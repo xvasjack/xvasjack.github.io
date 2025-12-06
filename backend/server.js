@@ -2,7 +2,6 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai');
-const nodemailer = require('nodemailer');
 const fetch = require('node-fetch');
 
 const app = express();
@@ -10,7 +9,7 @@ app.use(cors());
 app.use(express.json());
 
 // Check required environment variables
-const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'GMAIL_USER', 'GMAIL_APP_PASSWORD'];
+const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'RESEND_API_KEY'];
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
@@ -22,14 +21,29 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
 
-// Initialize Gmail transporter
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.GMAIL_USER,
-    pass: process.env.GMAIL_APP_PASSWORD
+// Send email using Resend API
+async function sendEmail(to, subject, html) {
+  const response = await fetch('https://api.resend.com/emails', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      from: 'Find Target <onboarding@resend.dev>',
+      to: to,
+      subject: subject,
+      html: html
+    })
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Email failed: ${error}`);
   }
-});
+
+  return await response.json();
+}
 
 // ============ AI TOOLS ============
 
@@ -474,24 +488,22 @@ app.post('/api/find-target', async (req, res) => {
 
     const htmlContent = buildEmailHTML(validCompanies, Business, Country, Exclusion);
 
-    await transporter.sendMail({
-      from: process.env.GMAIL_USER,
-      to: Email,
-      subject: `${Business} in ${Country} exclude ${Exclusion} (${validCompanies.length} companies)`,
-      html: htmlContent
-    });
+    await sendEmail(
+      Email,
+      `${Business} in ${Country} exclude ${Exclusion} (${validCompanies.length} companies)`,
+      htmlContent
+    );
 
     console.log(`\nEMAIL SENT to ${Email} with ${validCompanies.length} companies`);
   } catch (error) {
     console.error('Processing error:', error);
 
     try {
-      await transporter.sendMail({
-        from: process.env.GMAIL_USER,
-        to: Email,
-        subject: `Find Target - Error Processing Request`,
-        html: `<p>Sorry, there was an error processing your request for "${Business}" in "${Country}".</p><p>Error: ${error.message}</p><p>Please try again later.</p>`
-      });
+      await sendEmail(
+        Email,
+        `Find Target - Error Processing Request`,
+        `<p>Sorry, there was an error processing your request for "${Business}" in "${Country}".</p><p>Error: ${error.message}</p><p>Please try again later.</p>`
+      );
     } catch (emailError) {
       console.error('Failed to send error email:', emailError);
     }
