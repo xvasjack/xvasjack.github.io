@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Find Target - Company Search</title>
+  <link rel="stylesheet" type="text/css" href="css/main.css">
+  <style>
+    .form-container {
+      max-width: 600px;
+      margin: 0 auto;
+      padding: 8rem 2rem 4rem;
+      min-height: 100vh;
+      background-color: rgba(220,220,214,1);
+    }
+
+    .form-title {
+      font-size: 3.6rem;
+      color: #000;
+      margin-bottom: 1rem;
+      text-align: center;
+    }
+
+    .form-description {
+      font-size: 1.6rem;
+      color: #333;
+      margin-bottom: 4rem;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    .form-group {
+      margin-bottom: 2.5rem;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 1.4rem;
+      color: #000;
+      margin-bottom: 0.8rem;
+      font-weight: 600;
+    }
+
+    .form-label .required {
+      color: #c00;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 1.4rem 1.6rem;
+      font-size: 1.6rem;
+      border: 1px solid #999;
+      border-radius: 4px;
+      background-color: #fff;
+      box-sizing: border-box;
+      transition: border-color 0.3s, box-shadow 0.3s;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: #000;
+      box-shadow: 0 0 0 2px rgba(0,0,0,0.1);
+    }
+
+    .form-input::placeholder {
+      color: #999;
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 1.6rem 2rem;
+      font-size: 1.8rem;
+      font-weight: 600;
+      color: #fff;
+      background-color: #000;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.3s, transform 0.2s;
+      margin-top: 2rem;
+    }
+
+    .submit-btn:hover {
+      background-color: #333;
+    }
+
+    .submit-btn:active {
+      transform: scale(0.98);
+    }
+
+    .submit-btn:disabled {
+      background-color: #666;
+      cursor: not-allowed;
+    }
+
+    .back-link {
+      display: inline-block;
+      font-size: 1.4rem;
+      color: #000;
+      margin-top: 3rem;
+      text-decoration: underline;
+    }
+
+    .back-link:hover {
+      opacity: 0.7;
+    }
+
+    .success-message {
+      display: none;
+      padding: 2rem;
+      background-color: #d4edda;
+      border: 1px solid #c3e6cb;
+      border-radius: 4px;
+      color: #155724;
+      font-size: 1.6rem;
+      text-align: center;
+      margin-top: 2rem;
+    }
+
+    .error-message {
+      display: none;
+      padding: 2rem;
+      background-color: #f8d7da;
+      border: 1px solid #f5c6cb;
+      border-radius: 4px;
+      color: #721c24;
+      font-size: 1.6rem;
+      text-align: center;
+      margin-top: 2rem;
+    }
+
+    @media screen and (max-width: 767px) {
+      .form-container {
+        padding: 7rem 1.5rem 3rem;
+      }
+
+      .form-title {
+        font-size: 2.8rem;
+      }
+
+      .form-description {
+        font-size: 1.4rem;
+        margin-bottom: 3rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="container">
+      <nav class="nav">
+        <ul class="nav-list nav-list-mobile">
+          <li class="nav-item">
+            <div class="mobile-menu">
+              <span class="line line-top"></span>
+              <span class="line line-bottom"></span>
+            </div>
+          </li>
+          <li class="nav-item nav-item-hidden">
+            <a href="index.html" class="nav-link logo"></a>
+          </li>
+        </ul>
+
+        <ul class="nav-list nav-list-larger">
+          <li class="nav-item nav-item-hidden">
+            <a href="index.html" class="nav-link logo">Home</a>
+          </li>
+          <li class="nav-item">
+            <a href="find-target.html" class="nav-link" style="font-weight: bold;">Find Target</a>
+          </li>
+        </ul>
+      </nav>
+    </div>
+  </header>
+
+  <main class="form-container">
+    <h1 class="form-title">Find Target</h1>
+    <p class="form-description">
+      Fill in the form below, submit, and wait up to 45 minutes.<br>
+      The results will be emailed to you.
+    </p>
+
+    <form id="findTargetForm" method="POST" action="https://your-n8n-instance.com/webhook/69944173-4a78-4b43-93a6-76348603b21c">
+      <div class="form-group">
+        <label class="form-label" for="business">
+          Business <span class="required">*</span>
+        </label>
+        <input
+          type="text"
+          id="business"
+          name="Business"
+          class="form-input"
+          placeholder="Semiconductor distributor"
+          required
+        >
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="country">
+          Country <span class="required">*</span>
+        </label>
+        <input
+          type="text"
+          id="country"
+          name="Country"
+          class="form-input"
+          placeholder="Malaysia, Thailand, Singapore"
+          required
+        >
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="exclusion">
+          Exclusion <span class="required">*</span>
+        </label>
+        <input
+          type="text"
+          id="exclusion"
+          name="Exclusion"
+          class="form-input"
+          placeholder="Manufacturer, MNC, listed companies"
+          required
+        >
+      </div>
+
+      <div class="form-group">
+        <label class="form-label" for="email">
+          Email <span class="required">*</span>
+        </label>
+        <input
+          type="email"
+          id="email"
+          name="Email"
+          class="form-input"
+          placeholder="yourname@company.com"
+          required
+        >
+      </div>
+
+      <button type="submit" class="submit-btn" id="submitBtn">
+        Submit Request
+      </button>
+
+      <div class="success-message" id="successMessage">
+        Your request has been submitted successfully! Results will be emailed to you within 45 minutes.
+      </div>
+
+      <div class="error-message" id="errorMessage">
+        There was an error submitting your request. Please try again.
+      </div>
+    </form>
+
+    <a href="index.html" class="back-link">Back to Home</a>
+  </main>
+
+  <script>
+    document.getElementById('findTargetForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      const submitBtn = document.getElementById('submitBtn');
+      const successMessage = document.getElementById('successMessage');
+      const errorMessage = document.getElementById('errorMessage');
+
+      // Hide any previous messages
+      successMessage.style.display = 'none';
+      errorMessage.style.display = 'none';
+
+      // Disable button and show loading state
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
+
+      const formData = {
+        Business: document.getElementById('business').value,
+        Country: document.getElementById('country').value,
+        Exclusion: document.getElementById('exclusion').value,
+        Email: document.getElementById('email').value
+      };
+
+      try {
+        const response = await fetch(this.action, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(formData)
+        });
+
+        if (response.ok) {
+          successMessage.style.display = 'block';
+          this.reset();
+        } else {
+          throw new Error('Request failed');
+        }
+      } catch (error) {
+        errorMessage.style.display = 'block';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Submit Request';
+      }
+    });
+  </script>
+</body>
+</html>
