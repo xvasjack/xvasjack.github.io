@@ -1,6 +1,5 @@
 [build]
 builder = "nixpacks"
-buildCommand = "cd backend && npm install"
 
 [deploy]
-startCommand = "cd backend && npm start"
+startCommand = "cd backend && npm install && node server.js"
