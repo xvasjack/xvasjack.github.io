@@ -9,9 +9,17 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Check required environment variables
+const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'GMAIL_USER', 'GMAIL_APP_PASSWORD'];
+const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+if (missingVars.length > 0) {
+  console.error('Missing environment variables:', missingVars.join(', '));
+  console.error('Server will start but some features may not work.');
+}
+
 // Initialize OpenAI
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
+  apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
 
 // Initialize Gmail transporter
@@ -33,7 +41,8 @@ async function callGemini(prompt) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: [{ parts: [{ text: prompt }] }]
-      })
+      }),
+      timeout: 30000
     });
     const data = await response.json();
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -55,7 +64,8 @@ async function callPerplexity(prompt) {
       body: JSON.stringify({
         model: 'sonar-pro',
         messages: [{ role: 'user', content: prompt }]
-      })
+      }),
+      timeout: 30000
     });
     const data = await response.json();
     return data.choices?.[0]?.message?.content || '';
@@ -92,12 +102,12 @@ async function extractCompanies(text, country) {
       messages: [
         {
           role: 'system',
-          content: `Extract company information from the text. Return ONLY a valid JSON array.
+          content: `Extract company information from the text. Return ONLY a valid JSON object with a "companies" array.
 Each object must have: company_name, website, hq
 - website must start with http
 - hq format: "City, Country"
 - Only companies in ${country}
-Return [] if none found.`
+Return {"companies": []} if none found.`
         },
         { role: 'user', content: text }
       ],
@@ -106,8 +116,10 @@ Return [] if none found.`
 
     const content = extraction.choices[0].message.content;
     const parsed = JSON.parse(content);
-    return parsed.companies || parsed.data || parsed || [];
+    const companies = parsed.companies || parsed.data || [];
+    return Array.isArray(companies) ? companies : [];
   } catch (e) {
+    console.error('Extract error:', e.message);
     return [];
   }
 }
@@ -117,14 +129,14 @@ function mergeCompanies(existing, newOnes) {
   const seen = new Map();
 
   for (const c of existing) {
-    if (c.website) {
+    if (c && c.website) {
       const key = c.website.toLowerCase().replace(/\/$/, '').replace(/^https?:\/\//, '');
       seen.set(key, c);
     }
   }
 
   for (const c of newOnes) {
-    if (c.website) {
+    if (c && c.website) {
       const key = c.website.toLowerCase().replace(/\/$/, '').replace(/^https?:\/\//, '');
       if (!seen.has(key)) {
         seen.set(key, c);
@@ -218,7 +230,6 @@ async function agent3ChatGPT(business, country, exclusion, previous) {
 async function agent4Gemini(business, country, exclusion, previous) {
   console.log('Agent 4 (Gemini): City-specific search...');
 
-  // Common cities by country
   const cityMap = {
     'Malaysia': ['Kuala Lumpur', 'Penang', 'Johor Bahru', 'Shah Alam', 'Petaling Jaya'],
     'Singapore': ['Singapore'],
@@ -298,23 +309,18 @@ async function agent6ChatGPT(business, country, exclusion, previous) {
 
 // ============ VALIDATION ============
 
-// Fetch website content
+// Fetch website content (simplified - no AbortController)
 async function fetchWebsite(url) {
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-
     const response = await fetch(url, {
-      signal: controller.signal,
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; CompanyFinder/1.0)' }
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; CompanyFinder/1.0)' },
+      timeout: 10000
     });
-    clearTimeout(timeout);
 
     if (!response.ok) return null;
 
     const html = await response.text();
 
-    // Clean HTML
     const cleanText = html
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
@@ -338,7 +344,7 @@ async function validateCompany(company, business, country, exclusion, pageText) 
         {
           role: 'system',
           content: `You are validating if a company matches criteria. Be STRICT.
-Return JSON: { "valid": true/false, "reason": "..." }
+Return JSON: { "valid": true, "reason": "..." } or { "valid": false, "reason": "..." }
 
 REJECT if:
 - HQ is NOT in ${country}
@@ -365,7 +371,7 @@ ${pageText ? pageText.substring(0, 3000) : 'Could not fetch'}`
     const result = JSON.parse(validation.choices[0].message.content);
     return result.valid === true;
   } catch (e) {
-    return true; // Keep if validation fails
+    return true;
   }
 }
 
@@ -455,7 +461,6 @@ app.post('/api/find-target', async (req, res) => {
 
   // Process in background
   try {
-    // Run 6 agents sequentially
     let companies = await agent1Gemini(Business, Country, Exclusion);
     companies = await agent2Perplexity(Business, Country, Exclusion, companies);
     companies = await agent3ChatGPT(Business, Country, Exclusion, companies);
@@ -465,10 +470,8 @@ app.post('/api/find-target', async (req, res) => {
 
     console.log(`\nTotal before validation: ${companies.length}`);
 
-    // Validate companies
     const validCompanies = await validateCompanies(companies, Business, Country, Exclusion);
 
-    // Build and send email
     const htmlContent = buildEmailHTML(validCompanies, Business, Country, Exclusion);
 
     await transporter.sendMail({
