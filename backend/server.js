@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai');
 const nodemailer = require('nodemailer');
+const fetch = require('node-fetch');
 
 const app = express();
 app.use(cors());
