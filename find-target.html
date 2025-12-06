@@ -4,180 +4,167 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Find Target - Company Search</title>
-  <link rel="stylesheet" type="text/css" href="css/main.css">
   <style>
-    .form-container {
-      max-width: 600px;
-      margin: 0 auto;
-      padding: 8rem 2rem 4rem;
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      font-size: 10px;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+
+    body {
+      background-color: #f5f5f5;
       min-height: 100vh;
-      background-color: rgba(220,220,214,1);
+    }
+
+    .header {
+      background-color: #000;
+      padding: 1.5rem 2rem;
+      text-align: center;
+    }
+
+    .header-title {
+      color: #fff;
+      font-size: 2rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+    }
+
+    .form-container {
+      max-width: 500px;
+      margin: 0 auto;
+      padding: 4rem 2rem;
     }
 
     .form-title {
-      font-size: 3.6rem;
+      font-size: 3.2rem;
       color: #000;
       margin-bottom: 1rem;
       text-align: center;
     }
 
     .form-description {
-      font-size: 1.6rem;
-      color: #333;
-      margin-bottom: 4rem;
+      font-size: 1.5rem;
+      color: #666;
+      margin-bottom: 3rem;
       text-align: center;
-      line-height: 1.5;
+      line-height: 1.6;
     }
 
     .form-group {
-      margin-bottom: 2.5rem;
+      margin-bottom: 2rem;
     }
 
     .form-label {
       display: block;
       font-size: 1.4rem;
       color: #000;
-      margin-bottom: 0.8rem;
+      margin-bottom: 0.6rem;
       font-weight: 600;
     }
 
-    .form-label .required {
-      color: #c00;
+    .required {
+      color: #e00;
     }
 
     .form-input {
       width: 100%;
-      padding: 1.4rem 1.6rem;
+      padding: 1.2rem 1.4rem;
       font-size: 1.6rem;
-      border: 1px solid #999;
-      border-radius: 4px;
+      border: 2px solid #ddd;
+      border-radius: 6px;
       background-color: #fff;
-      box-sizing: border-box;
-      transition: border-color 0.3s, box-shadow 0.3s;
+      transition: border-color 0.2s;
     }
 
     .form-input:focus {
       outline: none;
       border-color: #000;
-      box-shadow: 0 0 0 2px rgba(0,0,0,0.1);
     }
 
     .form-input::placeholder {
-      color: #999;
+      color: #aaa;
     }
 
     .submit-btn {
       width: 100%;
-      padding: 1.6rem 2rem;
-      font-size: 1.8rem;
+      padding: 1.4rem 2rem;
+      font-size: 1.6rem;
       font-weight: 600;
       color: #fff;
       background-color: #000;
       border: none;
-      border-radius: 4px;
+      border-radius: 6px;
       cursor: pointer;
-      transition: background-color 0.3s, transform 0.2s;
-      margin-top: 2rem;
+      transition: background-color 0.2s;
+      margin-top: 1rem;
     }
 
     .submit-btn:hover {
       background-color: #333;
     }
 
-    .submit-btn:active {
-      transform: scale(0.98);
-    }
-
     .submit-btn:disabled {
-      background-color: #666;
+      background-color: #999;
       cursor: not-allowed;
-    }
-
-    .back-link {
-      display: inline-block;
-      font-size: 1.4rem;
-      color: #000;
-      margin-top: 3rem;
-      text-decoration: underline;
-    }
-
-    .back-link:hover {
-      opacity: 0.7;
     }
 
     .success-message {
       display: none;
-      padding: 2rem;
+      padding: 1.5rem;
       background-color: #d4edda;
       border: 1px solid #c3e6cb;
-      border-radius: 4px;
+      border-radius: 6px;
       color: #155724;
-      font-size: 1.6rem;
+      font-size: 1.4rem;
       text-align: center;
       margin-top: 2rem;
     }
 
     .error-message {
       display: none;
-      padding: 2rem;
+      padding: 1.5rem;
       background-color: #f8d7da;
       border: 1px solid #f5c6cb;
-      border-radius: 4px;
+      border-radius: 6px;
       color: #721c24;
-      font-size: 1.6rem;
+      font-size: 1.4rem;
       text-align: center;
       margin-top: 2rem;
     }
 
-    @media screen and (max-width: 767px) {
+    .footer {
+      text-align: center;
+      padding: 2rem;
+      font-size: 1.2rem;
+      color: #999;
+    }
+
+    @media screen and (max-width: 600px) {
       .form-container {
-        padding: 7rem 1.5rem 3rem;
+        padding: 3rem 1.5rem;
       }
 
       .form-title {
-        font-size: 2.8rem;
-      }
-
-      .form-description {
-        font-size: 1.4rem;
-        margin-bottom: 3rem;
+        font-size: 2.6rem;
       }
     }
   </style>
 </head>
 <body>
-  <header>
-    <div class="container">
-      <nav class="nav">
-        <ul class="nav-list nav-list-mobile">
-          <li class="nav-item">
-            <div class="mobile-menu">
-              <span class="line line-top"></span>
-              <span class="line line-bottom"></span>
-            </div>
-          </li>
-          <li class="nav-item nav-item-hidden">
-            <a href="index.html" class="nav-link logo"></a>
-          </li>
-        </ul>
-
-        <ul class="nav-list nav-list-larger">
-          <li class="nav-item nav-item-hidden">
-            <a href="index.html" class="nav-link logo">Home</a>
-          </li>
-          <li class="nav-item">
-            <a href="find-target.html" class="nav-link" style="font-weight: bold;">Find Target</a>
-          </li>
-        </ul>
-      </nav>
-    </div>
+  <header class="header">
+    <h1 class="header-title">Find Target</h1>
   </header>
 
   <main class="form-container">
-    <h1 class="form-title">Find Target</h1>
+    <h2 class="form-title">Company Search</h2>
     <p class="form-description">
-      Fill in the form below, submit, and wait up to 45 minutes.<br>
-      The results will be emailed to you.
+      Fill in the form below and submit.<br>
+      Results will be emailed to you within 45 minutes.
     </p>
 
     <form id="findTargetForm" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/find-target">
@@ -190,7 +177,7 @@
           id="business"
           name="Business"
           class="form-input"
-          placeholder="Semiconductor distributor"
+          placeholder="e.g. Semiconductor distributor"
           required
         >
       </div>
@@ -204,7 +191,7 @@
           id="country"
           name="Country"
           class="form-input"
-          placeholder="Malaysia, Thailand, Singapore"
+          placeholder="e.g. Malaysia, Thailand, Singapore"
           required
         >
       </div>
@@ -218,7 +205,7 @@
           id="exclusion"
           name="Exclusion"
           class="form-input"
-          placeholder="Manufacturer, MNC, listed companies"
+          placeholder="e.g. Manufacturer, MNC, listed companies"
           required
         >
       </div>
@@ -232,7 +219,7 @@
           id="email"
           name="Email"
           class="form-input"
-          placeholder="yourname@company.com"
+          placeholder="e.g. yourname@company.com"
           required
         >
       </div>
@@ -242,16 +229,18 @@
       </button>
 
       <div class="success-message" id="successMessage">
-        Your request has been submitted successfully! Results will be emailed to you within 45 minutes.
+        Request submitted! Results will be emailed to you within 45 minutes.
       </div>
 
       <div class="error-message" id="errorMessage">
-        There was an error submitting your request. Please try again.
+        Error submitting request. Please try again.
       </div>
     </form>
-
-    <a href="index.html" class="back-link">Back to Home</a>
   </main>
+
+  <footer class="footer">
+    Powered by AI
+  </footer>
 
   <script>
     document.getElementById('findTargetForm').addEventListener('submit', async function(e) {
@@ -261,11 +250,9 @@
       const successMessage = document.getElementById('successMessage');
       const errorMessage = document.getElementById('errorMessage');
 
-      // Hide any previous messages
       successMessage.style.display = 'none';
       errorMessage.style.display = 'none';
 
-      // Disable button and show loading state
       submitBtn.disabled = true;
       submitBtn.textContent = 'Submitting...';
 
