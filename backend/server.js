@@ -13,7 +13,6 @@ const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
-  console.error('Server will start but some features may not work.');
 }
 
 // Initialize OpenAI
@@ -47,15 +46,12 @@ async function sendEmail(to, subject, html) {
 
 // ============ AI TOOLS ============
 
-// Gemini API call
 async function callGemini(prompt) {
   try {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }]
-      }),
+      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
       timeout: 30000
     });
     const data = await response.json();
@@ -66,7 +62,6 @@ async function callGemini(prompt) {
   }
 }
 
-// Perplexity API call (has web search)
 async function callPerplexity(prompt) {
   try {
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
@@ -89,7 +84,6 @@ async function callPerplexity(prompt) {
   }
 }
 
-// OpenAI ChatGPT call
 async function callChatGPT(prompt) {
   try {
     const response = await openai.chat.completions.create({
@@ -104,52 +98,36 @@ async function callChatGPT(prompt) {
   }
 }
 
-// ============ AGENT FUNCTIONS ============
+// ============ EXTRACTION & DEDUPLICATION ============
 
-// Extract companies from AI response
 async function extractCompanies(text, country) {
   if (!text) return [];
-
   try {
     const extraction = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: `Extract company information from the text. Return ONLY a valid JSON object with a "companies" array.
-Each object must have: company_name, website, hq
+          content: `Extract company information. Return JSON: {"companies": [{company_name, website, hq}]}
 - website must start with http
 - hq format: "City, Country"
 - Only companies in ${country}
-Return {"companies": []} if none found.`
+Return {"companies": []} if none.`
         },
         { role: 'user', content: text }
       ],
       response_format: { type: 'json_object' }
     });
-
-    const content = extraction.choices[0].message.content;
-    const parsed = JSON.parse(content);
-    const companies = parsed.companies || parsed.data || [];
-    return Array.isArray(companies) ? companies : [];
+    const parsed = JSON.parse(extraction.choices[0].message.content);
+    return Array.isArray(parsed.companies) ? parsed.companies : [];
   } catch (e) {
-    console.error('Extract error:', e.message);
     return [];
   }
 }
 
-// Merge companies without duplicates
-function mergeCompanies(existing, newOnes) {
+function dedupeCompanies(allCompanies) {
   const seen = new Map();
-
-  for (const c of existing) {
-    if (c && c.website) {
-      const key = c.website.toLowerCase().replace(/\/$/, '').replace(/^https?:\/\//, '');
-      seen.set(key, c);
-    }
-  }
-
-  for (const c of newOnes) {
+  for (const c of allCompanies) {
     if (c && c.website) {
       const key = c.website.toLowerCase().replace(/\/$/, '').replace(/^https?:\/\//, '');
       if (!seen.has(key)) {
@@ -157,93 +135,13 @@ function mergeCompanies(existing, newOnes) {
       }
     }
   }
-
   return Array.from(seen.values());
 }
 
-// Agent 1: Gemini - General search with synonyms
-async function agent1Gemini(business, country, exclusion) {
-  console.log('Agent 1 (Gemini): Starting general search...');
+// ============ PARALLEL SEARCH ============
 
-  const queries = [
-    `List ${business} companies headquartered in ${country}. Exclude ${exclusion}. Provide company name, website URL, headquarters city.`,
-    `Find ${business} suppliers and distributors in ${country}. Not ${exclusion}. Include websites.`,
-    `${business} vendors based in ${country} excluding ${exclusion}. List with official websites.`,
-    `Directory of ${business} firms in ${country}. No ${exclusion}. Company name, website, HQ city.`,
-    `${country} ${business} companies list with websites. Exclude ${exclusion}.`,
-    `Local ${business} dealers in ${country}. Not ${exclusion}. Names and websites.`,
-    `${business} traders and wholesalers in ${country}. Exclude ${exclusion}.`,
-    `Find all ${business} in ${country} cities. No ${exclusion}. With websites.`
-  ];
-
-  let allCompanies = [];
-
-  for (const query of queries) {
-    const result = await callGemini(query);
-    const companies = await extractCompanies(result, country);
-    allCompanies = mergeCompanies(allCompanies, companies);
-    console.log(`  Query done. Total: ${allCompanies.length}`);
-  }
-
-  console.log(`Agent 1 done. Found: ${allCompanies.length}`);
-  return allCompanies;
-}
-
-// Agent 2: Perplexity - Web search with variations
-async function agent2Perplexity(business, country, exclusion, previous) {
-  console.log('Agent 2 (Perplexity): Web search with variations...');
-
-  const queries = [
-    `Search for ${business} companies in ${country}. Exclude ${exclusion}. List company names and websites.`,
-    `Find more ${business} distributors in ${country}. No ${exclusion}. Official websites only.`,
-    `${country} ${business} supplier directory. Exclude ${exclusion}. With website URLs.`,
-    `List of ${business} vendors operating in ${country}. Not ${exclusion}.`,
-    `${business} resellers and agents in ${country}. Exclude ${exclusion}.`,
-    `Find ${business} importers in ${country}. No ${exclusion}. Websites required.`
-  ];
-
-  let allCompanies = [...previous];
-
-  for (const query of queries) {
-    const result = await callPerplexity(query);
-    const companies = await extractCompanies(result, country);
-    allCompanies = mergeCompanies(allCompanies, companies);
-    console.log(`  Query done. Total: ${allCompanies.length}`);
-  }
-
-  console.log(`Agent 2 done. Total: ${allCompanies.length}`);
-  return allCompanies;
-}
-
-// Agent 3: ChatGPT - Industry associations and trade directories
-async function agent3ChatGPT(business, country, exclusion, previous) {
-  console.log('Agent 3 (ChatGPT): Industry associations & trade directories...');
-
-  const queries = [
-    `List ${business} companies that are members of trade associations in ${country}. Exclude ${exclusion}. Include websites.`,
-    `${business} companies from ${country} industry directories. No ${exclusion}. Names and websites.`,
-    `Find ${business} firms registered with chambers of commerce in ${country}. Exclude ${exclusion}.`,
-    `${country} ${business} association member companies. Not ${exclusion}. With official websites.`,
-    `Trade directory listing of ${business} in ${country}. Exclude ${exclusion}.`
-  ];
-
-  let allCompanies = [...previous];
-
-  for (const query of queries) {
-    const result = await callChatGPT(query);
-    const companies = await extractCompanies(result, country);
-    allCompanies = mergeCompanies(allCompanies, companies);
-    console.log(`  Query done. Total: ${allCompanies.length}`);
-  }
-
-  console.log(`Agent 3 done. Total: ${allCompanies.length}`);
-  return allCompanies;
-}
-
-// Agent 4: Gemini - City-specific and local registries
-async function agent4Gemini(business, country, exclusion, previous) {
-  console.log('Agent 4 (Gemini): City-specific search...');
-
+// Generate all search queries
+function generateQueries(business, country, exclusion) {
   const cityMap = {
     'Malaysia': ['Kuala Lumpur', 'Penang', 'Johor Bahru', 'Shah Alam', 'Petaling Jaya'],
     'Singapore': ['Singapore'],
@@ -254,53 +152,48 @@ async function agent4Gemini(business, country, exclusion, previous) {
   };
 
   const countries = country.split(',').map(c => c.trim());
-  let allCompanies = [...previous];
 
+  // Gemini queries
+  const geminiQueries = [
+    `List ${business} companies headquartered in ${country}. Exclude ${exclusion}. Provide company name, website URL, headquarters city.`,
+    `Find ${business} suppliers and distributors in ${country}. Not ${exclusion}. Include websites.`,
+    `${business} vendors based in ${country} excluding ${exclusion}. List with official websites.`,
+    `Directory of ${business} firms in ${country}. No ${exclusion}. Company name, website, HQ city.`,
+    `${country} ${business} companies list with websites. Exclude ${exclusion}.`,
+    `Local ${business} dealers in ${country}. Not ${exclusion}. Names and websites.`,
+    `${business} traders and wholesalers in ${country}. Exclude ${exclusion}.`,
+    `Find all ${business} in ${country} cities. No ${exclusion}. With websites.`
+  ];
+
+  // Add city-specific Gemini queries
   for (const c of countries) {
     const cities = cityMap[c] || [c];
     for (const city of cities.slice(0, 3)) {
-      const query = `${business} companies in ${city}, ${c}. Exclude ${exclusion}. List company name, website, city.`;
-      const result = await callGemini(query);
-      const companies = await extractCompanies(result, c);
-      allCompanies = mergeCompanies(allCompanies, companies);
-      console.log(`  ${city} done. Total: ${allCompanies.length}`);
+      geminiQueries.push(`${business} companies in ${city}, ${c}. Exclude ${exclusion}. List company name, website, city.`);
     }
   }
 
-  console.log(`Agent 4 done. Total: ${allCompanies.length}`);
-  return allCompanies;
-}
-
-// Agent 5: Perplexity - Exhibition participants and industry events
-async function agent5Perplexity(business, country, exclusion, previous) {
-  console.log('Agent 5 (Perplexity): Exhibition & event participants...');
-
-  const queries = [
+  // Perplexity queries (web search)
+  const perplexityQueries = [
+    `Search for ${business} companies in ${country}. Exclude ${exclusion}. List company names and websites.`,
+    `Find more ${business} distributors in ${country}. No ${exclusion}. Official websites only.`,
+    `${country} ${business} supplier directory. Exclude ${exclusion}. With website URLs.`,
+    `List of ${business} vendors operating in ${country}. Not ${exclusion}.`,
+    `${business} resellers and agents in ${country}. Exclude ${exclusion}.`,
+    `Find ${business} importers in ${country}. No ${exclusion}. Websites required.`,
     `${business} companies that exhibited at trade shows in ${country}. Exclude ${exclusion}. With websites.`,
     `List of ${business} exhibitors from ${country} at industry events. No ${exclusion}.`,
     `${country} ${business} companies at conferences and expos. Exclude ${exclusion}. Websites required.`,
-    `Find ${business} firms that participated in ${country} trade fairs. Not ${exclusion}.`,
-    `${business} booth exhibitors from ${country}. Exclude ${exclusion}. Company websites.`
+    `Find ${business} firms that participated in ${country} trade fairs. Not ${exclusion}.`
   ];
 
-  let allCompanies = [...previous];
-
-  for (const query of queries) {
-    const result = await callPerplexity(query);
-    const companies = await extractCompanies(result, country);
-    allCompanies = mergeCompanies(allCompanies, companies);
-    console.log(`  Query done. Total: ${allCompanies.length}`);
-  }
-
-  console.log(`Agent 5 done. Total: ${allCompanies.length}`);
-  return allCompanies;
-}
-
-// Agent 6: ChatGPT - Creative final pass
-async function agent6ChatGPT(business, country, exclusion, previous) {
-  console.log('Agent 6 (ChatGPT): Creative final pass...');
-
-  const queries = [
+  // ChatGPT queries
+  const chatgptQueries = [
+    `List ${business} companies that are members of trade associations in ${country}. Exclude ${exclusion}. Include websites.`,
+    `${business} companies from ${country} industry directories. No ${exclusion}. Names and websites.`,
+    `Find ${business} firms registered with chambers of commerce in ${country}. Exclude ${exclusion}.`,
+    `${country} ${business} association member companies. Not ${exclusion}. With official websites.`,
+    `Trade directory listing of ${business} in ${country}. Exclude ${exclusion}.`,
     `What are some lesser-known ${business} companies in ${country}? Exclude ${exclusion}. Include websites.`,
     `Small and medium ${business} enterprises in ${country}. Not ${exclusion}. With official sites.`,
     `Family-owned ${business} businesses in ${country}. Exclude ${exclusion}. Websites needed.`,
@@ -308,33 +201,59 @@ async function agent6ChatGPT(business, country, exclusion, previous) {
     `Regional ${business} players in ${country}. Exclude ${exclusion}. Company websites.`
   ];
 
-  let allCompanies = [...previous];
-
-  for (const query of queries) {
-    const result = await callChatGPT(query);
-    const companies = await extractCompanies(result, country);
-    allCompanies = mergeCompanies(allCompanies, companies);
-    console.log(`  Query done. Total: ${allCompanies.length}`);
-  }
-
-  console.log(`Agent 6 done. Total: ${allCompanies.length}`);
-  return allCompanies;
+  return { geminiQueries, perplexityQueries, chatgptQueries };
 }
 
-// ============ VALIDATION ============
+// Run all searches in parallel
+async function parallelSearch(business, country, exclusion) {
+  console.log('Starting PARALLEL search...');
+  const startTime = Date.now();
 
-// Fetch website content (simplified - no AbortController)
+  const { geminiQueries, perplexityQueries, chatgptQueries } = generateQueries(business, country, exclusion);
+
+  console.log(`  Gemini queries: ${geminiQueries.length}`);
+  console.log(`  Perplexity queries: ${perplexityQueries.length}`);
+  console.log(`  ChatGPT queries: ${chatgptQueries.length}`);
+  console.log(`  Total queries: ${geminiQueries.length + perplexityQueries.length + chatgptQueries.length}`);
+
+  // Run all API calls in parallel
+  const [geminiResults, perplexityResults, chatgptResults] = await Promise.all([
+    // Gemini - run all queries in parallel
+    Promise.all(geminiQueries.map(q => callGemini(q))),
+    // Perplexity - run all queries in parallel
+    Promise.all(perplexityQueries.map(q => callPerplexity(q))),
+    // ChatGPT - run all queries in parallel
+    Promise.all(chatgptQueries.map(q => callChatGPT(q)))
+  ]);
+
+  console.log(`  All API calls done in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+
+  // Extract companies from all results in parallel
+  const allTexts = [...geminiResults, ...perplexityResults, ...chatgptResults];
+  const extractionResults = await Promise.all(
+    allTexts.map(text => extractCompanies(text, country))
+  );
+
+  // Flatten and dedupe
+  const allCompanies = extractionResults.flat();
+  const uniqueCompanies = dedupeCompanies(allCompanies);
+
+  console.log(`  Extracted ${allCompanies.length} companies, ${uniqueCompanies.length} unique`);
+  console.log(`Search completed in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+
+  return uniqueCompanies;
+}
+
+// ============ PARALLEL VALIDATION ============
+
 async function fetchWebsite(url) {
   try {
     const response = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; CompanyFinder/1.0)' },
       timeout: 10000
     });
-
     if (!response.ok) return null;
-
     const html = await response.text();
-
     const cleanText = html
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
@@ -342,14 +261,12 @@ async function fetchWebsite(url) {
       .replace(/\s+/g, ' ')
       .trim()
       .substring(0, 12000);
-
     return cleanText.length > 50 ? cleanText : null;
   } catch (e) {
     return null;
   }
 }
 
-// Validate single company
 async function validateCompany(company, business, country, exclusion, pageText) {
   try {
     const validation = await openai.chat.completions.create({
@@ -357,31 +274,16 @@ async function validateCompany(company, business, country, exclusion, pageText) 
       messages: [
         {
           role: 'system',
-          content: `You are validating if a company matches criteria. Be STRICT.
-Return JSON: { "valid": true, "reason": "..." } or { "valid": false, "reason": "..." }
-
-REJECT if:
-- HQ is NOT in ${country}
-- Company is a ${exclusion}
-- It's a directory/marketplace/social media site
-- Website doesn't match a real ${business} company`
+          content: `Validate if company matches criteria. Return JSON: {"valid": true/false, "reason": "..."}
+REJECT if: HQ not in ${country}, is ${exclusion}, is directory/marketplace, not a real ${business} company.`
         },
         {
           role: 'user',
-          content: `Company: ${company.company_name}
-Website: ${company.website}
-Claimed HQ: ${company.hq}
-Business type needed: ${business}
-Country needed: ${country}
-Exclusions: ${exclusion}
-
-Website content preview:
-${pageText ? pageText.substring(0, 3000) : 'Could not fetch'}`
+          content: `Company: ${company.company_name}\nWebsite: ${company.website}\nHQ: ${company.hq}\nBusiness: ${business}\nCountry: ${country}\nExclusions: ${exclusion}\n\nWebsite preview:\n${pageText ? pageText.substring(0, 3000) : 'Could not fetch'}`
         }
       ],
       response_format: { type: 'json_object' }
     });
-
     const result = JSON.parse(validation.choices[0].message.content);
     return result.valid === true;
   } catch (e) {
@@ -389,27 +291,32 @@ ${pageText ? pageText.substring(0, 3000) : 'Could not fetch'}`
   }
 }
 
-// Validate all companies
-async function validateCompanies(companies, business, country, exclusion) {
-  console.log(`Validating ${companies.length} companies...`);
-
+async function parallelValidation(companies, business, country, exclusion) {
+  console.log(`\nStarting PARALLEL validation of ${companies.length} companies...`);
+  const startTime = Date.now();
+  const batchSize = 10; // Increased batch size
   const validated = [];
-  const batchSize = 5;
 
   for (let i = 0; i < companies.length; i += batchSize) {
     const batch = companies.slice(i, i + batchSize);
 
-    const results = await Promise.all(batch.map(async (company) => {
-      const pageText = await fetchWebsite(company.website);
-      const isValid = await validateCompany(company, business, country, exclusion, pageText);
-      return isValid ? company : null;
-    }));
+    // Fetch all websites in parallel
+    const pageTexts = await Promise.all(batch.map(c => fetchWebsite(c.website)));
 
-    validated.push(...results.filter(c => c !== null));
+    // Validate all in parallel
+    const validations = await Promise.all(
+      batch.map((company, idx) => validateCompany(company, business, country, exclusion, pageTexts[idx]))
+    );
+
+    // Collect valid ones
+    batch.forEach((company, idx) => {
+      if (validations[idx]) validated.push(company);
+    });
+
     console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
   }
 
-  console.log(`Validation done. Valid companies: ${validated.length}`);
+  console.log(`Validation completed in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
   return validated;
 }
 
@@ -425,27 +332,13 @@ function buildEmailHTML(companies, business, country, exclusion) {
     <br>
     <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
       <thead style="background-color: #f0f0f0;">
-        <tr>
-          <th>#</th>
-          <th>Company</th>
-          <th>Website</th>
-          <th>Headquarters</th>
-        </tr>
+        <tr><th>#</th><th>Company</th><th>Website</th><th>Headquarters</th></tr>
       </thead>
       <tbody>
   `;
-
-  companies.forEach((company, index) => {
-    html += `
-      <tr>
-        <td>${index + 1}</td>
-        <td>${company.company_name}</td>
-        <td><a href="${company.website}">${company.website}</a></td>
-        <td>${company.hq}</td>
-      </tr>
-    `;
+  companies.forEach((c, i) => {
+    html += `<tr><td>${i + 1}</td><td>${c.company_name}</td><td><a href="${c.website}">${c.website}</a></td><td>${c.hq}</td></tr>`;
   });
-
   html += '</tbody></table>';
   return html;
 }
@@ -467,52 +360,52 @@ app.post('/api/find-target', async (req, res) => {
   console.log(`Email: ${Email}`);
   console.log('='.repeat(50));
 
-  // Send immediate response
   res.json({
     success: true,
-    message: 'Request received. Results will be emailed within 45 minutes.'
+    message: 'Request received. Results will be emailed within 15 minutes.'
   });
 
-  // Process in background
   try {
-    let companies = await agent1Gemini(Business, Country, Exclusion);
-    companies = await agent2Perplexity(Business, Country, Exclusion, companies);
-    companies = await agent3ChatGPT(Business, Country, Exclusion, companies);
-    companies = await agent4Gemini(Business, Country, Exclusion, companies);
-    companies = await agent5Perplexity(Business, Country, Exclusion, companies);
-    companies = await agent6ChatGPT(Business, Country, Exclusion, companies);
+    const totalStart = Date.now();
 
-    console.log(`\nTotal before validation: ${companies.length}`);
+    // PARALLEL SEARCH
+    const companies = await parallelSearch(Business, Country, Exclusion);
+    console.log(`\nFound ${companies.length} unique companies`);
 
-    const validCompanies = await validateCompanies(companies, Business, Country, Exclusion);
+    // PARALLEL VALIDATION
+    const validCompanies = await parallelValidation(companies, Business, Country, Exclusion);
 
+    // SEND EMAIL
     const htmlContent = buildEmailHTML(validCompanies, Business, Country, Exclusion);
-
     await sendEmail(
       Email,
       `${Business} in ${Country} exclude ${Exclusion} (${validCompanies.length} companies)`,
       htmlContent
     );
 
-    console.log(`\nEMAIL SENT to ${Email} with ${validCompanies.length} companies`);
+    const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
+    console.log(`\n${'='.repeat(50)}`);
+    console.log(`COMPLETE! Email sent to ${Email}`);
+    console.log(`Total companies: ${validCompanies.length}`);
+    console.log(`Total time: ${totalTime} minutes`);
+    console.log('='.repeat(50));
+
   } catch (error) {
     console.error('Processing error:', error);
-
     try {
       await sendEmail(
         Email,
-        `Find Target - Error Processing Request`,
-        `<p>Sorry, there was an error processing your request for "${Business}" in "${Country}".</p><p>Error: ${error.message}</p><p>Please try again later.</p>`
+        `Find Target - Error`,
+        `<p>Error processing "${Business}" in "${Country}": ${error.message}</p>`
       );
-    } catch (emailError) {
-      console.error('Failed to send error email:', emailError);
+    } catch (e) {
+      console.error('Failed to send error email:', e);
     }
   }
 });
 
-// Health check
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target Backend v2' });
+  res.json({ status: 'ok', service: 'Find Target Backend v3 - Parallel' });
 });
 
 const PORT = process.env.PORT || 3000;
