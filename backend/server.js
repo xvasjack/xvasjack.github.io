@@ -512,22 +512,22 @@ async function validateCompanyStrict(company, business, country, exclusion, page
       messages: [
         {
           role: 'system',
-          content: `You are a VERY STRICT company validator. When in doubt, REJECT.
+          content: `You are a company validator. Analyze the website content to determine if this company matches the search criteria.
 
 USER'S SEARCH CRITERIA:
 - Target Business: "${business}"
 - Target Countries: ${country}
 - User wants to EXCLUDE: ${exclusion}
 
-VALIDATION RULES (ALL must pass):
+VALIDATION RULES:
 
-1. LOCATION: Company HQ MUST be clearly in ${country}. REJECT if unclear or in other countries.
+1. LOCATION (STRICT): Company must operate in or be headquartered in ${country}. REJECT only if clearly based in a different country (e.g., HQ in Japan, USA, Europe with no ${country} operations).
 
-2. BUSINESS: "${business}" MUST be the company's PRIMARY business. REJECT if it's just a side product or if company is in a different industry.
+2. BUSINESS (MODERATE): Company should be involved in "${business}" - either as a manufacturer, supplier, or significant player. ACCEPT if they produce, supply, or deal in ${business} products, even if they also do other things.
 
-3. EXCLUSIONS: Carefully analyze if this company matches what user wants to exclude: "${exclusion}". Use your judgment based on website content to determine if the company fits the exclusion criteria.
+3. EXCLUSIONS (STRICT): REJECT if the company clearly matches the exclusion criteria: "${exclusion}". Analyze the website for signs that match the exclusion.
 
-4. QUALITY: REJECT directories, marketplaces, B2B platforms, template websites, or companies with vague/generic information.
+4. QUALITY: REJECT only if it's clearly a directory, marketplace, or spam site.
 
 Return JSON: {"valid": true/false, "reason": "brief explanation"}`
         },
@@ -844,7 +844,7 @@ app.post('/api/find-target-slow', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v16 - Website Verification + Strict Validation' });
+  res.json({ status: 'ok', service: 'Find Target v17 - Balanced Validation' });
 });
 
 const PORT = process.env.PORT || 3000;
