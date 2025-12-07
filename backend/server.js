@@ -316,7 +316,7 @@ async function comprehensiveSearch(business, country, exclusion) {
   return uniqueCompanies;
 }
 
-// ============ VALIDATION WITH DEEPSEEK ============
+// ============ VALIDATION ============
 
 async function fetchWebsite(url) {
   try {
@@ -339,10 +339,10 @@ async function fetchWebsite(url) {
   }
 }
 
-async function validateCompanyWithDeepSeek(company, business, country, exclusion, pageText) {
+async function validateCompany(company, business, country, exclusion, pageText) {
   try {
-    const response = await deepseek.chat.completions.create({
-      model: 'deepseek-chat',
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -369,7 +369,7 @@ VALIDATION RULES:
 4. SPAM CHECK:
    - Directory, marketplace, domain-for-sale, aggregator site? → REJECT
 
-Return JSON ONLY: {"valid": true/false, "reason": "brief reason", "corrected_hq": "City, Country"}`
+Return JSON: {"valid": true/false, "reason": "brief reason", "corrected_hq": "City, Country"}`
         },
         {
           role: 'user',
@@ -384,15 +384,11 @@ Website content:
 ${pageText ? pageText.substring(0, 4000) : 'Could not fetch'}`
         }
       ],
+      response_format: { type: 'json_object' },
       temperature: 0
     });
 
-    const content = response.choices[0].message.content;
-    // Parse JSON from response (handle markdown code blocks)
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return { valid: true, corrected_hq: company.hq };
-
-    const result = JSON.parse(jsonMatch[0]);
+    const result = JSON.parse(response.choices[0].message.content);
     if (result.valid === true) {
       return {
         valid: true,
@@ -418,9 +414,9 @@ async function parallelValidation(companies, business, country, exclusion) {
     // Fetch all websites in parallel
     const pageTexts = await Promise.all(batch.map(c => fetchWebsite(c.website)));
 
-    // Validate all in parallel using DeepSeek
+    // Validate all in parallel
     const validations = await Promise.all(
-      batch.map((company, idx) => validateCompanyWithDeepSeek(company, business, country, exclusion, pageTexts[idx]))
+      batch.map((company, idx) => validateCompany(company, business, country, exclusion, pageTexts[idx]))
     );
 
     // Collect valid ones with corrected HQ
@@ -492,7 +488,7 @@ app.post('/api/find-target', async (req, res) => {
     const companies = await comprehensiveSearch(Business, Country, Exclusion);
     console.log(`\nFound ${companies.length} unique companies`);
 
-    // PARALLEL VALIDATION WITH DEEPSEEK
+    // PARALLEL VALIDATION
     const validCompanies = await parallelValidation(companies, Business, Country, Exclusion);
 
     // SEND EMAIL
@@ -525,7 +521,7 @@ app.post('/api/find-target', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target Backend v5 - Dynamic + DeepSeek' });
+  res.json({ status: 'ok', service: 'Find Target Backend v6 - Dynamic' });
 });
 
 const PORT = process.env.PORT || 3000;
