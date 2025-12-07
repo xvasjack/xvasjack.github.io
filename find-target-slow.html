@@ -519,48 +519,11 @@
     menuClose.addEventListener('click', closeMenu);
     menuOverlay.addEventListener('click', closeMenu);
 
-    // Form submission
-    document.getElementById('findTargetForm').addEventListener('submit', async function(e) {
-      e.preventDefault();
-
+    // Form submission - let browser handle native form submit to n8n
+    document.getElementById('findTargetForm').addEventListener('submit', function() {
       const submitBtn = document.getElementById('submitBtn');
-      const successMessage = document.getElementById('successMessage');
-      const errorMessage = document.getElementById('errorMessage');
-
-      successMessage.style.display = 'none';
-      errorMessage.style.display = 'none';
-
       submitBtn.disabled = true;
       submitBtn.textContent = 'Submitting...';
-
-      const formData = {
-        Business: document.getElementById('business').value,
-        Country: document.getElementById('country').value,
-        Exclusion: document.getElementById('exclusion').value,
-        Email: document.getElementById('email').value
-      };
-
-      try {
-        const response = await fetch(this.action, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(formData)
-        });
-
-        if (response.ok) {
-          successMessage.style.display = 'block';
-          this.reset();
-        } else {
-          throw new Error('Request failed');
-        }
-      } catch (error) {
-        errorMessage.style.display = 'block';
-      } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Submit Request';
-      }
     });
   </script>
 </body>
