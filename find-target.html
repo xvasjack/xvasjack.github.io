@@ -233,6 +233,131 @@
       text-decoration: underline;
     }
 
+    /* Menu Styles */
+    .menu-btn {
+      position: absolute;
+      left: 2rem;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(255,255,255,0.2);
+      border: none;
+      border-radius: 10px;
+      padding: 1rem;
+      cursor: pointer;
+      color: #fff;
+      transition: all 0.2s ease;
+    }
+
+    .menu-btn:hover {
+      background: rgba(255,255,255,0.3);
+    }
+
+    .menu-btn svg {
+      display: block;
+    }
+
+    .header {
+      position: relative;
+    }
+
+    .menu-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.5);
+      opacity: 0;
+      visibility: hidden;
+      transition: all 0.3s ease;
+      z-index: 998;
+    }
+
+    .menu-overlay.active {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .side-menu {
+      position: fixed;
+      top: 0;
+      left: -280px;
+      width: 280px;
+      height: 100%;
+      background: #fff;
+      box-shadow: 4px 0 20px rgba(0,0,0,0.15);
+      transition: left 0.3s ease;
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .side-menu.active {
+      left: 0;
+    }
+
+    .menu-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 2rem;
+      border-bottom: 1px solid #e5e7eb;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .menu-title {
+      font-size: 1.8rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .menu-close {
+      background: rgba(255,255,255,0.2);
+      border: none;
+      font-size: 2.4rem;
+      color: #fff;
+      cursor: pointer;
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease;
+    }
+
+    .menu-close:hover {
+      background: rgba(255,255,255,0.3);
+    }
+
+    .menu-list {
+      list-style: none;
+      padding: 1rem 0;
+      flex: 1;
+    }
+
+    .menu-item {
+      display: block;
+      padding: 1.4rem 2rem;
+      font-size: 1.5rem;
+      color: #374151;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      border-left: 3px solid transparent;
+    }
+
+    .menu-item:hover {
+      background: #f3f4f6;
+      color: #667eea;
+    }
+
+    .menu-item.active {
+      background: linear-gradient(90deg, rgba(102, 126, 234, 0.1) 0%, transparent 100%);
+      color: #667eea;
+      border-left-color: #667eea;
+      font-weight: 600;
+    }
+
     @media screen and (max-width: 600px) {
       .card {
         padding: 3rem 2rem;
@@ -246,11 +371,35 @@
       .main-container {
         padding: 1rem;
       }
+
+      .menu-btn {
+        left: 1rem;
+      }
     }
   </style>
 </head>
 <body>
+  <!-- Menu -->
+  <div class="menu-overlay" id="menuOverlay"></div>
+  <nav class="side-menu" id="sideMenu">
+    <div class="menu-header">
+      <span class="menu-title">Products</span>
+      <button class="menu-close" id="menuClose">&times;</button>
+    </div>
+    <ul class="menu-list">
+      <li><a href="find-target.html" class="menu-item active">Company Search</a></li>
+      <li><a href="validation.html" class="menu-item">Validation</a></li>
+    </ul>
+  </nav>
+
   <header class="header">
+    <button class="menu-btn" id="menuBtn">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="3" y1="12" x2="21" y2="12"></line>
+        <line x1="3" y1="6" x2="21" y2="6"></line>
+        <line x1="3" y1="18" x2="21" y2="18"></line>
+      </svg>
+    </button>
     <h1 class="header-title">Find Target</h1>
   </header>
 
@@ -350,6 +499,29 @@
   </footer>
 
   <script>
+    // Menu toggle functionality
+    const menuBtn = document.getElementById('menuBtn');
+    const menuClose = document.getElementById('menuClose');
+    const menuOverlay = document.getElementById('menuOverlay');
+    const sideMenu = document.getElementById('sideMenu');
+
+    function openMenu() {
+      sideMenu.classList.add('active');
+      menuOverlay.classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeMenu() {
+      sideMenu.classList.remove('active');
+      menuOverlay.classList.remove('active');
+      document.body.style.overflow = '';
+    }
+
+    menuBtn.addEventListener('click', openMenu);
+    menuClose.addEventListener('click', closeMenu);
+    menuOverlay.addEventListener('click', closeMenu);
+
+    // Form submission
     document.getElementById('findTargetForm').addEventListener('submit', async function(e) {
       e.preventDefault();
 
