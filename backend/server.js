@@ -23,7 +23,7 @@ const openai = new OpenAI({
 // Initialize DeepSeek (OpenAI-compatible API) - CHEAPEST, use for heavy workload
 const deepseek = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY || 'missing',
-  baseURL: 'https://api.deepseek.com'
+  baseURL: 'https://api.deepseek.com/v1'
 });
 
 // Send email using Brevo API
