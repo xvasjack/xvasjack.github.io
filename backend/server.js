@@ -251,6 +251,42 @@ function generateExhaustiveQueries(business, country, exclusion) {
     `${business} companies not affiliated with multinationals in ${country}. ${outputFormat}`
   );
 
+  // ===== LOCAL LANGUAGE SEARCHES =====
+  queries.perplexity.push(
+    `Search for ${business} companies in ${country} using local language terms (translate "${business}" to Thai, Vietnamese, Bahasa, Tagalog as appropriate). Exclude ${exclusion}. ${outputFormat}`,
+    `Find ${business} suppliers in ${country} - search in both English and local languages of each country. Not ${exclusion}. ${outputFormat}`
+  );
+  queries.chatgpt.push(
+    `List ${business} companies in ${country}. Search using local language variations and translations of "${business}". Exclude ${exclusion}. ${outputFormat}`
+  );
+
+  // ===== GOVERNMENT REGISTRIES =====
+  queries.perplexity.push(
+    `${business} companies registered with government business registries in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} firms in official company registrations database of ${country}. Not ${exclusion}. ${outputFormat}`
+  );
+
+  // ===== INDUSTRY PUBLICATIONS & NEWS =====
+  queries.perplexity.push(
+    `${business} companies mentioned in industry magazines and trade publications for ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Recent news about ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} market report ${country} - list all companies mentioned. Exclude ${exclusion}. ${outputFormat}`
+  );
+
+  // ===== LINKEDIN & PROFESSIONAL NETWORKS =====
+  queries.chatgpt.push(
+    `${business} companies with LinkedIn profiles in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} firms and their executives on professional networks in ${country}. Not ${exclusion}. ${outputFormat}`
+  );
+
+  // ===== RANKINGS & LISTS =====
+  queries.perplexity.push(
+    `Top ${business} companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Biggest ${business} suppliers in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `Leading ${business} manufacturers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Best ${business} companies ranked in ${country}. Not ${exclusion}. ${outputFormat}`
+  );
+
   // ===== FINAL SWEEP =====
   queries.chatgpt.push(
     `Any ${business} companies in ${country} not yet mentioned. Exclude ${exclusion}. ${outputFormat}`,
@@ -445,7 +481,7 @@ async function verifyWebsite(url) {
 async function filterVerifiedWebsites(companies) {
   console.log(`\nVerifying ${companies.length} websites...`);
   const startTime = Date.now();
-  const batchSize = 10;
+  const batchSize = 15; // Increased for better parallelization
   const verified = [];
 
   for (let i = 0; i < companies.length; i += batchSize) {
@@ -560,7 +596,7 @@ ${pageText.substring(0, 8000)}`
 async function parallelValidationStrict(companies, business, country, exclusion) {
   console.log(`\nSTRICT Validating ${companies.length} verified companies...`);
   const startTime = Date.now();
-  const batchSize = 5;
+  const batchSize = 10; // Increased for better parallelization
   const validated = [];
 
   for (let i = 0; i < companies.length; i += batchSize) {
@@ -844,7 +880,7 @@ app.post('/api/find-target-slow', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v17 - Balanced Validation' });
+  res.json({ status: 'ok', service: 'Find Target v18 - More Strategies + Better Parallelization' });
 });
 
 const PORT = process.env.PORT || 3000;
