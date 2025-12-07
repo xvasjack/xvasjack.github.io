@@ -468,24 +468,41 @@ Rules:
   }
 }
 
-// ============ DEDUPLICATION ============
+// ============ DEDUPLICATION (Enhanced for v20) ============
 
 function normalizeCompanyName(name) {
   if (!name) return '';
   return name.toLowerCase()
-    .replace(/\s+(sdn\.?\s*bhd\.?|bhd\.?|pte\.?\s*ltd\.?|ltd\.?|inc\.?|corp\.?|corporation|co\.?\s*ltd\.?|llc|gmbh|s\.?a\.?|pt\.?|cv\.?|private\s*limited|limited)$/gi, '')
-    .replace(/[^\w\s]/g, '')
-    .replace(/\s+/g, ' ')
+    // Remove ALL common legal suffixes globally (expanded list)
+    .replace(/\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi, '')
+    // Also remove these if they appear anywhere (for cases like "PT Company Name")
+    .replace(/^(pt\.?|cv\.?)\s+/gi, '')
+    .replace(/[^\w\s]/g, '')  // Remove special characters
+    .replace(/\s+/g, ' ')      // Normalize spaces
     .trim();
 }
 
 function normalizeWebsite(url) {
   if (!url) return '';
-  return url.toLowerCase().replace(/\/$/, '').replace(/^https?:\/\//, '').replace(/^www\./, '');
+  return url.toLowerCase()
+    .replace(/^https?:\/\//, '')           // Remove protocol
+    .replace(/^www\./, '')                  // Remove www
+    .replace(/\/+$/, '')                    // Remove trailing slashes
+    // Remove common path suffixes that don't differentiate companies
+    .replace(/\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i, '')
+    .replace(/\.(html?|php|aspx?|jsp)$/i, ''); // Remove file extensions
+}
+
+// Extract domain root for additional deduplication
+function extractDomainRoot(url) {
+  const normalized = normalizeWebsite(url);
+  // Get just the domain without any path
+  return normalized.split('/')[0];
 }
 
 function dedupeCompanies(allCompanies) {
   const seenWebsites = new Map();
+  const seenDomains = new Map();
   const seenNames = new Map();
   const results = [];
 
@@ -494,16 +511,62 @@ function dedupeCompanies(allCompanies) {
     if (!c.website.startsWith('http')) continue;
 
     const websiteKey = normalizeWebsite(c.website);
+    const domainKey = extractDomainRoot(c.website);
     const nameKey = normalizeCompanyName(c.company_name);
 
-    if (seenWebsites.has(websiteKey) || seenNames.has(nameKey)) continue;
+    // Skip if we've seen this exact URL, domain, or normalized name
+    if (seenWebsites.has(websiteKey)) continue;
+    if (seenDomains.has(domainKey)) continue;
+    if (nameKey && seenNames.has(nameKey)) continue;
 
     seenWebsites.set(websiteKey, true);
-    seenNames.set(nameKey, true);
+    seenDomains.set(domainKey, true);
+    if (nameKey) seenNames.set(nameKey, true);
     results.push(c);
   }
 
   return results;
+}
+
+// ============ PRE-FILTER: Remove obvious non-company URLs ============
+
+function isSpamOrDirectoryURL(url) {
+  if (!url) return true;
+  const urlLower = url.toLowerCase();
+
+  // Common directory/marketplace/aggregator domains to filter out
+  const spamPatterns = [
+    // Directories and marketplaces
+    'alibaba.com', 'made-in-china.com', 'globalsources.com', 'indiamart.com',
+    'kompass.com', 'yellowpages', 'yelp.com', 'trustpilot.com',
+    'dnb.com', 'bloomberg.com/profile', 'reuters.com/companies',
+    'crunchbase.com', 'zoominfo.com', 'opencorporates.com',
+    // Social media (unless it's the company's actual site)
+    'facebook.com', 'linkedin.com/company', 'twitter.com', 'instagram.com',
+    // Data aggregators
+    'dataforthai.com', 'companieshouse', 'bizfile', 'acra.gov',
+    // File hosting / docs
+    'scribd.com', 'slideshare.net', 'issuu.com',
+    // News sites (articles about companies, not companies themselves)
+    'wikipedia.org', 'bloomberg.com/news', 'reuters.com/article'
+  ];
+
+  for (const pattern of spamPatterns) {
+    if (urlLower.includes(pattern)) return true;
+  }
+
+  return false;
+}
+
+function preFilterCompanies(companies) {
+  return companies.filter(c => {
+    if (!c || !c.website) return false;
+    if (isSpamOrDirectoryURL(c.website)) {
+      console.log(`    Pre-filtered: ${c.company_name} - Directory/aggregator site`);
+      return false;
+    }
+    return true;
+  });
 }
 
 // ============ EXHAUSTIVE PARALLEL SEARCH WITH 14 STRATEGIES ============
@@ -742,7 +805,86 @@ async function fetchWebsite(url) {
   }
 }
 
-// ============ STRICT VALIDATION FOR FAST MODE ============
+// ============ DYNAMIC EXCLUSION RULES BUILDER ============
+
+function buildExclusionRules(exclusion, business) {
+  const exclusionLower = exclusion.toLowerCase();
+  let rules = '';
+
+  // Detect if user wants to exclude LARGE/MNC/BIG companies
+  if (exclusionLower.includes('large') || exclusionLower.includes('big') ||
+      exclusionLower.includes('mnc') || exclusionLower.includes('multinational') ||
+      exclusionLower.includes('major') || exclusionLower.includes('giant')) {
+    rules += `
+LARGE COMPANY DETECTION - REJECT if ANY of these signals are found:
+- Company name ends with "Tbk" or "Tbk." (Indonesian publicly listed)
+- Company name ends with "Berhad" without "Sdn" (Malaysian publicly listed)
+- Company name contains "PLC", "Public Limited", or "Public Company"
+- Website mentions being listed on ANY stock exchange (NYSE, NASDAQ, SGX, SET, IDX, HOSE, PSE, BURSA, etc.)
+- Website mentions "Fortune 500", "Fortune Global", "Forbes Global"
+- Website shows operations/subsidiaries in 5+ countries
+- Website mentions revenue >$100M, >$50M, or >100 million
+- Website mentions employee count >500 or >1000 employees
+- Website mentions being a "global leader", "world leader", "industry leader", "market leader"
+- Website prominently features "worldwide", "global presence", "international operations"
+- Company is clearly a subsidiary of a large multinational corporation
+- Parent company headquarters is in Japan, USA, Europe, or other developed country
+`;
+  }
+
+  // Detect if user wants to exclude LISTED/PUBLIC companies
+  if (exclusionLower.includes('listed') || exclusionLower.includes('public')) {
+    rules += `
+LISTED/PUBLIC COMPANY DETECTION - REJECT if:
+- Company name contains "Tbk", "PLC", "Public Limited", "Berhad" (without Sdn)
+- Website shows stock ticker symbol
+- Website mentions IPO, shareholders meeting, annual report to investors
+- Website mentions being listed on any stock exchange
+`;
+  }
+
+  // Detect if user wants to exclude DISTRIBUTORS
+  if (exclusionLower.includes('distributor')) {
+    rules += `
+DISTRIBUTOR DETECTION - REJECT if the company is PRIMARILY a distributor:
+- Website says "authorized dealer", "authorized distributor", "exclusive distributor"
+- Website says "we distribute", "distributing for", "distribution partner"
+- Website says "representing [brand]", "sole agent", "exclusive agent"
+- Website lists many brands they distribute but doesn't mention own manufacturing
+- Company has NO factory, plant, or production facility
+- HOWEVER: ACCEPT if they ALSO manufacture/produce, even if they distribute too
+`;
+  }
+
+  // Detect if user wants to exclude MANUFACTURERS (opposite case)
+  if (exclusionLower.includes('manufacturer') && !exclusionLower.includes('non-manufacturer')) {
+    rules += `
+MANUFACTURER DETECTION - REJECT if:
+- Website mentions "our factory", "our plant", "we manufacture", "production facility"
+- Website mentions "made by us", "produced by", "our production line"
+`;
+  }
+
+  // Always add business type verification (dynamic based on business parameter)
+  rules += `
+BUSINESS TYPE VERIFICATION - This is CRITICAL:
+- The company must actually PRODUCE/MANUFACTURE/MAKE "${business}"
+- REJECT if they only USE "${business}" in their operations
+- REJECT if they are a printing company, packaging company, or converter that just USES the product
+- REJECT if they provide services using "${business}" but don't make it
+- REJECT if their main business is something else and "${business}" is just a supply they use
+- ACCEPT only if they genuinely produce, manufacture, formulate, or make "${business}"
+
+Example: If searching for "ink manufacturer":
+- ACCEPT: Company that manufactures/produces ink
+- REJECT: Printing company that uses ink to print (they BUY ink, don't MAKE it)
+- REJECT: Packaging company that prints using ink (they USE ink, don't MANUFACTURE it)
+`;
+
+  return rules;
+}
+
+// ============ STRICT VALIDATION FOR FAST MODE (Enhanced v20) ============
 
 async function validateCompanyStrict(company, business, country, exclusion, pageText) {
   // If we couldn't fetch the website, REJECT (can't verify)
@@ -751,39 +893,47 @@ async function validateCompanyStrict(company, business, country, exclusion, page
     return { valid: false };
   }
 
+  // Build dynamic exclusion rules based on user's criteria
+  const exclusionRules = buildExclusionRules(exclusion, business);
+
   try {
     const validation = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: `You are a company validator. Analyze the website content to determine if this company matches the search criteria.
+          content: `You are a STRICT company validator. Your job is to determine if a company matches very specific search criteria. Be thorough and strict - when in doubt, REJECT.
 
 USER'S SEARCH CRITERIA:
-- Target Business: "${business}"
-- Target Countries: ${country}
-- User wants to EXCLUDE: ${exclusion}
+- Looking for: "${business}"
+- In these countries: ${country}
+- MUST EXCLUDE: ${exclusion}
 
-VALIDATION RULES:
+VALIDATION RULES (apply ALL of these):
 
-1. LOCATION (STRICT): Company must operate in or be headquartered in ${country}. REJECT only if clearly based in a different country (e.g., HQ in Japan, USA, Europe with no ${country} operations).
+1. LOCATION CHECK:
+- Company must be headquartered in or have primary operations in: ${country}
+- REJECT if headquarters is clearly outside these countries (Japan, USA, Europe, China, Korea, etc.)
+- Local subsidiaries of foreign multinationals should be REJECTED if "MNC" or "multinational" is in exclusions
 
-2. BUSINESS (MODERATE): Company should be involved in "${business}" - either as a manufacturer, supplier, or significant player. ACCEPT if they produce, supply, or deal in ${business} products, even if they also do other things.
+2. BUSINESS MATCH:
+${exclusionRules}
 
-3. EXCLUSIONS (STRICT): REJECT if the company clearly matches the exclusion criteria: "${exclusion}". Analyze the website for signs that match the exclusion.
+3. SPAM/QUALITY CHECK:
+- REJECT if this is a directory, marketplace, aggregator, or news article
+- REJECT if domain appears to be parked or for sale
 
-4. QUALITY: REJECT only if it's clearly a directory, marketplace, or spam site.
-
-Return JSON: {"valid": true/false, "reason": "brief explanation"}`
+Return JSON only: {"valid": true/false, "reason": "one sentence explanation"}`
         },
         {
           role: 'user',
-          content: `Company: ${company.company_name}
-Website: ${company.website}
-Claimed HQ: ${company.hq}
+          content: `COMPANY TO VALIDATE:
+- Name: ${company.company_name}
+- Website: ${company.website}
+- Claimed HQ: ${company.hq}
 
-Website content to analyze:
-${pageText.substring(0, 8000)}`
+WEBSITE CONTENT (analyze this carefully):
+${pageText.substring(0, 10000)}`
         }
       ],
       response_format: { type: 'json_object' }
@@ -836,66 +986,50 @@ async function parallelValidationStrict(companies, business, country, exclusion)
   return validated;
 }
 
-// ============ LENIENT VALIDATION FOR SLOW MODE ============
+// ============ LENIENT VALIDATION FOR SLOW MODE (Enhanced v20) ============
 
 async function validateCompany(company, business, country, exclusion, pageText) {
+  // Build dynamic exclusion rules (same as strict mode but slightly more lenient)
+  const exclusionRules = buildExclusionRules(exclusion, business);
+
   try {
     const validation = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: `You are a strict company validator. Validate if this company matches criteria.
+          content: `You are a company validator. Validate if this company matches the search criteria. Be thorough but fair.
+
+USER'S SEARCH CRITERIA:
+- Looking for: "${business}"
+- In these countries: ${country}
+- MUST EXCLUDE: ${exclusion}
 
 VALIDATION RULES:
 
 1. LOCATION CHECK:
-   - Is HQ in one of: ${country}?
-   - If clearly outside → REJECT
-   - If unclear but might be in region → ACCEPT
+- Company must be headquartered in or primarily operate in: ${country}
+- REJECT if headquarters is clearly outside these countries
+- If unclear but company serves the region → ACCEPT
 
-2. BUSINESS MATCH (BE LENIENT):
-   - Does company relate to "${business}"?
-   - Accept related products, services, sub-categories
-   - Only reject if COMPLETELY unrelated
+2. BUSINESS MATCH:
+${exclusionRules}
 
-3. LARGE COMPANY EXCLUSION (BE STRICT - user wants to exclude: ${exclusion}):
-   REJECT if ANY of these signals are present:
-   - Company is publicly listed/traded on any stock exchange
-   - Company is part of a global group with operations in 5+ countries
-   - Company is a subsidiary of a Fortune 500 or large multinational
-   - Company has "global", "worldwide", "international operations" prominently
-   - Company mentions revenue >$100M or employees >500
-   - Company is a well-known industry giant or market leader
-   - Company website mentions "group of companies" spanning multiple countries
-   - Parent company is a large multinational corporation
-
-   ACCEPT only if company appears to be:
-   - Locally owned and operated
-   - Single-country or regional focus (2-3 countries max)
-   - Independent (not subsidiary of large group)
-   - Small to medium enterprise
-
-4. DISTRIBUTOR EXCLUSION (if "distributor" in exclusions):
-   - Reject if company ONLY distributes products from others
-   - Accept if company also manufactures, formulates, or produces
-
-5. SPAM CHECK:
-   - Reject directories, marketplaces, aggregators
+3. SPAM/QUALITY CHECK:
+- REJECT if this is a directory, marketplace, aggregator, or news article
+- REJECT if domain is parked or for sale
 
 Return JSON: {"valid": true/false, "reason": "brief explanation", "corrected_hq": "City, Country or null"}`
         },
         {
           role: 'user',
-          content: `Company: ${company.company_name}
-Website: ${company.website}
-Claimed HQ: ${company.hq}
-Business: ${business}
-Countries: ${country}
-Exclusions: ${exclusion}
+          content: `COMPANY TO VALIDATE:
+- Name: ${company.company_name}
+- Website: ${company.website}
+- Claimed HQ: ${company.hq}
 
-Website content (analyze for large company signals):
-${pageText ? pageText.substring(0, 6000) : 'Could not fetch website - use company name to assess if likely large/multinational'}`
+WEBSITE CONTENT (analyze carefully):
+${pageText ? pageText.substring(0, 8000) : 'Could not fetch website - use company name to assess'}`
         }
       ],
       response_format: { type: 'json_object' }
@@ -993,8 +1127,12 @@ app.post('/api/find-target', async (req, res) => {
     const companies = await exhaustiveSearch(Business, Country, Exclusion);
     console.log(`\nFound ${companies.length} unique companies`);
 
+    // Pre-filter obvious spam/directories before expensive verification
+    const preFiltered = preFilterCompanies(companies);
+    console.log(`After pre-filter: ${preFiltered.length} companies`);
+
     // Filter out fake/dead websites before expensive validation
-    const verifiedCompanies = await filterVerifiedWebsites(companies);
+    const verifiedCompanies = await filterVerifiedWebsites(preFiltered);
     console.log(`\nCompanies with working websites: ${verifiedCompanies.length}`);
 
     const validCompanies = await parallelValidationStrict(verifiedCompanies, Business, Country, Exclusion);
@@ -1062,7 +1200,11 @@ app.post('/api/find-target-slow', async (req, res) => {
     const uniqueCompanies = dedupeCompanies(allCompanies);
     console.log(`\nTotal unique from 3 searches: ${uniqueCompanies.length}`);
 
-    const validCompanies = await parallelValidation(uniqueCompanies, Business, Country, Exclusion);
+    // Pre-filter obvious spam/directories
+    const preFiltered = preFilterCompanies(uniqueCompanies);
+    console.log(`After pre-filter: ${preFiltered.length} companies`);
+
+    const validCompanies = await parallelValidation(preFiltered, Business, Country, Exclusion);
 
     const htmlContent = buildEmailHTML(validCompanies, Business, Country, Exclusion);
     await sendEmail(
@@ -1089,7 +1231,7 @@ app.post('/api/find-target-slow', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v19 - 14-Strategy Search (SerpAPI + OpenAI Search + Perplexity + Gemini)' });
+  res.json({ status: 'ok', service: 'Find Target v20 - Enhanced Dedup + Dynamic Exclusion Detection' });
 });
 
 const PORT = process.env.PORT || 3000;
