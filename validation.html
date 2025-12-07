@@ -13,326 +13,275 @@
     }
 
     html {
-      font-size: 10px;
+      font-size: 16px;
     }
 
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
     }
 
-    .header {
-      padding: 2rem;
-      text-align: center;
-      position: relative;
+    /* Top Navigation Bar */
+    .top-nav {
+      background: #fff;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+      padding: 0 1.5rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
     }
 
-    .header-title {
-      color: #fff;
-      font-size: 2.4rem;
+    .nav-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+    }
+
+    .nav-brand {
+      font-size: 1.125rem;
       font-weight: 700;
-      letter-spacing: -0.5px;
-      text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      color: #1f2937;
+      text-decoration: none;
     }
 
+    .nav-links {
+      display: flex;
+      gap: 0.5rem;
+      list-style: none;
+    }
+
+    .nav-link {
+      display: block;
+      padding: 0.5rem 1rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #6b7280;
+      text-decoration: none;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .nav-link:hover {
+      color: #2563eb;
+      background: #eff6ff;
+    }
+
+    .nav-link.active {
+      color: #2563eb;
+      background: #eff6ff;
+    }
+
+    /* Mobile menu */
+    .mobile-menu-btn {
+      display: none;
+      background: none;
+      border: none;
+      padding: 0.5rem;
+      cursor: pointer;
+      color: #374151;
+    }
+
+    .mobile-menu {
+      display: none;
+      position: absolute;
+      top: 64px;
+      left: 0;
+      right: 0;
+      background: #fff;
+      border-top: 1px solid #e5e7eb;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      padding: 0.5rem;
+    }
+
+    .mobile-menu.active {
+      display: block;
+    }
+
+    .mobile-menu .nav-link {
+      display: block;
+      padding: 0.75rem 1rem;
+      border-radius: 6px;
+    }
+
+    /* Main Container */
     .main-container {
       flex: 1;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 2rem;
+      padding: 2rem 1rem;
     }
 
+    /* Card */
     .card {
       background: #fff;
-      border-radius: 20px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
       width: 100%;
-      max-width: 480px;
-      padding: 4rem 3.5rem;
-      animation: slideUp 0.5s ease-out;
+      max-width: 500px;
+      padding: 2.5rem 2rem;
     }
 
-    @keyframes slideUp {
-      from {
-        opacity: 0;
-        transform: translateY(20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
+    /* Form Header */
     .form-header {
       text-align: center;
-      margin-bottom: 3rem;
+      margin-bottom: 2rem;
     }
 
-    .form-icon {
-      width: 60px;
-      height: 60px;
-      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-      border-radius: 16px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 2rem;
+    .eyebrow {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.5rem;
     }
 
-    .form-icon svg {
-      width: 30px;
-      height: 30px;
-      fill: #fff;
-    }
-
-    .form-title {
-      font-size: 2.8rem;
-      color: #1a1a2e;
+    .page-title {
+      font-size: 1.75rem;
       font-weight: 700;
-      margin-bottom: 1rem;
-      letter-spacing: -0.5px;
+      color: #111827;
+      margin-bottom: 0.75rem;
     }
 
     .form-description {
-      font-size: 1.5rem;
-      color: #6b7280;
-      line-height: 1.7;
-    }
-
-    .coming-soon {
-      background: linear-gradient(135deg, rgba(17, 153, 142, 0.1) 0%, rgba(56, 239, 125, 0.1) 100%);
-      border: 2px dashed #11998e;
-      border-radius: 16px;
-      padding: 4rem 2rem;
-      text-align: center;
-      margin-top: 2rem;
-    }
-
-    .coming-soon-icon {
-      font-size: 4rem;
-      margin-bottom: 1.5rem;
-    }
-
-    .coming-soon-title {
-      font-size: 2rem;
-      color: #11998e;
-      font-weight: 700;
-      margin-bottom: 1rem;
-    }
-
-    .coming-soon-text {
-      font-size: 1.4rem;
+      font-size: 0.9375rem;
       color: #6b7280;
       line-height: 1.6;
     }
 
-    .back-link {
-      display: block;
+    /* Coming Soon Section */
+    .coming-soon {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 3rem 2rem;
       text-align: center;
+      margin-top: 1rem;
+    }
+
+    .coming-soon-icon {
+      font-size: 5rem;
+      margin-bottom: 1.5rem;
+      line-height: 1;
+    }
+
+    .coming-soon-title {
+      font-size: 1.5rem;
+      color: #111827;
+      font-weight: 700;
+      margin-bottom: 0.75rem;
+    }
+
+    .coming-soon-text {
+      font-size: 0.9375rem;
+      color: #6b7280;
+      line-height: 1.6;
+    }
+
+    /* Ghost Button */
+    .ghost-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.5rem;
+      font-size: 0.9375rem;
+      font-weight: 500;
+      font-family: inherit;
+      color: #374151;
+      background: transparent;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s ease;
       margin-top: 2rem;
-      padding-top: 2rem;
-      border-top: 1px solid #e5e7eb;
-      font-size: 1.3rem;
+    }
+
+    .ghost-btn:hover {
+      color: #2563eb;
+      border-color: #2563eb;
+      background: #eff6ff;
+    }
+
+    .ghost-btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 1.5rem;
+      font-size: 0.75rem;
       color: #9ca3af;
     }
 
-    .back-link a {
-      color: #11998e;
-      text-decoration: none;
-      font-weight: 500;
-    }
+    /* Responsive */
+    @media screen and (max-width: 640px) {
+      .nav-links {
+        display: none;
+      }
 
-    .back-link a:hover {
-      text-decoration: underline;
-    }
+      .mobile-menu-btn {
+        display: block;
+      }
 
-    .footer {
-      text-align: center;
-      padding: 2rem;
-      font-size: 1.2rem;
-      color: rgba(255,255,255,0.7);
-    }
-
-    /* Menu Styles */
-    .menu-btn {
-      position: absolute;
-      left: 2rem;
-      top: 50%;
-      transform: translateY(-50%);
-      background: rgba(255,255,255,0.2);
-      border: none;
-      border-radius: 10px;
-      padding: 1rem;
-      cursor: pointer;
-      color: #fff;
-      transition: all 0.2s ease;
-    }
-
-    .menu-btn:hover {
-      background: rgba(255,255,255,0.3);
-    }
-
-    .menu-btn svg {
-      display: block;
-    }
-
-    .menu-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.5);
-      opacity: 0;
-      visibility: hidden;
-      transition: all 0.3s ease;
-      z-index: 998;
-    }
-
-    .menu-overlay.active {
-      opacity: 1;
-      visibility: visible;
-    }
-
-    .side-menu {
-      position: fixed;
-      top: 0;
-      left: -280px;
-      width: 280px;
-      height: 100%;
-      background: #fff;
-      box-shadow: 4px 0 20px rgba(0,0,0,0.15);
-      transition: left 0.3s ease;
-      z-index: 999;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .side-menu.active {
-      left: 0;
-    }
-
-    .menu-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 2rem;
-      border-bottom: 1px solid #e5e7eb;
-      background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
-    }
-
-    .menu-title {
-      font-size: 1.8rem;
-      font-weight: 700;
-      color: #fff;
-    }
-
-    .menu-close {
-      background: rgba(255,255,255,0.2);
-      border: none;
-      font-size: 2.4rem;
-      color: #fff;
-      cursor: pointer;
-      width: 36px;
-      height: 36px;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s ease;
-    }
-
-    .menu-close:hover {
-      background: rgba(255,255,255,0.3);
-    }
-
-    .menu-list {
-      list-style: none;
-      padding: 1rem 0;
-      flex: 1;
-    }
-
-    .menu-item {
-      display: block;
-      padding: 1.4rem 2rem;
-      font-size: 1.5rem;
-      color: #374151;
-      text-decoration: none;
-      transition: all 0.2s ease;
-      border-left: 3px solid transparent;
-    }
-
-    .menu-item:hover {
-      background: #f3f4f6;
-      color: #11998e;
-    }
-
-    .menu-item.active {
-      background: linear-gradient(90deg, rgba(17, 153, 142, 0.1) 0%, transparent 100%);
-      color: #11998e;
-      border-left-color: #11998e;
-      font-weight: 600;
-    }
-
-    @media screen and (max-width: 600px) {
       .card {
-        padding: 3rem 2rem;
-        border-radius: 16px;
+        padding: 2rem 1.5rem;
       }
 
-      .form-title {
-        font-size: 2.4rem;
+      .page-title {
+        font-size: 1.5rem;
       }
 
-      .main-container {
-        padding: 1rem;
+      .coming-soon {
+        padding: 2rem 1.5rem;
       }
 
-      .menu-btn {
-        left: 1rem;
+      .coming-soon-icon {
+        font-size: 4rem;
       }
     }
   </style>
 </head>
 <body>
-  <!-- Menu -->
-  <div class="menu-overlay" id="menuOverlay"></div>
-  <nav class="side-menu" id="sideMenu">
-    <div class="menu-header">
-      <span class="menu-title">Products</span>
-      <button class="menu-close" id="menuClose">&times;</button>
+  <!-- Top Navigation -->
+  <nav class="top-nav">
+    <div class="nav-container">
+      <a href="find-target.html" class="nav-brand">Find Target</a>
+      <ul class="nav-links">
+        <li><a href="find-target.html" class="nav-link">v3 Fast</a></li>
+        <li><a href="find-target-slow.html" class="nav-link">v3 Slow</a></li>
+        <li><a href="validation.html" class="nav-link active">Validation</a></li>
+      </ul>
+      <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
     </div>
-    <ul class="menu-list">
-      <li><a href="find-target.html" class="menu-item">Company Search v3 Fast</a></li>
-      <li><a href="find-target-slow.html" class="menu-item">Company Search v3 Slow</a></li>
-      <li><a href="validation.html" class="menu-item active">Validation</a></li>
-    </ul>
+    <div class="mobile-menu" id="mobileMenu">
+      <a href="find-target.html" class="nav-link">v3 Fast</a>
+      <a href="find-target-slow.html" class="nav-link">v3 Slow</a>
+      <a href="validation.html" class="nav-link active">Validation</a>
+    </div>
   </nav>
-
-  <header class="header">
-    <button class="menu-btn" id="menuBtn">
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="3" y1="12" x2="21" y2="12"></line>
-        <line x1="3" y1="6" x2="21" y2="6"></line>
-        <line x1="3" y1="18" x2="21" y2="18"></line>
-      </svg>
-    </button>
-    <h1 class="header-title">Validation</h1>
-  </header>
 
   <main class="main-container">
     <div class="card">
       <div class="form-header">
-        <div class="form-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-          </svg>
-        </div>
-        <h2 class="form-title">Company Validation</h2>
+        <p class="eyebrow">Company Validation</p>
+        <h1 class="page-title">Validation</h1>
         <p class="form-description">
           Validate and verify company information with AI-powered analysis.
         </p>
@@ -340,15 +289,21 @@
 
       <div class="coming-soon">
         <div class="coming-soon-icon">🚀</div>
-        <h3 class="coming-soon-title">Coming Soon</h3>
+        <h2 class="coming-soon-title">Coming Soon</h2>
         <p class="coming-soon-text">
           This feature is currently under development.<br>
           Check back soon for company validation capabilities.
         </p>
       </div>
 
-      <div class="back-link">
-        <a href="find-target.html">← Back to Company Search</a>
+      <div style="text-align: center;">
+        <a href="find-target.html" class="ghost-btn">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="19" y1="12" x2="5" y2="12"></line>
+            <polyline points="12 19 5 12 12 5"></polyline>
+          </svg>
+          Back to Company Search
+        </a>
       </div>
     </div>
   </main>
@@ -358,27 +313,20 @@
   </footer>
 
   <script>
-    // Menu toggle functionality
-    const menuBtn = document.getElementById('menuBtn');
-    const menuClose = document.getElementById('menuClose');
-    const menuOverlay = document.getElementById('menuOverlay');
-    const sideMenu = document.getElementById('sideMenu');
+    // Mobile menu toggle
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const mobileMenu = document.getElementById('mobileMenu');
 
-    function openMenu() {
-      sideMenu.classList.add('active');
-      menuOverlay.classList.add('active');
-      document.body.style.overflow = 'hidden';
-    }
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('active');
+    });
 
-    function closeMenu() {
-      sideMenu.classList.remove('active');
-      menuOverlay.classList.remove('active');
-      document.body.style.overflow = '';
-    }
-
-    menuBtn.addEventListener('click', openMenu);
-    menuClose.addEventListener('click', closeMenu);
-    menuOverlay.addEventListener('click', closeMenu);
+    // Close mobile menu when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!mobileMenuBtn.contains(e.target) && !mobileMenu.contains(e.target)) {
+        mobileMenu.classList.remove('active');
+      }
+    });
   </script>
 </body>
 </html>

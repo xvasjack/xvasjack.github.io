@@ -13,117 +13,160 @@
     }
 
     html {
-      font-size: 10px;
+      font-size: 16px;
     }
 
     body {
-      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
     }
 
-    .header {
-      padding: 2rem;
-      text-align: center;
+    /* Top Navigation Bar */
+    .top-nav {
+      background: #fff;
+      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+      padding: 0 1.5rem;
+      position: sticky;
+      top: 0;
+      z-index: 100;
     }
 
-    .header-title {
-      color: #fff;
-      font-size: 2.4rem;
+    .nav-container {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+    }
+
+    .nav-brand {
+      font-size: 1.125rem;
       font-weight: 700;
-      letter-spacing: -0.5px;
-      text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+      color: #1f2937;
+      text-decoration: none;
     }
 
+    .nav-links {
+      display: flex;
+      gap: 0.5rem;
+      list-style: none;
+    }
+
+    .nav-link {
+      display: block;
+      padding: 0.5rem 1rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      color: #6b7280;
+      text-decoration: none;
+      border-radius: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .nav-link:hover {
+      color: #2563eb;
+      background: #eff6ff;
+    }
+
+    .nav-link.active {
+      color: #2563eb;
+      background: #eff6ff;
+    }
+
+    /* Mobile menu */
+    .mobile-menu-btn {
+      display: none;
+      background: none;
+      border: none;
+      padding: 0.5rem;
+      cursor: pointer;
+      color: #374151;
+    }
+
+    .mobile-menu {
+      display: none;
+      position: absolute;
+      top: 64px;
+      left: 0;
+      right: 0;
+      background: #fff;
+      border-top: 1px solid #e5e7eb;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+      padding: 0.5rem;
+    }
+
+    .mobile-menu.active {
+      display: block;
+    }
+
+    .mobile-menu .nav-link {
+      display: block;
+      padding: 0.75rem 1rem;
+      border-radius: 6px;
+    }
+
+    /* Main Container */
     .main-container {
       flex: 1;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 2rem;
+      padding: 2rem 1rem;
     }
 
+    /* Card */
     .card {
       background: #fff;
-      border-radius: 20px;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
       width: 100%;
-      max-width: 480px;
-      padding: 4rem 3.5rem;
-      animation: slideUp 0.5s ease-out;
+      max-width: 500px;
+      padding: 2.5rem 2rem;
     }
 
-    @keyframes slideUp {
-      from {
-        opacity: 0;
-        transform: translateY(20px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-
+    /* Form Header */
     .form-header {
       text-align: center;
-      margin-bottom: 3rem;
+      margin-bottom: 2rem;
     }
 
-    .form-icon {
-      width: 60px;
-      height: 60px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-      border-radius: 16px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      margin: 0 auto 2rem;
+    .eyebrow {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #6b7280;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 0.5rem;
     }
 
-    .form-icon svg {
-      width: 30px;
-      height: 30px;
-      fill: #fff;
-    }
-
-    .form-title {
-      font-size: 2.8rem;
-      color: #1a1a2e;
+    .page-title {
+      font-size: 1.75rem;
       font-weight: 700;
-      margin-bottom: 1rem;
-      letter-spacing: -0.5px;
+      color: #111827;
+      margin-bottom: 0.75rem;
     }
 
     .form-description {
-      font-size: 1.5rem;
+      font-size: 0.9375rem;
       color: #6b7280;
-      line-height: 1.7;
+      line-height: 1.6;
     }
 
-    .form-description a {
-      color: #667eea;
-      text-decoration: none;
-      font-weight: 500;
-    }
-
-    .form-description a:hover {
-      text-decoration: underline;
-    }
-
+    /* Form Styles */
     .form-group {
-      margin-bottom: 2rem;
+      margin-bottom: 1.25rem;
     }
 
     .form-label {
       display: block;
-      font-size: 1.3rem;
+      font-size: 0.875rem;
       color: #374151;
-      margin-bottom: 0.8rem;
+      margin-bottom: 0.375rem;
       font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
     }
 
     .required {
@@ -132,45 +175,45 @@
 
     .form-input {
       width: 100%;
-      padding: 1.4rem 1.6rem;
-      font-size: 1.6rem;
+      padding: 0.75rem;
+      font-size: 1rem;
       font-family: inherit;
-      border: 2px solid #e5e7eb;
-      border-radius: 12px;
-      background-color: #f9fafb;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background-color: #fff;
       transition: all 0.2s ease;
     }
 
     .form-input:focus {
       outline: none;
-      border-color: #667eea;
-      background-color: #fff;
-      box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
     }
 
     .form-input::placeholder {
       color: #9ca3af;
     }
 
+    /* Submit Button */
     .submit-btn {
       width: 100%;
-      padding: 1.6rem 2rem;
-      font-size: 1.6rem;
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
       font-weight: 600;
       font-family: inherit;
       color: #fff;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: #2563eb;
       border: none;
-      border-radius: 12px;
+      border-radius: 8px;
       cursor: pointer;
-      transition: all 0.3s ease;
-      margin-top: 1rem;
-      box-shadow: 0 4px 14px 0 rgba(102, 126, 234, 0.4);
+      transition: all 0.2s ease;
+      margin-top: 0.5rem;
     }
 
     .submit-btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px 0 rgba(102, 126, 234, 0.5);
+      background: #1d4ed8;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
     }
 
     .submit-btn:active {
@@ -179,18 +222,19 @@
 
     .submit-btn:disabled {
       background: #9ca3af;
-      box-shadow: none;
       cursor: not-allowed;
       transform: none;
+      box-shadow: none;
     }
 
+    /* Messages */
     .message {
       display: none;
-      padding: 1.6rem;
-      border-radius: 12px;
-      font-size: 1.4rem;
+      padding: 1rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
       text-align: center;
-      margin-top: 2rem;
+      margin-top: 1.25rem;
       font-weight: 500;
     }
 
@@ -206,25 +250,19 @@
       color: #991b1b;
     }
 
-    .footer {
-      text-align: center;
-      padding: 2rem;
-      font-size: 1.2rem;
-      color: rgba(255,255,255,0.7);
-    }
-
+    /* Version Link */
     .version-link {
       display: block;
       text-align: center;
-      margin-top: 2rem;
-      padding-top: 2rem;
+      margin-top: 1.5rem;
+      padding-top: 1.5rem;
       border-top: 1px solid #e5e7eb;
-      font-size: 1.3rem;
-      color: #9ca3af;
+      font-size: 0.875rem;
+      color: #6b7280;
     }
 
     .version-link a {
-      color: #667eea;
+      color: #2563eb;
       text-decoration: none;
       font-weight: 500;
     }
@@ -233,186 +271,64 @@
       text-decoration: underline;
     }
 
-    /* Menu Styles */
-    .menu-btn {
-      position: absolute;
-      left: 2rem;
-      top: 50%;
-      transform: translateY(-50%);
-      background: rgba(255,255,255,0.2);
-      border: none;
-      border-radius: 10px;
-      padding: 1rem;
-      cursor: pointer;
-      color: #fff;
-      transition: all 0.2s ease;
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 1.5rem;
+      font-size: 0.75rem;
+      color: #9ca3af;
     }
 
-    .menu-btn:hover {
-      background: rgba(255,255,255,0.3);
-    }
+    /* Responsive */
+    @media screen and (max-width: 640px) {
+      .nav-links {
+        display: none;
+      }
 
-    .menu-btn svg {
-      display: block;
-    }
+      .mobile-menu-btn {
+        display: block;
+      }
 
-    .header {
-      position: relative;
-    }
-
-    .menu-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.5);
-      opacity: 0;
-      visibility: hidden;
-      transition: all 0.3s ease;
-      z-index: 998;
-    }
-
-    .menu-overlay.active {
-      opacity: 1;
-      visibility: visible;
-    }
-
-    .side-menu {
-      position: fixed;
-      top: 0;
-      left: -280px;
-      width: 280px;
-      height: 100%;
-      background: #fff;
-      box-shadow: 4px 0 20px rgba(0,0,0,0.15);
-      transition: left 0.3s ease;
-      z-index: 999;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .side-menu.active {
-      left: 0;
-    }
-
-    .menu-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 2rem;
-      border-bottom: 1px solid #e5e7eb;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    }
-
-    .menu-title {
-      font-size: 1.8rem;
-      font-weight: 700;
-      color: #fff;
-    }
-
-    .menu-close {
-      background: rgba(255,255,255,0.2);
-      border: none;
-      font-size: 2.4rem;
-      color: #fff;
-      cursor: pointer;
-      width: 36px;
-      height: 36px;
-      border-radius: 8px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s ease;
-    }
-
-    .menu-close:hover {
-      background: rgba(255,255,255,0.3);
-    }
-
-    .menu-list {
-      list-style: none;
-      padding: 1rem 0;
-      flex: 1;
-    }
-
-    .menu-item {
-      display: block;
-      padding: 1.4rem 2rem;
-      font-size: 1.5rem;
-      color: #374151;
-      text-decoration: none;
-      transition: all 0.2s ease;
-      border-left: 3px solid transparent;
-    }
-
-    .menu-item:hover {
-      background: #f3f4f6;
-      color: #667eea;
-    }
-
-    .menu-item.active {
-      background: linear-gradient(90deg, rgba(102, 126, 234, 0.1) 0%, transparent 100%);
-      color: #667eea;
-      border-left-color: #667eea;
-      font-weight: 600;
-    }
-
-    @media screen and (max-width: 600px) {
       .card {
-        padding: 3rem 2rem;
-        border-radius: 16px;
+        padding: 2rem 1.5rem;
       }
 
-      .form-title {
-        font-size: 2.4rem;
-      }
-
-      .main-container {
-        padding: 1rem;
-      }
-
-      .menu-btn {
-        left: 1rem;
+      .page-title {
+        font-size: 1.5rem;
       }
     }
   </style>
 </head>
 <body>
-  <!-- Menu -->
-  <div class="menu-overlay" id="menuOverlay"></div>
-  <nav class="side-menu" id="sideMenu">
-    <div class="menu-header">
-      <span class="menu-title">Products</span>
-      <button class="menu-close" id="menuClose">&times;</button>
+  <!-- Top Navigation -->
+  <nav class="top-nav">
+    <div class="nav-container">
+      <a href="find-target.html" class="nav-brand">Find Target</a>
+      <ul class="nav-links">
+        <li><a href="find-target.html" class="nav-link active">v3 Fast</a></li>
+        <li><a href="find-target-slow.html" class="nav-link">v3 Slow</a></li>
+        <li><a href="validation.html" class="nav-link">Validation</a></li>
+      </ul>
+      <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
     </div>
-    <ul class="menu-list">
-      <li><a href="find-target.html" class="menu-item active">Company Search v3 Fast</a></li>
-      <li><a href="find-target-slow.html" class="menu-item">Company Search v3 Slow</a></li>
-      <li><a href="validation.html" class="menu-item">Validation</a></li>
-    </ul>
+    <div class="mobile-menu" id="mobileMenu">
+      <a href="find-target.html" class="nav-link active">v3 Fast</a>
+      <a href="find-target-slow.html" class="nav-link">v3 Slow</a>
+      <a href="validation.html" class="nav-link">Validation</a>
+    </div>
   </nav>
-
-  <header class="header">
-    <button class="menu-btn" id="menuBtn">
-      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="3" y1="12" x2="21" y2="12"></line>
-        <line x1="3" y1="6" x2="21" y2="6"></line>
-        <line x1="3" y1="18" x2="21" y2="18"></line>
-      </svg>
-    </button>
-    <h1 class="header-title">Find Target</h1>
-  </header>
 
   <main class="main-container">
     <div class="card">
       <div class="form-header">
-        <div class="form-icon">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
-            <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
-          </svg>
-        </div>
-        <h2 class="form-title">Company Search v3 Fast</h2>
+        <p class="eyebrow">Company Search</p>
+        <h1 class="page-title">v3 Fast</h1>
         <p class="form-description">
           Fill in the form below and submit.<br>
           Results will be emailed to you within <strong>5-10 minutes</strong>.
@@ -500,27 +416,20 @@
   </footer>
 
   <script>
-    // Menu toggle functionality
-    const menuBtn = document.getElementById('menuBtn');
-    const menuClose = document.getElementById('menuClose');
-    const menuOverlay = document.getElementById('menuOverlay');
-    const sideMenu = document.getElementById('sideMenu');
+    // Mobile menu toggle
+    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+    const mobileMenu = document.getElementById('mobileMenu');
 
-    function openMenu() {
-      sideMenu.classList.add('active');
-      menuOverlay.classList.add('active');
-      document.body.style.overflow = 'hidden';
-    }
+    mobileMenuBtn.addEventListener('click', () => {
+      mobileMenu.classList.toggle('active');
+    });
 
-    function closeMenu() {
-      sideMenu.classList.remove('active');
-      menuOverlay.classList.remove('active');
-      document.body.style.overflow = '';
-    }
-
-    menuBtn.addEventListener('click', openMenu);
-    menuClose.addEventListener('click', closeMenu);
-    menuOverlay.addEventListener('click', closeMenu);
+    // Close mobile menu when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!mobileMenuBtn.contains(e.target) && !mobileMenu.contains(e.target)) {
+        mobileMenu.classList.remove('active');
+      }
+    });
 
     // Form submission
     document.getElementById('findTargetForm').addEventListener('submit', async function(e) {
