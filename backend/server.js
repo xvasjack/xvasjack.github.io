@@ -20,20 +20,6 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
 
-// Known large ink companies to always exclude
-const KNOWN_LARGE_COMPANIES = [
-  'sakata', 'sakata inx', 'dic', 'dic corporation', 'toyo ink', 'toyo ink group',
-  'sun chemical', 'flint group', 'siegwerk', 'huber group', 'altana',
-  'tokyo printing ink', 't&k toka', 'inx international', 'kao', 'kao chimigraf',
-  'fuji film', 'fujifilm', 'konica', 'konica minolta', 'hp', 'hewlett packard',
-  'epson', 'canon', 'ricoh', 'xerox', 'brother', 'lexmark'
-];
-
-function isKnownLargeCompany(companyName) {
-  const normalized = companyName.toLowerCase();
-  return KNOWN_LARGE_COMPANIES.some(large => normalized.includes(large));
-}
-
 // Send email using Brevo API
 async function sendEmail(to, subject, html) {
   const senderEmail = process.env.BREVO_SENDER_EMAIL || 'xvasjack@gmail.com';
@@ -221,11 +207,10 @@ function generateExhaustiveQueries(business, country, exclusion) {
 
   // ===== TRADE SHOWS & EXHIBITIONS =====
   queries.gemini.push(
-    `${business} exhibitors at Drupa from ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} companies at Pack Print International from ${country}. Not ${exclusion}. ${outputFormat}`,
     `${business} exhibitors at trade shows in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} companies at printing expos in Asia. Not ${exclusion}. ${outputFormat}`,
-    `${business} participants at packaging exhibitions in ${country}. Exclude ${exclusion}. ${outputFormat}`
+    `${business} companies at industry exhibitions in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} participants at expos in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} exhibitors at international fairs from ${country}. Not ${exclusion}. ${outputFormat}`
   );
 
   // ===== IMPORT/EXPORT & B2B =====
@@ -264,15 +249,6 @@ function generateExhaustiveQueries(business, country, exclusion) {
     `Boutique ${business} companies in ${country}. No ${exclusion}. ${outputFormat}`,
     `Emerging ${business} startups in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${business} companies not affiliated with multinationals in ${country}. ${outputFormat}`
-  );
-
-  // ===== RELATED TERMS =====
-  queries.chatgpt.push(
-    `Printing ink companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Packaging ink suppliers in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `Publication ink manufacturers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Industrial coating companies in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `Specialty ink producers in ${country}. Exclude ${exclusion}. ${outputFormat}`
   );
 
   // ===== FINAL SWEEP =====
@@ -429,12 +405,6 @@ async function fetchWebsite(url) {
 }
 
 async function validateCompany(company, business, country, exclusion, pageText) {
-  // First check against known large companies blacklist
-  if (isKnownLargeCompany(company.company_name)) {
-    console.log(`    Rejected (blacklist): ${company.company_name} - Known large company`);
-    return { valid: false };
-  }
-
   try {
     const validation = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -455,16 +425,16 @@ VALIDATION RULES:
    - Accept related products, services, sub-categories
    - Only reject if COMPLETELY unrelated
 
-3. LARGE COMPANY EXCLUSION (BE STRICT - ${exclusion}):
+3. LARGE COMPANY EXCLUSION (BE STRICT - user wants to exclude: ${exclusion}):
    REJECT if ANY of these signals are present:
-   - Company is publicly listed/traded on stock exchange (TSE, SGX, SET, IDX, etc.)
+   - Company is publicly listed/traded on any stock exchange
    - Company is part of a global group with operations in 5+ countries
    - Company is a subsidiary of a Fortune 500 or large multinational
    - Company has "global", "worldwide", "international operations" prominently
    - Company mentions revenue >$100M or employees >500
-   - Company is affiliated with DIC, Sakata, Toyo Ink, Sun Chemical, Siegwerk, Flint Group
+   - Company is a well-known industry giant or market leader
    - Company website mentions "group of companies" spanning multiple countries
-   - Parent company is Japanese, American, or European multinational
+   - Parent company is a large multinational corporation
 
    ACCEPT only if company appears to be:
    - Locally owned and operated
@@ -504,10 +474,6 @@ ${pageText ? pageText.substring(0, 6000) : 'Could not fetch website - use compan
     console.log(`    Rejected: ${company.company_name} - ${result.reason}`);
     return { valid: false };
   } catch (e) {
-    // On error, still reject if name suggests large company
-    if (isKnownLargeCompany(company.company_name)) {
-      return { valid: false };
-    }
     console.log(`    Validation error for ${company.company_name}, accepting by default`);
     return { valid: true, corrected_hq: company.hq };
   }
@@ -685,7 +651,7 @@ app.post('/api/find-target-slow', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v12 - Exhaustive Search + Strict Large Company Filter' });
+  res.json({ status: 'ok', service: 'Find Target v13 - Dynamic Search (No Hardcoded Values)' });
 });
 
 const PORT = process.env.PORT || 3000;
