@@ -816,13 +816,27 @@ function buildExclusionRules(exclusion, business) {
       exclusionLower.includes('mnc') || exclusionLower.includes('multinational') ||
       exclusionLower.includes('major') || exclusionLower.includes('giant')) {
     rules += `
-LARGE COMPANY DETECTION - REJECT if ANY of these apply:
-- Company is a subsidiary of a large multinational corporation (MNC)
-- Parent company is a well-known global brand or multinational
-- Company name ends with "Tbk" (Indonesian publicly listed)
-- Website shows company is part of a global group with operations in 10+ countries
-- Website shows revenue >$100M or >1000 employees
-- Company is backed by or owned by Japanese/European/US/Chinese multinational
+LARGE COMPANY / MNC SUBSIDIARY DETECTION:
+
+REJECT ONLY IF you can confirm it's a TRUE subsidiary using these specific checks:
+
+CHECK 1 - COMPANY NAME: Does the company name contain a known MNC brand?
+Known ink MNC names: Toyo Ink, Sakata, Flint, Siegwerk, Sun Chemical, DIC, Huber, INX International, Wikoff
+Example: "Sakata INX Vietnam" contains "Sakata" → REJECT
+Example: "Toyo Ink Pte Ltd" contains "Toyo Ink" → REJECT
+
+CHECK 2 - EXPLICIT OWNERSHIP: Does website explicitly state subsidiary status?
+Look for: "subsidiary of", "part of [X] Group", "a member of [X] Group", "owned by"
+Example: Website says "We are part of Flint Group" → REJECT
+
+CHECK 3 - PUBLICLY LISTED:
+Company name ends with "Tbk" (Indonesian listed) → REJECT
+
+DO NOT REJECT for these (they are NOT subsidiaries):
+- Local company that distributes for a foreign brand (being a distributor ≠ being a subsidiary)
+- Local company that uses foreign technology/licenses
+- Local company with foreign customers or partners
+- Company name does NOT contain any MNC brand name
 `;
   }
 
@@ -839,11 +853,17 @@ LISTED/PUBLIC COMPANY DETECTION - REJECT if:
   // Detect if user wants to exclude DISTRIBUTORS
   if (exclusionLower.includes('distributor')) {
     rules += `
-DISTRIBUTOR DETECTION - REJECT if:
-- Company primarily distributes/resells products made by others
-- Company is described as "distributor", "trading company", "agent", or "dealer"
-- No evidence of own manufacturing/production facility
-- ACCEPT only if company clearly manufactures/produces the products themselves
+DISTRIBUTOR DETECTION:
+
+REJECT if company is a PURE distributor (no manufacturing):
+- Website says "we distribute", "authorized dealer", "trading company" with NO mention of own production
+- Company ONLY resells products made by other brands
+- No factory, plant, or manufacturing facility mentioned
+
+ACCEPT if company manufactures (even if they also distribute):
+- Website mentions "our factory", "we manufacture", "we produce", "our production facility"
+- Most manufacturers ALSO distribute their products - this is normal, do not reject
+- If they make ink AND sell it, they are a manufacturer, ACCEPT
 `;
   }
 
@@ -878,22 +898,26 @@ USER'S SEARCH CRITERIA:
 VALIDATION RULES:
 
 1. LOCATION CHECK:
-- Company must be headquartered in: ${country}
-- REJECT if headquarters is outside target countries
+- Company must be based in or have operations in: ${country}
+- ACCEPT if company is headquartered in or has manufacturing in the target region
 
 2. BUSINESS MATCH:
-- Company must be a ${business} MANUFACTURER/PRODUCER
-- ACCEPT only if they clearly MANUFACTURE, PRODUCE, or MAKE ${business}
-- REJECT if they are a printing/packaging company that only USES the product
-- REJECT if they are a trading company, distributor, or reseller
+- Company must MANUFACTURE/PRODUCE ${business}
+- ACCEPT if website shows they make/produce/manufacture the product
+- REJECT if they are a printing/packaging company that only USES ink (not makes it)
+- REJECT if they are a PURE trading company with no manufacturing
 
-3. EXCLUSION RULES:
+3. EXCLUSION RULES (apply these carefully):
 ${exclusionRules}
 
 4. SPAM CHECK:
-- REJECT if clearly a directory, marketplace, or spam site
+- REJECT only if clearly a directory, marketplace, or spam site
 
-IMPORTANT: When uncertain, lean towards REJECT. Only accept companies that clearly match all criteria.
+DECISION GUIDE:
+- If company manufactures ${business} in ${country} and is NOT an MNC subsidiary → ACCEPT
+- If company name contains known MNC brand OR website says "subsidiary of" → REJECT
+- If uncertain whether they manufacture → ACCEPT (benefit of doubt for manufacturers)
+- If uncertain about MNC status but name looks local → ACCEPT
 
 Return JSON only: {"valid": true/false, "reason": "one sentence explanation"}`
         },
@@ -980,22 +1004,26 @@ USER'S SEARCH CRITERIA:
 VALIDATION RULES:
 
 1. LOCATION CHECK:
-- Company must be headquartered in: ${country}
-- REJECT if headquarters is outside target countries
+- Company must be based in or have operations in: ${country}
+- ACCEPT if company is headquartered in or has manufacturing in the target region
 
 2. BUSINESS MATCH:
-- Company must be a ${business} MANUFACTURER/PRODUCER
-- ACCEPT only if they clearly MANUFACTURE, PRODUCE, or MAKE ${business}
-- REJECT if they only USE the product (e.g., printing company using ink)
-- REJECT if they are a trading company, distributor, or reseller
+- Company must MANUFACTURE/PRODUCE ${business}
+- ACCEPT if website shows they make/produce/manufacture the product
+- REJECT if they are a printing/packaging company that only USES ink (not makes it)
+- REJECT if they are a PURE trading company with no manufacturing
 
-3. EXCLUSION RULES:
+3. EXCLUSION RULES (apply these carefully):
 ${exclusionRules}
 
 4. SPAM CHECK:
-- REJECT if clearly a directory or spam site
+- REJECT only if clearly a directory or spam site
 
-IMPORTANT: When uncertain, lean towards REJECT. Only accept companies that clearly match all criteria.
+DECISION GUIDE:
+- If company manufactures ${business} in ${country} and is NOT an MNC subsidiary → ACCEPT
+- If company name contains known MNC brand OR website says "subsidiary of" → REJECT
+- If uncertain whether they manufacture → ACCEPT (benefit of doubt for manufacturers)
+- If uncertain about MNC status but name looks local → ACCEPT
 
 Return JSON: {"valid": true/false, "reason": "brief explanation", "corrected_hq": "City, Country or null"}`
         },
@@ -1209,7 +1237,7 @@ app.post('/api/find-target-slow', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v21 - Strict Validation (MNC/Subsidiary Rejection)' });
+  res.json({ status: 'ok', service: 'Find Target v22 - Balanced Validation (MNC by Name Check)' });
 });
 
 const PORT = process.env.PORT || 3000;
