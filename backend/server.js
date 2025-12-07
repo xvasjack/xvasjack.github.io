@@ -404,6 +404,120 @@ async function fetchWebsite(url) {
   }
 }
 
+// ============ STRICT VALIDATION FOR FAST MODE ============
+
+async function validateCompanyStrict(company, business, country, exclusion, pageText) {
+  // If we couldn't fetch the website, REJECT (can't verify)
+  if (!pageText) {
+    console.log(`    Rejected: ${company.company_name} - Could not verify (website unreachable)`);
+    return { valid: false };
+  }
+
+  try {
+    const validation = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a VERY STRICT company validator. When in doubt, REJECT.
+
+VALIDATION RULES (ALL must pass):
+
+1. LOCATION CHECK (STRICT):
+   - Company HQ MUST be clearly in: ${country}
+   - REJECT if HQ is in Japan, China, USA, Europe, or other countries
+   - REJECT if location is ambiguous or unclear
+   - Only ACCEPT if website clearly states HQ is in ${country}
+
+2. BUSINESS MATCH (STRICT):
+   - Company MUST directly operate in "${business}"
+   - REJECT trading companies, general distributors, or unrelated businesses
+   - REJECT if the company just happens to sell some ${business} products among many other things
+   - Only ACCEPT if ${business} is their PRIMARY business
+
+3. SIZE CHECK (STRICT - exclude: ${exclusion}):
+   REJECT if ANY of these:
+   - Publicly traded/listed on any stock exchange
+   - Part of a group with operations in 3+ countries
+   - Subsidiary of any multinational
+   - Has "global", "worldwide", "international" in description
+   - Revenue appears >$50M or employees >200
+   - Well-known brand name in the industry
+   - Website mentions multiple country offices
+   - Parent company is foreign (Japanese, American, European, etc.)
+   - Company name contains a well-known multinational brand
+
+4. DISTRIBUTOR CHECK (if "distributor" in exclusions):
+   - REJECT if company primarily distributes/resells others' products
+   - Only ACCEPT if company MANUFACTURES or FORMULATES their own products
+
+5. QUALITY CHECK:
+   - REJECT directories, marketplaces, B2B platforms
+   - REJECT if website looks like a template/placeholder
+   - REJECT if company information is vague or generic
+
+Return JSON: {"valid": true/false, "reason": "brief explanation"}`
+        },
+        {
+          role: 'user',
+          content: `Company: ${company.company_name}
+Website: ${company.website}
+Claimed HQ: ${company.hq}
+Target Business: ${business}
+Target Countries: ${country}
+Exclusions: ${exclusion}
+
+Website content to analyze:
+${pageText.substring(0, 8000)}`
+        }
+      ],
+      response_format: { type: 'json_object' }
+    });
+
+    const result = JSON.parse(validation.choices[0].message.content);
+    if (result.valid === true) {
+      return { valid: true, corrected_hq: company.hq };
+    }
+    console.log(`    Rejected: ${company.company_name} - ${result.reason}`);
+    return { valid: false };
+  } catch (e) {
+    // On error, REJECT (strict mode)
+    console.log(`    Rejected: ${company.company_name} - Validation error, rejecting in strict mode`);
+    return { valid: false };
+  }
+}
+
+async function parallelValidationStrict(companies, business, country, exclusion) {
+  console.log(`\nSTRICT Validating ${companies.length} companies...`);
+  const startTime = Date.now();
+  const batchSize = 5; // Smaller batches for stricter validation
+  const validated = [];
+
+  for (let i = 0; i < companies.length; i += batchSize) {
+    const batch = companies.slice(i, i + batchSize);
+    const pageTexts = await Promise.all(batch.map(c => fetchWebsite(c.website)));
+    const validations = await Promise.all(
+      batch.map((company, idx) => validateCompanyStrict(company, business, country, exclusion, pageTexts[idx]))
+    );
+
+    batch.forEach((company, idx) => {
+      if (validations[idx].valid) {
+        validated.push({
+          ...company,
+          hq: validations[idx].corrected_hq || company.hq
+        });
+      }
+    });
+
+    console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
+  }
+
+  console.log(`STRICT Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
+  return validated;
+}
+
+// ============ LENIENT VALIDATION FOR SLOW MODE ============
+
 async function validateCompany(company, business, country, exclusion, pageText) {
   try {
     const validation = await openai.chat.completions.create({
@@ -559,7 +673,7 @@ app.post('/api/find-target', async (req, res) => {
     const companies = await exhaustiveSearch(Business, Country, Exclusion);
     console.log(`\nFound ${companies.length} unique companies`);
 
-    const validCompanies = await parallelValidation(companies, Business, Country, Exclusion);
+    const validCompanies = await parallelValidationStrict(companies, Business, Country, Exclusion);
 
     const htmlContent = buildEmailHTML(validCompanies, Business, Country, Exclusion);
     await sendEmail(
@@ -651,7 +765,7 @@ app.post('/api/find-target-slow', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v13 - Dynamic Search (No Hardcoded Values)' });
+  res.json({ status: 'ok', service: 'Find Target v14 - Fast: Strict Validation, Slow: Lenient' });
 });
 
 const PORT = process.env.PORT || 3000;
