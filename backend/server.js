@@ -195,8 +195,8 @@ const LOCAL_LANGUAGE_MAP = {
 // ============ 14 SPECIALIZED SEARCH STRATEGIES (inspired by n8n workflow) ============
 
 function buildOutputFormat() {
-  return `For each company provide: company_name, website (must be a REAL working URL starting with http), hq (format: "City, Country" only).
-IMPORTANT: Only include companies you are CERTAIN exist. Do NOT make up companies or websites. Quality over quantity.`;
+  return `For each company provide: company_name, website (URL starting with http), hq (format: "City, Country" only).
+Be thorough - include all companies you find. We will verify them later.`;
 }
 
 // Strategy 1: Broad Google Search (SerpAPI)
@@ -498,23 +498,20 @@ async function extractCompanies(text, country) {
           role: 'system',
           content: `Extract company information from the text. Return JSON: {"companies": [{"company_name": "...", "website": "...", "hq": "..."}]}
 
-STRICT RULES:
-- Only extract companies EXPLICITLY mentioned in the text
-- website must be a REAL URL starting with http:// or https://
-- Do NOT invent or guess websites - only use URLs found in the text
+RULES:
+- Extract ALL companies mentioned that could be in: ${country}
+- website must start with http:// or https://
+- If website not in text, you may look it up if you know it's a real company
 - hq must be "City, Country" format ONLY
-- Target countries: ${country}
-- Return {"companies": []} if no valid companies found
-- Maximum 30 companies per extraction (focus on quality)`
+- Include companies even if some info is incomplete - we'll verify later
+- Be thorough - extract every company that might match`
         },
         { role: 'user', content: text.substring(0, 15000) }
       ],
       response_format: { type: 'json_object' }
     });
     const parsed = JSON.parse(extraction.choices[0].message.content);
-    const companies = Array.isArray(parsed.companies) ? parsed.companies : [];
-    // Cap at 30 per extraction to prevent hallucination
-    return companies.slice(0, 30);
+    return Array.isArray(parsed.companies) ? parsed.companies : [];
   } catch (e) {
     console.error('Extraction error:', e.message);
     return [];
@@ -1249,7 +1246,7 @@ app.post('/api/find-target-slow', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v25 - Expanded search queries (n8n-level thoroughness)' });
+  res.json({ status: 'ok', service: 'Find Target v26 - More thorough extraction + balanced output' });
 });
 
 const PORT = process.env.PORT || 3000;
