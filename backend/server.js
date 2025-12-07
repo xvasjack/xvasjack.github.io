@@ -20,7 +20,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
 
-// Initialize DeepSeek (OpenAI-compatible API)
+// Initialize DeepSeek (OpenAI-compatible API) - CHEAPEST, use for heavy workload
 const deepseek = new OpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY || 'missing',
   baseURL: 'https://api.deepseek.com'
@@ -91,20 +91,6 @@ async function callPerplexity(prompt) {
   }
 }
 
-async function callChatGPT(prompt) {
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3
-    });
-    return response.choices[0].message.content || '';
-  } catch (error) {
-    console.error('ChatGPT error:', error.message);
-    return '';
-  }
-}
-
 async function callDeepSeek(prompt) {
   try {
     const response = await deepseek.chat.completions.create({
@@ -119,171 +105,190 @@ async function callDeepSeek(prompt) {
   }
 }
 
-// ============ COMPREHENSIVE QUERY GENERATION ============
+// ============ EXHAUSTIVE QUERY GENERATION ============
 
 function generateAllQueries(business, country, exclusion) {
   const countries = country.split(',').map(c => c.trim());
 
   const queries = {
-    perplexity: [],
-    gemini: [],
-    chatgpt: [],
-    deepseek: []
+    perplexity: [],  // Web search - use for real-time data
+    gemini: [],      // Use sparingly
+    deepseek: []     // CHEAPEST - use heavily
   };
 
-  const outputFormat = `For each company provide: company_name, website (must start with http), hq (format: "City, Country" only). List as many companies as possible.`;
+  const outputFormat = `For each company provide: company_name, website (must start with http), hq (format: "City, Country" only). List as many companies as possible, at least 20-30 if available.`;
 
-  // ===== STRATEGY 1: BROAD SEARCHES (Perplexity - web search) =====
+  // ===== PERPLEXITY - WEB SEARCH (real-time data) =====
   queries.perplexity.push(
     `Find all ${business} companies headquartered in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Search for ${business} suppliers and distributors in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} vendors and dealers based in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Comprehensive list of ${business} companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} solution providers in ${country}. Not ${exclusion}. ${outputFormat}`
+    `${business} suppliers and distributors in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} companies listed in business directories for ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} exhibitors from ${country} at recent trade shows and expos. Not ${exclusion}. ${outputFormat}`,
+    `${business} importers and exporters in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Recent news about ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} companies registered with government agencies in ${country}. Exclude ${exclusion}. ${outputFormat}`
   );
 
-  // ===== STRATEGY 2: LISTS AND RANKINGS (Gemini) =====
-  queries.gemini.push(
-    `List of top ${business} companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Leading ${business} firms in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `Major ${business} players in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Best ${business} companies in ${country}. No ${exclusion}. ${outputFormat}`,
-    `Most reputable ${business} companies in ${country}. Exclude ${exclusion}. ${outputFormat}`
-  );
-
-  // ===== STRATEGY 3: CITY-SPECIFIC (Perplexity) =====
+  // City-specific Perplexity searches
   for (const c of countries) {
     queries.perplexity.push(
-      `${business} companies in all major cities of ${c}. Exclude ${exclusion}. ${outputFormat}`,
-      `Find ${business} firms in industrial areas and business districts of ${c}. Not ${exclusion}. ${outputFormat}`,
-      `${business} companies in the capital city and secondary cities of ${c}. Exclude ${exclusion}. ${outputFormat}`
+      `All ${business} companies in major cities of ${c}. Exclude ${exclusion}. ${outputFormat}`,
+      `${business} firms in industrial zones and business parks of ${c}. Not ${exclusion}. ${outputFormat}`
     );
   }
 
-  // ===== STRATEGY 4: LOCAL COMPANY NAMING + INDUSTRIAL ZONES (Gemini) =====
-  for (const c of countries) {
-    queries.gemini.push(
-      `Find ${business} companies in ${c} with local company suffixes. Exclude ${exclusion}. ${outputFormat}`,
-      `${business} companies in industrial estates and manufacturing zones in ${c}. Exclude ${exclusion}. ${outputFormat}`,
-      `${business} companies in free trade zones and special economic zones of ${c}. Not ${exclusion}. ${outputFormat}`
-    );
-  }
-
-  // ===== STRATEGY 5: ASSOCIATIONS + DIRECTORIES (Perplexity) =====
-  queries.perplexity.push(
-    `${business} companies that are members of trade associations in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} firms listed in Kompass, Yellow Pages, and business directories for ${country}. Not ${exclusion}. ${outputFormat}`,
-    `Chamber of commerce member companies in ${business} sector in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} industry association member list in ${country}. No ${exclusion}. ${outputFormat}`,
-    `${business} companies in industry federation member directories of ${country}. Exclude ${exclusion}. ${outputFormat}`
-  );
-
-  // ===== STRATEGY 6: EXHIBITIONS + TRADE SHOWS (Gemini) =====
+  // ===== GEMINI - Use for structured lists =====
   queries.gemini.push(
-    `${business} companies that exhibited at trade shows in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} exhibitors from ${country} at international industry expos. No ${exclusion}. ${outputFormat}`,
-    `${business} companies at conferences and exhibitions in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} firms that participated in trade fairs related to their industry. Not ${exclusion}. ${outputFormat}`
+    `Complete list of top ${business} companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Leading ${business} firms and market players in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} companies that exhibited at trade shows in ${country}. Exclude ${exclusion}. ${outputFormat}`
   );
 
-  // ===== STRATEGY 7: IMPORT/EXPORT + SUPPLIER DATABASES (Perplexity) =====
-  queries.perplexity.push(
-    `${business} importers and exporters in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} suppliers from ${country} listed on B2B platforms. Not ${exclusion}. ${outputFormat}`,
-    `${business} companies in supplier databases for ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} trading companies and wholesalers in ${country}. No ${exclusion}. ${outputFormat}`,
-    `${business} authorized dealers and resellers in ${country}. Exclude ${exclusion}. ${outputFormat}`
+  // ===== DEEPSEEK - HEAVY WORKLOAD (cheapest) =====
+
+  // Broad searches
+  queries.deepseek.push(
+    `Comprehensive list of all ${business} companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} vendors and dealers based in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} solution providers and service companies in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `All ${business} trading companies and wholesalers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} authorized dealers and resellers in ${country}. Not ${exclusion}. ${outputFormat}`
   );
 
-  // ===== STRATEGY 8: LOCAL DOMAINS + NEWS (Perplexity) =====
-  queries.perplexity.push(
-    `${business} companies in ${country} mentioned in recent industry news. Exclude ${exclusion}. ${outputFormat}`,
-    `Press releases from ${business} companies headquartered in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} companies that won awards or recognition in ${country}. Exclude ${exclusion}. ${outputFormat}`
+  // Lists and rankings
+  queries.deepseek.push(
+    `Top 50 ${business} companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Best ${business} suppliers in ${country} ranked by reputation. Not ${exclusion}. ${outputFormat}`,
+    `Most established ${business} companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Largest ${business} firms by revenue in ${country}. Not ${exclusion}. ${outputFormat}`
   );
 
-  // ===== STRATEGY 9: GOVERNMENT REGISTRIES + CERTIFICATIONS (Perplexity) =====
-  queries.perplexity.push(
-    `${business} companies registered with government agencies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Certified ${business} firms in ${country} with ISO or industry certifications. Not ${exclusion}. ${outputFormat}`,
-    `Licensed ${business} companies operating in ${country}. Exclude ${exclusion}. ${outputFormat}`
+  // Industry associations and directories
+  queries.deepseek.push(
+    `${business} companies that are members of trade associations in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} firms listed in Kompass directory for ${country}. Not ${exclusion}. ${outputFormat}`,
+    `Chamber of commerce member companies in ${business} sector in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} industry association member list in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} companies in Yellow Pages and business listings for ${country}. Exclude ${exclusion}. ${outputFormat}`
   );
 
-  // ===== STRATEGY 10: DEEP SEARCH - SME + EMERGING (ChatGPT) =====
-  queries.chatgpt.push(
-    `Find lesser-known ${business} companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+  // Trade shows and exhibitions
+  queries.deepseek.push(
+    `${business} companies that exhibited at international trade shows from ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} exhibitors at industry expos and conferences in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} firms that participated in trade fairs in Asia. Exclude ${exclusion}. ${outputFormat}`
+  );
+
+  // Import/Export and B2B
+  queries.deepseek.push(
+    `${business} suppliers from ${country} on Alibaba and B2B platforms. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} companies in global supplier databases for ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} OEM and ODM manufacturers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} contract manufacturers in ${country}. Not ${exclusion}. ${outputFormat}`
+  );
+
+  // SME and lesser-known
+  queries.deepseek.push(
+    `Lesser-known ${business} companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `Small and medium ${business} enterprises in ${country}. Not ${exclusion}. ${outputFormat}`,
     `Family-owned ${business} businesses in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `New or emerging ${business} companies in ${country}. No ${exclusion}. ${outputFormat}`,
+    `New and emerging ${business} startups in ${country}. Not ${exclusion}. ${outputFormat}`,
     `Regional ${business} players in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Privately held ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`
+    `Privately held ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `Boutique ${business} firms in ${country}. Exclude ${exclusion}. ${outputFormat}`
   );
 
-  // ===== STRATEGY 11: NICHE + SPECIALIZED (DeepSeek) =====
+  // Niche and specialized
   queries.deepseek.push(
-    `Find niche ${business} specialists in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Alternative ${business} suppliers in ${country} that are not commonly known. Not ${exclusion}. ${outputFormat}`,
-    `${business} service providers and solution companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Boutique ${business} firms in ${country}. No ${exclusion}. ${outputFormat}`,
-    `${business} companies focusing on specific sub-segments in ${country}. Exclude ${exclusion}. ${outputFormat}`
+    `Niche ${business} specialists in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} companies focusing on specific sub-segments in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `Specialized ${business} service providers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} companies serving specific industries in ${country}. Not ${exclusion}. ${outputFormat}`
   );
 
-  // ===== STRATEGY 12: SUPPLY CHAIN + PARTNERS (DeepSeek) =====
+  // Supply chain
   queries.deepseek.push(
-    `Upstream and downstream ${business} companies in ${country}. No ${exclusion}. ${outputFormat}`,
+    `Upstream ${business} companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Downstream ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
     `${business} companies that are partners of major brands in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} OEM and ODM companies in ${country}. Not ${exclusion}. ${outputFormat}`
+    `${business} value-added resellers in ${country}. Not ${exclusion}. ${outputFormat}`
   );
 
-  // ===== STRATEGY 13: LINKEDIN + PROFESSIONAL (ChatGPT) =====
-  queries.chatgpt.push(
-    `${business} companies in ${country} with active business presence. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} companies mentioned in industry reports about ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} companies that have been in business for over 10 years in ${country}. Exclude ${exclusion}. ${outputFormat}`
-  );
-
-  // ===== STRATEGY 14: TECHNOLOGY + INNOVATION (Gemini) =====
-  queries.gemini.push(
+  // Technology and innovation
+  queries.deepseek.push(
     `Innovative ${business} companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${business} companies with R&D facilities in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `Tech-forward ${business} firms in ${country}. Exclude ${exclusion}. ${outputFormat}`
+    `Tech-forward ${business} firms in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} companies with proprietary technology in ${country}. Not ${exclusion}. ${outputFormat}`
   );
 
-  // ===== STRATEGY 15: REGIONAL FOCUS (Perplexity) =====
+  // Certifications and awards
+  queries.deepseek.push(
+    `ISO certified ${business} companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Award-winning ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} companies with industry certifications in ${country}. Exclude ${exclusion}. ${outputFormat}`
+  );
+
+  // Established and long-standing
+  queries.deepseek.push(
+    `${business} companies established for over 10 years in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Heritage ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `Well-established ${business} firms in ${country}. Exclude ${exclusion}. ${outputFormat}`
+  );
+
+  // Country-specific exhaustive searches
   for (const c of countries) {
-    queries.perplexity.push(
-      `Complete list of all ${business} companies operating in ${c}. Exclude ${exclusion}. ${outputFormat}`
+    queries.deepseek.push(
+      `Complete directory of all ${business} companies in ${c}. Exclude ${exclusion}. ${outputFormat}`,
+      `Every ${business} supplier operating in ${c}. Not ${exclusion}. ${outputFormat}`,
+      `Full list of ${business} distributors in ${c}. Exclude ${exclusion}. ${outputFormat}`,
+      `All local ${business} companies headquartered in ${c}. Not ${exclusion}. ${outputFormat}`,
+      `${business} companies in capital city and major cities of ${c}. Exclude ${exclusion}. ${outputFormat}`,
+      `${business} companies in industrial estates of ${c}. Not ${exclusion}. ${outputFormat}`,
+      `${business} companies in free trade zones of ${c}. Exclude ${exclusion}. ${outputFormat}`
     );
   }
+
+  // Alternative terms and related
+  queries.deepseek.push(
+    `Companies related to ${business} in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} and related product companies in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `Companies in ${business} supply chain in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} ecosystem companies in ${country}. Not ${exclusion}. ${outputFormat}`
+  );
 
   return queries;
 }
 
-// ============ EXTRACTION & DEDUPLICATION ============
+// ============ EXTRACTION WITH DEEPSEEK (cheaper) ============
 
 async function extractCompanies(text, country) {
   if (!text) return [];
   try {
-    const extraction = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+    const response = await deepseek.chat.completions.create({
+      model: 'deepseek-chat',
       messages: [
         {
           role: 'system',
-          content: `Extract company information from the text. Return JSON: {"companies": [{"company_name": "...", "website": "...", "hq": "..."}]}
+          content: `Extract company information from the text. Return JSON ONLY: {"companies": [{"company_name": "...", "website": "...", "hq": "..."}]}
 Rules:
 - website must start with http:// or https://
-- hq must be formatted as "City, Country" ONLY (e.g., "Kuala Lumpur, Malaysia")
+- hq must be "City, Country" format ONLY
 - Only include companies headquartered in: ${country}
-- Extract ALL companies mentioned, do not skip any
-- Return {"companies": []} if no valid companies found.`
+- Extract ALL companies mentioned
+- Return {"companies": []} if none found`
         },
         { role: 'user', content: text }
       ],
-      response_format: { type: 'json_object' }
+      temperature: 0
     });
-    const parsed = JSON.parse(extraction.choices[0].message.content);
+    const content = response.choices[0].message.content;
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) return [];
+    const parsed = JSON.parse(jsonMatch[0]);
     return Array.isArray(parsed.companies) ? parsed.companies : [];
   } catch (e) {
+    console.error('Extraction error:', e.message);
     return [];
   }
 }
@@ -316,7 +321,6 @@ function dedupeCompanies(allCompanies) {
     const websiteKey = normalizeWebsite(c.website);
     const nameKey = normalizeCompanyName(c.company_name);
 
-    // Skip if we've seen this website OR this company name
     if (seenWebsites.has(websiteKey) || seenNames.has(nameKey)) continue;
 
     seenWebsites.set(websiteKey, true);
@@ -327,42 +331,42 @@ function dedupeCompanies(allCompanies) {
   return results;
 }
 
-// ============ PARALLEL SEARCH WITH ALL STRATEGIES ============
+// ============ PARALLEL SEARCH ============
 
 async function comprehensiveSearch(business, country, exclusion) {
-  console.log('Starting COMPREHENSIVE PARALLEL search...');
+  console.log('Starting EXHAUSTIVE PARALLEL search...');
   const startTime = Date.now();
 
   const queries = generateAllQueries(business, country, exclusion);
 
   console.log(`  Perplexity queries: ${queries.perplexity.length}`);
   console.log(`  Gemini queries: ${queries.gemini.length}`);
-  console.log(`  ChatGPT queries: ${queries.chatgpt.length}`);
-  console.log(`  DeepSeek queries: ${queries.deepseek.length}`);
-  const total = queries.perplexity.length + queries.gemini.length + queries.chatgpt.length + queries.deepseek.length;
+  console.log(`  DeepSeek queries: ${queries.deepseek.length} (heavy workload)`);
+  const total = queries.perplexity.length + queries.gemini.length + queries.deepseek.length;
   console.log(`  Total queries: ${total}`);
 
   // Run all API calls in parallel
-  const [perplexityResults, geminiResults, chatgptResults, deepseekResults] = await Promise.all([
+  const [perplexityResults, geminiResults, deepseekResults] = await Promise.all([
     Promise.all(queries.perplexity.map(q => callPerplexity(q))),
     Promise.all(queries.gemini.map(q => callGemini(q))),
-    Promise.all(queries.chatgpt.map(q => callChatGPT(q))),
     Promise.all(queries.deepseek.map(q => callDeepSeek(q)))
   ]);
 
   console.log(`  All API calls done in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
 
-  // Extract companies from all results in parallel
-  const allTexts = [...perplexityResults, ...geminiResults, ...chatgptResults, ...deepseekResults];
+  // Extract companies from all results in parallel using DeepSeek (cheaper)
+  const allTexts = [...perplexityResults, ...geminiResults, ...deepseekResults];
+  console.log(`  Extracting companies from ${allTexts.length} responses...`);
+
   const extractionResults = await Promise.all(
     allTexts.map(text => extractCompanies(text, country))
   );
 
-  // Flatten and dedupe by BOTH website AND name
+  // Flatten and dedupe
   const allCompanies = extractionResults.flat();
   const uniqueCompanies = dedupeCompanies(allCompanies);
 
-  console.log(`  Extracted ${allCompanies.length} companies, ${uniqueCompanies.length} unique (after name + website dedupe)`);
+  console.log(`  Extracted ${allCompanies.length} companies, ${uniqueCompanies.length} unique`);
   console.log(`Search completed in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
 
   return uniqueCompanies;
@@ -398,38 +402,26 @@ async function validateCompanyWithDeepSeek(company, business, country, exclusion
       messages: [
         {
           role: 'system',
-          content: `You are a company validator. Validate if this company matches the search criteria.
+          content: `You are a company validator. Validate if this company matches criteria.
 
-VALIDATION RULES:
+RULES:
+1. LOCATION: HQ must be in ${country}. If outside → REJECT
+2. BUSINESS (BE LENIENT): Must relate to "${business}". Accept related products/services.
+3. EXCLUSIONS (${exclusion}):
+   - "large/MNC": Reject if global presence, Fortune 500, stock listed, >1000 employees
+   - "distributor": Reject if ONLY distributes
+   - "manufacturer": Reject if ONLY manufactures
+4. SPAM: Reject directories, marketplaces, aggregators
 
-1. LOCATION CHECK:
-   - Is HQ actually in one of the target countries (${country})?
-   - If HQ is outside these countries → REJECT
-
-2. BUSINESS MATCH (BE LENIENT):
-   - Does the company's business relate to "${business}"?
-   - Accept related products, services, or sub-categories
-   - Only reject if completely unrelated
-
-3. EXCLUSION CHECK (${exclusion}) - DETECT VIA PAGE SIGNALS:
-   - If "large companies" in exclusions: Look for "global presence", "worldwide", "Fortune 500", stock tickers, "multinational", 10+ countries, revenue >$100M, employees >1000
-   - If "distributor" in exclusions: Reject if company ONLY distributes
-   - If "manufacturer" in exclusions: Reject if company ONLY manufactures
-   - If "MNC" in exclusions: Reject if parent company is foreign
-   - If "listed companies" in exclusions: Reject if publicly traded
-
-4. SPAM CHECK:
-   - Directory, marketplace, domain-for-sale, aggregator site? → REJECT
-
-Return JSON ONLY: {"valid": true/false, "reason": "brief reason", "corrected_hq": "City, Country"}`
+Return JSON ONLY: {"valid": true/false, "reason": "brief", "corrected_hq": "City, Country"}`
         },
         {
           role: 'user',
           content: `Company: ${company.company_name}
 Website: ${company.website}
-Claimed HQ: ${company.hq}
-Business sought: ${business}
-Target countries: ${country}
+HQ: ${company.hq}
+Business: ${business}
+Countries: ${country}
 Exclusions: ${exclusion}
 
 Website content:
@@ -445,36 +437,30 @@ ${pageText ? pageText.substring(0, 4000) : 'Could not fetch'}`
 
     const result = JSON.parse(jsonMatch[0]);
     if (result.valid === true) {
-      return {
-        valid: true,
-        corrected_hq: result.corrected_hq || company.hq
-      };
+      return { valid: true, corrected_hq: result.corrected_hq || company.hq };
     }
     return { valid: false };
   } catch (e) {
-    console.error('DeepSeek validation error:', e.message);
+    console.error('Validation error:', e.message);
     return { valid: true, corrected_hq: company.hq };
   }
 }
 
 async function parallelValidation(companies, business, country, exclusion) {
-  console.log(`\nStarting PARALLEL validation of ${companies.length} companies...`);
+  console.log(`\nStarting PARALLEL validation of ${companies.length} companies with DeepSeek...`);
   const startTime = Date.now();
-  const batchSize = 10;
+  const batchSize = 15; // Larger batch since DeepSeek is cheap
   const validated = [];
 
   for (let i = 0; i < companies.length; i += batchSize) {
     const batch = companies.slice(i, i + batchSize);
 
-    // Fetch all websites in parallel
     const pageTexts = await Promise.all(batch.map(c => fetchWebsite(c.website)));
 
-    // Validate all in parallel using DeepSeek
     const validations = await Promise.all(
       batch.map((company, idx) => validateCompanyWithDeepSeek(company, business, country, exclusion, pageTexts[idx]))
     );
 
-    // Collect valid ones with corrected HQ
     batch.forEach((company, idx) => {
       if (validations[idx].valid) {
         validated.push({
@@ -487,7 +473,7 @@ async function parallelValidation(companies, business, country, exclusion) {
     console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
   }
 
-  console.log(`Validation completed in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
+  console.log(`Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
   return validated;
 }
 
@@ -539,14 +525,11 @@ app.post('/api/find-target', async (req, res) => {
   try {
     const totalStart = Date.now();
 
-    // COMPREHENSIVE PARALLEL SEARCH
     const companies = await comprehensiveSearch(Business, Country, Exclusion);
     console.log(`\nFound ${companies.length} unique companies`);
 
-    // PARALLEL VALIDATION WITH DEEPSEEK
     const validCompanies = await parallelValidation(companies, Business, Country, Exclusion);
 
-    // SEND EMAIL
     const htmlContent = buildEmailHTML(validCompanies, Business, Country, Exclusion);
     await sendEmail(
       Email,
@@ -564,11 +547,7 @@ app.post('/api/find-target', async (req, res) => {
   } catch (error) {
     console.error('Processing error:', error);
     try {
-      await sendEmail(
-        Email,
-        `Find Target - Error`,
-        `<p>Error processing "${Business}" in "${Country}": ${error.message}</p>`
-      );
+      await sendEmail(Email, `Find Target - Error`, `<p>Error: ${error.message}</p>`);
     } catch (e) {
       console.error('Failed to send error email:', e);
     }
@@ -576,7 +555,7 @@ app.post('/api/find-target', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target Backend v7 - Enhanced Search + DeepSeek' });
+  res.json({ status: 'ok', service: 'Find Target v8 - Exhaustive DeepSeek' });
 });
 
 const PORT = process.env.PORT || 3000;
