@@ -22,6 +22,7 @@ const openai = new OpenAI({
 
 // Send email using Brevo API (free tier allows any recipient)
 async function sendEmail(to, subject, html) {
+  const senderEmail = process.env.BREVO_SENDER_EMAIL || 'xvasjack@gmail.com';
   const response = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: {
@@ -29,7 +30,7 @@ async function sendEmail(to, subject, html) {
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      sender: { name: 'Find Target', email: 'noreply@find-target.com' },
+      sender: { name: 'Find Target', email: senderEmail },
       to: [{ email: to }],
       subject: subject,
       htmlContent: html
