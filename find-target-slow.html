@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Find Target - Company Search v3 Fast</title>
+  <title>Find Target - Company Search v3 Slow</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * {
@@ -18,7 +18,7 @@
 
     body {
       font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
       min-height: 100vh;
       display: flex;
       flex-direction: column;
@@ -27,6 +27,7 @@
     .header {
       padding: 2rem;
       text-align: center;
+      position: relative;
     }
 
     .header-title {
@@ -74,7 +75,7 @@
     .form-icon {
       width: 60px;
       height: 60px;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
       border-radius: 16px;
       display: flex;
       align-items: center;
@@ -103,7 +104,7 @@
     }
 
     .form-description a {
-      color: #667eea;
+      color: #f5576c;
       text-decoration: none;
       font-weight: 500;
     }
@@ -143,9 +144,9 @@
 
     .form-input:focus {
       outline: none;
-      border-color: #667eea;
+      border-color: #f5576c;
       background-color: #fff;
-      box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+      box-shadow: 0 0 0 4px rgba(245, 87, 108, 0.1);
     }
 
     .form-input::placeholder {
@@ -159,18 +160,18 @@
       font-weight: 600;
       font-family: inherit;
       color: #fff;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
       border: none;
       border-radius: 12px;
       cursor: pointer;
       transition: all 0.3s ease;
       margin-top: 1rem;
-      box-shadow: 0 4px 14px 0 rgba(102, 126, 234, 0.4);
+      box-shadow: 0 4px 14px 0 rgba(245, 87, 108, 0.4);
     }
 
     .submit-btn:hover {
       transform: translateY(-2px);
-      box-shadow: 0 6px 20px 0 rgba(102, 126, 234, 0.5);
+      box-shadow: 0 6px 20px 0 rgba(245, 87, 108, 0.5);
     }
 
     .submit-btn:active {
@@ -224,7 +225,7 @@
     }
 
     .version-link a {
-      color: #667eea;
+      color: #f5576c;
       text-decoration: none;
       font-weight: 500;
     }
@@ -254,10 +255,6 @@
 
     .menu-btn svg {
       display: block;
-    }
-
-    .header {
-      position: relative;
     }
 
     .menu-overlay {
@@ -302,7 +299,7 @@
       align-items: center;
       padding: 2rem;
       border-bottom: 1px solid #e5e7eb;
-      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
     }
 
     .menu-title {
@@ -348,13 +345,13 @@
 
     .menu-item:hover {
       background: #f3f4f6;
-      color: #667eea;
+      color: #f5576c;
     }
 
     .menu-item.active {
-      background: linear-gradient(90deg, rgba(102, 126, 234, 0.1) 0%, transparent 100%);
-      color: #667eea;
-      border-left-color: #667eea;
+      background: linear-gradient(90deg, rgba(245, 87, 108, 0.1) 0%, transparent 100%);
+      color: #f5576c;
+      border-left-color: #f5576c;
       font-weight: 600;
     }
 
@@ -387,8 +384,8 @@
       <button class="menu-close" id="menuClose">&times;</button>
     </div>
     <ul class="menu-list">
-      <li><a href="find-target.html" class="menu-item active">Company Search v3 Fast</a></li>
-      <li><a href="find-target-slow.html" class="menu-item">Company Search v3 Slow</a></li>
+      <li><a href="find-target.html" class="menu-item">Company Search v3 Fast</a></li>
+      <li><a href="find-target-slow.html" class="menu-item active">Company Search v3 Slow</a></li>
       <li><a href="validation.html" class="menu-item">Validation</a></li>
     </ul>
   </nav>
@@ -412,14 +409,14 @@
             <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
           </svg>
         </div>
-        <h2 class="form-title">Company Search v3 Fast</h2>
+        <h2 class="form-title">Company Search v3 Slow</h2>
         <p class="form-description">
           Fill in the form below and submit.<br>
-          Results will be emailed to you within <strong>5-10 minutes</strong>.
+          Results will be emailed to you within <strong>15-45 minutes</strong>.
         </p>
       </div>
 
-      <form id="findTargetForm" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/find-target">
+      <form id="findTargetForm" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/find-target-slow">
         <div class="form-group">
           <label class="form-label" for="business">
             Business <span class="required">*</span>
@@ -481,7 +478,7 @@
         </button>
 
         <div class="message success-message" id="successMessage">
-          Request submitted successfully! Results will be emailed to you within 5-10 minutes.
+          Request submitted successfully! Results will be emailed to you within 15-45 minutes.
         </div>
 
         <div class="message error-message" id="errorMessage">
@@ -489,7 +486,7 @@
         </div>
 
         <div class="version-link">
-          If this doesn't work, please try <a href="find-target-slow.html">v3 Slow</a>
+          Need faster results? Try <a href="find-target.html">v3 Fast</a>
         </div>
       </form>
     </div>
