@@ -377,7 +377,100 @@ async function exhaustiveSearch(business, country, exclusion) {
   return uniqueCompanies;
 }
 
-// ============ STRICT VALIDATION FOR LARGE COMPANIES ============
+// ============ WEBSITE VERIFICATION ============
+
+async function verifyWebsite(url) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      signal: controller.signal,
+      redirect: 'follow'
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) return { valid: false, reason: `HTTP ${response.status}` };
+
+    const html = await response.text();
+    const lowerHtml = html.toLowerCase();
+
+    // Check for parked domain / placeholder signs
+    const parkedSigns = [
+      'domain is for sale',
+      'buy this domain',
+      'this domain is parked',
+      'parked by',
+      'domain parking',
+      'this page is under construction',
+      'coming soon',
+      'website coming soon',
+      'under maintenance',
+      'godaddy',
+      'namecheap parking',
+      'sedoparking',
+      'hugedomains',
+      'afternic',
+      'domain expired',
+      'this site can\'t be reached',
+      'page not found',
+      '404 not found',
+      'website not found'
+    ];
+
+    for (const sign of parkedSigns) {
+      if (lowerHtml.includes(sign)) {
+        return { valid: false, reason: `Parked/placeholder: "${sign}"` };
+      }
+    }
+
+    // Check for minimal content (likely placeholder)
+    const textContent = html
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (textContent.length < 200) {
+      return { valid: false, reason: 'Too little content (likely placeholder)' };
+    }
+
+    return { valid: true, content: textContent.substring(0, 15000) };
+  } catch (e) {
+    return { valid: false, reason: e.message || 'Connection failed' };
+  }
+}
+
+async function filterVerifiedWebsites(companies) {
+  console.log(`\nVerifying ${companies.length} websites...`);
+  const startTime = Date.now();
+  const batchSize = 10;
+  const verified = [];
+
+  for (let i = 0; i < companies.length; i += batchSize) {
+    const batch = companies.slice(i, i + batchSize);
+    const results = await Promise.all(batch.map(c => verifyWebsite(c.website)));
+
+    batch.forEach((company, idx) => {
+      if (results[idx].valid) {
+        verified.push({
+          ...company,
+          _pageContent: results[idx].content // Cache the content for validation
+        });
+      } else {
+        console.log(`    Removed: ${company.company_name} - ${results[idx].reason}`);
+      }
+    });
+
+    console.log(`  Verified ${Math.min(i + batchSize, companies.length)}/${companies.length}. Working: ${verified.length}`);
+  }
+
+  console.log(`Website verification done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Working: ${verified.length}/${companies.length}`);
+  return verified;
+}
+
+// ============ FETCH WEBSITE FOR VALIDATION ============
 
 async function fetchWebsite(url) {
   try {
@@ -465,22 +558,27 @@ ${pageText.substring(0, 8000)}`
 }
 
 async function parallelValidationStrict(companies, business, country, exclusion) {
-  console.log(`\nSTRICT Validating ${companies.length} companies...`);
+  console.log(`\nSTRICT Validating ${companies.length} verified companies...`);
   const startTime = Date.now();
-  const batchSize = 5; // Smaller batches for stricter validation
+  const batchSize = 5;
   const validated = [];
 
   for (let i = 0; i < companies.length; i += batchSize) {
     const batch = companies.slice(i, i + batchSize);
-    const pageTexts = await Promise.all(batch.map(c => fetchWebsite(c.website)));
+    // Use cached _pageContent from verification step, or fetch if not available
+    const pageTexts = await Promise.all(
+      batch.map(c => c._pageContent ? Promise.resolve(c._pageContent) : fetchWebsite(c.website))
+    );
     const validations = await Promise.all(
       batch.map((company, idx) => validateCompanyStrict(company, business, country, exclusion, pageTexts[idx]))
     );
 
     batch.forEach((company, idx) => {
       if (validations[idx].valid) {
+        // Remove internal _pageContent before adding to results
+        const { _pageContent, ...cleanCompany } = company;
         validated.push({
-          ...company,
+          ...cleanCompany,
           hq: validations[idx].corrected_hq || company.hq
         });
       }
@@ -650,7 +748,11 @@ app.post('/api/find-target', async (req, res) => {
     const companies = await exhaustiveSearch(Business, Country, Exclusion);
     console.log(`\nFound ${companies.length} unique companies`);
 
-    const validCompanies = await parallelValidationStrict(companies, Business, Country, Exclusion);
+    // Filter out fake/dead websites before expensive validation
+    const verifiedCompanies = await filterVerifiedWebsites(companies);
+    console.log(`\nCompanies with working websites: ${verifiedCompanies.length}`);
+
+    const validCompanies = await parallelValidationStrict(verifiedCompanies, Business, Country, Exclusion);
 
     const htmlContent = buildEmailHTML(validCompanies, Business, Country, Exclusion);
     await sendEmail(
@@ -742,7 +844,7 @@ app.post('/api/find-target-slow', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v14 - Fast: Strict Validation, Slow: Lenient' });
+  res.json({ status: 'ok', service: 'Find Target v16 - Website Verification + Strict Validation' });
 });
 
 const PORT = process.env.PORT || 3000;
