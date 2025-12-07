@@ -104,12 +104,12 @@ async function callChatGPT(prompt) {
 }
 
 // OpenAI Search model - has real-time web search capability
+// Note: gpt-4o-search-preview does NOT support temperature parameter
 async function callOpenAISearch(prompt) {
   try {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-search-preview',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.2
+      messages: [{ role: 'user', content: prompt }]
     });
     return response.choices[0].message.content || '';
   } catch (error) {
