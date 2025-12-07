@@ -124,7 +124,7 @@
       border-radius: 12px;
       box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
       width: 100%;
-      max-width: 500px;
+      max-width: 600px;
       padding: 2.5rem 2rem;
     }
 
@@ -156,64 +156,127 @@
       line-height: 1.6;
     }
 
-    /* Coming Soon Section */
-    .coming-soon {
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      border-radius: 12px;
-      padding: 3rem 2rem;
-      text-align: center;
-      margin-top: 1rem;
+    /* Form Styles */
+    .form-group {
+      margin-bottom: 1.25rem;
     }
 
-    .coming-soon-icon {
-      font-size: 5rem;
-      margin-bottom: 1.5rem;
-      line-height: 1;
-    }
-
-    .coming-soon-title {
-      font-size: 1.5rem;
-      color: #111827;
-      font-weight: 700;
-      margin-bottom: 0.75rem;
-    }
-
-    .coming-soon-text {
-      font-size: 0.9375rem;
-      color: #6b7280;
-      line-height: 1.6;
-    }
-
-    /* Ghost Button */
-    .ghost-btn {
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 0.5rem;
-      padding: 0.75rem 1.5rem;
-      font-size: 0.9375rem;
-      font-weight: 500;
-      font-family: inherit;
+    .form-label {
+      display: block;
+      font-size: 0.875rem;
       color: #374151;
-      background: transparent;
-      border: 1px solid #d1d5db;
+      margin-bottom: 0.375rem;
+      font-weight: 600;
+    }
+
+    .form-hint {
+      font-size: 0.75rem;
+      color: #9ca3af;
+      margin-top: 0.25rem;
+    }
+
+    .required {
+      color: #ef4444;
+    }
+
+    .form-input {
+      width: 100%;
+      padding: 0.75rem;
+      font-size: 1rem;
+      font-family: inherit;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background-color: #fff;
+      transition: all 0.2s ease;
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+
+    .form-input::placeholder {
+      color: #9ca3af;
+    }
+
+    .form-textarea {
+      width: 100%;
+      padding: 0.75rem;
+      font-size: 0.875rem;
+      font-family: inherit;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background-color: #fff;
+      transition: all 0.2s ease;
+      resize: vertical;
+      min-height: 120px;
+    }
+
+    .form-textarea:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+
+    .form-textarea::placeholder {
+      color: #9ca3af;
+    }
+
+    /* Submit Button */
+    .submit-btn {
+      width: 100%;
+      padding: 0.75rem 1.5rem;
+      font-size: 1rem;
+      font-weight: 600;
+      font-family: inherit;
+      color: #fff;
+      background: #2563eb;
+      border: none;
       border-radius: 8px;
       cursor: pointer;
-      text-decoration: none;
       transition: all 0.2s ease;
-      margin-top: 2rem;
+      margin-top: 0.5rem;
     }
 
-    .ghost-btn:hover {
-      color: #2563eb;
-      border-color: #2563eb;
-      background: #eff6ff;
+    .submit-btn:hover {
+      background: #1d4ed8;
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
     }
 
-    .ghost-btn svg {
-      width: 16px;
-      height: 16px;
+    .submit-btn:active {
+      transform: translateY(0);
+    }
+
+    .submit-btn:disabled {
+      background: #9ca3af;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    /* Messages */
+    .message {
+      display: none;
+      padding: 1rem;
+      border-radius: 8px;
+      font-size: 0.875rem;
+      text-align: center;
+      margin-top: 1.25rem;
+      font-weight: 500;
+    }
+
+    .success-message {
+      background-color: #ecfdf5;
+      border: 1px solid #a7f3d0;
+      color: #065f46;
+    }
+
+    .error-message {
+      background-color: #fef2f2;
+      border: 1px solid #fecaca;
+      color: #991b1b;
     }
 
     /* Footer */
@@ -240,14 +303,6 @@
 
       .page-title {
         font-size: 1.5rem;
-      }
-
-      .coming-soon {
-        padding: 2rem 1.5rem;
-      }
-
-      .coming-soon-icon {
-        font-size: 4rem;
       }
     }
   </style>
@@ -285,28 +340,93 @@
         <p class="eyebrow">Company Validation</p>
         <h1 class="page-title">Validation</h1>
         <p class="form-description">
-          Validate and verify company information with AI-powered analysis.
+          Validate companies against your target business criteria.<br>
+          Results will be emailed to you within <strong>15-30 minutes</strong>.
         </p>
       </div>
 
-      <div class="coming-soon">
-        <div class="coming-soon-icon">🚀</div>
-        <h2 class="coming-soon-title">Coming Soon</h2>
-        <p class="coming-soon-text">
-          This feature is currently under development.<br>
-          Check back soon for company validation capabilities.
-        </p>
-      </div>
+      <form id="validationForm" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/validation">
+        <div class="form-group">
+          <label class="form-label" for="companies">
+            Company Names <span class="required">*</span>
+          </label>
+          <textarea
+            id="companies"
+            name="Companies"
+            class="form-textarea"
+            placeholder="Enter company names (one per line or comma-separated)
 
-      <div style="text-align: center;">
-        <a href="find-target.html" class="ghost-btn">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="19" y1="12" x2="5" y2="12"></line>
-            <polyline points="12 19 5 12 12 5"></polyline>
-          </svg>
-          Back to Company Search
-        </a>
-      </div>
+Example:
+ABC Electronics Sdn Bhd
+XYZ Trading Co Ltd
+Sample Corp Malaysia"
+            rows="8"
+            required
+          ></textarea>
+          <p class="form-hint">You can paste up to 200 company names. Countries can be included with company names.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="countries">
+            Countries <span class="required">*</span>
+          </label>
+          <textarea
+            id="countries"
+            name="Countries"
+            class="form-textarea"
+            placeholder="Enter countries (one per line or comma-separated)
+
+Example:
+Malaysia
+Thailand
+Singapore"
+            rows="4"
+            required
+          ></textarea>
+          <p class="form-hint">List all countries where the companies might be located.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="targetBusiness">
+            Target Business <span class="required">*</span>
+          </label>
+          <input
+            type="text"
+            id="targetBusiness"
+            name="TargetBusiness"
+            class="form-input"
+            placeholder="e.g. Semiconductor distributor, Electronics wholesaler"
+            required
+          >
+          <p class="form-hint">Describe the type of business you're looking for.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="email">
+            Email <span class="required">*</span>
+          </label>
+          <input
+            type="email"
+            id="email"
+            name="Email"
+            class="form-input"
+            placeholder="e.g. yourname@company.com"
+            required
+          >
+        </div>
+
+        <button type="submit" class="submit-btn" id="submitBtn">
+          Validate Companies
+        </button>
+
+        <div class="message success-message" id="successMessage">
+          Validation request submitted! Results will be emailed to you within 15-30 minutes.
+        </div>
+
+        <div class="message error-message" id="errorMessage">
+          Error submitting request. Please try again.
+        </div>
+      </form>
     </div>
   </main>
 
@@ -327,6 +447,50 @@
     document.addEventListener('click', (e) => {
       if (!mobileMenuBtn.contains(e.target) && !mobileMenu.contains(e.target)) {
         mobileMenu.classList.remove('active');
+      }
+    });
+
+    // Form submission
+    document.getElementById('validationForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      const submitBtn = document.getElementById('submitBtn');
+      const successMessage = document.getElementById('successMessage');
+      const errorMessage = document.getElementById('errorMessage');
+
+      successMessage.style.display = 'none';
+      errorMessage.style.display = 'none';
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Submitting...';
+
+      const formData = {
+        Companies: document.getElementById('companies').value,
+        Countries: document.getElementById('countries').value,
+        TargetBusiness: document.getElementById('targetBusiness').value,
+        Email: document.getElementById('email').value
+      };
+
+      try {
+        const response = await fetch(this.action, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(formData)
+        });
+
+        if (response.ok) {
+          successMessage.style.display = 'block';
+          this.reset();
+        } else {
+          throw new Error('Request failed');
+        }
+      } catch (error) {
+        errorMessage.style.display = 'block';
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Validate Companies';
       }
     });
   </script>
