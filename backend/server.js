@@ -477,8 +477,143 @@ app.post('/api/find-target', async (req, res) => {
   }
 });
 
+// ============ SLOW VERSION - MORE EXHAUSTIVE ============
+
+function generateSlowSearchQueries(business, country, exclusion) {
+  const countries = country.split(',').map(c => c.trim());
+  const queries = [];
+
+  const outputFormat = `For each company provide: company_name, website URL (must start with http), headquarters location (City, Country format). List all companies you can find.`;
+
+  // All fast queries
+  queries.push(
+    `List all ${business} companies headquartered in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} suppliers and distributors based in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} companies in ${country} business directories. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} exhibitors from ${country} at trade shows. Not ${exclusion}. ${outputFormat}`,
+    `${business} importers and exporters in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Small and medium ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} vendors and dealers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} trading companies in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} companies registered in trade associations in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} companies in Yellow Pages or Kompass for ${country}. Not ${exclusion}. ${outputFormat}`
+  );
+
+  // Additional exhaustive queries
+  queries.push(
+    `Complete list of ${business} manufacturers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} OEM suppliers in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} wholesalers and stockists in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Family-owned ${business} businesses in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} companies that export from ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Recently established ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} companies in industrial parks in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} companies with ISO certification in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} contract manufacturers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Regional ${business} players in ${country}. Not ${exclusion}. ${outputFormat}`
+  );
+
+  // Country-specific exhaustive searches
+  for (const c of countries) {
+    queries.push(
+      `${business} companies headquartered in ${c}. Exclude ${exclusion}. ${outputFormat}`,
+      `Local ${business} firms in ${c}. Not ${exclusion}. ${outputFormat}`,
+      `${business} companies in major cities of ${c}. Exclude ${exclusion}. ${outputFormat}`,
+      `All ${business} suppliers operating in ${c}. Exclude ${exclusion}. ${outputFormat}`,
+      `${business} industry players in ${c}. Not ${exclusion}. ${outputFormat}`,
+      `Chamber of commerce ${business} members in ${c}. Exclude ${exclusion}. ${outputFormat}`
+    );
+  }
+
+  return queries;
+}
+
+async function exhaustiveSearch(business, country, exclusion) {
+  console.log('Starting EXHAUSTIVE search with Perplexity...');
+  const startTime = Date.now();
+
+  const queries = generateSlowSearchQueries(business, country, exclusion);
+  console.log(`  Running ${queries.length} Perplexity queries (slow mode)...`);
+
+  // Run all Perplexity searches in parallel
+  const searchResults = await Promise.all(queries.map(q => callPerplexity(q)));
+
+  console.log(`  Searches completed in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+
+  // Extract companies from all results
+  console.log(`  Extracting companies from ${searchResults.length} responses...`);
+  const extractionResults = await Promise.all(
+    searchResults.map(text => extractCompanies(text, country))
+  );
+
+  // Flatten and dedupe
+  const allCompanies = extractionResults.flat();
+  const uniqueCompanies = dedupeCompanies(allCompanies);
+
+  console.log(`  Raw: ${allCompanies.length}, Unique: ${uniqueCompanies.length}`);
+  console.log(`Exhaustive search completed in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+
+  return uniqueCompanies;
+}
+
+// SLOW ENDPOINT - More thorough search
+app.post('/api/find-target-slow', async (req, res) => {
+  const { Business, Country, Exclusion, Email } = req.body;
+
+  if (!Business || !Country || !Exclusion || !Email) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`NEW SLOW REQUEST: ${new Date().toISOString()}`);
+  console.log(`Business: ${Business}`);
+  console.log(`Country: ${Country}`);
+  console.log(`Exclusion: ${Exclusion}`);
+  console.log(`Email: ${Email}`);
+  console.log('='.repeat(50));
+
+  res.json({
+    success: true,
+    message: 'Request received. Results will be emailed within 15-45 minutes.'
+  });
+
+  try {
+    const totalStart = Date.now();
+
+    // Step 1: Exhaustive search with Perplexity
+    const companies = await exhaustiveSearch(Business, Country, Exclusion);
+    console.log(`\nFound ${companies.length} unique companies from exhaustive search`);
+
+    // Step 2: Validate (website check + Gemini validation)
+    const validCompanies = await validateCompanies(companies, Business, Country, Exclusion);
+
+    // Step 3: Send email
+    const htmlContent = buildEmailHTML(validCompanies, Business, Country, Exclusion);
+    await sendEmail(
+      Email,
+      `[SLOW] ${Business} in ${Country} exclude ${Exclusion} (${validCompanies.length} companies)`,
+      htmlContent
+    );
+
+    const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
+    console.log(`\n${'='.repeat(50)}`);
+    console.log(`SLOW COMPLETE! Email sent to ${Email}`);
+    console.log(`Total companies: ${validCompanies.length}`);
+    console.log(`Total time: ${totalTime} minutes`);
+    console.log('='.repeat(50));
+
+  } catch (error) {
+    console.error('Processing error:', error);
+    try {
+      await sendEmail(Email, `Find Target Slow - Error`, `<p>Error: ${error.message}</p>`);
+    } catch (e) {
+      console.error('Failed to send error email:', e);
+    }
+  }
+});
+
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v9 - Perplexity Search + Real Validation' });
+  res.json({ status: 'ok', service: 'Find Target v9 - Fast & Slow modes' });
 });
 
 const PORT = process.env.PORT || 3000;
