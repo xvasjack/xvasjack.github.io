@@ -21,6 +21,9 @@ const openai = new OpenAI({
 });
 
 // Send email using Resend API
+// Note: Free tier only allows sending to account owner email
+const RESEND_ACCOUNT_EMAIL = 'xvasjack@gmail.com';
+
 async function sendEmail(to, subject, html) {
   const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
@@ -30,7 +33,7 @@ async function sendEmail(to, subject, html) {
     },
     body: JSON.stringify({
       from: 'Find Target <onboarding@resend.dev>',
-      to: to,
+      to: RESEND_ACCOUNT_EMAIL,  // Free tier: must send to account email
       subject: subject,
       html: html
     })
