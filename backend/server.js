@@ -805,61 +805,64 @@ async function fetchWebsite(url) {
   }
 }
 
-// ============ DYNAMIC EXCLUSION RULES BUILDER ============
+// ============ DYNAMIC EXCLUSION RULES BUILDER (n8n-style PAGE SIGNAL detection) ============
 
 function buildExclusionRules(exclusion, business) {
   const exclusionLower = exclusion.toLowerCase();
   let rules = '';
 
-  // Detect if user wants to exclude LARGE/MNC/BIG companies
+  // Detect if user wants to exclude LARGE companies - use PAGE SIGNALS like n8n
   if (exclusionLower.includes('large') || exclusionLower.includes('big') ||
       exclusionLower.includes('mnc') || exclusionLower.includes('multinational') ||
       exclusionLower.includes('major') || exclusionLower.includes('giant')) {
     rules += `
-LARGE COMPANY DETECTION - REJECT if ANY of these apply:
-- Company is a subsidiary of a large multinational corporation (MNC)
-- Parent company is a well-known global brand or multinational
-- Company name ends with "Tbk" (Indonesian publicly listed)
-- Website shows company is part of a global group with operations in 10+ countries
-- Website shows revenue >$100M or >1000 employees
-- Company is backed by or owned by Japanese/European/US/Chinese multinational
+LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
+- "global presence", "worldwide operations", "global leader", "world's largest"
+- Stock ticker symbols or mentions of: NYSE, NASDAQ, SGX, SET, IDX, listed, IPO
+- "multinational", "global network", offices/operations in 10+ countries
+- Revenue figures >$100M, employee count >1000
+- "Fortune 500", "Forbes Global"
+- Company name contains known MNC: Toyo Ink, Sakata, Flint, Siegwerk, Sun Chemical, DIC
+- Website says "subsidiary of", "part of [X] Group", "member of [X] Group"
+- Company name ends with "Tbk" (Indonesian listed)
+
+If NONE of these signals are found → ACCEPT (assume local company)
 `;
   }
 
   // Detect if user wants to exclude LISTED/PUBLIC companies
   if (exclusionLower.includes('listed') || exclusionLower.includes('public')) {
     rules += `
-LISTED/PUBLIC COMPANY DETECTION - REJECT if:
-- Company name contains "Tbk" (Indonesian listed)
-- Company or its parent is publicly traded on any stock exchange
-- Website mentions being listed, IPO, or stock ticker
+LISTED COMPANY DETECTION - REJECT if page shows:
+- Stock ticker, NYSE, NASDAQ, SGX, SET, IDX, or any stock exchange
+- "publicly traded", "listed company", "IPO"
+- Company name contains "Tbk"
 `;
   }
 
   // Detect if user wants to exclude DISTRIBUTORS
   if (exclusionLower.includes('distributor')) {
     rules += `
-DISTRIBUTOR DETECTION - REJECT if:
-- Company primarily distributes/resells products made by others
-- Company is described as "distributor", "trading company", "agent", or "dealer"
-- No evidence of own manufacturing/production facility
-- ACCEPT only if company clearly manufactures/produces the products themselves
+DISTRIBUTOR DETECTION - REJECT only if:
+- Company ONLY distributes/resells with NO manufacturing
+- No mention of factory, plant, production facility, "we manufacture"
+
+ACCEPT if they manufacture (even if also distribute) - most manufacturers also sell their products
 `;
   }
 
   return rules;
 }
 
-// ============ STRICT VALIDATION FOR FAST MODE (v21) ============
+// ============ VALIDATION (v23 - n8n-style PAGE SIGNAL detection) ============
 
 async function validateCompanyStrict(company, business, country, exclusion, pageText) {
-  // If we couldn't fetch the website, REJECT (can't verify)
+  // If we couldn't fetch the website, skip (can't verify)
   if (!pageText) {
-    console.log(`    Rejected: ${company.company_name} - Could not verify (website unreachable)`);
+    console.log(`    Skipped: ${company.company_name} - Website unreachable`);
     return { valid: false };
   }
 
-  // Build dynamic exclusion rules based on user's criteria
   const exclusionRules = buildExclusionRules(exclusion, business);
 
   try {
@@ -868,43 +871,39 @@ async function validateCompanyStrict(company, business, country, exclusion, page
       messages: [
         {
           role: 'system',
-          content: `You are a company validator. Determine if a company matches the search criteria.
+          content: `You are a company validator. Be LENIENT on business match. Be STRICT on exclusions by detecting signals in page content.
 
-USER'S SEARCH CRITERIA:
-- Looking for: "${business}"
-- In these countries: ${country}
-- Exclude: ${exclusion}
+VALIDATION TASK:
+- Business sought: "${business}"
+- Target countries: ${country}
+- Exclusions: ${exclusion}
 
 VALIDATION RULES:
 
 1. LOCATION CHECK:
-- Company must be headquartered in: ${country}
-- REJECT if headquarters is outside target countries
+- Is HQ actually in one of the target countries (${country})?
+- If HQ is outside these countries → REJECT
 
-2. BUSINESS MATCH:
-- Company must be a ${business} MANUFACTURER/PRODUCER
-- ACCEPT only if they clearly MANUFACTURE, PRODUCE, or MAKE ${business}
-- REJECT if they are a printing/packaging company that only USES the product
-- REJECT if they are a trading company, distributor, or reseller
+2. BUSINESS MATCH (BE LENIENT):
+- Does the company's business relate to "${business}"?
+- Accept related products, services, or sub-categories
+- Only reject if completely unrelated
 
-3. EXCLUSION RULES:
+3. EXCLUSION CHECK - DETECT VIA PAGE SIGNALS:
 ${exclusionRules}
 
 4. SPAM CHECK:
-- REJECT if clearly a directory, marketplace, or spam site
+- Is this a directory, marketplace, domain-for-sale, or aggregator site? → REJECT
 
-IMPORTANT: When uncertain, lean towards REJECT. Only accept companies that clearly match all criteria.
-
-Return JSON only: {"valid": true/false, "reason": "one sentence explanation"}`
+OUTPUT: Return JSON only: {"valid": true/false, "reason": "one sentence"}`
         },
         {
           role: 'user',
-          content: `COMPANY TO VALIDATE:
-- Name: ${company.company_name}
-- Website: ${company.website}
-- Claimed HQ: ${company.hq}
+          content: `COMPANY: ${company.company_name}
+WEBSITE: ${company.website}
+HQ: ${company.hq}
 
-WEBSITE CONTENT:
+PAGE CONTENT:
 ${pageText.substring(0, 10000)}`
         }
       ],
@@ -918,9 +917,9 @@ ${pageText.substring(0, 10000)}`
     console.log(`    Rejected: ${company.company_name} - ${result.reason}`);
     return { valid: false };
   } catch (e) {
-    // On error, REJECT (strict mode)
-    console.log(`    Rejected: ${company.company_name} - Validation error`);
-    return { valid: false };
+    // On error, accept (benefit of doubt)
+    console.log(`    Error validating ${company.company_name}, accepting`);
+    return { valid: true, corrected_hq: company.hq };
   }
 }
 
@@ -958,10 +957,9 @@ async function parallelValidationStrict(companies, business, country, exclusion)
   return validated;
 }
 
-// ============ VALIDATION FOR SLOW MODE (v21 - Strict) ============
+// ============ VALIDATION FOR SLOW MODE (v23 - n8n style) ============
 
 async function validateCompany(company, business, country, exclusion, pageText) {
-  // Build dynamic exclusion rules
   const exclusionRules = buildExclusionRules(exclusion, business);
 
   try {
@@ -970,44 +968,40 @@ async function validateCompany(company, business, country, exclusion, pageText) 
       messages: [
         {
           role: 'system',
-          content: `You are a company validator. Determine if a company matches the search criteria.
+          content: `You are a company validator. Be LENIENT on business match. Be STRICT on exclusions by detecting signals in page content.
 
-USER'S SEARCH CRITERIA:
-- Looking for: "${business}"
-- In these countries: ${country}
-- Exclude: ${exclusion}
+VALIDATION TASK:
+- Business sought: "${business}"
+- Target countries: ${country}
+- Exclusions: ${exclusion}
 
 VALIDATION RULES:
 
 1. LOCATION CHECK:
-- Company must be headquartered in: ${country}
-- REJECT if headquarters is outside target countries
+- Is HQ actually in one of the target countries (${country})?
+- If HQ is outside these countries → REJECT
 
-2. BUSINESS MATCH:
-- Company must be a ${business} MANUFACTURER/PRODUCER
-- ACCEPT only if they clearly MANUFACTURE, PRODUCE, or MAKE ${business}
-- REJECT if they only USE the product (e.g., printing company using ink)
-- REJECT if they are a trading company, distributor, or reseller
+2. BUSINESS MATCH (BE LENIENT):
+- Does the company's business relate to "${business}"?
+- Accept related products, services, or sub-categories
+- Only reject if completely unrelated
 
-3. EXCLUSION RULES:
+3. EXCLUSION CHECK - DETECT VIA PAGE SIGNALS:
 ${exclusionRules}
 
 4. SPAM CHECK:
-- REJECT if clearly a directory or spam site
+- Is this a directory, marketplace, domain-for-sale, or aggregator site? → REJECT
 
-IMPORTANT: When uncertain, lean towards REJECT. Only accept companies that clearly match all criteria.
-
-Return JSON: {"valid": true/false, "reason": "brief explanation", "corrected_hq": "City, Country or null"}`
+OUTPUT: Return JSON: {"valid": true/false, "reason": "brief", "corrected_hq": "City, Country or null"}`
         },
         {
           role: 'user',
-          content: `COMPANY TO VALIDATE:
-- Name: ${company.company_name}
-- Website: ${company.website}
-- Claimed HQ: ${company.hq}
+          content: `COMPANY: ${company.company_name}
+WEBSITE: ${company.website}
+HQ: ${company.hq}
 
-WEBSITE CONTENT:
-${pageText ? pageText.substring(0, 8000) : 'Could not fetch website - use company name to assess'}`
+PAGE CONTENT:
+${pageText ? pageText.substring(0, 8000) : 'Could not fetch - validate by name only'}`
         }
       ],
       response_format: { type: 'json_object' }
@@ -1020,8 +1014,9 @@ ${pageText ? pageText.substring(0, 8000) : 'Could not fetch website - use compan
     console.log(`    Rejected: ${company.company_name} - ${result.reason}`);
     return { valid: false };
   } catch (e) {
-    console.log(`    Rejected: ${company.company_name} - Validation error`);
-    return { valid: false };
+    // On error, accept (benefit of doubt)
+    console.log(`    Error validating ${company.company_name}, accepting`);
+    return { valid: true, corrected_hq: company.hq };
   }
 }
 
@@ -1209,7 +1204,7 @@ app.post('/api/find-target-slow', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v21 - Strict Validation (MNC/Subsidiary Rejection)' });
+  res.json({ status: 'ok', service: 'Find Target v23 - n8n-style PAGE SIGNAL detection' });
 });
 
 const PORT = process.env.PORT || 3000;
