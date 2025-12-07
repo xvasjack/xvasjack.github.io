@@ -9,7 +9,7 @@ app.use(cors());
 app.use(express.json());
 
 // Check required environment variables
-const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'RESEND_API_KEY'];
+const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'BREVO_API_KEY'];
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
@@ -20,22 +20,19 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
 
-// Send email using Resend API
-// Note: Free tier only allows sending to account owner email
-const RESEND_ACCOUNT_EMAIL = 'xvasjack@gmail.com';
-
+// Send email using Brevo API (free tier allows any recipient)
 async function sendEmail(to, subject, html) {
-  const response = await fetch('https://api.resend.com/emails', {
+  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+      'api-key': process.env.BREVO_API_KEY,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      from: 'Find Target <onboarding@resend.dev>',
-      to: RESEND_ACCOUNT_EMAIL,  // Free tier: must send to account email
+      sender: { name: 'Find Target', email: 'noreply@find-target.com' },
+      to: [{ email: to }],
       subject: subject,
-      html: html
+      htmlContent: html
     })
   });
 
