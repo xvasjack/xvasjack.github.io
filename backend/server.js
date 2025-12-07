@@ -195,7 +195,8 @@ const LOCAL_LANGUAGE_MAP = {
 // ============ 14 SPECIALIZED SEARCH STRATEGIES (inspired by n8n workflow) ============
 
 function buildOutputFormat() {
-  return `For each company provide: company_name, website (must start with http), hq (format: "City, Country" only). List as many companies as possible, at least 20-30.`;
+  return `For each company provide: company_name, website (must be a REAL working URL starting with http), hq (format: "City, Country" only).
+IMPORTANT: Only include companies you are CERTAIN exist. Do NOT make up companies or websites. Quality over quantity.`;
 }
 
 // Strategy 1: Broad Google Search (SerpAPI)
@@ -448,20 +449,25 @@ async function extractCompanies(text, country) {
       messages: [
         {
           role: 'system',
-          content: `Extract ALL company information. Return JSON: {"companies": [{"company_name": "...", "website": "...", "hq": "..."}]}
-Rules:
-- website must start with http:// or https://
+          content: `Extract company information from the text. Return JSON: {"companies": [{"company_name": "...", "website": "...", "hq": "..."}]}
+
+STRICT RULES:
+- Only extract companies EXPLICITLY mentioned in the text
+- website must be a REAL URL starting with http:// or https://
+- Do NOT invent or guess websites - only use URLs found in the text
 - hq must be "City, Country" format ONLY
-- Include ALL companies mentioned that might be in: ${country}
-- Be exhaustive - extract every company mentioned
-- Return {"companies": []} if none found`
+- Target countries: ${country}
+- Return {"companies": []} if no valid companies found
+- Maximum 30 companies per extraction (focus on quality)`
         },
         { role: 'user', content: text.substring(0, 15000) }
       ],
       response_format: { type: 'json_object' }
     });
     const parsed = JSON.parse(extraction.choices[0].message.content);
-    return Array.isArray(parsed.companies) ? parsed.companies : [];
+    const companies = Array.isArray(parsed.companies) ? parsed.companies : [];
+    // Cap at 30 per extraction to prevent hallucination
+    return companies.slice(0, 30);
   } catch (e) {
     console.error('Extraction error:', e.message);
     return [];
@@ -528,30 +534,22 @@ function dedupeCompanies(allCompanies) {
   return results;
 }
 
-// ============ PRE-FILTER: Remove obvious non-company URLs ============
+// ============ PRE-FILTER: Remove only obvious non-company URLs ============
 
 function isSpamOrDirectoryURL(url) {
   if (!url) return true;
   const urlLower = url.toLowerCase();
 
-  // Common directory/marketplace/aggregator domains to filter out
-  const spamPatterns = [
-    // Directories and marketplaces
-    'alibaba.com', 'made-in-china.com', 'globalsources.com', 'indiamart.com',
-    'kompass.com', 'yellowpages', 'yelp.com', 'trustpilot.com',
-    'dnb.com', 'bloomberg.com/profile', 'reuters.com/companies',
-    'crunchbase.com', 'zoominfo.com', 'opencorporates.com',
-    // Social media (unless it's the company's actual site)
-    'facebook.com', 'linkedin.com/company', 'twitter.com', 'instagram.com',
-    // Data aggregators
-    'dataforthai.com', 'companieshouse', 'bizfile', 'acra.gov',
-    // File hosting / docs
-    'scribd.com', 'slideshare.net', 'issuu.com',
-    // News sites (articles about companies, not companies themselves)
-    'wikipedia.org', 'bloomberg.com/news', 'reuters.com/article'
+  // Only filter out obvious non-company URLs (very conservative)
+  const obviousSpam = [
+    'wikipedia.org',
+    'facebook.com',
+    'twitter.com',
+    'instagram.com',
+    'youtube.com'
   ];
 
-  for (const pattern of spamPatterns) {
+  for (const pattern of obviousSpam) {
     if (urlLower.includes(pattern)) return true;
   }
 
@@ -562,7 +560,7 @@ function preFilterCompanies(companies) {
   return companies.filter(c => {
     if (!c || !c.website) return false;
     if (isSpamOrDirectoryURL(c.website)) {
-      console.log(`    Pre-filtered: ${c.company_name} - Directory/aggregator site`);
+      console.log(`    Pre-filtered: ${c.company_name} - Social media/wiki`);
       return false;
     }
     return true;
@@ -1204,7 +1202,7 @@ app.post('/api/find-target-slow', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v23 - n8n-style PAGE SIGNAL detection' });
+  res.json({ status: 'ok', service: 'Find Target v24 - Anti-hallucination + Relaxed pre-filter' });
 });
 
 const PORT = process.env.PORT || 3000;
