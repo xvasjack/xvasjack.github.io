@@ -10,9 +10,13 @@ app.use(express.json());
 
 // Check required environment variables
 const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'BREVO_API_KEY'];
+const optionalEnvVars = ['SERPAPI_API_KEY']; // Optional but recommended
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
+}
+if (!process.env.SERPAPI_API_KEY) {
+  console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
 }
 
 // Initialize OpenAI
@@ -99,208 +103,337 @@ async function callChatGPT(prompt) {
   }
 }
 
-// ============ EXHAUSTIVE QUERY GENERATION ============
+// OpenAI Search model - has real-time web search capability
+async function callOpenAISearch(prompt) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-search-preview',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2
+    });
+    return response.choices[0].message.content || '';
+  } catch (error) {
+    console.error('OpenAI Search error:', error.message);
+    // Fallback to regular gpt-4o if search model not available
+    return callChatGPT(prompt);
+  }
+}
 
-function generateExhaustiveQueries(business, country, exclusion) {
+// SerpAPI - Google Search integration
+async function callSerpAPI(query) {
+  if (!process.env.SERPAPI_API_KEY) {
+    return '';
+  }
+  try {
+    const params = new URLSearchParams({
+      q: query,
+      api_key: process.env.SERPAPI_API_KEY,
+      engine: 'google',
+      num: 100 // Get more results
+    });
+    const response = await fetch(`https://serpapi.com/search?${params}`, {
+      timeout: 30000
+    });
+    const data = await response.json();
+
+    // Extract organic results
+    const results = [];
+    if (data.organic_results) {
+      for (const result of data.organic_results) {
+        results.push({
+          title: result.title || '',
+          link: result.link || '',
+          snippet: result.snippet || ''
+        });
+      }
+    }
+    return JSON.stringify(results);
+  } catch (error) {
+    console.error('SerpAPI error:', error.message);
+    return '';
+  }
+}
+
+// ============ SEARCH CONFIGURATION ============
+
+const CITY_MAP = {
+  'malaysia': ['Kuala Lumpur', 'Penang', 'Johor Bahru', 'Shah Alam', 'Petaling Jaya', 'Selangor', 'Ipoh', 'Klang', 'Subang', 'Melaka', 'Kuching', 'Kota Kinabalu'],
+  'singapore': ['Singapore', 'Jurong', 'Tuas', 'Woodlands'],
+  'thailand': ['Bangkok', 'Chonburi', 'Rayong', 'Samut Prakan', 'Ayutthaya', 'Chiang Mai', 'Pathum Thani', 'Nonthaburi', 'Samut Sakhon'],
+  'indonesia': ['Jakarta', 'Surabaya', 'Bandung', 'Medan', 'Bekasi', 'Tangerang', 'Semarang', 'Sidoarjo', 'Cikarang', 'Karawang', 'Bogor'],
+  'vietnam': ['Ho Chi Minh City', 'Hanoi', 'Da Nang', 'Hai Phong', 'Binh Duong', 'Dong Nai', 'Long An', 'Ba Ria', 'Can Tho'],
+  'philippines': ['Manila', 'Cebu', 'Davao', 'Quezon City', 'Makati', 'Laguna', 'Cavite', 'Batangas', 'Bulacan'],
+  'southeast asia': ['Kuala Lumpur', 'Singapore', 'Bangkok', 'Jakarta', 'Ho Chi Minh City', 'Manila', 'Penang', 'Johor Bahru', 'Surabaya', 'Hanoi']
+};
+
+const LOCAL_SUFFIXES = {
+  'malaysia': ['Sdn Bhd', 'Berhad'],
+  'singapore': ['Pte Ltd', 'Private Limited'],
+  'thailand': ['Co Ltd', 'Co., Ltd.'],
+  'indonesia': ['PT', 'CV'],
+  'vietnam': ['Co Ltd', 'JSC', 'Công ty'],
+  'philippines': ['Inc', 'Corporation']
+};
+
+const DOMAIN_MAP = {
+  'malaysia': '.my',
+  'singapore': '.sg',
+  'thailand': '.th',
+  'indonesia': '.co.id',
+  'vietnam': '.vn',
+  'philippines': '.ph'
+};
+
+const LOCAL_LANGUAGE_MAP = {
+  'thailand': { lang: 'Thai', examples: ['หมึก', 'สี', 'เคมี'] },
+  'vietnam': { lang: 'Vietnamese', examples: ['mực in', 'sơn', 'hóa chất'] },
+  'indonesia': { lang: 'Bahasa Indonesia', examples: ['tinta', 'cat', 'kimia'] },
+  'philippines': { lang: 'Tagalog', examples: ['tinta', 'pintura'] },
+  'malaysia': { lang: 'Bahasa Malaysia', examples: ['dakwat', 'cat'] }
+};
+
+// ============ 14 SPECIALIZED SEARCH STRATEGIES (inspired by n8n workflow) ============
+
+function buildOutputFormat() {
+  return `For each company provide: company_name, website (must start with http), hq (format: "City, Country" only). List as many companies as possible, at least 20-30.`;
+}
+
+// Strategy 1: Broad Google Search (SerpAPI)
+function strategy1_BroadSerpAPI(business, country, exclusion) {
   const countries = country.split(',').map(c => c.trim());
+  const queries = [];
 
-  // Comprehensive city mapping
-  const cityMap = {
-    'Malaysia': ['Kuala Lumpur', 'Penang', 'Johor Bahru', 'Shah Alam', 'Petaling Jaya', 'Selangor', 'Ipoh', 'Klang', 'Subang', 'Melaka', 'Kuching', 'Kota Kinabalu'],
-    'Singapore': ['Singapore', 'Jurong', 'Tuas', 'Woodlands'],
-    'Thailand': ['Bangkok', 'Chonburi', 'Rayong', 'Samut Prakan', 'Ayutthaya', 'Chiang Mai', 'Pathum Thani', 'Nonthaburi', 'Samut Sakhon'],
-    'Indonesia': ['Jakarta', 'Surabaya', 'Bandung', 'Medan', 'Bekasi', 'Tangerang', 'Semarang', 'Sidoarjo', 'Cikarang', 'Karawang', 'Bogor'],
-    'Vietnam': ['Ho Chi Minh City', 'Hanoi', 'Da Nang', 'Hai Phong', 'Binh Duong', 'Dong Nai', 'Long An', 'Ba Ria', 'Can Tho'],
-    'Philippines': ['Manila', 'Cebu', 'Davao', 'Quezon City', 'Makati', 'Laguna', 'Cavite', 'Batangas', 'Bulacan'],
-    'southeast asia': ['Kuala Lumpur', 'Singapore', 'Bangkok', 'Jakarta', 'Ho Chi Minh City', 'Manila', 'Penang', 'Johor Bahru', 'Surabaya', 'Hanoi']
-  };
+  // Generate synonyms and variations
+  const terms = business.split(/\s+or\s+|\s+and\s+|,/).map(t => t.trim()).filter(t => t);
 
-  // Local company suffixes
-  const localSuffixes = {
-    'Malaysia': ['Sdn Bhd', 'Berhad', 'Sdn. Bhd.'],
-    'Singapore': ['Pte Ltd', 'Private Limited', 'Pte. Ltd.'],
-    'Thailand': ['Co Ltd', 'Company Limited', 'Co., Ltd.'],
-    'Indonesia': ['PT', 'CV', 'PT.'],
-    'Vietnam': ['Co Ltd', 'JSC', 'LLC', 'Joint Stock'],
-    'Philippines': ['Inc', 'Corporation', 'Inc.'],
-    'southeast asia': ['Sdn Bhd', 'Pte Ltd', 'PT', 'Co Ltd']
-  };
+  for (const c of countries) {
+    queries.push(
+      `${business} companies ${c}`,
+      `${business} manufacturers ${c}`,
+      `${business} suppliers ${c}`,
+      `list of ${business} companies in ${c}`,
+      `${business} industry ${c}`
+    );
+    for (const term of terms) {
+      queries.push(`${term} ${c}`);
+    }
+  }
 
-  // Domain suffixes
-  const domainMap = {
-    'Malaysia': '.my', 'Singapore': '.sg', 'Thailand': '.th', 'co.th': '.co.th',
-    'Indonesia': '.id', '.co.id': '.co.id', 'Vietnam': '.vn', 'Philippines': '.ph',
-    'southeast asia': ['.my', '.sg', '.th', '.id', '.vn', '.ph']
-  };
+  return queries;
+}
 
-  const queries = { perplexity: [], gemini: [], chatgpt: [] };
-  const outputFormat = `For each company provide: company_name, website (must start with http), hq (format: "City, Country" only). List as many companies as possible, at least 20-30.`;
-
-  // ===== BROAD SEARCHES =====
-  queries.perplexity.push(
+// Strategy 2: Broad Perplexity Search
+function strategy2_BroadPerplexity(business, country, exclusion) {
+  const outputFormat = buildOutputFormat();
+  return [
     `Find ALL ${business} companies headquartered in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `Complete list of ${business} suppliers in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} distributors and dealers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `All ${business} vendors in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${country} ${business} companies directory. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} trading companies in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `List every ${business} company in ${country}. Exclude ${exclusion}. ${outputFormat}`
-  );
+    `${business} vendors and dealers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `All ${business} trading companies in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${country} ${business} companies directory - comprehensive list. Exclude ${exclusion}. ${outputFormat}`
+  ];
+}
 
-  // ===== SPECIFIC PRODUCT TERMS =====
-  const productTerms = business.split(/\s+or\s+|\s+and\s+|,/).map(t => t.trim()).filter(t => t);
-  for (const term of productTerms) {
-    queries.perplexity.push(
-      `${term} companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-      `${term} manufacturers and suppliers in ${country}. Not ${exclusion}. ${outputFormat}`
+// Strategy 3: Lists, Rankings, Top Companies (SerpAPI)
+function strategy3_ListsSerpAPI(business, country, exclusion) {
+  const countries = country.split(',').map(c => c.trim());
+  const queries = [];
+
+  for (const c of countries) {
+    queries.push(
+      `top ${business} companies ${c}`,
+      `biggest ${business} ${c}`,
+      `leading ${business} manufacturers ${c}`,
+      `list of ${business} ${c}`,
+      `best ${business} suppliers ${c}`,
+      `${business} industry ${c} overview`,
+      `major ${business} players ${c}`
     );
   }
 
-  // ===== CITY-SPECIFIC SEARCHES =====
+  return queries;
+}
+
+// Strategy 4: City-Specific Search (Perplexity)
+function strategy4_CitiesPerplexity(business, country, exclusion) {
+  const countries = country.split(',').map(c => c.trim());
+  const outputFormat = buildOutputFormat();
+  const queries = [];
+
   for (const c of countries) {
-    const normalizedCountry = c.toLowerCase();
-    const cities = cityMap[normalizedCountry] || cityMap[c] || [c];
-    for (const city of cities) {
-      queries.perplexity.push(
+    const cities = CITY_MAP[c.toLowerCase()] || [c];
+    for (const city of cities.slice(0, 5)) { // Top 5 cities per country
+      queries.push(
         `${business} companies in ${city}, ${c}. Exclude ${exclusion}. ${outputFormat}`
       );
-      queries.gemini.push(
-        `List ${business} firms located in ${city}. Not ${exclusion}. ${outputFormat}`
-      );
     }
   }
 
-  // ===== LOCAL NAMING CONVENTIONS =====
+  return queries;
+}
+
+// Strategy 5: Industrial Zones + Local Naming (SerpAPI)
+function strategy5_IndustrialSerpAPI(business, country, exclusion) {
+  const countries = country.split(',').map(c => c.trim());
+  const queries = [];
+
   for (const c of countries) {
-    const normalizedCountry = c.toLowerCase();
-    const suffixes = localSuffixes[normalizedCountry] || localSuffixes[c] || [];
+    const suffixes = LOCAL_SUFFIXES[c.toLowerCase()] || [];
+
+    // Local naming conventions
     for (const suffix of suffixes) {
-      queries.gemini.push(
-        `${business} companies with "${suffix}" in ${c}. Exclude ${exclusion}. ${outputFormat}`
-      );
+      queries.push(`${business} ${suffix} ${c}`);
     }
-  }
 
-  // ===== INDUSTRIAL ZONES =====
-  queries.gemini.push(
-    `${business} companies in industrial estates in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} factories in manufacturing zones in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} plants in free trade zones in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} companies in export processing zones in ${country}. Not ${exclusion}. ${outputFormat}`
-  );
-  for (const c of countries) {
-    queries.gemini.push(
-      `${business} companies in industrial parks of ${c}. Exclude ${exclusion}. ${outputFormat}`
+    // Industrial zones
+    queries.push(
+      `${business} industrial estate ${c}`,
+      `${business} manufacturing zone ${c}`,
+      `${business} factory ${c}`
     );
   }
 
-  // ===== TRADE ASSOCIATIONS & DIRECTORIES =====
-  queries.perplexity.push(
+  return queries;
+}
+
+// Strategy 6: Associations & Directories (Perplexity)
+function strategy6_DirectoriesPerplexity(business, country, exclusion) {
+  const outputFormat = buildOutputFormat();
+  return [
     `${business} companies in trade associations in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${business} firms in Kompass directory for ${country}. Not ${exclusion}. ${outputFormat}`,
     `Chamber of commerce ${business} members in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${country} ${business} industry association member list. No ${exclusion}. ${outputFormat}`,
-    `${business} companies in Yellow Pages ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} suppliers listed on ThomasNet for ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} companies on Made-in-China from ${country}. Exclude ${exclusion}. ${outputFormat}`
-  );
+    `${business} companies on Yellow Pages ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} business directory ${country}. Exclude ${exclusion}. ${outputFormat}`
+  ];
+}
 
-  // ===== TRADE SHOWS & EXHIBITIONS =====
-  queries.gemini.push(
+// Strategy 7: Trade Shows & Exhibitions (Perplexity)
+function strategy7_ExhibitionsPerplexity(business, country, exclusion) {
+  const outputFormat = buildOutputFormat();
+  return [
     `${business} exhibitors at trade shows in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} companies at industry exhibitions in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} participants at expos in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} companies at industry exhibitions in ${country} region. Not ${exclusion}. ${outputFormat}`,
+    `${business} participants at expos and conferences in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${business} exhibitors at international fairs from ${country}. Not ${exclusion}. ${outputFormat}`
-  );
+  ];
+}
 
-  // ===== IMPORT/EXPORT & B2B =====
-  queries.perplexity.push(
+// Strategy 8: Import/Export & Supplier Databases (Perplexity)
+function strategy8_TradePerplexity(business, country, exclusion) {
+  const outputFormat = buildOutputFormat();
+  return [
     `${business} importers and exporters in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${business} suppliers on Alibaba from ${country}. Not ${exclusion}. ${outputFormat}`,
     `${country} ${business} companies on Global Sources. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} wholesalers and stockists in ${country}. No ${exclusion}. ${outputFormat}`,
     `${business} OEM suppliers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} contract manufacturers in ${country}. Not ${exclusion}. ${outputFormat}`
-  );
+    `${business} contract manufacturers in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} approved vendors in ${country}. Exclude ${exclusion}. ${outputFormat}`
+  ];
+}
 
-  // ===== LOCAL DOMAIN SEARCHES =====
+// Strategy 9: Local Domains + News (Perplexity)
+function strategy9_DomainsPerplexity(business, country, exclusion) {
+  const countries = country.split(',').map(c => c.trim());
+  const outputFormat = buildOutputFormat();
+  const queries = [];
+
   for (const c of countries) {
-    const normalizedCountry = c.toLowerCase();
-    const domains = domainMap[normalizedCountry] || domainMap[c];
-    if (domains) {
-      const domainList = Array.isArray(domains) ? domains : [domains];
-      for (const domain of domainList) {
-        queries.perplexity.push(
-          `${business} companies with ${domain} websites. Exclude ${exclusion}. ${outputFormat}`
-        );
-      }
+    const domain = DOMAIN_MAP[c.toLowerCase()];
+    if (domain) {
+      queries.push(
+        `${business} companies with ${domain} websites. Exclude ${exclusion}. ${outputFormat}`
+      );
     }
   }
 
-  // ===== SME & NICHE SEARCHES =====
-  queries.chatgpt.push(
-    `Lesser-known ${business} companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Small and medium ${business} enterprises in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `Family-owned ${business} businesses in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Local ${business} companies in ${country}. No ${exclusion}. ${outputFormat}`,
-    `Independent ${business} firms in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Regional ${business} players in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `Niche ${business} specialists in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Boutique ${business} companies in ${country}. No ${exclusion}. ${outputFormat}`,
-    `Emerging ${business} startups in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} companies not affiliated with multinationals in ${country}. ${outputFormat}`
-  );
-
-  // ===== LOCAL LANGUAGE SEARCHES =====
-  queries.perplexity.push(
-    `Search for ${business} companies in ${country} using local language terms (translate "${business}" to Thai, Vietnamese, Bahasa, Tagalog as appropriate). Exclude ${exclusion}. ${outputFormat}`,
-    `Find ${business} suppliers in ${country} - search in both English and local languages of each country. Not ${exclusion}. ${outputFormat}`
-  );
-  queries.chatgpt.push(
-    `List ${business} companies in ${country}. Search using local language variations and translations of "${business}". Exclude ${exclusion}. ${outputFormat}`
-  );
-
-  // ===== GOVERNMENT REGISTRIES =====
-  queries.perplexity.push(
-    `${business} companies registered with government business registries in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} firms in official company registrations database of ${country}. Not ${exclusion}. ${outputFormat}`
-  );
-
-  // ===== INDUSTRY PUBLICATIONS & NEWS =====
-  queries.perplexity.push(
-    `${business} companies mentioned in industry magazines and trade publications for ${country}. Exclude ${exclusion}. ${outputFormat}`,
+  queries.push(
     `Recent news about ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} market report ${country} - list all companies mentioned. Exclude ${exclusion}. ${outputFormat}`
+    `${business} company announcements and press releases ${country}. Exclude ${exclusion}. ${outputFormat}`
   );
 
-  // ===== LINKEDIN & PROFESSIONAL NETWORKS =====
-  queries.chatgpt.push(
-    `${business} companies with LinkedIn profiles in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} firms and their executives on professional networks in ${country}. Not ${exclusion}. ${outputFormat}`
-  );
+  return queries;
+}
 
-  // ===== RANKINGS & LISTS =====
-  queries.perplexity.push(
-    `Top ${business} companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Biggest ${business} suppliers in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `Leading ${business} manufacturers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Best ${business} companies ranked in ${country}. Not ${exclusion}. ${outputFormat}`
-  );
+// Strategy 10: Government Registries (SerpAPI)
+function strategy10_RegistriesSerpAPI(business, country, exclusion) {
+  const countries = country.split(',').map(c => c.trim());
+  const queries = [];
 
-  // ===== FINAL SWEEP =====
-  queries.chatgpt.push(
-    `Any ${business} companies in ${country} not yet mentioned. Exclude ${exclusion}. ${outputFormat}`,
-    `Alternative ${business} suppliers in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `Complete directory of ALL ${business} in ${country}. Exclude ${exclusion}. ${outputFormat}`
-  );
-
-  // Country-specific comprehensive sweeps
   for (const c of countries) {
-    queries.chatgpt.push(
-      `Every ${business} company headquartered in ${c}. Exclude ${exclusion}. ${outputFormat}`,
-      `All local ${business} firms in ${c}. Not ${exclusion}. ${outputFormat}`
+    queries.push(
+      `${business} company registration ${c}`,
+      `${business} registered companies ${c}`,
+      `${business} business registry ${c}`
     );
   }
+
+  return queries;
+}
+
+// Strategy 11: City + Industrial Areas (SerpAPI)
+function strategy11_CityIndustrialSerpAPI(business, country, exclusion) {
+  const countries = country.split(',').map(c => c.trim());
+  const queries = [];
+
+  for (const c of countries) {
+    const cities = CITY_MAP[c.toLowerCase()] || [c];
+    for (const city of cities.slice(0, 3)) { // Top 3 cities
+      queries.push(
+        `${business} ${city}`,
+        `${business} companies ${city} industrial`
+      );
+    }
+  }
+
+  return queries;
+}
+
+// Strategy 12: Deep Web Search (OpenAI Search)
+function strategy12_DeepOpenAISearch(business, country, exclusion) {
+  const outputFormat = buildOutputFormat();
+  return [
+    `Find ${business} companies in ${country} - search LinkedIn company profiles, industry news, press releases, niche directories. Exclude ${exclusion}. ${outputFormat}`,
+    `Lesser-known and emerging ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `Small and medium ${business} enterprises in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Independent ${business} firms in ${country}. Not ${exclusion}. ${outputFormat}`
+  ];
+}
+
+// Strategy 13: Industry Publications (Perplexity)
+function strategy13_PublicationsPerplexity(business, country, exclusion) {
+  const outputFormat = buildOutputFormat();
+  return [
+    `${business} companies mentioned in industry magazines and trade publications for ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} market report ${country} - list all companies mentioned. Not ${exclusion}. ${outputFormat}`,
+    `${business} industry analysis ${country} - companies covered. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} ${country} magazine articles listing companies. Not ${exclusion}. ${outputFormat}`
+  ];
+}
+
+// Strategy 14: Final Sweep - Local Language Focus (OpenAI Search)
+function strategy14_LocalLanguageOpenAISearch(business, country, exclusion) {
+  const countries = country.split(',').map(c => c.trim());
+  const outputFormat = buildOutputFormat();
+  const queries = [];
+
+  queries.push(
+    `Search for ${business} companies in ${country} using local language terms. Translate "${business}" to Thai, Vietnamese, Bahasa Indonesia, Tagalog as appropriate for each country. Exclude ${exclusion}. ${outputFormat}`
+  );
+
+  for (const c of countries) {
+    const langInfo = LOCAL_LANGUAGE_MAP[c.toLowerCase()];
+    if (langInfo) {
+      queries.push(
+        `${business} companies in ${c} - search in ${langInfo.lang}. Also search upstream/downstream supply chain companies. Exclude ${exclusion}. ${outputFormat}`
+      );
+    }
+  }
+
+  queries.push(
+    `Complete final sweep: ALL ${business} companies headquartered in ${country} not yet found. Search niche sub-industries. Exclude ${exclusion}. ${outputFormat}`
+  );
 
   return queries;
 }
@@ -373,41 +506,117 @@ function dedupeCompanies(allCompanies) {
   return results;
 }
 
-// ============ EXHAUSTIVE PARALLEL SEARCH ============
+// ============ EXHAUSTIVE PARALLEL SEARCH WITH 14 STRATEGIES ============
+
+// Process SerpAPI results and extract companies using GPT
+async function processSerpResults(serpResults, business, country, exclusion) {
+  if (!serpResults || serpResults.length === 0) return [];
+
+  const outputFormat = buildOutputFormat();
+  const prompt = `From these Google search results, extract companies that match:
+- Business: ${business}
+- Country: ${country}
+- Exclude: ${exclusion}
+
+Search Results:
+${serpResults.join('\n\n')}
+
+${outputFormat}`;
+
+  const response = await callChatGPT(prompt);
+  return extractCompanies(response, country);
+}
 
 async function exhaustiveSearch(business, country, exclusion) {
-  console.log('Starting EXHAUSTIVE PARALLEL search...');
+  console.log('Starting EXHAUSTIVE 14-STRATEGY PARALLEL search...');
   const startTime = Date.now();
 
-  const queries = generateExhaustiveQueries(business, country, exclusion);
+  // Generate all queries for each strategy
+  const serpQueries1 = strategy1_BroadSerpAPI(business, country, exclusion);
+  const perpQueries2 = strategy2_BroadPerplexity(business, country, exclusion);
+  const serpQueries3 = strategy3_ListsSerpAPI(business, country, exclusion);
+  const perpQueries4 = strategy4_CitiesPerplexity(business, country, exclusion);
+  const serpQueries5 = strategy5_IndustrialSerpAPI(business, country, exclusion);
+  const perpQueries6 = strategy6_DirectoriesPerplexity(business, country, exclusion);
+  const perpQueries7 = strategy7_ExhibitionsPerplexity(business, country, exclusion);
+  const perpQueries8 = strategy8_TradePerplexity(business, country, exclusion);
+  const perpQueries9 = strategy9_DomainsPerplexity(business, country, exclusion);
+  const serpQueries10 = strategy10_RegistriesSerpAPI(business, country, exclusion);
+  const serpQueries11 = strategy11_CityIndustrialSerpAPI(business, country, exclusion);
+  const openaiQueries12 = strategy12_DeepOpenAISearch(business, country, exclusion);
+  const perpQueries13 = strategy13_PublicationsPerplexity(business, country, exclusion);
+  const openaiQueries14 = strategy14_LocalLanguageOpenAISearch(business, country, exclusion);
 
-  console.log(`  Perplexity queries: ${queries.perplexity.length}`);
-  console.log(`  Gemini queries: ${queries.gemini.length}`);
-  console.log(`  ChatGPT queries: ${queries.chatgpt.length}`);
-  const total = queries.perplexity.length + queries.gemini.length + queries.chatgpt.length;
-  console.log(`  Total queries: ${total}`);
+  const allSerpQueries = [...serpQueries1, ...serpQueries3, ...serpQueries5, ...serpQueries10, ...serpQueries11];
+  const allPerpQueries = [...perpQueries2, ...perpQueries4, ...perpQueries6, ...perpQueries7, ...perpQueries8, ...perpQueries9, ...perpQueries13];
+  const allOpenAISearchQueries = [...openaiQueries12, ...openaiQueries14];
 
-  // Run all in parallel
-  const [perplexityResults, geminiResults, chatgptResults] = await Promise.all([
-    Promise.all(queries.perplexity.map(q => callPerplexity(q))),
-    Promise.all(queries.gemini.map(q => callGemini(q))),
-    Promise.all(queries.chatgpt.map(q => callChatGPT(q)))
+  console.log(`  Strategy breakdown:`);
+  console.log(`    SerpAPI (Google): ${allSerpQueries.length} queries`);
+  console.log(`    Perplexity: ${allPerpQueries.length} queries`);
+  console.log(`    OpenAI Search: ${allOpenAISearchQueries.length} queries`);
+  console.log(`    Total: ${allSerpQueries.length + allPerpQueries.length + allOpenAISearchQueries.length}`);
+
+  // Run all strategies in parallel
+  const [serpResults, perpResults, openaiSearchResults, geminiResults] = await Promise.all([
+    // SerpAPI queries
+    process.env.SERPAPI_API_KEY
+      ? Promise.all(allSerpQueries.map(q => callSerpAPI(q)))
+      : Promise.resolve([]),
+
+    // Perplexity queries
+    Promise.all(allPerpQueries.map(q => callPerplexity(q))),
+
+    // OpenAI Search queries
+    Promise.all(allOpenAISearchQueries.map(q => callOpenAISearch(q))),
+
+    // Also run some Gemini queries for diversity
+    Promise.all([
+      callGemini(`Find ALL ${business} companies in ${country}. Exclude ${exclusion}. ${buildOutputFormat()}`),
+      callGemini(`List ${business} factories and manufacturing plants in ${country}. Not ${exclusion}. ${buildOutputFormat()}`),
+      callGemini(`${business} SME and family businesses in ${country}. Exclude ${exclusion}. ${buildOutputFormat()}`)
+    ])
   ]);
 
   console.log(`  All API calls done in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
 
-  // Extract from all results
-  const allTexts = [...perplexityResults, ...geminiResults, ...chatgptResults];
-  console.log(`  Extracting companies from ${allTexts.length} responses...`);
+  // Process SerpAPI results through GPT for extraction
+  let serpCompanies = [];
+  if (serpResults.length > 0) {
+    console.log(`  Processing ${serpResults.filter(r => r).length} SerpAPI results...`);
+    serpCompanies = await processSerpResults(serpResults.filter(r => r), business, country, exclusion);
+    console.log(`    Extracted ${serpCompanies.length} companies from SerpAPI`);
+  }
 
-  const extractionResults = await Promise.all(
-    allTexts.map(text => extractCompanies(text, country))
+  // Extract from Perplexity results
+  console.log(`  Extracting from ${perpResults.length} Perplexity results...`);
+  const perpExtractions = await Promise.all(
+    perpResults.map(text => extractCompanies(text, country))
   );
+  const perpCompanies = perpExtractions.flat();
+  console.log(`    Extracted ${perpCompanies.length} companies from Perplexity`);
 
-  const allCompanies = extractionResults.flat();
+  // Extract from OpenAI Search results
+  console.log(`  Extracting from ${openaiSearchResults.length} OpenAI Search results...`);
+  const openaiExtractions = await Promise.all(
+    openaiSearchResults.map(text => extractCompanies(text, country))
+  );
+  const openaiCompanies = openaiExtractions.flat();
+  console.log(`    Extracted ${openaiCompanies.length} companies from OpenAI Search`);
+
+  // Extract from Gemini results
+  console.log(`  Extracting from ${geminiResults.length} Gemini results...`);
+  const geminiExtractions = await Promise.all(
+    geminiResults.map(text => extractCompanies(text, country))
+  );
+  const geminiCompanies = geminiExtractions.flat();
+  console.log(`    Extracted ${geminiCompanies.length} companies from Gemini`);
+
+  // Combine and dedupe all
+  const allCompanies = [...serpCompanies, ...perpCompanies, ...openaiCompanies, ...geminiCompanies];
   const uniqueCompanies = dedupeCompanies(allCompanies);
 
-  console.log(`  Raw: ${allCompanies.length}, Unique: ${uniqueCompanies.length}`);
+  console.log(`  Raw total: ${allCompanies.length}, Unique: ${uniqueCompanies.length}`);
   console.log(`Search completed in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
 
   return uniqueCompanies;
@@ -880,7 +1089,7 @@ app.post('/api/find-target-slow', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v18 - More Strategies + Better Parallelization' });
+  res.json({ status: 'ok', service: 'Find Target v19 - 14-Strategy Search (SerpAPI + OpenAI Search + Perplexity + Gemini)' });
 });
 
 const PORT = process.env.PORT || 3000;
