@@ -416,7 +416,8 @@
         </p>
       </div>
 
-      <form id="findTargetForm" method="POST" action="https://xvasjack.app.n8n.cloud/webhook/find-target-slow">
+      <iframe name="hiddenFrame" style="display:none;"></iframe>
+      <form id="findTargetForm" method="POST" action="https://xvasjack.app.n8n.cloud/webhook/find-target-slow" target="hiddenFrame">
         <div class="form-group">
           <label class="form-label" for="business">
             Business <span class="required">*</span>
@@ -519,11 +520,20 @@
     menuClose.addEventListener('click', closeMenu);
     menuOverlay.addEventListener('click', closeMenu);
 
-    // Form submission - let browser handle native form submit to n8n
+    // Form submission - submit to hidden iframe, show success message
     document.getElementById('findTargetForm').addEventListener('submit', function() {
       const submitBtn = document.getElementById('submitBtn');
+      const successMessage = document.getElementById('successMessage');
+
       submitBtn.disabled = true;
       submitBtn.textContent = 'Submitting...';
+
+      // Show success message after brief delay (form submits to hidden iframe)
+      setTimeout(() => {
+        successMessage.style.display = 'block';
+        submitBtn.textContent = 'Submitted!';
+        this.reset();
+      }, 1000);
     });
   </script>
 </body>
