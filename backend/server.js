@@ -377,7 +377,100 @@ async function exhaustiveSearch(business, country, exclusion) {
   return uniqueCompanies;
 }
 
-// ============ STRICT VALIDATION FOR LARGE COMPANIES ============
+// ============ WEBSITE VERIFICATION ============
+
+async function verifyWebsite(url) {
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      signal: controller.signal,
+      redirect: 'follow'
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) return { valid: false, reason: `HTTP ${response.status}` };
+
+    const html = await response.text();
+    const lowerHtml = html.toLowerCase();
+
+    // Check for parked domain / placeholder signs
+    const parkedSigns = [
+      'domain is for sale',
+      'buy this domain',
+      'this domain is parked',
+      'parked by',
+      'domain parking',
+      'this page is under construction',
+      'coming soon',
+      'website coming soon',
+      'under maintenance',
+      'godaddy',
+      'namecheap parking',
+      'sedoparking',
+      'hugedomains',
+      'afternic',
+      'domain expired',
+      'this site can\'t be reached',
+      'page not found',
+      '404 not found',
+      'website not found'
+    ];
+
+    for (const sign of parkedSigns) {
+      if (lowerHtml.includes(sign)) {
+        return { valid: false, reason: `Parked/placeholder: "${sign}"` };
+      }
+    }
+
+    // Check for minimal content (likely placeholder)
+    const textContent = html
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (textContent.length < 200) {
+      return { valid: false, reason: 'Too little content (likely placeholder)' };
+    }
+
+    return { valid: true, content: textContent.substring(0, 15000) };
+  } catch (e) {
+    return { valid: false, reason: e.message || 'Connection failed' };
+  }
+}
+
+async function filterVerifiedWebsites(companies) {
+  console.log(`\nVerifying ${companies.length} websites...`);
+  const startTime = Date.now();
+  const batchSize = 10;
+  const verified = [];
+
+  for (let i = 0; i < companies.length; i += batchSize) {
+    const batch = companies.slice(i, i + batchSize);
+    const results = await Promise.all(batch.map(c => verifyWebsite(c.website)));
+
+    batch.forEach((company, idx) => {
+      if (results[idx].valid) {
+        verified.push({
+          ...company,
+          _pageContent: results[idx].content // Cache the content for validation
+        });
+      } else {
+        console.log(`    Removed: ${company.company_name} - ${results[idx].reason}`);
+      }
+    });
+
+    console.log(`  Verified ${Math.min(i + batchSize, companies.length)}/${companies.length}. Working: ${verified.length}`);
+  }
+
+  console.log(`Website verification done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Working: ${verified.length}/${companies.length}`);
+  return verified;
+}
+
+// ============ FETCH WEBSITE FOR VALIDATION ============
 
 async function fetchWebsite(url) {
   try {
@@ -403,6 +496,102 @@ async function fetchWebsite(url) {
     return null;
   }
 }
+
+// ============ STRICT VALIDATION FOR FAST MODE ============
+
+async function validateCompanyStrict(company, business, country, exclusion, pageText) {
+  // If we couldn't fetch the website, REJECT (can't verify)
+  if (!pageText) {
+    console.log(`    Rejected: ${company.company_name} - Could not verify (website unreachable)`);
+    return { valid: false };
+  }
+
+  try {
+    const validation = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a VERY STRICT company validator. When in doubt, REJECT.
+
+USER'S SEARCH CRITERIA:
+- Target Business: "${business}"
+- Target Countries: ${country}
+- User wants to EXCLUDE: ${exclusion}
+
+VALIDATION RULES (ALL must pass):
+
+1. LOCATION: Company HQ MUST be clearly in ${country}. REJECT if unclear or in other countries.
+
+2. BUSINESS: "${business}" MUST be the company's PRIMARY business. REJECT if it's just a side product or if company is in a different industry.
+
+3. EXCLUSIONS: Carefully analyze if this company matches what user wants to exclude: "${exclusion}". Use your judgment based on website content to determine if the company fits the exclusion criteria.
+
+4. QUALITY: REJECT directories, marketplaces, B2B platforms, template websites, or companies with vague/generic information.
+
+Return JSON: {"valid": true/false, "reason": "brief explanation"}`
+        },
+        {
+          role: 'user',
+          content: `Company: ${company.company_name}
+Website: ${company.website}
+Claimed HQ: ${company.hq}
+
+Website content to analyze:
+${pageText.substring(0, 8000)}`
+        }
+      ],
+      response_format: { type: 'json_object' }
+    });
+
+    const result = JSON.parse(validation.choices[0].message.content);
+    if (result.valid === true) {
+      return { valid: true, corrected_hq: company.hq };
+    }
+    console.log(`    Rejected: ${company.company_name} - ${result.reason}`);
+    return { valid: false };
+  } catch (e) {
+    // On error, REJECT (strict mode)
+    console.log(`    Rejected: ${company.company_name} - Validation error, rejecting in strict mode`);
+    return { valid: false };
+  }
+}
+
+async function parallelValidationStrict(companies, business, country, exclusion) {
+  console.log(`\nSTRICT Validating ${companies.length} verified companies...`);
+  const startTime = Date.now();
+  const batchSize = 5;
+  const validated = [];
+
+  for (let i = 0; i < companies.length; i += batchSize) {
+    const batch = companies.slice(i, i + batchSize);
+    // Use cached _pageContent from verification step, or fetch if not available
+    const pageTexts = await Promise.all(
+      batch.map(c => c._pageContent ? Promise.resolve(c._pageContent) : fetchWebsite(c.website))
+    );
+    const validations = await Promise.all(
+      batch.map((company, idx) => validateCompanyStrict(company, business, country, exclusion, pageTexts[idx]))
+    );
+
+    batch.forEach((company, idx) => {
+      if (validations[idx].valid) {
+        // Remove internal _pageContent before adding to results
+        const { _pageContent, ...cleanCompany } = company;
+        validated.push({
+          ...cleanCompany,
+          hq: validations[idx].corrected_hq || company.hq
+        });
+      }
+    });
+
+    console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
+  }
+
+  console.log(`STRICT Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
+  return validated;
+}
+
+// ============ LENIENT VALIDATION FOR SLOW MODE ============
 
 async function validateCompany(company, business, country, exclusion, pageText) {
   try {
@@ -559,7 +748,11 @@ app.post('/api/find-target', async (req, res) => {
     const companies = await exhaustiveSearch(Business, Country, Exclusion);
     console.log(`\nFound ${companies.length} unique companies`);
 
-    const validCompanies = await parallelValidation(companies, Business, Country, Exclusion);
+    // Filter out fake/dead websites before expensive validation
+    const verifiedCompanies = await filterVerifiedWebsites(companies);
+    console.log(`\nCompanies with working websites: ${verifiedCompanies.length}`);
+
+    const validCompanies = await parallelValidationStrict(verifiedCompanies, Business, Country, Exclusion);
 
     const htmlContent = buildEmailHTML(validCompanies, Business, Country, Exclusion);
     await sendEmail(
@@ -651,7 +844,7 @@ app.post('/api/find-target-slow', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v13 - Dynamic Search (No Hardcoded Values)' });
+  res.json({ status: 'ok', service: 'Find Target v16 - Website Verification + Strict Validation' });
 });
 
 const PORT = process.env.PORT || 3000;
