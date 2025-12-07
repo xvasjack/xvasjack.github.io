@@ -20,7 +20,7 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
 
-// Send email using Brevo API (free tier allows any recipient)
+// Send email using Brevo API
 async function sendEmail(to, subject, html) {
   const senderEmail = process.env.BREVO_SENDER_EMAIL || 'xvasjack@gmail.com';
   const response = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -53,7 +53,7 @@ async function callGemini(prompt) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      timeout: 30000
+      timeout: 60000
     });
     const data = await response.json();
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -75,7 +75,7 @@ async function callPerplexity(prompt) {
         model: 'sonar-pro',
         messages: [{ role: 'user', content: prompt }]
       }),
-      timeout: 30000
+      timeout: 60000
     });
     const data = await response.json();
     return data.choices?.[0]?.message?.content || '';
@@ -99,6 +99,152 @@ async function callChatGPT(prompt) {
   }
 }
 
+// ============ COMPREHENSIVE QUERY GENERATION ============
+
+function generateAllQueries(business, country, exclusion) {
+  const countries = country.split(',').map(c => c.trim());
+
+  // City mapping for Southeast Asia
+  const cityMap = {
+    'Malaysia': ['Kuala Lumpur', 'Penang', 'Johor Bahru', 'Shah Alam', 'Petaling Jaya', 'Selangor', 'Ipoh'],
+    'Singapore': ['Singapore'],
+    'Thailand': ['Bangkok', 'Chonburi', 'Rayong', 'Samut Prakan', 'Ayutthaya', 'Chiang Mai'],
+    'Indonesia': ['Jakarta', 'Surabaya', 'Bandung', 'Medan', 'Bekasi', 'Tangerang'],
+    'Vietnam': ['Ho Chi Minh City', 'Hanoi', 'Da Nang', 'Hai Phong', 'Binh Duong'],
+    'Philippines': ['Manila', 'Cebu', 'Davao', 'Quezon City', 'Makati']
+  };
+
+  // Local company naming conventions
+  const localSuffixes = {
+    'Malaysia': ['Sdn Bhd', 'Berhad'],
+    'Singapore': ['Pte Ltd', 'Private Limited'],
+    'Thailand': ['Co Ltd', 'Company Limited'],
+    'Indonesia': ['PT'],
+    'Vietnam': ['Co Ltd', 'JSC'],
+    'Philippines': ['Inc', 'Corporation']
+  };
+
+  // Domain suffixes
+  const domainMap = {
+    'Malaysia': '.my',
+    'Singapore': '.sg',
+    'Thailand': '.th',
+    'Indonesia': '.id',
+    'Vietnam': '.vn',
+    'Philippines': '.ph'
+  };
+
+  const queries = {
+    perplexity: [],
+    gemini: [],
+    chatgpt: []
+  };
+
+  const basePrompt = `Find ${business} companies in ${country}. Exclude ${exclusion}. For each company provide: company_name, website (must start with http), hq (format: "City, Country" only).`;
+
+  // ===== STRATEGY 1: BROAD SEARCHES (Perplexity) =====
+  queries.perplexity.push(
+    `${basePrompt} Search broadly for all types of ${business} companies, suppliers, distributors, vendors.`,
+    `Search for ${business} suppliers and distributors headquartered in ${country}. Not ${exclusion}. Include official websites.`,
+    `Find ${business} vendors and dealers based in ${country}. Exclude ${exclusion}. List company name, website, HQ city.`,
+    `${country} ${business} companies comprehensive list with websites. Exclude ${exclusion}.`
+  );
+
+  // ===== STRATEGY 2: LISTS AND RANKINGS (Gemini) =====
+  queries.gemini.push(
+    `List of top ${business} companies in ${country}. Exclude ${exclusion}. Provide company name, website, headquarters.`,
+    `Leading ${business} firms in ${country}. Not ${exclusion}. Include websites.`,
+    `Major ${business} players in ${country} region. Exclude ${exclusion}. With official websites.`,
+    `Best ${business} companies in ${country}. No ${exclusion}. List with websites and HQ.`
+  );
+
+  // ===== STRATEGY 3: CITY-SPECIFIC (Perplexity) =====
+  for (const c of countries) {
+    const cities = cityMap[c] || [c];
+    for (const city of cities) {
+      queries.perplexity.push(
+        `${business} companies located in ${city}, ${c}. Exclude ${exclusion}. List company name, website, city.`
+      );
+    }
+  }
+
+  // ===== STRATEGY 4: INDUSTRIAL ZONES + LOCAL NAMES (Gemini) =====
+  for (const c of countries) {
+    const suffixes = localSuffixes[c] || [];
+    for (const suffix of suffixes) {
+      queries.gemini.push(
+        `Find ${business} companies with "${suffix}" in ${c}. Exclude ${exclusion}. Include websites.`
+      );
+    }
+    queries.gemini.push(
+      `${business} companies in industrial estates and manufacturing zones in ${c}. Exclude ${exclusion}. With websites.`
+    );
+  }
+
+  // ===== STRATEGY 5: ASSOCIATIONS + DIRECTORIES (Perplexity) =====
+  queries.perplexity.push(
+    `${business} companies that are members of trade associations in ${country}. Exclude ${exclusion}. Include websites.`,
+    `${business} firms listed in Kompass directory for ${country}. Not ${exclusion}. With websites.`,
+    `Chamber of commerce member companies in ${business} sector in ${country}. Exclude ${exclusion}.`,
+    `${country} ${business} industry association member list. No ${exclusion}. Include websites.`
+  );
+
+  // ===== STRATEGY 6: EXHIBITIONS + TRADE SHOWS (Gemini) =====
+  queries.gemini.push(
+    `${business} companies that exhibited at trade shows in ${country}. Exclude ${exclusion}. With websites.`,
+    `List of ${business} exhibitors from ${country} at industry events and expos. No ${exclusion}.`,
+    `${country} ${business} companies at conferences and exhibitions. Exclude ${exclusion}. Websites required.`,
+    `Find ${business} firms that participated in ${country} trade fairs. Not ${exclusion}.`
+  );
+
+  // ===== STRATEGY 7: IMPORT/EXPORT + SUPPLIER DATABASES (Perplexity) =====
+  queries.perplexity.push(
+    `${business} importers and exporters in ${country}. Exclude ${exclusion}. Include websites.`,
+    `${business} suppliers listed on Alibaba from ${country}. Not ${exclusion}. Official websites.`,
+    `${country} ${business} companies in supplier databases. Exclude ${exclusion}.`,
+    `Find ${business} trading companies and wholesalers in ${country}. No ${exclusion}.`
+  );
+
+  // ===== STRATEGY 8: LOCAL DOMAINS + NEWS (Perplexity) =====
+  for (const c of countries) {
+    const domain = domainMap[c] || '';
+    if (domain) {
+      queries.perplexity.push(
+        `${business} companies with ${domain} domain websites in ${c}. Exclude ${exclusion}.`
+      );
+    }
+  }
+  queries.perplexity.push(
+    `Recent news about ${business} companies in ${country}. Exclude ${exclusion}. Include company websites.`
+  );
+
+  // ===== STRATEGY 9: GOVERNMENT REGISTRIES (Perplexity) =====
+  queries.perplexity.push(
+    `${business} companies registered with SSM Malaysia, DBD Thailand, or ACRA Singapore. Exclude ${exclusion}. Include websites.`,
+    `Registered ${business} firms in ${country} from government business registry. Not ${exclusion}.`
+  );
+
+  // ===== STRATEGY 10: DEEP SEARCH (ChatGPT) =====
+  queries.chatgpt.push(
+    `Find lesser-known ${business} companies in ${country}. Exclude ${exclusion}. Include websites.`,
+    `Small and medium ${business} enterprises in ${country}. Not ${exclusion}. With official sites.`,
+    `Family-owned ${business} businesses in ${country}. Exclude ${exclusion}. Websites needed.`,
+    `New or emerging ${business} companies in ${country}. No ${exclusion}. List with websites.`,
+    `Regional ${business} players in ${country}. Exclude ${exclusion}. Company websites.`,
+    `Niche ${business} specialists in ${country}. Not ${exclusion}. Include websites.`,
+    `${business} companies serving specific industries in ${country}. Exclude ${exclusion}.`
+  );
+
+  // ===== STRATEGY 11: FINAL SWEEP (ChatGPT) =====
+  queries.chatgpt.push(
+    `Any ${business} companies in ${country} not commonly known. Exclude ${exclusion}. With websites.`,
+    `Alternative ${business} suppliers in ${country}. Not ${exclusion}. Official websites only.`,
+    `${business} service providers and solution companies in ${country}. Exclude ${exclusion}.`
+  );
+
+  return queries;
+}
+
 // ============ EXTRACTION & DEDUPLICATION ============
 
 async function extractCompanies(text, country) {
@@ -109,11 +255,12 @@ async function extractCompanies(text, country) {
       messages: [
         {
           role: 'system',
-          content: `Extract company information. Return JSON: {"companies": [{company_name, website, hq}]}
-- website must start with http
-- hq format: "City, Country"
-- Only companies in ${country}
-Return {"companies": []} if none.`
+          content: `Extract company information from the text. Return JSON: {"companies": [{"company_name": "...", "website": "...", "hq": "..."}]}
+Rules:
+- website must start with http:// or https://
+- hq must be formatted as "City, Country" ONLY (e.g., "Kuala Lumpur, Malaysia")
+- Only include companies headquartered in: ${country}
+- Return {"companies": []} if no valid companies found.`
         },
         { role: 'user', content: text }
       ],
@@ -130,7 +277,10 @@ function dedupeCompanies(allCompanies) {
   const seen = new Map();
   for (const c of allCompanies) {
     if (c && c.website) {
-      const key = c.website.toLowerCase().replace(/\/$/, '').replace(/^https?:\/\//, '');
+      const key = c.website.toLowerCase()
+        .replace(/\/$/, '')
+        .replace(/^https?:\/\//, '')
+        .replace(/^www\./, '');
       if (!seen.has(key)) {
         seen.set(key, c);
       }
@@ -139,98 +289,30 @@ function dedupeCompanies(allCompanies) {
   return Array.from(seen.values());
 }
 
-// ============ PARALLEL SEARCH ============
+// ============ PARALLEL SEARCH WITH ALL STRATEGIES ============
 
-// Generate all search queries
-function generateQueries(business, country, exclusion) {
-  const cityMap = {
-    'Malaysia': ['Kuala Lumpur', 'Penang', 'Johor Bahru', 'Shah Alam', 'Petaling Jaya'],
-    'Singapore': ['Singapore'],
-    'Thailand': ['Bangkok', 'Chonburi', 'Rayong', 'Samut Prakan', 'Ayutthaya'],
-    'Indonesia': ['Jakarta', 'Surabaya', 'Bandung', 'Medan', 'Bekasi'],
-    'Vietnam': ['Ho Chi Minh City', 'Hanoi', 'Da Nang', 'Hai Phong', 'Binh Duong'],
-    'Philippines': ['Manila', 'Cebu', 'Davao', 'Quezon City', 'Makati']
-  };
-
-  const countries = country.split(',').map(c => c.trim());
-
-  // Gemini queries
-  const geminiQueries = [
-    `List ${business} companies headquartered in ${country}. Exclude ${exclusion}. Provide company name, website URL, headquarters city.`,
-    `Find ${business} suppliers and distributors in ${country}. Not ${exclusion}. Include websites.`,
-    `${business} vendors based in ${country} excluding ${exclusion}. List with official websites.`,
-    `Directory of ${business} firms in ${country}. No ${exclusion}. Company name, website, HQ city.`,
-    `${country} ${business} companies list with websites. Exclude ${exclusion}.`,
-    `Local ${business} dealers in ${country}. Not ${exclusion}. Names and websites.`,
-    `${business} traders and wholesalers in ${country}. Exclude ${exclusion}.`,
-    `Find all ${business} in ${country} cities. No ${exclusion}. With websites.`
-  ];
-
-  // Add city-specific Gemini queries
-  for (const c of countries) {
-    const cities = cityMap[c] || [c];
-    for (const city of cities.slice(0, 3)) {
-      geminiQueries.push(`${business} companies in ${city}, ${c}. Exclude ${exclusion}. List company name, website, city.`);
-    }
-  }
-
-  // Perplexity queries (web search)
-  const perplexityQueries = [
-    `Search for ${business} companies in ${country}. Exclude ${exclusion}. List company names and websites.`,
-    `Find more ${business} distributors in ${country}. No ${exclusion}. Official websites only.`,
-    `${country} ${business} supplier directory. Exclude ${exclusion}. With website URLs.`,
-    `List of ${business} vendors operating in ${country}. Not ${exclusion}.`,
-    `${business} resellers and agents in ${country}. Exclude ${exclusion}.`,
-    `Find ${business} importers in ${country}. No ${exclusion}. Websites required.`,
-    `${business} companies that exhibited at trade shows in ${country}. Exclude ${exclusion}. With websites.`,
-    `List of ${business} exhibitors from ${country} at industry events. No ${exclusion}.`,
-    `${country} ${business} companies at conferences and expos. Exclude ${exclusion}. Websites required.`,
-    `Find ${business} firms that participated in ${country} trade fairs. Not ${exclusion}.`
-  ];
-
-  // ChatGPT queries
-  const chatgptQueries = [
-    `List ${business} companies that are members of trade associations in ${country}. Exclude ${exclusion}. Include websites.`,
-    `${business} companies from ${country} industry directories. No ${exclusion}. Names and websites.`,
-    `Find ${business} firms registered with chambers of commerce in ${country}. Exclude ${exclusion}.`,
-    `${country} ${business} association member companies. Not ${exclusion}. With official websites.`,
-    `Trade directory listing of ${business} in ${country}. Exclude ${exclusion}.`,
-    `What are some lesser-known ${business} companies in ${country}? Exclude ${exclusion}. Include websites.`,
-    `Small and medium ${business} enterprises in ${country}. Not ${exclusion}. With official sites.`,
-    `Family-owned ${business} businesses in ${country}. Exclude ${exclusion}. Websites needed.`,
-    `New or emerging ${business} companies in ${country}. No ${exclusion}. List with websites.`,
-    `Regional ${business} players in ${country}. Exclude ${exclusion}. Company websites.`
-  ];
-
-  return { geminiQueries, perplexityQueries, chatgptQueries };
-}
-
-// Run all searches in parallel
-async function parallelSearch(business, country, exclusion) {
-  console.log('Starting PARALLEL search...');
+async function comprehensiveSearch(business, country, exclusion) {
+  console.log('Starting COMPREHENSIVE PARALLEL search...');
   const startTime = Date.now();
 
-  const { geminiQueries, perplexityQueries, chatgptQueries } = generateQueries(business, country, exclusion);
+  const queries = generateAllQueries(business, country, exclusion);
 
-  console.log(`  Gemini queries: ${geminiQueries.length}`);
-  console.log(`  Perplexity queries: ${perplexityQueries.length}`);
-  console.log(`  ChatGPT queries: ${chatgptQueries.length}`);
-  console.log(`  Total queries: ${geminiQueries.length + perplexityQueries.length + chatgptQueries.length}`);
+  console.log(`  Perplexity queries: ${queries.perplexity.length}`);
+  console.log(`  Gemini queries: ${queries.gemini.length}`);
+  console.log(`  ChatGPT queries: ${queries.chatgpt.length}`);
+  console.log(`  Total queries: ${queries.perplexity.length + queries.gemini.length + queries.chatgpt.length}`);
 
   // Run all API calls in parallel
-  const [geminiResults, perplexityResults, chatgptResults] = await Promise.all([
-    // Gemini - run all queries in parallel
-    Promise.all(geminiQueries.map(q => callGemini(q))),
-    // Perplexity - run all queries in parallel
-    Promise.all(perplexityQueries.map(q => callPerplexity(q))),
-    // ChatGPT - run all queries in parallel
-    Promise.all(chatgptQueries.map(q => callChatGPT(q)))
+  const [perplexityResults, geminiResults, chatgptResults] = await Promise.all([
+    Promise.all(queries.perplexity.map(q => callPerplexity(q))),
+    Promise.all(queries.gemini.map(q => callGemini(q))),
+    Promise.all(queries.chatgpt.map(q => callChatGPT(q)))
   ]);
 
   console.log(`  All API calls done in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
 
   // Extract companies from all results in parallel
-  const allTexts = [...geminiResults, ...perplexityResults, ...chatgptResults];
+  const allTexts = [...perplexityResults, ...geminiResults, ...chatgptResults];
   const extractionResults = await Promise.all(
     allTexts.map(text => extractCompanies(text, country))
   );
@@ -245,7 +327,7 @@ async function parallelSearch(business, country, exclusion) {
   return uniqueCompanies;
 }
 
-// ============ PARALLEL VALIDATION ============
+// ============ ENHANCED VALIDATION ============
 
 async function fetchWebsite(url) {
   try {
@@ -275,27 +357,63 @@ async function validateCompany(company, business, country, exclusion, pageText) 
       messages: [
         {
           role: 'system',
-          content: `Validate if company matches criteria. Return JSON: {"valid": true/false, "reason": "..."}
-REJECT if: HQ not in ${country}, is ${exclusion}, is directory/marketplace, not a real ${business} company.`
+          content: `You are a company validator. Validate if this company matches the search criteria.
+
+VALIDATION RULES:
+
+1. LOCATION CHECK:
+   - Is HQ actually in one of the target countries (${country})?
+   - If HQ is outside these countries → REJECT
+
+2. BUSINESS MATCH (BE LENIENT):
+   - Does the company's business relate to "${business}"?
+   - Accept related products, services, or sub-categories
+   - Only reject if completely unrelated
+
+3. EXCLUSION CHECK (${exclusion}) - DETECT VIA PAGE SIGNALS:
+   - If "large companies" in exclusions: Look for signals like "global presence", "worldwide operations", "Fortune 500", stock ticker symbols, "multinational", offices in 10+ countries, revenue >$100M, employees >1000
+   - If "distributor" in exclusions: Reject if company ONLY distributes and does not manufacture
+   - If "manufacturer" in exclusions: Reject if company ONLY manufactures
+   - If "MNC" in exclusions: Reject if parent company is foreign or HQ is actually abroad
+   - If "listed companies" in exclusions: Reject if publicly traded on any stock exchange
+
+4. SPAM CHECK:
+   - Is this a directory, marketplace, domain-for-sale, or aggregator site? → REJECT
+
+Return JSON: {"valid": true/false, "reason": "brief reason", "corrected_hq": "City, Country"}`
         },
         {
           role: 'user',
-          content: `Company: ${company.company_name}\nWebsite: ${company.website}\nHQ: ${company.hq}\nBusiness: ${business}\nCountry: ${country}\nExclusions: ${exclusion}\n\nWebsite preview:\n${pageText ? pageText.substring(0, 3000) : 'Could not fetch'}`
+          content: `Company: ${company.company_name}
+Website: ${company.website}
+Claimed HQ: ${company.hq}
+Business sought: ${business}
+Target countries: ${country}
+Exclusions: ${exclusion}
+
+Website content preview:
+${pageText ? pageText.substring(0, 4000) : 'Could not fetch website'}`
         }
       ],
       response_format: { type: 'json_object' }
     });
     const result = JSON.parse(validation.choices[0].message.content);
-    return result.valid === true;
+    if (result.valid === true) {
+      return {
+        valid: true,
+        corrected_hq: result.corrected_hq || company.hq
+      };
+    }
+    return { valid: false };
   } catch (e) {
-    return true;
+    return { valid: true, corrected_hq: company.hq };
   }
 }
 
 async function parallelValidation(companies, business, country, exclusion) {
   console.log(`\nStarting PARALLEL validation of ${companies.length} companies...`);
   const startTime = Date.now();
-  const batchSize = 10; // Increased batch size
+  const batchSize = 10;
   const validated = [];
 
   for (let i = 0; i < companies.length; i += batchSize) {
@@ -309,9 +427,14 @@ async function parallelValidation(companies, business, country, exclusion) {
       batch.map((company, idx) => validateCompany(company, business, country, exclusion, pageTexts[idx]))
     );
 
-    // Collect valid ones
+    // Collect valid ones with corrected HQ
     batch.forEach((company, idx) => {
-      if (validations[idx]) validated.push(company);
+      if (validations[idx].valid) {
+        validated.push({
+          ...company,
+          hq: validations[idx].corrected_hq || company.hq
+        });
+      }
     });
 
     console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
@@ -369,8 +492,8 @@ app.post('/api/find-target', async (req, res) => {
   try {
     const totalStart = Date.now();
 
-    // PARALLEL SEARCH
-    const companies = await parallelSearch(Business, Country, Exclusion);
+    // COMPREHENSIVE PARALLEL SEARCH
+    const companies = await comprehensiveSearch(Business, Country, Exclusion);
     console.log(`\nFound ${companies.length} unique companies`);
 
     // PARALLEL VALIDATION
@@ -406,7 +529,7 @@ app.post('/api/find-target', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target Backend v3 - Parallel' });
+  res.json({ status: 'ok', service: 'Find Target Backend v4 - Comprehensive' });
 });
 
 const PORT = process.env.PORT || 3000;
