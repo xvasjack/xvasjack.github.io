@@ -9,11 +9,16 @@ app.use(cors());
 app.use(express.json());
 
 // Check required environment variables
-const requiredEnvVars = ['PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'BREVO_API_KEY'];
+const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'BREVO_API_KEY'];
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
 }
+
+// Initialize OpenAI
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY || 'missing'
+});
 
 // Send email using Brevo API
 async function sendEmail(to, subject, html) {
@@ -42,7 +47,6 @@ async function sendEmail(to, subject, html) {
 
 // ============ AI TOOLS ============
 
-// Gemini - for extraction (fast, good at structured output)
 async function callGemini(prompt) {
   try {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
@@ -59,7 +63,6 @@ async function callGemini(prompt) {
   }
 }
 
-// Perplexity - for SEARCH (has real web access, won't hallucinate)
 async function callPerplexity(prompt) {
   try {
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
@@ -72,7 +75,7 @@ async function callPerplexity(prompt) {
         model: 'sonar-pro',
         messages: [{ role: 'user', content: prompt }]
       }),
-      timeout: 90000
+      timeout: 60000
     });
     const data = await response.json();
     return data.choices?.[0]?.message?.content || '';
@@ -82,68 +85,42 @@ async function callPerplexity(prompt) {
   }
 }
 
-// ============ SEARCH QUERIES (Perplexity only - real web search) ============
-
-function generateSearchQueries(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
-  const queries = [];
-
-  const outputFormat = `For each company provide: company_name, website URL (must start with http), headquarters location (City, Country format). List all companies you can find.`;
-
-  // Core searches
-  queries.push(
-    `List all ${business} companies headquartered in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} suppliers and distributors based in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} companies in ${country} business directories. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} exhibitors from ${country} at trade shows. Not ${exclusion}. ${outputFormat}`,
-    `${business} importers and exporters in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Small and medium ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} vendors and dealers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} trading companies in ${country}. Not ${exclusion}. ${outputFormat}`
-  );
-
-  // Country-specific searches
-  for (const c of countries) {
-    queries.push(
-      `${business} companies headquartered in ${c}. Exclude ${exclusion}. ${outputFormat}`,
-      `Local ${business} firms in ${c}. Not ${exclusion}. ${outputFormat}`,
-      `${business} companies in major cities of ${c}. Exclude ${exclusion}. ${outputFormat}`
-    );
+async function callChatGPT(prompt) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0
+    });
+    return response.choices[0].message.content || '';
+  } catch (error) {
+    console.error('ChatGPT error:', error.message);
+    return '';
   }
-
-  // Industry association and directory searches
-  queries.push(
-    `${business} companies registered in trade associations in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} companies in Yellow Pages or Kompass for ${country}. Not ${exclusion}. ${outputFormat}`
-  );
-
-  return queries;
 }
 
-// ============ EXTRACTION WITH GEMINI ============
+// ============ EXTRACTION WITH GPT-4o-mini (RELIABLE JSON) ============
 
 async function extractCompanies(text, country) {
   if (!text || text.length < 50) return [];
-
   try {
-    const prompt = `Extract company information from this text. Return ONLY valid JSON:
-{"companies": [{"company_name": "...", "website": "...", "hq": "..."}]}
-
+    const extraction = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `Extract company information. Return JSON: {"companies": [{"company_name": "...", "website": "...", "hq": "..."}]}
 Rules:
-- website MUST start with http:// or https:// - skip companies without valid URLs
-- hq must be "City, Country" format
+- website must start with http:// or https://
+- hq format: "City, Country"
 - Only include companies headquartered in: ${country}
-- Skip any company without a valid website URL
-- Return {"companies": []} if none found
-
-Text to extract from:
-${text}`;
-
-    const response = await callGemini(prompt);
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return [];
-
-    const parsed = JSON.parse(jsonMatch[0]);
+- Return {"companies": []} if none found`
+        },
+        { role: 'user', content: text.substring(0, 10000) }
+      ],
+      response_format: { type: 'json_object' }
+    });
+    const parsed = JSON.parse(extraction.choices[0].message.content);
     return Array.isArray(parsed.companies) ? parsed.companies : [];
   } catch (e) {
     console.error('Extraction error:', e.message);
@@ -182,7 +159,6 @@ function dedupeCompanies(allCompanies) {
     const websiteKey = normalizeWebsite(c.website);
     const nameKey = normalizeCompanyName(c.company_name);
 
-    // Skip if website or name already seen
     if (seenWebsites.has(websiteKey) || seenNames.has(nameKey)) continue;
 
     seenWebsites.set(websiteKey, true);
@@ -193,62 +169,114 @@ function dedupeCompanies(allCompanies) {
   return results;
 }
 
-// ============ WEBSITE VALIDATION (Real HTTP check) ============
+// ============ SEARCH QUERIES ============
 
-async function checkWebsiteExists(url) {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
+function generateQueries(business, country, exclusion) {
+  const countries = country.split(',').map(c => c.trim());
 
-    const response = await fetch(url, {
-      method: 'HEAD',
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      },
-      signal: controller.signal,
-      redirect: 'follow'
-    });
+  const outputFormat = `For each company provide: company_name, website URL (must start with http), headquarters (City, Country format). List all companies you can find.`;
 
-    clearTimeout(timeout);
-    return response.ok || response.status === 403 || response.status === 405;
-  } catch (e) {
-    // Try GET if HEAD fails
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 8000);
+  // Gemini queries - general knowledge
+  const geminiQueries = [
+    `List all ${business} companies headquartered in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Find ${business} suppliers and distributors in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} vendors based in ${country} excluding ${exclusion}. ${outputFormat}`,
+    `Directory of ${business} firms in ${country}. No ${exclusion}. ${outputFormat}`,
+    `Local ${business} dealers in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} traders and wholesalers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Small and medium ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} importers and exporters in ${country}. Exclude ${exclusion}. ${outputFormat}`
+  ];
 
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        signal: controller.signal,
-        redirect: 'follow'
-      });
-
-      clearTimeout(timeout);
-      return response.ok;
-    } catch (e2) {
-      return false;
-    }
+  // Add country-specific queries
+  for (const c of countries) {
+    geminiQueries.push(
+      `${business} companies in major cities of ${c}. Exclude ${exclusion}. ${outputFormat}`,
+      `All ${business} firms headquartered in ${c}. Not ${exclusion}. ${outputFormat}`
+    );
   }
+
+  // Perplexity queries - web search (real-time)
+  const perplexityQueries = [
+    `Search for ${business} companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Find ${business} distributors in ${country}. No ${exclusion}. ${outputFormat}`,
+    `${country} ${business} supplier directory. Exclude ${exclusion}. ${outputFormat}`,
+    `List of ${business} vendors operating in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} companies that exhibited at trade shows in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} exhibitors from ${country} at industry events. No ${exclusion}. ${outputFormat}`,
+    `${business} companies in business directories for ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Find ${business} importers in ${country}. Not ${exclusion}. ${outputFormat}`
+  ];
+
+  // ChatGPT queries - associations and lesser-known
+  const chatgptQueries = [
+    `List ${business} companies that are members of trade associations in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} companies from ${country} industry directories. No ${exclusion}. ${outputFormat}`,
+    `Find ${business} firms registered with chambers of commerce in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `What are some lesser-known ${business} companies in ${country}? Exclude ${exclusion}. ${outputFormat}`,
+    `Small and medium ${business} enterprises in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `Family-owned ${business} businesses in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `New or emerging ${business} companies in ${country}. No ${exclusion}. ${outputFormat}`,
+    `Regional ${business} players in ${country}. Not ${exclusion}. ${outputFormat}`
+  ];
+
+  return { geminiQueries, perplexityQueries, chatgptQueries };
 }
 
-async function fetchWebsiteContent(url) {
+// ============ PARALLEL SEARCH ============
+
+async function parallelSearch(business, country, exclusion) {
+  console.log('Starting PARALLEL search with Gemini + Perplexity + ChatGPT...');
+  const startTime = Date.now();
+
+  const { geminiQueries, perplexityQueries, chatgptQueries } = generateQueries(business, country, exclusion);
+
+  console.log(`  Gemini queries: ${geminiQueries.length}`);
+  console.log(`  Perplexity queries: ${perplexityQueries.length}`);
+  console.log(`  ChatGPT queries: ${chatgptQueries.length}`);
+  console.log(`  Total queries: ${geminiQueries.length + perplexityQueries.length + chatgptQueries.length}`);
+
+  // Run all API calls in parallel
+  const [geminiResults, perplexityResults, chatgptResults] = await Promise.all([
+    Promise.all(geminiQueries.map(q => callGemini(q))),
+    Promise.all(perplexityQueries.map(q => callPerplexity(q))),
+    Promise.all(chatgptQueries.map(q => callChatGPT(q)))
+  ]);
+
+  console.log(`  All API calls done in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+
+  // Extract companies from all results using GPT-4o-mini (reliable JSON)
+  const allTexts = [...geminiResults, ...perplexityResults, ...chatgptResults];
+  console.log(`  Extracting companies from ${allTexts.length} responses with GPT-4o-mini...`);
+
+  const extractionResults = await Promise.all(
+    allTexts.map(text => extractCompanies(text, country))
+  );
+
+  // Flatten and dedupe
+  const allCompanies = extractionResults.flat();
+  const uniqueCompanies = dedupeCompanies(allCompanies);
+
+  console.log(`  Raw: ${allCompanies.length}, Unique: ${uniqueCompanies.length}`);
+  console.log(`Search completed in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+
+  return uniqueCompanies;
+}
+
+// ============ VALIDATION WITH GPT-4o-mini ============
+
+async function fetchWebsite(url) {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
 
     const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      },
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
       signal: controller.signal,
       redirect: 'follow'
     });
 
     clearTimeout(timeout);
-
     if (!response.ok) return null;
 
     const html = await response.text();
@@ -266,41 +294,42 @@ async function fetchWebsiteContent(url) {
   }
 }
 
-// ============ VALIDATION WITH GEMINI ============
-
 async function validateCompany(company, business, country, exclusion, pageText) {
   try {
-    const prompt = `Validate if this company matches the search criteria.
-
-Company: ${company.company_name}
-Website: ${company.website}
-Claimed HQ: ${company.hq}
-
-Search Criteria:
-- Business type: ${business}
-- Must be headquartered in: ${country}
-- Exclusions: ${exclusion}
-
-Website content (first 4000 chars):
-${pageText ? pageText.substring(0, 4000) : 'WEBSITE COULD NOT BE ACCESSED'}
+    const validation = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `Validate if company matches criteria. Return JSON: {"valid": true/false, "reason": "brief explanation", "corrected_hq": "City, Country or null"}
 
 VALIDATION RULES:
-1. WEBSITE: If website could not be accessed → REJECT (fake website)
-2. LOCATION: HQ must be in one of: ${country}. If clearly elsewhere → REJECT
-3. BUSINESS: Must be related to "${business}". Be reasonable but reject if completely unrelated.
-4. EXCLUSIONS for "${exclusion}":
-   - If "large" or "MNC": Reject Fortune 500, multinationals with global offices, listed companies
-   - If "distributor": Reject if ONLY a distributor (not if they also manufacture/trade)
+1. LOCATION: HQ must be in ${country}. If clearly elsewhere → REJECT
+2. BUSINESS: Must be related to "${business}". Be reasonable but reject if completely unrelated.
+3. EXCLUSIONS (${exclusion}):
+   - If "large" or "MNC": Reject Fortune 500, multinationals, listed companies
+   - If "distributor": Reject if ONLY a distributor
    - If "manufacturer": Reject if ONLY a manufacturer
-5. SPAM: Reject business directories, marketplaces, aggregator sites
+4. SPAM: Reject directories, marketplaces, aggregator sites
+5. WEBSITE: If website content doesn't match a real company → REJECT`
+        },
+        {
+          role: 'user',
+          content: `Company: ${company.company_name}
+Website: ${company.website}
+HQ: ${company.hq}
+Business type needed: ${business}
+Countries: ${country}
+Exclusions: ${exclusion}
 
-Return ONLY JSON: {"valid": true/false, "reason": "one sentence", "corrected_hq": "City, Country or null"}`;
+Website content preview:
+${pageText ? pageText.substring(0, 4000) : 'Could not fetch website'}`
+        }
+      ],
+      response_format: { type: 'json_object' }
+    });
 
-    const response = await callGemini(prompt);
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return { valid: false, reason: 'Parse error' };
-
-    const result = JSON.parse(jsonMatch[0]);
+    const result = JSON.parse(validation.choices[0].message.content);
     return {
       valid: result.valid === true,
       reason: result.reason || '',
@@ -312,74 +341,25 @@ Return ONLY JSON: {"valid": true/false, "reason": "one sentence", "corrected_hq"
   }
 }
 
-// ============ MAIN SEARCH FUNCTION ============
-
-async function comprehensiveSearch(business, country, exclusion) {
-  console.log('Starting search with Perplexity (real web search)...');
+async function parallelValidation(companies, business, country, exclusion) {
+  console.log(`\nValidating ${companies.length} companies with GPT-4o-mini...`);
   const startTime = Date.now();
-
-  const queries = generateSearchQueries(business, country, exclusion);
-  console.log(`  Running ${queries.length} Perplexity queries...`);
-
-  // Run all Perplexity searches in parallel
-  const searchResults = await Promise.all(queries.map(q => callPerplexity(q)));
-
-  console.log(`  Searches completed in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
-
-  // Extract companies from all results
-  console.log(`  Extracting companies from ${searchResults.length} responses...`);
-  const extractionResults = await Promise.all(
-    searchResults.map(text => extractCompanies(text, country))
-  );
-
-  // Flatten and dedupe
-  const allCompanies = extractionResults.flat();
-  const uniqueCompanies = dedupeCompanies(allCompanies);
-
-  console.log(`  Raw: ${allCompanies.length}, Unique: ${uniqueCompanies.length}`);
-  console.log(`Search completed in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
-
-  return uniqueCompanies;
-}
-
-// ============ VALIDATION PIPELINE ============
-
-async function validateCompanies(companies, business, country, exclusion) {
-  console.log(`\nValidating ${companies.length} companies...`);
-  const startTime = Date.now();
-  const validated = [];
   const batchSize = 10;
+  const validated = [];
 
   for (let i = 0; i < companies.length; i += batchSize) {
     const batch = companies.slice(i, i + batchSize);
 
-    // Step 1: Check if websites actually exist (parallel)
-    console.log(`  Checking websites ${i + 1}-${Math.min(i + batchSize, companies.length)}...`);
-    const websiteChecks = await Promise.all(batch.map(c => checkWebsiteExists(c.website)));
+    // Fetch all websites in parallel
+    const pageTexts = await Promise.all(batch.map(c => fetchWebsite(c.website)));
 
-    // Filter to only companies with working websites
-    const companiesWithWorkingWebsites = batch.filter((_, idx) => websiteChecks[idx]);
-    const rejected = batch.length - companiesWithWorkingWebsites.length;
-    if (rejected > 0) {
-      console.log(`    Rejected ${rejected} with dead/fake websites`);
-    }
-
-    if (companiesWithWorkingWebsites.length === 0) continue;
-
-    // Step 2: Fetch website content for validation
-    const pageTexts = await Promise.all(
-      companiesWithWorkingWebsites.map(c => fetchWebsiteContent(c.website))
-    );
-
-    // Step 3: Validate with Gemini
+    // Validate all in parallel
     const validations = await Promise.all(
-      companiesWithWorkingWebsites.map((company, idx) =>
-        validateCompany(company, business, country, exclusion, pageTexts[idx])
-      )
+      batch.map((company, idx) => validateCompany(company, business, country, exclusion, pageTexts[idx]))
     );
 
-    // Collect valid companies
-    companiesWithWorkingWebsites.forEach((company, idx) => {
+    // Collect valid ones
+    batch.forEach((company, idx) => {
       if (validations[idx].valid) {
         validated.push({
           ...company,
@@ -390,10 +370,10 @@ async function validateCompanies(companies, business, country, exclusion) {
       }
     });
 
-    console.log(`  Progress: ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid so far: ${validated.length}`);
+    console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
   }
 
-  console.log(`Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Total valid: ${validated.length}`);
+  console.log(`Validation completed in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
   return validated;
 }
 
@@ -420,7 +400,7 @@ function buildEmailHTML(companies, business, country, exclusion) {
   return html;
 }
 
-// ============ MAIN ENDPOINT ============
+// ============ FAST ENDPOINT ============
 
 app.post('/api/find-target', async (req, res) => {
   const { Business, Country, Exclusion, Email } = req.body;
@@ -430,7 +410,7 @@ app.post('/api/find-target', async (req, res) => {
   }
 
   console.log(`\n${'='.repeat(50)}`);
-  console.log(`NEW REQUEST: ${new Date().toISOString()}`);
+  console.log(`NEW FAST REQUEST: ${new Date().toISOString()}`);
   console.log(`Business: ${Business}`);
   console.log(`Country: ${Country}`);
   console.log(`Exclusion: ${Exclusion}`);
@@ -439,20 +419,17 @@ app.post('/api/find-target', async (req, res) => {
 
   res.json({
     success: true,
-    message: 'Request received. Results will be emailed within 5 minutes.'
+    message: 'Request received. Results will be emailed within 5-10 minutes.'
   });
 
   try {
     const totalStart = Date.now();
 
-    // Step 1: Search with Perplexity (real web search)
-    const companies = await comprehensiveSearch(Business, Country, Exclusion);
-    console.log(`\nFound ${companies.length} unique companies from search`);
+    const companies = await parallelSearch(Business, Country, Exclusion);
+    console.log(`\nFound ${companies.length} unique companies`);
 
-    // Step 2: Validate (website check + Gemini validation)
-    const validCompanies = await validateCompanies(companies, Business, Country, Exclusion);
+    const validCompanies = await parallelValidation(companies, Business, Country, Exclusion);
 
-    // Step 3: Send email
     const htmlContent = buildEmailHTML(validCompanies, Business, Country, Exclusion);
     await sendEmail(
       Email,
@@ -462,7 +439,7 @@ app.post('/api/find-target', async (req, res) => {
 
     const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
     console.log(`\n${'='.repeat(50)}`);
-    console.log(`COMPLETE! Email sent to ${Email}`);
+    console.log(`FAST COMPLETE! Email sent to ${Email}`);
     console.log(`Total companies: ${validCompanies.length}`);
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(50));
@@ -477,76 +454,112 @@ app.post('/api/find-target', async (req, res) => {
   }
 });
 
-// ============ SLOW VERSION - MORE EXHAUSTIVE ============
+// ============ SLOW ENDPOINT - MORE EXHAUSTIVE ============
 
-function generateSlowSearchQueries(business, country, exclusion) {
+function generateSlowQueries(business, country, exclusion) {
   const countries = country.split(',').map(c => c.trim());
-  const queries = [];
+  const outputFormat = `For each company provide: company_name, website URL (must start with http), headquarters (City, Country format). List all companies you can find.`;
 
-  const outputFormat = `For each company provide: company_name, website URL (must start with http), headquarters location (City, Country format). List all companies you can find.`;
-
-  // All fast queries
-  queries.push(
+  // Extended Gemini queries
+  const geminiQueries = [
     `List all ${business} companies headquartered in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} suppliers and distributors based in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} companies in ${country} business directories. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} exhibitors from ${country} at trade shows. Not ${exclusion}. ${outputFormat}`,
-    `${business} importers and exporters in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Find ${business} suppliers and distributors in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} vendors based in ${country} excluding ${exclusion}. ${outputFormat}`,
+    `Directory of ${business} firms in ${country}. No ${exclusion}. ${outputFormat}`,
+    `Local ${business} dealers in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} traders and wholesalers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `Small and medium ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} vendors and dealers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} trading companies in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} companies registered in trade associations in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} companies in Yellow Pages or Kompass for ${country}. Not ${exclusion}. ${outputFormat}`
-  );
-
-  // Additional exhaustive queries
-  queries.push(
-    `Complete list of ${business} manufacturers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} importers and exporters in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${business} OEM suppliers in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} wholesalers and stockists in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Family-owned ${business} businesses in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} companies that export from ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Recently established ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} companies in industrial parks in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} companies with ISO certification in ${country}. Not ${exclusion}. ${outputFormat}`,
     `${business} contract manufacturers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Regional ${business} players in ${country}. Not ${exclusion}. ${outputFormat}`
-  );
+    `ISO certified ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} companies in industrial zones of ${country}. Exclude ${exclusion}. ${outputFormat}`
+  ];
 
-  // Country-specific exhaustive searches
   for (const c of countries) {
-    queries.push(
-      `${business} companies headquartered in ${c}. Exclude ${exclusion}. ${outputFormat}`,
-      `Local ${business} firms in ${c}. Not ${exclusion}. ${outputFormat}`,
+    geminiQueries.push(
       `${business} companies in major cities of ${c}. Exclude ${exclusion}. ${outputFormat}`,
-      `All ${business} suppliers operating in ${c}. Exclude ${exclusion}. ${outputFormat}`,
-      `${business} industry players in ${c}. Not ${exclusion}. ${outputFormat}`,
-      `Chamber of commerce ${business} members in ${c}. Exclude ${exclusion}. ${outputFormat}`
+      `All ${business} firms headquartered in ${c}. Not ${exclusion}. ${outputFormat}`,
+      `${business} companies in industrial parks of ${c}. Exclude ${exclusion}. ${outputFormat}`,
+      `Complete list of ${business} suppliers in ${c}. Not ${exclusion}. ${outputFormat}`
     );
   }
 
-  return queries;
+  // Extended Perplexity queries
+  const perplexityQueries = [
+    `Search for ${business} companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Find ${business} distributors in ${country}. No ${exclusion}. ${outputFormat}`,
+    `${country} ${business} supplier directory. Exclude ${exclusion}. ${outputFormat}`,
+    `List of ${business} vendors operating in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} companies that exhibited at trade shows in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} exhibitors from ${country} at industry events. No ${exclusion}. ${outputFormat}`,
+    `${business} companies in business directories for ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Find ${business} importers in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} companies in Yellow Pages for ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} companies in Kompass directory for ${country}. Not ${exclusion}. ${outputFormat}`,
+    `Recent news about ${business} companies in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} companies with government contracts in ${country}. Not ${exclusion}. ${outputFormat}`
+  ];
+
+  for (const c of countries) {
+    perplexityQueries.push(
+      `${business} companies headquartered in ${c}. Exclude ${exclusion}. ${outputFormat}`,
+      `All ${business} suppliers in ${c}. Not ${exclusion}. ${outputFormat}`
+    );
+  }
+
+  // Extended ChatGPT queries
+  const chatgptQueries = [
+    `List ${business} companies that are members of trade associations in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `${business} companies from ${country} industry directories. No ${exclusion}. ${outputFormat}`,
+    `Find ${business} firms registered with chambers of commerce in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `What are some lesser-known ${business} companies in ${country}? Exclude ${exclusion}. ${outputFormat}`,
+    `Small and medium ${business} enterprises in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `Family-owned ${business} businesses in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `New or emerging ${business} companies in ${country}. No ${exclusion}. ${outputFormat}`,
+    `Regional ${business} players in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} companies that are subsidiaries of regional groups in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Well-established ${business} firms in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} companies with strong reputation in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Niche ${business} specialists in ${country}. Not ${exclusion}. ${outputFormat}`
+  ];
+
+  for (const c of countries) {
+    chatgptQueries.push(
+      `All ${business} companies based in ${c}. Exclude ${exclusion}. ${outputFormat}`,
+      `${business} industry players in ${c}. Not ${exclusion}. ${outputFormat}`
+    );
+  }
+
+  return { geminiQueries, perplexityQueries, chatgptQueries };
 }
 
 async function exhaustiveSearch(business, country, exclusion) {
-  console.log('Starting EXHAUSTIVE search with Perplexity...');
+  console.log('Starting EXHAUSTIVE search with Gemini + Perplexity + ChatGPT...');
   const startTime = Date.now();
 
-  const queries = generateSlowSearchQueries(business, country, exclusion);
-  console.log(`  Running ${queries.length} Perplexity queries (slow mode)...`);
+  const { geminiQueries, perplexityQueries, chatgptQueries } = generateSlowQueries(business, country, exclusion);
 
-  // Run all Perplexity searches in parallel
-  const searchResults = await Promise.all(queries.map(q => callPerplexity(q)));
+  console.log(`  Gemini queries: ${geminiQueries.length}`);
+  console.log(`  Perplexity queries: ${perplexityQueries.length}`);
+  console.log(`  ChatGPT queries: ${chatgptQueries.length}`);
+  console.log(`  Total queries: ${geminiQueries.length + perplexityQueries.length + chatgptQueries.length}`);
 
-  console.log(`  Searches completed in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+  const [geminiResults, perplexityResults, chatgptResults] = await Promise.all([
+    Promise.all(geminiQueries.map(q => callGemini(q))),
+    Promise.all(perplexityQueries.map(q => callPerplexity(q))),
+    Promise.all(chatgptQueries.map(q => callChatGPT(q)))
+  ]);
 
-  // Extract companies from all results
-  console.log(`  Extracting companies from ${searchResults.length} responses...`);
+  console.log(`  All API calls done in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+
+  const allTexts = [...geminiResults, ...perplexityResults, ...chatgptResults];
+  console.log(`  Extracting companies from ${allTexts.length} responses with GPT-4o-mini...`);
+
   const extractionResults = await Promise.all(
-    searchResults.map(text => extractCompanies(text, country))
+    allTexts.map(text => extractCompanies(text, country))
   );
 
-  // Flatten and dedupe
   const allCompanies = extractionResults.flat();
   const uniqueCompanies = dedupeCompanies(allCompanies);
 
@@ -556,7 +569,6 @@ async function exhaustiveSearch(business, country, exclusion) {
   return uniqueCompanies;
 }
 
-// SLOW ENDPOINT - More thorough search
 app.post('/api/find-target-slow', async (req, res) => {
   const { Business, Country, Exclusion, Email } = req.body;
 
@@ -580,14 +592,11 @@ app.post('/api/find-target-slow', async (req, res) => {
   try {
     const totalStart = Date.now();
 
-    // Step 1: Exhaustive search with Perplexity
     const companies = await exhaustiveSearch(Business, Country, Exclusion);
     console.log(`\nFound ${companies.length} unique companies from exhaustive search`);
 
-    // Step 2: Validate (website check + Gemini validation)
-    const validCompanies = await validateCompanies(companies, Business, Country, Exclusion);
+    const validCompanies = await parallelValidation(companies, Business, Country, Exclusion);
 
-    // Step 3: Send email
     const htmlContent = buildEmailHTML(validCompanies, Business, Country, Exclusion);
     await sendEmail(
       Email,
@@ -613,7 +622,7 @@ app.post('/api/find-target-slow', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v9 - Fast & Slow modes' });
+  res.json({ status: 'ok', service: 'Find Target v10 - Multi-AI Search + GPT-4o-mini Extraction' });
 });
 
 const PORT = process.env.PORT || 3000;
