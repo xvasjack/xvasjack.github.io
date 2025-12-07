@@ -223,16 +223,32 @@ function strategy1_BroadSerpAPI(business, country, exclusion) {
   return queries;
 }
 
-// Strategy 2: Broad Perplexity Search
+// Strategy 2: Broad Perplexity Search (EXPANDED)
 function strategy2_BroadPerplexity(business, country, exclusion) {
   const outputFormat = buildOutputFormat();
-  return [
+  const countries = country.split(',').map(c => c.trim());
+  const queries = [];
+
+  // General queries
+  queries.push(
     `Find ALL ${business} companies headquartered in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Complete list of ${business} suppliers in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} vendors and dealers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `All ${business} trading companies in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${country} ${business} companies directory - comprehensive list. Exclude ${exclusion}. ${outputFormat}`
-  ];
+    `Complete list of ${business} manufacturers in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `${business} producers and makers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `All local ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
+    `SME and family-owned ${business} businesses in ${country}. Exclude ${exclusion}. ${outputFormat}`,
+    `Independent ${business} companies in ${country} not owned by multinationals. ${outputFormat}`
+  );
+
+  // Per-country queries for more specificity
+  for (const c of countries) {
+    queries.push(
+      `List all ${business} companies based in ${c}. ${outputFormat}`,
+      `${business} factories and plants in ${c}. ${outputFormat}`,
+      `Local ${business} manufacturers in ${c}. ${outputFormat}`
+    );
+  }
+
+  return queries;
 }
 
 // Strategy 3: Lists, Rankings, Top Companies (SerpAPI)
@@ -255,7 +271,7 @@ function strategy3_ListsSerpAPI(business, country, exclusion) {
   return queries;
 }
 
-// Strategy 4: City-Specific Search (Perplexity)
+// Strategy 4: City-Specific Search (Perplexity) - EXPANDED to ALL cities
 function strategy4_CitiesPerplexity(business, country, exclusion) {
   const countries = country.split(',').map(c => c.trim());
   const outputFormat = buildOutputFormat();
@@ -263,9 +279,11 @@ function strategy4_CitiesPerplexity(business, country, exclusion) {
 
   for (const c of countries) {
     const cities = CITY_MAP[c.toLowerCase()] || [c];
-    for (const city of cities.slice(0, 5)) { // Top 5 cities per country
+    // Use ALL cities, not just top 5
+    for (const city of cities) {
       queries.push(
-        `${business} companies in ${city}, ${c}. Exclude ${exclusion}. ${outputFormat}`
+        `${business} companies in ${city}, ${c}. Exclude ${exclusion}. ${outputFormat}`,
+        `${business} manufacturers near ${city}. ${outputFormat}`
       );
     }
   }
@@ -373,17 +391,20 @@ function strategy10_RegistriesSerpAPI(business, country, exclusion) {
   return queries;
 }
 
-// Strategy 11: City + Industrial Areas (SerpAPI)
+// Strategy 11: City + Industrial Areas (SerpAPI) - EXPANDED
 function strategy11_CityIndustrialSerpAPI(business, country, exclusion) {
   const countries = country.split(',').map(c => c.trim());
   const queries = [];
 
   for (const c of countries) {
     const cities = CITY_MAP[c.toLowerCase()] || [c];
-    for (const city of cities.slice(0, 3)) { // Top 3 cities
+    // Use ALL cities
+    for (const city of cities) {
       queries.push(
         `${business} ${city}`,
-        `${business} companies ${city} industrial`
+        `${business} companies ${city}`,
+        `${business} factory ${city}`,
+        `${business} manufacturer ${city}`
       );
     }
   }
@@ -391,15 +412,31 @@ function strategy11_CityIndustrialSerpAPI(business, country, exclusion) {
   return queries;
 }
 
-// Strategy 12: Deep Web Search (OpenAI Search)
+// Strategy 12: Deep Web Search (OpenAI Search) - EXPANDED with real-time search
 function strategy12_DeepOpenAISearch(business, country, exclusion) {
   const outputFormat = buildOutputFormat();
-  return [
-    `Find ${business} companies in ${country} - search LinkedIn company profiles, industry news, press releases, niche directories. Exclude ${exclusion}. ${outputFormat}`,
-    `Lesser-known and emerging ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `Small and medium ${business} enterprises in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Independent ${business} firms in ${country}. Not ${exclusion}. ${outputFormat}`
-  ];
+  const countries = country.split(',').map(c => c.trim());
+  const queries = [];
+
+  // General deep searches
+  queries.push(
+    `Search the web for ${business} companies in ${country}. Find company websites, LinkedIn profiles, industry directories. Exclude ${exclusion}. ${outputFormat}`,
+    `Find lesser-known ${business} companies in ${country} that may not appear in top search results. ${outputFormat}`,
+    `Search for small and medium ${business} enterprises (SMEs) in ${country}. ${outputFormat}`,
+    `Find independent local ${business} companies in ${country}, not subsidiaries of multinationals. ${outputFormat}`,
+    `Search industry news and press releases for ${business} companies in ${country}. ${outputFormat}`,
+    `Find ${business} startups and new companies in ${country}. ${outputFormat}`
+  );
+
+  // Per-country deep searches
+  for (const c of countries) {
+    queries.push(
+      `Search for all ${business} manufacturers in ${c}. Include company name, website, and location. ${outputFormat}`,
+      `Find ${business} producers in ${c} with their official websites. ${outputFormat}`
+    );
+  }
+
+  return queries;
 }
 
 // Strategy 13: Industry Publications (Perplexity)
@@ -413,27 +450,37 @@ function strategy13_PublicationsPerplexity(business, country, exclusion) {
   ];
 }
 
-// Strategy 14: Final Sweep - Local Language Focus (OpenAI Search)
+// Strategy 14: Final Sweep - Local Language + Comprehensive (OpenAI Search)
 function strategy14_LocalLanguageOpenAISearch(business, country, exclusion) {
   const countries = country.split(',').map(c => c.trim());
   const outputFormat = buildOutputFormat();
   const queries = [];
 
+  // Local language searches
   queries.push(
-    `Search for ${business} companies in ${country} using local language terms. Translate "${business}" to Thai, Vietnamese, Bahasa Indonesia, Tagalog as appropriate for each country. Exclude ${exclusion}. ${outputFormat}`
+    `Search for ${business} companies in ${country} using local language terms. Translate "${business}" to Thai, Vietnamese, Bahasa Indonesia, Tagalog, Malay as appropriate. ${outputFormat}`
   );
 
   for (const c of countries) {
     const langInfo = LOCAL_LANGUAGE_MAP[c.toLowerCase()];
     if (langInfo) {
       queries.push(
-        `${business} companies in ${c} - search in ${langInfo.lang}. Also search upstream/downstream supply chain companies. Exclude ${exclusion}. ${outputFormat}`
+        `Search in ${langInfo.lang} for ${business} companies in ${c}. ${outputFormat}`,
+        `Find ${business} manufacturers in ${c} using local language search terms. ${outputFormat}`
       );
     }
   }
 
+  // Supply chain and related industry searches
   queries.push(
-    `Complete final sweep: ALL ${business} companies headquartered in ${country} not yet found. Search niche sub-industries. Exclude ${exclusion}. ${outputFormat}`
+    `Find companies in the ${business} supply chain in ${country}. Include raw material suppliers and equipment makers. ${outputFormat}`,
+    `Search for ${business} related companies in ${country}: formulators, blenders, repackagers. ${outputFormat}`,
+    `Find niche and specialty ${business} companies in ${country}. ${outputFormat}`
+  );
+
+  // Final comprehensive sweep
+  queries.push(
+    `Comprehensive search: Find ALL ${business} companies in ${country} that have not been mentioned yet. Search obscure directories, local business listings, industry forums. ${outputFormat}`
   );
 
   return queries;
@@ -1202,7 +1249,7 @@ app.post('/api/find-target-slow', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v24 - Anti-hallucination + Relaxed pre-filter' });
+  res.json({ status: 'ok', service: 'Find Target v25 - Expanded search queries (n8n-level thoroughness)' });
 });
 
 const PORT = process.env.PORT || 3000;
