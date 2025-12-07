@@ -816,19 +816,16 @@ function buildExclusionRules(exclusion, business) {
       exclusionLower.includes('mnc') || exclusionLower.includes('multinational') ||
       exclusionLower.includes('major') || exclusionLower.includes('giant')) {
     rules += `
-LARGE COMPANY DETECTION - REJECT if ANY of these signals are found:
-- Company name ends with "Tbk" or "Tbk." (Indonesian publicly listed)
-- Company name ends with "Berhad" without "Sdn" (Malaysian publicly listed)
-- Company name contains "PLC", "Public Limited", or "Public Company"
-- Website mentions being listed on ANY stock exchange (NYSE, NASDAQ, SGX, SET, IDX, HOSE, PSE, BURSA, etc.)
-- Website mentions "Fortune 500", "Fortune Global", "Forbes Global"
-- Website shows operations/subsidiaries in 5+ countries
-- Website mentions revenue >$100M, >$50M, or >100 million
-- Website mentions employee count >500 or >1000 employees
-- Website mentions being a "global leader", "world leader", "industry leader", "market leader"
-- Website prominently features "worldwide", "global presence", "international operations"
-- Company is clearly a subsidiary of a large multinational corporation
-- Parent company headquarters is in Japan, USA, Europe, or other developed country
+LARGE COMPANY DETECTION - REJECT only if the LOCAL operation itself shows these signals:
+- Company name ends with "Tbk" (Indonesian publicly listed)
+- Website mentions THIS company being listed on stock exchange
+- Website shows THIS company has revenue >$100M or >1000 employees
+- Website shows THIS company operates in 10+ countries directly
+
+IMPORTANT EXCEPTIONS - DO NOT REJECT these:
+- Local manufacturing subsidiaries of foreign parent companies ARE ACCEPTABLE if they manufacture locally
+- A company with a Japanese/European/US parent but local manufacturing in ${exclusionLower.includes('southeast asia') ? 'Southeast Asia' : 'the target region'} is ACCEPTABLE
+- Focus on the LOCAL entity, not the parent company
 `;
   }
 
@@ -836,50 +833,22 @@ LARGE COMPANY DETECTION - REJECT if ANY of these signals are found:
   if (exclusionLower.includes('listed') || exclusionLower.includes('public')) {
     rules += `
 LISTED/PUBLIC COMPANY DETECTION - REJECT if:
-- Company name contains "Tbk", "PLC", "Public Limited", "Berhad" (without Sdn)
-- Website shows stock ticker symbol
-- Website mentions IPO, shareholders meeting, annual report to investors
-- Website mentions being listed on any stock exchange
+- Company name contains "Tbk" (Indonesian listed)
+- Website shows THIS LOCAL entity is publicly traded (not just the parent)
 `;
   }
 
   // Detect if user wants to exclude DISTRIBUTORS
   if (exclusionLower.includes('distributor')) {
     rules += `
-DISTRIBUTOR DETECTION - REJECT if the company is PRIMARILY a distributor:
-- Website says "authorized dealer", "authorized distributor", "exclusive distributor"
-- Website says "we distribute", "distributing for", "distribution partner"
-- Website says "representing [brand]", "sole agent", "exclusive agent"
-- Website lists many brands they distribute but doesn't mention own manufacturing
-- Company has NO factory, plant, or production facility
-- HOWEVER: ACCEPT if they ALSO manufacture/produce, even if they distribute too
+DISTRIBUTOR DETECTION - REJECT only if company is PURELY a distributor with NO manufacturing:
+- REJECT: Company ONLY distributes/resells products made by others
+- REJECT: Company explicitly says "we do not manufacture" or "we are distributors only"
+- ACCEPT: Company that manufactures AND distributes (most manufacturers also distribute!)
+- ACCEPT: Company that has ANY manufacturing/production capability
+- When in doubt about distributor status, ACCEPT if they mention any production
 `;
   }
-
-  // Detect if user wants to exclude MANUFACTURERS (opposite case)
-  if (exclusionLower.includes('manufacturer') && !exclusionLower.includes('non-manufacturer')) {
-    rules += `
-MANUFACTURER DETECTION - REJECT if:
-- Website mentions "our factory", "our plant", "we manufacture", "production facility"
-- Website mentions "made by us", "produced by", "our production line"
-`;
-  }
-
-  // Always add business type verification (dynamic based on business parameter)
-  rules += `
-BUSINESS TYPE VERIFICATION - This is CRITICAL:
-- The company must actually PRODUCE/MANUFACTURE/MAKE "${business}"
-- REJECT if they only USE "${business}" in their operations
-- REJECT if they are a printing company, packaging company, or converter that just USES the product
-- REJECT if they provide services using "${business}" but don't make it
-- REJECT if their main business is something else and "${business}" is just a supply they use
-- ACCEPT only if they genuinely produce, manufacture, formulate, or make "${business}"
-
-Example: If searching for "ink manufacturer":
-- ACCEPT: Company that manufactures/produces ink
-- REJECT: Printing company that uses ink to print (they BUY ink, don't MAKE it)
-- REJECT: Packaging company that prints using ink (they USE ink, don't MANUFACTURE it)
-`;
 
   return rules;
 }
@@ -902,26 +871,34 @@ async function validateCompanyStrict(company, business, country, exclusion, page
       messages: [
         {
           role: 'system',
-          content: `You are a STRICT company validator. Your job is to determine if a company matches very specific search criteria. Be thorough and strict - when in doubt, REJECT.
+          content: `You are a company validator. Determine if a company matches the search criteria.
 
 USER'S SEARCH CRITERIA:
 - Looking for: "${business}"
 - In these countries: ${country}
-- MUST EXCLUDE: ${exclusion}
+- Exclude: ${exclusion}
 
-VALIDATION RULES (apply ALL of these):
+VALIDATION RULES:
 
 1. LOCATION CHECK:
-- Company must be headquartered in or have primary operations in: ${country}
-- REJECT if headquarters is clearly outside these countries (Japan, USA, Europe, China, Korea, etc.)
-- Local subsidiaries of foreign multinationals should be REJECTED if "MNC" or "multinational" is in exclusions
+- Company must have operations in: ${country}
+- REJECT only if headquarters is clearly outside AND has no operations in target countries
+- Local subsidiaries/branches of foreign companies operating in ${country} are ACCEPTABLE
 
-2. BUSINESS MATCH:
+2. BUSINESS MATCH - THE MOST IMPORTANT CHECK:
+- Company must be involved in "${business}"
+- ACCEPT if they MANUFACTURE, PRODUCE, FORMULATE, or MAKE ${business}
+- ACCEPT if they are a manufacturer that also distributes
+- REJECT if they are a printing/packaging company that only USES the product
+- REJECT if they are a pure trading company with no production
+
+3. EXCLUSION RULES:
 ${exclusionRules}
 
-3. SPAM/QUALITY CHECK:
-- REJECT if this is a directory, marketplace, aggregator, or news article
-- REJECT if domain appears to be parked or for sale
+4. SPAM CHECK:
+- REJECT only if clearly a directory, marketplace, or spam site
+
+IMPORTANT: When uncertain about business match, lean towards ACCEPT if the company appears to produce/manufacture the product. Most manufacturers also do some distribution - that's normal and acceptable.
 
 Return JSON only: {"valid": true/false, "reason": "one sentence explanation"}`
         },
@@ -932,7 +909,7 @@ Return JSON only: {"valid": true/false, "reason": "one sentence explanation"}`
 - Website: ${company.website}
 - Claimed HQ: ${company.hq}
 
-WEBSITE CONTENT (analyze this carefully):
+WEBSITE CONTENT:
 ${pageText.substring(0, 10000)}`
         }
       ],
@@ -946,9 +923,9 @@ ${pageText.substring(0, 10000)}`
     console.log(`    Rejected: ${company.company_name} - ${result.reason}`);
     return { valid: false };
   } catch (e) {
-    // On error, REJECT (strict mode)
-    console.log(`    Rejected: ${company.company_name} - Validation error, rejecting in strict mode`);
-    return { valid: false };
+    // On error, ACCEPT (benefit of doubt)
+    console.log(`    Validation error for ${company.company_name}, accepting`);
+    return { valid: true, corrected_hq: company.hq };
   }
 }
 
@@ -989,7 +966,7 @@ async function parallelValidationStrict(companies, business, country, exclusion)
 // ============ LENIENT VALIDATION FOR SLOW MODE (Enhanced v20) ============
 
 async function validateCompany(company, business, country, exclusion, pageText) {
-  // Build dynamic exclusion rules (same as strict mode but slightly more lenient)
+  // Build dynamic exclusion rules
   const exclusionRules = buildExclusionRules(exclusion, business);
 
   try {
@@ -998,26 +975,33 @@ async function validateCompany(company, business, country, exclusion, pageText) 
       messages: [
         {
           role: 'system',
-          content: `You are a company validator. Validate if this company matches the search criteria. Be thorough but fair.
+          content: `You are a company validator. Determine if a company matches the search criteria.
 
 USER'S SEARCH CRITERIA:
 - Looking for: "${business}"
 - In these countries: ${country}
-- MUST EXCLUDE: ${exclusion}
+- Exclude: ${exclusion}
 
 VALIDATION RULES:
 
 1. LOCATION CHECK:
-- Company must be headquartered in or primarily operate in: ${country}
-- REJECT if headquarters is clearly outside these countries
+- Company must have operations in: ${country}
+- Local subsidiaries/branches of foreign companies operating locally are ACCEPTABLE
 - If unclear but company serves the region → ACCEPT
 
-2. BUSINESS MATCH:
+2. BUSINESS MATCH - MOST IMPORTANT:
+- Company must be involved in "${business}"
+- ACCEPT if they MANUFACTURE, PRODUCE, or MAKE ${business}
+- ACCEPT if they are a manufacturer that also distributes
+- REJECT if they only USE the product (e.g., printing company using ink)
+
+3. EXCLUSION RULES:
 ${exclusionRules}
 
-3. SPAM/QUALITY CHECK:
-- REJECT if this is a directory, marketplace, aggregator, or news article
-- REJECT if domain is parked or for sale
+4. SPAM CHECK:
+- REJECT only if clearly a directory or spam site
+
+IMPORTANT: When uncertain, lean towards ACCEPT if they appear to produce/manufacture.
 
 Return JSON: {"valid": true/false, "reason": "brief explanation", "corrected_hq": "City, Country or null"}`
         },
@@ -1028,7 +1012,7 @@ Return JSON: {"valid": true/false, "reason": "brief explanation", "corrected_hq"
 - Website: ${company.website}
 - Claimed HQ: ${company.hq}
 
-WEBSITE CONTENT (analyze carefully):
+WEBSITE CONTENT:
 ${pageText ? pageText.substring(0, 8000) : 'Could not fetch website - use company name to assess'}`
         }
       ],
