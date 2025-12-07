@@ -421,40 +421,20 @@ async function validateCompanyStrict(company, business, country, exclusion, page
           role: 'system',
           content: `You are a VERY STRICT company validator. When in doubt, REJECT.
 
+USER'S SEARCH CRITERIA:
+- Target Business: "${business}"
+- Target Countries: ${country}
+- User wants to EXCLUDE: ${exclusion}
+
 VALIDATION RULES (ALL must pass):
 
-1. LOCATION CHECK (STRICT):
-   - Company HQ MUST be clearly in: ${country}
-   - REJECT if HQ is in Japan, China, USA, Europe, or other countries
-   - REJECT if location is ambiguous or unclear
-   - Only ACCEPT if website clearly states HQ is in ${country}
+1. LOCATION: Company HQ MUST be clearly in ${country}. REJECT if unclear or in other countries.
 
-2. BUSINESS MATCH (STRICT):
-   - Company MUST directly operate in "${business}"
-   - REJECT trading companies, general distributors, or unrelated businesses
-   - REJECT if the company just happens to sell some ${business} products among many other things
-   - Only ACCEPT if ${business} is their PRIMARY business
+2. BUSINESS: "${business}" MUST be the company's PRIMARY business. REJECT if it's just a side product or if company is in a different industry.
 
-3. SIZE CHECK (STRICT - exclude: ${exclusion}):
-   REJECT if ANY of these:
-   - Publicly traded/listed on any stock exchange
-   - Part of a group with operations in 3+ countries
-   - Subsidiary of any multinational
-   - Has "global", "worldwide", "international" in description
-   - Revenue appears >$50M or employees >200
-   - Well-known brand name in the industry
-   - Website mentions multiple country offices
-   - Parent company is foreign (Japanese, American, European, etc.)
-   - Company name contains a well-known multinational brand
+3. EXCLUSIONS: Carefully analyze if this company matches what user wants to exclude: "${exclusion}". Use your judgment based on website content to determine if the company fits the exclusion criteria.
 
-4. DISTRIBUTOR CHECK (if "distributor" in exclusions):
-   - REJECT if company primarily distributes/resells others' products
-   - Only ACCEPT if company MANUFACTURES or FORMULATES their own products
-
-5. QUALITY CHECK:
-   - REJECT directories, marketplaces, B2B platforms
-   - REJECT if website looks like a template/placeholder
-   - REJECT if company information is vague or generic
+4. QUALITY: REJECT directories, marketplaces, B2B platforms, template websites, or companies with vague/generic information.
 
 Return JSON: {"valid": true/false, "reason": "brief explanation"}`
         },
@@ -463,9 +443,6 @@ Return JSON: {"valid": true/false, "reason": "brief explanation"}`
           content: `Company: ${company.company_name}
 Website: ${company.website}
 Claimed HQ: ${company.hq}
-Target Business: ${business}
-Target Countries: ${country}
-Exclusions: ${exclusion}
 
 Website content to analyze:
 ${pageText.substring(0, 8000)}`
