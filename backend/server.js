@@ -816,16 +816,13 @@ function buildExclusionRules(exclusion, business) {
       exclusionLower.includes('mnc') || exclusionLower.includes('multinational') ||
       exclusionLower.includes('major') || exclusionLower.includes('giant')) {
     rules += `
-LARGE COMPANY DETECTION - REJECT only if the LOCAL operation itself shows these signals:
+LARGE COMPANY DETECTION - REJECT if ANY of these apply:
+- Company is a subsidiary of a large multinational corporation (MNC)
+- Parent company is a well-known global brand or multinational
 - Company name ends with "Tbk" (Indonesian publicly listed)
-- Website mentions THIS company being listed on stock exchange
-- Website shows THIS company has revenue >$100M or >1000 employees
-- Website shows THIS company operates in 10+ countries directly
-
-IMPORTANT EXCEPTIONS - DO NOT REJECT these:
-- Local manufacturing subsidiaries of foreign parent companies ARE ACCEPTABLE if they manufacture locally
-- A company with a Japanese/European/US parent but local manufacturing in ${exclusionLower.includes('southeast asia') ? 'Southeast Asia' : 'the target region'} is ACCEPTABLE
-- Focus on the LOCAL entity, not the parent company
+- Website shows company is part of a global group with operations in 10+ countries
+- Website shows revenue >$100M or >1000 employees
+- Company is backed by or owned by Japanese/European/US/Chinese multinational
 `;
   }
 
@@ -834,26 +831,26 @@ IMPORTANT EXCEPTIONS - DO NOT REJECT these:
     rules += `
 LISTED/PUBLIC COMPANY DETECTION - REJECT if:
 - Company name contains "Tbk" (Indonesian listed)
-- Website shows THIS LOCAL entity is publicly traded (not just the parent)
+- Company or its parent is publicly traded on any stock exchange
+- Website mentions being listed, IPO, or stock ticker
 `;
   }
 
   // Detect if user wants to exclude DISTRIBUTORS
   if (exclusionLower.includes('distributor')) {
     rules += `
-DISTRIBUTOR DETECTION - REJECT only if company is PURELY a distributor with NO manufacturing:
-- REJECT: Company ONLY distributes/resells products made by others
-- REJECT: Company explicitly says "we do not manufacture" or "we are distributors only"
-- ACCEPT: Company that manufactures AND distributes (most manufacturers also distribute!)
-- ACCEPT: Company that has ANY manufacturing/production capability
-- When in doubt about distributor status, ACCEPT if they mention any production
+DISTRIBUTOR DETECTION - REJECT if:
+- Company primarily distributes/resells products made by others
+- Company is described as "distributor", "trading company", "agent", or "dealer"
+- No evidence of own manufacturing/production facility
+- ACCEPT only if company clearly manufactures/produces the products themselves
 `;
   }
 
   return rules;
 }
 
-// ============ STRICT VALIDATION FOR FAST MODE (Enhanced v20) ============
+// ============ STRICT VALIDATION FOR FAST MODE (v21) ============
 
 async function validateCompanyStrict(company, business, country, exclusion, pageText) {
   // If we couldn't fetch the website, REJECT (can't verify)
@@ -881,24 +878,22 @@ USER'S SEARCH CRITERIA:
 VALIDATION RULES:
 
 1. LOCATION CHECK:
-- Company must have operations in: ${country}
-- REJECT only if headquarters is clearly outside AND has no operations in target countries
-- Local subsidiaries/branches of foreign companies operating in ${country} are ACCEPTABLE
+- Company must be headquartered in: ${country}
+- REJECT if headquarters is outside target countries
 
-2. BUSINESS MATCH - THE MOST IMPORTANT CHECK:
-- Company must be involved in "${business}"
-- ACCEPT if they MANUFACTURE, PRODUCE, FORMULATE, or MAKE ${business}
-- ACCEPT if they are a manufacturer that also distributes
+2. BUSINESS MATCH:
+- Company must be a ${business} MANUFACTURER/PRODUCER
+- ACCEPT only if they clearly MANUFACTURE, PRODUCE, or MAKE ${business}
 - REJECT if they are a printing/packaging company that only USES the product
-- REJECT if they are a pure trading company with no production
+- REJECT if they are a trading company, distributor, or reseller
 
 3. EXCLUSION RULES:
 ${exclusionRules}
 
 4. SPAM CHECK:
-- REJECT only if clearly a directory, marketplace, or spam site
+- REJECT if clearly a directory, marketplace, or spam site
 
-IMPORTANT: When uncertain about business match, lean towards ACCEPT if the company appears to produce/manufacture the product. Most manufacturers also do some distribution - that's normal and acceptable.
+IMPORTANT: When uncertain, lean towards REJECT. Only accept companies that clearly match all criteria.
 
 Return JSON only: {"valid": true/false, "reason": "one sentence explanation"}`
         },
@@ -923,9 +918,9 @@ ${pageText.substring(0, 10000)}`
     console.log(`    Rejected: ${company.company_name} - ${result.reason}`);
     return { valid: false };
   } catch (e) {
-    // On error, ACCEPT (benefit of doubt)
-    console.log(`    Validation error for ${company.company_name}, accepting`);
-    return { valid: true, corrected_hq: company.hq };
+    // On error, REJECT (strict mode)
+    console.log(`    Rejected: ${company.company_name} - Validation error`);
+    return { valid: false };
   }
 }
 
@@ -963,7 +958,7 @@ async function parallelValidationStrict(companies, business, country, exclusion)
   return validated;
 }
 
-// ============ LENIENT VALIDATION FOR SLOW MODE (Enhanced v20) ============
+// ============ VALIDATION FOR SLOW MODE (v21 - Strict) ============
 
 async function validateCompany(company, business, country, exclusion, pageText) {
   // Build dynamic exclusion rules
@@ -985,23 +980,22 @@ USER'S SEARCH CRITERIA:
 VALIDATION RULES:
 
 1. LOCATION CHECK:
-- Company must have operations in: ${country}
-- Local subsidiaries/branches of foreign companies operating locally are ACCEPTABLE
-- If unclear but company serves the region → ACCEPT
+- Company must be headquartered in: ${country}
+- REJECT if headquarters is outside target countries
 
-2. BUSINESS MATCH - MOST IMPORTANT:
-- Company must be involved in "${business}"
-- ACCEPT if they MANUFACTURE, PRODUCE, or MAKE ${business}
-- ACCEPT if they are a manufacturer that also distributes
+2. BUSINESS MATCH:
+- Company must be a ${business} MANUFACTURER/PRODUCER
+- ACCEPT only if they clearly MANUFACTURE, PRODUCE, or MAKE ${business}
 - REJECT if they only USE the product (e.g., printing company using ink)
+- REJECT if they are a trading company, distributor, or reseller
 
 3. EXCLUSION RULES:
 ${exclusionRules}
 
 4. SPAM CHECK:
-- REJECT only if clearly a directory or spam site
+- REJECT if clearly a directory or spam site
 
-IMPORTANT: When uncertain, lean towards ACCEPT if they appear to produce/manufacture.
+IMPORTANT: When uncertain, lean towards REJECT. Only accept companies that clearly match all criteria.
 
 Return JSON: {"valid": true/false, "reason": "brief explanation", "corrected_hq": "City, Country or null"}`
         },
@@ -1026,8 +1020,8 @@ ${pageText ? pageText.substring(0, 8000) : 'Could not fetch website - use compan
     console.log(`    Rejected: ${company.company_name} - ${result.reason}`);
     return { valid: false };
   } catch (e) {
-    console.log(`    Validation error for ${company.company_name}, accepting by default`);
-    return { valid: true, corrected_hq: company.hq };
+    console.log(`    Rejected: ${company.company_name} - Validation error`);
+    return { valid: false };
   }
 }
 
@@ -1215,7 +1209,7 @@ app.post('/api/find-target-slow', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v20 - Enhanced Dedup + Dynamic Exclusion Detection' });
+  res.json({ status: 'ok', service: 'Find Target v21 - Strict Validation (MNC/Subsidiary Rejection)' });
 });
 
 const PORT = process.env.PORT || 3000;
