@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Find Target - Company Search v3 Fast</title>
+  <title>Trading Comparable - Company Analysis</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * {
@@ -194,6 +194,108 @@
       color: #9ca3af;
     }
 
+    /* File Upload */
+    .file-upload {
+      position: relative;
+      width: 100%;
+    }
+
+    .file-upload-input {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      top: 0;
+      left: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .file-upload-label {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+      border: 2px dashed #e2e8f0;
+      border-radius: 8px;
+      background: #f9fafb;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .file-upload-label:hover {
+      border-color: #2563eb;
+      background: #eff6ff;
+    }
+
+    .file-upload-label.has-file {
+      border-color: #10b981;
+      background: #ecfdf5;
+    }
+
+    .file-upload-icon {
+      width: 48px;
+      height: 48px;
+      margin-bottom: 0.75rem;
+      color: #9ca3af;
+    }
+
+    .file-upload-label:hover .file-upload-icon {
+      color: #2563eb;
+    }
+
+    .file-upload-label.has-file .file-upload-icon {
+      color: #10b981;
+    }
+
+    .file-upload-text {
+      font-size: 0.875rem;
+      color: #6b7280;
+      text-align: center;
+    }
+
+    .file-upload-text strong {
+      color: #2563eb;
+    }
+
+    .file-name {
+      margin-top: 0.5rem;
+      font-size: 0.875rem;
+      color: #10b981;
+      font-weight: 500;
+    }
+
+    /* Textarea */
+    .form-textarea {
+      width: 100%;
+      padding: 0.75rem;
+      font-size: 1rem;
+      font-family: inherit;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background-color: #fff;
+      transition: all 0.2s ease;
+      resize: vertical;
+      min-height: 80px;
+    }
+
+    .form-textarea:focus {
+      outline: none;
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    }
+
+    .form-textarea::placeholder {
+      color: #9ca3af;
+    }
+
+    /* Helper text */
+    .helper-text {
+      font-size: 0.75rem;
+      color: #9ca3af;
+      margin-top: 0.375rem;
+    }
+
     /* Submit Button */
     .submit-btn {
       width: 100%;
@@ -250,25 +352,32 @@
       color: #991b1b;
     }
 
-    /* Version Link */
-    .version-link {
-      display: block;
-      text-align: center;
-      margin-top: 1.5rem;
-      padding-top: 1.5rem;
-      border-top: 1px solid #e5e7eb;
+    /* Info box */
+    .info-box {
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .info-box-title {
       font-size: 0.875rem;
-      color: #6b7280;
+      font-weight: 600;
+      color: #0369a1;
+      margin-bottom: 0.5rem;
     }
 
-    .version-link a {
-      color: #2563eb;
-      text-decoration: none;
-      font-weight: 500;
+    .info-box-list {
+      font-size: 0.8125rem;
+      color: #0c4a6e;
+      line-height: 1.5;
+      padding-left: 1rem;
+      margin: 0;
     }
 
-    .version-link a:hover {
-      text-decoration: underline;
+    .info-box-list li {
+      margin-bottom: 0.25rem;
     }
 
     /* Footer */
@@ -305,10 +414,10 @@
     <div class="nav-container">
       <a href="find-target.html" class="nav-brand">Find Target</a>
       <ul class="nav-links">
-        <li><a href="find-target.html" class="nav-link active">v3 Fast</a></li>
+        <li><a href="find-target.html" class="nav-link">v3 Fast</a></li>
         <li><a href="find-target-slow.html" class="nav-link">v3 Slow</a></li>
         <li><a href="validation.html" class="nav-link">Validation</a></li>
-        <li><a href="trading-comparable.html" class="nav-link">Trading Comparable</a></li>
+        <li><a href="trading-comparable.html" class="nav-link active">Trading Comparable</a></li>
         <li><a href="profile-slides.html" class="nav-link">Profile Slides</a></li>
       </ul>
       <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
@@ -320,10 +429,10 @@
       </button>
     </div>
     <div class="mobile-menu" id="mobileMenu">
-      <a href="find-target.html" class="nav-link active">v3 Fast</a>
+      <a href="find-target.html" class="nav-link">v3 Fast</a>
       <a href="find-target-slow.html" class="nav-link">v3 Slow</a>
       <a href="validation.html" class="nav-link">Validation</a>
-      <a href="trading-comparable.html" class="nav-link">Trading Comparable</a>
+      <a href="trading-comparable.html" class="nav-link active">Trading Comparable</a>
       <a href="profile-slides.html" class="nav-link">Profile Slides</a>
     </div>
   </nav>
@@ -331,55 +440,90 @@
   <main class="main-container">
     <div class="card">
       <div class="form-header">
-        <p class="eyebrow">Company Search</p>
-        <h1 class="page-title">v3 Fast</h1>
+        <p class="eyebrow">Company Analysis</p>
+        <h1 class="page-title">Trading Comparable</h1>
         <p class="form-description">
-          Fill in the form below and submit.<br>
-          Results will be emailed to you within <strong>5-10 minutes</strong>.
+          Upload your Excel file with company data and we'll find comparable companies for your target.
         </p>
       </div>
 
-      <form id="findTargetForm" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/find-target">
+      <div class="info-box">
+        <p class="info-box-title">What this tool does:</p>
+        <ol class="info-box-list">
+          <li>Identifies columns in your Excel (handles messy formatting)</li>
+          <li>Reads financials: P/E, P/B, EV/Sales, EV/EBITDA</li>
+          <li>Filters based on target's profitability</li>
+          <li>Searches company websites for business matching</li>
+          <li>Outputs shortlisted comparable companies</li>
+        </ol>
+      </div>
+
+      <form id="tradingComparableForm" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/trading-comparable" enctype="multipart/form-data">
         <div class="form-group">
-          <label class="form-label" for="business">
-            Business <span class="required">*</span>
+          <label class="form-label">
+            Excel File <span class="required">*</span>
           </label>
-          <input
-            type="text"
-            id="business"
-            name="Business"
-            class="form-input"
-            placeholder="e.g. Semiconductor distributor"
-            required
-          >
+          <div class="file-upload">
+            <input
+              type="file"
+              id="excelFile"
+              name="ExcelFile"
+              class="file-upload-input"
+              accept=".xlsx,.xls,.csv"
+              required
+            >
+            <label class="file-upload-label" id="fileUploadLabel" for="excelFile">
+              <svg class="file-upload-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+              </svg>
+              <p class="file-upload-text">
+                <strong>Click to upload</strong> or drag and drop<br>
+                .xlsx, .xls, or .csv files
+              </p>
+              <p class="file-name" id="fileName"></p>
+            </label>
+          </div>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="country">
-            Country <span class="required">*</span>
+          <label class="form-label" for="targetCompany">
+            Target Company / Industry <span class="required">*</span>
           </label>
           <input
             type="text"
-            id="country"
-            name="Country"
+            id="targetCompany"
+            name="TargetCompany"
             class="form-input"
-            placeholder="e.g. Malaysia, Thailand, Singapore"
+            placeholder="e.g. Tesla, Semiconductor industry"
             required
           >
+          <p class="helper-text">Enter a company name or industry description</p>
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="exclusion">
-            Exclusion <span class="required">*</span>
+          <label class="form-label" for="targetDescription">
+            Target Business Description
           </label>
-          <input
-            type="text"
-            id="exclusion"
-            name="Exclusion"
-            class="form-input"
-            placeholder="e.g. Manufacturer, MNC, listed companies"
-            required
-          >
+          <textarea
+            id="targetDescription"
+            name="TargetDescription"
+            class="form-textarea"
+            placeholder="e.g. Electric vehicle manufacturer with energy storage products..."
+          ></textarea>
+          <p class="helper-text">Optional: Provide more context for better matching</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="isProfitable">
+            Is the target company profitable? <span class="required">*</span>
+          </label>
+          <select id="isProfitable" name="IsProfitable" class="form-input" required>
+            <option value="">Select...</option>
+            <option value="yes">Yes - Profitable</option>
+            <option value="no">No - Loss-making</option>
+            <option value="unknown">Unknown</option>
+          </select>
+          <p class="helper-text">This helps filter relevant financial metrics</p>
         </div>
 
         <div class="form-group">
@@ -397,19 +541,15 @@
         </div>
 
         <button type="submit" class="submit-btn" id="submitBtn">
-          Submit Request
+          Analyze Comparables
         </button>
 
         <div class="message success-message" id="successMessage">
-          Request submitted successfully! Results will be emailed to you within 5-10 minutes.
+          Analysis started! Results will be emailed to you within 15-30 minutes.
         </div>
 
         <div class="message error-message" id="errorMessage">
           Error submitting request. Please try again.
-        </div>
-
-        <div class="version-link">
-          If this doesn't work, please try <a href="find-target-slow.html">v3 Slow</a>
         </div>
       </form>
     </div>
@@ -435,8 +575,49 @@
       }
     });
 
+    // File upload handling
+    const fileInput = document.getElementById('excelFile');
+    const fileUploadLabel = document.getElementById('fileUploadLabel');
+    const fileNameDisplay = document.getElementById('fileName');
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        fileNameDisplay.textContent = file.name;
+        fileUploadLabel.classList.add('has-file');
+      } else {
+        fileNameDisplay.textContent = '';
+        fileUploadLabel.classList.remove('has-file');
+      }
+    });
+
+    // Drag and drop
+    fileUploadLabel.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      fileUploadLabel.style.borderColor = '#2563eb';
+      fileUploadLabel.style.background = '#eff6ff';
+    });
+
+    fileUploadLabel.addEventListener('dragleave', (e) => {
+      e.preventDefault();
+      if (!fileUploadLabel.classList.contains('has-file')) {
+        fileUploadLabel.style.borderColor = '#e2e8f0';
+        fileUploadLabel.style.background = '#f9fafb';
+      }
+    });
+
+    fileUploadLabel.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const file = e.dataTransfer.files[0];
+      if (file && (file.name.endsWith('.xlsx') || file.name.endsWith('.xls') || file.name.endsWith('.csv'))) {
+        fileInput.files = e.dataTransfer.files;
+        fileNameDisplay.textContent = file.name;
+        fileUploadLabel.classList.add('has-file');
+      }
+    });
+
     // Form submission
-    document.getElementById('findTargetForm').addEventListener('submit', async function(e) {
+    document.getElementById('tradingComparableForm').addEventListener('submit', async function(e) {
       e.preventDefault();
 
       const submitBtn = document.getElementById('submitBtn');
@@ -447,27 +628,21 @@
       errorMessage.style.display = 'none';
 
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Submitting...';
+      submitBtn.textContent = 'Uploading & Analyzing...';
 
-      const formData = {
-        Business: document.getElementById('business').value,
-        Country: document.getElementById('country').value,
-        Exclusion: document.getElementById('exclusion').value,
-        Email: document.getElementById('email').value
-      };
+      const formData = new FormData(this);
 
       try {
         const response = await fetch(this.action, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(formData)
+          body: formData
         });
 
         if (response.ok) {
           successMessage.style.display = 'block';
           this.reset();
+          fileNameDisplay.textContent = '';
+          fileUploadLabel.classList.remove('has-file');
         } else {
           throw new Error('Request failed');
         }
@@ -475,7 +650,7 @@
         errorMessage.style.display = 'block';
       } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Submit Request';
+        submitBtn.textContent = 'Analyze Comparables';
       }
     });
   </script>
