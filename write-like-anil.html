@@ -5,6 +5,270 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Write Like Anil</title>
   <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Page-specific styles for Write Like Anil */
+    .writer-main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      padding: 12px 24px;
+      gap: 20px;
+    }
+
+    .writer-info {
+      flex: 0 0 240px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 8px;
+    }
+
+    .writer-content {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      max-width: 1000px;
+    }
+
+    .writer-card {
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+      max-height: calc(100vh - 100px);
+    }
+
+    .writer-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border-subtle);
+      background: var(--bg-subtle);
+      flex-shrink: 0;
+    }
+
+    .writer-card-header h2 {
+      font-size: 15px;
+      font-weight: 600;
+      color: var(--text-main);
+      margin: 0;
+    }
+
+    .writer-card-body {
+      flex: 1;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      overflow: auto;
+      gap: 10px;
+    }
+
+    /* Segmented control tabs */
+    .segment-tabs {
+      display: flex;
+      background: var(--bg-body);
+      border-radius: var(--radius-sm);
+      padding: 3px;
+      gap: 2px;
+    }
+
+    .segment-tabs .seg-btn {
+      flex: 1;
+      padding: 5px 12px;
+      font-size: 13px;
+      font-weight: 500;
+      font-family: var(--font-sans);
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .segment-tabs .seg-btn:hover:not(.active) {
+      color: var(--text-main);
+    }
+
+    .segment-tabs .seg-btn.active {
+      background: var(--accent);
+      color: white;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    /* Form content */
+    .form-content {
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      flex: 1;
+    }
+
+    .form-content.active {
+      display: flex;
+    }
+
+    .writer-card-body .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .writer-card-body label {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-main);
+    }
+
+    .writer-card-body textarea {
+      padding: 10px 12px;
+      font-size: 14px;
+      font-family: var(--font-sans);
+      color: var(--text-main);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-md);
+      resize: none;
+      transition: all 0.15s ease;
+      flex: 1;
+      min-height: 80px;
+    }
+
+    .writer-card-body textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    .writer-card-body textarea::placeholder {
+      color: var(--text-light);
+    }
+
+    /* Submit button */
+    .writer-submit {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      width: 100%;
+      height: 42px;
+      margin-top: auto;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: var(--font-sans);
+      color: white;
+      background: var(--accent);
+      border: none;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+    }
+
+    .writer-submit:hover {
+      background: var(--accent-strong);
+    }
+
+    .writer-submit:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .writer-submit svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* Output area */
+    .output-box {
+      flex: 1;
+      padding: 14px;
+      background: var(--bg-body);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      overflow: auto;
+      min-height: 150px;
+    }
+
+    .output-box .placeholder {
+      color: var(--text-light);
+      font-size: 14px;
+      font-style: italic;
+    }
+
+    .output-box .result {
+      font-size: 14px;
+      line-height: 1.6;
+      color: var(--text-main);
+      white-space: pre-wrap;
+    }
+
+    .output-box .error {
+      color: var(--error);
+      font-size: 14px;
+      font-weight: 500;
+    }
+
+    /* Copy button */
+    .copy-btn {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 500;
+      font-family: var(--font-sans);
+      color: var(--text-muted);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .copy-btn:hover:not(:disabled) {
+      color: var(--accent);
+      border-color: var(--accent);
+    }
+
+    .copy-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .copy-btn.copied {
+      color: var(--success);
+      border-color: var(--success);
+    }
+
+    .copy-btn svg {
+      width: 14px;
+      height: 14px;
+    }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .writer-main {
+        flex-direction: column;
+        overflow: auto;
+      }
+      .writer-info {
+        flex: 0 0 auto;
+      }
+      .writer-content {
+        grid-template-columns: 1fr;
+      }
+      .writer-card {
+        max-height: none;
+        min-height: 300px;
+      }
+    }
+  </style>
 </head>
 <body>
   <header class="app-header">
@@ -26,51 +290,58 @@
     </nav>
   </header>
 
-  <main class="app-main writer-layout">
-    <div class="writer-container">
-      <div class="writer-panel input-panel">
-        <div class="panel-header">
+  <main class="writer-main">
+    <section class="writer-info">
+      <span class="status-badge">Online</span>
+      <h1 class="page-title">Write Like Anil</h1>
+      <p class="page-description">Generate or rewrite emails in Anil's professional style.</p>
+    </section>
+
+    <section class="writer-content">
+      <!-- Input Card -->
+      <div class="writer-card">
+        <div class="writer-card-header">
           <h2>Input</h2>
-          <div class="tabs inline-tabs">
-            <button class="tab-btn active" data-mode="generate">Generate</button>
-            <button class="tab-btn" data-mode="rewrite">Rewrite</button>
+          <div class="segment-tabs">
+            <button class="seg-btn active" data-mode="generate">Generate</button>
+            <button class="seg-btn" data-mode="rewrite">Rewrite</button>
           </div>
         </div>
-
-        <div class="panel-body">
-          <div class="mode-content active" id="mode-generate">
-            <div class="form-group">
+        <div class="writer-card-body">
+          <div class="form-content active" id="form-generate">
+            <div class="form-group" style="flex:2;">
               <label for="generatePrompt">What do you want to write?</label>
-              <textarea id="generatePrompt" rows="4" placeholder="e.g. A follow-up email to the client about the quarterly review meeting scheduled for next week..."></textarea>
+              <textarea id="generatePrompt" placeholder="e.g. A follow-up email to the client about the quarterly review meeting..."></textarea>
             </div>
-            <div class="form-group">
+            <div class="form-group" style="flex:1;">
               <label for="generateContext">Additional context <span class="label-hint">(optional)</span></label>
-              <textarea id="generateContext" rows="3" placeholder="Any background info, key points to include, recipient details..."></textarea>
+              <textarea id="generateContext" placeholder="Background info, key points, recipient details..."></textarea>
             </div>
           </div>
 
-          <div class="mode-content" id="mode-rewrite">
-            <div class="form-group">
+          <div class="form-content" id="form-rewrite">
+            <div class="form-group" style="flex:3;">
               <label for="rewriteInput">Paste your draft email</label>
-              <textarea id="rewriteInput" rows="6" placeholder="Paste the email you want to rewrite in Anil's style..."></textarea>
+              <textarea id="rewriteInput" placeholder="Paste the email you want to rewrite in Anil's style..."></textarea>
             </div>
-            <div class="form-group">
+            <div class="form-group" style="flex:1;">
               <label for="rewriteNotes">Rewrite instructions <span class="label-hint">(optional)</span></label>
-              <textarea id="rewriteNotes" rows="2" placeholder="e.g. Make it more concise, soften the tone, add urgency..."></textarea>
+              <textarea id="rewriteNotes" placeholder="e.g. Make it more concise, soften the tone..."></textarea>
             </div>
           </div>
 
-          <button type="button" class="submit-btn" id="generateBtn">
+          <button type="button" class="writer-submit" id="submitBtn">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
             </svg>
-            <span id="btnText">Generate Email</span>
+            <span id="btnText">Generate</span>
           </button>
         </div>
       </div>
 
-      <div class="writer-panel output-panel">
-        <div class="panel-header">
+      <!-- Output Card -->
+      <div class="writer-card">
+        <div class="writer-card-header">
           <h2>Output</h2>
           <button class="copy-btn" id="copyBtn" disabled>
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -79,70 +350,68 @@
             <span>Copy</span>
           </button>
         </div>
-
-        <div class="panel-body">
-          <div class="output-area" id="outputArea">
-            <p class="output-placeholder">Your email will appear here...</p>
+        <div class="writer-card-body">
+          <div class="output-box" id="outputBox">
+            <p class="placeholder">Generated email will appear here...</p>
           </div>
         </div>
       </div>
-    </div>
+    </section>
   </main>
 
   <script>
     // Tab switching
-    const tabBtns = document.querySelectorAll('.tab-btn');
-    const modeContents = document.querySelectorAll('.mode-content');
+    const segBtns = document.querySelectorAll('.seg-btn');
+    const formContents = document.querySelectorAll('.form-content');
     const btnText = document.getElementById('btnText');
     let currentMode = 'generate';
 
-    tabBtns.forEach(btn => {
+    segBtns.forEach(btn => {
       btn.addEventListener('click', () => {
         const mode = btn.dataset.mode;
         currentMode = mode;
 
-        tabBtns.forEach(b => b.classList.remove('active'));
-        modeContents.forEach(c => c.classList.remove('active'));
+        segBtns.forEach(b => b.classList.remove('active'));
+        formContents.forEach(c => c.classList.remove('active'));
 
         btn.classList.add('active');
-        document.getElementById('mode-' + mode).classList.add('active');
+        document.getElementById('form-' + mode).classList.add('active');
 
-        btnText.textContent = mode === 'generate' ? 'Generate Email' : 'Rewrite Email';
+        btnText.textContent = mode === 'generate' ? 'Generate' : 'Rewrite in Anil\'s Style';
       });
     });
 
     // Copy functionality
     const copyBtn = document.getElementById('copyBtn');
-    const outputArea = document.getElementById('outputArea');
+    const outputBox = document.getElementById('outputBox');
 
     copyBtn.addEventListener('click', async () => {
-      const text = outputArea.innerText;
-      if (!text || text === 'Your email will appear here...') return;
+      const text = outputBox.innerText;
+      if (!text || text === 'Generated email will appear here...') return;
 
       try {
         await navigator.clipboard.writeText(text);
-        const originalHTML = copyBtn.innerHTML;
+        const origHTML = copyBtn.innerHTML;
         copyBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><span>Copied!</span>';
         copyBtn.classList.add('copied');
 
         setTimeout(() => {
-          copyBtn.innerHTML = originalHTML;
+          copyBtn.innerHTML = origHTML;
           copyBtn.classList.remove('copied');
         }, 2000);
       } catch (err) {
-        console.error('Failed to copy:', err);
+        console.error('Copy failed:', err);
       }
     });
 
-    // Generate/Rewrite functionality
-    const generateBtn = document.getElementById('generateBtn');
+    // Submit functionality
+    const submitBtn = document.getElementById('submitBtn');
 
-    generateBtn.addEventListener('click', async () => {
-      generateBtn.disabled = true;
-      generateBtn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Processing...';
+    submitBtn.addEventListener('click', async () => {
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Processing...';
 
       let inputData = {};
-
       if (currentMode === 'generate') {
         inputData = {
           mode: 'generate',
@@ -166,23 +435,21 @@
 
         if (response.ok) {
           const data = await response.json();
-          outputArea.innerHTML = '<div class="output-text">' + formatOutput(data.email || data.result || 'No output generated') + '</div>';
+          const text = data.email || data.result || 'No output generated';
+          outputBox.innerHTML = '<div class="result">' + text.replace(/\n/g, '<br>') + '</div>';
           copyBtn.disabled = false;
         } else {
           throw new Error('Request failed');
         }
       } catch (err) {
-        outputArea.innerHTML = '<p class="output-error">Error generating email. Please try again.</p>';
+        outputBox.innerHTML = '<p class="error">Error generating email. Please try again.</p>';
         console.error(err);
       } finally {
-        generateBtn.disabled = false;
-        generateBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg><span id="btnText">' + (currentMode === 'generate' ? 'Generate Email' : 'Rewrite Email') + '</span>';
+        submitBtn.disabled = false;
+        const label = currentMode === 'generate' ? 'Generate' : 'Rewrite in Anil\'s Style';
+        submitBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg><span id="btnText">' + label + '</span>';
       }
     });
-
-    function formatOutput(text) {
-      return text.replace(/\n/g, '<br>');
-    }
   </script>
 </body>
 </html>
