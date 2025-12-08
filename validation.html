@@ -475,28 +475,6 @@ Singapore"
         </div>
 
         <div class="form-group">
-          <label class="form-label">
-            Output Option <span class="required">*</span>
-          </label>
-          <div class="radio-group">
-            <label class="radio-option selected">
-              <input type="radio" name="OutputOption" value="in_scope_only" checked>
-              <div class="radio-content">
-                <span class="radio-label">In-scope companies only</span>
-                <span class="radio-description">Only show companies that match your target business criteria</span>
-              </div>
-            </label>
-            <label class="radio-option">
-              <input type="radio" name="OutputOption" value="all_companies">
-              <div class="radio-content">
-                <span class="radio-label">All companies with status</span>
-                <span class="radio-description">Show all companies with their validation status (in-scope / out-of-scope)</span>
-              </div>
-            </label>
-          </div>
-        </div>
-
-        <div class="form-group">
           <label class="form-label" for="email">
             Email <span class="required">*</span>
           </label>
@@ -591,6 +569,9 @@ Singapore"
         if (response.ok) {
           successMessage.style.display = 'block';
           this.reset();
+          // Re-select default radio option after reset
+          radioOptions.forEach(opt => opt.classList.remove('selected'));
+          radioOptions[0].classList.add('selected');
         } else {
           throw new Error('Request failed');
         }
