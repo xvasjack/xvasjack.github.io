@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Validation - Company Validation</title>
+  <title>Speeda List Validation</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * {
@@ -390,11 +390,11 @@
   <main class="main-container">
     <div class="card">
       <div class="form-header">
-        <p class="eyebrow">Company Validation</p>
+        <p class="eyebrow">Speeda List</p>
         <h1 class="page-title">Validation</h1>
         <p class="form-description">
           Validate companies against your target business criteria.<br>
-          Results will be emailed to you within <strong>15-30 minutes</strong>.
+          Results will be emailed to you within <strong>10 minutes</strong>.
         </p>
       </div>
 
@@ -407,7 +407,7 @@
             id="companies"
             name="Companies"
             class="form-textarea"
-            placeholder="Enter company names (one per line or comma-separated)
+            placeholder="Enter company names (one per line)
 
 Example:
 ABC Electronics Sdn Bhd
@@ -416,7 +416,7 @@ Sample Corp Malaysia"
             rows="8"
             required
           ></textarea>
-          <p class="form-hint">You can paste up to 200 company names. Countries can be included with company names.</p>
+          <p class="form-hint">You can paste up to 200 company names.</p>
         </div>
 
         <div class="form-group">
@@ -427,7 +427,7 @@ Sample Corp Malaysia"
             id="countries"
             name="Countries"
             class="form-textarea"
-            placeholder="Enter countries (one per line or comma-separated)
+            placeholder="Enter countries (one per line)
 
 Example:
 Malaysia
@@ -436,7 +436,6 @@ Singapore"
             rows="4"
             required
           ></textarea>
-          <p class="form-hint">List all countries where the companies might be located.</p>
         </div>
 
         <div class="form-group">
@@ -451,7 +450,28 @@ Singapore"
             placeholder="e.g. Semiconductor distributor, Electronics wholesaler"
             required
           >
-          <p class="form-hint">Describe the type of business you're looking for.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">
+            Output Option <span class="required">*</span>
+          </label>
+          <div class="radio-group">
+            <label class="radio-option selected">
+              <input type="radio" name="OutputOption" value="in_scope_only" checked>
+              <div class="radio-content">
+                <span class="radio-label">In-scope companies only</span>
+                <span class="radio-description">Only show companies that match your target business criteria</span>
+              </div>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="OutputOption" value="all_companies">
+              <div class="radio-content">
+                <span class="radio-label">All companies with status</span>
+                <span class="radio-description">Show all companies with their validation status (in-scope / out-of-scope)</span>
+              </div>
+            </label>
+          </div>
         </div>
 
         <div class="form-group">
@@ -495,7 +515,7 @@ Singapore"
         </button>
 
         <div class="message success-message" id="successMessage">
-          Validation request submitted! Results will be emailed to you within 15-30 minutes.
+          Validation request submitted! Results will be emailed to you within 10 minutes.
         </div>
 
         <div class="message error-message" id="errorMessage">
