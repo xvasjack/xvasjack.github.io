@@ -4,221 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Profile Slides</title>
-  <style>
-    :root {
-      --bg-body: #f1f5f9;
-      --bg-surface: #ffffff;
-      --bg-subtle: #e2e8f0;
-      --accent: #2563eb;
-      --accent-soft: rgba(37, 99, 235, 0.1);
-      --accent-strong: #1d4ed8;
-      --text-main: #0f172a;
-      --text-muted: #64748b;
-      --text-light: #94a3b8;
-      --border-subtle: #d4d4d8;
-      --border-medium: #cbd5e1;
-      --badge-soon-bg: #fef3c7;
-      --badge-soon-color: #d97706;
-      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
-      --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      --radius-sm: 6px;
-      --radius-md: 8px;
-      --radius-lg: 12px;
-      --radius-xl: 16px;
-    }
-
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    html, body {
-      height: 100%;
-      overflow: hidden;
-      font-family: var(--font-sans);
-      font-size: 16px;
-      background: var(--bg-body);
-      color: var(--text-main);
-      line-height: 1.55;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    body { display: flex; flex-direction: column; }
-
-    .app-header {
-      flex: 0 0 auto;
-      height: 54px;
-      background: var(--bg-surface);
-      border-bottom: 1px solid var(--border-subtle);
-      display: flex;
-      align-items: center;
-      padding: 0 24px;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .logo {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 18px;
-      font-weight: 600;
-      color: var(--text-main);
-      text-decoration: none;
-    }
-
-    .logo-icon {
-      width: 30px;
-      height: 30px;
-      background: var(--accent);
-      border-radius: var(--radius-sm);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .logo-icon svg { width: 17px; height: 17px; color: white; }
-
-    nav {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      margin-left: 32px;
-    }
-
-    nav a {
-      padding: 8px 14px;
-      font-size: 15px;
-      font-weight: 500;
-      color: var(--text-muted);
-      text-decoration: none;
-      border-radius: var(--radius-sm);
-      transition: all 0.15s ease;
-    }
-
-    nav a:hover { color: var(--text-main); background: var(--bg-subtle); }
-    nav a.active { color: var(--accent); background: var(--accent-soft); }
-
-    .app-main {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      padding: 20px;
-    }
-
-    .coming-soon-card {
-      max-width: 540px;
-      width: 100%;
-      background: var(--bg-surface);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-xl);
-      box-shadow: var(--shadow-lg);
-      text-align: center;
-      padding: 28px 32px;
-    }
-
-    .coming-soon-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 14px;
-      background: var(--badge-soon-bg);
-      color: var(--badge-soon-color);
-      font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      border-radius: var(--radius-sm);
-      margin-bottom: 16px;
-    }
-
-    .coming-soon-icon {
-      width: 64px;
-      height: 64px;
-      margin: 0 auto 16px;
-      background: linear-gradient(135deg, var(--accent) 0%, #3b82f6 100%);
-      border-radius: var(--radius-lg);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 8px 24px -8px rgba(37, 99, 235, 0.4);
-    }
-
-    .coming-soon-icon svg {
-      width: 32px;
-      height: 32px;
-      color: white;
-    }
-
-    .coming-soon-title {
-      font-size: 27px;
-      font-weight: 700;
-      color: var(--text-main);
-      margin-bottom: 8px;
-    }
-
-    .coming-soon-description {
-      font-size: 15px;
-      color: var(--text-muted);
-      line-height: 1.55;
-      max-width: 380px;
-      margin: 0 auto 20px;
-    }
-
-    .feature-list {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
-      margin-bottom: 20px;
-    }
-
-    .feature-item {
-      padding: 14px 10px;
-      background: var(--bg-subtle);
-      border-radius: var(--radius-md);
-    }
-
-    .feature-item svg {
-      width: 26px;
-      height: 26px;
-      color: var(--accent);
-      margin-bottom: 6px;
-    }
-
-    .feature-item-title {
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--text-main);
-      margin-bottom: 2px;
-    }
-
-    .feature-item-desc {
-      font-size: 13px;
-      color: var(--text-muted);
-    }
-
-    .back-btn {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 12px 22px;
-      font-size: 15px;
-      font-weight: 500;
-      font-family: var(--font-sans);
-      color: var(--text-main);
-      background: var(--bg-surface);
-      border: 1px solid var(--border-medium);
-      border-radius: var(--radius-md);
-      text-decoration: none;
-      transition: all 0.15s ease;
-    }
-
-    .back-btn:hover {
-      background: var(--bg-subtle);
-      border-color: var(--accent);
-    }
-
-    .back-btn svg { width: 18px; height: 18px; }
-  </style>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
   <header class="app-header">
@@ -239,9 +25,9 @@
     </nav>
   </header>
 
-  <main class="app-main">
+  <main class="app-main centered">
     <div class="coming-soon-card">
-      <span class="coming-soon-badge">Coming Soon</span>
+      <span class="status-badge coming-soon">Coming Soon</span>
 
       <div class="coming-soon-icon">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -250,9 +36,7 @@
       </div>
 
       <h1 class="coming-soon-title">Profile Slides</h1>
-      <p class="coming-soon-description">
-        AI-powered slide generation is in development. Stay tuned for automated presentation creation.
-      </p>
+      <p class="coming-soon-description">AI-powered slide generation is in development. Stay tuned for automated presentation creation.</p>
 
       <div class="feature-list">
         <div class="feature-item">
