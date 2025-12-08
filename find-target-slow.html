@@ -6,44 +6,28 @@
   <title>Find Target - v3 Slow</title>
   <style>
     :root {
-      /* Color Palette - Soft Light Theme */
       --bg-body: #f1f5f9;
       --bg-surface: #ffffff;
       --bg-subtle: #e2e8f0;
       --accent: #2563eb;
-      --accent-soft: #dbeafe;
+      --accent-soft: rgba(37, 99, 235, 0.1);
       --accent-strong: #1d4ed8;
-      --accent-secondary: #7c3aed;
-      --accent-secondary-soft: #ede9fe;
       --text-main: #0f172a;
       --text-muted: #64748b;
       --text-light: #94a3b8;
-      --border-subtle: #e2e8f0;
+      --border-subtle: #d4d4d8;
       --border-medium: #cbd5e1;
-      --success: #059669;
-      --success-soft: #d1fae5;
+      --success: #16a34a;
+      --success-soft: #dcfce7;
       --error: #dc2626;
       --error-soft: #fee2e2;
-      --warning: #d97706;
-      --warning-soft: #fef3c7;
+      --warning: #f59e0b;
+      --badge-online-bg: #dcfce7;
+      --badge-online-color: #16a34a;
       --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
       --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
       --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
-
-      /* Typography */
-      --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-
-      /* Spacing */
-      --space-1: 4px;
-      --space-2: 8px;
-      --space-3: 12px;
-      --space-4: 16px;
-      --space-5: 20px;
-      --space-6: 24px;
-      --space-8: 32px;
-
-      /* Radii */
+      --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       --radius-sm: 6px;
       --radius-md: 8px;
       --radius-lg: 12px;
@@ -61,58 +45,50 @@
       -webkit-font-smoothing: antialiased;
     }
 
-    body {
-      display: flex;
-      flex-direction: column;
-    }
+    body { display: flex; flex-direction: column; }
 
-    /* Header */
     .app-header {
       flex: 0 0 auto;
-      height: 56px;
+      height: 52px;
       background: var(--bg-surface);
       border-bottom: 1px solid var(--border-subtle);
       display: flex;
       align-items: center;
-      padding: 0 var(--space-6);
+      padding: 0 24px;
       box-shadow: var(--shadow-sm);
     }
 
     .logo {
       display: flex;
       align-items: center;
-      gap: var(--space-3);
-      font-size: 18px;
+      gap: 10px;
+      font-size: 17px;
       font-weight: 600;
       color: var(--text-main);
       text-decoration: none;
     }
 
     .logo-icon {
-      width: 32px;
-      height: 32px;
+      width: 28px;
+      height: 28px;
       background: var(--accent);
-      border-radius: var(--radius-md);
+      border-radius: var(--radius-sm);
       display: flex;
       align-items: center;
       justify-content: center;
     }
 
-    .logo-icon svg {
-      width: 18px;
-      height: 18px;
-      color: white;
-    }
+    .logo-icon svg { width: 16px; height: 16px; color: white; }
 
     nav {
       display: flex;
       align-items: center;
-      gap: var(--space-1);
-      margin-left: var(--space-8);
+      gap: 4px;
+      margin-left: 32px;
     }
 
     nav a {
-      padding: var(--space-2) var(--space-4);
+      padding: 6px 14px;
       font-size: 14px;
       font-weight: 500;
       color: var(--text-muted);
@@ -127,41 +103,39 @@
     }
 
     nav a.active {
-      color: var(--accent-secondary);
-      background: var(--accent-secondary-soft);
+      color: var(--accent);
+      background: var(--accent-soft);
     }
 
-    /* Main Content */
     .app-main {
       flex: 1;
       display: flex;
       overflow: hidden;
-      padding: var(--space-6);
-      gap: var(--space-8);
+      padding: 24px;
+      gap: 32px;
     }
 
-    /* Left Column - Page Info */
     .page-info {
-      flex: 0 0 320px;
+      flex: 0 0 300px;
       display: flex;
       flex-direction: column;
       justify-content: center;
-      padding: var(--space-6);
+      padding: 16px;
     }
 
     .status-badge {
       display: inline-flex;
       align-items: center;
-      gap: var(--space-2);
-      padding: var(--space-1) var(--space-3);
-      background: var(--accent-secondary-soft);
-      color: var(--accent-secondary);
-      font-size: 12px;
+      gap: 6px;
+      padding: 4px 10px;
+      background: var(--badge-online-bg);
+      color: var(--badge-online-color);
+      font-size: 11px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.5px;
       border-radius: var(--radius-sm);
-      margin-bottom: var(--space-4);
+      margin-bottom: 12px;
       width: fit-content;
     }
 
@@ -169,58 +143,30 @@
       content: "";
       width: 6px;
       height: 6px;
-      background: var(--accent-secondary);
+      background: currentColor;
       border-radius: 50%;
     }
 
     .page-title {
-      font-size: 28px;
+      font-size: 26px;
       font-weight: 700;
       color: var(--text-main);
-      margin-bottom: var(--space-3);
+      margin-bottom: 8px;
       line-height: 1.2;
     }
 
     .page-description {
-      font-size: 15px;
+      font-size: 14px;
       color: var(--text-muted);
       line-height: 1.6;
-      margin-bottom: var(--space-6);
     }
 
-    .turnaround {
-      display: flex;
-      align-items: baseline;
-      gap: var(--space-3);
-      padding: var(--space-4);
-      background: var(--bg-subtle);
-      border-radius: var(--radius-md);
-    }
-
-    .turnaround-label {
-      font-size: 13px;
-      color: var(--text-muted);
-    }
-
-    .turnaround-value {
-      font-size: 24px;
-      font-weight: 700;
-      font-family: var(--font-mono);
-      color: var(--accent-secondary);
-    }
-
-    .turnaround-unit {
-      font-size: 13px;
-      color: var(--text-light);
-    }
-
-    /* Right Column - Form Card */
     .page-content {
       flex: 1;
       display: flex;
       align-items: center;
       justify-content: center;
-      max-width: 560px;
+      max-width: 480px;
     }
 
     .form-card {
@@ -229,46 +175,43 @@
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow-lg);
-      padding: var(--space-6);
+      padding: 24px;
     }
 
     .form-card h2 {
-      font-size: 18px;
+      font-size: 17px;
       font-weight: 600;
       color: var(--text-main);
-      margin-bottom: var(--space-5);
-      padding-bottom: var(--space-4);
+      margin-bottom: 20px;
+      padding-bottom: 12px;
       border-bottom: 1px solid var(--border-subtle);
     }
 
-    /* Form Elements */
     .form-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: var(--space-4);
+      gap: 16px;
     }
 
     .form-group {
       display: flex;
       flex-direction: column;
-      gap: var(--space-2);
+      gap: 6px;
     }
 
-    .form-group.full-width {
-      grid-column: span 2;
-    }
+    .form-group.full-width { grid-column: span 2; }
 
     label {
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 500;
       color: var(--text-main);
     }
 
     input[type="text"],
     input[type="email"] {
-      height: 44px;
-      padding: 0 var(--space-4);
-      font-size: 15px;
+      height: 40px;
+      padding: 0 12px;
+      font-size: 14px;
       font-family: var(--font-sans);
       color: var(--text-main);
       background: var(--bg-surface);
@@ -277,110 +220,55 @@
       transition: all 0.15s ease;
     }
 
-    input::placeholder {
-      color: var(--text-light);
-    }
+    input::placeholder { color: var(--text-light); }
 
     input:focus {
       outline: none;
-      border-color: var(--accent-secondary);
-      box-shadow: 0 0 0 3px var(--accent-secondary-soft);
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
     }
 
-    /* Submit Button */
     .submit-btn {
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: var(--space-2);
+      gap: 8px;
       width: 100%;
-      height: 48px;
-      margin-top: var(--space-6);
-      padding: 0 var(--space-6);
-      font-size: 15px;
+      height: 44px;
+      margin-top: 20px;
+      font-size: 14px;
       font-weight: 600;
       font-family: var(--font-sans);
       color: white;
-      background: var(--accent-secondary);
+      background: var(--accent);
       border: none;
       border-radius: var(--radius-md);
       cursor: pointer;
       transition: all 0.15s ease;
     }
 
-    .submit-btn:hover {
-      background: #6d28d9;
-    }
+    .submit-btn:hover { background: var(--accent-strong); }
+    .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .submit-btn svg { width: 16px; height: 16px; }
 
-    .submit-btn:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    .submit-btn svg {
-      width: 18px;
-      height: 18px;
-    }
-
-    /* Messages */
     .message {
       display: none;
       align-items: center;
-      gap: var(--space-3);
-      margin-top: var(--space-4);
-      padding: var(--space-4);
-      font-size: 14px;
+      gap: 10px;
+      margin-top: 16px;
+      padding: 12px;
+      font-size: 13px;
       font-weight: 500;
       border-radius: var(--radius-md);
     }
 
-    .message.show {
-      display: flex;
-    }
+    .message.show { display: flex; }
+    .message svg { width: 18px; height: 18px; flex-shrink: 0; }
+    .message.success { background: var(--success-soft); color: var(--success); }
+    .message.error { background: var(--error-soft); color: var(--error); }
 
-    .message svg {
-      width: 20px;
-      height: 20px;
-      flex-shrink: 0;
-    }
-
-    .message.success {
-      background: var(--success-soft);
-      color: var(--success);
-    }
-
-    .message.error {
-      background: var(--error-soft);
-      color: var(--error);
-    }
-
-    /* Footer hint */
-    .footer-hint {
-      margin-top: var(--space-5);
-      padding-top: var(--space-4);
-      border-top: 1px solid var(--border-subtle);
-      font-size: 13px;
-      color: var(--text-muted);
-      text-align: center;
-    }
-
-    .footer-hint a {
-      color: var(--accent);
-      text-decoration: none;
-      font-weight: 500;
-    }
-
-    .footer-hint a:hover {
-      text-decoration: underline;
-    }
-
-    /* Spinner */
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    .spinner {
-      animation: spin 1s linear infinite;
-    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 1s linear infinite; }
   </style>
 </head>
 <body>
@@ -404,16 +292,11 @@
 
   <main class="app-main">
     <section class="page-info">
-      <span class="status-badge">Deep Search</span>
+      <span class="status-badge">Online</span>
       <h1 class="page-title">v3 Slow Search</h1>
       <p class="page-description">
-        Comprehensive deep analysis of potential targets. Takes longer but provides more thorough results with additional insights and validation.
+        Thorough analysis of potential targets with deeper insights. Results delivered to your email in 15-45 minutes.
       </p>
-      <div class="turnaround">
-        <span class="turnaround-label">Average turnaround</span>
-        <span class="turnaround-value">~30</span>
-        <span class="turnaround-unit">minutes</span>
-      </div>
     </section>
 
     <section class="page-content">
@@ -426,17 +309,14 @@
               <label for="business">Business Type</label>
               <input type="text" id="business" name="Business" required placeholder="e.g. Semiconductor distributor">
             </div>
-
             <div class="form-group">
               <label for="country">Country</label>
               <input type="text" id="country" name="Country" required placeholder="e.g. Malaysia, Thailand">
             </div>
-
             <div class="form-group">
               <label for="exclusion">Exclusions</label>
               <input type="text" id="exclusion" name="Exclusion" required placeholder="e.g. MNC, Listed">
             </div>
-
             <div class="form-group full-width">
               <label for="email">Email Address</label>
               <input type="email" id="email" name="Email" required placeholder="your@company.com">
@@ -460,10 +340,6 @@
             Error submitting request. Please try again.
           </div>
         </form>
-
-        <p class="footer-hint">
-          Need faster results? Try <a href="find-target.html">v3 Fast</a> for quicker turnaround.
-        </p>
       </div>
     </section>
   </main>
