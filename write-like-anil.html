@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Write Like Anil</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="app-header">
+    <a href="find-target.html" class="logo">
+      <span class="logo-icon">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+      </span>
+      Find Target
+    </a>
+    <nav>
+      <a href="find-target.html">v3 Fast</a>
+      <a href="find-target-slow.html">v3 Slow</a>
+      <a href="validation.html">Validation</a>
+      <a href="trading-comparable.html">Trading Comp</a>
+      <a href="profile-slides.html">Slides</a>
+      <a href="write-like-anil.html" class="active">Write Like Anil</a>
+    </nav>
+  </header>
+
+  <main class="app-main writer-layout">
+    <div class="writer-container">
+      <div class="writer-panel input-panel">
+        <div class="panel-header">
+          <h2>Input</h2>
+          <div class="tabs inline-tabs">
+            <button class="tab-btn active" data-mode="generate">Generate</button>
+            <button class="tab-btn" data-mode="rewrite">Rewrite</button>
+          </div>
+        </div>
+
+        <div class="panel-body">
+          <div class="mode-content active" id="mode-generate">
+            <div class="form-group">
+              <label for="generatePrompt">What do you want to write?</label>
+              <textarea id="generatePrompt" rows="4" placeholder="e.g. A follow-up email to the client about the quarterly review meeting scheduled for next week..."></textarea>
+            </div>
+            <div class="form-group">
+              <label for="generateContext">Additional context <span class="label-hint">(optional)</span></label>
+              <textarea id="generateContext" rows="3" placeholder="Any background info, key points to include, recipient details..."></textarea>
+            </div>
+          </div>
+
+          <div class="mode-content" id="mode-rewrite">
+            <div class="form-group">
+              <label for="rewriteInput">Paste your draft email</label>
+              <textarea id="rewriteInput" rows="6" placeholder="Paste the email you want to rewrite in Anil's style..."></textarea>
+            </div>
+            <div class="form-group">
+              <label for="rewriteNotes">Rewrite instructions <span class="label-hint">(optional)</span></label>
+              <textarea id="rewriteNotes" rows="2" placeholder="e.g. Make it more concise, soften the tone, add urgency..."></textarea>
+            </div>
+          </div>
+
+          <button type="button" class="submit-btn" id="generateBtn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+            <span id="btnText">Generate Email</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="writer-panel output-panel">
+        <div class="panel-header">
+          <h2>Output</h2>
+          <button class="copy-btn" id="copyBtn" disabled>
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+            </svg>
+            <span>Copy</span>
+          </button>
+        </div>
+
+        <div class="panel-body">
+          <div class="output-area" id="outputArea">
+            <p class="output-placeholder">Your email will appear here...</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // Tab switching
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const modeContents = document.querySelectorAll('.mode-content');
+    const btnText = document.getElementById('btnText');
+    let currentMode = 'generate';
+
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const mode = btn.dataset.mode;
+        currentMode = mode;
+
+        tabBtns.forEach(b => b.classList.remove('active'));
+        modeContents.forEach(c => c.classList.remove('active'));
+
+        btn.classList.add('active');
+        document.getElementById('mode-' + mode).classList.add('active');
+
+        btnText.textContent = mode === 'generate' ? 'Generate Email' : 'Rewrite Email';
+      });
+    });
+
+    // Copy functionality
+    const copyBtn = document.getElementById('copyBtn');
+    const outputArea = document.getElementById('outputArea');
+
+    copyBtn.addEventListener('click', async () => {
+      const text = outputArea.innerText;
+      if (!text || text === 'Your email will appear here...') return;
+
+      try {
+        await navigator.clipboard.writeText(text);
+        const originalHTML = copyBtn.innerHTML;
+        copyBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg><span>Copied!</span>';
+        copyBtn.classList.add('copied');
+
+        setTimeout(() => {
+          copyBtn.innerHTML = originalHTML;
+          copyBtn.classList.remove('copied');
+        }, 2000);
+      } catch (err) {
+        console.error('Failed to copy:', err);
+      }
+    });
+
+    // Generate/Rewrite functionality
+    const generateBtn = document.getElementById('generateBtn');
+
+    generateBtn.addEventListener('click', async () => {
+      generateBtn.disabled = true;
+      generateBtn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Processing...';
+
+      let inputData = {};
+
+      if (currentMode === 'generate') {
+        inputData = {
+          mode: 'generate',
+          prompt: document.getElementById('generatePrompt').value,
+          context: document.getElementById('generateContext').value
+        };
+      } else {
+        inputData = {
+          mode: 'rewrite',
+          draft: document.getElementById('rewriteInput').value,
+          notes: document.getElementById('rewriteNotes').value
+        };
+      }
+
+      try {
+        const response = await fetch('https://xvasjackgithubio-production.up.railway.app/api/write-like-anil', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(inputData)
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          outputArea.innerHTML = '<div class="output-text">' + formatOutput(data.email || data.result || 'No output generated') + '</div>';
+          copyBtn.disabled = false;
+        } else {
+          throw new Error('Request failed');
+        }
+      } catch (err) {
+        outputArea.innerHTML = '<p class="output-error">Error generating email. Please try again.</p>';
+        console.error(err);
+      } finally {
+        generateBtn.disabled = false;
+        generateBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg><span id="btnText">' + (currentMode === 'generate' ? 'Generate Email' : 'Rewrite Email') + '</span>';
+      }
+    });
+
+    function formatOutput(text) {
+      return text.replace(/\n/g, '<br>');
+    }
+  </script>
+</body>
+</html>
