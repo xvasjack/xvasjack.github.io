@@ -3,155 +3,429 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Trading Comparable - Company Analysis</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', 'system-ui', 'sans-serif'],
-            mono: ['JetBrains Mono', 'monospace'],
-          },
-        },
-      },
-    }
-  </script>
+  <title>Trading Comparable</title>
   <style>
-    * { font-family: 'Inter', system-ui, sans-serif; }
-    .font-mono { font-family: 'JetBrains Mono', monospace; }
-    html, body { overflow: hidden; }
+    :root {
+      --bg-body: #f1f5f9;
+      --bg-surface: #ffffff;
+      --bg-subtle: #e2e8f0;
+      --accent: #2563eb;
+      --accent-soft: rgba(37, 99, 235, 0.1);
+      --accent-strong: #1d4ed8;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --text-light: #94a3b8;
+      --border-subtle: #d4d4d8;
+      --border-medium: #cbd5e1;
+      --success: #16a34a;
+      --success-soft: #dcfce7;
+      --error: #dc2626;
+      --error-soft: #fee2e2;
+      --warning: #f59e0b;
+      --badge-online-bg: #dcfce7;
+      --badge-online-color: #16a34a;
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+      --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: var(--font-sans);
+      background: var(--bg-body);
+      color: var(--text-main);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body { display: flex; flex-direction: column; }
+
+    .app-header {
+      flex: 0 0 auto;
+      height: 52px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      padding: 0 24px;
+      box-shadow: var(--shadow-sm);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text-main);
+      text-decoration: none;
+    }
+
+    .logo-icon {
+      width: 28px;
+      height: 28px;
+      background: var(--accent);
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-icon svg { width: 16px; height: 16px; color: white; }
+
+    nav {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-left: 32px;
+    }
+
+    nav a {
+      padding: 6px 14px;
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-decoration: none;
+      border-radius: var(--radius-sm);
+      transition: all 0.15s ease;
+    }
+
+    nav a:hover { color: var(--text-main); background: var(--bg-subtle); }
+    nav a.active { color: var(--accent); background: var(--accent-soft); }
+
+    .app-main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      padding: 20px 24px;
+      gap: 28px;
+    }
+
+    .page-info {
+      flex: 0 0 260px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 12px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      background: var(--badge-online-bg);
+      color: var(--badge-online-color);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-radius: var(--radius-sm);
+      margin-bottom: 12px;
+      width: fit-content;
+    }
+
+    .status-badge::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      background: currentColor;
+      border-radius: 50%;
+    }
+
+    .page-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 8px;
+      line-height: 1.2;
+    }
+
+    .page-description {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+
+    .page-content {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      max-width: 480px;
+    }
+
+    .form-card {
+      width: 100%;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      padding: 20px;
+    }
+
+    .form-card h2 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 16px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .form-group.full-width { grid-column: span 2; }
+
+    label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-main);
+    }
+
+    .label-hint {
+      font-weight: 400;
+      color: var(--text-light);
+    }
+
+    input[type="text"],
+    input[type="email"] {
+      height: 38px;
+      padding: 0 12px;
+      font-size: 14px;
+      font-family: var(--font-sans);
+      color: var(--text-main);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-md);
+      transition: all 0.15s ease;
+    }
+
+    input::placeholder { color: var(--text-light); }
+    input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+    .upload-zone {
+      position: relative;
+      border: 2px dashed var(--border-medium);
+      border-radius: var(--radius-md);
+      padding: 14px;
+      text-align: center;
+      transition: all 0.15s ease;
+      cursor: pointer;
+    }
+
+    .upload-zone:hover { border-color: var(--accent); background: var(--accent-soft); }
+    .upload-zone.active { border-color: var(--accent); background: var(--accent-soft); }
+    .upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+
+    .upload-zone .upload-content {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .upload-zone svg { width: 22px; height: 22px; color: var(--text-light); }
+    .upload-zone p { font-size: 13px; color: var(--text-muted); }
+    .upload-zone .highlight { color: var(--accent); font-weight: 500; }
+    .upload-zone .file-name { display: none; margin-top: 6px; font-size: 12px; font-weight: 500; color: var(--accent); }
+    .upload-zone .file-name.show { display: block; }
+
+    .radio-group {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .radio-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .radio-option:hover { border-color: var(--accent); }
+    .radio-option.selected { border-color: var(--accent); background: var(--accent-soft); }
+    .radio-option input { width: 14px; height: 14px; margin-top: 2px; accent-color: var(--accent); }
+
+    .radio-option-content { flex: 1; }
+    .radio-option-title { font-size: 13px; font-weight: 500; color: var(--text-main); }
+    .radio-option-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+    .hint-text {
+      font-size: 12px;
+      color: var(--text-light);
+      margin-top: 6px;
+    }
+
+    .submit-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      height: 42px;
+      margin-top: 16px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: var(--font-sans);
+      color: white;
+      background: var(--accent);
+      border: none;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .submit-btn:hover { background: var(--accent-strong); }
+    .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+    .submit-btn svg { width: 16px; height: 16px; }
+
+    .message {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      margin-top: 14px;
+      padding: 10px;
+      font-size: 13px;
+      font-weight: 500;
+      border-radius: var(--radius-md);
+    }
+
+    .message.show { display: flex; }
+    .message svg { width: 16px; height: 16px; flex-shrink: 0; }
+    .message.success { background: var(--success-soft); color: var(--success); }
+    .message.error { background: var(--error-soft); color: var(--error); }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 1s linear infinite; }
   </style>
 </head>
-<body class="h-screen flex flex-col bg-slate-950 text-slate-100">
-
-  <!-- Top Navigation Bar -->
-  <header class="flex-none h-16 bg-slate-900 border-b border-slate-700 flex items-center px-6">
-    <div class="flex items-center gap-3">
-      <div class="w-10 h-10 rounded-lg bg-violet-600 flex items-center justify-center">
-        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+<body>
+  <header class="app-header">
+    <a href="find-target.html" class="logo">
+      <span class="logo-icon">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
         </svg>
-      </div>
-      <span class="text-xl font-bold text-white">Find Target</span>
-    </div>
-    <nav class="ml-10 flex items-center gap-1">
-      <a href="find-target.html" class="px-5 py-2.5 text-base font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">v3 Fast</a>
-      <a href="find-target-slow.html" class="px-5 py-2.5 text-base font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">v3 Slow</a>
-      <a href="validation.html" class="px-5 py-2.5 text-base font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">Validation</a>
-      <a href="trading-comparable.html" class="px-5 py-2.5 text-base font-medium rounded-lg bg-violet-600 text-white">Trading Comp</a>
-      <a href="profile-slides.html" class="px-5 py-2.5 text-base font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">Slides</a>
+      </span>
+      Find Target
+    </a>
+    <nav>
+      <a href="find-target.html">v3 Fast</a>
+      <a href="find-target-slow.html">v3 Slow</a>
+      <a href="validation.html">Validation</a>
+      <a href="trading-comparable.html" class="active">Trading Comp</a>
+      <a href="profile-slides.html">Slides</a>
     </nav>
-    <div class="ml-auto flex items-center gap-3">
-      <span class="px-4 py-2 text-sm font-mono rounded-lg bg-emerald-900/50 text-emerald-400 border border-emerald-700">ONLINE</span>
-    </div>
   </header>
 
-  <!-- Main Content Area -->
-  <main class="flex-1 flex items-center justify-center p-8 overflow-hidden bg-gradient-to-br from-slate-950 to-slate-900">
-    <div class="w-full max-w-2xl">
-      <!-- Card Container -->
-      <div class="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl">
+  <main class="app-main">
+    <section class="page-info">
+      <span class="status-badge">Online</span>
+      <h1 class="page-title">Trading Comparable</h1>
+      <p class="page-description">
+        Analyze trading comparables from your Excel file. Get P/E, P/B, and EV/EBITDA multiples. Results in 15-30 minutes.
+      </p>
+    </section>
 
-        <!-- Card Header -->
-        <div class="px-8 py-5 bg-slate-800/50 border-b border-slate-700 flex items-center justify-between">
-          <div>
-            <h1 class="text-2xl font-bold text-white flex items-center gap-3">
-              <svg class="w-7 h-7 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-              </svg>
-              Trading Comparable
-            </h1>
-            <p class="text-base text-slate-400 mt-1">Results delivered in <span class="font-mono text-violet-400">15-30 minutes</span></p>
-          </div>
-        </div>
-
-        <!-- Form -->
-        <form id="tradingForm" class="p-8" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/trading-comparable" enctype="multipart/form-data">
-          <!-- File Upload -->
-          <div>
-            <label class="block text-base font-medium text-slate-300 mb-2">Excel File with Comparables</label>
-            <div class="relative">
-              <input type="file" id="excelFile" name="ExcelFile" accept=".xlsx,.xls,.csv" required class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-              <div id="uploadZone" class="border-2 border-dashed border-slate-600 rounded-lg p-6 text-center hover:border-violet-500 hover:bg-violet-900/10 transition-all cursor-pointer">
-                <div class="flex items-center justify-center gap-3">
-                  <svg class="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-                  </svg>
-                  <span class="text-lg text-slate-300"><span class="text-violet-400 font-medium">Upload</span> Excel file</span>
-                </div>
-                <p id="fileName" class="text-base text-violet-400 font-medium mt-2 hidden"></p>
+    <section class="page-content">
+      <div class="form-card">
+        <h2>Analysis Details</h2>
+        <form id="tradingForm" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/trading-comparable" enctype="multipart/form-data">
+          <div class="form-group">
+            <label>Excel File with Comparables</label>
+            <div class="upload-zone" id="uploadZone">
+              <input type="file" id="excelFile" name="ExcelFile" accept=".xlsx,.xls,.csv" required>
+              <div class="upload-content">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                </svg>
+                <p><span class="highlight">Upload</span> Excel file</p>
               </div>
+              <p class="file-name" id="fileName"></p>
             </div>
           </div>
 
-          <!-- Two Columns -->
-          <div class="grid grid-cols-2 gap-5 mt-6">
-            <div>
-              <label class="block text-base font-medium text-slate-300 mb-2">Target Company</label>
-              <input type="text" name="TargetCompany" required placeholder="e.g. Tesla"
-                class="w-full h-14 px-5 text-lg bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
+          <div class="form-grid" style="margin-top: 14px;">
+            <div class="form-group">
+              <label for="targetCompany">Target Company</label>
+              <input type="text" id="targetCompany" name="TargetCompany" required placeholder="e.g. Tesla">
             </div>
-            <div>
-              <label class="block text-base font-medium text-slate-300 mb-2">Email</label>
-              <input type="email" name="Email" required placeholder="your@email.com"
-                class="w-full h-14 px-5 text-lg bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
+            <div class="form-group">
+              <label for="email">Email</label>
+              <input type="email" id="email" name="Email" required placeholder="your@email.com">
             </div>
           </div>
 
-          <div class="mt-5">
-            <label class="block text-base font-medium text-slate-300 mb-2">Business Description <span class="text-slate-500">(optional)</span></label>
-            <input type="text" name="TargetDescription" placeholder="e.g. Electric vehicle manufacturer"
-              class="w-full h-14 px-5 text-lg bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
+          <div class="form-group" style="margin-top: 14px;">
+            <label for="description">Business Description <span class="label-hint">(optional)</span></label>
+            <input type="text" id="description" name="TargetDescription" placeholder="e.g. Electric vehicle manufacturer">
           </div>
 
-          <!-- Profitability -->
-          <div class="mt-6">
-            <label class="block text-base font-medium text-slate-300 mb-3">Is target profitable?</label>
-            <div class="grid grid-cols-2 gap-4">
-              <label class="radio-opt flex items-center gap-3 p-4 border-2 border-violet-500 bg-violet-900/20 rounded-lg cursor-pointer">
-                <input type="radio" name="IsProfitable" value="yes" checked class="w-5 h-5 text-violet-600">
-                <div>
-                  <span class="text-lg font-medium text-white">Yes - Profitable</span>
-                  <p class="text-sm text-slate-400">All metrics (P/E, P/B, EV/EBITDA)</p>
+          <div class="form-group" style="margin-top: 14px;">
+            <label>Is target profitable?</label>
+            <div class="radio-group">
+              <label class="radio-option selected">
+                <input type="radio" name="IsProfitable" value="yes" checked>
+                <div class="radio-option-content">
+                  <span class="radio-option-title">Yes - Profitable</span>
+                  <span class="radio-option-desc">All metrics: P/E, P/B, EV/EBITDA</span>
                 </div>
               </label>
-              <label class="radio-opt flex items-center gap-3 p-4 border-2 border-slate-600 rounded-lg cursor-pointer hover:border-slate-500 transition-colors">
-                <input type="radio" name="IsProfitable" value="no" class="w-5 h-5 text-violet-600">
-                <div>
-                  <span class="text-lg font-medium text-white">No - Loss-making</span>
-                  <p class="text-sm text-slate-400">Skip P/E ratio</p>
+              <label class="radio-option">
+                <input type="radio" name="IsProfitable" value="no">
+                <div class="radio-option-content">
+                  <span class="radio-option-title">No - Loss-making</span>
+                  <span class="radio-option-desc">Skip P/E ratio</span>
                 </div>
               </label>
             </div>
-            <p class="text-sm text-slate-500 mt-2">For industry analysis, select "Yes - Profitable"</p>
+            <p class="hint-text">For industry analysis, select "Yes - Profitable"</p>
           </div>
 
-          <!-- Submit Button -->
-          <button type="submit" id="submitBtn"
-            class="w-full h-16 mt-8 text-lg font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-lg transition-all duration-200 flex items-center justify-center gap-3 shadow-lg shadow-violet-600/25">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button type="submit" class="submit-btn" id="submitBtn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
             </svg>
             Analyze Comparables
           </button>
 
-          <!-- Messages -->
-          <div id="successMessage" class="hidden mt-6 p-5 bg-emerald-900/30 border border-emerald-700 rounded-lg">
-            <p class="text-lg text-emerald-400 text-center font-medium">Submitted! Results in 15-30 minutes.</p>
+          <div class="message success" id="successMessage">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            Submitted! Results in 15-30 minutes.
           </div>
 
-          <div id="errorMessage" class="hidden mt-6 p-5 bg-red-900/30 border border-red-700 rounded-lg">
-            <p class="text-lg text-red-400 text-center font-medium">Error. Please try again.</p>
+          <div class="message error" id="errorMessage">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            Error. Please try again.
           </div>
         </form>
       </div>
-    </div>
+    </section>
   </main>
 
   <script>
-    // File upload
     const fileInput = document.getElementById('excelFile');
     const uploadZone = document.getElementById('uploadZone');
     const fileNameDisplay = document.getElementById('fileName');
@@ -160,59 +434,45 @@
       const file = e.target.files[0];
       if (file) {
         fileNameDisplay.textContent = file.name;
-        fileNameDisplay.classList.remove('hidden');
-        uploadZone.classList.add('border-violet-500', 'bg-violet-900/20');
+        fileNameDisplay.classList.add('show');
+        uploadZone.classList.add('active');
       }
     });
 
-    // Radio buttons
-    document.querySelectorAll('.radio-opt').forEach(opt => {
+    document.querySelectorAll('.radio-option').forEach(opt => {
       opt.addEventListener('click', () => {
-        document.querySelectorAll('.radio-opt').forEach(o => {
-          o.classList.remove('border-violet-500', 'bg-violet-900/20');
-          o.classList.add('border-slate-600');
-        });
-        opt.classList.add('border-violet-500', 'bg-violet-900/20');
-        opt.classList.remove('border-slate-600');
+        document.querySelectorAll('.radio-option').forEach(o => o.classList.remove('selected'));
+        opt.classList.add('selected');
         opt.querySelector('input').checked = true;
       });
     });
 
-    // Form submission
     document.getElementById('tradingForm').addEventListener('submit', async function(e) {
       e.preventDefault();
-      const submitBtn = document.getElementById('submitBtn');
-      const successMessage = document.getElementById('successMessage');
-      const errorMessage = document.getElementById('errorMessage');
-
-      successMessage.classList.add('hidden');
-      errorMessage.classList.add('hidden');
-      submitBtn.disabled = true;
-      submitBtn.innerHTML = '<svg class="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Uploading...';
-
+      const btn = document.getElementById('submitBtn');
+      const success = document.getElementById('successMessage');
+      const error = document.getElementById('errorMessage');
+      success.classList.remove('show');
+      error.classList.remove('show');
+      btn.disabled = true;
+      btn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Uploading...';
       try {
         const formData = new FormData(this);
         const response = await fetch(this.action, { method: 'POST', body: formData });
         if (response.ok) {
-          successMessage.classList.remove('hidden');
+          success.classList.add('show');
           this.reset();
-          fileNameDisplay.classList.add('hidden');
-          uploadZone.classList.remove('border-violet-500', 'bg-violet-900/20');
-          document.querySelectorAll('.radio-opt').forEach((o, i) => {
-            if (i === 0) {
-              o.classList.add('border-violet-500', 'bg-violet-900/20');
-              o.classList.remove('border-slate-600');
-            } else {
-              o.classList.remove('border-violet-500', 'bg-violet-900/20');
-              o.classList.add('border-slate-600');
-            }
+          fileNameDisplay.classList.remove('show');
+          uploadZone.classList.remove('active');
+          document.querySelectorAll('.radio-option').forEach((o, i) => {
+            if (i === 0) o.classList.add('selected');
+            else o.classList.remove('selected');
           });
         } else throw new Error();
-      } catch {
-        errorMessage.classList.remove('hidden');
-      } finally {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg> Analyze Comparables';
+      } catch { error.classList.add('show'); }
+      finally {
+        btn.disabled = false;
+        btn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg> Analyze Comparables';
       }
     });
   </script>
