@@ -21,7 +21,6 @@
       --success-soft: #dcfce7;
       --error: #dc2626;
       --error-soft: #fee2e2;
-      --warning: #f59e0b;
       --badge-online-bg: #dcfce7;
       --badge-online-color: #16a34a;
       --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -38,9 +37,10 @@
       height: 100%;
       overflow: hidden;
       font-family: var(--font-sans);
+      font-size: 16px;
       background: var(--bg-body);
       color: var(--text-main);
-      line-height: 1.5;
+      line-height: 1.55;
       -webkit-font-smoothing: antialiased;
     }
 
@@ -48,7 +48,7 @@
 
     .app-header {
       flex: 0 0 auto;
-      height: 52px;
+      height: 54px;
       background: var(--bg-surface);
       border-bottom: 1px solid var(--border-subtle);
       display: flex;
@@ -61,15 +61,15 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      font-size: 17px;
+      font-size: 18px;
       font-weight: 600;
       color: var(--text-main);
       text-decoration: none;
     }
 
     .logo-icon {
-      width: 28px;
-      height: 28px;
+      width: 30px;
+      height: 30px;
       background: var(--accent);
       border-radius: var(--radius-sm);
       display: flex;
@@ -77,7 +77,7 @@
       justify-content: center;
     }
 
-    .logo-icon svg { width: 16px; height: 16px; color: white; }
+    .logo-icon svg { width: 17px; height: 17px; color: white; }
 
     nav {
       display: flex;
@@ -87,8 +87,8 @@
     }
 
     nav a {
-      padding: 6px 14px;
-      font-size: 14px;
+      padding: 8px 14px;
+      font-size: 15px;
       font-weight: 500;
       color: var(--text-muted);
       text-decoration: none;
@@ -103,12 +103,12 @@
       flex: 1;
       display: flex;
       overflow: hidden;
-      padding: 20px 24px;
+      padding: 14px 24px;
       gap: 28px;
     }
 
     .page-info {
-      flex: 0 0 260px;
+      flex: 0 0 280px;
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -119,28 +119,28 @@
       display: inline-flex;
       align-items: center;
       gap: 6px;
-      padding: 4px 10px;
+      padding: 5px 12px;
       background: var(--badge-online-bg);
       color: var(--badge-online-color);
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.5px;
       border-radius: var(--radius-sm);
-      margin-bottom: 12px;
+      margin-bottom: 10px;
       width: fit-content;
     }
 
     .status-badge::before {
       content: "";
-      width: 6px;
-      height: 6px;
+      width: 7px;
+      height: 7px;
       background: currentColor;
       border-radius: 50%;
     }
 
     .page-title {
-      font-size: 24px;
+      font-size: 27px;
       font-weight: 700;
       color: var(--text-main);
       margin-bottom: 8px;
@@ -148,9 +148,9 @@
     }
 
     .page-description {
-      font-size: 14px;
+      font-size: 15px;
       color: var(--text-muted);
-      line-height: 1.6;
+      line-height: 1.55;
     }
 
     .page-content {
@@ -158,7 +158,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      max-width: 480px;
+      max-width: 500px;
     }
 
     .form-card {
@@ -167,14 +167,14 @@
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-lg);
       box-shadow: var(--shadow-lg);
-      padding: 20px;
+      padding: 18px 22px;
     }
 
     .form-card h2 {
-      font-size: 16px;
+      font-size: 18px;
       font-weight: 600;
       color: var(--text-main);
-      margin-bottom: 16px;
+      margin-bottom: 14px;
       padding-bottom: 10px;
       border-bottom: 1px solid var(--border-subtle);
     }
@@ -182,7 +182,7 @@
     .form-grid {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 14px;
+      gap: 10px;
     }
 
     .form-group {
@@ -194,7 +194,7 @@
     .form-group.full-width { grid-column: span 2; }
 
     label {
-      font-size: 13px;
+      font-size: 15px;
       font-weight: 500;
       color: var(--text-main);
     }
@@ -206,9 +206,9 @@
 
     input[type="text"],
     input[type="email"] {
-      height: 38px;
-      padding: 0 12px;
-      font-size: 14px;
+      height: 44px;
+      padding: 0 14px;
+      font-size: 16px;
       font-family: var(--font-sans);
       color: var(--text-main);
       background: var(--bg-surface);
@@ -241,16 +241,16 @@
       gap: 10px;
     }
 
-    .upload-zone svg { width: 22px; height: 22px; color: var(--text-light); }
-    .upload-zone p { font-size: 13px; color: var(--text-muted); }
+    .upload-zone svg { width: 24px; height: 24px; color: var(--text-light); }
+    .upload-zone p { font-size: 15px; color: var(--text-muted); }
     .upload-zone .highlight { color: var(--accent); font-weight: 500; }
-    .upload-zone .file-name { display: none; margin-top: 6px; font-size: 12px; font-weight: 500; color: var(--accent); }
+    .upload-zone .file-name { display: none; margin-top: 6px; font-size: 14px; font-weight: 500; color: var(--accent); }
     .upload-zone .file-name.show { display: block; }
 
     .radio-group {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
     }
 
     .radio-option {
@@ -266,14 +266,14 @@
 
     .radio-option:hover { border-color: var(--accent); }
     .radio-option.selected { border-color: var(--accent); background: var(--accent-soft); }
-    .radio-option input { width: 14px; height: 14px; margin-top: 2px; accent-color: var(--accent); }
+    .radio-option input { width: 16px; height: 16px; margin-top: 2px; accent-color: var(--accent); }
 
     .radio-option-content { flex: 1; }
-    .radio-option-title { font-size: 13px; font-weight: 500; color: var(--text-main); }
-    .radio-option-desc { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+    .radio-option-title { font-size: 15px; font-weight: 500; color: var(--text-main); }
+    .radio-option-desc { font-size: 13px; color: var(--text-muted); margin-top: 2px; }
 
     .hint-text {
-      font-size: 12px;
+      font-size: 13px;
       color: var(--text-light);
       margin-top: 6px;
     }
@@ -284,9 +284,9 @@
       justify-content: center;
       gap: 8px;
       width: 100%;
-      height: 42px;
-      margin-top: 16px;
-      font-size: 14px;
+      height: 48px;
+      margin-top: 14px;
+      font-size: 15px;
       font-weight: 600;
       font-family: var(--font-sans);
       color: white;
@@ -299,21 +299,21 @@
 
     .submit-btn:hover { background: var(--accent-strong); }
     .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-    .submit-btn svg { width: 16px; height: 16px; }
+    .submit-btn svg { width: 18px; height: 18px; }
 
     .message {
       display: none;
       align-items: center;
       gap: 10px;
-      margin-top: 14px;
-      padding: 10px;
-      font-size: 13px;
+      margin-top: 12px;
+      padding: 12px 14px;
+      font-size: 14px;
       font-weight: 500;
       border-radius: var(--radius-md);
     }
 
     .message.show { display: flex; }
-    .message svg { width: 16px; height: 16px; flex-shrink: 0; }
+    .message svg { width: 18px; height: 18px; flex-shrink: 0; }
     .message.success { background: var(--success-soft); color: var(--success); }
     .message.error { background: var(--error-soft); color: var(--error); }
 
@@ -345,7 +345,7 @@
       <span class="status-badge">Online</span>
       <h1 class="page-title">Trading Comparable</h1>
       <p class="page-description">
-        Analyze trading comparables from your Excel file. Get P/E, P/B, and EV/EBITDA multiples. Results in 15-30 minutes.
+        Analyze comparables from your Excel file. Get P/E, P/B, EV/EBITDA multiples. Results in 15-30 minutes.
       </p>
     </section>
 
@@ -367,7 +367,7 @@
             </div>
           </div>
 
-          <div class="form-grid" style="margin-top: 14px;">
+          <div class="form-grid" style="margin-top: 12px;">
             <div class="form-group">
               <label for="targetCompany">Target Company</label>
               <input type="text" id="targetCompany" name="TargetCompany" required placeholder="e.g. Tesla">
@@ -378,12 +378,12 @@
             </div>
           </div>
 
-          <div class="form-group" style="margin-top: 14px;">
+          <div class="form-group" style="margin-top: 10px;">
             <label for="description">Business Description <span class="label-hint">(optional)</span></label>
             <input type="text" id="description" name="TargetDescription" placeholder="e.g. Electric vehicle manufacturer">
           </div>
 
-          <div class="form-group" style="margin-top: 14px;">
+          <div class="form-group" style="margin-top: 10px;">
             <label>Is target profitable?</label>
             <div class="radio-group">
               <label class="radio-option selected">
