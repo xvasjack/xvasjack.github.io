@@ -1,182 +1,156 @@
 <!DOCTYPE html>
-<html lang="en" class="h-full">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Trading Comparable - Company Analysis</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script>
     tailwind.config = {
-      darkMode: 'class',
       theme: {
         extend: {
-          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
-          fontSize: { 'xxs': '0.65rem' },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
         },
       },
     }
   </script>
   <style>
     * { font-family: 'Inter', system-ui, sans-serif; }
-    ::-webkit-scrollbar { display: none; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+    html, body { overflow: hidden; }
   </style>
 </head>
-<body class="h-full bg-slate-50 dark:bg-slate-900 transition-colors duration-200">
-  <div class="h-full flex">
-    <!-- Sidebar -->
-    <aside class="w-52 bg-white dark:bg-slate-800 border-r border-slate-200 dark:border-slate-700 flex flex-col">
-      <div class="p-4 border-b border-slate-200 dark:border-slate-700">
-        <h1 class="text-sm font-bold text-slate-900 dark:text-white tracking-tight">Find Target</h1>
-        <p class="text-xxs text-slate-500 dark:text-slate-400 mt-0.5">AI-Powered Search</p>
+<body class="h-screen flex flex-col bg-slate-950 text-slate-100">
+
+  <!-- Top Navigation Bar -->
+  <header class="flex-none h-16 bg-slate-900 border-b border-slate-700 flex items-center px-6">
+    <div class="flex items-center gap-3">
+      <div class="w-10 h-10 rounded-lg bg-violet-600 flex items-center justify-center">
+        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+        </svg>
       </div>
+      <span class="text-xl font-bold text-white">Find Target</span>
+    </div>
+    <nav class="ml-10 flex items-center gap-1">
+      <a href="find-target.html" class="px-5 py-2.5 text-base font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">v3 Fast</a>
+      <a href="find-target-slow.html" class="px-5 py-2.5 text-base font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">v3 Slow</a>
+      <a href="validation.html" class="px-5 py-2.5 text-base font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">Validation</a>
+      <a href="trading-comparable.html" class="px-5 py-2.5 text-base font-medium rounded-lg bg-violet-600 text-white">Trading Comp</a>
+      <a href="profile-slides.html" class="px-5 py-2.5 text-base font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">Slides</a>
+    </nav>
+    <div class="ml-auto flex items-center gap-3">
+      <span class="px-4 py-2 text-sm font-mono rounded-lg bg-emerald-900/50 text-emerald-400 border border-emerald-700">ONLINE</span>
+    </div>
+  </header>
 
-      <nav class="flex-1 p-2 space-y-0.5">
-        <a href="find-target.html" class="flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-          v3 Fast
-        </a>
-        <a href="find-target-slow.html" class="flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-          v3 Slow
-        </a>
-        <a href="validation.html" class="flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-          Validation
-        </a>
-        <a href="trading-comparable.html" class="flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium bg-violet-50 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300 border border-violet-200 dark:border-violet-800">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-          Trading Comp
-        </a>
-        <a href="profile-slides.html" class="flex items-center gap-2 px-3 py-2 rounded-md text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
-          Profile Slides
-        </a>
-      </nav>
+  <!-- Main Content Area -->
+  <main class="flex-1 flex items-center justify-center p-8 overflow-hidden bg-gradient-to-br from-slate-950 to-slate-900">
+    <div class="w-full max-w-2xl">
+      <!-- Card Container -->
+      <div class="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl">
 
-      <!-- Dark Mode Toggle -->
-      <div class="p-3 border-t border-slate-200 dark:border-slate-700">
-        <button id="themeToggle" class="w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-medium text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700/50 transition-colors">
-          <span class="flex items-center gap-2">
-            <svg class="w-3.5 h-3.5 dark:hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
-            <svg class="w-3.5 h-3.5 hidden dark:block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-            <span class="dark:hidden">Dark Mode</span>
-            <span class="hidden dark:inline">Light Mode</span>
-          </span>
-          <div class="w-8 h-4 bg-slate-300 dark:bg-blue-600 rounded-full relative transition-colors">
-            <div class="absolute top-0.5 left-0.5 dark:left-4 w-3 h-3 bg-white rounded-full shadow transition-all"></div>
+        <!-- Card Header -->
+        <div class="px-8 py-5 bg-slate-800/50 border-b border-slate-700 flex items-center justify-between">
+          <div>
+            <h1 class="text-2xl font-bold text-white flex items-center gap-3">
+              <svg class="w-7 h-7 text-violet-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+              </svg>
+              Trading Comparable
+            </h1>
+            <p class="text-base text-slate-400 mt-1">Results delivered in <span class="font-mono text-violet-400">15-30 minutes</span></p>
           </div>
-        </button>
-      </div>
-    </aside>
-
-    <!-- Main Content -->
-    <main class="flex-1 flex items-center justify-center p-6 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800">
-      <div class="w-full max-w-md">
-        <div class="bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-          <!-- Header -->
-          <div class="px-5 py-4 border-b border-slate-200 dark:border-slate-700 bg-gradient-to-r from-violet-600 to-purple-600">
-            <div class="flex items-center justify-between">
-              <div>
-                <h2 class="text-sm font-semibold text-white">Trading Comparable</h2>
-                <p class="text-xxs text-violet-200 mt-0.5">Results in 15-30 minutes</p>
-              </div>
-              <div class="w-8 h-8 rounded-lg bg-white/20 flex items-center justify-center">
-                <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-              </div>
-            </div>
-          </div>
-
-          <!-- Form -->
-          <form id="tradingForm" class="p-4 space-y-3" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/trading-comparable" enctype="multipart/form-data">
-            <!-- File Upload -->
-            <div>
-              <label class="block text-xxs font-medium text-slate-700 dark:text-slate-300 mb-1">Excel File</label>
-              <div class="relative">
-                <input type="file" id="excelFile" name="ExcelFile" accept=".xlsx,.xls,.csv" required class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-                <div id="uploadZone" class="border-2 border-dashed border-slate-300 dark:border-slate-600 rounded-lg p-3 text-center hover:border-violet-400 dark:hover:border-violet-500 hover:bg-violet-50/50 dark:hover:bg-violet-900/20 transition-all cursor-pointer">
-                  <div class="flex items-center justify-center gap-2">
-                    <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-                    <span class="text-xxs text-slate-600 dark:text-slate-300"><span class="text-violet-600 dark:text-violet-400 font-medium">Upload</span> Excel file</span>
-                  </div>
-                  <p id="fileName" class="text-xxs text-violet-600 font-medium mt-1 hidden"></p>
-                </div>
-              </div>
-            </div>
-
-            <!-- Two Columns -->
-            <div class="grid grid-cols-2 gap-3">
-              <div>
-                <label class="block text-xxs font-medium text-slate-700 dark:text-slate-300 mb-1">Target Company</label>
-                <input type="text" name="TargetCompany" required placeholder="e.g. Tesla"
-                  class="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent dark:text-white placeholder-slate-400">
-              </div>
-              <div>
-                <label class="block text-xxs font-medium text-slate-700 dark:text-slate-300 mb-1">Email</label>
-                <input type="email" name="Email" required placeholder="your@email.com"
-                  class="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent dark:text-white placeholder-slate-400">
-              </div>
-            </div>
-
-            <div>
-              <label class="block text-xxs font-medium text-slate-700 dark:text-slate-300 mb-1">Business Description <span class="text-slate-400">(optional)</span></label>
-              <input type="text" name="TargetDescription" placeholder="e.g. Electric vehicle manufacturer"
-                class="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-violet-500 focus:border-transparent dark:text-white placeholder-slate-400">
-            </div>
-
-            <!-- Profitability -->
-            <div>
-              <label class="block text-xxs font-medium text-slate-700 dark:text-slate-300 mb-2">Is target profitable?</label>
-              <div class="grid grid-cols-2 gap-2">
-                <label class="radio-opt flex items-center gap-2 p-2 border border-violet-500 dark:border-violet-600 bg-violet-50 dark:bg-violet-900/30 rounded-lg cursor-pointer">
-                  <input type="radio" name="IsProfitable" value="yes" checked class="w-3 h-3 text-violet-600">
-                  <div>
-                    <span class="text-xxs font-medium text-slate-700 dark:text-slate-300">Yes</span>
-                    <p class="text-xxs text-slate-400">All metrics</p>
-                  </div>
-                </label>
-                <label class="radio-opt flex items-center gap-2 p-2 border border-slate-200 dark:border-slate-600 rounded-lg cursor-pointer hover:border-violet-300 dark:hover:border-violet-700 transition-colors">
-                  <input type="radio" name="IsProfitable" value="no" class="w-3 h-3 text-violet-600">
-                  <div>
-                    <span class="text-xxs font-medium text-slate-700 dark:text-slate-300">No</span>
-                    <p class="text-xxs text-slate-400">Skip P/E</p>
-                  </div>
-                </label>
-              </div>
-              <p class="text-xxs text-slate-400 mt-1">For industry analysis, select "Yes"</p>
-            </div>
-
-            <button type="submit" id="submitBtn"
-              class="w-full py-2.5 text-xs font-semibold text-white bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-700 hover:to-purple-700 rounded-lg shadow-sm transition-all duration-200 flex items-center justify-center gap-2">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-              Analyze Comparables
-            </button>
-
-            <div id="successMessage" class="hidden p-3 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 rounded-lg">
-              <p class="text-xs text-emerald-700 dark:text-emerald-300 text-center font-medium">Submitted! Results in 15-30 min.</p>
-            </div>
-
-            <div id="errorMessage" class="hidden p-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 rounded-lg">
-              <p class="text-xs text-red-700 dark:text-red-300 text-center font-medium">Error. Please try again.</p>
-            </div>
-          </form>
         </div>
+
+        <!-- Form -->
+        <form id="tradingForm" class="p-8" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/trading-comparable" enctype="multipart/form-data">
+          <!-- File Upload -->
+          <div>
+            <label class="block text-base font-medium text-slate-300 mb-2">Excel File with Comparables</label>
+            <div class="relative">
+              <input type="file" id="excelFile" name="ExcelFile" accept=".xlsx,.xls,.csv" required class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+              <div id="uploadZone" class="border-2 border-dashed border-slate-600 rounded-lg p-6 text-center hover:border-violet-500 hover:bg-violet-900/10 transition-all cursor-pointer">
+                <div class="flex items-center justify-center gap-3">
+                  <svg class="w-8 h-8 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                  </svg>
+                  <span class="text-lg text-slate-300"><span class="text-violet-400 font-medium">Upload</span> Excel file</span>
+                </div>
+                <p id="fileName" class="text-base text-violet-400 font-medium mt-2 hidden"></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Two Columns -->
+          <div class="grid grid-cols-2 gap-5 mt-6">
+            <div>
+              <label class="block text-base font-medium text-slate-300 mb-2">Target Company</label>
+              <input type="text" name="TargetCompany" required placeholder="e.g. Tesla"
+                class="w-full h-14 px-5 text-lg bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
+            </div>
+            <div>
+              <label class="block text-base font-medium text-slate-300 mb-2">Email</label>
+              <input type="email" name="Email" required placeholder="your@email.com"
+                class="w-full h-14 px-5 text-lg bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
+            </div>
+          </div>
+
+          <div class="mt-5">
+            <label class="block text-base font-medium text-slate-300 mb-2">Business Description <span class="text-slate-500">(optional)</span></label>
+            <input type="text" name="TargetDescription" placeholder="e.g. Electric vehicle manufacturer"
+              class="w-full h-14 px-5 text-lg bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent">
+          </div>
+
+          <!-- Profitability -->
+          <div class="mt-6">
+            <label class="block text-base font-medium text-slate-300 mb-3">Is target profitable?</label>
+            <div class="grid grid-cols-2 gap-4">
+              <label class="radio-opt flex items-center gap-3 p-4 border-2 border-violet-500 bg-violet-900/20 rounded-lg cursor-pointer">
+                <input type="radio" name="IsProfitable" value="yes" checked class="w-5 h-5 text-violet-600">
+                <div>
+                  <span class="text-lg font-medium text-white">Yes - Profitable</span>
+                  <p class="text-sm text-slate-400">All metrics (P/E, P/B, EV/EBITDA)</p>
+                </div>
+              </label>
+              <label class="radio-opt flex items-center gap-3 p-4 border-2 border-slate-600 rounded-lg cursor-pointer hover:border-slate-500 transition-colors">
+                <input type="radio" name="IsProfitable" value="no" class="w-5 h-5 text-violet-600">
+                <div>
+                  <span class="text-lg font-medium text-white">No - Loss-making</span>
+                  <p class="text-sm text-slate-400">Skip P/E ratio</p>
+                </div>
+              </label>
+            </div>
+            <p class="text-sm text-slate-500 mt-2">For industry analysis, select "Yes - Profitable"</p>
+          </div>
+
+          <!-- Submit Button -->
+          <button type="submit" id="submitBtn"
+            class="w-full h-16 mt-8 text-lg font-semibold text-white bg-violet-600 hover:bg-violet-700 rounded-lg transition-all duration-200 flex items-center justify-center gap-3 shadow-lg shadow-violet-600/25">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+            Analyze Comparables
+          </button>
+
+          <!-- Messages -->
+          <div id="successMessage" class="hidden mt-6 p-5 bg-emerald-900/30 border border-emerald-700 rounded-lg">
+            <p class="text-lg text-emerald-400 text-center font-medium">Submitted! Results in 15-30 minutes.</p>
+          </div>
+
+          <div id="errorMessage" class="hidden mt-6 p-5 bg-red-900/30 border border-red-700 rounded-lg">
+            <p class="text-lg text-red-400 text-center font-medium">Error. Please try again.</p>
+          </div>
+        </form>
       </div>
-    </main>
-  </div>
+    </div>
+  </main>
 
   <script>
-    // Theme toggle
-    const themeToggle = document.getElementById('themeToggle');
-    const html = document.documentElement;
-    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      html.classList.add('dark');
-    }
-    themeToggle.addEventListener('click', () => {
-      html.classList.toggle('dark');
-      localStorage.theme = html.classList.contains('dark') ? 'dark' : 'light';
-    });
-
     // File upload
     const fileInput = document.getElementById('excelFile');
     const uploadZone = document.getElementById('uploadZone');
@@ -187,7 +161,7 @@
       if (file) {
         fileNameDisplay.textContent = file.name;
         fileNameDisplay.classList.remove('hidden');
-        uploadZone.classList.add('border-violet-400', 'bg-violet-50', 'dark:border-violet-600', 'dark:bg-violet-900/30');
+        uploadZone.classList.add('border-violet-500', 'bg-violet-900/20');
       }
     });
 
@@ -195,11 +169,11 @@
     document.querySelectorAll('.radio-opt').forEach(opt => {
       opt.addEventListener('click', () => {
         document.querySelectorAll('.radio-opt').forEach(o => {
-          o.classList.remove('border-violet-500', 'dark:border-violet-600', 'bg-violet-50', 'dark:bg-violet-900/30');
-          o.classList.add('border-slate-200', 'dark:border-slate-600');
+          o.classList.remove('border-violet-500', 'bg-violet-900/20');
+          o.classList.add('border-slate-600');
         });
-        opt.classList.add('border-violet-500', 'dark:border-violet-600', 'bg-violet-50', 'dark:bg-violet-900/30');
-        opt.classList.remove('border-slate-200', 'dark:border-slate-600');
+        opt.classList.add('border-violet-500', 'bg-violet-900/20');
+        opt.classList.remove('border-slate-600');
         opt.querySelector('input').checked = true;
       });
     });
@@ -214,7 +188,7 @@
       successMessage.classList.add('hidden');
       errorMessage.classList.add('hidden');
       submitBtn.disabled = true;
-      submitBtn.innerHTML = '<svg class="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Uploading...';
+      submitBtn.innerHTML = '<svg class="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Uploading...';
 
       try {
         const formData = new FormData(this);
@@ -223,14 +197,14 @@
           successMessage.classList.remove('hidden');
           this.reset();
           fileNameDisplay.classList.add('hidden');
-          uploadZone.classList.remove('border-violet-400', 'bg-violet-50', 'dark:border-violet-600', 'dark:bg-violet-900/30');
+          uploadZone.classList.remove('border-violet-500', 'bg-violet-900/20');
           document.querySelectorAll('.radio-opt').forEach((o, i) => {
             if (i === 0) {
-              o.classList.add('border-violet-500', 'dark:border-violet-600', 'bg-violet-50', 'dark:bg-violet-900/30');
-              o.classList.remove('border-slate-200', 'dark:border-slate-600');
+              o.classList.add('border-violet-500', 'bg-violet-900/20');
+              o.classList.remove('border-slate-600');
             } else {
-              o.classList.remove('border-violet-500', 'dark:border-violet-600', 'bg-violet-50', 'dark:bg-violet-900/30');
-              o.classList.add('border-slate-200', 'dark:border-slate-600');
+              o.classList.remove('border-violet-500', 'bg-violet-900/20');
+              o.classList.add('border-slate-600');
             }
           });
         } else throw new Error();
@@ -238,7 +212,7 @@
         errorMessage.classList.remove('hidden');
       } finally {
         submitBtn.disabled = false;
-        submitBtn.innerHTML = '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg> Analyze Comparables';
+        submitBtn.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg> Analyze Comparables';
       }
     });
   </script>
