@@ -17,12 +17,6 @@
       --text-light: #94a3b8;
       --border-subtle: #d4d4d8;
       --border-medium: #cbd5e1;
-      --success: #16a34a;
-      --success-soft: #dcfce7;
-      --error: #dc2626;
-      --error-soft: #fee2e2;
-      --warning: #f59e0b;
-      --warning-soft: #fef3c7;
       --badge-soon-bg: #fef3c7;
       --badge-soon-color: #d97706;
       --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -40,9 +34,10 @@
       height: 100%;
       overflow: hidden;
       font-family: var(--font-sans);
+      font-size: 16px;
       background: var(--bg-body);
       color: var(--text-main);
-      line-height: 1.5;
+      line-height: 1.55;
       -webkit-font-smoothing: antialiased;
     }
 
@@ -50,7 +45,7 @@
 
     .app-header {
       flex: 0 0 auto;
-      height: 52px;
+      height: 54px;
       background: var(--bg-surface);
       border-bottom: 1px solid var(--border-subtle);
       display: flex;
@@ -63,15 +58,15 @@
       display: flex;
       align-items: center;
       gap: 10px;
-      font-size: 17px;
+      font-size: 18px;
       font-weight: 600;
       color: var(--text-main);
       text-decoration: none;
     }
 
     .logo-icon {
-      width: 28px;
-      height: 28px;
+      width: 30px;
+      height: 30px;
       background: var(--accent);
       border-radius: var(--radius-sm);
       display: flex;
@@ -79,7 +74,7 @@
       justify-content: center;
     }
 
-    .logo-icon svg { width: 16px; height: 16px; color: white; }
+    .logo-icon svg { width: 17px; height: 17px; color: white; }
 
     nav {
       display: flex;
@@ -89,8 +84,8 @@
     }
 
     nav a {
-      padding: 6px 14px;
-      font-size: 14px;
+      padding: 8px 14px;
+      font-size: 15px;
       font-weight: 500;
       color: var(--text-muted);
       text-decoration: none;
@@ -107,18 +102,18 @@
       align-items: center;
       justify-content: center;
       overflow: hidden;
-      padding: 24px;
+      padding: 20px;
     }
 
     .coming-soon-card {
-      max-width: 520px;
+      max-width: 540px;
       width: 100%;
       background: var(--bg-surface);
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-xl);
       box-shadow: var(--shadow-lg);
       text-align: center;
-      padding: 32px;
+      padding: 28px 32px;
     }
 
     .coming-soon-badge {
@@ -128,18 +123,18 @@
       padding: 6px 14px;
       background: var(--badge-soon-bg);
       color: var(--badge-soon-color);
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 600;
       text-transform: uppercase;
       letter-spacing: 0.5px;
       border-radius: var(--radius-sm);
-      margin-bottom: 20px;
+      margin-bottom: 16px;
     }
 
     .coming-soon-icon {
       width: 64px;
       height: 64px;
-      margin: 0 auto 20px;
+      margin: 0 auto 16px;
       background: linear-gradient(135deg, var(--accent) 0%, #3b82f6 100%);
       border-radius: var(--radius-lg);
       display: flex;
@@ -155,49 +150,49 @@
     }
 
     .coming-soon-title {
-      font-size: 26px;
+      font-size: 27px;
       font-weight: 700;
       color: var(--text-main);
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
 
     .coming-soon-description {
-      font-size: 14px;
+      font-size: 15px;
       color: var(--text-muted);
-      line-height: 1.6;
-      max-width: 360px;
-      margin: 0 auto 24px;
+      line-height: 1.55;
+      max-width: 380px;
+      margin: 0 auto 20px;
     }
 
     .feature-list {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 14px;
-      margin-bottom: 24px;
+      gap: 12px;
+      margin-bottom: 20px;
     }
 
     .feature-item {
-      padding: 16px 12px;
+      padding: 14px 10px;
       background: var(--bg-subtle);
       border-radius: var(--radius-md);
     }
 
     .feature-item svg {
-      width: 24px;
-      height: 24px;
+      width: 26px;
+      height: 26px;
       color: var(--accent);
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
     .feature-item-title {
-      font-size: 13px;
+      font-size: 15px;
       font-weight: 600;
       color: var(--text-main);
       margin-bottom: 2px;
     }
 
     .feature-item-desc {
-      font-size: 12px;
+      font-size: 13px;
       color: var(--text-muted);
     }
 
@@ -205,8 +200,8 @@
       display: inline-flex;
       align-items: center;
       gap: 8px;
-      padding: 10px 20px;
-      font-size: 14px;
+      padding: 12px 22px;
+      font-size: 15px;
       font-weight: 500;
       font-family: var(--font-sans);
       color: var(--text-main);
@@ -222,7 +217,7 @@
       border-color: var(--accent);
     }
 
-    .back-btn svg { width: 16px; height: 16px; }
+    .back-btn svg { width: 18px; height: 18px; }
   </style>
 </head>
 <body>
@@ -256,7 +251,7 @@
 
       <h1 class="coming-soon-title">Profile Slides</h1>
       <p class="coming-soon-description">
-        AI-powered profile slide generation is currently in development. Stay tuned for automated presentation creation.
+        AI-powered slide generation is in development. Stay tuned for automated presentation creation.
       </p>
 
       <div class="feature-list">
