@@ -4,336 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Speeda Validation</title>
+  <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-  <style>
-    :root {
-      --bg-body: #f1f5f9;
-      --bg-surface: #ffffff;
-      --bg-subtle: #e2e8f0;
-      --accent: #2563eb;
-      --accent-soft: rgba(37, 99, 235, 0.1);
-      --accent-strong: #1d4ed8;
-      --text-main: #0f172a;
-      --text-muted: #64748b;
-      --text-light: #94a3b8;
-      --border-subtle: #d4d4d8;
-      --border-medium: #cbd5e1;
-      --success: #16a34a;
-      --success-soft: #dcfce7;
-      --error: #dc2626;
-      --error-soft: #fee2e2;
-      --badge-online-bg: #dcfce7;
-      --badge-online-color: #16a34a;
-      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
-      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
-      --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      --radius-sm: 6px;
-      --radius-md: 8px;
-      --radius-lg: 12px;
-    }
-
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-    html, body {
-      height: 100%;
-      overflow: hidden;
-      font-family: var(--font-sans);
-      font-size: 16px;
-      background: var(--bg-body);
-      color: var(--text-main);
-      line-height: 1.55;
-      -webkit-font-smoothing: antialiased;
-    }
-
-    body { display: flex; flex-direction: column; }
-
-    .app-header {
-      flex: 0 0 auto;
-      height: 54px;
-      background: var(--bg-surface);
-      border-bottom: 1px solid var(--border-subtle);
-      display: flex;
-      align-items: center;
-      padding: 0 24px;
-      box-shadow: var(--shadow-sm);
-    }
-
-    .logo {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 18px;
-      font-weight: 600;
-      color: var(--text-main);
-      text-decoration: none;
-    }
-
-    .logo-icon {
-      width: 30px;
-      height: 30px;
-      background: var(--accent);
-      border-radius: var(--radius-sm);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .logo-icon svg { width: 17px; height: 17px; color: white; }
-
-    nav {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      margin-left: 32px;
-    }
-
-    nav a {
-      padding: 8px 14px;
-      font-size: 15px;
-      font-weight: 500;
-      color: var(--text-muted);
-      text-decoration: none;
-      border-radius: var(--radius-sm);
-      transition: all 0.15s ease;
-    }
-
-    nav a:hover { color: var(--text-main); background: var(--bg-subtle); }
-    nav a.active { color: var(--accent); background: var(--accent-soft); }
-
-    .app-main {
-      flex: 1;
-      display: flex;
-      overflow: hidden;
-      padding: 14px 24px;
-      gap: 28px;
-    }
-
-    .page-info {
-      flex: 0 0 280px;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      padding: 12px;
-    }
-
-    .status-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      padding: 5px 12px;
-      background: var(--badge-online-bg);
-      color: var(--badge-online-color);
-      font-size: 12px;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      border-radius: var(--radius-sm);
-      margin-bottom: 10px;
-      width: fit-content;
-    }
-
-    .status-badge::before {
-      content: "";
-      width: 7px;
-      height: 7px;
-      background: currentColor;
-      border-radius: 50%;
-    }
-
-    .page-title {
-      font-size: 27px;
-      font-weight: 700;
-      color: var(--text-main);
-      margin-bottom: 8px;
-      line-height: 1.2;
-    }
-
-    .page-description {
-      font-size: 15px;
-      color: var(--text-muted);
-      line-height: 1.55;
-    }
-
-    .page-content {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      max-width: 540px;
-    }
-
-    .form-card {
-      width: 100%;
-      background: var(--bg-surface);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-lg);
-      overflow: hidden;
-    }
-
-    .tabs {
-      display: flex;
-      border-bottom: 1px solid var(--border-subtle);
-    }
-
-    .tab-btn {
-      flex: 1;
-      padding: 12px;
-      font-size: 15px;
-      font-weight: 500;
-      font-family: var(--font-sans);
-      color: var(--text-muted);
-      background: transparent;
-      border: none;
-      border-bottom: 2px solid transparent;
-      cursor: pointer;
-      transition: all 0.15s ease;
-    }
-
-    .tab-btn:hover { color: var(--text-main); background: var(--bg-subtle); }
-    .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); background: var(--accent-soft); }
-
-    .form-body { padding: 18px 20px; }
-
-    .form-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-
-    .form-group {
-      display: flex;
-      flex-direction: column;
-      gap: 5px;
-    }
-
-    .form-group.full-width { grid-column: span 2; }
-
-    label {
-      font-size: 15px;
-      font-weight: 500;
-      color: var(--text-main);
-    }
-
-    .label-hint {
-      font-weight: 400;
-      color: var(--text-light);
-    }
-
-    input[type="text"],
-    input[type="email"] {
-      height: 44px;
-      padding: 0 14px;
-      font-size: 16px;
-      font-family: var(--font-sans);
-      color: var(--text-main);
-      background: var(--bg-surface);
-      border: 1px solid var(--border-medium);
-      border-radius: var(--radius-md);
-      transition: all 0.15s ease;
-    }
-
-    textarea {
-      padding: 10px 14px;
-      font-size: 16px;
-      font-family: var(--font-sans);
-      color: var(--text-main);
-      background: var(--bg-surface);
-      border: 1px solid var(--border-medium);
-      border-radius: var(--radius-md);
-      resize: none;
-      transition: all 0.15s ease;
-    }
-
-    input::placeholder, textarea::placeholder { color: var(--text-light); }
-    input:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-
-    .upload-zone {
-      position: relative;
-      border: 2px dashed var(--border-medium);
-      border-radius: var(--radius-md);
-      padding: 18px;
-      text-align: center;
-      transition: all 0.15s ease;
-      cursor: pointer;
-    }
-
-    .upload-zone:hover { border-color: var(--accent); background: var(--accent-soft); }
-    .upload-zone.active { border-color: var(--accent); background: var(--accent-soft); }
-    .upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-    .upload-zone svg { width: 28px; height: 28px; color: var(--text-light); margin-bottom: 6px; }
-    .upload-zone p { font-size: 15px; color: var(--text-muted); }
-    .upload-zone .highlight { color: var(--accent); font-weight: 500; }
-    .upload-zone .file-name { display: none; margin-top: 6px; font-size: 14px; font-weight: 500; color: var(--accent); }
-    .upload-zone .file-name.show { display: block; }
-
-    .radio-group {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-
-    .radio-option {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 10px 12px;
-      border: 1px solid var(--border-medium);
-      border-radius: var(--radius-md);
-      cursor: pointer;
-      transition: all 0.15s ease;
-    }
-
-    .radio-option:hover { border-color: var(--accent); }
-    .radio-option.selected { border-color: var(--accent); background: var(--accent-soft); }
-    .radio-option input { width: 16px; height: 16px; accent-color: var(--accent); }
-    .radio-option span { font-size: 15px; font-weight: 500; color: var(--text-main); }
-
-    .submit-btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      width: 100%;
-      height: 48px;
-      margin-top: 14px;
-      font-size: 15px;
-      font-weight: 600;
-      font-family: var(--font-sans);
-      color: white;
-      background: var(--accent);
-      border: none;
-      border-radius: var(--radius-md);
-      cursor: pointer;
-      transition: all 0.15s ease;
-    }
-
-    .submit-btn:hover { background: var(--accent-strong); }
-    .submit-btn:disabled { opacity: 0.6; cursor: not-allowed; }
-    .submit-btn svg { width: 18px; height: 18px; }
-
-    .message {
-      display: none;
-      align-items: center;
-      gap: 10px;
-      margin-top: 12px;
-      padding: 12px 14px;
-      font-size: 14px;
-      font-weight: 500;
-      border-radius: var(--radius-md);
-    }
-
-    .message.show { display: flex; }
-    .message svg { width: 18px; height: 18px; flex-shrink: 0; }
-    .message.success { background: var(--success-soft); color: var(--success); }
-    .message.error { background: var(--error-soft); color: var(--error); }
-
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
-
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .spinner { animation: spin 1s linear infinite; }
-  </style>
 </head>
 <body>
   <header class="app-header">
@@ -358,13 +30,11 @@
     <section class="page-info">
       <span class="status-badge">Online</span>
       <h1 class="page-title">Speeda Validation</h1>
-      <p class="page-description">
-        Validate your company list against Speeda. Results in ~10 minutes.
-      </p>
+      <p class="page-description">Validate your company list against Speeda. Results in ~10 minutes.</p>
     </section>
 
     <section class="page-content">
-      <div class="form-card">
+      <div class="form-card" style="padding: 0; overflow: hidden;">
         <div class="tabs">
           <button class="tab-btn active" data-tab="upload">Upload Excel</button>
           <button class="tab-btn" data-tab="manual">Manual Entry</button>
@@ -387,13 +57,13 @@
               <label for="companies">Companies <span class="label-hint">(one per line)</span></label>
               <textarea id="companies" name="Companies" rows="3" placeholder="Company A&#10;Company B&#10;Company C"></textarea>
             </div>
-            <div class="form-group" style="margin-top: 10px;">
+            <div class="form-group" style="margin-top: 8px;">
               <label for="countries">Countries</label>
               <input type="text" id="countries" name="Countries" placeholder="e.g. Malaysia, Thailand, Singapore">
             </div>
           </div>
 
-          <div class="form-grid" style="margin-top: 12px;">
+          <div class="form-grid" style="margin-top: 10px;">
             <div class="form-group">
               <label for="targetBusiness">Target Business</label>
               <input type="text" id="targetBusiness" name="TargetBusiness" required placeholder="e.g. Semiconductor">
@@ -404,14 +74,14 @@
             </div>
           </div>
 
-          <div class="form-group" style="margin-top: 12px;">
+          <div class="form-group" style="margin-top: 10px;">
             <label>Output Option</label>
-            <div class="radio-group">
-              <label class="radio-option selected">
+            <div class="radio-group horizontal">
+              <label class="radio-option simple selected">
                 <input type="radio" name="OutputOption" value="in_scope_only" checked>
                 <span>In-scope only</span>
               </label>
-              <label class="radio-option">
+              <label class="radio-option simple">
                 <input type="radio" name="OutputOption" value="all_companies">
                 <span>All with status</span>
               </label>
