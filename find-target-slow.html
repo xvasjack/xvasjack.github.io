@@ -3,440 +3,172 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Find Target - Company Search v3 Slow</title>
+  <title>Find Target - v3 Slow</title>
+  <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+        },
+      },
+    }
+  </script>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    html {
-      font-size: 16px;
-    }
-
-    body {
-      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-
-    /* Top Navigation Bar */
-    .top-nav {
-      background: #fff;
-      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-      padding: 0 1.5rem;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-
-    .nav-container {
-      max-width: 1200px;
-      margin: 0 auto;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      height: 64px;
-    }
-
-    .nav-brand {
-      font-size: 1.125rem;
-      font-weight: 700;
-      color: #1f2937;
-      text-decoration: none;
-    }
-
-    .nav-links {
-      display: flex;
-      gap: 0.5rem;
-      list-style: none;
-    }
-
-    .nav-link {
-      display: block;
-      padding: 0.5rem 1rem;
-      font-size: 0.875rem;
-      font-weight: 500;
-      color: #6b7280;
-      text-decoration: none;
-      border-radius: 6px;
-      transition: all 0.2s ease;
-    }
-
-    .nav-link:hover {
-      color: #2563eb;
-      background: #eff6ff;
-    }
-
-    .nav-link.active {
-      color: #2563eb;
-      background: #eff6ff;
-    }
-
-    /* Mobile menu */
-    .mobile-menu-btn {
-      display: none;
-      background: none;
-      border: none;
-      padding: 0.5rem;
-      cursor: pointer;
-      color: #374151;
-    }
-
-    .mobile-menu {
-      display: none;
-      position: absolute;
-      top: 64px;
-      left: 0;
-      right: 0;
-      background: #fff;
-      border-top: 1px solid #e5e7eb;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-      padding: 0.5rem;
-    }
-
-    .mobile-menu.active {
-      display: block;
-    }
-
-    .mobile-menu .nav-link {
-      display: block;
-      padding: 0.75rem 1rem;
-      border-radius: 6px;
-    }
-
-    /* Main Container */
-    .main-container {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 2rem 1rem;
-    }
-
-    /* Card */
-    .card {
-      background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-      width: 100%;
-      max-width: 500px;
-      padding: 2.5rem 2rem;
-    }
-
-    /* Form Header */
-    .form-header {
-      text-align: center;
-      margin-bottom: 2rem;
-    }
-
-    .eyebrow {
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: #6b7280;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      margin-bottom: 0.5rem;
-    }
-
-    .page-title {
-      font-size: 1.75rem;
-      font-weight: 700;
-      color: #111827;
-      margin-bottom: 0.75rem;
-    }
-
-    .form-description {
-      font-size: 0.9375rem;
-      color: #6b7280;
-      line-height: 1.6;
-    }
-
-    /* Form Styles */
-    .form-group {
-      margin-bottom: 1.25rem;
-    }
-
-    .form-label {
-      display: block;
-      font-size: 0.875rem;
-      color: #374151;
-      margin-bottom: 0.375rem;
-      font-weight: 600;
-    }
-
-    .required {
-      color: #ef4444;
-    }
-
-    .form-input {
-      width: 100%;
-      padding: 0.75rem;
-      font-size: 1rem;
-      font-family: inherit;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      background-color: #fff;
-      transition: all 0.2s ease;
-    }
-
-    .form-input:focus {
-      outline: none;
-      border-color: #2563eb;
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
-    }
-
-    .form-input::placeholder {
-      color: #9ca3af;
-    }
-
-    /* Submit Button */
-    .submit-btn {
-      width: 100%;
-      padding: 0.75rem 1.5rem;
-      font-size: 1rem;
-      font-weight: 600;
-      font-family: inherit;
-      color: #fff;
-      background: #2563eb;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      margin-top: 0.5rem;
-    }
-
-    .submit-btn:hover {
-      background: #1d4ed8;
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-    }
-
-    .submit-btn:active {
-      transform: translateY(0);
-    }
-
-    .submit-btn:disabled {
-      background: #9ca3af;
-      cursor: not-allowed;
-      transform: none;
-      box-shadow: none;
-    }
-
-    /* Messages */
-    .message {
-      display: none;
-      padding: 1rem;
-      border-radius: 8px;
-      font-size: 0.875rem;
-      text-align: center;
-      margin-top: 1.25rem;
-      font-weight: 500;
-    }
-
-    .success-message {
-      background-color: #ecfdf5;
-      border: 1px solid #a7f3d0;
-      color: #065f46;
-    }
-
-    .error-message {
-      background-color: #fef2f2;
-      border: 1px solid #fecaca;
-      color: #991b1b;
-    }
-
-    /* Version Link */
-    .version-link {
-      display: block;
-      text-align: center;
-      margin-top: 1.5rem;
-      padding-top: 1.5rem;
-      border-top: 1px solid #e5e7eb;
-      font-size: 0.875rem;
-      color: #6b7280;
-    }
-
-    .version-link a {
-      color: #2563eb;
-      text-decoration: none;
-      font-weight: 500;
-    }
-
-    .version-link a:hover {
-      text-decoration: underline;
-    }
-
-    /* Footer */
-    .footer {
-      text-align: center;
-      padding: 1.5rem;
-      font-size: 0.75rem;
-      color: #9ca3af;
-    }
-
-    /* Responsive */
-    @media screen and (max-width: 640px) {
-      .nav-links {
-        display: none;
-      }
-
-      .mobile-menu-btn {
-        display: block;
-      }
-
-      .card {
-        padding: 2rem 1.5rem;
-      }
-
-      .page-title {
-        font-size: 1.5rem;
-      }
-    }
+    body { font-family: 'Inter', system-ui, sans-serif; }
   </style>
 </head>
-<body>
-  <!-- Top Navigation -->
-  <nav class="top-nav">
-    <div class="nav-container">
-      <a href="find-target.html" class="nav-brand">Find Target</a>
-      <ul class="nav-links">
-        <li><a href="find-target.html" class="nav-link">v3 Fast</a></li>
-        <li><a href="find-target-slow.html" class="nav-link active">v3 Slow</a></li>
-        <li><a href="validation.html" class="nav-link">Validation</a></li>
-        <li><a href="trading-comparable.html" class="nav-link">Trading Comparable</a></li>
-        <li><a href="profile-slides.html" class="nav-link">Profile Slides</a></li>
+<body class="bg-gray-50 h-screen overflow-hidden">
+  <!-- Mobile Header -->
+  <header class="lg:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between fixed top-0 left-0 right-0 z-50">
+    <span class="font-bold text-gray-900">Find Target</span>
+    <button id="mobileMenuBtn" class="p-2 rounded-lg hover:bg-gray-100 transition-colors">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+      </svg>
+    </button>
+  </header>
+
+  <!-- Mobile Menu Overlay -->
+  <div id="mobileOverlay" class="fixed inset-0 bg-black/50 z-40 lg:hidden hidden"></div>
+
+  <!-- Sidebar -->
+  <aside id="sidebar" class="fixed top-0 left-0 h-full w-64 bg-white border-r border-gray-200 z-50 transform -translate-x-full lg:translate-x-0 transition-transform duration-300">
+    <div class="p-6 border-b border-gray-200">
+      <a href="find-target.html" class="font-bold text-xl text-gray-900">Find Target</a>
+    </div>
+    <nav class="p-4">
+      <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3 px-3">Products</p>
+      <ul class="space-y-1">
+        <li>
+          <a href="find-target.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            v3 Fast
+          </a>
+        </li>
+        <li>
+          <a href="find-target-slow.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg bg-blue-50 text-blue-700 font-medium">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            v3 Slow
+          </a>
+        </li>
+        <li>
+          <a href="validation.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            Validation
+          </a>
+        </li>
+        <li>
+          <a href="trading-comparable.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            Trading Comparable
+          </a>
+        </li>
+        <li>
+          <a href="profile-slides.html" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-gray-600 hover:bg-gray-100 hover:text-gray-900 transition-colors">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+            Profile Slides
+          </a>
+        </li>
       </ul>
-      <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="3" y1="12" x2="21" y2="12"></line>
-          <line x1="3" y1="6" x2="21" y2="6"></line>
-          <line x1="3" y1="18" x2="21" y2="18"></line>
-        </svg>
-      </button>
-    </div>
-    <div class="mobile-menu" id="mobileMenu">
-      <a href="find-target.html" class="nav-link">v3 Fast</a>
-      <a href="find-target-slow.html" class="nav-link active">v3 Slow</a>
-      <a href="validation.html" class="nav-link">Validation</a>
-      <a href="trading-comparable.html" class="nav-link">Trading Comparable</a>
-      <a href="profile-slides.html" class="nav-link">Profile Slides</a>
-    </div>
-  </nav>
+    </nav>
+  </aside>
 
-  <main class="main-container">
-    <div class="card">
-      <div class="form-header">
-        <p class="eyebrow">Company Search</p>
-        <h1 class="page-title">v3 Slow</h1>
-        <p class="form-description">
-          Fill in the form below and submit.<br>
-          Results will be emailed to you within <strong>15-45 minutes</strong>.
-        </p>
+  <!-- Main Content -->
+  <main class="lg:ml-64 h-screen pt-14 lg:pt-0">
+    <div class="h-full flex items-center justify-center p-4">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 w-full max-w-md">
+        <div class="p-6">
+          <!-- Header -->
+          <div class="text-center mb-6">
+            <p class="text-xs font-semibold text-blue-600 uppercase tracking-wider mb-1">Company Search</p>
+            <h1 class="text-2xl font-bold text-gray-900 mb-1">v3 Slow</h1>
+            <p class="text-sm text-gray-500">Results emailed within <strong class="text-gray-700">15-45 minutes</strong></p>
+          </div>
+
+          <iframe name="hiddenFrame" style="display:none;"></iframe>
+          <form id="findTargetForm" method="POST" action="https://xvasjack.app.n8n.cloud/webhook/find-target-slow" target="hiddenFrame" class="space-y-4">
+            <div>
+              <label for="business" class="block text-sm font-medium text-gray-700 mb-1">
+                Business <span class="text-red-500">*</span>
+              </label>
+              <input type="text" id="business" name="Business" required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                placeholder="e.g. Semiconductor distributor">
+            </div>
+
+            <div>
+              <label for="country" class="block text-sm font-medium text-gray-700 mb-1">
+                Country <span class="text-red-500">*</span>
+              </label>
+              <input type="text" id="country" name="Country" required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                placeholder="e.g. Malaysia, Thailand, Singapore">
+            </div>
+
+            <div>
+              <label for="exclusion" class="block text-sm font-medium text-gray-700 mb-1">
+                Exclusion <span class="text-red-500">*</span>
+              </label>
+              <input type="text" id="exclusion" name="Exclusion" required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                placeholder="e.g. Manufacturer, MNC, listed companies">
+            </div>
+
+            <div>
+              <label for="email" class="block text-sm font-medium text-gray-700 mb-1">
+                Email <span class="text-red-500">*</span>
+              </label>
+              <input type="email" id="email" name="Email" required
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
+                placeholder="e.g. yourname@company.com">
+            </div>
+
+            <button type="submit" id="submitBtn"
+              class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm transition-all">
+              Submit Request
+            </button>
+
+            <div id="successMessage" class="hidden p-3 bg-green-50 border border-green-200 rounded-lg text-center">
+              <p class="text-green-800 text-sm font-medium">Request submitted! Results will be emailed within 15-45 minutes.</p>
+            </div>
+
+            <div id="errorMessage" class="hidden p-3 bg-red-50 border border-red-200 rounded-lg text-center">
+              <p class="text-red-800 text-sm font-medium">Error submitting request. Please try again.</p>
+            </div>
+
+            <p class="text-center text-xs text-gray-400 pt-2 border-t border-gray-100">
+              Need faster results? Try <a href="find-target.html" class="text-blue-600 hover:underline">v3 Fast</a>
+            </p>
+          </form>
+        </div>
       </div>
-
-      <iframe name="hiddenFrame" style="display:none;"></iframe>
-      <form id="findTargetForm" method="POST" action="https://xvasjack.app.n8n.cloud/webhook/find-target-slow" target="hiddenFrame">
-        <div class="form-group">
-          <label class="form-label" for="business">
-            Business <span class="required">*</span>
-          </label>
-          <input
-            type="text"
-            id="business"
-            name="Business"
-            class="form-input"
-            placeholder="e.g. Semiconductor distributor"
-            required
-          >
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="country">
-            Country <span class="required">*</span>
-          </label>
-          <input
-            type="text"
-            id="country"
-            name="Country"
-            class="form-input"
-            placeholder="e.g. Malaysia, Thailand, Singapore"
-            required
-          >
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="exclusion">
-            Exclusion <span class="required">*</span>
-          </label>
-          <input
-            type="text"
-            id="exclusion"
-            name="Exclusion"
-            class="form-input"
-            placeholder="e.g. Manufacturer, MNC, listed companies"
-            required
-          >
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="email">
-            Email <span class="required">*</span>
-          </label>
-          <input
-            type="email"
-            id="email"
-            name="Email"
-            class="form-input"
-            placeholder="e.g. yourname@company.com"
-            required
-          >
-        </div>
-
-        <button type="submit" class="submit-btn" id="submitBtn">
-          Submit Request
-        </button>
-
-        <div class="message success-message" id="successMessage">
-          Request submitted successfully! Results will be emailed to you within 15-45 minutes.
-        </div>
-
-        <div class="message error-message" id="errorMessage">
-          Error submitting request. Please try again.
-        </div>
-
-        <div class="version-link">
-          Need faster results? Try <a href="find-target.html">v3 Fast</a>
-        </div>
-      </form>
     </div>
   </main>
 
-  <footer class="footer">
-    Powered by AI
-  </footer>
-
   <script>
-    // Mobile menu toggle
     const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-    const mobileMenu = document.getElementById('mobileMenu');
+    const mobileOverlay = document.getElementById('mobileOverlay');
+    const sidebar = document.getElementById('sidebar');
 
-    mobileMenuBtn.addEventListener('click', () => {
-      mobileMenu.classList.toggle('active');
-    });
+    function openMobileMenu() {
+      sidebar.classList.remove('-translate-x-full');
+      mobileOverlay.classList.remove('hidden');
+      document.body.style.overflow = 'hidden';
+    }
 
-    // Close mobile menu when clicking outside
-    document.addEventListener('click', (e) => {
-      if (!mobileMenuBtn.contains(e.target) && !mobileMenu.contains(e.target)) {
-        mobileMenu.classList.remove('active');
-      }
-    });
+    function closeMobileMenu() {
+      sidebar.classList.add('-translate-x-full');
+      mobileOverlay.classList.add('hidden');
+      document.body.style.overflow = '';
+    }
 
-    // Form submission - submit to hidden iframe, show success message
+    mobileMenuBtn.addEventListener('click', openMobileMenu);
+    mobileOverlay.addEventListener('click', closeMobileMenu);
+
     document.getElementById('findTargetForm').addEventListener('submit', function() {
       const submitBtn = document.getElementById('submitBtn');
       const successMessage = document.getElementById('successMessage');
@@ -444,9 +176,8 @@
       submitBtn.disabled = true;
       submitBtn.textContent = 'Submitting...';
 
-      // Show success message after brief delay (form submits to hidden iframe)
       setTimeout(() => {
-        successMessage.style.display = 'block';
+        successMessage.classList.remove('hidden');
         submitBtn.textContent = 'Submitted!';
         this.reset();
       }, 1000);
