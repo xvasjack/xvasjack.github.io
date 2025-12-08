@@ -173,6 +173,11 @@ nav a.active {
   display: none;
 }
 
+.status-badge.offline {
+  background: var(--error-soft);
+  color: var(--error);
+}
+
 /* Typography */
 .page-title {
   font-size: 28px;
