@@ -1265,65 +1265,275 @@ function parseCountries(text) {
     .filter(line => line.length > 0);
 }
 
-// Find company website using AI search
-async function findCompanyWebsite(companyName, countries) {
-  const countryList = countries.join(', ');
+// Check if URL is a valid company website (not social media, maps, directories)
+function isValidCompanyWebsite(url) {
+  if (!url) return false;
+  const urlLower = url.toLowerCase();
+
+  const invalidPatterns = [
+    'google.com/maps',
+    'google.com/search',
+    'maps.google',
+    'facebook.com',
+    'linkedin.com',
+    'twitter.com',
+    'instagram.com',
+    'youtube.com',
+    'wikipedia.org',
+    'bloomberg.com',
+    'reuters.com',
+    'alibaba.com',
+    'made-in-china.com',
+    'globalsources.com',
+    'indiamart.com',
+    'yellowpages',
+    'yelp.com',
+    'trustpilot.com',
+    'glassdoor.com',
+    'crunchbase.com',
+    'zoominfo.com',
+    'dnb.com',
+    'opencorporates.com'
+  ];
+
+  for (const pattern of invalidPatterns) {
+    if (urlLower.includes(pattern)) return false;
+  }
+
+  // Must start with http
+  if (!url.startsWith('http')) return false;
+
+  return true;
+}
+
+// Extract clean URL from text
+function extractCleanURL(text) {
+  if (!text) return null;
+
+  // Find URLs in text
+  const urlMatches = text.match(/https?:\/\/[^\s"'<>\])+,]+/gi);
+  if (!urlMatches) return null;
+
+  // Find the first valid company website
+  for (const url of urlMatches) {
+    const cleanUrl = url.replace(/[.,;:!?)]+$/, ''); // Clean trailing punctuation
+    if (isValidCompanyWebsite(cleanUrl)) {
+      return cleanUrl;
+    }
+  }
+
+  return null;
+}
+
+// Method 1: Use SerpAPI (Google Search) - Most reliable
+async function findWebsiteViaSerpAPI(companyName, countries) {
+  if (!process.env.SERPAPI_API_KEY) return null;
+
+  const countryStr = countries.slice(0, 2).join(' ');
+  const query = `"${companyName}" ${countryStr} official website`;
 
   try {
-    // Try OpenAI Search first (has real-time web access)
-    const searchResult = await callOpenAISearch(
-      `Find the official website for "${companyName}" company in ${countryList}. Return ONLY the website URL starting with http. If not found, return "NOT_FOUND".`
-    );
+    const params = new URLSearchParams({
+      q: query,
+      api_key: process.env.SERPAPI_API_KEY,
+      engine: 'google',
+      num: 10
+    });
 
-    // Extract URL from response
-    const urlMatch = searchResult.match(/https?:\/\/[^\s"'<>]+/i);
-    if (urlMatch) {
-      return urlMatch[0].replace(/[.,;:!?)]+$/, ''); // Clean trailing punctuation
-    }
+    const response = await fetch(`https://serpapi.com/search?${params}`, { timeout: 15000 });
+    const data = await response.json();
 
-    // Fallback to Perplexity
-    const perpResult = await callPerplexity(
-      `What is the official website URL for "${companyName}" company located in ${countryList}? Return only the URL.`
-    );
+    if (data.organic_results) {
+      for (const result of data.organic_results) {
+        if (result.link && isValidCompanyWebsite(result.link)) {
+          // Check if the result title/snippet mentions the company
+          const titleLower = (result.title || '').toLowerCase();
+          const snippetLower = (result.snippet || '').toLowerCase();
+          const companyLower = companyName.toLowerCase();
+          const companyWords = companyLower.split(/\s+/).filter(w => w.length > 2);
 
-    const perpUrlMatch = perpResult.match(/https?:\/\/[^\s"'<>]+/i);
-    if (perpUrlMatch) {
-      return perpUrlMatch[0].replace(/[.,;:!?)]+$/, '');
+          // Check if at least some company words appear in title or snippet
+          const matchCount = companyWords.filter(w =>
+            titleLower.includes(w) || snippetLower.includes(w)
+          ).length;
+
+          if (matchCount >= Math.min(2, companyWords.length)) {
+            return result.link;
+          }
+        }
+      }
+
+      // Fallback: return first valid website from results
+      for (const result of data.organic_results) {
+        if (result.link && isValidCompanyWebsite(result.link)) {
+          return result.link;
+        }
+      }
     }
 
     return null;
   } catch (e) {
-    console.error(`Error finding website for ${companyName}:`, e.message);
+    console.error(`SerpAPI error for ${companyName}:`, e.message);
     return null;
   }
 }
 
-// Validate if company matches target business
+// Method 2: Use Perplexity
+async function findWebsiteViaPerplexity(companyName, countries) {
+  const countryStr = countries.join(', ');
+
+  try {
+    const result = await callPerplexity(
+      `What is the official company website URL for "${companyName}" located in ${countryStr}?
+       Return ONLY the direct website URL (like https://www.company.com).
+       Do NOT return Google Maps, LinkedIn, Facebook, or any directory links.
+       If you cannot find the official website, respond with "NOT_FOUND".`
+    );
+
+    return extractCleanURL(result);
+  } catch (e) {
+    console.error(`Perplexity error for ${companyName}:`, e.message);
+    return null;
+  }
+}
+
+// Method 3: Use OpenAI Search
+async function findWebsiteViaOpenAISearch(companyName, countries) {
+  const countryStr = countries.join(', ');
+
+  try {
+    const result = await callOpenAISearch(
+      `Find the official company website for "${companyName}" in ${countryStr}.
+       Return ONLY the direct URL to their official website (e.g., https://www.companyname.com).
+       Do NOT return Google Maps links, LinkedIn, Facebook, or directory websites.
+       If the official website cannot be found, say "NOT_FOUND".`
+    );
+
+    return extractCleanURL(result);
+  } catch (e) {
+    console.error(`OpenAI Search error for ${companyName}:`, e.message);
+    return null;
+  }
+}
+
+// Method 4: Use Gemini
+async function findWebsiteViaGemini(companyName, countries) {
+  const countryStr = countries.join(', ');
+
+  try {
+    const result = await callGemini(
+      `What is the official website URL for the company "${companyName}" based in ${countryStr}?
+       Return only the URL starting with https:// or http://
+       Do not return Google Maps, social media, or directory links.
+       If unknown, respond with NOT_FOUND.`
+    );
+
+    return extractCleanURL(result);
+  } catch (e) {
+    console.error(`Gemini error for ${companyName}:`, e.message);
+    return null;
+  }
+}
+
+// Combined website finder - tries multiple methods for accuracy
+async function findCompanyWebsite(companyName, countries) {
+  console.log(`  Finding website for: ${companyName}`);
+
+  // Try all methods in parallel for speed, then validate
+  const [serpResult, perpResult, openaiResult, geminiResult] = await Promise.all([
+    findWebsiteViaSerpAPI(companyName, countries),
+    findWebsiteViaPerplexity(companyName, countries),
+    findWebsiteViaOpenAISearch(companyName, countries),
+    findWebsiteViaGemini(companyName, countries)
+  ]);
+
+  console.log(`    SerpAPI: ${serpResult || 'not found'}`);
+  console.log(`    Perplexity: ${perpResult || 'not found'}`);
+  console.log(`    OpenAI Search: ${openaiResult || 'not found'}`);
+  console.log(`    Gemini: ${geminiResult || 'not found'}`);
+
+  // Collect all valid results
+  const candidates = [serpResult, perpResult, openaiResult, geminiResult].filter(url => url);
+
+  if (candidates.length === 0) {
+    console.log(`    No website found for ${companyName}`);
+    return null;
+  }
+
+  // If multiple methods agree on the same domain, that's most reliable
+  const domainCounts = {};
+  for (const url of candidates) {
+    try {
+      const domain = new URL(url).hostname.replace(/^www\./, '');
+      domainCounts[domain] = (domainCounts[domain] || 0) + 1;
+    } catch (e) {}
+  }
+
+  // Find most agreed-upon domain
+  let bestDomain = null;
+  let bestCount = 0;
+  for (const [domain, count] of Object.entries(domainCounts)) {
+    if (count > bestCount) {
+      bestCount = count;
+      bestDomain = domain;
+    }
+  }
+
+  // Return the URL for the best domain
+  if (bestDomain) {
+    for (const url of candidates) {
+      try {
+        const domain = new URL(url).hostname.replace(/^www\./, '');
+        if (domain === bestDomain) {
+          console.log(`    Selected: ${url} (${bestCount} sources agree)`);
+          return url;
+        }
+      } catch (e) {}
+    }
+  }
+
+  // Fallback: prefer SerpAPI result (most reliable), then others
+  const finalResult = serpResult || perpResult || openaiResult || geminiResult;
+  console.log(`    Selected: ${finalResult}`);
+  return finalResult;
+}
+
+// Validate if company matches target business - STRICTLY based on website content
 async function validateCompanyBusiness(company, targetBusiness, pageText) {
+  if (!pageText || pageText.length < 100) {
+    return {
+      in_scope: false,
+      reason: 'Could not fetch sufficient website content',
+      business_description: 'Unable to determine - website inaccessible or insufficient content'
+    };
+  }
+
   try {
     const validation = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
-          content: `You are a company validator. Determine if the company matches the target business criteria.
+          content: `You are a company validator. Determine if the company matches the target business criteria STRICTLY based on the website content provided.
 
 TARGET BUSINESS: "${targetBusiness}"
 
 RULES:
-- Be LENIENT - accept companies that are related to the target business
-- Accept if they manufacture, distribute, or provide services related to "${targetBusiness}"
-- Only reject if completely unrelated
+1. Your determination must be based ONLY on what the website content says
+2. If the website clearly shows the company is in the target business → IN SCOPE
+3. If the website shows a different business → OUT OF SCOPE
+4. If the website content is unclear or doesn't describe business activities → OUT OF SCOPE with reason "Insufficient website content"
+5. Be accurate - do not guess or assume
 
-OUTPUT: Return JSON: {"in_scope": true/false, "reason": "brief explanation", "business_description": "what this company actually does"}`
+OUTPUT: Return JSON: {"in_scope": true/false, "reason": "brief explanation based on website content", "business_description": "what this company actually does based on website"}`
         },
         {
           role: 'user',
           content: `COMPANY: ${company.company_name}
 WEBSITE: ${company.website}
 
-PAGE CONTENT:
-${pageText ? pageText.substring(0, 8000) : 'Could not fetch website content'}`
+WEBSITE CONTENT:
+${pageText.substring(0, 10000)}`
         }
       ],
       response_format: { type: 'json_object' }
@@ -1332,7 +1542,7 @@ ${pageText ? pageText.substring(0, 8000) : 'Could not fetch website content'}`
     return JSON.parse(validation.choices[0].message.content);
   } catch (e) {
     console.error(`Error validating ${company.company_name}:`, e.message);
-    return { in_scope: false, reason: 'Validation error', business_description: 'Unknown' };
+    return { in_scope: false, reason: 'Validation error', business_description: 'Error during validation' };
   }
 }
 
@@ -1352,7 +1562,6 @@ function buildValidationEmailHTML(companies, targetBusiness, countries, outputOp
   `;
 
   if (outputOption === 'all_companies') {
-    // Show all companies with status
     html += `
     <h3>All Companies</h3>
     <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
@@ -1374,7 +1583,6 @@ function buildValidationEmailHTML(companies, targetBusiness, countries, outputOp
     });
     html += '</tbody></table>';
   } else {
-    // Show only in-scope companies
     html += `
     <h3>In-Scope Companies</h3>
     <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
@@ -1424,7 +1632,6 @@ app.post('/api/validation', async (req, res) => {
   try {
     const totalStart = Date.now();
 
-    // Parse inputs
     const companyList = parseCompanyList(Companies);
     const countryList = parseCountries(Countries);
     const outputOption = OutputOption || 'in_scope_only';
@@ -1436,35 +1643,42 @@ app.post('/api/validation', async (req, res) => {
       return;
     }
 
-    // Process companies in batches
-    const batchSize = 5;
+    // Process companies in smaller batches for accuracy
+    const batchSize = 3;
     const results = [];
 
     for (let i = 0; i < companyList.length; i += batchSize) {
       const batch = companyList.slice(i, i + batchSize);
-      console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(companyList.length / batchSize)}`);
+      console.log(`\nProcessing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(companyList.length / batchSize)}`);
 
       const batchResults = await Promise.all(batch.map(async (companyName) => {
-        // Find website
+        // Step 1: Find website using multiple methods
         const website = await findCompanyWebsite(companyName, countryList);
 
         if (!website) {
-          console.log(`  ${companyName}: Website not found`);
           return {
             company_name: companyName,
             website: null,
             in_scope: false,
-            reason: 'Website not found',
-            business_description: 'Could not verify'
+            reason: 'Official website not found',
+            business_description: 'Could not locate official company website'
           };
         }
 
-        console.log(`  ${companyName}: Found ${website}`);
-
-        // Fetch website content
+        // Step 2: Fetch website content
         const pageText = await fetchWebsite(website);
 
-        // Validate against target business
+        if (!pageText || pageText.length < 100) {
+          return {
+            company_name: companyName,
+            website,
+            in_scope: false,
+            reason: 'Website inaccessible or no content',
+            business_description: 'Could not fetch website content for validation'
+          };
+        }
+
+        // Step 3: Validate against target business based on website content
         const validation = await validateCompanyBusiness(
           { company_name: companyName, website },
           TargetBusiness,
@@ -1481,7 +1695,7 @@ app.post('/api/validation', async (req, res) => {
       }));
 
       results.push(...batchResults);
-      console.log(`  Completed: ${results.length}/${companyList.length}`);
+      console.log(`Completed: ${results.length}/${companyList.length}`);
     }
 
     // Build and send email
@@ -1512,7 +1726,7 @@ app.post('/api/validation', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v27 - Added Speeda List Validation' });
+  res.json({ status: 'ok', service: 'Find Target v28 - Improved Speeda List Validation' });
 });
 
 const PORT = process.env.PORT || 3000;
