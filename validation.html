@@ -6,6 +6,8 @@
   <title>Speeda List Validation</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- SheetJS for Excel parsing -->
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   <script>
     tailwind.config = {
       theme: {
@@ -126,7 +128,7 @@
                     <p id="fileName" class="text-sm text-green-600 font-medium mt-2 hidden"></p>
                   </div>
                 </div>
-                <p class="text-xs text-gray-500 mt-2">Excel should contain company names and countries columns.</p>
+                <p class="text-xs text-gray-500 mt-2">Excel will be parsed automatically to extract company names and countries.</p>
               </div>
             </div>
 
@@ -196,7 +198,7 @@ Singapore"
                 Output Option <span class="text-red-500">*</span>
               </label>
               <div class="space-y-3">
-                <label class="radio-option flex items-start gap-3 p-4 border border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-all selected border-blue-500 bg-blue-50/50">
+                <label class="radio-option flex items-start gap-3 p-4 border border-blue-500 bg-blue-50/50 rounded-lg cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-all selected">
                   <input type="radio" name="OutputOption" value="in_scope_only" checked class="mt-0.5 w-4 h-4 text-blue-600 focus:ring-blue-500">
                   <div>
                     <span class="block text-sm font-medium text-gray-900">In-scope companies only</span>
@@ -307,18 +309,13 @@ Singapore"
     const fileInput = document.getElementById('excelFile');
     const uploadZone = document.getElementById('uploadZone');
     const fileNameDisplay = document.getElementById('fileName');
+    const companiesTextarea = document.getElementById('companies');
+    const countriesTextarea = document.getElementById('countries');
 
     fileInput.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (file) {
-        fileNameDisplay.textContent = file.name;
-        fileNameDisplay.classList.remove('hidden');
-        uploadZone.classList.add('border-green-400', 'bg-green-50');
-        uploadZone.classList.remove('border-gray-300');
-      } else {
-        fileNameDisplay.classList.add('hidden');
-        uploadZone.classList.remove('border-green-400', 'bg-green-50');
-        uploadZone.classList.add('border-gray-300');
+        processExcelFile(file);
       }
     });
 
@@ -334,6 +331,151 @@ Singapore"
         uploadZone.classList.remove('border-blue-400', 'bg-blue-50');
       }
     });
+
+    uploadZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      uploadZone.classList.remove('border-blue-400', 'bg-blue-50');
+      const file = e.dataTransfer.files[0];
+      if (file) {
+        fileInput.files = e.dataTransfer.files;
+        processExcelFile(file);
+      }
+    });
+
+    // Process Excel file with SheetJS
+    function processExcelFile(file) {
+      if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
+        alert('Please upload an Excel file (.xlsx, .xls) or CSV file');
+        return;
+      }
+
+      fileNameDisplay.textContent = file.name;
+      fileNameDisplay.classList.remove('hidden');
+      uploadZone.classList.add('border-green-400', 'bg-green-50');
+      uploadZone.classList.remove('border-gray-300');
+
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+
+          // Get first sheet
+          const sheetName = workbook.SheetNames[0];
+          const sheet = workbook.Sheets[sheetName];
+
+          // Convert to JSON
+          const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+          // Extract companies and countries
+          const extractedData = extractCompaniesAndCountries(jsonData);
+
+          // Populate textareas and switch to manual tab to show results
+          if (extractedData.companies.length > 0) {
+            companiesTextarea.value = extractedData.companies.join('\n');
+          }
+          if (extractedData.countries.length > 0) {
+            countriesTextarea.value = extractedData.countries.join('\n');
+          }
+
+          // Switch to manual tab to show extracted data
+          switchTab('manual');
+
+          console.log('Extracted:', extractedData);
+        } catch (error) {
+          console.error('Error parsing Excel:', error);
+          alert('Error parsing Excel file. Please check the file format.');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    // Extract companies and countries from Excel data
+    function extractCompaniesAndCountries(data) {
+      const companies = [];
+      const countries = new Set();
+
+      // Known country names for detection
+      const knownCountries = [
+        'malaysia', 'singapore', 'thailand', 'indonesia', 'vietnam', 'philippines',
+        'china', 'japan', 'korea', 'south korea', 'taiwan', 'hong kong', 'india',
+        'australia', 'usa', 'united states', 'uk', 'united kingdom', 'germany',
+        'france', 'italy', 'spain', 'netherlands', 'belgium', 'cambodia', 'myanmar',
+        'laos', 'brunei', 'bangladesh', 'pakistan', 'sri lanka', 'nepal'
+      ];
+
+      // Common column name patterns
+      const companyPatterns = ['company', 'name', 'company name', 'firm', 'organization', 'organisation', 'business'];
+      const countryPatterns = ['country', 'location', 'region', 'nation', 'hq', 'headquarters'];
+
+      let companyColIndex = -1;
+      let countryColIndex = -1;
+      let headerRow = -1;
+
+      // Find header row and column indices
+      for (let i = 0; i < Math.min(5, data.length); i++) {
+        const row = data[i];
+        if (!row) continue;
+
+        for (let j = 0; j < row.length; j++) {
+          const cellValue = String(row[j] || '').toLowerCase().trim();
+
+          if (companyColIndex === -1 && companyPatterns.some(p => cellValue.includes(p))) {
+            companyColIndex = j;
+            headerRow = i;
+          }
+          if (countryColIndex === -1 && countryPatterns.some(p => cellValue.includes(p))) {
+            countryColIndex = j;
+            headerRow = i;
+          }
+        }
+
+        if (companyColIndex !== -1) break;
+      }
+
+      // If no header found, assume first column is companies
+      if (companyColIndex === -1) {
+        companyColIndex = 0;
+        headerRow = -1;
+      }
+
+      // Extract data starting after header row
+      const startRow = headerRow + 1;
+      for (let i = startRow; i < data.length; i++) {
+        const row = data[i];
+        if (!row) continue;
+
+        // Get company name
+        const companyName = String(row[companyColIndex] || '').trim();
+        if (companyName && companyName.length > 1 && companyName.length < 200) {
+          if (!knownCountries.includes(companyName.toLowerCase())) {
+            companies.push(companyName);
+          }
+        }
+
+        // Get country if column exists
+        if (countryColIndex !== -1 && row[countryColIndex]) {
+          const countryValue = String(row[countryColIndex]).trim();
+          if (countryValue && knownCountries.includes(countryValue.toLowerCase())) {
+            countries.add(countryValue);
+          }
+        }
+
+        // Also scan all cells for country names
+        for (let j = 0; j < row.length; j++) {
+          const cellValue = String(row[j] || '').toLowerCase().trim();
+          const matchedCountry = knownCountries.find(c => cellValue === c || cellValue.includes(c));
+          if (matchedCountry) {
+            countries.add(matchedCountry.charAt(0).toUpperCase() + matchedCountry.slice(1));
+          }
+        }
+      }
+
+      return {
+        companies: companies.slice(0, 200),
+        countries: Array.from(countries)
+      };
+    }
 
     // Radio button selection
     const radioOptions = document.querySelectorAll('.radio-option');
@@ -366,25 +508,19 @@ Singapore"
 
       const outputOption = document.querySelector('input[name="OutputOption"]:checked').value;
 
-      let formData;
-
-      if (currentTab === 'upload') {
-        formData = new FormData(this);
-      } else {
-        formData = {
-          Companies: document.getElementById('companies').value,
-          Countries: document.getElementById('countries').value,
-          TargetBusiness: document.getElementById('targetBusiness').value,
-          OutputOption: outputOption,
-          Email: document.getElementById('email').value
-        };
-      }
+      const formData = {
+        Companies: companiesTextarea.value,
+        Countries: countriesTextarea.value,
+        TargetBusiness: document.getElementById('targetBusiness').value,
+        OutputOption: outputOption,
+        Email: document.getElementById('email').value
+      };
 
       try {
         const response = await fetch(this.action, {
           method: 'POST',
-          headers: currentTab === 'manual' ? { 'Content-Type': 'application/json' } : undefined,
-          body: currentTab === 'manual' ? JSON.stringify(formData) : formData
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData)
         });
 
         if (response.ok) {
@@ -400,6 +536,8 @@ Singapore"
           });
           radioOptions[0].classList.add('selected', 'border-blue-500', 'bg-blue-50/50');
           radioOptions[0].classList.remove('border-gray-200');
+          // Reset to upload tab
+          switchTab('upload');
         } else {
           throw new Error('Request failed');
         }
