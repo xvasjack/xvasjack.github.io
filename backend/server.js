@@ -1245,8 +1245,274 @@ app.post('/api/find-target-slow', async (req, res) => {
   }
 });
 
+// ============ VALIDATION ENDPOINT ============
+
+// Parse company names from text (one per line)
+function parseCompanyList(text) {
+  if (!text) return [];
+  return text
+    .split(/[\n\r]+/)
+    .map(line => line.trim())
+    .filter(line => line.length > 0 && line.length < 200);
+}
+
+// Parse countries from text
+function parseCountries(text) {
+  if (!text) return [];
+  return text
+    .split(/[\n\r]+/)
+    .map(line => line.trim())
+    .filter(line => line.length > 0);
+}
+
+// Find company website using AI search
+async function findCompanyWebsite(companyName, countries) {
+  const countryList = countries.join(', ');
+
+  try {
+    // Try OpenAI Search first (has real-time web access)
+    const searchResult = await callOpenAISearch(
+      `Find the official website for "${companyName}" company in ${countryList}. Return ONLY the website URL starting with http. If not found, return "NOT_FOUND".`
+    );
+
+    // Extract URL from response
+    const urlMatch = searchResult.match(/https?:\/\/[^\s"'<>]+/i);
+    if (urlMatch) {
+      return urlMatch[0].replace(/[.,;:!?)]+$/, ''); // Clean trailing punctuation
+    }
+
+    // Fallback to Perplexity
+    const perpResult = await callPerplexity(
+      `What is the official website URL for "${companyName}" company located in ${countryList}? Return only the URL.`
+    );
+
+    const perpUrlMatch = perpResult.match(/https?:\/\/[^\s"'<>]+/i);
+    if (perpUrlMatch) {
+      return perpUrlMatch[0].replace(/[.,;:!?)]+$/, '');
+    }
+
+    return null;
+  } catch (e) {
+    console.error(`Error finding website for ${companyName}:`, e.message);
+    return null;
+  }
+}
+
+// Validate if company matches target business
+async function validateCompanyBusiness(company, targetBusiness, pageText) {
+  try {
+    const validation = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a company validator. Determine if the company matches the target business criteria.
+
+TARGET BUSINESS: "${targetBusiness}"
+
+RULES:
+- Be LENIENT - accept companies that are related to the target business
+- Accept if they manufacture, distribute, or provide services related to "${targetBusiness}"
+- Only reject if completely unrelated
+
+OUTPUT: Return JSON: {"in_scope": true/false, "reason": "brief explanation", "business_description": "what this company actually does"}`
+        },
+        {
+          role: 'user',
+          content: `COMPANY: ${company.company_name}
+WEBSITE: ${company.website}
+
+PAGE CONTENT:
+${pageText ? pageText.substring(0, 8000) : 'Could not fetch website content'}`
+        }
+      ],
+      response_format: { type: 'json_object' }
+    });
+
+    return JSON.parse(validation.choices[0].message.content);
+  } catch (e) {
+    console.error(`Error validating ${company.company_name}:`, e.message);
+    return { in_scope: false, reason: 'Validation error', business_description: 'Unknown' };
+  }
+}
+
+// Build validation results email
+function buildValidationEmailHTML(companies, targetBusiness, countries, outputOption) {
+  const inScopeCompanies = companies.filter(c => c.in_scope);
+  const outOfScopeCompanies = companies.filter(c => !c.in_scope);
+
+  let html = `
+    <h2>Speeda List Validation Results</h2>
+    <p><strong>Target Business:</strong> ${targetBusiness}</p>
+    <p><strong>Countries:</strong> ${countries.join(', ')}</p>
+    <p><strong>Total Companies Processed:</strong> ${companies.length}</p>
+    <p><strong>In-Scope:</strong> ${inScopeCompanies.length}</p>
+    <p><strong>Out-of-Scope:</strong> ${outOfScopeCompanies.length}</p>
+    <br>
+  `;
+
+  if (outputOption === 'all_companies') {
+    // Show all companies with status
+    html += `
+    <h3>All Companies</h3>
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+      <thead style="background-color: #f0f0f0;">
+        <tr><th>#</th><th>Company</th><th>Website</th><th>Status</th><th>Business Description</th></tr>
+      </thead>
+      <tbody>
+    `;
+    companies.forEach((c, i) => {
+      const statusColor = c.in_scope ? '#10b981' : '#ef4444';
+      const statusText = c.in_scope ? 'IN SCOPE' : 'OUT OF SCOPE';
+      html += `<tr>
+        <td>${i + 1}</td>
+        <td>${c.company_name}</td>
+        <td>${c.website ? `<a href="${c.website}">${c.website}</a>` : 'Not found'}</td>
+        <td style="color: ${statusColor}; font-weight: bold;">${statusText}</td>
+        <td>${c.business_description || c.reason || '-'}</td>
+      </tr>`;
+    });
+    html += '</tbody></table>';
+  } else {
+    // Show only in-scope companies
+    html += `
+    <h3>In-Scope Companies</h3>
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+      <thead style="background-color: #f0f0f0;">
+        <tr><th>#</th><th>Company</th><th>Website</th><th>Business Description</th></tr>
+      </thead>
+      <tbody>
+    `;
+    if (inScopeCompanies.length === 0) {
+      html += '<tr><td colspan="4" style="text-align: center;">No in-scope companies found</td></tr>';
+    } else {
+      inScopeCompanies.forEach((c, i) => {
+        html += `<tr>
+          <td>${i + 1}</td>
+          <td>${c.company_name}</td>
+          <td>${c.website ? `<a href="${c.website}">${c.website}</a>` : 'Not found'}</td>
+          <td>${c.business_description || '-'}</td>
+        </tr>`;
+      });
+    }
+    html += '</tbody></table>';
+  }
+
+  return html;
+}
+
+app.post('/api/validation', async (req, res) => {
+  const { Companies, Countries, TargetBusiness, OutputOption, Email } = req.body;
+
+  if (!Companies || !Countries || !TargetBusiness || !Email) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`NEW VALIDATION REQUEST: ${new Date().toISOString()}`);
+  console.log(`Target Business: ${TargetBusiness}`);
+  console.log(`Countries: ${Countries}`);
+  console.log(`Output Option: ${OutputOption || 'in_scope_only'}`);
+  console.log(`Email: ${Email}`);
+  console.log('='.repeat(50));
+
+  res.json({
+    success: true,
+    message: 'Validation request received. Results will be emailed within 10 minutes.'
+  });
+
+  try {
+    const totalStart = Date.now();
+
+    // Parse inputs
+    const companyList = parseCompanyList(Companies);
+    const countryList = parseCountries(Countries);
+    const outputOption = OutputOption || 'in_scope_only';
+
+    console.log(`Parsed ${companyList.length} companies and ${countryList.length} countries`);
+
+    if (companyList.length === 0) {
+      await sendEmail(Email, 'Speeda List Validation - No Companies', '<p>No valid company names were found in your input.</p>');
+      return;
+    }
+
+    // Process companies in batches
+    const batchSize = 5;
+    const results = [];
+
+    for (let i = 0; i < companyList.length; i += batchSize) {
+      const batch = companyList.slice(i, i + batchSize);
+      console.log(`Processing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(companyList.length / batchSize)}`);
+
+      const batchResults = await Promise.all(batch.map(async (companyName) => {
+        // Find website
+        const website = await findCompanyWebsite(companyName, countryList);
+
+        if (!website) {
+          console.log(`  ${companyName}: Website not found`);
+          return {
+            company_name: companyName,
+            website: null,
+            in_scope: false,
+            reason: 'Website not found',
+            business_description: 'Could not verify'
+          };
+        }
+
+        console.log(`  ${companyName}: Found ${website}`);
+
+        // Fetch website content
+        const pageText = await fetchWebsite(website);
+
+        // Validate against target business
+        const validation = await validateCompanyBusiness(
+          { company_name: companyName, website },
+          TargetBusiness,
+          pageText
+        );
+
+        return {
+          company_name: companyName,
+          website,
+          in_scope: validation.in_scope,
+          reason: validation.reason,
+          business_description: validation.business_description
+        };
+      }));
+
+      results.push(...batchResults);
+      console.log(`  Completed: ${results.length}/${companyList.length}`);
+    }
+
+    // Build and send email
+    const htmlContent = buildValidationEmailHTML(results, TargetBusiness, countryList, outputOption);
+    const inScopeCount = results.filter(r => r.in_scope).length;
+
+    await sendEmail(
+      Email,
+      `Speeda List Validation: ${inScopeCount}/${results.length} in-scope for "${TargetBusiness}"`,
+      htmlContent
+    );
+
+    const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
+    console.log(`\n${'='.repeat(50)}`);
+    console.log(`VALIDATION COMPLETE! Email sent to ${Email}`);
+    console.log(`Total companies: ${results.length}, In-scope: ${inScopeCount}`);
+    console.log(`Total time: ${totalTime} minutes`);
+    console.log('='.repeat(50));
+
+  } catch (error) {
+    console.error('Validation error:', error);
+    try {
+      await sendEmail(Email, `Speeda List Validation - Error`, `<p>Error: ${error.message}</p>`);
+    } catch (e) {
+      console.error('Failed to send error email:', e);
+    }
+  }
+});
+
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v26 - More thorough extraction + balanced output' });
+  res.json({ status: 'ok', service: 'Find Target v27 - Added Speeda List Validation' });
 });
 
 const PORT = process.env.PORT || 3000;
