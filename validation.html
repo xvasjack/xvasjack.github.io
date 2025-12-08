@@ -4,188 +4,641 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Speeda List Validation</title>
-  <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', 'system-ui', 'sans-serif'],
-            mono: ['JetBrains Mono', 'monospace'],
-          },
-        },
-      },
-    }
-  </script>
   <style>
-    * { font-family: 'Inter', system-ui, sans-serif; }
-    .font-mono { font-family: 'JetBrains Mono', monospace; }
-    html, body { overflow: hidden; }
+    :root {
+      /* Color Palette - Soft Light Theme */
+      --bg-body: #f1f5f9;
+      --bg-surface: #ffffff;
+      --bg-subtle: #e2e8f0;
+      --accent: #2563eb;
+      --accent-soft: #dbeafe;
+      --accent-strong: #1d4ed8;
+      --accent-secondary: #059669;
+      --accent-secondary-soft: #d1fae5;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --text-light: #94a3b8;
+      --border-subtle: #e2e8f0;
+      --border-medium: #cbd5e1;
+      --success: #059669;
+      --success-soft: #d1fae5;
+      --error: #dc2626;
+      --error-soft: #fee2e2;
+      --warning: #d97706;
+      --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -1px rgba(0, 0, 0, 0.04);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+
+      /* Typography */
+      --font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+
+      /* Spacing */
+      --space-1: 4px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 20px;
+      --space-6: 24px;
+      --space-8: 32px;
+
+      /* Radii */
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      overflow: hidden;
+      font-family: var(--font-sans);
+      background: var(--bg-body);
+      color: var(--text-main);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Header */
+    .app-header {
+      flex: 0 0 auto;
+      height: 56px;
+      background: var(--bg-surface);
+      border-bottom: 1px solid var(--border-subtle);
+      display: flex;
+      align-items: center;
+      padding: 0 var(--space-6);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      font-size: 18px;
+      font-weight: 600;
+      color: var(--text-main);
+      text-decoration: none;
+    }
+
+    .logo-icon {
+      width: 32px;
+      height: 32px;
+      background: var(--accent);
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .logo-icon svg {
+      width: 18px;
+      height: 18px;
+      color: white;
+    }
+
+    nav {
+      display: flex;
+      align-items: center;
+      gap: var(--space-1);
+      margin-left: var(--space-8);
+    }
+
+    nav a {
+      padding: var(--space-2) var(--space-4);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-muted);
+      text-decoration: none;
+      border-radius: var(--radius-sm);
+      transition: all 0.15s ease;
+    }
+
+    nav a:hover {
+      color: var(--text-main);
+      background: var(--bg-subtle);
+    }
+
+    nav a.active {
+      color: var(--accent-secondary);
+      background: var(--accent-secondary-soft);
+    }
+
+    /* Main Content */
+    .app-main {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      padding: var(--space-6);
+      gap: var(--space-8);
+    }
+
+    /* Left Column - Page Info */
+    .page-info {
+      flex: 0 0 280px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: var(--space-6);
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      padding: var(--space-1) var(--space-3);
+      background: var(--accent-secondary-soft);
+      color: var(--accent-secondary);
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-radius: var(--radius-sm);
+      margin-bottom: var(--space-4);
+      width: fit-content;
+    }
+
+    .status-badge::before {
+      content: "";
+      width: 6px;
+      height: 6px;
+      background: var(--accent-secondary);
+      border-radius: 50%;
+    }
+
+    .page-title {
+      font-size: 26px;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: var(--space-3);
+      line-height: 1.2;
+    }
+
+    .page-description {
+      font-size: 14px;
+      color: var(--text-muted);
+      line-height: 1.6;
+      margin-bottom: var(--space-5);
+    }
+
+    .turnaround {
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-3);
+      padding: var(--space-4);
+      background: var(--bg-subtle);
+      border-radius: var(--radius-md);
+    }
+
+    .turnaround-label {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .turnaround-value {
+      font-size: 24px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      color: var(--accent-secondary);
+    }
+
+    .turnaround-unit {
+      font-size: 13px;
+      color: var(--text-light);
+    }
+
+    /* Right Column - Form Card */
+    .page-content {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      max-width: 600px;
+    }
+
+    .form-card {
+      width: 100%;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-lg);
+      box-shadow: var(--shadow-lg);
+      overflow: hidden;
+    }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border-subtle);
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: var(--space-4);
+      font-size: 14px;
+      font-weight: 500;
+      font-family: var(--font-sans);
+      color: var(--text-muted);
+      background: transparent;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-main);
+      background: var(--bg-subtle);
+    }
+
+    .tab-btn.active {
+      color: var(--accent-secondary);
+      border-bottom-color: var(--accent-secondary);
+      background: var(--accent-secondary-soft);
+    }
+
+    .form-body {
+      padding: var(--space-5);
+    }
+
+    /* Form Elements */
+    .form-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-4);
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: var(--space-2);
+    }
+
+    .form-group.full-width {
+      grid-column: span 2;
+    }
+
+    label {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-main);
+    }
+
+    .label-hint {
+      font-weight: 400;
+      color: var(--text-light);
+    }
+
+    input[type="text"],
+    input[type="email"] {
+      height: 42px;
+      padding: 0 var(--space-4);
+      font-size: 14px;
+      font-family: var(--font-sans);
+      color: var(--text-main);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-md);
+      transition: all 0.15s ease;
+    }
+
+    textarea {
+      padding: var(--space-3) var(--space-4);
+      font-size: 14px;
+      font-family: var(--font-sans);
+      color: var(--text-main);
+      background: var(--bg-surface);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-md);
+      resize: none;
+      transition: all 0.15s ease;
+    }
+
+    input::placeholder,
+    textarea::placeholder {
+      color: var(--text-light);
+    }
+
+    input:focus,
+    textarea:focus {
+      outline: none;
+      border-color: var(--accent-secondary);
+      box-shadow: 0 0 0 3px var(--accent-secondary-soft);
+    }
+
+    /* Upload Zone */
+    .upload-zone {
+      position: relative;
+      border: 2px dashed var(--border-medium);
+      border-radius: var(--radius-md);
+      padding: var(--space-5);
+      text-align: center;
+      transition: all 0.15s ease;
+      cursor: pointer;
+    }
+
+    .upload-zone:hover {
+      border-color: var(--accent-secondary);
+      background: var(--accent-secondary-soft);
+    }
+
+    .upload-zone.active {
+      border-color: var(--accent-secondary);
+      background: var(--accent-secondary-soft);
+    }
+
+    .upload-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .upload-zone svg {
+      width: 32px;
+      height: 32px;
+      color: var(--text-light);
+      margin-bottom: var(--space-2);
+    }
+
+    .upload-zone p {
+      font-size: 14px;
+      color: var(--text-muted);
+    }
+
+    .upload-zone .highlight {
+      color: var(--accent-secondary);
+      font-weight: 500;
+    }
+
+    .upload-zone .file-name {
+      display: none;
+      margin-top: var(--space-2);
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--accent-secondary);
+    }
+
+    .upload-zone .file-name.show {
+      display: block;
+    }
+
+    /* Radio Options */
+    .radio-group {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: var(--space-3);
+    }
+
+    .radio-option {
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-3) var(--space-4);
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .radio-option:hover {
+      border-color: var(--accent-secondary);
+    }
+
+    .radio-option.selected {
+      border-color: var(--accent-secondary);
+      background: var(--accent-secondary-soft);
+    }
+
+    .radio-option input {
+      width: 16px;
+      height: 16px;
+      accent-color: var(--accent-secondary);
+    }
+
+    .radio-option span {
+      font-size: 14px;
+      font-weight: 500;
+      color: var(--text-main);
+    }
+
+    /* Submit Button */
+    .submit-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-2);
+      width: 100%;
+      height: 46px;
+      margin-top: var(--space-5);
+      padding: 0 var(--space-6);
+      font-size: 15px;
+      font-weight: 600;
+      font-family: var(--font-sans);
+      color: white;
+      background: var(--accent-secondary);
+      border: none;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .submit-btn:hover {
+      background: #047857;
+    }
+
+    .submit-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .submit-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* Messages */
+    .message {
+      display: none;
+      align-items: center;
+      gap: var(--space-3);
+      margin-top: var(--space-4);
+      padding: var(--space-3);
+      font-size: 14px;
+      font-weight: 500;
+      border-radius: var(--radius-md);
+    }
+
+    .message.show {
+      display: flex;
+    }
+
+    .message svg {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+
+    .message.success {
+      background: var(--success-soft);
+      color: var(--success);
+    }
+
+    .message.error {
+      background: var(--error-soft);
+      color: var(--error);
+    }
+
+    /* Tab Content */
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
+
+    /* Spinner */
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    .spinner {
+      animation: spin 1s linear infinite;
+    }
   </style>
 </head>
-<body class="h-screen flex flex-col bg-slate-950 text-slate-100">
-
-  <!-- Top Navigation Bar -->
-  <header class="flex-none h-16 bg-slate-900 border-b border-slate-700 flex items-center px-6">
-    <div class="flex items-center gap-3">
-      <div class="w-10 h-10 rounded-lg bg-emerald-600 flex items-center justify-center">
-        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+<body>
+  <header class="app-header">
+    <a href="find-target.html" class="logo">
+      <span class="logo-icon">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
         </svg>
-      </div>
-      <span class="text-xl font-bold text-white">Find Target</span>
-    </div>
-    <nav class="ml-10 flex items-center gap-1">
-      <a href="find-target.html" class="px-5 py-2.5 text-base font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">v3 Fast</a>
-      <a href="find-target-slow.html" class="px-5 py-2.5 text-base font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">v3 Slow</a>
-      <a href="validation.html" class="px-5 py-2.5 text-base font-medium rounded-lg bg-emerald-600 text-white">Validation</a>
-      <a href="trading-comparable.html" class="px-5 py-2.5 text-base font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">Trading Comp</a>
-      <a href="profile-slides.html" class="px-5 py-2.5 text-base font-medium rounded-lg text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">Slides</a>
+      </span>
+      Find Target
+    </a>
+    <nav>
+      <a href="find-target.html">v3 Fast</a>
+      <a href="find-target-slow.html">v3 Slow</a>
+      <a href="validation.html" class="active">Validation</a>
+      <a href="trading-comparable.html">Trading Comp</a>
+      <a href="profile-slides.html">Slides</a>
     </nav>
-    <div class="ml-auto flex items-center gap-3">
-      <span class="px-4 py-2 text-sm font-mono rounded-lg bg-emerald-900/50 text-emerald-400 border border-emerald-700">ONLINE</span>
-    </div>
   </header>
 
-  <!-- Main Content Area -->
-  <main class="flex-1 flex items-center justify-center p-8 overflow-hidden bg-gradient-to-br from-slate-950 to-slate-900">
-    <div class="w-full max-w-2xl">
-      <!-- Card Container -->
-      <div class="bg-slate-900 border border-slate-700 rounded-xl overflow-hidden shadow-2xl">
+  <main class="app-main">
+    <section class="page-info">
+      <span class="status-badge">Validation</span>
+      <h1 class="page-title">Speeda List Validation</h1>
+      <p class="page-description">
+        Validate your company list against Speeda's database. Upload an Excel file or enter companies manually to check their business scope.
+      </p>
+      <div class="turnaround">
+        <span class="turnaround-label">Average turnaround</span>
+        <span class="turnaround-value">~10</span>
+        <span class="turnaround-unit">minutes</span>
+      </div>
+    </section>
 
-        <!-- Card Header -->
-        <div class="px-8 py-5 bg-slate-800/50 border-b border-slate-700 flex items-center justify-between">
-          <div>
-            <h1 class="text-2xl font-bold text-white flex items-center gap-3">
-              <svg class="w-7 h-7 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    <section class="page-content">
+      <div class="form-card">
+        <div class="tabs">
+          <button class="tab-btn active" data-tab="upload">Upload Excel</button>
+          <button class="tab-btn" data-tab="manual">Manual Entry</button>
+        </div>
+
+        <form id="validationForm" class="form-body" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/validation">
+          <!-- Upload Tab -->
+          <div class="tab-content active" id="tab-upload">
+            <div class="upload-zone" id="uploadZone">
+              <input type="file" id="excelFile" accept=".xlsx,.xls,.csv">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
               </svg>
-              Speeda Validation
-            </h1>
-            <p class="text-base text-slate-400 mt-1">Results delivered in <span class="font-mono text-emerald-400">~10 minutes</span></p>
-          </div>
-        </div>
-
-        <!-- Tabs -->
-        <div class="flex border-b border-slate-700">
-          <button id="tabUpload" class="flex-1 px-6 py-4 text-base font-medium text-emerald-400 border-b-2 border-emerald-400 bg-emerald-900/20">
-            Upload Excel
-          </button>
-          <button id="tabManual" class="flex-1 px-6 py-4 text-base font-medium text-slate-400 border-b-2 border-transparent hover:text-slate-300">
-            Manual Entry
-          </button>
-        </div>
-
-        <!-- Form -->
-        <form id="validationForm" class="p-8" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/validation">
-          <!-- Upload Tab Content -->
-          <div id="contentUpload">
-            <div class="relative">
-              <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-              <div id="uploadZone" class="border-2 border-dashed border-slate-600 rounded-lg p-8 text-center hover:border-emerald-500 hover:bg-emerald-900/10 transition-all cursor-pointer">
-                <svg class="w-12 h-12 text-slate-500 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-                </svg>
-                <p class="text-lg text-slate-300"><span class="text-emerald-400 font-medium">Click to upload</span> or drag and drop</p>
-                <p class="text-base text-slate-500 mt-1">.xlsx, .xls, .csv</p>
-                <p id="fileName" class="text-base text-emerald-400 font-medium mt-3 hidden"></p>
-              </div>
+              <p><span class="highlight">Click to upload</span> or drag and drop</p>
+              <p style="font-size: 13px; color: var(--text-light); margin-top: 4px;">.xlsx, .xls, .csv</p>
+              <p class="file-name" id="fileName"></p>
             </div>
           </div>
 
-          <!-- Manual Tab Content -->
-          <div id="contentManual" class="hidden space-y-5">
-            <div>
-              <label class="block text-base font-medium text-slate-300 mb-2">Companies (one per line)</label>
-              <textarea id="companies" name="Companies" rows="4" placeholder="Company A&#10;Company B&#10;Company C"
-                class="w-full px-5 py-4 text-lg bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent resize-none"></textarea>
+          <!-- Manual Tab -->
+          <div class="tab-content" id="tab-manual">
+            <div class="form-group">
+              <label for="companies">Companies <span class="label-hint">(one per line)</span></label>
+              <textarea id="companies" name="Companies" rows="4" placeholder="Company A&#10;Company B&#10;Company C"></textarea>
             </div>
-            <div>
-              <label class="block text-base font-medium text-slate-300 mb-2">Countries</label>
-              <input type="text" id="countries" name="Countries" placeholder="e.g. Malaysia, Thailand, Singapore"
-                class="w-full h-14 px-5 text-lg bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
+            <div class="form-group" style="margin-top: var(--space-4);">
+              <label for="countries">Countries</label>
+              <input type="text" id="countries" name="Countries" placeholder="e.g. Malaysia, Thailand, Singapore">
             </div>
           </div>
 
           <!-- Common Fields -->
-          <div class="grid grid-cols-2 gap-5 mt-6">
-            <div>
-              <label class="block text-base font-medium text-slate-300 mb-2">Target Business</label>
-              <input type="text" id="targetBusiness" name="TargetBusiness" required placeholder="e.g. Semiconductor"
-                class="w-full h-14 px-5 text-lg bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
+          <div class="form-grid" style="margin-top: var(--space-4);">
+            <div class="form-group">
+              <label for="targetBusiness">Target Business</label>
+              <input type="text" id="targetBusiness" name="TargetBusiness" required placeholder="e.g. Semiconductor">
             </div>
-            <div>
-              <label class="block text-base font-medium text-slate-300 mb-2">Email</label>
-              <input type="email" id="email" name="Email" required placeholder="your@email.com"
-                class="w-full h-14 px-5 text-lg bg-slate-800 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent">
+            <div class="form-group">
+              <label for="email">Email</label>
+              <input type="email" id="email" name="Email" required placeholder="your@email.com">
             </div>
           </div>
 
-          <!-- Output Option -->
-          <div class="mt-6">
-            <label class="block text-base font-medium text-slate-300 mb-3">Output Option</label>
-            <div class="grid grid-cols-2 gap-4">
-              <label class="radio-opt flex items-center gap-3 p-4 border-2 border-emerald-500 bg-emerald-900/20 rounded-lg cursor-pointer">
-                <input type="radio" name="OutputOption" value="in_scope_only" checked class="w-5 h-5 text-emerald-600">
-                <span class="text-lg font-medium text-white">In-scope only</span>
+          <div class="form-group" style="margin-top: var(--space-4);">
+            <label>Output Option</label>
+            <div class="radio-group">
+              <label class="radio-option selected">
+                <input type="radio" name="OutputOption" value="in_scope_only" checked>
+                <span>In-scope only</span>
               </label>
-              <label class="radio-opt flex items-center gap-3 p-4 border-2 border-slate-600 rounded-lg cursor-pointer hover:border-slate-500 transition-colors">
-                <input type="radio" name="OutputOption" value="all_companies" class="w-5 h-5 text-emerald-600">
-                <span class="text-lg font-medium text-white">All with status</span>
+              <label class="radio-option">
+                <input type="radio" name="OutputOption" value="all_companies">
+                <span>All with status</span>
               </label>
             </div>
           </div>
 
-          <!-- Submit Button -->
-          <button type="submit" id="submitBtn"
-            class="w-full h-16 mt-8 text-lg font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg transition-all duration-200 flex items-center justify-center gap-3 shadow-lg shadow-emerald-600/25">
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <button type="submit" class="submit-btn" id="submitBtn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
             </svg>
             Validate Companies
           </button>
 
-          <!-- Messages -->
-          <div id="successMessage" class="hidden mt-6 p-5 bg-emerald-900/30 border border-emerald-700 rounded-lg">
-            <p class="text-lg text-emerald-400 text-center font-medium">Submitted! Results in ~10 minutes.</p>
+          <div class="message success" id="successMessage">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            Submitted! Results in ~10 minutes.
           </div>
 
-          <div id="errorMessage" class="hidden mt-6 p-5 bg-red-900/30 border border-red-700 rounded-lg">
-            <p class="text-lg text-red-400 text-center font-medium">Error. Please try again.</p>
+          <div class="message error" id="errorMessage">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            Error. Please try again.
           </div>
         </form>
       </div>
-    </div>
+    </section>
   </main>
 
   <script>
     // Tab switching
-    const tabUpload = document.getElementById('tabUpload');
-    const tabManual = document.getElementById('tabManual');
-    const contentUpload = document.getElementById('contentUpload');
-    const contentManual = document.getElementById('contentManual');
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
 
-    function switchTab(tab) {
-      if (tab === 'upload') {
-        tabUpload.classList.add('text-emerald-400', 'border-emerald-400', 'bg-emerald-900/20');
-        tabUpload.classList.remove('text-slate-400', 'border-transparent');
-        tabManual.classList.remove('text-emerald-400', 'border-emerald-400', 'bg-emerald-900/20');
-        tabManual.classList.add('text-slate-400', 'border-transparent');
-        contentUpload.classList.remove('hidden');
-        contentManual.classList.add('hidden');
-      } else {
-        tabManual.classList.add('text-emerald-400', 'border-emerald-400', 'bg-emerald-900/20');
-        tabManual.classList.remove('text-slate-400', 'border-transparent');
-        tabUpload.classList.remove('text-emerald-400', 'border-emerald-400', 'bg-emerald-900/20');
-        tabUpload.classList.add('text-slate-400', 'border-transparent');
-        contentManual.classList.remove('hidden');
-        contentUpload.classList.add('hidden');
-      }
-    }
-    tabUpload.addEventListener('click', () => switchTab('upload'));
-    tabManual.addEventListener('click', () => switchTab('manual'));
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        tabBtns.forEach(b => b.classList.remove('active'));
+        tabContents.forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+      });
+    });
 
     // File upload with Excel parsing
     const fileInput = document.getElementById('excelFile');
@@ -201,8 +654,8 @@
 
     function processExcelFile(file) {
       fileNameDisplay.textContent = file.name;
-      fileNameDisplay.classList.remove('hidden');
-      uploadZone.classList.add('border-emerald-500', 'bg-emerald-900/20');
+      fileNameDisplay.classList.add('show');
+      uploadZone.classList.add('active');
 
       const reader = new FileReader();
       reader.onload = (e) => {
@@ -214,7 +667,11 @@
           const extracted = extractData(jsonData);
           if (extracted.companies.length > 0) companiesTextarea.value = extracted.companies.join('\n');
           if (extracted.countries.length > 0) countriesInput.value = extracted.countries.join(', ');
-          switchTab('manual');
+          // Switch to manual tab
+          tabBtns.forEach(b => b.classList.remove('active'));
+          tabContents.forEach(c => c.classList.remove('active'));
+          document.querySelector('[data-tab="manual"]').classList.add('active');
+          document.getElementById('tab-manual').classList.add('active');
         } catch (error) {
           console.error('Error parsing Excel:', error);
         }
@@ -237,15 +694,11 @@
       return { companies: companies.slice(0, 200), countries: Array.from(countries) };
     }
 
-    // Radio buttons
-    document.querySelectorAll('.radio-opt').forEach(opt => {
+    // Radio options
+    document.querySelectorAll('.radio-option').forEach(opt => {
       opt.addEventListener('click', () => {
-        document.querySelectorAll('.radio-opt').forEach(o => {
-          o.classList.remove('border-emerald-500', 'bg-emerald-900/20');
-          o.classList.add('border-slate-600');
-        });
-        opt.classList.add('border-emerald-500', 'bg-emerald-900/20');
-        opt.classList.remove('border-slate-600');
+        document.querySelectorAll('.radio-option').forEach(o => o.classList.remove('selected'));
+        opt.classList.add('selected');
         opt.querySelector('input').checked = true;
       });
     });
@@ -253,14 +706,14 @@
     // Form submission
     document.getElementById('validationForm').addEventListener('submit', async function(e) {
       e.preventDefault();
-      const submitBtn = document.getElementById('submitBtn');
-      const successMessage = document.getElementById('successMessage');
-      const errorMessage = document.getElementById('errorMessage');
+      const btn = document.getElementById('submitBtn');
+      const success = document.getElementById('successMessage');
+      const error = document.getElementById('errorMessage');
 
-      successMessage.classList.add('hidden');
-      errorMessage.classList.add('hidden');
-      submitBtn.disabled = true;
-      submitBtn.innerHTML = '<svg class="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path></svg> Processing...';
+      success.classList.remove('show');
+      error.classList.remove('show');
+      btn.disabled = true;
+      btn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Processing...';
 
       try {
         const response = await fetch(this.action, {
@@ -275,17 +728,26 @@
           })
         });
         if (response.ok) {
-          successMessage.classList.remove('hidden');
+          success.classList.add('show');
           this.reset();
-          fileNameDisplay.classList.add('hidden');
-          uploadZone.classList.remove('border-emerald-500', 'bg-emerald-900/20');
-          switchTab('upload');
+          fileNameDisplay.classList.remove('show');
+          uploadZone.classList.remove('active');
+          // Reset to upload tab
+          tabBtns.forEach(b => b.classList.remove('active'));
+          tabContents.forEach(c => c.classList.remove('active'));
+          document.querySelector('[data-tab="upload"]').classList.add('active');
+          document.getElementById('tab-upload').classList.add('active');
+          // Reset radio
+          document.querySelectorAll('.radio-option').forEach((o, i) => {
+            if (i === 0) o.classList.add('selected');
+            else o.classList.remove('selected');
+          });
         } else throw new Error();
       } catch {
-        errorMessage.classList.remove('hidden');
+        error.classList.add('show');
       } finally {
-        submitBtn.disabled = false;
-        submitBtn.innerHTML = '<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Validate Companies';
+        btn.disabled = false;
+        btn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Validate Companies';
       }
     });
   </script>
