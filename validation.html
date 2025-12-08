@@ -6,7 +6,6 @@
   <title>Speeda List Validation</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <!-- SheetJS for Excel parsing -->
   <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   <script>
     tailwind.config = {
@@ -20,14 +19,12 @@
     }
   </script>
   <style>
-    body {
-      font-family: 'Inter', system-ui, sans-serif;
-    }
+    body { font-family: 'Inter', system-ui, sans-serif; }
   </style>
 </head>
-<body class="bg-gray-50 min-h-screen">
+<body class="bg-gray-50 h-screen overflow-hidden">
   <!-- Mobile Header -->
-  <header class="lg:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
+  <header class="lg:hidden bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between fixed top-0 left-0 right-0 z-50">
     <span class="font-bold text-gray-900">Find Target</span>
     <button id="mobileMenuBtn" class="p-2 rounded-lg hover:bg-gray-100 transition-colors">
       <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -82,180 +79,120 @@
   </aside>
 
   <!-- Main Content -->
-  <main class="lg:ml-64 min-h-screen">
-    <div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 lg:py-12">
-      <!-- Header -->
-      <div class="mb-8">
-        <p class="text-sm font-semibold text-blue-600 uppercase tracking-wider mb-1">Speeda List</p>
-        <h1 class="text-3xl font-bold text-gray-900 mb-2">Validation</h1>
-        <p class="text-gray-500">Validate companies against your target business criteria. Results will be emailed within <strong class="text-gray-700">10 minutes</strong>.</p>
-      </div>
-
-      <!-- Form Card -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+  <main class="lg:ml-64 h-screen pt-14 lg:pt-0">
+    <div class="h-full flex items-center justify-center p-4">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 w-full max-w-lg">
         <form id="validationForm" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/validation">
           <!-- Tab Navigation -->
           <div class="border-b border-gray-200">
             <div class="flex">
-              <button type="button" id="tabUpload" class="flex-1 px-6 py-4 text-sm font-medium text-blue-600 border-b-2 border-blue-600 bg-blue-50/50 transition-colors">
+              <button type="button" id="tabUpload" class="flex-1 px-4 py-3 text-sm font-medium text-blue-600 border-b-2 border-blue-600 bg-blue-50/50 transition-colors">
                 <div class="flex items-center justify-center gap-2">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
                   Upload Excel
                 </div>
               </button>
-              <button type="button" id="tabManual" class="flex-1 px-6 py-4 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:text-gray-700 hover:border-gray-300 transition-colors">
+              <button type="button" id="tabManual" class="flex-1 px-4 py-3 text-sm font-medium text-gray-500 border-b-2 border-transparent hover:text-gray-700 transition-colors">
                 <div class="flex items-center justify-center gap-2">
-                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                   Manual Entry
                 </div>
               </button>
             </div>
           </div>
 
-          <div class="p-6 space-y-6">
+          <div class="p-5 space-y-3">
+            <!-- Header -->
+            <div class="text-center mb-2">
+              <p class="text-xs font-semibold text-blue-600 uppercase tracking-wider">Speeda List</p>
+              <h1 class="text-xl font-bold text-gray-900">Validation</h1>
+              <p class="text-xs text-gray-500">Results emailed within <strong>10 minutes</strong></p>
+            </div>
+
             <!-- Tab Content: Upload Excel -->
-            <div id="contentUpload" class="space-y-4">
-              <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">
-                  Excel File <span class="text-red-500">*</span>
-                </label>
-                <div class="file-upload-zone relative">
-                  <input type="file" id="excelFile" name="ExcelFile" accept=".xlsx,.xls,.csv" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-                  <div id="uploadZone" class="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:border-blue-400 hover:bg-blue-50/50 transition-all cursor-pointer">
-                    <svg class="w-12 h-12 text-gray-400 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-                    <p class="text-sm text-gray-600"><span class="text-blue-600 font-medium">Click to upload</span> or drag and drop</p>
-                    <p class="text-xs text-gray-400 mt-1">.xlsx, .xls, or .csv files</p>
-                    <p id="fileName" class="text-sm text-green-600 font-medium mt-2 hidden"></p>
+            <div id="contentUpload">
+              <div class="relative">
+                <input type="file" id="excelFile" name="ExcelFile" accept=".xlsx,.xls,.csv" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                <div id="uploadZone" class="border-2 border-dashed border-gray-300 rounded-lg p-3 text-center hover:border-blue-400 hover:bg-blue-50/50 transition-all cursor-pointer">
+                  <div class="flex items-center justify-center gap-2">
+                    <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                    <span class="text-sm text-gray-600"><span class="text-blue-600 font-medium">Click to upload</span> .xlsx, .xls, .csv</span>
                   </div>
+                  <p id="fileName" class="text-xs text-green-600 font-medium mt-1 hidden"></p>
                 </div>
-                <p class="text-xs text-gray-500 mt-2">Excel will be parsed automatically to extract company names and countries.</p>
               </div>
             </div>
 
             <!-- Tab Content: Manual Entry -->
-            <div id="contentManual" class="space-y-4 hidden">
+            <div id="contentManual" class="hidden space-y-3">
               <div>
-                <label for="companies" class="block text-sm font-medium text-gray-700 mb-2">
-                  Company Names <span class="text-red-500">*</span>
-                </label>
-                <textarea
-                  id="companies"
-                  name="Companies"
-                  rows="6"
-                  class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors resize-none text-sm"
-                  placeholder="Enter company names (one per line)
-
-Example:
-ABC Electronics Sdn Bhd
-XYZ Trading Co Ltd
-Sample Corp Malaysia"
-                ></textarea>
-                <p class="text-xs text-gray-500 mt-1">You can paste up to 200 company names.</p>
+                <label for="companies" class="block text-sm font-medium text-gray-700 mb-1">Companies <span class="text-red-500">*</span></label>
+                <textarea id="companies" name="Companies" rows="3"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm resize-none"
+                  placeholder="One company per line"></textarea>
               </div>
-
               <div>
-                <label for="countries" class="block text-sm font-medium text-gray-700 mb-2">
-                  Countries <span class="text-red-500">*</span>
-                </label>
-                <textarea
-                  id="countries"
-                  name="Countries"
-                  rows="3"
-                  class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors resize-none text-sm"
-                  placeholder="Enter countries (one per line)
-
-Example:
-Malaysia
-Thailand
-Singapore"
-                ></textarea>
+                <label for="countries" class="block text-sm font-medium text-gray-700 mb-1">Countries <span class="text-red-500">*</span></label>
+                <textarea id="countries" name="Countries" rows="2"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm resize-none"
+                  placeholder="e.g. Malaysia, Thailand"></textarea>
               </div>
             </div>
 
-            <!-- Divider -->
-            <div class="border-t border-gray-200 pt-6">
-              <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-4">Common Fields</p>
-            </div>
-
-            <!-- Target Business -->
-            <div>
-              <label for="targetBusiness" class="block text-sm font-medium text-gray-700 mb-2">
-                Target Business <span class="text-red-500">*</span>
-              </label>
-              <input
-                type="text"
-                id="targetBusiness"
-                name="TargetBusiness"
-                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-                placeholder="e.g. Semiconductor distributor, Electronics wholesaler"
-                required
-              >
+            <!-- Common Fields -->
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label for="targetBusiness" class="block text-sm font-medium text-gray-700 mb-1">Target Business <span class="text-red-500">*</span></label>
+                <input type="text" id="targetBusiness" name="TargetBusiness" required
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  placeholder="e.g. Semiconductor">
+              </div>
+              <div>
+                <label for="email" class="block text-sm font-medium text-gray-700 mb-1">Email <span class="text-red-500">*</span></label>
+                <input type="email" id="email" name="Email" required
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  placeholder="your@email.com">
+              </div>
             </div>
 
             <!-- Output Option -->
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-3">
-                Output Option <span class="text-red-500">*</span>
-              </label>
-              <div class="space-y-3">
-                <label class="radio-option flex items-start gap-3 p-4 border border-blue-500 bg-blue-50/50 rounded-lg cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-all selected">
-                  <input type="radio" name="OutputOption" value="in_scope_only" checked class="mt-0.5 w-4 h-4 text-blue-600 focus:ring-blue-500">
+              <label class="block text-sm font-medium text-gray-700 mb-2">Output Option <span class="text-red-500">*</span></label>
+              <div class="flex gap-3">
+                <label class="radio-option flex-1 flex items-center gap-2 p-2.5 border border-blue-500 bg-blue-50/50 rounded-lg cursor-pointer transition-all">
+                  <input type="radio" name="OutputOption" value="in_scope_only" checked class="w-4 h-4 text-blue-600">
                   <div>
-                    <span class="block text-sm font-medium text-gray-900">In-scope companies only</span>
-                    <span class="block text-xs text-gray-500 mt-0.5">Only show companies that match your target business criteria</span>
+                    <span class="text-sm font-medium text-gray-900">In-scope only</span>
                   </div>
                 </label>
-                <label class="radio-option flex items-start gap-3 p-4 border border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-all">
-                  <input type="radio" name="OutputOption" value="all_companies" class="mt-0.5 w-4 h-4 text-blue-600 focus:ring-blue-500">
+                <label class="radio-option flex-1 flex items-center gap-2 p-2.5 border border-gray-200 rounded-lg cursor-pointer hover:border-blue-300 transition-all">
+                  <input type="radio" name="OutputOption" value="all_companies" class="w-4 h-4 text-blue-600">
                   <div>
-                    <span class="block text-sm font-medium text-gray-900">All companies with status</span>
-                    <span class="block text-xs text-gray-500 mt-0.5">Show all companies with their validation status (in-scope / out-of-scope)</span>
+                    <span class="text-sm font-medium text-gray-900">All with status</span>
                   </div>
                 </label>
               </div>
             </div>
 
-            <!-- Email -->
-            <div>
-              <label for="email" class="block text-sm font-medium text-gray-700 mb-2">
-                Email <span class="text-red-500">*</span>
-              </label>
-              <input
-                type="email"
-                id="email"
-                name="Email"
-                class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors text-sm"
-                placeholder="e.g. yourname@company.com"
-                required
-              >
-            </div>
-
-            <!-- Submit Button -->
-            <button type="submit" id="submitBtn" class="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm hover:shadow-md transition-all transform hover:-translate-y-0.5 active:translate-y-0">
+            <button type="submit" id="submitBtn"
+              class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg shadow-sm transition-all">
               Validate Companies
             </button>
 
-            <!-- Messages -->
-            <div id="successMessage" class="hidden p-4 bg-green-50 border border-green-200 rounded-lg text-center">
-              <p class="text-green-800 font-medium">Validation request submitted!</p>
-              <p class="text-green-600 text-sm mt-1">Results will be emailed to you within 10 minutes.</p>
+            <div id="successMessage" class="hidden p-3 bg-green-50 border border-green-200 rounded-lg text-center">
+              <p class="text-green-800 text-sm font-medium">Submitted! Results will be emailed within 10 minutes.</p>
             </div>
 
-            <div id="errorMessage" class="hidden p-4 bg-red-50 border border-red-200 rounded-lg text-center">
-              <p class="text-red-800 font-medium">Error submitting request.</p>
-              <p class="text-red-600 text-sm mt-1">Please try again.</p>
+            <div id="errorMessage" class="hidden p-3 bg-red-50 border border-red-200 rounded-lg text-center">
+              <p class="text-red-800 text-sm font-medium">Error submitting request. Please try again.</p>
             </div>
           </div>
         </form>
       </div>
-
-      <!-- Footer -->
-      <p class="text-center text-xs text-gray-400 mt-8">Powered by AI</p>
     </div>
   </main>
 
   <script>
-    // Mobile menu toggle
     const mobileMenuBtn = document.getElementById('mobileMenuBtn');
     const mobileOverlay = document.getElementById('mobileOverlay');
     const sidebar = document.getElementById('sidebar');
@@ -319,30 +256,6 @@ Singapore"
       }
     });
 
-    // Drag and drop
-    uploadZone.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      uploadZone.classList.add('border-blue-400', 'bg-blue-50');
-    });
-
-    uploadZone.addEventListener('dragleave', (e) => {
-      e.preventDefault();
-      if (!uploadZone.classList.contains('border-green-400')) {
-        uploadZone.classList.remove('border-blue-400', 'bg-blue-50');
-      }
-    });
-
-    uploadZone.addEventListener('drop', (e) => {
-      e.preventDefault();
-      uploadZone.classList.remove('border-blue-400', 'bg-blue-50');
-      const file = e.dataTransfer.files[0];
-      if (file) {
-        fileInput.files = e.dataTransfer.files;
-        processExcelFile(file);
-      }
-    });
-
-    // Process Excel file with SheetJS
     function processExcelFile(file) {
       if (!file.name.match(/\.(xlsx|xls|csv)$/i)) {
         alert('Please upload an Excel file (.xlsx, .xls) or CSV file');
@@ -359,67 +272,50 @@ Singapore"
         try {
           const data = new Uint8Array(e.target.result);
           const workbook = XLSX.read(data, { type: 'array' });
-
-          // Get first sheet
           const sheetName = workbook.SheetNames[0];
           const sheet = workbook.Sheets[sheetName];
-
-          // Convert to JSON
           const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-
-          // Extract companies and countries
           const extractedData = extractCompaniesAndCountries(jsonData);
 
-          // Populate textareas and switch to manual tab to show results
           if (extractedData.companies.length > 0) {
             companiesTextarea.value = extractedData.companies.join('\n');
           }
           if (extractedData.countries.length > 0) {
             countriesTextarea.value = extractedData.countries.join('\n');
           }
-
-          // Switch to manual tab to show extracted data
           switchTab('manual');
-
-          console.log('Extracted:', extractedData);
         } catch (error) {
           console.error('Error parsing Excel:', error);
-          alert('Error parsing Excel file. Please check the file format.');
+          alert('Error parsing Excel file.');
         }
       };
       reader.readAsArrayBuffer(file);
     }
 
-    // Extract companies and countries from Excel data
     function extractCompaniesAndCountries(data) {
       const companies = [];
       const countries = new Set();
 
-      // Known country names for detection
       const knownCountries = [
         'malaysia', 'singapore', 'thailand', 'indonesia', 'vietnam', 'philippines',
         'china', 'japan', 'korea', 'south korea', 'taiwan', 'hong kong', 'india',
         'australia', 'usa', 'united states', 'uk', 'united kingdom', 'germany',
-        'france', 'italy', 'spain', 'netherlands', 'belgium', 'cambodia', 'myanmar',
-        'laos', 'brunei', 'bangladesh', 'pakistan', 'sri lanka', 'nepal'
+        'france', 'italy', 'spain', 'netherlands', 'belgium', 'cambodia', 'myanmar'
       ];
 
-      // Common column name patterns
-      const companyPatterns = ['company', 'name', 'company name', 'firm', 'organization', 'organisation', 'business'];
-      const countryPatterns = ['country', 'location', 'region', 'nation', 'hq', 'headquarters'];
+      const companyPatterns = ['company', 'name', 'company name', 'firm', 'organization'];
+      const countryPatterns = ['country', 'location', 'region', 'nation', 'hq'];
 
       let companyColIndex = -1;
       let countryColIndex = -1;
       let headerRow = -1;
 
-      // Find header row and column indices
       for (let i = 0; i < Math.min(5, data.length); i++) {
         const row = data[i];
         if (!row) continue;
 
         for (let j = 0; j < row.length; j++) {
           const cellValue = String(row[j] || '').toLowerCase().trim();
-
           if (companyColIndex === -1 && companyPatterns.some(p => cellValue.includes(p))) {
             companyColIndex = j;
             headerRow = i;
@@ -429,23 +325,19 @@ Singapore"
             headerRow = i;
           }
         }
-
         if (companyColIndex !== -1) break;
       }
 
-      // If no header found, assume first column is companies
       if (companyColIndex === -1) {
         companyColIndex = 0;
         headerRow = -1;
       }
 
-      // Extract data starting after header row
       const startRow = headerRow + 1;
       for (let i = startRow; i < data.length; i++) {
         const row = data[i];
         if (!row) continue;
 
-        // Get company name
         const companyName = String(row[companyColIndex] || '').trim();
         if (companyName && companyName.length > 1 && companyName.length < 200) {
           if (!knownCountries.includes(companyName.toLowerCase())) {
@@ -453,7 +345,6 @@ Singapore"
           }
         }
 
-        // Get country if column exists
         if (countryColIndex !== -1 && row[countryColIndex]) {
           const countryValue = String(row[countryColIndex]).trim();
           if (countryValue && knownCountries.includes(countryValue.toLowerCase())) {
@@ -461,10 +352,9 @@ Singapore"
           }
         }
 
-        // Also scan all cells for country names
         for (let j = 0; j < row.length; j++) {
           const cellValue = String(row[j] || '').toLowerCase().trim();
-          const matchedCountry = knownCountries.find(c => cellValue === c || cellValue.includes(c));
+          const matchedCountry = knownCountries.find(c => cellValue === c);
           if (matchedCountry) {
             countries.add(matchedCountry.charAt(0).toUpperCase() + matchedCountry.slice(1));
           }
@@ -477,15 +367,15 @@ Singapore"
       };
     }
 
-    // Radio button selection
+    // Radio buttons
     const radioOptions = document.querySelectorAll('.radio-option');
     radioOptions.forEach(option => {
       option.addEventListener('click', () => {
         radioOptions.forEach(opt => {
-          opt.classList.remove('selected', 'border-blue-500', 'bg-blue-50/50');
+          opt.classList.remove('border-blue-500', 'bg-blue-50/50');
           opt.classList.add('border-gray-200');
         });
-        option.classList.add('selected', 'border-blue-500', 'bg-blue-50/50');
+        option.classList.add('border-blue-500', 'bg-blue-50/50');
         option.classList.remove('border-gray-200');
         option.querySelector('input[type="radio"]').checked = true;
       });
@@ -504,7 +394,6 @@ Singapore"
 
       submitBtn.disabled = true;
       submitBtn.textContent = 'Submitting...';
-      submitBtn.classList.add('opacity-75');
 
       const outputOption = document.querySelector('input[name="OutputOption"]:checked').value;
 
@@ -529,14 +418,12 @@ Singapore"
           fileNameDisplay.classList.add('hidden');
           uploadZone.classList.remove('border-green-400', 'bg-green-50');
           uploadZone.classList.add('border-gray-300');
-          // Reset radio buttons
           radioOptions.forEach(opt => {
-            opt.classList.remove('selected', 'border-blue-500', 'bg-blue-50/50');
+            opt.classList.remove('border-blue-500', 'bg-blue-50/50');
             opt.classList.add('border-gray-200');
           });
-          radioOptions[0].classList.add('selected', 'border-blue-500', 'bg-blue-50/50');
+          radioOptions[0].classList.add('border-blue-500', 'bg-blue-50/50');
           radioOptions[0].classList.remove('border-gray-200');
-          // Reset to upload tab
           switchTab('upload');
         } else {
           throw new Error('Request failed');
@@ -546,7 +433,6 @@ Singapore"
       } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = 'Validate Companies';
-        submitBtn.classList.remove('opacity-75');
       }
     });
   </script>
