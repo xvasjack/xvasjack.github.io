@@ -296,6 +296,59 @@
       margin-top: 0.375rem;
     }
 
+    /* Radio Group */
+    .radio-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .radio-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: 0.875rem 1rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .radio-option:hover {
+      border-color: #2563eb;
+      background: #f8fafc;
+    }
+
+    .radio-option.selected {
+      border-color: #2563eb;
+      background: #eff6ff;
+    }
+
+    .radio-option input[type="radio"] {
+      margin-top: 0.125rem;
+      width: 1rem;
+      height: 1rem;
+      accent-color: #2563eb;
+      cursor: pointer;
+    }
+
+    .radio-content {
+      flex: 1;
+    }
+
+    .radio-label {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #374151;
+      display: block;
+      margin-bottom: 0.125rem;
+    }
+
+    .radio-description {
+      font-size: 0.75rem;
+      color: #6b7280;
+    }
+
     /* Submit Button */
     .submit-btn {
       width: 100%;
@@ -514,16 +567,26 @@
         </div>
 
         <div class="form-group">
-          <label class="form-label" for="isProfitable">
-            Is the target company profitable? <span class="required">*</span>
+          <label class="form-label">
+            Is the target profitable? <span class="required">*</span>
           </label>
-          <select id="isProfitable" name="IsProfitable" class="form-input" required>
-            <option value="">Select...</option>
-            <option value="yes">Yes - Profitable</option>
-            <option value="no">No - Loss-making</option>
-            <option value="unknown">Unknown</option>
-          </select>
-          <p class="helper-text">This helps filter relevant financial metrics</p>
+          <div class="radio-group">
+            <label class="radio-option selected">
+              <input type="radio" name="IsProfitable" value="yes" checked>
+              <div class="radio-content">
+                <span class="radio-label">Yes - Profitable</span>
+                <span class="radio-description">Target company has positive earnings. Use all metrics (P/E, P/B, EV/EBITDA, EV/Sales).</span>
+              </div>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="IsProfitable" value="no">
+              <div class="radio-content">
+                <span class="radio-label">No - Loss-making</span>
+                <span class="radio-description">Target company is unprofitable. Skip P/E ratio and focus on P/B, EV/Sales.</span>
+              </div>
+            </label>
+          </div>
+          <p class="helper-text">If you entered an industry instead of a specific company, select "Yes - Profitable".</p>
         </div>
 
         <div class="form-group">
@@ -616,6 +679,16 @@
       }
     });
 
+    // Radio button selection
+    const radioOptions = document.querySelectorAll('.radio-option');
+    radioOptions.forEach(option => {
+      option.addEventListener('click', () => {
+        radioOptions.forEach(opt => opt.classList.remove('selected'));
+        option.classList.add('selected');
+        option.querySelector('input[type="radio"]').checked = true;
+      });
+    });
+
     // Form submission
     document.getElementById('tradingComparableForm').addEventListener('submit', async function(e) {
       e.preventDefault();
@@ -643,6 +716,9 @@
           this.reset();
           fileNameDisplay.textContent = '';
           fileUploadLabel.classList.remove('has-file');
+          // Re-select default radio option after reset
+          radioOptions.forEach(opt => opt.classList.remove('selected'));
+          radioOptions[0].classList.add('selected');
         } else {
           throw new Error('Request failed');
         }
