@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
+const pptxgen = require('pptxgenjs');
 
 const app = express();
 app.use(cors());
@@ -1794,50 +1795,157 @@ Maintain the core message but apply Anil's tone, structure, and conventions. Inc
 
 // ============ PROFILE SLIDES ============
 
-// Carbone API configuration
-const CARBONE_TEMPLATE_ID = process.env.CARBONE_TEMPLATE_ID || '1301068940422363675';
-const CARBONE_API_TOKEN = process.env.CARBONE_API_TOKEN || 'eyJhbGciOiJFUzUxMiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIxMjkyNTc1MDM0OTYxNTIyOTA2IiwiYXVkIjoiY2FyYm9uZSIsImV4cCI6MjQyNTgwNjM4OSwiZGF0YSI6eyJ0eXBlIjoicHJvZCJ9fQ.AV2ze5AEli_nFsHNYYzdHXC15QtxMR1eEpVdxS2F3shTyA19tnRVFwjzN9m2VpJy3G7ibHwXPWIjl55SUJ50zjVAAHtq4Xw5898OKz9u3mB7OFijzdC7KUTr_uSHQZIfrIRB6so7W7XurTZ58yEVZIUKKbCv5jGBdMWfQpcwY_vJGvMg';
-
-// Generate PPTX using Carbone API
-async function generatePPTXWithCarbone(companies) {
+// Generate PPTX using PptxGenJS
+async function generatePPTX(companies) {
   try {
-    console.log('Calling Carbone API to generate PPTX...');
+    console.log('Generating PPTX with PptxGenJS...');
 
-    const response = await fetch(`https://api.carbone.io/render/${CARBONE_TEMPLATE_ID}?download=true`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${CARBONE_API_TOKEN}`,
-        'Content-Type': 'application/json',
-        'carbone-version': '5'
-      },
-      body: JSON.stringify({
-        data: { companies },
-        convertTo: 'pptx'
-      })
+    const pptx = new pptxgen();
+    pptx.author = 'Find Target';
+    pptx.title = 'Company Profile Slides';
+    pptx.subject = 'Company Profiles';
+
+    // Define colors
+    const COLORS = {
+      primary: '1e3a5f',    // Dark blue
+      secondary: '2563eb',  // Blue
+      accent: '16a34a',     // Green
+      text: '1f2937',       // Dark gray
+      lightBg: 'f8fafc',    // Light gray background
+      white: 'ffffff'
+    };
+
+    companies.forEach((company, index) => {
+      const slide = pptx.addSlide();
+
+      // Header bar
+      slide.addShape(pptx.shapes.RECTANGLE, {
+        x: 0, y: 0, w: '100%', h: 0.8,
+        fill: { color: COLORS.primary }
+      });
+
+      // Company title
+      slide.addText(company.title || company.company_name || 'Company Profile', {
+        x: 0.5, y: 0.15, w: 8, h: 0.5,
+        fontSize: 24, bold: true, color: COLORS.white
+      });
+
+      // Slide number
+      slide.addText(`${index + 1}/${companies.length}`, {
+        x: 8.5, y: 0.15, w: 1, h: 0.5,
+        fontSize: 12, color: COLORS.white, align: 'right'
+      });
+
+      // Message (subtitle)
+      if (company.message) {
+        slide.addText(company.message, {
+          x: 0.5, y: 1.0, w: 9, h: 0.4,
+          fontSize: 12, italic: true, color: COLORS.secondary
+        });
+      }
+
+      // Left column - Basic Info
+      let yPos = 1.6;
+
+      // Website
+      if (company.website) {
+        slide.addText([
+          { text: 'Website: ', options: { bold: true, color: COLORS.text } },
+          { text: company.website, options: { color: COLORS.secondary } }
+        ], { x: 0.5, y: yPos, w: 4.5, h: 0.3, fontSize: 10 });
+        yPos += 0.35;
+      }
+
+      // Established Year
+      if (company.established_year) {
+        slide.addText([
+          { text: 'Established: ', options: { bold: true, color: COLORS.text } },
+          { text: company.established_year, options: { color: COLORS.text } }
+        ], { x: 0.5, y: yPos, w: 4.5, h: 0.3, fontSize: 10 });
+        yPos += 0.35;
+      }
+
+      // Location
+      if (company.location) {
+        slide.addText('Location:', {
+          x: 0.5, y: yPos, w: 4.5, h: 0.25,
+          fontSize: 10, bold: true, color: COLORS.text
+        });
+        yPos += 0.25;
+
+        const locationLines = company.location.split('\n').filter(l => l.trim());
+        locationLines.forEach(line => {
+          slide.addText(line.trim(), {
+            x: 0.5, y: yPos, w: 4.5, h: 0.22,
+            fontSize: 9, color: COLORS.text
+          });
+          yPos += 0.22;
+        });
+        yPos += 0.1;
+      }
+
+      // Business description
+      if (company.business) {
+        slide.addText('Business:', {
+          x: 0.5, y: yPos, w: 4.5, h: 0.25,
+          fontSize: 10, bold: true, color: COLORS.text
+        });
+        yPos += 0.28;
+
+        const businessLines = company.business.split('\n').filter(l => l.trim());
+        businessLines.forEach(line => {
+          slide.addText(line.replace(/^-\s*/, '• ').trim(), {
+            x: 0.5, y: yPos, w: 4.5, h: 0.22,
+            fontSize: 9, color: COLORS.text
+          });
+          yPos += 0.22;
+        });
+      }
+
+      // Right column - Key Metrics
+      if (company.metrics) {
+        slide.addShape(pptx.shapes.RECTANGLE, {
+          x: 5.2, y: 1.5, w: 4.3, h: 3.2,
+          fill: { color: COLORS.lightBg },
+          line: { color: 'e5e7eb', width: 1 }
+        });
+
+        slide.addText('Key Metrics', {
+          x: 5.4, y: 1.6, w: 4, h: 0.3,
+          fontSize: 11, bold: true, color: COLORS.primary
+        });
+
+        let metricsY = 1.95;
+        const metricsLines = company.metrics.split('\n').filter(l => l.trim());
+        metricsLines.slice(0, 12).forEach(line => {
+          slide.addText('• ' + line.trim(), {
+            x: 5.4, y: metricsY, w: 3.9, h: 0.22,
+            fontSize: 8, color: COLORS.text
+          });
+          metricsY += 0.24;
+        });
+      }
+
+      // Footnote at bottom
+      if (company.footnote) {
+        slide.addText(company.footnote, {
+          x: 0.5, y: 5.0, w: 9, h: 0.4,
+          fontSize: 7, color: '6b7280', italic: true
+        });
+      }
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Carbone API error:', errorText);
-      throw new Error(`Carbone API failed: ${response.status}`);
-    }
+    // Generate base64
+    const base64Content = await pptx.write({ outputType: 'base64' });
 
-    // Get the binary PPTX file
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // Convert to base64 for email attachment
-    const base64Content = buffer.toString('base64');
-
-    console.log(`PPTX generated: ${buffer.length} bytes`);
+    console.log('PPTX generated successfully');
 
     return {
       success: true,
-      content: base64Content,
-      size: buffer.length
+      content: base64Content
     };
   } catch (error) {
-    console.error('Carbone error:', error);
+    console.error('PptxGenJS error:', error);
     return {
       success: false,
       error: error.message
@@ -2200,23 +2308,10 @@ app.post('/api/profile-slides', async (req, res) => {
     console.log(`Extracted: ${companies.length}/${websites.length} successful`);
     console.log('='.repeat(50));
 
-    // Generate PPTX using Carbone
+    // Generate PPTX using PptxGenJS
     let pptxResult = null;
     if (companies.length > 0) {
-      // Format data for Carbone template
-      const carboneData = companies.map(c => ({
-        company_name: c.company_name,
-        website: c.website,
-        established_year: c.established_year,
-        location: c.location,
-        business: c.business,
-        message: c.message,
-        footnote: c.footnote,
-        title: c.title,
-        metrics: c.metrics
-      }));
-
-      pptxResult = await generatePPTXWithCarbone(carboneData);
+      pptxResult = await generatePPTX(companies);
     }
 
     // Build email content
