@@ -24,21 +24,32 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
 
-// Send email using Brevo API
-async function sendEmail(to, subject, html) {
+// Send email using Brevo API (with optional attachment)
+async function sendEmail(to, subject, html, attachment = null) {
   const senderEmail = process.env.BREVO_SENDER_EMAIL || 'xvasjack@gmail.com';
+
+  const emailData = {
+    sender: { name: 'Find Target', email: senderEmail },
+    to: [{ email: to }],
+    subject: subject,
+    htmlContent: html
+  };
+
+  // Add attachment if provided
+  if (attachment) {
+    emailData.attachment = [{
+      content: attachment.content, // base64 encoded
+      name: attachment.name
+    }];
+  }
+
   const response = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: {
       'api-key': process.env.BREVO_API_KEY,
       'Content-Type': 'application/json'
     },
-    body: JSON.stringify({
-      sender: { name: 'Find Target', email: senderEmail },
-      to: [{ email: to }],
-      subject: subject,
-      htmlContent: html
-    })
+    body: JSON.stringify(emailData)
   });
 
   if (!response.ok) {
@@ -1783,6 +1794,57 @@ Maintain the core message but apply Anil's tone, structure, and conventions. Inc
 
 // ============ PROFILE SLIDES ============
 
+// Carbone API configuration
+const CARBONE_TEMPLATE_ID = process.env.CARBONE_TEMPLATE_ID || '1301068940422363675';
+const CARBONE_API_TOKEN = process.env.CARBONE_API_TOKEN || 'eyJhbGciOiJFUzUxMiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIxMjkyNTc1MDM0OTYxNTIyOTA2IiwiYXVkIjoiY2FyYm9uZSIsImV4cCI6MjQyNTgwNjM4OSwiZGF0YSI6eyJ0eXBlIjoicHJvZCJ9fQ.AV2ze5AEli_nFsHNYYzdHXC15QtxMR1eEpVdxS2F3shTyA19tnRVFwjzN9m2VpJy3G7ibHwXPWIjl55SUJ50zjVAAHtq4Xw5898OKz9u3mB7OFijzdC7KUTr_uSHQZIfrIRB6so7W7XurTZ58yEVZIUKKbCv5jGBdMWfQpcwY_vJGvMg';
+
+// Generate PPTX using Carbone API
+async function generatePPTXWithCarbone(companies) {
+  try {
+    console.log('Calling Carbone API to generate PPTX...');
+
+    const response = await fetch(`https://api.carbone.io/render/${CARBONE_TEMPLATE_ID}?download=true`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${CARBONE_API_TOKEN}`,
+        'Content-Type': 'application/json',
+        'carbone-version': '5'
+      },
+      body: JSON.stringify({
+        data: { companies },
+        convertTo: 'pptx'
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Carbone API error:', errorText);
+      throw new Error(`Carbone API failed: ${response.status}`);
+    }
+
+    // Get the binary PPTX file
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    // Convert to base64 for email attachment
+    const base64Content = buffer.toString('base64');
+
+    console.log(`PPTX generated: ${buffer.length} bytes`);
+
+    return {
+      success: true,
+      content: base64Content,
+      size: buffer.length
+    };
+  } catch (error) {
+    console.error('Carbone error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
 // Currency exchange mapping by country
 const CURRENCY_EXCHANGE = {
   'philippines': '為替レート: PHP 100M = 3億円',
@@ -1991,33 +2053,32 @@ ${scrapedContent.substring(0, 12000)}`
   }
 }
 
-// Build profile slides email HTML
-function buildProfileSlidesEmailHTML(companies, errors) {
+// Build profile slides email HTML (simple version with PPTX attached)
+function buildProfileSlidesEmailHTML(companies, errors, hasPPTX) {
+  const companyNames = companies.map(c => c.title || c.company_name).join(', ');
+
   let html = `
-    <h2>Profile Slides - Extracted Data</h2>
-    <p><strong>Companies Extracted:</strong> ${companies.length}</p>
-    <p><strong>Failed:</strong> ${errors.length}</p>
+    <h2>Profile Slides</h2>
+    <p>Your profile slides have been generated.</p>
     <br>
+    <p><strong>Companies Extracted:</strong> ${companies.length}</p>
+    <p><strong>Companies:</strong> ${companyNames || 'N/A'}</p>
   `;
 
-  // Company data table
-  if (companies.length > 0) {
-    html += `<h3>Extracted Company Profiles</h3>`;
+  if (hasPPTX) {
+    html += `<br><p style="color: #16a34a;"><strong>✓ PowerPoint file attached.</strong></p>`;
+  } else {
+    html += `<br><p style="color: #dc2626;"><strong>⚠ PPTX generation failed. Data included below.</strong></p>`;
 
+    // Include extracted data as fallback
     companies.forEach((c, i) => {
       html += `
-        <div style="margin-bottom: 24px; padding: 16px; border: 1px solid #e5e7eb; border-radius: 8px;">
-          <h4 style="margin: 0 0 12px 0; color: #1f2937;">${i + 1}. ${c.title || c.company_name || 'Unknown'}</h4>
-          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-            <tr><td style="padding: 6px 0; color: #6b7280; width: 140px;"><strong>Website:</strong></td><td style="padding: 6px 0;"><a href="${c.website}">${c.website}</a></td></tr>
-            <tr><td style="padding: 6px 0; color: #6b7280;"><strong>Company Name:</strong></td><td style="padding: 6px 0;">${c.company_name || '-'}</td></tr>
-            <tr><td style="padding: 6px 0; color: #6b7280;"><strong>Established:</strong></td><td style="padding: 6px 0;">${c.established_year || '-'}</td></tr>
-            <tr><td style="padding: 6px 0; color: #6b7280; vertical-align: top;"><strong>Location:</strong></td><td style="padding: 6px 0; white-space: pre-line;">${c.location || '-'}</td></tr>
-            <tr><td style="padding: 6px 0; color: #6b7280; vertical-align: top;"><strong>Message:</strong></td><td style="padding: 6px 0;">${c.message || '-'}</td></tr>
-            <tr><td style="padding: 6px 0; color: #6b7280; vertical-align: top;"><strong>Business:</strong></td><td style="padding: 6px 0; white-space: pre-line;">${c.business || '-'}</td></tr>
-            <tr><td style="padding: 6px 0; color: #6b7280; vertical-align: top;"><strong>Key Metrics:</strong></td><td style="padding: 6px 0; white-space: pre-line;">${c.metrics || '-'}</td></tr>
-            <tr><td style="padding: 6px 0; color: #6b7280; vertical-align: top;"><strong>Footnote:</strong></td><td style="padding: 6px 0; white-space: pre-line;">${c.footnote || '-'}</td></tr>
-          </table>
+        <div style="margin: 16px 0; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px;">
+          <h4 style="margin: 0 0 8px 0;">${i + 1}. ${c.title || c.company_name || 'Unknown'}</h4>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Website:</strong> ${c.website}</p>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Established:</strong> ${c.established_year || '-'}</p>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Location:</strong> ${c.location || '-'}</p>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Business:</strong> ${c.business || '-'}</p>
         </div>
       `;
     });
@@ -2025,30 +2086,13 @@ function buildProfileSlidesEmailHTML(companies, errors) {
 
   // Errors section
   if (errors.length > 0) {
-    html += `<h3 style="color: #dc2626;">Failed Extractions</h3>`;
+    html += `<br><h3 style="color: #dc2626;">Failed Extractions</h3>`;
     html += `<ul>`;
     errors.forEach(e => {
       html += `<li><strong>${e.website}</strong>: ${e.error}</li>`;
     });
     html += `</ul>`;
   }
-
-  // JSON data for Carbone
-  html += `
-    <br>
-    <h3>JSON Data (for Carbone/PPTX generation)</h3>
-    <pre style="background: #f3f4f6; padding: 16px; border-radius: 8px; overflow-x: auto; font-size: 12px;">${JSON.stringify(companies.map(c => ({
-      company_name: c.company_name,
-      website: c.website,
-      established_year: c.established_year,
-      location: c.location,
-      business: c.business,
-      message: c.message,
-      footnote: c.footnote,
-      title: c.title,
-      metrics: c.metrics
-    })), null, 2)}</pre>
-  `;
 
   return html;
 }
@@ -2152,18 +2196,43 @@ app.post('/api/profile-slides', async (req, res) => {
     const errors = results.filter(r => r.error);
 
     console.log(`\n${'='.repeat(50)}`);
-    console.log(`PROFILE SLIDES COMPLETE`);
-    console.log(`Processed: ${companies.length}/${websites.length} successful`);
+    console.log(`PROFILE SLIDES EXTRACTION COMPLETE`);
+    console.log(`Extracted: ${companies.length}/${websites.length} successful`);
     console.log('='.repeat(50));
 
-    // Send email with results
-    const htmlContent = buildProfileSlidesEmailHTML(companies, errors);
+    // Generate PPTX using Carbone
+    let pptxResult = null;
+    if (companies.length > 0) {
+      // Format data for Carbone template
+      const carboneData = companies.map(c => ({
+        company_name: c.company_name,
+        website: c.website,
+        established_year: c.established_year,
+        location: c.location,
+        business: c.business,
+        message: c.message,
+        footnote: c.footnote,
+        title: c.title,
+        metrics: c.metrics
+      }));
+
+      pptxResult = await generatePPTXWithCarbone(carboneData);
+    }
+
+    // Build email content
     const companyNames = companies.slice(0, 3).map(c => c.title || c.company_name).join(', ');
-    const subject = `Profile Slides: ${companies.length} companies extracted${companyNames ? ` (${companyNames}${companies.length > 3 ? '...' : ''})` : ''}`;
+    const subject = `Profile Slides: ${companies.length} companies${companyNames ? ` (${companyNames}${companies.length > 3 ? '...' : ''})` : ''}`;
+    const htmlContent = buildProfileSlidesEmailHTML(companies, errors, pptxResult?.success);
 
-    await sendEmail(email, subject, htmlContent);
+    // Send email with PPTX attachment
+    const attachment = pptxResult?.success ? {
+      content: pptxResult.content,
+      name: `Profile_Slides_${new Date().toISOString().split('T')[0]}.pptx`
+    } : null;
 
-    console.log(`Email sent to ${email}`);
+    await sendEmail(email, subject, htmlContent, attachment);
+
+    console.log(`Email sent to ${email}${attachment ? ' with PPTX attachment' : ''}`);
     console.log('='.repeat(50));
 
   } catch (error) {
