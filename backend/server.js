@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
+const pptxgen = require('pptxgenjs');
 const XLSX = require('xlsx');
 const multer = require('multer');
 
@@ -2023,6 +2024,556 @@ Maintain the core message but apply Anil's tone, structure, and conventions. Inc
   }
 });
 
+<<<<<<< HEAD
+// ============ PROFILE SLIDES ============
+
+// Generate PPTX using PptxGenJS
+async function generatePPTX(companies) {
+  try {
+    console.log('Generating PPTX with PptxGenJS...');
+
+    const pptx = new pptxgen();
+    pptx.author = 'Find Target';
+    pptx.title = 'Company Profile Slides';
+    pptx.subject = 'Company Profiles';
+
+    // Define colors
+    const COLORS = {
+      primary: '1e3a5f',    // Dark blue
+      secondary: '2563eb',  // Blue
+      accent: '16a34a',     // Green
+      text: '1f2937',       // Dark gray
+      lightBg: 'f8fafc',    // Light gray background
+      white: 'ffffff'
+    };
+
+    companies.forEach((company, index) => {
+      const slide = pptx.addSlide();
+
+      // Header bar
+      slide.addShape(pptx.shapes.RECTANGLE, {
+        x: 0, y: 0, w: '100%', h: 0.8,
+        fill: { color: COLORS.primary }
+      });
+
+      // Company title
+      slide.addText(company.title || company.company_name || 'Company Profile', {
+        x: 0.5, y: 0.15, w: 8, h: 0.5,
+        fontSize: 24, bold: true, color: COLORS.white
+      });
+
+      // Slide number
+      slide.addText(`${index + 1}/${companies.length}`, {
+        x: 8.5, y: 0.15, w: 1, h: 0.5,
+        fontSize: 12, color: COLORS.white, align: 'right'
+      });
+
+      // Message (subtitle)
+      if (company.message) {
+        slide.addText(company.message, {
+          x: 0.5, y: 1.0, w: 9, h: 0.4,
+          fontSize: 12, italic: true, color: COLORS.secondary
+        });
+      }
+
+      // Left column - Basic Info
+      let yPos = 1.6;
+
+      // Website
+      if (company.website) {
+        slide.addText([
+          { text: 'Website: ', options: { bold: true, color: COLORS.text } },
+          { text: company.website, options: { color: COLORS.secondary } }
+        ], { x: 0.5, y: yPos, w: 4.5, h: 0.3, fontSize: 10 });
+        yPos += 0.35;
+      }
+
+      // Established Year
+      if (company.established_year) {
+        slide.addText([
+          { text: 'Established: ', options: { bold: true, color: COLORS.text } },
+          { text: company.established_year, options: { color: COLORS.text } }
+        ], { x: 0.5, y: yPos, w: 4.5, h: 0.3, fontSize: 10 });
+        yPos += 0.35;
+      }
+
+      // Location
+      if (company.location) {
+        slide.addText('Location:', {
+          x: 0.5, y: yPos, w: 4.5, h: 0.25,
+          fontSize: 10, bold: true, color: COLORS.text
+        });
+        yPos += 0.25;
+
+        const locationLines = company.location.split('\n').filter(l => l.trim());
+        locationLines.forEach(line => {
+          slide.addText(line.trim(), {
+            x: 0.5, y: yPos, w: 4.5, h: 0.22,
+            fontSize: 9, color: COLORS.text
+          });
+          yPos += 0.22;
+        });
+        yPos += 0.1;
+      }
+
+      // Business description
+      if (company.business) {
+        slide.addText('Business:', {
+          x: 0.5, y: yPos, w: 4.5, h: 0.25,
+          fontSize: 10, bold: true, color: COLORS.text
+        });
+        yPos += 0.28;
+
+        const businessLines = company.business.split('\n').filter(l => l.trim());
+        businessLines.forEach(line => {
+          slide.addText(line.replace(/^-\s*/, '• ').trim(), {
+            x: 0.5, y: yPos, w: 4.5, h: 0.22,
+            fontSize: 9, color: COLORS.text
+          });
+          yPos += 0.22;
+        });
+      }
+
+      // Right column - Key Metrics
+      if (company.metrics) {
+        slide.addShape(pptx.shapes.RECTANGLE, {
+          x: 5.2, y: 1.5, w: 4.3, h: 3.2,
+          fill: { color: COLORS.lightBg },
+          line: { color: 'e5e7eb', width: 1 }
+        });
+
+        slide.addText('Key Metrics', {
+          x: 5.4, y: 1.6, w: 4, h: 0.3,
+          fontSize: 11, bold: true, color: COLORS.primary
+        });
+
+        let metricsY = 1.95;
+        const metricsLines = company.metrics.split('\n').filter(l => l.trim());
+        metricsLines.slice(0, 12).forEach(line => {
+          slide.addText('• ' + line.trim(), {
+            x: 5.4, y: metricsY, w: 3.9, h: 0.22,
+            fontSize: 8, color: COLORS.text
+          });
+          metricsY += 0.24;
+        });
+      }
+
+      // Footnote at bottom
+      if (company.footnote) {
+        slide.addText(company.footnote, {
+          x: 0.5, y: 5.0, w: 9, h: 0.4,
+          fontSize: 7, color: '6b7280', italic: true
+        });
+      }
+    });
+
+    // Generate base64
+    const base64Content = await pptx.write({ outputType: 'base64' });
+
+    console.log('PPTX generated successfully');
+
+    return {
+      success: true,
+      content: base64Content
+    };
+  } catch (error) {
+    console.error('PptxGenJS error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// Currency exchange mapping by country
+const CURRENCY_EXCHANGE = {
+  'philippines': '為替レート: PHP 100M = 3億円',
+  'thailand': '為替レート: THB 100M = 4億円',
+  'malaysia': '為替レート: MYR 10M = 3億円',
+  'indonesia': '為替レート: IDR 10B = 1億円',
+  'singapore': '為替レート: SGD 1M = 1億円',
+  'vietnam': '為替レート: VND 100B = 6億円'
+};
+
+// Scrape website and convert to clean text (similar to fetchWebsite but returns more content)
+async function scrapeWebsite(url) {
+  try {
+    // Normalize URL
+    if (!url.startsWith('http')) {
+      url = 'https://' + url;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      },
+      signal: controller.signal,
+      redirect: 'follow'
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      return { success: false, error: `HTTP ${response.status}` };
+    }
+
+    const html = await response.text();
+
+    // Clean HTML to readable text (similar to n8n's markdownify)
+    const cleanText = html
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+      .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (cleanText.length < 100) {
+      return { success: false, error: 'Insufficient content' };
+    }
+
+    return { success: true, content: cleanText.substring(0, 25000), url };
+  } catch (e) {
+    return { success: false, error: e.message || 'Connection failed' };
+  }
+}
+
+// AI Agent 1: Extract company name, established year, location
+async function extractBasicInfo(scrapedContent, websiteUrl) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You extract company information from website content.
+
+OUTPUT JSON with these fields:
+- company_name: Company name with first letter of each word capitalized
+- established_year: Clean numbers only (e.g., "1995"), leave empty if not found
+- location: Format as "type: city, state, country" for each location. Types: HQ, warehouse, factory, branch, etc. Multiple locations in point form. If Singapore, include which area. No postcodes or full addresses.
+
+RULES:
+- Write proper English (e.g., "Việt Nam" → "Vietnam")
+- Leave fields empty if information not found
+- Return ONLY valid JSON`
+        },
+        {
+          role: 'user',
+          content: `Website: ${websiteUrl}
+Content: ${scrapedContent.substring(0, 12000)}`
+        }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.2
+    });
+
+    return JSON.parse(response.choices[0].message.content);
+  } catch (e) {
+    console.error('Agent 1 error:', e.message);
+    return { company_name: '', established_year: '', location: '' };
+  }
+}
+
+// AI Agent 2: Extract business, message, footnote, title
+async function extractBusinessInfo(scrapedContent, basicInfo) {
+  const locationText = basicInfo.location || '';
+  const hqMatch = locationText.match(/HQ:\s*([^,\n]+),\s*([^\n]+)/i);
+  const hqCountry = hqMatch ? hqMatch[2].trim().toLowerCase() : '';
+  const currencyExchange = CURRENCY_EXCHANGE[hqCountry] || '';
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You extract business information from website content.
+
+INPUT:
+- HTML content from company website
+- Previously extracted: company name, year, location
+
+OUTPUT JSON:
+1. business: Brief description of what company does. Format like: "Manufacture products such as X, Y, Z. Distribute products such as A, B, C." Max 3 examples per point. Use point forms (\\n-) for different business lines.
+
+2. message: One-liner introductory message about the company. Example: "Malaysia-based distributor specializing in electronic components and industrial automation products across Southeast Asia."
+
+3. footnote: Two parts:
+   - Notes (optional): If unusual shortforms used, write full-form like "SKU (Stock Keeping Unit)". Separate multiple with comma.
+   - Currency: ${currencyExchange || 'Leave empty if no matching currency'}
+   Separate notes and currency with semicolon. Always end with new line: "出典: 会社ウェブサイト、SPEEDA"
+
+4. title: Company name WITHOUT suffix (remove Pte Ltd, Sdn Bhd, Co Ltd, JSC, PT, Inc, etc.)
+
+RULES:
+- All point forms use "\\n-"
+- Return ONLY valid JSON`
+        },
+        {
+          role: 'user',
+          content: `Company: ${basicInfo.company_name}
+Established: ${basicInfo.established_year}
+Location: ${basicInfo.location}
+
+Website Content:
+${scrapedContent.substring(0, 12000)}`
+        }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.2
+    });
+
+    return JSON.parse(response.choices[0].message.content);
+  } catch (e) {
+    console.error('Agent 2 error:', e.message);
+    return { business: '', message: '', footnote: '', title: basicInfo.company_name || '' };
+  }
+}
+
+// AI Agent 3: Extract key metrics
+async function extractKeyMetrics(scrapedContent, previousData) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You extract key business metrics from website content.
+
+Example metrics to look for:
+- Supplier names
+- Customer names
+- Supplier/Customer count
+- Number of projects
+- Brands distributed/owned
+- Headcount/Employee count
+- Countries exported to
+- Countries with sales/project/product presence
+- Revenue figures
+- Years of experience
+- Number of products
+- Factory/warehouse size
+- Certifications
+
+OUTPUT JSON with ONE field:
+- metrics: All key metrics found, formatted as readable text with line breaks (\\n). Include the metric name and value.
+
+Only include metrics that are explicitly mentioned on the website.
+Return ONLY valid JSON.`
+        },
+        {
+          role: 'user',
+          content: `Company: ${previousData.company_name}
+Business: ${previousData.business}
+
+Website Content:
+${scrapedContent.substring(0, 12000)}`
+        }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.2
+    });
+
+    return JSON.parse(response.choices[0].message.content);
+  } catch (e) {
+    console.error('Agent 3 error:', e.message);
+    return { metrics: '' };
+  }
+}
+
+// Build profile slides email HTML (simple version with PPTX attached)
+function buildProfileSlidesEmailHTML(companies, errors, hasPPTX) {
+  const companyNames = companies.map(c => c.title || c.company_name).join(', ');
+
+  let html = `
+    <h2>Profile Slides</h2>
+    <p>Your profile slides have been generated.</p>
+    <br>
+    <p><strong>Companies Extracted:</strong> ${companies.length}</p>
+    <p><strong>Companies:</strong> ${companyNames || 'N/A'}</p>
+  `;
+
+  if (hasPPTX) {
+    html += `<br><p style="color: #16a34a;"><strong>✓ PowerPoint file attached.</strong></p>`;
+  } else {
+    html += `<br><p style="color: #dc2626;"><strong>⚠ PPTX generation failed. Data included below.</strong></p>`;
+
+    // Include extracted data as fallback
+    companies.forEach((c, i) => {
+      html += `
+        <div style="margin: 16px 0; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px;">
+          <h4 style="margin: 0 0 8px 0;">${i + 1}. ${c.title || c.company_name || 'Unknown'}</h4>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Website:</strong> ${c.website}</p>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Established:</strong> ${c.established_year || '-'}</p>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Location:</strong> ${c.location || '-'}</p>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Business:</strong> ${c.business || '-'}</p>
+        </div>
+      `;
+    });
+  }
+
+  // Errors section
+  if (errors.length > 0) {
+    html += `<br><h3 style="color: #dc2626;">Failed Extractions</h3>`;
+    html += `<ul>`;
+    errors.forEach(e => {
+      html += `<li><strong>${e.website}</strong>: ${e.error}</li>`;
+    });
+    html += `</ul>`;
+  }
+
+  return html;
+}
+
+// Main profile slides endpoint
+app.post('/api/profile-slides', async (req, res) => {
+  const { websites, email } = req.body;
+
+  if (!websites || !Array.isArray(websites) || websites.length === 0) {
+    return res.status(400).json({ error: 'Please provide an array of website URLs' });
+  }
+
+  if (!email) {
+    return res.status(400).json({ error: 'Please provide an email address' });
+  }
+
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`PROFILE SLIDES REQUEST: ${new Date().toISOString()}`);
+  console.log(`Processing ${websites.length} website(s)`);
+  console.log(`Email: ${email}`);
+  console.log('='.repeat(50));
+
+  // Return immediately - process in background
+  res.json({
+    success: true,
+    message: 'Request received. Results will be emailed within 5-10 minutes.',
+    companies: [],
+    errors: [],
+    total: websites.length
+  });
+
+  // Process in background
+  try {
+    const results = [];
+
+    for (let i = 0; i < websites.length; i++) {
+      const website = websites[i].trim();
+      if (!website) continue;
+
+      console.log(`\n[${i + 1}/${websites.length}] Processing: ${website}`);
+
+      try {
+        // Step 1: Scrape website
+        console.log('  Step 1: Scraping website...');
+        const scraped = await scrapeWebsite(website);
+
+        if (!scraped.success) {
+          console.log(`  Failed to scrape: ${scraped.error}`);
+          results.push({
+            website,
+            error: `Failed to scrape: ${scraped.error}`,
+            step: 1
+          });
+          continue;
+        }
+        console.log(`  Scraped ${scraped.content.length} characters`);
+
+        // Step 2: Extract basic info (company name, year, location)
+        console.log('  Step 2: Extracting company name, year, location...');
+        const basicInfo = await extractBasicInfo(scraped.content, website);
+        console.log(`  Company: ${basicInfo.company_name || 'Not found'}`);
+
+        // Step 3: Extract business details
+        console.log('  Step 3: Extracting business, message, footnote, title...');
+        const businessInfo = await extractBusinessInfo(scraped.content, basicInfo);
+
+        // Step 4: Extract key metrics
+        console.log('  Step 4: Extracting key metrics...');
+        const metricsInfo = await extractKeyMetrics(scraped.content, {
+          company_name: basicInfo.company_name,
+          business: businessInfo.business
+        });
+
+        // Combine all extracted data
+        const companyData = {
+          website: scraped.url,
+          company_name: basicInfo.company_name || '',
+          established_year: basicInfo.established_year || '',
+          location: basicInfo.location || '',
+          business: businessInfo.business || '',
+          message: businessInfo.message || '',
+          footnote: businessInfo.footnote || '',
+          title: businessInfo.title || '',
+          metrics: metricsInfo.metrics || ''
+        };
+
+        console.log(`  ✓ Completed: ${companyData.title || companyData.company_name}`);
+        results.push(companyData);
+
+      } catch (error) {
+        console.error(`  Error processing ${website}:`, error.message);
+        results.push({
+          website,
+          error: error.message,
+          step: 0
+        });
+      }
+    }
+
+    const companies = results.filter(r => !r.error);
+    const errors = results.filter(r => r.error);
+
+    console.log(`\n${'='.repeat(50)}`);
+    console.log(`PROFILE SLIDES EXTRACTION COMPLETE`);
+    console.log(`Extracted: ${companies.length}/${websites.length} successful`);
+    console.log('='.repeat(50));
+
+    // Generate PPTX using PptxGenJS
+    let pptxResult = null;
+    if (companies.length > 0) {
+      pptxResult = await generatePPTX(companies);
+    }
+
+    // Build email content
+    const companyNames = companies.slice(0, 3).map(c => c.title || c.company_name).join(', ');
+    const subject = `Profile Slides: ${companies.length} companies${companyNames ? ` (${companyNames}${companies.length > 3 ? '...' : ''})` : ''}`;
+    const htmlContent = buildProfileSlidesEmailHTML(companies, errors, pptxResult?.success);
+
+    // Send email with PPTX attachment
+    const attachment = pptxResult?.success ? {
+      content: pptxResult.content,
+      name: `Profile_Slides_${new Date().toISOString().split('T')[0]}.pptx`
+    } : null;
+
+    await sendEmail(email, subject, htmlContent, attachment);
+
+    console.log(`Email sent to ${email}${attachment ? ' with PPTX attachment' : ''}`);
+    console.log('='.repeat(50));
+
+  } catch (error) {
+    console.error('Profile slides error:', error);
+    try {
+      await sendEmail(email, 'Profile Slides - Error', `<p>Error processing your request: ${error.message}</p>`);
+    } catch (e) {
+      console.error('Failed to send error email:', e);
+    }
+  }
+});
+
+=======
+>>>>>>> origin/main
 app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'Find Target v29 - Write Like Anil' });
 });
