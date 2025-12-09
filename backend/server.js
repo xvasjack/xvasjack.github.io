@@ -2384,142 +2384,123 @@ Maintain the core message but apply Anil's tone, structure, and conventions. Inc
 
 // ============ PROFILE SLIDES ============
 
-// Generate PPTX using PptxGenJS
+// Generate PPTX using PptxGenJS - matching YCP template
 async function generatePPTX(companies) {
   try {
     console.log('Generating PPTX with PptxGenJS...');
 
     const pptx = new pptxgen();
-    pptx.author = 'Find Target';
+    pptx.author = 'YCP';
     pptx.title = 'Company Profile Slides';
     pptx.subject = 'Company Profiles';
+    pptx.layout = 'LAYOUT_16x9';
 
-    // Define colors
+    // YCP Theme Colors (from template)
     const COLORS = {
-      primary: '1e3a5f',    // Dark blue
-      secondary: '2563eb',  // Blue
-      accent: '16a34a',     // Green
-      text: '1f2937',       // Dark gray
-      lightBg: 'f8fafc',    // Light gray background
-      white: 'ffffff'
+      accent3: '011AB7',      // Dark blue - label column background
+      white: 'FFFFFF',
+      black: '000000',
+      gray: 'BFBFBF',         // Dashed border color
+      dk2: '1F497D'           // Underline color
     };
 
-    companies.forEach((company, index) => {
+    companies.forEach((company) => {
       const slide = pptx.addSlide();
 
-      // Header bar
-      slide.addShape(pptx.shapes.RECTANGLE, {
-        x: 0, y: 0, w: '100%', h: 0.8,
-        fill: { color: COLORS.primary }
-      });
-
-      // Company title
+      // Title (top)
       slide.addText(company.title || company.company_name || 'Company Profile', {
-        x: 0.5, y: 0.15, w: 8, h: 0.5,
-        fontSize: 24, bold: true, color: COLORS.white
+        x: 0.35, y: 0.06, w: 9.14, h: 0.55,
+        fontSize: 28, bold: true, fontFace: 'Segoe UI',
+        color: COLORS.black, valign: 'middle'
       });
 
-      // Slide number
-      slide.addText(`${index + 1}/${companies.length}`, {
-        x: 8.5, y: 0.15, w: 1, h: 0.5,
-        fontSize: 12, color: COLORS.white, align: 'right'
-      });
-
-      // Message (subtitle)
+      // Message (subtitle below title)
       if (company.message) {
         slide.addText(company.message, {
-          x: 0.5, y: 1.0, w: 9, h: 0.4,
-          fontSize: 12, italic: true, color: COLORS.secondary
+          x: 0.35, y: 0.55, w: 9.14, h: 0.3,
+          fontSize: 16, fontFace: 'Segoe UI',
+          color: COLORS.black, valign: 'top'
         });
       }
 
-      // Left column - Basic Info
-      let yPos = 1.6;
+      // Left section header: "会社概要資料"
+      slide.addText('会社概要資料', {
+        x: 0.33, y: 1.25, w: 5.58, h: 0.3,
+        fontSize: 14, fontFace: 'Segoe UI',
+        color: COLORS.black, align: 'center'
+      });
+      // Left section underline
+      slide.addShape(pptx.shapes.LINE, {
+        x: 0.33, y: 1.58, w: 5.58, h: 0,
+        line: { color: COLORS.dk2, width: 1.75 }
+      });
 
-      // Website
-      if (company.website) {
-        slide.addText([
-          { text: 'Website: ', options: { bold: true, color: COLORS.text } },
-          { text: company.website, options: { color: COLORS.secondary } }
-        ], { x: 0.5, y: yPos, w: 4.5, h: 0.3, fontSize: 10 });
-        yPos += 0.35;
-      }
+      // Right section header: "Product Photos"
+      slide.addText('Product Photos', {
+        x: 6.28, y: 1.27, w: 5.58, h: 0.3,
+        fontSize: 14, fontFace: 'Segoe UI',
+        color: COLORS.black, align: 'center'
+      });
+      // Right section underline
+      slide.addShape(pptx.shapes.LINE, {
+        x: 6.28, y: 1.58, w: 5.58, h: 0,
+        line: { color: COLORS.dk2, width: 1.75 }
+      });
 
-      // Established Year
-      if (company.established_year) {
-        slide.addText([
-          { text: 'Established: ', options: { bold: true, color: COLORS.text } },
-          { text: company.established_year, options: { color: COLORS.text } }
-        ], { x: 0.5, y: yPos, w: 4.5, h: 0.3, fontSize: 10 });
-        yPos += 0.35;
-      }
+      // Build styled table rows
+      const tableData = [
+        ['Name', company.company_name || ''],
+        ['Est. Year', company.established_year || ''],
+        ['Location', company.location || ''],
+        ['Business', company.business || ''],
+        ['Key Metrics', company.metrics || '']
+      ];
 
-      // Location
-      if (company.location) {
-        slide.addText('Location:', {
-          x: 0.5, y: yPos, w: 4.5, h: 0.25,
-          fontSize: 10, bold: true, color: COLORS.text
-        });
-        yPos += 0.25;
+      const rows = tableData.map((row) => [
+        {
+          text: row[0],
+          options: {
+            fill: { color: COLORS.accent3 },
+            color: COLORS.white,
+            align: 'center',
+            bold: false
+          }
+        },
+        {
+          text: row[1],
+          options: {
+            fill: { color: COLORS.white },
+            color: COLORS.black,
+            align: 'left',
+            border: [
+              { pt: 1, color: COLORS.gray, type: 'dash' },
+              { pt: 0 },
+              { pt: 1, color: COLORS.gray, type: 'dash' },
+              { pt: 0 }
+            ]
+          }
+        }
+      ]);
 
-        const locationLines = company.location.split('\n').filter(l => l.trim());
-        locationLines.forEach(line => {
-          slide.addText(line.trim(), {
-            x: 0.5, y: yPos, w: 4.5, h: 0.22,
-            fontSize: 9, color: COLORS.text
-          });
-          yPos += 0.22;
-        });
-        yPos += 0.1;
-      }
-
-      // Business description
-      if (company.business) {
-        slide.addText('Business:', {
-          x: 0.5, y: yPos, w: 4.5, h: 0.25,
-          fontSize: 10, bold: true, color: COLORS.text
-        });
-        yPos += 0.28;
-
-        const businessLines = company.business.split('\n').filter(l => l.trim());
-        businessLines.forEach(line => {
-          slide.addText(line.replace(/^-\s*/, '• ').trim(), {
-            x: 0.5, y: yPos, w: 4.5, h: 0.22,
-            fontSize: 9, color: COLORS.text
-          });
-          yPos += 0.22;
-        });
-      }
-
-      // Right column - Key Metrics
-      if (company.metrics) {
-        slide.addShape(pptx.shapes.RECTANGLE, {
-          x: 5.2, y: 1.5, w: 4.3, h: 3.2,
-          fill: { color: COLORS.lightBg },
-          line: { color: 'e5e7eb', width: 1 }
-        });
-
-        slide.addText('Key Metrics', {
-          x: 5.4, y: 1.6, w: 4, h: 0.3,
-          fontSize: 11, bold: true, color: COLORS.primary
-        });
-
-        let metricsY = 1.95;
-        const metricsLines = company.metrics.split('\n').filter(l => l.trim());
-        metricsLines.slice(0, 12).forEach(line => {
-          slide.addText('• ' + line.trim(), {
-            x: 5.4, y: metricsY, w: 3.9, h: 0.22,
-            fontSize: 8, color: COLORS.text
-          });
-          metricsY += 0.24;
-        });
-      }
+      // Add styled table
+      slide.addTable(rows, {
+        x: 0.33, y: 1.69,
+        w: 5.58,
+        colW: [1.26, 4.32],
+        rowH: 0.43,
+        fontFace: 'Segoe UI',
+        fontSize: 14,
+        valign: 'middle',
+        border: { pt: 2.5, color: COLORS.white },
+        margin: [0, 0.04, 0, 0.04]
+      });
 
       // Footnote at bottom
       if (company.footnote) {
         slide.addText(company.footnote, {
-          x: 0.5, y: 5.0, w: 9, h: 0.4,
-          fontSize: 7, color: '6b7280', italic: true
+          x: 0.35, y: 6.13, w: 9.01, h: 0.43,
+          fontSize: 10, fontFace: 'Segoe UI',
+          color: COLORS.black, valign: 'middle'
         });
       }
     });
