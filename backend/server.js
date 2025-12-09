@@ -1798,6 +1798,27 @@ app.post('/api/validation', async (req, res) => {
 
 // ============ TRADING COMPARABLE ============
 
+// Helper function to calculate statistics
+function calculateStats(values) {
+  const nums = values.filter(v => typeof v === 'number' && !isNaN(v) && isFinite(v));
+  if (nums.length === 0) return { mean: null, median: null, min: null, max: null, count: 0 };
+
+  const sorted = [...nums].sort((a, b) => a - b);
+  const sum = nums.reduce((a, b) => a + b, 0);
+  const mean = sum / nums.length;
+  const median = nums.length % 2 === 0
+    ? (sorted[nums.length / 2 - 1] + sorted[nums.length / 2]) / 2
+    : sorted[Math.floor(nums.length / 2)];
+
+  return {
+    mean: Math.round(mean * 10) / 10,
+    median: Math.round(median * 10) / 10,
+    min: Math.round(Math.min(...nums) * 10) / 10,
+    max: Math.round(Math.max(...nums) * 10) / 10,
+    count: nums.length
+  };
+}
+
 app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res) => {
   const { TargetCompanyOrIndustry, Email, IsProfitable } = req.body;
   const excelFile = req.file;
@@ -1817,7 +1838,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
   // Respond immediately
   res.json({
     success: true,
-    message: 'Request received. Results will be emailed within 15-30 minutes.'
+    message: 'Request received. Results will be emailed shortly.'
   });
 
   try {
@@ -1825,95 +1846,207 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     const workbook = XLSX.read(excelFile.buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
-    const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-    // Extract company names from first column (skip header)
-    const comparableCompanies = data.slice(1)
-      .map(row => row[0])
-      .filter(name => name && typeof name === 'string' && name.trim().length > 0);
+    // Get data with headers
+    const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    const headers = rawData[0] || [];
+    const dataRows = rawData.slice(1);
 
-    console.log(`Found ${comparableCompanies.length} comparable companies in Excel`);
+    console.log(`Headers found: ${headers.join(', ')}`);
+    console.log(`Data rows: ${dataRows.length}`);
 
-    if (comparableCompanies.length === 0) {
-      await sendEmail(Email, 'Trading Comparable - No Companies Found',
-        '<p>No company names were found in the first column of your Excel file. Please ensure companies are listed in column A.</p>');
+    if (dataRows.length === 0) {
+      await sendEmail(Email, 'Trading Comparable - No Data Found',
+        '<p>No data rows were found in your Excel file.</p>');
       return;
     }
 
-    // Determine which metrics to fetch based on profitability
+    // Find column indices for common metrics (case-insensitive, partial match)
+    const findColumn = (patterns) => {
+      for (const pattern of patterns) {
+        const idx = headers.findIndex(h =>
+          h && h.toString().toLowerCase().includes(pattern.toLowerCase())
+        );
+        if (idx !== -1) return idx;
+      }
+      return -1;
+    };
+
+    const companyCol = findColumn(['company', 'name', 'ticker', 'stock']);
+    const peCol = findColumn(['p/e', 'pe', 'price/earnings', 'price to earnings']);
+    const pbCol = findColumn(['p/b', 'pb', 'price/book', 'price to book']);
+    const evEbitdaCol = findColumn(['ev/ebitda', 'evebitda', 'ev ebitda']);
+    const evSalesCol = findColumn(['ev/sales', 'ev/revenue', 'evsales']);
+    const marketCapCol = findColumn(['market cap', 'mcap', 'capitalization']);
+
+    console.log(`Column indices - Company: ${companyCol}, P/E: ${peCol}, P/B: ${pbCol}, EV/EBITDA: ${evEbitdaCol}`);
+
+    // Extract data
+    const companies = [];
+    const peValues = [];
+    const pbValues = [];
+    const evEbitdaValues = [];
+    const evSalesValues = [];
+
+    for (const row of dataRows) {
+      if (!row || row.length === 0) continue;
+
+      const company = companyCol >= 0 ? row[companyCol] : row[0];
+      if (!company) continue;
+
+      const pe = peCol >= 0 ? parseFloat(row[peCol]) : null;
+      const pb = pbCol >= 0 ? parseFloat(row[pbCol]) : null;
+      const evEbitda = evEbitdaCol >= 0 ? parseFloat(row[evEbitdaCol]) : null;
+      const evSales = evSalesCol >= 0 ? parseFloat(row[evSalesCol]) : null;
+      const marketCap = marketCapCol >= 0 ? row[marketCapCol] : null;
+
+      companies.push({
+        name: company,
+        pe: isNaN(pe) ? null : pe,
+        pb: isNaN(pb) ? null : pb,
+        evEbitda: isNaN(evEbitda) ? null : evEbitda,
+        evSales: isNaN(evSales) ? null : evSales,
+        marketCap: marketCap
+      });
+
+      if (!isNaN(pe) && pe !== null) peValues.push(pe);
+      if (!isNaN(pb) && pb !== null) pbValues.push(pb);
+      if (!isNaN(evEbitda) && evEbitda !== null) evEbitdaValues.push(evEbitda);
+      if (!isNaN(evSales) && evSales !== null) evSalesValues.push(evSales);
+    }
+
+    console.log(`Parsed ${companies.length} companies`);
+
+    // Calculate statistics
     const isProfitable = IsProfitable === 'yes';
-    const metricsToFetch = isProfitable
-      ? ['P/E ratio', 'P/B ratio', 'EV/EBITDA']
-      : ['P/B ratio', 'EV/EBITDA']; // Skip P/E for loss-making
+    const peStats = isProfitable ? calculateStats(peValues) : null;
+    const pbStats = calculateStats(pbValues);
+    const evEbitdaStats = calculateStats(evEbitdaValues);
+    const evSalesStats = calculateStats(evSalesValues);
 
-    // Use Perplexity to fetch trading multiples
-    const prompt = `I need current trading multiples for the following comparable companies for a ${TargetCompanyOrIndustry} analysis.
+    // Build company table HTML
+    let companyTableHTML = `
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+      <thead style="background-color: #f0f0f0;">
+        <tr>
+          <th>#</th>
+          <th>Company</th>
+          ${isProfitable ? '<th>P/E</th>' : ''}
+          <th>P/B</th>
+          <th>EV/EBITDA</th>
+          ${evSalesValues.length > 0 ? '<th>EV/Sales</th>' : ''}
+        </tr>
+      </thead>
+      <tbody>
+    `;
 
-Companies to analyze:
-${comparableCompanies.map((c, i) => `${i + 1}. ${c}`).join('\n')}
+    companies.forEach((c, i) => {
+      companyTableHTML += `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${c.name}</td>
+          ${isProfitable ? `<td>${c.pe !== null ? c.pe.toFixed(1) : '-'}</td>` : ''}
+          <td>${c.pb !== null ? c.pb.toFixed(1) : '-'}</td>
+          <td>${c.evEbitda !== null ? c.evEbitda.toFixed(1) : '-'}</td>
+          ${evSalesValues.length > 0 ? `<td>${c.evSales !== null ? c.evSales.toFixed(1) : '-'}</td>` : ''}
+        </tr>
+      `;
+    });
 
-For each company, provide:
-- Company name
-- Stock exchange/ticker (if public)
-${metricsToFetch.map(m => `- ${m}`).join('\n')}
-- Market cap (if available)
-- Data date/source
+    companyTableHTML += '</tbody></table>';
 
-If a company is private or data unavailable, note that.
+    // Build summary statistics table
+    let summaryHTML = `
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+      <thead style="background-color: #2563eb; color: white;">
+        <tr>
+          <th>Metric</th>
+          <th>Mean</th>
+          <th>Median</th>
+          <th>Min</th>
+          <th>Max</th>
+          <th>Count</th>
+        </tr>
+      </thead>
+      <tbody>
+    `;
 
-Format as a structured list for each company. Be thorough and accurate. Use the most recent data available.`;
+    if (isProfitable && peStats && peStats.count > 0) {
+      summaryHTML += `
+        <tr>
+          <td><strong>P/E</strong></td>
+          <td>${peStats.mean}x</td>
+          <td>${peStats.median}x</td>
+          <td>${peStats.min}x</td>
+          <td>${peStats.max}x</td>
+          <td>${peStats.count}</td>
+        </tr>
+      `;
+    }
 
-    console.log('Fetching trading multiples via Perplexity...');
-    const perpResponse = await callPerplexity(prompt);
+    if (pbStats && pbStats.count > 0) {
+      summaryHTML += `
+        <tr>
+          <td><strong>P/B</strong></td>
+          <td>${pbStats.mean}x</td>
+          <td>${pbStats.median}x</td>
+          <td>${pbStats.min}x</td>
+          <td>${pbStats.max}x</td>
+          <td>${pbStats.count}</td>
+        </tr>
+      `;
+    }
 
-    // Also get supplementary data from OpenAI Search
-    console.log('Fetching supplementary data via OpenAI Search...');
-    const openaiResponse = await callOpenAISearch(`Find current trading multiples (${metricsToFetch.join(', ')}) for these companies: ${comparableCompanies.slice(0, 10).join(', ')}. Provide latest available valuation metrics.`);
+    if (evEbitdaStats && evEbitdaStats.count > 0) {
+      summaryHTML += `
+        <tr>
+          <td><strong>EV/EBITDA</strong></td>
+          <td>${evEbitdaStats.mean}x</td>
+          <td>${evEbitdaStats.median}x</td>
+          <td>${evEbitdaStats.min}x</td>
+          <td>${evEbitdaStats.max}x</td>
+          <td>${evEbitdaStats.count}</td>
+        </tr>
+      `;
+    }
 
-    // Combine and format results
-    const combinedAnalysis = `
-${perpResponse}
+    if (evSalesStats && evSalesStats.count > 0) {
+      summaryHTML += `
+        <tr>
+          <td><strong>EV/Sales</strong></td>
+          <td>${evSalesStats.mean}x</td>
+          <td>${evSalesStats.median}x</td>
+          <td>${evSalesStats.min}x</td>
+          <td>${evSalesStats.max}x</td>
+          <td>${evSalesStats.count}</td>
+        </tr>
+      `;
+    }
 
---- Additional Data ---
-${openaiResponse}
-`;
+    summaryHTML += '</tbody></table>';
 
-    // Use GPT to format into a nice table
-    const formattingPrompt = `Based on this trading comparable data, create a clean HTML table with the following columns:
-- Company Name
-- Ticker
-${metricsToFetch.map(m => `- ${m}`).join('\n')}
-- Market Cap
-- Notes
-
-Data:
-${combinedAnalysis}
-
-Output ONLY the HTML table (no other text). If data is not available for a metric, put "N/A".
-Round ratios to 1 decimal place.`;
-
-    const tableResponse = await callChatGPT(formattingPrompt);
-
-    // Build email
+    // Build final email
     const emailHTML = `
 <h2>Trading Comparable Analysis</h2>
 <p><strong>Target:</strong> ${TargetCompanyOrIndustry}</p>
+<p><strong>Comparable Companies:</strong> ${companies.length}</p>
 <p><strong>Profitability:</strong> ${isProfitable ? 'Yes - All metrics included' : 'No - P/E ratio excluded'}</p>
-<p><strong>Comparable Companies:</strong> ${comparableCompanies.length}</p>
-<p><strong>Metrics:</strong> ${metricsToFetch.join(', ')}</p>
 <br>
-<h3>Trading Multiples</h3>
-${tableResponse}
+
+<h3>Summary Statistics</h3>
+${summaryHTML}
 <br>
-<h3>Raw Analysis</h3>
-<pre style="background: #f5f5f5; padding: 15px; white-space: pre-wrap; font-size: 12px;">${combinedAnalysis}</pre>
+
+<h3>Comparable Companies</h3>
+${companyTableHTML}
 <br>
-<p><em>Data sourced from public market data. Please verify critical figures independently.</em></p>
+
+<p><em>Analysis based on data from uploaded Excel file: ${excelFile.originalname}</em></p>
 `;
 
     await sendEmail(
       Email,
-      `Trading Comparable: ${TargetCompanyOrIndustry} (${comparableCompanies.length} comps)`,
+      `Trading Comps: ${TargetCompanyOrIndustry} - Median P/B ${pbStats?.median || 'N/A'}x, EV/EBITDA ${evEbitdaStats?.median || 'N/A'}x`,
       emailHTML
     );
 
