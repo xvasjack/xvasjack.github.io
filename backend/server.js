@@ -1991,96 +1991,189 @@ ${scrapedContent.substring(0, 12000)}`
   }
 }
 
+// Build profile slides email HTML
+function buildProfileSlidesEmailHTML(companies, errors) {
+  let html = `
+    <h2>Profile Slides - Extracted Data</h2>
+    <p><strong>Companies Extracted:</strong> ${companies.length}</p>
+    <p><strong>Failed:</strong> ${errors.length}</p>
+    <br>
+  `;
+
+  // Company data table
+  if (companies.length > 0) {
+    html += `<h3>Extracted Company Profiles</h3>`;
+
+    companies.forEach((c, i) => {
+      html += `
+        <div style="margin-bottom: 24px; padding: 16px; border: 1px solid #e5e7eb; border-radius: 8px;">
+          <h4 style="margin: 0 0 12px 0; color: #1f2937;">${i + 1}. ${c.title || c.company_name || 'Unknown'}</h4>
+          <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
+            <tr><td style="padding: 6px 0; color: #6b7280; width: 140px;"><strong>Website:</strong></td><td style="padding: 6px 0;"><a href="${c.website}">${c.website}</a></td></tr>
+            <tr><td style="padding: 6px 0; color: #6b7280;"><strong>Company Name:</strong></td><td style="padding: 6px 0;">${c.company_name || '-'}</td></tr>
+            <tr><td style="padding: 6px 0; color: #6b7280;"><strong>Established:</strong></td><td style="padding: 6px 0;">${c.established_year || '-'}</td></tr>
+            <tr><td style="padding: 6px 0; color: #6b7280; vertical-align: top;"><strong>Location:</strong></td><td style="padding: 6px 0; white-space: pre-line;">${c.location || '-'}</td></tr>
+            <tr><td style="padding: 6px 0; color: #6b7280; vertical-align: top;"><strong>Message:</strong></td><td style="padding: 6px 0;">${c.message || '-'}</td></tr>
+            <tr><td style="padding: 6px 0; color: #6b7280; vertical-align: top;"><strong>Business:</strong></td><td style="padding: 6px 0; white-space: pre-line;">${c.business || '-'}</td></tr>
+            <tr><td style="padding: 6px 0; color: #6b7280; vertical-align: top;"><strong>Key Metrics:</strong></td><td style="padding: 6px 0; white-space: pre-line;">${c.metrics || '-'}</td></tr>
+            <tr><td style="padding: 6px 0; color: #6b7280; vertical-align: top;"><strong>Footnote:</strong></td><td style="padding: 6px 0; white-space: pre-line;">${c.footnote || '-'}</td></tr>
+          </table>
+        </div>
+      `;
+    });
+  }
+
+  // Errors section
+  if (errors.length > 0) {
+    html += `<h3 style="color: #dc2626;">Failed Extractions</h3>`;
+    html += `<ul>`;
+    errors.forEach(e => {
+      html += `<li><strong>${e.website}</strong>: ${e.error}</li>`;
+    });
+    html += `</ul>`;
+  }
+
+  // JSON data for Carbone
+  html += `
+    <br>
+    <h3>JSON Data (for Carbone/PPTX generation)</h3>
+    <pre style="background: #f3f4f6; padding: 16px; border-radius: 8px; overflow-x: auto; font-size: 12px;">${JSON.stringify(companies.map(c => ({
+      company_name: c.company_name,
+      website: c.website,
+      established_year: c.established_year,
+      location: c.location,
+      business: c.business,
+      message: c.message,
+      footnote: c.footnote,
+      title: c.title,
+      metrics: c.metrics
+    })), null, 2)}</pre>
+  `;
+
+  return html;
+}
+
 // Main profile slides endpoint
 app.post('/api/profile-slides', async (req, res) => {
-  const { websites } = req.body;
+  const { websites, email } = req.body;
 
   if (!websites || !Array.isArray(websites) || websites.length === 0) {
     return res.status(400).json({ error: 'Please provide an array of website URLs' });
   }
 
-  console.log(`\n${'='.repeat(50)}`);
-  console.log(`PROFILE SLIDES REQUEST: ${new Date().toISOString()}`);
-  console.log(`Processing ${websites.length} website(s)`);
-  console.log('='.repeat(50));
-
-  const results = [];
-
-  for (let i = 0; i < websites.length; i++) {
-    const website = websites[i].trim();
-    if (!website) continue;
-
-    console.log(`\n[${i + 1}/${websites.length}] Processing: ${website}`);
-
-    try {
-      // Step 1: Scrape website
-      console.log('  Step 1: Scraping website...');
-      const scraped = await scrapeWebsite(website);
-
-      if (!scraped.success) {
-        console.log(`  Failed to scrape: ${scraped.error}`);
-        results.push({
-          website,
-          error: `Failed to scrape: ${scraped.error}`,
-          step: 1
-        });
-        continue;
-      }
-      console.log(`  Scraped ${scraped.content.length} characters`);
-
-      // Step 2: Extract basic info (company name, year, location)
-      console.log('  Step 2: Extracting company name, year, location...');
-      const basicInfo = await extractBasicInfo(scraped.content, website);
-      console.log(`  Company: ${basicInfo.company_name || 'Not found'}`);
-
-      // Step 3: Extract business details
-      console.log('  Step 3: Extracting business, message, footnote, title...');
-      const businessInfo = await extractBusinessInfo(scraped.content, basicInfo);
-
-      // Step 4: Extract key metrics
-      console.log('  Step 4: Extracting key metrics...');
-      const metricsInfo = await extractKeyMetrics(scraped.content, {
-        company_name: basicInfo.company_name,
-        business: businessInfo.business
-      });
-
-      // Combine all extracted data
-      const companyData = {
-        website: scraped.url,
-        company_name: basicInfo.company_name || '',
-        established_year: basicInfo.established_year || '',
-        location: basicInfo.location || '',
-        business: businessInfo.business || '',
-        message: businessInfo.message || '',
-        footnote: businessInfo.footnote || '',
-        title: businessInfo.title || '',
-        metrics: metricsInfo.metrics || ''
-      };
-
-      console.log(`  ✓ Completed: ${companyData.title || companyData.company_name}`);
-      results.push(companyData);
-
-    } catch (error) {
-      console.error(`  Error processing ${website}:`, error.message);
-      results.push({
-        website,
-        error: error.message,
-        step: 0
-      });
-    }
+  if (!email) {
+    return res.status(400).json({ error: 'Please provide an email address' });
   }
 
   console.log(`\n${'='.repeat(50)}`);
-  console.log(`PROFILE SLIDES COMPLETE`);
-  console.log(`Processed: ${results.filter(r => !r.error).length}/${websites.length} successful`);
+  console.log(`PROFILE SLIDES REQUEST: ${new Date().toISOString()}`);
+  console.log(`Processing ${websites.length} website(s)`);
+  console.log(`Email: ${email}`);
   console.log('='.repeat(50));
 
+  // Return immediately - process in background
   res.json({
     success: true,
-    companies: results.filter(r => !r.error),
-    errors: results.filter(r => r.error),
+    message: 'Request received. Results will be emailed within 5-10 minutes.',
+    companies: [],
+    errors: [],
     total: websites.length
   });
+
+  // Process in background
+  try {
+    const results = [];
+
+    for (let i = 0; i < websites.length; i++) {
+      const website = websites[i].trim();
+      if (!website) continue;
+
+      console.log(`\n[${i + 1}/${websites.length}] Processing: ${website}`);
+
+      try {
+        // Step 1: Scrape website
+        console.log('  Step 1: Scraping website...');
+        const scraped = await scrapeWebsite(website);
+
+        if (!scraped.success) {
+          console.log(`  Failed to scrape: ${scraped.error}`);
+          results.push({
+            website,
+            error: `Failed to scrape: ${scraped.error}`,
+            step: 1
+          });
+          continue;
+        }
+        console.log(`  Scraped ${scraped.content.length} characters`);
+
+        // Step 2: Extract basic info (company name, year, location)
+        console.log('  Step 2: Extracting company name, year, location...');
+        const basicInfo = await extractBasicInfo(scraped.content, website);
+        console.log(`  Company: ${basicInfo.company_name || 'Not found'}`);
+
+        // Step 3: Extract business details
+        console.log('  Step 3: Extracting business, message, footnote, title...');
+        const businessInfo = await extractBusinessInfo(scraped.content, basicInfo);
+
+        // Step 4: Extract key metrics
+        console.log('  Step 4: Extracting key metrics...');
+        const metricsInfo = await extractKeyMetrics(scraped.content, {
+          company_name: basicInfo.company_name,
+          business: businessInfo.business
+        });
+
+        // Combine all extracted data
+        const companyData = {
+          website: scraped.url,
+          company_name: basicInfo.company_name || '',
+          established_year: basicInfo.established_year || '',
+          location: basicInfo.location || '',
+          business: businessInfo.business || '',
+          message: businessInfo.message || '',
+          footnote: businessInfo.footnote || '',
+          title: businessInfo.title || '',
+          metrics: metricsInfo.metrics || ''
+        };
+
+        console.log(`  ✓ Completed: ${companyData.title || companyData.company_name}`);
+        results.push(companyData);
+
+      } catch (error) {
+        console.error(`  Error processing ${website}:`, error.message);
+        results.push({
+          website,
+          error: error.message,
+          step: 0
+        });
+      }
+    }
+
+    const companies = results.filter(r => !r.error);
+    const errors = results.filter(r => r.error);
+
+    console.log(`\n${'='.repeat(50)}`);
+    console.log(`PROFILE SLIDES COMPLETE`);
+    console.log(`Processed: ${companies.length}/${websites.length} successful`);
+    console.log('='.repeat(50));
+
+    // Send email with results
+    const htmlContent = buildProfileSlidesEmailHTML(companies, errors);
+    const companyNames = companies.slice(0, 3).map(c => c.title || c.company_name).join(', ');
+    const subject = `Profile Slides: ${companies.length} companies extracted${companyNames ? ` (${companyNames}${companies.length > 3 ? '...' : ''})` : ''}`;
+
+    await sendEmail(email, subject, htmlContent);
+
+    console.log(`Email sent to ${email}`);
+    console.log('='.repeat(50));
+
+  } catch (error) {
+    console.error('Profile slides error:', error);
+    try {
+      await sendEmail(email, 'Profile Slides - Error', `<p>Error processing your request: ${error.message}</p>`);
+    } catch (e) {
+      console.error('Failed to send error email:', e);
+    }
+  }
 });
 
 app.get('/', (req, res) => {
