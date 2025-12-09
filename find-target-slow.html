@@ -35,7 +35,6 @@
 
     <section class="page-content">
       <div class="form-card">
-        <h2>Search Criteria</h2>
         <iframe name="hiddenFrame" style="display:none;"></iframe>
         <form id="findTargetForm" method="POST" action="https://xvasjack.app.n8n.cloud/webhook/find-target-slow" target="hiddenFrame">
           <div class="form-grid">
@@ -57,12 +56,7 @@
             </div>
           </div>
 
-          <button type="submit" class="submit-btn" id="submitBtn">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-            </svg>
-            Deep Search
-          </button>
+          <button type="submit" class="submit-btn" id="submitBtn">Submit</button>
 
           <div class="message success" id="successMessage">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
@@ -88,7 +82,7 @@
 
       setTimeout(() => {
         success.classList.add('show');
-        btn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg> Submitted!';
+        btn.innerHTML = 'Submitted!';
         this.reset();
       }, 1000);
     });
