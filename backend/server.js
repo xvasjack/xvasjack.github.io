@@ -5,10 +5,14 @@ const OpenAI = require('openai');
 const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
 const XLSX = require('xlsx');
+const multer = require('multer');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Multer configuration for file uploads (memory storage)
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Check required environment variables
 const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'BREVO_API_KEY'];
@@ -1792,6 +1796,274 @@ app.post('/api/validation', async (req, res) => {
   }
 });
 
+// ============ TRADING COMPARABLE ============
+
+// Helper function to calculate statistics
+function calculateStats(values) {
+  const nums = values.filter(v => typeof v === 'number' && !isNaN(v) && isFinite(v));
+  if (nums.length === 0) return { mean: null, median: null, min: null, max: null, count: 0 };
+
+  const sorted = [...nums].sort((a, b) => a - b);
+  const sum = nums.reduce((a, b) => a + b, 0);
+  const mean = sum / nums.length;
+  const median = nums.length % 2 === 0
+    ? (sorted[nums.length / 2 - 1] + sorted[nums.length / 2]) / 2
+    : sorted[Math.floor(nums.length / 2)];
+
+  return {
+    mean: Math.round(mean * 10) / 10,
+    median: Math.round(median * 10) / 10,
+    min: Math.round(Math.min(...nums) * 10) / 10,
+    max: Math.round(Math.max(...nums) * 10) / 10,
+    count: nums.length
+  };
+}
+
+app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res) => {
+  const { TargetCompanyOrIndustry, Email, IsProfitable } = req.body;
+  const excelFile = req.file;
+
+  if (!excelFile || !TargetCompanyOrIndustry || !Email) {
+    return res.status(400).json({ error: 'Excel file, target company/industry, and email are required' });
+  }
+
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`NEW TRADING COMPARABLE REQUEST: ${new Date().toISOString()}`);
+  console.log(`Target: ${TargetCompanyOrIndustry}`);
+  console.log(`Email: ${Email}`);
+  console.log(`Profitable: ${IsProfitable}`);
+  console.log(`File: ${excelFile.originalname} (${excelFile.size} bytes)`);
+  console.log('='.repeat(50));
+
+  // Respond immediately
+  res.json({
+    success: true,
+    message: 'Request received. Results will be emailed shortly.'
+  });
+
+  try {
+    // Parse the Excel file
+    const workbook = XLSX.read(excelFile.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+
+    // Get data with headers
+    const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    const headers = rawData[0] || [];
+    const dataRows = rawData.slice(1);
+
+    console.log(`Headers found: ${headers.join(', ')}`);
+    console.log(`Data rows: ${dataRows.length}`);
+
+    if (dataRows.length === 0) {
+      await sendEmail(Email, 'Trading Comparable - No Data Found',
+        '<p>No data rows were found in your Excel file.</p>');
+      return;
+    }
+
+    // Find column indices for common metrics (case-insensitive, partial match)
+    const findColumn = (patterns) => {
+      for (const pattern of patterns) {
+        const idx = headers.findIndex(h =>
+          h && h.toString().toLowerCase().includes(pattern.toLowerCase())
+        );
+        if (idx !== -1) return idx;
+      }
+      return -1;
+    };
+
+    const companyCol = findColumn(['company', 'name', 'ticker', 'stock']);
+    const peCol = findColumn(['p/e', 'pe', 'price/earnings', 'price to earnings']);
+    const pbCol = findColumn(['p/b', 'pb', 'price/book', 'price to book']);
+    const evEbitdaCol = findColumn(['ev/ebitda', 'evebitda', 'ev ebitda']);
+    const evSalesCol = findColumn(['ev/sales', 'ev/revenue', 'evsales']);
+    const marketCapCol = findColumn(['market cap', 'mcap', 'capitalization']);
+
+    console.log(`Column indices - Company: ${companyCol}, P/E: ${peCol}, P/B: ${pbCol}, EV/EBITDA: ${evEbitdaCol}`);
+
+    // Extract data
+    const companies = [];
+    const peValues = [];
+    const pbValues = [];
+    const evEbitdaValues = [];
+    const evSalesValues = [];
+
+    for (const row of dataRows) {
+      if (!row || row.length === 0) continue;
+
+      const company = companyCol >= 0 ? row[companyCol] : row[0];
+      if (!company) continue;
+
+      const pe = peCol >= 0 ? parseFloat(row[peCol]) : null;
+      const pb = pbCol >= 0 ? parseFloat(row[pbCol]) : null;
+      const evEbitda = evEbitdaCol >= 0 ? parseFloat(row[evEbitdaCol]) : null;
+      const evSales = evSalesCol >= 0 ? parseFloat(row[evSalesCol]) : null;
+      const marketCap = marketCapCol >= 0 ? row[marketCapCol] : null;
+
+      companies.push({
+        name: company,
+        pe: isNaN(pe) ? null : pe,
+        pb: isNaN(pb) ? null : pb,
+        evEbitda: isNaN(evEbitda) ? null : evEbitda,
+        evSales: isNaN(evSales) ? null : evSales,
+        marketCap: marketCap
+      });
+
+      if (!isNaN(pe) && pe !== null) peValues.push(pe);
+      if (!isNaN(pb) && pb !== null) pbValues.push(pb);
+      if (!isNaN(evEbitda) && evEbitda !== null) evEbitdaValues.push(evEbitda);
+      if (!isNaN(evSales) && evSales !== null) evSalesValues.push(evSales);
+    }
+
+    console.log(`Parsed ${companies.length} companies`);
+
+    // Calculate statistics
+    const isProfitable = IsProfitable === 'yes';
+    const peStats = isProfitable ? calculateStats(peValues) : null;
+    const pbStats = calculateStats(pbValues);
+    const evEbitdaStats = calculateStats(evEbitdaValues);
+    const evSalesStats = calculateStats(evSalesValues);
+
+    // Build company table HTML
+    let companyTableHTML = `
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+      <thead style="background-color: #f0f0f0;">
+        <tr>
+          <th>#</th>
+          <th>Company</th>
+          ${isProfitable ? '<th>P/E</th>' : ''}
+          <th>P/B</th>
+          <th>EV/EBITDA</th>
+          ${evSalesValues.length > 0 ? '<th>EV/Sales</th>' : ''}
+        </tr>
+      </thead>
+      <tbody>
+    `;
+
+    companies.forEach((c, i) => {
+      companyTableHTML += `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${c.name}</td>
+          ${isProfitable ? `<td>${c.pe !== null ? c.pe.toFixed(1) : '-'}</td>` : ''}
+          <td>${c.pb !== null ? c.pb.toFixed(1) : '-'}</td>
+          <td>${c.evEbitda !== null ? c.evEbitda.toFixed(1) : '-'}</td>
+          ${evSalesValues.length > 0 ? `<td>${c.evSales !== null ? c.evSales.toFixed(1) : '-'}</td>` : ''}
+        </tr>
+      `;
+    });
+
+    companyTableHTML += '</tbody></table>';
+
+    // Build summary statistics table
+    let summaryHTML = `
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+      <thead style="background-color: #2563eb; color: white;">
+        <tr>
+          <th>Metric</th>
+          <th>Mean</th>
+          <th>Median</th>
+          <th>Min</th>
+          <th>Max</th>
+          <th>Count</th>
+        </tr>
+      </thead>
+      <tbody>
+    `;
+
+    if (isProfitable && peStats && peStats.count > 0) {
+      summaryHTML += `
+        <tr>
+          <td><strong>P/E</strong></td>
+          <td>${peStats.mean}x</td>
+          <td>${peStats.median}x</td>
+          <td>${peStats.min}x</td>
+          <td>${peStats.max}x</td>
+          <td>${peStats.count}</td>
+        </tr>
+      `;
+    }
+
+    if (pbStats && pbStats.count > 0) {
+      summaryHTML += `
+        <tr>
+          <td><strong>P/B</strong></td>
+          <td>${pbStats.mean}x</td>
+          <td>${pbStats.median}x</td>
+          <td>${pbStats.min}x</td>
+          <td>${pbStats.max}x</td>
+          <td>${pbStats.count}</td>
+        </tr>
+      `;
+    }
+
+    if (evEbitdaStats && evEbitdaStats.count > 0) {
+      summaryHTML += `
+        <tr>
+          <td><strong>EV/EBITDA</strong></td>
+          <td>${evEbitdaStats.mean}x</td>
+          <td>${evEbitdaStats.median}x</td>
+          <td>${evEbitdaStats.min}x</td>
+          <td>${evEbitdaStats.max}x</td>
+          <td>${evEbitdaStats.count}</td>
+        </tr>
+      `;
+    }
+
+    if (evSalesStats && evSalesStats.count > 0) {
+      summaryHTML += `
+        <tr>
+          <td><strong>EV/Sales</strong></td>
+          <td>${evSalesStats.mean}x</td>
+          <td>${evSalesStats.median}x</td>
+          <td>${evSalesStats.min}x</td>
+          <td>${evSalesStats.max}x</td>
+          <td>${evSalesStats.count}</td>
+        </tr>
+      `;
+    }
+
+    summaryHTML += '</tbody></table>';
+
+    // Build final email
+    const emailHTML = `
+<h2>Trading Comparable Analysis</h2>
+<p><strong>Target:</strong> ${TargetCompanyOrIndustry}</p>
+<p><strong>Comparable Companies:</strong> ${companies.length}</p>
+<p><strong>Profitability:</strong> ${isProfitable ? 'Yes - All metrics included' : 'No - P/E ratio excluded'}</p>
+<br>
+
+<h3>Summary Statistics</h3>
+${summaryHTML}
+<br>
+
+<h3>Comparable Companies</h3>
+${companyTableHTML}
+<br>
+
+<p><em>Analysis based on data from uploaded Excel file: ${excelFile.originalname}</em></p>
+`;
+
+    await sendEmail(
+      Email,
+      `Trading Comps: ${TargetCompanyOrIndustry} - Median P/B ${pbStats?.median || 'N/A'}x, EV/EBITDA ${evEbitdaStats?.median || 'N/A'}x`,
+      emailHTML
+    );
+
+    console.log(`\n${'='.repeat(50)}`);
+    console.log(`TRADING COMPARABLE COMPLETE! Email sent to ${Email}`);
+    console.log('='.repeat(50));
+
+  } catch (error) {
+    console.error('Trading comparable error:', error);
+    try {
+      await sendEmail(Email, 'Trading Comparable - Error', `<p>Error processing your request: ${error.message}</p>`);
+    } catch (e) {
+      console.error('Failed to send error email:', e);
+    }
+  }
+});
+
 // ============ WRITE LIKE ANIL ============
 
 const ANIL_SYSTEM_PROMPT = `You are helping users write emails in Anil's professional style.
@@ -2433,7 +2705,7 @@ app.post('/api/profile-slides', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v29 - Write Like Anil' });
+  res.json({ status: 'ok', service: 'Find Target v30 - Profile Slides' });
 });
 
 const PORT = process.env.PORT || 3000;
