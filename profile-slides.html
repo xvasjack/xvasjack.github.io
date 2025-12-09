@@ -5,6 +5,158 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Profile Slides</title>
   <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Progress tracking styles */
+    .progress-section {
+      display: none;
+      margin-top: 16px;
+      padding: 16px;
+      background: var(--bg-subtle);
+      border-radius: var(--radius-md);
+    }
+    .progress-section.visible {
+      display: block;
+    }
+    .progress-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .progress-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
+    }
+    .progress-count {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    .progress-bar-container {
+      height: 6px;
+      background: var(--border-subtle);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 3px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+    .progress-bar-fill.complete {
+      background: var(--success);
+    }
+
+    /* Website progress list */
+    .website-progress-list {
+      max-height: 300px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .website-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+    }
+    .website-item.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .website-item.done {
+      border-color: var(--success);
+    }
+    .website-item.error {
+      border-color: var(--error);
+      background: var(--error-soft);
+    }
+    .website-icon {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .website-icon.spinner {
+      animation: spin 1s linear infinite;
+      color: var(--accent);
+    }
+    .website-icon.done {
+      color: var(--success);
+    }
+    .website-icon.error {
+      color: var(--error);
+    }
+    .website-icon.pending {
+      color: var(--text-light);
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    .website-details {
+      flex: 1;
+      min-width: 0;
+    }
+    .website-url {
+      font-weight: 500;
+      color: var(--text-main);
+      word-break: break-all;
+    }
+    .website-status {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .website-item.active .website-status {
+      color: var(--accent);
+    }
+    .website-item.error .website-status {
+      color: var(--error);
+    }
+
+    /* Summary stats */
+    .summary-stats {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-subtle);
+    }
+    .stat-box {
+      flex: 1;
+      padding: 12px;
+      background: var(--bg-surface);
+      border-radius: var(--radius-sm);
+      text-align: center;
+    }
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .stat-value.success {
+      color: var(--success);
+    }
+    .stat-value.error {
+      color: var(--error);
+    }
+    .stat-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-top: 2px;
+    }
+  </style>
 </head>
 <body>
   <header class="app-header">
@@ -26,50 +178,210 @@
     </nav>
   </header>
 
-  <main class="app-main centered">
-    <div class="coming-soon-card">
-      <span class="status-badge coming-soon">Coming Soon</span>
+  <main class="app-main">
+    <section class="page-info">
+      <span class="status-badge">Online</span>
+      <h1 class="page-title">Profile Slides</h1>
+      <p class="page-description">Generate company profile slides from websites. PowerPoint file will be emailed to you.</p>
+    </section>
 
-      <div class="coming-soon-icon">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
-        </svg>
+    <section class="page-content">
+      <div class="form-card">
+        <h2>Website URLs</h2>
+        <form id="slidesForm">
+          <div class="form-body">
+            <div class="form-group">
+              <label for="websites">Company Websites</label>
+              <textarea id="websites" name="websites" rows="8" placeholder="https://www.company1.com&#10;https://www.company2.com&#10;https://www.company3.com" required></textarea>
+              <p class="hint-text">Enter one website URL per line. Up to 10 websites per request.</p>
+            </div>
+
+            <div class="form-group">
+              <label for="email">Email Address</label>
+              <input type="email" id="email" name="email" required placeholder="your@company.com">
+              <p class="hint-text">Results will be sent to this email within 5-10 minutes.</p>
+            </div>
+
+            <button type="submit" class="submit-btn" id="submitBtn">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+              </svg>
+              Generate Profile Slides
+            </button>
+
+            <!-- Progress Section -->
+            <div class="progress-section" id="progressSection">
+              <div class="progress-header">
+                <span class="progress-title">Processing Websites</span>
+                <span class="progress-count" id="progressCount">0 / 0</span>
+              </div>
+              <div class="progress-bar-container">
+                <div class="progress-bar-fill" id="progressBar"></div>
+              </div>
+              <div class="website-progress-list" id="websiteList"></div>
+              <div class="summary-stats" id="summaryStats" style="display: none;">
+                <div class="stat-box">
+                  <div class="stat-value success" id="successCount">0</div>
+                  <div class="stat-label">Extracted</div>
+                </div>
+                <div class="stat-box">
+                  <div class="stat-value error" id="errorCount">0</div>
+                  <div class="stat-label">Failed</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="message success" id="successMessage">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              <span id="successText">Request submitted! Results will be emailed within 5-10 minutes.</span>
+            </div>
+
+            <div class="message error" id="errorMessage">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              <span id="errorText">Error submitting request. Please try again.</span>
+            </div>
+          </div>
+        </form>
       </div>
-
-      <h1 class="coming-soon-title">Profile Slides</h1>
-      <p class="coming-soon-description">AI-powered slide generation is in development. Stay tuned for automated presentation creation.</p>
-
-      <div class="feature-list">
-        <div class="feature-item">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z"/>
-          </svg>
-          <p class="feature-item-title">Templates</p>
-          <p class="feature-item-desc">Professional layouts</p>
-        </div>
-        <div class="feature-item">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
-          </svg>
-          <p class="feature-item-title">AI Design</p>
-          <p class="feature-item-desc">Smart formatting</p>
-        </div>
-        <div class="feature-item">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-          </svg>
-          <p class="feature-item-title">Export</p>
-          <p class="feature-item-desc">PPT & PDF output</p>
-        </div>
-      </div>
-
-      <a href="find-target.html" class="back-btn">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18"/>
-        </svg>
-        Back to Company Search
-      </a>
-    </div>
+    </section>
   </main>
+
+  <script>
+    const form = document.getElementById('slidesForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const progressSection = document.getElementById('progressSection');
+    const progressBar = document.getElementById('progressBar');
+    const progressCount = document.getElementById('progressCount');
+    const websiteList = document.getElementById('websiteList');
+    const summaryStats = document.getElementById('summaryStats');
+    const successCount = document.getElementById('successCount');
+    const errorCount = document.getElementById('errorCount');
+    const successMessage = document.getElementById('successMessage');
+    const errorMessage = document.getElementById('errorMessage');
+    const successText = document.getElementById('successText');
+
+    const spinnerIcon = '<svg class="website-icon spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg>';
+    const pendingIcon = '<svg class="website-icon pending" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2" opacity="0.3"></circle></svg>';
+    const doneIcon = '<svg class="website-icon done" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>';
+    const errorIcon = '<svg class="website-icon error" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
+
+    function createWebsiteItem(url, index) {
+      return `
+        <div class="website-item" id="website-${index}">
+          ${pendingIcon}
+          <div class="website-details">
+            <div class="website-url">${url}</div>
+            <div class="website-status">Waiting...</div>
+          </div>
+        </div>
+      `;
+    }
+
+    function updateWebsiteStatus(index, status, statusText) {
+      const item = document.getElementById(`website-${index}`);
+      if (!item) return;
+
+      item.classList.remove('active', 'done', 'error');
+
+      if (status === 'active') {
+        item.classList.add('active');
+        item.querySelector('.website-icon').outerHTML = spinnerIcon;
+        item.querySelector('.website-status').textContent = statusText || 'Processing...';
+      } else if (status === 'done') {
+        item.classList.add('done');
+        item.querySelector('.website-icon').outerHTML = doneIcon;
+        item.querySelector('.website-status').textContent = statusText || 'Queued';
+      } else if (status === 'error') {
+        item.classList.add('error');
+        item.querySelector('.website-icon').outerHTML = errorIcon;
+        item.querySelector('.website-status').textContent = statusText || 'Failed';
+      }
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const websitesInput = document.getElementById('websites').value.trim();
+      const email = document.getElementById('email').value.trim();
+
+      if (!websitesInput || !email) {
+        alert('Please fill in all fields');
+        return;
+      }
+
+      const websites = websitesInput.split('\n').map(u => u.trim()).filter(u => u);
+      if (websites.length === 0) {
+        alert('Please enter at least one website URL');
+        return;
+      }
+
+      if (websites.length > 10) {
+        alert('Maximum 10 websites per request. Please reduce the number of URLs.');
+        return;
+      }
+
+      // Reset and show progress
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Submitting...';
+
+      successMessage.classList.remove('show');
+      errorMessage.classList.remove('show');
+      summaryStats.style.display = 'none';
+
+      // Build website list UI
+      websiteList.innerHTML = websites.map((url, i) => createWebsiteItem(url, i)).join('');
+      progressBar.style.width = '0%';
+      progressBar.classList.remove('complete');
+      progressCount.textContent = `0 / ${websites.length}`;
+      progressSection.classList.add('visible');
+
+      try {
+        // Make API request (returns immediately, processing happens in background)
+        const response = await fetch('https://xvasjackgithubio-production.up.railway.app/api/profile-slides', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ websites, email })
+        });
+
+        if (!response.ok) {
+          throw new Error('Request failed');
+        }
+
+        const data = await response.json();
+
+        // Mark all websites as "queued" since processing happens server-side
+        websites.forEach((url, i) => {
+          updateWebsiteStatus(i, 'done', 'Queued for processing');
+        });
+
+        // Show progress as complete (submission done)
+        progressBar.style.width = '100%';
+        progressBar.classList.add('complete');
+        progressCount.textContent = `${websites.length} / ${websites.length}`;
+        summaryStats.style.display = 'flex';
+        successCount.textContent = websites.length;
+        errorCount.textContent = '0';
+
+        // Show success message
+        successText.textContent = `Request submitted! ${websites.length} website(s) will be processed. Results will be emailed to ${email} within 5-10 minutes.`;
+        successMessage.classList.add('show');
+
+        // Reset form
+        form.reset();
+
+      } catch (err) {
+        console.error('Error:', err);
+        errorMessage.classList.add('show');
+
+        // Mark all as error if request failed
+        websites.forEach((_, i) => {
+          updateWebsiteStatus(i, 'error', 'Submission failed');
+        });
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Generate Profile Slides';
+      }
+    });
+  </script>
 </body>
 </html>
