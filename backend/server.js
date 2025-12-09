@@ -2659,12 +2659,111 @@ const COUNTRY_FLAG_MAP = {
   'hong kong': 'HK', 'hk': 'HK'
 };
 
+// Common shortform definitions
+const SHORTFORM_DEFINITIONS = {
+  'HQ': 'Headquarters',
+  'SEA': 'Southeast Asia',
+  'THB': 'Thai Baht',
+  'PHP': 'Philippine Peso',
+  'MYR': 'Malaysian Ringgit',
+  'IDR': 'Indonesian Rupiah',
+  'SGD': 'Singapore Dollar',
+  'VND': 'Vietnamese Dong',
+  'USD': 'US Dollar',
+  'JPY': 'Japanese Yen',
+  'CNY': 'Chinese Yuan',
+  'KRW': 'Korean Won',
+  'TWD': 'Taiwan Dollar',
+  'INR': 'Indian Rupee',
+  'HKD': 'Hong Kong Dollar',
+  'AUD': 'Australian Dollar',
+  'GBP': 'British Pound',
+  'EUR': 'Euro',
+  'ISO': 'International Organization for Standardization',
+  'B2B': 'Business to Business',
+  'B2C': 'Business to Consumer',
+  'R&D': 'Research and Development',
+  'OEM': 'Original Equipment Manufacturer',
+  'ODM': 'Original Design Manufacturer',
+  'SME': 'Small and Medium Enterprise',
+  'CAGR': 'Compound Annual Growth Rate',
+  'YoY': 'Year over Year',
+  'QoQ': 'Quarter over Quarter',
+  'FY': 'Fiscal Year',
+  'M': 'Million',
+  'B': 'Billion',
+  'K': 'Thousand',
+  'DBD': 'Department of Business Development',
+  'EBITDA': 'Earnings Before Interest, Taxes, Depreciation and Amortization',
+  'ROE': 'Return on Equity',
+  'ROI': 'Return on Investment',
+  'GM': 'Gross Margin',
+  'NM': 'Net Margin',
+  'JV': 'Joint Venture',
+  'M&A': 'Mergers and Acquisitions',
+  'IPO': 'Initial Public Offering',
+  'CEO': 'Chief Executive Officer',
+  'CFO': 'Chief Financial Officer',
+  'COO': 'Chief Operating Officer',
+  'HoHo': 'Ho Chi Minh City',
+  'KL': 'Kuala Lumpur',
+  'BKK': 'Bangkok',
+  'JKT': 'Jakarta',
+  'MNL': 'Manila',
+  'SG': 'Singapore'
+};
+
+// Exchange rate mapping by country (for footnote)
+const EXCHANGE_RATE_MAP = {
+  'PH': '為替レート: PHP 100M = 3億円',
+  'TH': '為替レート: THB 100M = 4億円',
+  'MY': '為替レート: MYR 10M = 3億円',
+  'ID': '為替レート: IDR 100B = 10億円',
+  'SG': '為替レート: SGD 1M = 1億円',
+  'VN': '為替レート: VND 100B = 6億円',
+  'JP': '',
+  'CN': '為替レート: CNY 10M = 2億円',
+  'KR': '為替レート: KRW 1B = 1億円',
+  'TW': '為替レート: TWD 10M = 0.5億円',
+  'US': '為替レート: USD 1M = 1.5億円',
+  'GB': '為替レート: GBP 1M = 2億円',
+  'AU': '為替レート: AUD 1M = 1億円',
+  'IN': '為替レート: INR 100M = 2億円',
+  'HK': '為替レート: HKD 10M = 2億円'
+};
+
 // Get country code from location string
 function getCountryCode(location) {
   if (!location) return null;
   const loc = location.toLowerCase();
   for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
     if (loc.includes(key)) return code;
+  }
+  return null;
+}
+
+// Detect shortforms in text and return formatted note
+function detectShortforms(companyData) {
+  const allText = [
+    companyData.company_name,
+    companyData.location,
+    companyData.business,
+    companyData.metrics,
+    companyData.footnote
+  ].filter(Boolean).join(' ');
+
+  const foundShortforms = [];
+
+  for (const [shortform, definition] of Object.entries(SHORTFORM_DEFINITIONS)) {
+    // Match shortform as whole word (with word boundaries)
+    const regex = new RegExp(`\\b${shortform}\\b`, 'i');
+    if (regex.test(allText)) {
+      foundShortforms.push(`${shortform} (${definition})`);
+    }
+  }
+
+  if (foundShortforms.length > 0) {
+    return 'Note: ' + foundShortforms.join(', ');
   }
   return null;
 }
@@ -2855,14 +2954,38 @@ async function generatePPTX(companies) {
         margin: [0, 0.04, 0, 0.04]
       });
 
-      // ===== FOOTNOTE =====
-      if (company.footnote) {
-        slide.addText(company.footnote, {
-          x: 0.38, y: 6.7, w: 9.5, h: 0.4,
-          fontSize: 10, fontFace: 'Segoe UI',
+      // ===== FOOTNOTE (3 lines) =====
+      let footnoteY = 6.4;
+      const footnoteLineHeight = 0.18;
+
+      // Line 1: Note with shortform explanations
+      const shortformNote = detectShortforms(company);
+      if (shortformNote) {
+        slide.addText(shortformNote, {
+          x: 0.38, y: footnoteY, w: 12.5, h: footnoteLineHeight,
+          fontSize: 8, fontFace: 'Segoe UI',
           color: COLORS.black
         });
+        footnoteY += footnoteLineHeight;
       }
+
+      // Line 2: Exchange rate (reuse countryCode from flag section)
+      const exchangeRate = countryCode ? EXCHANGE_RATE_MAP[countryCode] : null;
+      if (exchangeRate) {
+        slide.addText(exchangeRate, {
+          x: 0.38, y: footnoteY, w: 12.5, h: footnoteLineHeight,
+          fontSize: 8, fontFace: 'Segoe UI',
+          color: COLORS.black
+        });
+        footnoteY += footnoteLineHeight;
+      }
+
+      // Line 3: Source
+      slide.addText('Source: Company website', {
+        x: 0.38, y: footnoteY, w: 12.5, h: footnoteLineHeight,
+        fontSize: 8, fontFace: 'Segoe UI',
+        color: COLORS.black
+      });
     }
 
     // Generate base64
