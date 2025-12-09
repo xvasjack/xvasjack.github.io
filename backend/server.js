@@ -1843,8 +1843,310 @@ Maintain the core message but apply Anil's tone, structure, and conventions. Inc
   }
 });
 
+// ============ PROFILE SLIDES ============
+
+// Currency exchange mapping by country
+const CURRENCY_EXCHANGE = {
+  'philippines': '為替レート: PHP 100M = 3億円',
+  'thailand': '為替レート: THB 100M = 4億円',
+  'malaysia': '為替レート: MYR 10M = 3億円',
+  'indonesia': '為替レート: IDR 10B = 1億円',
+  'singapore': '為替レート: SGD 1M = 1億円',
+  'vietnam': '為替レート: VND 100B = 6億円'
+};
+
+// Scrape website and convert to clean text (similar to fetchWebsite but returns more content)
+async function scrapeWebsite(url) {
+  try {
+    // Normalize URL
+    if (!url.startsWith('http')) {
+      url = 'https://' + url;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+      },
+      signal: controller.signal,
+      redirect: 'follow'
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      return { success: false, error: `HTTP ${response.status}` };
+    }
+
+    const html = await response.text();
+
+    // Clean HTML to readable text (similar to n8n's markdownify)
+    const cleanText = html
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+      .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
+      .replace(/<!--[\s\S]*?-->/g, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/g, ' ')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\s+/g, ' ')
+      .trim();
+
+    if (cleanText.length < 100) {
+      return { success: false, error: 'Insufficient content' };
+    }
+
+    return { success: true, content: cleanText.substring(0, 25000), url };
+  } catch (e) {
+    return { success: false, error: e.message || 'Connection failed' };
+  }
+}
+
+// AI Agent 1: Extract company name, established year, location
+async function extractBasicInfo(scrapedContent, websiteUrl) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You extract company information from website content.
+
+OUTPUT JSON with these fields:
+- company_name: Company name with first letter of each word capitalized
+- established_year: Clean numbers only (e.g., "1995"), leave empty if not found
+- location: Format as "type: city, state, country" for each location. Types: HQ, warehouse, factory, branch, etc. Multiple locations in point form. If Singapore, include which area. No postcodes or full addresses.
+
+RULES:
+- Write proper English (e.g., "Việt Nam" → "Vietnam")
+- Leave fields empty if information not found
+- Return ONLY valid JSON`
+        },
+        {
+          role: 'user',
+          content: `Website: ${websiteUrl}
+Content: ${scrapedContent.substring(0, 12000)}`
+        }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.2
+    });
+
+    return JSON.parse(response.choices[0].message.content);
+  } catch (e) {
+    console.error('Agent 1 error:', e.message);
+    return { company_name: '', established_year: '', location: '' };
+  }
+}
+
+// AI Agent 2: Extract business, message, footnote, title
+async function extractBusinessInfo(scrapedContent, basicInfo) {
+  const locationText = basicInfo.location || '';
+  const hqMatch = locationText.match(/HQ:\s*([^,\n]+),\s*([^\n]+)/i);
+  const hqCountry = hqMatch ? hqMatch[2].trim().toLowerCase() : '';
+  const currencyExchange = CURRENCY_EXCHANGE[hqCountry] || '';
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You extract business information from website content.
+
+INPUT:
+- HTML content from company website
+- Previously extracted: company name, year, location
+
+OUTPUT JSON:
+1. business: Brief description of what company does. Format like: "Manufacture products such as X, Y, Z. Distribute products such as A, B, C." Max 3 examples per point. Use point forms (\\n-) for different business lines.
+
+2. message: One-liner introductory message about the company. Example: "Malaysia-based distributor specializing in electronic components and industrial automation products across Southeast Asia."
+
+3. footnote: Two parts:
+   - Notes (optional): If unusual shortforms used, write full-form like "SKU (Stock Keeping Unit)". Separate multiple with comma.
+   - Currency: ${currencyExchange || 'Leave empty if no matching currency'}
+   Separate notes and currency with semicolon. Always end with new line: "出典: 会社ウェブサイト、SPEEDA"
+
+4. title: Company name WITHOUT suffix (remove Pte Ltd, Sdn Bhd, Co Ltd, JSC, PT, Inc, etc.)
+
+RULES:
+- All point forms use "\\n-"
+- Return ONLY valid JSON`
+        },
+        {
+          role: 'user',
+          content: `Company: ${basicInfo.company_name}
+Established: ${basicInfo.established_year}
+Location: ${basicInfo.location}
+
+Website Content:
+${scrapedContent.substring(0, 12000)}`
+        }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.2
+    });
+
+    return JSON.parse(response.choices[0].message.content);
+  } catch (e) {
+    console.error('Agent 2 error:', e.message);
+    return { business: '', message: '', footnote: '', title: basicInfo.company_name || '' };
+  }
+}
+
+// AI Agent 3: Extract key metrics
+async function extractKeyMetrics(scrapedContent, previousData) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You extract key business metrics from website content.
+
+Example metrics to look for:
+- Supplier names
+- Customer names
+- Supplier/Customer count
+- Number of projects
+- Brands distributed/owned
+- Headcount/Employee count
+- Countries exported to
+- Countries with sales/project/product presence
+- Revenue figures
+- Years of experience
+- Number of products
+- Factory/warehouse size
+- Certifications
+
+OUTPUT JSON with ONE field:
+- metrics: All key metrics found, formatted as readable text with line breaks (\\n). Include the metric name and value.
+
+Only include metrics that are explicitly mentioned on the website.
+Return ONLY valid JSON.`
+        },
+        {
+          role: 'user',
+          content: `Company: ${previousData.company_name}
+Business: ${previousData.business}
+
+Website Content:
+${scrapedContent.substring(0, 12000)}`
+        }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.2
+    });
+
+    return JSON.parse(response.choices[0].message.content);
+  } catch (e) {
+    console.error('Agent 3 error:', e.message);
+    return { metrics: '' };
+  }
+}
+
+// Main profile slides endpoint
+app.post('/api/profile-slides', async (req, res) => {
+  const { websites } = req.body;
+
+  if (!websites || !Array.isArray(websites) || websites.length === 0) {
+    return res.status(400).json({ error: 'Please provide an array of website URLs' });
+  }
+
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`PROFILE SLIDES REQUEST: ${new Date().toISOString()}`);
+  console.log(`Processing ${websites.length} website(s)`);
+  console.log('='.repeat(50));
+
+  const results = [];
+
+  for (let i = 0; i < websites.length; i++) {
+    const website = websites[i].trim();
+    if (!website) continue;
+
+    console.log(`\n[${i + 1}/${websites.length}] Processing: ${website}`);
+
+    try {
+      // Step 1: Scrape website
+      console.log('  Step 1: Scraping website...');
+      const scraped = await scrapeWebsite(website);
+
+      if (!scraped.success) {
+        console.log(`  Failed to scrape: ${scraped.error}`);
+        results.push({
+          website,
+          error: `Failed to scrape: ${scraped.error}`,
+          step: 1
+        });
+        continue;
+      }
+      console.log(`  Scraped ${scraped.content.length} characters`);
+
+      // Step 2: Extract basic info (company name, year, location)
+      console.log('  Step 2: Extracting company name, year, location...');
+      const basicInfo = await extractBasicInfo(scraped.content, website);
+      console.log(`  Company: ${basicInfo.company_name || 'Not found'}`);
+
+      // Step 3: Extract business details
+      console.log('  Step 3: Extracting business, message, footnote, title...');
+      const businessInfo = await extractBusinessInfo(scraped.content, basicInfo);
+
+      // Step 4: Extract key metrics
+      console.log('  Step 4: Extracting key metrics...');
+      const metricsInfo = await extractKeyMetrics(scraped.content, {
+        company_name: basicInfo.company_name,
+        business: businessInfo.business
+      });
+
+      // Combine all extracted data
+      const companyData = {
+        website: scraped.url,
+        company_name: basicInfo.company_name || '',
+        established_year: basicInfo.established_year || '',
+        location: basicInfo.location || '',
+        business: businessInfo.business || '',
+        message: businessInfo.message || '',
+        footnote: businessInfo.footnote || '',
+        title: businessInfo.title || '',
+        metrics: metricsInfo.metrics || ''
+      };
+
+      console.log(`  ✓ Completed: ${companyData.title || companyData.company_name}`);
+      results.push(companyData);
+
+    } catch (error) {
+      console.error(`  Error processing ${website}:`, error.message);
+      results.push({
+        website,
+        error: error.message,
+        step: 0
+      });
+    }
+  }
+
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`PROFILE SLIDES COMPLETE`);
+  console.log(`Processed: ${results.filter(r => !r.error).length}/${websites.length} successful`);
+  console.log('='.repeat(50));
+
+  res.json({
+    success: true,
+    companies: results.filter(r => !r.error),
+    errors: results.filter(r => r.error),
+    total: websites.length
+  });
+});
+
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v29 - Write Like Anil' });
+  res.json({ status: 'ok', service: 'Find Target v30 - Profile Slides' });
 });
 
 const PORT = process.env.PORT || 3000;

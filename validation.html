@@ -3,9 +3,30 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Speeda Validation</title>
+  <title>Speeda List Validation</title>
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <style>
+    .progress-bar { height: 4px; background: var(--bg-subtle); border-radius: 2px; overflow: hidden; margin-top: 8px; }
+    .progress-fill { height: 100%; background: var(--accent); transition: width 0.3s ease; width: 0%; }
+    .progress-fill.complete { background: var(--success); }
+    .progress-text { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+    .detection-results { display: flex; gap: 8px; margin-top: 8px; }
+    .detection-item { flex: 1; padding: 8px; background: var(--bg-subtle); border-radius: var(--radius-sm); text-align: center; }
+    .detection-count { font-size: 18px; font-weight: 700; color: var(--accent); }
+    .detection-label { font-size: 11px; color: var(--text-muted); }
+    .file-status { display: none; padding: 10px; border: 1px solid var(--border-medium); border-radius: var(--radius-md); background: var(--bg-surface); margin-top: 8px; }
+    .file-status.active { display: block; }
+    .file-status-header { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+    .file-status-name { font-weight: 600; color: var(--text-main); }
+    .file-status-size { color: var(--text-muted); margin-left: 4px; }
+    .file-remove-btn { margin-left: auto; padding: 2px 8px; font-size: 11px; color: var(--error); background: transparent; border: 1px solid var(--error-soft); border-radius: 4px; cursor: pointer; }
+    .compact-upload { padding: 12px; border: 2px dashed var(--border-medium); border-radius: var(--radius-md); text-align: center; cursor: pointer; transition: all 0.15s ease; position: relative; }
+    .compact-upload:hover { border-color: var(--accent); background: var(--accent-soft); }
+    .compact-upload input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+    .compact-upload p { font-size: 14px; color: var(--text-muted); margin: 0; }
+    .compact-upload .highlight { color: var(--accent); font-weight: 500; }
+  </style>
 </head>
 <body>
   <header class="app-header">
@@ -30,62 +51,77 @@
   <main class="app-main">
     <section class="page-info">
       <span class="status-badge coming-soon">Coming Soon</span>
-      <h1 class="page-title">Speeda Validation</h1>
-      <p class="page-description">Validate your company list against Speeda. Results in ~10 minutes.</p>
+      <h1 class="page-title">Speeda List Validation</h1>
+      <p class="page-description">Validate companies against your target business. Results in 10 minutes.</p>
     </section>
 
     <section class="page-content">
-      <div class="form-card" style="padding: 0; overflow: hidden;">
-        <div class="tabs">
-          <button class="tab-btn active" data-tab="upload">Upload Excel</button>
-          <button class="tab-btn" data-tab="manual">Manual Entry</button>
-        </div>
+      <div class="form-card">
+        <h2>Validation Criteria</h2>
+        <form id="validationForm">
+          <!-- Inline tabs -->
+          <div style="display: flex; gap: 4px; margin-bottom: 10px;">
+            <button type="button" class="tab-btn active" data-tab="file" style="flex:1; padding: 8px; font-size: 13px;">Upload Excel</button>
+            <button type="button" class="tab-btn" data-tab="manual" style="flex:1; padding: 8px; font-size: 13px;">Manual Entry</button>
+          </div>
 
-        <form id="validationForm" class="form-body" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/validation">
-          <div class="tab-content active" id="tab-upload">
-            <div class="upload-zone" id="uploadZone">
-              <input type="file" id="excelFile" accept=".xlsx,.xls,.csv">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-              </svg>
-              <p><span class="highlight">Click to upload</span> or drag and drop</p>
-              <p class="file-name" id="fileName"></p>
+          <!-- File Upload -->
+          <div class="tab-content active" id="fileTab">
+            <div class="compact-upload" id="uploadZone">
+              <input type="file" id="excelFile" accept=".xlsx,.xls">
+              <p><span class="highlight">Click to upload</span> or drag Excel file</p>
+            </div>
+            <div class="file-status" id="fileStatus">
+              <div class="file-status-header">
+                <span class="file-status-name" id="fileStatusName"></span>
+                <span class="file-status-size" id="fileStatusSize"></span>
+                <button type="button" class="file-remove-btn" id="fileRemoveBtn">Remove</button>
+              </div>
+              <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+              <div class="progress-text" id="progressText">Analyzing...</div>
+              <div class="detection-results" id="detectionResults" style="display: none;">
+                <div class="detection-item"><div class="detection-count" id="companyCount">0</div><div class="detection-label">Companies</div></div>
+                <div class="detection-item"><div class="detection-count" id="countryCount">0</div><div class="detection-label">Countries</div></div>
+              </div>
             </div>
           </div>
 
-          <div class="tab-content" id="tab-manual">
-            <div class="form-group">
-              <label for="companies">Companies <span class="label-hint">(one per line)</span></label>
-              <textarea id="companies" name="Companies" rows="3" placeholder="Company A&#10;Company B&#10;Company C"></textarea>
-            </div>
-            <div class="form-group" style="margin-top: 8px;">
-              <label for="countries">Countries</label>
-              <input type="text" id="countries" name="Countries" placeholder="e.g. Malaysia, Thailand, Singapore">
+          <!-- Manual Entry -->
+          <div class="tab-content" id="manualTab">
+            <div class="form-grid">
+              <div class="form-group full-width">
+                <label for="companies">Company Names</label>
+                <textarea id="companies" name="Companies" rows="3" placeholder="One company per line (up to 200)"></textarea>
+              </div>
+              <div class="form-group full-width">
+                <label for="countries">Countries</label>
+                <input type="text" id="countries" name="Countries" placeholder="e.g. Malaysia, Thailand, Singapore">
+              </div>
             </div>
           </div>
 
+          <!-- Common fields -->
           <div class="form-grid" style="margin-top: 10px;">
-            <div class="form-group">
+            <div class="form-group full-width">
               <label for="targetBusiness">Target Business</label>
-              <input type="text" id="targetBusiness" name="TargetBusiness" required placeholder="e.g. Semiconductor">
+              <input type="text" id="targetBusiness" name="TargetBusiness" required placeholder="e.g. Semiconductor distributor">
             </div>
-            <div class="form-group">
-              <label for="email">Email</label>
-              <input type="email" id="email" name="Email" required placeholder="your@email.com">
+            <div class="form-group full-width">
+              <label>Output Option</label>
+              <div class="radio-group horizontal">
+                <label class="radio-option simple selected">
+                  <input type="radio" name="OutputOption" value="in_scope_only" checked>
+                  <span>In-scope only</span>
+                </label>
+                <label class="radio-option simple">
+                  <input type="radio" name="OutputOption" value="all_companies">
+                  <span>All with status</span>
+                </label>
+              </div>
             </div>
-          </div>
-
-          <div class="form-group" style="margin-top: 10px;">
-            <label>Output Option</label>
-            <div class="radio-group horizontal">
-              <label class="radio-option simple selected">
-                <input type="radio" name="OutputOption" value="in_scope_only" checked>
-                <span>In-scope only</span>
-              </label>
-              <label class="radio-option simple">
-                <input type="radio" name="OutputOption" value="all_companies">
-                <span>All with status</span>
-              </label>
+            <div class="form-group full-width">
+              <label for="email">Email Address</label>
+              <input type="email" id="email" name="Email" required placeholder="your@company.com">
             </div>
           </div>
 
@@ -98,12 +134,11 @@
 
           <div class="message success" id="successMessage">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-            Submitted! Results in ~10 minutes.
+            Request submitted! Results in 10 minutes.
           </div>
-
           <div class="message error" id="errorMessage">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-            Error. Please try again.
+            Error submitting request. Please try again.
           </div>
         </form>
       </div>
@@ -111,66 +146,23 @@
   </main>
 
   <script>
+    // Tab switching
     const tabBtns = document.querySelectorAll('.tab-btn');
-    const tabContents = document.querySelectorAll('.tab-content');
+    const fileTab = document.getElementById('fileTab');
+    const manualTab = document.getElementById('manualTab');
+    let currentMode = 'file';
+
     tabBtns.forEach(btn => {
       btn.addEventListener('click', () => {
+        currentMode = btn.dataset.tab;
         tabBtns.forEach(b => b.classList.remove('active'));
-        tabContents.forEach(c => c.classList.remove('active'));
         btn.classList.add('active');
-        document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+        fileTab.classList.toggle('active', currentMode === 'file');
+        manualTab.classList.toggle('active', currentMode === 'manual');
       });
     });
 
-    const fileInput = document.getElementById('excelFile');
-    const uploadZone = document.getElementById('uploadZone');
-    const fileNameDisplay = document.getElementById('fileName');
-    const companiesTextarea = document.getElementById('companies');
-    const countriesInput = document.getElementById('countries');
-
-    fileInput.addEventListener('change', (e) => {
-      const file = e.target.files[0];
-      if (file) processExcelFile(file);
-    });
-
-    function processExcelFile(file) {
-      fileNameDisplay.textContent = file.name;
-      fileNameDisplay.classList.add('show');
-      uploadZone.classList.add('active');
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
-          const sheet = workbook.Sheets[workbook.SheetNames[0]];
-          const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-          const extracted = extractData(jsonData);
-          if (extracted.companies.length > 0) companiesTextarea.value = extracted.companies.join('\n');
-          if (extracted.countries.length > 0) countriesInput.value = extracted.countries.join(', ');
-          tabBtns.forEach(b => b.classList.remove('active'));
-          tabContents.forEach(c => c.classList.remove('active'));
-          document.querySelector('[data-tab="manual"]').classList.add('active');
-          document.getElementById('tab-manual').classList.add('active');
-        } catch (error) { console.error('Error parsing Excel:', error); }
-      };
-      reader.readAsArrayBuffer(file);
-    }
-
-    function extractData(data) {
-      const companies = [], countries = new Set();
-      const knownCountries = ['malaysia', 'singapore', 'thailand', 'indonesia', 'vietnam', 'philippines', 'china', 'japan', 'korea', 'taiwan', 'hong kong', 'india'];
-      data.forEach(row => {
-        if (!row) return;
-        const val = String(row[0] || '').trim();
-        if (val && val.length > 1 && val.length < 200 && !knownCountries.includes(val.toLowerCase())) companies.push(val);
-        row.forEach(cell => {
-          const c = String(cell || '').toLowerCase().trim();
-          if (knownCountries.includes(c)) countries.add(c.charAt(0).toUpperCase() + c.slice(1));
-        });
-      });
-      return { companies: companies.slice(0, 200), countries: Array.from(countries) };
-    }
-
+    // Radio selection
     document.querySelectorAll('.radio-option').forEach(opt => {
       opt.addEventListener('click', () => {
         document.querySelectorAll('.radio-option').forEach(o => o.classList.remove('selected'));
@@ -179,41 +171,136 @@
       });
     });
 
+    // File upload
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('excelFile');
+    const fileStatus = document.getElementById('fileStatus');
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    const detectionResults = document.getElementById('detectionResults');
+    let extractedData = null;
+
+    uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.style.borderColor = 'var(--accent)'; });
+    uploadZone.addEventListener('dragleave', () => { uploadZone.style.borderColor = ''; });
+    uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.style.borderColor = ''; if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); });
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) processFile(e.target.files[0]); });
+    document.getElementById('fileRemoveBtn').addEventListener('click', resetFileUpload);
+
+    function resetFileUpload() {
+      extractedData = null;
+      fileInput.value = '';
+      uploadZone.style.display = 'block';
+      fileStatus.classList.remove('active');
+      progressFill.style.width = '0%';
+      detectionResults.style.display = 'none';
+    }
+
+    async function processFile(file) {
+      if (!file.name.match(/\.(xlsx|xls)$/i)) { alert('Please upload an Excel file'); return; }
+      uploadZone.style.display = 'none';
+      fileStatus.classList.add('active');
+      document.getElementById('fileStatusName').textContent = file.name;
+      document.getElementById('fileStatusSize').textContent = '(' + (file.size/1024).toFixed(1) + ' KB)';
+      progressFill.style.width = '30%';
+      progressText.textContent = 'Reading...';
+
+      const reader = new FileReader();
+      reader.onload = async e => {
+        try {
+          progressFill.style.width = '60%';
+          progressText.textContent = 'Analyzing...';
+          const data = new Uint8Array(e.target.result);
+          const wb = XLSX.read(data, { type: 'array' });
+          const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+          extractedData = analyzeData(json);
+          progressFill.style.width = '100%';
+          progressFill.classList.add('complete');
+          progressText.textContent = 'Done!';
+          setTimeout(() => {
+            progressText.style.display = 'none';
+            detectionResults.style.display = 'flex';
+            document.getElementById('companyCount').textContent = extractedData.companies.length;
+            document.getElementById('countryCount').textContent = extractedData.countries.length;
+          }, 300);
+        } catch (err) { progressText.textContent = 'Error: ' + err.message; }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function analyzeData(json) {
+      const companies = [], countries = new Set();
+      const knownCountries = ['malaysia','singapore','thailand','indonesia','vietnam','philippines','china','japan','korea','south korea','taiwan','hong kong','india','australia','usa','united states','uk','united kingdom','germany','france','italy','spain','netherlands','belgium','cambodia','myanmar'];
+      const cols = [];
+      const maxCols = Math.max(...json.slice(0,20).map(r => r?.length || 0));
+
+      for (let c = 0; c < maxCols; c++) {
+        const col = { idx: c, compScore: 0, countryScore: 0 };
+        for (let r = 0; r < Math.min(json.length, 30); r++) {
+          const val = json[r]?.[c] ? String(json[r][c]).trim() : '';
+          if (!val) continue;
+          const low = val.toLowerCase();
+          if (r < 5 && /company|name|firm|corp/i.test(val)) col.compScore += 10;
+          if (r < 5 && /country|location|region/i.test(val)) col.countryScore += 10;
+          if (knownCountries.some(x => low === x)) col.countryScore += 2;
+          if (/\b(ltd|inc|corp|sdn|bhd|pte|llc|gmbh)\b/i.test(val)) col.compScore += 3;
+        }
+        cols.push(col);
+      }
+
+      const compCol = cols.reduce((a,b) => b.compScore > a.compScore ? b : a, {compScore:-1,idx:0});
+      const countryCol = cols.reduce((a,b) => b.countryScore > a.countryScore && b.idx !== compCol.idx ? b : a, {countryScore:-1,idx:-1});
+
+      for (let i = 1; i < json.length; i++) {
+        const row = json[i];
+        if (!row) continue;
+        const comp = row[compCol.idx] ? String(row[compCol.idx]).trim() : '';
+        if (comp.length > 1 && comp.length < 200 && !knownCountries.includes(comp.toLowerCase())) companies.push(comp);
+        for (let j = 0; j < row.length; j++) {
+          const cell = row[j] ? String(row[j]).toLowerCase().trim() : '';
+          const match = knownCountries.find(x => cell === x);
+          if (match) countries.add(match.charAt(0).toUpperCase() + match.slice(1));
+        }
+      }
+      return { companies: companies.slice(0, 200), countries: Array.from(countries) };
+    }
+
+    // Form submit
     document.getElementById('validationForm').addEventListener('submit', async function(e) {
       e.preventDefault();
       const btn = document.getElementById('submitBtn');
       const success = document.getElementById('successMessage');
       const error = document.getElementById('errorMessage');
-      success.classList.remove('show');
-      error.classList.remove('show');
+      success.classList.remove('show'); error.classList.remove('show');
+
+      let companiesData, countriesData;
+      if (currentMode === 'file') {
+        if (!extractedData?.companies.length) { alert('Please upload an Excel file first'); return; }
+        companiesData = extractedData.companies.join('\n');
+        countriesData = extractedData.countries.join('\n');
+      } else {
+        companiesData = document.getElementById('companies').value;
+        countriesData = document.getElementById('countries').value;
+        if (!companiesData.trim()) { alert('Please enter company names'); return; }
+        if (!countriesData.trim()) { alert('Please enter countries'); return; }
+      }
+
       btn.disabled = true;
-      btn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Processing...';
+      btn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Submitting...';
+
       try {
-        const response = await fetch(this.action, {
+        const res = await fetch('https://xvasjackgithubio-production.up.railway.app/api/validation', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            Companies: companiesTextarea.value,
-            Countries: countriesInput.value,
+            Companies: companiesData,
+            Countries: countriesData,
             TargetBusiness: document.getElementById('targetBusiness').value,
             OutputOption: document.querySelector('input[name="OutputOption"]:checked').value,
             Email: document.getElementById('email').value
           })
         });
-        if (response.ok) {
-          success.classList.add('show');
-          this.reset();
-          fileNameDisplay.classList.remove('show');
-          uploadZone.classList.remove('active');
-          tabBtns.forEach(b => b.classList.remove('active'));
-          tabContents.forEach(c => c.classList.remove('active'));
-          document.querySelector('[data-tab="upload"]').classList.add('active');
-          document.getElementById('tab-upload').classList.add('active');
-          document.querySelectorAll('.radio-option').forEach((o, i) => {
-            if (i === 0) o.classList.add('selected');
-            else o.classList.remove('selected');
-          });
-        } else throw new Error();
+        if (res.ok) { success.classList.add('show'); this.reset(); resetFileUpload(); }
+        else throw new Error();
       } catch { error.classList.add('show'); }
       finally {
         btn.disabled = false;
