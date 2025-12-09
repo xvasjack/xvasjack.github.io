@@ -6,386 +6,155 @@
   <title>Profile Slides</title>
   <link rel="stylesheet" href="styles.css">
   <style>
-    /* Page-specific styles for Profile Slides */
-    .slides-main {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      padding: 16px 24px;
+    /* Progress tracking styles */
+    .progress-section {
+      display: none;
+      margin-top: 16px;
+      padding: 16px;
+      background: var(--bg-subtle);
+      border-radius: var(--radius-md);
     }
-
-    .slides-header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 14px;
-      flex-shrink: 0;
+    .progress-section.visible {
+      display: block;
     }
-
-    .slides-header .page-title {
-      font-size: 22px;
-      margin: 0;
-    }
-
-    .slides-content {
-      flex: 1;
-      display: grid;
-      grid-template-columns: 350px 1fr;
-      gap: 20px;
-      min-height: 0;
-    }
-
-    .slides-card {
-      display: flex;
-      flex-direction: column;
-      background: var(--bg-surface);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-lg);
-      box-shadow: var(--shadow-lg);
-      overflow: hidden;
-      min-height: 0;
-    }
-
-    .slides-card-header {
+    .progress-header {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 12px 18px;
-      border-bottom: 1px solid var(--border-subtle);
-      background: var(--bg-subtle);
-      flex-shrink: 0;
+      margin-bottom: 12px;
     }
-
-    .slides-card-header h2 {
-      font-size: 15px;
+    .progress-title {
+      font-size: 14px;
       font-weight: 600;
       color: var(--text-main);
-      margin: 0;
     }
-
-    .slides-card-body {
-      flex: 1;
-      padding: 16px 18px;
-      display: flex;
-      flex-direction: column;
-      overflow: auto;
-      gap: 14px;
-      min-height: 0;
-    }
-
-    /* Form elements */
-    .slides-card-body .form-group {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-
-    .slides-card-body label {
-      font-size: 14px;
-      font-weight: 500;
-      color: var(--text-main);
-    }
-
-    .label-hint {
-      font-weight: 400;
-      color: var(--text-muted);
-      font-size: 12px;
-    }
-
-    .slides-card-body textarea {
-      padding: 12px 14px;
-      font-size: 14px;
-      font-family: var(--font-mono);
-      color: var(--text-main);
-      background: var(--bg-surface);
-      border: 1px solid var(--border-medium);
-      border-radius: var(--radius-md);
-      resize: none;
-      transition: all 0.15s ease;
-      min-height: 200px;
-    }
-
-    .slides-card-body textarea:focus {
-      outline: none;
-      border-color: var(--accent);
-      box-shadow: 0 0 0 3px var(--accent-soft);
-    }
-
-    .slides-card-body textarea::placeholder {
-      color: var(--text-light);
-    }
-
-    /* Submit button */
-    .slides-submit {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      width: 100%;
-      height: 46px;
-      margin-top: auto;
-      font-size: 15px;
-      font-weight: 600;
-      font-family: var(--font-sans);
-      color: white;
-      background: var(--accent);
-      border: none;
-      border-radius: var(--radius-md);
-      cursor: pointer;
-      transition: all 0.15s ease;
-      flex-shrink: 0;
-    }
-
-    .slides-submit:hover {
-      background: var(--accent-strong);
-    }
-
-    .slides-submit:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-
-    .slides-submit svg {
-      width: 18px;
-      height: 18px;
-    }
-
-    /* Progress indicator */
-    .progress-container {
-      margin-top: 12px;
-      display: none;
-    }
-
-    .progress-container.visible {
-      display: block;
-    }
-
-    .progress-step {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 8px 0;
+    .progress-count {
       font-size: 13px;
       color: var(--text-muted);
     }
-
-    .progress-step.active {
-      color: var(--accent);
-      font-weight: 500;
+    .progress-bar-container {
+      height: 6px;
+      background: var(--border-subtle);
+      border-radius: 3px;
+      overflow: hidden;
+      margin-bottom: 16px;
+    }
+    .progress-bar-fill {
+      height: 100%;
+      background: var(--accent);
+      border-radius: 3px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+    .progress-bar-fill.complete {
+      background: var(--success);
     }
 
-    .progress-step.done {
+    /* Website progress list */
+    .website-progress-list {
+      max-height: 300px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .website-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+    }
+    .website-item.active {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .website-item.done {
+      border-color: var(--success);
+    }
+    .website-item.error {
+      border-color: var(--error);
+      background: var(--error-soft);
+    }
+    .website-icon {
+      width: 18px;
+      height: 18px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .website-icon.spinner {
+      animation: spin 1s linear infinite;
+      color: var(--accent);
+    }
+    .website-icon.done {
       color: var(--success);
     }
-
-    .progress-step.error {
+    .website-icon.error {
       color: var(--error);
     }
-
-    .progress-step svg {
-      width: 16px;
-      height: 16px;
-      flex-shrink: 0;
+    .website-icon.pending {
+      color: var(--text-light);
     }
-
-    .progress-step .spinner {
-      animation: spin 1s linear infinite;
-    }
-
     @keyframes spin {
       from { transform: rotate(0deg); }
       to { transform: rotate(360deg); }
     }
-
-    /* Results area */
-    .results-container {
+    .website-details {
       flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      overflow: auto;
-      padding-right: 4px;
+      min-width: 0;
+    }
+    .website-url {
+      font-weight: 500;
+      color: var(--text-main);
+      word-break: break-all;
+    }
+    .website-status {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .website-item.active .website-status {
+      color: var(--accent);
+    }
+    .website-item.error .website-status {
+      color: var(--error);
     }
 
-    .results-placeholder {
+    /* Summary stats */
+    .summary-stats {
       display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
+      gap: 12px;
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--border-subtle);
+    }
+    .stat-box {
       flex: 1;
-      color: var(--text-light);
+      padding: 12px;
+      background: var(--bg-surface);
+      border-radius: var(--radius-sm);
       text-align: center;
     }
-
-    .results-placeholder svg {
-      width: 64px;
-      height: 64px;
-      margin-bottom: 16px;
-      opacity: 0.4;
-    }
-
-    .results-placeholder p {
-      font-size: 15px;
-      margin: 0;
-    }
-
-    /* Company result card */
-    .company-card {
-      background: var(--bg-body);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-md);
-      overflow: hidden;
-    }
-
-    .company-card-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 12px 16px;
-      background: var(--bg-subtle);
-      border-bottom: 1px solid var(--border-subtle);
-    }
-
-    .company-card-header h3 {
-      font-size: 16px;
-      font-weight: 600;
-      color: var(--text-main);
-      margin: 0;
-    }
-
-    .company-card-header .badge {
-      padding: 4px 10px;
-      font-size: 11px;
-      font-weight: 600;
-      background: var(--accent-soft);
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
       color: var(--accent);
-      border-radius: 20px;
     }
-
-    .company-card-body {
-      padding: 16px;
+    .stat-value.success {
+      color: var(--success);
     }
-
-    .company-field {
-      margin-bottom: 12px;
+    .stat-value.error {
+      color: var(--error);
     }
-
-    .company-field:last-child {
-      margin-bottom: 0;
-    }
-
-    .company-field-label {
+    .stat-label {
       font-size: 11px;
-      font-weight: 600;
+      color: var(--text-muted);
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      color: var(--text-muted);
-      margin-bottom: 4px;
-    }
-
-    .company-field-value {
-      font-size: 14px;
-      color: var(--text-main);
-      line-height: 1.5;
-      white-space: pre-wrap;
-    }
-
-    .company-field-value a {
-      color: var(--accent);
-      text-decoration: none;
-    }
-
-    .company-field-value a:hover {
-      text-decoration: underline;
-    }
-
-    .company-field-value.empty {
-      color: var(--text-light);
-      font-style: italic;
-    }
-
-    /* Error card */
-    .error-card {
-      background: #fef2f2;
-      border: 1px solid #fecaca;
-      border-radius: var(--radius-md);
-      padding: 14px 16px;
-    }
-
-    .error-card .error-title {
-      font-size: 14px;
-      font-weight: 600;
-      color: #dc2626;
-      margin-bottom: 4px;
-    }
-
-    .error-card .error-msg {
-      font-size: 13px;
-      color: #b91c1c;
-    }
-
-    /* Export button */
-    .export-btn {
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      padding: 6px 12px;
-      font-size: 13px;
-      font-weight: 500;
-      font-family: var(--font-sans);
-      color: var(--text-muted);
-      background: var(--bg-surface);
-      border: 1px solid var(--border-medium);
-      border-radius: 4px;
-      cursor: pointer;
-      transition: all 0.15s ease;
-    }
-
-    .export-btn:hover:not(:disabled) {
-      color: var(--accent);
-      border-color: var(--accent);
-    }
-
-    .export-btn:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-
-    .export-btn svg {
-      width: 14px;
-      height: 14px;
-    }
-
-    /* Stats bar */
-    .stats-bar {
-      display: flex;
-      gap: 16px;
-      padding: 10px 0;
-      border-bottom: 1px solid var(--border-subtle);
-      margin-bottom: 4px;
-    }
-
-    .stat-item {
-      font-size: 13px;
-      color: var(--text-muted);
-    }
-
-    .stat-item strong {
-      color: var(--text-main);
-    }
-
-    /* Responsive */
-    @media (max-width: 1000px) {
-      .slides-main {
-        overflow: auto;
-      }
-      .slides-content {
-        grid-template-columns: 1fr;
-      }
-      .slides-card {
-        min-height: 350px;
-      }
+      margin-top: 2px;
     }
   </style>
 </head>
@@ -409,264 +178,208 @@
     </nav>
   </header>
 
-  <main class="slides-main">
-    <div class="slides-header">
+  <main class="app-main">
+    <section class="page-info">
       <span class="status-badge offline">Offline</span>
       <h1 class="page-title">Profile Slides</h1>
-    </div>
+      <p class="page-description">Generate company profile slides from websites. PowerPoint file will be emailed to you.</p>
+    </section>
 
-    <section class="slides-content">
-      <!-- Input Card -->
-      <div class="slides-card">
-        <div class="slides-card-header">
-          <h2>Input</h2>
-        </div>
-        <div class="slides-card-body">
-          <div class="form-group">
-            <label for="websiteInput">Website URLs <span class="label-hint">(one per line)</span></label>
-            <textarea id="websiteInput" placeholder="https://www.company1.com&#10;https://www.company2.com&#10;https://www.company3.com"></textarea>
-          </div>
+    <section class="page-content">
+      <div class="form-card">
+        <h2>Website URLs</h2>
+        <form id="slidesForm">
+          <div class="form-body">
+            <div class="form-group">
+              <label for="websites">Company Websites</label>
+              <textarea id="websites" name="websites" rows="8" placeholder="https://www.company1.com&#10;https://www.company2.com&#10;https://www.company3.com" required></textarea>
+              <p class="hint-text">Enter one website URL per line. Up to 10 websites per request.</p>
+            </div>
 
-          <button type="button" class="slides-submit" id="submitBtn">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-            </svg>
-            <span id="btnText">Extract & Generate</span>
-          </button>
+            <div class="form-group">
+              <label for="email">Email Address</label>
+              <input type="email" id="email" name="email" required placeholder="your@company.com">
+              <p class="hint-text">Results will be sent to this email within 5-10 minutes.</p>
+            </div>
 
-          <div class="progress-container" id="progressContainer">
-            <div class="progress-step" id="step1">
-              <svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg>
-              <span>Scraping websites...</span>
-            </div>
-            <div class="progress-step" id="step2">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" opacity="0.25"></circle></svg>
-              <span>Extracting company info...</span>
-            </div>
-            <div class="progress-step" id="step3">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" opacity="0.25"></circle></svg>
-              <span>Analyzing business details...</span>
-            </div>
-            <div class="progress-step" id="step4">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" opacity="0.25"></circle></svg>
-              <span>Gathering key metrics...</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Results Card -->
-      <div class="slides-card">
-        <div class="slides-card-header">
-          <h2>Extracted Data</h2>
-          <button class="export-btn" id="exportBtn" disabled>
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-            </svg>
-            <span>Export JSON</span>
-          </button>
-        </div>
-        <div class="slides-card-body">
-          <div class="results-container" id="resultsContainer">
-            <div class="results-placeholder">
+            <button type="submit" class="submit-btn" id="submitBtn">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
               </svg>
-              <p>Enter website URLs and click "Extract & Generate"<br>to scrape company information</p>
+              Generate Profile Slides
+            </button>
+
+            <!-- Progress Section -->
+            <div class="progress-section" id="progressSection">
+              <div class="progress-header">
+                <span class="progress-title">Processing Websites</span>
+                <span class="progress-count" id="progressCount">0 / 0</span>
+              </div>
+              <div class="progress-bar-container">
+                <div class="progress-bar-fill" id="progressBar"></div>
+              </div>
+              <div class="website-progress-list" id="websiteList"></div>
+              <div class="summary-stats" id="summaryStats" style="display: none;">
+                <div class="stat-box">
+                  <div class="stat-value success" id="successCount">0</div>
+                  <div class="stat-label">Extracted</div>
+                </div>
+                <div class="stat-box">
+                  <div class="stat-value error" id="errorCount">0</div>
+                  <div class="stat-label">Failed</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="message success" id="successMessage">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              <span id="successText">Request submitted! Results will be emailed within 5-10 minutes.</span>
+            </div>
+
+            <div class="message error" id="errorMessage">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              <span id="errorText">Error submitting request. Please try again.</span>
             </div>
           </div>
-        </div>
+        </form>
       </div>
     </section>
   </main>
 
   <script>
+    const form = document.getElementById('slidesForm');
     const submitBtn = document.getElementById('submitBtn');
-    const btnText = document.getElementById('btnText');
-    const websiteInput = document.getElementById('websiteInput');
-    const progressContainer = document.getElementById('progressContainer');
-    const resultsContainer = document.getElementById('resultsContainer');
-    const exportBtn = document.getElementById('exportBtn');
+    const progressSection = document.getElementById('progressSection');
+    const progressBar = document.getElementById('progressBar');
+    const progressCount = document.getElementById('progressCount');
+    const websiteList = document.getElementById('websiteList');
+    const summaryStats = document.getElementById('summaryStats');
+    const successCount = document.getElementById('successCount');
+    const errorCount = document.getElementById('errorCount');
+    const successMessage = document.getElementById('successMessage');
+    const errorMessage = document.getElementById('errorMessage');
+    const successText = document.getElementById('successText');
 
-    let extractedData = null;
+    const spinnerIcon = '<svg class="website-icon spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg>';
+    const pendingIcon = '<svg class="website-icon pending" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke-width="2" opacity="0.3"></circle></svg>';
+    const doneIcon = '<svg class="website-icon done" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>';
+    const errorIcon = '<svg class="website-icon error" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
 
-    // Progress step icons
-    const spinnerIcon = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg>';
-    const pendingIcon = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2" opacity="0.25"></circle></svg>';
-    const doneIcon = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>';
-    const errorIcon = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>';
+    function createWebsiteItem(url, index) {
+      return `
+        <div class="website-item" id="website-${index}">
+          ${pendingIcon}
+          <div class="website-details">
+            <div class="website-url">${url}</div>
+            <div class="website-status">Waiting...</div>
+          </div>
+        </div>
+      `;
+    }
 
-    function updateStep(stepId, status) {
-      const step = document.getElementById(stepId);
-      step.classList.remove('active', 'done', 'error');
+    function updateWebsiteStatus(index, status, step, isError = false) {
+      const item = document.getElementById(`website-${index}`);
+      if (!item) return;
+
+      item.classList.remove('active', 'done', 'error');
 
       if (status === 'active') {
-        step.classList.add('active');
-        step.querySelector('svg').outerHTML = spinnerIcon;
+        item.classList.add('active');
+        item.querySelector('.website-icon').outerHTML = spinnerIcon;
+        item.querySelector('.website-status').textContent = step;
       } else if (status === 'done') {
-        step.classList.add('done');
-        step.querySelector('svg').outerHTML = doneIcon;
+        item.classList.add('done');
+        item.querySelector('.website-icon').outerHTML = doneIcon;
+        item.querySelector('.website-status').textContent = 'Extracted successfully';
       } else if (status === 'error') {
-        step.classList.add('error');
-        step.querySelector('svg').outerHTML = errorIcon;
-      } else {
-        step.querySelector('svg').outerHTML = pendingIcon;
+        item.classList.add('error');
+        item.querySelector('.website-icon').outerHTML = errorIcon;
+        item.querySelector('.website-status').textContent = step || 'Failed to extract';
       }
     }
 
-    function resetProgress() {
-      ['step1', 'step2', 'step3', 'step4'].forEach(id => {
-        updateStep(id, 'pending');
-      });
-    }
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
 
-    function renderCompanyCard(company) {
-      const fields = [
-        { key: 'title', label: 'Title' },
-        { key: 'website', label: 'Website', isLink: true },
-        { key: 'established_year', label: 'Established' },
-        { key: 'location', label: 'Location' },
-        { key: 'message', label: 'Message' },
-        { key: 'business', label: 'Business' },
-        { key: 'metrics', label: 'Key Metrics' },
-        { key: 'footnote', label: 'Footnote' }
-      ];
+      const websitesInput = document.getElementById('websites').value.trim();
+      const email = document.getElementById('email').value.trim();
 
-      const fieldsHtml = fields.map(f => {
-        let value = company[f.key] || '';
-        if (!value) {
-          return `<div class="company-field">
-            <div class="company-field-label">${f.label}</div>
-            <div class="company-field-value empty">Not found</div>
-          </div>`;
-        }
-
-        if (f.isLink) {
-          value = `<a href="${value}" target="_blank">${value}</a>`;
-        } else {
-          value = value.replace(/\n/g, '<br>');
-        }
-
-        return `<div class="company-field">
-          <div class="company-field-label">${f.label}</div>
-          <div class="company-field-value">${value}</div>
-        </div>`;
-      }).join('');
-
-      return `<div class="company-card">
-        <div class="company-card-header">
-          <h3>${company.title || company.company_name || 'Unknown Company'}</h3>
-          <span class="badge">${company.established_year || 'N/A'}</span>
-        </div>
-        <div class="company-card-body">
-          ${fieldsHtml}
-        </div>
-      </div>`;
-    }
-
-    function renderErrorCard(error) {
-      return `<div class="error-card">
-        <div class="error-title">${error.website}</div>
-        <div class="error-msg">${error.error}</div>
-      </div>`;
-    }
-
-    function renderResults(data) {
-      let html = '';
-
-      // Stats bar
-      html += `<div class="stats-bar">
-        <div class="stat-item"><strong>${data.companies.length}</strong> extracted</div>
-        <div class="stat-item"><strong>${data.errors.length}</strong> errors</div>
-        <div class="stat-item">Total: <strong>${data.total}</strong></div>
-      </div>`;
-
-      // Company cards
-      data.companies.forEach(company => {
-        html += renderCompanyCard(company);
-      });
-
-      // Error cards
-      data.errors.forEach(error => {
-        html += renderErrorCard(error);
-      });
-
-      resultsContainer.innerHTML = html;
-      exportBtn.disabled = data.companies.length === 0;
-      extractedData = data;
-    }
-
-    // Export functionality
-    exportBtn.addEventListener('click', () => {
-      if (!extractedData || !extractedData.companies.length) return;
-
-      const json = JSON.stringify(extractedData.companies, null, 2);
-      const blob = new Blob([json], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'profile-slides-data.json';
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    });
-
-    // Submit functionality
-    submitBtn.addEventListener('click', async () => {
-      const input = websiteInput.value.trim();
-      if (!input) {
-        alert('Please enter at least one website URL');
+      if (!websitesInput || !email) {
+        alert('Please fill in all fields');
         return;
       }
 
-      const websites = input.split('\n').map(u => u.trim()).filter(u => u);
+      const websites = websitesInput.split('\n').map(u => u.trim()).filter(u => u);
       if (websites.length === 0) {
         alert('Please enter at least one website URL');
         return;
       }
 
+      if (websites.length > 10) {
+        alert('Maximum 10 websites per request. Please reduce the number of URLs.');
+        return;
+      }
+
       // Reset and show progress
       submitBtn.disabled = true;
-      btnText.textContent = 'Processing...';
-      progressContainer.classList.add('visible');
-      resetProgress();
-      resultsContainer.innerHTML = '<div class="results-placeholder"><p>Processing websites...</p></div>';
+      submitBtn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Submitting...';
 
-      // Simulate progress steps (since backend does it all at once)
-      updateStep('step1', 'active');
+      successMessage.classList.remove('show');
+      errorMessage.classList.remove('show');
+      summaryStats.style.display = 'none';
+
+      // Build website list UI
+      websiteList.innerHTML = websites.map((url, i) => createWebsiteItem(url, i)).join('');
+      progressBar.style.width = '0%';
+      progressBar.classList.remove('complete');
+      progressCount.textContent = `0 / ${websites.length}`;
+      progressSection.classList.add('visible');
 
       try {
+        // Make API request (returns immediately, processing happens in background)
         const response = await fetch('https://xvasjackgithubio-production.up.railway.app/api/profile-slides', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ websites })
+          body: JSON.stringify({ websites, email })
         });
-
-        // Mark all steps as done
-        updateStep('step1', 'done');
-        updateStep('step2', 'done');
-        updateStep('step3', 'done');
-        updateStep('step4', 'done');
 
         if (!response.ok) {
           throw new Error('Request failed');
         }
 
         const data = await response.json();
-        renderResults(data);
+
+        // Mark all websites as "queued" since processing happens server-side
+        websites.forEach((url, i) => {
+          updateWebsiteStatus(i, 'done', 'Queued for processing');
+        });
+
+        // Show progress as complete (submission done)
+        progressBar.style.width = '100%';
+        progressBar.classList.add('complete');
+        progressCount.textContent = `${websites.length} / ${websites.length}`;
+        summaryStats.style.display = 'flex';
+        successCount.textContent = websites.length;
+        errorCount.textContent = '0';
+
+        // Show success message
+        successText.textContent = `Request submitted! ${websites.length} website(s) will be processed. Results will be emailed to ${email} within 5-10 minutes.`;
+        successMessage.classList.add('show');
+
+        // Reset form
+        form.reset();
 
       } catch (err) {
         console.error('Error:', err);
-        updateStep('step1', 'error');
-        resultsContainer.innerHTML = `<div class="error-card">
-          <div class="error-title">Request Failed</div>
-          <div class="error-msg">${err.message || 'Failed to process websites. Please try again.'}</div>
-        </div>`;
+        errorMessage.classList.add('show');
+
+        // Mark all as error if request failed
+        websites.forEach((_, i) => {
+          updateWebsiteStatus(i, 'error', 'Submission failed');
+        });
       } finally {
         submitBtn.disabled = false;
-        btnText.textContent = 'Extract & Generate';
+        submitBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Generate Profile Slides';
       }
     });
   </script>
