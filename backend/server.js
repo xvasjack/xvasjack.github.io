@@ -4,6 +4,7 @@ const cors = require('cors');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
+const XLSX = require('xlsx');
 
 const app = express();
 app.use(cors());
@@ -25,10 +26,9 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
 
-// Send email using Brevo API (with optional attachment)
+// Send email using Brevo API
 async function sendEmail(to, subject, html, attachment = null) {
   const senderEmail = process.env.BREVO_SENDER_EMAIL || 'xvasjack@gmail.com';
-
   const emailData = {
     sender: { name: 'Find Target', email: senderEmail },
     to: [{ email: to }],
@@ -36,10 +36,9 @@ async function sendEmail(to, subject, html, attachment = null) {
     htmlContent: html
   };
 
-  // Add attachment if provided
   if (attachment) {
     emailData.attachment = [{
-      content: attachment.content, // base64 encoded
+      content: attachment.content,
       name: attachment.name
     }];
   }
@@ -1609,6 +1608,62 @@ function buildValidationEmailHTML(companies, targetBusiness, countries, outputOp
   return html;
 }
 
+// Build validation results as Excel file (returns base64 string)
+function buildValidationExcel(companies, targetBusiness, countries, outputOption) {
+  const inScopeCompanies = companies.filter(c => c.in_scope);
+
+  // Prepare data based on output option
+  let data;
+  if (outputOption === 'all_companies') {
+    data = companies.map((c, i) => ({
+      '#': i + 1,
+      'Company': c.company_name,
+      'Website': c.website || 'Not found',
+      'Status': c.in_scope ? 'IN SCOPE' : 'OUT OF SCOPE',
+      'Business Description': c.business_description || c.reason || '-'
+    }));
+  } else {
+    data = inScopeCompanies.map((c, i) => ({
+      '#': i + 1,
+      'Company': c.company_name,
+      'Website': c.website || 'Not found',
+      'Business Description': c.business_description || '-'
+    }));
+  }
+
+  // Create workbook with summary sheet and results sheet
+  const wb = XLSX.utils.book_new();
+
+  // Summary sheet
+  const summaryData = [
+    ['Speeda List Validation Results'],
+    [],
+    ['Target Business:', targetBusiness],
+    ['Countries:', countries.join(', ')],
+    ['Total Companies:', companies.length],
+    ['In-Scope:', inScopeCompanies.length],
+    ['Out-of-Scope:', companies.length - inScopeCompanies.length]
+  ];
+  const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+  XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+
+  // Results sheet
+  const resultsSheet = XLSX.utils.json_to_sheet(data);
+  // Set column widths
+  resultsSheet['!cols'] = [
+    { wch: 5 },   // #
+    { wch: 40 },  // Company
+    { wch: 50 },  // Website
+    { wch: 15 },  // Status (if all_companies)
+    { wch: 60 }   // Business Description
+  ];
+  XLSX.utils.book_append_sheet(wb, resultsSheet, 'Results');
+
+  // Write to buffer and convert to base64
+  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  return buffer.toString('base64');
+}
+
 app.post('/api/validation', async (req, res) => {
   const { Companies, Countries, TargetBusiness, OutputOption, Email } = req.body;
 
@@ -1643,12 +1698,13 @@ app.post('/api/validation', async (req, res) => {
       return;
     }
 
-    const batchSize = 3;
+    // Process 15 companies in parallel for much faster results
+    const batchSize = 15;
     const results = [];
 
     for (let i = 0; i < companyList.length; i += batchSize) {
       const batch = companyList.slice(i, i + batchSize);
-      console.log(`\nProcessing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(companyList.length / batchSize)}`);
+      console.log(`\nProcessing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(companyList.length / batchSize)} (${batch.length} companies)`);
 
       const batchResults = await Promise.all(batch.map(async (companyName) => {
         const website = await findCompanyWebsiteMulti(companyName, countryList);
@@ -1694,13 +1750,29 @@ app.post('/api/validation', async (req, res) => {
       console.log(`Completed: ${results.length}/${companyList.length}`);
     }
 
-    const htmlContent = buildValidationEmailHTML(results, TargetBusiness, countryList, outputOption);
     const inScopeCount = results.filter(r => r.in_scope).length;
+
+    // Build Excel file
+    const excelBase64 = buildValidationExcel(results, TargetBusiness, countryList, outputOption);
+
+    // Simple email body
+    const emailBody = `
+      <h2>Speeda List Validation Complete</h2>
+      <p><strong>Target Business:</strong> ${TargetBusiness}</p>
+      <p><strong>Countries:</strong> ${countryList.join(', ')}</p>
+      <p><strong>Results:</strong> ${inScopeCount} in-scope out of ${results.length} companies</p>
+      <br>
+      <p>Please see the attached Excel file for detailed results.</p>
+    `;
 
     await sendEmail(
       Email,
       `Speeda List Validation: ${inScopeCount}/${results.length} in-scope for "${TargetBusiness}"`,
-      htmlContent
+      emailBody,
+      {
+        content: excelBase64,
+        name: `validation-results-${new Date().toISOString().split('T')[0]}.xlsx`
+      }
     );
 
     const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
@@ -1724,24 +1796,44 @@ app.post('/api/validation', async (req, res) => {
 
 const ANIL_SYSTEM_PROMPT = `You are helping users write emails in Anil's professional style.
 
-CRITICAL RULES:
-- PRESERVE all specific references from the user's input: sheet names, file names, column references, technical terms. If user writes something in angle brackets like <Clean BS>, convert to square brackets [Clean BS] or quotes "Clean BS" in output - NEVER drop them.
-- Do NOT add extra spaces or formatting errors. Output clean, properly spaced text.
-- Do NOT invent specific dates, times, or deadlines. Only include dates/times if provided in input.
-
-STYLE CONSTRAINTS:
+CONSTRAINTS:
 - Tone: polite, formal, concise, tactfully assertive; client-first; no hype.
-- Structure: greeting; 1-line context; purpose in line 1–2; facts; explicit ask; next step; polite close.
-- Diction: prefer "Well noted.", "Do let me know…", "Happy to…", "We will keep you informed…", "Kindly…"
-- BANNED phrases: "excited", "super", "thrilled", "soon", "ASAP", "at the earliest", "thank you for your attention to this matter", "I hope this message finds you well", "I hope this email finds you well"
-- Short paragraphs with blank lines. Only use numbered lists when listing 3+ items.
-- When dates ARE provided: use absolute format + TZ (e.g., 09 Jan 2026, 14:00 SGT).
+- Structure: greeting; 1-line context; purpose in line 1–2; facts (numbers/dates/acronyms); explicit ask; next step; polite close; sign-off "Best Regards," (NO name after - user will add their own).
+- Diction: prefer "Well noted.", "Do let me know…", "Happy to…", "We will keep you informed…"
+- BANNED words: "excited", "super", "thrilled", vague time ("soon", "ASAP", "at the earliest"), emotive over-apologies.
+- IMPORTANT: Do NOT invent specific dates, times, or deadlines. Only include dates/times if they were provided in the user's input. If no date given, use phrases like "at your earliest convenience" or leave the timing open.
+- Honorifics by region (e.g., "-san" for Japanese, "Dato" for Malaysian); short paragraphs with blank lines; numbered lists for terms.
+- When dates ARE provided: use absolute format + TZ (e.g., 09 Jan 2026, 14:00 SGT). Currencies spaced (USD 12m). Multiples like "7x EBITDA". FY labels (FY25).
+
+SUBJECT LINE PATTERNS:
+- Intro: {A} ↔ {B} — {topic}
+- {Deal/Company}: NDA + IM
+- {Project}: NBO status
+- Correction: aligned IM on {topic}
+- {Company}: exclusivity terms
+- Meeting: {topic}
+
+EXAMPLE STYLE (note the structure and tone):
+
+Dear Martin,
+
+As discussed, we have received two NBOs for Nimbus:
+1) NorthBridge: 0.9x FY25 Revenue; exclusivity 30 days; breakup fee USD 0.5m.
+2) Helios: 1.0x FY25 Revenue; exclusivity 21 days; no breakup fee.
+
+We suggest holding to at least 1.0x FY25 Revenue and requiring a modest breakup fee to avoid creep downwards.
+
+Do let me know if you prefer to invite management interviews before revisions.
+
+Thank you.
+
+Best Regards,
 
 OUTPUT FORMAT:
 - First line: Subject: [subject line]
-- Blank line
-- Email body
-- End with "Thank you." then blank line then "Best Regards," (no name)`;
+- Then blank line
+- Then email body
+- End with "Best Regards," (no name - user adds their own signature)`;
 
 app.post('/api/write-like-anil', async (req, res) => {
   console.log('\n' + '='.repeat(50));
@@ -2341,7 +2433,7 @@ app.post('/api/profile-slides', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v30 - Profile Slides' });
+  res.json({ status: 'ok', service: 'Find Target v29 - Write Like Anil' });
 });
 
 const PORT = process.env.PORT || 3000;
