@@ -5,10 +5,14 @@ const OpenAI = require('openai');
 const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
 const XLSX = require('xlsx');
+const multer = require('multer');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
+
+// Multer configuration for file uploads (memory storage)
+const upload = multer({ storage: multer.memoryStorage() });
 
 // Check required environment variables
 const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'BREVO_API_KEY'];
@@ -1786,6 +1790,141 @@ app.post('/api/validation', async (req, res) => {
     console.error('Validation error:', error);
     try {
       await sendEmail(Email, `Speeda List Validation - Error`, `<p>Error: ${error.message}</p>`);
+    } catch (e) {
+      console.error('Failed to send error email:', e);
+    }
+  }
+});
+
+// ============ TRADING COMPARABLE ============
+
+app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res) => {
+  const { TargetCompanyOrIndustry, Email, IsProfitable } = req.body;
+  const excelFile = req.file;
+
+  if (!excelFile || !TargetCompanyOrIndustry || !Email) {
+    return res.status(400).json({ error: 'Excel file, target company/industry, and email are required' });
+  }
+
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`NEW TRADING COMPARABLE REQUEST: ${new Date().toISOString()}`);
+  console.log(`Target: ${TargetCompanyOrIndustry}`);
+  console.log(`Email: ${Email}`);
+  console.log(`Profitable: ${IsProfitable}`);
+  console.log(`File: ${excelFile.originalname} (${excelFile.size} bytes)`);
+  console.log('='.repeat(50));
+
+  // Respond immediately
+  res.json({
+    success: true,
+    message: 'Request received. Results will be emailed within 15-30 minutes.'
+  });
+
+  try {
+    // Parse the Excel file
+    const workbook = XLSX.read(excelFile.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+    const data = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+    // Extract company names from first column (skip header)
+    const comparableCompanies = data.slice(1)
+      .map(row => row[0])
+      .filter(name => name && typeof name === 'string' && name.trim().length > 0);
+
+    console.log(`Found ${comparableCompanies.length} comparable companies in Excel`);
+
+    if (comparableCompanies.length === 0) {
+      await sendEmail(Email, 'Trading Comparable - No Companies Found',
+        '<p>No company names were found in the first column of your Excel file. Please ensure companies are listed in column A.</p>');
+      return;
+    }
+
+    // Determine which metrics to fetch based on profitability
+    const isProfitable = IsProfitable === 'yes';
+    const metricsToFetch = isProfitable
+      ? ['P/E ratio', 'P/B ratio', 'EV/EBITDA']
+      : ['P/B ratio', 'EV/EBITDA']; // Skip P/E for loss-making
+
+    // Use Perplexity to fetch trading multiples
+    const prompt = `I need current trading multiples for the following comparable companies for a ${TargetCompanyOrIndustry} analysis.
+
+Companies to analyze:
+${comparableCompanies.map((c, i) => `${i + 1}. ${c}`).join('\n')}
+
+For each company, provide:
+- Company name
+- Stock exchange/ticker (if public)
+${metricsToFetch.map(m => `- ${m}`).join('\n')}
+- Market cap (if available)
+- Data date/source
+
+If a company is private or data unavailable, note that.
+
+Format as a structured list for each company. Be thorough and accurate. Use the most recent data available.`;
+
+    console.log('Fetching trading multiples via Perplexity...');
+    const perpResponse = await callPerplexity(prompt);
+
+    // Also get supplementary data from OpenAI Search
+    console.log('Fetching supplementary data via OpenAI Search...');
+    const openaiResponse = await callOpenAISearch(`Find current trading multiples (${metricsToFetch.join(', ')}) for these companies: ${comparableCompanies.slice(0, 10).join(', ')}. Provide latest available valuation metrics.`);
+
+    // Combine and format results
+    const combinedAnalysis = `
+${perpResponse}
+
+--- Additional Data ---
+${openaiResponse}
+`;
+
+    // Use GPT to format into a nice table
+    const formattingPrompt = `Based on this trading comparable data, create a clean HTML table with the following columns:
+- Company Name
+- Ticker
+${metricsToFetch.map(m => `- ${m}`).join('\n')}
+- Market Cap
+- Notes
+
+Data:
+${combinedAnalysis}
+
+Output ONLY the HTML table (no other text). If data is not available for a metric, put "N/A".
+Round ratios to 1 decimal place.`;
+
+    const tableResponse = await callChatGPT(formattingPrompt);
+
+    // Build email
+    const emailHTML = `
+<h2>Trading Comparable Analysis</h2>
+<p><strong>Target:</strong> ${TargetCompanyOrIndustry}</p>
+<p><strong>Profitability:</strong> ${isProfitable ? 'Yes - All metrics included' : 'No - P/E ratio excluded'}</p>
+<p><strong>Comparable Companies:</strong> ${comparableCompanies.length}</p>
+<p><strong>Metrics:</strong> ${metricsToFetch.join(', ')}</p>
+<br>
+<h3>Trading Multiples</h3>
+${tableResponse}
+<br>
+<h3>Raw Analysis</h3>
+<pre style="background: #f5f5f5; padding: 15px; white-space: pre-wrap; font-size: 12px;">${combinedAnalysis}</pre>
+<br>
+<p><em>Data sourced from public market data. Please verify critical figures independently.</em></p>
+`;
+
+    await sendEmail(
+      Email,
+      `Trading Comparable: ${TargetCompanyOrIndustry} (${comparableCompanies.length} comps)`,
+      emailHTML
+    );
+
+    console.log(`\n${'='.repeat(50)}`);
+    console.log(`TRADING COMPARABLE COMPLETE! Email sent to ${Email}`);
+    console.log('='.repeat(50));
+
+  } catch (error) {
+    console.error('Trading comparable error:', error);
+    try {
+      await sendEmail(Email, 'Trading Comparable - Error', `<p>Error processing your request: ${error.message}</p>`);
     } catch (e) {
       console.error('Failed to send error email:', e);
     }
