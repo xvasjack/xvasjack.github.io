@@ -1827,45 +1827,230 @@ function formatPercent(val) {
   return Number(val).toFixed(1) + '%';
 }
 
-// Helper: Qualitative filter using AI to check business relevance
-async function checkBusinessRelevance(companies, targetDescription) {
+// Helper: Check business relevance using a single AI model
+async function checkRelevanceWithOpenAI(companies, filterCriteria) {
   const companyNames = companies.map(c => c.name);
   const prompt = `You are analyzing companies for a trading comparable analysis.
 
-Target company/industry: "${targetDescription}"
+Filter criteria: "${filterCriteria}"
 
-List of companies to evaluate:
+Companies to evaluate:
 ${companyNames.map((name, i) => `${i + 1}. ${name}`).join('\n')}
 
-For each company, determine if its business is RELEVANT to the target (i.e., would be considered a peer/comparable company in the same or similar industry).
+For each company:
+1. Determine if it matches the filter criteria (relevant=true) or not (relevant=false)
+2. Provide a SHORT business description (5-10 words max) explaining what the company does
 
-Return ONLY a JSON array of objects with this exact format:
-[{"index": 0, "name": "Company Name", "relevant": true, "reason": "Brief reason"}, ...]
+Return JSON: {"results": [{"index": 0, "name": "Company Name", "relevant": true, "business": "Cloud software provider for HR"}]}
 
-Be reasonably inclusive - if a company could plausibly be in a related industry, mark it as relevant.
-Only exclude companies that are clearly in unrelated industries.`;
+Be selective - only include companies that clearly match the criteria.`;
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.1,
       response_format: { type: 'json_object' }
     });
-
-    const content = response.choices[0].message.content;
-    const parsed = JSON.parse(content);
-    const results = parsed.results || parsed.companies || parsed;
-
-    if (Array.isArray(results)) {
-      return results;
-    }
-    return companies.map((c, i) => ({ index: i, name: c.name, relevant: true, reason: 'Default included' }));
+    const parsed = JSON.parse(response.choices[0].message.content);
+    return parsed.results || parsed.companies || parsed;
   } catch (error) {
-    console.error('AI relevance check error:', error);
-    // On error, include all companies
-    return companies.map((c, i) => ({ index: i, name: c.name, relevant: true, reason: 'AI check failed - included by default' }));
+    console.error('OpenAI relevance check error:', error);
+    return null;
   }
+}
+
+async function checkRelevanceWithGemini(companies, filterCriteria) {
+  const companyNames = companies.map(c => c.name);
+  const prompt = `You are analyzing companies for a trading comparable analysis.
+
+Filter criteria: "${filterCriteria}"
+
+Companies to evaluate:
+${companyNames.map((name, i) => `${i + 1}. ${name}`).join('\n')}
+
+For each company:
+1. Determine if it matches the filter criteria (relevant=true) or not (relevant=false)
+2. Provide a SHORT business description (5-10 words max) explaining what the company does
+
+Return ONLY valid JSON with this exact format:
+{"results": [{"index": 0, "name": "Company Name", "relevant": true, "business": "Cloud software provider for HR"}]}
+
+Be selective - only include companies that clearly match the criteria.`;
+
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json' }
+      })
+    });
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const parsed = JSON.parse(text);
+    return parsed.results || parsed.companies || parsed;
+  } catch (error) {
+    console.error('Gemini relevance check error:', error);
+    return null;
+  }
+}
+
+// Helper: Check relevance with multiple AIs in parallel, require majority agreement
+async function checkBusinessRelevanceMultiAI(companies, filterCriteria) {
+  console.log(`  Running multi-AI relevance check for: "${filterCriteria}"`);
+
+  // Run both AIs in parallel
+  const [openaiResults, geminiResults] = await Promise.all([
+    checkRelevanceWithOpenAI(companies, filterCriteria),
+    checkRelevanceWithGemini(companies, filterCriteria)
+  ]);
+
+  // Merge results - company is relevant only if BOTH AIs agree (or one fails)
+  const mergedResults = companies.map((c, i) => {
+    const openaiResult = openaiResults?.find(r => r.index === i || r.name === c.name);
+    const geminiResult = geminiResults?.find(r => r.index === i || r.name === c.name);
+
+    // Get relevance votes
+    const openaiRelevant = openaiResult?.relevant ?? true;
+    const geminiRelevant = geminiResult?.relevant ?? true;
+
+    // Get business descriptions
+    const openaiDesc = openaiResult?.business || '';
+    const geminiDesc = geminiResult?.business || '';
+    const business = openaiDesc || geminiDesc || 'Unknown business';
+
+    // Both must agree to exclude (conservative approach)
+    const relevant = openaiRelevant || geminiRelevant;
+
+    return {
+      index: i,
+      name: c.name,
+      relevant,
+      business,
+      openaiVote: openaiRelevant,
+      geminiVote: geminiRelevant
+    };
+  });
+
+  const keptCount = mergedResults.filter(r => r.relevant).length;
+  const removedCount = mergedResults.filter(r => !r.relevant).length;
+  console.log(`  Multi-AI result: ${keptCount} kept, ${removedCount} removed`);
+
+  return mergedResults;
+}
+
+// Helper: Generate filtering steps based on target description
+async function generateFilteringSteps(targetDescription, companyCount) {
+  const prompt = `You are creating a methodical filtering approach for trading comparable analysis.
+
+Target: "${targetDescription}"
+Number of companies to filter: ${companyCount}
+
+Create 2-4 progressive filtering steps to narrow down from a broad industry to the specific target.
+Each step should be more specific than the previous.
+
+Example for "payroll outsourcing company in Asia":
+Step 1: "Business process outsourcing (BPO) or HR services companies"
+Step 2: "HR technology or payroll services companies"
+Step 3: "Payroll processing or payroll outsourcing companies"
+Step 4: "Payroll companies with Asia focus or operations"
+
+Return JSON: {"steps": ["step 1 criteria", "step 2 criteria", "step 3 criteria"]}
+
+Make each step progressively more selective. First step should be broad, last step should match the target closely.`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      response_format: { type: 'json_object' }
+    });
+    const parsed = JSON.parse(response.choices[0].message.content);
+    return parsed.steps || [`Companies related to ${targetDescription}`];
+  } catch (error) {
+    console.error('Error generating filtering steps:', error);
+    return [`Companies related to ${targetDescription}`];
+  }
+}
+
+// Helper: Apply iterative qualitative filtering with multiple AI checks
+async function applyIterativeQualitativeFilter(companies, targetDescription, outputWorkbook, sheetHeaders, startSheetNumber) {
+  let currentCompanies = [...companies];
+  let sheetNumber = startSheetNumber;
+  const filterLog = [];
+
+  // Generate filtering steps
+  console.log('Generating filtering steps...');
+  const filteringSteps = await generateFilteringSteps(targetDescription, currentCompanies.length);
+  console.log(`Generated ${filteringSteps.length} filtering steps:`, filteringSteps);
+
+  // Apply each filtering step
+  for (let stepIdx = 0; stepIdx < filteringSteps.length; stepIdx++) {
+    const filterCriteria = filteringSteps[stepIdx];
+    console.log(`\nApplying filter step ${stepIdx + 1}: "${filterCriteria}"`);
+
+    if (currentCompanies.length <= 3) {
+      console.log('  Skipping - already at minimum company count');
+      break;
+    }
+
+    // Run multi-AI relevance check
+    const relevanceResults = await checkBusinessRelevanceMultiAI(currentCompanies, filterCriteria);
+
+    const removedCompanies = [];
+    const keptCompanies = [];
+
+    for (let i = 0; i < currentCompanies.length; i++) {
+      const result = relevanceResults[i];
+      const company = { ...currentCompanies[i] };
+
+      if (result && !result.relevant) {
+        company.filterReason = result.business;
+        removedCompanies.push(company);
+      } else {
+        keptCompanies.push(company);
+      }
+    }
+
+    // Only apply filter if it doesn't remove too many companies
+    if (keptCompanies.length >= 3) {
+      currentCompanies = keptCompanies;
+      const logEntry = `Filter ${sheetNumber - 1} (${filterCriteria}): Removed ${removedCompanies.length} companies`;
+      filterLog.push(logEntry);
+      console.log(`  ${logEntry}`);
+
+      // Create sheet for this filter step
+      const sheetData = createSheetData(currentCompanies, sheetHeaders,
+        `Step ${stepIdx + 1}: ${filterCriteria} - ${currentCompanies.length} companies (removed ${removedCompanies.length})`);
+
+      // Add removed companies section
+      if (removedCompanies.length > 0) {
+        sheetData.push([]);
+        sheetData.push(['REMOVED COMPANIES (with business description):']);
+        for (const c of removedCompanies) {
+          sheetData.push([c.name, '', '', '', '', '', '', '', '', '', '', c.filterReason]);
+        }
+      }
+
+      const sheet = XLSX.utils.aoa_to_sheet(sheetData);
+      const sheetName = `${sheetNumber}. Q${stepIdx + 1} ${filterCriteria.substring(0, 20)}`;
+      XLSX.utils.book_append_sheet(outputWorkbook, sheet, sheetName.substring(0, 31));
+      sheetNumber++;
+    } else {
+      console.log(`  Skipping filter - would leave only ${keptCompanies.length} companies`);
+    }
+
+    // Stop if we're in the target range
+    if (currentCompanies.length >= 3 && currentCompanies.length <= 30) {
+      console.log(`  Reached target range: ${currentCompanies.length} companies`);
+      break;
+    }
+  }
+
+  return { companies: currentCompanies, filterLog, sheetNumber };
 }
 
 // Helper: Create sheet data from companies
@@ -2146,40 +2331,20 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       }
     }
 
-    // QUALITATIVE FILTER: Check business relevance using AI
-    // Only apply if we still have more than 30 companies OR less than 3
-    if (currentCompanies.length > 30 || currentCompanies.length < 3) {
-      const beforeQual = currentCompanies.length;
+    // QUALITATIVE FILTER: Apply iterative multi-AI filtering
+    // Uses multiple AIs in parallel, applies progressive filtering steps
+    console.log(`\nStarting qualitative filtering with ${currentCompanies.length} companies...`);
+    const qualResult = await applyIterativeQualitativeFilter(
+      currentCompanies,
+      TargetCompanyOrIndustry,
+      outputWorkbook,
+      sheetHeaders,
+      sheetNumber
+    );
 
-      console.log(`Applying qualitative filter to ${currentCompanies.length} companies...`);
-      const relevanceResults = await checkBusinessRelevance(currentCompanies, TargetCompanyOrIndustry);
-
-      const removedByQual = [];
-      const relevanceMap = new Map();
-      for (const r of relevanceResults) {
-        relevanceMap.set(r.index, r);
-      }
-
-      currentCompanies = currentCompanies.filter((c, i) => {
-        const result = relevanceMap.get(i);
-        if (result && !result.relevant) {
-          c.filterReason = `Not relevant: ${result.reason || 'Unrelated industry'}`;
-          removedByQual.push(c);
-          return false;
-        }
-        return true;
-      });
-
-      filterLog.push(`Filter ${sheetNumber - 1} (Qualitative): Removed ${removedByQual.length} companies not relevant to "${TargetCompanyOrIndustry}"`);
-      console.log(filterLog[filterLog.length - 1]);
-
-      // Sheet: After Qualitative filter
-      const sheetQualData = createSheetData(currentCompanies, sheetHeaders,
-        `After Business Relevance Filter - ${currentCompanies.length} companies (removed ${removedByQual.length})`);
-      const sheetQual = XLSX.utils.aoa_to_sheet(sheetQualData);
-      XLSX.utils.book_append_sheet(outputWorkbook, sheetQual, `${sheetNumber}. After Relevance`);
-      sheetNumber++;
-    }
+    currentCompanies = qualResult.companies;
+    filterLog.push(...qualResult.filterLog);
+    sheetNumber = qualResult.sheetNumber;
 
     // FINAL SHEET: Summary with medians
     const finalCompanies = currentCompanies;
