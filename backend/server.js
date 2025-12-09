@@ -2157,7 +2157,6 @@ Maintain the core message but apply Anil's tone, structure, and conventions. Inc
   }
 });
 
-<<<<<<< HEAD
 // ============ PROFILE SLIDES ============
 
 // Generate PPTX using PptxGenJS
@@ -2705,8 +2704,6 @@ app.post('/api/profile-slides', async (req, res) => {
   }
 });
 
-=======
->>>>>>> origin/main
 app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'Find Target v29 - Write Like Anil' });
 });
