@@ -3,477 +3,111 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Find Target - Company Search v3 Fast</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    html {
-      font-size: 16px;
-    }
-
-    body {
-      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-
-    /* Top Navigation Bar */
-    .top-nav {
-      background: #fff;
-      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-      padding: 0 1.5rem;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-
-    .nav-container {
-      max-width: 1200px;
-      margin: 0 auto;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      height: 64px;
-    }
-
-    .nav-brand {
-      font-size: 1.125rem;
-      font-weight: 700;
-      color: #1f2937;
-      text-decoration: none;
-    }
-
-    .nav-links {
-      display: flex;
-      gap: 0.5rem;
-      list-style: none;
-    }
-
-    .nav-link {
-      display: block;
-      padding: 0.5rem 1rem;
-      font-size: 0.875rem;
-      font-weight: 500;
-      color: #6b7280;
-      text-decoration: none;
-      border-radius: 6px;
-      transition: all 0.2s ease;
-    }
-
-    .nav-link:hover {
-      color: #2563eb;
-      background: #eff6ff;
-    }
-
-    .nav-link.active {
-      color: #2563eb;
-      background: #eff6ff;
-    }
-
-    /* Mobile menu */
-    .mobile-menu-btn {
-      display: none;
-      background: none;
-      border: none;
-      padding: 0.5rem;
-      cursor: pointer;
-      color: #374151;
-    }
-
-    .mobile-menu {
-      display: none;
-      position: absolute;
-      top: 64px;
-      left: 0;
-      right: 0;
-      background: #fff;
-      border-top: 1px solid #e5e7eb;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-      padding: 0.5rem;
-    }
-
-    .mobile-menu.active {
-      display: block;
-    }
-
-    .mobile-menu .nav-link {
-      display: block;
-      padding: 0.75rem 1rem;
-      border-radius: 6px;
-    }
-
-    /* Main Container */
-    .main-container {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 2rem 1rem;
-    }
-
-    /* Card */
-    .card {
-      background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-      width: 100%;
-      max-width: 500px;
-      padding: 2.5rem 2rem;
-    }
-
-    /* Form Header */
-    .form-header {
-      text-align: center;
-      margin-bottom: 2rem;
-    }
-
-    .eyebrow {
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: #6b7280;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      margin-bottom: 0.5rem;
-    }
-
-    .page-title {
-      font-size: 1.75rem;
-      font-weight: 700;
-      color: #111827;
-      margin-bottom: 0.75rem;
-    }
-
-    .form-description {
-      font-size: 0.9375rem;
-      color: #6b7280;
-      line-height: 1.6;
-    }
-
-    /* Form Styles */
-    .form-group {
-      margin-bottom: 1.25rem;
-    }
-
-    .form-label {
-      display: block;
-      font-size: 0.875rem;
-      color: #374151;
-      margin-bottom: 0.375rem;
-      font-weight: 600;
-    }
-
-    .required {
-      color: #ef4444;
-    }
-
-    .form-input {
-      width: 100%;
-      padding: 0.75rem;
-      font-size: 1rem;
-      font-family: inherit;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      background-color: #fff;
-      transition: all 0.2s ease;
-    }
-
-    .form-input:focus {
-      outline: none;
-      border-color: #2563eb;
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
-    }
-
-    .form-input::placeholder {
-      color: #9ca3af;
-    }
-
-    /* Submit Button */
-    .submit-btn {
-      width: 100%;
-      padding: 0.75rem 1.5rem;
-      font-size: 1rem;
-      font-weight: 600;
-      font-family: inherit;
-      color: #fff;
-      background: #2563eb;
-      border: none;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      margin-top: 0.5rem;
-    }
-
-    .submit-btn:hover {
-      background: #1d4ed8;
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-    }
-
-    .submit-btn:active {
-      transform: translateY(0);
-    }
-
-    .submit-btn:disabled {
-      background: #9ca3af;
-      cursor: not-allowed;
-      transform: none;
-      box-shadow: none;
-    }
-
-    /* Messages */
-    .message {
-      display: none;
-      padding: 1rem;
-      border-radius: 8px;
-      font-size: 0.875rem;
-      text-align: center;
-      margin-top: 1.25rem;
-      font-weight: 500;
-    }
-
-    .success-message {
-      background-color: #ecfdf5;
-      border: 1px solid #a7f3d0;
-      color: #065f46;
-    }
-
-    .error-message {
-      background-color: #fef2f2;
-      border: 1px solid #fecaca;
-      color: #991b1b;
-    }
-
-    /* Version Link */
-    .version-link {
-      display: block;
-      text-align: center;
-      margin-top: 1.5rem;
-      padding-top: 1.5rem;
-      border-top: 1px solid #e5e7eb;
-      font-size: 0.875rem;
-      color: #6b7280;
-    }
-
-    .version-link a {
-      color: #2563eb;
-      text-decoration: none;
-      font-weight: 500;
-    }
-
-    .version-link a:hover {
-      text-decoration: underline;
-    }
-
-    /* Footer */
-    .footer {
-      text-align: center;
-      padding: 1.5rem;
-      font-size: 0.75rem;
-      color: #9ca3af;
-    }
-
-    /* Responsive */
-    @media screen and (max-width: 640px) {
-      .nav-links {
-        display: none;
-      }
-
-      .mobile-menu-btn {
-        display: block;
-      }
-
-      .card {
-        padding: 2rem 1.5rem;
-      }
-
-      .page-title {
-        font-size: 1.5rem;
-      }
-    }
-  </style>
+  <title>Find Target - v3 Fast</title>
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- Top Navigation -->
-  <nav class="top-nav">
-    <div class="nav-container">
-      <a href="find-target.html" class="nav-brand">Find Target</a>
-      <ul class="nav-links">
-        <li><a href="find-target.html" class="nav-link active">v3 Fast</a></li>
-        <li><a href="find-target-slow.html" class="nav-link">v3 Slow</a></li>
-        <li><a href="validation.html" class="nav-link">Validation</a></li>
-        <li><a href="profile-slides.html" class="nav-link">Profile Slides</a></li>
-      </ul>
-      <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="3" y1="12" x2="21" y2="12"></line>
-          <line x1="3" y1="6" x2="21" y2="6"></line>
-          <line x1="3" y1="18" x2="21" y2="18"></line>
+  <header class="app-header">
+    <a href="find-target.html" class="logo">
+      <span class="logo-icon">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
         </svg>
-      </button>
-    </div>
-    <div class="mobile-menu" id="mobileMenu">
-      <a href="find-target.html" class="nav-link active">v3 Fast</a>
-      <a href="find-target-slow.html" class="nav-link">v3 Slow</a>
-      <a href="validation.html" class="nav-link">Validation</a>
-      <a href="profile-slides.html" class="nav-link">Profile Slides</a>
-    </div>
-  </nav>
+      </span>
+      Find Target
+    </a>
+    <nav>
+      <a href="find-target.html" class="active">v3 Fast</a>
+      <a href="find-target-slow.html">v3 Slow</a>
+      <a href="validation.html">Validation</a>
+      <a href="trading-comparable.html">Trading Comp</a>
+      <a href="profile-slides.html">Slides</a>
+      <a href="write-like-anil.html">Write Like Anil</a>
+    </nav>
+  </header>
 
-  <main class="main-container">
-    <div class="card">
-      <div class="form-header">
-        <p class="eyebrow">Company Search</p>
-        <h1 class="page-title">v3 Fast</h1>
-        <p class="form-description">
-          Fill in the form below and submit.<br>
-          Results will be emailed to you within <strong>5-10 minutes</strong>.
-        </p>
+  <main class="app-main">
+    <section class="page-info">
+      <span class="status-badge">Online</span>
+      <h1 class="page-title">v3 Fast Search</h1>
+      <p class="page-description">Find potential targets quickly. Results in 5-10 minutes.</p>
+    </section>
+
+    <section class="page-content">
+      <div class="form-card">
+        <h2>Search Criteria</h2>
+        <form id="findTargetForm" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/find-target">
+          <div class="form-grid">
+            <div class="form-group full-width">
+              <label for="business">Business Type</label>
+              <input type="text" id="business" name="Business" required placeholder="e.g. Semiconductor distributor">
+            </div>
+            <div class="form-group">
+              <label for="country">Country</label>
+              <input type="text" id="country" name="Country" required placeholder="e.g. Malaysia, Thailand">
+            </div>
+            <div class="form-group">
+              <label for="exclusion">Exclusions</label>
+              <input type="text" id="exclusion" name="Exclusion" required placeholder="e.g. MNC, Listed">
+            </div>
+            <div class="form-group full-width">
+              <label for="email">Email Address</label>
+              <input type="email" id="email" name="Email" required placeholder="your@company.com">
+            </div>
+          </div>
+
+          <button type="submit" class="submit-btn" id="submitBtn">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+            </svg>
+            Search Companies
+          </button>
+
+          <div class="message success" id="successMessage">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            Request submitted! Results will arrive in 5-10 minutes.
+          </div>
+
+          <div class="message error" id="errorMessage">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            Error submitting request. Please try again.
+          </div>
+        </form>
       </div>
-
-      <form id="findTargetForm" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/find-target">
-        <div class="form-group">
-          <label class="form-label" for="business">
-            Business <span class="required">*</span>
-          </label>
-          <input
-            type="text"
-            id="business"
-            name="Business"
-            class="form-input"
-            placeholder="e.g. Semiconductor distributor"
-            required
-          >
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="country">
-            Country <span class="required">*</span>
-          </label>
-          <input
-            type="text"
-            id="country"
-            name="Country"
-            class="form-input"
-            placeholder="e.g. Malaysia, Thailand, Singapore"
-            required
-          >
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="exclusion">
-            Exclusion <span class="required">*</span>
-          </label>
-          <input
-            type="text"
-            id="exclusion"
-            name="Exclusion"
-            class="form-input"
-            placeholder="e.g. Manufacturer, MNC, listed companies"
-            required
-          >
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="email">
-            Email <span class="required">*</span>
-          </label>
-          <input
-            type="email"
-            id="email"
-            name="Email"
-            class="form-input"
-            placeholder="e.g. yourname@company.com"
-            required
-          >
-        </div>
-
-        <button type="submit" class="submit-btn" id="submitBtn">
-          Submit Request
-        </button>
-
-        <div class="message success-message" id="successMessage">
-          Request submitted successfully! Results will be emailed to you within 5-10 minutes.
-        </div>
-
-        <div class="message error-message" id="errorMessage">
-          Error submitting request. Please try again.
-        </div>
-
-        <div class="version-link">
-          If this doesn't work, please try <a href="find-target-slow.html">v3 Slow</a>
-        </div>
-      </form>
-    </div>
+    </section>
   </main>
 
-  <footer class="footer">
-    Powered by AI
-  </footer>
-
   <script>
-    // Mobile menu toggle
-    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-    const mobileMenu = document.getElementById('mobileMenu');
-
-    mobileMenuBtn.addEventListener('click', () => {
-      mobileMenu.classList.toggle('active');
-    });
-
-    // Close mobile menu when clicking outside
-    document.addEventListener('click', (e) => {
-      if (!mobileMenuBtn.contains(e.target) && !mobileMenu.contains(e.target)) {
-        mobileMenu.classList.remove('active');
-      }
-    });
-
-    // Form submission
     document.getElementById('findTargetForm').addEventListener('submit', async function(e) {
       e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      const success = document.getElementById('successMessage');
+      const error = document.getElementById('errorMessage');
 
-      const submitBtn = document.getElementById('submitBtn');
-      const successMessage = document.getElementById('successMessage');
-      const errorMessage = document.getElementById('errorMessage');
-
-      successMessage.style.display = 'none';
-      errorMessage.style.display = 'none';
-
-      submitBtn.disabled = true;
-      submitBtn.textContent = 'Submitting...';
-
-      const formData = {
-        Business: document.getElementById('business').value,
-        Country: document.getElementById('country').value,
-        Exclusion: document.getElementById('exclusion').value,
-        Email: document.getElementById('email').value
-      };
+      success.classList.remove('show');
+      error.classList.remove('show');
+      btn.disabled = true;
+      btn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Processing...';
 
       try {
+        const formData = new FormData(this);
+        const data = Object.fromEntries(formData);
         const response = await fetch(this.action, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(formData)
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(data)
         });
-
         if (response.ok) {
-          successMessage.style.display = 'block';
+          success.classList.add('show');
           this.reset();
         } else {
-          throw new Error('Request failed');
+          throw new Error();
         }
-      } catch (error) {
-        errorMessage.style.display = 'block';
+      } catch {
+        error.classList.add('show');
       } finally {
-        submitBtn.disabled = false;
-        submitBtn.textContent = 'Submit Request';
+        btn.disabled = false;
+        btn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg> Search Companies';
       }
     });
   </script>
