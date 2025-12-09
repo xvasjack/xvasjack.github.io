@@ -2549,6 +2549,48 @@ Maintain the core message but apply Anil's tone, structure, and conventions. Inc
 
 // ============ PROFILE SLIDES ============
 
+// Country to flag code mapping
+const COUNTRY_FLAG_MAP = {
+  'philippines': 'PH', 'ph': 'PH', 'manila': 'PH',
+  'thailand': 'TH', 'th': 'TH', 'bangkok': 'TH',
+  'malaysia': 'MY', 'my': 'MY', 'kuala lumpur': 'MY',
+  'indonesia': 'ID', 'id': 'ID', 'jakarta': 'ID',
+  'singapore': 'SG', 'sg': 'SG',
+  'vietnam': 'VN', 'vn': 'VN', 'ho chi minh': 'VN', 'hanoi': 'VN',
+  'japan': 'JP', 'jp': 'JP', 'tokyo': 'JP',
+  'china': 'CN', 'cn': 'CN', 'beijing': 'CN', 'shanghai': 'CN',
+  'korea': 'KR', 'kr': 'KR', 'seoul': 'KR',
+  'taiwan': 'TW', 'tw': 'TW', 'taipei': 'TW',
+  'usa': 'US', 'us': 'US', 'united states': 'US', 'america': 'US',
+  'uk': 'GB', 'united kingdom': 'GB', 'england': 'GB', 'london': 'GB',
+  'australia': 'AU', 'au': 'AU', 'sydney': 'AU',
+  'india': 'IN', 'in': 'IN', 'mumbai': 'IN', 'delhi': 'IN',
+  'hong kong': 'HK', 'hk': 'HK'
+};
+
+// Get country code from location string
+function getCountryCode(location) {
+  if (!location) return null;
+  const loc = location.toLowerCase();
+  for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
+    if (loc.includes(key)) return code;
+  }
+  return null;
+}
+
+// Fetch image as base64
+async function fetchImageAsBase64(url) {
+  try {
+    const response = await fetch(url, { timeout: 5000 });
+    if (!response.ok) return null;
+    const buffer = await response.arrayBuffer();
+    return Buffer.from(buffer).toString('base64');
+  } catch (e) {
+    console.log('Failed to fetch image:', url);
+    return null;
+  }
+}
+
 // Generate PPTX using PptxGenJS - matching YCP template
 async function generatePPTX(companies) {
   try {
@@ -2558,61 +2600,124 @@ async function generatePPTX(companies) {
     pptx.author = 'YCP';
     pptx.title = 'Company Profile Slides';
     pptx.subject = 'Company Profiles';
-    pptx.layout = 'LAYOUT_16x9';
+
+    // Set exact slide size to match template (13.333" x 7.5" = 16:9 widescreen)
+    pptx.defineLayout({ name: 'YCP', width: 13.333, height: 7.5 });
+    pptx.layout = 'YCP';
 
     // YCP Theme Colors (from template)
     const COLORS = {
-      accent3: '011AB7',      // Dark blue - label column background
+      headerLine: '293F55',    // Dark navy for header/footer lines
+      accent3: '011AB7',       // Dark blue - label column background
       white: 'FFFFFF',
       black: '000000',
-      gray: 'BFBFBF',         // Dashed border color
-      dk2: '1F497D'           // Underline color
+      gray: 'BFBFBF',          // Dashed border color
+      dk2: '1F497D',           // Section underline color
+      footerText: '808080'     // Gray footer text
     };
 
-    companies.forEach((company) => {
+    for (const company of companies) {
       const slide = pptx.addSlide();
 
-      // Title (top)
+      // ===== HEADER LINES (from template) =====
+      // Thick line under title area
+      slide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 1.02, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 4.5 }
+      });
+      // Thin line below
+      slide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 1.10, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 2.25 }
+      });
+
+      // ===== FOOTER LINE =====
+      slide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 7.24, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 2.25 }
+      });
+
+      // Footer copyright text
+      slide.addText('(C) YCP 2025 all rights reserved', {
+        x: 4.1, y: 7.26, w: 5.1, h: 0.2,
+        fontSize: 8, fontFace: 'Segoe UI',
+        color: COLORS.footerText, align: 'center'
+      });
+
+      // ===== TITLE (top left) =====
       slide.addText(company.title || company.company_name || 'Company Profile', {
-        x: 0.35, y: 0.06, w: 9.14, h: 0.55,
-        fontSize: 28, bold: true, fontFace: 'Segoe UI',
-        color: COLORS.black, valign: 'middle'
+        x: 0.38, y: 0.05, w: 9.5, h: 0.6,
+        fontSize: 24, bold: true, fontFace: 'Segoe UI',
+        color: COLORS.black, valign: 'bottom'
       });
 
       // Message (subtitle below title)
       if (company.message) {
         slide.addText(company.message, {
-          x: 0.35, y: 0.55, w: 9.14, h: 0.3,
+          x: 0.38, y: 0.65, w: 9.5, h: 0.3,
           fontSize: 16, fontFace: 'Segoe UI',
-          color: COLORS.black, valign: 'top'
+          color: COLORS.black
         });
       }
 
-      // Left section header: "会社概要資料"
+      // ===== FLAG (top right) =====
+      const countryCode = getCountryCode(company.location);
+      if (countryCode) {
+        try {
+          const flagUrl = `https://flagcdn.com/w80/${countryCode.toLowerCase()}.png`;
+          const flagBase64 = await fetchImageAsBase64(flagUrl);
+          if (flagBase64) {
+            slide.addImage({
+              data: `image/png;base64,${flagBase64}`,
+              x: 11.5, y: 0.15, w: 0.6, h: 0.4
+            });
+          }
+        } catch (e) {
+          console.log('Flag fetch failed for', countryCode);
+        }
+      }
+
+      // ===== LOGO (top right, next to flag) =====
+      if (company.website) {
+        try {
+          const domain = company.website.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+          const logoUrl = `https://logo.clearbit.com/${domain}`;
+          const logoBase64 = await fetchImageAsBase64(logoUrl);
+          if (logoBase64) {
+            slide.addImage({
+              data: `image/png;base64,${logoBase64}`,
+              x: 12.2, y: 0.1, w: 0.5, h: 0.5
+            });
+          }
+        } catch (e) {
+          console.log('Logo fetch failed for', company.website);
+        }
+      }
+
+      // ===== SECTION HEADERS =====
+      // Left: "会社概要資料"
       slide.addText('会社概要資料', {
-        x: 0.33, y: 1.25, w: 5.58, h: 0.3,
+        x: 0.36, y: 1.22, w: 5.8, h: 0.35,
         fontSize: 14, fontFace: 'Segoe UI',
         color: COLORS.black, align: 'center'
       });
-      // Left section underline
       slide.addShape(pptx.shapes.LINE, {
-        x: 0.33, y: 1.58, w: 5.58, h: 0,
+        x: 0.36, y: 1.58, w: 5.8, h: 0,
         line: { color: COLORS.dk2, width: 1.75 }
       });
 
-      // Right section header: "Product Photos"
+      // Right: "Product Photos"
       slide.addText('Product Photos', {
-        x: 6.28, y: 1.27, w: 5.58, h: 0.3,
+        x: 6.88, y: 1.22, w: 5.8, h: 0.35,
         fontSize: 14, fontFace: 'Segoe UI',
         color: COLORS.black, align: 'center'
       });
-      // Right section underline
       slide.addShape(pptx.shapes.LINE, {
-        x: 6.28, y: 1.58, w: 5.58, h: 0,
+        x: 6.88, y: 1.58, w: 5.8, h: 0,
         line: { color: COLORS.dk2, width: 1.75 }
       });
 
-      // Build styled table rows
+      // ===== TABLE =====
       const tableData = [
         ['Name', company.company_name || ''],
         ['Est. Year', company.established_year || ''],
@@ -2647,11 +2752,10 @@ async function generatePPTX(companies) {
         }
       ]);
 
-      // Add styled table
       slide.addTable(rows, {
-        x: 0.33, y: 1.69,
-        w: 5.58,
-        colW: [1.26, 4.32],
+        x: 0.36, y: 1.7,
+        w: 5.8,
+        colW: [1.3, 4.5],
         rowH: 0.43,
         fontFace: 'Segoe UI',
         fontSize: 14,
@@ -2660,15 +2764,15 @@ async function generatePPTX(companies) {
         margin: [0, 0.04, 0, 0.04]
       });
 
-      // Footnote at bottom
+      // ===== FOOTNOTE =====
       if (company.footnote) {
         slide.addText(company.footnote, {
-          x: 0.35, y: 6.13, w: 9.01, h: 0.43,
+          x: 0.38, y: 6.7, w: 9.5, h: 0.4,
           fontSize: 10, fontFace: 'Segoe UI',
-          color: COLORS.black, valign: 'middle'
+          color: COLORS.black
         });
       }
-    });
+    }
 
     // Generate base64
     const base64Content = await pptx.write({ outputType: 'base64' });
