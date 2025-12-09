@@ -1827,116 +1827,207 @@ function formatPercent(val) {
   return Number(val).toFixed(1) + '%';
 }
 
-// Helper: Check business relevance using a single AI model
-async function checkRelevanceWithOpenAI(companies, filterCriteria) {
-  const companyNames = companies.map(c => c.name);
-  const prompt = `You are analyzing companies for a trading comparable analysis.
+// Build reasoning prompt for AI relevance check - no hardcoded examples
+function buildReasoningPrompt(companyNames, filterCriteria) {
+  return `You are filtering companies for a trading comparable analysis.
 
-Filter criteria: "${filterCriteria}"
+FILTER CRITERIA: "${filterCriteria}"
 
 Companies to evaluate:
 ${companyNames.map((name, i) => `${i + 1}. ${name}`).join('\n')}
 
-For each company:
-1. Determine if it matches the filter criteria (relevant=true) or not (relevant=false)
-2. Provide a SHORT business description (5-10 words max) explaining what the company does
+For EACH company, think step by step:
+1. What is this company's PRIMARY business? (research if needed)
+2. Does "${filterCriteria}" describe their main business activity?
+3. Would an investment banker consider this company a direct peer/comparable?
 
-Return JSON: {"results": [{"index": 0, "name": "Company Name", "relevant": true, "business": "Cloud software provider for HR"}]}
+Decision rules:
+- relevant=true: Company's PRIMARY business matches the filter criteria
+- relevant=false: Company operates in a different industry, or the criteria is only a minor part of their business
 
-Be selective - only include companies that clearly match the criteria.`;
+Output JSON: {"results": [{"index": 0, "name": "Company Name", "relevant": false, "business": "5-10 word description of actual business"}]}`;
+}
+
+// Helper: Check business relevance using OpenAI o1 (best reasoning model)
+async function checkRelevanceWithOpenAI(companies, filterCriteria) {
+  const companyNames = companies.map(c => c.name);
+  const prompt = buildReasoningPrompt(companyNames, filterCriteria);
 
   try {
+    // Try o1 first (best reasoning)
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.1,
-      response_format: { type: 'json_object' }
+      model: 'o1',
+      messages: [{ role: 'user', content: prompt + '\n\nRespond with valid JSON only.' }]
     });
-    const parsed = JSON.parse(response.choices[0].message.content);
-    return parsed.results || parsed.companies || parsed;
-  } catch (error) {
-    console.error('OpenAI relevance check error:', error);
+    const content = response.choices[0].message.content;
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return { source: 'openai-o1', results: parsed.results || parsed.companies || parsed };
+    }
     return null;
+  } catch (error) {
+    console.error('OpenAI o1 error:', error.message);
+    // Fallback to o3-mini with high reasoning
+    try {
+      const response = await openai.chat.completions.create({
+        model: 'o3-mini',
+        messages: [{ role: 'user', content: prompt + '\n\nRespond with valid JSON only.' }],
+        reasoning_effort: 'high'
+      });
+      const content = response.choices[0].message.content;
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return { source: 'openai-o3-high', results: parsed.results || parsed.companies || parsed };
+      }
+      return null;
+    } catch (e) {
+      console.error('OpenAI o3-mini fallback error:', e.message);
+      return null;
+    }
   }
 }
 
+// Helper: Check business relevance using Gemini 2.5 Pro (best Gemini model)
 async function checkRelevanceWithGemini(companies, filterCriteria) {
   const companyNames = companies.map(c => c.name);
-  const prompt = `You are analyzing companies for a trading comparable analysis.
-
-Filter criteria: "${filterCriteria}"
-
-Companies to evaluate:
-${companyNames.map((name, i) => `${i + 1}. ${name}`).join('\n')}
-
-For each company:
-1. Determine if it matches the filter criteria (relevant=true) or not (relevant=false)
-2. Provide a SHORT business description (5-10 words max) explaining what the company does
-
-Return ONLY valid JSON with this exact format:
-{"results": [{"index": 0, "name": "Company Name", "relevant": true, "business": "Cloud software provider for HR"}]}
-
-Be selective - only include companies that clearly match the criteria.`;
+  const prompt = buildReasoningPrompt(companyNames, filterCriteria);
 
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    // Try Gemini 2.5 Pro (best model)
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-06-05:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
+        contents: [{ parts: [{ text: prompt + '\n\nRespond with valid JSON only.' }] }],
         generationConfig: { responseMimeType: 'application/json' }
       })
     });
     const data = await response.json();
+    if (data.error) throw new Error(data.error.message);
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const parsed = JSON.parse(text);
-    return parsed.results || parsed.companies || parsed;
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return { source: 'gemini-2.5-pro', results: parsed.results || parsed.companies || parsed };
+    }
   } catch (error) {
-    console.error('Gemini relevance check error:', error);
+    console.error('Gemini 2.5 Pro error:', error.message);
+  }
+
+  // Fallback to Gemini 2.0 Flash Thinking
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-thinking-exp:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt + '\n\nRespond with valid JSON only.' }] }]
+      })
+    });
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.map(p => p.text).join('') || '';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return { source: 'gemini-thinking', results: parsed.results || parsed.companies || parsed };
+    }
+    return null;
+  } catch (error) {
+    console.error('Gemini Thinking fallback error:', error.message);
     return null;
   }
 }
 
-// Helper: Check relevance with multiple AIs in parallel, require majority agreement
-async function checkBusinessRelevanceMultiAI(companies, filterCriteria) {
-  console.log(`  Running multi-AI relevance check for: "${filterCriteria}"`);
+// Helper: Check business relevance using Perplexity sonar-pro (best with web search)
+async function checkRelevanceWithPerplexity(companies, filterCriteria) {
+  const companyNames = companies.map(c => c.name);
+  const prompt = buildReasoningPrompt(companyNames, filterCriteria);
 
-  // Run both AIs in parallel
-  const [openaiResults, geminiResults] = await Promise.all([
+  try {
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'sonar-pro',
+        messages: [{ role: 'user', content: prompt + '\n\nRespond with valid JSON only.' }]
+      })
+    });
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return { source: 'perplexity-pro', results: parsed.results || parsed.companies || parsed };
+    }
+    return null;
+  } catch (error) {
+    console.error('Perplexity sonar-pro error:', error.message);
+    return null;
+  }
+}
+
+// Helper: Check relevance with 3 AIs in parallel, use majority voting
+async function checkBusinessRelevanceMultiAI(companies, filterCriteria) {
+  console.log(`  Running 3-AI relevance check for: "${filterCriteria}"`);
+
+  // Run all 3 AIs in parallel
+  const [openaiResult, geminiResult, perplexityResult] = await Promise.all([
     checkRelevanceWithOpenAI(companies, filterCriteria),
-    checkRelevanceWithGemini(companies, filterCriteria)
+    checkRelevanceWithGemini(companies, filterCriteria),
+    checkRelevanceWithPerplexity(companies, filterCriteria)
   ]);
 
-  // Merge results - company is relevant only if BOTH AIs agree (or one fails)
+  const aiResults = [openaiResult, geminiResult, perplexityResult].filter(r => r !== null);
+  console.log(`  Got responses from ${aiResults.length} AIs: ${aiResults.map(r => r.source).join(', ')}`);
+
+  // Merge results using majority voting (2/3 must agree)
   const mergedResults = companies.map((c, i) => {
-    const openaiResult = openaiResults?.find(r => r.index === i || r.name === c.name);
-    const geminiResult = geminiResults?.find(r => r.index === i || r.name === c.name);
+    const votes = [];
+    const descriptions = [];
 
-    // Get relevance votes
-    const openaiRelevant = openaiResult?.relevant ?? true;
-    const geminiRelevant = geminiResult?.relevant ?? true;
+    for (const aiResult of aiResults) {
+      if (!Array.isArray(aiResult.results)) continue;
+      const result = aiResult.results.find(r => r.index === i || r.name === c.name);
+      if (result) {
+        votes.push(result.relevant === true);
+        if (result.business) descriptions.push(result.business);
+      }
+    }
 
-    // Get business descriptions
-    const openaiDesc = openaiResult?.business || '';
-    const geminiDesc = geminiResult?.business || '';
-    const business = openaiDesc || geminiDesc || 'Unknown business';
+    // Majority voting: need majority to say relevant to KEEP
+    // If 2+ AIs say NOT relevant, exclude the company
+    const relevantVotes = votes.filter(v => v === true).length;
+    const notRelevantVotes = votes.filter(v => v === false).length;
+    const totalVotes = votes.length;
 
-    // Both must agree to exclude (conservative approach)
-    const relevant = openaiRelevant || geminiRelevant;
+    let relevant;
+    if (totalVotes >= 2) {
+      // Majority voting - need more relevant than not-relevant to keep
+      relevant = relevantVotes > notRelevantVotes;
+    } else if (totalVotes === 1) {
+      relevant = votes[0];
+    } else {
+      relevant = true; // No AI responded, keep by default
+    }
+
+    const business = descriptions[0] || 'Unknown business';
 
     return {
       index: i,
       name: c.name,
       relevant,
       business,
-      openaiVote: openaiRelevant,
-      geminiVote: geminiRelevant
+      votes: `${relevantVotes}/${totalVotes} voted relevant`
     };
   });
 
   const keptCount = mergedResults.filter(r => r.relevant).length;
   const removedCount = mergedResults.filter(r => !r.relevant).length;
-  console.log(`  Multi-AI result: ${keptCount} kept, ${removedCount} removed`);
+  console.log(`  Majority voting result: ${keptCount} kept, ${removedCount} removed`);
 
   return mergedResults;
 }
