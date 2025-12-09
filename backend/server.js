@@ -2263,13 +2263,24 @@ function getCountryCode(location) {
 
 // Detect shortforms in text and return formatted note
 function detectShortforms(companyData) {
-  const allText = [
+  // Collect all text including key_metrics array
+  const textParts = [
     companyData.company_name,
     companyData.location,
     companyData.business,
     companyData.metrics,
     companyData.footnote
-  ].filter(Boolean).join(' ');
+  ];
+
+  // Also include key_metrics array values
+  if (companyData.key_metrics && Array.isArray(companyData.key_metrics)) {
+    companyData.key_metrics.forEach(metric => {
+      if (metric.label) textParts.push(metric.label);
+      if (metric.value) textParts.push(metric.value);
+    });
+  }
+
+  const allText = textParts.filter(Boolean).join(' ');
 
   const foundShortforms = [];
 
@@ -2377,8 +2388,8 @@ async function generatePPTX(companies) {
           const flagBase64 = await fetchImageAsBase64(flagUrl);
           if (flagBase64) {
             slide.addImage({
-              data: `image/png;base64,${flagBase64}`,
-              x: 11.5, y: 0.15, w: 0.6, h: 0.4
+              data: `data:image/png;base64,${flagBase64}`,
+              x: 10.64, y: 0.22, w: 0.83, h: 0.55
             });
           }
         } catch (e) {
@@ -2394,8 +2405,8 @@ async function generatePPTX(companies) {
           const logoBase64 = await fetchImageAsBase64(logoUrl);
           if (logoBase64) {
             slide.addImage({
-              data: `image/png;base64,${logoBase64}`,
-              x: 12.2, y: 0.1, w: 0.5, h: 0.5
+              data: `data:image/png;base64,${logoBase64}`,
+              x: 11.63, y: 0.30, w: 1.0, h: 0.45
             });
           }
         } catch (e) {
@@ -2426,14 +2437,26 @@ async function generatePPTX(companies) {
         line: { color: COLORS.dk2, width: 1.75 }
       });
 
-      // ===== TABLE =====
+      // ===== TABLE (dynamic rows for each metric) =====
+      // Base company info rows
       const tableData = [
         ['Name', company.company_name || ''],
         ['Est. Year', company.established_year || ''],
         ['Location', company.location || ''],
-        ['Business', company.business || ''],
-        ['Key Metrics', company.metrics || '']
+        ['Business', company.business || '']
       ];
+
+      // Add key metrics as separate rows if available
+      if (company.key_metrics && Array.isArray(company.key_metrics)) {
+        company.key_metrics.forEach(metric => {
+          if (metric.label && metric.value) {
+            tableData.push([metric.label, metric.value]);
+          }
+        });
+      } else if (company.metrics) {
+        // Fallback for old format (single string)
+        tableData.push(['Key Metrics', company.metrics]);
+      }
 
       const rows = tableData.map((row) => [
         {
@@ -2465,9 +2488,9 @@ async function generatePPTX(companies) {
         x: 0.36, y: 1.7,
         w: 5.8,
         colW: [1.3, 4.5],
-        rowH: 0.43,
+        rowH: 0.38,  // Slightly smaller row height to fit more metrics
         fontFace: 'Segoe UI',
-        fontSize: 14,
+        fontSize: 12,  // Slightly smaller font for more content
         valign: 'middle',
         border: { pt: 2.5, color: COLORS.white },
         margin: [0, 0.04, 0, 0.04]
@@ -2682,7 +2705,7 @@ ${scrapedContent.substring(0, 12000)}`
   }
 }
 
-// AI Agent 3: Extract key metrics
+// AI Agent 3: Extract key metrics creatively as individual items
 async function extractKeyMetrics(scrapedContent, previousData) {
   try {
     const response = await openai.chat.completions.create({
@@ -2690,46 +2713,60 @@ async function extractKeyMetrics(scrapedContent, previousData) {
       messages: [
         {
           role: 'system',
-          content: `You extract key business metrics from website content.
+          content: `You are a creative analyst who extracts impressive and important key business metrics from website content.
 
-Example metrics to look for:
-- Supplier names
-- Customer names
-- Supplier/Customer count
-- Number of projects
-- Brands distributed/owned
-- Headcount/Employee count
-- Countries exported to
-- Countries with sales/project/product presence
-- Revenue figures
-- Years of experience
-- Number of products
-- Factory/warehouse size
-- Certifications
+Your job is to identify metrics that would be valuable for an investor or business partner evaluating this company. Be creative - look for anything that demonstrates the company's scale, capabilities, achievements, or market position.
 
-OUTPUT JSON with ONE field:
-- metrics: All key metrics found, formatted as readable text with line breaks (\\n). Include the metric name and value.
+Categories to explore:
+- Scale: Revenue, employees, factory size, warehouse capacity, fleet size
+- Customers: Notable customer names, number of customers, customer segments
+- Suppliers: Notable supplier/partner names, number of suppliers
+- Geographic reach: Export countries, locations, international presence
+- Products: Product lines, SKUs, brands owned/distributed
+- Operations: Production capacity, processing volume, machines/equipment
+- Quality: Certifications (ISO, HACCP, GMP, etc.), awards, accreditations
+- Experience: Years in operation, years of expertise
+- Projects: Number of projects, notable project names
 
-Only include metrics that are explicitly mentioned on the website.
+OUTPUT JSON with this structure:
+{
+  "key_metrics": [
+    {"label": "Metric Label", "value": "Metric Value"},
+    {"label": "Number of Employees", "value": "200+"},
+    {"label": "Export Countries", "value": "15 countries in Asia"},
+    {"label": "Factory Size", "value": "12,000 m²"},
+    {"label": "Certifications", "value": "ISO 9001, ISO 14001, HACCP"}
+  ]
+}
+
+IMPORTANT RULES:
+- Extract 4-8 key metrics that are EXPLICITLY mentioned or strongly implied on the website
+- Each metric should be a separate object in the array
+- Labels should be concise (2-4 words)
+- Values should be specific with numbers when available
+- Only include metrics with actual data - never make up values
+- If a metric category has multiple items (like certifications), combine them into one value
+- Be creative in finding metrics that show the company's strengths
+
 Return ONLY valid JSON.`
         },
         {
           role: 'user',
           content: `Company: ${previousData.company_name}
-Business: ${previousData.business}
+Industry/Business: ${previousData.business}
 
-Website Content:
-${scrapedContent.substring(0, 12000)}`
+Website Content (analyze for impressive metrics):
+${scrapedContent.substring(0, 15000)}`
         }
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.2
+      temperature: 0.4  // Slightly higher for creativity
     });
 
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
     console.error('Agent 3 error:', e.message);
-    return { metrics: '' };
+    return { key_metrics: [] };
   }
 }
 
@@ -2856,7 +2893,8 @@ app.post('/api/profile-slides', async (req, res) => {
           message: businessInfo.message || '',
           footnote: businessInfo.footnote || '',
           title: businessInfo.title || '',
-          metrics: metricsInfo.metrics || ''
+          key_metrics: metricsInfo.key_metrics || [],  // Array of {label, value} objects
+          metrics: metricsInfo.metrics || ''  // Fallback for old format
         };
 
         console.log(`  ✓ Completed: ${companyData.title || companyData.company_name}`);
