@@ -35,7 +35,6 @@
 
     <section class="page-content">
       <div class="form-card">
-        <h2>Analysis Details</h2>
         <form id="tradingForm" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/trading-comparable" enctype="multipart/form-data">
           <div class="form-group">
             <label>Excel File with Comparables</label>
@@ -88,12 +87,7 @@
             <p class="hint-text">For industry analysis, select "Yes - Profitable"</p>
           </div>
 
-          <button type="submit" class="submit-btn" id="submitBtn">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
-            </svg>
-            Analyze Comparables
-          </button>
+          <button type="submit" class="submit-btn" id="submitBtn">Submit</button>
 
           <div class="message success" id="successMessage">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
@@ -156,7 +150,7 @@
       } catch { error.classList.add('show'); }
       finally {
         btn.disabled = false;
-        btn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg> Analyze Comparables';
+        btn.innerHTML = 'Submit';
       }
     });
   </script>

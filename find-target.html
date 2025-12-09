@@ -35,7 +35,6 @@
 
     <section class="page-content">
       <div class="form-card">
-        <h2>Search Criteria</h2>
         <form id="findTargetForm" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/find-target">
           <div class="form-grid">
             <div class="form-group full-width">
@@ -56,12 +55,7 @@
             </div>
           </div>
 
-          <button type="submit" class="submit-btn" id="submitBtn">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-            </svg>
-            Search Companies
-          </button>
+          <button type="submit" class="submit-btn" id="submitBtn">Submit</button>
 
           <div class="message success" id="successMessage">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
@@ -107,7 +101,7 @@
         error.classList.add('show');
       } finally {
         btn.disabled = false;
-        btn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg> Search Companies';
+        btn.innerHTML = 'Submit';
       }
     });
   </script>
