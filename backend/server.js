@@ -1889,18 +1889,18 @@ async function checkRelevanceWithOpenAI(companies, filterCriteria) {
   }
 }
 
-// Helper: Check business relevance using Gemini 2.5 Pro (best Gemini model)
+// Helper: Check business relevance using Gemini 1.5 Pro (stable, best reasoning)
 async function checkRelevanceWithGemini(companies, filterCriteria) {
   const companyNames = companies.map(c => c.name);
   const prompt = buildReasoningPrompt(companyNames, filterCriteria);
 
   try {
-    // Try Gemini 2.5 Pro (best model)
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-06-05:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    // Use Gemini 1.5 Pro (stable, excellent reasoning)
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt + '\n\nRespond with valid JSON only.' }] }],
+        contents: [{ parts: [{ text: prompt }] }],
         generationConfig: { responseMimeType: 'application/json' }
       })
     });
@@ -1910,31 +1910,32 @@ async function checkRelevanceWithGemini(companies, filterCriteria) {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
-      return { source: 'gemini-2.5-pro', results: parsed.results || parsed.companies || parsed };
+      return { source: 'gemini-1.5-pro', results: parsed.results || parsed.companies || parsed };
     }
   } catch (error) {
-    console.error('Gemini 2.5 Pro error:', error.message);
+    console.error('Gemini 1.5 Pro error:', error.message);
   }
 
-  // Fallback to Gemini 2.0 Flash Thinking
+  // Fallback to Gemini 2.0 Flash
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-thinking-exp:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt + '\n\nRespond with valid JSON only.' }] }]
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json' }
       })
     });
     const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.map(p => p.text).join('') || '';
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
-      return { source: 'gemini-thinking', results: parsed.results || parsed.companies || parsed };
+      return { source: 'gemini-2.0-flash', results: parsed.results || parsed.companies || parsed };
     }
     return null;
   } catch (error) {
-    console.error('Gemini Thinking fallback error:', error.message);
+    console.error('Gemini 2.0 Flash fallback error:', error.message);
     return null;
   }
 }
