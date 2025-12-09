@@ -3,8 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Validation - Company Validation</title>
+  <title>Speeda List Validation</title>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   <style>
     * {
       margin: 0;
@@ -24,7 +25,6 @@
       flex-direction: column;
     }
 
-    /* Top Navigation Bar */
     .top-nav {
       background: #fff;
       box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
@@ -77,7 +77,6 @@
       background: #eff6ff;
     }
 
-    /* Mobile menu */
     .mobile-menu-btn {
       display: none;
       background: none;
@@ -109,7 +108,6 @@
       border-radius: 6px;
     }
 
-    /* Main Container */
     .main-container {
       flex: 1;
       display: flex;
@@ -118,7 +116,6 @@
       padding: 2rem 1rem;
     }
 
-    /* Card */
     .card {
       background: #fff;
       border-radius: 12px;
@@ -128,7 +125,6 @@
       padding: 2.5rem 2rem;
     }
 
-    /* Form Header */
     .form-header {
       text-align: center;
       margin-bottom: 2rem;
@@ -156,7 +152,6 @@
       line-height: 1.6;
     }
 
-    /* Form Styles */
     .form-group {
       margin-bottom: 1.25rem;
     }
@@ -223,7 +218,268 @@
       color: #9ca3af;
     }
 
-    /* Submit Button */
+    /* Input Mode Tabs */
+    .input-mode-tabs {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+      background: #f3f4f6;
+      padding: 0.25rem;
+      border-radius: 8px;
+    }
+
+    .input-mode-tab {
+      flex: 1;
+      padding: 0.625rem 1rem;
+      font-size: 0.875rem;
+      font-weight: 500;
+      font-family: inherit;
+      color: #6b7280;
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .input-mode-tab:hover {
+      color: #374151;
+    }
+
+    .input-mode-tab.active {
+      background: #fff;
+      color: #2563eb;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .input-section {
+      display: none;
+    }
+
+    .input-section.active {
+      display: block;
+    }
+
+    /* File Upload */
+    .file-upload-wrapper {
+      padding: 2rem 1.5rem;
+      border: 2px dashed #e2e8f0;
+      border-radius: 8px;
+      text-align: center;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .file-upload-wrapper:hover {
+      border-color: #2563eb;
+      background: #f8fafc;
+    }
+
+    .file-upload-wrapper.dragover {
+      border-color: #2563eb;
+      background: #eff6ff;
+    }
+
+    .file-upload-icon {
+      font-size: 2.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .file-upload-text {
+      font-size: 0.9375rem;
+      color: #374151;
+      margin-bottom: 0.25rem;
+    }
+
+    .file-upload-text strong {
+      color: #2563eb;
+    }
+
+    .file-upload-hint {
+      font-size: 0.75rem;
+      color: #9ca3af;
+    }
+
+    .file-input {
+      display: none;
+    }
+
+    /* File Status */
+    .file-status {
+      display: none;
+      padding: 1.5rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      background: #f9fafb;
+    }
+
+    .file-status.active {
+      display: block;
+    }
+
+    .file-status-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+
+    .file-status-icon {
+      font-size: 1.5rem;
+    }
+
+    .file-status-info {
+      flex: 1;
+    }
+
+    .file-status-name {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #111827;
+    }
+
+    .file-status-size {
+      font-size: 0.75rem;
+      color: #6b7280;
+    }
+
+    .file-remove-btn {
+      padding: 0.25rem 0.5rem;
+      font-size: 0.75rem;
+      font-family: inherit;
+      color: #ef4444;
+      background: transparent;
+      border: 1px solid #fecaca;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .file-remove-btn:hover {
+      background: #fef2f2;
+    }
+
+    /* Progress Bar */
+    .progress-container {
+      margin-bottom: 1rem;
+    }
+
+    .progress-bar {
+      height: 6px;
+      background: #e5e7eb;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: #2563eb;
+      border-radius: 3px;
+      transition: width 0.3s ease;
+      width: 0%;
+    }
+
+    .progress-fill.complete {
+      background: #10b981;
+    }
+
+    .progress-text {
+      font-size: 0.75rem;
+      color: #6b7280;
+      margin-top: 0.5rem;
+    }
+
+    /* Detection Results */
+    .detection-results {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .detection-item {
+      flex: 1;
+      padding: 0.75rem;
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 6px;
+      text-align: center;
+    }
+
+    .detection-count {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #2563eb;
+    }
+
+    .detection-label {
+      font-size: 0.75rem;
+      color: #6b7280;
+      margin-top: 0.25rem;
+    }
+
+    .detection-error {
+      padding: 0.75rem;
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 6px;
+      color: #991b1b;
+      font-size: 0.875rem;
+      margin-top: 1rem;
+    }
+
+    /* Radio Group */
+    .radio-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .radio-option {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: 0.875rem 1rem;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .radio-option:hover {
+      border-color: #2563eb;
+      background: #f8fafc;
+    }
+
+    .radio-option.selected {
+      border-color: #2563eb;
+      background: #eff6ff;
+    }
+
+    .radio-option input[type="radio"] {
+      margin-top: 0.125rem;
+      width: 1rem;
+      height: 1rem;
+      accent-color: #2563eb;
+      cursor: pointer;
+    }
+
+    .radio-content {
+      flex: 1;
+    }
+
+    .radio-label {
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: #374151;
+      display: block;
+      margin-bottom: 0.125rem;
+    }
+
+    .radio-description {
+      font-size: 0.75rem;
+      color: #6b7280;
+    }
+
     .submit-btn {
       width: 100%;
       padding: 0.75rem 1.5rem;
@@ -256,7 +512,6 @@
       box-shadow: none;
     }
 
-    /* Messages */
     .message {
       display: none;
       padding: 1rem;
@@ -279,7 +534,6 @@
       color: #991b1b;
     }
 
-    /* Footer */
     .footer {
       text-align: center;
       padding: 1.5rem;
@@ -287,7 +541,6 @@
       color: #9ca3af;
     }
 
-    /* Responsive */
     @media screen and (max-width: 640px) {
       .nav-links {
         display: none;
@@ -304,11 +557,14 @@
       .page-title {
         font-size: 1.5rem;
       }
+
+      .detection-results {
+        flex-direction: column;
+      }
     }
   </style>
 </head>
 <body>
-  <!-- Top Navigation -->
   <nav class="top-nav">
     <div class="nav-container">
       <a href="find-target.html" class="nav-brand">Find Target</a>
@@ -337,55 +593,103 @@
   <main class="main-container">
     <div class="card">
       <div class="form-header">
-        <p class="eyebrow">Company Validation</p>
+        <p class="eyebrow">Speeda List</p>
         <h1 class="page-title">Validation</h1>
         <p class="form-description">
           Validate companies against your target business criteria.<br>
-          Results will be emailed to you within <strong>15-30 minutes</strong>.
+          Results will be emailed to you within <strong>10 minutes</strong>.
         </p>
       </div>
 
-      <form id="validationForm" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/validation">
-        <div class="form-group">
-          <label class="form-label" for="companies">
-            Company Names <span class="required">*</span>
-          </label>
-          <textarea
-            id="companies"
-            name="Companies"
-            class="form-textarea"
-            placeholder="Enter company names (one per line or comma-separated)
+      <form id="validationForm">
+        <!-- Input Mode Tabs -->
+        <div class="input-mode-tabs">
+          <button type="button" class="input-mode-tab active" data-mode="file">Upload Excel File</button>
+          <button type="button" class="input-mode-tab" data-mode="manual">Manual Entry</button>
+        </div>
+
+        <!-- File Upload Section -->
+        <div class="input-section active" id="fileSection">
+          <div class="file-upload-wrapper" id="fileUploadWrapper">
+            <div class="file-upload-icon">📊</div>
+            <div class="file-upload-text"><strong>Click to upload</strong> or drag and drop</div>
+            <div class="file-upload-hint">Excel file (.xlsx, .xls) with company names and countries</div>
+            <input type="file" class="file-input" id="excelFile" accept=".xlsx,.xls">
+          </div>
+
+          <div class="file-status" id="fileStatus">
+            <div class="file-status-header">
+              <div class="file-status-icon">📄</div>
+              <div class="file-status-info">
+                <div class="file-status-name" id="fileStatusName">filename.xlsx</div>
+                <div class="file-status-size" id="fileStatusSize">0 KB</div>
+              </div>
+              <button type="button" class="file-remove-btn" id="fileRemoveBtn">Remove</button>
+            </div>
+
+            <div class="progress-container" id="progressContainer">
+              <div class="progress-bar">
+                <div class="progress-fill" id="progressFill"></div>
+              </div>
+              <div class="progress-text" id="progressText">Analyzing file...</div>
+            </div>
+
+            <div class="detection-results" id="detectionResults" style="display: none;">
+              <div class="detection-item">
+                <div class="detection-count" id="companyCount">0</div>
+                <div class="detection-label">Companies detected</div>
+              </div>
+              <div class="detection-item">
+                <div class="detection-count" id="countryCount">0</div>
+                <div class="detection-label">Countries detected</div>
+              </div>
+            </div>
+
+            <div class="detection-error" id="detectionError" style="display: none;"></div>
+          </div>
+        </div>
+
+        <!-- Manual Entry Section -->
+        <div class="input-section" id="manualSection">
+          <div class="form-group">
+            <label class="form-label" for="companies">
+              Company Names <span class="required">*</span>
+            </label>
+            <textarea
+              id="companies"
+              name="Companies"
+              class="form-textarea"
+              placeholder="Enter company names (one per line)
 
 Example:
 ABC Electronics Sdn Bhd
 XYZ Trading Co Ltd
 Sample Corp Malaysia"
-            rows="8"
-            required
-          ></textarea>
-          <p class="form-hint">You can paste up to 200 company names. Countries can be included with company names.</p>
-        </div>
+              rows="8"
+            ></textarea>
+            <p class="form-hint">You can paste up to 200 company names.</p>
+          </div>
 
-        <div class="form-group">
-          <label class="form-label" for="countries">
-            Countries <span class="required">*</span>
-          </label>
-          <textarea
-            id="countries"
-            name="Countries"
-            class="form-textarea"
-            placeholder="Enter countries (one per line or comma-separated)
+          <div class="form-group">
+            <label class="form-label" for="countries">
+              Countries <span class="required">*</span>
+            </label>
+            <textarea
+              id="countries"
+              name="Countries"
+              class="form-textarea"
+              placeholder="Enter countries (one per line)
 
 Example:
 Malaysia
 Thailand
 Singapore"
-            rows="4"
-            required
-          ></textarea>
-          <p class="form-hint">List all countries where the companies might be located.</p>
+              rows="4"
+            ></textarea>
+          </div>
         </div>
 
+        <!-- Common Fields -->
         <div class="form-group">
           <label class="form-label" for="targetBusiness">
             Target Business <span class="required">*</span>
@@ -398,7 +702,28 @@ Singapore"
             placeholder="e.g. Semiconductor distributor, Electronics wholesaler"
             required
           >
-          <p class="form-hint">Describe the type of business you're looking for.</p>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">
+            Output Option <span class="required">*</span>
+          </label>
+          <div class="radio-group">
+            <label class="radio-option selected">
+              <input type="radio" name="OutputOption" value="in_scope_only" checked>
+              <div class="radio-content">
+                <span class="radio-label">In-scope companies only</span>
+                <span class="radio-description">Only show companies that match your target business criteria</span>
+              </div>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="OutputOption" value="all_companies">
+              <div class="radio-content">
+                <span class="radio-label">All companies with status</span>
+                <span class="radio-description">Show all companies with their validation status (in-scope / out-of-scope)</span>
+              </div>
+            </label>
+          </div>
         </div>
 
         <div class="form-group">
@@ -420,7 +745,7 @@ Singapore"
         </button>
 
         <div class="message success-message" id="successMessage">
-          Validation request submitted! Results will be emailed to you within 15-30 minutes.
+          Validation request submitted! Results will be emailed to you within 10 minutes.
         </div>
 
         <div class="message error-message" id="errorMessage">
@@ -443,12 +768,289 @@ Singapore"
       mobileMenu.classList.toggle('active');
     });
 
-    // Close mobile menu when clicking outside
     document.addEventListener('click', (e) => {
       if (!mobileMenuBtn.contains(e.target) && !mobileMenu.contains(e.target)) {
         mobileMenu.classList.remove('active');
       }
     });
+
+    // Radio button selection
+    const radioOptions = document.querySelectorAll('.radio-option');
+    radioOptions.forEach(option => {
+      option.addEventListener('click', () => {
+        radioOptions.forEach(opt => opt.classList.remove('selected'));
+        option.classList.add('selected');
+        option.querySelector('input[type="radio"]').checked = true;
+      });
+    });
+
+    // Input mode tabs
+    const inputModeTabs = document.querySelectorAll('.input-mode-tab');
+    const fileSection = document.getElementById('fileSection');
+    const manualSection = document.getElementById('manualSection');
+    let currentMode = 'file';
+
+    inputModeTabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        const mode = tab.dataset.mode;
+        currentMode = mode;
+
+        inputModeTabs.forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+
+        if (mode === 'file') {
+          fileSection.classList.add('active');
+          manualSection.classList.remove('active');
+        } else {
+          fileSection.classList.remove('active');
+          manualSection.classList.add('active');
+        }
+      });
+    });
+
+    // File upload handling
+    const fileUploadWrapper = document.getElementById('fileUploadWrapper');
+    const fileInput = document.getElementById('excelFile');
+    const fileStatus = document.getElementById('fileStatus');
+    const fileStatusName = document.getElementById('fileStatusName');
+    const fileStatusSize = document.getElementById('fileStatusSize');
+    const fileRemoveBtn = document.getElementById('fileRemoveBtn');
+    const progressContainer = document.getElementById('progressContainer');
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    const detectionResults = document.getElementById('detectionResults');
+    const detectionError = document.getElementById('detectionError');
+    const companyCountEl = document.getElementById('companyCount');
+    const countryCountEl = document.getElementById('countryCount');
+
+    let extractedData = null;
+
+    fileUploadWrapper.addEventListener('click', () => fileInput.click());
+
+    fileUploadWrapper.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      fileUploadWrapper.classList.add('dragover');
+    });
+
+    fileUploadWrapper.addEventListener('dragleave', () => {
+      fileUploadWrapper.classList.remove('dragover');
+    });
+
+    fileUploadWrapper.addEventListener('drop', (e) => {
+      e.preventDefault();
+      fileUploadWrapper.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) processFile(file);
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) processFile(file);
+    });
+
+    fileRemoveBtn.addEventListener('click', () => {
+      resetFileUpload();
+    });
+
+    function resetFileUpload() {
+      extractedData = null;
+      fileInput.value = '';
+      fileUploadWrapper.style.display = 'block';
+      fileStatus.classList.remove('active');
+      progressFill.style.width = '0%';
+      progressFill.classList.remove('complete');
+      detectionResults.style.display = 'none';
+      detectionError.style.display = 'none';
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
+    async function processFile(file) {
+      if (!file.name.match(/\.(xlsx|xls)$/i)) {
+        alert('Please upload an Excel file (.xlsx or .xls)');
+        return;
+      }
+
+      // Show file status
+      fileUploadWrapper.style.display = 'none';
+      fileStatus.classList.add('active');
+      fileStatusName.textContent = file.name;
+      fileStatusSize.textContent = formatFileSize(file.size);
+      progressContainer.style.display = 'block';
+      detectionResults.style.display = 'none';
+      detectionError.style.display = 'none';
+
+      // Animate progress
+      progressFill.style.width = '20%';
+      progressText.textContent = 'Reading file...';
+
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          progressFill.style.width = '40%';
+          progressText.textContent = 'Parsing Excel data...';
+
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames[0];
+          const sheet = workbook.Sheets[sheetName];
+          const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+
+          progressFill.style.width = '60%';
+          progressText.textContent = 'AI analyzing structure...';
+
+          // Use AI to analyze the data structure
+          extractedData = await analyzeWithAI(jsonData);
+
+          progressFill.style.width = '100%';
+          progressFill.classList.add('complete');
+          progressText.textContent = 'Analysis complete!';
+
+          // Show results
+          setTimeout(() => {
+            progressContainer.style.display = 'none';
+            detectionResults.style.display = 'flex';
+            companyCountEl.textContent = extractedData.companies.length;
+            countryCountEl.textContent = extractedData.countries.length;
+          }, 500);
+
+        } catch (error) {
+          console.error('Error processing file:', error);
+          progressContainer.style.display = 'none';
+          detectionError.style.display = 'block';
+          detectionError.textContent = 'Error analyzing file: ' + error.message;
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    // AI-powered analysis of Excel data
+    async function analyzeWithAI(jsonData) {
+      // First, try to detect columns intelligently
+      const companies = [];
+      const countries = new Set();
+
+      const knownCountries = [
+        'malaysia', 'singapore', 'thailand', 'indonesia', 'vietnam', 'philippines',
+        'china', 'japan', 'korea', 'south korea', 'taiwan', 'hong kong', 'india',
+        'australia', 'usa', 'united states', 'uk', 'united kingdom', 'germany',
+        'france', 'italy', 'spain', 'netherlands', 'belgium', 'cambodia', 'myanmar',
+        'laos', 'brunei', 'bangladesh', 'pakistan', 'sri lanka', 'nepal', 'new zealand'
+      ];
+
+      // Analyze all rows to find patterns
+      const columnAnalysis = [];
+      const maxCols = Math.max(...jsonData.slice(0, 20).map(r => r ? r.length : 0));
+
+      for (let col = 0; col < maxCols; col++) {
+        const colData = {
+          index: col,
+          headerCandidates: [],
+          companyScore: 0,
+          countryScore: 0,
+          values: []
+        };
+
+        for (let row = 0; row < Math.min(jsonData.length, 30); row++) {
+          if (!jsonData[row] || !jsonData[row][col]) continue;
+          const val = String(jsonData[row][col]).trim();
+          if (!val) continue;
+
+          colData.values.push({ row, value: val });
+
+          const valLower = val.toLowerCase();
+
+          // Check for header keywords
+          if (row < 5) {
+            if (/company|name|firm|organization|business|corp/i.test(val)) {
+              colData.companyScore += 10;
+              colData.headerCandidates.push({ row, type: 'company', val });
+            }
+            if (/country|location|region|nation|hq|headquarters|地域|国/i.test(val)) {
+              colData.countryScore += 10;
+              colData.headerCandidates.push({ row, type: 'country', val });
+            }
+          }
+
+          // Check for country values
+          const matchedCountry = knownCountries.find(c => valLower === c || valLower.includes(c));
+          if (matchedCountry) {
+            colData.countryScore += 2;
+          }
+
+          // Check for company-like values (long strings, corporate suffixes)
+          if (val.length > 5 && val.length < 150) {
+            if (/\b(ltd|inc|corp|co|llc|gmbh|sdn|bhd|pte|plc|pvt|limited|company)\b/i.test(val)) {
+              colData.companyScore += 3;
+            }
+            // Likely company name if mixed case and moderate length
+            if (val.length > 10 && /[A-Z]/.test(val) && /[a-z]/.test(val)) {
+              colData.companyScore += 1;
+            }
+          }
+        }
+
+        columnAnalysis.push(colData);
+      }
+
+      // Find best company and country columns
+      let companyCol = columnAnalysis.reduce((best, col) =>
+        col.companyScore > best.companyScore ? col : best, { companyScore: -1, index: 0 });
+      let countryCol = columnAnalysis.reduce((best, col) =>
+        col.countryScore > best.countryScore && col.index !== companyCol.index ? col : best, { countryScore: -1, index: -1 });
+
+      // Determine header row
+      let headerRow = -1;
+      if (companyCol.headerCandidates.length > 0) {
+        headerRow = companyCol.headerCandidates[0].row;
+      }
+
+      // Extract companies
+      const startRow = headerRow + 1;
+      for (let i = startRow; i < jsonData.length; i++) {
+        const row = jsonData[i];
+        if (!row) continue;
+
+        const companyVal = row[companyCol.index];
+        if (companyVal) {
+          const companyName = String(companyVal).trim();
+          if (companyName.length > 1 && companyName.length < 200) {
+            // Don't include if it's a known country
+            if (!knownCountries.includes(companyName.toLowerCase())) {
+              companies.push(companyName);
+            }
+          }
+        }
+
+        // Extract country from country column
+        if (countryCol.index >= 0 && row[countryCol.index]) {
+          const countryVal = String(row[countryCol.index]).trim().toLowerCase();
+          const matched = knownCountries.find(c => countryVal === c || countryVal.includes(c));
+          if (matched) {
+            countries.add(matched.charAt(0).toUpperCase() + matched.slice(1));
+          }
+        }
+
+        // Also scan all columns for country mentions
+        for (let j = 0; j < row.length; j++) {
+          if (!row[j]) continue;
+          const cellVal = String(row[j]).toLowerCase().trim();
+          const matched = knownCountries.find(c => cellVal === c);
+          if (matched) {
+            countries.add(matched.charAt(0).toUpperCase() + matched.slice(1));
+          }
+        }
+      }
+
+      return {
+        companies: companies.slice(0, 200),
+        countries: Array.from(countries)
+      };
+    }
 
     // Form submission
     document.getElementById('validationForm').addEventListener('submit', async function(e) {
@@ -461,18 +1063,45 @@ Singapore"
       successMessage.style.display = 'none';
       errorMessage.style.display = 'none';
 
+      // Validate based on mode
+      let companiesData, countriesData;
+
+      if (currentMode === 'file') {
+        if (!extractedData || extractedData.companies.length === 0) {
+          alert('Please upload an Excel file with company data first.');
+          return;
+        }
+        companiesData = extractedData.companies.join('\n');
+        countriesData = extractedData.countries.join('\n');
+      } else {
+        companiesData = document.getElementById('companies').value;
+        countriesData = document.getElementById('countries').value;
+
+        if (!companiesData.trim()) {
+          alert('Please enter company names.');
+          return;
+        }
+        if (!countriesData.trim()) {
+          alert('Please enter countries.');
+          return;
+        }
+      }
+
       submitBtn.disabled = true;
       submitBtn.textContent = 'Submitting...';
 
+      const outputOption = document.querySelector('input[name="OutputOption"]:checked').value;
+
       const formData = {
-        Companies: document.getElementById('companies').value,
-        Countries: document.getElementById('countries').value,
+        Companies: companiesData,
+        Countries: countriesData,
         TargetBusiness: document.getElementById('targetBusiness').value,
+        OutputOption: outputOption,
         Email: document.getElementById('email').value
       };
 
       try {
-        const response = await fetch(this.action, {
+        const response = await fetch('https://xvasjackgithubio-production.up.railway.app/api/validation', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -483,6 +1112,9 @@ Singapore"
         if (response.ok) {
           successMessage.style.display = 'block';
           this.reset();
+          resetFileUpload();
+          radioOptions.forEach(opt => opt.classList.remove('selected'));
+          radioOptions[0].classList.add('selected');
         } else {
           throw new Error('Request failed');
         }
