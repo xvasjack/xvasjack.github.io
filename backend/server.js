@@ -1798,25 +1798,33 @@ app.post('/api/validation', async (req, res) => {
 
 // ============ TRADING COMPARABLE ============
 
-// Helper function to calculate statistics
-function calculateStats(values) {
-  const nums = values.filter(v => typeof v === 'number' && !isNaN(v) && isFinite(v));
-  if (nums.length === 0) return { mean: null, median: null, min: null, max: null, count: 0 };
-
+// Helper function to calculate median
+function calculateMedian(values) {
+  const nums = values.filter(v => typeof v === 'number' && !isNaN(v) && isFinite(v) && v > 0);
+  if (nums.length === 0) return null;
   const sorted = [...nums].sort((a, b) => a - b);
-  const sum = nums.reduce((a, b) => a + b, 0);
-  const mean = sum / nums.length;
-  const median = nums.length % 2 === 0
-    ? (sorted[nums.length / 2 - 1] + sorted[nums.length / 2]) / 2
-    : sorted[Math.floor(nums.length / 2)];
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1] + sorted[mid]) / 2
+    : sorted[mid];
+}
 
-  return {
-    mean: Math.round(mean * 10) / 10,
-    median: Math.round(median * 10) / 10,
-    min: Math.round(Math.min(...nums) * 10) / 10,
-    max: Math.round(Math.max(...nums) * 10) / 10,
-    count: nums.length
-  };
+// Format number for display
+function formatNum(val, decimals = 1) {
+  if (val === null || val === undefined || isNaN(val)) return '-';
+  return Number(val).toFixed(decimals);
+}
+
+// Format as multiple (with x suffix)
+function formatMultiple(val) {
+  if (val === null || val === undefined || isNaN(val)) return '-';
+  return Number(val).toFixed(1) + 'x';
+}
+
+// Format as percentage
+function formatPercent(val) {
+  if (val === null || val === undefined || isNaN(val)) return '-';
+  return Number(val).toFixed(1) + '%';
 }
 
 app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res) => {
@@ -1835,34 +1843,47 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
   console.log(`File: ${excelFile.originalname} (${excelFile.size} bytes)`);
   console.log('='.repeat(50));
 
-  // Respond immediately
   res.json({
     success: true,
     message: 'Request received. Results will be emailed shortly.'
   });
 
   try {
-    // Parse the Excel file
     const workbook = XLSX.read(excelFile.buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
     const sheet = workbook.Sheets[sheetName];
+    const allRows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-    // Get data with headers
-    const rawData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
-    const headers = rawData[0] || [];
-    const dataRows = rawData.slice(1);
+    console.log(`Total rows in file: ${allRows.length}`);
 
-    console.log(`Headers found: ${headers.join(', ')}`);
-    console.log(`Data rows: ${dataRows.length}`);
+    // Find the header row - look for row containing company-related headers
+    let headerRowIndex = -1;
+    let headers = [];
 
-    if (dataRows.length === 0) {
-      await sendEmail(Email, 'Trading Comparable - No Data Found',
-        '<p>No data rows were found in your Excel file.</p>');
-      return;
+    for (let i = 0; i < Math.min(20, allRows.length); i++) {
+      const row = allRows[i];
+      if (!row) continue;
+      const rowStr = row.join(' ').toLowerCase();
+      // Look for rows that have company name AND financial metrics
+      if ((rowStr.includes('company') || rowStr.includes('name')) &&
+          (rowStr.includes('sales') || rowStr.includes('market') || rowStr.includes('ebitda') || rowStr.includes('p/e') || rowStr.includes('ev/'))) {
+        headerRowIndex = i;
+        headers = row;
+        break;
+      }
     }
 
-    // Find column indices for common metrics (case-insensitive, partial match)
-    const findColumn = (patterns) => {
+    if (headerRowIndex === -1) {
+      // Fallback: use first row as header
+      headerRowIndex = 0;
+      headers = allRows[0] || [];
+    }
+
+    console.log(`Header row index: ${headerRowIndex}`);
+    console.log(`Headers: ${headers.slice(0, 10).join(', ')}...`);
+
+    // Find column indices (case-insensitive, flexible matching)
+    const findCol = (patterns) => {
       for (const pattern of patterns) {
         const idx = headers.findIndex(h =>
           h && h.toString().toLowerCase().includes(pattern.toLowerCase())
@@ -1872,186 +1893,185 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       return -1;
     };
 
-    const companyCol = findColumn(['company', 'name', 'ticker', 'stock']);
-    const peCol = findColumn(['p/e', 'pe', 'price/earnings', 'price to earnings']);
-    const pbCol = findColumn(['p/b', 'pb', 'price/book', 'price to book']);
-    const evEbitdaCol = findColumn(['ev/ebitda', 'evebitda', 'ev ebitda']);
-    const evSalesCol = findColumn(['ev/sales', 'ev/revenue', 'evsales']);
-    const marketCapCol = findColumn(['market cap', 'mcap', 'capitalization']);
+    const cols = {
+      company: findCol(['company name', 'company', 'name']),
+      country: findCol(['country', 'region', 'location']),
+      sales: findCol(['sales', 'revenue']),
+      marketCap: findCol(['market cap', 'mcap', 'market capitalization']),
+      ev: findCol(['enterprise value', ' ev ', 'ev/']),
+      ebitda: findCol(['ebitda']),
+      netMargin: findCol(['net margin', 'net income margin', 'profit margin']),
+      evEbitda: findCol(['ev/ebitda', 'ev / ebitda']),
+      pe: findCol(['p/e', 'pe ', 'price/earnings', 'per']),
+      pb: findCol(['p/b', 'pb ', 'p/bv', 'pbv', 'price/book'])
+    };
 
-    console.log(`Column indices - Company: ${companyCol}, P/E: ${peCol}, P/B: ${pbCol}, EV/EBITDA: ${evEbitdaCol}`);
+    // If company column not found, use first column
+    if (cols.company === -1) cols.company = 0;
 
-    // Extract data
+    console.log(`Column mapping:`, cols);
+
+    // Extract data rows (skip header and any metadata rows)
+    const dataRows = allRows.slice(headerRowIndex + 1);
     const companies = [];
-    const peValues = [];
-    const pbValues = [];
-    const evEbitdaValues = [];
-    const evSalesValues = [];
 
     for (const row of dataRows) {
       if (!row || row.length === 0) continue;
 
-      const company = companyCol >= 0 ? row[companyCol] : row[0];
-      if (!company) continue;
+      const companyName = cols.company >= 0 ? row[cols.company] : null;
 
-      const pe = peCol >= 0 ? parseFloat(row[peCol]) : null;
-      const pb = pbCol >= 0 ? parseFloat(row[pbCol]) : null;
-      const evEbitda = evEbitdaCol >= 0 ? parseFloat(row[evEbitdaCol]) : null;
-      const evSales = evSalesCol >= 0 ? parseFloat(row[evSalesCol]) : null;
-      const marketCap = marketCapCol >= 0 ? row[marketCapCol] : null;
+      // Skip empty rows, metadata rows, and rows that look like headers/notes
+      if (!companyName) continue;
+      const nameStr = String(companyName).toLowerCase();
+      if (nameStr.includes('total') || nameStr.includes('median') || nameStr.includes('average') ||
+          nameStr.includes('note:') || nameStr.includes('source:') || nameStr.includes('unit') ||
+          nameStr.startsWith('*') || nameStr.length < 2) continue;
 
-      companies.push({
-        name: company,
-        pe: isNaN(pe) ? null : pe,
-        pb: isNaN(pb) ? null : pb,
-        evEbitda: isNaN(evEbitda) ? null : evEbitda,
-        evSales: isNaN(evSales) ? null : evSales,
-        marketCap: marketCap
-      });
+      // Skip rows that look like Speeda IDs (SPD...)
+      if (nameStr.startsWith('spd') && nameStr.length > 10) continue;
 
-      if (!isNaN(pe) && pe !== null) peValues.push(pe);
-      if (!isNaN(pb) && pb !== null) pbValues.push(pb);
-      if (!isNaN(evEbitda) && evEbitda !== null) evEbitdaValues.push(evEbitda);
-      if (!isNaN(evSales) && evSales !== null) evSalesValues.push(evSales);
+      const parseNum = (idx) => {
+        if (idx < 0 || !row[idx]) return null;
+        const val = parseFloat(String(row[idx]).replace(/[,%]/g, ''));
+        return isNaN(val) ? null : val;
+      };
+
+      const company = {
+        name: companyName,
+        country: cols.country >= 0 ? row[cols.country] || '-' : '-',
+        sales: parseNum(cols.sales),
+        marketCap: parseNum(cols.marketCap),
+        ev: parseNum(cols.ev),
+        ebitda: parseNum(cols.ebitda),
+        netMargin: parseNum(cols.netMargin),
+        evEbitda: parseNum(cols.evEbitda),
+        pe: parseNum(cols.pe),
+        pb: parseNum(cols.pb)
+      };
+
+      // Only include if it has at least some financial data
+      const hasData = company.sales || company.marketCap || company.evEbitda || company.pe || company.pb;
+      if (hasData) {
+        companies.push(company);
+      }
     }
 
-    console.log(`Parsed ${companies.length} companies`);
+    console.log(`Extracted ${companies.length} companies with data`);
 
-    // Calculate statistics
+    if (companies.length === 0) {
+      await sendEmail(Email, 'Trading Comparable - No Data Found',
+        '<p>No valid company data was found in your Excel file. Please ensure the file has company names and financial metrics.</p>');
+      return;
+    }
+
+    // Calculate medians
     const isProfitable = IsProfitable === 'yes';
-    const peStats = isProfitable ? calculateStats(peValues) : null;
-    const pbStats = calculateStats(pbValues);
-    const evEbitdaStats = calculateStats(evEbitdaValues);
-    const evSalesStats = calculateStats(evSalesValues);
+    const medians = {
+      sales: calculateMedian(companies.map(c => c.sales)),
+      marketCap: calculateMedian(companies.map(c => c.marketCap)),
+      ev: calculateMedian(companies.map(c => c.ev)),
+      ebitda: calculateMedian(companies.map(c => c.ebitda)),
+      netMargin: calculateMedian(companies.map(c => c.netMargin)),
+      evEbitda: calculateMedian(companies.map(c => c.evEbitda)),
+      pe: isProfitable ? calculateMedian(companies.map(c => c.pe)) : null,
+      pb: calculateMedian(companies.map(c => c.pb))
+    };
 
-    // Build company table HTML
-    let companyTableHTML = `
-    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
-      <thead style="background-color: #f0f0f0;">
-        <tr>
-          <th>#</th>
-          <th>Company</th>
-          ${isProfitable ? '<th>P/E</th>' : ''}
-          <th>P/B</th>
-          <th>EV/EBITDA</th>
-          ${evSalesValues.length > 0 ? '<th>EV/Sales</th>' : ''}
+    // Determine which columns to show based on data availability
+    const hasSales = companies.some(c => c.sales);
+    const hasMarketCap = companies.some(c => c.marketCap);
+    const hasEV = companies.some(c => c.ev);
+    const hasEbitda = companies.some(c => c.ebitda);
+    const hasNetMargin = companies.some(c => c.netMargin);
+    const hasEvEbitda = companies.some(c => c.evEbitda);
+    const hasPE = isProfitable && companies.some(c => c.pe);
+    const hasPB = companies.some(c => c.pb);
+    const hasCountry = companies.some(c => c.country && c.country !== '-');
+
+    // Build HTML table
+    let tableHTML = `
+    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 12px;">
+      <thead>
+        <tr style="background-color: #1e3a5f; color: white;">
+          <th rowspan="2" style="padding: 8px;">Company Name</th>
+          ${hasCountry ? '<th rowspan="2" style="padding: 8px;">Country</th>' : ''}
+          ${(hasSales || hasMarketCap || hasEV || hasEbitda || hasNetMargin) ?
+            `<th colspan="${[hasSales, hasMarketCap, hasEV, hasEbitda, hasNetMargin].filter(Boolean).length}" style="padding: 8px; background-color: #2563eb;">Financial Information (USD M)</th>` : ''}
+          ${(hasEvEbitda || hasPE || hasPB) ?
+            `<th colspan="${[hasEvEbitda, hasPE, hasPB].filter(Boolean).length}" style="padding: 8px; background-color: #1e3a5f;">Multiples</th>` : ''}
+        </tr>
+        <tr style="background-color: #374151; color: white;">
+          ${hasSales ? '<th style="padding: 6px;">Sales</th>' : ''}
+          ${hasMarketCap ? '<th style="padding: 6px;">Market Cap</th>' : ''}
+          ${hasEV ? '<th style="padding: 6px;">EV</th>' : ''}
+          ${hasEbitda ? '<th style="padding: 6px;">EBITDA</th>' : ''}
+          ${hasNetMargin ? '<th style="padding: 6px;">Net Margin</th>' : ''}
+          ${hasEvEbitda ? '<th style="padding: 6px;">EV/EBITDA</th>' : ''}
+          ${hasPE ? '<th style="padding: 6px;">P/E</th>' : ''}
+          ${hasPB ? '<th style="padding: 6px;">P/BV</th>' : ''}
         </tr>
       </thead>
       <tbody>
     `;
 
     companies.forEach((c, i) => {
-      companyTableHTML += `
-        <tr>
-          <td>${i + 1}</td>
-          <td>${c.name}</td>
-          ${isProfitable ? `<td>${c.pe !== null ? c.pe.toFixed(1) : '-'}</td>` : ''}
-          <td>${c.pb !== null ? c.pb.toFixed(1) : '-'}</td>
-          <td>${c.evEbitda !== null ? c.evEbitda.toFixed(1) : '-'}</td>
-          ${evSalesValues.length > 0 ? `<td>${c.evSales !== null ? c.evSales.toFixed(1) : '-'}</td>` : ''}
+      tableHTML += `
+        <tr style="background-color: ${i % 2 === 0 ? '#ffffff' : '#f9fafb'};">
+          <td style="padding: 6px;">${i + 1}. ${c.name}</td>
+          ${hasCountry ? `<td style="padding: 6px;">${c.country}</td>` : ''}
+          ${hasSales ? `<td style="padding: 6px; text-align: right;">${formatNum(c.sales, 0)}</td>` : ''}
+          ${hasMarketCap ? `<td style="padding: 6px; text-align: right;">${formatNum(c.marketCap, 0)}</td>` : ''}
+          ${hasEV ? `<td style="padding: 6px; text-align: right;">${formatNum(c.ev, 0)}</td>` : ''}
+          ${hasEbitda ? `<td style="padding: 6px; text-align: right;">${formatNum(c.ebitda, 0)}</td>` : ''}
+          ${hasNetMargin ? `<td style="padding: 6px; text-align: right;">${formatPercent(c.netMargin)}</td>` : ''}
+          ${hasEvEbitda ? `<td style="padding: 6px; text-align: right;">${formatMultiple(c.evEbitda)}</td>` : ''}
+          ${hasPE ? `<td style="padding: 6px; text-align: right;">${formatMultiple(c.pe)}</td>` : ''}
+          ${hasPB ? `<td style="padding: 6px; text-align: right;">${formatMultiple(c.pb)}</td>` : ''}
         </tr>
       `;
     });
 
-    companyTableHTML += '</tbody></table>';
-
-    // Build summary statistics table
-    let summaryHTML = `
-    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
-      <thead style="background-color: #2563eb; color: white;">
-        <tr>
-          <th>Metric</th>
-          <th>Mean</th>
-          <th>Median</th>
-          <th>Min</th>
-          <th>Max</th>
-          <th>Count</th>
+    // Median row
+    tableHTML += `
+        <tr style="background-color: #dbeafe; font-weight: bold;">
+          <td style="padding: 6px;">Median</td>
+          ${hasCountry ? '<td></td>' : ''}
+          ${hasSales ? `<td style="padding: 6px; text-align: right;">${formatNum(medians.sales, 0)}</td>` : ''}
+          ${hasMarketCap ? `<td style="padding: 6px; text-align: right;">${formatNum(medians.marketCap, 0)}</td>` : ''}
+          ${hasEV ? `<td style="padding: 6px; text-align: right;">${formatNum(medians.ev, 0)}</td>` : ''}
+          ${hasEbitda ? `<td style="padding: 6px; text-align: right;">${formatNum(medians.ebitda, 0)}</td>` : ''}
+          ${hasNetMargin ? `<td style="padding: 6px; text-align: right;">${formatPercent(medians.netMargin)}</td>` : ''}
+          ${hasEvEbitda ? `<td style="padding: 6px; text-align: right; color: #1e40af;">${formatMultiple(medians.evEbitda)}</td>` : ''}
+          ${hasPE ? `<td style="padding: 6px; text-align: right; color: #1e40af;">${formatMultiple(medians.pe)}</td>` : ''}
+          ${hasPB ? `<td style="padding: 6px; text-align: right; color: #1e40af;">${formatMultiple(medians.pb)}</td>` : ''}
         </tr>
-      </thead>
-      <tbody>
+      </tbody>
+    </table>
     `;
 
-    if (isProfitable && peStats && peStats.count > 0) {
-      summaryHTML += `
-        <tr>
-          <td><strong>P/E</strong></td>
-          <td>${peStats.mean}x</td>
-          <td>${peStats.median}x</td>
-          <td>${peStats.min}x</td>
-          <td>${peStats.max}x</td>
-          <td>${peStats.count}</td>
-        </tr>
-      `;
-    }
-
-    if (pbStats && pbStats.count > 0) {
-      summaryHTML += `
-        <tr>
-          <td><strong>P/B</strong></td>
-          <td>${pbStats.mean}x</td>
-          <td>${pbStats.median}x</td>
-          <td>${pbStats.min}x</td>
-          <td>${pbStats.max}x</td>
-          <td>${pbStats.count}</td>
-        </tr>
-      `;
-    }
-
-    if (evEbitdaStats && evEbitdaStats.count > 0) {
-      summaryHTML += `
-        <tr>
-          <td><strong>EV/EBITDA</strong></td>
-          <td>${evEbitdaStats.mean}x</td>
-          <td>${evEbitdaStats.median}x</td>
-          <td>${evEbitdaStats.min}x</td>
-          <td>${evEbitdaStats.max}x</td>
-          <td>${evEbitdaStats.count}</td>
-        </tr>
-      `;
-    }
-
-    if (evSalesStats && evSalesStats.count > 0) {
-      summaryHTML += `
-        <tr>
-          <td><strong>EV/Sales</strong></td>
-          <td>${evSalesStats.mean}x</td>
-          <td>${evSalesStats.median}x</td>
-          <td>${evSalesStats.min}x</td>
-          <td>${evSalesStats.max}x</td>
-          <td>${evSalesStats.count}</td>
-        </tr>
-      `;
-    }
-
-    summaryHTML += '</tbody></table>';
-
-    // Build final email
+    // Build email
     const emailHTML = `
-<h2>Trading Comparable Analysis</h2>
-<p><strong>Target:</strong> ${TargetCompanyOrIndustry}</p>
-<p><strong>Comparable Companies:</strong> ${companies.length}</p>
-<p><strong>Profitability:</strong> ${isProfitable ? 'Yes - All metrics included' : 'No - P/E ratio excluded'}</p>
+<h2 style="color: #1e3a5f;">Trading Comparable – ${TargetCompanyOrIndustry}</h2>
+<p style="color: #6b7280; font-size: 14px;">Considering financial data availability, profitability and business relevance, ${companies.length} companies are considered as peers</p>
 <br>
-
-<h3>Summary Statistics</h3>
-${summaryHTML}
+${tableHTML}
 <br>
-
-<h3>Comparable Companies</h3>
-${companyTableHTML}
-<br>
-
-<p><em>Analysis based on data from uploaded Excel file: ${excelFile.originalname}</em></p>
+<p style="font-size: 11px; color: #6b7280;">
+Note: EV (Enterprise Value)<br>
+Data as of ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}<br>
+Source: Speeda
+</p>
 `;
 
     await sendEmail(
       Email,
-      `Trading Comps: ${TargetCompanyOrIndustry} - Median P/B ${pbStats?.median || 'N/A'}x, EV/EBITDA ${evEbitdaStats?.median || 'N/A'}x`,
+      `Trading Comps: ${TargetCompanyOrIndustry} - ${companies.length} peers, Median EV/EBITDA ${formatMultiple(medians.evEbitda)}, P/BV ${formatMultiple(medians.pb)}`,
       emailHTML
     );
 
     console.log(`\n${'='.repeat(50)}`);
     console.log(`TRADING COMPARABLE COMPLETE! Email sent to ${Email}`);
+    console.log(`Companies: ${companies.length}, Median EV/EBITDA: ${medians.evEbitda}, P/B: ${medians.pb}`);
     console.log('='.repeat(50));
 
   } catch (error) {
