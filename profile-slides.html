@@ -277,7 +277,7 @@
       `;
     }
 
-    function updateWebsiteStatus(index, status, step, isError = false) {
+    function updateWebsiteStatus(index, status, statusText) {
       const item = document.getElementById(`website-${index}`);
       if (!item) return;
 
@@ -286,15 +286,15 @@
       if (status === 'active') {
         item.classList.add('active');
         item.querySelector('.website-icon').outerHTML = spinnerIcon;
-        item.querySelector('.website-status').textContent = step;
+        item.querySelector('.website-status').textContent = statusText || 'Processing...';
       } else if (status === 'done') {
         item.classList.add('done');
         item.querySelector('.website-icon').outerHTML = doneIcon;
-        item.querySelector('.website-status').textContent = 'Extracted successfully';
+        item.querySelector('.website-status').textContent = statusText || 'Queued';
       } else if (status === 'error') {
         item.classList.add('error');
         item.querySelector('.website-icon').outerHTML = errorIcon;
-        item.querySelector('.website-status').textContent = step || 'Failed to extract';
+        item.querySelector('.website-status').textContent = statusText || 'Failed';
       }
     }
 
