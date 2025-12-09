@@ -1827,6 +1827,92 @@ function formatPercent(val) {
   return Number(val).toFixed(1) + '%';
 }
 
+// Helper: Qualitative filter using AI to check business relevance
+async function checkBusinessRelevance(companies, targetDescription) {
+  const companyNames = companies.map(c => c.name);
+  const prompt = `You are analyzing companies for a trading comparable analysis.
+
+Target company/industry: "${targetDescription}"
+
+List of companies to evaluate:
+${companyNames.map((name, i) => `${i + 1}. ${name}`).join('\n')}
+
+For each company, determine if its business is RELEVANT to the target (i.e., would be considered a peer/comparable company in the same or similar industry).
+
+Return ONLY a JSON array of objects with this exact format:
+[{"index": 0, "name": "Company Name", "relevant": true, "reason": "Brief reason"}, ...]
+
+Be reasonably inclusive - if a company could plausibly be in a related industry, mark it as relevant.
+Only exclude companies that are clearly in unrelated industries.`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.1,
+      response_format: { type: 'json_object' }
+    });
+
+    const content = response.choices[0].message.content;
+    const parsed = JSON.parse(content);
+    const results = parsed.results || parsed.companies || parsed;
+
+    if (Array.isArray(results)) {
+      return results;
+    }
+    return companies.map((c, i) => ({ index: i, name: c.name, relevant: true, reason: 'Default included' }));
+  } catch (error) {
+    console.error('AI relevance check error:', error);
+    // On error, include all companies
+    return companies.map((c, i) => ({ index: i, name: c.name, relevant: true, reason: 'AI check failed - included by default' }));
+  }
+}
+
+// Helper: Create sheet data from companies
+function createSheetData(companies, headers, title) {
+  const data = [[title], [], headers];
+
+  for (const c of companies) {
+    const row = [
+      c.name,
+      c.country || '-',
+      c.sales,
+      c.marketCap,
+      c.ev,
+      c.ebitda,
+      c.netMargin,
+      c.evEbitda,
+      c.peTTM,
+      c.peFY,
+      c.pb,
+      c.filterReason || ''
+    ];
+    data.push(row);
+  }
+
+  // Add median row
+  if (companies.length > 0) {
+    const medianRow = [
+      'MEDIAN',
+      '',
+      calculateMedian(companies.map(c => c.sales)),
+      calculateMedian(companies.map(c => c.marketCap)),
+      calculateMedian(companies.map(c => c.ev)),
+      calculateMedian(companies.map(c => c.ebitda)),
+      calculateMedian(companies.map(c => c.netMargin)),
+      calculateMedian(companies.map(c => c.evEbitda)),
+      calculateMedian(companies.map(c => c.peTTM)),
+      calculateMedian(companies.map(c => c.peFY)),
+      calculateMedian(companies.map(c => c.pb)),
+      ''
+    ];
+    data.push([]);
+    data.push(medianRow);
+  }
+
+  return data;
+}
+
 app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res) => {
   const { TargetCompanyOrIndustry, Email, IsProfitable } = req.body;
   const excelFile = req.file;
@@ -1864,7 +1950,6 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       const row = allRows[i];
       if (!row) continue;
       const rowStr = row.join(' ').toLowerCase();
-      // Look for rows that have company name AND financial metrics
       if ((rowStr.includes('company') || rowStr.includes('name')) &&
           (rowStr.includes('sales') || rowStr.includes('market') || rowStr.includes('ebitda') || rowStr.includes('p/e') || rowStr.includes('ev/'))) {
         headerRowIndex = i;
@@ -1874,15 +1959,14 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     }
 
     if (headerRowIndex === -1) {
-      // Fallback: use first row as header
       headerRowIndex = 0;
       headers = allRows[0] || [];
     }
 
     console.log(`Header row index: ${headerRowIndex}`);
-    console.log(`Headers: ${headers.slice(0, 10).join(', ')}...`);
+    console.log(`Headers: ${headers.slice(0, 15).join(', ')}...`);
 
-    // Find column indices (case-insensitive, flexible matching)
+    // Find column indices - enhanced to detect TTM vs FY columns
     const findCol = (patterns) => {
       for (const pattern of patterns) {
         const idx = headers.findIndex(h =>
@@ -1893,6 +1977,41 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       return -1;
     };
 
+    // Find all columns matching a pattern (for TTM/FY detection)
+    const findAllCols = (patterns) => {
+      const found = [];
+      for (let idx = 0; idx < headers.length; idx++) {
+        const h = headers[idx];
+        if (!h) continue;
+        const hLower = h.toString().toLowerCase();
+        for (const pattern of patterns) {
+          if (hLower.includes(pattern.toLowerCase())) {
+            found.push({ idx, header: h });
+            break;
+          }
+        }
+      }
+      return found;
+    };
+
+    // Find P/E columns - prefer TTM over FY
+    const peCols = findAllCols(['p/e', 'pe ', 'per ', 'price/earnings', 'price-earnings']);
+    let peTTMCol = -1;
+    let peFYCol = -1;
+
+    for (const col of peCols) {
+      const hLower = col.header.toLowerCase();
+      if (hLower.includes('ttm') || hLower.includes('trailing') || hLower.includes('ltm')) {
+        peTTMCol = col.idx;
+      } else if (hLower.includes('fy') || hLower.includes('annual') || hLower.includes('year')) {
+        peFYCol = col.idx;
+      }
+    }
+    // If no specific TTM/FY found, use first P/E column as FY
+    if (peTTMCol === -1 && peFYCol === -1 && peCols.length > 0) {
+      peFYCol = peCols[0].idx;
+    }
+
     const cols = {
       company: findCol(['company name', 'company', 'name']),
       country: findCol(['country', 'region', 'location']),
@@ -1900,34 +2019,32 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       marketCap: findCol(['market cap', 'mcap', 'market capitalization']),
       ev: findCol(['enterprise value', ' ev ', 'ev/']),
       ebitda: findCol(['ebitda']),
-      netMargin: findCol(['net margin', 'net income margin', 'profit margin']),
+      netMargin: findCol(['net margin', 'net income margin', 'profit margin', 'net profit margin']),
+      opMargin: findCol(['operating margin', 'op margin', 'oper margin', 'opm']),
       evEbitda: findCol(['ev/ebitda', 'ev / ebitda']),
-      pe: findCol(['p/e', 'pe ', 'price/earnings', 'per']),
+      peTTM: peTTMCol,
+      peFY: peFYCol,
       pb: findCol(['p/b', 'pb ', 'p/bv', 'pbv', 'price/book'])
     };
 
-    // If company column not found, use first column
     if (cols.company === -1) cols.company = 0;
 
     console.log(`Column mapping:`, cols);
 
-    // Extract data rows (skip header and any metadata rows)
+    // Extract data rows
     const dataRows = allRows.slice(headerRowIndex + 1);
-    const companies = [];
+    const allCompanies = [];
 
     for (const row of dataRows) {
       if (!row || row.length === 0) continue;
 
       const companyName = cols.company >= 0 ? row[cols.company] : null;
-
-      // Skip empty rows, metadata rows, and rows that look like headers/notes
       if (!companyName) continue;
+
       const nameStr = String(companyName).toLowerCase();
       if (nameStr.includes('total') || nameStr.includes('median') || nameStr.includes('average') ||
           nameStr.includes('note:') || nameStr.includes('source:') || nameStr.includes('unit') ||
           nameStr.startsWith('*') || nameStr.length < 2) continue;
-
-      // Skip rows that look like Speeda IDs (SPD...)
       if (nameStr.startsWith('spd') && nameStr.length > 10) continue;
 
       const parseNum = (idx) => {
@@ -1944,120 +2061,203 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
         ev: parseNum(cols.ev),
         ebitda: parseNum(cols.ebitda),
         netMargin: parseNum(cols.netMargin),
+        opMargin: parseNum(cols.opMargin),
         evEbitda: parseNum(cols.evEbitda),
-        pe: parseNum(cols.pe),
-        pb: parseNum(cols.pb)
+        peTTM: parseNum(cols.peTTM),
+        peFY: parseNum(cols.peFY),
+        pb: parseNum(cols.pb),
+        filterReason: ''
       };
 
       // Only include if it has at least some financial data
-      const hasData = company.sales || company.marketCap || company.evEbitda || company.pe || company.pb;
+      const hasData = company.sales || company.marketCap || company.evEbitda || company.peTTM || company.peFY || company.pb;
       if (hasData) {
-        companies.push(company);
+        allCompanies.push(company);
       }
     }
 
-    console.log(`Extracted ${companies.length} companies with data`);
+    console.log(`Extracted ${allCompanies.length} companies with data`);
 
-    if (companies.length === 0) {
+    if (allCompanies.length === 0) {
       await sendEmail(Email, 'Trading Comparable - No Data Found',
         '<p>No valid company data was found in your Excel file. Please ensure the file has company names and financial metrics.</p>');
       return;
     }
 
-    // Calculate medians
+    // Create output workbook
+    const outputWorkbook = XLSX.utils.book_new();
+    const sheetHeaders = ['Company', 'Country', 'Sales', 'Market Cap', 'EV', 'EBITDA', 'Net Margin %', 'EV/EBITDA', 'P/E (TTM)', 'P/E (FY)', 'P/BV', 'Filter Reason'];
+
+    // Sheet 1: All Original Companies
+    const sheet1Data = createSheetData(allCompanies, sheetHeaders, `Original Data - ${allCompanies.length} companies`);
+    const sheet1 = XLSX.utils.aoa_to_sheet(sheet1Data);
+    XLSX.utils.book_append_sheet(outputWorkbook, sheet1, '1. Original');
+
     const isProfitable = IsProfitable === 'yes';
+    let currentCompanies = [...allCompanies];
+    let sheetNumber = 2;
+    const filterLog = [];
+
+    if (isProfitable) {
+      // FILTER 1: Remove companies without P/E (prefer TTM, fallback to FY)
+      const beforePE = currentCompanies.length;
+      const removedByPE = [];
+      currentCompanies = currentCompanies.filter(c => {
+        const hasPE = (c.peTTM !== null && c.peTTM > 0) || (c.peFY !== null && c.peFY > 0);
+        if (!hasPE) {
+          c.filterReason = 'No P/E ratio';
+          removedByPE.push(c);
+        }
+        return hasPE;
+      });
+
+      filterLog.push(`Filter 1 (P/E): Removed ${removedByPE.length} companies without P/E ratio`);
+      console.log(filterLog[filterLog.length - 1]);
+
+      // Sheet: After P/E filter
+      const sheetPEData = createSheetData(currentCompanies, sheetHeaders,
+        `After P/E Filter - ${currentCompanies.length} companies (removed ${removedByPE.length})`);
+      const sheetPE = XLSX.utils.aoa_to_sheet(sheetPEData);
+      XLSX.utils.book_append_sheet(outputWorkbook, sheetPE, `${sheetNumber}. After PE Filter`);
+      sheetNumber++;
+
+      // FILTER 2: Remove companies without net margin (or operating margin)
+      if (currentCompanies.length > 30) {
+        const beforeMargin = currentCompanies.length;
+        const removedByMargin = [];
+        currentCompanies = currentCompanies.filter(c => {
+          const hasMargin = (c.netMargin !== null) || (c.opMargin !== null);
+          if (!hasMargin) {
+            c.filterReason = 'No margin data';
+            removedByMargin.push(c);
+          }
+          return hasMargin;
+        });
+
+        filterLog.push(`Filter 2 (Margin): Removed ${removedByMargin.length} companies without margin data`);
+        console.log(filterLog[filterLog.length - 1]);
+
+        // Sheet: After Margin filter
+        const sheetMarginData = createSheetData(currentCompanies, sheetHeaders,
+          `After Margin Filter - ${currentCompanies.length} companies (removed ${removedByMargin.length})`);
+        const sheetMargin = XLSX.utils.aoa_to_sheet(sheetMarginData);
+        XLSX.utils.book_append_sheet(outputWorkbook, sheetMargin, `${sheetNumber}. After Margin Filter`);
+        sheetNumber++;
+      }
+    }
+
+    // QUALITATIVE FILTER: Check business relevance using AI
+    // Only apply if we still have more than 30 companies OR less than 3
+    if (currentCompanies.length > 30 || currentCompanies.length < 3) {
+      const beforeQual = currentCompanies.length;
+
+      console.log(`Applying qualitative filter to ${currentCompanies.length} companies...`);
+      const relevanceResults = await checkBusinessRelevance(currentCompanies, TargetCompanyOrIndustry);
+
+      const removedByQual = [];
+      const relevanceMap = new Map();
+      for (const r of relevanceResults) {
+        relevanceMap.set(r.index, r);
+      }
+
+      currentCompanies = currentCompanies.filter((c, i) => {
+        const result = relevanceMap.get(i);
+        if (result && !result.relevant) {
+          c.filterReason = `Not relevant: ${result.reason || 'Unrelated industry'}`;
+          removedByQual.push(c);
+          return false;
+        }
+        return true;
+      });
+
+      filterLog.push(`Filter ${sheetNumber - 1} (Qualitative): Removed ${removedByQual.length} companies not relevant to "${TargetCompanyOrIndustry}"`);
+      console.log(filterLog[filterLog.length - 1]);
+
+      // Sheet: After Qualitative filter
+      const sheetQualData = createSheetData(currentCompanies, sheetHeaders,
+        `After Business Relevance Filter - ${currentCompanies.length} companies (removed ${removedByQual.length})`);
+      const sheetQual = XLSX.utils.aoa_to_sheet(sheetQualData);
+      XLSX.utils.book_append_sheet(outputWorkbook, sheetQual, `${sheetNumber}. After Relevance`);
+      sheetNumber++;
+    }
+
+    // FINAL SHEET: Summary with medians
+    const finalCompanies = currentCompanies;
     const medians = {
-      sales: calculateMedian(companies.map(c => c.sales)),
-      marketCap: calculateMedian(companies.map(c => c.marketCap)),
-      ev: calculateMedian(companies.map(c => c.ev)),
-      ebitda: calculateMedian(companies.map(c => c.ebitda)),
-      netMargin: calculateMedian(companies.map(c => c.netMargin)),
-      evEbitda: calculateMedian(companies.map(c => c.evEbitda)),
-      pe: isProfitable ? calculateMedian(companies.map(c => c.pe)) : null,
-      pb: calculateMedian(companies.map(c => c.pb))
+      sales: calculateMedian(finalCompanies.map(c => c.sales)),
+      marketCap: calculateMedian(finalCompanies.map(c => c.marketCap)),
+      ev: calculateMedian(finalCompanies.map(c => c.ev)),
+      ebitda: calculateMedian(finalCompanies.map(c => c.ebitda)),
+      netMargin: calculateMedian(finalCompanies.map(c => c.netMargin)),
+      evEbitda: calculateMedian(finalCompanies.map(c => c.evEbitda)),
+      peTTM: calculateMedian(finalCompanies.map(c => c.peTTM)),
+      peFY: calculateMedian(finalCompanies.map(c => c.peFY)),
+      pb: calculateMedian(finalCompanies.map(c => c.pb))
     };
 
-    // Determine which columns to show based on data availability
-    const hasSales = companies.some(c => c.sales);
-    const hasMarketCap = companies.some(c => c.marketCap);
-    const hasEV = companies.some(c => c.ev);
-    const hasEbitda = companies.some(c => c.ebitda);
-    const hasNetMargin = companies.some(c => c.netMargin);
-    const hasEvEbitda = companies.some(c => c.evEbitda);
-    const hasPE = isProfitable && companies.some(c => c.pe);
-    const hasPB = companies.some(c => c.pb);
-    const hasCountry = companies.some(c => c.country && c.country !== '-');
+    // Create final summary sheet
+    const summaryData = [
+      [`Trading Comparable Analysis: ${TargetCompanyOrIndustry}`],
+      [`Generated: ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`],
+      [],
+      ['FILTER SUMMARY'],
+      [`Started with ${allCompanies.length} companies`],
+      ...filterLog.map(f => [f]),
+      [`Final shortlist: ${finalCompanies.length} companies`],
+      [],
+      ['FINAL COMPARABLE COMPANIES'],
+      sheetHeaders,
+    ];
 
-    // Build HTML table
-    let tableHTML = `
-    <table border="1" cellpadding="6" cellspacing="0" style="border-collapse: collapse; width: 100%; font-size: 12px;">
-      <thead>
-        <tr style="background-color: #1e3a5f; color: white;">
-          <th rowspan="2" style="padding: 8px;">Company Name</th>
-          ${hasCountry ? '<th rowspan="2" style="padding: 8px;">Country</th>' : ''}
-          ${(hasSales || hasMarketCap || hasEV || hasEbitda || hasNetMargin) ?
-            `<th colspan="${[hasSales, hasMarketCap, hasEV, hasEbitda, hasNetMargin].filter(Boolean).length}" style="padding: 8px; background-color: #2563eb;">Financial Information (USD M)</th>` : ''}
-          ${(hasEvEbitda || hasPE || hasPB) ?
-            `<th colspan="${[hasEvEbitda, hasPE, hasPB].filter(Boolean).length}" style="padding: 8px; background-color: #1e3a5f;">Multiples</th>` : ''}
-        </tr>
-        <tr style="background-color: #374151; color: white;">
-          ${hasSales ? '<th style="padding: 6px;">Sales</th>' : ''}
-          ${hasMarketCap ? '<th style="padding: 6px;">Market Cap</th>' : ''}
-          ${hasEV ? '<th style="padding: 6px;">EV</th>' : ''}
-          ${hasEbitda ? '<th style="padding: 6px;">EBITDA</th>' : ''}
-          ${hasNetMargin ? '<th style="padding: 6px;">Net Margin</th>' : ''}
-          ${hasEvEbitda ? '<th style="padding: 6px;">EV/EBITDA</th>' : ''}
-          ${hasPE ? '<th style="padding: 6px;">P/E</th>' : ''}
-          ${hasPB ? '<th style="padding: 6px;">P/BV</th>' : ''}
-        </tr>
-      </thead>
-      <tbody>
-    `;
+    for (const c of finalCompanies) {
+      summaryData.push([
+        c.name, c.country || '-', c.sales, c.marketCap, c.ev, c.ebitda, c.netMargin,
+        c.evEbitda, c.peTTM, c.peFY, c.pb, ''
+      ]);
+    }
 
-    companies.forEach((c, i) => {
-      tableHTML += `
-        <tr style="background-color: ${i % 2 === 0 ? '#ffffff' : '#f9fafb'};">
-          <td style="padding: 6px;">${i + 1}. ${c.name}</td>
-          ${hasCountry ? `<td style="padding: 6px;">${c.country}</td>` : ''}
-          ${hasSales ? `<td style="padding: 6px; text-align: right;">${formatNum(c.sales, 0)}</td>` : ''}
-          ${hasMarketCap ? `<td style="padding: 6px; text-align: right;">${formatNum(c.marketCap, 0)}</td>` : ''}
-          ${hasEV ? `<td style="padding: 6px; text-align: right;">${formatNum(c.ev, 0)}</td>` : ''}
-          ${hasEbitda ? `<td style="padding: 6px; text-align: right;">${formatNum(c.ebitda, 0)}</td>` : ''}
-          ${hasNetMargin ? `<td style="padding: 6px; text-align: right;">${formatPercent(c.netMargin)}</td>` : ''}
-          ${hasEvEbitda ? `<td style="padding: 6px; text-align: right;">${formatMultiple(c.evEbitda)}</td>` : ''}
-          ${hasPE ? `<td style="padding: 6px; text-align: right;">${formatMultiple(c.pe)}</td>` : ''}
-          ${hasPB ? `<td style="padding: 6px; text-align: right;">${formatMultiple(c.pb)}</td>` : ''}
-        </tr>
-      `;
-    });
+    summaryData.push([]);
+    summaryData.push([
+      'MEDIAN', '', medians.sales, medians.marketCap, medians.ev, medians.ebitda, medians.netMargin,
+      medians.evEbitda, medians.peTTM, medians.peFY, medians.pb, ''
+    ]);
 
-    // Median row
-    tableHTML += `
-        <tr style="background-color: #dbeafe; font-weight: bold;">
-          <td style="padding: 6px;">Median</td>
-          ${hasCountry ? '<td></td>' : ''}
-          ${hasSales ? `<td style="padding: 6px; text-align: right;">${formatNum(medians.sales, 0)}</td>` : ''}
-          ${hasMarketCap ? `<td style="padding: 6px; text-align: right;">${formatNum(medians.marketCap, 0)}</td>` : ''}
-          ${hasEV ? `<td style="padding: 6px; text-align: right;">${formatNum(medians.ev, 0)}</td>` : ''}
-          ${hasEbitda ? `<td style="padding: 6px; text-align: right;">${formatNum(medians.ebitda, 0)}</td>` : ''}
-          ${hasNetMargin ? `<td style="padding: 6px; text-align: right;">${formatPercent(medians.netMargin)}</td>` : ''}
-          ${hasEvEbitda ? `<td style="padding: 6px; text-align: right; color: #1e40af;">${formatMultiple(medians.evEbitda)}</td>` : ''}
-          ${hasPE ? `<td style="padding: 6px; text-align: right; color: #1e40af;">${formatMultiple(medians.pe)}</td>` : ''}
-          ${hasPB ? `<td style="padding: 6px; text-align: right; color: #1e40af;">${formatMultiple(medians.pb)}</td>` : ''}
-        </tr>
-      </tbody>
-    </table>
-    `;
+    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(outputWorkbook, summarySheet, 'Summary');
 
-    // Build email
+    // Generate Excel buffer
+    const excelBuffer = XLSX.write(outputWorkbook, { type: 'base64', bookType: 'xlsx' });
+
+    // Send email with Excel attachment
     const emailHTML = `
-<h2 style="color: #1e3a5f;">Trading Comparable – ${TargetCompanyOrIndustry}</h2>
-<p style="color: #6b7280; font-size: 14px;">Considering financial data availability, profitability and business relevance, ${companies.length} companies are considered as peers</p>
-<br>
-${tableHTML}
-<br>
-<p style="font-size: 11px; color: #6b7280;">
-Note: EV (Enterprise Value)<br>
+<h2 style="color: #1e3a5f;">Trading Comparable Analysis – ${TargetCompanyOrIndustry}</h2>
+<p style="color: #374151;">Please find attached the Excel file with your trading comparable analysis.</p>
+
+<h3 style="color: #1e3a5f;">Filter Summary</h3>
+<ul style="color: #374151;">
+  <li>Started with: ${allCompanies.length} companies</li>
+  ${filterLog.map(f => `<li>${f}</li>`).join('\n')}
+  <li><strong>Final shortlist: ${finalCompanies.length} companies</strong></li>
+</ul>
+
+<h3 style="color: #1e3a5f;">Median Multiples</h3>
+<table border="1" cellpadding="8" style="border-collapse: collapse;">
+  <tr style="background-color: #1e3a5f; color: white;">
+    <th>EV/EBITDA</th>
+    <th>P/E (TTM)</th>
+    <th>P/E (FY)</th>
+    <th>P/BV</th>
+  </tr>
+  <tr style="text-align: center;">
+    <td>${formatMultiple(medians.evEbitda)}</td>
+    <td>${formatMultiple(medians.peTTM)}</td>
+    <td>${formatMultiple(medians.peFY)}</td>
+    <td>${formatMultiple(medians.pb)}</td>
+  </tr>
+</table>
+
+<p style="font-size: 12px; color: #6b7280; margin-top: 20px;">
+The Excel file contains multiple sheets showing each filtering step.<br>
 Data as of ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}<br>
 Source: Speeda
 </p>
@@ -2065,13 +2265,18 @@ Source: Speeda
 
     await sendEmail(
       Email,
-      `Trading Comps: ${TargetCompanyOrIndustry} - ${companies.length} peers, Median EV/EBITDA ${formatMultiple(medians.evEbitda)}, P/BV ${formatMultiple(medians.pb)}`,
-      emailHTML
+      `Trading Comps: ${TargetCompanyOrIndustry} - ${finalCompanies.length} peers`,
+      emailHTML,
+      {
+        content: excelBuffer,
+        name: `Trading_Comparable_${TargetCompanyOrIndustry.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`
+      }
     );
 
     console.log(`\n${'='.repeat(50)}`);
     console.log(`TRADING COMPARABLE COMPLETE! Email sent to ${Email}`);
-    console.log(`Companies: ${companies.length}, Median EV/EBITDA: ${medians.evEbitda}, P/B: ${medians.pb}`);
+    console.log(`Original: ${allCompanies.length} → Final: ${finalCompanies.length} companies`);
+    console.log(`Median EV/EBITDA: ${medians.evEbitda}, P/E TTM: ${medians.peTTM}, P/B: ${medians.pb}`);
     console.log('='.repeat(50));
 
   } catch (error) {
