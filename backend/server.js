@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
+const XLSX = require('xlsx');
 
 const app = express();
 app.use(cors());
@@ -24,10 +25,9 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
 
-// Send email using Brevo API (with optional attachment)
+// Send email using Brevo API
 async function sendEmail(to, subject, html, attachment = null) {
-  const senderEmail = process.env.BREVO_SENDER_EMAIL || 'sj.goh@bluerockvent.com';
-
+  const senderEmail = process.env.BREVO_SENDER_EMAIL || 'xvasjack@gmail.com';
   const emailData = {
     sender: { name: 'Find Target', email: senderEmail },
     to: [{ email: to }],
@@ -35,10 +35,9 @@ async function sendEmail(to, subject, html, attachment = null) {
     htmlContent: html
   };
 
-  // Add attachment if provided
   if (attachment) {
     emailData.attachment = [{
-      content: attachment.content, // base64 encoded
+      content: attachment.content,
       name: attachment.name
     }];
   }
@@ -1608,6 +1607,62 @@ function buildValidationEmailHTML(companies, targetBusiness, countries, outputOp
   return html;
 }
 
+// Build validation results as Excel file (returns base64 string)
+function buildValidationExcel(companies, targetBusiness, countries, outputOption) {
+  const inScopeCompanies = companies.filter(c => c.in_scope);
+
+  // Prepare data based on output option
+  let data;
+  if (outputOption === 'all_companies') {
+    data = companies.map((c, i) => ({
+      '#': i + 1,
+      'Company': c.company_name,
+      'Website': c.website || 'Not found',
+      'Status': c.in_scope ? 'IN SCOPE' : 'OUT OF SCOPE',
+      'Business Description': c.business_description || c.reason || '-'
+    }));
+  } else {
+    data = inScopeCompanies.map((c, i) => ({
+      '#': i + 1,
+      'Company': c.company_name,
+      'Website': c.website || 'Not found',
+      'Business Description': c.business_description || '-'
+    }));
+  }
+
+  // Create workbook with summary sheet and results sheet
+  const wb = XLSX.utils.book_new();
+
+  // Summary sheet
+  const summaryData = [
+    ['Speeda List Validation Results'],
+    [],
+    ['Target Business:', targetBusiness],
+    ['Countries:', countries.join(', ')],
+    ['Total Companies:', companies.length],
+    ['In-Scope:', inScopeCompanies.length],
+    ['Out-of-Scope:', companies.length - inScopeCompanies.length]
+  ];
+  const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+  XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
+
+  // Results sheet
+  const resultsSheet = XLSX.utils.json_to_sheet(data);
+  // Set column widths
+  resultsSheet['!cols'] = [
+    { wch: 5 },   // #
+    { wch: 40 },  // Company
+    { wch: 50 },  // Website
+    { wch: 15 },  // Status (if all_companies)
+    { wch: 60 }   // Business Description
+  ];
+  XLSX.utils.book_append_sheet(wb, resultsSheet, 'Results');
+
+  // Write to buffer and convert to base64
+  const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  return buffer.toString('base64');
+}
+
 app.post('/api/validation', async (req, res) => {
   const { Companies, Countries, TargetBusiness, OutputOption, Email } = req.body;
 
@@ -1694,13 +1749,29 @@ app.post('/api/validation', async (req, res) => {
       console.log(`Completed: ${results.length}/${companyList.length}`);
     }
 
-    const htmlContent = buildValidationEmailHTML(results, TargetBusiness, countryList, outputOption);
     const inScopeCount = results.filter(r => r.in_scope).length;
+
+    // Build Excel file
+    const excelBase64 = buildValidationExcel(results, TargetBusiness, countryList, outputOption);
+
+    // Simple email body
+    const emailBody = `
+      <h2>Speeda List Validation Complete</h2>
+      <p><strong>Target Business:</strong> ${TargetBusiness}</p>
+      <p><strong>Countries:</strong> ${countryList.join(', ')}</p>
+      <p><strong>Results:</strong> ${inScopeCount} in-scope out of ${results.length} companies</p>
+      <br>
+      <p>Please see the attached Excel file for detailed results.</p>
+    `;
 
     await sendEmail(
       Email,
       `Speeda List Validation: ${inScopeCount}/${results.length} in-scope for "${TargetBusiness}"`,
-      htmlContent
+      emailBody,
+      {
+        content: excelBase64,
+        name: `validation-results-${new Date().toISOString().split('T')[0]}.xlsx`
+      }
     );
 
     const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
@@ -1722,88 +1793,46 @@ app.post('/api/validation', async (req, res) => {
 
 // ============ WRITE LIKE ANIL ============
 
-const ANIL_SYSTEM_PROMPT = `You are rewriting emails in Anil's professional M&A advisory style.
+const ANIL_SYSTEM_PROMPT = `You are helping users write emails in Anil's professional style.
 
-CRITICAL RULES:
-1. PRESERVE all specific references from user's input: sheet names, file names, column references, technical terms. If angle brackets like <Clean BS>, convert to square brackets [Clean BS] or quotes "Clean BS" - NEVER drop them.
-2. Do NOT invent dates, times, or deadlines not in the original. Keep timing vague if user didn't specify.
-3. Do NOT add fluff or filler text. Every sentence must have purpose.
+CONSTRAINTS:
+- Tone: polite, formal, concise, tactfully assertive; client-first; no hype.
+- Structure: greeting; 1-line context; purpose in line 1–2; facts (numbers/dates/acronyms); explicit ask; next step; polite close; sign-off "Best Regards," (NO name after - user will add their own).
+- Diction: prefer "Well noted.", "Do let me know…", "Happy to…", "We will keep you informed…"
+- BANNED words: "excited", "super", "thrilled", vague time ("soon", "ASAP", "at the earliest"), emotive over-apologies.
+- IMPORTANT: Do NOT invent specific dates, times, or deadlines. Only include dates/times if they were provided in the user's input. If no date given, use phrases like "at your earliest convenience" or leave the timing open.
+- Honorifics by region (e.g., "-san" for Japanese, "Dato" for Malaysian); short paragraphs with blank lines; numbered lists for terms.
+- When dates ARE provided: use absolute format + TZ (e.g., 09 Jan 2026, 14:00 SGT). Currencies spaced (USD 12m). Multiples like "7x EBITDA". FY labels (FY25).
 
-STRUCTURE (follow this order):
-1. Greeting: "Dear [Name]," or "Hi [Name],"
-2. Context opener (one line): "Further to your email,..." / "As discussed,..." / "Well noted." / "Thank you for the materials."
-3. Body: State the purpose, facts, or update in 1-3 short paragraphs
-4. Ask/Next step: Clear action item if applicable
-5. Close: "Thank you."
-6. Sign-off: "Best Regards," (NO name after)
+SUBJECT LINE PATTERNS:
+- Intro: {A} ↔ {B} — {topic}
+- {Deal/Company}: NDA + IM
+- {Project}: NBO status
+- Correction: aligned IM on {topic}
+- {Company}: exclusivity terms
+- Meeting: {topic}
 
-PREFERRED PHRASES:
-- "Well noted." (to acknowledge)
-- "Happy to [confirm/proceed/discuss/schedule]..."
-- "Grateful if you could [share/confirm/provide]..."
-- "Do let me know if [you require clarification / any points need discussion]."
-- "We will keep you informed."
-- "Kindly [execute/confirm/return]..."
-- "Further to your email/note/discussion,..."
-- "As discussed/mentioned,..."
-- "If acceptable,..."
-- "In the interest of time,..."
-- "Just a quick note that..."
-- "From our perspective,..."
-- "Please confirm by [date]." (only if date provided)
+EXAMPLE STYLE (note the structure and tone):
 
-BANNED PHRASES (never use):
-- "I hope this message/email finds you well"
-- "Thank you for your attention to this matter"
-- "At your earliest convenience"
-- "ASAP" / "soon" / "at the earliest"
-- "excited" / "super" / "thrilled"
-- "Please don't hesitate to..."
-- "I wanted to reach out..."
-- "Just circling back..."
+Dear Martin,
 
-FORMATTING:
-- Short paragraphs (1-3 sentences each) separated by blank lines
-- Numbered lists ONLY for 3+ items (slots, conditions, actions)
-- Dates when provided: DD Mon YYYY, HH:MM TZ (e.g., 12 Dec 2025, 17:00 SGT)
+As discussed, we have received two NBOs for Nimbus:
+1) NorthBridge: 0.9x FY25 Revenue; exclusivity 30 days; breakup fee USD 0.5m.
+2) Helios: 1.0x FY25 Revenue; exclusivity 21 days; no breakup fee.
 
-EXAMPLE REWRITES:
+We suggest holding to at least 1.0x FY25 Revenue and requiring a modest breakup fee to avoid creep downwards.
 
-Input: "Thanks for the email. We'll send the SPA draft soon and let me know if there's any changes to discuss."
-Output:
-Subject: SPA draft — next steps
-
-Dear [Name],
-
-Thank you for your email. Well noted.
-
-We will share the draft SPA shortly. Kindly let us know if there are any points to discuss.
-
-Thank you.
-
-Best Regards,
-
----
-
-Input: "Can we schedule a call next week to discuss the NDA? Let me know your availability."
-Output:
-Subject: NDA discussion — proposed call
-
-Hi [Name],
-
-Happy to schedule a call to discuss the NDA.
-
-Do let me know your availability and we will send a calendar invite.
+Do let me know if you prefer to invite management interviews before revisions.
 
 Thank you.
 
 Best Regards,
 
 OUTPUT FORMAT:
-- First line: Subject: [concise subject]
-- Blank line
-- Email body (preserve all user references exactly)
-- End with "Thank you." then "Best Regards," (no name)`;
+- First line: Subject: [subject line]
+- Then blank line
+- Then email body
+- End with "Best Regards," (no name - user adds their own signature)`;
 
 app.post('/api/write-like-anil', async (req, res) => {
   console.log('\n' + '='.repeat(50));
@@ -1855,461 +1884,8 @@ Maintain the core message but apply Anil's tone, structure, and conventions. Inc
   }
 });
 
-// ============ PROFILE SLIDES ============
-
-// Carbone API configuration
-const CARBONE_TEMPLATE_ID = process.env.CARBONE_TEMPLATE_ID || '1301068940422363675';
-const CARBONE_API_TOKEN = process.env.CARBONE_API_TOKEN || 'eyJhbGciOiJFUzUxMiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiIxMjkyNTc1MDM0OTYxNTIyOTA2IiwiYXVkIjoiY2FyYm9uZSIsImV4cCI6MjQyNTgwNjM4OSwiZGF0YSI6eyJ0eXBlIjoicHJvZCJ9fQ.AV2ze5AEli_nFsHNYYzdHXC15QtxMR1eEpVdxS2F3shTyA19tnRVFwjzN9m2VpJy3G7ibHwXPWIjl55SUJ50zjVAAHtq4Xw5898OKz9u3mB7OFijzdC7KUTr_uSHQZIfrIRB6so7W7XurTZ58yEVZIUKKbCv5jGBdMWfQpcwY_vJGvMg';
-
-// Generate PPTX using Carbone API
-async function generatePPTXWithCarbone(companies) {
-  try {
-    console.log('Calling Carbone API to generate PPTX...');
-
-    const response = await fetch(`https://api.carbone.io/render/${CARBONE_TEMPLATE_ID}?download=true`, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${CARBONE_API_TOKEN}`,
-        'Content-Type': 'application/json',
-        'carbone-version': '5'
-      },
-      body: JSON.stringify({
-        data: { companies },
-        convertTo: 'pptx'
-      })
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('Carbone API error:', errorText);
-      throw new Error(`Carbone API failed: ${response.status}`);
-    }
-
-    // Get the binary PPTX file
-    const arrayBuffer = await response.arrayBuffer();
-    const buffer = Buffer.from(arrayBuffer);
-
-    // Convert to base64 for email attachment
-    const base64Content = buffer.toString('base64');
-
-    console.log(`PPTX generated: ${buffer.length} bytes`);
-
-    return {
-      success: true,
-      content: base64Content,
-      size: buffer.length
-    };
-  } catch (error) {
-    console.error('Carbone error:', error);
-    return {
-      success: false,
-      error: error.message
-    };
-  }
-}
-
-// Currency exchange mapping by country
-const CURRENCY_EXCHANGE = {
-  'philippines': '為替レート: PHP 100M = 3億円',
-  'thailand': '為替レート: THB 100M = 4億円',
-  'malaysia': '為替レート: MYR 10M = 3億円',
-  'indonesia': '為替レート: IDR 10B = 1億円',
-  'singapore': '為替レート: SGD 1M = 1億円',
-  'vietnam': '為替レート: VND 100B = 6億円'
-};
-
-// Scrape website and convert to clean text (similar to fetchWebsite but returns more content)
-async function scrapeWebsite(url) {
-  try {
-    // Normalize URL
-    if (!url.startsWith('http')) {
-      url = 'https://' + url;
-    }
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
-
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      },
-      signal: controller.signal,
-      redirect: 'follow'
-    });
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      return { success: false, error: `HTTP ${response.status}` };
-    }
-
-    const html = await response.text();
-
-    // Clean HTML to readable text (similar to n8n's markdownify)
-    const cleanText = html
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
-      .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
-      .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
-      .replace(/<!--[\s\S]*?-->/g, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/&nbsp;/g, ' ')
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    if (cleanText.length < 100) {
-      return { success: false, error: 'Insufficient content' };
-    }
-
-    return { success: true, content: cleanText.substring(0, 25000), url };
-  } catch (e) {
-    return { success: false, error: e.message || 'Connection failed' };
-  }
-}
-
-// AI Agent 1: Extract company name, established year, location
-async function extractBasicInfo(scrapedContent, websiteUrl) {
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'system',
-          content: `You extract company information from website content.
-
-OUTPUT JSON with these fields:
-- company_name: Company name with first letter of each word capitalized
-- established_year: Clean numbers only (e.g., "1995"), leave empty if not found
-- location: Format as "type: city, state, country" for each location. Types: HQ, warehouse, factory, branch, etc. Multiple locations in point form. If Singapore, include which area. No postcodes or full addresses.
-
-RULES:
-- Write proper English (e.g., "Việt Nam" → "Vietnam")
-- Leave fields empty if information not found
-- Return ONLY valid JSON`
-        },
-        {
-          role: 'user',
-          content: `Website: ${websiteUrl}
-Content: ${scrapedContent.substring(0, 12000)}`
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2
-    });
-
-    return JSON.parse(response.choices[0].message.content);
-  } catch (e) {
-    console.error('Agent 1 error:', e.message);
-    return { company_name: '', established_year: '', location: '' };
-  }
-}
-
-// AI Agent 2: Extract business, message, footnote, title
-async function extractBusinessInfo(scrapedContent, basicInfo) {
-  const locationText = basicInfo.location || '';
-  const hqMatch = locationText.match(/HQ:\s*([^,\n]+),\s*([^\n]+)/i);
-  const hqCountry = hqMatch ? hqMatch[2].trim().toLowerCase() : '';
-  const currencyExchange = CURRENCY_EXCHANGE[hqCountry] || '';
-
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'system',
-          content: `You extract business information from website content.
-
-INPUT:
-- HTML content from company website
-- Previously extracted: company name, year, location
-
-OUTPUT JSON:
-1. business: Brief description of what company does. Format like: "Manufacture products such as X, Y, Z. Distribute products such as A, B, C." Max 3 examples per point. Use point forms (\\n-) for different business lines.
-
-2. message: One-liner introductory message about the company. Example: "Malaysia-based distributor specializing in electronic components and industrial automation products across Southeast Asia."
-
-3. footnote: Two parts:
-   - Notes (optional): If unusual shortforms used, write full-form like "SKU (Stock Keeping Unit)". Separate multiple with comma.
-   - Currency: ${currencyExchange || 'Leave empty if no matching currency'}
-   Separate notes and currency with semicolon. Always end with new line: "出典: 会社ウェブサイト、SPEEDA"
-
-4. title: Company name WITHOUT suffix (remove Pte Ltd, Sdn Bhd, Co Ltd, JSC, PT, Inc, etc.)
-
-RULES:
-- All point forms use "\\n-"
-- Return ONLY valid JSON`
-        },
-        {
-          role: 'user',
-          content: `Company: ${basicInfo.company_name}
-Established: ${basicInfo.established_year}
-Location: ${basicInfo.location}
-
-Website Content:
-${scrapedContent.substring(0, 12000)}`
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2
-    });
-
-    return JSON.parse(response.choices[0].message.content);
-  } catch (e) {
-    console.error('Agent 2 error:', e.message);
-    return { business: '', message: '', footnote: '', title: basicInfo.company_name || '' };
-  }
-}
-
-// AI Agent 3: Extract key metrics
-async function extractKeyMetrics(scrapedContent, previousData) {
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'system',
-          content: `You extract key business metrics from website content.
-
-Example metrics to look for:
-- Supplier names
-- Customer names
-- Supplier/Customer count
-- Number of projects
-- Brands distributed/owned
-- Headcount/Employee count
-- Countries exported to
-- Countries with sales/project/product presence
-- Revenue figures
-- Years of experience
-- Number of products
-- Factory/warehouse size
-- Certifications
-
-OUTPUT JSON with ONE field:
-- metrics: All key metrics found, formatted as readable text with line breaks (\\n). Include the metric name and value.
-
-Only include metrics that are explicitly mentioned on the website.
-Return ONLY valid JSON.`
-        },
-        {
-          role: 'user',
-          content: `Company: ${previousData.company_name}
-Business: ${previousData.business}
-
-Website Content:
-${scrapedContent.substring(0, 12000)}`
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2
-    });
-
-    return JSON.parse(response.choices[0].message.content);
-  } catch (e) {
-    console.error('Agent 3 error:', e.message);
-    return { metrics: '' };
-  }
-}
-
-// Build profile slides email HTML (simple version with PPTX attached)
-function buildProfileSlidesEmailHTML(companies, errors, hasPPTX) {
-  const companyNames = companies.map(c => c.title || c.company_name).join(', ');
-
-  let html = `
-    <h2>Profile Slides</h2>
-    <p>Your profile slides have been generated.</p>
-    <br>
-    <p><strong>Companies Extracted:</strong> ${companies.length}</p>
-    <p><strong>Companies:</strong> ${companyNames || 'N/A'}</p>
-  `;
-
-  if (hasPPTX) {
-    html += `<br><p style="color: #16a34a;"><strong>✓ PowerPoint file attached.</strong></p>`;
-  } else {
-    html += `<br><p style="color: #dc2626;"><strong>⚠ PPTX generation failed. Data included below.</strong></p>`;
-
-    // Include extracted data as fallback
-    companies.forEach((c, i) => {
-      html += `
-        <div style="margin: 16px 0; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px;">
-          <h4 style="margin: 0 0 8px 0;">${i + 1}. ${c.title || c.company_name || 'Unknown'}</h4>
-          <p style="margin: 4px 0; font-size: 13px;"><strong>Website:</strong> ${c.website}</p>
-          <p style="margin: 4px 0; font-size: 13px;"><strong>Established:</strong> ${c.established_year || '-'}</p>
-          <p style="margin: 4px 0; font-size: 13px;"><strong>Location:</strong> ${c.location || '-'}</p>
-          <p style="margin: 4px 0; font-size: 13px;"><strong>Business:</strong> ${c.business || '-'}</p>
-        </div>
-      `;
-    });
-  }
-
-  // Errors section
-  if (errors.length > 0) {
-    html += `<br><h3 style="color: #dc2626;">Failed Extractions</h3>`;
-    html += `<ul>`;
-    errors.forEach(e => {
-      html += `<li><strong>${e.website}</strong>: ${e.error}</li>`;
-    });
-    html += `</ul>`;
-  }
-
-  return html;
-}
-
-// Main profile slides endpoint
-app.post('/api/profile-slides', async (req, res) => {
-  const { websites, email } = req.body;
-
-  if (!websites || !Array.isArray(websites) || websites.length === 0) {
-    return res.status(400).json({ error: 'Please provide an array of website URLs' });
-  }
-
-  if (!email) {
-    return res.status(400).json({ error: 'Please provide an email address' });
-  }
-
-  console.log(`\n${'='.repeat(50)}`);
-  console.log(`PROFILE SLIDES REQUEST: ${new Date().toISOString()}`);
-  console.log(`Processing ${websites.length} website(s)`);
-  console.log(`Email: ${email}`);
-  console.log('='.repeat(50));
-
-  // Return immediately - process in background
-  res.json({
-    success: true,
-    message: 'Request received. Results will be emailed within 5-10 minutes.',
-    companies: [],
-    errors: [],
-    total: websites.length
-  });
-
-  // Process in background
-  try {
-    const results = [];
-
-    for (let i = 0; i < websites.length; i++) {
-      const website = websites[i].trim();
-      if (!website) continue;
-
-      console.log(`\n[${i + 1}/${websites.length}] Processing: ${website}`);
-
-      try {
-        // Step 1: Scrape website
-        console.log('  Step 1: Scraping website...');
-        const scraped = await scrapeWebsite(website);
-
-        if (!scraped.success) {
-          console.log(`  Failed to scrape: ${scraped.error}`);
-          results.push({
-            website,
-            error: `Failed to scrape: ${scraped.error}`,
-            step: 1
-          });
-          continue;
-        }
-        console.log(`  Scraped ${scraped.content.length} characters`);
-
-        // Step 2: Extract basic info (company name, year, location)
-        console.log('  Step 2: Extracting company name, year, location...');
-        const basicInfo = await extractBasicInfo(scraped.content, website);
-        console.log(`  Company: ${basicInfo.company_name || 'Not found'}`);
-
-        // Step 3: Extract business details
-        console.log('  Step 3: Extracting business, message, footnote, title...');
-        const businessInfo = await extractBusinessInfo(scraped.content, basicInfo);
-
-        // Step 4: Extract key metrics
-        console.log('  Step 4: Extracting key metrics...');
-        const metricsInfo = await extractKeyMetrics(scraped.content, {
-          company_name: basicInfo.company_name,
-          business: businessInfo.business
-        });
-
-        // Combine all extracted data
-        const companyData = {
-          website: scraped.url,
-          company_name: basicInfo.company_name || '',
-          established_year: basicInfo.established_year || '',
-          location: basicInfo.location || '',
-          business: businessInfo.business || '',
-          message: businessInfo.message || '',
-          footnote: businessInfo.footnote || '',
-          title: businessInfo.title || '',
-          metrics: metricsInfo.metrics || ''
-        };
-
-        console.log(`  ✓ Completed: ${companyData.title || companyData.company_name}`);
-        results.push(companyData);
-
-      } catch (error) {
-        console.error(`  Error processing ${website}:`, error.message);
-        results.push({
-          website,
-          error: error.message,
-          step: 0
-        });
-      }
-    }
-
-    const companies = results.filter(r => !r.error);
-    const errors = results.filter(r => r.error);
-
-    console.log(`\n${'='.repeat(50)}`);
-    console.log(`PROFILE SLIDES EXTRACTION COMPLETE`);
-    console.log(`Extracted: ${companies.length}/${websites.length} successful`);
-    console.log('='.repeat(50));
-
-    // Generate PPTX using Carbone
-    let pptxResult = null;
-    if (companies.length > 0) {
-      // Format data for Carbone template
-      const carboneData = companies.map(c => ({
-        company_name: c.company_name,
-        website: c.website,
-        established_year: c.established_year,
-        location: c.location,
-        business: c.business,
-        message: c.message,
-        footnote: c.footnote,
-        title: c.title,
-        metrics: c.metrics
-      }));
-
-      pptxResult = await generatePPTXWithCarbone(carboneData);
-    }
-
-    // Build email content
-    const companyNames = companies.slice(0, 3).map(c => c.title || c.company_name).join(', ');
-    const subject = `Profile Slides: ${companies.length} companies${companyNames ? ` (${companyNames}${companies.length > 3 ? '...' : ''})` : ''}`;
-    const htmlContent = buildProfileSlidesEmailHTML(companies, errors, pptxResult?.success);
-
-    // Send email with PPTX attachment
-    const attachment = pptxResult?.success ? {
-      content: pptxResult.content,
-      name: `Profile_Slides_${new Date().toISOString().split('T')[0]}.pptx`
-    } : null;
-
-    await sendEmail(email, subject, htmlContent, attachment);
-
-    console.log(`Email sent to ${email}${attachment ? ' with PPTX attachment' : ''}`);
-    console.log('='.repeat(50));
-
-  } catch (error) {
-    console.error('Profile slides error:', error);
-    try {
-      await sendEmail(email, 'Profile Slides - Error', `<p>Error processing your request: ${error.message}</p>`);
-    } catch (e) {
-      console.error('Failed to send error email:', e);
-    }
-  }
-});
-
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v30 - Profile Slides' });
+  res.json({ status: 'ok', service: 'Find Target v29 - Write Like Anil' });
 });
 
 const PORT = process.env.PORT || 3000;
