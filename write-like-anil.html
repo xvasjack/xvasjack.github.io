@@ -305,31 +305,12 @@
       <div class="writer-card">
         <div class="writer-card-header">
           <h2>Input</h2>
-          <div class="segment-tabs">
-            <button class="seg-btn active" data-mode="generate">Generate</button>
-            <button class="seg-btn" data-mode="rewrite">Rewrite</button>
-          </div>
         </div>
         <div class="writer-card-body">
-          <div class="form-content active" id="form-generate">
-            <div class="form-group" style="flex:2;">
-              <label for="generatePrompt">What do you want to write?</label>
-              <textarea id="generatePrompt" placeholder="e.g. A follow-up email to the client about the quarterly review meeting scheduled for next week..."></textarea>
-            </div>
+          <div class="form-content active" id="form-rewrite">
             <div class="form-group" style="flex:1;">
-              <label for="generateContext">Additional context <span class="label-hint">(optional)</span></label>
-              <textarea id="generateContext" placeholder="Background info, key points, recipient details..."></textarea>
-            </div>
-          </div>
-
-          <div class="form-content" id="form-rewrite">
-            <div class="form-group" style="flex:3;">
               <label for="rewriteInput">Paste your draft email</label>
               <textarea id="rewriteInput" placeholder="Paste the email you want to rewrite in Anil's style..."></textarea>
-            </div>
-            <div class="form-group" style="flex:1;">
-              <label for="rewriteNotes">Rewrite instructions <span class="label-hint">(optional)</span></label>
-              <textarea id="rewriteNotes" placeholder="e.g. Make it more concise, soften the tone..."></textarea>
             </div>
           </div>
 
@@ -337,7 +318,7 @@
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
             </svg>
-            <span id="btnText">Generate</span>
+            <span id="btnText">Rewrite</span>
           </button>
         </div>
       </div>
@@ -363,27 +344,6 @@
   </main>
 
   <script>
-    // Tab switching
-    const segBtns = document.querySelectorAll('.seg-btn');
-    const formContents = document.querySelectorAll('.form-content');
-    const btnText = document.getElementById('btnText');
-    let currentMode = 'generate';
-
-    segBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        const mode = btn.dataset.mode;
-        currentMode = mode;
-
-        segBtns.forEach(b => b.classList.remove('active'));
-        formContents.forEach(c => c.classList.remove('active'));
-
-        btn.classList.add('active');
-        document.getElementById('form-' + mode).classList.add('active');
-
-        btnText.textContent = mode === 'generate' ? 'Generate' : 'Rewrite in Anil\'s Style';
-      });
-    });
-
     // Copy functionality
     const copyBtn = document.getElementById('copyBtn');
     const outputBox = document.getElementById('outputBox');
@@ -414,20 +374,11 @@
       submitBtn.disabled = true;
       submitBtn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Processing...';
 
-      let inputData = {};
-      if (currentMode === 'generate') {
-        inputData = {
-          mode: 'generate',
-          prompt: document.getElementById('generatePrompt').value,
-          context: document.getElementById('generateContext').value
-        };
-      } else {
-        inputData = {
-          mode: 'rewrite',
-          draft: document.getElementById('rewriteInput').value,
-          notes: document.getElementById('rewriteNotes').value
-        };
-      }
+      const inputData = {
+        mode: 'rewrite',
+        draft: document.getElementById('rewriteInput').value,
+        notes: ''
+      };
 
       try {
         const response = await fetch('https://xvasjackgithubio-production.up.railway.app/api/write-like-anil', {
@@ -449,8 +400,7 @@
         console.error(err);
       } finally {
         submitBtn.disabled = false;
-        const label = currentMode === 'generate' ? 'Generate' : 'Rewrite in Anil\'s Style';
-        submitBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg><span id="btnText">' + label + '</span>';
+        submitBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg><span id="btnText">Rewrite</span>';
       }
     });
   </script>
