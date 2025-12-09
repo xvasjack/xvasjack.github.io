@@ -2417,23 +2417,23 @@ async function generatePPTX(companies) {
       // ===== SECTION HEADERS =====
       // Left: "会社概要資料"
       slide.addText('会社概要資料', {
-        x: 0.36, y: 1.22, w: 5.8, h: 0.35,
+        x: 0.36, y: 1.30, w: 6.1, h: 0.35,
         fontSize: 14, fontFace: 'Segoe UI',
         color: COLORS.black, align: 'center'
       });
       slide.addShape(pptx.shapes.LINE, {
-        x: 0.36, y: 1.58, w: 5.8, h: 0,
+        x: 0.36, y: 1.68, w: 6.1, h: 0,
         line: { color: COLORS.dk2, width: 1.75 }
       });
 
       // Right: "Product Photos"
       slide.addText('Product Photos', {
-        x: 6.88, y: 1.22, w: 5.8, h: 0.35,
+        x: 6.86, y: 1.30, w: 6.1, h: 0.35,
         fontSize: 14, fontFace: 'Segoe UI',
         color: COLORS.black, align: 'center'
       });
       slide.addShape(pptx.shapes.LINE, {
-        x: 6.88, y: 1.58, w: 5.8, h: 0,
+        x: 6.86, y: 1.68, w: 6.1, h: 0,
         line: { color: COLORS.dk2, width: 1.75 }
       });
 
@@ -2484,21 +2484,26 @@ async function generatePPTX(companies) {
         }
       ]);
 
+      const tableStartY = 1.80;
+      const rowHeight = 0.35;
+
       slide.addTable(rows, {
-        x: 0.36, y: 1.7,
-        w: 5.8,
-        colW: [1.3, 4.5],
-        rowH: 0.38,  // Slightly smaller row height to fit more metrics
+        x: 0.36, y: tableStartY,
+        w: 6.1,
+        colW: [1.4, 4.7],
+        rowH: rowHeight,
         fontFace: 'Segoe UI',
-        fontSize: 12,  // Slightly smaller font for more content
+        fontSize: 11,
         valign: 'middle',
         border: { pt: 2.5, color: COLORS.white },
         margin: [0, 0.04, 0, 0.04]
       });
 
-      // ===== FOOTNOTE (3 lines) =====
-      let footnoteY = 6.4;
-      const footnoteLineHeight = 0.18;
+      // ===== FOOTNOTE (positioned dynamically based on table size) =====
+      // Calculate table end position: startY + (numRows * rowHeight)
+      const tableEndY = tableStartY + (tableData.length * rowHeight);
+      let footnoteY = Math.max(tableEndY + 0.1, 5.8);  // At least 0.1" below table, min at 5.8"
+      const footnoteLineHeight = 0.16;
 
       // Line 1: Note with shortform explanations
       const shortformNote = detectShortforms(company);
@@ -2770,6 +2775,74 @@ ${scrapedContent.substring(0, 15000)}`
   }
 }
 
+// AI Agent 4: Search for missing company information (est year, location, HQ)
+async function searchMissingInfo(companyName, website, missingFields) {
+  if (!companyName || missingFields.length === 0) {
+    return {};
+  }
+
+  try {
+    console.log(`  Searching for missing info: ${missingFields.join(', ')}`);
+
+    // Use OpenAI Search model which has web search capability
+    const searchQuery = `${companyName} company ${missingFields.includes('established_year') ? 'founded year established' : ''} ${missingFields.includes('location') ? 'headquarters location country' : ''}`.trim();
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-search-preview',
+      messages: [
+        {
+          role: 'user',
+          content: `Search for information about "${companyName}" (website: ${website}).
+
+I need to find:
+${missingFields.includes('established_year') ? '- When was this company founded/established? (year only)' : ''}
+${missingFields.includes('location') ? '- Where is this company headquartered? (city, country)' : ''}
+
+Return ONLY a JSON object with these fields (include only fields you can find with confidence):
+{
+  ${missingFields.includes('established_year') ? '"established_year": "YYYY",' : ''}
+  ${missingFields.includes('location') ? '"location": "City, Country"' : ''}
+}
+
+If you cannot find reliable information for a field, omit it from the response.
+Return ONLY valid JSON, no explanations.`
+        }
+      ]
+    });
+
+    const content = response.choices[0].message.content || '';
+
+    // Try to parse JSON from response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const result = JSON.parse(jsonMatch[0]);
+      console.log(`  Found missing info:`, result);
+      return result;
+    }
+
+    return {};
+  } catch (e) {
+    console.error('Agent 4 (search) error:', e.message);
+
+    // Fallback to Perplexity if OpenAI search fails
+    try {
+      const perplexityPrompt = `What is the founding year and headquarters location of ${companyName} (${website})? Reply ONLY with JSON: {"established_year": "YYYY", "location": "City, Country"}`;
+      const perplexityResponse = await callPerplexity(perplexityPrompt);
+
+      const jsonMatch = perplexityResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const result = JSON.parse(jsonMatch[0]);
+        console.log(`  Found via Perplexity:`, result);
+        return result;
+      }
+    } catch (pe) {
+      console.error('Perplexity fallback error:', pe.message);
+    }
+
+    return {};
+  }
+}
+
 // Build profile slides email HTML (simple version with PPTX attached)
 function buildProfileSlidesEmailHTML(companies, errors, hasPPTX) {
   const companyNames = companies.map(c => c.title || c.company_name).join(', ');
@@ -2883,12 +2956,23 @@ app.post('/api/profile-slides', async (req, res) => {
           business: businessInfo.business
         });
 
-        // Combine all extracted data
+        // Step 5: Search for missing info (est year, location) if not found on website
+        let searchedInfo = {};
+        const missingFields = [];
+        if (!basicInfo.established_year) missingFields.push('established_year');
+        if (!basicInfo.location) missingFields.push('location');
+
+        if (missingFields.length > 0 && basicInfo.company_name) {
+          console.log('  Step 5: Searching for missing info...');
+          searchedInfo = await searchMissingInfo(basicInfo.company_name, website, missingFields);
+        }
+
+        // Combine all extracted data (use searched info as fallback)
         const companyData = {
           website: scraped.url,
           company_name: basicInfo.company_name || '',
-          established_year: basicInfo.established_year || '',
-          location: basicInfo.location || '',
+          established_year: basicInfo.established_year || searchedInfo.established_year || '',
+          location: basicInfo.location || searchedInfo.location || '',
           business: businessInfo.business || '',
           message: businessInfo.message || '',
           footnote: businessInfo.footnote || '',
