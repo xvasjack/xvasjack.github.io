@@ -1631,12 +1631,13 @@ app.post('/api/validation', async (req, res) => {
       return;
     }
 
-    const batchSize = 3;
+    // Process 15 companies in parallel for much faster results
+    const batchSize = 15;
     const results = [];
 
     for (let i = 0; i < companyList.length; i += batchSize) {
       const batch = companyList.slice(i, i + batchSize);
-      console.log(`\nProcessing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(companyList.length / batchSize)}`);
+      console.log(`\nProcessing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(companyList.length / batchSize)} (${batch.length} companies)`);
 
       const batchResults = await Promise.all(batch.map(async (companyName) => {
         const website = await findCompanyWebsiteMulti(companyName, countryList);
