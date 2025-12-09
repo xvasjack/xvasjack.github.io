@@ -1848,51 +1848,76 @@ Decision rules:
 Output JSON: {"results": [{"index": 0, "name": "Company Name", "relevant": false, "business": "5-10 word description of actual business"}]}`;
 }
 
-// Helper: Check business relevance using OpenAI o3-mini (reasoning model)
+// Helper: Check business relevance using OpenAI o1 (best reasoning model)
 async function checkRelevanceWithOpenAI(companies, filterCriteria) {
   const companyNames = companies.map(c => c.name);
   const prompt = buildReasoningPrompt(companyNames, filterCriteria);
 
   try {
+    // Try o1 first (best reasoning)
     const response = await openai.chat.completions.create({
-      model: 'o3-mini',
-      messages: [{ role: 'user', content: prompt + '\n\nRespond with valid JSON only.' }],
-      reasoning_effort: 'medium'
+      model: 'o1',
+      messages: [{ role: 'user', content: prompt + '\n\nRespond with valid JSON only.' }]
     });
     const content = response.choices[0].message.content;
-    // Extract JSON from response
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
-      return { source: 'openai-o3', results: parsed.results || parsed.companies || parsed };
+      return { source: 'openai-o1', results: parsed.results || parsed.companies || parsed };
     }
     return null;
   } catch (error) {
-    console.error('OpenAI o3-mini error:', error);
-    // Fallback to gpt-4o
+    console.error('OpenAI o1 error:', error.message);
+    // Fallback to o3-mini with high reasoning
     try {
       const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.1,
-        response_format: { type: 'json_object' }
+        model: 'o3-mini',
+        messages: [{ role: 'user', content: prompt + '\n\nRespond with valid JSON only.' }],
+        reasoning_effort: 'high'
       });
-      const parsed = JSON.parse(response.choices[0].message.content);
-      return { source: 'openai-4o', results: parsed.results || parsed.companies || parsed };
+      const content = response.choices[0].message.content;
+      const jsonMatch = content.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return { source: 'openai-o3-high', results: parsed.results || parsed.companies || parsed };
+      }
+      return null;
     } catch (e) {
-      console.error('OpenAI gpt-4o fallback error:', e);
+      console.error('OpenAI o3-mini fallback error:', e.message);
       return null;
     }
   }
 }
 
-// Helper: Check business relevance using Gemini 2.0 Flash Thinking (reasoning model)
+// Helper: Check business relevance using Gemini 2.5 Pro (best Gemini model)
 async function checkRelevanceWithGemini(companies, filterCriteria) {
   const companyNames = companies.map(c => c.name);
   const prompt = buildReasoningPrompt(companyNames, filterCriteria);
 
   try {
-    // Try Gemini 2.0 Flash Thinking (reasoning model)
+    // Try Gemini 2.5 Pro (best model)
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-06-05:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt + '\n\nRespond with valid JSON only.' }] }],
+        generationConfig: { responseMimeType: 'application/json' }
+      })
+    });
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message);
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return { source: 'gemini-2.5-pro', results: parsed.results || parsed.companies || parsed };
+    }
+  } catch (error) {
+    console.error('Gemini 2.5 Pro error:', error.message);
+  }
+
+  // Fallback to Gemini 2.0 Flash Thinking
+  try {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-thinking-exp:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1907,31 +1932,14 @@ async function checkRelevanceWithGemini(companies, filterCriteria) {
       const parsed = JSON.parse(jsonMatch[0]);
       return { source: 'gemini-thinking', results: parsed.results || parsed.companies || parsed };
     }
+    return null;
   } catch (error) {
-    console.error('Gemini Thinking error:', error);
-  }
-
-  // Fallback to regular Gemini Flash
-  try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: 'application/json' }
-      })
-    });
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    const parsed = JSON.parse(text);
-    return { source: 'gemini-flash', results: parsed.results || parsed.companies || parsed };
-  } catch (error) {
-    console.error('Gemini Flash error:', error);
+    console.error('Gemini Thinking fallback error:', error.message);
     return null;
   }
 }
 
-// Helper: Check business relevance using Perplexity (with web search for real company data)
+// Helper: Check business relevance using Perplexity sonar-pro (best with web search)
 async function checkRelevanceWithPerplexity(companies, filterCriteria) {
   const companyNames = companies.map(c => c.name);
   const prompt = buildReasoningPrompt(companyNames, filterCriteria);
@@ -1944,7 +1952,7 @@ async function checkRelevanceWithPerplexity(companies, filterCriteria) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'sonar-reasoning',
+        model: 'sonar-pro',
         messages: [{ role: 'user', content: prompt + '\n\nRespond with valid JSON only.' }]
       })
     });
@@ -1953,11 +1961,11 @@ async function checkRelevanceWithPerplexity(companies, filterCriteria) {
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
-      return { source: 'perplexity-reasoning', results: parsed.results || parsed.companies || parsed };
+      return { source: 'perplexity-pro', results: parsed.results || parsed.companies || parsed };
     }
     return null;
   } catch (error) {
-    console.error('Perplexity reasoning error:', error);
+    console.error('Perplexity sonar-pro error:', error.message);
     return null;
   }
 }
