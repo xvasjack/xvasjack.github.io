@@ -4,774 +4,290 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Speeda List Validation</title>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
   <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    html {
-      font-size: 16px;
-    }
-
-    body {
-      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-      background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-    }
-
-    .top-nav {
-      background: #fff;
-      box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
-      padding: 0 1.5rem;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-    }
-
-    .nav-container {
-      max-width: 1200px;
-      margin: 0 auto;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      height: 64px;
-    }
-
-    .nav-brand {
-      font-size: 1.125rem;
-      font-weight: 700;
-      color: #1f2937;
-      text-decoration: none;
-    }
-
-    .nav-links {
-      display: flex;
-      gap: 0.5rem;
-      list-style: none;
-    }
-
-    .nav-link {
-      display: block;
-      padding: 0.5rem 1rem;
-      font-size: 0.875rem;
-      font-weight: 500;
-      color: #6b7280;
-      text-decoration: none;
-      border-radius: 6px;
-      transition: all 0.2s ease;
-    }
-
-    .nav-link:hover {
-      color: #2563eb;
-      background: #eff6ff;
-    }
-
-    .nav-link.active {
-      color: #2563eb;
-      background: #eff6ff;
-    }
-
-    .mobile-menu-btn {
-      display: none;
-      background: none;
-      border: none;
-      padding: 0.5rem;
-      cursor: pointer;
-      color: #374151;
-    }
-
-    .mobile-menu {
-      display: none;
-      position: absolute;
-      top: 64px;
-      left: 0;
-      right: 0;
-      background: #fff;
-      border-top: 1px solid #e5e7eb;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-      padding: 0.5rem;
-    }
-
-    .mobile-menu.active {
-      display: block;
-    }
-
-    .mobile-menu .nav-link {
-      display: block;
-      padding: 0.75rem 1rem;
-      border-radius: 6px;
-    }
-
-    .main-container {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 2rem 1rem;
-    }
-
-    .card {
-      background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
-      width: 100%;
-      max-width: 600px;
-      padding: 2.5rem 2rem;
-    }
-
-    .form-header {
-      text-align: center;
-      margin-bottom: 2rem;
-    }
-
-    .eyebrow {
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: #6b7280;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      margin-bottom: 0.5rem;
-    }
-
-    .page-title {
-      font-size: 1.75rem;
-      font-weight: 700;
-      color: #111827;
-      margin-bottom: 0.75rem;
-    }
-
-    .form-description {
-      font-size: 0.9375rem;
-      color: #6b7280;
-      line-height: 1.6;
-    }
-
-    .form-group {
-      margin-bottom: 1.25rem;
-    }
-
-    .form-label {
-      display: block;
-      font-size: 0.875rem;
-      color: #374151;
-      margin-bottom: 0.375rem;
-      font-weight: 600;
-    }
-
-    .form-hint {
-      font-size: 0.75rem;
-      color: #9ca3af;
-      margin-top: 0.25rem;
-    }
-
-    .required {
-      color: #ef4444;
-    }
-
-    .form-input {
-      width: 100%;
-      padding: 0.75rem;
-      font-size: 1rem;
-      font-family: inherit;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      background-color: #fff;
-      transition: all 0.2s ease;
-    }
-
-    .form-input:focus {
-      outline: none;
-      border-color: #2563eb;
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
-    }
-
-    .form-input::placeholder {
-      color: #9ca3af;
-    }
-
-    .form-textarea {
-      width: 100%;
-      padding: 0.75rem;
-      font-size: 0.875rem;
-      font-family: inherit;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      background-color: #fff;
-      transition: all 0.2s ease;
-      resize: vertical;
-      min-height: 120px;
-    }
-
-    .form-textarea:focus {
-      outline: none;
-      border-color: #2563eb;
-      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
-    }
-
-    .form-textarea::placeholder {
-      color: #9ca3af;
-    }
-
-    /* Input Mode Tabs */
-    .input-mode-tabs {
-      display: flex;
-      gap: 0.5rem;
-      margin-bottom: 1.5rem;
-      background: #f3f4f6;
-      padding: 0.25rem;
-      border-radius: 8px;
-    }
-
-    .input-mode-tab {
-      flex: 1;
-      padding: 0.625rem 1rem;
-      font-size: 0.875rem;
-      font-weight: 500;
-      font-family: inherit;
-      color: #6b7280;
-      background: transparent;
-      border: none;
-      border-radius: 6px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .input-mode-tab:hover {
-      color: #374151;
-    }
-
-    .input-mode-tab.active {
-      background: #fff;
-      color: #2563eb;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-    }
-
-    .input-section {
-      display: none;
-    }
-
-    .input-section.active {
-      display: block;
-    }
-
-    /* File Upload */
-    .file-upload-wrapper {
-      padding: 2rem 1.5rem;
-      border: 2px dashed #e2e8f0;
-      border-radius: 8px;
-      text-align: center;
-      transition: all 0.2s ease;
-      cursor: pointer;
-    }
-
-    .file-upload-wrapper:hover {
-      border-color: #2563eb;
-      background: #f8fafc;
-    }
-
-    .file-upload-wrapper.dragover {
-      border-color: #2563eb;
-      background: #eff6ff;
-    }
-
-    .file-upload-icon {
-      font-size: 2.5rem;
-      margin-bottom: 0.75rem;
-    }
-
-    .file-upload-text {
-      font-size: 0.9375rem;
-      color: #374151;
-      margin-bottom: 0.25rem;
-    }
-
-    .file-upload-text strong {
-      color: #2563eb;
-    }
-
-    .file-upload-hint {
-      font-size: 0.75rem;
-      color: #9ca3af;
-    }
-
-    .file-input {
-      display: none;
-    }
-
-    /* File Status */
-    .file-status {
-      display: none;
-      padding: 1.5rem;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      background: #f9fafb;
-    }
-
-    .file-status.active {
-      display: block;
-    }
-
-    .file-status-header {
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      margin-bottom: 1rem;
-    }
-
-    .file-status-icon {
-      font-size: 1.5rem;
-    }
-
-    .file-status-info {
-      flex: 1;
-    }
-
-    .file-status-name {
-      font-size: 0.875rem;
-      font-weight: 600;
-      color: #111827;
-    }
-
-    .file-status-size {
-      font-size: 0.75rem;
-      color: #6b7280;
-    }
-
-    .file-remove-btn {
-      padding: 0.25rem 0.5rem;
-      font-size: 0.75rem;
-      font-family: inherit;
-      color: #ef4444;
-      background: transparent;
-      border: 1px solid #fecaca;
-      border-radius: 4px;
-      cursor: pointer;
-      transition: all 0.2s ease;
-    }
-
-    .file-remove-btn:hover {
-      background: #fef2f2;
-    }
-
-    /* Progress Bar */
+    /* Progress bar styles */
     .progress-container {
-      margin-bottom: 1rem;
+      margin-top: 12px;
     }
-
     .progress-bar {
       height: 6px;
-      background: #e5e7eb;
+      background: var(--bg-subtle);
       border-radius: 3px;
       overflow: hidden;
     }
-
     .progress-fill {
       height: 100%;
-      background: #2563eb;
+      background: var(--accent);
       border-radius: 3px;
       transition: width 0.3s ease;
       width: 0%;
     }
-
     .progress-fill.complete {
-      background: #10b981;
+      background: var(--success);
     }
-
     .progress-text {
-      font-size: 0.75rem;
-      color: #6b7280;
-      margin-top: 0.5rem;
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 6px;
     }
-
-    /* Detection Results */
+    /* Detection results */
     .detection-results {
       display: flex;
-      gap: 1rem;
-      margin-top: 1rem;
+      gap: 12px;
+      margin-top: 12px;
     }
-
     .detection-item {
       flex: 1;
-      padding: 0.75rem;
-      background: #fff;
-      border: 1px solid #e2e8f0;
-      border-radius: 6px;
+      padding: 12px;
+      background: var(--bg-subtle);
+      border-radius: var(--radius-md);
       text-align: center;
     }
-
     .detection-count {
-      font-size: 1.5rem;
+      font-size: 24px;
       font-weight: 700;
-      color: #2563eb;
+      color: var(--accent);
     }
-
     .detection-label {
-      font-size: 0.75rem;
-      color: #6b7280;
-      margin-top: 0.25rem;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
     }
-
     .detection-error {
-      padding: 0.75rem;
-      background: #fef2f2;
-      border: 1px solid #fecaca;
-      border-radius: 6px;
-      color: #991b1b;
-      font-size: 0.875rem;
-      margin-top: 1rem;
+      padding: 12px;
+      background: var(--error-soft);
+      border-radius: var(--radius-md);
+      color: var(--error);
+      font-size: 14px;
+      margin-top: 12px;
     }
-
-    /* Radio Group */
-    .radio-group {
+    /* File status */
+    .file-status {
+      display: none;
+      padding: 16px;
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-md);
+      background: var(--bg-surface);
+    }
+    .file-status.active {
+      display: block;
+    }
+    .file-status-header {
       display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
+      align-items: center;
+      gap: 10px;
     }
-
-    .radio-option {
-      display: flex;
-      align-items: flex-start;
-      gap: 0.75rem;
-      padding: 0.875rem 1rem;
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      cursor: pointer;
-      transition: all 0.2s ease;
+    .file-status-icon {
+      font-size: 24px;
     }
-
-    .radio-option:hover {
-      border-color: #2563eb;
-      background: #f8fafc;
-    }
-
-    .radio-option.selected {
-      border-color: #2563eb;
-      background: #eff6ff;
-    }
-
-    .radio-option input[type="radio"] {
-      margin-top: 0.125rem;
-      width: 1rem;
-      height: 1rem;
-      accent-color: #2563eb;
-      cursor: pointer;
-    }
-
-    .radio-content {
+    .file-status-info {
       flex: 1;
     }
-
-    .radio-label {
-      font-size: 0.875rem;
+    .file-status-name {
+      font-size: 14px;
       font-weight: 600;
-      color: #374151;
-      display: block;
-      margin-bottom: 0.125rem;
+      color: var(--text-main);
     }
-
-    .radio-description {
-      font-size: 0.75rem;
-      color: #6b7280;
+    .file-status-size {
+      font-size: 12px;
+      color: var(--text-muted);
     }
-
-    .submit-btn {
-      width: 100%;
-      padding: 0.75rem 1.5rem;
-      font-size: 1rem;
-      font-weight: 600;
-      font-family: inherit;
-      color: #fff;
-      background: #2563eb;
-      border: none;
-      border-radius: 8px;
+    .file-remove-btn {
+      padding: 4px 10px;
+      font-size: 12px;
+      font-family: var(--font-sans);
+      color: var(--error);
+      background: transparent;
+      border: 1px solid var(--error-soft);
+      border-radius: var(--radius-sm);
       cursor: pointer;
-      transition: all 0.2s ease;
-      margin-top: 0.5rem;
+      transition: all 0.15s ease;
     }
-
-    .submit-btn:hover {
-      background: #1d4ed8;
-      transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
-    }
-
-    .submit-btn:active {
-      transform: translateY(0);
-    }
-
-    .submit-btn:disabled {
-      background: #9ca3af;
-      cursor: not-allowed;
-      transform: none;
-      box-shadow: none;
-    }
-
-    .message {
-      display: none;
-      padding: 1rem;
-      border-radius: 8px;
-      font-size: 0.875rem;
-      text-align: center;
-      margin-top: 1.25rem;
-      font-weight: 500;
-    }
-
-    .success-message {
-      background-color: #ecfdf5;
-      border: 1px solid #a7f3d0;
-      color: #065f46;
-    }
-
-    .error-message {
-      background-color: #fef2f2;
-      border: 1px solid #fecaca;
-      color: #991b1b;
-    }
-
-    .footer {
-      text-align: center;
-      padding: 1.5rem;
-      font-size: 0.75rem;
-      color: #9ca3af;
-    }
-
-    @media screen and (max-width: 640px) {
-      .nav-links {
-        display: none;
-      }
-
-      .mobile-menu-btn {
-        display: block;
-      }
-
-      .card {
-        padding: 2rem 1.5rem;
-      }
-
-      .page-title {
-        font-size: 1.5rem;
-      }
-
-      .detection-results {
-        flex-direction: column;
-      }
+    .file-remove-btn:hover {
+      background: var(--error-soft);
     }
   </style>
 </head>
 <body>
-  <nav class="top-nav">
-    <div class="nav-container">
-      <a href="find-target.html" class="nav-brand">Find Target</a>
-      <ul class="nav-links">
-        <li><a href="find-target.html" class="nav-link">v3 Fast</a></li>
-        <li><a href="find-target-slow.html" class="nav-link">v3 Slow</a></li>
-        <li><a href="validation.html" class="nav-link active">Validation</a></li>
-        <li><a href="profile-slides.html" class="nav-link">Profile Slides</a></li>
-      </ul>
-      <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
-        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="3" y1="12" x2="21" y2="12"></line>
-          <line x1="3" y1="6" x2="21" y2="6"></line>
-          <line x1="3" y1="18" x2="21" y2="18"></line>
+  <header class="app-header">
+    <a href="find-target.html" class="logo">
+      <span class="logo-icon">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
         </svg>
-      </button>
-    </div>
-    <div class="mobile-menu" id="mobileMenu">
-      <a href="find-target.html" class="nav-link">v3 Fast</a>
-      <a href="find-target-slow.html" class="nav-link">v3 Slow</a>
-      <a href="validation.html" class="nav-link active">Validation</a>
-      <a href="profile-slides.html" class="nav-link">Profile Slides</a>
-    </div>
-  </nav>
+      </span>
+      Find Target
+    </a>
+    <nav>
+      <a href="find-target.html">v3 Fast</a>
+      <a href="find-target-slow.html">v3 Slow</a>
+      <a href="validation.html" class="active">Validation</a>
+      <a href="trading-comparable.html">Trading Comp</a>
+      <a href="profile-slides.html">Slides</a>
+      <a href="write-like-anil.html">Write Like Anil</a>
+    </nav>
+  </header>
 
-  <main class="main-container">
-    <div class="card">
-      <div class="form-header">
-        <p class="eyebrow">Speeda List</p>
-        <h1 class="page-title">Validation</h1>
-        <p class="form-description">
-          Validate companies against your target business criteria.<br>
-          Results will be emailed to you within <strong>10 minutes</strong>.
-        </p>
+  <main class="app-main">
+    <section class="page-info">
+      <span class="status-badge">Online</span>
+      <h1 class="page-title">Speeda List Validation</h1>
+      <p class="page-description">Validate companies against your target business criteria. Results emailed within 10 minutes.</p>
+    </section>
+
+    <section class="page-content">
+      <div class="form-card">
+        <h2>Validation Criteria</h2>
+
+        <!-- Tabs for input mode -->
+        <div class="tabs">
+          <button type="button" class="tab-btn active" data-tab="file">Upload Excel File</button>
+          <button type="button" class="tab-btn" data-tab="manual">Manual Entry</button>
+        </div>
+
+        <form id="validationForm">
+          <!-- File Upload Tab -->
+          <div class="tab-content active" id="fileTab">
+            <div class="form-body">
+              <div class="upload-zone" id="uploadZone">
+                <input type="file" id="excelFile" accept=".xlsx,.xls">
+                <div class="upload-content">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+                  </svg>
+                  <p><span class="highlight">Click to upload</span> or drag and drop</p>
+                </div>
+                <div class="file-name" id="fileName"></div>
+              </div>
+
+              <div class="file-status" id="fileStatus">
+                <div class="file-status-header">
+                  <div class="file-status-icon">📄</div>
+                  <div class="file-status-info">
+                    <div class="file-status-name" id="fileStatusName">filename.xlsx</div>
+                    <div class="file-status-size" id="fileStatusSize">0 KB</div>
+                  </div>
+                  <button type="button" class="file-remove-btn" id="fileRemoveBtn">Remove</button>
+                </div>
+
+                <div class="progress-container" id="progressContainer">
+                  <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                  </div>
+                  <div class="progress-text" id="progressText">Analyzing file...</div>
+                </div>
+
+                <div class="detection-results" id="detectionResults" style="display: none;">
+                  <div class="detection-item">
+                    <div class="detection-count" id="companyCount">0</div>
+                    <div class="detection-label">Companies detected</div>
+                  </div>
+                  <div class="detection-item">
+                    <div class="detection-count" id="countryCount">0</div>
+                    <div class="detection-label">Countries detected</div>
+                  </div>
+                </div>
+
+                <div class="detection-error" id="detectionError" style="display: none;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Manual Entry Tab -->
+          <div class="tab-content" id="manualTab">
+            <div class="form-body">
+              <div class="form-group">
+                <label for="companies">Company Names</label>
+                <textarea id="companies" name="Companies" rows="6" placeholder="Enter company names (one per line)"></textarea>
+                <p class="hint-text">You can paste up to 200 company names.</p>
+              </div>
+
+              <div class="form-group">
+                <label for="countries">Countries</label>
+                <textarea id="countries" name="Countries" rows="3" placeholder="Enter countries (one per line)"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <!-- Common fields -->
+          <div class="form-body">
+            <div class="form-group">
+              <label for="targetBusiness">Target Business</label>
+              <input type="text" id="targetBusiness" name="TargetBusiness" required placeholder="e.g. Semiconductor distributor">
+            </div>
+
+            <div class="form-group">
+              <label>Output Option</label>
+              <div class="radio-group">
+                <label class="radio-option selected">
+                  <input type="radio" name="OutputOption" value="in_scope_only" checked>
+                  <div class="radio-option-content">
+                    <div class="radio-option-title">In-scope companies only</div>
+                    <div class="radio-option-desc">Only show companies that match your criteria</div>
+                  </div>
+                </label>
+                <label class="radio-option">
+                  <input type="radio" name="OutputOption" value="all_companies">
+                  <div class="radio-option-content">
+                    <div class="radio-option-title">All companies with status</div>
+                    <div class="radio-option-desc">Show all with in-scope / out-of-scope status</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="email">Email Address</label>
+              <input type="email" id="email" name="Email" required placeholder="your@company.com">
+            </div>
+
+            <button type="submit" class="submit-btn" id="submitBtn">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+              Validate Companies
+            </button>
+
+            <div class="message success" id="successMessage">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              Request submitted! Results will arrive within 10 minutes.
+            </div>
+
+            <div class="message error" id="errorMessage">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              Error submitting request. Please try again.
+            </div>
+          </div>
+        </form>
       </div>
-
-      <form id="validationForm">
-        <!-- Input Mode Tabs -->
-        <div class="input-mode-tabs">
-          <button type="button" class="input-mode-tab active" data-mode="file">Upload Excel File</button>
-          <button type="button" class="input-mode-tab" data-mode="manual">Manual Entry</button>
-        </div>
-
-        <!-- File Upload Section -->
-        <div class="input-section active" id="fileSection">
-          <div class="file-upload-wrapper" id="fileUploadWrapper">
-            <div class="file-upload-icon">📊</div>
-            <div class="file-upload-text"><strong>Click to upload</strong> or drag and drop</div>
-            <div class="file-upload-hint">Excel file (.xlsx, .xls) with company names and countries</div>
-            <input type="file" class="file-input" id="excelFile" accept=".xlsx,.xls">
-          </div>
-
-          <div class="file-status" id="fileStatus">
-            <div class="file-status-header">
-              <div class="file-status-icon">📄</div>
-              <div class="file-status-info">
-                <div class="file-status-name" id="fileStatusName">filename.xlsx</div>
-                <div class="file-status-size" id="fileStatusSize">0 KB</div>
-              </div>
-              <button type="button" class="file-remove-btn" id="fileRemoveBtn">Remove</button>
-            </div>
-
-            <div class="progress-container" id="progressContainer">
-              <div class="progress-bar">
-                <div class="progress-fill" id="progressFill"></div>
-              </div>
-              <div class="progress-text" id="progressText">Analyzing file...</div>
-            </div>
-
-            <div class="detection-results" id="detectionResults" style="display: none;">
-              <div class="detection-item">
-                <div class="detection-count" id="companyCount">0</div>
-                <div class="detection-label">Companies detected</div>
-              </div>
-              <div class="detection-item">
-                <div class="detection-count" id="countryCount">0</div>
-                <div class="detection-label">Countries detected</div>
-              </div>
-            </div>
-
-            <div class="detection-error" id="detectionError" style="display: none;"></div>
-          </div>
-        </div>
-
-        <!-- Manual Entry Section -->
-        <div class="input-section" id="manualSection">
-          <div class="form-group">
-            <label class="form-label" for="companies">
-              Company Names <span class="required">*</span>
-            </label>
-            <textarea
-              id="companies"
-              name="Companies"
-              class="form-textarea"
-              placeholder="Enter company names (one per line)
-
-Example:
-ABC Electronics Sdn Bhd
-XYZ Trading Co Ltd
-Sample Corp Malaysia"
-              rows="8"
-            ></textarea>
-            <p class="form-hint">You can paste up to 200 company names.</p>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label" for="countries">
-              Countries <span class="required">*</span>
-            </label>
-            <textarea
-              id="countries"
-              name="Countries"
-              class="form-textarea"
-              placeholder="Enter countries (one per line)
-
-Example:
-Malaysia
-Thailand
-Singapore"
-              rows="4"
-            ></textarea>
-          </div>
-        </div>
-
-        <!-- Common Fields -->
-        <div class="form-group">
-          <label class="form-label" for="targetBusiness">
-            Target Business <span class="required">*</span>
-          </label>
-          <input
-            type="text"
-            id="targetBusiness"
-            name="TargetBusiness"
-            class="form-input"
-            placeholder="e.g. Semiconductor distributor, Electronics wholesaler"
-            required
-          >
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">
-            Output Option <span class="required">*</span>
-          </label>
-          <div class="radio-group">
-            <label class="radio-option selected">
-              <input type="radio" name="OutputOption" value="in_scope_only" checked>
-              <div class="radio-content">
-                <span class="radio-label">In-scope companies only</span>
-                <span class="radio-description">Only show companies that match your target business criteria</span>
-              </div>
-            </label>
-            <label class="radio-option">
-              <input type="radio" name="OutputOption" value="all_companies">
-              <div class="radio-content">
-                <span class="radio-label">All companies with status</span>
-                <span class="radio-description">Show all companies with their validation status (in-scope / out-of-scope)</span>
-              </div>
-            </label>
-          </div>
-        </div>
-
-        <div class="form-group">
-          <label class="form-label" for="email">
-            Email <span class="required">*</span>
-          </label>
-          <input
-            type="email"
-            id="email"
-            name="Email"
-            class="form-input"
-            placeholder="e.g. yourname@company.com"
-            required
-          >
-        </div>
-
-        <button type="submit" class="submit-btn" id="submitBtn">
-          Validate Companies
-        </button>
-
-        <div class="message success-message" id="successMessage">
-          Validation request submitted! Results will be emailed to you within 10 minutes.
-        </div>
-
-        <div class="message error-message" id="errorMessage">
-          Error submitting request. Please try again.
-        </div>
-      </form>
-    </div>
+    </section>
   </main>
 
-  <footer class="footer">
-    Powered by AI
-  </footer>
-
   <script>
-    // Mobile menu toggle
-    const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-    const mobileMenu = document.getElementById('mobileMenu');
+    // Tab switching
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const fileTab = document.getElementById('fileTab');
+    const manualTab = document.getElementById('manualTab');
+    let currentMode = 'file';
 
-    mobileMenuBtn.addEventListener('click', () => {
-      mobileMenu.classList.toggle('active');
-    });
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        const tab = btn.dataset.tab;
+        currentMode = tab;
 
-    document.addEventListener('click', (e) => {
-      if (!mobileMenuBtn.contains(e.target) && !mobileMenu.contains(e.target)) {
-        mobileMenu.classList.remove('active');
-      }
+        tabBtns.forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        if (tab === 'file') {
+          fileTab.classList.add('active');
+          manualTab.classList.remove('active');
+        } else {
+          fileTab.classList.remove('active');
+          manualTab.classList.add('active');
+        }
+      });
     });
 
     // Radio button selection
@@ -784,32 +300,8 @@ Singapore"
       });
     });
 
-    // Input mode tabs
-    const inputModeTabs = document.querySelectorAll('.input-mode-tab');
-    const fileSection = document.getElementById('fileSection');
-    const manualSection = document.getElementById('manualSection');
-    let currentMode = 'file';
-
-    inputModeTabs.forEach(tab => {
-      tab.addEventListener('click', () => {
-        const mode = tab.dataset.mode;
-        currentMode = mode;
-
-        inputModeTabs.forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-
-        if (mode === 'file') {
-          fileSection.classList.add('active');
-          manualSection.classList.remove('active');
-        } else {
-          fileSection.classList.remove('active');
-          manualSection.classList.add('active');
-        }
-      });
-    });
-
     // File upload handling
-    const fileUploadWrapper = document.getElementById('fileUploadWrapper');
+    const uploadZone = document.getElementById('uploadZone');
     const fileInput = document.getElementById('excelFile');
     const fileStatus = document.getElementById('fileStatus');
     const fileStatusName = document.getElementById('fileStatusName');
@@ -825,20 +317,18 @@ Singapore"
 
     let extractedData = null;
 
-    fileUploadWrapper.addEventListener('click', () => fileInput.click());
-
-    fileUploadWrapper.addEventListener('dragover', (e) => {
+    uploadZone.addEventListener('dragover', (e) => {
       e.preventDefault();
-      fileUploadWrapper.classList.add('dragover');
+      uploadZone.classList.add('active');
     });
 
-    fileUploadWrapper.addEventListener('dragleave', () => {
-      fileUploadWrapper.classList.remove('dragover');
+    uploadZone.addEventListener('dragleave', () => {
+      uploadZone.classList.remove('active');
     });
 
-    fileUploadWrapper.addEventListener('drop', (e) => {
+    uploadZone.addEventListener('drop', (e) => {
       e.preventDefault();
-      fileUploadWrapper.classList.remove('dragover');
+      uploadZone.classList.remove('active');
       const file = e.dataTransfer.files[0];
       if (file) processFile(file);
     });
@@ -855,7 +345,7 @@ Singapore"
     function resetFileUpload() {
       extractedData = null;
       fileInput.value = '';
-      fileUploadWrapper.style.display = 'block';
+      uploadZone.style.display = 'block';
       fileStatus.classList.remove('active');
       progressFill.style.width = '0%';
       progressFill.classList.remove('complete');
@@ -876,7 +366,7 @@ Singapore"
       }
 
       // Show file status
-      fileUploadWrapper.style.display = 'none';
+      uploadZone.style.display = 'none';
       fileStatus.classList.add('active');
       fileStatusName.textContent = file.name;
       fileStatusSize.textContent = formatFileSize(file.size);
@@ -930,7 +420,6 @@ Singapore"
 
     // AI-powered analysis of Excel data
     async function analyzeWithAI(jsonData) {
-      // First, try to detect columns intelligently
       const companies = [];
       const countries = new Set();
 
@@ -961,7 +450,6 @@ Singapore"
           if (!val) continue;
 
           colData.values.push({ row, value: val });
-
           const valLower = val.toLowerCase();
 
           // Check for header keywords
@@ -970,7 +458,7 @@ Singapore"
               colData.companyScore += 10;
               colData.headerCandidates.push({ row, type: 'company', val });
             }
-            if (/country|location|region|nation|hq|headquarters|地域|国/i.test(val)) {
+            if (/country|location|region|nation|hq|headquarters/i.test(val)) {
               colData.countryScore += 10;
               colData.headerCandidates.push({ row, type: 'country', val });
             }
@@ -982,12 +470,11 @@ Singapore"
             colData.countryScore += 2;
           }
 
-          // Check for company-like values (long strings, corporate suffixes)
+          // Check for company-like values
           if (val.length > 5 && val.length < 150) {
             if (/\b(ltd|inc|corp|co|llc|gmbh|sdn|bhd|pte|plc|pvt|limited|company)\b/i.test(val)) {
               colData.companyScore += 3;
             }
-            // Likely company name if mixed case and moderate length
             if (val.length > 10 && /[A-Z]/.test(val) && /[a-z]/.test(val)) {
               colData.companyScore += 1;
             }
@@ -1019,7 +506,6 @@ Singapore"
         if (companyVal) {
           const companyName = String(companyVal).trim();
           if (companyName.length > 1 && companyName.length < 200) {
-            // Don't include if it's a known country
             if (!knownCountries.includes(companyName.toLowerCase())) {
               companies.push(companyName);
             }
@@ -1060,8 +546,8 @@ Singapore"
       const successMessage = document.getElementById('successMessage');
       const errorMessage = document.getElementById('errorMessage');
 
-      successMessage.style.display = 'none';
-      errorMessage.style.display = 'none';
+      successMessage.classList.remove('show');
+      errorMessage.classList.remove('show');
 
       // Validate based on mode
       let companiesData, countriesData;
@@ -1088,7 +574,7 @@ Singapore"
       }
 
       submitBtn.disabled = true;
-      submitBtn.textContent = 'Submitting...';
+      submitBtn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Submitting...';
 
       const outputOption = document.querySelector('input[name="OutputOption"]:checked').value;
 
@@ -1110,7 +596,7 @@ Singapore"
         });
 
         if (response.ok) {
-          successMessage.style.display = 'block';
+          successMessage.classList.add('show');
           this.reset();
           resetFileUpload();
           radioOptions.forEach(opt => opt.classList.remove('selected'));
@@ -1119,10 +605,10 @@ Singapore"
           throw new Error('Request failed');
         }
       } catch (error) {
-        errorMessage.style.display = 'block';
+        errorMessage.classList.add('show');
       } finally {
         submitBtn.disabled = false;
-        submitBtn.textContent = 'Validate Companies';
+        submitBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg> Validate Companies';
       }
     });
   </script>
