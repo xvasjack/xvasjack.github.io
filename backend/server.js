@@ -2248,6 +2248,41 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     const sheet = workbook.Sheets[sheetName];
     const allRows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
+    // Read Filter List sheet to extract criteria for slide title
+    let slideTitle = TargetCompanyOrIndustry; // Default fallback
+    const filterListSheet = workbook.Sheets['Filter List'];
+    if (filterListSheet) {
+      const filterRows = XLSX.utils.sheet_to_json(filterListSheet, { header: 1 });
+      let region = '';
+      let industry = '';
+      let status = '';
+
+      // Parse the Filter List sheet to find Region, Industry, Status
+      for (const row of filterRows) {
+        if (!row || row.length < 2) continue;
+        const label = String(row[0] || '').toLowerCase();
+        const value = String(row[1] || '');
+
+        if (label.includes('region')) {
+          region = value;
+        } else if (label.includes('industry')) {
+          industry = value;
+        } else if (label.includes('status')) {
+          status = value;
+        }
+      }
+
+      // Build dynamic title: "Listed Cosmetics Companies in Malaysia, Singapore and Thailand"
+      if (industry || region) {
+        const statusText = status.toLowerCase() === 'listed' ? 'Listed ' : '';
+        const industryText = industry || '';
+        const regionText = region ? region.split(',').map(r => r.trim()).join(', ').replace(/, ([^,]*)$/, ' and $1') : '';
+
+        slideTitle = `${statusText}${industryText} Companies in ${regionText}`.trim();
+        console.log(`Dynamic slide title from Filter List: ${slideTitle}`);
+      }
+    }
+
     console.log(`Total rows in file: ${allRows.length}`);
 
     // Find the header row - look for row containing company-related headers
@@ -2570,7 +2605,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     // ===== TITLE + SUBTITLE (positioned per slideLayout1: x=0.38", y=0.05") =====
     // Title at top (font 24), subtitle below (font 16), combined text box
     slide.addText([
-      { text: `Trading Comparable – ${TargetCompanyOrIndustry}`, options: { fontSize: 24, fontFace: 'Segoe UI', color: COLORS.black, breakLine: true } },
+      { text: `Trading Comparable – ${slideTitle}`, options: { fontSize: 24, fontFace: 'Segoe UI', color: COLORS.black, breakLine: true } },
       { text: `Considering financial data availability, profitability and business relevance, ${finalCompanies.length} companies are considered as peers`, options: { fontSize: 16, fontFace: 'Segoe UI', color: COLORS.black } }
     ], {
       x: 0.38, y: 0.05, w: 12.5, h: 0.91,
@@ -2717,7 +2752,8 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       border: solidWhiteBorder
     };
 
-    // Median empty cells - font 14
+    // Median empty cells - NO horizontal borders (no lines from last company to Median)
+    const noBorder = { type: 'none' };
     const medianEmptyStyle = {
       fill: COLORS.white,
       color: COLORS.black,
@@ -2725,7 +2761,18 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fontSize: 14,
       valign: 'middle',
       margin: cellMargin,
-      border: solidWhiteBorder
+      border: [noBorder, noBorder, noBorder, noBorder]
+    };
+
+    // Last data row style - solid border at bottom
+    const lastDataStyle = {
+      fill: COLORS.white,
+      color: COLORS.black,
+      fontFace: 'Segoe UI',
+      fontSize: 14,
+      valign: 'middle',
+      margin: cellMargin,
+      border: [dottedBorder, solidWhiteBorder, solidWhiteBorder, solidWhiteBorder]
     };
 
     // === ROW 1: Dark blue merged headers ===
@@ -2754,18 +2801,20 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     displayCompanies.forEach((c, idx) => {
       const peValue = c.peTTM !== null ? c.peTTM : c.peFY;
       const companyName = `${idx + 1}. ${cleanCompanyName(c.name)}`;
+      const isLastRow = idx === displayCompanies.length - 1;
+      const rowStyle = isLastRow ? lastDataStyle : dataStyle;
 
       tableRows.push([
-        { text: companyName, options: { ...dataStyle, align: 'left' } },
-        { text: String(c.country || '-'), options: { ...dataStyle, align: 'left' } },
-        { text: formatFinNum(c.sales), options: { ...dataStyle, align: 'right' } },
-        { text: formatFinNum(c.marketCap), options: { ...dataStyle, align: 'right' } },
-        { text: formatFinNum(c.ev), options: { ...dataStyle, align: 'right' } },
-        { text: formatFinNum(c.ebitda), options: { ...dataStyle, align: 'right' } },
-        { text: formatPct(c.netMargin), options: { ...dataStyle, align: 'right' } },
-        { text: formatMultipleX(c.evEbitda), options: { ...dataStyle, align: 'right' } },
-        { text: formatMultipleX(peValue), options: { ...dataStyle, align: 'right' } },
-        { text: formatMultipleX(c.pb), options: { ...dataStyle, align: 'right' } }
+        { text: companyName, options: { ...rowStyle, align: 'left' } },
+        { text: String(c.country || '-'), options: { ...rowStyle, align: 'left' } },
+        { text: formatFinNum(c.sales), options: { ...rowStyle, align: 'right' } },
+        { text: formatFinNum(c.marketCap), options: { ...rowStyle, align: 'right' } },
+        { text: formatFinNum(c.ev), options: { ...rowStyle, align: 'right' } },
+        { text: formatFinNum(c.ebitda), options: { ...rowStyle, align: 'right' } },
+        { text: formatPct(c.netMargin), options: { ...rowStyle, align: 'right' } },
+        { text: formatMultipleX(c.evEbitda), options: { ...rowStyle, align: 'right' } },
+        { text: formatMultipleX(peValue), options: { ...rowStyle, align: 'right' } },
+        { text: formatMultipleX(c.pb), options: { ...rowStyle, align: 'right' } }
       ]);
     });
 
