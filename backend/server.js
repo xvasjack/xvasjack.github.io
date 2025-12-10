@@ -2677,8 +2677,10 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
 
     // Border styles (3pt white solid for header rows)
     const solidWhiteBorder = { type: 'solid', pt: 3, color: COLORS.white };
-    // sysDash border for horizontal lines between data rows (from reference PPTX)
-    const sysDashBorder = { type: 'sysDash', pt: 0.5, color: COLORS.lineGray };
+    // sysDash border for horizontal lines between data rows (from YCP template: 1pt gray dashed)
+    const sysDashBorder = { type: 'sysDash', pt: 1, color: 'BFBFBF' };
+    // 2.5pt white solid for data row vertical borders (visually hidden against white background)
+    const dataVerticalBorder = { type: 'solid', pt: 2.5, color: COLORS.white };
     const noBorder = { type: 'none' };
 
     // Row 1 style: DARK BLUE with solid white borders - font 14
@@ -2718,7 +2720,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       border: solidWhiteBorder
     };
 
-    // Data row style - sysDash horizontal borders between rows, no vertical borders (matches reference PPTX)
+    // Data row style - sysDash horizontal borders, white solid vertical borders (from YCP template)
     // Border order: [top, right, bottom, left]
     const dataStyle = {
       fill: COLORS.white,
@@ -2727,7 +2729,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fontSize: 14,
       valign: 'middle',
       margin: cellMargin,
-      border: [sysDashBorder, noBorder, sysDashBorder, noBorder]
+      border: [sysDashBorder, dataVerticalBorder, sysDashBorder, dataVerticalBorder]
     };
 
     // Median "Median" label style - light blue with sysDash top border
@@ -2765,7 +2767,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       border: [noBorder, noBorder, noBorder, noBorder]
     };
 
-    // Last data row style - sysDash border at bottom (line below last company), no vertical borders
+    // Last data row style - sysDash border at bottom (line below last company), white solid vertical borders
     const lastDataStyle = {
       fill: COLORS.white,
       color: COLORS.black,
@@ -2773,7 +2775,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fontSize: 14,
       valign: 'middle',
       margin: cellMargin,
-      border: [sysDashBorder, noBorder, sysDashBorder, noBorder]
+      border: [sysDashBorder, dataVerticalBorder, sysDashBorder, dataVerticalBorder]
     };
 
     // === ROW 1: Dark blue merged headers ===
