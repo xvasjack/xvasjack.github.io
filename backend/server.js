@@ -2827,7 +2827,7 @@ async function generatePPTX(companies) {
       // ===== TITLE (top left) =====
       slide.addText(company.title || company.company_name || 'Company Profile', {
         x: 0.38, y: 0.05, w: 9.5, h: 0.6,
-        fontSize: 24, bold: true, fontFace: 'Segoe UI',
+        fontSize: 24, bold: false, fontFace: 'Segoe UI',
         color: COLORS.black, valign: 'bottom'
       });
 
@@ -2857,43 +2857,47 @@ async function generatePPTX(companies) {
         }
       }
 
-      // ===== LOGO (top right, next to flag) =====
+      // ===== LOGO (top right of slide) =====
       if (company.website) {
         try {
           const domain = company.website.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
           const logoUrl = `https://logo.clearbit.com/${domain}`;
+          console.log(`  Fetching logo from: ${logoUrl}`);
           const logoBase64 = await fetchImageAsBase64(logoUrl);
           if (logoBase64) {
+            console.log(`  Logo fetched successfully for ${domain}`);
             slide.addImage({
               data: `data:image/png;base64,${logoBase64}`,
-              x: 11.63, y: 0.30, w: 1.0, h: 0.45
+              x: 12.0, y: 0.15, w: 1.0, h: 0.50
             });
+          } else {
+            console.log(`  Logo not available for ${domain}`);
           }
         } catch (e) {
-          console.log('Logo fetch failed for', company.website);
+          console.log('Logo fetch failed for', company.website, e.message);
         }
       }
 
       // ===== SECTION HEADERS =====
-      // Left: "会社概要資料"
+      // Left: "会社概要資料" - positioned per ref v4
       slide.addText('会社概要資料', {
-        x: 0.36, y: 1.30, w: 6.1, h: 0.35,
+        x: 0.36, y: 1.22, w: 6.1, h: 0.30,
         fontSize: 14, fontFace: 'Segoe UI',
-        color: COLORS.black, align: 'center'
+        color: COLORS.black, align: 'left'
       });
       slide.addShape(pptx.shapes.LINE, {
-        x: 0.36, y: 1.68, w: 6.1, h: 0,
+        x: 0.36, y: 1.52, w: 6.1, h: 0,
         line: { color: COLORS.dk2, width: 1.75 }
       });
 
-      // Right: "Product Photos"
+      // Right: "Product Photos" - positioned per ref v4
       slide.addText('Product Photos', {
-        x: 6.86, y: 1.30, w: 6.1, h: 0.35,
+        x: 6.86, y: 1.22, w: 6.1, h: 0.30,
         fontSize: 14, fontFace: 'Segoe UI',
-        color: COLORS.black, align: 'center'
+        color: COLORS.black, align: 'left'
       });
       slide.addShape(pptx.shapes.LINE, {
-        x: 6.86, y: 1.68, w: 6.1, h: 0,
+        x: 6.86, y: 1.52, w: 6.1, h: 0,
         line: { color: COLORS.dk2, width: 1.75 }
       });
 
@@ -2944,7 +2948,7 @@ async function generatePPTX(companies) {
         }
       ]);
 
-      const tableStartY = 1.80;
+      const tableStartY = 1.65;
       const rowHeight = 0.35;
 
       slide.addTable(rows, {
@@ -2953,44 +2957,100 @@ async function generatePPTX(companies) {
         colW: [1.4, 4.7],
         rowH: rowHeight,
         fontFace: 'Segoe UI',
-        fontSize: 11,
+        fontSize: 14,
         valign: 'middle',
         border: { pt: 2.5, color: COLORS.white },
         margin: [0, 0.04, 0, 0.04]
       });
 
-      // ===== FOOTNOTE (positioned dynamically based on table size) =====
-      // Calculate table end position: startY + (numRows * rowHeight)
+      // ===== 財務実績 SECTION (Financial Performance) =====
+      // Calculate position after main table
       const tableEndY = tableStartY + (tableData.length * rowHeight);
-      let footnoteY = Math.max(tableEndY + 0.1, 5.8);  // At least 0.1" below table, min at 5.8"
-      const footnoteLineHeight = 0.16;
+      const financialSectionY = tableEndY + 0.25;
+
+      // Section header: "財務実績"
+      slide.addText('財務実績', {
+        x: 0.36, y: financialSectionY, w: 6.1, h: 0.30,
+        fontSize: 14, fontFace: 'Segoe UI',
+        color: COLORS.black, align: 'left'
+      });
+      slide.addShape(pptx.shapes.LINE, {
+        x: 0.36, y: financialSectionY + 0.30, w: 6.1, h: 0,
+        line: { color: COLORS.dk2, width: 1.75 }
+      });
+
+      // Financial data table (if financial metrics available)
+      if (company.financial_metrics && Array.isArray(company.financial_metrics) && company.financial_metrics.length > 0) {
+        const financialRows = company.financial_metrics.map((metric) => [
+          {
+            text: metric.label || '',
+            options: {
+              fill: { color: COLORS.accent3 },
+              color: COLORS.white,
+              align: 'center',
+              bold: false
+            }
+          },
+          {
+            text: metric.value || '',
+            options: {
+              fill: { color: COLORS.white },
+              color: COLORS.black,
+              align: 'left',
+              border: [
+                { pt: 1, color: COLORS.gray, type: 'dash' },
+                { pt: 0 },
+                { pt: 1, color: COLORS.gray, type: 'dash' },
+                { pt: 0 }
+              ]
+            }
+          }
+        ]);
+
+        slide.addTable(financialRows, {
+          x: 0.36, y: financialSectionY + 0.40,
+          w: 6.1,
+          colW: [1.4, 4.7],
+          rowH: rowHeight,
+          fontFace: 'Segoe UI',
+          fontSize: 14,
+          valign: 'middle',
+          border: { pt: 2.5, color: COLORS.white },
+          margin: [0, 0.04, 0, 0.04]
+        });
+      }
+
+      // ===== FOOTNOTE (fixed position per ref v4) =====
+      const footnoteY = 6.85;  // Fixed position per ref v4
+      const footnoteLineHeight = 0.18;
+      let currentFootnoteY = footnoteY;
 
       // Line 1: Note with shortform explanations
       const shortformNote = detectShortforms(company);
       if (shortformNote) {
         slide.addText(shortformNote, {
-          x: 0.38, y: footnoteY, w: 12.5, h: footnoteLineHeight,
-          fontSize: 8, fontFace: 'Segoe UI',
+          x: 0.38, y: currentFootnoteY, w: 12.5, h: footnoteLineHeight,
+          fontSize: 10, fontFace: 'Segoe UI',
           color: COLORS.black
         });
-        footnoteY += footnoteLineHeight;
+        currentFootnoteY += footnoteLineHeight;
       }
 
       // Line 2: Exchange rate (reuse countryCode from flag section)
       const exchangeRate = countryCode ? EXCHANGE_RATE_MAP[countryCode] : null;
       if (exchangeRate) {
         slide.addText(exchangeRate, {
-          x: 0.38, y: footnoteY, w: 12.5, h: footnoteLineHeight,
-          fontSize: 8, fontFace: 'Segoe UI',
+          x: 0.38, y: currentFootnoteY, w: 12.5, h: footnoteLineHeight,
+          fontSize: 10, fontFace: 'Segoe UI',
           color: COLORS.black
         });
-        footnoteY += footnoteLineHeight;
+        currentFootnoteY += footnoteLineHeight;
       }
 
       // Line 3: Source
       slide.addText('Source: Company website', {
-        x: 0.38, y: footnoteY, w: 12.5, h: footnoteLineHeight,
-        fontSize: 8, fontFace: 'Segoe UI',
+        x: 0.38, y: currentFootnoteY, w: 12.5, h: footnoteLineHeight,
+        fontSize: 10, fontFace: 'Segoe UI',
         color: COLORS.black
       });
     }
@@ -3170,7 +3230,7 @@ ${scrapedContent.substring(0, 12000)}`
   }
 }
 
-// AI Agent 3: Extract key metrics creatively as individual items
+// AI Agent 3: Extract key metrics for M&A evaluation
 async function extractKeyMetrics(scrapedContent, previousData) {
   try {
     const response = await openai.chat.completions.create({
@@ -3178,40 +3238,40 @@ async function extractKeyMetrics(scrapedContent, previousData) {
       messages: [
         {
           role: 'system',
-          content: `You are a creative analyst who extracts impressive and important key business metrics from website content.
+          content: `You are an M&A analyst extracting key business metrics that would be valuable for potential buyers evaluating this company as an acquisition target.
 
-Your job is to identify metrics that would be valuable for an investor or business partner evaluating this company. Be creative - look for anything that demonstrates the company's scale, capabilities, achievements, or market position.
+Focus on metrics that demonstrate business value and attractiveness for M&A:
 
-Categories to explore:
-- Scale: Revenue, employees, factory size, warehouse capacity, fleet size
-- Customers: Notable customer names, number of customers, customer segments
-- Suppliers: Notable supplier/partner names, number of suppliers
-- Geographic reach: Export countries, locations, international presence
-- Products: Product lines, SKUs, brands owned/distributed
-- Operations: Production capacity, processing volume, machines/equipment
-- Quality: Certifications (ISO, HACCP, GMP, etc.), awards, accreditations
-- Experience: Years in operation, years of expertise
-- Projects: Number of projects, notable project names
+PRIORITY METRICS TO FIND (in order of importance):
+1. Customers: Number of customers, key customer names, customer segments
+2. Suppliers: Number of suppliers, key supplier/partner names
+3. Export/Distribution: Export countries, distribution network reach
+4. Partnerships: Key partnerships, joint ventures, exclusive agreements
+5. Certifications: ISO, HACCP, GMP, FDA, CE, halal, etc. (shows compliance and quality)
+6. Operations: Factory size (m²), warehouse capacity, headcount/employees
+7. Geographic Presence: Number of branches, offices, locations
 
 OUTPUT JSON with this structure:
 {
   "key_metrics": [
-    {"label": "Metric Label", "value": "Metric Value"},
-    {"label": "Number of Employees", "value": "200+"},
-    {"label": "Export Countries", "value": "15 countries in Asia"},
-    {"label": "Factory Size", "value": "12,000 m²"},
-    {"label": "Certifications", "value": "ISO 9001, ISO 14001, HACCP"}
+    {"label": "Number of Customers", "value": "500+ active customers"},
+    {"label": "Key Customers", "value": "Toyota, Honda, Samsung"},
+    {"label": "Number of Suppliers", "value": "120 suppliers"},
+    {"label": "Export Countries", "value": "Japan, USA, EU (15 countries)"},
+    {"label": "Certifications", "value": "ISO 9001, ISO 14001, HACCP"},
+    {"label": "Factory Size", "value": "25,000 m²"},
+    {"label": "Headcount", "value": "350 employees"}
   ]
 }
 
 IMPORTANT RULES:
-- Extract 4-8 key metrics that are EXPLICITLY mentioned or strongly implied on the website
+- Extract 4-8 key metrics that are EXPLICITLY mentioned on the website
 - Each metric should be a separate object in the array
 - Labels should be concise (2-4 words)
 - Values should be specific with numbers when available
 - Only include metrics with actual data - never make up values
-- If a metric category has multiple items (like certifications), combine them into one value
-- Be creative in finding metrics that show the company's strengths
+- For certifications, combine multiple into one value
+- Focus on M&A-relevant information that shows business scale and capabilities
 
 Return ONLY valid JSON.`
         },
@@ -3220,18 +3280,77 @@ Return ONLY valid JSON.`
           content: `Company: ${previousData.company_name}
 Industry/Business: ${previousData.business}
 
-Website Content (analyze for impressive metrics):
+Website Content (analyze for M&A-relevant metrics):
 ${scrapedContent.substring(0, 15000)}`
         }
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.4  // Slightly higher for creativity
+      temperature: 0.3
     });
 
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
     console.error('Agent 3 error:', e.message);
     return { key_metrics: [] };
+  }
+}
+
+// AI Agent 3b: Extract financial metrics for 財務実績 section
+async function extractFinancialMetrics(scrapedContent, previousData) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an M&A analyst extracting financial performance metrics from website content.
+
+Focus on financial metrics important for M&A evaluation:
+
+PRIORITY FINANCIAL METRICS:
+1. Revenue: Annual revenue, sales figures, turnover
+2. Profit: Net profit, operating profit, EBITDA
+3. Growth: Revenue growth rate, YoY growth
+4. Employees: Number of employees, workforce size
+5. Assets: Total assets, net assets
+6. Capital: Registered capital, paid-up capital
+
+OUTPUT JSON with this structure:
+{
+  "financial_metrics": [
+    {"label": "Revenue", "value": "USD 50M (2023)"},
+    {"label": "Net Profit", "value": "USD 5M"},
+    {"label": "Growth Rate", "value": "15% YoY"},
+    {"label": "Employees", "value": "500+"}
+  ]
+}
+
+IMPORTANT RULES:
+- Only extract financial data that is EXPLICITLY mentioned on the website
+- Include currency and year if available
+- If no financial data found, return empty array
+- Maximum 4 financial metrics
+- Do NOT make up financial figures
+
+Return ONLY valid JSON.`
+        },
+        {
+          role: 'user',
+          content: `Company: ${previousData.company_name}
+Industry/Business: ${previousData.business}
+
+Website Content (extract financial metrics):
+${scrapedContent.substring(0, 15000)}`
+        }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.2
+    });
+
+    return JSON.parse(response.choices[0].message.content);
+  } catch (e) {
+    console.error('Agent 3b error:', e.message);
+    return { financial_metrics: [] };
   }
 }
 
@@ -3416,6 +3535,13 @@ app.post('/api/profile-slides', async (req, res) => {
           business: businessInfo.business
         });
 
+        // Step 4b: Extract financial metrics for 財務実績 section
+        console.log('  Step 4b: Extracting financial metrics...');
+        const financialInfo = await extractFinancialMetrics(scraped.content, {
+          company_name: basicInfo.company_name,
+          business: businessInfo.business
+        });
+
         // Step 5: Search for missing info (est year, location) if not found on website
         let searchedInfo = {};
         const missingFields = [];
@@ -3438,6 +3564,7 @@ app.post('/api/profile-slides', async (req, res) => {
           footnote: businessInfo.footnote || '',
           title: businessInfo.title || '',
           key_metrics: metricsInfo.key_metrics || [],  // Array of {label, value} objects
+          financial_metrics: financialInfo.financial_metrics || [],  // For 財務実績 section
           metrics: metricsInfo.metrics || ''  // Fallback for old format
         };
 
