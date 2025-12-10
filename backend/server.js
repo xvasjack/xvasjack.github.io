@@ -2891,17 +2891,31 @@ async function generatePPTX(companies) {
       if (company.website) {
         try {
           const domain = company.website.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
-          const logoUrl = `https://logo.clearbit.com/${domain}`;
-          console.log(`  Fetching logo from: ${logoUrl}`);
-          const logoBase64 = await fetchImageAsBase64(logoUrl);
+
+          // Try multiple logo sources
+          const logoSources = [
+            `https://logo.clearbit.com/${domain}`,
+            `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
+            `https://icon.horse/icon/${domain}`
+          ];
+
+          let logoBase64 = null;
+          for (const logoUrl of logoSources) {
+            console.log(`  Trying logo from: ${logoUrl}`);
+            logoBase64 = await fetchImageAsBase64(logoUrl);
+            if (logoBase64) {
+              console.log(`  Logo fetched successfully from ${logoUrl}`);
+              break;
+            }
+          }
+
           if (logoBase64) {
-            console.log(`  Logo fetched successfully for ${domain}`);
             slide.addImage({
               data: `data:image/png;base64,${logoBase64}`,
               x: 12.0, y: 0.15, w: 1.0, h: 0.50
             });
           } else {
-            console.log(`  Logo not available for ${domain}`);
+            console.log(`  Logo not available for ${domain} from any source`);
           }
         } catch (e) {
           console.log('Logo fetch failed for', company.website, e.message);
@@ -2911,27 +2925,27 @@ async function generatePPTX(companies) {
       // ===== SECTION HEADERS =====
       // Left: "会社概要資料" - positioned per ref v4
       slide.addText('会社概要資料', {
-        x: 0.36, y: 1.22, w: 6.1, h: 0.30,
+        x: 0.37, y: 1.37, w: 6.1, h: 0.35,
         fontSize: 14, fontFace: 'Segoe UI',
         color: COLORS.black, align: 'left'
       });
       slide.addShape(pptx.shapes.LINE, {
-        x: 0.36, y: 1.52, w: 6.1, h: 0,
+        x: 0.37, y: 1.79, w: 6.1, h: 0,
         line: { color: COLORS.dk2, width: 1.75 }
       });
 
       // Right: "Product Photos" - positioned per ref v4
       slide.addText('Product Photos', {
-        x: 6.86, y: 1.22, w: 6.1, h: 0.30,
+        x: 6.87, y: 1.37, w: 6.1, h: 0.35,
         fontSize: 14, fontFace: 'Segoe UI',
         color: COLORS.black, align: 'left'
       });
       slide.addShape(pptx.shapes.LINE, {
-        x: 6.86, y: 1.52, w: 6.1, h: 0,
+        x: 6.87, y: 1.79, w: 6.1, h: 0,
         line: { color: COLORS.dk2, width: 1.75 }
       });
 
-      // ===== TABLE (dynamic rows for each metric) =====
+      // ===== LEFT TABLE (会社概要資料) =====
       // Base company info rows
       const tableData = [
         ['Name', company.company_name || ''],
@@ -2978,11 +2992,11 @@ async function generatePPTX(companies) {
         }
       ]);
 
-      const tableStartY = 1.65;
+      const tableStartY = 1.85;
       const rowHeight = 0.35;
 
       slide.addTable(rows, {
-        x: 0.36, y: tableStartY,
+        x: 0.37, y: tableStartY,
         w: 6.1,
         colW: [1.4, 4.7],
         rowH: rowHeight,
@@ -2993,19 +3007,61 @@ async function generatePPTX(companies) {
         margin: [0, 0.04, 0, 0.04]
       });
 
-      // ===== 財務実績 SECTION (Financial Performance) =====
-      // Calculate position after main table
-      const tableEndY = tableStartY + (tableData.length * rowHeight);
-      const financialSectionY = tableEndY + 0.25;
+      // ===== RIGHT TABLE (Product Photos placeholder) =====
+      // 3 empty rows for product photos
+      const rightTableData = [
+        ['', ''],
+        ['', ''],
+        ['', '']
+      ];
 
-      // Section header: "財務実績"
+      const rightRows = rightTableData.map((row) => [
+        {
+          text: row[0],
+          options: {
+            fill: { color: COLORS.accent3 },
+            color: COLORS.white,
+            align: 'center',
+            bold: false
+          }
+        },
+        {
+          text: row[1],
+          options: {
+            fill: { color: COLORS.white },
+            color: COLORS.black,
+            align: 'left',
+            border: [
+              { pt: 1, color: COLORS.gray, type: 'dash' },
+              { pt: 0 },
+              { pt: 1, color: COLORS.gray, type: 'dash' },
+              { pt: 0 }
+            ]
+          }
+        }
+      ]);
+
+      slide.addTable(rightRows, {
+        x: 6.87, y: tableStartY,
+        w: 6.1,
+        colW: [1.4, 4.7],
+        rowH: rowHeight,
+        fontFace: 'Segoe UI',
+        fontSize: 14,
+        valign: 'middle',
+        border: { pt: 2.5, color: COLORS.white },
+        margin: [0, 0.04, 0, 0.04]
+      });
+
+      // ===== 財務実績 SECTION (Financial Performance) - RIGHT SIDE =====
+      // Section header: "財務実績" at fixed position (6.87, 4.29)
       slide.addText('財務実績', {
-        x: 0.36, y: financialSectionY, w: 6.1, h: 0.30,
+        x: 6.87, y: 4.29, w: 6.1, h: 0.35,
         fontSize: 14, fontFace: 'Segoe UI',
         color: COLORS.black, align: 'left'
       });
       slide.addShape(pptx.shapes.LINE, {
-        x: 0.36, y: financialSectionY + 0.30, w: 6.1, h: 0,
+        x: 6.87, y: 4.71, w: 6.1, h: 0,
         line: { color: COLORS.dk2, width: 1.75 }
       });
 
@@ -3038,7 +3094,7 @@ async function generatePPTX(companies) {
         ]);
 
         slide.addTable(financialRows, {
-          x: 0.36, y: financialSectionY + 0.40,
+          x: 6.87, y: 4.77,
           w: 6.1,
           colW: [1.4, 4.7],
           rowH: rowHeight,
