@@ -23,6 +23,7 @@
       <a href="trading-comparable.html">Trading Comp</a>
       <a href="profile-slides.html" class="active">Slides</a>
       <a href="write-like-anil.html">Write Like Anil</a>
+      <a href="financial-chart-maker.html">Financial Chart</a>
     </nav>
   </header>
 
@@ -35,7 +36,6 @@
 
     <section class="page-content">
       <div class="form-card">
-        <h2>Generate Slides</h2>
         <form id="slidesForm">
           <div class="form-body">
             <div class="form-group">
@@ -53,7 +53,7 @@
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
               </svg>
-              Generate Profile Slides
+              Submit
             </button>
 
             <div class="message success" id="successMessage">
@@ -128,7 +128,7 @@
         errorMessage.classList.add('show');
       } finally {
         submitBtn.disabled = false;
-        submitBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Generate Profile Slides';
+        submitBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Submit';
       }
     });
   </script>

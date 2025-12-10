@@ -2156,6 +2156,8 @@ function createSheetData(companies, headers, title) {
       c.ev,
       c.ebitda,
       c.netMargin,
+      c.opMargin,
+      c.ebitdaMargin,
       c.evEbitda,
       c.peTTM,
       c.peFY,
@@ -2175,6 +2177,8 @@ function createSheetData(companies, headers, title) {
       calculateMedian(companies.map(c => c.ev)),
       calculateMedian(companies.map(c => c.ebitda)),
       calculateMedian(companies.map(c => c.netMargin)),
+      calculateMedian(companies.map(c => c.opMargin)),
+      calculateMedian(companies.map(c => c.ebitdaMargin)),
       calculateMedian(companies.map(c => c.evEbitda)),
       calculateMedian(companies.map(c => c.peTTM)),
       calculateMedian(companies.map(c => c.peFY)),
@@ -2296,6 +2300,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       ebitda: findCol(['ebitda']),
       netMargin: findCol(['net margin', 'net income margin', 'profit margin', 'net profit margin']),
       opMargin: findCol(['operating margin', 'op margin', 'oper margin', 'opm']),
+      ebitdaMargin: findCol(['ebitda margin', 'ebitda %', 'ebitda/sales']),
       evEbitda: findCol(['ev/ebitda', 'ev / ebitda']),
       peTTM: peTTMCol,
       peFY: peFYCol,
@@ -2337,6 +2342,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
         ebitda: parseNum(cols.ebitda),
         netMargin: parseNum(cols.netMargin),
         opMargin: parseNum(cols.opMargin),
+        ebitdaMargin: parseNum(cols.ebitdaMargin),
         evEbitda: parseNum(cols.evEbitda),
         peTTM: parseNum(cols.peTTM),
         peFY: parseNum(cols.peFY),
@@ -2361,7 +2367,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
 
     // Create output workbook
     const outputWorkbook = XLSX.utils.book_new();
-    const sheetHeaders = ['Company', 'Country', 'Sales', 'Market Cap', 'EV', 'EBITDA', 'Net Margin %', 'EV/EBITDA', 'P/E (TTM)', 'P/E (FY)', 'P/BV', 'Filter Reason'];
+    const sheetHeaders = ['Company', 'Country', 'Sales', 'Market Cap', 'EV', 'EBITDA', 'Net Margin %', 'Op Margin %', 'EBITDA Margin %', 'EV/EBITDA', 'P/E (TTM)', 'P/E (FY)', 'P/BV', 'Filter Reason'];
 
     // Sheet 1: All Original Companies
     const sheet1Data = createSheetData(allCompanies, sheetHeaders, `Original Data - ${allCompanies.length} companies`);
@@ -2451,6 +2457,8 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       ev: calculateMedian(finalCompanies.map(c => c.ev)),
       ebitda: calculateMedian(finalCompanies.map(c => c.ebitda)),
       netMargin: calculateMedian(finalCompanies.map(c => c.netMargin)),
+      opMargin: calculateMedian(finalCompanies.map(c => c.opMargin)),
+      ebitdaMargin: calculateMedian(finalCompanies.map(c => c.ebitdaMargin)),
       evEbitda: calculateMedian(finalCompanies.map(c => c.evEbitda)),
       peTTM: calculateMedian(finalCompanies.map(c => c.peTTM)),
       peFY: calculateMedian(finalCompanies.map(c => c.peFY)),
@@ -2474,14 +2482,14 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     for (const c of finalCompanies) {
       summaryData.push([
         c.name, c.country || '-', c.sales, c.marketCap, c.ev, c.ebitda, c.netMargin,
-        c.evEbitda, c.peTTM, c.peFY, c.pb, ''
+        c.opMargin, c.ebitdaMargin, c.evEbitda, c.peTTM, c.peFY, c.pb, ''
       ]);
     }
 
     summaryData.push([]);
     summaryData.push([
       'MEDIAN', '', medians.sales, medians.marketCap, medians.ev, medians.ebitda, medians.netMargin,
-      medians.evEbitda, medians.peTTM, medians.peFY, medians.pb, ''
+      medians.opMargin, medians.ebitdaMargin, medians.evEbitda, medians.peTTM, medians.peFY, medians.pb, ''
     ]);
 
     const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
@@ -2646,145 +2654,497 @@ Maintain the core message but apply Anil's tone, structure, and conventions. Inc
 
 // ============ PROFILE SLIDES ============
 
-// Generate PPTX using PptxGenJS
+// Country to flag code mapping
+const COUNTRY_FLAG_MAP = {
+  'philippines': 'PH', 'ph': 'PH', 'manila': 'PH',
+  'thailand': 'TH', 'th': 'TH', 'bangkok': 'TH',
+  'malaysia': 'MY', 'my': 'MY', 'kuala lumpur': 'MY',
+  'indonesia': 'ID', 'id': 'ID', 'jakarta': 'ID',
+  'singapore': 'SG', 'sg': 'SG',
+  'vietnam': 'VN', 'vn': 'VN', 'ho chi minh': 'VN', 'hanoi': 'VN',
+  'japan': 'JP', 'jp': 'JP', 'tokyo': 'JP',
+  'china': 'CN', 'cn': 'CN', 'beijing': 'CN', 'shanghai': 'CN',
+  'korea': 'KR', 'kr': 'KR', 'seoul': 'KR',
+  'taiwan': 'TW', 'tw': 'TW', 'taipei': 'TW',
+  'usa': 'US', 'us': 'US', 'united states': 'US', 'america': 'US',
+  'uk': 'GB', 'united kingdom': 'GB', 'england': 'GB', 'london': 'GB',
+  'australia': 'AU', 'au': 'AU', 'sydney': 'AU',
+  'india': 'IN', 'in': 'IN', 'mumbai': 'IN', 'delhi': 'IN',
+  'hong kong': 'HK', 'hk': 'HK'
+};
+
+// Common shortform definitions
+const SHORTFORM_DEFINITIONS = {
+  'HQ': 'Headquarters',
+  'SEA': 'Southeast Asia',
+  'THB': 'Thai Baht',
+  'PHP': 'Philippine Peso',
+  'MYR': 'Malaysian Ringgit',
+  'IDR': 'Indonesian Rupiah',
+  'SGD': 'Singapore Dollar',
+  'VND': 'Vietnamese Dong',
+  'USD': 'US Dollar',
+  'JPY': 'Japanese Yen',
+  'CNY': 'Chinese Yuan',
+  'KRW': 'Korean Won',
+  'TWD': 'Taiwan Dollar',
+  'INR': 'Indian Rupee',
+  'HKD': 'Hong Kong Dollar',
+  'AUD': 'Australian Dollar',
+  'GBP': 'British Pound',
+  'EUR': 'Euro',
+  'ISO': 'International Organization for Standardization',
+  'B2B': 'Business to Business',
+  'B2C': 'Business to Consumer',
+  'R&D': 'Research and Development',
+  'OEM': 'Original Equipment Manufacturer',
+  'ODM': 'Original Design Manufacturer',
+  'SME': 'Small and Medium Enterprise',
+  'CAGR': 'Compound Annual Growth Rate',
+  'YoY': 'Year over Year',
+  'QoQ': 'Quarter over Quarter',
+  'FY': 'Fiscal Year',
+  'M': 'Million',
+  'B': 'Billion',
+  'K': 'Thousand',
+  'DBD': 'Department of Business Development',
+  'EBITDA': 'Earnings Before Interest, Taxes, Depreciation and Amortization',
+  'ROE': 'Return on Equity',
+  'ROI': 'Return on Investment',
+  'GM': 'Gross Margin',
+  'NM': 'Net Margin',
+  'JV': 'Joint Venture',
+  'M&A': 'Mergers and Acquisitions',
+  'IPO': 'Initial Public Offering',
+  'CEO': 'Chief Executive Officer',
+  'CFO': 'Chief Financial Officer',
+  'COO': 'Chief Operating Officer',
+  'HoHo': 'Ho Chi Minh City',
+  'KL': 'Kuala Lumpur',
+  'BKK': 'Bangkok',
+  'JKT': 'Jakarta',
+  'MNL': 'Manila',
+  'SG': 'Singapore'
+};
+
+// Exchange rate mapping by country (for footnote)
+const EXCHANGE_RATE_MAP = {
+  'PH': '為替レート: PHP 100M = 3億円',
+  'TH': '為替レート: THB 100M = 4億円',
+  'MY': '為替レート: MYR 10M = 3億円',
+  'ID': '為替レート: IDR 100B = 10億円',
+  'SG': '為替レート: SGD 1M = 1億円',
+  'VN': '為替レート: VND 100B = 6億円',
+  'JP': '',
+  'CN': '為替レート: CNY 10M = 2億円',
+  'KR': '為替レート: KRW 1B = 1億円',
+  'TW': '為替レート: TWD 10M = 0.5億円',
+  'US': '為替レート: USD 1M = 1.5億円',
+  'GB': '為替レート: GBP 1M = 2億円',
+  'AU': '為替レート: AUD 1M = 1億円',
+  'IN': '為替レート: INR 100M = 2億円',
+  'HK': '為替レート: HKD 10M = 2億円'
+};
+
+// Get country code from location string
+function getCountryCode(location) {
+  if (!location) return null;
+  const loc = location.toLowerCase();
+  for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
+    if (loc.includes(key)) return code;
+  }
+  return null;
+}
+
+// Detect shortforms in text and return formatted note
+function detectShortforms(companyData) {
+  // Collect all text including key_metrics array
+  const textParts = [
+    companyData.company_name,
+    companyData.location,
+    companyData.business,
+    companyData.metrics,
+    companyData.footnote
+  ];
+
+  // Also include key_metrics array values
+  if (companyData.key_metrics && Array.isArray(companyData.key_metrics)) {
+    companyData.key_metrics.forEach(metric => {
+      if (metric.label) textParts.push(metric.label);
+      if (metric.value) textParts.push(metric.value);
+    });
+  }
+
+  const allText = textParts.filter(Boolean).join(' ');
+
+  const foundShortforms = [];
+
+  for (const [shortform, definition] of Object.entries(SHORTFORM_DEFINITIONS)) {
+    // Match shortform as whole word (with word boundaries)
+    const regex = new RegExp(`\\b${shortform}\\b`, 'i');
+    if (regex.test(allText)) {
+      foundShortforms.push(`${shortform} (${definition})`);
+    }
+  }
+
+  if (foundShortforms.length > 0) {
+    return 'Note: ' + foundShortforms.join(', ');
+  }
+  return null;
+}
+
+// Fetch image as base64
+async function fetchImageAsBase64(url) {
+  try {
+    const response = await fetch(url, { timeout: 5000 });
+    if (!response.ok) return null;
+    const buffer = await response.arrayBuffer();
+    return Buffer.from(buffer).toString('base64');
+  } catch (e) {
+    console.log('Failed to fetch image:', url);
+    return null;
+  }
+}
+
+// Generate PPTX using PptxGenJS - matching YCP template
 async function generatePPTX(companies) {
   try {
     console.log('Generating PPTX with PptxGenJS...');
 
     const pptx = new pptxgen();
-    pptx.author = 'Find Target';
+    pptx.author = 'YCP';
     pptx.title = 'Company Profile Slides';
     pptx.subject = 'Company Profiles';
 
-    // Define colors
+    // Set exact slide size to match template (13.333" x 7.5" = 16:9 widescreen)
+    pptx.defineLayout({ name: 'YCP', width: 13.333, height: 7.5 });
+    pptx.layout = 'YCP';
+
+    // YCP Theme Colors (from template)
     const COLORS = {
-      primary: '1e3a5f',    // Dark blue
-      secondary: '2563eb',  // Blue
-      accent: '16a34a',     // Green
-      text: '1f2937',       // Dark gray
-      lightBg: 'f8fafc',    // Light gray background
-      white: 'ffffff'
+      headerLine: '293F55',    // Dark navy for header/footer lines
+      accent3: '011AB7',       // Dark blue - label column background
+      white: 'FFFFFF',
+      black: '000000',
+      gray: 'BFBFBF',          // Dashed border color
+      dk2: '1F497D',           // Section underline color
+      footerText: '808080'     // Gray footer text
     };
 
-    companies.forEach((company, index) => {
+    for (const company of companies) {
       const slide = pptx.addSlide();
 
-      // Header bar
-      slide.addShape(pptx.shapes.RECTANGLE, {
-        x: 0, y: 0, w: '100%', h: 0.8,
-        fill: { color: COLORS.primary }
+      // ===== HEADER LINES (from template) =====
+      // Thick line under title area
+      slide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 1.02, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 4.5 }
+      });
+      // Thin line below
+      slide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 1.10, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 2.25 }
       });
 
-      // Company title
+      // ===== FOOTER LINE =====
+      slide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 7.24, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 2.25 }
+      });
+
+      // Footer copyright text
+      slide.addText('(C) YCP 2025 all rights reserved', {
+        x: 4.1, y: 7.26, w: 5.1, h: 0.2,
+        fontSize: 8, fontFace: 'Segoe UI',
+        color: COLORS.footerText, align: 'center'
+      });
+
+      // ===== TITLE (top left) =====
       slide.addText(company.title || company.company_name || 'Company Profile', {
-        x: 0.5, y: 0.15, w: 8, h: 0.5,
-        fontSize: 24, bold: true, color: COLORS.white
+        x: 0.38, y: 0.05, w: 9.5, h: 0.6,
+        fontSize: 24, bold: false, fontFace: 'Segoe UI',
+        color: COLORS.black, valign: 'bottom'
       });
 
-      // Slide number
-      slide.addText(`${index + 1}/${companies.length}`, {
-        x: 8.5, y: 0.15, w: 1, h: 0.5,
-        fontSize: 12, color: COLORS.white, align: 'right'
-      });
-
-      // Message (subtitle)
+      // Message (subtitle below title)
       if (company.message) {
         slide.addText(company.message, {
-          x: 0.5, y: 1.0, w: 9, h: 0.4,
-          fontSize: 12, italic: true, color: COLORS.secondary
+          x: 0.38, y: 0.65, w: 9.5, h: 0.3,
+          fontSize: 16, fontFace: 'Segoe UI',
+          color: COLORS.black
         });
       }
 
-      // Left column - Basic Info
-      let yPos = 1.6;
+      // ===== FLAG (top right) =====
+      const countryCode = getCountryCode(company.location);
+      if (countryCode) {
+        try {
+          const flagUrl = `https://flagcdn.com/w80/${countryCode.toLowerCase()}.png`;
+          const flagBase64 = await fetchImageAsBase64(flagUrl);
+          if (flagBase64) {
+            slide.addImage({
+              data: `data:image/png;base64,${flagBase64}`,
+              x: 10.64, y: 0.22, w: 0.83, h: 0.55
+            });
+          }
+        } catch (e) {
+          console.log('Flag fetch failed for', countryCode);
+        }
+      }
 
-      // Website
+      // ===== LOGO (top right of slide) =====
       if (company.website) {
-        slide.addText([
-          { text: 'Website: ', options: { bold: true, color: COLORS.text } },
-          { text: company.website, options: { color: COLORS.secondary } }
-        ], { x: 0.5, y: yPos, w: 4.5, h: 0.3, fontSize: 10 });
-        yPos += 0.35;
+        try {
+          const domain = company.website.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+
+          // Try multiple logo sources
+          const logoSources = [
+            `https://logo.clearbit.com/${domain}`,
+            `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
+            `https://icon.horse/icon/${domain}`
+          ];
+
+          let logoBase64 = null;
+          for (const logoUrl of logoSources) {
+            console.log(`  Trying logo from: ${logoUrl}`);
+            logoBase64 = await fetchImageAsBase64(logoUrl);
+            if (logoBase64) {
+              console.log(`  Logo fetched successfully from ${logoUrl}`);
+              break;
+            }
+          }
+
+          if (logoBase64) {
+            slide.addImage({
+              data: `data:image/png;base64,${logoBase64}`,
+              x: 12.0, y: 0.15, w: 1.0, h: 0.50
+            });
+          } else {
+            console.log(`  Logo not available for ${domain} from any source`);
+          }
+        } catch (e) {
+          console.log('Logo fetch failed for', company.website, e.message);
+        }
       }
 
-      // Established Year
-      if (company.established_year) {
-        slide.addText([
-          { text: 'Established: ', options: { bold: true, color: COLORS.text } },
-          { text: company.established_year, options: { color: COLORS.text } }
-        ], { x: 0.5, y: yPos, w: 4.5, h: 0.3, fontSize: 10 });
-        yPos += 0.35;
+      // ===== SECTION HEADERS =====
+      // Left: "会社概要資料" - positioned per ref v4
+      slide.addText('会社概要資料', {
+        x: 0.37, y: 1.37, w: 6.1, h: 0.35,
+        fontSize: 14, fontFace: 'Segoe UI',
+        color: COLORS.black, align: 'center'
+      });
+      slide.addShape(pptx.shapes.LINE, {
+        x: 0.37, y: 1.79, w: 6.1, h: 0,
+        line: { color: COLORS.dk2, width: 1.75 }
+      });
+
+      // Right: "Product Photos" - positioned per ref v4
+      slide.addText('Products and Applications', {
+        x: 6.87, y: 1.37, w: 6.1, h: 0.35,
+        fontSize: 14, fontFace: 'Segoe UI',
+        color: COLORS.black, align: 'center'
+      });
+      slide.addShape(pptx.shapes.LINE, {
+        x: 6.87, y: 1.79, w: 6.1, h: 0,
+        line: { color: COLORS.dk2, width: 1.75 }
+      });
+
+      // ===== LEFT TABLE (会社概要資料) =====
+      // Base company info rows
+      const tableData = [
+        ['Name', company.company_name || ''],
+        ['Est. Year', company.established_year || ''],
+        ['Location', company.location || ''],
+        ['Business', company.business || '']
+      ];
+
+      // Add key metrics as separate rows if available
+      if (company.key_metrics && Array.isArray(company.key_metrics)) {
+        company.key_metrics.forEach(metric => {
+          if (metric.label && metric.value) {
+            tableData.push([metric.label, metric.value]);
+          }
+        });
+      } else if (company.metrics) {
+        // Fallback for old format (single string)
+        tableData.push(['Key Metrics', company.metrics]);
       }
 
-      // Location
-      if (company.location) {
-        slide.addText('Location:', {
-          x: 0.5, y: yPos, w: 4.5, h: 0.25,
-          fontSize: 10, bold: true, color: COLORS.text
-        });
-        yPos += 0.25;
+      const rows = tableData.map((row) => [
+        {
+          text: row[0],
+          options: {
+            fill: { color: COLORS.accent3 },
+            color: COLORS.white,
+            align: 'center',
+            bold: false
+          }
+        },
+        {
+          text: row[1],
+          options: {
+            fill: { color: COLORS.white },
+            color: COLORS.black,
+            align: 'left',
+            border: [
+              { pt: 1, color: COLORS.gray, type: 'dash' },
+              { pt: 0 },
+              { pt: 1, color: COLORS.gray, type: 'dash' },
+              { pt: 0 }
+            ]
+          }
+        }
+      ]);
 
-        const locationLines = company.location.split('\n').filter(l => l.trim());
-        locationLines.forEach(line => {
-          slide.addText(line.trim(), {
-            x: 0.5, y: yPos, w: 4.5, h: 0.22,
-            fontSize: 9, color: COLORS.text
-          });
-          yPos += 0.22;
+      const tableStartY = 1.85;
+      const rowHeight = 0.35;
+
+      slide.addTable(rows, {
+        x: 0.37, y: tableStartY,
+        w: 6.1,
+        colW: [1.4, 4.7],
+        rowH: rowHeight,
+        fontFace: 'Segoe UI',
+        fontSize: 14,
+        valign: 'middle',
+        border: { pt: 2.5, color: COLORS.white },
+        margin: [0, 0.04, 0, 0.04]
+      });
+
+      // ===== RIGHT TABLE (Product Photos placeholder) =====
+      // 3 empty rows for product photos
+      const rightTableData = [
+        ['', ''],
+        ['', ''],
+        ['', '']
+      ];
+
+      const rightRows = rightTableData.map((row) => [
+        {
+          text: row[0],
+          options: {
+            fill: { color: COLORS.accent3 },
+            color: COLORS.white,
+            align: 'center',
+            bold: false
+          }
+        },
+        {
+          text: row[1],
+          options: {
+            fill: { color: COLORS.white },
+            color: COLORS.black,
+            align: 'left',
+            border: [
+              { pt: 1, color: COLORS.gray, type: 'dash' },
+              { pt: 0 },
+              { pt: 1, color: COLORS.gray, type: 'dash' },
+              { pt: 0 }
+            ]
+          }
+        }
+      ]);
+
+      slide.addTable(rightRows, {
+        x: 6.87, y: tableStartY,
+        w: 6.1,
+        colW: [1.4, 4.7],
+        rowH: rowHeight,
+        fontFace: 'Segoe UI',
+        fontSize: 14,
+        valign: 'middle',
+        border: { pt: 2.5, color: COLORS.white },
+        margin: [0, 0.04, 0, 0.04]
+      });
+
+      // ===== 財務実績 SECTION (Financial Performance) - RIGHT SIDE =====
+      // Section header: "財務実績" at fixed position (6.87, 4.29)
+      slide.addText('財務実績', {
+        x: 6.87, y: 4.29, w: 6.1, h: 0.35,
+        fontSize: 14, fontFace: 'Segoe UI',
+        color: COLORS.black, align: 'center'
+      });
+      slide.addShape(pptx.shapes.LINE, {
+        x: 6.87, y: 4.71, w: 6.1, h: 0,
+        line: { color: COLORS.dk2, width: 1.75 }
+      });
+
+      // Financial data table (if financial metrics available)
+      if (company.financial_metrics && Array.isArray(company.financial_metrics) && company.financial_metrics.length > 0) {
+        const financialRows = company.financial_metrics.map((metric) => [
+          {
+            text: metric.label || '',
+            options: {
+              fill: { color: COLORS.accent3 },
+              color: COLORS.white,
+              align: 'center',
+              bold: false
+            }
+          },
+          {
+            text: metric.value || '',
+            options: {
+              fill: { color: COLORS.white },
+              color: COLORS.black,
+              align: 'left',
+              border: [
+                { pt: 1, color: COLORS.gray, type: 'dash' },
+                { pt: 0 },
+                { pt: 1, color: COLORS.gray, type: 'dash' },
+                { pt: 0 }
+              ]
+            }
+          }
+        ]);
+
+        slide.addTable(financialRows, {
+          x: 6.87, y: 4.77,
+          w: 6.1,
+          colW: [1.4, 4.7],
+          rowH: rowHeight,
+          fontFace: 'Segoe UI',
+          fontSize: 14,
+          valign: 'middle',
+          border: { pt: 2.5, color: COLORS.white },
+          margin: [0, 0.04, 0, 0.04]
         });
-        yPos += 0.1;
       }
 
-      // Business description
-      if (company.business) {
-        slide.addText('Business:', {
-          x: 0.5, y: yPos, w: 4.5, h: 0.25,
-          fontSize: 10, bold: true, color: COLORS.text
-        });
-        yPos += 0.28;
+      // ===== FOOTNOTE (fixed position per ref v4) =====
+      const footnoteY = 6.85;  // Fixed position per ref v4
+      const footnoteLineHeight = 0.18;
+      let currentFootnoteY = footnoteY;
 
-        const businessLines = company.business.split('\n').filter(l => l.trim());
-        businessLines.forEach(line => {
-          slide.addText(line.replace(/^-\s*/, '• ').trim(), {
-            x: 0.5, y: yPos, w: 4.5, h: 0.22,
-            fontSize: 9, color: COLORS.text
-          });
-          yPos += 0.22;
+      // Line 1: Note with shortform explanations
+      const shortformNote = detectShortforms(company);
+      if (shortformNote) {
+        slide.addText(shortformNote, {
+          x: 0.38, y: currentFootnoteY, w: 12.5, h: footnoteLineHeight,
+          fontSize: 10, fontFace: 'Segoe UI',
+          color: COLORS.black
         });
+        currentFootnoteY += footnoteLineHeight;
       }
 
-      // Right column - Key Metrics
-      if (company.metrics) {
-        slide.addShape(pptx.shapes.RECTANGLE, {
-          x: 5.2, y: 1.5, w: 4.3, h: 3.2,
-          fill: { color: COLORS.lightBg },
-          line: { color: 'e5e7eb', width: 1 }
+      // Line 2: Exchange rate (reuse countryCode from flag section)
+      const exchangeRate = countryCode ? EXCHANGE_RATE_MAP[countryCode] : null;
+      if (exchangeRate) {
+        slide.addText(exchangeRate, {
+          x: 0.38, y: currentFootnoteY, w: 12.5, h: footnoteLineHeight,
+          fontSize: 10, fontFace: 'Segoe UI',
+          color: COLORS.black
         });
-
-        slide.addText('Key Metrics', {
-          x: 5.4, y: 1.6, w: 4, h: 0.3,
-          fontSize: 11, bold: true, color: COLORS.primary
-        });
-
-        let metricsY = 1.95;
-        const metricsLines = company.metrics.split('\n').filter(l => l.trim());
-        metricsLines.slice(0, 12).forEach(line => {
-          slide.addText('• ' + line.trim(), {
-            x: 5.4, y: metricsY, w: 3.9, h: 0.22,
-            fontSize: 8, color: COLORS.text
-          });
-          metricsY += 0.24;
-        });
+        currentFootnoteY += footnoteLineHeight;
       }
 
-      // Footnote at bottom
-      if (company.footnote) {
-        slide.addText(company.footnote, {
-          x: 0.5, y: 5.0, w: 9, h: 0.4,
-          fontSize: 7, color: '6b7280', italic: true
-        });
-      }
-    });
+      // Line 3: Source
+      slide.addText('Source: Company website', {
+        x: 0.38, y: currentFootnoteY, w: 12.5, h: footnoteLineHeight,
+        fontSize: 10, fontFace: 'Segoe UI',
+        color: COLORS.black
+      });
+    }
 
     // Generate base64
     const base64Content = await pptx.write({ outputType: 'base64' });
@@ -2918,14 +3278,17 @@ async function extractBusinessInfo(scrapedContent, basicInfo) {
       messages: [
         {
           role: 'system',
-          content: `You extract business information from website content.
+          content: `You extract business information from website content for M&A discussion slides.
 
 INPUT:
 - HTML content from company website
 - Previously extracted: company name, year, location
 
 OUTPUT JSON:
-1. business: Brief description of what company does. Format like: "Manufacture products such as X, Y, Z. Distribute products such as A, B, C." Max 3 examples per point. Use point forms (\\n-) for different business lines.
+1. business: Detailed description of what company does. Format each business line on separate line starting with "■ " (black square bullet).
+   Example:
+   "■ Manufacture high-quality printing inks\\n■ Provide services related to printing technology\\n■ Distribute industrial chemicals across Southeast Asia"
+   Be comprehensive - include manufacturing, distribution, services, R&D activities.
 
 2. message: One-liner introductory message about the company. Example: "Malaysia-based distributor specializing in electronic components and industrial automation products across Southeast Asia."
 
@@ -2937,7 +3300,9 @@ OUTPUT JSON:
 4. title: Company name WITHOUT suffix (remove Pte Ltd, Sdn Bhd, Co Ltd, JSC, PT, Inc, etc.)
 
 RULES:
-- All point forms use "\\n-"
+- All bullet points must use "■ " (black square followed by space)
+- Each bullet point on new line using "\\n"
+- Be thorough and extract ALL business activities mentioned
 - Return ONLY valid JSON`
         },
         {
@@ -2961,7 +3326,7 @@ ${scrapedContent.substring(0, 12000)}`
   }
 }
 
-// AI Agent 3: Extract key metrics
+// AI Agent 3: Extract key metrics for M&A evaluation
 async function extractKeyMetrics(scrapedContent, previousData) {
   try {
     const response = await openai.chat.completions.create({
@@ -2969,36 +3334,127 @@ async function extractKeyMetrics(scrapedContent, previousData) {
       messages: [
         {
           role: 'system',
-          content: `You extract key business metrics from website content.
+          content: `You are an M&A analyst extracting COMPREHENSIVE key business metrics for potential buyers evaluating this company.
 
-Example metrics to look for:
-- Supplier names
-- Customer names
-- Supplier/Customer count
-- Number of projects
-- Brands distributed/owned
-- Headcount/Employee count
-- Countries exported to
-- Countries with sales/project/product presence
-- Revenue figures
-- Years of experience
-- Number of products
-- Factory/warehouse size
-- Certifications
+EXTRACT AS MANY OF THESE METRICS AS POSSIBLE (aim for 8-15 metrics):
 
-OUTPUT JSON with ONE field:
-- metrics: All key metrics found, formatted as readable text with line breaks (\\n). Include the metric name and value.
+CUSTOMERS & MARKET:
+- Number of customers (total active customers)
+- Key customer names (notable clients)
+- Customer segments served
+- Market share or market position
 
-Only include metrics that are explicitly mentioned on the website.
+SUPPLIERS & PARTNERSHIPS:
+- Number of suppliers
+- Key supplier/partner names
+- Notable partnerships, JVs, technology transfers
+- Exclusive distribution agreements
+
+OPERATIONS & SCALE:
+- Production capacity (units/month, tons/month)
+- Factory/warehouse size (m², sq ft)
+- Number of machines/equipment
+- Number of employees/headcount
+- Number of SKUs/products
+
+GEOGRAPHIC REACH:
+- Export countries (list regions/countries)
+- Distribution network (number of distributors/partners)
+- Number of branches/offices/locations
+- Markets served
+
+QUALITY & COMPLIANCE:
+- Certifications (ISO, HACCP, GMP, FDA, CE, halal, etc.)
+- Awards and recognitions
+- Patents or proprietary technology
+
+OUTPUT JSON:
+{
+  "key_metrics": [
+    {"label": "Shareholding", "value": "Family owned (100%)"},
+    {"label": "Key Metrics", "value": "■ Production capacity of 800+ tons per month\\n■ 250+ machines\\n■ 300+ employees"},
+    {"label": "Export Countries", "value": "SEA, South Asia, North Africa"},
+    {"label": "Distribution Network", "value": "700 domestic distribution partners"},
+    {"label": "Certification", "value": "ISO 9001, ISO 14001"},
+    {"label": "Notable Partnerships", "value": "Launch partnership with Dainichiseika Color & Chemicals (Japanese) in 2009 technology transfer, joint product development and marketing"}
+  ]
+}
+
+RULES:
+- Extract as many metrics as found (8-15 ideally)
+- For metrics with multiple items, use "■ " bullet points separated by "\\n"
+- Labels should be 1-3 words
+- Be specific with numbers when available
+- Include shareholding structure if mentioned
+- NEVER make up data - only include what's explicitly stated
+- Return ONLY valid JSON`
+        },
+        {
+          role: 'user',
+          content: `Company: ${previousData.company_name}
+Industry/Business: ${previousData.business}
+
+Website Content (extract ALL M&A-relevant metrics):
+${scrapedContent.substring(0, 18000)}`
+        }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.3
+    });
+
+    return JSON.parse(response.choices[0].message.content);
+  } catch (e) {
+    console.error('Agent 3 error:', e.message);
+    return { key_metrics: [] };
+  }
+}
+
+// AI Agent 3b: Extract financial metrics for 財務実績 section
+async function extractFinancialMetrics(scrapedContent, previousData) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an M&A analyst extracting financial performance metrics from website content.
+
+Focus on financial metrics important for M&A evaluation:
+
+PRIORITY FINANCIAL METRICS:
+1. Revenue: Annual revenue, sales figures, turnover
+2. Profit: Net profit, operating profit, EBITDA
+3. Growth: Revenue growth rate, YoY growth
+4. Employees: Number of employees, workforce size
+5. Assets: Total assets, net assets
+6. Capital: Registered capital, paid-up capital
+
+OUTPUT JSON with this structure:
+{
+  "financial_metrics": [
+    {"label": "Revenue", "value": "USD 50M (2023)"},
+    {"label": "Net Profit", "value": "USD 5M"},
+    {"label": "Growth Rate", "value": "15% YoY"},
+    {"label": "Employees", "value": "500+"}
+  ]
+}
+
+IMPORTANT RULES:
+- Only extract financial data that is EXPLICITLY mentioned on the website
+- Include currency and year if available
+- If no financial data found, return empty array
+- Maximum 4 financial metrics
+- Do NOT make up financial figures
+
 Return ONLY valid JSON.`
         },
         {
           role: 'user',
           content: `Company: ${previousData.company_name}
-Business: ${previousData.business}
+Industry/Business: ${previousData.business}
 
-Website Content:
-${scrapedContent.substring(0, 12000)}`
+Website Content (extract financial metrics):
+${scrapedContent.substring(0, 15000)}`
         }
       ],
       response_format: { type: 'json_object' },
@@ -3007,8 +3463,155 @@ ${scrapedContent.substring(0, 12000)}`
 
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
-    console.error('Agent 3 error:', e.message);
-    return { metrics: '' };
+    console.error('Agent 3b error:', e.message);
+    return { financial_metrics: [] };
+  }
+}
+
+// AI Agent 4: Search for missing company information (est year, location, HQ)
+async function searchMissingInfo(companyName, website, missingFields) {
+  if (!companyName || missingFields.length === 0) {
+    return {};
+  }
+
+  try {
+    console.log(`  Searching for missing info: ${missingFields.join(', ')}`);
+
+    // Use OpenAI Search model which has web search capability
+    const searchQuery = `${companyName} company ${missingFields.includes('established_year') ? 'founded year established' : ''} ${missingFields.includes('location') ? 'headquarters location country' : ''}`.trim();
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-search-preview',
+      messages: [
+        {
+          role: 'user',
+          content: `Search for information about "${companyName}" (website: ${website}).
+
+I need to find:
+${missingFields.includes('established_year') ? '- When was this company founded/established? (year only)' : ''}
+${missingFields.includes('location') ? '- Where is this company headquartered? (city, country)' : ''}
+
+Return ONLY a JSON object with these fields (include only fields you can find with confidence):
+{
+  ${missingFields.includes('established_year') ? '"established_year": "YYYY",' : ''}
+  ${missingFields.includes('location') ? '"location": "City, Country"' : ''}
+}
+
+If you cannot find reliable information for a field, omit it from the response.
+Return ONLY valid JSON, no explanations.`
+        }
+      ]
+    });
+
+    const content = response.choices[0].message.content || '';
+
+    // Try to parse JSON from response
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const result = JSON.parse(jsonMatch[0]);
+      console.log(`  Found missing info:`, result);
+      return result;
+    }
+
+    return {};
+  } catch (e) {
+    console.error('Agent 4 (search) error:', e.message);
+
+    // Fallback to Perplexity if OpenAI search fails
+    try {
+      const perplexityPrompt = `What is the founding year and headquarters location of ${companyName} (${website})? Reply ONLY with JSON: {"established_year": "YYYY", "location": "City, Country"}`;
+      const perplexityResponse = await callPerplexity(perplexityPrompt);
+
+      const jsonMatch = perplexityResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const result = JSON.parse(jsonMatch[0]);
+        console.log(`  Found via Perplexity:`, result);
+        return result;
+      }
+    } catch (pe) {
+      console.error('Perplexity fallback error:', pe.message);
+    }
+
+    return {};
+  }
+}
+
+// AI Agent 5: Search web for additional company metrics
+async function searchAdditionalMetrics(companyName, website, existingMetrics) {
+  if (!companyName) {
+    return { additional_metrics: [] };
+  }
+
+  try {
+    console.log(`  Step 6: Searching web for additional metrics...`);
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-search-preview',
+      messages: [
+        {
+          role: 'user',
+          content: `Search for detailed business information about "${companyName}" (website: ${website}).
+
+I need M&A-relevant metrics for an acquisition discussion. Find:
+
+1. COMPANY SCALE:
+   - Number of employees/headcount
+   - Revenue figures (annual revenue)
+   - Number of retail stores, offices, branches
+   - Market capitalization (if public)
+
+2. OPERATIONS:
+   - Number of products/SKUs
+   - Production capacity
+   - Factory/warehouse locations and sizes
+   - Number of suppliers
+
+3. CUSTOMERS & MARKET:
+   - Number of customers
+   - Key customer names or segments
+   - Market share
+   - Geographic markets served
+
+4. CERTIFICATIONS & QUALITY:
+   - ISO certifications
+   - Industry-specific certifications
+   - Awards
+
+5. PARTNERSHIPS:
+   - Key partnerships
+   - Joint ventures
+   - Major suppliers
+
+Already have: ${existingMetrics.map(m => m.label).join(', ')}
+
+Return ONLY a JSON object:
+{
+  "additional_metrics": [
+    {"label": "Employees", "value": "164,000+ worldwide"},
+    {"label": "Retail Stores", "value": "500+ stores globally"},
+    {"label": "Revenue", "value": "USD 383B (2023)"}
+  ]
+}
+
+Only include metrics you can verify. Do not repeat metrics already provided.
+Return ONLY valid JSON.`
+        }
+      ]
+    });
+
+    const content = response.choices[0].message.content || '';
+
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const result = JSON.parse(jsonMatch[0]);
+      console.log(`  Found ${result.additional_metrics?.length || 0} additional metrics via web search`);
+      return result;
+    }
+
+    return { additional_metrics: [] };
+  } catch (e) {
+    console.error('Agent 5 (additional metrics search) error:', e.message);
+    return { additional_metrics: [] };
   }
 }
 
@@ -3125,20 +3728,57 @@ app.post('/api/profile-slides', async (req, res) => {
           business: businessInfo.business
         });
 
-        // Combine all extracted data
+        // Step 4b: Extract financial metrics for 財務実績 section
+        console.log('  Step 4b: Extracting financial metrics...');
+        const financialInfo = await extractFinancialMetrics(scraped.content, {
+          company_name: basicInfo.company_name,
+          business: businessInfo.business
+        });
+
+        // Step 5: Search for missing info (est year, location) if not found on website
+        let searchedInfo = {};
+        const missingFields = [];
+        if (!basicInfo.established_year) missingFields.push('established_year');
+        if (!basicInfo.location) missingFields.push('location');
+
+        if (missingFields.length > 0 && basicInfo.company_name) {
+          console.log('  Step 5: Searching for missing info...');
+          searchedInfo = await searchMissingInfo(basicInfo.company_name, website, missingFields);
+        }
+
+        // Step 6: Search web for additional metrics (especially for large companies)
+        let additionalMetrics = [];
+        if (basicInfo.company_name) {
+          const additionalInfo = await searchAdditionalMetrics(
+            basicInfo.company_name,
+            website,
+            metricsInfo.key_metrics || []
+          );
+          additionalMetrics = additionalInfo.additional_metrics || [];
+        }
+
+        // Combine all key metrics (website + web search)
+        const allKeyMetrics = [
+          ...(metricsInfo.key_metrics || []),
+          ...additionalMetrics
+        ];
+
+        // Combine all extracted data (use searched info as fallback)
         const companyData = {
           website: scraped.url,
           company_name: basicInfo.company_name || '',
-          established_year: basicInfo.established_year || '',
-          location: basicInfo.location || '',
+          established_year: basicInfo.established_year || searchedInfo.established_year || '',
+          location: basicInfo.location || searchedInfo.location || '',
           business: businessInfo.business || '',
           message: businessInfo.message || '',
           footnote: businessInfo.footnote || '',
           title: businessInfo.title || '',
-          metrics: metricsInfo.metrics || ''
+          key_metrics: allKeyMetrics,  // Combined metrics from website + web search
+          financial_metrics: financialInfo.financial_metrics || [],  // For 財務実績 section
+          metrics: metricsInfo.metrics || ''  // Fallback for old format
         };
 
-        console.log(`  ✓ Completed: ${companyData.title || companyData.company_name}`);
+        console.log(`  ✓ Completed: ${companyData.title || companyData.company_name} (${allKeyMetrics.length} metrics)`);
         results.push(companyData);
 
       } catch (error) {
@@ -3191,8 +3831,631 @@ app.post('/api/profile-slides', async (req, res) => {
   }
 });
 
+// ============ FINANCIAL CHART MAKER ============
+
+// Country to currency mapping for LC/local currency detection
+const COUNTRY_CURRENCY_MAP = {
+  'japan': { code: 'JPY', symbol: '¥', name: 'Japanese Yen' },
+  'united states': { code: 'USD', symbol: '$', name: 'US Dollar' },
+  'usa': { code: 'USD', symbol: '$', name: 'US Dollar' },
+  'china': { code: 'CNY', symbol: '¥', name: 'Chinese Yuan' },
+  'korea': { code: 'KRW', symbol: '₩', name: 'Korean Won' },
+  'south korea': { code: 'KRW', symbol: '₩', name: 'Korean Won' },
+  'thailand': { code: 'THB', symbol: '฿', name: 'Thai Baht' },
+  'malaysia': { code: 'MYR', symbol: 'RM', name: 'Malaysian Ringgit' },
+  'singapore': { code: 'SGD', symbol: 'S$', name: 'Singapore Dollar' },
+  'indonesia': { code: 'IDR', symbol: 'Rp', name: 'Indonesian Rupiah' },
+  'vietnam': { code: 'VND', symbol: '₫', name: 'Vietnamese Dong' },
+  'philippines': { code: 'PHP', symbol: '₱', name: 'Philippine Peso' },
+  'india': { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
+  'australia': { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
+  'uk': { code: 'GBP', symbol: '£', name: 'British Pound' },
+  'united kingdom': { code: 'GBP', symbol: '£', name: 'British Pound' },
+  'europe': { code: 'EUR', symbol: '€', name: 'Euro' },
+  'germany': { code: 'EUR', symbol: '€', name: 'Euro' },
+  'france': { code: 'EUR', symbol: '€', name: 'Euro' },
+  'taiwan': { code: 'TWD', symbol: 'NT$', name: 'Taiwan Dollar' },
+  'hong kong': { code: 'HKD', symbol: 'HK$', name: 'Hong Kong Dollar' },
+  'brazil': { code: 'BRL', symbol: 'R$', name: 'Brazilian Real' },
+  'mexico': { code: 'MXN', symbol: 'MX$', name: 'Mexican Peso' },
+  'canada': { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar' }
+};
+
+// AI agent to analyze Excel financial data
+async function analyzeFinancialExcel(excelContent) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a financial data extraction expert. Analyze the Excel data and extract key financial information.
+
+OUTPUT JSON with these fields:
+- company_name: The company name found in the file (look for headers, titles, or file metadata)
+- currency: The currency used (e.g., "USD", "JPY", "EUR"). If it says "LC" or "local currency", look for country mentions to determine actual currency. If currency symbol found (¥, $, €, etc.), identify it.
+- country: Country of the company if mentioned
+- revenue_data: Array of objects with { period: "FY2023" or "2023", value: number } - extract revenue/sales figures for multiple years. Value should be raw numbers (e.g., 1000000 not "1M").
+- revenue_unit: The unit for revenue (e.g., "millions", "billions", "thousands", or "units" for raw numbers)
+- margin_data: Array of objects with { period: "FY2023", margin_type: "operating" | "ebitda" | "pretax" | "net" | "gross", value: number (as percentage, e.g., 15.5 for 15.5%) }
+  Priority order for margins: operating margin > EBITDA margin > pre-tax margin > net margin > gross margin
+  Include the highest priority margin type available. If multiple margin types exist, include them all sorted by priority.
+- fiscal_year_end: Month of fiscal year end if mentioned (e.g., "March", "December")
+
+RULES:
+- Extract ALL years/periods available (not just most recent)
+- Revenue values should be numeric (convert "1,234" to 1234, "1.5M" to 1500000)
+- Margin values as percentages (e.g., 12.5 for 12.5%)
+- If LC/local currency mentioned, determine from country context
+- Return ONLY valid JSON`
+        },
+        {
+          role: 'user',
+          content: `Analyze this financial data:\n\n${excelContent}`
+        }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.2
+    });
+
+    return JSON.parse(response.choices[0].message.content);
+  } catch (e) {
+    console.error('Financial analysis error:', e.message);
+    return null;
+  }
+}
+
+// Generate financial chart PowerPoint (supports multiple companies/slides)
+async function generateFinancialChartPPTX(financialDataArray) {
+  try {
+    // Ensure we have an array
+    const dataArray = Array.isArray(financialDataArray) ? financialDataArray : [financialDataArray];
+
+    console.log('Generating Financial Chart PPTX...');
+    console.log(`Processing ${dataArray.length} company/companies`);
+
+    const pptx = new pptxgen();
+    pptx.author = 'YCP';
+    pptx.title = 'Financial Charts';
+    pptx.subject = 'Financial Performance';
+
+    // Set exact slide size to match template (13.333" x 7.5" = 16:9 widescreen)
+    pptx.defineLayout({ name: 'YCP', width: 13.333, height: 7.5 });
+    pptx.layout = 'YCP';
+
+    // YCP Theme Colors (from template)
+    const COLORS = {
+      headerLine: '293F55',
+      accent3: '011AB7',
+      white: 'FFFFFF',
+      black: '000000',
+      gray: 'BFBFBF',
+      dk2: '1F497D',
+      footerText: '808080',
+      chartBlue: '2563EB',
+      chartOrange: 'F97316',
+      chartGreen: '22C55E'
+    };
+
+    // Generate one slide per company
+    for (const financialData of dataArray) {
+      if (!financialData) continue;
+
+    const slide = pptx.addSlide();
+
+    // ===== HEADER LINES (from template) =====
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0, y: 1.02, w: 13.333, h: 0,
+      line: { color: COLORS.headerLine, width: 4.5 }
+    });
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0, y: 1.10, w: 13.333, h: 0,
+      line: { color: COLORS.headerLine, width: 2.25 }
+    });
+
+    // ===== FOOTER LINE =====
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0, y: 7.24, w: 13.333, h: 0,
+      line: { color: COLORS.headerLine, width: 2.25 }
+    });
+
+    // Footer copyright text
+    slide.addText('(C) YCP 2025 all rights reserved', {
+      x: 4.1, y: 7.26, w: 5.1, h: 0.2,
+      fontSize: 8, fontFace: 'Segoe UI',
+      color: COLORS.footerText, align: 'center'
+    });
+
+    // ===== TITLE (top left) =====
+    const companyName = financialData.company_name || 'Financial Performance';
+    slide.addText(companyName, {
+      x: 0.38, y: 0.05, w: 9.5, h: 0.6,
+      fontSize: 24, bold: false, fontFace: 'Segoe UI',
+      color: COLORS.black, valign: 'bottom'
+    });
+
+    // Subtitle with currency info
+    const currency = financialData.currency || 'USD';
+    const currencyUnit = financialData.revenue_unit || 'millions';
+    slide.addText(`Financial Overview (${currency}, ${currencyUnit})`, {
+      x: 0.38, y: 0.65, w: 9.5, h: 0.3,
+      fontSize: 14, fontFace: 'Segoe UI',
+      color: COLORS.footerText
+    });
+
+    // ===== SECTION HEADER: Revenue =====
+    slide.addText('売上高 (Revenue)', {
+      x: 0.36, y: 1.22, w: 6.1, h: 0.30,
+      fontSize: 14, fontFace: 'Segoe UI',
+      color: COLORS.black, align: 'left'
+    });
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0.36, y: 1.52, w: 6.1, h: 0,
+      line: { color: COLORS.dk2, width: 1.75 }
+    });
+
+    // ===== REVENUE BAR CHART (left side) =====
+    const revenueData = financialData.revenue_data || [];
+    if (revenueData.length > 0) {
+      // Sort by period
+      revenueData.sort((a, b) => {
+        const yearA = parseInt(String(a.period).replace(/\D/g, ''));
+        const yearB = parseInt(String(b.period).replace(/\D/g, ''));
+        return yearA - yearB;
+      });
+
+      const chartLabels = revenueData.map(d => String(d.period));
+      const chartValues = revenueData.map(d => d.value || 0);
+
+      slide.addChart(pptx.charts.BAR, [
+        {
+          name: 'Revenue',
+          labels: chartLabels,
+          values: chartValues
+        }
+      ], {
+        x: 0.36, y: 1.65, w: 6.0, h: 2.5,
+        barDir: 'col',
+        barGapWidthPct: 50,
+        chartColors: [COLORS.accent3],
+        showValue: true,
+        dataLabelPosition: 'outEnd',
+        dataLabelFontSize: 9,
+        dataLabelColor: COLORS.black,
+        catAxisTitle: '',
+        valAxisTitle: '',
+        catAxisLabelFontSize: 10,
+        valAxisLabelFontSize: 9,
+        showLegend: false,
+        valAxisDisplayUnits: 'none'
+      });
+    }
+
+    // ===== SECTION HEADER: Margins (right side) =====
+    slide.addText('利益率 (Margins)', {
+      x: 6.86, y: 1.22, w: 6.1, h: 0.30,
+      fontSize: 14, fontFace: 'Segoe UI',
+      color: COLORS.black, align: 'left'
+    });
+    slide.addShape(pptx.shapes.LINE, {
+      x: 6.86, y: 1.52, w: 6.1, h: 0,
+      line: { color: COLORS.dk2, width: 1.75 }
+    });
+
+    // ===== MARGIN LINE CHART (right side) =====
+    const marginData = financialData.margin_data || [];
+    if (marginData.length > 0) {
+      // Group margins by type
+      const marginTypes = [...new Set(marginData.map(m => m.margin_type))];
+      const marginPriority = ['operating', 'ebitda', 'pretax', 'net', 'gross'];
+      marginTypes.sort((a, b) => marginPriority.indexOf(a) - marginPriority.indexOf(b));
+
+      // Get unique periods
+      const periods = [...new Set(marginData.map(m => m.period))].sort((a, b) => {
+        const yearA = parseInt(String(a).replace(/\D/g, ''));
+        const yearB = parseInt(String(b).replace(/\D/g, ''));
+        return yearA - yearB;
+      });
+
+      const chartData = marginTypes.slice(0, 3).map((type, idx) => {
+        const typeData = marginData.filter(m => m.margin_type === type);
+        const values = periods.map(p => {
+          const found = typeData.find(m => m.period === p);
+          return found ? found.value : 0;
+        });
+        const labels = {
+          'operating': 'Operating Margin',
+          'ebitda': 'EBITDA Margin',
+          'pretax': 'Pre-tax Margin',
+          'net': 'Net Margin',
+          'gross': 'Gross Margin'
+        };
+        return {
+          name: labels[type] || type,
+          labels: periods,
+          values: values
+        };
+      });
+
+      if (chartData.length > 0 && chartData[0].values.some(v => v !== 0)) {
+        slide.addChart(pptx.charts.LINE, chartData, {
+          x: 6.86, y: 1.65, w: 6.0, h: 2.5,
+          lineDataSymbol: 'circle',
+          lineDataSymbolSize: 8,
+          chartColors: [COLORS.chartBlue, COLORS.chartOrange, COLORS.chartGreen],
+          showValue: true,
+          dataLabelPosition: 'above',
+          dataLabelFontSize: 9,
+          catAxisLabelFontSize: 10,
+          valAxisLabelFontSize: 9,
+          showLegend: true,
+          legendPos: 'b',
+          legendFontSize: 9,
+          valAxisDisplayUnits: 'none'
+        });
+      }
+    }
+
+    // ===== FINANCIAL SUMMARY TABLE (bottom left) =====
+    slide.addText('財務サマリー (Summary)', {
+      x: 0.36, y: 4.35, w: 6.1, h: 0.30,
+      fontSize: 14, fontFace: 'Segoe UI',
+      color: COLORS.black, align: 'left'
+    });
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0.36, y: 4.65, w: 6.1, h: 0,
+      line: { color: COLORS.dk2, width: 1.75 }
+    });
+
+    // Build summary table
+    const summaryData = [
+      ['Company', companyName],
+      ['Currency', currency]
+    ];
+
+    if (financialData.fiscal_year_end) {
+      summaryData.push(['FY End', financialData.fiscal_year_end]);
+    }
+
+    if (revenueData.length > 0) {
+      const latestRevenue = revenueData[revenueData.length - 1];
+      const formatValue = (val) => {
+        if (val >= 1000000000) return (val / 1000000000).toFixed(1) + 'B';
+        if (val >= 1000000) return (val / 1000000).toFixed(1) + 'M';
+        if (val >= 1000) return (val / 1000).toFixed(1) + 'K';
+        return val.toLocaleString();
+      };
+      summaryData.push(['Latest Revenue', `${formatValue(latestRevenue.value)} (${latestRevenue.period})`]);
+    }
+
+    if (marginData.length > 0) {
+      const marginLabels = {
+        'operating': 'Op. Margin',
+        'ebitda': 'EBITDA Margin',
+        'pretax': 'Pre-tax Margin',
+        'net': 'Net Margin',
+        'gross': 'Gross Margin'
+      };
+      // Get latest margin for primary type
+      const primaryType = marginData[0].margin_type;
+      const latestMargin = marginData.filter(m => m.margin_type === primaryType).sort((a, b) => {
+        const yearA = parseInt(String(a.period).replace(/\D/g, ''));
+        const yearB = parseInt(String(b.period).replace(/\D/g, ''));
+        return yearB - yearA;
+      })[0];
+      if (latestMargin) {
+        summaryData.push([marginLabels[primaryType] || primaryType, `${latestMargin.value.toFixed(1)}% (${latestMargin.period})`]);
+      }
+    }
+
+    const tableRows = summaryData.map((row) => [
+      {
+        text: row[0],
+        options: {
+          fill: { color: COLORS.accent3 },
+          color: COLORS.white,
+          align: 'center',
+          bold: false
+        }
+      },
+      {
+        text: row[1],
+        options: {
+          fill: { color: COLORS.white },
+          color: COLORS.black,
+          align: 'left',
+          border: [
+            { pt: 1, color: COLORS.gray, type: 'dash' },
+            { pt: 0 },
+            { pt: 1, color: COLORS.gray, type: 'dash' },
+            { pt: 0 }
+          ]
+        }
+      }
+    ]);
+
+    slide.addTable(tableRows, {
+      x: 0.36, y: 4.75,
+      w: 6.1,
+      colW: [1.4, 4.7],
+      rowH: 0.35,
+      fontFace: 'Segoe UI',
+      fontSize: 14,
+      valign: 'middle',
+      border: { pt: 2.5, color: COLORS.white },
+      margin: [0, 0.04, 0, 0.04]
+    });
+
+    // ===== KEY METRICS (bottom right) =====
+    slide.addText('主要指標 (Key Metrics)', {
+      x: 6.86, y: 4.35, w: 6.1, h: 0.30,
+      fontSize: 14, fontFace: 'Segoe UI',
+      color: COLORS.black, align: 'left'
+    });
+    slide.addShape(pptx.shapes.LINE, {
+      x: 6.86, y: 4.65, w: 6.1, h: 0,
+      line: { color: COLORS.dk2, width: 1.75 }
+    });
+
+    // Calculate growth metrics
+    const metricsData = [];
+    if (revenueData.length >= 2) {
+      const sortedRevenue = [...revenueData].sort((a, b) => {
+        const yearA = parseInt(String(a.period).replace(/\D/g, ''));
+        const yearB = parseInt(String(b.period).replace(/\D/g, ''));
+        return yearA - yearB;
+      });
+      const firstYear = sortedRevenue[0];
+      const lastYear = sortedRevenue[sortedRevenue.length - 1];
+      const yearsSpan = parseInt(String(lastYear.period).replace(/\D/g, '')) - parseInt(String(firstYear.period).replace(/\D/g, ''));
+
+      if (yearsSpan > 0 && firstYear.value > 0) {
+        const cagr = (Math.pow(lastYear.value / firstYear.value, 1 / yearsSpan) - 1) * 100;
+        metricsData.push(['Revenue CAGR', `${cagr.toFixed(1)}%`]);
+      }
+
+      // YoY growth
+      if (sortedRevenue.length >= 2) {
+        const prevYear = sortedRevenue[sortedRevenue.length - 2];
+        const yoyGrowth = ((lastYear.value - prevYear.value) / prevYear.value) * 100;
+        metricsData.push(['YoY Growth', `${yoyGrowth.toFixed(1)}%`]);
+      }
+    }
+
+    // Add margin trend
+    if (marginData.length >= 2) {
+      const primaryType = marginData[0].margin_type;
+      const typeData = marginData.filter(m => m.margin_type === primaryType).sort((a, b) => {
+        const yearA = parseInt(String(a.period).replace(/\D/g, ''));
+        const yearB = parseInt(String(b.period).replace(/\D/g, ''));
+        return yearA - yearB;
+      });
+      if (typeData.length >= 2) {
+        const marginChange = typeData[typeData.length - 1].value - typeData[typeData.length - 2].value;
+        const marginLabels = {
+          'operating': 'Op. Margin',
+          'ebitda': 'EBITDA',
+          'pretax': 'Pre-tax',
+          'net': 'Net',
+          'gross': 'Gross'
+        };
+        metricsData.push([`${marginLabels[primaryType]} Change`, `${marginChange >= 0 ? '+' : ''}${marginChange.toFixed(1)}pp`]);
+      }
+    }
+
+    if (metricsData.length > 0) {
+      const metricsRows = metricsData.map((row) => [
+        {
+          text: row[0],
+          options: {
+            fill: { color: COLORS.accent3 },
+            color: COLORS.white,
+            align: 'center',
+            bold: false
+          }
+        },
+        {
+          text: row[1],
+          options: {
+            fill: { color: COLORS.white },
+            color: COLORS.black,
+            align: 'left',
+            border: [
+              { pt: 1, color: COLORS.gray, type: 'dash' },
+              { pt: 0 },
+              { pt: 1, color: COLORS.gray, type: 'dash' },
+              { pt: 0 }
+            ]
+          }
+        }
+      ]);
+
+      slide.addTable(metricsRows, {
+        x: 6.86, y: 4.75,
+        w: 6.1,
+        colW: [1.8, 4.3],
+        rowH: 0.35,
+        fontFace: 'Segoe UI',
+        fontSize: 14,
+        valign: 'middle',
+        border: { pt: 2.5, color: COLORS.white },
+        margin: [0, 0.04, 0, 0.04]
+      });
+    }
+
+    // ===== FOOTNOTE =====
+    slide.addText('Source: Company financial data', {
+      x: 0.38, y: 6.90, w: 12.5, h: 0.18,
+      fontSize: 10, fontFace: 'Segoe UI',
+      color: COLORS.black
+    });
+
+    } // End of for loop (one slide per company)
+
+    // Generate base64
+    const base64Content = await pptx.write({ outputType: 'base64' });
+
+    console.log('Financial Chart PPTX generated successfully');
+
+    return {
+      success: true,
+      content: base64Content
+    };
+  } catch (error) {
+    console.error('Financial Chart PPTX error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// Financial Chart API endpoint - supports multiple files (up to 20)
+app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res) => {
+  const { email } = req.body;
+  const excelFiles = req.files;
+
+  if (!excelFiles || excelFiles.length === 0 || !email) {
+    return res.status(400).json({ error: 'Excel file(s) and email are required' });
+  }
+
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`NEW FINANCIAL CHART REQUEST: ${new Date().toISOString()}`);
+  console.log(`Email: ${email}`);
+  console.log(`Files: ${excelFiles.length}`);
+  excelFiles.forEach((f, i) => console.log(`  ${i + 1}. ${f.originalname} (${f.size} bytes)`));
+  console.log('='.repeat(50));
+
+  // Respond immediately
+  res.json({
+    success: true,
+    message: `Request received. Processing ${excelFiles.length} file(s).`,
+    fileCount: excelFiles.length
+  });
+
+  try {
+    const allFinancialData = [];
+    const errors = [];
+
+    // Process each Excel file
+    for (let i = 0; i < excelFiles.length; i++) {
+      const excelFile = excelFiles[i];
+      console.log(`\nProcessing file ${i + 1}/${excelFiles.length}: ${excelFile.originalname}`);
+
+      try {
+        // Parse Excel file
+        const workbook = XLSX.read(excelFile.buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+
+        // Get CSV format for AI analysis
+        const csvContent = XLSX.utils.sheet_to_csv(sheet);
+
+        // Use AI to analyze financial data
+        console.log('  Analyzing with AI...');
+        const financialData = await analyzeFinancialExcel(`File name: ${excelFile.originalname}\n\nContent:\n${csvContent.substring(0, 15000)}`);
+
+        if (financialData) {
+          financialData._fileName = excelFile.originalname;
+          allFinancialData.push(financialData);
+          console.log(`  ✓ Extracted: ${financialData.company_name || 'Unknown'}`);
+        } else {
+          errors.push({ file: excelFile.originalname, error: 'Failed to analyze' });
+          console.log(`  ✗ Failed to analyze`);
+        }
+      } catch (fileError) {
+        errors.push({ file: excelFile.originalname, error: fileError.message });
+        console.log(`  ✗ Error: ${fileError.message}`);
+      }
+    }
+
+    if (allFinancialData.length === 0) {
+      throw new Error('No financial data could be extracted from any file');
+    }
+
+    console.log(`\nSuccessfully processed ${allFinancialData.length}/${excelFiles.length} files`);
+
+    // Generate PowerPoint with all charts (one slide per company)
+    const pptxResult = await generateFinancialChartPPTX(allFinancialData);
+
+    if (!pptxResult.success) {
+      throw new Error(pptxResult.error || 'Failed to generate PowerPoint');
+    }
+
+    // Build email content with summary of all companies
+    const companyNames = allFinancialData.map(d => d.company_name || 'Unknown').join(', ');
+    const summaryRows = allFinancialData.map(d => `
+      <tr>
+        <td style="padding: 8px; border: 1px solid #e2e8f0;">${d.company_name || 'Unknown'}</td>
+        <td style="padding: 8px; border: 1px solid #e2e8f0;">${d.currency || '-'}</td>
+        <td style="padding: 8px; border: 1px solid #e2e8f0;">${d.revenue_data ? d.revenue_data.length + ' periods' : '-'}</td>
+        <td style="padding: 8px; border: 1px solid #e2e8f0;">${d.margin_data ? [...new Set(d.margin_data.map(m => m.margin_type))].join(', ') : '-'}</td>
+      </tr>
+    `).join('');
+
+    const errorSection = errors.length > 0 ? `
+      <h3 style="color: #dc2626; margin-top: 20px;">Failed Files (${errors.length})</h3>
+      <ul style="color: #666;">
+        ${errors.map(e => `<li>${e.file}: ${e.error}</li>`).join('')}
+      </ul>
+    ` : '';
+
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #1a365d;">Financial Charts - ${allFinancialData.length} Companies</h2>
+        <p>Your financial chart PowerPoint has been generated with ${allFinancialData.length} slide${allFinancialData.length > 1 ? 's' : ''}.</p>
+
+        <h3 style="color: #2563eb; margin-top: 20px;">Companies Processed</h3>
+        <table style="border-collapse: collapse; width: 100%; margin-top: 10px;">
+          <tr style="background: #f8fafc;">
+            <th style="padding: 8px; border: 1px solid #e2e8f0; text-align: left;">Company</th>
+            <th style="padding: 8px; border: 1px solid #e2e8f0; text-align: left;">Currency</th>
+            <th style="padding: 8px; border: 1px solid #e2e8f0; text-align: left;">Revenue</th>
+            <th style="padding: 8px; border: 1px solid #e2e8f0; text-align: left;">Margins</th>
+          </tr>
+          ${summaryRows}
+        </table>
+
+        ${errorSection}
+
+        <p style="margin-top: 20px; color: #64748b; font-size: 12px;">
+          Generated by Financial Chart Maker<br>
+          ${new Date().toISOString()}
+        </p>
+      </div>
+    `;
+
+    // Send email with PPTX attachment
+    const firstCompany = allFinancialData[0]?.company_name || 'Financial_Charts';
+    await sendEmail(
+      email,
+      `Financial Charts: ${allFinancialData.length} companies${allFinancialData.length <= 3 ? ' (' + companyNames + ')' : ''}`,
+      htmlContent,
+      {
+        content: pptxResult.content,
+        name: `Financial_Charts_${allFinancialData.length}_companies_${new Date().toISOString().split('T')[0]}.pptx`
+      }
+    );
+
+    console.log(`Financial chart email sent to ${email}`);
+    console.log('='.repeat(50));
+
+  } catch (error) {
+    console.error('Financial chart error:', error);
+    try {
+      await sendEmail(
+        email,
+        'Financial Chart - Error',
+        `<p>Error processing your financial data: ${error.message}</p><p>Please ensure your Excel files contain financial data with revenue and margin information.</p>`
+      );
+    } catch (e) {
+      console.error('Failed to send error email:', e);
+    }
+  }
+});
+
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v30 - Profile Slides' });
+  res.json({ status: 'ok', service: 'Find Target v31 - Financial Chart' });
 });
 
 const PORT = process.env.PORT || 3000;
