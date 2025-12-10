@@ -4424,26 +4424,17 @@ async function generateFinancialChartPPTX(financialDataArray) {
 
         if (hasMarginData) {
           // Create COMBO chart - bar for revenue, line for margin on secondary axis
-          // Put secondaryValAxis directly on the chartType entry (not in options)
-          slide.addChart(pptx.charts.COMBO, [], {
+          // Data as second param, chartTypes specifies type + secondaryValAxis
+          slide.addChart(pptx.charts.COMBO, [
+            { name: revenueLabel, labels: chartLabels, values: revenueValues },
+            { name: marginLabel, labels: chartLabels, values: marginValues }
+          ], {
             x: chartX, y: chartY, w: chartW, h: chartH,
             chartTypes: [
-              {
-                type: pptx.charts.BAR,
-                data: [{ name: revenueLabel, labels: chartLabels, values: revenueValues }],
-                barDir: 'col',
-                barGapWidthPct: 50,
-                chartColors: ['4472C4']
-              },
-              {
-                type: pptx.charts.LINE,
-                data: [{ name: marginLabel, labels: chartLabels, values: marginValues }],
-                lineSmooth: false,
-                lineSize: 2,
-                chartColors: ['ED7D31'],
-                secondaryValAxis: true
-              }
+              { type: pptx.charts.BAR, barDir: 'col', barGapWidthPct: 50 },
+              { type: pptx.charts.LINE, secondaryValAxis: true }
             ],
+            chartColors: ['4472C4', 'ED7D31'],
             showValue: true,
             dataLabelFontFace: 'Segoe UI',
             dataLabelFontSize: 9,
