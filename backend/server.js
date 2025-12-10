@@ -2096,16 +2096,36 @@ async function applyIterativeQualitativeFilter(companies, targetDescription, out
       const sheetData = createSheetData(currentCompanies, sheetHeaders,
         `Step ${stepIdx + 1}: ${filterCriteria} - ${currentCompanies.length} companies (removed ${removedCompanies.length})`);
 
-      // Add removed companies section
+      // Add removed companies section (5 rows gap, clear header)
       if (removedCompanies.length > 0) {
-        sheetData.push([]);
-        sheetData.push(['REMOVED COMPANIES (with business description):']);
+        // Add 5 empty rows for visual separation
+        for (let i = 0; i < 5; i++) {
+          sheetData.push([]);
+        }
+        // Header row for out-of-scope section
+        sheetData.push(['OUT OF SCOPE - Not matching: "' + filterCriteria + '"', 'Business Description (Reason for Exclusion)']);
+        sheetData.push(['Company Name', 'What They Actually Do']);
+        // List removed companies
         for (const c of removedCompanies) {
-          sheetData.push([c.name, '', '', '', '', '', '', '', '', '', '', c.filterReason]);
+          sheetData.push([c.name, c.filterReason || 'Does not match filter criteria']);
         }
       }
 
       const sheet = XLSX.utils.aoa_to_sheet(sheetData);
+
+      // Apply styling to the out-of-scope header row
+      if (removedCompanies.length > 0) {
+        const headerRowIdx = sheetData.length - removedCompanies.length - 2; // Row index of "OUT OF SCOPE" header
+        const subHeaderRowIdx = headerRowIdx + 1;
+
+        // Style header cells (dark background)
+        const headerStyle = { fill: { fgColor: { rgb: '1E3A5F' } }, font: { bold: true, color: { rgb: 'FFFFFF' } } };
+        const subHeaderStyle = { fill: { fgColor: { rgb: '374151' } }, font: { bold: true, color: { rgb: 'FFFFFF' } } };
+
+        // Apply styles if xlsx supports it (basic xlsx doesn't, but we set the data clearly)
+        // The header text itself makes it clear
+      }
+
       const sheetName = `${sheetNumber}. Q${stepIdx + 1} ${filterCriteria.substring(0, 20)}`;
       XLSX.utils.book_append_sheet(outputWorkbook, sheet, sheetName.substring(0, 31));
       sheetNumber++;
