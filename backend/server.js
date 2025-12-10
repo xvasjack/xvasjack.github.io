@@ -4222,14 +4222,14 @@ async function generateFinancialChartPPTX(financialDataArray) {
       slide.addText('財務実績', {
         x: 6.86, y: 4.35, w: 6.1, h: 0.30,
         fontSize: 14, fontFace: 'Segoe UI',
-        color: COLORS.black, align: 'left'
+        color: COLORS.black, align: 'center'
       });
       slide.addShape(pptx.shapes.LINE, {
         x: 6.86, y: 4.65, w: 6.1, h: 0,
         line: { color: COLORS.dk2, width: 1.75 }
       });
 
-      // ===== COMBO CHART (Column + Line on Secondary Axis) - Bottom Right =====
+      // ===== FINANCIAL CHART - Bottom Right =====
       const revenueData = financialData.revenue_data || [];
       const marginData = financialData.margin_data || [];
 
@@ -4246,12 +4246,12 @@ async function generateFinancialChartPPTX(financialDataArray) {
 
         // Get the highest priority margin available
         const marginPriority = ['operating', 'ebitda', 'pretax', 'net', 'gross'];
-        const marginLabels = {
-          'operating': 'Operating Margin (%)',
-          'ebitda': 'EBITDA Margin (%)',
-          'pretax': 'Pre-tax Margin (%)',
-          'net': 'Net Margin (%)',
-          'gross': 'Gross Margin (%)'
+        const marginLabelMap = {
+          'operating': '営業利益率',
+          'ebitda': 'EBITDA利益率',
+          'pretax': '税前利益率',
+          'net': '純利益率',
+          'gross': '粗利益率'
         };
 
         let selectedMarginType = null;
@@ -4262,50 +4262,82 @@ async function generateFinancialChartPPTX(financialDataArray) {
           const typeData = marginData.filter(m => m.margin_type === marginType);
           if (typeData.length > 0) {
             selectedMarginType = marginType;
-            // Match margin values to revenue periods
             marginValues = chartLabels.map(period => {
               const found = typeData.find(m => String(m.period) === period);
-              return found ? found.value : null;
+              return found ? found.value : 0;
             });
             break;
           }
         }
 
-        // Build chart data array
-        const chartDataArray = [
+        // Determine unit display
+        const unitDisplay = currencyUnit === 'millions' ? '百万' : (currencyUnit === 'billions' ? '十億' : '');
+        const revenueLabel = `売上高 (${currency}${unitDisplay})`;
+        const marginLabel = selectedMarginType ? `${marginLabelMap[selectedMarginType] || '利益率'} (%)` : '利益率 (%)';
+
+        // Chart position and size
+        const chartX = 6.86;
+        const chartY = 4.75;
+        const chartW = 6.0;
+        const chartH = 2.0;
+
+        // Create BAR chart for revenue (primary axis)
+        slide.addChart(pptx.charts.BAR, [
           {
-            name: `Revenue (${currency} ${currencyUnit})`,
+            name: revenueLabel,
             labels: chartLabels,
             values: revenueValues
           }
-        ];
+        ], {
+          x: chartX, y: chartY, w: chartW, h: chartH,
+          barDir: 'col',
+          barGapWidthPct: 75,
+          chartColors: ['4472C4'],
+          showValue: false,
+          catAxisLabelFontFace: 'Segoe UI',
+          catAxisLabelFontSize: 10,
+          valAxisLabelFontFace: 'Segoe UI',
+          valAxisLabelFontSize: 9,
+          valAxisDisplayUnits: 'none',
+          valAxisMajorGridLine: { style: 'solid', color: 'D9D9D9', size: 0.5 },
+          showLegend: true,
+          legendPos: 't',
+          legendFontFace: 'Segoe UI',
+          legendFontSize: 10
+        });
 
-        // Add margin line if available
-        if (selectedMarginType && marginValues.some(v => v !== null)) {
-          chartDataArray.push({
-            name: marginLabels[selectedMarginType] || 'Margin (%)',
-            labels: chartLabels,
-            values: marginValues.map(v => v || 0)
+        // If we have margin data, create LINE chart overlay (secondary axis)
+        if (selectedMarginType && marginValues.some(v => v !== 0)) {
+          slide.addChart(pptx.charts.LINE, [
+            {
+              name: marginLabel,
+              labels: chartLabels,
+              values: marginValues
+            }
+          ], {
+            x: chartX, y: chartY, w: chartW, h: chartH,
+            lineDataSymbol: 'circle',
+            lineDataSymbolSize: 8,
+            lineSize: 2,
+            chartColors: ['ED7D31'],
+            showValue: true,
+            dataLabelPosition: 't',
+            dataLabelFontFace: 'Segoe UI',
+            dataLabelFontSize: 9,
+            dataLabelColor: 'ED7D31',
+            catAxisHidden: true,
+            valAxisHidden: false,
+            valAxisLabelFontFace: 'Segoe UI',
+            valAxisLabelFontSize: 9,
+            valAxisDisplayUnits: 'none',
+            valAxisMajorGridLine: { style: 'none' },
+            showLegend: true,
+            legendPos: 't',
+            legendFontFace: 'Segoe UI',
+            legendFontSize: 10,
+            fill: 'none'
           });
         }
-
-        // Create simple bar chart with both revenue and margin as bars
-        // (Combo chart with secondary axis causes file corruption)
-        slide.addChart(pptx.charts.BAR, chartDataArray, {
-          x: 6.86, y: 4.75, w: 6.0, h: 2.35,
-          barDir: 'col',
-          barGapWidthPct: 50,
-          chartColors: [COLORS.chartBlue, COLORS.chartOrange],
-          showValue: true,
-          dataLabelPosition: 'outEnd',
-          dataLabelFontSize: 8,
-          catAxisLabelFontSize: 9,
-          valAxisLabelFontSize: 8,
-          showLegend: true,
-          legendPos: 'b',
-          legendFontSize: 8,
-          valAxisDisplayUnits: 'none'
-        });
       }
 
       // ===== FOOTNOTE =====
