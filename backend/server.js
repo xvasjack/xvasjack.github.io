@@ -2971,6 +2971,27 @@ async function generatePPTX(companies) {
         tableData.push(['Key Metrics', company.metrics]);
       }
 
+      // Helper function to format cell text with proper PowerPoint bullets
+      const formatCellText = (text) => {
+        if (!text || typeof text !== 'string') return text;
+
+        // Check if text contains bullet points (■ or starts with ■)
+        if (text.includes('■')) {
+          // Split by newline and filter out empty lines
+          const lines = text.split('\n').filter(line => line.trim());
+
+          // Convert to array of text objects with bullet formatting
+          return lines.map((line, index) => {
+            const cleanLine = line.replace(/^■\s*/, '').trim();
+            return {
+              text: cleanLine + (index < lines.length - 1 ? '\n' : ''),
+              options: { bullet: { type: 'bullet' } }
+            };
+          });
+        }
+        return text;
+      };
+
       const rows = tableData.map((row) => [
         {
           text: row[0],
@@ -2982,7 +3003,7 @@ async function generatePPTX(companies) {
           }
         },
         {
-          text: row[1],
+          text: formatCellText(row[1]),
           options: {
             fill: { color: COLORS.white },
             color: COLORS.black,
