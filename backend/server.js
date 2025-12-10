@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
@@ -2506,10 +2507,11 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     pptx.defineLayout({ name: 'TRADING', width: 13.333, height: 7.5 });
     pptx.layout = 'TRADING';
 
-    // Template colors
+    // Template colors (extracted from reference PPTX theme1.xml)
     const COLORS = {
-      darkBlue: '003399',      // Row 1 and median cells
-      lightBlue: 'B4C6E7',     // Row 2 column headers
+      darkBlue: '011AB7',      // Row 1 (Financial Information, Multiples) - accent3
+      lightBlue: '007FFF',     // Row 2 column headers AND median cell - accent1
+      navyLine: '293F55',      // Header/footer lines from slideLayout1
       white: 'FFFFFF',
       black: '000000',
       gray: '808080',
@@ -2518,24 +2520,26 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
 
     const slide = pptx.addSlide();
 
-    // ===== TOP BLUE BAR =====
-    slide.addShape(pptx.shapes.RECTANGLE, {
-      x: 0, y: 0, w: 13.333, h: 0.08,
-      fill: { color: COLORS.darkBlue },
-      line: { color: COLORS.darkBlue }
+    // ===== HEADER LINES (from slideLayout1) =====
+    // Thick line at y=1.02" (933847 EMU), width 4.5pt (57150 EMU)
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0, y: 1.02, w: 13.333, h: 0,
+      line: { color: COLORS.navyLine, width: 4.5 }
+    });
+    // Thin line at y=1.10" (1005855 EMU), width 2.25pt (28575 EMU)
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0, y: 1.10, w: 13.333, h: 0,
+      line: { color: COLORS.navyLine, width: 2.25 }
     });
 
-    // ===== TITLE + SUBTITLE =====
-    slide.addText(`Trading Comparable – ${TargetCompanyOrIndustry}`, {
-      x: 0.38, y: 0.25, w: 12.5, h: 0.55,
-      fontSize: 28, bold: true, fontFace: 'Segoe UI',
-      color: COLORS.black
-    });
-
-    slide.addText(`Considering financial data availability, profitability and business relevance, ${finalCompanies.length} companies are considered as peers`, {
-      x: 0.38, y: 0.75, w: 12.5, h: 0.35,
-      fontSize: 14, bold: false, fontFace: 'Segoe UI',
-      color: COLORS.black
+    // ===== TITLE + SUBTITLE (positioned per slideLayout1: x=0.38", y=0.05") =====
+    // Title at top (font 24), subtitle below (font 16), combined text box
+    slide.addText([
+      { text: `Trading Comparable – ${TargetCompanyOrIndustry}`, options: { fontSize: 24, fontFace: 'Segoe UI', color: COLORS.black, breakLine: true } },
+      { text: `Considering financial data availability, profitability and business relevance, ${finalCompanies.length} companies are considered as peers`, options: { fontSize: 16, fontFace: 'Segoe UI', color: COLORS.black } }
+    ], {
+      x: 0.38, y: 0.05, w: 12.5, h: 0.91,
+      valign: 'bottom'
     });
 
     // Helper function to clean company name
@@ -2638,10 +2642,21 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       margin: cellMargin
     };
 
-    // Median dark blue style
-    const medianDarkStyle = {
-      fill: COLORS.darkBlue,
+    // Median "Median" label style - light blue (#007FFF) with white text
+    const medianLabelStyle = {
+      fill: COLORS.lightBlue,
       color: COLORS.white,
+      fontFace: 'Segoe UI',
+      fontSize: 10,
+      bold: true,
+      valign: 'middle',
+      margin: cellMargin
+    };
+
+    // Median value cells - white background with bold black text
+    const medianValueStyle = {
+      fill: COLORS.white,
+      color: COLORS.black,
       fontFace: 'Segoe UI',
       fontSize: 10,
       bold: true,
@@ -2701,6 +2716,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     });
 
     // === MEDIAN ROW ===
+    // Only the "Median" cell has light blue fill; values have white background
     const medianPE = medians.peTTM !== null ? medians.peTTM : medians.peFY;
     tableRows.push([
       { text: '', options: { ...medianEmptyStyle } },
@@ -2709,25 +2725,26 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       { text: '', options: { ...medianEmptyStyle } },
       { text: '', options: { ...medianEmptyStyle } },
       { text: '', options: { ...medianEmptyStyle } },
-      { text: 'Median', options: { ...medianDarkStyle, align: 'right' } },
-      { text: formatMultipleX(medians.evEbitda), options: { ...medianDarkStyle, align: 'right' } },
-      { text: formatMultipleX(medianPE), options: { ...medianDarkStyle, align: 'right' } },
-      { text: formatMultipleX(medians.pb), options: { ...medianDarkStyle, align: 'right' } }
+      { text: 'Median', options: { ...medianLabelStyle, align: 'right' } },
+      { text: formatMultipleX(medians.evEbitda), options: { ...medianValueStyle, align: 'right' } },
+      { text: formatMultipleX(medianPE), options: { ...medianValueStyle, align: 'right' } },
+      { text: formatMultipleX(medians.pb), options: { ...medianValueStyle, align: 'right' } }
     ]);
 
-    // Calculate dimensions
+    // Calculate dimensions (from reference PPTX)
     const numRows = displayCompanies.length + 3;
     const availableHeight = 5.2;
-    const rowHeight = Math.min(0.18, availableHeight / numRows);
+    const rowHeight = Math.min(0.179, availableHeight / numRows); // Reference: 0.179" per row
 
-    // Column widths - stretched to full width
-    const colWidths = [2.2, 1.25, 1.05, 1.1, 0.9, 1.0, 1.05, 1.1, 0.95, 0.9];
-    const tableWidth = colWidths.reduce((a, b) => a + b, 0);
+    // Column widths from reference PPTX (total: 12.59")
+    // Col 1: 2.42", Col 2: 1.31", Cols 3-10: 1.11" each
+    const colWidths = [2.42, 1.31, 1.11, 1.11, 1.11, 1.11, 1.11, 1.11, 1.11, 1.11];
+    const tableWidth = colWidths.reduce((a, b) => a + b, 0); // 12.59"
 
-    // Add TABLE to slide
+    // Add TABLE to slide (position from reference: x=0.38", y=1.47")
     slide.addTable(tableRows, {
       x: 0.38,
-      y: 1.2,
+      y: 1.47,
       w: tableWidth,
       fontSize: 10,
       fontFace: 'Segoe UI',
@@ -2752,21 +2769,37 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fontSize: 9, fontFace: 'Segoe UI', color: COLORS.black
     });
 
+    // ===== FOOTER LINE (from slideLayout1: y=7.24", width 2.25pt) =====
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0, y: 7.24, w: 13.333, h: 0,
+      line: { color: COLORS.navyLine, width: 2.25 }
+    });
+
+    // ===== YCP LOGO (from slideLayout1: x=0.38", y=7.30") =====
+    // Logo image stored in backend folder
+    try {
+      const logoPath = path.join(__dirname, 'ycp-logo.png');
+      const logoExists = require('fs').existsSync(logoPath);
+      if (logoExists) {
+        slide.addImage({
+          path: logoPath,
+          x: 0.38, y: 7.30, w: 0.47, h: 0.17
+        });
+      }
+    } catch (e) {
+      console.log('Logo not found, skipping');
+    }
+
+    // ===== FOOTER COPYRIGHT (from slideLayout1: center, y=7.26") =====
     slide.addText('(C) YCP 2025 all rights reserved', {
-      x: 4.5, y: 7.1, w: 4.5, h: 0.25,
-      fontSize: 9, fontFace: 'Segoe UI', color: COLORS.gray, align: 'center'
+      x: 4.1, y: 7.26, w: 5.1, h: 0.20,
+      fontSize: 8, fontFace: 'Segoe UI', color: COLORS.gray, align: 'center'
     });
 
+    // ===== PAGE NUMBER =====
     slide.addText('1', {
-      x: 12.5, y: 7.1, w: 0.5, h: 0.25,
-      fontSize: 9, fontFace: 'Segoe UI', color: COLORS.black, align: 'right'
-    });
-
-    // ===== BOTTOM BLUE BAR =====
-    slide.addShape(pptx.shapes.RECTANGLE, {
-      x: 0, y: 7.42, w: 13.333, h: 0.08,
-      fill: { color: COLORS.darkBlue },
-      line: { color: COLORS.darkBlue }
+      x: 12.5, y: 7.26, w: 0.5, h: 0.20,
+      fontSize: 10, fontFace: 'Segoe UI', color: COLORS.black, align: 'right'
     });
 
     // Generate PPT buffer
