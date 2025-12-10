@@ -4517,8 +4517,7 @@ async function generateFinancialChartPPTX(financialDataArray) {
                 lineSmooth: false,
                 lineSize: 2,
                 lineDataSymbolSize: 6,
-                secondaryValAxis: true,
-                secondaryCatAxis: true
+                secondaryValAxis: true
               }
             ],
             chartColors: ['5B9BD5', 'ED7D31'],
@@ -4534,41 +4533,28 @@ async function generateFinancialChartPPTX(financialDataArray) {
             catAxisLineShow: true,
             catAxisLineColor: '000000',
             catAxisMajorTickMark: 'out',
-            // Value axes configuration
-            valAxes: [
-              {
-                // Primary axis (left - revenue) with border and tick marks
-                showValAxisTitle: false,
-                valAxisLabelFontFace: 'Segoe UI',
-                valAxisLabelFontSize: 9,
-                valAxisLabelColor: '000000',
-                valAxisDisplayUnits: 'none',
-                valAxisLineShow: true,
-                valAxisLineColor: '000000',
-                valAxisMajorTickMark: 'out',
-                valAxisMajorGridLine: { style: 'solid', color: 'D9D9D9', size: 0.5 },
-                valAxisMinorGridLine: { style: 'none' }
-              },
-              {
-                // Secondary axis (right - margin %) with border and tick marks
-                showValAxisTitle: false,
-                valAxisLabelFontFace: 'Segoe UI',
-                valAxisLabelFontSize: 9,
-                valAxisLabelColor: 'ED7D31',
-                valAxisMinVal: 0,
-                valAxisMaxVal: 25,
-                valAxisDisplayUnits: 'none',
-                valAxisLineShow: true,
-                valAxisLineColor: '000000',
-                valAxisMajorTickMark: 'out',
-                valAxisMajorGridLine: { style: 'none' },
-                valAxisMinorGridLine: { style: 'none' }
-              }
-            ],
-            catAxes: [
-              { catAxisTitle: '', catAxisLineShow: true, catAxisMajorTickMark: 'out' },
-              { catAxisHidden: true }
-            ],
+            // Primary value axis (left - revenue)
+            valAxisLabelFontFace: 'Segoe UI',
+            valAxisLabelFontSize: 9,
+            valAxisLabelColor: '000000',
+            valAxisDisplayUnits: 'none',
+            valAxisLineShow: true,
+            valAxisLineColor: '000000',
+            valAxisMajorTickMark: 'out',
+            valAxisMajorGridLine: { style: 'solid', color: 'D9D9D9', size: 0.5 },
+            valAxisMinorGridLine: { style: 'none' },
+            // Secondary value axis (right - margin %)
+            showSecValAxis: true,
+            secValAxisLabelFontFace: 'Segoe UI',
+            secValAxisLabelFontSize: 9,
+            secValAxisLabelColor: 'ED7D31',
+            secValAxisMinVal: 0,
+            secValAxisMaxVal: 25,
+            secValAxisDisplayUnits: 'none',
+            secValAxisLineShow: true,
+            secValAxisLineColor: '000000',
+            secValAxisMajorTickMark: 'out',
+            secValAxisMajorGridLine: { style: 'none' },
             // Legend - PPT built-in, positioned at top
             showLegend: true,
             legendPos: 't'
