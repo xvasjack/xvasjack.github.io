@@ -1269,14 +1269,14 @@ app.post('/api/find-target-slow', async (req, res) => {
 async function expandWithMultiModelAI(existingCompanies, business, country, iteration) {
   console.log(`\n--- Multi-Model AI Expansion (Iteration ${iteration}) ---`);
   const existingNames = existingCompanies
-    .filter(c => c && c.name)
-    .map(c => c.name.toLowerCase());
+    .filter(c => c && c.company_name)
+    .map(c => c.company_name.toLowerCase());
 
   // Build context of what we already found
   const existingList = existingCompanies
-    .filter(c => c && c.name)
+    .filter(c => c && c.company_name)
     .slice(0, 50)
-    .map(c => c.name)
+    .map(c => c.company_name)
     .join(', ');
 
   // Create prompts for different AI models - search WITHOUT exclusion for maximum coverage
@@ -1326,8 +1326,8 @@ List at least 20 new companies if possible.`;
   // Combine and filter out duplicates (compared to existing)
   const allNewCompanies = [...gptCompanies, ...geminiCompanies, ...perplexityCompanies];
   const trulyNew = allNewCompanies.filter(c => {
-    if (!c || !c.name) return false;
-    const nameLower = c.name.toLowerCase();
+    if (!c || !c.company_name) return false;
+    const nameLower = c.company_name.toLowerCase();
     return !existingNames.some(existing =>
       existing.includes(nameLower) || nameLower.includes(existing) ||
       levenshteinSimilarity(existing, nameLower) > 0.8
