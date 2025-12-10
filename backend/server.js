@@ -2732,7 +2732,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       border: [dashBorder, dataVerticalBorder, dashBorder, dataVerticalBorder]
     };
 
-    // Median "Median" label style - light blue with sysDash top border
+    // Median "Median" label style - light blue with dash top and bottom borders
     const medianLabelStyle = {
       fill: COLORS.lightBlue,
       color: COLORS.white,
@@ -2741,10 +2741,10 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       bold: true,
       valign: 'middle',
       margin: cellMargin,
-      border: [dashBorder, solidWhiteBorder, solidWhiteBorder, solidWhiteBorder]
+      border: [dashBorder, solidWhiteBorder, dashBorder, solidWhiteBorder]
     };
 
-    // Median value cells - white background with sysDash top border
+    // Median value cells - white background with dash top and bottom borders
     const medianValueStyle = {
       fill: COLORS.white,
       color: COLORS.black,
@@ -2753,7 +2753,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       bold: true,
       valign: 'middle',
       margin: cellMargin,
-      border: [dashBorder, solidWhiteBorder, solidWhiteBorder, solidWhiteBorder]
+      border: [dashBorder, solidWhiteBorder, dashBorder, solidWhiteBorder]
     };
 
     // Median empty cells - NO borders (no lines from last company to Median)
