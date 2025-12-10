@@ -112,19 +112,6 @@ Singapore"></textarea>
               <input type="text" id="targetBusiness" name="TargetBusiness" required placeholder="e.g. Semiconductor distributor">
             </div>
             <div class="form-group full-width">
-              <label>Output Option</label>
-              <div class="radio-group horizontal">
-                <label class="radio-option simple selected">
-                  <input type="radio" name="OutputOption" value="in_scope_only" checked>
-                  <span>In-scope only</span>
-                </label>
-                <label class="radio-option simple">
-                  <input type="radio" name="OutputOption" value="all_companies">
-                  <span>All with status</span>
-                </label>
-              </div>
-            </div>
-            <div class="form-group full-width">
               <label for="email">Email Address</label>
               <input type="email" id="email" name="Email" required placeholder="your@company.com">
             </div>
@@ -159,15 +146,6 @@ Singapore"></textarea>
         btn.classList.add('active');
         fileTab.classList.toggle('active', currentMode === 'file');
         manualTab.classList.toggle('active', currentMode === 'manual');
-      });
-    });
-
-    // Radio selection
-    document.querySelectorAll('.radio-option').forEach(opt => {
-      opt.addEventListener('click', () => {
-        document.querySelectorAll('.radio-option').forEach(o => o.classList.remove('selected'));
-        opt.classList.add('selected');
-        opt.querySelector('input').checked = true;
       });
     });
 
@@ -295,7 +273,7 @@ Singapore"></textarea>
             Companies: companiesData,
             Countries: countriesData,
             TargetBusiness: document.getElementById('targetBusiness').value,
-            OutputOption: document.querySelector('input[name="OutputOption"]:checked').value,
+            OutputOption: 'both_sheets',
             Email: document.getElementById('email').value
           })
         });
