@@ -4840,6 +4840,7 @@ async function generateUTBPDF(companyName, website, research, additionalContext)
     const doc = new PDFDocument({
       size: 'A4',
       margins: { top: 50, bottom: 50, left: 50, right: 50 },
+      bufferPages: true,
       info: {
         Title: `UTB Report - ${companyName}`,
         Author: 'BlueRock Ventures',
@@ -5074,6 +5075,8 @@ async function generateUTBPDF(companyName, website, research, additionalContext)
          .text(`UTB Report - ${companyName} | Page ${i + 1} of ${pages.count}`, 50, doc.page.height - 30, { align: 'center', width: doc.page.width - 100 });
     }
 
+    // Flush buffered pages and end
+    doc.flushPages();
     doc.end();
   });
 }
