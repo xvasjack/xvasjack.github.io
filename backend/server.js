@@ -2985,21 +2985,21 @@ async function generatePPTX(companies) {
         color: COLORS.footerText, align: 'center'
       });
 
-      // ===== TITLE (top left) =====
-      slide.addText(company.title || company.company_name || 'Company Profile', {
-        x: 0.38, y: 0.05, w: 9.5, h: 0.6,
-        fontSize: 24, bold: false, fontFace: 'Segoe UI',
+      // ===== TITLE + MESSAGE (combined in one text box) =====
+      const titleText = company.title || company.company_name || 'Company Profile';
+      const messageText = company.message || '';
+
+      // Create combined text with title (font 24) and message (font 16)
+      const titleContent = messageText ? [
+        { text: titleText, options: { fontSize: 24, fontFace: 'Segoe UI', color: COLORS.black, breakLine: true } },
+        { text: messageText, options: { fontSize: 16, fontFace: 'Segoe UI', color: COLORS.black } }
+      ] : titleText;
+
+      slide.addText(titleContent, {
+        x: 0.38, y: 0.07, w: 9.5, h: 0.9,
+        fontSize: 24, fontFace: 'Segoe UI',
         color: COLORS.black, valign: 'bottom'
       });
-
-      // Message (subtitle below title)
-      if (company.message) {
-        slide.addText(company.message, {
-          x: 0.38, y: 0.65, w: 9.5, h: 0.3,
-          fontSize: 16, fontFace: 'Segoe UI',
-          color: COLORS.black
-        });
-      }
 
       // ===== FLAG (top right) =====
       const countryCode = getCountryCode(company.location);
