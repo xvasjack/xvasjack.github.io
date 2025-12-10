@@ -4053,6 +4053,7 @@ RULES:
 }
 
 // Generate financial chart PowerPoint (supports multiple companies/slides)
+// Creates a single combo chart (column for revenue + line for margin on secondary axis) at bottom right
 async function generateFinancialChartPPTX(financialDataArray) {
   try {
     // Ensure we have an array
@@ -4079,363 +4080,178 @@ async function generateFinancialChartPPTX(financialDataArray) {
       gray: 'BFBFBF',
       dk2: '1F497D',
       footerText: '808080',
-      chartBlue: '2563EB',
-      chartOrange: 'F97316',
-      chartGreen: '22C55E'
+      chartBlue: '4472C4',
+      chartOrange: 'ED7D31'
     };
 
     // Generate one slide per company
     for (const financialData of dataArray) {
       if (!financialData) continue;
 
-    const slide = pptx.addSlide();
+      const slide = pptx.addSlide();
 
-    // ===== HEADER LINES (from template) =====
-    slide.addShape(pptx.shapes.LINE, {
-      x: 0, y: 1.02, w: 13.333, h: 0,
-      line: { color: COLORS.headerLine, width: 4.5 }
-    });
-    slide.addShape(pptx.shapes.LINE, {
-      x: 0, y: 1.10, w: 13.333, h: 0,
-      line: { color: COLORS.headerLine, width: 2.25 }
-    });
-
-    // ===== FOOTER LINE =====
-    slide.addShape(pptx.shapes.LINE, {
-      x: 0, y: 7.24, w: 13.333, h: 0,
-      line: { color: COLORS.headerLine, width: 2.25 }
-    });
-
-    // Footer copyright text
-    slide.addText('(C) YCP 2025 all rights reserved', {
-      x: 4.1, y: 7.26, w: 5.1, h: 0.2,
-      fontSize: 8, fontFace: 'Segoe UI',
-      color: COLORS.footerText, align: 'center'
-    });
-
-    // ===== TITLE (top left) =====
-    const companyName = financialData.company_name || 'Financial Performance';
-    slide.addText(companyName, {
-      x: 0.38, y: 0.05, w: 9.5, h: 0.6,
-      fontSize: 24, bold: false, fontFace: 'Segoe UI',
-      color: COLORS.black, valign: 'bottom'
-    });
-
-    // Subtitle with currency info
-    const currency = financialData.currency || 'USD';
-    const currencyUnit = financialData.revenue_unit || 'millions';
-    slide.addText(`Financial Overview (${currency}, ${currencyUnit})`, {
-      x: 0.38, y: 0.65, w: 9.5, h: 0.3,
-      fontSize: 14, fontFace: 'Segoe UI',
-      color: COLORS.footerText
-    });
-
-    // ===== SECTION HEADER: Revenue =====
-    slide.addText('売上高 (Revenue)', {
-      x: 0.36, y: 1.22, w: 6.1, h: 0.30,
-      fontSize: 14, fontFace: 'Segoe UI',
-      color: COLORS.black, align: 'left'
-    });
-    slide.addShape(pptx.shapes.LINE, {
-      x: 0.36, y: 1.52, w: 6.1, h: 0,
-      line: { color: COLORS.dk2, width: 1.75 }
-    });
-
-    // ===== REVENUE BAR CHART (left side) =====
-    const revenueData = financialData.revenue_data || [];
-    if (revenueData.length > 0) {
-      // Sort by period
-      revenueData.sort((a, b) => {
-        const yearA = parseInt(String(a.period).replace(/\D/g, ''));
-        const yearB = parseInt(String(b.period).replace(/\D/g, ''));
-        return yearA - yearB;
+      // ===== HEADER LINES (from template) =====
+      slide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 1.02, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 4.5 }
+      });
+      slide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 1.10, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 2.25 }
       });
 
-      const chartLabels = revenueData.map(d => String(d.period));
-      const chartValues = revenueData.map(d => d.value || 0);
-
-      slide.addChart(pptx.charts.BAR, [
-        {
-          name: 'Revenue',
-          labels: chartLabels,
-          values: chartValues
-        }
-      ], {
-        x: 0.36, y: 1.65, w: 6.0, h: 2.5,
-        barDir: 'col',
-        barGapWidthPct: 50,
-        chartColors: [COLORS.accent3],
-        showValue: true,
-        dataLabelPosition: 'outEnd',
-        dataLabelFontSize: 9,
-        dataLabelColor: COLORS.black,
-        catAxisTitle: '',
-        valAxisTitle: '',
-        catAxisLabelFontSize: 10,
-        valAxisLabelFontSize: 9,
-        showLegend: false,
-        valAxisDisplayUnits: 'none'
-      });
-    }
-
-    // ===== SECTION HEADER: Margins (right side) =====
-    slide.addText('利益率 (Margins)', {
-      x: 6.86, y: 1.22, w: 6.1, h: 0.30,
-      fontSize: 14, fontFace: 'Segoe UI',
-      color: COLORS.black, align: 'left'
-    });
-    slide.addShape(pptx.shapes.LINE, {
-      x: 6.86, y: 1.52, w: 6.1, h: 0,
-      line: { color: COLORS.dk2, width: 1.75 }
-    });
-
-    // ===== MARGIN LINE CHART (right side) =====
-    const marginData = financialData.margin_data || [];
-    if (marginData.length > 0) {
-      // Group margins by type
-      const marginTypes = [...new Set(marginData.map(m => m.margin_type))];
-      const marginPriority = ['operating', 'ebitda', 'pretax', 'net', 'gross'];
-      marginTypes.sort((a, b) => marginPriority.indexOf(a) - marginPriority.indexOf(b));
-
-      // Get unique periods
-      const periods = [...new Set(marginData.map(m => m.period))].sort((a, b) => {
-        const yearA = parseInt(String(a).replace(/\D/g, ''));
-        const yearB = parseInt(String(b).replace(/\D/g, ''));
-        return yearA - yearB;
+      // ===== FOOTER LINE =====
+      slide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 7.24, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 2.25 }
       });
 
-      const chartData = marginTypes.slice(0, 3).map((type, idx) => {
-        const typeData = marginData.filter(m => m.margin_type === type);
-        const values = periods.map(p => {
-          const found = typeData.find(m => m.period === p);
-          return found ? found.value : 0;
+      // Footer copyright text
+      slide.addText('(C) YCP 2025 all rights reserved', {
+        x: 4.1, y: 7.26, w: 5.1, h: 0.2,
+        fontSize: 8, fontFace: 'Segoe UI',
+        color: COLORS.footerText, align: 'center'
+      });
+
+      // ===== TITLE (top left) =====
+      const companyName = financialData.company_name || 'Financial Performance';
+      slide.addText(companyName, {
+        x: 0.38, y: 0.05, w: 9.5, h: 0.6,
+        fontSize: 24, bold: false, fontFace: 'Segoe UI',
+        color: COLORS.black, valign: 'bottom'
+      });
+
+      // Subtitle with currency info
+      const currency = financialData.currency || 'USD';
+      const currencyUnit = financialData.revenue_unit || 'millions';
+      slide.addText(`Financial Overview (${currency}, ${currencyUnit})`, {
+        x: 0.38, y: 0.65, w: 9.5, h: 0.3,
+        fontSize: 14, fontFace: 'Segoe UI',
+        color: COLORS.footerText
+      });
+
+      // ===== SECTION HEADER: 財務実績 (Financial Performance) - Bottom Right =====
+      slide.addText('財務実績', {
+        x: 6.86, y: 4.35, w: 6.1, h: 0.30,
+        fontSize: 14, fontFace: 'Segoe UI',
+        color: COLORS.black, align: 'left'
+      });
+      slide.addShape(pptx.shapes.LINE, {
+        x: 6.86, y: 4.65, w: 6.1, h: 0,
+        line: { color: COLORS.dk2, width: 1.75 }
+      });
+
+      // ===== COMBO CHART (Column + Line on Secondary Axis) - Bottom Right =====
+      const revenueData = financialData.revenue_data || [];
+      const marginData = financialData.margin_data || [];
+
+      if (revenueData.length > 0) {
+        // Sort revenue by period
+        revenueData.sort((a, b) => {
+          const yearA = parseInt(String(a.period).replace(/\D/g, ''));
+          const yearB = parseInt(String(b.period).replace(/\D/g, ''));
+          return yearA - yearB;
         });
-        const labels = {
-          'operating': 'Operating Margin',
-          'ebitda': 'EBITDA Margin',
-          'pretax': 'Pre-tax Margin',
-          'net': 'Net Margin',
-          'gross': 'Gross Margin'
-        };
-        return {
-          name: labels[type] || type,
-          labels: periods,
-          values: values
-        };
-      });
 
-      if (chartData.length > 0 && chartData[0].values.some(v => v !== 0)) {
-        slide.addChart(pptx.charts.LINE, chartData, {
-          x: 6.86, y: 1.65, w: 6.0, h: 2.5,
-          lineDataSymbol: 'circle',
-          lineDataSymbolSize: 8,
-          chartColors: [COLORS.chartBlue, COLORS.chartOrange, COLORS.chartGreen],
+        const chartLabels = revenueData.map(d => String(d.period));
+        const revenueValues = revenueData.map(d => d.value || 0);
+
+        // Get the highest priority margin available
+        const marginPriority = ['operating', 'ebitda', 'pretax', 'net', 'gross'];
+        const marginLabels = {
+          'operating': 'Operating Margin (%)',
+          'ebitda': 'EBITDA Margin (%)',
+          'pretax': 'Pre-tax Margin (%)',
+          'net': 'Net Margin (%)',
+          'gross': 'Gross Margin (%)'
+        };
+
+        let selectedMarginType = null;
+        let marginValues = [];
+
+        // Find highest priority margin that has data
+        for (const marginType of marginPriority) {
+          const typeData = marginData.filter(m => m.margin_type === marginType);
+          if (typeData.length > 0) {
+            selectedMarginType = marginType;
+            // Match margin values to revenue periods
+            marginValues = chartLabels.map(period => {
+              const found = typeData.find(m => String(m.period) === period);
+              return found ? found.value : null;
+            });
+            break;
+          }
+        }
+
+        // Build chart data array
+        const chartDataArray = [
+          {
+            name: `Revenue (${currency} ${currencyUnit})`,
+            labels: chartLabels,
+            values: revenueValues
+          }
+        ];
+
+        // Add margin line if available
+        if (selectedMarginType && marginValues.some(v => v !== null)) {
+          chartDataArray.push({
+            name: marginLabels[selectedMarginType] || 'Margin (%)',
+            labels: chartLabels,
+            values: marginValues.map(v => v || 0)
+          });
+        }
+
+        // Create combo chart (bar + line on secondary axis)
+        slide.addChart(pptx.charts.BAR, chartDataArray, {
+          x: 6.86, y: 4.75, w: 6.0, h: 2.35,
+          barDir: 'col',
+          barGapWidthPct: 50,
+          chartColors: [COLORS.chartBlue, COLORS.chartOrange],
           showValue: true,
-          dataLabelPosition: 'above',
-          dataLabelFontSize: 9,
-          catAxisLabelFontSize: 10,
-          valAxisLabelFontSize: 9,
+          dataLabelPosition: 'outEnd',
+          dataLabelFontSize: 8,
+          dataLabelColor: COLORS.black,
+          catAxisLabelFontSize: 9,
+          valAxisLabelFontSize: 8,
           showLegend: true,
           legendPos: 'b',
-          legendFontSize: 9,
-          valAxisDisplayUnits: 'none'
+          legendFontSize: 8,
+          valAxisDisplayUnits: 'none',
+          // Secondary axis for margin (line chart)
+          catAxisLineShow: false,
+          valAxisLineShow: false,
+          // Make second series a line chart on secondary axis
+          chartColorsOpacity: 100,
+          lineDataSymbol: 'circle',
+          lineDataSymbolSize: 6,
+          // Secondary value axis for margin percentage
+          valAxes: [
+            {
+              showValAxisTitle: false,
+              valAxisDisplayUnits: 'none'
+            },
+            {
+              showValAxisTitle: false,
+              valAxisDisplayUnits: 'none',
+              valGridLine: { style: 'none' }
+            }
+          ],
+          catAxes: [{ catAxisTitle: '' }],
+          // Specify which series uses which chart type and axis
+          type: chartDataArray.length > 1 ? pptx.charts.COMBO : pptx.charts.BAR,
+          comboChartTypes: chartDataArray.length > 1 ? [
+            { type: pptx.charts.BAR, data: [chartDataArray[0]], options: { barDir: 'col', chartColors: [COLORS.chartBlue] } },
+            { type: pptx.charts.LINE, data: [chartDataArray[1]], options: { secondaryValAxis: true, lineDataSymbol: 'circle', chartColors: [COLORS.chartOrange] } }
+          ] : undefined
         });
       }
-    }
 
-    // ===== FINANCIAL SUMMARY TABLE (bottom left) =====
-    slide.addText('財務サマリー (Summary)', {
-      x: 0.36, y: 4.35, w: 6.1, h: 0.30,
-      fontSize: 14, fontFace: 'Segoe UI',
-      color: COLORS.black, align: 'left'
-    });
-    slide.addShape(pptx.shapes.LINE, {
-      x: 0.36, y: 4.65, w: 6.1, h: 0,
-      line: { color: COLORS.dk2, width: 1.75 }
-    });
-
-    // Build summary table
-    const summaryData = [
-      ['Company', companyName],
-      ['Currency', currency]
-    ];
-
-    if (financialData.fiscal_year_end) {
-      summaryData.push(['FY End', financialData.fiscal_year_end]);
-    }
-
-    if (revenueData.length > 0) {
-      const latestRevenue = revenueData[revenueData.length - 1];
-      const formatValue = (val) => {
-        if (val >= 1000000000) return (val / 1000000000).toFixed(1) + 'B';
-        if (val >= 1000000) return (val / 1000000).toFixed(1) + 'M';
-        if (val >= 1000) return (val / 1000).toFixed(1) + 'K';
-        return val.toLocaleString();
-      };
-      summaryData.push(['Latest Revenue', `${formatValue(latestRevenue.value)} (${latestRevenue.period})`]);
-    }
-
-    if (marginData.length > 0) {
-      const marginLabels = {
-        'operating': 'Op. Margin',
-        'ebitda': 'EBITDA Margin',
-        'pretax': 'Pre-tax Margin',
-        'net': 'Net Margin',
-        'gross': 'Gross Margin'
-      };
-      // Get latest margin for primary type
-      const primaryType = marginData[0].margin_type;
-      const latestMargin = marginData.filter(m => m.margin_type === primaryType).sort((a, b) => {
-        const yearA = parseInt(String(a.period).replace(/\D/g, ''));
-        const yearB = parseInt(String(b.period).replace(/\D/g, ''));
-        return yearB - yearA;
-      })[0];
-      if (latestMargin) {
-        summaryData.push([marginLabels[primaryType] || primaryType, `${latestMargin.value.toFixed(1)}% (${latestMargin.period})`]);
-      }
-    }
-
-    const tableRows = summaryData.map((row) => [
-      {
-        text: row[0],
-        options: {
-          fill: { color: COLORS.accent3 },
-          color: COLORS.white,
-          align: 'center',
-          bold: false
-        }
-      },
-      {
-        text: row[1],
-        options: {
-          fill: { color: COLORS.white },
-          color: COLORS.black,
-          align: 'left',
-          border: [
-            { pt: 1, color: COLORS.gray, type: 'dash' },
-            { pt: 0 },
-            { pt: 1, color: COLORS.gray, type: 'dash' },
-            { pt: 0 }
-          ]
-        }
-      }
-    ]);
-
-    slide.addTable(tableRows, {
-      x: 0.36, y: 4.75,
-      w: 6.1,
-      colW: [1.4, 4.7],
-      rowH: 0.35,
-      fontFace: 'Segoe UI',
-      fontSize: 14,
-      valign: 'middle',
-      border: { pt: 2.5, color: COLORS.white },
-      margin: [0, 0.04, 0, 0.04]
-    });
-
-    // ===== KEY METRICS (bottom right) =====
-    slide.addText('主要指標 (Key Metrics)', {
-      x: 6.86, y: 4.35, w: 6.1, h: 0.30,
-      fontSize: 14, fontFace: 'Segoe UI',
-      color: COLORS.black, align: 'left'
-    });
-    slide.addShape(pptx.shapes.LINE, {
-      x: 6.86, y: 4.65, w: 6.1, h: 0,
-      line: { color: COLORS.dk2, width: 1.75 }
-    });
-
-    // Calculate growth metrics
-    const metricsData = [];
-    if (revenueData.length >= 2) {
-      const sortedRevenue = [...revenueData].sort((a, b) => {
-        const yearA = parseInt(String(a.period).replace(/\D/g, ''));
-        const yearB = parseInt(String(b.period).replace(/\D/g, ''));
-        return yearA - yearB;
+      // ===== FOOTNOTE =====
+      slide.addText('Source: Company financial data', {
+        x: 0.38, y: 6.90, w: 12.5, h: 0.18,
+        fontSize: 10, fontFace: 'Segoe UI',
+        color: COLORS.black
       });
-      const firstYear = sortedRevenue[0];
-      const lastYear = sortedRevenue[sortedRevenue.length - 1];
-      const yearsSpan = parseInt(String(lastYear.period).replace(/\D/g, '')) - parseInt(String(firstYear.period).replace(/\D/g, ''));
-
-      if (yearsSpan > 0 && firstYear.value > 0) {
-        const cagr = (Math.pow(lastYear.value / firstYear.value, 1 / yearsSpan) - 1) * 100;
-        metricsData.push(['Revenue CAGR', `${cagr.toFixed(1)}%`]);
-      }
-
-      // YoY growth
-      if (sortedRevenue.length >= 2) {
-        const prevYear = sortedRevenue[sortedRevenue.length - 2];
-        const yoyGrowth = ((lastYear.value - prevYear.value) / prevYear.value) * 100;
-        metricsData.push(['YoY Growth', `${yoyGrowth.toFixed(1)}%`]);
-      }
-    }
-
-    // Add margin trend
-    if (marginData.length >= 2) {
-      const primaryType = marginData[0].margin_type;
-      const typeData = marginData.filter(m => m.margin_type === primaryType).sort((a, b) => {
-        const yearA = parseInt(String(a.period).replace(/\D/g, ''));
-        const yearB = parseInt(String(b.period).replace(/\D/g, ''));
-        return yearA - yearB;
-      });
-      if (typeData.length >= 2) {
-        const marginChange = typeData[typeData.length - 1].value - typeData[typeData.length - 2].value;
-        const marginLabels = {
-          'operating': 'Op. Margin',
-          'ebitda': 'EBITDA',
-          'pretax': 'Pre-tax',
-          'net': 'Net',
-          'gross': 'Gross'
-        };
-        metricsData.push([`${marginLabels[primaryType]} Change`, `${marginChange >= 0 ? '+' : ''}${marginChange.toFixed(1)}pp`]);
-      }
-    }
-
-    if (metricsData.length > 0) {
-      const metricsRows = metricsData.map((row) => [
-        {
-          text: row[0],
-          options: {
-            fill: { color: COLORS.accent3 },
-            color: COLORS.white,
-            align: 'center',
-            bold: false
-          }
-        },
-        {
-          text: row[1],
-          options: {
-            fill: { color: COLORS.white },
-            color: COLORS.black,
-            align: 'left',
-            border: [
-              { pt: 1, color: COLORS.gray, type: 'dash' },
-              { pt: 0 },
-              { pt: 1, color: COLORS.gray, type: 'dash' },
-              { pt: 0 }
-            ]
-          }
-        }
-      ]);
-
-      slide.addTable(metricsRows, {
-        x: 6.86, y: 4.75,
-        w: 6.1,
-        colW: [1.8, 4.3],
-        rowH: 0.35,
-        fontFace: 'Segoe UI',
-        fontSize: 14,
-        valign: 'middle',
-        border: { pt: 2.5, color: COLORS.white },
-        margin: [0, 0.04, 0, 0.04]
-      });
-    }
-
-    // ===== FOOTNOTE =====
-    slide.addText('Source: Company financial data', {
-      x: 0.38, y: 6.90, w: 12.5, h: 0.18,
-      fontSize: 10, fontFace: 'Segoe UI',
-      color: COLORS.black
-    });
 
     } // End of for loop (one slide per company)
 
