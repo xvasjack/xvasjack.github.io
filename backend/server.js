@@ -1,6 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const path = require('path');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
@@ -2247,6 +2248,41 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     const sheet = workbook.Sheets[sheetName];
     const allRows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
+    // Read Filter List sheet to extract criteria for slide title
+    let slideTitle = TargetCompanyOrIndustry; // Default fallback
+    const filterListSheet = workbook.Sheets['Filter List'];
+    if (filterListSheet) {
+      const filterRows = XLSX.utils.sheet_to_json(filterListSheet, { header: 1 });
+      let region = '';
+      let industry = '';
+      let status = '';
+
+      // Parse the Filter List sheet to find Region, Industry, Status
+      for (const row of filterRows) {
+        if (!row || row.length < 2) continue;
+        const label = String(row[0] || '').toLowerCase();
+        const value = String(row[1] || '');
+
+        if (label.includes('region')) {
+          region = value;
+        } else if (label.includes('industry')) {
+          industry = value;
+        } else if (label.includes('status')) {
+          status = value;
+        }
+      }
+
+      // Build dynamic title: "Listed Cosmetics Companies in Malaysia, Singapore and Thailand"
+      if (industry || region) {
+        const statusText = status.toLowerCase() === 'listed' ? 'Listed ' : '';
+        const industryText = industry || '';
+        const regionText = region ? region.split(',').map(r => r.trim()).join(', ').replace(/, ([^,]*)$/, ' and $1') : '';
+
+        slideTitle = `${statusText}${industryText} Companies in ${regionText}`.trim();
+        console.log(`Dynamic slide title from Filter List: ${slideTitle}`);
+      }
+    }
+
     console.log(`Total rows in file: ${allRows.length}`);
 
     // Find the header row - look for row containing company-related headers
@@ -2527,56 +2563,53 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     const excelBuffer = XLSX.write(outputWorkbook, { type: 'base64', bookType: 'xlsx' });
 
     // Generate PPT slide - matching trading comps template EXACTLY
-    // Reference template structure:
-    // - Top blue bar (full width)
-    // - Title (large) + subtitle (smaller)
-    // - Table with:
-    //   - Row 1: "Financial Information (USD M)" and "Multiples" in dark blue boxes
-    //   - Row 2: Column headers in blue text with underline (no fill)
-    //   - Data rows: horizontal dotted lines only (no vertical lines)
-    //   - Median row: only last 4 cells have blue background
-    // - Footer: Note, Date, Source on left / YCP logo + copyright in center / page number on right
-    // - Bottom blue bar (full width)
+    // Using proper TABLE structure:
+    // - Row 1: DARK BLUE (#003399) - merged cells for "Financial Information" and "Multiples"
+    // - Row 2: LIGHT BLUE (#B4C6E7) - column headers
+    // - Data rows: white with dotted line borders
+    // - Median row: last 4 cells dark blue
 
     const pptx = new pptxgen();
     pptx.author = 'YCP';
     pptx.title = 'Trading Comparable';
 
-    // Set exact slide size to match template (16:9 widescreen)
+    // Set exact slide size (16:9 widescreen)
     pptx.defineLayout({ name: 'TRADING', width: 13.333, height: 7.5 });
     pptx.layout = 'TRADING';
 
-    // Template colors
+    // Template colors (extracted from reference PPTX theme1.xml)
     const COLORS = {
-      headerBlue: '003399',       // Dark blue for header boxes and bars
-      headerTextBlue: '003399',   // Blue for column header text
-      medianBlue: '003399',       // Blue for median cells
+      darkBlue: '011AB7',      // Row 1 (Financial Information, Multiples) - accent3
+      lightBlue: '007FFF',     // Row 2 column headers AND median cell - accent1
+      navyLine: '293F55',      // Header/footer lines from slideLayout1
       white: 'FFFFFF',
       black: '000000',
       gray: '808080',
-      dottedLine: 'A0A0A0'        // Gray for dotted lines
+      lineGray: 'A0A0A0'
     };
 
     const slide = pptx.addSlide();
 
-    // ===== TOP BLUE BAR =====
-    slide.addShape(pptx.shapes.RECTANGLE, {
-      x: 0, y: 0, w: 13.333, h: 0.08,
-      fill: { color: COLORS.headerBlue },
-      line: { color: COLORS.headerBlue }
+    // ===== HEADER LINES (from slideLayout1) =====
+    // Thick line at y=1.02" (933847 EMU), width 4.5pt (57150 EMU)
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0, y: 1.02, w: 13.333, h: 0,
+      line: { color: COLORS.navyLine, width: 4.5 }
+    });
+    // Thin line at y=1.10" (1005855 EMU), width 2.25pt (28575 EMU)
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0, y: 1.10, w: 13.333, h: 0,
+      line: { color: COLORS.navyLine, width: 2.25 }
     });
 
-    // ===== TITLE + SUBTITLE =====
-    slide.addText(`Trading Comparable – ${TargetCompanyOrIndustry}`, {
-      x: 0.38, y: 0.25, w: 12.5, h: 0.55,
-      fontSize: 28, bold: true, fontFace: 'Segoe UI',
-      color: COLORS.black
-    });
-
-    slide.addText(`Considering financial data availability, profitability and business relevance, ${finalCompanies.length} companies are considered as peers`, {
-      x: 0.38, y: 0.75, w: 12.5, h: 0.35,
-      fontSize: 14, bold: false, fontFace: 'Segoe UI',
-      color: COLORS.black
+    // ===== TITLE + SUBTITLE (positioned per slideLayout1: x=0.38", y=0.05") =====
+    // Title at top (font 24), subtitle below (font 16), combined text box
+    slide.addText([
+      { text: `Trading Comparable – ${slideTitle}`, options: { fontSize: 24, fontFace: 'Segoe UI', color: COLORS.black, breakLine: true } },
+      { text: `Considering financial data availability, profitability and business relevance, ${finalCompanies.length} companies are considered as peers`, options: { fontSize: 16, fontFace: 'Segoe UI', color: COLORS.black } }
+    ], {
+      x: 0.38, y: 0.05, w: 12.5, h: 0.91,
+      valign: 'bottom'
     });
 
     // Helper function to clean company name
@@ -2610,7 +2643,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       return cleaned.trim();
     };
 
-    // Helper functions for formatting
+    // Helper functions
     const formatFinNum = (val) => {
       if (val === null || val === undefined) return '-';
       if (typeof val === 'number') return Math.round(val).toLocaleString('en-US');
@@ -2629,145 +2662,202 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       return String(val);
     };
 
-    // ===== TABLE STRUCTURE =====
-    const tableX = 0.38;
-    const tableY = 1.25;
-    const displayCompanies = finalCompanies.slice(0, 30);
-
-    // Column widths (total ~12.5")
-    const colWidths = [2.0, 1.0, 0.85, 1.05, 0.85, 0.9, 1.0, 1.05, 0.85, 0.85];
-    const colPositions = [tableX];
-    for (let i = 0; i < colWidths.length - 1; i++) {
-      colPositions.push(colPositions[i] + colWidths[i]);
-    }
-
-    const rowHeight = 0.18;
-    const headerRowY = tableY;
-    const subHeaderRowY = tableY + rowHeight;
-    const dataStartY = tableY + rowHeight * 2;
-
-    // ===== HEADER ROW 1: "Financial Information" and "Multiples" boxes =====
-    // Calculate positions for the merged headers
-    const finInfoStartX = colPositions[2];
-    const finInfoWidth = colWidths[2] + colWidths[3] + colWidths[4] + colWidths[5] + colWidths[6];
-    const multiplesStartX = colPositions[7];
-    const multiplesWidth = colWidths[7] + colWidths[8] + colWidths[9];
-
-    // Financial Information box
-    slide.addShape(pptx.shapes.RECTANGLE, {
-      x: finInfoStartX, y: headerRowY, w: finInfoWidth, h: rowHeight,
-      fill: { color: COLORS.headerBlue },
-      line: { color: COLORS.headerBlue }
+    // ===== BUILD TABLE =====
+    // Sort companies by sales (highest to lowest), then take top 30
+    const sortedCompanies = [...finalCompanies].sort((a, b) => {
+      const salesA = a.sales !== null && a.sales !== undefined ? a.sales : 0;
+      const salesB = b.sales !== null && b.sales !== undefined ? b.sales : 0;
+      return salesB - salesA;
     });
-    slide.addText('Financial Information (USD M)', {
-      x: finInfoStartX, y: headerRowY, w: finInfoWidth, h: rowHeight,
-      fontSize: 11, bold: false, fontFace: 'Segoe UI',
-      color: COLORS.white, align: 'center', valign: 'middle'
-    });
+    const displayCompanies = sortedCompanies.slice(0, 30);
+    const tableRows = [];
 
-    // Multiples box
-    slide.addShape(pptx.shapes.RECTANGLE, {
-      x: multiplesStartX, y: headerRowY, w: multiplesWidth, h: rowHeight,
-      fill: { color: COLORS.headerBlue },
-      line: { color: COLORS.headerBlue }
-    });
-    slide.addText('Multiples', {
-      x: multiplesStartX, y: headerRowY, w: multiplesWidth, h: rowHeight,
-      fontSize: 11, bold: false, fontFace: 'Segoe UI',
-      color: COLORS.white, align: 'center', valign: 'middle'
-    });
+    // Cell margin
+    const cellMargin = [0, 0.04, 0, 0.04];
 
-    // ===== HEADER ROW 2: Column headers (blue text with underline) =====
-    const columnHeaders = ['Company Name', 'Country', 'Sales', 'Market Cap', 'EV', 'EBITDA', 'Net Margin', 'EV/ EBITDA', 'PER', 'PBR'];
-    const headerAligns = ['left', 'left', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right'];
+    // Border styles (3pt white solid for header rows)
+    const solidWhiteBorder = { type: 'solid', pt: 3, color: COLORS.white };
+    // sysDash border for horizontal lines between data rows (from reference PPTX)
+    const sysDashBorder = { type: 'sysDash', pt: 0.5, color: COLORS.lineGray };
+    const noBorder = { type: 'none' };
 
-    columnHeaders.forEach((header, idx) => {
-      slide.addText(header, {
-        x: colPositions[idx], y: subHeaderRowY, w: colWidths[idx], h: rowHeight,
-        fontSize: 11, bold: false, fontFace: 'Segoe UI',
-        color: COLORS.headerTextBlue, align: headerAligns[idx], valign: 'middle'
-      });
-    });
+    // Row 1 style: DARK BLUE with solid white borders - font 14
+    const row1DarkStyle = {
+      fill: COLORS.darkBlue,
+      color: COLORS.white,
+      fontFace: 'Segoe UI',
+      fontSize: 14,
+      bold: false,
+      valign: 'middle',
+      align: 'center',
+      margin: cellMargin,
+      border: solidWhiteBorder
+    };
 
-    // Underline for header row 2
-    slide.addShape(pptx.shapes.LINE, {
-      x: tableX, y: subHeaderRowY + rowHeight,
-      w: colWidths.reduce((a, b) => a + b, 0), h: 0,
-      line: { color: COLORS.headerTextBlue, width: 1, dashType: 'solid' }
-    });
+    // Row 1 empty cells (white background) with solid white borders - font 14
+    const row1EmptyStyle = {
+      fill: COLORS.white,
+      color: COLORS.black,
+      fontFace: 'Segoe UI',
+      fontSize: 14,
+      valign: 'middle',
+      margin: cellMargin,
+      border: solidWhiteBorder
+    };
 
-    // ===== DATA ROWS =====
+    // Row 2 style: LIGHT BLUE with WHITE text, font 14, center aligned, solid white borders
+    const row2Style = {
+      fill: COLORS.lightBlue,
+      color: COLORS.white,
+      fontFace: 'Segoe UI',
+      fontSize: 14,
+      bold: false,
+      valign: 'middle',
+      align: 'center',
+      margin: cellMargin,
+      border: solidWhiteBorder
+    };
+
+    // Data row style - sysDash horizontal borders between rows, font 14
+    // Border order: [top, right, bottom, left]
+    const dataStyle = {
+      fill: COLORS.white,
+      color: COLORS.black,
+      fontFace: 'Segoe UI',
+      fontSize: 14,
+      valign: 'middle',
+      margin: cellMargin,
+      border: [sysDashBorder, solidWhiteBorder, sysDashBorder, solidWhiteBorder]
+    };
+
+    // Median "Median" label style - light blue with sysDash top border
+    const medianLabelStyle = {
+      fill: COLORS.lightBlue,
+      color: COLORS.white,
+      fontFace: 'Segoe UI',
+      fontSize: 14,
+      bold: true,
+      valign: 'middle',
+      margin: cellMargin,
+      border: [sysDashBorder, solidWhiteBorder, solidWhiteBorder, solidWhiteBorder]
+    };
+
+    // Median value cells - white background with sysDash top border
+    const medianValueStyle = {
+      fill: COLORS.white,
+      color: COLORS.black,
+      fontFace: 'Segoe UI',
+      fontSize: 14,
+      bold: true,
+      valign: 'middle',
+      margin: cellMargin,
+      border: [sysDashBorder, solidWhiteBorder, solidWhiteBorder, solidWhiteBorder]
+    };
+
+    // Median empty cells - NO borders (no lines from last company to Median)
+    const medianEmptyStyle = {
+      fill: COLORS.white,
+      color: COLORS.black,
+      fontFace: 'Segoe UI',
+      fontSize: 14,
+      valign: 'middle',
+      margin: cellMargin,
+      border: [noBorder, noBorder, noBorder, noBorder]
+    };
+
+    // Last data row style - sysDash border at bottom (line below last company)
+    const lastDataStyle = {
+      fill: COLORS.white,
+      color: COLORS.black,
+      fontFace: 'Segoe UI',
+      fontSize: 14,
+      valign: 'middle',
+      margin: cellMargin,
+      border: [sysDashBorder, solidWhiteBorder, sysDashBorder, solidWhiteBorder]
+    };
+
+    // === ROW 1: Dark blue merged headers ===
+    tableRows.push([
+      { text: '', options: { ...row1EmptyStyle } },
+      { text: '', options: { ...row1EmptyStyle } },
+      { text: 'Financial Information (USD M)', options: { ...row1DarkStyle, colspan: 5 } },
+      { text: 'Multiples', options: { ...row1DarkStyle, colspan: 3 } }
+    ]);
+
+    // === ROW 2: Light blue column headers (all center aligned) ===
+    tableRows.push([
+      { text: 'Company Name', options: { ...row2Style } },
+      { text: 'Country', options: { ...row2Style } },
+      { text: 'Sales', options: { ...row2Style } },
+      { text: 'Market Cap', options: { ...row2Style } },
+      { text: 'EV', options: { ...row2Style } },
+      { text: 'EBITDA', options: { ...row2Style } },
+      { text: 'Net Margin', options: { ...row2Style } },
+      { text: 'EV/ EBITDA', options: { ...row2Style } },
+      { text: 'PER', options: { ...row2Style } },
+      { text: 'PBR', options: { ...row2Style } }
+    ]);
+
+    // === DATA ROWS ===
     displayCompanies.forEach((c, idx) => {
-      const rowY = dataStartY + (idx * rowHeight);
       const peValue = c.peTTM !== null ? c.peTTM : c.peFY;
       const companyName = `${idx + 1}. ${cleanCompanyName(c.name)}`;
+      const isLastRow = idx === displayCompanies.length - 1;
+      const rowStyle = isLastRow ? lastDataStyle : dataStyle;
 
-      const rowData = [
-        companyName,
-        String(c.country || '-'),
-        formatFinNum(c.sales),
-        formatFinNum(c.marketCap),
-        formatFinNum(c.ev),
-        formatFinNum(c.ebitda),
-        formatPct(c.netMargin),
-        formatMultipleX(c.evEbitda),
-        formatMultipleX(peValue),
-        formatMultipleX(c.pb)
-      ];
-
-      rowData.forEach((text, colIdx) => {
-        slide.addText(text, {
-          x: colPositions[colIdx], y: rowY, w: colWidths[colIdx], h: rowHeight,
-          fontSize: 10, fontFace: 'Segoe UI',
-          color: COLORS.black, align: headerAligns[colIdx], valign: 'middle'
-        });
-      });
-
-      // Dotted line after each row
-      slide.addShape(pptx.shapes.LINE, {
-        x: tableX, y: rowY + rowHeight,
-        w: colWidths.reduce((a, b) => a + b, 0), h: 0,
-        line: { color: COLORS.dottedLine, width: 0.5, dashType: 'dash' }
-      });
+      tableRows.push([
+        { text: companyName, options: { ...rowStyle, align: 'left' } },
+        { text: String(c.country || '-'), options: { ...rowStyle, align: 'left' } },
+        { text: formatFinNum(c.sales), options: { ...rowStyle, align: 'right' } },
+        { text: formatFinNum(c.marketCap), options: { ...rowStyle, align: 'right' } },
+        { text: formatFinNum(c.ev), options: { ...rowStyle, align: 'right' } },
+        { text: formatFinNum(c.ebitda), options: { ...rowStyle, align: 'right' } },
+        { text: formatPct(c.netMargin), options: { ...rowStyle, align: 'right' } },
+        { text: formatMultipleX(c.evEbitda), options: { ...rowStyle, align: 'right' } },
+        { text: formatMultipleX(peValue), options: { ...rowStyle, align: 'right' } },
+        { text: formatMultipleX(c.pb), options: { ...rowStyle, align: 'right' } }
+      ]);
     });
 
-    // ===== MEDIAN ROW =====
-    const medianRowY = dataStartY + (displayCompanies.length * rowHeight);
+    // === MEDIAN ROW ===
+    // Only the "Median" cell has light blue fill; values have white background
     const medianPE = medians.peTTM !== null ? medians.peTTM : medians.peFY;
+    tableRows.push([
+      { text: '', options: { ...medianEmptyStyle } },
+      { text: '', options: { ...medianEmptyStyle } },
+      { text: '', options: { ...medianEmptyStyle } },
+      { text: '', options: { ...medianEmptyStyle } },
+      { text: '', options: { ...medianEmptyStyle } },
+      { text: '', options: { ...medianEmptyStyle } },
+      { text: 'Median', options: { ...medianLabelStyle, align: 'center' } },
+      { text: formatMultipleX(medians.evEbitda), options: { ...medianValueStyle, align: 'right' } },
+      { text: formatMultipleX(medianPE), options: { ...medianValueStyle, align: 'right' } },
+      { text: formatMultipleX(medians.pb), options: { ...medianValueStyle, align: 'right' } }
+    ]);
 
-    // Median label cell with blue background (in Net Margin column position)
-    const medianStartX = colPositions[6];
-    const medianWidth = colWidths[6] + colWidths[7] + colWidths[8] + colWidths[9];
+    // Calculate dimensions (from reference PPTX)
+    const numRows = displayCompanies.length + 3;
+    const availableHeight = 5.2;
+    const rowHeight = Math.min(0.179, availableHeight / numRows); // Reference: 0.179" per row
 
-    slide.addShape(pptx.shapes.RECTANGLE, {
-      x: medianStartX, y: medianRowY, w: medianWidth, h: rowHeight,
-      fill: { color: COLORS.medianBlue },
-      line: { color: COLORS.medianBlue }
-    });
+    // Column widths from reference PPTX (total: 12.59")
+    // Col 1: 2.42", Col 2: 1.31", Cols 3-10: 1.11" each
+    const colWidths = [2.42, 1.31, 1.11, 1.11, 1.11, 1.11, 1.11, 1.11, 1.11, 1.11];
+    const tableWidth = colWidths.reduce((a, b) => a + b, 0); // 12.59"
 
-    // Median text and values
-    slide.addText('Median', {
-      x: colPositions[6], y: medianRowY, w: colWidths[6], h: rowHeight,
-      fontSize: 10, bold: true, fontFace: 'Segoe UI',
-      color: COLORS.white, align: 'right', valign: 'middle'
-    });
-    slide.addText(formatMultipleX(medians.evEbitda), {
-      x: colPositions[7], y: medianRowY, w: colWidths[7], h: rowHeight,
-      fontSize: 10, bold: true, fontFace: 'Segoe UI',
-      color: COLORS.white, align: 'right', valign: 'middle'
-    });
-    slide.addText(formatMultipleX(medianPE), {
-      x: colPositions[8], y: medianRowY, w: colWidths[8], h: rowHeight,
-      fontSize: 10, bold: true, fontFace: 'Segoe UI',
-      color: COLORS.white, align: 'right', valign: 'middle'
-    });
-    slide.addText(formatMultipleX(medians.pb), {
-      x: colPositions[9], y: medianRowY, w: colWidths[9], h: rowHeight,
-      fontSize: 10, bold: true, fontFace: 'Segoe UI',
-      color: COLORS.white, align: 'right', valign: 'middle'
+    // Add TABLE to slide (position from reference: x=0.38", y=1.47")
+    // Cell-level borders are set in each cell style
+    slide.addTable(tableRows, {
+      x: 0.38,
+      y: 1.47,
+      w: tableWidth,
+      fontSize: 14,
+      fontFace: 'Segoe UI',
+      colW: colWidths,
+      rowH: rowHeight
     });
 
-    // ===== FOOTER LEFT: Note, Date, Source =====
+    // ===== FOOTER =====
     const footerY = 6.66;
     slide.addText('Note: EV (Enterprise Value)', {
       x: 0.38, y: footerY, w: 4, h: 0.18,
@@ -2783,23 +2873,37 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fontSize: 9, fontFace: 'Segoe UI', color: COLORS.black
     });
 
-    // ===== FOOTER CENTER: Copyright =====
+    // ===== FOOTER LINE (from slideLayout1: y=7.24", width 2.25pt) =====
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0, y: 7.24, w: 13.333, h: 0,
+      line: { color: COLORS.navyLine, width: 2.25 }
+    });
+
+    // ===== YCP LOGO (from slideLayout1: x=0.38", y=7.30") =====
+    // Logo image stored in backend folder
+    try {
+      const logoPath = path.join(__dirname, 'ycp-logo.png');
+      const logoExists = require('fs').existsSync(logoPath);
+      if (logoExists) {
+        slide.addImage({
+          path: logoPath,
+          x: 0.38, y: 7.30, w: 0.47, h: 0.17
+        });
+      }
+    } catch (e) {
+      console.log('Logo not found, skipping');
+    }
+
+    // ===== FOOTER COPYRIGHT (from slideLayout1: center, y=7.26") =====
     slide.addText('(C) YCP 2025 all rights reserved', {
-      x: 4.5, y: 7.1, w: 4.5, h: 0.25,
-      fontSize: 9, fontFace: 'Segoe UI', color: COLORS.gray, align: 'center'
+      x: 4.1, y: 7.26, w: 5.1, h: 0.20,
+      fontSize: 8, fontFace: 'Segoe UI', color: COLORS.gray, align: 'center'
     });
 
-    // ===== FOOTER RIGHT: Page number =====
+    // ===== PAGE NUMBER =====
     slide.addText('1', {
-      x: 12.5, y: 7.1, w: 0.5, h: 0.25,
-      fontSize: 9, fontFace: 'Segoe UI', color: COLORS.black, align: 'right'
-    });
-
-    // ===== BOTTOM BLUE BAR =====
-    slide.addShape(pptx.shapes.RECTANGLE, {
-      x: 0, y: 7.42, w: 13.333, h: 0.08,
-      fill: { color: COLORS.headerBlue },
-      line: { color: COLORS.headerBlue }
+      x: 12.5, y: 7.26, w: 0.5, h: 0.20,
+      fontSize: 10, fontFace: 'Segoe UI', color: COLORS.black, align: 'right'
     });
 
     // Generate PPT buffer
@@ -4388,7 +4492,7 @@ async function generateFinancialChartPPTX(financialDataArray) {
         const hasMarginData = selectedMarginType && marginValues.some(v => v !== 0);
 
         if (hasMarginData) {
-          // Create COMBO chart with column (revenue) + line (margin on secondary axis)
+          // COMBO chart: BAR (revenue) + LINE (margin on secondary axis)
           slide.addChart(pptx.charts.COMBO, [
             {
               name: revenueLabel,
@@ -4417,13 +4521,13 @@ async function generateFinancialChartPPTX(financialDataArray) {
                 secondaryCatAxis: true
               }
             ],
-            chartColors: ['4472C4', 'ED7D31'],
+            chartColors: ['5B9BD5', 'ED7D31'],
             showValue: true,
             dataLabelPosition: 'outEnd',
             dataLabelFontFace: 'Segoe UI',
             dataLabelFontSize: 9,
             dataLabelColor: '000000',
-            // Category axis (bottom)
+            // Category axis (bottom) with border and tick marks
             catAxisLabelFontFace: 'Segoe UI',
             catAxisLabelFontSize: 10,
             catAxisLabelColor: '000000',
@@ -4433,7 +4537,7 @@ async function generateFinancialChartPPTX(financialDataArray) {
             // Value axes configuration
             valAxes: [
               {
-                // Primary axis (left - revenue)
+                // Primary axis (left - revenue) with border and tick marks
                 showValAxisTitle: false,
                 valAxisLabelFontFace: 'Segoe UI',
                 valAxisLabelFontSize: 9,
@@ -4446,7 +4550,7 @@ async function generateFinancialChartPPTX(financialDataArray) {
                 valAxisMinorGridLine: { style: 'none' }
               },
               {
-                // Secondary axis (right - margin %)
+                // Secondary axis (right - margin %) with border and tick marks
                 showValAxisTitle: false,
                 valAxisLabelFontFace: 'Segoe UI',
                 valAxisLabelFontSize: 9,
@@ -4465,7 +4569,7 @@ async function generateFinancialChartPPTX(financialDataArray) {
               { catAxisTitle: '', catAxisLineShow: true, catAxisMajorTickMark: 'out' },
               { catAxisHidden: true }
             ],
-            // Legend - use PPT built-in, positioned at top
+            // Legend - PPT built-in, positioned at top
             showLegend: true,
             legendPos: 't'
           });
@@ -4481,21 +4585,21 @@ async function generateFinancialChartPPTX(financialDataArray) {
             x: chartX, y: chartY, w: chartW, h: chartH,
             barDir: 'col',
             barGapWidthPct: 50,
-            chartColors: ['4472C4'],
+            chartColors: ['5B9BD5'],
             showValue: true,
             dataLabelPosition: 'outEnd',
             dataLabelFontFace: 'Segoe UI',
             dataLabelFontSize: 9,
             dataLabelColor: '000000',
             dataLabelFormatCode: '#,##0',
-            // Category axis (bottom)
+            // Category axis (bottom) with border and tick marks
             catAxisLabelFontFace: 'Segoe UI',
             catAxisLabelFontSize: 10,
             catAxisLabelColor: '000000',
             catAxisLineShow: true,
             catAxisLineColor: '000000',
             catAxisMajorTickMark: 'out',
-            // Value axis (left)
+            // Value axis (left) with border and tick marks
             valAxisLabelFontFace: 'Segoe UI',
             valAxisLabelFontSize: 9,
             valAxisLabelColor: '000000',
@@ -4505,7 +4609,7 @@ async function generateFinancialChartPPTX(financialDataArray) {
             valAxisMajorTickMark: 'out',
             valAxisMajorGridLine: { style: 'solid', color: 'D9D9D9', size: 0.5 },
             valAxisMinorGridLine: { style: 'none' },
-            // Legend - use PPT built-in, positioned at top
+            // Legend - PPT built-in, positioned at top
             showLegend: true,
             legendPos: 't'
           });
@@ -4685,12 +4789,12 @@ app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res
 
 // ============ UTB (UNDERSTANDING THE BUSINESS) - COMPREHENSIVE M&A INTELLIGENCE ============
 
-// Initialize PDFKit
-let PDFDocument;
+// Initialize ExcelJS
+let ExcelJS;
 try {
-  PDFDocument = require('pdfkit');
+  ExcelJS = require('exceljs');
 } catch (e) {
-  console.warn('PDFKit not available - UTB PDF generation disabled');
+  console.warn('ExcelJS not available - UTB Excel generation disabled');
 }
 
 // Language detection from domain
@@ -5240,362 +5344,687 @@ async function conductUTBResearch(companyName, website, additionalContext) {
   };
 }
 
-// Generate compact UTB PDF (6-8 pages max)
-async function generateUTBPDF(companyName, website, research, additionalContext) {
-  return new Promise((resolve, reject) => {
-    if (!PDFDocument) {
-      reject(new Error('PDFKit not available'));
-      return;
-    }
+// Generate UTB Excel workbook with structured data
+async function generateUTBExcel(companyName, website, research, additionalContext) {
+  if (!ExcelJS) {
+    throw new Error('ExcelJS not available');
+  }
 
-    const { synthesis, metadata } = research;
-    const chunks = [];
-    const doc = new PDFDocument({
-      size: 'A4',
-      margins: { top: 50, bottom: 60, left: 50, right: 50 },
-      bufferPages: true
+  const { synthesis, metadata } = research;
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'UTB - M&A Buyer Intelligence';
+  workbook.created = new Date();
+
+  // Colors
+  const navy = 'FF1A365D';
+  const blue = 'FF2563EB';
+  const lightBlue = 'FFDBEAFE';
+  const lightGray = 'FFF8FAFC';
+  const white = 'FFFFFFFF';
+
+  // Helper: Style header row
+  const styleHeaderRow = (row, color = navy) => {
+    row.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: color } };
+      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
+      cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
+      cell.border = {
+        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+      };
     });
+    row.height = 22;
+  };
 
-    doc.on('data', chunk => chunks.push(chunk));
-    doc.on('end', () => resolve(Buffer.concat(chunks).toString('base64')));
-    doc.on('error', reject);
+  // Helper: Style data row
+  const styleDataRow = (row, isAlternate = false) => {
+    row.eachCell(cell => {
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isAlternate ? lightGray : white } };
+      cell.font = { size: 10 };
+      cell.alignment = { vertical: 'top', wrapText: true };
+      cell.border = {
+        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } }
+      };
+    });
+  };
 
-    // Colors
-    const navy = '#1a365d';
-    const blue = '#2563eb';
-    const gray = '#64748b';
-    const black = '#1e293b';
+  // Helper: Add section title
+  const addSectionTitle = (ws, title, row) => {
+    ws.mergeCells(`A${row}:F${row}`);
+    const cell = ws.getCell(`A${row}`);
+    cell.value = title;
+    cell.font = { bold: true, size: 14, color: { argb: navy } };
+    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: lightBlue } };
+    cell.alignment = { vertical: 'middle' };
+    ws.getRow(row).height = 28;
+    return row + 1;
+  };
 
-    // Layout
-    const W = doc.page.width - 100; // content width
-    const L = 50; // left margin
+  // ========== SHEET 1: EXECUTIVE SUMMARY ==========
+  const summarySheet = workbook.addWorksheet('Executive Summary');
+  summarySheet.columns = [
+    { key: 'label', width: 20 },
+    { key: 'value', width: 60 }
+  ];
 
-    // Helpers
-    const truncate = (str, max) => {
-      if (!str) return '';
-      str = String(str);
-      return str.length > max ? str.substring(0, max - 3) + '...' : str;
-    };
+  // Title
+  summarySheet.mergeCells('A1:B1');
+  const titleCell = summarySheet.getCell('A1');
+  titleCell.value = `UTB: ${companyName}`;
+  titleCell.font = { bold: true, size: 18, color: { argb: navy } };
+  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: lightBlue } };
+  summarySheet.getRow(1).height = 35;
 
-    const header = (text, y = null) => {
-      if (y !== null) doc.y = y;
-      doc.fontSize(11).font('Helvetica-Bold').fillColor(navy).text(text, L);
-      doc.moveTo(L, doc.y + 1).lineTo(L + W, doc.y + 1).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
-      doc.moveDown(0.3);
-    };
+  summarySheet.mergeCells('A2:B2');
+  summarySheet.getCell('A2').value = website;
+  summarySheet.getCell('A2').font = { size: 11, color: { argb: 'FF64748B' } };
 
-    const label = (lbl, val) => {
-      if (!val || val === 'N/A' || val === 'Not disclosed') return;
-      doc.fontSize(8).font('Helvetica-Bold').fillColor(gray).text(lbl + ': ', L, doc.y, { continued: true });
-      doc.font('Helvetica').fillColor(black).text(truncate(val, 100));
-    };
+  // Executive Summary
+  let r = 4;
+  r = addSectionTitle(summarySheet, 'Executive Summary', r);
+  summarySheet.mergeCells(`A${r}:B${r}`);
+  summarySheet.getCell(`A${r}`).value = synthesis.executive_summary || 'No executive summary available';
+  summarySheet.getCell(`A${r}`).alignment = { wrapText: true, vertical: 'top' };
+  summarySheet.getRow(r).height = 60;
+  r += 2;
 
-    const para = (text, maxLen = 300) => {
-      if (!text) return;
-      doc.fontSize(8).font('Helvetica').fillColor(black).text(truncate(text, maxLen), L, doc.y, { width: W, lineGap: 1 });
-      doc.moveDown(0.2);
-    };
-
-    const bullets = (items, max = 5, maxLen = 80) => {
-      if (!items || !Array.isArray(items)) return;
-      items.slice(0, max).forEach(item => {
-        if (item && item !== 'Unknown') {
-          const text = typeof item === 'object' ? (item.name || item.sector || item.driver || JSON.stringify(item)) : item;
-          doc.fontSize(8).font('Helvetica').fillColor(black).text('• ' + truncate(text, maxLen), L + 8, doc.y, { width: W - 16 });
-        }
-      });
-      doc.moveDown(0.2);
-    };
-
-    const table = (headers, rows, widths) => {
-      const total = widths.reduce((a, b) => a + b, 0);
-      let x = L;
-      // Header
-      doc.rect(L, doc.y, total, 14).fill(navy);
-      headers.forEach((h, i) => {
-        doc.fontSize(7).font('Helvetica-Bold').fillColor('white').text(h, x + 2, doc.y + 3, { width: widths[i] - 4 });
-        x += widths[i];
-      });
-      doc.y += 14;
-      // Rows (max 6)
-      rows.slice(0, 6).forEach((row, ri) => {
-        x = L;
-        const bg = ri % 2 === 0 ? '#f8fafc' : 'white';
-        doc.rect(L, doc.y, total, 12).fill(bg);
-        row.forEach((cell, i) => {
-          doc.fontSize(7).font('Helvetica').fillColor(black).text(truncate(cell, 30), x + 2, doc.y + 2, { width: widths[i] - 4 });
-          x += widths[i];
-        });
-        doc.y += 12;
-      });
-      doc.moveDown(0.3);
-    };
-
-    // ========== PAGE 1: TITLE & EXECUTIVE SUMMARY ==========
-    doc.rect(0, 0, doc.page.width, 120).fill(navy);
-    doc.fontSize(10).font('Helvetica').fillColor('#94a3b8').text('M&A BUYER INTELLIGENCE', L, 30);
-    doc.fontSize(22).font('Helvetica-Bold').fillColor('white').text('Understanding The Business', L, 50);
-    doc.fontSize(14).font('Helvetica').text(companyName, L, 85);
-    doc.fontSize(9).fillColor('#94a3b8').text(website, L, 102);
-
-    doc.y = 140;
-    header('Executive Summary');
-    para(synthesis.executive_summary, 500);
-
-    // Company Snapshot
-    doc.moveDown(0.3);
-    const profile = synthesis.company_profile || {};
-    const fin = synthesis.financials || {};
-    doc.rect(L, doc.y, W, 55).fill('#f8fafc').stroke('#e2e8f0');
-    const boxY = doc.y + 8;
-    doc.fontSize(9).font('Helvetica-Bold').fillColor(navy).text('COMPANY SNAPSHOT', L + 10, boxY);
-
-    const c1 = L + 10, c2 = L + 175, c3 = L + 340;
-    let row = boxY + 16;
-    doc.fontSize(7).font('Helvetica');
-    doc.fillColor(gray).text('HQ:', c1, row); doc.fillColor(black).text(truncate(profile.hq_location, 25), c1 + 25, row);
-    doc.fillColor(gray).text('Founded:', c2, row); doc.fillColor(black).text(profile.founded || '-', c2 + 45, row);
-    doc.fillColor(gray).text('Employees:', c3, row); doc.fillColor(black).text(truncate(profile.employees, 15), c3 + 55, row);
-    row += 12;
-    doc.fillColor(gray).text('Revenue:', c1, row); doc.fillColor(black).text(truncate(fin.total_revenue, 25), c1 + 45, row);
-    doc.fillColor(gray).text('Ownership:', c2, row); doc.fillColor(black).text(truncate(profile.ownership_structure, 20), c2 + 55, row);
-
-    doc.y = boxY + 60;
-
-    // Leadership (brief)
-    const lead = synthesis.leadership || {};
-    if (lead.ceo) {
-      header('Leadership');
-      label('CEO', `${lead.ceo.name || 'N/A'} - ${truncate(lead.ceo.background, 60)}`);
-      if (lead.key_executives && lead.key_executives.length > 0) {
-        const execs = lead.key_executives.slice(0, 3).map(e => `${e.title}: ${e.name}`).join(' | ');
-        doc.fontSize(7).font('Helvetica').fillColor(gray).text(execs, L);
-      }
-    }
-
-    // ========== PAGE 2: PRODUCTS & FINANCIALS ==========
-    doc.addPage();
-    doc.rect(0, 0, doc.page.width, 35).fill(blue);
-    doc.fontSize(13).font('Helvetica-Bold').fillColor('white').text('Products & Financial Overview', L, 10);
-    doc.y = 50;
-
-    const prod = synthesis.products_and_services || {};
-    header('Products & Services');
-    para(prod.overview, 250);
-
-    if (prod.product_lines && prod.product_lines.length > 0) {
-      prod.product_lines.slice(0, 4).forEach(line => {
-        doc.fontSize(9).font('Helvetica-Bold').fillColor(blue).text(truncate(line.name, 40), L);
-        doc.fontSize(7).font('Helvetica').fillColor(black).text(truncate(line.description, 150), L);
-        if (line.key_products) {
-          doc.fontSize(7).fillColor(gray).text('Products: ' + line.key_products.slice(0, 3).join(', '), L);
-        }
-        doc.moveDown(0.2);
-      });
-    }
-
-    doc.moveDown(0.3);
-    header('Financial Breakdown');
-    label('Total Revenue', fin.total_revenue);
-    label('Growth', fin.revenue_growth);
-
-    if (fin.revenue_by_segment && fin.revenue_by_segment.length > 0) {
-      doc.moveDown(0.2);
-      doc.fontSize(8).font('Helvetica-Bold').fillColor(gray).text('Revenue by Segment:', L);
-      const segRows = fin.revenue_by_segment.slice(0, 5).map(s => [s.segment, s.revenue, truncate(s.description, 40)]);
-      table(['Segment', 'Revenue', 'Description'], segRows, [100, 80, 160]);
-    }
-
-    if (fin.revenue_by_geography && fin.revenue_by_geography.length > 0) {
-      doc.fontSize(8).font('Helvetica-Bold').fillColor(gray).text('Revenue by Geography:', L);
-      const geoRows = fin.revenue_by_geography.slice(0, 5).map(g => [g.region, g.percentage]);
-      table(['Region', 'Share'], geoRows, [120, 80]);
-    }
-
-    // ========== PAGE 3: OPERATIONS & COMPETITION ==========
-    doc.addPage();
-    doc.rect(0, 0, doc.page.width, 35).fill(navy);
-    doc.fontSize(13).font('Helvetica-Bold').fillColor('white').text('Operations & Competitive Landscape', L, 10);
-    doc.y = 50;
-
-    const ops = synthesis.operations || {};
-    if (ops.manufacturing_footprint && ops.manufacturing_footprint.length > 0) {
-      header('Manufacturing Footprint');
-      const mfgRows = ops.manufacturing_footprint.slice(0, 5).map(m => [m.location, truncate(m.function, 35), m.capacity || '-']);
-      table(['Location', 'Function', 'Capacity'], mfgRows, [130, 180, 80]);
-    }
-
-    const comp = synthesis.competitive_landscape || {};
-    header('Competitive Position');
-    const pos = comp.company_position || {};
-    label('Market Share', pos.market_share);
-    label('Positioning', pos.positioning);
-
-    if (pos.key_strengths) {
-      doc.fontSize(8).font('Helvetica-Bold').fillColor(gray).text('Strengths:', L);
-      bullets(pos.key_strengths, 4, 70);
-    }
-
-    if (comp.competitors && comp.competitors.length > 0) {
-      header('Key Competitors');
-      const compRows = comp.competitors.slice(0, 6).map(c => [c.name, c.hq, c.revenue, c.threat_level]);
-      table(['Company', 'HQ', 'Revenue', 'Threat'], compRows, [110, 70, 100, 60]);
-    }
-
-    // ========== PAGE 4: M&A HISTORY & APPETITE ==========
-    doc.addPage();
-    doc.rect(0, 0, doc.page.width, 35).fill(blue);
-    doc.fontSize(13).font('Helvetica-Bold').fillColor('white').text('M&A Analysis', L, 10);
-    doc.y = 50;
-
-    const maTrack = synthesis.ma_track_record || {};
-    if (maTrack.acquisition_history && maTrack.acquisition_history.length > 0) {
-      header('Acquisition History');
-      const acqRows = maTrack.acquisition_history.slice(0, 5).map(a => [a.year, a.target, a.deal_value, truncate(a.rationale, 35)]);
-      table(['Year', 'Target', 'Value', 'Rationale'], acqRows, [45, 100, 70, 175]);
-    }
-
-    if (maTrack.pattern_analysis) {
-      doc.fontSize(8).font('Helvetica-Bold').fillColor(gray).text('M&A Pattern:', L);
-      para(maTrack.pattern_analysis, 200);
-    }
-
-    const appetite = synthesis.acquisition_appetite || {};
-    header('Acquisition Appetite');
-    if (appetite.likely_deal_size) {
-      label('Target Deal Size', appetite.likely_deal_size.range);
-    }
-    label('Deal Structure', appetite.preferred_deal_structure);
-    if (appetite.urgency) {
-      label('Urgency', appetite.urgency.level);
-    }
-
-    if (appetite.strategic_drivers && appetite.strategic_drivers.length > 0) {
-      doc.moveDown(0.2);
-      doc.fontSize(8).font('Helvetica-Bold').fillColor(gray).text('Strategic Drivers:', L);
-      bullets(appetite.strategic_drivers.map(d => `${d.driver} (${d.priority})`), 4, 80);
-    }
-
-    // ========== PAGE 5: TARGET PROFILE & MATRIX ==========
-    doc.addPage();
-    doc.rect(0, 0, doc.page.width, 35).fill(navy);
-    doc.fontSize(13).font('Helvetica-Bold').fillColor('white').text('Target Acquisition Profile', L, 10);
-    doc.y = 50;
-
-    const tp = synthesis.target_profile || {};
-
-    if (tp.industries_of_interest && tp.industries_of_interest.length > 0) {
-      header('Industries of Interest');
-      const indRows = tp.industries_of_interest.slice(0, 5).map(i => [i.sector, i.interest_level, truncate(i.rationale, 50)]);
-      table(['Sector', 'Interest', 'Rationale'], indRows, [120, 50, 220]);
-    }
-
-    if (tp.geographic_preferences && tp.geographic_preferences.length > 0) {
-      header('Geographic Preferences');
-      const geoRows = tp.geographic_preferences.slice(0, 5).map(g => [g.region, g.interest_level, truncate(g.rationale, 50)]);
-      table(['Region', 'Interest', 'Rationale'], geoRows, [100, 50, 240]);
-    }
-
-    label('Company Stage', tp.company_stage);
-
-    if (tp.capabilities_sought && tp.capabilities_sought.length > 0) {
-      doc.fontSize(8).font('Helvetica-Bold').fillColor(gray).text('Capabilities Sought:', L);
-      bullets(tp.capabilities_sought, 4, 80);
-    }
-
-    // Country-Sector Matrix
-    const matrix = synthesis.country_sector_matrix || {};
-    if (matrix.sectors && matrix.countries && matrix.matrix) {
-      doc.moveDown(0.3);
-      header('Country x Sector Interest Matrix');
-
-      const sectors = (matrix.sectors || []).slice(0, 5);
-      const countries = (matrix.countries || []).slice(0, 6);
-      const mData = matrix.matrix || {};
-
-      if (sectors.length > 0 && countries.length > 0) {
-        const cw = Math.floor((W - 70) / sectors.length);
-        const widths = [70, ...sectors.map(() => cw)];
-        const hdrs = ['Country', ...sectors.map(s => truncate(s, 10))];
-        const rows = countries.map(country => {
-          const cd = mData[country] || {};
-          return [truncate(country, 12), ...sectors.map((s, i) => {
-            const k = s.toLowerCase().replace(/\s+/g, '_');
-            return cd[k] || cd[s] || cd[`sector${i+1}`] || '-';
-          })];
-        });
-        table(hdrs, rows, widths);
-        doc.fontSize(7).fillColor(gray).text('H=High  M=Medium  L=Low  N=None', L, doc.y, { align: 'center', width: W });
-      }
-    }
-
-    // ========== PAGE 6: ENGAGEMENT STRATEGY ==========
-    doc.addPage();
-    doc.rect(0, 0, doc.page.width, 35).fill(blue);
-    doc.fontSize(13).font('Helvetica-Bold').fillColor('white').text('Engagement Strategy', L, 10);
-    doc.y = 50;
-
-    const eng = synthesis.engagement_strategy || {};
-
-    if (eng.key_decision_makers && eng.key_decision_makers.length > 0) {
-      header('Key Decision Makers');
-      eng.key_decision_makers.slice(0, 3).forEach(dm => {
-        doc.fontSize(9).font('Helvetica-Bold').fillColor(black).text(`${dm.name || 'TBD'} - ${dm.title || 'Executive'}`, L);
-        doc.fontSize(7).font('Helvetica').fillColor(gray).text(truncate(dm.approach, 100), L);
-        doc.moveDown(0.2);
-      });
-    }
-
-    if (eng.hot_buttons && eng.hot_buttons.length > 0) {
-      header('Hot Buttons');
-      eng.hot_buttons.slice(0, 3).forEach(hb => {
-        doc.fontSize(8).font('Helvetica-Bold').fillColor(blue).text('• ' + truncate(hb.topic, 40), L);
-        doc.fontSize(7).font('Helvetica').fillColor(black).text(truncate(hb.how_to_leverage, 80), L + 10);
-      });
-      doc.moveDown(0.2);
-    }
-
-    if (eng.concerns_objections && eng.concerns_objections.length > 0) {
-      header('Potential Concerns');
-      eng.concerns_objections.slice(0, 3).forEach(co => {
-        doc.fontSize(8).font('Helvetica-Bold').fillColor('#dc2626').text('• ' + truncate(co.concern, 40), L);
-        doc.fontSize(7).font('Helvetica').fillColor(black).text(truncate(co.how_to_address, 80), L + 10);
-      });
-      doc.moveDown(0.2);
-    }
-
-    const appr = eng.recommended_approach || {};
-    if (appr.positioning || appr.key_messages) {
-      header('Recommended Approach');
-      para(appr.positioning, 150);
-      if (appr.key_messages) {
-        bullets(appr.key_messages, 3, 70);
-      }
-    }
-
-    if (eng.next_steps && eng.next_steps.length > 0) {
-      header('Next Steps');
-      const stepRows = eng.next_steps.slice(0, 4).map(s => [truncate(s.action, 50), s.priority]);
-      table(['Action', 'Priority'], stepRows, [280, 60]);
-    }
-
-    // Footer on last page
-    doc.moveDown(1);
-    doc.fontSize(7).font('Helvetica').fillColor(gray)
-      .text(`Generated: ${new Date().toLocaleDateString()} | ${website}`, L, doc.y, { width: W, align: 'center' });
-    doc.text('For internal M&A advisory use only.', { align: 'center' });
-
-    // Page numbers
-    const range = doc.bufferedPageRange();
-    for (let i = 0; i < range.count; i++) {
-      doc.switchToPage(i);
-      doc.fontSize(7).font('Helvetica').fillColor(gray)
-        .text(`${i + 1}/${range.count}`, doc.page.width - 70, doc.page.height - 40);
-    }
-
-    doc.flushPages();
-    doc.end();
+  // Company Profile
+  const profile = synthesis.company_profile || {};
+  r = addSectionTitle(summarySheet, 'Company Profile', r);
+  const profileData = [
+    ['Legal Name', profile.legal_name || companyName],
+    ['Headquarters', profile.hq_location || 'Not disclosed'],
+    ['Founded', profile.founded || 'Not disclosed'],
+    ['Ownership', profile.ownership_structure || 'Not disclosed'],
+    ['Employees', profile.employees || 'Not disclosed'],
+    ['Website', website]
+  ];
+  profileData.forEach((item, i) => {
+    summarySheet.getCell(`A${r}`).value = item[0];
+    summarySheet.getCell(`A${r}`).font = { bold: true, size: 10 };
+    summarySheet.getCell(`B${r}`).value = item[1];
+    styleDataRow(summarySheet.getRow(r), i % 2 === 0);
+    r++;
   });
+  r++;
+
+  // Leadership
+  const lead = synthesis.leadership || {};
+  r = addSectionTitle(summarySheet, 'Leadership', r);
+  if (lead.ceo) {
+    summarySheet.getCell(`A${r}`).value = 'CEO';
+    summarySheet.getCell(`A${r}`).font = { bold: true };
+    summarySheet.getCell(`B${r}`).value = `${lead.ceo.name || 'N/A'} - ${lead.ceo.background || ''}`;
+    styleDataRow(summarySheet.getRow(r));
+    r++;
+  }
+  if (lead.key_executives && lead.key_executives.length > 0) {
+    lead.key_executives.forEach((exec, i) => {
+      summarySheet.getCell(`A${r}`).value = exec.title || 'Executive';
+      summarySheet.getCell(`A${r}`).font = { bold: true };
+      summarySheet.getCell(`B${r}`).value = `${exec.name || 'N/A'} - ${exec.background || ''}`;
+      styleDataRow(summarySheet.getRow(r), i % 2 === 0);
+      r++;
+    });
+  }
+
+  // ========== SHEET 2: FINANCIALS ==========
+  const finSheet = workbook.addWorksheet('Financials');
+  finSheet.columns = [
+    { key: 'label', width: 25 },
+    { key: 'value', width: 30 },
+    { key: 'notes', width: 45 }
+  ];
+
+  const fin = synthesis.financials || {};
+  let fr = 1;
+  fr = addSectionTitle(finSheet, 'Financial Overview', fr);
+
+  const finOverview = [
+    ['Total Revenue', fin.total_revenue || 'Not disclosed', ''],
+    ['Revenue Growth', fin.revenue_growth || 'Not disclosed', ''],
+    ['Operating Margin', fin.profitability?.operating_margin || 'Not disclosed', ''],
+    ['EBITDA Margin', fin.profitability?.ebitda_margin || 'Not disclosed', ''],
+    ['Net Margin', fin.profitability?.net_margin || 'Not disclosed', ''],
+    ['Key Metrics', fin.key_metrics || '', '']
+  ];
+  finOverview.forEach((item, i) => {
+    finSheet.getCell(`A${fr}`).value = item[0];
+    finSheet.getCell(`A${fr}`).font = { bold: true };
+    finSheet.getCell(`B${fr}`).value = item[1];
+    finSheet.getCell(`C${fr}`).value = item[2];
+    styleDataRow(finSheet.getRow(fr), i % 2 === 0);
+    fr++;
+  });
+  fr++;
+
+  // Revenue by Segment
+  if (fin.revenue_by_segment && fin.revenue_by_segment.length > 0) {
+    fr = addSectionTitle(finSheet, 'Revenue by Segment', fr);
+    const segHeader = finSheet.getRow(fr);
+    segHeader.values = ['Segment', 'Revenue', 'Description'];
+    styleHeaderRow(segHeader, blue);
+    fr++;
+    fin.revenue_by_segment.forEach((seg, i) => {
+      finSheet.getCell(`A${fr}`).value = seg.segment;
+      finSheet.getCell(`B${fr}`).value = seg.revenue;
+      finSheet.getCell(`C${fr}`).value = seg.description;
+      styleDataRow(finSheet.getRow(fr), i % 2 === 0);
+      fr++;
+    });
+    fr++;
+  }
+
+  // Revenue by Geography
+  if (fin.revenue_by_geography && fin.revenue_by_geography.length > 0) {
+    fr = addSectionTitle(finSheet, 'Revenue by Geography', fr);
+    const geoHeader = finSheet.getRow(fr);
+    geoHeader.values = ['Region', 'Share', 'Notes'];
+    styleHeaderRow(geoHeader, blue);
+    fr++;
+    fin.revenue_by_geography.forEach((geo, i) => {
+      finSheet.getCell(`A${fr}`).value = geo.region;
+      finSheet.getCell(`B${fr}`).value = geo.percentage;
+      finSheet.getCell(`C${fr}`).value = geo.notes || '';
+      styleDataRow(finSheet.getRow(fr), i % 2 === 0);
+      fr++;
+    });
+  }
+
+  // ========== SHEET 3: PRODUCTS & OPERATIONS ==========
+  const prodSheet = workbook.addWorksheet('Products & Operations');
+  prodSheet.columns = [
+    { key: 'a', width: 25 },
+    { key: 'b', width: 35 },
+    { key: 'c', width: 40 }
+  ];
+
+  const prod = synthesis.products_and_services || {};
+  let pr = 1;
+
+  // Products Overview
+  pr = addSectionTitle(prodSheet, 'Products & Services Overview', pr);
+  prodSheet.mergeCells(`A${pr}:C${pr}`);
+  prodSheet.getCell(`A${pr}`).value = prod.overview || 'No overview available';
+  prodSheet.getCell(`A${pr}`).alignment = { wrapText: true };
+  prodSheet.getRow(pr).height = 40;
+  pr += 2;
+
+  // Product Lines
+  if (prod.product_lines && prod.product_lines.length > 0) {
+    pr = addSectionTitle(prodSheet, 'Product Lines', pr);
+    const plHeader = prodSheet.getRow(pr);
+    plHeader.values = ['Product Line', 'Description', 'Key Products'];
+    styleHeaderRow(plHeader, blue);
+    pr++;
+    prod.product_lines.forEach((line, i) => {
+      prodSheet.getCell(`A${pr}`).value = line.name;
+      prodSheet.getCell(`A${pr}`).font = { bold: true };
+      prodSheet.getCell(`B${pr}`).value = line.description;
+      prodSheet.getCell(`C${pr}`).value = (line.key_products || []).join(', ');
+      styleDataRow(prodSheet.getRow(pr), i % 2 === 0);
+      pr++;
+    });
+    pr++;
+  }
+
+  // Technology & IP
+  if (prod.technology_ip && prod.technology_ip.length > 0) {
+    pr = addSectionTitle(prodSheet, 'Technology & IP', pr);
+    prod.technology_ip.forEach((tech, i) => {
+      prodSheet.getCell(`A${pr}`).value = `• ${tech}`;
+      styleDataRow(prodSheet.getRow(pr), i % 2 === 0);
+      pr++;
+    });
+    pr++;
+  }
+
+  // Operations
+  const ops = synthesis.operations || {};
+  if (ops.manufacturing_footprint && ops.manufacturing_footprint.length > 0) {
+    pr = addSectionTitle(prodSheet, 'Manufacturing Footprint', pr);
+    const mfgHeader = prodSheet.getRow(pr);
+    mfgHeader.values = ['Location', 'Function', 'Capacity'];
+    styleHeaderRow(mfgHeader);
+    pr++;
+    ops.manufacturing_footprint.forEach((mfg, i) => {
+      prodSheet.getCell(`A${pr}`).value = mfg.location;
+      prodSheet.getCell(`B${pr}`).value = mfg.function;
+      prodSheet.getCell(`C${pr}`).value = mfg.capacity || '-';
+      styleDataRow(prodSheet.getRow(pr), i % 2 === 0);
+      pr++;
+    });
+    pr++;
+  }
+
+  if (ops.rd_centers && ops.rd_centers.length > 0) {
+    pr = addSectionTitle(prodSheet, 'R&D Centers', pr);
+    const rdHeader = prodSheet.getRow(pr);
+    rdHeader.values = ['Location', 'Focus Area', ''];
+    styleHeaderRow(rdHeader);
+    pr++;
+    ops.rd_centers.forEach((rd, i) => {
+      prodSheet.getCell(`A${pr}`).value = rd.location;
+      prodSheet.getCell(`B${pr}`).value = rd.focus;
+      styleDataRow(prodSheet.getRow(pr), i % 2 === 0);
+      pr++;
+    });
+  }
+
+  // ========== SHEET 4: COMPETITIVE LANDSCAPE ==========
+  const compSheet = workbook.addWorksheet('Competitive Landscape');
+  compSheet.columns = [
+    { key: 'a', width: 25 },
+    { key: 'b', width: 20 },
+    { key: 'c', width: 25 },
+    { key: 'd', width: 30 }
+  ];
+
+  const comp = synthesis.competitive_landscape || {};
+  let cr = 1;
+
+  // Market Overview
+  const mkt = comp.market_overview || {};
+  cr = addSectionTitle(compSheet, 'Market Overview', cr);
+  const mktData = [
+    ['Market Size', mkt.market_size || 'Not disclosed'],
+    ['Growth Rate', mkt.growth_rate || 'Not disclosed']
+  ];
+  mktData.forEach((item, i) => {
+    compSheet.getCell(`A${cr}`).value = item[0];
+    compSheet.getCell(`A${cr}`).font = { bold: true };
+    compSheet.getCell(`B${cr}`).value = item[1];
+    styleDataRow(compSheet.getRow(cr), i % 2 === 0);
+    cr++;
+  });
+  if (mkt.key_trends && mkt.key_trends.length > 0) {
+    compSheet.getCell(`A${cr}`).value = 'Key Trends';
+    compSheet.getCell(`A${cr}`).font = { bold: true };
+    compSheet.mergeCells(`B${cr}:D${cr}`);
+    compSheet.getCell(`B${cr}`).value = mkt.key_trends.join('; ');
+    compSheet.getCell(`B${cr}`).alignment = { wrapText: true };
+    styleDataRow(compSheet.getRow(cr));
+    cr++;
+  }
+  cr++;
+
+  // Company Position
+  const pos = comp.company_position || {};
+  cr = addSectionTitle(compSheet, 'Company Competitive Position', cr);
+  const posData = [
+    ['Market Share', pos.market_share || 'Not disclosed'],
+    ['Positioning', pos.positioning || 'Not disclosed']
+  ];
+  posData.forEach((item, i) => {
+    compSheet.getCell(`A${cr}`).value = item[0];
+    compSheet.getCell(`A${cr}`).font = { bold: true };
+    compSheet.mergeCells(`B${cr}:D${cr}`);
+    compSheet.getCell(`B${cr}`).value = item[1];
+    styleDataRow(compSheet.getRow(cr), i % 2 === 0);
+    cr++;
+  });
+  if (pos.key_strengths && pos.key_strengths.length > 0) {
+    compSheet.getCell(`A${cr}`).value = 'Key Strengths';
+    compSheet.getCell(`A${cr}`).font = { bold: true, color: { argb: 'FF16A34A' } };
+    compSheet.mergeCells(`B${cr}:D${cr}`);
+    compSheet.getCell(`B${cr}`).value = pos.key_strengths.join('; ');
+    compSheet.getCell(`B${cr}`).alignment = { wrapText: true };
+    styleDataRow(compSheet.getRow(cr));
+    cr++;
+  }
+  if (pos.key_weaknesses && pos.key_weaknesses.length > 0) {
+    compSheet.getCell(`A${cr}`).value = 'Key Weaknesses';
+    compSheet.getCell(`A${cr}`).font = { bold: true, color: { argb: 'FFDC2626' } };
+    compSheet.mergeCells(`B${cr}:D${cr}`);
+    compSheet.getCell(`B${cr}`).value = pos.key_weaknesses.join('; ');
+    compSheet.getCell(`B${cr}`).alignment = { wrapText: true };
+    styleDataRow(compSheet.getRow(cr));
+    cr++;
+  }
+  cr++;
+
+  // Competitors Table
+  if (comp.competitors && comp.competitors.length > 0) {
+    cr = addSectionTitle(compSheet, 'Key Competitors', cr);
+    const compHeader = compSheet.getRow(cr);
+    compHeader.values = ['Company', 'HQ', 'Revenue', 'Threat Level'];
+    styleHeaderRow(compHeader, blue);
+    cr++;
+    comp.competitors.forEach((c, i) => {
+      compSheet.getCell(`A${cr}`).value = c.name;
+      compSheet.getCell(`A${cr}`).font = { bold: true };
+      compSheet.getCell(`B${cr}`).value = c.hq;
+      compSheet.getCell(`C${cr}`).value = c.revenue;
+      compSheet.getCell(`D${cr}`).value = c.threat_level;
+      // Color code threat level
+      if (c.threat_level === 'High') {
+        compSheet.getCell(`D${cr}`).font = { color: { argb: 'FFDC2626' }, bold: true };
+      } else if (c.threat_level === 'Medium') {
+        compSheet.getCell(`D${cr}`).font = { color: { argb: 'FFD97706' } };
+      }
+      styleDataRow(compSheet.getRow(cr), i % 2 === 0);
+      cr++;
+    });
+  }
+
+  // ========== SHEET 5: M&A ANALYSIS ==========
+  const maSheet = workbook.addWorksheet('M&A Analysis');
+  maSheet.columns = [
+    { key: 'a', width: 15 },
+    { key: 'b', width: 25 },
+    { key: 'c', width: 20 },
+    { key: 'd', width: 40 }
+  ];
+
+  const maTrack = synthesis.ma_track_record || {};
+  let mr = 1;
+
+  // Acquisition History
+  if (maTrack.acquisition_history && maTrack.acquisition_history.length > 0) {
+    mr = addSectionTitle(maSheet, 'Acquisition History', mr);
+    const acqHeader = maSheet.getRow(mr);
+    acqHeader.values = ['Year', 'Target', 'Deal Value', 'Rationale'];
+    styleHeaderRow(acqHeader);
+    mr++;
+    maTrack.acquisition_history.forEach((acq, i) => {
+      maSheet.getCell(`A${mr}`).value = acq.year;
+      maSheet.getCell(`B${mr}`).value = acq.target;
+      maSheet.getCell(`B${mr}`).font = { bold: true };
+      maSheet.getCell(`C${mr}`).value = acq.deal_value;
+      maSheet.getCell(`D${mr}`).value = acq.rationale;
+      styleDataRow(maSheet.getRow(mr), i % 2 === 0);
+      mr++;
+    });
+    mr++;
+  }
+
+  // M&A Pattern
+  if (maTrack.pattern_analysis) {
+    mr = addSectionTitle(maSheet, 'M&A Pattern Analysis', mr);
+    maSheet.mergeCells(`A${mr}:D${mr}`);
+    maSheet.getCell(`A${mr}`).value = maTrack.pattern_analysis;
+    maSheet.getCell(`A${mr}`).alignment = { wrapText: true };
+    maSheet.getRow(mr).height = 50;
+    mr += 2;
+  }
+
+  // Acquisition Appetite
+  const appetite = synthesis.acquisition_appetite || {};
+  mr = addSectionTitle(maSheet, 'Acquisition Appetite', mr);
+  const appData = [
+    ['Target Deal Size', appetite.likely_deal_size?.range || 'Not disclosed', appetite.likely_deal_size?.rationale || ''],
+    ['Deal Structure', appetite.preferred_deal_structure || 'Not disclosed', ''],
+    ['Urgency Level', appetite.urgency?.level || 'Not disclosed', appetite.urgency?.rationale || '']
+  ];
+  appData.forEach((item, i) => {
+    maSheet.getCell(`A${mr}`).value = item[0];
+    maSheet.getCell(`A${mr}`).font = { bold: true };
+    maSheet.getCell(`B${mr}`).value = item[1];
+    maSheet.mergeCells(`C${mr}:D${mr}`);
+    maSheet.getCell(`C${mr}`).value = item[2];
+    styleDataRow(maSheet.getRow(mr), i % 2 === 0);
+    mr++;
+  });
+  mr++;
+
+  // Strategic Drivers
+  if (appetite.strategic_drivers && appetite.strategic_drivers.length > 0) {
+    mr = addSectionTitle(maSheet, 'Strategic Drivers', mr);
+    const sdHeader = maSheet.getRow(mr);
+    sdHeader.values = ['Driver', 'Priority', 'Evidence', ''];
+    styleHeaderRow(sdHeader, blue);
+    mr++;
+    appetite.strategic_drivers.forEach((sd, i) => {
+      maSheet.getCell(`A${mr}`).value = sd.driver;
+      maSheet.getCell(`A${mr}`).font = { bold: true };
+      maSheet.getCell(`B${mr}`).value = sd.priority;
+      if (sd.priority === 'High') {
+        maSheet.getCell(`B${mr}`).font = { color: { argb: 'FF16A34A' }, bold: true };
+      }
+      maSheet.mergeCells(`C${mr}:D${mr}`);
+      maSheet.getCell(`C${mr}`).value = sd.evidence;
+      styleDataRow(maSheet.getRow(mr), i % 2 === 0);
+      mr++;
+    });
+  }
+
+  // ========== SHEET 6: TARGET PROFILE ==========
+  const tpSheet = workbook.addWorksheet('Target Profile');
+  tpSheet.columns = [
+    { key: 'a', width: 25 },
+    { key: 'b', width: 15 },
+    { key: 'c', width: 50 }
+  ];
+
+  const tp = synthesis.target_profile || {};
+  let tr = 1;
+
+  // Industries of Interest
+  if (tp.industries_of_interest && tp.industries_of_interest.length > 0) {
+    tr = addSectionTitle(tpSheet, 'Industries of Interest', tr);
+    const indHeader = tpSheet.getRow(tr);
+    indHeader.values = ['Sector', 'Interest', 'Rationale'];
+    styleHeaderRow(indHeader);
+    tr++;
+    tp.industries_of_interest.forEach((ind, i) => {
+      tpSheet.getCell(`A${tr}`).value = ind.sector;
+      tpSheet.getCell(`A${tr}`).font = { bold: true };
+      tpSheet.getCell(`B${tr}`).value = ind.interest_level;
+      if (ind.interest_level === 'High') {
+        tpSheet.getCell(`B${tr}`).font = { color: { argb: 'FF16A34A' }, bold: true };
+      }
+      tpSheet.getCell(`C${tr}`).value = ind.rationale;
+      styleDataRow(tpSheet.getRow(tr), i % 2 === 0);
+      tr++;
+    });
+    tr++;
+  }
+
+  // Geographic Preferences
+  if (tp.geographic_preferences && tp.geographic_preferences.length > 0) {
+    tr = addSectionTitle(tpSheet, 'Geographic Preferences', tr);
+    const geoHeader = tpSheet.getRow(tr);
+    geoHeader.values = ['Region', 'Interest', 'Rationale'];
+    styleHeaderRow(geoHeader, blue);
+    tr++;
+    tp.geographic_preferences.forEach((geo, i) => {
+      tpSheet.getCell(`A${tr}`).value = geo.region;
+      tpSheet.getCell(`A${tr}`).font = { bold: true };
+      tpSheet.getCell(`B${tr}`).value = geo.interest_level;
+      if (geo.interest_level === 'High') {
+        tpSheet.getCell(`B${tr}`).font = { color: { argb: 'FF16A34A' }, bold: true };
+      }
+      tpSheet.getCell(`C${tr}`).value = geo.rationale;
+      styleDataRow(tpSheet.getRow(tr), i % 2 === 0);
+      tr++;
+    });
+    tr++;
+  }
+
+  // Capabilities Sought
+  if (tp.capabilities_sought && tp.capabilities_sought.length > 0) {
+    tr = addSectionTitle(tpSheet, 'Capabilities Sought', tr);
+    tp.capabilities_sought.forEach((cap, i) => {
+      tpSheet.getCell(`A${tr}`).value = `• ${cap}`;
+      styleDataRow(tpSheet.getRow(tr), i % 2 === 0);
+      tr++;
+    });
+    tr++;
+  }
+
+  // Country-Sector Matrix
+  const matrix = synthesis.country_sector_matrix || {};
+  if (matrix.sectors && matrix.countries && matrix.matrix) {
+    tr = addSectionTitle(tpSheet, 'Country × Sector Interest Matrix', tr);
+
+    // Adjust columns for matrix
+    const sectors = matrix.sectors.slice(0, 6);
+    const matrixHeader = tpSheet.getRow(tr);
+    matrixHeader.values = ['Country', ...sectors];
+    styleHeaderRow(matrixHeader);
+    tr++;
+
+    matrix.countries.forEach((country, ci) => {
+      const cd = matrix.matrix[country] || {};
+      const rowData = [country];
+      sectors.forEach((s, i) => {
+        const k = s.toLowerCase().replace(/\s+/g, '_');
+        rowData.push(cd[k] || cd[s] || cd[`sector${i+1}`] || '-');
+      });
+      const row = tpSheet.getRow(tr);
+      row.values = rowData;
+      row.getCell(1).font = { bold: true };
+      // Color code interest levels
+      for (let c = 2; c <= sectors.length + 1; c++) {
+        const val = row.getCell(c).value;
+        if (val === 'H') {
+          row.getCell(c).font = { color: { argb: 'FF16A34A' }, bold: true };
+          row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
+        } else if (val === 'M') {
+          row.getCell(c).font = { color: { argb: 'FFD97706' } };
+          row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } };
+        } else if (val === 'L') {
+          row.getCell(c).font = { color: { argb: 'FF64748B' } };
+        }
+        row.getCell(c).alignment = { horizontal: 'center' };
+      }
+      styleDataRow(row, ci % 2 === 0);
+      tr++;
+    });
+    tr++;
+    tpSheet.getCell(`A${tr}`).value = 'H=High  M=Medium  L=Low  N=None';
+    tpSheet.getCell(`A${tr}`).font = { size: 9, color: { argb: 'FF64748B' }, italic: true };
+  }
+
+  // ========== SHEET 7: ENGAGEMENT STRATEGY ==========
+  const engSheet = workbook.addWorksheet('Engagement Strategy');
+  engSheet.columns = [
+    { key: 'a', width: 25 },
+    { key: 'b', width: 30 },
+    { key: 'c', width: 45 }
+  ];
+
+  const eng = synthesis.engagement_strategy || {};
+  let er = 1;
+
+  // Key Decision Makers
+  if (eng.key_decision_makers && eng.key_decision_makers.length > 0) {
+    er = addSectionTitle(engSheet, 'Key Decision Makers', er);
+    const dmHeader = engSheet.getRow(er);
+    dmHeader.values = ['Name', 'Title', 'Approach'];
+    styleHeaderRow(dmHeader);
+    er++;
+    eng.key_decision_makers.forEach((dm, i) => {
+      engSheet.getCell(`A${er}`).value = dm.name || 'TBD';
+      engSheet.getCell(`A${er}`).font = { bold: true };
+      engSheet.getCell(`B${er}`).value = dm.title;
+      engSheet.getCell(`C${er}`).value = dm.approach;
+      styleDataRow(engSheet.getRow(er), i % 2 === 0);
+      er++;
+    });
+    er++;
+  }
+
+  // Hot Buttons
+  if (eng.hot_buttons && eng.hot_buttons.length > 0) {
+    er = addSectionTitle(engSheet, 'Hot Buttons (Topics That Resonate)', er);
+    const hbHeader = engSheet.getRow(er);
+    hbHeader.values = ['Topic', 'Evidence', 'How to Leverage'];
+    styleHeaderRow(hbHeader, 'FF16A34A');
+    er++;
+    eng.hot_buttons.forEach((hb, i) => {
+      engSheet.getCell(`A${er}`).value = hb.topic;
+      engSheet.getCell(`A${er}`).font = { bold: true };
+      engSheet.getCell(`B${er}`).value = hb.evidence;
+      engSheet.getCell(`C${er}`).value = hb.how_to_leverage;
+      styleDataRow(engSheet.getRow(er), i % 2 === 0);
+      er++;
+    });
+    er++;
+  }
+
+  // Concerns & Objections
+  if (eng.concerns_objections && eng.concerns_objections.length > 0) {
+    er = addSectionTitle(engSheet, 'Potential Concerns & Objections', er);
+    const coHeader = engSheet.getRow(er);
+    coHeader.values = ['Concern', 'Evidence', 'How to Address'];
+    styleHeaderRow(coHeader, 'FFDC2626');
+    er++;
+    eng.concerns_objections.forEach((co, i) => {
+      engSheet.getCell(`A${er}`).value = co.concern;
+      engSheet.getCell(`A${er}`).font = { bold: true };
+      engSheet.getCell(`B${er}`).value = co.evidence;
+      engSheet.getCell(`C${er}`).value = co.how_to_address;
+      styleDataRow(engSheet.getRow(er), i % 2 === 0);
+      er++;
+    });
+    er++;
+  }
+
+  // Recommended Approach
+  const appr = eng.recommended_approach || {};
+  if (appr.positioning || appr.key_messages) {
+    er = addSectionTitle(engSheet, 'Recommended Approach', er);
+    if (appr.positioning) {
+      engSheet.getCell(`A${er}`).value = 'Positioning';
+      engSheet.getCell(`A${er}`).font = { bold: true };
+      engSheet.mergeCells(`B${er}:C${er}`);
+      engSheet.getCell(`B${er}`).value = appr.positioning;
+      engSheet.getCell(`B${er}`).alignment = { wrapText: true };
+      styleDataRow(engSheet.getRow(er));
+      er++;
+    }
+    if (appr.timing) {
+      engSheet.getCell(`A${er}`).value = 'Timing';
+      engSheet.getCell(`A${er}`).font = { bold: true };
+      engSheet.mergeCells(`B${er}:C${er}`);
+      engSheet.getCell(`B${er}`).value = appr.timing;
+      styleDataRow(engSheet.getRow(er), true);
+      er++;
+    }
+    if (appr.channel) {
+      engSheet.getCell(`A${er}`).value = 'Channel';
+      engSheet.getCell(`A${er}`).font = { bold: true };
+      engSheet.mergeCells(`B${er}:C${er}`);
+      engSheet.getCell(`B${er}`).value = appr.channel;
+      styleDataRow(engSheet.getRow(er));
+      er++;
+    }
+    if (appr.key_messages && appr.key_messages.length > 0) {
+      engSheet.getCell(`A${er}`).value = 'Key Messages';
+      engSheet.getCell(`A${er}`).font = { bold: true };
+      engSheet.mergeCells(`B${er}:C${er}`);
+      engSheet.getCell(`B${er}`).value = appr.key_messages.map((m, i) => `${i+1}. ${m}`).join('\n');
+      engSheet.getCell(`B${er}`).alignment = { wrapText: true };
+      engSheet.getRow(er).height = Math.max(20, appr.key_messages.length * 18);
+      styleDataRow(engSheet.getRow(er), true);
+      er++;
+    }
+    er++;
+  }
+
+  // Next Steps
+  if (eng.next_steps && eng.next_steps.length > 0) {
+    er = addSectionTitle(engSheet, 'Next Steps', er);
+    const nsHeader = engSheet.getRow(er);
+    nsHeader.values = ['Action', 'Priority', 'Owner'];
+    styleHeaderRow(nsHeader);
+    er++;
+    eng.next_steps.forEach((ns, i) => {
+      engSheet.getCell(`A${er}`).value = ns.action;
+      engSheet.getCell(`B${er}`).value = ns.priority;
+      if (ns.priority === 'High') {
+        engSheet.getCell(`B${er}`).font = { color: { argb: 'FFDC2626' }, bold: true };
+      }
+      engSheet.getCell(`C${er}`).value = ns.owner || 'TBD';
+      styleDataRow(engSheet.getRow(er), i % 2 === 0);
+      er++;
+    });
+  }
+
+  // Generate buffer
+  const buffer = await workbook.xlsx.writeBuffer();
+  return buffer.toString('base64');
 }
 
 // UTB API endpoint
@@ -5620,8 +6049,8 @@ app.post('/api/utb', async (req, res) => {
     // Conduct comprehensive research
     const research = await conductUTBResearch(companyName, website, context);
 
-    // Generate professional PDF
-    const pdfBase64 = await generateUTBPDF(companyName, website, research, context);
+    // Generate Excel workbook with structured data
+    const excelBase64 = await generateUTBExcel(companyName, website, research, context);
 
     // Send email with attachment
     await sendEmail(
@@ -5630,13 +6059,22 @@ app.post('/api/utb', async (req, res) => {
       `<div style="font-family:Arial,sans-serif;max-width:500px;">
         <h2 style="color:#1a365d;margin-bottom:5px;">${companyName}</h2>
         <p style="color:#64748b;margin-top:0;">${website}</p>
-        <p>Your 6-page UTB report is attached.</p>
+        <p>Your UTB Excel report is attached with 7 structured sheets:</p>
+        <ul style="font-size:13px;color:#475569;">
+          <li>Executive Summary</li>
+          <li>Financials</li>
+          <li>Products & Operations</li>
+          <li>Competitive Landscape</li>
+          <li>M&A Analysis</li>
+          <li>Target Profile</li>
+          <li>Engagement Strategy</li>
+        </ul>
         <p style="font-size:12px;color:#94a3b8;">Generated: ${new Date().toLocaleString()}</p>
       </div>`,
-      { content: pdfBase64, name: `UTB_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf` }
+      { content: excelBase64, name: `UTB_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.xlsx` }
     );
 
-    console.log(`[UTB] Report sent successfully to ${email}`);
+    console.log(`[UTB] Excel report sent successfully to ${email}`);
   } catch (error) {
     console.error('[UTB] Error:', error);
     await sendEmail(email, `UTB Error - ${companyName}`, `<p>Error: ${error.message}</p>`).catch(() => {});
@@ -5644,7 +6082,7 @@ app.post('/api/utb', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v35 - UTB Compact' });
+  res.json({ status: 'ok', service: 'Find Target v36 - UTB Excel' });
 });
 
 const PORT = process.env.PORT || 3000;
