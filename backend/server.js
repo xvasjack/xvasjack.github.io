@@ -2718,7 +2718,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       border: solidWhiteBorder
     };
 
-    // Data row style - sysDash horizontal borders between rows, font 14
+    // Data row style - sysDash horizontal borders between rows, no vertical borders (matches reference PPTX)
     // Border order: [top, right, bottom, left]
     const dataStyle = {
       fill: COLORS.white,
@@ -2727,7 +2727,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fontSize: 14,
       valign: 'middle',
       margin: cellMargin,
-      border: [sysDashBorder, solidWhiteBorder, sysDashBorder, solidWhiteBorder]
+      border: [sysDashBorder, noBorder, sysDashBorder, noBorder]
     };
 
     // Median "Median" label style - light blue with sysDash top border
@@ -2765,7 +2765,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       border: [noBorder, noBorder, noBorder, noBorder]
     };
 
-    // Last data row style - sysDash border at bottom (line below last company)
+    // Last data row style - sysDash border at bottom (line below last company), no vertical borders
     const lastDataStyle = {
       fill: COLORS.white,
       color: COLORS.black,
@@ -2773,7 +2773,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fontSize: 14,
       valign: 'middle',
       margin: cellMargin,
-      border: [sysDashBorder, solidWhiteBorder, sysDashBorder, solidWhiteBorder]
+      border: [sysDashBorder, noBorder, sysDashBorder, noBorder]
     };
 
     // === ROW 1: Dark blue merged headers ===
