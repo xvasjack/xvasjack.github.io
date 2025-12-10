@@ -5162,8 +5162,8 @@ Respond in this EXACT JSON format:
 
 REMEMBER: Help an MD quickly understand if this company has a defensible position worth paying for.`).catch(e => ({ section: 'competitors', error: e.message })),
 
-    // Synthesis 4: M&A Analysis & Acquisition Appetite
-    callChatGPT(`You are preparing an M&A buyer intelligence brief. This is THE most important section.
+    // Synthesis 4: M&A Deep Dive - Full Story Analysis
+    callChatGPT(`You are an M&A advisor writing a DEEP intelligence brief on a company's acquisition behavior.
 
 COMPANY: ${companyName}
 
@@ -5173,109 +5173,84 @@ ${research.maHistory}
 RESEARCH ON LEADERSHIP & STRATEGY:
 ${research.leadership}
 
-RESEARCH ON FINANCIALS (for capacity assessment):
+RESEARCH ON FINANCIALS:
 ${research.financials}
 
 ---
 
-CRITICAL INSTRUCTIONS:
-- This section determines if we should pursue this buyer. Be ACTIONABLE.
-- Don't just list facts - INTERPRET what they mean for pitching deals
-- "Capabilities sought" should be plain English business needs, NOT technical jargon
-- Example good: "Companies with strong distribution in Southeast Asia"
-- Example bad: "Advanced polymer processing technology capabilities"
+CRITICAL: I need DEPTH, not breadth. Don't give me 10 shallow bullet points. Give me 3-4 deals analyzed DEEPLY.
+
+For EACH significant acquisition, write 3-5 sentences explaining:
+1. What they bought and why (the strategic logic)
+2. What it tells us about their priorities
+3. How they executed (price paid, integration approach)
+4. What it means for future deals they'd consider
+
+Then synthesize: What patterns emerge? What does this tell us about how they think about M&A?
 
 Respond in this EXACT JSON format:
 {
-  "ma_track_record": {
-    "acquisition_history": [
+  "ma_deep_dive": {
+    "deal_stories": [
       {
-        "year": "Year",
-        "target": "Company name",
-        "deal_value": "Amount or Not disclosed",
-        "what_they_bought": "Plain English - what capability/market did they acquire?",
-        "pattern_signal": "What this tells us about their M&A strategy"
+        "deal": "Target company name (Year)",
+        "full_story": "3-5 sentence deep analysis of this deal - what they bought, why, how, and what it tells us"
       }
     ],
-    "deal_style": "2-3 sentences: Do they do bolt-ons or transformational? Fast or slow integration? Aggressive or conservative valuations?"
-  },
-  "acquisition_appetite": {
-    "buying_motivation": [
-      {"need": "What business problem are they trying to solve through M&A?", "urgency": "High/Medium/Low", "evidence": "What signals this?"}
-    ],
-    "deal_parameters": {
-      "sweet_spot_size": "$X-Y million - based on past deals and balance sheet",
-      "structure_preference": "Full acquisition / JV / Minority - and why",
-      "decision_speed": "Fast mover / Deliberate / Slow - with evidence"
-    }
-  },
-  "what_they_want": {
-    "business_types": [
-      {"description": "Plain English description of target company type", "fit_level": "High/Medium/Low", "why": "How this fits their strategy"}
-    ],
-    "geographic_focus": [
-      {"region": "Region name", "interest": "High/Medium/Low", "reasoning": "Why this geography"}
-    ],
-    "deal_breakers": ["What would make them walk away from a deal"]
-  },
-  "country_sector_matrix": {
-    "explanation": "Interest level by country and business type (H=High, M=Medium, L=Low)",
-    "sectors": ["Use plain business descriptions, not technical terms"],
-    "countries": ["Key geographies"],
-    "matrix": {
-      "Japan": {"sector1": "H", "sector2": "M"},
-      "USA": {"sector1": "M", "sector2": "H"}
+    "ma_philosophy": "2-3 paragraphs synthesizing their overall M&A philosophy. Are they empire builders or focused acquirers? Do they buy technology, market access, or capacity? How aggressive are they on valuation? How do they integrate - hands-off or full absorption?",
+    "deal_capacity": {
+      "financial_firepower": "Based on balance sheet and past deals, what can they spend?",
+      "appetite_level": "High/Medium/Low - are they actively hunting or opportunistic?",
+      "decision_process": "Fast/Deliberate/Slow - how long do their deals take?"
     }
   }
 }
 
-REMEMBER: An MD should read this and immediately know if they have a deal worth pitching.`).catch(e => ({ section: 'ma_analysis', error: e.message })),
+REMEMBER: An MD reading this should deeply understand HOW this company thinks about M&A.`).catch(e => ({ section: 'ma_analysis', error: e.message })),
 
-    // Synthesis 5: Engagement Strategy
-    callChatGPT(`You are a senior M&A advisor preparing for a client meeting. How should we engage with this company?
+    // Synthesis 5: Ideal Target Profile - Deep Strategic Analysis
+    callChatGPT(`You are an M&A advisor writing THE most important page of a buyer brief: What exactly should we pitch them?
 
 COMPANY: ${companyName}
 
-RESEARCH ON LEADERSHIP:
-${research.leadership}
-
-RESEARCH ON M&A:
-${research.maHistory}
-
-RESEARCH ON STRATEGY:
+ALL RESEARCH:
 ${research.products}
+${research.maHistory}
+${research.leadership}
+${research.financials}
 
 ${context ? `CLIENT CONTEXT: ${context}` : ''}
 
 ---
 
-Think like a seasoned dealmaker. What would actually work with this company?
+CRITICAL: Don't give me a checklist of shallow criteria. Give me ONE deep, insightful analysis.
+
+Write 2-3 paragraphs that answer: "If I had to describe the PERFECT acquisition target for ${companyName}, what would it look like and WHY?"
+
+Consider and SYNTHESIZE:
+- Value chain position: Do they want upstream suppliers, downstream distribution, or horizontal competitors?
+- Industry adjacencies: Which specific sectors fit their strategy and why?
+- Geography: Which countries/regions and why (market access, cost, talent)?
+- Company stage: Early-stage tech, growth companies, or mature cash-flow businesses?
+- Size: What's their sweet spot and why?
+
+Then give me ONE specific example: "A company like [description] in [country] would be highly attractive because [specific reasons tied to their strategy]"
 
 Respond in this EXACT JSON format:
 {
-  "engagement_strategy": {
-    "key_decision_makers": [
-      {"name": "Name if known", "title": "Title", "role_in_ma": "Their role in M&A decisions", "approach": "How to engage them"}
-    ],
-    "hot_buttons": [
-      {"topic": "What excites them", "evidence": "Why we think this", "how_to_leverage": "How to use this"}
-    ],
-    "concerns_objections": [
-      {"concern": "What might worry them", "evidence": "Why we think this", "how_to_address": "How to overcome"}
-    ],
-    "recommended_approach": {
-      "positioning": "How to position opportunities to them",
-      "timing": "Any timing considerations",
-      "channel": "How to reach them (direct, advisor, event, etc.)",
-      "key_messages": ["3-4 key messages that would resonate"]
+  "ideal_target": {
+    "strategic_analysis": "2-3 paragraphs of deep analysis on what they want and WHY. Connect dots between their strategy, past deals, and future needs. This should read like insight, not a checklist.",
+    "sweet_spot": {
+      "value_chain": "Where in the value chain (upstream/midstream/downstream) and why",
+      "industries": "Which specific industries/segments and why",
+      "geographies": "Which countries/regions and why",
+      "size_range": "Revenue or deal size range and why this fits",
+      "stage": "Growth stage preference and why"
     },
-    "next_steps": [
-      {"action": "Specific action to take", "priority": "High/Medium/Low", "owner": "Who should do this"}
-    ]
+    "example_target": "One specific, concrete example: 'A company like [X] that does [Y] in [Z country] would be attractive because [specific strategic fit]'",
+    "what_to_avoid": "1-2 sentences on what would NOT fit and why"
   }
-}
-
-IMPORTANT: Be SPECIFIC and ACTIONABLE. This should be immediately useful for a meeting prep.`).catch(e => ({ section: 'engagement', error: e.message }))
+}`).catch(e => ({ section: 'ideal_target', error: e.message }))
   ];
 
   // Add local insights synthesis if available
@@ -5732,321 +5707,136 @@ async function generateUTBExcel(companyName, website, research, additionalContex
     compSheet.getRow(cr).height = 50;
   }
 
-  // ========== SHEET 5: M&A ANALYSIS ==========
-  const maSheet = workbook.addWorksheet('M&A Analysis');
+  // ========== SHEET 5: M&A DEEP DIVE ==========
+  const maSheet = workbook.addWorksheet('M&A Deep Dive');
   maSheet.columns = [
-    { key: 'a', width: 20 },
-    { key: 'b', width: 25 },
-    { key: 'c', width: 55 }
+    { key: 'a', width: 25 },
+    { key: 'b', width: 75 }
   ];
 
-  const maTrack = synthesis.ma_track_record || {};
+  const maDeepDive = synthesis.ma_deep_dive || {};
   let mr = 1;
 
-  // Acquisition History - What They've Done
-  if (maTrack.acquisition_history && maTrack.acquisition_history.length > 0) {
-    mr = addSectionTitle(maSheet, 'Past Deals - What They\'ve Bought', mr);
-    const acqHeader = maSheet.getRow(mr);
-    acqHeader.values = ['Year / Target', 'What They Acquired', 'What This Tells Us'];
-    styleHeaderRow(acqHeader);
-    mr++;
-    maTrack.acquisition_history.forEach((acq, i) => {
-      maSheet.getCell(`A${mr}`).value = `${acq.year}: ${acq.target}`;
-      maSheet.getCell(`A${mr}`).font = { bold: true };
-      maSheet.getCell(`B${mr}`).value = acq.what_they_bought || acq.deal_value || '';
-      maSheet.getCell(`C${mr}`).value = acq.pattern_signal || acq.rationale || '';
+  // Deal Stories - Deep Analysis Per Deal
+  const dealStories = maDeepDive.deal_stories || [];
+  if (dealStories.length > 0) {
+    mr = addSectionTitle(maSheet, 'Deal-by-Deal Analysis', mr);
+    dealStories.forEach((story, i) => {
+      maSheet.getCell(`A${mr}`).value = story.deal;
+      maSheet.getCell(`A${mr}`).font = { bold: true, size: 11, color: { argb: blue } };
+      mr++;
+      maSheet.mergeCells(`A${mr}:B${mr}`);
+      maSheet.getCell(`A${mr}`).value = story.full_story;
+      maSheet.getCell(`A${mr}`).alignment = { wrapText: true, vertical: 'top' };
+      maSheet.getRow(mr).height = 80;
       styleDataRow(maSheet.getRow(mr), i % 2 === 0);
       mr++;
+      mr++; // Extra space between deals
     });
-    mr++;
   }
 
-  // Deal Style
-  if (maTrack.deal_style || maTrack.pattern_analysis) {
-    mr = addSectionTitle(maSheet, 'How They Do Deals', mr);
-    maSheet.mergeCells(`A${mr}:C${mr}`);
-    maSheet.getCell(`A${mr}`).value = maTrack.deal_style || maTrack.pattern_analysis;
-    maSheet.getCell(`A${mr}`).alignment = { wrapText: true };
-    maSheet.getRow(mr).height = 50;
+  // M&A Philosophy - Deep Synthesis
+  if (maDeepDive.ma_philosophy) {
+    mr = addSectionTitle(maSheet, 'How They Think About M&A', mr);
+    maSheet.mergeCells(`A${mr}:B${mr}`);
+    maSheet.getCell(`A${mr}`).value = maDeepDive.ma_philosophy;
+    maSheet.getCell(`A${mr}`).alignment = { wrapText: true, vertical: 'top' };
+    maSheet.getRow(mr).height = 120;
     mr += 2;
   }
 
-  // Why They're Buying - Motivations
-  const appetite = synthesis.acquisition_appetite || {};
-  const motivations = appetite.buying_motivation || appetite.strategic_drivers || [];
-  if (motivations.length > 0) {
-    mr = addSectionTitle(maSheet, 'Why They\'re Looking to Buy', mr);
-    const motHeader = maSheet.getRow(mr);
-    motHeader.values = ['Business Need', 'Urgency', 'Evidence'];
-    styleHeaderRow(motHeader, blue);
-    mr++;
-    motivations.forEach((mot, i) => {
-      maSheet.getCell(`A${mr}`).value = mot.need || mot.driver || '';
+  // Deal Capacity
+  const capacity = maDeepDive.deal_capacity || {};
+  if (capacity.financial_firepower || capacity.appetite_level) {
+    mr = addSectionTitle(maSheet, 'Deal Capacity', mr);
+    if (capacity.financial_firepower) {
+      maSheet.getCell(`A${mr}`).value = 'Financial Firepower';
       maSheet.getCell(`A${mr}`).font = { bold: true };
-      maSheet.getCell(`B${mr}`).value = mot.urgency || mot.priority || '';
-      if ((mot.urgency || mot.priority) === 'High') {
-        maSheet.getCell(`B${mr}`).font = { color: { argb: 'FFDC2626' }, bold: true };
-      }
-      maSheet.getCell(`C${mr}`).value = mot.evidence || '';
-      styleDataRow(maSheet.getRow(mr), i % 2 === 0);
+      maSheet.getCell(`B${mr}`).value = capacity.financial_firepower;
+      styleDataRow(maSheet.getRow(mr));
       mr++;
-    });
-    mr++;
+    }
+    if (capacity.appetite_level) {
+      maSheet.getCell(`A${mr}`).value = 'Appetite Level';
+      maSheet.getCell(`A${mr}`).font = { bold: true };
+      maSheet.getCell(`B${mr}`).value = capacity.appetite_level;
+      if (capacity.appetite_level.includes('High')) {
+        maSheet.getCell(`B${mr}`).font = { color: { argb: 'FF16A34A' }, bold: true };
+      }
+      styleDataRow(maSheet.getRow(mr), true);
+      mr++;
+    }
+    if (capacity.decision_process) {
+      maSheet.getCell(`A${mr}`).value = 'Decision Speed';
+      maSheet.getCell(`A${mr}`).font = { bold: true };
+      maSheet.getCell(`B${mr}`).value = capacity.decision_process;
+      styleDataRow(maSheet.getRow(mr));
+      mr++;
+    }
   }
 
-  // Deal Parameters
-  const dealParams = appetite.deal_parameters || {};
-  mr = addSectionTitle(maSheet, 'Deal Parameters', mr);
-  const paramData = [
-    ['Sweet Spot Size', dealParams.sweet_spot_size || appetite.likely_deal_size?.range || 'Not disclosed'],
-    ['Structure Preference', dealParams.structure_preference || appetite.preferred_deal_structure || 'Not disclosed'],
-    ['Decision Speed', dealParams.decision_speed || appetite.urgency?.level || 'Not disclosed']
-  ];
-  paramData.forEach((item, i) => {
-    maSheet.getCell(`A${mr}`).value = item[0];
-    maSheet.getCell(`A${mr}`).font = { bold: true };
-    maSheet.mergeCells(`B${mr}:C${mr}`);
-    maSheet.getCell(`B${mr}`).value = item[1];
-    styleDataRow(maSheet.getRow(mr), i % 2 === 0);
-    mr++;
-  });
-
-  // ========== SHEET 6: WHAT THEY WANT ==========
-  const tpSheet = workbook.addWorksheet('What They Want');
+  // ========== SHEET 6: IDEAL TARGET (Deep Analysis) ==========
+  const tpSheet = workbook.addWorksheet('Ideal Target');
   tpSheet.columns = [
-    { key: 'a', width: 30 },
-    { key: 'b', width: 15 },
-    { key: 'c', width: 50 }
+    { key: 'a', width: 25 },
+    { key: 'b', width: 75 }
   ];
 
-  const whatTheyWant = synthesis.what_they_want || synthesis.target_profile || {};
+  const idealTarget = synthesis.ideal_target || {};
   let tr = 1;
 
-  // Types of Businesses
-  const businessTypes = whatTheyWant.business_types || whatTheyWant.industries_of_interest || [];
-  if (businessTypes.length > 0) {
-    tr = addSectionTitle(tpSheet, 'Types of Companies They Want', tr);
-    const btHeader = tpSheet.getRow(tr);
-    btHeader.values = ['Target Description', 'Fit Level', 'Why This Fits'];
-    styleHeaderRow(btHeader);
-    tr++;
-    businessTypes.forEach((bt, i) => {
-      tpSheet.getCell(`A${tr}`).value = bt.description || bt.sector || '';
+  // Strategic Analysis - The Deep Insight
+  if (idealTarget.strategic_analysis) {
+    tr = addSectionTitle(tpSheet, 'What They\'re Really Looking For', tr);
+    tpSheet.mergeCells(`A${tr}:B${tr}`);
+    tpSheet.getCell(`A${tr}`).value = idealTarget.strategic_analysis;
+    tpSheet.getCell(`A${tr}`).alignment = { wrapText: true, vertical: 'top' };
+    tpSheet.getRow(tr).height = 150;
+    tr += 2;
+  }
+
+  // Sweet Spot - Key Criteria
+  const sweetSpot = idealTarget.sweet_spot || {};
+  if (Object.keys(sweetSpot).length > 0) {
+    tr = addSectionTitle(tpSheet, 'The Sweet Spot', tr);
+    const spotData = [
+      ['Value Chain Position', sweetSpot.value_chain],
+      ['Target Industries', sweetSpot.industries],
+      ['Target Geographies', sweetSpot.geographies],
+      ['Size Range', sweetSpot.size_range],
+      ['Company Stage', sweetSpot.stage]
+    ].filter(item => item[1]);
+
+    spotData.forEach((item, i) => {
+      tpSheet.getCell(`A${tr}`).value = item[0];
       tpSheet.getCell(`A${tr}`).font = { bold: true };
-      tpSheet.getCell(`B${tr}`).value = bt.fit_level || bt.interest_level || '';
-      if ((bt.fit_level || bt.interest_level) === 'High') {
-        tpSheet.getCell(`B${tr}`).font = { color: { argb: 'FF16A34A' }, bold: true };
-      }
-      tpSheet.getCell(`C${tr}`).value = bt.why || bt.rationale || '';
+      tpSheet.getCell(`B${tr}`).value = item[1];
+      tpSheet.getCell(`B${tr}`).alignment = { wrapText: true };
       styleDataRow(tpSheet.getRow(tr), i % 2 === 0);
       tr++;
     });
     tr++;
   }
 
-  // Geographic Focus
-  const geoFocus = whatTheyWant.geographic_focus || whatTheyWant.geographic_preferences || [];
-  if (geoFocus.length > 0) {
-    tr = addSectionTitle(tpSheet, 'Geographic Focus', tr);
-    const geoHeader = tpSheet.getRow(tr);
-    geoHeader.values = ['Region', 'Interest', 'Reasoning'];
-    styleHeaderRow(geoHeader, blue);
-    tr++;
-    geoFocus.forEach((geo, i) => {
-      tpSheet.getCell(`A${tr}`).value = geo.region;
-      tpSheet.getCell(`A${tr}`).font = { bold: true };
-      tpSheet.getCell(`B${tr}`).value = geo.interest || geo.interest_level || '';
-      if ((geo.interest || geo.interest_level) === 'High') {
-        tpSheet.getCell(`B${tr}`).font = { color: { argb: 'FF16A34A' }, bold: true };
-      }
-      tpSheet.getCell(`C${tr}`).value = geo.reasoning || geo.rationale || '';
-      styleDataRow(tpSheet.getRow(tr), i % 2 === 0);
-      tr++;
-    });
-    tr++;
+  // Concrete Example
+  if (idealTarget.example_target) {
+    tr = addSectionTitle(tpSheet, 'Example of an Ideal Target', tr);
+    tpSheet.mergeCells(`A${tr}:B${tr}`);
+    tpSheet.getCell(`A${tr}`).value = idealTarget.example_target;
+    tpSheet.getCell(`A${tr}`).alignment = { wrapText: true, vertical: 'top' };
+    tpSheet.getCell(`A${tr}`).font = { italic: true, color: { argb: 'FF16A34A' } };
+    tpSheet.getRow(tr).height = 60;
+    tr += 2;
   }
 
-  // Deal Breakers
-  const dealBreakers = whatTheyWant.deal_breakers || [];
-  if (dealBreakers.length > 0) {
-    tr = addSectionTitle(tpSheet, 'Deal Breakers - What Makes Them Walk Away', tr);
-    dealBreakers.forEach((db, i) => {
-      tpSheet.getCell(`A${tr}`).value = `• ${db}`;
-      tpSheet.getCell(`A${tr}`).font = { color: { argb: 'FFDC2626' } };
-      styleDataRow(tpSheet.getRow(tr), i % 2 === 0);
-      tr++;
-    });
-    tr++;
-  }
-
-  // Country-Sector Matrix
-  const matrix = synthesis.country_sector_matrix || {};
-  if (matrix.sectors && matrix.countries && matrix.matrix) {
-    tr = addSectionTitle(tpSheet, 'Country × Sector Interest Matrix', tr);
-
-    // Adjust columns for matrix
-    const sectors = matrix.sectors.slice(0, 6);
-    const matrixHeader = tpSheet.getRow(tr);
-    matrixHeader.values = ['Country', ...sectors];
-    styleHeaderRow(matrixHeader);
-    tr++;
-
-    matrix.countries.forEach((country, ci) => {
-      const cd = matrix.matrix[country] || {};
-      const rowData = [country];
-      sectors.forEach((s, i) => {
-        const k = s.toLowerCase().replace(/\s+/g, '_');
-        rowData.push(cd[k] || cd[s] || cd[`sector${i+1}`] || '-');
-      });
-      const row = tpSheet.getRow(tr);
-      row.values = rowData;
-      row.getCell(1).font = { bold: true };
-      // Color code interest levels
-      for (let c = 2; c <= sectors.length + 1; c++) {
-        const val = row.getCell(c).value;
-        if (val === 'H') {
-          row.getCell(c).font = { color: { argb: 'FF16A34A' }, bold: true };
-          row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
-        } else if (val === 'M') {
-          row.getCell(c).font = { color: { argb: 'FFD97706' } };
-          row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } };
-        } else if (val === 'L') {
-          row.getCell(c).font = { color: { argb: 'FF64748B' } };
-        }
-        row.getCell(c).alignment = { horizontal: 'center' };
-      }
-      styleDataRow(row, ci % 2 === 0);
-      tr++;
-    });
-    tr++;
-    tpSheet.getCell(`A${tr}`).value = 'H=High  M=Medium  L=Low  N=None';
-    tpSheet.getCell(`A${tr}`).font = { size: 9, color: { argb: 'FF64748B' }, italic: true };
-  }
-
-  // ========== SHEET 7: ENGAGEMENT STRATEGY ==========
-  const engSheet = workbook.addWorksheet('Engagement Strategy');
-  engSheet.columns = [
-    { key: 'a', width: 25 },
-    { key: 'b', width: 30 },
-    { key: 'c', width: 45 }
-  ];
-
-  const eng = synthesis.engagement_strategy || {};
-  let er = 1;
-
-  // Key Decision Makers
-  if (eng.key_decision_makers && eng.key_decision_makers.length > 0) {
-    er = addSectionTitle(engSheet, 'Key Decision Makers', er);
-    const dmHeader = engSheet.getRow(er);
-    dmHeader.values = ['Name', 'Title', 'Approach'];
-    styleHeaderRow(dmHeader);
-    er++;
-    eng.key_decision_makers.forEach((dm, i) => {
-      engSheet.getCell(`A${er}`).value = dm.name || 'TBD';
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.getCell(`B${er}`).value = dm.title;
-      engSheet.getCell(`C${er}`).value = dm.approach;
-      styleDataRow(engSheet.getRow(er), i % 2 === 0);
-      er++;
-    });
-    er++;
-  }
-
-  // Hot Buttons
-  if (eng.hot_buttons && eng.hot_buttons.length > 0) {
-    er = addSectionTitle(engSheet, 'Hot Buttons (Topics That Resonate)', er);
-    const hbHeader = engSheet.getRow(er);
-    hbHeader.values = ['Topic', 'Evidence', 'How to Leverage'];
-    styleHeaderRow(hbHeader, 'FF16A34A');
-    er++;
-    eng.hot_buttons.forEach((hb, i) => {
-      engSheet.getCell(`A${er}`).value = hb.topic;
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.getCell(`B${er}`).value = hb.evidence;
-      engSheet.getCell(`C${er}`).value = hb.how_to_leverage;
-      styleDataRow(engSheet.getRow(er), i % 2 === 0);
-      er++;
-    });
-    er++;
-  }
-
-  // Concerns & Objections
-  if (eng.concerns_objections && eng.concerns_objections.length > 0) {
-    er = addSectionTitle(engSheet, 'Potential Concerns & Objections', er);
-    const coHeader = engSheet.getRow(er);
-    coHeader.values = ['Concern', 'Evidence', 'How to Address'];
-    styleHeaderRow(coHeader, 'FFDC2626');
-    er++;
-    eng.concerns_objections.forEach((co, i) => {
-      engSheet.getCell(`A${er}`).value = co.concern;
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.getCell(`B${er}`).value = co.evidence;
-      engSheet.getCell(`C${er}`).value = co.how_to_address;
-      styleDataRow(engSheet.getRow(er), i % 2 === 0);
-      er++;
-    });
-    er++;
-  }
-
-  // Recommended Approach
-  const appr = eng.recommended_approach || {};
-  if (appr.positioning || appr.key_messages) {
-    er = addSectionTitle(engSheet, 'Recommended Approach', er);
-    if (appr.positioning) {
-      engSheet.getCell(`A${er}`).value = 'Positioning';
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.mergeCells(`B${er}:C${er}`);
-      engSheet.getCell(`B${er}`).value = appr.positioning;
-      engSheet.getCell(`B${er}`).alignment = { wrapText: true };
-      styleDataRow(engSheet.getRow(er));
-      er++;
-    }
-    if (appr.timing) {
-      engSheet.getCell(`A${er}`).value = 'Timing';
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.mergeCells(`B${er}:C${er}`);
-      engSheet.getCell(`B${er}`).value = appr.timing;
-      styleDataRow(engSheet.getRow(er), true);
-      er++;
-    }
-    if (appr.channel) {
-      engSheet.getCell(`A${er}`).value = 'Channel';
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.mergeCells(`B${er}:C${er}`);
-      engSheet.getCell(`B${er}`).value = appr.channel;
-      styleDataRow(engSheet.getRow(er));
-      er++;
-    }
-    if (appr.key_messages && appr.key_messages.length > 0) {
-      engSheet.getCell(`A${er}`).value = 'Key Messages';
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.mergeCells(`B${er}:C${er}`);
-      engSheet.getCell(`B${er}`).value = appr.key_messages.map((m, i) => `${i+1}. ${m}`).join('\n');
-      engSheet.getCell(`B${er}`).alignment = { wrapText: true };
-      engSheet.getRow(er).height = Math.max(20, appr.key_messages.length * 18);
-      styleDataRow(engSheet.getRow(er), true);
-      er++;
-    }
-    er++;
-  }
-
-  // Next Steps
-  if (eng.next_steps && eng.next_steps.length > 0) {
-    er = addSectionTitle(engSheet, 'Next Steps', er);
-    const nsHeader = engSheet.getRow(er);
-    nsHeader.values = ['Action', 'Priority', 'Owner'];
-    styleHeaderRow(nsHeader);
-    er++;
-    eng.next_steps.forEach((ns, i) => {
-      engSheet.getCell(`A${er}`).value = ns.action;
-      engSheet.getCell(`B${er}`).value = ns.priority;
-      if (ns.priority === 'High') {
-        engSheet.getCell(`B${er}`).font = { color: { argb: 'FFDC2626' }, bold: true };
-      }
-      engSheet.getCell(`C${er}`).value = ns.owner || 'TBD';
-      styleDataRow(engSheet.getRow(er), i % 2 === 0);
-      er++;
-    });
+  // What to Avoid
+  if (idealTarget.what_to_avoid) {
+    tr = addSectionTitle(tpSheet, 'What NOT to Pitch', tr);
+    tpSheet.mergeCells(`A${tr}:B${tr}`);
+    tpSheet.getCell(`A${tr}`).value = idealTarget.what_to_avoid;
+    tpSheet.getCell(`A${tr}`).alignment = { wrapText: true };
+    tpSheet.getCell(`A${tr}`).font = { color: { argb: 'FFDC2626' } };
+    tpSheet.getRow(tr).height = 40;
   }
 
   // Generate buffer
@@ -6086,15 +5876,14 @@ app.post('/api/utb', async (req, res) => {
       `<div style="font-family:Arial,sans-serif;max-width:500px;">
         <h2 style="color:#1a365d;margin-bottom:5px;">${companyName}</h2>
         <p style="color:#64748b;margin-top:0;">${website}</p>
-        <p>Your UTB Excel report is attached with 7 structured sheets:</p>
+        <p>Your UTB buyer intelligence report is attached:</p>
         <ul style="font-size:13px;color:#475569;">
-          <li>Executive Summary</li>
-          <li>Financials</li>
-          <li>Products & Operations</li>
-          <li>Competitive Landscape</li>
-          <li>M&A Analysis</li>
-          <li>Target Profile</li>
-          <li>Engagement Strategy</li>
+          <li><b>Executive Summary</b> - Company profile & leadership</li>
+          <li><b>Financials</b> - Revenue breakdown & margins</li>
+          <li><b>Products & Operations</b> - Business segments & capabilities</li>
+          <li><b>Competitive Landscape</b> - Market position & moat</li>
+          <li><b>M&A Deep Dive</b> - Deal-by-deal analysis & M&A philosophy</li>
+          <li><b>Ideal Target</b> - Deep strategic analysis of what to pitch</li>
         </ul>
         <p style="font-size:12px;color:#94a3b8;">Generated: ${new Date().toLocaleString()}</p>
       </div>`,
@@ -6109,7 +5898,7 @@ app.post('/api/utb', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v36 - UTB Excel' });
+  res.json({ status: 'ok', service: 'Find Target v37 - UTB Deep Dive' });
 });
 
 const PORT = process.env.PORT || 3000;
