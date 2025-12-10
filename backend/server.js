@@ -2634,13 +2634,21 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
         /\s+(SpA|SPA|S\.p\.A\.)\.?$/i,
         /\s+(Pte|PTE)\.?\s*(Ltd|LTD)?\.?$/i,
         /\s+(Sdn|SDN)\.?\s*(Bhd|BHD)?\.?$/i,
-        /,\s*(Inc|Ltd|LLC|Corp)\.?$/i
+        /,\s*(Inc|Ltd|LLC|Corp)\.?$/i,
+        /\s+Holdings?$/i,
+        /\s+Group$/i,
+        /\s+International$/i
       ];
       let cleaned = String(name).trim();
       for (const suffix of suffixes) {
         cleaned = cleaned.replace(suffix, '');
       }
-      return cleaned.trim();
+      cleaned = cleaned.trim();
+      // Truncate to 20 chars max to fit on one line
+      if (cleaned.length > 20) {
+        cleaned = cleaned.substring(0, 18) + '..';
+      }
+      return cleaned;
     };
 
     // Helper functions
