@@ -5422,12 +5422,12 @@ app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res
 
     console.log(`\nSuccessfully processed ${allFinancialData.length}/${excelFiles.length} files`);
 
-    // Generate Excel workbook with charts (one sheet per company)
-    // Excel handles COMBO charts with secondary axes reliably
-    const excelResult = await generateFinancialChartExcel(allFinancialData);
+    // Generate PowerPoint with embedded Excel charts (one slide per company)
+    // Uses OOXML chart embedding for reliable chart rendering
+    const pptxResult = await generateFinancialChartPPTX(allFinancialData);
 
-    if (!excelResult.success) {
-      throw new Error(excelResult.error || 'Failed to generate Excel workbook');
+    if (!pptxResult.success) {
+      throw new Error(pptxResult.error || 'Failed to generate PowerPoint');
     }
 
     // Build email content with summary of all companies
@@ -5451,8 +5451,7 @@ app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #1a365d;">Financial Charts - ${allFinancialData.length} Companies</h2>
-        <p>Your financial chart Excel workbook has been generated with ${allFinancialData.length} sheet${allFinancialData.length > 1 ? 's' : ''}.</p>
-        <p style="color: #059669; font-size: 13px;"><strong>Tip:</strong> You can copy-paste the charts directly into PowerPoint if needed.</p>
+        <p>Your financial chart PowerPoint has been generated with ${allFinancialData.length} slide${allFinancialData.length > 1 ? 's' : ''}.</p>
 
         <h3 style="color: #2563eb; margin-top: 20px;">Companies Processed</h3>
         <table style="border-collapse: collapse; width: 100%; margin-top: 10px;">
@@ -5474,19 +5473,19 @@ app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res
       </div>
     `;
 
-    // Send email with Excel attachment
+    // Send email with PPTX attachment
     const firstCompany = allFinancialData[0]?.company_name || 'Financial_Charts';
     await sendEmail(
       email,
       `Financial Charts: ${allFinancialData.length} companies${allFinancialData.length <= 3 ? ' (' + companyNames + ')' : ''}`,
       htmlContent,
       {
-        content: excelResult.content,
-        name: `Financial_Charts_${allFinancialData.length}_companies_${new Date().toISOString().split('T')[0]}.xlsx`
+        content: pptxResult.content,
+        name: `Financial_Charts_${allFinancialData.length}_companies_${new Date().toISOString().split('T')[0]}.pptx`
       }
     );
 
-    console.log(`Financial chart Excel sent to ${email}`);
+    console.log(`Financial chart PPTX sent to ${email}`);
     console.log('='.repeat(50));
 
   } catch (error) {
