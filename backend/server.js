@@ -4423,39 +4423,51 @@ async function generateFinancialChartPPTX(financialDataArray) {
             dataLabelFontFace: 'Segoe UI',
             dataLabelFontSize: 9,
             dataLabelColor: '000000',
+            // Category axis (bottom)
             catAxisLabelFontFace: 'Segoe UI',
             catAxisLabelFontSize: 10,
             catAxisLabelColor: '000000',
+            catAxisLineShow: true,
+            catAxisLineColor: '000000',
+            catAxisMajorTickMark: 'out',
+            // Value axes configuration
             valAxes: [
               {
+                // Primary axis (left - revenue)
                 showValAxisTitle: false,
                 valAxisLabelFontFace: 'Segoe UI',
                 valAxisLabelFontSize: 9,
                 valAxisLabelColor: '000000',
                 valAxisDisplayUnits: 'none',
+                valAxisLineShow: true,
+                valAxisLineColor: '000000',
+                valAxisMajorTickMark: 'out',
                 valAxisMajorGridLine: { style: 'solid', color: 'D9D9D9', size: 0.5 },
                 valAxisMinorGridLine: { style: 'none' }
               },
               {
+                // Secondary axis (right - margin %)
                 showValAxisTitle: false,
                 valAxisLabelFontFace: 'Segoe UI',
                 valAxisLabelFontSize: 9,
                 valAxisLabelColor: 'ED7D31',
                 valAxisMinVal: 0,
-                valAxisMaxVal: 100,
+                valAxisMaxVal: 25,
                 valAxisDisplayUnits: 'none',
-                valAxisMajorGridLine: { style: 'none' }
+                valAxisLineShow: true,
+                valAxisLineColor: '000000',
+                valAxisMajorTickMark: 'out',
+                valAxisMajorGridLine: { style: 'none' },
+                valAxisMinorGridLine: { style: 'none' }
               }
             ],
             catAxes: [
-              { catAxisTitle: '' },
+              { catAxisTitle: '', catAxisLineShow: true, catAxisMajorTickMark: 'out' },
               { catAxisHidden: true }
             ],
+            // Legend - use PPT built-in, positioned at top
             showLegend: true,
-            legendPos: 't',
-            legendFontFace: 'Segoe UI',
-            legendFontSize: 10,
-            legendColor: '000000'
+            legendPos: 't'
           });
         } else {
           // Create simple BAR chart for revenue only (no margin data)
@@ -4476,20 +4488,26 @@ async function generateFinancialChartPPTX(financialDataArray) {
             dataLabelFontSize: 9,
             dataLabelColor: '000000',
             dataLabelFormatCode: '#,##0',
+            // Category axis (bottom)
             catAxisLabelFontFace: 'Segoe UI',
             catAxisLabelFontSize: 10,
             catAxisLabelColor: '000000',
+            catAxisLineShow: true,
+            catAxisLineColor: '000000',
+            catAxisMajorTickMark: 'out',
+            // Value axis (left)
             valAxisLabelFontFace: 'Segoe UI',
             valAxisLabelFontSize: 9,
             valAxisLabelColor: '000000',
             valAxisDisplayUnits: 'none',
+            valAxisLineShow: true,
+            valAxisLineColor: '000000',
+            valAxisMajorTickMark: 'out',
             valAxisMajorGridLine: { style: 'solid', color: 'D9D9D9', size: 0.5 },
             valAxisMinorGridLine: { style: 'none' },
+            // Legend - use PPT built-in, positioned at top
             showLegend: true,
-            legendPos: 't',
-            legendFontFace: 'Segoe UI',
-            legendFontSize: 10,
-            legendColor: '000000'
+            legendPos: 't'
           });
         }
       }
