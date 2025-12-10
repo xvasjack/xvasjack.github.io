@@ -54,19 +54,16 @@
             <div class="form-group">
               <label for="companyName">Company Name</label>
               <input type="text" id="companyName" name="companyName" required placeholder="e.g., TOYO Innovex Co., Ltd.">
-              <p class="hint-text">Enter the full legal name of the company.</p>
             </div>
 
             <div class="form-group">
               <label for="website">Company Website</label>
-              <input type="url" id="website" name="website" required placeholder="https://www.company.com">
-              <p class="hint-text">Enter the company's official website URL.</p>
+              <input type="text" id="website" name="website" required placeholder="https://www.company.com">
             </div>
 
             <div class="form-group">
               <label for="context">Additional Context (Optional)</label>
               <textarea id="context" name="context" rows="4" placeholder="Any specific focus areas, known M&A interests, upcoming meetings, etc."></textarea>
-              <p class="hint-text">Provide any background information that might help focus the research.</p>
             </div>
 
             <div class="form-group">
@@ -75,12 +72,7 @@
               <p class="hint-text">Excel report will be emailed within 10-15 minutes.</p>
             </div>
 
-            <button type="submit" class="submit-btn" id="submitBtn">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-              </svg>
-              Generate UTB Report
-            </button>
+            <button type="submit" class="submit-btn" id="submitBtn">Submit</button>
 
             <div class="message success" id="successMessage">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
@@ -149,7 +141,7 @@
         errorMessage.classList.add('show');
       } finally {
         submitBtn.disabled = false;
-        submitBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Generate UTB Report';
+        submitBtn.innerHTML = 'Submit';
       }
     });
   </script>
