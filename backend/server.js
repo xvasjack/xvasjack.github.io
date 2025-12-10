@@ -3836,34 +3836,17 @@ async function generateFinancialChartPPTX(financialDataArray) {
         const chartW = 6.0;
         const chartH = 2.0;
 
-        // Create BAR chart for revenue (primary axis)
-        slide.addChart(pptx.charts.BAR, [
-          {
-            name: revenueLabel,
-            labels: chartLabels,
-            values: revenueValues
-          }
-        ], {
-          x: chartX, y: chartY, w: chartW, h: chartH,
-          barDir: 'col',
-          barGapWidthPct: 75,
-          chartColors: ['4472C4'],
-          showValue: false,
-          catAxisLabelFontFace: 'Segoe UI',
-          catAxisLabelFontSize: 10,
-          valAxisLabelFontFace: 'Segoe UI',
-          valAxisLabelFontSize: 9,
-          valAxisDisplayUnits: 'none',
-          valAxisMajorGridLine: { style: 'solid', color: 'D9D9D9', size: 0.5 },
-          showLegend: true,
-          legendPos: 't',
-          legendFontFace: 'Segoe UI',
-          legendFontSize: 10
-        });
+        // Check if we have margin data for combo chart
+        const hasMarginData = selectedMarginType && marginValues.some(v => v !== 0);
 
-        // If we have margin data, create LINE chart overlay (secondary axis)
-        if (selectedMarginType && marginValues.some(v => v !== 0)) {
-          slide.addChart(pptx.charts.LINE, [
+        if (hasMarginData) {
+          // Create COMBO chart with column (revenue) + line (margin on secondary axis)
+          slide.addChart(pptx.charts.COMBO, [
+            {
+              name: revenueLabel,
+              labels: chartLabels,
+              values: revenueValues
+            },
             {
               name: marginLabel,
               labels: chartLabels,
@@ -3871,26 +3854,94 @@ async function generateFinancialChartPPTX(financialDataArray) {
             }
           ], {
             x: chartX, y: chartY, w: chartW, h: chartH,
-            lineDataSymbol: 'circle',
-            lineDataSymbolSize: 8,
-            lineSize: 2,
-            chartColors: ['ED7D31'],
+            chartTypes: [
+              {
+                type: pptx.charts.BAR,
+                barDir: 'col',
+                barGapWidthPct: 50
+              },
+              {
+                type: pptx.charts.LINE,
+                lineSmooth: false,
+                lineSize: 2,
+                lineDataSymbolSize: 6,
+                secondaryValAxis: true,
+                secondaryCatAxis: true
+              }
+            ],
+            chartColors: ['4472C4', 'ED7D31'],
             showValue: true,
-            dataLabelPosition: 't',
+            dataLabelPosition: 'outEnd',
             dataLabelFontFace: 'Segoe UI',
             dataLabelFontSize: 9,
-            dataLabelColor: 'ED7D31',
-            catAxisHidden: true,
-            valAxisHidden: false,
-            valAxisLabelFontFace: 'Segoe UI',
-            valAxisLabelFontSize: 9,
-            valAxisDisplayUnits: 'none',
-            valAxisMajorGridLine: { style: 'none' },
+            dataLabelColor: '000000',
+            catAxisLabelFontFace: 'Segoe UI',
+            catAxisLabelFontSize: 10,
+            catAxisLabelColor: '000000',
+            valAxes: [
+              {
+                showValAxisTitle: false,
+                valAxisLabelFontFace: 'Segoe UI',
+                valAxisLabelFontSize: 9,
+                valAxisLabelColor: '000000',
+                valAxisDisplayUnits: 'none',
+                valAxisMajorGridLine: { style: 'solid', color: 'D9D9D9', size: 0.5 },
+                valAxisMinorGridLine: { style: 'none' }
+              },
+              {
+                showValAxisTitle: false,
+                valAxisLabelFontFace: 'Segoe UI',
+                valAxisLabelFontSize: 9,
+                valAxisLabelColor: 'ED7D31',
+                valAxisMinVal: 0,
+                valAxisMaxVal: 100,
+                valAxisDisplayUnits: 'none',
+                valAxisMajorGridLine: { style: 'none' }
+              }
+            ],
+            catAxes: [
+              { catAxisTitle: '' },
+              { catAxisHidden: true }
+            ],
             showLegend: true,
             legendPos: 't',
             legendFontFace: 'Segoe UI',
             legendFontSize: 10,
-            fill: 'none'
+            legendColor: '000000'
+          });
+        } else {
+          // Create simple BAR chart for revenue only (no margin data)
+          slide.addChart(pptx.charts.BAR, [
+            {
+              name: revenueLabel,
+              labels: chartLabels,
+              values: revenueValues
+            }
+          ], {
+            x: chartX, y: chartY, w: chartW, h: chartH,
+            barDir: 'col',
+            barGapWidthPct: 50,
+            chartColors: ['4472C4'],
+            showValue: true,
+            dataLabelPosition: 'outEnd',
+            dataLabelFontFace: 'Segoe UI',
+            dataLabelFontSize: 9,
+            dataLabelColor: '000000',
+            dataLabelFormatCode: '#,##0',
+            catAxisLabelFontFace: 'Segoe UI',
+            catAxisLabelFontSize: 10,
+            catAxisLabelColor: '000000',
+            valAxisLabelFontFace: 'Segoe UI',
+            valAxisLabelFontSize: 9,
+            valAxisLabelColor: '000000',
+            valAxisDisplayUnits: 'none',
+            valAxisMajorGridLine: { style: 'solid', color: 'D9D9D9', size: 0.5 },
+            valAxisMinorGridLine: { style: 'none' },
+            showLegend: true,
+            legendPos: 't',
+            legendFontFace: 'Segoe UI',
+            legendFontSize: 10,
+            legendColor: '000000'
           });
         }
       }
