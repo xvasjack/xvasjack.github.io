@@ -1263,6 +1263,209 @@ app.post('/api/find-target-slow', async (req, res) => {
   }
 });
 
+// ============ V4 EXHAUSTIVE ENDPOINT ============
+
+// Multi-model AI expansion to find additional companies
+async function expandWithMultiModelAI(existingCompanies, business, country, iteration) {
+  console.log(`\n--- Multi-Model AI Expansion (Iteration ${iteration}) ---`);
+  const existingNames = existingCompanies.map(c => c.name.toLowerCase());
+
+  // Build context of what we already found
+  const existingList = existingCompanies.slice(0, 50).map(c => c.name).join(', ');
+
+  // Create prompts for different AI models - search WITHOUT exclusion for maximum coverage
+  const expansionPrompt = `You are helping find ALL ${business} companies in ${country} for M&A research.
+
+We have already found these companies: ${existingList}
+
+Your task: Find ADDITIONAL ${business} companies in ${country} that we might have missed.
+
+Search strategies:
+1. Look for smaller/family-owned businesses
+2. Check regional/city-specific companies
+3. Consider adjacent/related business types
+4. Look for companies with different naming conventions
+5. Consider newly established companies
+6. Look for companies in industrial parks/zones
+
+Important:
+- Do NOT repeat companies already listed above
+- Include company website if known
+- Focus on finding NEW companies not in our list
+
+For each company found, provide:
+Company Name | Website (if known)
+
+List at least 20 new companies if possible.`;
+
+  // Call multiple AI models in parallel for diverse results
+  const [gptResult, geminiResult, perplexityResult] = await Promise.all([
+    // GPT-4o (best available GPT model)
+    callChatGPT(expansionPrompt),
+    // Gemini
+    callGemini(expansionPrompt),
+    // Perplexity for web search
+    callPerplexity(expansionPrompt)
+  ]);
+
+  // Extract companies from each result
+  const gptCompanies = await extractCompanies(gptResult, country);
+  const geminiCompanies = await extractCompanies(geminiResult, country);
+  const perplexityCompanies = await extractCompanies(perplexityResult, country);
+
+  console.log(`  GPT-4o found: ${gptCompanies.length} companies`);
+  console.log(`  Gemini found: ${geminiCompanies.length} companies`);
+  console.log(`  Perplexity found: ${perplexityCompanies.length} companies`);
+
+  // Combine and filter out duplicates (compared to existing)
+  const allNewCompanies = [...gptCompanies, ...geminiCompanies, ...perplexityCompanies];
+  const trulyNew = allNewCompanies.filter(c => {
+    const nameLower = c.name.toLowerCase();
+    return !existingNames.some(existing =>
+      existing.includes(nameLower) || nameLower.includes(existing) ||
+      levenshteinSimilarity(existing, nameLower) > 0.8
+    );
+  });
+
+  // Dedupe the new companies
+  const uniqueNew = dedupeCompanies(trulyNew);
+  console.log(`  Truly new companies found: ${uniqueNew.length}`);
+
+  return uniqueNew;
+}
+
+// Simple Levenshtein similarity for fuzzy matching
+function levenshteinSimilarity(s1, s2) {
+  const longer = s1.length > s2.length ? s1 : s2;
+  const shorter = s1.length > s2.length ? s2 : s1;
+  if (longer.length === 0) return 1.0;
+
+  const costs = [];
+  for (let i = 0; i <= s1.length; i++) {
+    let lastValue = i;
+    for (let j = 0; j <= s2.length; j++) {
+      if (i === 0) {
+        costs[j] = j;
+      } else if (j > 0) {
+        let newValue = costs[j - 1];
+        if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
+          newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+        }
+        costs[j - 1] = lastValue;
+        lastValue = newValue;
+      }
+    }
+    if (i > 0) costs[s2.length] = lastValue;
+  }
+  return (longer.length - costs[s2.length]) / longer.length;
+}
+
+app.post('/api/find-target-v4', async (req, res) => {
+  const { Business, Country, Exclusion, Email } = req.body;
+
+  if (!Business || !Country || !Exclusion || !Email) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`NEW V4 EXHAUSTIVE REQUEST: ${new Date().toISOString()}`);
+  console.log(`Business: ${Business}`);
+  console.log(`Country: ${Country}`);
+  console.log(`Exclusion: ${Exclusion}`);
+  console.log(`Email: ${Email}`);
+  console.log('='.repeat(60));
+
+  res.json({
+    success: true,
+    message: 'Request received. Exhaustive search running. Results will be emailed in ~15+ minutes.'
+  });
+
+  try {
+    const totalStart = Date.now();
+
+    // PHASE 1: Run v3 exhaustive search 3 times with different phrasings
+    console.log('\n========== PHASE 1: 3x V3 SEARCHES ==========');
+
+    console.log('\n--- Search 1: Primary ---');
+    const companies1 = await exhaustiveSearch(Business, Country, Exclusion);
+    console.log(`Search 1 found: ${companies1.length} companies`);
+
+    console.log('\n--- Search 2: Supplier/Vendor variation ---');
+    const companies2 = await exhaustiveSearch(`${Business} supplier vendor`, Country, Exclusion);
+    console.log(`Search 2 found: ${companies2.length} companies`);
+
+    console.log('\n--- Search 3: Manufacturer/Producer variation ---');
+    const companies3 = await exhaustiveSearch(`${Business} manufacturer producer`, Country, Exclusion);
+    console.log(`Search 3 found: ${companies3.length} companies`);
+
+    // Combine and dedupe from phase 1
+    const phase1Companies = dedupeCompanies([...companies1, ...companies2, ...companies3]);
+    console.log(`\nPhase 1 total unique: ${phase1Companies.length} companies`);
+
+    // PHASE 2: Multi-model AI expansion (iterate 2-3 times until exhaustive)
+    console.log('\n========== PHASE 2: MULTI-MODEL AI EXPANSION ==========');
+
+    let allCompanies = [...phase1Companies];
+    let previousCount = 0;
+    const MAX_ITERATIONS = 3;
+    const MIN_NEW_THRESHOLD = 3; // Stop if fewer than 3 new companies found
+
+    for (let i = 1; i <= MAX_ITERATIONS; i++) {
+      const newCompanies = await expandWithMultiModelAI(allCompanies, Business, Country, i);
+
+      if (newCompanies.length < MIN_NEW_THRESHOLD) {
+        console.log(`\nIteration ${i}: Only ${newCompanies.length} new companies. Stopping expansion.`);
+        allCompanies = dedupeCompanies([...allCompanies, ...newCompanies]);
+        break;
+      }
+
+      allCompanies = dedupeCompanies([...allCompanies, ...newCompanies]);
+      console.log(`After iteration ${i}: ${allCompanies.length} total unique companies`);
+
+      // Check if we're still finding significant new companies
+      if (allCompanies.length - previousCount < MIN_NEW_THRESHOLD && i > 1) {
+        console.log(`Diminishing returns detected. Stopping expansion.`);
+        break;
+      }
+      previousCount = allCompanies.length;
+    }
+
+    console.log(`\n========== PHASE 3: VALIDATION ==========`);
+    console.log(`Total candidates before validation: ${allCompanies.length}`);
+
+    // Pre-filter obvious spam/directories
+    const preFiltered = preFilterCompanies(allCompanies);
+    console.log(`After pre-filter: ${preFiltered.length} companies`);
+
+    // Validate with strict criteria (applying exclusion)
+    const validCompanies = await parallelValidationStrict(preFiltered, Business, Country, Exclusion);
+    console.log(`After validation: ${validCompanies.length} companies`);
+
+    // Build and send email
+    const htmlContent = buildEmailHTML(validCompanies, Business, Country, Exclusion);
+    await sendEmail(
+      Email,
+      `[V4 EXHAUSTIVE] ${Business} in ${Country} exclude ${Exclusion} (${validCompanies.length} companies)`,
+      htmlContent
+    );
+
+    const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`V4 EXHAUSTIVE COMPLETE! Email sent to ${Email}`);
+    console.log(`Total companies: ${validCompanies.length}`);
+    console.log(`Total time: ${totalTime} minutes`);
+    console.log('='.repeat(60));
+
+  } catch (error) {
+    console.error('V4 Processing error:', error);
+    try {
+      await sendEmail(Email, `Find Target V4 - Error`, `<p>Error: ${error.message}</p>`);
+    } catch (e) {
+      console.error('Failed to send error email:', e);
+    }
+  }
+});
+
 // ============ VALIDATION ENDPOINT ============
 
 // Parse company names from text (one per line)
