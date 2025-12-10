@@ -3707,8 +3707,595 @@ app.post('/api/profile-slides', async (req, res) => {
   }
 });
 
+// ============ FINANCIAL CHART MAKER ============
+
+// Country to currency mapping for LC/local currency detection
+const COUNTRY_CURRENCY_MAP = {
+  'japan': { code: 'JPY', symbol: '¥', name: 'Japanese Yen' },
+  'united states': { code: 'USD', symbol: '$', name: 'US Dollar' },
+  'usa': { code: 'USD', symbol: '$', name: 'US Dollar' },
+  'china': { code: 'CNY', symbol: '¥', name: 'Chinese Yuan' },
+  'korea': { code: 'KRW', symbol: '₩', name: 'Korean Won' },
+  'south korea': { code: 'KRW', symbol: '₩', name: 'Korean Won' },
+  'thailand': { code: 'THB', symbol: '฿', name: 'Thai Baht' },
+  'malaysia': { code: 'MYR', symbol: 'RM', name: 'Malaysian Ringgit' },
+  'singapore': { code: 'SGD', symbol: 'S$', name: 'Singapore Dollar' },
+  'indonesia': { code: 'IDR', symbol: 'Rp', name: 'Indonesian Rupiah' },
+  'vietnam': { code: 'VND', symbol: '₫', name: 'Vietnamese Dong' },
+  'philippines': { code: 'PHP', symbol: '₱', name: 'Philippine Peso' },
+  'india': { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
+  'australia': { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
+  'uk': { code: 'GBP', symbol: '£', name: 'British Pound' },
+  'united kingdom': { code: 'GBP', symbol: '£', name: 'British Pound' },
+  'europe': { code: 'EUR', symbol: '€', name: 'Euro' },
+  'germany': { code: 'EUR', symbol: '€', name: 'Euro' },
+  'france': { code: 'EUR', symbol: '€', name: 'Euro' },
+  'taiwan': { code: 'TWD', symbol: 'NT$', name: 'Taiwan Dollar' },
+  'hong kong': { code: 'HKD', symbol: 'HK$', name: 'Hong Kong Dollar' },
+  'brazil': { code: 'BRL', symbol: 'R$', name: 'Brazilian Real' },
+  'mexico': { code: 'MXN', symbol: 'MX$', name: 'Mexican Peso' },
+  'canada': { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar' }
+};
+
+// AI agent to analyze Excel financial data
+async function analyzeFinancialExcel(excelContent) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a financial data extraction expert. Analyze the Excel data and extract key financial information.
+
+OUTPUT JSON with these fields:
+- company_name: The company name found in the file (look for headers, titles, or file metadata)
+- currency: The currency used (e.g., "USD", "JPY", "EUR"). If it says "LC" or "local currency", look for country mentions to determine actual currency. If currency symbol found (¥, $, €, etc.), identify it.
+- country: Country of the company if mentioned
+- revenue_data: Array of objects with { period: "FY2023" or "2023", value: number } - extract revenue/sales figures for multiple years. Value should be raw numbers (e.g., 1000000 not "1M").
+- revenue_unit: The unit for revenue (e.g., "millions", "billions", "thousands", or "units" for raw numbers)
+- margin_data: Array of objects with { period: "FY2023", margin_type: "operating" | "ebitda" | "pretax" | "net" | "gross", value: number (as percentage, e.g., 15.5 for 15.5%) }
+  Priority order for margins: operating margin > EBITDA margin > pre-tax margin > net margin > gross margin
+  Include the highest priority margin type available. If multiple margin types exist, include them all sorted by priority.
+- fiscal_year_end: Month of fiscal year end if mentioned (e.g., "March", "December")
+
+RULES:
+- Extract ALL years/periods available (not just most recent)
+- Revenue values should be numeric (convert "1,234" to 1234, "1.5M" to 1500000)
+- Margin values as percentages (e.g., 12.5 for 12.5%)
+- If LC/local currency mentioned, determine from country context
+- Return ONLY valid JSON`
+        },
+        {
+          role: 'user',
+          content: `Analyze this financial data:\n\n${excelContent}`
+        }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.2
+    });
+
+    return JSON.parse(response.choices[0].message.content);
+  } catch (e) {
+    console.error('Financial analysis error:', e.message);
+    return null;
+  }
+}
+
+// Generate financial chart PowerPoint
+async function generateFinancialChartPPTX(financialData) {
+  try {
+    console.log('Generating Financial Chart PPTX...');
+    console.log('Financial data:', JSON.stringify(financialData, null, 2));
+
+    const pptx = new pptxgen();
+    pptx.author = 'YCP';
+    pptx.title = 'Financial Chart';
+    pptx.subject = 'Financial Performance';
+
+    // Set exact slide size to match template (13.333" x 7.5" = 16:9 widescreen)
+    pptx.defineLayout({ name: 'YCP', width: 13.333, height: 7.5 });
+    pptx.layout = 'YCP';
+
+    // YCP Theme Colors (from template)
+    const COLORS = {
+      headerLine: '293F55',
+      accent3: '011AB7',
+      white: 'FFFFFF',
+      black: '000000',
+      gray: 'BFBFBF',
+      dk2: '1F497D',
+      footerText: '808080',
+      chartBlue: '2563EB',
+      chartOrange: 'F97316',
+      chartGreen: '22C55E'
+    };
+
+    const slide = pptx.addSlide();
+
+    // ===== HEADER LINES (from template) =====
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0, y: 1.02, w: 13.333, h: 0,
+      line: { color: COLORS.headerLine, width: 4.5 }
+    });
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0, y: 1.10, w: 13.333, h: 0,
+      line: { color: COLORS.headerLine, width: 2.25 }
+    });
+
+    // ===== FOOTER LINE =====
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0, y: 7.24, w: 13.333, h: 0,
+      line: { color: COLORS.headerLine, width: 2.25 }
+    });
+
+    // Footer copyright text
+    slide.addText('(C) YCP 2025 all rights reserved', {
+      x: 4.1, y: 7.26, w: 5.1, h: 0.2,
+      fontSize: 8, fontFace: 'Segoe UI',
+      color: COLORS.footerText, align: 'center'
+    });
+
+    // ===== TITLE (top left) =====
+    const companyName = financialData.company_name || 'Financial Performance';
+    slide.addText(companyName, {
+      x: 0.38, y: 0.05, w: 9.5, h: 0.6,
+      fontSize: 24, bold: false, fontFace: 'Segoe UI',
+      color: COLORS.black, valign: 'bottom'
+    });
+
+    // Subtitle with currency info
+    const currency = financialData.currency || 'USD';
+    const currencyUnit = financialData.revenue_unit || 'millions';
+    slide.addText(`Financial Overview (${currency}, ${currencyUnit})`, {
+      x: 0.38, y: 0.65, w: 9.5, h: 0.3,
+      fontSize: 14, fontFace: 'Segoe UI',
+      color: COLORS.footerText
+    });
+
+    // ===== SECTION HEADER: Revenue =====
+    slide.addText('売上高 (Revenue)', {
+      x: 0.36, y: 1.22, w: 6.1, h: 0.30,
+      fontSize: 14, fontFace: 'Segoe UI',
+      color: COLORS.black, align: 'left'
+    });
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0.36, y: 1.52, w: 6.1, h: 0,
+      line: { color: COLORS.dk2, width: 1.75 }
+    });
+
+    // ===== REVENUE BAR CHART (left side) =====
+    const revenueData = financialData.revenue_data || [];
+    if (revenueData.length > 0) {
+      // Sort by period
+      revenueData.sort((a, b) => {
+        const yearA = parseInt(String(a.period).replace(/\D/g, ''));
+        const yearB = parseInt(String(b.period).replace(/\D/g, ''));
+        return yearA - yearB;
+      });
+
+      const chartLabels = revenueData.map(d => String(d.period));
+      const chartValues = revenueData.map(d => d.value || 0);
+
+      slide.addChart(pptx.charts.BAR, [
+        {
+          name: 'Revenue',
+          labels: chartLabels,
+          values: chartValues
+        }
+      ], {
+        x: 0.36, y: 1.65, w: 6.0, h: 2.5,
+        barDir: 'col',
+        barGapWidthPct: 50,
+        chartColors: [COLORS.accent3],
+        showValue: true,
+        dataLabelPosition: 'outEnd',
+        dataLabelFontSize: 9,
+        dataLabelColor: COLORS.black,
+        catAxisTitle: '',
+        valAxisTitle: '',
+        catAxisLabelFontSize: 10,
+        valAxisLabelFontSize: 9,
+        showLegend: false,
+        valAxisDisplayUnits: 'none'
+      });
+    }
+
+    // ===== SECTION HEADER: Margins (right side) =====
+    slide.addText('利益率 (Margins)', {
+      x: 6.86, y: 1.22, w: 6.1, h: 0.30,
+      fontSize: 14, fontFace: 'Segoe UI',
+      color: COLORS.black, align: 'left'
+    });
+    slide.addShape(pptx.shapes.LINE, {
+      x: 6.86, y: 1.52, w: 6.1, h: 0,
+      line: { color: COLORS.dk2, width: 1.75 }
+    });
+
+    // ===== MARGIN LINE CHART (right side) =====
+    const marginData = financialData.margin_data || [];
+    if (marginData.length > 0) {
+      // Group margins by type
+      const marginTypes = [...new Set(marginData.map(m => m.margin_type))];
+      const marginPriority = ['operating', 'ebitda', 'pretax', 'net', 'gross'];
+      marginTypes.sort((a, b) => marginPriority.indexOf(a) - marginPriority.indexOf(b));
+
+      // Get unique periods
+      const periods = [...new Set(marginData.map(m => m.period))].sort((a, b) => {
+        const yearA = parseInt(String(a).replace(/\D/g, ''));
+        const yearB = parseInt(String(b).replace(/\D/g, ''));
+        return yearA - yearB;
+      });
+
+      const chartData = marginTypes.slice(0, 3).map((type, idx) => {
+        const typeData = marginData.filter(m => m.margin_type === type);
+        const values = periods.map(p => {
+          const found = typeData.find(m => m.period === p);
+          return found ? found.value : 0;
+        });
+        const labels = {
+          'operating': 'Operating Margin',
+          'ebitda': 'EBITDA Margin',
+          'pretax': 'Pre-tax Margin',
+          'net': 'Net Margin',
+          'gross': 'Gross Margin'
+        };
+        return {
+          name: labels[type] || type,
+          labels: periods,
+          values: values
+        };
+      });
+
+      if (chartData.length > 0 && chartData[0].values.some(v => v !== 0)) {
+        slide.addChart(pptx.charts.LINE, chartData, {
+          x: 6.86, y: 1.65, w: 6.0, h: 2.5,
+          lineDataSymbol: 'circle',
+          lineDataSymbolSize: 8,
+          chartColors: [COLORS.chartBlue, COLORS.chartOrange, COLORS.chartGreen],
+          showValue: true,
+          dataLabelPosition: 'above',
+          dataLabelFontSize: 9,
+          catAxisLabelFontSize: 10,
+          valAxisLabelFontSize: 9,
+          showLegend: true,
+          legendPos: 'b',
+          legendFontSize: 9,
+          valAxisDisplayUnits: 'none'
+        });
+      }
+    }
+
+    // ===== FINANCIAL SUMMARY TABLE (bottom left) =====
+    slide.addText('財務サマリー (Summary)', {
+      x: 0.36, y: 4.35, w: 6.1, h: 0.30,
+      fontSize: 14, fontFace: 'Segoe UI',
+      color: COLORS.black, align: 'left'
+    });
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0.36, y: 4.65, w: 6.1, h: 0,
+      line: { color: COLORS.dk2, width: 1.75 }
+    });
+
+    // Build summary table
+    const summaryData = [
+      ['Company', companyName],
+      ['Currency', currency]
+    ];
+
+    if (financialData.fiscal_year_end) {
+      summaryData.push(['FY End', financialData.fiscal_year_end]);
+    }
+
+    if (revenueData.length > 0) {
+      const latestRevenue = revenueData[revenueData.length - 1];
+      const formatValue = (val) => {
+        if (val >= 1000000000) return (val / 1000000000).toFixed(1) + 'B';
+        if (val >= 1000000) return (val / 1000000).toFixed(1) + 'M';
+        if (val >= 1000) return (val / 1000).toFixed(1) + 'K';
+        return val.toLocaleString();
+      };
+      summaryData.push(['Latest Revenue', `${formatValue(latestRevenue.value)} (${latestRevenue.period})`]);
+    }
+
+    if (marginData.length > 0) {
+      const marginLabels = {
+        'operating': 'Op. Margin',
+        'ebitda': 'EBITDA Margin',
+        'pretax': 'Pre-tax Margin',
+        'net': 'Net Margin',
+        'gross': 'Gross Margin'
+      };
+      // Get latest margin for primary type
+      const primaryType = marginData[0].margin_type;
+      const latestMargin = marginData.filter(m => m.margin_type === primaryType).sort((a, b) => {
+        const yearA = parseInt(String(a.period).replace(/\D/g, ''));
+        const yearB = parseInt(String(b.period).replace(/\D/g, ''));
+        return yearB - yearA;
+      })[0];
+      if (latestMargin) {
+        summaryData.push([marginLabels[primaryType] || primaryType, `${latestMargin.value.toFixed(1)}% (${latestMargin.period})`]);
+      }
+    }
+
+    const tableRows = summaryData.map((row) => [
+      {
+        text: row[0],
+        options: {
+          fill: { color: COLORS.accent3 },
+          color: COLORS.white,
+          align: 'center',
+          bold: false
+        }
+      },
+      {
+        text: row[1],
+        options: {
+          fill: { color: COLORS.white },
+          color: COLORS.black,
+          align: 'left',
+          border: [
+            { pt: 1, color: COLORS.gray, type: 'dash' },
+            { pt: 0 },
+            { pt: 1, color: COLORS.gray, type: 'dash' },
+            { pt: 0 }
+          ]
+        }
+      }
+    ]);
+
+    slide.addTable(tableRows, {
+      x: 0.36, y: 4.75,
+      w: 6.1,
+      colW: [1.4, 4.7],
+      rowH: 0.35,
+      fontFace: 'Segoe UI',
+      fontSize: 14,
+      valign: 'middle',
+      border: { pt: 2.5, color: COLORS.white },
+      margin: [0, 0.04, 0, 0.04]
+    });
+
+    // ===== KEY METRICS (bottom right) =====
+    slide.addText('主要指標 (Key Metrics)', {
+      x: 6.86, y: 4.35, w: 6.1, h: 0.30,
+      fontSize: 14, fontFace: 'Segoe UI',
+      color: COLORS.black, align: 'left'
+    });
+    slide.addShape(pptx.shapes.LINE, {
+      x: 6.86, y: 4.65, w: 6.1, h: 0,
+      line: { color: COLORS.dk2, width: 1.75 }
+    });
+
+    // Calculate growth metrics
+    const metricsData = [];
+    if (revenueData.length >= 2) {
+      const sortedRevenue = [...revenueData].sort((a, b) => {
+        const yearA = parseInt(String(a.period).replace(/\D/g, ''));
+        const yearB = parseInt(String(b.period).replace(/\D/g, ''));
+        return yearA - yearB;
+      });
+      const firstYear = sortedRevenue[0];
+      const lastYear = sortedRevenue[sortedRevenue.length - 1];
+      const yearsSpan = parseInt(String(lastYear.period).replace(/\D/g, '')) - parseInt(String(firstYear.period).replace(/\D/g, ''));
+
+      if (yearsSpan > 0 && firstYear.value > 0) {
+        const cagr = (Math.pow(lastYear.value / firstYear.value, 1 / yearsSpan) - 1) * 100;
+        metricsData.push(['Revenue CAGR', `${cagr.toFixed(1)}%`]);
+      }
+
+      // YoY growth
+      if (sortedRevenue.length >= 2) {
+        const prevYear = sortedRevenue[sortedRevenue.length - 2];
+        const yoyGrowth = ((lastYear.value - prevYear.value) / prevYear.value) * 100;
+        metricsData.push(['YoY Growth', `${yoyGrowth.toFixed(1)}%`]);
+      }
+    }
+
+    // Add margin trend
+    if (marginData.length >= 2) {
+      const primaryType = marginData[0].margin_type;
+      const typeData = marginData.filter(m => m.margin_type === primaryType).sort((a, b) => {
+        const yearA = parseInt(String(a.period).replace(/\D/g, ''));
+        const yearB = parseInt(String(b.period).replace(/\D/g, ''));
+        return yearA - yearB;
+      });
+      if (typeData.length >= 2) {
+        const marginChange = typeData[typeData.length - 1].value - typeData[typeData.length - 2].value;
+        const marginLabels = {
+          'operating': 'Op. Margin',
+          'ebitda': 'EBITDA',
+          'pretax': 'Pre-tax',
+          'net': 'Net',
+          'gross': 'Gross'
+        };
+        metricsData.push([`${marginLabels[primaryType]} Change`, `${marginChange >= 0 ? '+' : ''}${marginChange.toFixed(1)}pp`]);
+      }
+    }
+
+    if (metricsData.length > 0) {
+      const metricsRows = metricsData.map((row) => [
+        {
+          text: row[0],
+          options: {
+            fill: { color: COLORS.accent3 },
+            color: COLORS.white,
+            align: 'center',
+            bold: false
+          }
+        },
+        {
+          text: row[1],
+          options: {
+            fill: { color: COLORS.white },
+            color: COLORS.black,
+            align: 'left',
+            border: [
+              { pt: 1, color: COLORS.gray, type: 'dash' },
+              { pt: 0 },
+              { pt: 1, color: COLORS.gray, type: 'dash' },
+              { pt: 0 }
+            ]
+          }
+        }
+      ]);
+
+      slide.addTable(metricsRows, {
+        x: 6.86, y: 4.75,
+        w: 6.1,
+        colW: [1.8, 4.3],
+        rowH: 0.35,
+        fontFace: 'Segoe UI',
+        fontSize: 14,
+        valign: 'middle',
+        border: { pt: 2.5, color: COLORS.white },
+        margin: [0, 0.04, 0, 0.04]
+      });
+    }
+
+    // ===== FOOTNOTE =====
+    slide.addText('Source: Company financial data', {
+      x: 0.38, y: 6.90, w: 12.5, h: 0.18,
+      fontSize: 10, fontFace: 'Segoe UI',
+      color: COLORS.black
+    });
+
+    // Generate base64
+    const base64Content = await pptx.write({ outputType: 'base64' });
+
+    console.log('Financial Chart PPTX generated successfully');
+
+    return {
+      success: true,
+      content: base64Content
+    };
+  } catch (error) {
+    console.error('Financial Chart PPTX error:', error);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
+// Financial Chart API endpoint
+app.post('/api/financial-chart', upload.single('excelFile'), async (req, res) => {
+  const { email } = req.body;
+  const excelFile = req.file;
+
+  if (!excelFile || !email) {
+    return res.status(400).json({ error: 'Excel file and email are required' });
+  }
+
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`NEW FINANCIAL CHART REQUEST: ${new Date().toISOString()}`);
+  console.log(`Email: ${email}`);
+  console.log(`File: ${excelFile.originalname} (${excelFile.size} bytes)`);
+  console.log('='.repeat(50));
+
+  // Respond immediately
+  res.json({
+    success: true,
+    message: 'Request received. Financial chart will be emailed shortly.',
+    companyName: 'Processing...'
+  });
+
+  try {
+    // Parse Excel file
+    const workbook = XLSX.read(excelFile.buffer, { type: 'buffer' });
+    const sheetName = workbook.SheetNames[0];
+    const sheet = workbook.Sheets[sheetName];
+
+    // Get all data as text for AI analysis
+    const allRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+    const excelContent = allRows.map(row => row.join('\t')).join('\n');
+
+    // Also get CSV format for better parsing
+    const csvContent = XLSX.utils.sheet_to_csv(sheet);
+
+    console.log(`Excel rows: ${allRows.length}`);
+    console.log(`First 500 chars: ${excelContent.substring(0, 500)}`);
+
+    // Use AI to analyze financial data
+    console.log('Analyzing financial data with AI...');
+    const financialData = await analyzeFinancialExcel(`File name: ${excelFile.originalname}\n\nContent:\n${csvContent.substring(0, 15000)}`);
+
+    if (!financialData) {
+      throw new Error('Failed to analyze financial data');
+    }
+
+    console.log('Financial data extracted:', JSON.stringify(financialData, null, 2));
+
+    // Generate PowerPoint with charts
+    const pptxResult = await generateFinancialChartPPTX(financialData);
+
+    if (!pptxResult.success) {
+      throw new Error(pptxResult.error || 'Failed to generate PowerPoint');
+    }
+
+    // Build email content
+    const companyName = financialData.company_name || 'Financial Data';
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #1a365d;">Financial Chart - ${companyName}</h2>
+        <p>Your financial chart PowerPoint has been generated successfully.</p>
+
+        <h3 style="color: #2563eb; margin-top: 20px;">Data Summary</h3>
+        <table style="border-collapse: collapse; width: 100%; margin-top: 10px;">
+          <tr>
+            <td style="padding: 8px; border: 1px solid #e2e8f0; background: #f8fafc; font-weight: bold;">Company</td>
+            <td style="padding: 8px; border: 1px solid #e2e8f0;">${companyName}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border: 1px solid #e2e8f0; background: #f8fafc; font-weight: bold;">Currency</td>
+            <td style="padding: 8px; border: 1px solid #e2e8f0;">${financialData.currency || 'Not detected'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border: 1px solid #e2e8f0; background: #f8fafc; font-weight: bold;">Revenue Periods</td>
+            <td style="padding: 8px; border: 1px solid #e2e8f0;">${financialData.revenue_data ? financialData.revenue_data.map(r => r.period).join(', ') : 'None'}</td>
+          </tr>
+          <tr>
+            <td style="padding: 8px; border: 1px solid #e2e8f0; background: #f8fafc; font-weight: bold;">Margin Types</td>
+            <td style="padding: 8px; border: 1px solid #e2e8f0;">${financialData.margin_data ? [...new Set(financialData.margin_data.map(m => m.margin_type))].join(', ') : 'None'}</td>
+          </tr>
+        </table>
+
+        <p style="margin-top: 20px; color: #64748b; font-size: 12px;">
+          Generated by Financial Chart Maker<br>
+          ${new Date().toISOString()}
+        </p>
+      </div>
+    `;
+
+    // Send email with PPTX attachment
+    await sendEmail(
+      email,
+      `Financial Chart: ${companyName}`,
+      htmlContent,
+      {
+        content: pptxResult.content,
+        name: `Financial_Chart_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pptx`
+      }
+    );
+
+    console.log(`Financial chart email sent to ${email}`);
+    console.log('='.repeat(50));
+
+  } catch (error) {
+    console.error('Financial chart error:', error);
+    try {
+      await sendEmail(
+        email,
+        'Financial Chart - Error',
+        `<p>Error processing your financial data: ${error.message}</p><p>Please ensure your Excel file contains financial data with revenue and margin information.</p>`
+      );
+    } catch (e) {
+      console.error('Failed to send error email:', e);
+    }
+  }
+});
+
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v30 - Profile Slides' });
+  res.json({ status: 'ok', service: 'Find Target v31 - Financial Chart' });
 });
 
 const PORT = process.env.PORT || 3000;
