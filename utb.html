@@ -30,18 +30,21 @@
 
   <main class="app-main">
     <section class="page-info">
-      <span class="status-badge coming-soon">Coming Soon</span>
+      <span class="status-badge">Online</span>
       <h1 class="page-title">Understanding The Business</h1>
-      <p class="page-description">Generate a comprehensive M&A buyer intelligence report. Research business domains, competitive landscape, strategic direction, and acquisition appetite to prepare for client meetings.</p>
+      <p class="page-description">Generate a comprehensive M&A buyer intelligence report. Deep-dive research into products, financials, operations, competitive landscape, M&A history, and acquisition appetite.</p>
       <div class="features-list" style="margin-top: 16px; font-size: 13px; color: #666;">
-        <p style="margin-bottom: 8px;"><strong>Report Includes:</strong></p>
+        <p style="margin-bottom: 8px;"><strong>10-12 Page Report Includes:</strong></p>
         <ul style="margin: 0; padding-left: 20px; line-height: 1.8;">
-          <li>Company Overview & Business Domains</li>
-          <li>Products, Services & Value Proposition</li>
-          <li>Competitive Landscape Analysis</li>
-          <li>Strategic Direction & M&A Focus</li>
-          <li>Geographic Presence & Expansion</li>
-          <li>Target Acquisition Profile</li>
+          <li>Executive Summary & Company Profile</li>
+          <li>Financial Overview with Revenue Breakdown</li>
+          <li>Products & Services (Specific Names/Models)</li>
+          <li>Manufacturing & Operations Footprint</li>
+          <li>Competitive Landscape with Named Competitors</li>
+          <li>M&A Track Record & Acquisition History</li>
+          <li>Target Acquisition Profile & Deal Parameters</li>
+          <li>Country-Sector Interest Matrix (H/M/L)</li>
+          <li>Engagement Strategy & Next Steps</li>
         </ul>
       </div>
     </section>
@@ -71,7 +74,7 @@
             <div class="form-group">
               <label for="email">Email Address</label>
               <input type="email" id="email" name="email" required placeholder="your@company.com">
-              <p class="hint-text">PDF report will be emailed within 10-15 minutes.</p>
+              <p class="hint-text">Comprehensive 10-12 page PDF report will be emailed within 10-15 minutes.</p>
             </div>
 
             <button type="submit" class="submit-btn" id="submitBtn">
@@ -83,7 +86,7 @@
 
             <div class="message success" id="successMessage">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-              <span id="successText">Request received! Your UTB report will be emailed within 10-15 minutes.</span>
+              <span id="successText">Request received! Your comprehensive 10-12 page UTB report will be emailed within 10-15 minutes.</span>
             </div>
 
             <div class="message error" id="errorMessage">
@@ -134,7 +137,7 @@
         const result = await response.json().catch(() => null);
 
         if (response.ok && result) {
-          successText.textContent = `Request received! UTB report for "${companyName}" will be emailed to ${email} within 10-15 minutes.`;
+          successText.textContent = `Request received! Comprehensive UTB report for "${companyName}" will be emailed to ${email} within 10-15 minutes.`;
           successMessage.classList.add('show');
           form.reset();
         } else if (!response.ok && response.status === 404) {

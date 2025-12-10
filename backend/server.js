@@ -4665,9 +4665,9 @@ app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res
   }
 });
 
-// ============ UTB (UNDERSTANDING THE BUSINESS) ============
+// ============ UTB (UNDERSTANDING THE BUSINESS) - COMPREHENSIVE M&A INTELLIGENCE ============
 
-// Initialize PDFKit (lazy load to avoid errors if not installed)
+// Initialize PDFKit
 let PDFDocument;
 try {
   PDFDocument = require('pdfkit');
@@ -4675,185 +4675,554 @@ try {
   console.warn('PDFKit not available - UTB PDF generation disabled');
 }
 
-// UTB Research & Synthesis - Parallel multi-language approach
-async function conductUTBResearch(companyName, website, additionalContext) {
-  console.log(`Starting UTB research for: ${companyName}`);
-
-  // Detect local language from website domain
+// Language detection from domain
+function detectLanguage(website) {
   const domainMatch = website.match(/\.([a-z]{2,3})(?:\/|$)/i);
   const tld = domainMatch ? domainMatch[1].toLowerCase() : '';
   const languageMap = {
-    'jp': { lang: 'Japanese', searchLang: '日本語で検索' },
-    'cn': { lang: 'Chinese', searchLang: '用中文搜索' },
-    'kr': { lang: 'Korean', searchLang: '한국어로 검색' },
-    'de': { lang: 'German', searchLang: 'Auf Deutsch suchen' },
-    'fr': { lang: 'French', searchLang: 'Rechercher en français' },
-    'th': { lang: 'Thai', searchLang: 'ค้นหาเป็นภาษาไทย' },
-    'vn': { lang: 'Vietnamese', searchLang: 'Tìm kiếm bằng tiếng Việt' },
-    'id': { lang: 'Indonesian', searchLang: 'Cari dalam Bahasa Indonesia' },
-    'tw': { lang: 'Chinese (Traditional)', searchLang: '用繁體中文搜索' }
+    'jp': { lang: 'Japanese', native: '日本語', searchPrefix: '日本語で' },
+    'cn': { lang: 'Chinese', native: '中文', searchPrefix: '用中文' },
+    'kr': { lang: 'Korean', native: '한국어', searchPrefix: '한국어로' },
+    'de': { lang: 'German', native: 'Deutsch', searchPrefix: 'Auf Deutsch:' },
+    'fr': { lang: 'French', native: 'Français', searchPrefix: 'En français:' },
+    'th': { lang: 'Thai', native: 'ไทย', searchPrefix: 'ภาษาไทย:' },
+    'vn': { lang: 'Vietnamese', native: 'Tiếng Việt', searchPrefix: 'Bằng tiếng Việt:' },
+    'id': { lang: 'Indonesian', native: 'Indonesia', searchPrefix: 'Dalam Bahasa Indonesia:' },
+    'tw': { lang: 'Chinese (Traditional)', native: '繁體中文', searchPrefix: '用繁體中文' }
   };
-  const localLang = languageMap[tld] || null;
+  return languageMap[tld] || null;
+}
 
-  console.log(`Detected TLD: ${tld}, Local language: ${localLang?.lang || 'English only'}`);
+// UTB Phase 1: Deep Fact-Finding with 6 parallel specialized queries
+async function utbPhase1Research(companyName, website, context) {
+  console.log(`[UTB Phase 1] Starting deep fact-finding for: ${companyName}`);
+  const localLang = detectLanguage(website);
 
-  // Step 1: Run PARALLEL research queries
-  console.log('Step 1: Running parallel research queries...');
+  const queries = [
+    // Query 1: Company Deep Dive - Products & Services
+    callPerplexity(`Research ${companyName} (${website}) - PRODUCTS & SERVICES DEEP DIVE:
 
-  const researchPromises = [];
+CRITICAL: I need SPECIFIC details, not general descriptions.
 
-  // Query 1: English - General company facts
-  researchPromises.push(
-    callPerplexity(`Research ${companyName} (${website}). FACTS only - numbers, names, dates:
-1. BASICS: HQ, founding year, ownership, revenue, employees, CEO/key executives
-2. BUSINESS: Products/services, customer segments, manufacturing locations
-3. COMPETITORS: Main competitors, market position, competitive advantages
-4. GEOGRAPHIC: Countries of operation, revenue by region
-${additionalContext ? `CONTEXT: ${additionalContext}` : ''}
-Be specific and factual.`).catch(e => { console.error('English query error:', e.message); return ''; })
-  );
+1. PRODUCT LINES: List ALL major product lines with:
+   - Specific product/model names (e.g., "Model X-7", "Series 5000", brand names)
+   - Key specifications or features
+   - Target applications/industries served
 
-  // Query 2: M&A History and Partnerships (critical for UTB)
-  researchPromises.push(
-    callPerplexity(`Research ${companyName} M&A activity and strategic partnerships:
-1. PAST M&A: Any acquisitions or mergers in last 5 years - target names, deal sizes, rationale
-2. PARTNERSHIPS: Key strategic alliances, JVs, distribution agreements
-3. INVESTMENT: Any minority investments made or received
-4. ANNOUNCED INTENTIONS: Any public statements about M&A strategy or expansion plans
-5. INTEGRATION: How they've integrated past acquisitions
-Be specific with names, dates, deal values if available.`).catch(e => { console.error('M&A query error:', e.message); return ''; })
-  );
+2. SERVICE OFFERINGS: List specific services with names
+   - Consulting services, support packages, etc.
 
-  // Query 3: Local language search (if applicable)
+3. TECHNOLOGY/IP: Proprietary technologies, patents, unique capabilities
+   - Specific technology names or trademarked processes
+
+4. VALUE CHAIN POSITION: Where they sit (R&D, manufacturing, distribution, etc.)
+
+BE SPECIFIC with names and numbers. Generic descriptions are NOT useful.
+${context ? `CONTEXT: ${context}` : ''}`).catch(e => ({ type: 'products', data: '', error: e.message })),
+
+    // Query 2: Financial Analysis
+    callPerplexity(`Research ${companyName} financial data - DETAILED BREAKDOWN:
+
+1. REVENUE:
+   - Total annual revenue (most recent, in local currency AND USD)
+   - Revenue breakdown by business segment (% and amounts)
+   - Revenue breakdown by geography (Japan, Asia, Americas, Europe, etc.)
+   - Revenue trend (last 3-5 years if available)
+
+2. PROFITABILITY:
+   - Operating margin, EBITDA margin, Net margin
+   - Trend in profitability
+
+3. KEY METRICS:
+   - Market cap (if public)
+   - Number of employees
+   - Revenue per employee
+
+4. RECENT PERFORMANCE:
+   - Latest quarterly/annual results highlights
+   - Any guidance or forecasts
+
+Provide SPECIFIC numbers and percentages. Source data from annual reports, investor presentations, or financial databases.`).catch(e => ({ type: 'financials', data: '', error: e.message })),
+
+    // Query 3: Manufacturing & Operations
+    callPerplexity(`Research ${companyName} manufacturing and operations footprint:
+
+1. MANUFACTURING LOCATIONS:
+   - List ALL manufacturing facilities by country/city
+   - What is produced at each location
+   - Capacity information if available (units, square meters, etc.)
+
+2. R&D CENTERS:
+   - Research facility locations
+   - Key areas of R&D focus
+
+3. SUPPLY CHAIN:
+   - Key suppliers or supply chain dependencies
+   - Vertical integration level
+
+4. OPERATIONAL FOOTPRINT:
+   - Number of locations globally
+   - Sales/distribution offices by region
+
+Provide SPECIFIC locations (city, country) not just "facilities in Asia".`).catch(e => ({ type: 'operations', data: '', error: e.message })),
+
+    // Query 4: Competitive Landscape
+    callPerplexity(`Research ${companyName} competitive landscape - DETAILED ANALYSIS:
+
+1. DIRECT COMPETITORS:
+   - List 5-10 main competitors BY NAME
+   - For each: approximate revenue, HQ location, key differentiator
+   - Market share estimates if available
+
+2. COMPETITIVE POSITIONING:
+   - How ${companyName} ranks vs competitors (market share, technology, etc.)
+   - Key competitive advantages
+   - Competitive weaknesses or gaps
+
+3. MARKET DYNAMICS:
+   - Total addressable market size
+   - Market growth rate
+   - Key trends affecting competition
+
+4. BARRIERS TO ENTRY:
+   - What protects ${companyName}'s position
+
+Provide SPECIFIC competitor names and data, not generic statements.`).catch(e => ({ type: 'competitors', data: '', error: e.message })),
+
+    // Query 5: M&A History & Strategy
+    callPerplexity(`Research ${companyName} M&A activity and corporate development - COMPREHENSIVE:
+
+1. PAST ACQUISITIONS (last 10 years):
+   - Target company name
+   - Year of acquisition
+   - Deal value (if disclosed)
+   - Strategic rationale
+   - Integration outcome
+
+2. PAST DIVESTITURES:
+   - Any businesses sold off
+
+3. STRATEGIC PARTNERSHIPS & JVs:
+   - Partner name
+   - Nature of partnership
+   - Year established
+
+4. INVESTMENTS:
+   - Minority investments made
+   - VC/CVC activity
+
+5. M&A STRATEGY SIGNALS:
+   - Management statements about M&A
+   - Investor presentation mentions of inorganic growth
+   - Recent news about M&A intentions
+
+Provide SPECIFIC deal names, dates, and values.`).catch(e => ({ type: 'ma_history', data: '', error: e.message })),
+
+    // Query 6: Leadership & Strategy
+    callPerplexity(`Research ${companyName} leadership and strategic direction:
+
+1. LEADERSHIP TEAM:
+   - CEO name and background (tenure, previous roles)
+   - Key executives (CFO, COO, CTO, etc.)
+   - Board composition (notable members)
+
+2. STRATEGIC PRIORITIES:
+   - Stated strategic initiatives
+   - Medium-term plan (if disclosed)
+   - Key focus areas for growth
+
+3. RECENT NEWS:
+   - Major announcements in last 12 months
+   - New product launches
+   - Market expansion news
+
+4. INVESTOR MESSAGING:
+   - Key themes from investor presentations
+   - Guidance or targets shared
+
+Provide SPECIFIC names and quotes where available.`).catch(e => ({ type: 'leadership', data: '', error: e.message }))
+  ];
+
+  // Add local language query if applicable
   if (localLang) {
-    researchPromises.push(
-      callPerplexity(`${localLang.searchLang}: ${companyName}
-Research in ${localLang.lang} for deeper local insights:
-- Recent news and press releases
-- Local market position and reputation
-- Management interviews or statements
-- Industry awards or recognition
-- Local partnerships or expansions
-Provide facts in English.`).catch(e => { console.error('Local lang query error:', e.message); return ''; })
+    queries.push(
+      callPerplexity(`${localLang.searchPrefix} ${companyName}について詳しく調べてください:
+
+Search for ${companyName} in ${localLang.lang}:
+- Recent press releases and news
+- Management interviews and statements
+- Industry awards and recognition
+- Local market reputation and positioning
+- Detailed product/service information not available in English
+- Employee reviews or company culture insights
+
+Provide findings in English with specific details.`).catch(e => ({ type: 'local', data: '', error: e.message }))
     );
   }
 
-  // Query 4: Gemini for additional perspective (parallel)
-  researchPromises.push(
-    callGemini(`Analyze ${companyName} (${website}) for M&A advisory:
-- What makes this company strategically valuable?
-- What are their likely growth constraints?
-- What type of acquisitions would make sense for them?
-Be analytical and concise.`).catch(e => { console.error('Gemini query error:', e.message); return ''; })
-  );
+  // Execute all queries in parallel
+  const results = await Promise.all(queries);
 
-  // Wait for all queries in parallel
-  const [englishFacts, maHistory, localFacts, geminiAnalysis] = await Promise.all(researchPromises);
+  // Organize results
+  const research = {
+    products: typeof results[0] === 'string' ? results[0] : '',
+    financials: typeof results[1] === 'string' ? results[1] : '',
+    operations: typeof results[2] === 'string' ? results[2] : '',
+    competitors: typeof results[3] === 'string' ? results[3] : '',
+    maHistory: typeof results[4] === 'string' ? results[4] : '',
+    leadership: typeof results[5] === 'string' ? results[5] : '',
+    localInsights: localLang && results[6] && typeof results[6] === 'string' ? results[6] : ''
+  };
 
-  // Combine all research
-  const combinedResearch = `
-=== COMPANY OVERVIEW (English) ===
-${englishFacts || 'Limited information'}
+  console.log(`[UTB Phase 1] Complete. Research lengths: products=${research.products.length}, financials=${research.financials.length}, operations=${research.operations.length}, competitors=${research.competitors.length}, maHistory=${research.maHistory.length}, leadership=${research.leadership.length}`);
 
-=== M&A HISTORY & PARTNERSHIPS ===
-${maHistory || 'No M&A history found'}
+  return research;
+}
 
-${localLang ? `=== LOCAL INSIGHTS (${localLang.lang}) ===
-${localFacts || 'No local language results'}` : ''}
+// UTB Phase 2: Section-by-Section Synthesis
+async function utbPhase2Synthesis(companyName, website, research, context) {
+  console.log(`[UTB Phase 2] Synthesizing intelligence for: ${companyName}`);
 
-=== STRATEGIC ANALYSIS ===
-${geminiAnalysis || 'No additional analysis'}
-`.trim();
-
-  console.log('Step 1 complete. Combined research length:', combinedResearch.length);
-
-  // Step 2: Deep synthesis with GPT-4o
-  console.log('Step 2: Synthesizing with GPT-4o...');
-  const synthesisPrompt = `You are a senior M&A advisor preparing for a client meeting. Based on the research below, THINK DEEPLY and provide STRUCTURED ANALYSIS.
+  const synthesisPrompts = [
+    // Synthesis 1: Executive Summary & Company Profile
+    callChatGPT(`You are a senior M&A advisor. Based on the research below, write a COMPREHENSIVE company profile.
 
 COMPANY: ${companyName}
 WEBSITE: ${website}
-${additionalContext ? `CLIENT CONTEXT: ${additionalContext}` : ''}
+${context ? `CLIENT CONTEXT: ${context}` : ''}
 
-RESEARCH:
-${combinedResearch}
+RESEARCH ON PRODUCTS & SERVICES:
+${research.products}
+
+RESEARCH ON FINANCIALS:
+${research.financials}
+
+RESEARCH ON LEADERSHIP:
+${research.leadership}
 
 ---
 
-TASK: Synthesize into actionable M&A intelligence. ANALYZE and INFER - don't just summarize.
-
-Respond in this EXACT JSON format (no markdown, just JSON):
+Respond in this EXACT JSON format:
 {
-  "snapshot": {
-    "name": "Company name",
-    "hq": "City, Country",
-    "founded": "Year or Unknown",
-    "ownership": "Public/Private/PE-backed",
-    "revenue": "Amount or estimate",
-    "employees": "Number or estimate",
-    "industry": "Primary industry"
+  "executive_summary": "3-4 sentences capturing the essence of this company for an M&A advisor. What are they, why do they matter, what's their trajectory?",
+  "company_profile": {
+    "legal_name": "Full legal name",
+    "hq_location": "City, Country",
+    "founded": "Year",
+    "ownership_structure": "Public (ticker) / Private / PE-backed by [name]",
+    "employees": "Number with source year",
+    "website": "${website}"
   },
-  "business_summary": "2-3 sentences on what they do and why they matter. Be specific.",
-  "competitive_position": "2-3 sentences on market position vs competitors. Strengths and weaknesses.",
-  "partnerships_ma_history": {
-    "past_acquisitions": ["List key acquisitions with year if known"],
-    "key_partnerships": ["List 2-3 important strategic partnerships"],
-    "pattern": "1 sentence on their M&A/partnership pattern or style"
+  "financials": {
+    "total_revenue": "Amount in local currency and USD equivalent",
+    "revenue_growth": "YoY or CAGR if available",
+    "revenue_by_segment": [
+      {"segment": "Segment name", "revenue": "Amount or %", "description": "What this segment does"}
+    ],
+    "revenue_by_geography": [
+      {"region": "Region name", "percentage": "X%", "notes": "Any relevant notes"}
+    ],
+    "profitability": {
+      "operating_margin": "X% or N/A",
+      "ebitda_margin": "X% or N/A",
+      "net_margin": "X% or N/A"
+    },
+    "key_metrics": "Any other important financial metrics"
   },
-  "ma_motivation": {
-    "primary_drivers": ["2-3 likely reasons they want to do M&A based on evidence"],
-    "urgency": "High/Medium/Low with 1 sentence explanation",
-    "budget_indication": "Deal size range they likely target, with reasoning"
+  "leadership": {
+    "ceo": {"name": "Name", "tenure": "Since year", "background": "Brief background"},
+    "key_executives": [
+      {"title": "Title", "name": "Name", "background": "Brief"}
+    ]
+  }
+}
+
+IMPORTANT: Use SPECIFIC numbers and names. If information is not available, write "Not disclosed" rather than making things up.`).catch(e => ({ section: 'profile', error: e.message })),
+
+    // Synthesis 2: Products, Services & Operations
+    callChatGPT(`You are a senior M&A advisor analyzing a company's products and operations.
+
+COMPANY: ${companyName}
+
+RESEARCH ON PRODUCTS & SERVICES:
+${research.products}
+
+RESEARCH ON OPERATIONS:
+${research.operations}
+
+---
+
+Respond in this EXACT JSON format:
+{
+  "products_and_services": {
+    "overview": "2-3 sentences on what they offer and to whom",
+    "product_lines": [
+      {
+        "name": "Product line or brand name",
+        "description": "What it does",
+        "key_products": ["Specific model/product names"],
+        "target_market": "Who buys this",
+        "competitive_position": "Leader/Challenger/Niche"
+      }
+    ],
+    "services": [
+      {"name": "Service name", "description": "What it includes"}
+    ],
+    "technology_ip": ["List proprietary technologies, patents, or unique capabilities"]
+  },
+  "operations": {
+    "manufacturing_footprint": [
+      {"location": "City, Country", "function": "What is made/done there", "capacity": "If known"}
+    ],
+    "rd_centers": [
+      {"location": "City, Country", "focus": "What they research"}
+    ],
+    "global_presence": {
+      "countries_with_operations": "Number",
+      "key_markets": ["List top markets"],
+      "recent_expansions": "Any recent geographic moves"
+    }
+  }
+}
+
+IMPORTANT: Be SPECIFIC with product names, locations, and capabilities. Generic descriptions are not useful for M&A advisors.`).catch(e => ({ section: 'products', error: e.message })),
+
+    // Synthesis 3: Competitive Landscape
+    callChatGPT(`You are a senior M&A advisor analyzing competitive dynamics.
+
+COMPANY: ${companyName}
+
+RESEARCH ON COMPETITORS:
+${research.competitors}
+
+RESEARCH ON PRODUCTS (for context):
+${research.products}
+
+---
+
+Respond in this EXACT JSON format:
+{
+  "competitive_landscape": {
+    "market_overview": {
+      "market_size": "Total addressable market in USD",
+      "growth_rate": "Market CAGR",
+      "key_trends": ["3-5 major trends affecting the market"]
+    },
+    "company_position": {
+      "market_share": "Estimated % or rank",
+      "positioning": "How they compete (cost, quality, innovation, etc.)",
+      "key_strengths": ["3-4 competitive advantages"],
+      "key_weaknesses": ["2-3 competitive gaps or challenges"]
+    },
+    "competitors": [
+      {
+        "name": "Competitor name",
+        "hq": "Country",
+        "revenue": "Approximate",
+        "key_differentiator": "What makes them different",
+        "threat_level": "High/Medium/Low"
+      }
+    ],
+    "competitive_dynamics": "2-3 sentences on how competition is evolving"
+  }
+}
+
+IMPORTANT: Name SPECIFIC competitors with data. Do not use generic descriptions.`).catch(e => ({ section: 'competitors', error: e.message })),
+
+    // Synthesis 4: M&A Analysis & Acquisition Appetite
+    callChatGPT(`You are a senior M&A advisor analyzing a company's M&A track record and future appetite.
+
+COMPANY: ${companyName}
+
+RESEARCH ON M&A HISTORY:
+${research.maHistory}
+
+RESEARCH ON LEADERSHIP & STRATEGY:
+${research.leadership}
+
+RESEARCH ON FINANCIALS (for capacity assessment):
+${research.financials}
+
+---
+
+Think deeply and INFER from the evidence. This is the most critical section.
+
+Respond in this EXACT JSON format:
+{
+  "ma_track_record": {
+    "acquisition_history": [
+      {
+        "year": "Year",
+        "target": "Company name",
+        "deal_value": "Amount or Not disclosed",
+        "rationale": "Why they did it",
+        "outcome": "How it worked out if known"
+      }
+    ],
+    "partnerships_jvs": [
+      {"partner": "Name", "year": "Year", "nature": "What kind of partnership"}
+    ],
+    "pattern_analysis": "2-3 sentences on their M&A style (bolt-on vs transformational, integration approach, deal frequency)"
+  },
+  "acquisition_appetite": {
+    "strategic_drivers": [
+      {"driver": "Reason they'd acquire", "evidence": "What suggests this", "priority": "High/Medium/Low"}
+    ],
+    "likely_deal_size": {
+      "range": "$X-Y million",
+      "rationale": "Why this range based on past deals and financial capacity"
+    },
+    "preferred_deal_structure": "Acquisition / JV / Minority stake - with reasoning",
+    "urgency": {
+      "level": "High/Medium/Low",
+      "rationale": "Why this urgency level"
+    }
   },
   "target_profile": {
-    "industries": ["2-3 sectors they'd likely target"],
-    "geographies": ["2-3 preferred regions with reasoning"],
-    "company_stage": "What stage companies (startup/growth/mature)",
-    "capabilities_sought": ["2-3 specific capabilities or technologies"],
-    "deal_structure": "Preferred structure (acquisition/JV/minority) with reasoning"
+    "industries_of_interest": [
+      {"sector": "Sector name", "interest_level": "High/Medium/Low", "rationale": "Why interested"}
+    ],
+    "geographic_preferences": [
+      {"region": "Region", "interest_level": "High/Medium/Low", "rationale": "Why interested"}
+    ],
+    "company_stage": "Early-stage / Growth / Mature - with reasoning",
+    "capabilities_sought": ["Specific technologies, capabilities, or assets they'd want"],
+    "exclusions": ["Types of deals they'd likely avoid"]
   },
-  "engagement_approach": {
-    "key_decision_makers": "Who likely decides on M&A",
-    "hot_buttons": ["2-3 things that would excite them"],
-    "concerns": ["2-3 potential objections or sensitivities"],
-    "recommended_angle": "1-2 sentences on how to position opportunities to them"
-  }
-}
-
-IMPORTANT:
-- Infer from evidence, don't just repeat facts
-- Include M&A history insights in your analysis
-- Be concise - each field should be brief
-- Think like an advisor: what does this client ACTUALLY want?`;
-
-  let analysis = null;
-  try {
-    const response = await callChatGPT(synthesisPrompt);
-    const jsonMatch = response.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
-      analysis = JSON.parse(jsonMatch[0]);
+  "country_sector_matrix": {
+    "explanation": "This matrix shows estimated interest level (H=High, M=Medium, L=Low, N=No interest) by country and sector",
+    "sectors": ["List 4-6 relevant sectors"],
+    "countries": ["List 6-8 relevant countries/regions"],
+    "matrix": {
+      "Japan": {"sector1": "H", "sector2": "M"},
+      "USA": {"sector1": "M", "sector2": "H"}
     }
-  } catch (error) {
-    console.error('Synthesis error:', error.message);
   }
-
-  // Fallback structure
-  if (!analysis) {
-    analysis = {
-      snapshot: { name: companyName, hq: 'Unknown', founded: 'Unknown', ownership: 'Unknown', revenue: 'Unknown', employees: 'Unknown', industry: 'Unknown' },
-      business_summary: 'Analysis could not be completed.',
-      competitive_position: 'Unable to assess.',
-      partnerships_ma_history: { past_acquisitions: [], key_partnerships: [], pattern: 'Unknown' },
-      ma_motivation: { primary_drivers: ['Unknown'], urgency: 'Unknown', budget_indication: 'Unknown' },
-      target_profile: { industries: ['Unknown'], geographies: ['Unknown'], company_stage: 'Unknown', capabilities_sought: ['Unknown'], deal_structure: 'Unknown' },
-      engagement_approach: { key_decision_makers: 'Unknown', hot_buttons: ['Unknown'], concerns: ['Unknown'], recommended_angle: 'Further research needed.' }
-    };
-  }
-
-  return { analysis, rawFacts: combinedResearch };
 }
 
-// Generate concise 3-page UTB PDF
+IMPORTANT: INFER intelligently from evidence. This analysis should demonstrate deep thinking, not just data regurgitation.`).catch(e => ({ section: 'ma_analysis', error: e.message })),
+
+    // Synthesis 5: Engagement Strategy
+    callChatGPT(`You are a senior M&A advisor preparing for a client meeting. How should we engage with this company?
+
+COMPANY: ${companyName}
+
+RESEARCH ON LEADERSHIP:
+${research.leadership}
+
+RESEARCH ON M&A:
+${research.maHistory}
+
+RESEARCH ON STRATEGY:
+${research.products}
+
+${context ? `CLIENT CONTEXT: ${context}` : ''}
+
+---
+
+Think like a seasoned dealmaker. What would actually work with this company?
+
+Respond in this EXACT JSON format:
+{
+  "engagement_strategy": {
+    "key_decision_makers": [
+      {"name": "Name if known", "title": "Title", "role_in_ma": "Their role in M&A decisions", "approach": "How to engage them"}
+    ],
+    "hot_buttons": [
+      {"topic": "What excites them", "evidence": "Why we think this", "how_to_leverage": "How to use this"}
+    ],
+    "concerns_objections": [
+      {"concern": "What might worry them", "evidence": "Why we think this", "how_to_address": "How to overcome"}
+    ],
+    "recommended_approach": {
+      "positioning": "How to position opportunities to them",
+      "timing": "Any timing considerations",
+      "channel": "How to reach them (direct, advisor, event, etc.)",
+      "key_messages": ["3-4 key messages that would resonate"]
+    },
+    "next_steps": [
+      {"action": "Specific action to take", "priority": "High/Medium/Low", "owner": "Who should do this"}
+    ]
+  }
+}
+
+IMPORTANT: Be SPECIFIC and ACTIONABLE. This should be immediately useful for a meeting prep.`).catch(e => ({ section: 'engagement', error: e.message }))
+  ];
+
+  // Add local insights synthesis if available
+  if (research.localInsights) {
+    synthesisPrompts.push(
+      callChatGPT(`Synthesize these local language insights about ${companyName}:
+
+LOCAL INSIGHTS:
+${research.localInsights}
+
+Respond in JSON:
+{
+  "local_insights": {
+    "key_findings": ["Important findings not available in English sources"],
+    "reputation": "How they're perceived locally",
+    "recent_developments": "Recent news or announcements",
+    "cultural_considerations": "Any cultural factors relevant for engagement"
+  }
+}`).catch(e => ({ section: 'local', error: e.message }))
+    );
+  }
+
+  // Execute all synthesis in parallel
+  const synthesisResults = await Promise.all(synthesisPrompts);
+
+  // Parse and combine results
+  const sections = {};
+  for (const result of synthesisResults) {
+    if (typeof result === 'string') {
+      try {
+        const jsonMatch = result.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          Object.assign(sections, parsed);
+        }
+      } catch (e) {
+        console.error('Failed to parse synthesis result:', e.message);
+      }
+    } else if (result.error) {
+      console.error(`Synthesis error for ${result.section}:`, result.error);
+    }
+  }
+
+  console.log(`[UTB Phase 2] Complete. Sections generated: ${Object.keys(sections).join(', ')}`);
+
+  return sections;
+}
+
+// Main UTB Research Function
+async function conductUTBResearch(companyName, website, additionalContext) {
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`[UTB] Starting comprehensive research for: ${companyName}`);
+  console.log(`[UTB] Website: ${website}`);
+  console.log('='.repeat(60));
+
+  // Phase 1: Deep fact-finding
+  const rawResearch = await utbPhase1Research(companyName, website, additionalContext);
+
+  // Phase 2: Section-by-section synthesis
+  const synthesis = await utbPhase2Synthesis(companyName, website, rawResearch, additionalContext);
+
+  console.log(`[UTB] Research complete for: ${companyName}`);
+
+  return {
+    synthesis,
+    rawResearch,
+    metadata: {
+      company: companyName,
+      website,
+      generatedAt: new Date().toISOString(),
+      localLanguage: detectLanguage(website)?.lang || null
+    }
+  };
+}
+
+// Generate comprehensive UTB PDF (10-12 pages)
 async function generateUTBPDF(companyName, website, research, additionalContext) {
   return new Promise((resolve, reject) => {
     if (!PDFDocument) {
@@ -4861,11 +5230,11 @@ async function generateUTBPDF(companyName, website, research, additionalContext)
       return;
     }
 
-    const { analysis } = research;
+    const { synthesis, metadata } = research;
     const chunks = [];
     const doc = new PDFDocument({
       size: 'A4',
-      margins: { top: 40, bottom: 40, left: 50, right: 50 },
+      margins: { top: 50, bottom: 50, left: 50, right: 50 },
       bufferPages: true
     });
 
@@ -4873,166 +5242,571 @@ async function generateUTBPDF(companyName, website, research, additionalContext)
     doc.on('end', () => resolve(Buffer.concat(chunks).toString('base64')));
     doc.on('error', reject);
 
-    // Constants
-    const pageWidth = doc.page.width - 100;
+    // Colors
     const navy = '#1a365d';
     const blue = '#2563eb';
     const gray = '#64748b';
+    const lightGray = '#94a3b8';
     const black = '#1e293b';
+    const bgLight = '#f8fafc';
+    const borderLight = '#e2e8f0';
+
+    // Page dimensions
+    const pageWidth = doc.page.width - 100;
+    const leftMargin = 50;
+    const rightMargin = doc.page.width - 50;
+
+    // Helper: Check if we need a new page
+    const checkPageBreak = (requiredSpace = 100) => {
+      if (doc.y > doc.page.height - 80 - requiredSpace) {
+        doc.addPage();
+        doc.y = 50;
+        return true;
+      }
+      return false;
+    };
+
+    // Helper: Page header for subsequent pages
+    const pageHeader = (title, color = navy) => {
+      doc.rect(0, 0, doc.page.width, 45).fill(color);
+      doc.fontSize(16).font('Helvetica-Bold').fillColor('white').text(title, leftMargin, 14);
+      doc.y = 60;
+    };
 
     // Helper: Section header
-    const sectionHeader = (text) => {
+    const sectionHeader = (text, addLine = true) => {
+      checkPageBreak(80);
       doc.fontSize(13).font('Helvetica-Bold').fillColor(navy).text(text);
-      doc.moveTo(50, doc.y + 2).lineTo(545, doc.y + 2).strokeColor('#e2e8f0').lineWidth(1).stroke();
-      doc.moveDown(0.4);
+      if (addLine) {
+        doc.moveTo(leftMargin, doc.y + 2).lineTo(rightMargin, doc.y + 2).strokeColor(borderLight).lineWidth(1).stroke();
+      }
+      doc.moveDown(0.5);
+    };
+
+    // Helper: Subsection header
+    const subHeader = (text) => {
+      checkPageBreak(60);
+      doc.fontSize(11).font('Helvetica-Bold').fillColor(blue).text(text);
+      doc.moveDown(0.3);
     };
 
     // Helper: Label-value pair
-    const labelValue = (label, value, inline = false) => {
+    const labelValue = (label, value) => {
+      if (!value || value === 'N/A' || value === 'Not disclosed') return;
       doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text(label + ': ', { continued: true });
-      doc.font('Helvetica').fillColor(black).text(value || 'N/A', { continued: inline });
-      if (!inline) doc.moveDown(0.2);
+      doc.font('Helvetica').fillColor(black).text(String(value));
+      doc.moveDown(0.15);
+    };
+
+    // Helper: Paragraph
+    const paragraph = (text, indent = 0) => {
+      if (!text || text === 'N/A') return;
+      doc.fontSize(9).font('Helvetica').fillColor(black).text(String(text), leftMargin + indent, doc.y, { align: 'justify', lineGap: 2, width: pageWidth - indent });
+      doc.moveDown(0.4);
     };
 
     // Helper: Bullet list
-    const bulletList = (items) => {
-      (items || []).forEach(item => {
-        if (item && item !== 'Unknown') {
-          doc.fontSize(9).font('Helvetica').fillColor(black).text('• ' + item, { indent: 10 });
+    const bulletList = (items, indent = 0) => {
+      if (!items || !Array.isArray(items) || items.length === 0) return;
+      items.forEach(item => {
+        if (item && item !== 'Unknown' && item !== 'N/A') {
+          checkPageBreak(20);
+          const text = typeof item === 'object' ? JSON.stringify(item) : String(item);
+          doc.fontSize(9).font('Helvetica').fillColor(black).text('• ' + text, leftMargin + 10 + indent, doc.y, { width: pageWidth - 20 - indent });
+          doc.moveDown(0.15);
         }
       });
       doc.moveDown(0.3);
     };
 
-    // ========== PAGE 1: Company Overview ==========
-    // Header bar
-    doc.rect(0, 0, doc.page.width, 60).fill(navy);
-    doc.fontSize(20).font('Helvetica-Bold').fillColor('white').text('Understanding The Business', 50, 20);
-    doc.fontSize(10).font('Helvetica').text(companyName, 50, 42);
+    // Helper: Info box
+    const infoBox = (content) => {
+      const startY = doc.y;
+      const boxHeight = 20;
+      doc.rect(leftMargin, startY, pageWidth, boxHeight).fill(bgLight).stroke(borderLight);
+      doc.fontSize(8).font('Helvetica').fillColor(gray).text(content, leftMargin + 10, startY + 6, { width: pageWidth - 20 });
+      doc.y = startY + boxHeight + 10;
+    };
 
-    doc.y = 80;
+    // Helper: Draw a simple table
+    const drawTable = (headers, rows, colWidths) => {
+      checkPageBreak(100);
+      const startX = leftMargin;
+      const rowHeight = 20;
+      const totalWidth = colWidths.reduce((a, b) => a + b, 0);
 
-    // Snapshot box
-    doc.rect(50, doc.y, pageWidth, 75).fill('#f8fafc').stroke('#e2e8f0');
-    const boxY = doc.y + 10;
-    doc.fontSize(10).font('Helvetica-Bold').fillColor(navy).text('COMPANY SNAPSHOT', 60, boxY);
+      // Header row
+      let x = startX;
+      doc.rect(startX, doc.y, totalWidth, rowHeight).fill(navy);
+      headers.forEach((header, i) => {
+        doc.fontSize(8).font('Helvetica-Bold').fillColor('white').text(header, x + 4, doc.y + 5, { width: colWidths[i] - 8 });
+        x += colWidths[i];
+      });
+      doc.y += rowHeight;
 
-    const snap = analysis.snapshot || {};
-    const col1X = 60, col2X = 220, col3X = 380;
-    let snapY = boxY + 18;
+      // Data rows
+      rows.forEach((row, rowIndex) => {
+        checkPageBreak(rowHeight + 10);
+        x = startX;
+        const bgColor = rowIndex % 2 === 0 ? bgLight : 'white';
+        doc.rect(startX, doc.y, totalWidth, rowHeight).fill(bgColor).stroke(borderLight);
+        row.forEach((cell, i) => {
+          doc.fontSize(8).font('Helvetica').fillColor(black).text(String(cell || '-'), x + 4, doc.y + 5, { width: colWidths[i] - 8 });
+          x += colWidths[i];
+        });
+        doc.y += rowHeight;
+      });
+      doc.moveDown(0.5);
+    };
+
+    // ========== PAGE 1: TITLE PAGE ==========
+    // Navy header block
+    doc.rect(0, 0, doc.page.width, 180).fill(navy);
+    doc.fontSize(12).font('Helvetica').fillColor(lightGray).text('M&A BUYER INTELLIGENCE REPORT', leftMargin, 40);
+    doc.fontSize(32).font('Helvetica-Bold').fillColor('white').text('Understanding The Business', leftMargin, 70, { width: pageWidth });
+    doc.fontSize(18).font('Helvetica').fillColor('white').text(companyName, leftMargin, 130);
+    doc.fontSize(11).fillColor(lightGray).text(website, leftMargin, 155);
+
+    doc.y = 200;
+
+    // Executive Summary
+    sectionHeader('Executive Summary');
+    const execSummary = synthesis.executive_summary || 'Executive summary not available.';
+    paragraph(execSummary);
+
+    // Company Snapshot Box
+    doc.moveDown(0.5);
+    const profile = synthesis.company_profile || {};
+    const financials = synthesis.financials || {};
+
+    const snapBoxY = doc.y;
+    doc.rect(leftMargin, snapBoxY, pageWidth, 100).fill(bgLight).stroke(borderLight);
+    doc.fontSize(10).font('Helvetica-Bold').fillColor(navy).text('COMPANY SNAPSHOT', leftMargin + 15, snapBoxY + 12);
+
+    const col1 = leftMargin + 15;
+    const col2 = leftMargin + 180;
+    const col3 = leftMargin + 350;
+    let snapRow = snapBoxY + 32;
 
     doc.fontSize(8).font('Helvetica').fillColor(gray);
-    doc.text('HQ:', col1X, snapY); doc.fillColor(black).text(snap.hq || 'N/A', col1X + 25, snapY);
-    doc.fillColor(gray).text('Founded:', col2X, snapY); doc.fillColor(black).text(snap.founded || 'N/A', col2X + 45, snapY);
-    doc.fillColor(gray).text('Ownership:', col3X, snapY); doc.fillColor(black).text(snap.ownership || 'N/A', col3X + 55, snapY);
+    doc.text('Legal Name:', col1, snapRow);
+    doc.fillColor(black).text(profile.legal_name || companyName, col1 + 60, snapRow);
+    doc.fillColor(gray).text('HQ:', col2, snapRow);
+    doc.fillColor(black).text(profile.hq_location || 'N/A', col2 + 25, snapRow);
+    doc.fillColor(gray).text('Founded:', col3, snapRow);
+    doc.fillColor(black).text(profile.founded || 'N/A', col3 + 50, snapRow);
 
-    snapY += 14;
-    doc.fillColor(gray).text('Revenue:', col1X, snapY); doc.fillColor(black).text(snap.revenue || 'N/A', col1X + 45, snapY);
-    doc.fillColor(gray).text('Employees:', col2X, snapY); doc.fillColor(black).text(snap.employees || 'N/A', col2X + 55, snapY);
-    doc.fillColor(gray).text('Industry:', col3X, snapY); doc.fillColor(black).text(snap.industry || 'N/A', col3X + 45, snapY);
+    snapRow += 16;
+    doc.fillColor(gray).text('Ownership:', col1, snapRow);
+    doc.fillColor(black).text(profile.ownership_structure || 'N/A', col1 + 60, snapRow);
+    doc.fillColor(gray).text('Employees:', col2, snapRow);
+    doc.fillColor(black).text(profile.employees || 'N/A', col2 + 55, snapRow);
+    doc.fillColor(gray).text('Revenue:', col3, snapRow);
+    doc.fillColor(black).text(financials.total_revenue || 'N/A', col3 + 50, snapRow);
 
-    doc.y = 170;
+    snapRow += 16;
+    doc.fillColor(gray).text('Website:', col1, snapRow);
+    doc.fillColor(blue).text(website, col1 + 60, snapRow);
 
-    // Business Summary
-    sectionHeader('Business Overview');
-    doc.fontSize(9).font('Helvetica').fillColor(black).text(analysis.business_summary || 'N/A', { align: 'justify', lineGap: 2 });
-    doc.moveDown(0.8);
+    doc.y = snapBoxY + 115;
 
-    // Competitive Position
-    sectionHeader('Competitive Position');
-    doc.fontSize(9).font('Helvetica').fillColor(black).text(analysis.competitive_position || 'N/A', { align: 'justify', lineGap: 2 });
-    doc.moveDown(0.8);
-
-    // Context if provided
+    // Research context if provided
     if (additionalContext) {
-      sectionHeader('Research Context');
-      doc.fontSize(8).font('Helvetica-Oblique').fillColor(gray).text(additionalContext.substring(0, 500), { lineGap: 1 });
+      doc.moveDown(0.5);
+      infoBox('Research Context: ' + additionalContext.substring(0, 200) + (additionalContext.length > 200 ? '...' : ''));
     }
 
-    // ========== PAGE 2: M&A Analysis ==========
+    // ========== PAGE 2: FINANCIAL OVERVIEW ==========
     doc.addPage();
-    doc.rect(0, 0, doc.page.width, 35).fill(blue);
-    doc.fontSize(14).font('Helvetica-Bold').fillColor('white').text('M&A Strategic Analysis', 50, 10);
-    doc.y = 50;
+    pageHeader('Financial Overview');
 
-    // M&A History & Partnerships (new section)
-    const history = analysis.partnerships_ma_history || {};
-    sectionHeader('M&A History & Partnerships');
+    // Revenue breakdown
+    sectionHeader('Revenue Analysis');
+    labelValue('Total Revenue', financials.total_revenue);
+    labelValue('Revenue Growth', financials.revenue_growth);
+    labelValue('Key Metrics', financials.key_metrics);
 
-    if (history.past_acquisitions && history.past_acquisitions.length > 0) {
-      doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Past Acquisitions:');
-      bulletList(history.past_acquisitions);
+    if (financials.revenue_by_segment && financials.revenue_by_segment.length > 0) {
+      doc.moveDown(0.5);
+      subHeader('Revenue by Business Segment');
+      const segmentRows = financials.revenue_by_segment.map(s => [s.segment || '-', s.revenue || '-', s.description || '-']);
+      drawTable(['Segment', 'Revenue / %', 'Description'], segmentRows, [120, 100, 275]);
     }
 
-    if (history.key_partnerships && history.key_partnerships.length > 0) {
-      doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Key Partnerships:');
-      bulletList(history.key_partnerships);
+    if (financials.revenue_by_geography && financials.revenue_by_geography.length > 0) {
+      subHeader('Revenue by Geography');
+      const geoRows = financials.revenue_by_geography.map(g => [g.region || '-', g.percentage || '-', g.notes || '-']);
+      drawTable(['Region', '%', 'Notes'], geoRows, [120, 80, 295]);
     }
 
-    if (history.pattern && history.pattern !== 'Unknown') {
-      labelValue('M&A Pattern', history.pattern);
+    // Profitability
+    const prof = financials.profitability || {};
+    if (prof.operating_margin || prof.ebitda_margin || prof.net_margin) {
+      subHeader('Profitability');
+      labelValue('Operating Margin', prof.operating_margin);
+      labelValue('EBITDA Margin', prof.ebitda_margin);
+      labelValue('Net Margin', prof.net_margin);
     }
-    doc.moveDown(0.4);
 
-    const ma = analysis.ma_motivation || {};
+    // Leadership
+    const leadership = synthesis.leadership || {};
+    doc.moveDown(0.5);
+    sectionHeader('Leadership Team');
+    if (leadership.ceo) {
+      labelValue('CEO', `${leadership.ceo.name || 'N/A'} (${leadership.ceo.tenure || 'N/A'})`);
+      if (leadership.ceo.background) {
+        paragraph(leadership.ceo.background, 20);
+      }
+    }
+    if (leadership.key_executives && leadership.key_executives.length > 0) {
+      subHeader('Key Executives');
+      leadership.key_executives.forEach(exec => {
+        labelValue(exec.title, exec.name);
+        if (exec.background) paragraph(exec.background, 20);
+      });
+    }
 
-    sectionHeader('M&A Motivation');
-    doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Primary Drivers:');
-    bulletList(ma.primary_drivers);
+    // ========== PAGE 3: PRODUCTS & SERVICES ==========
+    doc.addPage();
+    pageHeader('Products & Services', blue);
 
-    labelValue('Urgency', ma.urgency);
-    labelValue('Budget Indication', ma.budget_indication);
-    doc.moveDown(0.6);
+    const products = synthesis.products_and_services || {};
+    if (products.overview) {
+      paragraph(products.overview);
+    }
 
-    const tp = analysis.target_profile || {};
+    if (products.product_lines && products.product_lines.length > 0) {
+      sectionHeader('Product Lines');
+      products.product_lines.forEach(line => {
+        checkPageBreak(80);
+        subHeader(line.name || 'Product Line');
+        paragraph(line.description);
+        if (line.key_products && line.key_products.length > 0) {
+          doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Key Products:');
+          bulletList(line.key_products, 10);
+        }
+        labelValue('Target Market', line.target_market);
+        labelValue('Competitive Position', line.competitive_position);
+        doc.moveDown(0.3);
+      });
+    }
 
+    if (products.services && products.services.length > 0) {
+      sectionHeader('Services');
+      products.services.forEach(svc => {
+        labelValue(svc.name, svc.description);
+      });
+    }
+
+    if (products.technology_ip && products.technology_ip.length > 0) {
+      sectionHeader('Technology & Intellectual Property');
+      bulletList(products.technology_ip);
+    }
+
+    // ========== PAGE 4: OPERATIONS ==========
+    const operations = synthesis.operations || {};
+    if (operations.manufacturing_footprint || operations.rd_centers || operations.global_presence) {
+      doc.addPage();
+      pageHeader('Operations & Footprint');
+
+      if (operations.manufacturing_footprint && operations.manufacturing_footprint.length > 0) {
+        sectionHeader('Manufacturing Footprint');
+        const mfgRows = operations.manufacturing_footprint.map(m => [m.location || '-', m.function || '-', m.capacity || '-']);
+        drawTable(['Location', 'Function', 'Capacity'], mfgRows, [150, 200, 145]);
+      }
+
+      if (operations.rd_centers && operations.rd_centers.length > 0) {
+        sectionHeader('R&D Centers');
+        const rdRows = operations.rd_centers.map(r => [r.location || '-', r.focus || '-']);
+        drawTable(['Location', 'Focus Area'], rdRows, [150, 345]);
+      }
+
+      if (operations.global_presence) {
+        sectionHeader('Global Presence');
+        labelValue('Countries with Operations', operations.global_presence.countries_with_operations);
+        if (operations.global_presence.key_markets) {
+          doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Key Markets:');
+          bulletList(operations.global_presence.key_markets);
+        }
+        labelValue('Recent Expansions', operations.global_presence.recent_expansions);
+      }
+    }
+
+    // ========== PAGE 5: COMPETITIVE LANDSCAPE ==========
+    doc.addPage();
+    pageHeader('Competitive Landscape');
+
+    const competitive = synthesis.competitive_landscape || {};
+    const market = competitive.market_overview || {};
+
+    sectionHeader('Market Overview');
+    labelValue('Market Size', market.market_size);
+    labelValue('Growth Rate', market.growth_rate);
+    if (market.key_trends && market.key_trends.length > 0) {
+      doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Key Market Trends:');
+      bulletList(market.key_trends);
+    }
+
+    const position = competitive.company_position || {};
+    sectionHeader('Company Positioning');
+    labelValue('Market Share', position.market_share);
+    labelValue('Positioning', position.positioning);
+    if (position.key_strengths && position.key_strengths.length > 0) {
+      doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Competitive Strengths:');
+      bulletList(position.key_strengths);
+    }
+    if (position.key_weaknesses && position.key_weaknesses.length > 0) {
+      doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Competitive Gaps:');
+      bulletList(position.key_weaknesses);
+    }
+
+    if (competitive.competitors && competitive.competitors.length > 0) {
+      sectionHeader('Key Competitors');
+      const compRows = competitive.competitors.map(c => [c.name || '-', c.hq || '-', c.revenue || '-', c.key_differentiator || '-', c.threat_level || '-']);
+      drawTable(['Company', 'HQ', 'Revenue', 'Differentiator', 'Threat'], compRows, [100, 60, 80, 180, 75]);
+    }
+
+    if (competitive.competitive_dynamics) {
+      doc.moveDown(0.5);
+      subHeader('Competitive Dynamics');
+      paragraph(competitive.competitive_dynamics);
+    }
+
+    // ========== PAGE 6-7: M&A ANALYSIS ==========
+    doc.addPage();
+    pageHeader('M&A Track Record & Analysis', navy);
+
+    const maTrack = synthesis.ma_track_record || {};
+
+    if (maTrack.acquisition_history && maTrack.acquisition_history.length > 0) {
+      sectionHeader('Acquisition History');
+      const acqRows = maTrack.acquisition_history.map(a => [a.year || '-', a.target || '-', a.deal_value || '-', a.rationale || '-']);
+      drawTable(['Year', 'Target', 'Value', 'Rationale'], acqRows, [50, 120, 80, 245]);
+    }
+
+    if (maTrack.partnerships_jvs && maTrack.partnerships_jvs.length > 0) {
+      sectionHeader('Strategic Partnerships & JVs');
+      const partRows = maTrack.partnerships_jvs.map(p => [p.partner || '-', p.year || '-', p.nature || '-']);
+      drawTable(['Partner', 'Year', 'Nature'], partRows, [150, 60, 285]);
+    }
+
+    if (maTrack.pattern_analysis) {
+      subHeader('M&A Pattern Analysis');
+      paragraph(maTrack.pattern_analysis);
+    }
+
+    // Acquisition Appetite
+    const appetite = synthesis.acquisition_appetite || {};
+    doc.addPage();
+    pageHeader('Acquisition Appetite Analysis', blue);
+
+    if (appetite.strategic_drivers && appetite.strategic_drivers.length > 0) {
+      sectionHeader('Strategic Drivers for M&A');
+      const driverRows = appetite.strategic_drivers.map(d => [d.driver || '-', d.evidence || '-', d.priority || '-']);
+      drawTable(['Driver', 'Evidence', 'Priority'], driverRows, [120, 300, 75]);
+    }
+
+    sectionHeader('Deal Parameters');
+    if (appetite.likely_deal_size) {
+      labelValue('Likely Deal Size', appetite.likely_deal_size.range);
+      if (appetite.likely_deal_size.rationale) paragraph(appetite.likely_deal_size.rationale, 20);
+    }
+    labelValue('Preferred Deal Structure', appetite.preferred_deal_structure);
+    if (appetite.urgency) {
+      labelValue('Urgency', appetite.urgency.level);
+      if (appetite.urgency.rationale) paragraph(appetite.urgency.rationale, 20);
+    }
+
+    // Target Profile
+    const targetProfile = synthesis.target_profile || {};
     sectionHeader('Target Acquisition Profile');
 
-    doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Target Industries:');
-    bulletList(tp.industries);
+    if (targetProfile.industries_of_interest && targetProfile.industries_of_interest.length > 0) {
+      subHeader('Industries of Interest');
+      const indRows = targetProfile.industries_of_interest.map(i => [i.sector || '-', i.interest_level || '-', i.rationale || '-']);
+      drawTable(['Sector', 'Interest', 'Rationale'], indRows, [120, 60, 315]);
+    }
 
-    doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Geographic Focus:');
-    bulletList(tp.geographies);
+    if (targetProfile.geographic_preferences && targetProfile.geographic_preferences.length > 0) {
+      subHeader('Geographic Preferences');
+      const geoRows = targetProfile.geographic_preferences.map(g => [g.region || '-', g.interest_level || '-', g.rationale || '-']);
+      drawTable(['Region', 'Interest', 'Rationale'], geoRows, [120, 60, 315]);
+    }
 
-    labelValue('Company Stage', tp.company_stage);
-    labelValue('Deal Structure', tp.deal_structure);
-    doc.moveDown(0.3);
+    labelValue('Company Stage Preference', targetProfile.company_stage);
+    if (targetProfile.capabilities_sought && targetProfile.capabilities_sought.length > 0) {
+      doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Capabilities Sought:');
+      bulletList(targetProfile.capabilities_sought);
+    }
+    if (targetProfile.exclusions && targetProfile.exclusions.length > 0) {
+      doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Likely Exclusions:');
+      bulletList(targetProfile.exclusions);
+    }
 
-    doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Capabilities Sought:');
-    bulletList(tp.capabilities_sought);
+    // Country-Sector Matrix
+    const matrix = synthesis.country_sector_matrix || {};
+    if (matrix.sectors && matrix.countries && matrix.matrix) {
+      doc.addPage();
+      pageHeader('M&A Interest Matrix');
 
-    // ========== PAGE 3: Engagement Strategy ==========
+      sectionHeader('Country x Sector Interest Matrix');
+      if (matrix.explanation) {
+        infoBox(matrix.explanation);
+      }
+
+      // Build matrix table
+      const sectors = matrix.sectors || [];
+      const countries = matrix.countries || [];
+      const matrixData = matrix.matrix || {};
+
+      if (sectors.length > 0 && countries.length > 0) {
+        const colWidth = Math.min(70, (pageWidth - 80) / sectors.length);
+        const colWidths = [80, ...sectors.map(() => colWidth)];
+        const headers = ['Country', ...sectors];
+
+        const rows = countries.map(country => {
+          const countryData = matrixData[country] || {};
+          return [country, ...sectors.map((sector, i) => {
+            // Handle different matrix key formats
+            const key = sector.toLowerCase().replace(/\s+/g, '_');
+            const key2 = `sector${i + 1}`;
+            return countryData[key] || countryData[key2] || countryData[sector] || '-';
+          })];
+        });
+
+        drawTable(headers, rows, colWidths);
+
+        // Legend
+        doc.moveDown(0.5);
+        doc.fontSize(8).font('Helvetica').fillColor(gray)
+          .text('H = High Interest  |  M = Medium Interest  |  L = Low Interest  |  N = No Interest', { align: 'center' });
+      }
+    }
+
+    // ========== PAGE 8: ENGAGEMENT STRATEGY ==========
     doc.addPage();
-    doc.rect(0, 0, doc.page.width, 35).fill(navy);
-    doc.fontSize(14).font('Helvetica-Bold').fillColor('white').text('Engagement Strategy', 50, 10);
+    pageHeader('Engagement Strategy', navy);
+
+    const engagement = synthesis.engagement_strategy || {};
+
+    if (engagement.key_decision_makers && engagement.key_decision_makers.length > 0) {
+      sectionHeader('Key Decision Makers');
+      engagement.key_decision_makers.forEach(dm => {
+        checkPageBreak(60);
+        const nameTitle = `${dm.name || 'Name TBD'} - ${dm.title || 'Title TBD'}`;
+        doc.fontSize(10).font('Helvetica-Bold').fillColor(black).text(nameTitle);
+        labelValue('Role in M&A', dm.role_in_ma);
+        labelValue('Approach', dm.approach);
+        doc.moveDown(0.3);
+      });
+    }
+
+    if (engagement.hot_buttons && engagement.hot_buttons.length > 0) {
+      sectionHeader('Hot Buttons (What Excites Them)');
+      engagement.hot_buttons.forEach(hb => {
+        checkPageBreak(50);
+        doc.fontSize(9).font('Helvetica-Bold').fillColor(blue).text('• ' + (hb.topic || 'Topic'));
+        labelValue('Evidence', hb.evidence);
+        labelValue('How to Leverage', hb.how_to_leverage);
+        doc.moveDown(0.2);
+      });
+    }
+
+    if (engagement.concerns_objections && engagement.concerns_objections.length > 0) {
+      sectionHeader('Potential Concerns & Objections');
+      engagement.concerns_objections.forEach(co => {
+        checkPageBreak(50);
+        doc.fontSize(9).font('Helvetica-Bold').fillColor('#dc2626').text('• ' + (co.concern || 'Concern'));
+        labelValue('Evidence', co.evidence);
+        labelValue('How to Address', co.how_to_address);
+        doc.moveDown(0.2);
+      });
+    }
+
+    const approach = engagement.recommended_approach || {};
+    if (approach.positioning || approach.key_messages) {
+      sectionHeader('Recommended Approach');
+      labelValue('Positioning', approach.positioning);
+      labelValue('Timing', approach.timing);
+      labelValue('Channel', approach.channel);
+      if (approach.key_messages && approach.key_messages.length > 0) {
+        doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Key Messages:');
+        bulletList(approach.key_messages);
+      }
+    }
+
+    if (engagement.next_steps && engagement.next_steps.length > 0) {
+      sectionHeader('Recommended Next Steps');
+      const stepRows = engagement.next_steps.map(s => [s.action || '-', s.priority || '-', s.owner || '-']);
+      drawTable(['Action', 'Priority', 'Owner'], stepRows, [320, 75, 100]);
+    }
+
+    // ========== LOCAL INSIGHTS (if available) ==========
+    const localInsights = synthesis.local_insights;
+    if (localInsights) {
+      doc.addPage();
+      pageHeader(`Local Market Insights (${metadata?.localLanguage || 'Local'})`);
+
+      if (localInsights.reputation) {
+        sectionHeader('Local Reputation');
+        paragraph(localInsights.reputation);
+      }
+
+      if (localInsights.key_findings && localInsights.key_findings.length > 0) {
+        sectionHeader('Key Findings from Local Sources');
+        bulletList(localInsights.key_findings);
+      }
+
+      if (localInsights.recent_developments) {
+        sectionHeader('Recent Developments');
+        paragraph(localInsights.recent_developments);
+      }
+
+      if (localInsights.cultural_considerations) {
+        sectionHeader('Cultural Considerations');
+        paragraph(localInsights.cultural_considerations);
+      }
+    }
+
+    // ========== FINAL PAGE: DISCLAIMER ==========
+    doc.addPage();
     doc.y = 50;
+    sectionHeader('Disclaimer & Notes');
 
-    const eng = analysis.engagement_approach || {};
+    doc.fontSize(8).font('Helvetica').fillColor(gray);
+    doc.text('This report is generated for internal M&A advisory purposes only. The information contained herein is based on publicly available sources and AI-assisted analysis.', leftMargin, doc.y, { width: pageWidth, align: 'justify' });
+    doc.moveDown(0.5);
+    doc.text('Key limitations:', leftMargin, doc.y);
+    doc.moveDown(0.3);
+    doc.text('• Information may be incomplete or outdated. Always verify critical facts through primary research.', leftMargin + 10, doc.y, { width: pageWidth - 10 });
+    doc.moveDown(0.2);
+    doc.text('• M&A appetite and interest levels are inferred from available evidence and may not reflect actual intentions.', leftMargin + 10, doc.y, { width: pageWidth - 10 });
+    doc.moveDown(0.2);
+    doc.text('• Financial data should be confirmed against official filings and audited statements.', leftMargin + 10, doc.y, { width: pageWidth - 10 });
+    doc.moveDown(0.2);
+    doc.text('• Competitive analysis is based on publicly available information only.', leftMargin + 10, doc.y, { width: pageWidth - 10 });
 
-    sectionHeader('Key Decision Makers');
-    doc.fontSize(9).font('Helvetica').fillColor(black).text(eng.key_decision_makers || 'N/A');
-    doc.moveDown(0.6);
+    doc.moveDown(1);
+    doc.fontSize(9).font('Helvetica-Bold').fillColor(black).text('Report Details:');
+    doc.moveDown(0.3);
+    doc.fontSize(8).font('Helvetica').fillColor(gray);
+    doc.text(`Company: ${companyName}`, leftMargin, doc.y);
+    doc.text(`Website: ${website}`, leftMargin, doc.y + 12);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, leftMargin, doc.y + 24);
+    if (metadata?.localLanguage) {
+      doc.text(`Local Language Search: ${metadata.localLanguage}`, leftMargin, doc.y + 36);
+    }
 
-    sectionHeader('Hot Buttons (What Excites Them)');
-    bulletList(eng.hot_buttons);
-
-    sectionHeader('Potential Concerns');
-    bulletList(eng.concerns);
-
-    sectionHeader('Recommended Approach');
-    doc.fontSize(9).font('Helvetica').fillColor(black).text(eng.recommended_angle || 'N/A', { align: 'justify', lineGap: 2 });
-
-    // Footer
-    doc.moveDown(2);
-    doc.fontSize(7).font('Helvetica').fillColor(gray)
-       .text(`Generated: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })} | ${website}`, { align: 'center' });
-    doc.text('For internal use only. Supplement with primary research.', { align: 'center' });
-
-    // Page numbers
+    // Add page numbers to all pages
     const range = doc.bufferedPageRange();
     for (let i = 0; i < range.count; i++) {
       doc.switchToPage(i);
-      doc.fontSize(8).fillColor(gray).text(`${i + 1}/${range.count}`, doc.page.width - 70, doc.page.height - 30);
+      // Footer line
+      doc.moveTo(leftMargin, doc.page.height - 40).lineTo(rightMargin, doc.page.height - 40).strokeColor(borderLight).lineWidth(0.5).stroke();
+      // Page number
+      doc.fontSize(8).font('Helvetica').fillColor(gray).text(`Page ${i + 1} of ${range.count}`, leftMargin, doc.page.height - 30, { width: pageWidth, align: 'center' });
+      // Company name in footer
+      doc.fontSize(7).text(`UTB: ${companyName}`, leftMargin, doc.page.height - 30);
     }
 
     doc.flushPages();
@@ -5048,39 +5822,69 @@ app.post('/api/utb', async (req, res) => {
     return res.status(400).json({ error: 'Company name, website, and email are required' });
   }
 
-  console.log(`\n${'='.repeat(50)}`);
-  console.log(`UTB REQUEST: ${companyName}`);
-  console.log(`Website: ${website}`);
-  console.log(`Email: ${email}`);
-  console.log('='.repeat(50));
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`[UTB] REQUEST: ${companyName}`);
+  console.log(`[UTB] Website: ${website}`);
+  console.log(`[UTB] Email: ${email}`);
+  console.log(`[UTB] Context: ${context ? context.substring(0, 100) + '...' : 'None'}`);
+  console.log('='.repeat(60));
 
-  res.json({ success: true, message: `UTB report for ${companyName} will be emailed in 5-10 minutes.` });
+  // Respond immediately
+  res.json({ success: true, message: `UTB report for ${companyName} will be emailed in 10-15 minutes.` });
 
   try {
+    // Conduct comprehensive research
     const research = await conductUTBResearch(companyName, website, context);
+
+    // Generate professional PDF
     const pdfBase64 = await generateUTBPDF(companyName, website, research, context);
 
+    // Send email with attachment
     await sendEmail(
       email,
-      `UTB: ${companyName}`,
-      `<div style="font-family:Arial,sans-serif;max-width:500px;">
-        <h2 style="color:#1a365d;margin-bottom:5px;">${companyName}</h2>
-        <p style="color:#64748b;margin-top:0;">${website}</p>
-        <p>Your 3-page UTB report is attached.</p>
-        <p style="font-size:12px;color:#94a3b8;">Generated: ${new Date().toLocaleString()}</p>
+      `UTB: ${companyName} - M&A Buyer Intelligence`,
+      `<div style="font-family:Arial,sans-serif;max-width:600px;">
+        <div style="background:#1a365d;padding:20px;border-radius:8px 8px 0 0;">
+          <h1 style="color:white;margin:0;font-size:18px;">Understanding The Business</h1>
+          <p style="color:#94a3b8;margin:5px 0 0 0;font-size:14px;">M&A Buyer Intelligence Report</p>
+        </div>
+        <div style="background:#f8fafc;padding:20px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;">
+          <h2 style="color:#1a365d;margin:0 0 10px 0;font-size:20px;">${companyName}</h2>
+          <p style="color:#64748b;margin:0 0 15px 0;font-size:14px;">${website}</p>
+          <p style="color:#1e293b;margin:0 0 10px 0;">Your comprehensive UTB report is attached.</p>
+          <p style="color:#64748b;margin:0 0 15px 0;font-size:13px;">This report includes:</p>
+          <ul style="color:#64748b;margin:0 0 15px 0;padding-left:20px;font-size:13px;">
+            <li>Executive Summary & Company Profile</li>
+            <li>Financial Overview & Leadership</li>
+            <li>Products, Services & Operations</li>
+            <li>Competitive Landscape Analysis</li>
+            <li>M&A Track Record & Acquisition Appetite</li>
+            <li>Country-Sector Interest Matrix</li>
+            <li>Engagement Strategy & Next Steps</li>
+          </ul>
+          <p style="font-size:12px;color:#94a3b8;margin:0;">Generated: ${new Date().toLocaleString()}</p>
+        </div>
       </div>`,
       { content: pdfBase64, name: `UTB_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf` }
     );
 
-    console.log(`UTB sent to ${email}`);
+    console.log(`[UTB] Report sent successfully to ${email}`);
   } catch (error) {
-    console.error('UTB error:', error);
-    await sendEmail(email, `UTB Error - ${companyName}`, `<p>Error: ${error.message}</p>`).catch(() => {});
+    console.error('[UTB] Error:', error);
+    await sendEmail(
+      email,
+      `UTB Error - ${companyName}`,
+      `<div style="font-family:Arial,sans-serif;">
+        <p style="color:#dc2626;">We encountered an error generating the UTB report for ${companyName}.</p>
+        <p style="color:#64748b;">Error: ${error.message}</p>
+        <p style="color:#64748b;">Please try again or contact support if the issue persists.</p>
+      </div>`
+    ).catch(() => {});
   }
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v33 - UTB Redesign' });
+  res.json({ status: 'ok', service: 'Find Target v34 - UTB Comprehensive Intelligence' });
 });
 
 const PORT = process.env.PORT || 3000;
