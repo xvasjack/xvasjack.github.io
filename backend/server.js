@@ -5346,7 +5346,7 @@ async function conductUTBResearch(companyName, website, additionalContext) {
   };
 }
 
-// Generate comprehensive UTB PDF (10-12 pages)
+// Generate compact UTB PDF (6-8 pages max)
 async function generateUTBPDF(companyName, website, research, additionalContext) {
   return new Promise((resolve, reject) => {
     if (!PDFDocument) {
@@ -5358,7 +5358,7 @@ async function generateUTBPDF(companyName, website, research, additionalContext)
     const chunks = [];
     const doc = new PDFDocument({
       size: 'A4',
-      margins: { top: 50, bottom: 50, left: 50, right: 50 },
+      margins: { top: 50, bottom: 60, left: 50, right: 50 },
       bufferPages: true
     });
 
@@ -5370,567 +5370,333 @@ async function generateUTBPDF(companyName, website, research, additionalContext)
     const navy = '#1a365d';
     const blue = '#2563eb';
     const gray = '#64748b';
-    const lightGray = '#94a3b8';
     const black = '#1e293b';
-    const bgLight = '#f8fafc';
-    const borderLight = '#e2e8f0';
 
-    // Page dimensions
-    const pageWidth = doc.page.width - 100;
-    const leftMargin = 50;
-    const rightMargin = doc.page.width - 50;
+    // Layout
+    const W = doc.page.width - 100; // content width
+    const L = 50; // left margin
 
-    // Helper: Check if we need a new page
-    const checkPageBreak = (requiredSpace = 100) => {
-      if (doc.y > doc.page.height - 80 - requiredSpace) {
-        doc.addPage();
-        doc.y = 50;
-        return true;
-      }
-      return false;
+    // Helpers
+    const truncate = (str, max) => {
+      if (!str) return '';
+      str = String(str);
+      return str.length > max ? str.substring(0, max - 3) + '...' : str;
     };
 
-    // Helper: Page header for subsequent pages
-    const pageHeader = (title, color = navy) => {
-      doc.rect(0, 0, doc.page.width, 45).fill(color);
-      doc.fontSize(16).font('Helvetica-Bold').fillColor('white').text(title, leftMargin, 14);
-      doc.y = 60;
-    };
-
-    // Helper: Section header
-    const sectionHeader = (text, addLine = true) => {
-      checkPageBreak(80);
-      doc.fontSize(13).font('Helvetica-Bold').fillColor(navy).text(text);
-      if (addLine) {
-        doc.moveTo(leftMargin, doc.y + 2).lineTo(rightMargin, doc.y + 2).strokeColor(borderLight).lineWidth(1).stroke();
-      }
-      doc.moveDown(0.5);
-    };
-
-    // Helper: Subsection header
-    const subHeader = (text) => {
-      checkPageBreak(60);
-      doc.fontSize(11).font('Helvetica-Bold').fillColor(blue).text(text);
+    const header = (text, y = null) => {
+      if (y !== null) doc.y = y;
+      doc.fontSize(11).font('Helvetica-Bold').fillColor(navy).text(text, L);
+      doc.moveTo(L, doc.y + 1).lineTo(L + W, doc.y + 1).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
       doc.moveDown(0.3);
     };
 
-    // Helper: Label-value pair
-    const labelValue = (label, value) => {
-      if (!value || value === 'N/A' || value === 'Not disclosed') return;
-      doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text(label + ': ', { continued: true });
-      doc.font('Helvetica').fillColor(black).text(String(value));
-      doc.moveDown(0.15);
+    const label = (lbl, val) => {
+      if (!val || val === 'N/A' || val === 'Not disclosed') return;
+      doc.fontSize(8).font('Helvetica-Bold').fillColor(gray).text(lbl + ': ', L, doc.y, { continued: true });
+      doc.font('Helvetica').fillColor(black).text(truncate(val, 100));
     };
 
-    // Helper: Paragraph
-    const paragraph = (text, indent = 0) => {
-      if (!text || text === 'N/A') return;
-      doc.fontSize(9).font('Helvetica').fillColor(black).text(String(text), leftMargin + indent, doc.y, { align: 'justify', lineGap: 2, width: pageWidth - indent });
-      doc.moveDown(0.4);
+    const para = (text, maxLen = 300) => {
+      if (!text) return;
+      doc.fontSize(8).font('Helvetica').fillColor(black).text(truncate(text, maxLen), L, doc.y, { width: W, lineGap: 1 });
+      doc.moveDown(0.2);
     };
 
-    // Helper: Bullet list
-    const bulletList = (items, indent = 0) => {
-      if (!items || !Array.isArray(items) || items.length === 0) return;
-      items.forEach(item => {
-        if (item && item !== 'Unknown' && item !== 'N/A') {
-          checkPageBreak(20);
-          const text = typeof item === 'object' ? JSON.stringify(item) : String(item);
-          doc.fontSize(9).font('Helvetica').fillColor(black).text('• ' + text, leftMargin + 10 + indent, doc.y, { width: pageWidth - 20 - indent });
-          doc.moveDown(0.15);
+    const bullets = (items, max = 5, maxLen = 80) => {
+      if (!items || !Array.isArray(items)) return;
+      items.slice(0, max).forEach(item => {
+        if (item && item !== 'Unknown') {
+          const text = typeof item === 'object' ? (item.name || item.sector || item.driver || JSON.stringify(item)) : item;
+          doc.fontSize(8).font('Helvetica').fillColor(black).text('• ' + truncate(text, maxLen), L + 8, doc.y, { width: W - 16 });
         }
       });
-      doc.moveDown(0.3);
+      doc.moveDown(0.2);
     };
 
-    // Helper: Info box
-    const infoBox = (content) => {
-      const startY = doc.y;
-      const boxHeight = 20;
-      doc.rect(leftMargin, startY, pageWidth, boxHeight).fill(bgLight).stroke(borderLight);
-      doc.fontSize(8).font('Helvetica').fillColor(gray).text(content, leftMargin + 10, startY + 6, { width: pageWidth - 20 });
-      doc.y = startY + boxHeight + 10;
-    };
-
-    // Helper: Draw a simple table
-    const drawTable = (headers, rows, colWidths) => {
-      checkPageBreak(100);
-      const startX = leftMargin;
-      const rowHeight = 20;
-      const totalWidth = colWidths.reduce((a, b) => a + b, 0);
-
-      // Header row
-      let x = startX;
-      doc.rect(startX, doc.y, totalWidth, rowHeight).fill(navy);
-      headers.forEach((header, i) => {
-        doc.fontSize(8).font('Helvetica-Bold').fillColor('white').text(header, x + 4, doc.y + 5, { width: colWidths[i] - 8 });
-        x += colWidths[i];
+    const table = (headers, rows, widths) => {
+      const total = widths.reduce((a, b) => a + b, 0);
+      let x = L;
+      // Header
+      doc.rect(L, doc.y, total, 14).fill(navy);
+      headers.forEach((h, i) => {
+        doc.fontSize(7).font('Helvetica-Bold').fillColor('white').text(h, x + 2, doc.y + 3, { width: widths[i] - 4 });
+        x += widths[i];
       });
-      doc.y += rowHeight;
-
-      // Data rows
-      rows.forEach((row, rowIndex) => {
-        checkPageBreak(rowHeight + 10);
-        x = startX;
-        const bgColor = rowIndex % 2 === 0 ? bgLight : 'white';
-        doc.rect(startX, doc.y, totalWidth, rowHeight).fill(bgColor).stroke(borderLight);
+      doc.y += 14;
+      // Rows (max 6)
+      rows.slice(0, 6).forEach((row, ri) => {
+        x = L;
+        const bg = ri % 2 === 0 ? '#f8fafc' : 'white';
+        doc.rect(L, doc.y, total, 12).fill(bg);
         row.forEach((cell, i) => {
-          doc.fontSize(8).font('Helvetica').fillColor(black).text(String(cell || '-'), x + 4, doc.y + 5, { width: colWidths[i] - 8 });
-          x += colWidths[i];
+          doc.fontSize(7).font('Helvetica').fillColor(black).text(truncate(cell, 30), x + 2, doc.y + 2, { width: widths[i] - 4 });
+          x += widths[i];
         });
-        doc.y += rowHeight;
+        doc.y += 12;
       });
-      doc.moveDown(0.5);
+      doc.moveDown(0.3);
     };
 
-    // ========== PAGE 1: TITLE PAGE ==========
-    // Navy header block
-    doc.rect(0, 0, doc.page.width, 180).fill(navy);
-    doc.fontSize(12).font('Helvetica').fillColor(lightGray).text('M&A BUYER INTELLIGENCE REPORT', leftMargin, 40);
-    doc.fontSize(32).font('Helvetica-Bold').fillColor('white').text('Understanding The Business', leftMargin, 70, { width: pageWidth });
-    doc.fontSize(18).font('Helvetica').fillColor('white').text(companyName, leftMargin, 130);
-    doc.fontSize(11).fillColor(lightGray).text(website, leftMargin, 155);
+    // ========== PAGE 1: TITLE & EXECUTIVE SUMMARY ==========
+    doc.rect(0, 0, doc.page.width, 120).fill(navy);
+    doc.fontSize(10).font('Helvetica').fillColor('#94a3b8').text('M&A BUYER INTELLIGENCE', L, 30);
+    doc.fontSize(22).font('Helvetica-Bold').fillColor('white').text('Understanding The Business', L, 50);
+    doc.fontSize(14).font('Helvetica').text(companyName, L, 85);
+    doc.fontSize(9).fillColor('#94a3b8').text(website, L, 102);
 
-    doc.y = 200;
+    doc.y = 140;
+    header('Executive Summary');
+    para(synthesis.executive_summary, 500);
 
-    // Executive Summary
-    sectionHeader('Executive Summary');
-    const execSummary = synthesis.executive_summary || 'Executive summary not available.';
-    paragraph(execSummary);
-
-    // Company Snapshot Box
-    doc.moveDown(0.5);
+    // Company Snapshot
+    doc.moveDown(0.3);
     const profile = synthesis.company_profile || {};
-    const financials = synthesis.financials || {};
+    const fin = synthesis.financials || {};
+    doc.rect(L, doc.y, W, 55).fill('#f8fafc').stroke('#e2e8f0');
+    const boxY = doc.y + 8;
+    doc.fontSize(9).font('Helvetica-Bold').fillColor(navy).text('COMPANY SNAPSHOT', L + 10, boxY);
 
-    const snapBoxY = doc.y;
-    doc.rect(leftMargin, snapBoxY, pageWidth, 100).fill(bgLight).stroke(borderLight);
-    doc.fontSize(10).font('Helvetica-Bold').fillColor(navy).text('COMPANY SNAPSHOT', leftMargin + 15, snapBoxY + 12);
+    const c1 = L + 10, c2 = L + 175, c3 = L + 340;
+    let row = boxY + 16;
+    doc.fontSize(7).font('Helvetica');
+    doc.fillColor(gray).text('HQ:', c1, row); doc.fillColor(black).text(truncate(profile.hq_location, 25), c1 + 25, row);
+    doc.fillColor(gray).text('Founded:', c2, row); doc.fillColor(black).text(profile.founded || '-', c2 + 45, row);
+    doc.fillColor(gray).text('Employees:', c3, row); doc.fillColor(black).text(truncate(profile.employees, 15), c3 + 55, row);
+    row += 12;
+    doc.fillColor(gray).text('Revenue:', c1, row); doc.fillColor(black).text(truncate(fin.total_revenue, 25), c1 + 45, row);
+    doc.fillColor(gray).text('Ownership:', c2, row); doc.fillColor(black).text(truncate(profile.ownership_structure, 20), c2 + 55, row);
 
-    const col1 = leftMargin + 15;
-    const col2 = leftMargin + 180;
-    const col3 = leftMargin + 350;
-    let snapRow = snapBoxY + 32;
+    doc.y = boxY + 60;
 
-    doc.fontSize(8).font('Helvetica').fillColor(gray);
-    doc.text('Legal Name:', col1, snapRow);
-    doc.fillColor(black).text(profile.legal_name || companyName, col1 + 60, snapRow);
-    doc.fillColor(gray).text('HQ:', col2, snapRow);
-    doc.fillColor(black).text(profile.hq_location || 'N/A', col2 + 25, snapRow);
-    doc.fillColor(gray).text('Founded:', col3, snapRow);
-    doc.fillColor(black).text(profile.founded || 'N/A', col3 + 50, snapRow);
-
-    snapRow += 16;
-    doc.fillColor(gray).text('Ownership:', col1, snapRow);
-    doc.fillColor(black).text(profile.ownership_structure || 'N/A', col1 + 60, snapRow);
-    doc.fillColor(gray).text('Employees:', col2, snapRow);
-    doc.fillColor(black).text(profile.employees || 'N/A', col2 + 55, snapRow);
-    doc.fillColor(gray).text('Revenue:', col3, snapRow);
-    doc.fillColor(black).text(financials.total_revenue || 'N/A', col3 + 50, snapRow);
-
-    snapRow += 16;
-    doc.fillColor(gray).text('Website:', col1, snapRow);
-    doc.fillColor(blue).text(website, col1 + 60, snapRow);
-
-    doc.y = snapBoxY + 115;
-
-    // Research context if provided
-    if (additionalContext) {
-      doc.moveDown(0.5);
-      infoBox('Research Context: ' + additionalContext.substring(0, 200) + (additionalContext.length > 200 ? '...' : ''));
-    }
-
-    // ========== PAGE 2: FINANCIAL OVERVIEW ==========
-    doc.addPage();
-    pageHeader('Financial Overview');
-
-    // Revenue breakdown
-    sectionHeader('Revenue Analysis');
-    labelValue('Total Revenue', financials.total_revenue);
-    labelValue('Revenue Growth', financials.revenue_growth);
-    labelValue('Key Metrics', financials.key_metrics);
-
-    if (financials.revenue_by_segment && financials.revenue_by_segment.length > 0) {
-      doc.moveDown(0.5);
-      subHeader('Revenue by Business Segment');
-      const segmentRows = financials.revenue_by_segment.map(s => [s.segment || '-', s.revenue || '-', s.description || '-']);
-      drawTable(['Segment', 'Revenue / %', 'Description'], segmentRows, [120, 100, 275]);
-    }
-
-    if (financials.revenue_by_geography && financials.revenue_by_geography.length > 0) {
-      subHeader('Revenue by Geography');
-      const geoRows = financials.revenue_by_geography.map(g => [g.region || '-', g.percentage || '-', g.notes || '-']);
-      drawTable(['Region', '%', 'Notes'], geoRows, [120, 80, 295]);
-    }
-
-    // Profitability
-    const prof = financials.profitability || {};
-    if (prof.operating_margin || prof.ebitda_margin || prof.net_margin) {
-      subHeader('Profitability');
-      labelValue('Operating Margin', prof.operating_margin);
-      labelValue('EBITDA Margin', prof.ebitda_margin);
-      labelValue('Net Margin', prof.net_margin);
-    }
-
-    // Leadership
-    const leadership = synthesis.leadership || {};
-    doc.moveDown(0.5);
-    sectionHeader('Leadership Team');
-    if (leadership.ceo) {
-      labelValue('CEO', `${leadership.ceo.name || 'N/A'} (${leadership.ceo.tenure || 'N/A'})`);
-      if (leadership.ceo.background) {
-        paragraph(leadership.ceo.background, 20);
+    // Leadership (brief)
+    const lead = synthesis.leadership || {};
+    if (lead.ceo) {
+      header('Leadership');
+      label('CEO', `${lead.ceo.name || 'N/A'} - ${truncate(lead.ceo.background, 60)}`);
+      if (lead.key_executives && lead.key_executives.length > 0) {
+        const execs = lead.key_executives.slice(0, 3).map(e => `${e.title}: ${e.name}`).join(' | ');
+        doc.fontSize(7).font('Helvetica').fillColor(gray).text(execs, L);
       }
     }
-    if (leadership.key_executives && leadership.key_executives.length > 0) {
-      subHeader('Key Executives');
-      leadership.key_executives.forEach(exec => {
-        labelValue(exec.title, exec.name);
-        if (exec.background) paragraph(exec.background, 20);
-      });
-    }
 
-    // ========== PAGE 3: PRODUCTS & SERVICES ==========
+    // ========== PAGE 2: PRODUCTS & FINANCIALS ==========
     doc.addPage();
-    pageHeader('Products & Services', blue);
+    doc.rect(0, 0, doc.page.width, 35).fill(blue);
+    doc.fontSize(13).font('Helvetica-Bold').fillColor('white').text('Products & Financial Overview', L, 10);
+    doc.y = 50;
 
-    const products = synthesis.products_and_services || {};
-    if (products.overview) {
-      paragraph(products.overview);
-    }
+    const prod = synthesis.products_and_services || {};
+    header('Products & Services');
+    para(prod.overview, 250);
 
-    if (products.product_lines && products.product_lines.length > 0) {
-      sectionHeader('Product Lines');
-      products.product_lines.forEach(line => {
-        checkPageBreak(80);
-        subHeader(line.name || 'Product Line');
-        paragraph(line.description);
-        if (line.key_products && line.key_products.length > 0) {
-          doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Key Products:');
-          bulletList(line.key_products, 10);
+    if (prod.product_lines && prod.product_lines.length > 0) {
+      prod.product_lines.slice(0, 4).forEach(line => {
+        doc.fontSize(9).font('Helvetica-Bold').fillColor(blue).text(truncate(line.name, 40), L);
+        doc.fontSize(7).font('Helvetica').fillColor(black).text(truncate(line.description, 150), L);
+        if (line.key_products) {
+          doc.fontSize(7).fillColor(gray).text('Products: ' + line.key_products.slice(0, 3).join(', '), L);
         }
-        labelValue('Target Market', line.target_market);
-        labelValue('Competitive Position', line.competitive_position);
-        doc.moveDown(0.3);
+        doc.moveDown(0.2);
       });
     }
 
-    if (products.services && products.services.length > 0) {
-      sectionHeader('Services');
-      products.services.forEach(svc => {
-        labelValue(svc.name, svc.description);
-      });
+    doc.moveDown(0.3);
+    header('Financial Breakdown');
+    label('Total Revenue', fin.total_revenue);
+    label('Growth', fin.revenue_growth);
+
+    if (fin.revenue_by_segment && fin.revenue_by_segment.length > 0) {
+      doc.moveDown(0.2);
+      doc.fontSize(8).font('Helvetica-Bold').fillColor(gray).text('Revenue by Segment:', L);
+      const segRows = fin.revenue_by_segment.slice(0, 5).map(s => [s.segment, s.revenue, truncate(s.description, 40)]);
+      table(['Segment', 'Revenue', 'Description'], segRows, [100, 80, 160]);
     }
 
-    if (products.technology_ip && products.technology_ip.length > 0) {
-      sectionHeader('Technology & Intellectual Property');
-      bulletList(products.technology_ip);
+    if (fin.revenue_by_geography && fin.revenue_by_geography.length > 0) {
+      doc.fontSize(8).font('Helvetica-Bold').fillColor(gray).text('Revenue by Geography:', L);
+      const geoRows = fin.revenue_by_geography.slice(0, 5).map(g => [g.region, g.percentage]);
+      table(['Region', 'Share'], geoRows, [120, 80]);
     }
 
-    // ========== PAGE 4: OPERATIONS ==========
-    const operations = synthesis.operations || {};
-    if (operations.manufacturing_footprint || operations.rd_centers || operations.global_presence) {
-      doc.addPage();
-      pageHeader('Operations & Footprint');
-
-      if (operations.manufacturing_footprint && operations.manufacturing_footprint.length > 0) {
-        sectionHeader('Manufacturing Footprint');
-        const mfgRows = operations.manufacturing_footprint.map(m => [m.location || '-', m.function || '-', m.capacity || '-']);
-        drawTable(['Location', 'Function', 'Capacity'], mfgRows, [150, 200, 145]);
-      }
-
-      if (operations.rd_centers && operations.rd_centers.length > 0) {
-        sectionHeader('R&D Centers');
-        const rdRows = operations.rd_centers.map(r => [r.location || '-', r.focus || '-']);
-        drawTable(['Location', 'Focus Area'], rdRows, [150, 345]);
-      }
-
-      if (operations.global_presence) {
-        sectionHeader('Global Presence');
-        labelValue('Countries with Operations', operations.global_presence.countries_with_operations);
-        if (operations.global_presence.key_markets) {
-          doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Key Markets:');
-          bulletList(operations.global_presence.key_markets);
-        }
-        labelValue('Recent Expansions', operations.global_presence.recent_expansions);
-      }
-    }
-
-    // ========== PAGE 5: COMPETITIVE LANDSCAPE ==========
+    // ========== PAGE 3: OPERATIONS & COMPETITION ==========
     doc.addPage();
-    pageHeader('Competitive Landscape');
+    doc.rect(0, 0, doc.page.width, 35).fill(navy);
+    doc.fontSize(13).font('Helvetica-Bold').fillColor('white').text('Operations & Competitive Landscape', L, 10);
+    doc.y = 50;
 
-    const competitive = synthesis.competitive_landscape || {};
-    const market = competitive.market_overview || {};
-
-    sectionHeader('Market Overview');
-    labelValue('Market Size', market.market_size);
-    labelValue('Growth Rate', market.growth_rate);
-    if (market.key_trends && market.key_trends.length > 0) {
-      doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Key Market Trends:');
-      bulletList(market.key_trends);
+    const ops = synthesis.operations || {};
+    if (ops.manufacturing_footprint && ops.manufacturing_footprint.length > 0) {
+      header('Manufacturing Footprint');
+      const mfgRows = ops.manufacturing_footprint.slice(0, 5).map(m => [m.location, truncate(m.function, 35), m.capacity || '-']);
+      table(['Location', 'Function', 'Capacity'], mfgRows, [130, 180, 80]);
     }
 
-    const position = competitive.company_position || {};
-    sectionHeader('Company Positioning');
-    labelValue('Market Share', position.market_share);
-    labelValue('Positioning', position.positioning);
-    if (position.key_strengths && position.key_strengths.length > 0) {
-      doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Competitive Strengths:');
-      bulletList(position.key_strengths);
-    }
-    if (position.key_weaknesses && position.key_weaknesses.length > 0) {
-      doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Competitive Gaps:');
-      bulletList(position.key_weaknesses);
+    const comp = synthesis.competitive_landscape || {};
+    header('Competitive Position');
+    const pos = comp.company_position || {};
+    label('Market Share', pos.market_share);
+    label('Positioning', pos.positioning);
+
+    if (pos.key_strengths) {
+      doc.fontSize(8).font('Helvetica-Bold').fillColor(gray).text('Strengths:', L);
+      bullets(pos.key_strengths, 4, 70);
     }
 
-    if (competitive.competitors && competitive.competitors.length > 0) {
-      sectionHeader('Key Competitors');
-      const compRows = competitive.competitors.map(c => [c.name || '-', c.hq || '-', c.revenue || '-', c.key_differentiator || '-', c.threat_level || '-']);
-      drawTable(['Company', 'HQ', 'Revenue', 'Differentiator', 'Threat'], compRows, [100, 60, 80, 180, 75]);
+    if (comp.competitors && comp.competitors.length > 0) {
+      header('Key Competitors');
+      const compRows = comp.competitors.slice(0, 6).map(c => [c.name, c.hq, c.revenue, c.threat_level]);
+      table(['Company', 'HQ', 'Revenue', 'Threat'], compRows, [110, 70, 100, 60]);
     }
 
-    if (competitive.competitive_dynamics) {
-      doc.moveDown(0.5);
-      subHeader('Competitive Dynamics');
-      paragraph(competitive.competitive_dynamics);
-    }
-
-    // ========== PAGE 6-7: M&A ANALYSIS ==========
+    // ========== PAGE 4: M&A HISTORY & APPETITE ==========
     doc.addPage();
-    pageHeader('M&A Track Record & Analysis', navy);
+    doc.rect(0, 0, doc.page.width, 35).fill(blue);
+    doc.fontSize(13).font('Helvetica-Bold').fillColor('white').text('M&A Analysis', L, 10);
+    doc.y = 50;
 
     const maTrack = synthesis.ma_track_record || {};
-
     if (maTrack.acquisition_history && maTrack.acquisition_history.length > 0) {
-      sectionHeader('Acquisition History');
-      const acqRows = maTrack.acquisition_history.map(a => [a.year || '-', a.target || '-', a.deal_value || '-', a.rationale || '-']);
-      drawTable(['Year', 'Target', 'Value', 'Rationale'], acqRows, [50, 120, 80, 245]);
-    }
-
-    if (maTrack.partnerships_jvs && maTrack.partnerships_jvs.length > 0) {
-      sectionHeader('Strategic Partnerships & JVs');
-      const partRows = maTrack.partnerships_jvs.map(p => [p.partner || '-', p.year || '-', p.nature || '-']);
-      drawTable(['Partner', 'Year', 'Nature'], partRows, [150, 60, 285]);
+      header('Acquisition History');
+      const acqRows = maTrack.acquisition_history.slice(0, 5).map(a => [a.year, a.target, a.deal_value, truncate(a.rationale, 35)]);
+      table(['Year', 'Target', 'Value', 'Rationale'], acqRows, [45, 100, 70, 175]);
     }
 
     if (maTrack.pattern_analysis) {
-      subHeader('M&A Pattern Analysis');
-      paragraph(maTrack.pattern_analysis);
+      doc.fontSize(8).font('Helvetica-Bold').fillColor(gray).text('M&A Pattern:', L);
+      para(maTrack.pattern_analysis, 200);
     }
 
-    // Acquisition Appetite
     const appetite = synthesis.acquisition_appetite || {};
-    doc.addPage();
-    pageHeader('Acquisition Appetite Analysis', blue);
+    header('Acquisition Appetite');
+    if (appetite.likely_deal_size) {
+      label('Target Deal Size', appetite.likely_deal_size.range);
+    }
+    label('Deal Structure', appetite.preferred_deal_structure);
+    if (appetite.urgency) {
+      label('Urgency', appetite.urgency.level);
+    }
 
     if (appetite.strategic_drivers && appetite.strategic_drivers.length > 0) {
-      sectionHeader('Strategic Drivers for M&A');
-      const driverRows = appetite.strategic_drivers.map(d => [d.driver || '-', d.evidence || '-', d.priority || '-']);
-      drawTable(['Driver', 'Evidence', 'Priority'], driverRows, [120, 300, 75]);
+      doc.moveDown(0.2);
+      doc.fontSize(8).font('Helvetica-Bold').fillColor(gray).text('Strategic Drivers:', L);
+      bullets(appetite.strategic_drivers.map(d => `${d.driver} (${d.priority})`), 4, 80);
     }
 
-    sectionHeader('Deal Parameters');
-    if (appetite.likely_deal_size) {
-      labelValue('Likely Deal Size', appetite.likely_deal_size.range);
-      if (appetite.likely_deal_size.rationale) paragraph(appetite.likely_deal_size.rationale, 20);
-    }
-    labelValue('Preferred Deal Structure', appetite.preferred_deal_structure);
-    if (appetite.urgency) {
-      labelValue('Urgency', appetite.urgency.level);
-      if (appetite.urgency.rationale) paragraph(appetite.urgency.rationale, 20);
+    // ========== PAGE 5: TARGET PROFILE & MATRIX ==========
+    doc.addPage();
+    doc.rect(0, 0, doc.page.width, 35).fill(navy);
+    doc.fontSize(13).font('Helvetica-Bold').fillColor('white').text('Target Acquisition Profile', L, 10);
+    doc.y = 50;
+
+    const tp = synthesis.target_profile || {};
+
+    if (tp.industries_of_interest && tp.industries_of_interest.length > 0) {
+      header('Industries of Interest');
+      const indRows = tp.industries_of_interest.slice(0, 5).map(i => [i.sector, i.interest_level, truncate(i.rationale, 50)]);
+      table(['Sector', 'Interest', 'Rationale'], indRows, [120, 50, 220]);
     }
 
-    // Target Profile
-    const targetProfile = synthesis.target_profile || {};
-    sectionHeader('Target Acquisition Profile');
-
-    if (targetProfile.industries_of_interest && targetProfile.industries_of_interest.length > 0) {
-      subHeader('Industries of Interest');
-      const indRows = targetProfile.industries_of_interest.map(i => [i.sector || '-', i.interest_level || '-', i.rationale || '-']);
-      drawTable(['Sector', 'Interest', 'Rationale'], indRows, [120, 60, 315]);
+    if (tp.geographic_preferences && tp.geographic_preferences.length > 0) {
+      header('Geographic Preferences');
+      const geoRows = tp.geographic_preferences.slice(0, 5).map(g => [g.region, g.interest_level, truncate(g.rationale, 50)]);
+      table(['Region', 'Interest', 'Rationale'], geoRows, [100, 50, 240]);
     }
 
-    if (targetProfile.geographic_preferences && targetProfile.geographic_preferences.length > 0) {
-      subHeader('Geographic Preferences');
-      const geoRows = targetProfile.geographic_preferences.map(g => [g.region || '-', g.interest_level || '-', g.rationale || '-']);
-      drawTable(['Region', 'Interest', 'Rationale'], geoRows, [120, 60, 315]);
-    }
+    label('Company Stage', tp.company_stage);
 
-    labelValue('Company Stage Preference', targetProfile.company_stage);
-    if (targetProfile.capabilities_sought && targetProfile.capabilities_sought.length > 0) {
-      doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Capabilities Sought:');
-      bulletList(targetProfile.capabilities_sought);
-    }
-    if (targetProfile.exclusions && targetProfile.exclusions.length > 0) {
-      doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Likely Exclusions:');
-      bulletList(targetProfile.exclusions);
+    if (tp.capabilities_sought && tp.capabilities_sought.length > 0) {
+      doc.fontSize(8).font('Helvetica-Bold').fillColor(gray).text('Capabilities Sought:', L);
+      bullets(tp.capabilities_sought, 4, 80);
     }
 
     // Country-Sector Matrix
     const matrix = synthesis.country_sector_matrix || {};
     if (matrix.sectors && matrix.countries && matrix.matrix) {
-      doc.addPage();
-      pageHeader('M&A Interest Matrix');
+      doc.moveDown(0.3);
+      header('Country x Sector Interest Matrix');
 
-      sectionHeader('Country x Sector Interest Matrix');
-      if (matrix.explanation) {
-        infoBox(matrix.explanation);
-      }
-
-      // Build matrix table
-      const sectors = matrix.sectors || [];
-      const countries = matrix.countries || [];
-      const matrixData = matrix.matrix || {};
+      const sectors = (matrix.sectors || []).slice(0, 5);
+      const countries = (matrix.countries || []).slice(0, 6);
+      const mData = matrix.matrix || {};
 
       if (sectors.length > 0 && countries.length > 0) {
-        const colWidth = Math.min(70, (pageWidth - 80) / sectors.length);
-        const colWidths = [80, ...sectors.map(() => colWidth)];
-        const headers = ['Country', ...sectors];
-
+        const cw = Math.floor((W - 70) / sectors.length);
+        const widths = [70, ...sectors.map(() => cw)];
+        const hdrs = ['Country', ...sectors.map(s => truncate(s, 10))];
         const rows = countries.map(country => {
-          const countryData = matrixData[country] || {};
-          return [country, ...sectors.map((sector, i) => {
-            // Handle different matrix key formats
-            const key = sector.toLowerCase().replace(/\s+/g, '_');
-            const key2 = `sector${i + 1}`;
-            return countryData[key] || countryData[key2] || countryData[sector] || '-';
+          const cd = mData[country] || {};
+          return [truncate(country, 12), ...sectors.map((s, i) => {
+            const k = s.toLowerCase().replace(/\s+/g, '_');
+            return cd[k] || cd[s] || cd[`sector${i+1}`] || '-';
           })];
         });
-
-        drawTable(headers, rows, colWidths);
-
-        // Legend
-        doc.moveDown(0.5);
-        doc.fontSize(8).font('Helvetica').fillColor(gray)
-          .text('H = High Interest  |  M = Medium Interest  |  L = Low Interest  |  N = No Interest', { align: 'center' });
+        table(hdrs, rows, widths);
+        doc.fontSize(7).fillColor(gray).text('H=High  M=Medium  L=Low  N=None', L, doc.y, { align: 'center', width: W });
       }
     }
 
-    // ========== PAGE 8: ENGAGEMENT STRATEGY ==========
+    // ========== PAGE 6: ENGAGEMENT STRATEGY ==========
     doc.addPage();
-    pageHeader('Engagement Strategy', navy);
-
-    const engagement = synthesis.engagement_strategy || {};
-
-    if (engagement.key_decision_makers && engagement.key_decision_makers.length > 0) {
-      sectionHeader('Key Decision Makers');
-      engagement.key_decision_makers.forEach(dm => {
-        checkPageBreak(60);
-        const nameTitle = `${dm.name || 'Name TBD'} - ${dm.title || 'Title TBD'}`;
-        doc.fontSize(10).font('Helvetica-Bold').fillColor(black).text(nameTitle);
-        labelValue('Role in M&A', dm.role_in_ma);
-        labelValue('Approach', dm.approach);
-        doc.moveDown(0.3);
-      });
-    }
-
-    if (engagement.hot_buttons && engagement.hot_buttons.length > 0) {
-      sectionHeader('Hot Buttons (What Excites Them)');
-      engagement.hot_buttons.forEach(hb => {
-        checkPageBreak(50);
-        doc.fontSize(9).font('Helvetica-Bold').fillColor(blue).text('• ' + (hb.topic || 'Topic'));
-        labelValue('Evidence', hb.evidence);
-        labelValue('How to Leverage', hb.how_to_leverage);
-        doc.moveDown(0.2);
-      });
-    }
-
-    if (engagement.concerns_objections && engagement.concerns_objections.length > 0) {
-      sectionHeader('Potential Concerns & Objections');
-      engagement.concerns_objections.forEach(co => {
-        checkPageBreak(50);
-        doc.fontSize(9).font('Helvetica-Bold').fillColor('#dc2626').text('• ' + (co.concern || 'Concern'));
-        labelValue('Evidence', co.evidence);
-        labelValue('How to Address', co.how_to_address);
-        doc.moveDown(0.2);
-      });
-    }
-
-    const approach = engagement.recommended_approach || {};
-    if (approach.positioning || approach.key_messages) {
-      sectionHeader('Recommended Approach');
-      labelValue('Positioning', approach.positioning);
-      labelValue('Timing', approach.timing);
-      labelValue('Channel', approach.channel);
-      if (approach.key_messages && approach.key_messages.length > 0) {
-        doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Key Messages:');
-        bulletList(approach.key_messages);
-      }
-    }
-
-    if (engagement.next_steps && engagement.next_steps.length > 0) {
-      sectionHeader('Recommended Next Steps');
-      const stepRows = engagement.next_steps.map(s => [s.action || '-', s.priority || '-', s.owner || '-']);
-      drawTable(['Action', 'Priority', 'Owner'], stepRows, [320, 75, 100]);
-    }
-
-    // ========== LOCAL INSIGHTS (if available) ==========
-    const localInsights = synthesis.local_insights;
-    if (localInsights) {
-      doc.addPage();
-      pageHeader(`Local Market Insights (${metadata?.localLanguage || 'Local'})`);
-
-      if (localInsights.reputation) {
-        sectionHeader('Local Reputation');
-        paragraph(localInsights.reputation);
-      }
-
-      if (localInsights.key_findings && localInsights.key_findings.length > 0) {
-        sectionHeader('Key Findings from Local Sources');
-        bulletList(localInsights.key_findings);
-      }
-
-      if (localInsights.recent_developments) {
-        sectionHeader('Recent Developments');
-        paragraph(localInsights.recent_developments);
-      }
-
-      if (localInsights.cultural_considerations) {
-        sectionHeader('Cultural Considerations');
-        paragraph(localInsights.cultural_considerations);
-      }
-    }
-
-    // ========== FINAL PAGE: DISCLAIMER ==========
-    doc.addPage();
+    doc.rect(0, 0, doc.page.width, 35).fill(blue);
+    doc.fontSize(13).font('Helvetica-Bold').fillColor('white').text('Engagement Strategy', L, 10);
     doc.y = 50;
-    sectionHeader('Disclaimer & Notes');
 
-    doc.fontSize(8).font('Helvetica').fillColor(gray);
-    doc.text('This report is generated for internal M&A advisory purposes only. The information contained herein is based on publicly available sources and AI-assisted analysis.', leftMargin, doc.y, { width: pageWidth, align: 'justify' });
-    doc.moveDown(0.5);
-    doc.text('Key limitations:', leftMargin, doc.y);
-    doc.moveDown(0.3);
-    doc.text('• Information may be incomplete or outdated. Always verify critical facts through primary research.', leftMargin + 10, doc.y, { width: pageWidth - 10 });
-    doc.moveDown(0.2);
-    doc.text('• M&A appetite and interest levels are inferred from available evidence and may not reflect actual intentions.', leftMargin + 10, doc.y, { width: pageWidth - 10 });
-    doc.moveDown(0.2);
-    doc.text('• Financial data should be confirmed against official filings and audited statements.', leftMargin + 10, doc.y, { width: pageWidth - 10 });
-    doc.moveDown(0.2);
-    doc.text('• Competitive analysis is based on publicly available information only.', leftMargin + 10, doc.y, { width: pageWidth - 10 });
+    const eng = synthesis.engagement_strategy || {};
 
-    doc.moveDown(1);
-    doc.fontSize(9).font('Helvetica-Bold').fillColor(black).text('Report Details:');
-    doc.moveDown(0.3);
-    doc.fontSize(8).font('Helvetica').fillColor(gray);
-    doc.text(`Company: ${companyName}`, leftMargin, doc.y);
-    doc.text(`Website: ${website}`, leftMargin, doc.y + 12);
-    doc.text(`Generated: ${new Date().toLocaleString()}`, leftMargin, doc.y + 24);
-    if (metadata?.localLanguage) {
-      doc.text(`Local Language Search: ${metadata.localLanguage}`, leftMargin, doc.y + 36);
+    if (eng.key_decision_makers && eng.key_decision_makers.length > 0) {
+      header('Key Decision Makers');
+      eng.key_decision_makers.slice(0, 3).forEach(dm => {
+        doc.fontSize(9).font('Helvetica-Bold').fillColor(black).text(`${dm.name || 'TBD'} - ${dm.title || 'Executive'}`, L);
+        doc.fontSize(7).font('Helvetica').fillColor(gray).text(truncate(dm.approach, 100), L);
+        doc.moveDown(0.2);
+      });
     }
 
-    // Add page numbers to all pages
+    if (eng.hot_buttons && eng.hot_buttons.length > 0) {
+      header('Hot Buttons');
+      eng.hot_buttons.slice(0, 3).forEach(hb => {
+        doc.fontSize(8).font('Helvetica-Bold').fillColor(blue).text('• ' + truncate(hb.topic, 40), L);
+        doc.fontSize(7).font('Helvetica').fillColor(black).text(truncate(hb.how_to_leverage, 80), L + 10);
+      });
+      doc.moveDown(0.2);
+    }
+
+    if (eng.concerns_objections && eng.concerns_objections.length > 0) {
+      header('Potential Concerns');
+      eng.concerns_objections.slice(0, 3).forEach(co => {
+        doc.fontSize(8).font('Helvetica-Bold').fillColor('#dc2626').text('• ' + truncate(co.concern, 40), L);
+        doc.fontSize(7).font('Helvetica').fillColor(black).text(truncate(co.how_to_address, 80), L + 10);
+      });
+      doc.moveDown(0.2);
+    }
+
+    const appr = eng.recommended_approach || {};
+    if (appr.positioning || appr.key_messages) {
+      header('Recommended Approach');
+      para(appr.positioning, 150);
+      if (appr.key_messages) {
+        bullets(appr.key_messages, 3, 70);
+      }
+    }
+
+    if (eng.next_steps && eng.next_steps.length > 0) {
+      header('Next Steps');
+      const stepRows = eng.next_steps.slice(0, 4).map(s => [truncate(s.action, 50), s.priority]);
+      table(['Action', 'Priority'], stepRows, [280, 60]);
+    }
+
+    // Footer on last page
+    doc.moveDown(1);
+    doc.fontSize(7).font('Helvetica').fillColor(gray)
+      .text(`Generated: ${new Date().toLocaleDateString()} | ${website}`, L, doc.y, { width: W, align: 'center' });
+    doc.text('For internal M&A advisory use only.', { align: 'center' });
+
+    // Page numbers
     const range = doc.bufferedPageRange();
     for (let i = 0; i < range.count; i++) {
       doc.switchToPage(i);
-      // Footer line
-      doc.moveTo(leftMargin, doc.page.height - 40).lineTo(rightMargin, doc.page.height - 40).strokeColor(borderLight).lineWidth(0.5).stroke();
-      // Page number
-      doc.fontSize(8).font('Helvetica').fillColor(gray).text(`Page ${i + 1} of ${range.count}`, leftMargin, doc.page.height - 30, { width: pageWidth, align: 'center' });
-      // Company name in footer
-      doc.fontSize(7).text(`UTB: ${companyName}`, leftMargin, doc.page.height - 30);
+      doc.fontSize(7).font('Helvetica').fillColor(gray)
+        .text(`${i + 1}/${range.count}`, doc.page.width - 70, doc.page.height - 40);
     }
 
     doc.flushPages();
@@ -5966,28 +5732,12 @@ app.post('/api/utb', async (req, res) => {
     // Send email with attachment
     await sendEmail(
       email,
-      `UTB: ${companyName} - M&A Buyer Intelligence`,
-      `<div style="font-family:Arial,sans-serif;max-width:600px;">
-        <div style="background:#1a365d;padding:20px;border-radius:8px 8px 0 0;">
-          <h1 style="color:white;margin:0;font-size:18px;">Understanding The Business</h1>
-          <p style="color:#94a3b8;margin:5px 0 0 0;font-size:14px;">M&A Buyer Intelligence Report</p>
-        </div>
-        <div style="background:#f8fafc;padding:20px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;">
-          <h2 style="color:#1a365d;margin:0 0 10px 0;font-size:20px;">${companyName}</h2>
-          <p style="color:#64748b;margin:0 0 15px 0;font-size:14px;">${website}</p>
-          <p style="color:#1e293b;margin:0 0 10px 0;">Your comprehensive UTB report is attached.</p>
-          <p style="color:#64748b;margin:0 0 15px 0;font-size:13px;">This report includes:</p>
-          <ul style="color:#64748b;margin:0 0 15px 0;padding-left:20px;font-size:13px;">
-            <li>Executive Summary & Company Profile</li>
-            <li>Financial Overview & Leadership</li>
-            <li>Products, Services & Operations</li>
-            <li>Competitive Landscape Analysis</li>
-            <li>M&A Track Record & Acquisition Appetite</li>
-            <li>Country-Sector Interest Matrix</li>
-            <li>Engagement Strategy & Next Steps</li>
-          </ul>
-          <p style="font-size:12px;color:#94a3b8;margin:0;">Generated: ${new Date().toLocaleString()}</p>
-        </div>
+      `UTB: ${companyName}`,
+      `<div style="font-family:Arial,sans-serif;max-width:500px;">
+        <h2 style="color:#1a365d;margin-bottom:5px;">${companyName}</h2>
+        <p style="color:#64748b;margin-top:0;">${website}</p>
+        <p>Your 6-page UTB report is attached.</p>
+        <p style="font-size:12px;color:#94a3b8;">Generated: ${new Date().toLocaleString()}</p>
       </div>`,
       { content: pdfBase64, name: `UTB_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf` }
     );
@@ -5995,20 +5745,12 @@ app.post('/api/utb', async (req, res) => {
     console.log(`[UTB] Report sent successfully to ${email}`);
   } catch (error) {
     console.error('[UTB] Error:', error);
-    await sendEmail(
-      email,
-      `UTB Error - ${companyName}`,
-      `<div style="font-family:Arial,sans-serif;">
-        <p style="color:#dc2626;">We encountered an error generating the UTB report for ${companyName}.</p>
-        <p style="color:#64748b;">Error: ${error.message}</p>
-        <p style="color:#64748b;">Please try again or contact support if the issue persists.</p>
-      </div>`
-    ).catch(() => {});
+    await sendEmail(email, `UTB Error - ${companyName}`, `<p>Error: ${error.message}</p>`).catch(() => {});
   }
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v34 - UTB Comprehensive Intelligence' });
+  res.json({ status: 'ok', service: 'Find Target v35 - UTB Compact' });
 });
 
 const PORT = process.env.PORT || 3000;
