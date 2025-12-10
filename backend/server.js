@@ -2492,14 +2492,18 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     const excelBuffer = XLSX.write(outputWorkbook, { type: 'base64', bookType: 'xlsx' });
 
     // Generate PPT slide - matching trading comps template exactly
-    // Reference: trading comps slide ref.pptx breakdown:
-    // - Title: "Trading Comparable – {Target}"
-    // - Subtitle: "Considering financial data availability, profitability and business relevance, {N} companies are considered as peers"
-    // - Table: 10 columns with 2 header rows (merged cells for "Financial Information (USD M)" and "Multiples")
-    // - Columns: Company Name | Country | Sales | Market Cap | EV | EBITDA | Net Margin | EV/ EBITDA | PER | PBR
-    // - Data format: "#. Company Name", numbers with commas, percentages with %, multiples with x
-    // - Median row: only shows EV/EBITDA, PER, PBR values
-    // - Footer: "Note: EV (Enterprise Value)", "Data as of {date}", "Source: Speeda"
+    // POSITIONS FROM REFERENCE:
+    // - Title/message: x=0.38", y=0.05"
+    // - Table: x=0.38", y=1.47"
+    // - Footnote: x=0.38", y=6.66"
+    // FORMATTING:
+    // - Title: font 24, not bold, same text box as message
+    // - Message: font 16, below title
+    // - Table: dotted borders, 2 header rows
+    // - Header row 1: dark blue (#011AB7), white text
+    // - Header row 2: light blue (#B4C6E7), black text
+    // - Median: in Net Margin column, colored background
+    // - Cell margins: left/right 0.04", top/bottom 0"
 
     const pptx = new pptxgen();
     pptx.author = 'YCP';
@@ -2511,25 +2515,60 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
 
     // Template colors (from reference PPTX)
     const COLORS = {
-      headerBlue: '011AB7',      // Blue for merged header cells
-      tableHeaderText: 'FFFFFF', // White text on headers
-      tableBorder: 'FFFFFF',     // White borders between cells
-      black: '000000',
-      white: 'FFFFFF'
+      headerDarkBlue: '011AB7',   // Dark blue for row 1 merged headers
+      headerLightBlue: 'B4C6E7',  // Light blue for row 2 column headers
+      medianBlue: '011AB7',       // Blue for median row
+      white: 'FFFFFF',
+      black: '000000'
     };
 
     const slide = pptx.addSlide();
 
-    // ===== TITLE (using slide title placeholder style) =====
-    // Title with subtitle on next line, matching reference format
+    // ===== TITLE + MESSAGE (same text box) =====
+    // Position: x=0.38", y=0.05" from top left corner
+    // Title: font 24, NOT bold
+    // Message: font 16, below title
     slide.addText([
-      { text: `Trading Comparable – ${TargetCompanyOrIndustry}`, options: { fontSize: 28, bold: true, fontFace: 'Segoe UI', breakLine: true } },
+      { text: `Trading Comparable – ${TargetCompanyOrIndustry}`, options: { fontSize: 24, bold: false, fontFace: 'Segoe UI', breakLine: true } },
       { text: `Considering financial data availability, profitability and business relevance, ${finalCompanies.length} companies are considered as peers`, options: { fontSize: 16, bold: false, fontFace: 'Segoe UI' } }
     ], {
-      x: 0.36, y: 0.25, w: 12.6, h: 0.85,
+      x: 0.38, y: 0.05, w: 12.5, h: 1.2,
       color: COLORS.black,
       valign: 'top'
     });
+
+    // Helper function to clean company name (remove suffixes like Bhd, PCL, JSC, Ltd, Inc, etc.)
+    const cleanCompanyName = (name) => {
+      if (!name) return '-';
+      // Remove common corporate suffixes
+      const suffixes = [
+        /\s+(Bhd|BHD|Berhad|BERHAD)\.?$/i,
+        /\s+(PCL|Pcl|P\.C\.L\.)\.?$/i,
+        /\s+(JSC|Jsc|J\.S\.C\.)\.?$/i,
+        /\s+(Ltd|LTD|Limited|LIMITED)\.?$/i,
+        /\s+(Inc|INC|Incorporated|INCORPORATED)\.?$/i,
+        /\s+(Corp|CORP|Corporation|CORPORATION)\.?$/i,
+        /\s+(Co|CO|Company|COMPANY)\.?,?\s*(Ltd|LTD|Limited)?\.?$/i,
+        /\s+(PLC|Plc|P\.L\.C\.)\.?$/i,
+        /\s+(AG|A\.G\.)\.?$/i,
+        /\s+(SA|S\.A\.|S\.A)\.?$/i,
+        /\s+(NV|N\.V\.)\.?$/i,
+        /\s+(GmbH|GMBH)\.?$/i,
+        /\s+(Tbk|TBK|PT)\.?$/i,
+        /\s+(Oyj|OYJ|AB)\.?$/i,
+        /\s+(SE)\.?$/i,
+        /\s+(SpA|SPA|S\.p\.A\.)\.?$/i,
+        /\s+(Pte|PTE)\.?\s*(Ltd|LTD)?\.?$/i,
+        /\s+(Sdn|SDN)\.?\s*(Bhd|BHD)?\.?$/i,
+        /,\s*(Inc|Ltd|LLC|Corp)\.?$/i
+      ];
+
+      let cleaned = String(name).trim();
+      for (const suffix of suffixes) {
+        cleaned = cleaned.replace(suffix, '');
+      }
+      return cleaned.trim();
+    };
 
     // Helper function to format financial numbers (with commas, no decimals)
     const formatFinNum = (val) => {
@@ -2559,37 +2598,47 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     };
 
     // ===== TABLE =====
-    // Styles matching reference PPTX
-    const subHeaderStyle = {
+    // Cell margin settings: left/right 0.04", top/bottom 0"
+    const cellMargin = [0, 0.04, 0, 0.04]; // [top, right, bottom, left] in inches
+
+    // Row 1 style: dark blue background, white text (for merged headers)
+    const row1Style = {
       bold: false,
-      fill: COLORS.headerBlue,
-      color: COLORS.tableHeaderText,
+      fill: COLORS.headerDarkBlue,
+      color: COLORS.white,
       fontFace: 'Segoe UI',
       valign: 'middle',
-      align: 'center'
+      align: 'center',
+      margin: cellMargin
     };
 
-    const headerStyle = {
+    // Row 2 style: light blue background, black text (for column headers)
+    const row2Style = {
       bold: false,
-      fill: COLORS.headerBlue,
-      color: COLORS.tableHeaderText,
+      fill: COLORS.headerLightBlue,
+      color: COLORS.black,
       fontFace: 'Segoe UI',
-      valign: 'middle'
+      valign: 'middle',
+      margin: cellMargin
     };
 
+    // Data row style: white background, black text
     const dataStyle = {
       fill: COLORS.white,
       color: COLORS.black,
       fontFace: 'Segoe UI',
-      valign: 'middle'
+      valign: 'middle',
+      margin: cellMargin
     };
 
+    // Median row style: blue background, white text
     const medianStyle = {
       bold: true,
-      fill: COLORS.white,
-      color: COLORS.black,
+      fill: COLORS.medianBlue,
+      color: COLORS.white,
       fontFace: 'Segoe UI',
-      valign: 'middle'
+      valign: 'middle',
+      margin: cellMargin
     };
 
     // Build table rows
@@ -2597,36 +2646,36 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
 
     // Header row 1: merged cells for "Financial Information (USD M)" and "Multiples"
     tableRows.push([
-      { text: '', options: { ...subHeaderStyle, fill: COLORS.white } },  // Company Name col - empty
-      { text: '', options: { ...subHeaderStyle, fill: COLORS.white } },  // Country col - empty
-      { text: 'Financial Information (USD M)', options: { ...subHeaderStyle, colspan: 5 } },
-      { text: 'Multiples', options: { ...subHeaderStyle, colspan: 3 } }
+      { text: '', options: { ...row1Style, fill: COLORS.white } },  // Company Name col - empty (white bg)
+      { text: '', options: { ...row1Style, fill: COLORS.white } },  // Country col - empty (white bg)
+      { text: 'Financial Information (USD M)', options: { ...row1Style, colspan: 5 } },
+      { text: 'Multiples', options: { ...row1Style, colspan: 3 } }
     ]);
 
-    // Header row 2: actual column headers
+    // Header row 2: actual column headers (light blue background, black text)
     tableRows.push([
-      { text: 'Company Name', options: { ...headerStyle, align: 'left' } },
-      { text: 'Country', options: { ...headerStyle, align: 'center' } },
-      { text: 'Sales', options: { ...headerStyle, align: 'center' } },
-      { text: 'Market Cap', options: { ...headerStyle, align: 'center' } },
-      { text: 'EV', options: { ...headerStyle, align: 'center' } },
-      { text: 'EBITDA', options: { ...headerStyle, align: 'center' } },
-      { text: 'Net Margin', options: { ...headerStyle, align: 'center' } },
-      { text: 'EV/ EBITDA', options: { ...headerStyle, align: 'center' } },
-      { text: 'PER', options: { ...headerStyle, align: 'center' } },
-      { text: 'PBR', options: { ...headerStyle, align: 'center' } }
+      { text: 'Company Name', options: { ...row2Style, align: 'left' } },
+      { text: 'Country', options: { ...row2Style, align: 'center' } },
+      { text: 'Sales', options: { ...row2Style, align: 'center' } },
+      { text: 'Market Cap', options: { ...row2Style, align: 'center' } },
+      { text: 'EV', options: { ...row2Style, align: 'center' } },
+      { text: 'EBITDA', options: { ...row2Style, align: 'center' } },
+      { text: 'Net Margin', options: { ...row2Style, align: 'center' } },
+      { text: 'EV/ EBITDA', options: { ...row2Style, align: 'center' } },
+      { text: 'PER', options: { ...row2Style, align: 'center' } },
+      { text: 'PBR', options: { ...row2Style, align: 'center' } }
     ]);
 
     // Data rows - show all companies (reference shows 26)
     const displayCompanies = finalCompanies.slice(0, 30); // Show up to 30 companies
     displayCompanies.forEach((c, idx) => {
       const peValue = c.peTTM !== null ? c.peTTM : c.peFY;
-      // Company name format: "#. Company Name" (matching reference)
-      const companyName = `${idx + 1}. ${c.name || '-'}`;
+      // Company name format: "#. Company Name" (with suffixes removed)
+      const companyName = `${idx + 1}. ${cleanCompanyName(c.name)}`;
 
       tableRows.push([
         { text: companyName, options: { ...dataStyle, align: 'left' } },
-        { text: String(c.country || '-'), options: { ...dataStyle, align: 'center' } },
+        { text: String(c.country || '-'), options: { ...dataStyle, align: 'left' } },  // Country align LEFT
         { text: formatFinNum(c.sales), options: { ...dataStyle, align: 'right' } },
         { text: formatFinNum(c.marketCap), options: { ...dataStyle, align: 'right' } },
         { text: formatFinNum(c.ev), options: { ...dataStyle, align: 'right' } },
@@ -2638,23 +2687,23 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       ]);
     });
 
-    // Median row - only shows EV/EBITDA, PER, PBR values (matching reference)
+    // Median row - "Median" in Net Margin column (col 7), values in EV/EBITDA, PER, PBR
     const medianPE = medians.peTTM !== null ? medians.peTTM : medians.peFY;
     tableRows.push([
-      { text: 'Median', options: { ...medianStyle, align: 'left' } },
-      { text: '', options: { ...medianStyle, align: 'center' } },
-      { text: '', options: { ...medianStyle, align: 'right' } },
-      { text: '', options: { ...medianStyle, align: 'right' } },
-      { text: '', options: { ...medianStyle, align: 'right' } },
-      { text: '', options: { ...medianStyle, align: 'right' } },
-      { text: '', options: { ...medianStyle, align: 'right' } },
+      { text: '', options: { ...medianStyle } },
+      { text: '', options: { ...medianStyle } },
+      { text: '', options: { ...medianStyle } },
+      { text: '', options: { ...medianStyle } },
+      { text: '', options: { ...medianStyle } },
+      { text: '', options: { ...medianStyle } },
+      { text: 'Median', options: { ...medianStyle, align: 'right' } },  // "Median" in Net Margin column
       { text: formatMultipleX(medians.evEbitda), options: { ...medianStyle, align: 'right' } },
       { text: formatMultipleX(medianPE), options: { ...medianStyle, align: 'right' } },
       { text: formatMultipleX(medians.pb), options: { ...medianStyle, align: 'right' } }
     ]);
 
     // Calculate row height based on number of companies
-    const tableY = 1.1;
+    const tableY = 1.47;  // Position from reference: y=1.47"
     const availableHeight = 5.0;
     const numRows = displayCompanies.length + 3; // 2 header rows + data rows + median row
     const rowHeight = Math.min(0.17, availableHeight / numRows);
@@ -2663,23 +2712,24 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     // Company Name | Country | Sales | Market Cap | EV | EBITDA | Net Margin | EV/EBITDA | PER | PBR
     const colWidths = [2.3, 1.2, 1.05, 1.05, 1.05, 1.05, 1.05, 1.05, 1.05, 1.05];
 
-    // Add table to slide
+    // Add table to slide with DOTTED borders
     slide.addTable(tableRows, {
-      x: 0.36, y: tableY,
+      x: 0.38, y: tableY,  // Position from reference
       w: 11.95,
       fontSize: 12,
       fontFace: 'Segoe UI',
-      border: { type: 'solid', pt: 3, color: COLORS.tableBorder },
+      border: { type: 'dash', pt: 0.5, color: COLORS.black },  // DOTTED lines
       colW: colWidths,
       rowH: rowHeight
     });
 
-    // ===== FOOTER ELEMENTS (matching reference) =====
-    const footerY = tableY + (numRows * rowHeight) + 0.15;
+    // ===== FOOTER ELEMENTS =====
+    // Position: x=0.38", y=6.66"
+    const footerY = 6.66;
 
     // Note: EV (Enterprise Value)
     slide.addText('Note: EV (Enterprise Value)', {
-      x: 0.36, y: footerY, w: 6, h: 0.2,
+      x: 0.38, y: footerY, w: 6, h: 0.2,
       fontSize: 10, fontFace: 'Segoe UI',
       color: COLORS.black
     });
@@ -2687,14 +2737,14 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     // Data as of date
     const dataDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
     slide.addText(`Data as of ${dataDate}`, {
-      x: 0.36, y: footerY + 0.2, w: 6, h: 0.2,
+      x: 0.38, y: footerY + 0.2, w: 6, h: 0.2,
       fontSize: 10, fontFace: 'Segoe UI',
       color: COLORS.black
     });
 
     // Source: Speeda
     slide.addText('Source: Speeda', {
-      x: 0.36, y: footerY + 0.4, w: 6, h: 0.2,
+      x: 0.38, y: footerY + 0.4, w: 6, h: 0.2,
       fontSize: 10, fontFace: 'Segoe UI',
       color: COLORS.black
     });
