@@ -3695,15 +3695,18 @@ RULES:
   }
 }
 
-// Generate financial chart PowerPoint
-async function generateFinancialChartPPTX(financialData) {
+// Generate financial chart PowerPoint (supports multiple companies/slides)
+async function generateFinancialChartPPTX(financialDataArray) {
   try {
+    // Ensure we have an array
+    const dataArray = Array.isArray(financialDataArray) ? financialDataArray : [financialDataArray];
+
     console.log('Generating Financial Chart PPTX...');
-    console.log('Financial data:', JSON.stringify(financialData, null, 2));
+    console.log(`Processing ${dataArray.length} company/companies`);
 
     const pptx = new pptxgen();
     pptx.author = 'YCP';
-    pptx.title = 'Financial Chart';
+    pptx.title = 'Financial Charts';
     pptx.subject = 'Financial Performance';
 
     // Set exact slide size to match template (13.333" x 7.5" = 16:9 widescreen)
@@ -3723,6 +3726,10 @@ async function generateFinancialChartPPTX(financialData) {
       chartOrange: 'F97316',
       chartGreen: '22C55E'
     };
+
+    // Generate one slide per company
+    for (const financialData of dataArray) {
+      if (!financialData) continue;
 
     const slide = pptx.addSlide();
 
@@ -4073,6 +4080,8 @@ async function generateFinancialChartPPTX(financialData) {
       color: COLORS.black
     });
 
+    } // End of for loop (one slide per company)
+
     // Generate base64
     const base64Content = await pptx.write({ outputType: 'base64' });
 
@@ -4091,87 +4100,113 @@ async function generateFinancialChartPPTX(financialData) {
   }
 }
 
-// Financial Chart API endpoint
-app.post('/api/financial-chart', upload.single('excelFile'), async (req, res) => {
+// Financial Chart API endpoint - supports multiple files (up to 20)
+app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res) => {
   const { email } = req.body;
-  const excelFile = req.file;
+  const excelFiles = req.files;
 
-  if (!excelFile || !email) {
-    return res.status(400).json({ error: 'Excel file and email are required' });
+  if (!excelFiles || excelFiles.length === 0 || !email) {
+    return res.status(400).json({ error: 'Excel file(s) and email are required' });
   }
 
   console.log(`\n${'='.repeat(50)}`);
   console.log(`NEW FINANCIAL CHART REQUEST: ${new Date().toISOString()}`);
   console.log(`Email: ${email}`);
-  console.log(`File: ${excelFile.originalname} (${excelFile.size} bytes)`);
+  console.log(`Files: ${excelFiles.length}`);
+  excelFiles.forEach((f, i) => console.log(`  ${i + 1}. ${f.originalname} (${f.size} bytes)`));
   console.log('='.repeat(50));
 
   // Respond immediately
   res.json({
     success: true,
-    message: 'Request received. Financial chart will be emailed shortly.',
-    companyName: 'Processing...'
+    message: `Request received. Processing ${excelFiles.length} file(s).`,
+    fileCount: excelFiles.length
   });
 
   try {
-    // Parse Excel file
-    const workbook = XLSX.read(excelFile.buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
+    const allFinancialData = [];
+    const errors = [];
 
-    // Get all data as text for AI analysis
-    const allRows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
-    const excelContent = allRows.map(row => row.join('\t')).join('\n');
+    // Process each Excel file
+    for (let i = 0; i < excelFiles.length; i++) {
+      const excelFile = excelFiles[i];
+      console.log(`\nProcessing file ${i + 1}/${excelFiles.length}: ${excelFile.originalname}`);
 
-    // Also get CSV format for better parsing
-    const csvContent = XLSX.utils.sheet_to_csv(sheet);
+      try {
+        // Parse Excel file
+        const workbook = XLSX.read(excelFile.buffer, { type: 'buffer' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
 
-    console.log(`Excel rows: ${allRows.length}`);
-    console.log(`First 500 chars: ${excelContent.substring(0, 500)}`);
+        // Get CSV format for AI analysis
+        const csvContent = XLSX.utils.sheet_to_csv(sheet);
 
-    // Use AI to analyze financial data
-    console.log('Analyzing financial data with AI...');
-    const financialData = await analyzeFinancialExcel(`File name: ${excelFile.originalname}\n\nContent:\n${csvContent.substring(0, 15000)}`);
+        // Use AI to analyze financial data
+        console.log('  Analyzing with AI...');
+        const financialData = await analyzeFinancialExcel(`File name: ${excelFile.originalname}\n\nContent:\n${csvContent.substring(0, 15000)}`);
 
-    if (!financialData) {
-      throw new Error('Failed to analyze financial data');
+        if (financialData) {
+          financialData._fileName = excelFile.originalname;
+          allFinancialData.push(financialData);
+          console.log(`  ✓ Extracted: ${financialData.company_name || 'Unknown'}`);
+        } else {
+          errors.push({ file: excelFile.originalname, error: 'Failed to analyze' });
+          console.log(`  ✗ Failed to analyze`);
+        }
+      } catch (fileError) {
+        errors.push({ file: excelFile.originalname, error: fileError.message });
+        console.log(`  ✗ Error: ${fileError.message}`);
+      }
     }
 
-    console.log('Financial data extracted:', JSON.stringify(financialData, null, 2));
+    if (allFinancialData.length === 0) {
+      throw new Error('No financial data could be extracted from any file');
+    }
 
-    // Generate PowerPoint with charts
-    const pptxResult = await generateFinancialChartPPTX(financialData);
+    console.log(`\nSuccessfully processed ${allFinancialData.length}/${excelFiles.length} files`);
+
+    // Generate PowerPoint with all charts (one slide per company)
+    const pptxResult = await generateFinancialChartPPTX(allFinancialData);
 
     if (!pptxResult.success) {
       throw new Error(pptxResult.error || 'Failed to generate PowerPoint');
     }
 
-    // Build email content
-    const companyName = financialData.company_name || 'Financial Data';
+    // Build email content with summary of all companies
+    const companyNames = allFinancialData.map(d => d.company_name || 'Unknown').join(', ');
+    const summaryRows = allFinancialData.map(d => `
+      <tr>
+        <td style="padding: 8px; border: 1px solid #e2e8f0;">${d.company_name || 'Unknown'}</td>
+        <td style="padding: 8px; border: 1px solid #e2e8f0;">${d.currency || '-'}</td>
+        <td style="padding: 8px; border: 1px solid #e2e8f0;">${d.revenue_data ? d.revenue_data.length + ' periods' : '-'}</td>
+        <td style="padding: 8px; border: 1px solid #e2e8f0;">${d.margin_data ? [...new Set(d.margin_data.map(m => m.margin_type))].join(', ') : '-'}</td>
+      </tr>
+    `).join('');
+
+    const errorSection = errors.length > 0 ? `
+      <h3 style="color: #dc2626; margin-top: 20px;">Failed Files (${errors.length})</h3>
+      <ul style="color: #666;">
+        ${errors.map(e => `<li>${e.file}: ${e.error}</li>`).join('')}
+      </ul>
+    ` : '';
+
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #1a365d;">Financial Chart - ${companyName}</h2>
-        <p>Your financial chart PowerPoint has been generated successfully.</p>
+        <h2 style="color: #1a365d;">Financial Charts - ${allFinancialData.length} Companies</h2>
+        <p>Your financial chart PowerPoint has been generated with ${allFinancialData.length} slide${allFinancialData.length > 1 ? 's' : ''}.</p>
 
-        <h3 style="color: #2563eb; margin-top: 20px;">Data Summary</h3>
+        <h3 style="color: #2563eb; margin-top: 20px;">Companies Processed</h3>
         <table style="border-collapse: collapse; width: 100%; margin-top: 10px;">
-          <tr>
-            <td style="padding: 8px; border: 1px solid #e2e8f0; background: #f8fafc; font-weight: bold;">Company</td>
-            <td style="padding: 8px; border: 1px solid #e2e8f0;">${companyName}</td>
+          <tr style="background: #f8fafc;">
+            <th style="padding: 8px; border: 1px solid #e2e8f0; text-align: left;">Company</th>
+            <th style="padding: 8px; border: 1px solid #e2e8f0; text-align: left;">Currency</th>
+            <th style="padding: 8px; border: 1px solid #e2e8f0; text-align: left;">Revenue</th>
+            <th style="padding: 8px; border: 1px solid #e2e8f0; text-align: left;">Margins</th>
           </tr>
-          <tr>
-            <td style="padding: 8px; border: 1px solid #e2e8f0; background: #f8fafc; font-weight: bold;">Currency</td>
-            <td style="padding: 8px; border: 1px solid #e2e8f0;">${financialData.currency || 'Not detected'}</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px; border: 1px solid #e2e8f0; background: #f8fafc; font-weight: bold;">Revenue Periods</td>
-            <td style="padding: 8px; border: 1px solid #e2e8f0;">${financialData.revenue_data ? financialData.revenue_data.map(r => r.period).join(', ') : 'None'}</td>
-          </tr>
-          <tr>
-            <td style="padding: 8px; border: 1px solid #e2e8f0; background: #f8fafc; font-weight: bold;">Margin Types</td>
-            <td style="padding: 8px; border: 1px solid #e2e8f0;">${financialData.margin_data ? [...new Set(financialData.margin_data.map(m => m.margin_type))].join(', ') : 'None'}</td>
-          </tr>
+          ${summaryRows}
         </table>
+
+        ${errorSection}
 
         <p style="margin-top: 20px; color: #64748b; font-size: 12px;">
           Generated by Financial Chart Maker<br>
@@ -4181,13 +4216,14 @@ app.post('/api/financial-chart', upload.single('excelFile'), async (req, res) =>
     `;
 
     // Send email with PPTX attachment
+    const firstCompany = allFinancialData[0]?.company_name || 'Financial_Charts';
     await sendEmail(
       email,
-      `Financial Chart: ${companyName}`,
+      `Financial Charts: ${allFinancialData.length} companies${allFinancialData.length <= 3 ? ' (' + companyNames + ')' : ''}`,
       htmlContent,
       {
         content: pptxResult.content,
-        name: `Financial_Chart_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pptx`
+        name: `Financial_Charts_${allFinancialData.length}_companies_${new Date().toISOString().split('T')[0]}.pptx`
       }
     );
 
@@ -4200,7 +4236,7 @@ app.post('/api/financial-chart', upload.single('excelFile'), async (req, res) =>
       await sendEmail(
         email,
         'Financial Chart - Error',
-        `<p>Error processing your financial data: ${error.message}</p><p>Please ensure your Excel file contains financial data with revenue and margin information.</p>`
+        `<p>Error processing your financial data: ${error.message}</p><p>Please ensure your Excel files contain financial data with revenue and margin information.</p>`
       );
     } catch (e) {
       console.error('Failed to send error email:', e);
