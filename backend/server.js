@@ -2897,7 +2897,7 @@ async function generatePPTX(companies) {
       slide.addText('会社概要資料', {
         x: 0.37, y: 1.37, w: 6.1, h: 0.35,
         fontSize: 14, fontFace: 'Segoe UI',
-        color: COLORS.black, align: 'left'
+        color: COLORS.black, align: 'center'
       });
       slide.addShape(pptx.shapes.LINE, {
         x: 0.37, y: 1.79, w: 6.1, h: 0,
@@ -2905,10 +2905,10 @@ async function generatePPTX(companies) {
       });
 
       // Right: "Product Photos" - positioned per ref v4
-      slide.addText('Product Photos', {
+      slide.addText('Products and Applications', {
         x: 6.87, y: 1.37, w: 6.1, h: 0.35,
         fontSize: 14, fontFace: 'Segoe UI',
-        color: COLORS.black, align: 'left'
+        color: COLORS.black, align: 'center'
       });
       slide.addShape(pptx.shapes.LINE, {
         x: 6.87, y: 1.79, w: 6.1, h: 0,
@@ -3028,7 +3028,7 @@ async function generatePPTX(companies) {
       slide.addText('財務実績', {
         x: 6.87, y: 4.29, w: 6.1, h: 0.35,
         fontSize: 14, fontFace: 'Segoe UI',
-        color: COLORS.black, align: 'left'
+        color: COLORS.black, align: 'center'
       });
       slide.addShape(pptx.shapes.LINE, {
         x: 6.87, y: 4.71, w: 6.1, h: 0,
@@ -3243,14 +3243,17 @@ async function extractBusinessInfo(scrapedContent, basicInfo) {
       messages: [
         {
           role: 'system',
-          content: `You extract business information from website content.
+          content: `You extract business information from website content for M&A discussion slides.
 
 INPUT:
 - HTML content from company website
 - Previously extracted: company name, year, location
 
 OUTPUT JSON:
-1. business: Brief description of what company does. Format like: "Manufacture products such as X, Y, Z. Distribute products such as A, B, C." Max 3 examples per point. Use point forms (\\n-) for different business lines.
+1. business: Detailed description of what company does. Format each business line on separate line starting with "■ " (black square bullet).
+   Example:
+   "■ Manufacture high-quality printing inks\\n■ Provide services related to printing technology\\n■ Distribute industrial chemicals across Southeast Asia"
+   Be comprehensive - include manufacturing, distribution, services, R&D activities.
 
 2. message: One-liner introductory message about the company. Example: "Malaysia-based distributor specializing in electronic components and industrial automation products across Southeast Asia."
 
@@ -3262,7 +3265,9 @@ OUTPUT JSON:
 4. title: Company name WITHOUT suffix (remove Pte Ltd, Sdn Bhd, Co Ltd, JSC, PT, Inc, etc.)
 
 RULES:
-- All point forms use "\\n-"
+- All bullet points must use "■ " (black square followed by space)
+- Each bullet point on new line using "\\n"
+- Be thorough and extract ALL business activities mentioned
 - Return ONLY valid JSON`
         },
         {
@@ -3294,50 +3299,68 @@ async function extractKeyMetrics(scrapedContent, previousData) {
       messages: [
         {
           role: 'system',
-          content: `You are an M&A analyst extracting key business metrics that would be valuable for potential buyers evaluating this company as an acquisition target.
+          content: `You are an M&A analyst extracting COMPREHENSIVE key business metrics for potential buyers evaluating this company.
 
-Focus on metrics that demonstrate business value and attractiveness for M&A:
+EXTRACT AS MANY OF THESE METRICS AS POSSIBLE (aim for 8-15 metrics):
 
-PRIORITY METRICS TO FIND (in order of importance):
-1. Customers: Number of customers, key customer names, customer segments
-2. Suppliers: Number of suppliers, key supplier/partner names
-3. Export/Distribution: Export countries, distribution network reach
-4. Partnerships: Key partnerships, joint ventures, exclusive agreements
-5. Certifications: ISO, HACCP, GMP, FDA, CE, halal, etc. (shows compliance and quality)
-6. Operations: Factory size (m²), warehouse capacity, headcount/employees
-7. Geographic Presence: Number of branches, offices, locations
+CUSTOMERS & MARKET:
+- Number of customers (total active customers)
+- Key customer names (notable clients)
+- Customer segments served
+- Market share or market position
 
-OUTPUT JSON with this structure:
+SUPPLIERS & PARTNERSHIPS:
+- Number of suppliers
+- Key supplier/partner names
+- Notable partnerships, JVs, technology transfers
+- Exclusive distribution agreements
+
+OPERATIONS & SCALE:
+- Production capacity (units/month, tons/month)
+- Factory/warehouse size (m², sq ft)
+- Number of machines/equipment
+- Number of employees/headcount
+- Number of SKUs/products
+
+GEOGRAPHIC REACH:
+- Export countries (list regions/countries)
+- Distribution network (number of distributors/partners)
+- Number of branches/offices/locations
+- Markets served
+
+QUALITY & COMPLIANCE:
+- Certifications (ISO, HACCP, GMP, FDA, CE, halal, etc.)
+- Awards and recognitions
+- Patents or proprietary technology
+
+OUTPUT JSON:
 {
   "key_metrics": [
-    {"label": "Number of Customers", "value": "500+ active customers"},
-    {"label": "Key Customers", "value": "Toyota, Honda, Samsung"},
-    {"label": "Number of Suppliers", "value": "120 suppliers"},
-    {"label": "Export Countries", "value": "Japan, USA, EU (15 countries)"},
-    {"label": "Certifications", "value": "ISO 9001, ISO 14001, HACCP"},
-    {"label": "Factory Size", "value": "25,000 m²"},
-    {"label": "Headcount", "value": "350 employees"}
+    {"label": "Shareholding", "value": "Family owned (100%)"},
+    {"label": "Key Metrics", "value": "■ Production capacity of 800+ tons per month\\n■ 250+ machines\\n■ 300+ employees"},
+    {"label": "Export Countries", "value": "SEA, South Asia, North Africa"},
+    {"label": "Distribution Network", "value": "700 domestic distribution partners"},
+    {"label": "Certification", "value": "ISO 9001, ISO 14001"},
+    {"label": "Notable Partnerships", "value": "Launch partnership with Dainichiseika Color & Chemicals (Japanese) in 2009 technology transfer, joint product development and marketing"}
   ]
 }
 
-IMPORTANT RULES:
-- Extract 4-8 key metrics that are EXPLICITLY mentioned on the website
-- Each metric should be a separate object in the array
-- Labels should be concise (2-4 words)
-- Values should be specific with numbers when available
-- Only include metrics with actual data - never make up values
-- For certifications, combine multiple into one value
-- Focus on M&A-relevant information that shows business scale and capabilities
-
-Return ONLY valid JSON.`
+RULES:
+- Extract as many metrics as found (8-15 ideally)
+- For metrics with multiple items, use "■ " bullet points separated by "\\n"
+- Labels should be 1-3 words
+- Be specific with numbers when available
+- Include shareholding structure if mentioned
+- NEVER make up data - only include what's explicitly stated
+- Return ONLY valid JSON`
         },
         {
           role: 'user',
           content: `Company: ${previousData.company_name}
 Industry/Business: ${previousData.business}
 
-Website Content (analyze for M&A-relevant metrics):
-${scrapedContent.substring(0, 15000)}`
+Website Content (extract ALL M&A-relevant metrics):
+${scrapedContent.substring(0, 18000)}`
         }
       ],
       response_format: { type: 'json_object' },
@@ -3478,6 +3501,85 @@ Return ONLY valid JSON, no explanations.`
   }
 }
 
+// AI Agent 5: Search web for additional company metrics
+async function searchAdditionalMetrics(companyName, website, existingMetrics) {
+  if (!companyName) {
+    return { additional_metrics: [] };
+  }
+
+  try {
+    console.log(`  Step 6: Searching web for additional metrics...`);
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-search-preview',
+      messages: [
+        {
+          role: 'user',
+          content: `Search for detailed business information about "${companyName}" (website: ${website}).
+
+I need M&A-relevant metrics for an acquisition discussion. Find:
+
+1. COMPANY SCALE:
+   - Number of employees/headcount
+   - Revenue figures (annual revenue)
+   - Number of retail stores, offices, branches
+   - Market capitalization (if public)
+
+2. OPERATIONS:
+   - Number of products/SKUs
+   - Production capacity
+   - Factory/warehouse locations and sizes
+   - Number of suppliers
+
+3. CUSTOMERS & MARKET:
+   - Number of customers
+   - Key customer names or segments
+   - Market share
+   - Geographic markets served
+
+4. CERTIFICATIONS & QUALITY:
+   - ISO certifications
+   - Industry-specific certifications
+   - Awards
+
+5. PARTNERSHIPS:
+   - Key partnerships
+   - Joint ventures
+   - Major suppliers
+
+Already have: ${existingMetrics.map(m => m.label).join(', ')}
+
+Return ONLY a JSON object:
+{
+  "additional_metrics": [
+    {"label": "Employees", "value": "164,000+ worldwide"},
+    {"label": "Retail Stores", "value": "500+ stores globally"},
+    {"label": "Revenue", "value": "USD 383B (2023)"}
+  ]
+}
+
+Only include metrics you can verify. Do not repeat metrics already provided.
+Return ONLY valid JSON.`
+        }
+      ]
+    });
+
+    const content = response.choices[0].message.content || '';
+
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const result = JSON.parse(jsonMatch[0]);
+      console.log(`  Found ${result.additional_metrics?.length || 0} additional metrics via web search`);
+      return result;
+    }
+
+    return { additional_metrics: [] };
+  } catch (e) {
+    console.error('Agent 5 (additional metrics search) error:', e.message);
+    return { additional_metrics: [] };
+  }
+}
+
 // Build profile slides email HTML (simple version with PPTX attached)
 function buildProfileSlidesEmailHTML(companies, errors, hasPPTX) {
   const companyNames = companies.map(c => c.title || c.company_name).join(', ');
@@ -3609,6 +3711,23 @@ app.post('/api/profile-slides', async (req, res) => {
           searchedInfo = await searchMissingInfo(basicInfo.company_name, website, missingFields);
         }
 
+        // Step 6: Search web for additional metrics (especially for large companies)
+        let additionalMetrics = [];
+        if (basicInfo.company_name) {
+          const additionalInfo = await searchAdditionalMetrics(
+            basicInfo.company_name,
+            website,
+            metricsInfo.key_metrics || []
+          );
+          additionalMetrics = additionalInfo.additional_metrics || [];
+        }
+
+        // Combine all key metrics (website + web search)
+        const allKeyMetrics = [
+          ...(metricsInfo.key_metrics || []),
+          ...additionalMetrics
+        ];
+
         // Combine all extracted data (use searched info as fallback)
         const companyData = {
           website: scraped.url,
@@ -3619,12 +3738,12 @@ app.post('/api/profile-slides', async (req, res) => {
           message: businessInfo.message || '',
           footnote: businessInfo.footnote || '',
           title: businessInfo.title || '',
-          key_metrics: metricsInfo.key_metrics || [],  // Array of {label, value} objects
+          key_metrics: allKeyMetrics,  // Combined metrics from website + web search
           financial_metrics: financialInfo.financial_metrics || [],  // For 財務実績 section
           metrics: metricsInfo.metrics || ''  // Fallback for old format
         };
 
-        console.log(`  ✓ Completed: ${companyData.title || companyData.company_name}`);
+        console.log(`  ✓ Completed: ${companyData.title || companyData.company_name} (${allKeyMetrics.length} metrics)`);
         results.push(companyData);
 
       } catch (error) {
