@@ -217,16 +217,18 @@
           body: formData
         });
 
-        const result = await response.json();
+        const result = await response.json().catch(() => null);
 
-        if (response.ok) {
+        if (response.ok && result) {
           successText.textContent = `Request received! ${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} will be processed. PowerPoint will be emailed to ${email} within 5-10 minutes.`;
           successMessage.classList.add('show');
           form.reset();
           selectedFiles = [];
           updateFileList();
+        } else if (!response.ok && response.status === 404) {
+          throw new Error('API endpoint not available. Please try again later.');
         } else {
-          throw new Error(result.error || 'Request failed');
+          throw new Error(result?.error || 'Request failed');
         }
       } catch (err) {
         console.error('Error:', err);
