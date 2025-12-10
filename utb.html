@@ -69,14 +69,14 @@
             <div class="form-group">
               <label for="email">Email Address</label>
               <input type="email" id="email" name="email" required placeholder="your@company.com">
-              <p class="hint-text">Excel report will be emailed within 20 minutes.</p>
+              <p class="hint-text">Excel report will be emailed within 10-15 minutes.</p>
             </div>
 
             <button type="submit" class="submit-btn" id="submitBtn">Submit</button>
 
             <div class="message success" id="successMessage">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-              <span id="successText">Request received! Your Excel report will be emailed within 20 minutes.</span>
+              <span id="successText">Request received! Your UTB report will be emailed within 10-15 minutes.</span>
             </div>
 
             <div class="message error" id="errorMessage">
@@ -127,7 +127,7 @@
         const result = await response.json().catch(() => null);
 
         if (response.ok && result) {
-          successText.textContent = `Request received! Excel report for "${companyName}" will be emailed to ${email} within 20 minutes.`;
+          successText.textContent = `Request received! UTB report for "${companyName}" will be emailed to ${email} within 10-15 minutes.`;
           successMessage.classList.add('show');
           form.reset();
         } else if (!response.ok && response.status === 404) {

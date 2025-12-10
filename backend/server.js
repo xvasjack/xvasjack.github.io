@@ -2844,13 +2844,21 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
         /\s+(SpA|SPA|S\.p\.A\.)\.?$/i,
         /\s+(Pte|PTE)\.?\s*(Ltd|LTD)?\.?$/i,
         /\s+(Sdn|SDN)\.?\s*(Bhd|BHD)?\.?$/i,
-        /,\s*(Inc|Ltd|LLC|Corp)\.?$/i
+        /,\s*(Inc|Ltd|LLC|Corp)\.?$/i,
+        /\s+Holdings?$/i,
+        /\s+Group$/i,
+        /\s+International$/i
       ];
       let cleaned = String(name).trim();
       for (const suffix of suffixes) {
         cleaned = cleaned.replace(suffix, '');
       }
-      return cleaned.trim();
+      cleaned = cleaned.trim();
+      // Truncate to 20 chars max to fit on one line
+      if (cleaned.length > 20) {
+        cleaned = cleaned.substring(0, 18) + '..';
+      }
+      return cleaned;
     };
 
     // Helper functions
@@ -2887,8 +2895,10 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
 
     // Border styles (3pt white solid for header rows)
     const solidWhiteBorder = { type: 'solid', pt: 3, color: COLORS.white };
-    // sysDash border for horizontal lines between data rows (from reference PPTX)
-    const sysDashBorder = { type: 'sysDash', pt: 0.5, color: COLORS.lineGray };
+    // Dashed border for horizontal lines between data rows
+    const dashBorder = { type: 'dash', pt: 1, color: 'BFBFBF' };
+    // 2.5pt white solid for data row vertical borders (visually hidden against white background)
+    const dataVerticalBorder = { type: 'solid', pt: 2.5, color: COLORS.white };
     const noBorder = { type: 'none' };
 
     // Row 1 style: DARK BLUE with solid white borders - font 14
@@ -2928,7 +2938,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       border: solidWhiteBorder
     };
 
-    // Data row style - sysDash horizontal borders between rows, no vertical borders (matches reference PPTX)
+    // Data row style - sysDash horizontal borders, white solid vertical borders (from YCP template)
     // Border order: [top, right, bottom, left]
     const dataStyle = {
       fill: COLORS.white,
@@ -2937,10 +2947,10 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fontSize: 14,
       valign: 'middle',
       margin: cellMargin,
-      border: [sysDashBorder, noBorder, sysDashBorder, noBorder]
+      border: [dashBorder, dataVerticalBorder, dashBorder, dataVerticalBorder]
     };
 
-    // Median "Median" label style - light blue with sysDash top border
+    // Median "Median" label style - light blue with dash top and bottom borders
     const medianLabelStyle = {
       fill: COLORS.lightBlue,
       color: COLORS.white,
@@ -2949,10 +2959,10 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       bold: true,
       valign: 'middle',
       margin: cellMargin,
-      border: [sysDashBorder, solidWhiteBorder, solidWhiteBorder, solidWhiteBorder]
+      border: [dashBorder, solidWhiteBorder, dashBorder, solidWhiteBorder]
     };
 
-    // Median value cells - white background with sysDash top border
+    // Median value cells - white background with dash top and bottom borders
     const medianValueStyle = {
       fill: COLORS.white,
       color: COLORS.black,
@@ -2961,7 +2971,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       bold: true,
       valign: 'middle',
       margin: cellMargin,
-      border: [sysDashBorder, solidWhiteBorder, solidWhiteBorder, solidWhiteBorder]
+      border: [dashBorder, solidWhiteBorder, dashBorder, solidWhiteBorder]
     };
 
     // Median empty cells - NO borders (no lines from last company to Median)
@@ -2975,7 +2985,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       border: [noBorder, noBorder, noBorder, noBorder]
     };
 
-    // Last data row style - sysDash border at bottom (line below last company), no vertical borders
+    // Last data row style - sysDash border at bottom (line below last company), white solid vertical borders
     const lastDataStyle = {
       fill: COLORS.white,
       color: COLORS.black,
@@ -2983,7 +2993,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fontSize: 14,
       valign: 'middle',
       margin: cellMargin,
-      border: [sysDashBorder, noBorder, sysDashBorder, noBorder]
+      border: [dashBorder, dataVerticalBorder, dashBorder, dataVerticalBorder]
     };
 
     // === ROW 1: Dark blue merged headers ===
@@ -4557,14 +4567,139 @@ RULES:
   }
 }
 
-// Generate financial chart PowerPoint (supports multiple companies/slides)
-// Creates a single combo chart (column for revenue + line for margin on secondary axis) at bottom right
+// Initialize xlsx-chart for Excel chart generation
+const XLSXChart = require('xlsx-chart');
+
+// Generate financial chart Excel workbook with COMBO chart (column + line)
+// Uses xlsx-chart library which properly supports combo charts
+async function generateFinancialChartExcel(financialDataArray) {
+  return new Promise((resolve) => {
+    try {
+      const dataArray = Array.isArray(financialDataArray) ? financialDataArray : [financialDataArray];
+      console.log('Generating Financial Chart Excel with xlsx-chart...');
+      console.log(`Processing ${dataArray.length} company/companies`);
+
+      // For now, we'll generate one file for the first company
+      // xlsx-chart doesn't support multiple sheets easily, so we use the first company
+      const financialData = dataArray[0];
+      if (!financialData) {
+        return resolve({ success: false, error: 'No financial data provided' });
+      }
+
+      const currency = financialData.currency || 'USD';
+      const currencyUnit = financialData.revenue_unit || 'millions';
+      const revenueData = financialData.revenue_data || [];
+      const marginData = financialData.margin_data || [];
+
+      if (revenueData.length === 0) {
+        return resolve({ success: false, error: 'No revenue data found' });
+      }
+
+      // Sort revenue by period
+      revenueData.sort((a, b) => {
+        const yearA = parseInt(String(a.period).replace(/\D/g, ''));
+        const yearB = parseInt(String(b.period).replace(/\D/g, ''));
+        return yearA - yearB;
+      });
+
+      const chartLabels = revenueData.map(d => String(d.period));
+      const revenueValues = revenueData.map(d => d.value || 0);
+
+      // Get highest priority margin
+      const marginPriority = ['operating', 'ebitda', 'pretax', 'net', 'gross'];
+      const marginLabelMap = {
+        'operating': '営業利益率 (%)',
+        'ebitda': 'EBITDA利益率 (%)',
+        'pretax': '税前利益率 (%)',
+        'net': '純利益率 (%)',
+        'gross': '粗利益率 (%)'
+      };
+
+      let selectedMarginType = null;
+      let marginValues = [];
+
+      for (const marginType of marginPriority) {
+        const typeData = marginData.filter(m => m.margin_type === marginType);
+        if (typeData.length > 0) {
+          selectedMarginType = marginType;
+          marginValues = chartLabels.map(period => {
+            const found = typeData.find(m => String(m.period) === period);
+            return found ? found.value : 0;
+          });
+          break;
+        }
+      }
+
+      const unitDisplay = currencyUnit === 'millions' ? '百万' : (currencyUnit === 'billions' ? '十億' : '');
+      const revenueLabel = `売上高 (${currency}${unitDisplay})`;
+      const marginLabel = selectedMarginType ? marginLabelMap[selectedMarginType] : '利益率 (%)';
+      const companyName = financialData.company_name || 'Financial Performance';
+
+      // Build xlsx-chart options
+      const titles = [revenueLabel];
+      if (selectedMarginType && marginValues.some(v => v !== 0)) {
+        titles.push(marginLabel);
+      }
+
+      // Build data object for xlsx-chart
+      const data = {};
+
+      // Revenue series (column chart)
+      data[revenueLabel] = { chart: 'column' };
+      chartLabels.forEach((label, i) => {
+        data[revenueLabel][label] = revenueValues[i];
+      });
+
+      // Margin series (line chart) if available
+      if (selectedMarginType && marginValues.some(v => v !== 0)) {
+        data[marginLabel] = { chart: 'line' };
+        chartLabels.forEach((label, i) => {
+          data[marginLabel][label] = marginValues[i];
+        });
+      }
+
+      const opts = {
+        titles: titles,
+        fields: chartLabels,
+        data: data,
+        chartTitle: companyName + ' - 財務実績'
+      };
+
+      const xlsxChart = new XLSXChart();
+      xlsxChart.generate(opts, (err, buffer) => {
+        if (err) {
+          console.error('xlsx-chart error:', err);
+          return resolve({ success: false, error: err.message || 'Chart generation failed' });
+        }
+
+        const base64Content = buffer.toString('base64');
+        console.log('Financial Chart Excel generated successfully');
+        resolve({
+          success: true,
+          content: base64Content
+        });
+      });
+
+    } catch (error) {
+      console.error('Financial Chart Excel error:', error);
+      resolve({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+}
+
+// Generate financial chart PowerPoint with embedded Excel charts
+// Uses embedded Excel workbook for reliable chart rendering (avoids pptxgenjs chart corruption)
 async function generateFinancialChartPPTX(financialDataArray) {
+  const JSZip = require('jszip');
+
   try {
     // Ensure we have an array
     const dataArray = Array.isArray(financialDataArray) ? financialDataArray : [financialDataArray];
 
-    console.log('Generating Financial Chart PPTX...');
+    console.log('Generating Financial Chart PPTX with embedded Excel charts...');
     console.log(`Processing ${dataArray.length} company/companies`);
 
     const pptx = new pptxgen();
@@ -4589,8 +4724,12 @@ async function generateFinancialChartPPTX(financialDataArray) {
       chartOrange: 'ED7D31'
     };
 
+    // Store chart data for each slide to embed later
+    const slideChartData = [];
+
     // Generate one slide per company
-    for (const financialData of dataArray) {
+    for (let slideIndex = 0; slideIndex < dataArray.length; slideIndex++) {
+      const financialData = dataArray[slideIndex];
       if (!financialData) continue;
 
       const slide = pptx.addSlide();
@@ -4646,7 +4785,7 @@ async function generateFinancialChartPPTX(financialDataArray) {
         line: { color: COLORS.dk2, width: 1.75 }
       });
 
-      // ===== FINANCIAL CHART - Bottom Right =====
+      // ===== Prepare chart data for embedding =====
       const revenueData = financialData.revenue_data || [];
       const marginData = financialData.margin_data || [];
 
@@ -4690,126 +4829,19 @@ async function generateFinancialChartPPTX(financialDataArray) {
         // Determine unit display
         const unitDisplay = currencyUnit === 'millions' ? '百万' : (currencyUnit === 'billions' ? '十億' : '');
         const revenueLabel = `売上高 (${currency}${unitDisplay})`;
-        const marginLabel = selectedMarginType ? `${marginLabelMap[selectedMarginType] || '利益率'} (%)` : '利益率 (%)';
-
-        // Chart position and size
-        const chartX = 6.86;
-        const chartY = 4.75;
-        const chartW = 6.0;
-        const chartH = 2.0;
-
-        // Check if we have margin data for combo chart
+        const marginLabel = selectedMarginType ? marginLabelMap[selectedMarginType] || '利益率' : null;
         const hasMarginData = selectedMarginType && marginValues.some(v => v !== 0);
 
-        if (hasMarginData) {
-          // COMBO chart: BAR (revenue) + LINE (margin on secondary axis)
-          slide.addChart(pptx.charts.COMBO, [
-            {
-              name: revenueLabel,
-              labels: chartLabels,
-              values: revenueValues
-            },
-            {
-              name: marginLabel,
-              labels: chartLabels,
-              values: marginValues
-            }
-          ], {
-            x: chartX, y: chartY, w: chartW, h: chartH,
-            chartTypes: [
-              {
-                type: pptx.charts.BAR,
-                barDir: 'col',
-                barGapWidthPct: 50
-              },
-              {
-                type: pptx.charts.LINE,
-                lineSmooth: false,
-                lineSize: 2,
-                lineDataSymbolSize: 6,
-                secondaryValAxis: true
-              }
-            ],
-            chartColors: ['5B9BD5', 'ED7D31'],
-            showValue: true,
-            dataLabelPosition: 'outEnd',
-            dataLabelFontFace: 'Segoe UI',
-            dataLabelFontSize: 9,
-            dataLabelColor: '000000',
-            // Category axis (bottom) with border and tick marks
-            catAxisLabelFontFace: 'Segoe UI',
-            catAxisLabelFontSize: 10,
-            catAxisLabelColor: '000000',
-            catAxisLineShow: true,
-            catAxisLineColor: '000000',
-            catAxisMajorTickMark: 'out',
-            // Primary value axis (left - revenue)
-            valAxisLabelFontFace: 'Segoe UI',
-            valAxisLabelFontSize: 9,
-            valAxisLabelColor: '000000',
-            valAxisDisplayUnits: 'none',
-            valAxisLineShow: true,
-            valAxisLineColor: '000000',
-            valAxisMajorTickMark: 'out',
-            valAxisMajorGridLine: { style: 'solid', color: 'D9D9D9', size: 0.5 },
-            valAxisMinorGridLine: { style: 'none' },
-            // Secondary value axis (right - margin %)
-            showSecValAxis: true,
-            secValAxisLabelFontFace: 'Segoe UI',
-            secValAxisLabelFontSize: 9,
-            secValAxisLabelColor: 'ED7D31',
-            secValAxisMinVal: 0,
-            secValAxisMaxVal: 25,
-            secValAxisDisplayUnits: 'none',
-            secValAxisLineShow: true,
-            secValAxisLineColor: '000000',
-            secValAxisMajorTickMark: 'out',
-            secValAxisMajorGridLine: { style: 'none' },
-            // Legend - PPT built-in, positioned at top
-            showLegend: true,
-            legendPos: 't'
-          });
-        } else {
-          // Create simple BAR chart for revenue only (no margin data)
-          slide.addChart(pptx.charts.BAR, [
-            {
-              name: revenueLabel,
-              labels: chartLabels,
-              values: revenueValues
-            }
-          ], {
-            x: chartX, y: chartY, w: chartW, h: chartH,
-            barDir: 'col',
-            barGapWidthPct: 50,
-            chartColors: ['5B9BD5'],
-            showValue: true,
-            dataLabelPosition: 'outEnd',
-            dataLabelFontFace: 'Segoe UI',
-            dataLabelFontSize: 9,
-            dataLabelColor: '000000',
-            dataLabelFormatCode: '#,##0',
-            // Category axis (bottom) with border and tick marks
-            catAxisLabelFontFace: 'Segoe UI',
-            catAxisLabelFontSize: 10,
-            catAxisLabelColor: '000000',
-            catAxisLineShow: true,
-            catAxisLineColor: '000000',
-            catAxisMajorTickMark: 'out',
-            // Value axis (left) with border and tick marks
-            valAxisLabelFontFace: 'Segoe UI',
-            valAxisLabelFontSize: 9,
-            valAxisLabelColor: '000000',
-            valAxisDisplayUnits: 'none',
-            valAxisLineShow: true,
-            valAxisLineColor: '000000',
-            valAxisMajorTickMark: 'out',
-            valAxisMajorGridLine: { style: 'solid', color: 'D9D9D9', size: 0.5 },
-            valAxisMinorGridLine: { style: 'none' },
-            // Legend - PPT built-in, positioned at top
-            showLegend: true,
-            legendPos: 't'
-          });
-        }
+        // Store chart data for embedding
+        slideChartData.push({
+          slideIndex: slideIndex + 1,
+          chartLabels,
+          revenueValues,
+          revenueLabel,
+          marginValues: hasMarginData ? marginValues : null,
+          marginLabel: hasMarginData ? marginLabel : null,
+          hasMarginData
+        });
       }
 
       // ===== FOOTNOTE =====
@@ -4821,10 +4853,63 @@ async function generateFinancialChartPPTX(financialDataArray) {
 
     } // End of for loop (one slide per company)
 
-    // Generate base64
-    const base64Content = await pptx.write({ outputType: 'base64' });
+    // Generate base PPTX without charts
+    const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
 
-    console.log('Financial Chart PPTX generated successfully');
+    // Now modify the PPTX to add embedded Excel charts
+    const zip = await JSZip.loadAsync(pptxBuffer);
+
+    // Add charts for each slide
+    for (let i = 0; i < slideChartData.length; i++) {
+      const chartData = slideChartData[i];
+      const chartNum = i + 1;
+      const slideNum = chartData.slideIndex;
+
+      // Create embedded Excel workbook for chart data
+      const excelBuffer = await createChartExcelWorkbook(chartData);
+
+      // Add Excel embedding to PPTX
+      zip.file(`ppt/embeddings/Microsoft_Excel_Worksheet${chartNum}.xlsx`, excelBuffer);
+
+      // Create chart XML
+      const chartXml = createChartXml(chartData, chartNum);
+      zip.file(`ppt/charts/chart${chartNum}.xml`, chartXml);
+
+      // Create chart colors XML
+      const chartColorsXml = createChartColorsXml();
+      zip.file(`ppt/charts/colors${chartNum}.xml`, chartColorsXml);
+
+      // Create chart style XML
+      const chartStyleXml = createChartStyleXml();
+      zip.file(`ppt/charts/style${chartNum}.xml`, chartStyleXml);
+
+      // Create chart relationships
+      const chartRelsXml = createChartRelsXml(chartNum);
+      zip.folder('ppt/charts/_rels').file(`chart${chartNum}.xml.rels`, chartRelsXml);
+
+      // Update slide XML to include chart reference
+      const slideXmlPath = `ppt/slides/slide${slideNum}.xml`;
+      let slideXml = await zip.file(slideXmlPath).async('string');
+      slideXml = addChartToSlideXml(slideXml, chartNum);
+      zip.file(slideXmlPath, slideXml);
+
+      // Update slide relationships
+      const slideRelsPath = `ppt/slides/_rels/slide${slideNum}.xml.rels`;
+      let slideRels = await zip.file(slideRelsPath).async('string');
+      slideRels = addChartRelationship(slideRels, chartNum);
+      zip.file(slideRelsPath, slideRels);
+    }
+
+    // Update [Content_Types].xml to include chart content types
+    let contentTypes = await zip.file('[Content_Types].xml').async('string');
+    contentTypes = updateContentTypes(contentTypes, slideChartData.length);
+    zip.file('[Content_Types].xml', contentTypes);
+
+    // Generate final PPTX
+    const finalBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+    const base64Content = finalBuffer.toString('base64');
+
+    console.log('Financial Chart PPTX with embedded Excel charts generated successfully');
 
     return {
       success: true,
@@ -4837,6 +4922,446 @@ async function generateFinancialChartPPTX(financialDataArray) {
       error: error.message
     };
   }
+}
+
+// Create Excel workbook buffer for chart data source
+async function createChartExcelWorkbook(chartData) {
+  const ExcelJS = require('exceljs');
+  const workbook = new ExcelJS.Workbook();
+  const sheet = workbook.addWorksheet('Sheet1');
+
+  // Row 1: Headers (Period labels)
+  const row1 = ['', ...chartData.chartLabels];
+  sheet.addRow(row1);
+
+  // Row 2: Revenue data
+  const row2 = [chartData.revenueLabel, ...chartData.revenueValues];
+  sheet.addRow(row2);
+
+  // Row 3: Margin data (if available)
+  if (chartData.hasMarginData && chartData.marginValues) {
+    const row3 = [chartData.marginLabel, ...chartData.marginValues.map(v => v / 100)]; // Convert to decimal for %
+    sheet.addRow(row3);
+  }
+
+  return await workbook.xlsx.writeBuffer();
+}
+
+// Create chart XML for embedded chart
+function createChartXml(chartData, chartNum) {
+  const { chartLabels, revenueValues, revenueLabel, marginValues, marginLabel, hasMarginData } = chartData;
+  const numPts = chartLabels.length;
+
+  // Build category (X-axis) labels
+  const catPts = chartLabels.map((label, idx) =>
+    `<c:pt idx="${idx}"><c:v>${label}</c:v></c:pt>`
+  ).join('');
+
+  // Build revenue values
+  const revValPts = revenueValues.map((val, idx) =>
+    `<c:pt idx="${idx}"><c:v>${val}</c:v></c:pt>`
+  ).join('');
+
+  // Column chart series for revenue
+  let revenueSeries = `
+    <c:ser>
+      <c:idx val="0"/>
+      <c:order val="0"/>
+      <c:tx><c:v>${revenueLabel}</c:v></c:tx>
+      <c:spPr>
+        <a:solidFill><a:srgbClr val="5B9BD5"/></a:solidFill>
+        <a:ln><a:noFill/></a:ln>
+      </c:spPr>
+      <c:invertIfNegative val="0"/>
+      <c:dLbls>
+        <c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>
+        <c:txPr>
+          <a:bodyPr/>
+          <a:lstStyle/>
+          <a:p><a:pPr><a:defRPr sz="800" b="0"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:latin typeface="Segoe UI"/></a:defRPr></a:pPr></a:p>
+        </c:txPr>
+        <c:dLblPos val="outEnd"/>
+        <c:showLegendKey val="0"/>
+        <c:showVal val="1"/>
+        <c:showCatName val="0"/>
+        <c:showSerName val="0"/>
+        <c:showPercent val="0"/>
+      </c:dLbls>
+      <c:cat>
+        <c:strRef>
+          <c:f>Sheet1!$B$1:$${String.fromCharCode(65 + numPts)}$1</c:f>
+          <c:strCache>
+            <c:ptCount val="${numPts}"/>
+            ${catPts}
+          </c:strCache>
+        </c:strRef>
+      </c:cat>
+      <c:val>
+        <c:numRef>
+          <c:f>Sheet1!$B$2:$${String.fromCharCode(65 + numPts)}$2</c:f>
+          <c:numCache>
+            <c:formatCode>#,##0</c:formatCode>
+            <c:ptCount val="${numPts}"/>
+            ${revValPts}
+          </c:numCache>
+        </c:numRef>
+      </c:val>
+    </c:ser>`;
+
+  // Line chart series for margin (if available)
+  let marginSeries = '';
+  let lineChart = '';
+  if (hasMarginData && marginValues) {
+    const marginValPts = marginValues.map((val, idx) =>
+      `<c:pt idx="${idx}"><c:v>${val / 100}</c:v></c:pt>`
+    ).join('');
+
+    lineChart = `
+    <c:lineChart>
+      <c:grouping val="standard"/>
+      <c:varyColors val="0"/>
+      <c:ser>
+        <c:idx val="1"/>
+        <c:order val="1"/>
+        <c:tx><c:v>${marginLabel} (%)</c:v></c:tx>
+        <c:spPr>
+          <a:ln w="28575"><a:solidFill><a:srgbClr val="ED7D31"/></a:solidFill></a:ln>
+        </c:spPr>
+        <c:marker>
+          <c:symbol val="circle"/>
+          <c:size val="5"/>
+          <c:spPr>
+            <a:solidFill><a:srgbClr val="ED7D31"/></a:solidFill>
+            <a:ln><a:solidFill><a:srgbClr val="ED7D31"/></a:solidFill></a:ln>
+          </c:spPr>
+        </c:marker>
+        <c:dLbls>
+          <c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>
+          <c:txPr>
+            <a:bodyPr/>
+            <a:lstStyle/>
+            <a:p><a:pPr><a:defRPr sz="800" b="0"><a:solidFill><a:srgbClr val="ED7D31"/></a:solidFill><a:latin typeface="Segoe UI"/></a:defRPr></a:pPr></a:p>
+          </c:txPr>
+          <c:numFmt formatCode="0.0%" sourceLinked="0"/>
+          <c:dLblPos val="t"/>
+          <c:showLegendKey val="0"/>
+          <c:showVal val="1"/>
+          <c:showCatName val="0"/>
+          <c:showSerName val="0"/>
+          <c:showPercent val="0"/>
+        </c:dLbls>
+        <c:cat>
+          <c:strRef>
+            <c:f>Sheet1!$B$1:$${String.fromCharCode(65 + numPts)}$1</c:f>
+            <c:strCache>
+              <c:ptCount val="${numPts}"/>
+              ${catPts}
+            </c:strCache>
+          </c:strRef>
+        </c:cat>
+        <c:val>
+          <c:numRef>
+            <c:f>Sheet1!$B$3:$${String.fromCharCode(65 + numPts)}$3</c:f>
+            <c:numCache>
+              <c:formatCode>0.0%</c:formatCode>
+              <c:ptCount val="${numPts}"/>
+              ${marginValPts}
+            </c:numCache>
+          </c:numRef>
+        </c:val>
+        <c:smooth val="0"/>
+      </c:ser>
+      <c:dLbls>
+        <c:showLegendKey val="0"/>
+        <c:showVal val="0"/>
+        <c:showCatName val="0"/>
+        <c:showSerName val="0"/>
+        <c:showPercent val="0"/>
+      </c:dLbls>
+      <c:marker val="1"/>
+      <c:axId val="100"/>
+      <c:axId val="101"/>
+    </c:lineChart>
+    <c:valAx>
+      <c:axId val="101"/>
+      <c:scaling><c:orientation val="minMax"/></c:scaling>
+      <c:delete val="0"/>
+      <c:axPos val="r"/>
+      <c:numFmt formatCode="0%" sourceLinked="0"/>
+      <c:majorTickMark val="out"/>
+      <c:minorTickMark val="none"/>
+      <c:tickLblPos val="nextTo"/>
+      <c:spPr><a:ln><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln></c:spPr>
+      <c:txPr>
+        <a:bodyPr/>
+        <a:lstStyle/>
+        <a:p><a:pPr><a:defRPr sz="800"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:latin typeface="Segoe UI"/></a:defRPr></a:pPr></a:p>
+      </c:txPr>
+      <c:crossAx val="100"/>
+      <c:crosses val="max"/>
+      <c:crossBetween val="between"/>
+    </c:valAx>`;
+  }
+
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <c:date1904 val="0"/>
+  <c:lang val="en-US"/>
+  <c:roundedCorners val="0"/>
+  <c:chart>
+    <c:autoTitleDeleted val="1"/>
+    <c:plotArea>
+      <c:layout/>
+      <c:barChart>
+        <c:barDir val="col"/>
+        <c:grouping val="clustered"/>
+        <c:varyColors val="0"/>
+        ${revenueSeries}
+        <c:dLbls>
+          <c:showLegendKey val="0"/>
+          <c:showVal val="0"/>
+          <c:showCatName val="0"/>
+          <c:showSerName val="0"/>
+          <c:showPercent val="0"/>
+        </c:dLbls>
+        <c:gapWidth val="150"/>
+        <c:axId val="100"/>
+        <c:axId val="200"/>
+      </c:barChart>
+      ${lineChart}
+      <c:catAx>
+        <c:axId val="100"/>
+        <c:scaling><c:orientation val="minMax"/></c:scaling>
+        <c:delete val="0"/>
+        <c:axPos val="b"/>
+        <c:majorTickMark val="out"/>
+        <c:minorTickMark val="none"/>
+        <c:tickLblPos val="nextTo"/>
+        <c:spPr><a:ln><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln></c:spPr>
+        <c:txPr>
+          <a:bodyPr/>
+          <a:lstStyle/>
+          <a:p><a:pPr><a:defRPr sz="900"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:latin typeface="Segoe UI"/></a:defRPr></a:pPr></a:p>
+        </c:txPr>
+        <c:crossAx val="200"/>
+        <c:crosses val="autoZero"/>
+        <c:auto val="1"/>
+        <c:lblAlgn val="ctr"/>
+      </c:catAx>
+      <c:valAx>
+        <c:axId val="200"/>
+        <c:scaling><c:orientation val="minMax"/></c:scaling>
+        <c:delete val="0"/>
+        <c:axPos val="l"/>
+        <c:majorGridlines>
+          <c:spPr><a:ln w="6350"><a:solidFill><a:srgbClr val="D9D9D9"/></a:solidFill></a:ln></c:spPr>
+        </c:majorGridlines>
+        <c:numFmt formatCode="#,##0" sourceLinked="0"/>
+        <c:majorTickMark val="out"/>
+        <c:minorTickMark val="none"/>
+        <c:tickLblPos val="nextTo"/>
+        <c:spPr><a:ln><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln></c:spPr>
+        <c:txPr>
+          <a:bodyPr/>
+          <a:lstStyle/>
+          <a:p><a:pPr><a:defRPr sz="800"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:latin typeface="Segoe UI"/></a:defRPr></a:pPr></a:p>
+        </c:txPr>
+        <c:crossAx val="100"/>
+        <c:crosses val="autoZero"/>
+        <c:crossBetween val="between"/>
+      </c:valAx>
+    </c:plotArea>
+    <c:legend>
+      <c:legendPos val="t"/>
+      <c:layout/>
+      <c:overlay val="0"/>
+      <c:txPr>
+        <a:bodyPr/>
+        <a:lstStyle/>
+        <a:p><a:pPr><a:defRPr sz="900"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:latin typeface="Segoe UI"/></a:defRPr></a:pPr></a:p>
+      </c:txPr>
+    </c:legend>
+    <c:plotVisOnly val="1"/>
+    <c:dispBlanksAs val="gap"/>
+  </c:chart>
+  <c:spPr>
+    <a:noFill/>
+    <a:ln><a:noFill/></a:ln>
+  </c:spPr>
+  <c:externalData r:id="rId1">
+    <c:autoUpdate val="0"/>
+  </c:externalData>
+</c:chartSpace>`;
+}
+
+// Create chart colors XML
+function createChartColorsXml() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cs:colorStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" meth="cycle" id="10">
+  <a:schemeClr val="accent1"/>
+  <a:schemeClr val="accent2"/>
+  <a:schemeClr val="accent3"/>
+  <a:schemeClr val="accent4"/>
+  <a:schemeClr val="accent5"/>
+  <a:schemeClr val="accent6"/>
+  <cs:variation/>
+</cs:colorStyle>`;
+}
+
+// Create chart style XML
+function createChartStyleXml() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cs:chartStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" id="201">
+  <cs:axisTitle>
+    <cs:lnRef idx="0"/>
+    <cs:fillRef idx="0"/>
+    <cs:effectRef idx="0"/>
+    <cs:fontRef idx="minor"><a:schemeClr val="tx1"/></cs:fontRef>
+    <cs:defRPr sz="1000" kern="1200"/>
+  </cs:axisTitle>
+  <cs:categoryAxis>
+    <cs:lnRef idx="0"/>
+    <cs:fillRef idx="0"/>
+    <cs:effectRef idx="0"/>
+    <cs:fontRef idx="minor"><a:schemeClr val="tx1"/></cs:fontRef>
+  </cs:categoryAxis>
+  <cs:chartArea mods="allowNoFillOverride allowNoLineOverride">
+    <cs:lnRef idx="0"/>
+    <cs:fillRef idx="0"/>
+    <cs:effectRef idx="0"/>
+    <cs:fontRef idx="minor"><a:schemeClr val="tx1"/></cs:fontRef>
+  </cs:chartArea>
+  <cs:dataLabel>
+    <cs:lnRef idx="0"/>
+    <cs:fillRef idx="0"/>
+    <cs:effectRef idx="0"/>
+    <cs:fontRef idx="minor"><a:schemeClr val="tx1"/></cs:fontRef>
+  </cs:dataLabel>
+  <cs:dataPoint>
+    <cs:lnRef idx="0"/>
+    <cs:fillRef idx="1"><cs:styleClr val="auto"/></cs:fillRef>
+    <cs:effectRef idx="0"/>
+    <cs:fontRef idx="minor"><a:schemeClr val="tx1"/></cs:fontRef>
+  </cs:dataPoint>
+  <cs:legend>
+    <cs:lnRef idx="0"/>
+    <cs:fillRef idx="0"/>
+    <cs:effectRef idx="0"/>
+    <cs:fontRef idx="minor"><a:schemeClr val="tx1"/></cs:fontRef>
+  </cs:legend>
+  <cs:plotArea mods="allowNoFillOverride allowNoLineOverride">
+    <cs:lnRef idx="0"/>
+    <cs:fillRef idx="0"/>
+    <cs:effectRef idx="0"/>
+    <cs:fontRef idx="minor"><a:schemeClr val="tx1"/></cs:fontRef>
+  </cs:plotArea>
+  <cs:valueAxis>
+    <cs:lnRef idx="0"/>
+    <cs:fillRef idx="0"/>
+    <cs:effectRef idx="0"/>
+    <cs:fontRef idx="minor"><a:schemeClr val="tx1"/></cs:fontRef>
+  </cs:valueAxis>
+</cs:chartStyle>`;
+}
+
+// Create chart relationships XML
+function createChartRelsXml(chartNum) {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/package" Target="../embeddings/Microsoft_Excel_Worksheet${chartNum}.xlsx"/>
+  <Relationship Id="rId2" Type="http://schemas.microsoft.com/office/2011/relationships/chartColorStyle" Target="colors${chartNum}.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.microsoft.com/office/2011/relationships/chartStyle" Target="style${chartNum}.xml"/>
+</Relationships>`;
+}
+
+// Add chart reference to slide XML
+function addChartToSlideXml(slideXml, chartNum) {
+  // Chart position: x=6.86", y=4.75", w=6.0", h=2.0" (converted to EMUs: 1 inch = 914400 EMUs)
+  const chartX = Math.round(6.86 * 914400);
+  const chartY = Math.round(4.75 * 914400);
+  const chartW = Math.round(6.0 * 914400);
+  const chartH = Math.round(2.0 * 914400);
+
+  // Find the highest rId in the slide
+  const rIdMatches = slideXml.match(/r:id="rId(\d+)"/g) || [];
+  let maxRId = 0;
+  rIdMatches.forEach(match => {
+    const id = parseInt(match.match(/rId(\d+)/)[1]);
+    if (id > maxRId) maxRId = id;
+  });
+  const chartRId = `rId${maxRId + 1}`;
+
+  // Create chart graphicFrame
+  const chartGraphicFrame = `
+    <p:graphicFrame>
+      <p:nvGraphicFramePr>
+        <p:cNvPr id="${100 + chartNum}" name="Chart ${chartNum}"/>
+        <p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr>
+        <p:nvPr/>
+      </p:nvGraphicFramePr>
+      <p:xfrm>
+        <a:off x="${chartX}" y="${chartY}"/>
+        <a:ext cx="${chartW}" cy="${chartH}"/>
+      </p:xfrm>
+      <a:graphic>
+        <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">
+          <c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="${chartRId}"/>
+        </a:graphicData>
+      </a:graphic>
+    </p:graphicFrame>`;
+
+  // Insert before closing </p:spTree>
+  slideXml = slideXml.replace('</p:spTree>', chartGraphicFrame + '</p:spTree>');
+
+  // Store the rId for relationship update
+  slideXml = slideXml.replace('__CHART_RID__', chartRId);
+
+  return slideXml;
+}
+
+// Add chart relationship to slide relationships
+function addChartRelationship(slideRels, chartNum) {
+  // Find highest rId
+  const rIdMatches = slideRels.match(/Id="rId(\d+)"/g) || [];
+  let maxRId = 0;
+  rIdMatches.forEach(match => {
+    const id = parseInt(match.match(/rId(\d+)/)[1]);
+    if (id > maxRId) maxRId = id;
+  });
+  const newRId = maxRId + 1;
+
+  const chartRel = `<Relationship Id="rId${newRId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart${chartNum}.xml"/>`;
+
+  slideRels = slideRels.replace('</Relationships>', chartRel + '</Relationships>');
+
+  return slideRels;
+}
+
+// Update Content_Types.xml
+function updateContentTypes(contentTypes, numCharts) {
+  // Add chart-related content types if not present
+  const chartType = '<Override PartName="/ppt/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>';
+
+  if (!contentTypes.includes('drawingml.chart+xml')) {
+    // Add Override entries for each chart
+    let chartOverrides = '';
+    for (let i = 1; i <= numCharts; i++) {
+      chartOverrides += `<Override PartName="/ppt/charts/chart${i}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`;
+      chartOverrides += `<Override PartName="/ppt/charts/colors${i}.xml" ContentType="application/vnd.ms-office.chartcolorstyle+xml"/>`;
+      chartOverrides += `<Override PartName="/ppt/charts/style${i}.xml" ContentType="application/vnd.ms-office.chartstyle+xml"/>`;
+    }
+    contentTypes = contentTypes.replace('</Types>', chartOverrides + '</Types>');
+  }
+
+  // Add xlsx content type if not present
+  if (!contentTypes.includes('spreadsheetml.sheet')) {
+    for (let i = 1; i <= numCharts; i++) {
+      const xlsxOverride = `<Override PartName="/ppt/embeddings/Microsoft_Excel_Worksheet${i}.xlsx" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/>`;
+      contentTypes = contentTypes.replace('</Types>', xlsxOverride + '</Types>');
+    }
+  }
+
+  return contentTypes;
 }
 
 // Financial Chart API endpoint - supports multiple files (up to 20)
@@ -4904,7 +5429,8 @@ app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res
 
     console.log(`\nSuccessfully processed ${allFinancialData.length}/${excelFiles.length} files`);
 
-    // Generate PowerPoint with all charts (one slide per company)
+    // Generate PowerPoint with embedded Excel charts (one slide per company)
+    // Uses OOXML chart embedding for reliable chart rendering
     const pptxResult = await generateFinancialChartPPTX(allFinancialData);
 
     if (!pptxResult.success) {
@@ -4966,7 +5492,7 @@ app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res
       }
     );
 
-    console.log(`Financial chart email sent to ${email}`);
+    console.log(`Financial chart PPTX sent to ${email}`);
     console.log('='.repeat(50));
 
   } catch (error) {
@@ -5355,8 +5881,8 @@ Respond in this EXACT JSON format:
 
 REMEMBER: Help an MD quickly understand if this company has a defensible position worth paying for.`).catch(e => ({ section: 'competitors', error: e.message })),
 
-    // Synthesis 4: M&A Analysis & Acquisition Appetite
-    callChatGPT(`You are preparing an M&A buyer intelligence brief. This is THE most important section.
+    // Synthesis 4: M&A Deep Dive - Full Story Analysis
+    callChatGPT(`You are an M&A advisor writing a DEEP intelligence brief on a company's acquisition behavior.
 
 COMPANY: ${companyName}
 
@@ -5366,109 +5892,84 @@ ${research.maHistory}
 RESEARCH ON LEADERSHIP & STRATEGY:
 ${research.leadership}
 
-RESEARCH ON FINANCIALS (for capacity assessment):
+RESEARCH ON FINANCIALS:
 ${research.financials}
 
 ---
 
-CRITICAL INSTRUCTIONS:
-- This section determines if we should pursue this buyer. Be ACTIONABLE.
-- Don't just list facts - INTERPRET what they mean for pitching deals
-- "Capabilities sought" should be plain English business needs, NOT technical jargon
-- Example good: "Companies with strong distribution in Southeast Asia"
-- Example bad: "Advanced polymer processing technology capabilities"
+CRITICAL: I need DEPTH, not breadth. Don't give me 10 shallow bullet points. Give me 3-4 deals analyzed DEEPLY.
+
+For EACH significant acquisition, write 3-5 sentences explaining:
+1. What they bought and why (the strategic logic)
+2. What it tells us about their priorities
+3. How they executed (price paid, integration approach)
+4. What it means for future deals they'd consider
+
+Then synthesize: What patterns emerge? What does this tell us about how they think about M&A?
 
 Respond in this EXACT JSON format:
 {
-  "ma_track_record": {
-    "acquisition_history": [
+  "ma_deep_dive": {
+    "deal_stories": [
       {
-        "year": "Year",
-        "target": "Company name",
-        "deal_value": "Amount or Not disclosed",
-        "what_they_bought": "Plain English - what capability/market did they acquire?",
-        "pattern_signal": "What this tells us about their M&A strategy"
+        "deal": "Target company name (Year)",
+        "full_story": "3-5 sentence deep analysis of this deal - what they bought, why, how, and what it tells us"
       }
     ],
-    "deal_style": "2-3 sentences: Do they do bolt-ons or transformational? Fast or slow integration? Aggressive or conservative valuations?"
-  },
-  "acquisition_appetite": {
-    "buying_motivation": [
-      {"need": "What business problem are they trying to solve through M&A?", "urgency": "High/Medium/Low", "evidence": "What signals this?"}
-    ],
-    "deal_parameters": {
-      "sweet_spot_size": "$X-Y million - based on past deals and balance sheet",
-      "structure_preference": "Full acquisition / JV / Minority - and why",
-      "decision_speed": "Fast mover / Deliberate / Slow - with evidence"
-    }
-  },
-  "what_they_want": {
-    "business_types": [
-      {"description": "Plain English description of target company type", "fit_level": "High/Medium/Low", "why": "How this fits their strategy"}
-    ],
-    "geographic_focus": [
-      {"region": "Region name", "interest": "High/Medium/Low", "reasoning": "Why this geography"}
-    ],
-    "deal_breakers": ["What would make them walk away from a deal"]
-  },
-  "country_sector_matrix": {
-    "explanation": "Interest level by country and business type (H=High, M=Medium, L=Low)",
-    "sectors": ["Use plain business descriptions, not technical terms"],
-    "countries": ["Key geographies"],
-    "matrix": {
-      "Japan": {"sector1": "H", "sector2": "M"},
-      "USA": {"sector1": "M", "sector2": "H"}
+    "ma_philosophy": "2-3 paragraphs synthesizing their overall M&A philosophy. Are they empire builders or focused acquirers? Do they buy technology, market access, or capacity? How aggressive are they on valuation? How do they integrate - hands-off or full absorption?",
+    "deal_capacity": {
+      "financial_firepower": "Based on balance sheet and past deals, what can they spend?",
+      "appetite_level": "High/Medium/Low - are they actively hunting or opportunistic?",
+      "decision_process": "Fast/Deliberate/Slow - how long do their deals take?"
     }
   }
 }
 
-REMEMBER: An MD should read this and immediately know if they have a deal worth pitching.`).catch(e => ({ section: 'ma_analysis', error: e.message })),
+REMEMBER: An MD reading this should deeply understand HOW this company thinks about M&A.`).catch(e => ({ section: 'ma_analysis', error: e.message })),
 
-    // Synthesis 5: Engagement Strategy
-    callChatGPT(`You are a senior M&A advisor preparing for a client meeting. How should we engage with this company?
+    // Synthesis 5: Ideal Target Profile - Deep Strategic Analysis
+    callChatGPT(`You are an M&A advisor writing THE most important page of a buyer brief: What exactly should we pitch them?
 
 COMPANY: ${companyName}
 
-RESEARCH ON LEADERSHIP:
-${research.leadership}
-
-RESEARCH ON M&A:
-${research.maHistory}
-
-RESEARCH ON STRATEGY:
+ALL RESEARCH:
 ${research.products}
+${research.maHistory}
+${research.leadership}
+${research.financials}
 
 ${context ? `CLIENT CONTEXT: ${context}` : ''}
 
 ---
 
-Think like a seasoned dealmaker. What would actually work with this company?
+CRITICAL: Don't give me a checklist of shallow criteria. Give me ONE deep, insightful analysis.
+
+Write 2-3 paragraphs that answer: "If I had to describe the PERFECT acquisition target for ${companyName}, what would it look like and WHY?"
+
+Consider and SYNTHESIZE:
+- Value chain position: Do they want upstream suppliers, downstream distribution, or horizontal competitors?
+- Industry adjacencies: Which specific sectors fit their strategy and why?
+- Geography: Which countries/regions and why (market access, cost, talent)?
+- Company stage: Early-stage tech, growth companies, or mature cash-flow businesses?
+- Size: What's their sweet spot and why?
+
+Then give me ONE specific example: "A company like [description] in [country] would be highly attractive because [specific reasons tied to their strategy]"
 
 Respond in this EXACT JSON format:
 {
-  "engagement_strategy": {
-    "key_decision_makers": [
-      {"name": "Name if known", "title": "Title", "role_in_ma": "Their role in M&A decisions", "approach": "How to engage them"}
-    ],
-    "hot_buttons": [
-      {"topic": "What excites them", "evidence": "Why we think this", "how_to_leverage": "How to use this"}
-    ],
-    "concerns_objections": [
-      {"concern": "What might worry them", "evidence": "Why we think this", "how_to_address": "How to overcome"}
-    ],
-    "recommended_approach": {
-      "positioning": "How to position opportunities to them",
-      "timing": "Any timing considerations",
-      "channel": "How to reach them (direct, advisor, event, etc.)",
-      "key_messages": ["3-4 key messages that would resonate"]
+  "ideal_target": {
+    "strategic_analysis": "2-3 paragraphs of deep analysis on what they want and WHY. Connect dots between their strategy, past deals, and future needs. This should read like insight, not a checklist.",
+    "sweet_spot": {
+      "value_chain": "Where in the value chain (upstream/midstream/downstream) and why",
+      "industries": "Which specific industries/segments and why",
+      "geographies": "Which countries/regions and why",
+      "size_range": "Revenue or deal size range and why this fits",
+      "stage": "Growth stage preference and why"
     },
-    "next_steps": [
-      {"action": "Specific action to take", "priority": "High/Medium/Low", "owner": "Who should do this"}
-    ]
+    "example_target": "One specific, concrete example: 'A company like [X] that does [Y] in [Z country] would be attractive because [specific strategic fit]'",
+    "what_to_avoid": "1-2 sentences on what would NOT fit and why"
   }
-}
-
-IMPORTANT: Be SPECIFIC and ACTIONABLE. This should be immediately useful for a meeting prep.`).catch(e => ({ section: 'engagement', error: e.message }))
+}`).catch(e => ({ section: 'ideal_target', error: e.message }))
   ];
 
   // Add local insights synthesis if available
@@ -5925,321 +6426,136 @@ async function generateUTBExcel(companyName, website, research, additionalContex
     compSheet.getRow(cr).height = 50;
   }
 
-  // ========== SHEET 5: M&A ANALYSIS ==========
-  const maSheet = workbook.addWorksheet('M&A Analysis');
+  // ========== SHEET 5: M&A DEEP DIVE ==========
+  const maSheet = workbook.addWorksheet('M&A Deep Dive');
   maSheet.columns = [
-    { key: 'a', width: 20 },
-    { key: 'b', width: 25 },
-    { key: 'c', width: 55 }
+    { key: 'a', width: 25 },
+    { key: 'b', width: 75 }
   ];
 
-  const maTrack = synthesis.ma_track_record || {};
+  const maDeepDive = synthesis.ma_deep_dive || {};
   let mr = 1;
 
-  // Acquisition History - What They've Done
-  if (maTrack.acquisition_history && maTrack.acquisition_history.length > 0) {
-    mr = addSectionTitle(maSheet, 'Past Deals - What They\'ve Bought', mr);
-    const acqHeader = maSheet.getRow(mr);
-    acqHeader.values = ['Year / Target', 'What They Acquired', 'What This Tells Us'];
-    styleHeaderRow(acqHeader);
-    mr++;
-    maTrack.acquisition_history.forEach((acq, i) => {
-      maSheet.getCell(`A${mr}`).value = `${acq.year}: ${acq.target}`;
-      maSheet.getCell(`A${mr}`).font = { bold: true };
-      maSheet.getCell(`B${mr}`).value = acq.what_they_bought || acq.deal_value || '';
-      maSheet.getCell(`C${mr}`).value = acq.pattern_signal || acq.rationale || '';
+  // Deal Stories - Deep Analysis Per Deal
+  const dealStories = maDeepDive.deal_stories || [];
+  if (dealStories.length > 0) {
+    mr = addSectionTitle(maSheet, 'Deal-by-Deal Analysis', mr);
+    dealStories.forEach((story, i) => {
+      maSheet.getCell(`A${mr}`).value = story.deal;
+      maSheet.getCell(`A${mr}`).font = { bold: true, size: 11, color: { argb: blue } };
+      mr++;
+      maSheet.mergeCells(`A${mr}:B${mr}`);
+      maSheet.getCell(`A${mr}`).value = story.full_story;
+      maSheet.getCell(`A${mr}`).alignment = { wrapText: true, vertical: 'top' };
+      maSheet.getRow(mr).height = 80;
       styleDataRow(maSheet.getRow(mr), i % 2 === 0);
       mr++;
+      mr++; // Extra space between deals
     });
-    mr++;
   }
 
-  // Deal Style
-  if (maTrack.deal_style || maTrack.pattern_analysis) {
-    mr = addSectionTitle(maSheet, 'How They Do Deals', mr);
-    maSheet.mergeCells(`A${mr}:C${mr}`);
-    maSheet.getCell(`A${mr}`).value = maTrack.deal_style || maTrack.pattern_analysis;
-    maSheet.getCell(`A${mr}`).alignment = { wrapText: true };
-    maSheet.getRow(mr).height = 50;
+  // M&A Philosophy - Deep Synthesis
+  if (maDeepDive.ma_philosophy) {
+    mr = addSectionTitle(maSheet, 'How They Think About M&A', mr);
+    maSheet.mergeCells(`A${mr}:B${mr}`);
+    maSheet.getCell(`A${mr}`).value = maDeepDive.ma_philosophy;
+    maSheet.getCell(`A${mr}`).alignment = { wrapText: true, vertical: 'top' };
+    maSheet.getRow(mr).height = 120;
     mr += 2;
   }
 
-  // Why They're Buying - Motivations
-  const appetite = synthesis.acquisition_appetite || {};
-  const motivations = appetite.buying_motivation || appetite.strategic_drivers || [];
-  if (motivations.length > 0) {
-    mr = addSectionTitle(maSheet, 'Why They\'re Looking to Buy', mr);
-    const motHeader = maSheet.getRow(mr);
-    motHeader.values = ['Business Need', 'Urgency', 'Evidence'];
-    styleHeaderRow(motHeader, blue);
-    mr++;
-    motivations.forEach((mot, i) => {
-      maSheet.getCell(`A${mr}`).value = mot.need || mot.driver || '';
+  // Deal Capacity
+  const capacity = maDeepDive.deal_capacity || {};
+  if (capacity.financial_firepower || capacity.appetite_level) {
+    mr = addSectionTitle(maSheet, 'Deal Capacity', mr);
+    if (capacity.financial_firepower) {
+      maSheet.getCell(`A${mr}`).value = 'Financial Firepower';
       maSheet.getCell(`A${mr}`).font = { bold: true };
-      maSheet.getCell(`B${mr}`).value = mot.urgency || mot.priority || '';
-      if ((mot.urgency || mot.priority) === 'High') {
-        maSheet.getCell(`B${mr}`).font = { color: { argb: 'FFDC2626' }, bold: true };
-      }
-      maSheet.getCell(`C${mr}`).value = mot.evidence || '';
-      styleDataRow(maSheet.getRow(mr), i % 2 === 0);
+      maSheet.getCell(`B${mr}`).value = capacity.financial_firepower;
+      styleDataRow(maSheet.getRow(mr));
       mr++;
-    });
-    mr++;
+    }
+    if (capacity.appetite_level) {
+      maSheet.getCell(`A${mr}`).value = 'Appetite Level';
+      maSheet.getCell(`A${mr}`).font = { bold: true };
+      maSheet.getCell(`B${mr}`).value = capacity.appetite_level;
+      if (capacity.appetite_level.includes('High')) {
+        maSheet.getCell(`B${mr}`).font = { color: { argb: 'FF16A34A' }, bold: true };
+      }
+      styleDataRow(maSheet.getRow(mr), true);
+      mr++;
+    }
+    if (capacity.decision_process) {
+      maSheet.getCell(`A${mr}`).value = 'Decision Speed';
+      maSheet.getCell(`A${mr}`).font = { bold: true };
+      maSheet.getCell(`B${mr}`).value = capacity.decision_process;
+      styleDataRow(maSheet.getRow(mr));
+      mr++;
+    }
   }
 
-  // Deal Parameters
-  const dealParams = appetite.deal_parameters || {};
-  mr = addSectionTitle(maSheet, 'Deal Parameters', mr);
-  const paramData = [
-    ['Sweet Spot Size', dealParams.sweet_spot_size || appetite.likely_deal_size?.range || 'Not disclosed'],
-    ['Structure Preference', dealParams.structure_preference || appetite.preferred_deal_structure || 'Not disclosed'],
-    ['Decision Speed', dealParams.decision_speed || appetite.urgency?.level || 'Not disclosed']
-  ];
-  paramData.forEach((item, i) => {
-    maSheet.getCell(`A${mr}`).value = item[0];
-    maSheet.getCell(`A${mr}`).font = { bold: true };
-    maSheet.mergeCells(`B${mr}:C${mr}`);
-    maSheet.getCell(`B${mr}`).value = item[1];
-    styleDataRow(maSheet.getRow(mr), i % 2 === 0);
-    mr++;
-  });
-
-  // ========== SHEET 6: WHAT THEY WANT ==========
-  const tpSheet = workbook.addWorksheet('What They Want');
+  // ========== SHEET 6: IDEAL TARGET (Deep Analysis) ==========
+  const tpSheet = workbook.addWorksheet('Ideal Target');
   tpSheet.columns = [
-    { key: 'a', width: 30 },
-    { key: 'b', width: 15 },
-    { key: 'c', width: 50 }
+    { key: 'a', width: 25 },
+    { key: 'b', width: 75 }
   ];
 
-  const whatTheyWant = synthesis.what_they_want || synthesis.target_profile || {};
+  const idealTarget = synthesis.ideal_target || {};
   let tr = 1;
 
-  // Types of Businesses
-  const businessTypes = whatTheyWant.business_types || whatTheyWant.industries_of_interest || [];
-  if (businessTypes.length > 0) {
-    tr = addSectionTitle(tpSheet, 'Types of Companies They Want', tr);
-    const btHeader = tpSheet.getRow(tr);
-    btHeader.values = ['Target Description', 'Fit Level', 'Why This Fits'];
-    styleHeaderRow(btHeader);
-    tr++;
-    businessTypes.forEach((bt, i) => {
-      tpSheet.getCell(`A${tr}`).value = bt.description || bt.sector || '';
+  // Strategic Analysis - The Deep Insight
+  if (idealTarget.strategic_analysis) {
+    tr = addSectionTitle(tpSheet, 'What They\'re Really Looking For', tr);
+    tpSheet.mergeCells(`A${tr}:B${tr}`);
+    tpSheet.getCell(`A${tr}`).value = idealTarget.strategic_analysis;
+    tpSheet.getCell(`A${tr}`).alignment = { wrapText: true, vertical: 'top' };
+    tpSheet.getRow(tr).height = 150;
+    tr += 2;
+  }
+
+  // Sweet Spot - Key Criteria
+  const sweetSpot = idealTarget.sweet_spot || {};
+  if (Object.keys(sweetSpot).length > 0) {
+    tr = addSectionTitle(tpSheet, 'The Sweet Spot', tr);
+    const spotData = [
+      ['Value Chain Position', sweetSpot.value_chain],
+      ['Target Industries', sweetSpot.industries],
+      ['Target Geographies', sweetSpot.geographies],
+      ['Size Range', sweetSpot.size_range],
+      ['Company Stage', sweetSpot.stage]
+    ].filter(item => item[1]);
+
+    spotData.forEach((item, i) => {
+      tpSheet.getCell(`A${tr}`).value = item[0];
       tpSheet.getCell(`A${tr}`).font = { bold: true };
-      tpSheet.getCell(`B${tr}`).value = bt.fit_level || bt.interest_level || '';
-      if ((bt.fit_level || bt.interest_level) === 'High') {
-        tpSheet.getCell(`B${tr}`).font = { color: { argb: 'FF16A34A' }, bold: true };
-      }
-      tpSheet.getCell(`C${tr}`).value = bt.why || bt.rationale || '';
+      tpSheet.getCell(`B${tr}`).value = item[1];
+      tpSheet.getCell(`B${tr}`).alignment = { wrapText: true };
       styleDataRow(tpSheet.getRow(tr), i % 2 === 0);
       tr++;
     });
     tr++;
   }
 
-  // Geographic Focus
-  const geoFocus = whatTheyWant.geographic_focus || whatTheyWant.geographic_preferences || [];
-  if (geoFocus.length > 0) {
-    tr = addSectionTitle(tpSheet, 'Geographic Focus', tr);
-    const geoHeader = tpSheet.getRow(tr);
-    geoHeader.values = ['Region', 'Interest', 'Reasoning'];
-    styleHeaderRow(geoHeader, blue);
-    tr++;
-    geoFocus.forEach((geo, i) => {
-      tpSheet.getCell(`A${tr}`).value = geo.region;
-      tpSheet.getCell(`A${tr}`).font = { bold: true };
-      tpSheet.getCell(`B${tr}`).value = geo.interest || geo.interest_level || '';
-      if ((geo.interest || geo.interest_level) === 'High') {
-        tpSheet.getCell(`B${tr}`).font = { color: { argb: 'FF16A34A' }, bold: true };
-      }
-      tpSheet.getCell(`C${tr}`).value = geo.reasoning || geo.rationale || '';
-      styleDataRow(tpSheet.getRow(tr), i % 2 === 0);
-      tr++;
-    });
-    tr++;
+  // Concrete Example
+  if (idealTarget.example_target) {
+    tr = addSectionTitle(tpSheet, 'Example of an Ideal Target', tr);
+    tpSheet.mergeCells(`A${tr}:B${tr}`);
+    tpSheet.getCell(`A${tr}`).value = idealTarget.example_target;
+    tpSheet.getCell(`A${tr}`).alignment = { wrapText: true, vertical: 'top' };
+    tpSheet.getCell(`A${tr}`).font = { italic: true, color: { argb: 'FF16A34A' } };
+    tpSheet.getRow(tr).height = 60;
+    tr += 2;
   }
 
-  // Deal Breakers
-  const dealBreakers = whatTheyWant.deal_breakers || [];
-  if (dealBreakers.length > 0) {
-    tr = addSectionTitle(tpSheet, 'Deal Breakers - What Makes Them Walk Away', tr);
-    dealBreakers.forEach((db, i) => {
-      tpSheet.getCell(`A${tr}`).value = `• ${db}`;
-      tpSheet.getCell(`A${tr}`).font = { color: { argb: 'FFDC2626' } };
-      styleDataRow(tpSheet.getRow(tr), i % 2 === 0);
-      tr++;
-    });
-    tr++;
-  }
-
-  // Country-Sector Matrix
-  const matrix = synthesis.country_sector_matrix || {};
-  if (matrix.sectors && matrix.countries && matrix.matrix) {
-    tr = addSectionTitle(tpSheet, 'Country × Sector Interest Matrix', tr);
-
-    // Adjust columns for matrix
-    const sectors = matrix.sectors.slice(0, 6);
-    const matrixHeader = tpSheet.getRow(tr);
-    matrixHeader.values = ['Country', ...sectors];
-    styleHeaderRow(matrixHeader);
-    tr++;
-
-    matrix.countries.forEach((country, ci) => {
-      const cd = matrix.matrix[country] || {};
-      const rowData = [country];
-      sectors.forEach((s, i) => {
-        const k = s.toLowerCase().replace(/\s+/g, '_');
-        rowData.push(cd[k] || cd[s] || cd[`sector${i+1}`] || '-');
-      });
-      const row = tpSheet.getRow(tr);
-      row.values = rowData;
-      row.getCell(1).font = { bold: true };
-      // Color code interest levels
-      for (let c = 2; c <= sectors.length + 1; c++) {
-        const val = row.getCell(c).value;
-        if (val === 'H') {
-          row.getCell(c).font = { color: { argb: 'FF16A34A' }, bold: true };
-          row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
-        } else if (val === 'M') {
-          row.getCell(c).font = { color: { argb: 'FFD97706' } };
-          row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } };
-        } else if (val === 'L') {
-          row.getCell(c).font = { color: { argb: 'FF64748B' } };
-        }
-        row.getCell(c).alignment = { horizontal: 'center' };
-      }
-      styleDataRow(row, ci % 2 === 0);
-      tr++;
-    });
-    tr++;
-    tpSheet.getCell(`A${tr}`).value = 'H=High  M=Medium  L=Low  N=None';
-    tpSheet.getCell(`A${tr}`).font = { size: 9, color: { argb: 'FF64748B' }, italic: true };
-  }
-
-  // ========== SHEET 7: ENGAGEMENT STRATEGY ==========
-  const engSheet = workbook.addWorksheet('Engagement Strategy');
-  engSheet.columns = [
-    { key: 'a', width: 25 },
-    { key: 'b', width: 30 },
-    { key: 'c', width: 45 }
-  ];
-
-  const eng = synthesis.engagement_strategy || {};
-  let er = 1;
-
-  // Key Decision Makers
-  if (eng.key_decision_makers && eng.key_decision_makers.length > 0) {
-    er = addSectionTitle(engSheet, 'Key Decision Makers', er);
-    const dmHeader = engSheet.getRow(er);
-    dmHeader.values = ['Name', 'Title', 'Approach'];
-    styleHeaderRow(dmHeader);
-    er++;
-    eng.key_decision_makers.forEach((dm, i) => {
-      engSheet.getCell(`A${er}`).value = dm.name || 'TBD';
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.getCell(`B${er}`).value = dm.title;
-      engSheet.getCell(`C${er}`).value = dm.approach;
-      styleDataRow(engSheet.getRow(er), i % 2 === 0);
-      er++;
-    });
-    er++;
-  }
-
-  // Hot Buttons
-  if (eng.hot_buttons && eng.hot_buttons.length > 0) {
-    er = addSectionTitle(engSheet, 'Hot Buttons (Topics That Resonate)', er);
-    const hbHeader = engSheet.getRow(er);
-    hbHeader.values = ['Topic', 'Evidence', 'How to Leverage'];
-    styleHeaderRow(hbHeader, 'FF16A34A');
-    er++;
-    eng.hot_buttons.forEach((hb, i) => {
-      engSheet.getCell(`A${er}`).value = hb.topic;
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.getCell(`B${er}`).value = hb.evidence;
-      engSheet.getCell(`C${er}`).value = hb.how_to_leverage;
-      styleDataRow(engSheet.getRow(er), i % 2 === 0);
-      er++;
-    });
-    er++;
-  }
-
-  // Concerns & Objections
-  if (eng.concerns_objections && eng.concerns_objections.length > 0) {
-    er = addSectionTitle(engSheet, 'Potential Concerns & Objections', er);
-    const coHeader = engSheet.getRow(er);
-    coHeader.values = ['Concern', 'Evidence', 'How to Address'];
-    styleHeaderRow(coHeader, 'FFDC2626');
-    er++;
-    eng.concerns_objections.forEach((co, i) => {
-      engSheet.getCell(`A${er}`).value = co.concern;
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.getCell(`B${er}`).value = co.evidence;
-      engSheet.getCell(`C${er}`).value = co.how_to_address;
-      styleDataRow(engSheet.getRow(er), i % 2 === 0);
-      er++;
-    });
-    er++;
-  }
-
-  // Recommended Approach
-  const appr = eng.recommended_approach || {};
-  if (appr.positioning || appr.key_messages) {
-    er = addSectionTitle(engSheet, 'Recommended Approach', er);
-    if (appr.positioning) {
-      engSheet.getCell(`A${er}`).value = 'Positioning';
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.mergeCells(`B${er}:C${er}`);
-      engSheet.getCell(`B${er}`).value = appr.positioning;
-      engSheet.getCell(`B${er}`).alignment = { wrapText: true };
-      styleDataRow(engSheet.getRow(er));
-      er++;
-    }
-    if (appr.timing) {
-      engSheet.getCell(`A${er}`).value = 'Timing';
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.mergeCells(`B${er}:C${er}`);
-      engSheet.getCell(`B${er}`).value = appr.timing;
-      styleDataRow(engSheet.getRow(er), true);
-      er++;
-    }
-    if (appr.channel) {
-      engSheet.getCell(`A${er}`).value = 'Channel';
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.mergeCells(`B${er}:C${er}`);
-      engSheet.getCell(`B${er}`).value = appr.channel;
-      styleDataRow(engSheet.getRow(er));
-      er++;
-    }
-    if (appr.key_messages && appr.key_messages.length > 0) {
-      engSheet.getCell(`A${er}`).value = 'Key Messages';
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.mergeCells(`B${er}:C${er}`);
-      engSheet.getCell(`B${er}`).value = appr.key_messages.map((m, i) => `${i+1}. ${m}`).join('\n');
-      engSheet.getCell(`B${er}`).alignment = { wrapText: true };
-      engSheet.getRow(er).height = Math.max(20, appr.key_messages.length * 18);
-      styleDataRow(engSheet.getRow(er), true);
-      er++;
-    }
-    er++;
-  }
-
-  // Next Steps
-  if (eng.next_steps && eng.next_steps.length > 0) {
-    er = addSectionTitle(engSheet, 'Next Steps', er);
-    const nsHeader = engSheet.getRow(er);
-    nsHeader.values = ['Action', 'Priority', 'Owner'];
-    styleHeaderRow(nsHeader);
-    er++;
-    eng.next_steps.forEach((ns, i) => {
-      engSheet.getCell(`A${er}`).value = ns.action;
-      engSheet.getCell(`B${er}`).value = ns.priority;
-      if (ns.priority === 'High') {
-        engSheet.getCell(`B${er}`).font = { color: { argb: 'FFDC2626' }, bold: true };
-      }
-      engSheet.getCell(`C${er}`).value = ns.owner || 'TBD';
-      styleDataRow(engSheet.getRow(er), i % 2 === 0);
-      er++;
-    });
+  // What to Avoid
+  if (idealTarget.what_to_avoid) {
+    tr = addSectionTitle(tpSheet, 'What NOT to Pitch', tr);
+    tpSheet.mergeCells(`A${tr}:B${tr}`);
+    tpSheet.getCell(`A${tr}`).value = idealTarget.what_to_avoid;
+    tpSheet.getCell(`A${tr}`).alignment = { wrapText: true };
+    tpSheet.getCell(`A${tr}`).font = { color: { argb: 'FFDC2626' } };
+    tpSheet.getRow(tr).height = 40;
   }
 
   // Generate buffer
@@ -6279,15 +6595,14 @@ app.post('/api/utb', async (req, res) => {
       `<div style="font-family:Arial,sans-serif;max-width:500px;">
         <h2 style="color:#1a365d;margin-bottom:5px;">${companyName}</h2>
         <p style="color:#64748b;margin-top:0;">${website}</p>
-        <p>Your UTB Excel report is attached with 7 structured sheets:</p>
+        <p>Your UTB buyer intelligence report is attached:</p>
         <ul style="font-size:13px;color:#475569;">
-          <li>Executive Summary</li>
-          <li>Financials</li>
-          <li>Products & Operations</li>
-          <li>Competitive Landscape</li>
-          <li>M&A Analysis</li>
-          <li>Target Profile</li>
-          <li>Engagement Strategy</li>
+          <li><b>Executive Summary</b> - Company profile & leadership</li>
+          <li><b>Financials</b> - Revenue breakdown & margins</li>
+          <li><b>Products & Operations</b> - Business segments & capabilities</li>
+          <li><b>Competitive Landscape</b> - Market position & moat</li>
+          <li><b>M&A Deep Dive</b> - Deal-by-deal analysis & M&A philosophy</li>
+          <li><b>Ideal Target</b> - Deep strategic analysis of what to pitch</li>
         </ul>
         <p style="font-size:12px;color:#94a3b8;">Generated: ${new Date().toLocaleString()}</p>
       </div>`,
@@ -6302,7 +6617,7 @@ app.post('/api/utb', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v36 - UTB Excel' });
+  res.json({ status: 'ok', service: 'Find Target v37 - UTB Deep Dive' });
 });
 
 const PORT = process.env.PORT || 3000;
