@@ -4289,66 +4289,23 @@ async function generateFinancialChartPPTX(financialDataArray) {
           });
         }
 
-        // Create chart - use COMBO if we have margin data, otherwise just BAR
-        if (chartDataArray.length > 1) {
-          // For COMBO chart in pptxgenjs, structure data with options per series
-          const comboChartData = [
-            {
-              type: pptx.charts.BAR,
-              data: [{
-                name: chartDataArray[0].name,
-                labels: chartDataArray[0].labels,
-                values: chartDataArray[0].values
-              }],
-              options: {
-                barDir: 'col',
-                barGapWidthPct: 50,
-                chartColors: [COLORS.chartBlue]
-              }
-            },
-            {
-              type: pptx.charts.LINE,
-              data: [{
-                name: chartDataArray[1].name,
-                labels: chartDataArray[1].labels,
-                values: chartDataArray[1].values
-              }],
-              options: {
-                secondaryValAxis: true,
-                lineDataSymbol: 'circle',
-                lineDataSymbolSize: 6,
-                chartColors: [COLORS.chartOrange]
-              }
-            }
-          ];
-
-          slide.addChart(comboChartData, {
-            x: 6.86, y: 4.75, w: 6.0, h: 2.35,
-            catAxisLabelFontSize: 9,
-            valAxisLabelFontSize: 8,
-            showLegend: true,
-            legendPos: 'b',
-            legendFontSize: 8
-          });
-        } else {
-          // Simple bar chart (no margin data)
-          slide.addChart(pptx.charts.BAR, chartDataArray, {
-            x: 6.86, y: 4.75, w: 6.0, h: 2.35,
-            barDir: 'col',
-            barGapWidthPct: 50,
-            chartColors: [COLORS.chartBlue],
-            showValue: true,
-            dataLabelPosition: 'outEnd',
-            dataLabelFontSize: 8,
-            dataLabelColor: COLORS.black,
-            catAxisLabelFontSize: 9,
-            valAxisLabelFontSize: 8,
-            showLegend: true,
-            legendPos: 'b',
-            legendFontSize: 8,
-            valAxisDisplayUnits: 'none'
-          });
-        }
+        // Create simple bar chart with both revenue and margin as bars
+        // (Combo chart with secondary axis causes file corruption)
+        slide.addChart(pptx.charts.BAR, chartDataArray, {
+          x: 6.86, y: 4.75, w: 6.0, h: 2.35,
+          barDir: 'col',
+          barGapWidthPct: 50,
+          chartColors: [COLORS.chartBlue, COLORS.chartOrange],
+          showValue: true,
+          dataLabelPosition: 'outEnd',
+          dataLabelFontSize: 8,
+          catAxisLabelFontSize: 9,
+          valAxisLabelFontSize: 8,
+          showLegend: true,
+          legendPos: 'b',
+          legendFontSize: 8,
+          valAxisDisplayUnits: 'none'
+        });
       }
 
       // ===== FOOTNOTE =====
