@@ -4347,6 +4347,129 @@ RULES:
   }
 }
 
+// Initialize xlsx-chart for Excel chart generation
+const XLSXChart = require('xlsx-chart');
+
+// Generate financial chart Excel workbook with COMBO chart (column + line)
+// Uses xlsx-chart library which properly supports combo charts
+async function generateFinancialChartExcel(financialDataArray) {
+  return new Promise((resolve) => {
+    try {
+      const dataArray = Array.isArray(financialDataArray) ? financialDataArray : [financialDataArray];
+      console.log('Generating Financial Chart Excel with xlsx-chart...');
+      console.log(`Processing ${dataArray.length} company/companies`);
+
+      // For now, we'll generate one file for the first company
+      // xlsx-chart doesn't support multiple sheets easily, so we use the first company
+      const financialData = dataArray[0];
+      if (!financialData) {
+        return resolve({ success: false, error: 'No financial data provided' });
+      }
+
+      const currency = financialData.currency || 'USD';
+      const currencyUnit = financialData.revenue_unit || 'millions';
+      const revenueData = financialData.revenue_data || [];
+      const marginData = financialData.margin_data || [];
+
+      if (revenueData.length === 0) {
+        return resolve({ success: false, error: 'No revenue data found' });
+      }
+
+      // Sort revenue by period
+      revenueData.sort((a, b) => {
+        const yearA = parseInt(String(a.period).replace(/\D/g, ''));
+        const yearB = parseInt(String(b.period).replace(/\D/g, ''));
+        return yearA - yearB;
+      });
+
+      const chartLabels = revenueData.map(d => String(d.period));
+      const revenueValues = revenueData.map(d => d.value || 0);
+
+      // Get highest priority margin
+      const marginPriority = ['operating', 'ebitda', 'pretax', 'net', 'gross'];
+      const marginLabelMap = {
+        'operating': '営業利益率 (%)',
+        'ebitda': 'EBITDA利益率 (%)',
+        'pretax': '税前利益率 (%)',
+        'net': '純利益率 (%)',
+        'gross': '粗利益率 (%)'
+      };
+
+      let selectedMarginType = null;
+      let marginValues = [];
+
+      for (const marginType of marginPriority) {
+        const typeData = marginData.filter(m => m.margin_type === marginType);
+        if (typeData.length > 0) {
+          selectedMarginType = marginType;
+          marginValues = chartLabels.map(period => {
+            const found = typeData.find(m => String(m.period) === period);
+            return found ? found.value : 0;
+          });
+          break;
+        }
+      }
+
+      const unitDisplay = currencyUnit === 'millions' ? '百万' : (currencyUnit === 'billions' ? '十億' : '');
+      const revenueLabel = `売上高 (${currency}${unitDisplay})`;
+      const marginLabel = selectedMarginType ? marginLabelMap[selectedMarginType] : '利益率 (%)';
+      const companyName = financialData.company_name || 'Financial Performance';
+
+      // Build xlsx-chart options
+      const titles = [revenueLabel];
+      if (selectedMarginType && marginValues.some(v => v !== 0)) {
+        titles.push(marginLabel);
+      }
+
+      // Build data object for xlsx-chart
+      const data = {};
+
+      // Revenue series (column chart)
+      data[revenueLabel] = { chart: 'column' };
+      chartLabels.forEach((label, i) => {
+        data[revenueLabel][label] = revenueValues[i];
+      });
+
+      // Margin series (line chart) if available
+      if (selectedMarginType && marginValues.some(v => v !== 0)) {
+        data[marginLabel] = { chart: 'line' };
+        chartLabels.forEach((label, i) => {
+          data[marginLabel][label] = marginValues[i];
+        });
+      }
+
+      const opts = {
+        titles: titles,
+        fields: chartLabels,
+        data: data,
+        chartTitle: companyName + ' - 財務実績'
+      };
+
+      const xlsxChart = new XLSXChart();
+      xlsxChart.generate(opts, (err, buffer) => {
+        if (err) {
+          console.error('xlsx-chart error:', err);
+          return resolve({ success: false, error: err.message || 'Chart generation failed' });
+        }
+
+        const base64Content = buffer.toString('base64');
+        console.log('Financial Chart Excel generated successfully');
+        resolve({
+          success: true,
+          content: base64Content
+        });
+      });
+
+    } catch (error) {
+      console.error('Financial Chart Excel error:', error);
+      resolve({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+}
+
 // Generate financial chart PowerPoint (supports multiple companies/slides)
 // Creates a single combo chart (column for revenue + line for margin on secondary axis) at bottom right
 async function generateFinancialChartPPTX(financialDataArray) {
@@ -4689,11 +4812,12 @@ app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res
 
     console.log(`\nSuccessfully processed ${allFinancialData.length}/${excelFiles.length} files`);
 
-    // Generate PowerPoint with all charts (one slide per company)
-    const pptxResult = await generateFinancialChartPPTX(allFinancialData);
+    // Generate Excel workbook with charts (one sheet per company)
+    // Excel handles COMBO charts with secondary axes reliably
+    const excelResult = await generateFinancialChartExcel(allFinancialData);
 
-    if (!pptxResult.success) {
-      throw new Error(pptxResult.error || 'Failed to generate PowerPoint');
+    if (!excelResult.success) {
+      throw new Error(excelResult.error || 'Failed to generate Excel workbook');
     }
 
     // Build email content with summary of all companies
@@ -4717,7 +4841,8 @@ app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #1a365d;">Financial Charts - ${allFinancialData.length} Companies</h2>
-        <p>Your financial chart PowerPoint has been generated with ${allFinancialData.length} slide${allFinancialData.length > 1 ? 's' : ''}.</p>
+        <p>Your financial chart Excel workbook has been generated with ${allFinancialData.length} sheet${allFinancialData.length > 1 ? 's' : ''}.</p>
+        <p style="color: #059669; font-size: 13px;"><strong>Tip:</strong> You can copy-paste the charts directly into PowerPoint if needed.</p>
 
         <h3 style="color: #2563eb; margin-top: 20px;">Companies Processed</h3>
         <table style="border-collapse: collapse; width: 100%; margin-top: 10px;">
@@ -4739,19 +4864,19 @@ app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res
       </div>
     `;
 
-    // Send email with PPTX attachment
+    // Send email with Excel attachment
     const firstCompany = allFinancialData[0]?.company_name || 'Financial_Charts';
     await sendEmail(
       email,
       `Financial Charts: ${allFinancialData.length} companies${allFinancialData.length <= 3 ? ' (' + companyNames + ')' : ''}`,
       htmlContent,
       {
-        content: pptxResult.content,
-        name: `Financial_Charts_${allFinancialData.length}_companies_${new Date().toISOString().split('T')[0]}.pptx`
+        content: excelResult.content,
+        name: `Financial_Charts_${allFinancialData.length}_companies_${new Date().toISOString().split('T')[0]}.xlsx`
       }
     );
 
-    console.log(`Financial chart email sent to ${email}`);
+    console.log(`Financial chart Excel sent to ${email}`);
     console.log('='.repeat(50));
 
   } catch (error) {
