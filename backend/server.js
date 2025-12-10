@@ -3841,35 +3841,40 @@ async function generateFinancialChartPPTX(financialDataArray) {
 
         if (hasMarginData) {
           // Create COMBO chart with column (revenue) + line (margin on secondary axis)
-          slide.addChart(pptx.charts.COMBO, [
-            {
-              name: revenueLabel,
-              labels: chartLabels,
-              values: revenueValues
-            },
-            {
-              name: marginLabel,
-              labels: chartLabels,
-              values: marginValues
-            }
-          ], {
+          // Using chartTypes with embedded data for proper secondary axis support
+          slide.addChart(pptx.charts.COMBO, [], {
             x: chartX, y: chartY, w: chartW, h: chartH,
             chartTypes: [
               {
                 type: pptx.charts.BAR,
-                barDir: 'col',
-                barGapWidthPct: 50
+                data: [{
+                  name: revenueLabel,
+                  labels: chartLabels,
+                  values: revenueValues
+                }],
+                options: {
+                  barDir: 'col',
+                  barGapWidthPct: 50,
+                  chartColors: ['4472C4']
+                }
               },
               {
                 type: pptx.charts.LINE,
-                lineSmooth: false,
-                lineSize: 2,
-                lineDataSymbolSize: 6,
-                secondaryValAxis: true,
-                secondaryCatAxis: true
+                data: [{
+                  name: marginLabel,
+                  labels: chartLabels,
+                  values: marginValues
+                }],
+                options: {
+                  lineSmooth: false,
+                  lineSize: 2,
+                  lineDataSymbolSize: 6,
+                  chartColors: ['ED7D31'],
+                  secondaryValAxis: true,
+                  secondaryCatAxis: true
+                }
               }
             ],
-            chartColors: ['4472C4', 'ED7D31'],
             showValue: true,
             dataLabelPosition: 'outEnd',
             dataLabelFontFace: 'Segoe UI',
@@ -3878,31 +3883,12 @@ async function generateFinancialChartPPTX(financialDataArray) {
             catAxisLabelFontFace: 'Segoe UI',
             catAxisLabelFontSize: 10,
             catAxisLabelColor: '000000',
-            valAxes: [
-              {
-                showValAxisTitle: false,
-                valAxisLabelFontFace: 'Segoe UI',
-                valAxisLabelFontSize: 9,
-                valAxisLabelColor: '000000',
-                valAxisDisplayUnits: 'none',
-                valAxisMajorGridLine: { style: 'solid', color: 'D9D9D9', size: 0.5 },
-                valAxisMinorGridLine: { style: 'none' }
-              },
-              {
-                showValAxisTitle: false,
-                valAxisLabelFontFace: 'Segoe UI',
-                valAxisLabelFontSize: 9,
-                valAxisLabelColor: 'ED7D31',
-                valAxisMinVal: 0,
-                valAxisMaxVal: 100,
-                valAxisDisplayUnits: 'none',
-                valAxisMajorGridLine: { style: 'none' }
-              }
-            ],
-            catAxes: [
-              { catAxisTitle: '' },
-              { catAxisHidden: true }
-            ],
+            valAxisLabelFontFace: 'Segoe UI',
+            valAxisLabelFontSize: 9,
+            valAxisLabelColor: '000000',
+            valAxisDisplayUnits: 'none',
+            valAxisMajorGridLine: { style: 'solid', color: 'D9D9D9', size: 0.5 },
+            valAxisMinorGridLine: { style: 'none' },
             showLegend: true,
             legendPos: 't',
             legendFontFace: 'Segoe UI',
