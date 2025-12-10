@@ -2593,13 +2593,24 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     };
 
     // ===== BUILD TABLE =====
-    const displayCompanies = finalCompanies.slice(0, 30);
+    // Sort companies by sales (highest to lowest), then take top 30
+    const sortedCompanies = [...finalCompanies].sort((a, b) => {
+      const salesA = a.sales !== null && a.sales !== undefined ? a.sales : 0;
+      const salesB = b.sales !== null && b.sales !== undefined ? b.sales : 0;
+      return salesB - salesA;
+    });
+    const displayCompanies = sortedCompanies.slice(0, 30);
     const tableRows = [];
 
     // Cell margin
     const cellMargin = [0, 0.04, 0, 0.04];
 
-    // Row 1 style: DARK BLUE
+    // Border styles (3pt white solid for header rows)
+    const solidWhiteBorder = { type: 'solid', pt: 3, color: COLORS.white };
+    // Dashed border for horizontal lines between data rows
+    const dashedBorder = { type: 'dash', pt: 0.5, color: COLORS.lineGray };
+
+    // Row 1 style: DARK BLUE with solid white borders
     const row1DarkStyle = {
       fill: COLORS.darkBlue,
       color: COLORS.white,
@@ -2608,38 +2619,43 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       bold: false,
       valign: 'middle',
       align: 'center',
-      margin: cellMargin
+      margin: cellMargin,
+      border: solidWhiteBorder
     };
 
-    // Row 1 empty cells (white background)
+    // Row 1 empty cells (white background) with solid white borders
     const row1EmptyStyle = {
       fill: COLORS.white,
       color: COLORS.black,
       fontFace: 'Segoe UI',
       fontSize: 11,
       valign: 'middle',
-      margin: cellMargin
+      margin: cellMargin,
+      border: solidWhiteBorder
     };
 
-    // Row 2 style: LIGHT BLUE
+    // Row 2 style: LIGHT BLUE with WHITE text, font 14, center aligned, solid white borders
     const row2Style = {
       fill: COLORS.lightBlue,
-      color: COLORS.black,
+      color: COLORS.white,
       fontFace: 'Segoe UI',
-      fontSize: 11,
+      fontSize: 14,
       bold: false,
       valign: 'middle',
-      margin: cellMargin
+      align: 'center',
+      margin: cellMargin,
+      border: solidWhiteBorder
     };
 
-    // Data row style
+    // Data row style - dashed horizontal borders between rows
     const dataStyle = {
       fill: COLORS.white,
       color: COLORS.black,
       fontFace: 'Segoe UI',
       fontSize: 10,
       valign: 'middle',
-      margin: cellMargin
+      margin: cellMargin,
+      border: [dashedBorder, solidWhiteBorder, dashedBorder, solidWhiteBorder]
     };
 
     // Median "Median" label style - light blue (#007FFF) with white text
@@ -2650,7 +2666,8 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fontSize: 10,
       bold: true,
       valign: 'middle',
-      margin: cellMargin
+      margin: cellMargin,
+      border: solidWhiteBorder
     };
 
     // Median value cells - white background with bold black text
@@ -2661,7 +2678,8 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fontSize: 10,
       bold: true,
       valign: 'middle',
-      margin: cellMargin
+      margin: cellMargin,
+      border: solidWhiteBorder
     };
 
     // Median empty cells
@@ -2671,7 +2689,8 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fontFace: 'Segoe UI',
       fontSize: 10,
       valign: 'middle',
-      margin: cellMargin
+      margin: cellMargin,
+      border: solidWhiteBorder
     };
 
     // === ROW 1: Dark blue merged headers ===
@@ -2682,18 +2701,18 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       { text: 'Multiples', options: { ...row1DarkStyle, colspan: 3 } }
     ]);
 
-    // === ROW 2: Light blue column headers ===
+    // === ROW 2: Light blue column headers (all center aligned) ===
     tableRows.push([
-      { text: 'Company Name', options: { ...row2Style, align: 'left' } },
-      { text: 'Country', options: { ...row2Style, align: 'left' } },
-      { text: 'Sales', options: { ...row2Style, align: 'center' } },
-      { text: 'Market Cap', options: { ...row2Style, align: 'center' } },
-      { text: 'EV', options: { ...row2Style, align: 'center' } },
-      { text: 'EBITDA', options: { ...row2Style, align: 'center' } },
-      { text: 'Net Margin', options: { ...row2Style, align: 'center' } },
-      { text: 'EV/ EBITDA', options: { ...row2Style, align: 'center' } },
-      { text: 'PER', options: { ...row2Style, align: 'center' } },
-      { text: 'PBR', options: { ...row2Style, align: 'center' } }
+      { text: 'Company Name', options: { ...row2Style } },
+      { text: 'Country', options: { ...row2Style } },
+      { text: 'Sales', options: { ...row2Style } },
+      { text: 'Market Cap', options: { ...row2Style } },
+      { text: 'EV', options: { ...row2Style } },
+      { text: 'EBITDA', options: { ...row2Style } },
+      { text: 'Net Margin', options: { ...row2Style } },
+      { text: 'EV/ EBITDA', options: { ...row2Style } },
+      { text: 'PER', options: { ...row2Style } },
+      { text: 'PBR', options: { ...row2Style } }
     ]);
 
     // === DATA ROWS ===
@@ -2725,7 +2744,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       { text: '', options: { ...medianEmptyStyle } },
       { text: '', options: { ...medianEmptyStyle } },
       { text: '', options: { ...medianEmptyStyle } },
-      { text: 'Median', options: { ...medianLabelStyle, align: 'right' } },
+      { text: 'Median', options: { ...medianLabelStyle, align: 'center' } },
       { text: formatMultipleX(medians.evEbitda), options: { ...medianValueStyle, align: 'right' } },
       { text: formatMultipleX(medianPE), options: { ...medianValueStyle, align: 'right' } },
       { text: formatMultipleX(medians.pb), options: { ...medianValueStyle, align: 'right' } }
@@ -2742,13 +2761,13 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     const tableWidth = colWidths.reduce((a, b) => a + b, 0); // 12.59"
 
     // Add TABLE to slide (position from reference: x=0.38", y=1.47")
+    // Cell-level borders are set in each cell style
     slide.addTable(tableRows, {
       x: 0.38,
       y: 1.47,
       w: tableWidth,
       fontSize: 10,
       fontFace: 'Segoe UI',
-      border: { type: 'dash', pt: 0.5, color: COLORS.lineGray },
       colW: colWidths,
       rowH: rowHeight
     });
