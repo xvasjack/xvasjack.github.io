@@ -3844,49 +3844,66 @@ async function generateFinancialChartPPTX(financialDataArray) {
           });
         }
 
-        // Create combo chart (bar + line on secondary axis)
-        slide.addChart(pptx.charts.BAR, chartDataArray, {
-          x: 6.86, y: 4.75, w: 6.0, h: 2.35,
-          barDir: 'col',
-          barGapWidthPct: 50,
-          chartColors: [COLORS.chartBlue, COLORS.chartOrange],
-          showValue: true,
-          dataLabelPosition: 'outEnd',
-          dataLabelFontSize: 8,
-          dataLabelColor: COLORS.black,
-          catAxisLabelFontSize: 9,
-          valAxisLabelFontSize: 8,
-          showLegend: true,
-          legendPos: 'b',
-          legendFontSize: 8,
-          valAxisDisplayUnits: 'none',
-          // Secondary axis for margin (line chart)
-          catAxisLineShow: false,
-          valAxisLineShow: false,
-          // Make second series a line chart on secondary axis
-          chartColorsOpacity: 100,
-          lineDataSymbol: 'circle',
-          lineDataSymbolSize: 6,
-          // Secondary value axis for margin percentage
-          valAxes: [
-            {
-              showValAxisTitle: false,
-              valAxisDisplayUnits: 'none'
-            },
-            {
-              showValAxisTitle: false,
-              valAxisDisplayUnits: 'none',
-              valGridLine: { style: 'none' }
-            }
-          ],
-          catAxes: [{ catAxisTitle: '' }],
-          // Specify which series uses which chart type and axis
-          type: chartDataArray.length > 1 ? pptx.charts.COMBO : pptx.charts.BAR,
-          comboChartTypes: chartDataArray.length > 1 ? [
-            { type: pptx.charts.BAR, data: [chartDataArray[0]], options: { barDir: 'col', chartColors: [COLORS.chartBlue] } },
-            { type: pptx.charts.LINE, data: [chartDataArray[1]], options: { secondaryValAxis: true, lineDataSymbol: 'circle', chartColors: [COLORS.chartOrange] } }
-          ] : undefined
-        });
+        // Create chart - use COMBO if we have margin data, otherwise just BAR
+        if (chartDataArray.length > 1) {
+          // Combo chart: Bar for revenue + Line for margin on secondary axis
+          slide.addChart(pptx.charts.COMBO, null, {
+            x: 6.86, y: 4.75, w: 6.0, h: 2.35,
+            chartColors: [COLORS.chartBlue, COLORS.chartOrange],
+            showValue: true,
+            dataLabelFontSize: 8,
+            catAxisLabelFontSize: 9,
+            valAxisLabelFontSize: 8,
+            showLegend: true,
+            legendPos: 'b',
+            legendFontSize: 8,
+            comboChartTypes: [
+              {
+                type: pptx.charts.BAR,
+                data: [chartDataArray[0]],
+                options: {
+                  barDir: 'col',
+                  barGapWidthPct: 50,
+                  chartColors: [COLORS.chartBlue],
+                  showValue: true,
+                  dataLabelPosition: 'outEnd',
+                  dataLabelFontSize: 8
+                }
+              },
+              {
+                type: pptx.charts.LINE,
+                data: [chartDataArray[1]],
+                options: {
+                  secondaryValAxis: true,
+                  lineDataSymbol: 'circle',
+                  lineDataSymbolSize: 6,
+                  chartColors: [COLORS.chartOrange],
+                  showValue: true,
+                  dataLabelPosition: 't',
+                  dataLabelFontSize: 8
+                }
+              }
+            ]
+          });
+        } else {
+          // Simple bar chart (no margin data)
+          slide.addChart(pptx.charts.BAR, chartDataArray, {
+            x: 6.86, y: 4.75, w: 6.0, h: 2.35,
+            barDir: 'col',
+            barGapWidthPct: 50,
+            chartColors: [COLORS.chartBlue],
+            showValue: true,
+            dataLabelPosition: 'outEnd',
+            dataLabelFontSize: 8,
+            dataLabelColor: COLORS.black,
+            catAxisLabelFontSize: 9,
+            valAxisLabelFontSize: 8,
+            showLegend: true,
+            legendPos: 'b',
+            legendFontSize: 8,
+            valAxisDisplayUnits: 'none'
+          });
+        }
       }
 
       // ===== FOOTNOTE =====
