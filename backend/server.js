@@ -1616,52 +1616,43 @@ function buildValidationEmailHTML(companies, targetBusiness, countries, outputOp
 function buildValidationExcel(companies, targetBusiness, countries, outputOption) {
   const inScopeCompanies = companies.filter(c => c.in_scope);
 
-  // Prepare data based on output option
-  let data;
-  if (outputOption === 'all_companies') {
-    data = companies.map((c, i) => ({
-      '#': i + 1,
-      'Company': c.company_name,
-      'Website': c.website || 'Not found',
-      'Status': c.in_scope ? 'IN SCOPE' : 'OUT OF SCOPE',
-      'Business Description': c.business_description || c.reason || '-'
-    }));
-  } else {
-    data = inScopeCompanies.map((c, i) => ({
-      '#': i + 1,
-      'Company': c.company_name,
-      'Website': c.website || 'Not found',
-      'Business Description': c.business_description || '-'
-    }));
-  }
-
-  // Create workbook with summary sheet and results sheet
+  // Create workbook
   const wb = XLSX.utils.book_new();
 
-  // Summary sheet
-  const summaryData = [
-    ['Speeda List Validation Results'],
-    [],
-    ['Target Business:', targetBusiness],
-    ['Countries:', countries.join(', ')],
-    ['Total Companies:', companies.length],
-    ['In-Scope:', inScopeCompanies.length],
-    ['Out-of-Scope:', companies.length - inScopeCompanies.length]
-  ];
-  const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-  XLSX.utils.book_append_sheet(wb, summarySheet, 'Summary');
-
-  // Results sheet
-  const resultsSheet = XLSX.utils.json_to_sheet(data);
-  // Set column widths
-  resultsSheet['!cols'] = [
+  // Always create 2 sheets: In-Scope Only and All Companies (for both_sheets or as default)
+  // Sheet 1: In-Scope Only
+  const inScopeData = inScopeCompanies.map((c, i) => ({
+    '#': i + 1,
+    'Company': c.company_name,
+    'Website': c.website || 'Not found',
+    'Business Description': c.business_description || '-'
+  }));
+  const inScopeSheet = XLSX.utils.json_to_sheet(inScopeData);
+  inScopeSheet['!cols'] = [
     { wch: 5 },   // #
     { wch: 40 },  // Company
     { wch: 50 },  // Website
-    { wch: 15 },  // Status (if all_companies)
     { wch: 60 }   // Business Description
   ];
-  XLSX.utils.book_append_sheet(wb, resultsSheet, 'Results');
+  XLSX.utils.book_append_sheet(wb, inScopeSheet, 'In-Scope Only');
+
+  // Sheet 2: All Companies with status
+  const allData = companies.map((c, i) => ({
+    '#': i + 1,
+    'Company': c.company_name,
+    'Website': c.website || 'Not found',
+    'Status': c.in_scope ? 'IN SCOPE' : 'OUT OF SCOPE',
+    'Business Description': c.business_description || c.reason || '-'
+  }));
+  const allSheet = XLSX.utils.json_to_sheet(allData);
+  allSheet['!cols'] = [
+    { wch: 5 },   // #
+    { wch: 40 },  // Company
+    { wch: 50 },  // Website
+    { wch: 15 },  // Status
+    { wch: 60 }   // Business Description
+  ];
+  XLSX.utils.book_append_sheet(wb, allSheet, 'All Companies');
 
   // Write to buffer and convert to base64
   const buffer = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
