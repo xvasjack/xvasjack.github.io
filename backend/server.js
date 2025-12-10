@@ -1513,13 +1513,7 @@ async function validateCompanyBusinessStrict(company, targetBusiness, pageText) 
     };
   }
 
-  try {
-    const validation = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a company validator. Determine if the company matches the target business criteria STRICTLY based on the website content provided.
+  const systemPrompt = (model) => `You are a company validator. Determine if the company matches the target business criteria STRICTLY based on the website content provided.
 
 TARGET BUSINESS: "${targetBusiness}"
 
@@ -1527,24 +1521,65 @@ RULES:
 1. Your determination must be based ONLY on what the website content says
 2. If the website clearly shows the company is in the target business → IN SCOPE
 3. If the website shows a different business → OUT OF SCOPE
-4. If the website content is unclear or doesn't describe business activities → OUT OF SCOPE with reason "Insufficient website content"
+4. If the website content is unclear or doesn't describe business activities → OUT OF SCOPE
 5. Be accurate - do not guess or assume
 
-OUTPUT: Return JSON: {"in_scope": true/false, "reason": "brief explanation based on website content", "business_description": "what this company actually does based on website"}`
-        },
-        {
-          role: 'user',
-          content: `COMPANY: ${company.company_name}
+OUTPUT: Return JSON: {"in_scope": true/false, "confidence": "high/medium/low", "reason": "brief explanation based on website content", "business_description": "what this company actually does based on website"}`;
+
+  const userPrompt = `COMPANY: ${company.company_name}
 WEBSITE: ${company.website}
 
 WEBSITE CONTENT:
-${pageText.substring(0, 10000)}`
-        }
+${pageText.substring(0, 10000)}`;
+
+  try {
+    // First pass: gpt-4o-mini (fast and cheap)
+    const firstPass = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: systemPrompt('gpt-4o-mini') },
+        { role: 'user', content: userPrompt }
       ],
       response_format: { type: 'json_object' }
     });
 
-    return JSON.parse(validation.choices[0].message.content);
+    const result = JSON.parse(firstPass.choices[0].message.content);
+
+    // Check if we need a second pass with gpt-4o
+    const needsSecondPass =
+      result.confidence === 'low' ||
+      result.confidence === 'medium' ||
+      result.reason?.toLowerCase().includes('unclear') ||
+      result.reason?.toLowerCase().includes('insufficient') ||
+      result.reason?.toLowerCase().includes('cannot determine') ||
+      result.reason?.toLowerCase().includes('not clear');
+
+    if (needsSecondPass) {
+      console.log(`  → Re-validating ${company.company_name} with gpt-4o (confidence: ${result.confidence})`);
+
+      // Second pass: gpt-4o (more accurate)
+      const secondPass = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          { role: 'system', content: systemPrompt('gpt-4o') },
+          { role: 'user', content: userPrompt }
+        ],
+        response_format: { type: 'json_object' }
+      });
+
+      const finalResult = JSON.parse(secondPass.choices[0].message.content);
+      return {
+        in_scope: finalResult.in_scope,
+        reason: finalResult.reason,
+        business_description: finalResult.business_description
+      };
+    }
+
+    return {
+      in_scope: result.in_scope,
+      reason: result.reason,
+      business_description: result.business_description
+    };
   } catch (e) {
     console.error(`Error validating ${company.company_name}:`, e.message);
     return { in_scope: false, reason: 'Validation error', business_description: 'Error during validation' };
