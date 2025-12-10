@@ -2677,8 +2677,8 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
 
     // Border styles (3pt white solid for header rows)
     const solidWhiteBorder = { type: 'solid', pt: 3, color: COLORS.white };
-    // sysDash border for horizontal lines between data rows (from YCP template: 1pt gray dashed)
-    const sysDashBorder = { type: 'sysDash', pt: 1, color: 'BFBFBF' };
+    // Dashed border for horizontal lines between data rows
+    const dashBorder = { type: 'dash', pt: 1, color: 'BFBFBF' };
     // 2.5pt white solid for data row vertical borders (visually hidden against white background)
     const dataVerticalBorder = { type: 'solid', pt: 2.5, color: COLORS.white };
     const noBorder = { type: 'none' };
@@ -2729,7 +2729,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fontSize: 14,
       valign: 'middle',
       margin: cellMargin,
-      border: [sysDashBorder, dataVerticalBorder, sysDashBorder, dataVerticalBorder]
+      border: [dashBorder, dataVerticalBorder, dashBorder, dataVerticalBorder]
     };
 
     // Median "Median" label style - light blue with sysDash top border
@@ -2741,7 +2741,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       bold: true,
       valign: 'middle',
       margin: cellMargin,
-      border: [sysDashBorder, solidWhiteBorder, solidWhiteBorder, solidWhiteBorder]
+      border: [dashBorder, solidWhiteBorder, solidWhiteBorder, solidWhiteBorder]
     };
 
     // Median value cells - white background with sysDash top border
@@ -2753,7 +2753,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       bold: true,
       valign: 'middle',
       margin: cellMargin,
-      border: [sysDashBorder, solidWhiteBorder, solidWhiteBorder, solidWhiteBorder]
+      border: [dashBorder, solidWhiteBorder, solidWhiteBorder, solidWhiteBorder]
     };
 
     // Median empty cells - NO borders (no lines from last company to Median)
@@ -2775,7 +2775,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fontSize: 14,
       valign: 'middle',
       margin: cellMargin,
-      border: [sysDashBorder, dataVerticalBorder, sysDashBorder, dataVerticalBorder]
+      border: [dashBorder, dataVerticalBorder, dashBorder, dataVerticalBorder]
     };
 
     // === ROW 1: Dark blue merged headers ===
