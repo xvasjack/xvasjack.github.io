@@ -4665,8 +4665,524 @@ app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res
   }
 });
 
+// ============ UTB (UNDERSTANDING THE BUSINESS) ============
+
+// Initialize PDFKit (lazy load to avoid errors if not installed)
+let PDFDocument;
+try {
+  PDFDocument = require('pdfkit');
+} catch (e) {
+  console.warn('PDFKit not available - UTB PDF generation disabled');
+}
+
+// UTB Research function - uses multiple AI models for thorough research
+async function conductUTBResearch(companyName, website, additionalContext) {
+  console.log(`Starting UTB research for: ${companyName}`);
+
+  const results = {
+    companyOverview: '',
+    businessDomains: '',
+    productsServices: '',
+    competitiveLandscape: '',
+    strategicDirection: '',
+    geographicPresence: '',
+    maAppetite: '',
+    targetProfile: '',
+    keyConsiderations: ''
+  };
+
+  // Research prompts designed for M&A advisory context
+  const researchQueries = [
+    {
+      key: 'companyOverview',
+      prompt: `Research ${companyName} (${website}). Provide a comprehensive company overview including:
+- Company history and founding
+- Headquarters location and key facilities
+- Ownership structure (public/private, major shareholders)
+- Revenue and employee count (latest available)
+- Key executives and management team
+- Recent news and developments
+${additionalContext ? `Additional context: ${additionalContext}` : ''}
+Be thorough and cite specific facts.`
+    },
+    {
+      key: 'businessDomains',
+      prompt: `Analyze ${companyName}'s (${website}) business domains and segments:
+- Core business areas and divisions
+- Revenue breakdown by segment (if available)
+- Key technologies and capabilities
+- Manufacturing facilities and locations
+- Supply chain position (upstream/downstream)
+- Patents, proprietary technologies, or unique competencies
+Focus on information relevant for M&A due diligence.`
+    },
+    {
+      key: 'productsServices',
+      prompt: `Detail ${companyName}'s (${website}) products and services:
+- Main product lines and offerings
+- Key applications and end markets
+- Customer segments and major clients
+- Market share in key segments
+- Product differentiation and competitive advantages
+- Recent product launches or developments`
+    },
+    {
+      key: 'competitiveLandscape',
+      prompt: `Analyze the competitive landscape for ${companyName} (${website}):
+- Direct competitors (by product/service line)
+- Market position vs competitors
+- Competitive advantages and disadvantages
+- Industry trends affecting competition
+- Barriers to entry in their markets
+- Recent competitive dynamics (M&A activity, new entrants)`
+    },
+    {
+      key: 'strategicDirection',
+      prompt: `Research ${companyName}'s (${website}) strategic direction:
+- Stated corporate strategy and vision
+- Recent strategic initiatives
+- Capital expenditure plans
+- R&D focus areas
+- Any announced M&A strategy or interest
+- Growth targets or ambitions mentioned publicly
+${additionalContext ? `Context from client: ${additionalContext}` : ''}`
+    },
+    {
+      key: 'geographicPresence',
+      prompt: `Analyze ${companyName}'s (${website}) geographic footprint:
+- Countries of operation
+- Sales breakdown by region (if available)
+- Manufacturing and operational locations
+- Key markets and expansion targets
+- International partnerships or joint ventures
+- Geographic growth strategy`
+    }
+  ];
+
+  // Execute research queries in parallel using Perplexity for real-time web search
+  console.log('Conducting web research with Perplexity...');
+  const researchPromises = researchQueries.map(async ({ key, prompt }) => {
+    try {
+      const result = await callPerplexity(prompt);
+      return { key, result };
+    } catch (error) {
+      console.error(`Research error for ${key}:`, error.message);
+      return { key, result: 'Research data unavailable' };
+    }
+  });
+
+  const researchResults = await Promise.all(researchPromises);
+  researchResults.forEach(({ key, result }) => {
+    results[key] = result;
+  });
+
+  // Use GPT-4o for M&A-specific analysis based on research
+  console.log('Generating M&A analysis with GPT-4o...');
+
+  const maAnalysisPrompt = `Based on the following research about ${companyName}, analyze their M&A appetite and likely acquisition targets from an M&A advisory perspective.
+
+RESEARCH SUMMARY:
+${Object.entries(results).map(([k, v]) => `${k}: ${v?.substring(0, 1500) || 'N/A'}`).join('\n\n')}
+
+${additionalContext ? `ADDITIONAL CONTEXT FROM CLIENT: ${additionalContext}` : ''}
+
+Provide analysis on:
+
+1. M&A APPETITE & MOTIVATION
+- Likely reasons for pursuing M&A (growth, capability, geography, vertical integration)
+- Urgency level and timing considerations
+- Budget/deal size expectations
+
+2. TARGET ACQUISITION PROFILE
+- Industries/sectors of interest
+- Geographic preferences
+- Company size and stage preferences
+- Specific capabilities or technologies sought
+- Deal structure preferences (full acquisition, JV, minority stake)
+
+3. KEY CONSIDERATIONS FOR ENGAGEMENT
+- Decision-making process and key stakeholders
+- Potential concerns or sensitivities
+- Competitive dynamics to be aware of
+- Recommended approach for engagement
+
+Be specific and actionable for an M&A advisory team preparing for a client meeting.`;
+
+  try {
+    const maAnalysis = await callChatGPT(maAnalysisPrompt);
+
+    // Parse the analysis into sections
+    const sections = maAnalysis.split(/\d+\.\s+/);
+    if (sections.length >= 3) {
+      results.maAppetite = sections[1] || maAnalysis;
+      results.targetProfile = sections[2] || '';
+      results.keyConsiderations = sections[3] || '';
+    } else {
+      results.maAppetite = maAnalysis;
+    }
+  } catch (error) {
+    console.error('M&A analysis error:', error.message);
+    results.maAppetite = 'Analysis unavailable';
+  }
+
+  return results;
+}
+
+// Generate UTB PDF Report
+async function generateUTBPDF(companyName, website, research, additionalContext) {
+  return new Promise((resolve, reject) => {
+    if (!PDFDocument) {
+      reject(new Error('PDFKit not available'));
+      return;
+    }
+
+    const chunks = [];
+    const doc = new PDFDocument({
+      size: 'A4',
+      margins: { top: 50, bottom: 50, left: 50, right: 50 },
+      info: {
+        Title: `UTB Report - ${companyName}`,
+        Author: 'BlueRock Ventures',
+        Subject: 'Understanding The Business Report'
+      }
+    });
+
+    doc.on('data', chunk => chunks.push(chunk));
+    doc.on('end', () => {
+      const pdfBuffer = Buffer.concat(chunks);
+      resolve(pdfBuffer.toString('base64'));
+    });
+    doc.on('error', reject);
+
+    // Colors
+    const primaryColor = '#1a365d';
+    const accentColor = '#2563eb';
+    const textColor = '#334155';
+    const lightGray = '#f1f5f9';
+
+    // Helper function for section headers
+    const addSectionHeader = (title) => {
+      doc.moveDown(0.5);
+      doc.fillColor(primaryColor)
+         .fontSize(14)
+         .font('Helvetica-Bold')
+         .text(title, { underline: false });
+      doc.moveDown(0.3);
+      doc.fillColor(textColor).font('Helvetica').fontSize(10);
+    };
+
+    // Helper function for content
+    const addContent = (text) => {
+      if (!text || text === 'Research data unavailable' || text === 'Analysis unavailable') {
+        doc.fillColor('#94a3b8').text('Information not available', { lineGap: 3 });
+      } else {
+        // Clean up text and handle line breaks
+        const cleanText = text
+          .replace(/\*\*/g, '')
+          .replace(/\n\n+/g, '\n\n')
+          .trim();
+        doc.fillColor(textColor).text(cleanText, { lineGap: 3, align: 'justify' });
+      }
+      doc.moveDown(0.5);
+    };
+
+    // Title Page
+    doc.rect(0, 0, doc.page.width, 120).fill(primaryColor);
+    doc.fillColor('white')
+       .fontSize(28)
+       .font('Helvetica-Bold')
+       .text('Understanding The Business', 50, 45);
+    doc.fontSize(16)
+       .font('Helvetica')
+       .text('M&A Buyer Intelligence Report', 50, 80);
+
+    doc.moveDown(4);
+    doc.fillColor(primaryColor)
+       .fontSize(24)
+       .font('Helvetica-Bold')
+       .text(companyName, { align: 'center' });
+
+    doc.moveDown(0.5);
+    doc.fillColor(accentColor)
+       .fontSize(12)
+       .font('Helvetica')
+       .text(website, { align: 'center', link: website });
+
+    doc.moveDown(2);
+    doc.fillColor(textColor)
+       .fontSize(10)
+       .text(`Report Generated: ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, { align: 'center' });
+
+    doc.moveDown(0.3);
+    doc.text('Prepared by: BlueRock Ventures', { align: 'center' });
+
+    if (additionalContext) {
+      doc.moveDown(2);
+      doc.rect(50, doc.y, doc.page.width - 100, 60).fill(lightGray);
+      doc.fillColor(primaryColor)
+         .fontSize(10)
+         .font('Helvetica-Bold')
+         .text('Research Context:', 60, doc.y - 50);
+      doc.fillColor(textColor)
+         .font('Helvetica')
+         .fontSize(9)
+         .text(additionalContext.substring(0, 300) + (additionalContext.length > 300 ? '...' : ''), 60, doc.y + 5, { width: doc.page.width - 120 });
+    }
+
+    // Table of Contents
+    doc.addPage();
+    doc.fillColor(primaryColor)
+       .fontSize(18)
+       .font('Helvetica-Bold')
+       .text('Table of Contents', { underline: false });
+    doc.moveDown(1);
+
+    const tocItems = [
+      '1. Executive Summary',
+      '2. Company Overview',
+      '3. Business Domains & Segments',
+      '4. Products & Services',
+      '5. Competitive Landscape',
+      '6. Strategic Direction',
+      '7. Geographic Presence',
+      '8. M&A Appetite & Motivation',
+      '9. Target Acquisition Profile',
+      '10. Key Considerations for Engagement'
+    ];
+
+    doc.fillColor(textColor).fontSize(11).font('Helvetica');
+    tocItems.forEach(item => {
+      doc.text(item);
+      doc.moveDown(0.3);
+    });
+
+    // Executive Summary
+    doc.addPage();
+    doc.fillColor(primaryColor)
+       .fontSize(18)
+       .font('Helvetica-Bold')
+       .text('1. Executive Summary');
+    doc.moveDown(1);
+
+    doc.fillColor(textColor).fontSize(10).font('Helvetica');
+    doc.text(`This Understanding The Business (UTB) report provides a comprehensive analysis of ${companyName} to support M&A advisory engagement preparation. The research covers the company's business domains, competitive position, strategic direction, and potential acquisition interests.`, { lineGap: 3, align: 'justify' });
+
+    doc.moveDown(1);
+    doc.fillColor(primaryColor).font('Helvetica-Bold').text('Key Highlights:');
+    doc.moveDown(0.3);
+    doc.fillColor(textColor).font('Helvetica');
+
+    // Extract key points from research
+    const highlights = [
+      research.companyOverview?.split('.')[0] || 'Company overview available below',
+      research.businessDomains?.split('.')[0] || 'Business domain analysis provided',
+      research.strategicDirection?.split('.')[0] || 'Strategic direction analyzed'
+    ];
+    highlights.forEach(h => {
+      if (h && h.length > 10) {
+        doc.text(`• ${h.trim()}.`, { indent: 10, lineGap: 2 });
+      }
+    });
+
+    // Company Overview
+    doc.addPage();
+    doc.fillColor(primaryColor)
+       .fontSize(18)
+       .font('Helvetica-Bold')
+       .text('2. Company Overview');
+    doc.moveDown(1);
+    addContent(research.companyOverview);
+
+    // Business Domains
+    addSectionHeader('3. Business Domains & Segments');
+    addContent(research.businessDomains);
+
+    // Check if we need a new page
+    if (doc.y > 650) doc.addPage();
+
+    // Products & Services
+    addSectionHeader('4. Products & Services');
+    addContent(research.productsServices);
+
+    // Competitive Landscape
+    doc.addPage();
+    doc.fillColor(primaryColor)
+       .fontSize(18)
+       .font('Helvetica-Bold')
+       .text('5. Competitive Landscape');
+    doc.moveDown(1);
+    addContent(research.competitiveLandscape);
+
+    // Strategic Direction
+    addSectionHeader('6. Strategic Direction');
+    addContent(research.strategicDirection);
+
+    // Geographic Presence
+    doc.addPage();
+    doc.fillColor(primaryColor)
+       .fontSize(18)
+       .font('Helvetica-Bold')
+       .text('7. Geographic Presence');
+    doc.moveDown(1);
+    addContent(research.geographicPresence);
+
+    // M&A Analysis Section
+    doc.addPage();
+    doc.rect(0, 0, doc.page.width, 40).fill(accentColor);
+    doc.fillColor('white')
+       .fontSize(16)
+       .font('Helvetica-Bold')
+       .text('M&A ADVISORY ANALYSIS', 50, 12);
+
+    doc.moveDown(2);
+
+    // M&A Appetite
+    doc.fillColor(primaryColor)
+       .fontSize(14)
+       .font('Helvetica-Bold')
+       .text('8. M&A Appetite & Motivation');
+    doc.moveDown(0.5);
+    addContent(research.maAppetite);
+
+    // Target Profile
+    addSectionHeader('9. Target Acquisition Profile');
+    addContent(research.targetProfile);
+
+    // Key Considerations
+    doc.addPage();
+    doc.fillColor(primaryColor)
+       .fontSize(18)
+       .font('Helvetica-Bold')
+       .text('10. Key Considerations for Engagement');
+    doc.moveDown(1);
+    addContent(research.keyConsiderations);
+
+    // Disclaimer
+    doc.moveDown(2);
+    doc.rect(50, doc.y, doc.page.width - 100, 80).fill(lightGray);
+    doc.fillColor('#64748b')
+       .fontSize(8)
+       .font('Helvetica-Oblique')
+       .text('DISCLAIMER: This report is prepared for internal use by BlueRock Ventures for M&A advisory purposes. Information is gathered from publicly available sources and AI-assisted research. While efforts have been made to ensure accuracy, this report should be supplemented with primary research and due diligence. Not for distribution outside the organization.', 60, doc.y - 70, { width: doc.page.width - 120, align: 'justify' });
+
+    // Footer on each page
+    const pages = doc.bufferedPageRange();
+    for (let i = 0; i < pages.count; i++) {
+      doc.switchToPage(i);
+      doc.fillColor('#94a3b8')
+         .fontSize(8)
+         .text(`UTB Report - ${companyName} | Page ${i + 1} of ${pages.count}`, 50, doc.page.height - 30, { align: 'center', width: doc.page.width - 100 });
+    }
+
+    doc.end();
+  });
+}
+
+// UTB API endpoint
+app.post('/api/utb', async (req, res) => {
+  const { companyName, website, context, email } = req.body;
+
+  if (!companyName || !website || !email) {
+    return res.status(400).json({ error: 'Company name, website, and email are required' });
+  }
+
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`NEW UTB REQUEST: ${new Date().toISOString()}`);
+  console.log(`Company: ${companyName}`);
+  console.log(`Website: ${website}`);
+  console.log(`Email: ${email}`);
+  console.log(`Context: ${context ? context.substring(0, 100) + '...' : 'None'}`);
+  console.log('='.repeat(50));
+
+  // Respond immediately
+  res.json({
+    success: true,
+    message: `UTB report request received for ${companyName}. The PDF report will be emailed within 10-15 minutes.`
+  });
+
+  try {
+    // Conduct research
+    console.log('Starting UTB research...');
+    const research = await conductUTBResearch(companyName, website, context);
+    console.log('Research completed');
+
+    // Generate PDF
+    console.log('Generating PDF report...');
+    const pdfBase64 = await generateUTBPDF(companyName, website, research, context);
+    console.log('PDF generated successfully');
+
+    // Build email content
+    const emailHtml = `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <div style="background: #1a365d; color: white; padding: 20px; text-align: center;">
+          <h1 style="margin: 0; font-size: 24px;">Understanding The Business Report</h1>
+        </div>
+
+        <div style="padding: 20px;">
+          <h2 style="color: #1a365d; margin-top: 0;">${companyName}</h2>
+          <p style="color: #64748b;">${website}</p>
+
+          <p>Your UTB report has been generated and is attached to this email.</p>
+
+          <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin: 20px 0;">
+            <h3 style="color: #1a365d; margin-top: 0; font-size: 14px;">Report Sections:</h3>
+            <ul style="color: #475569; font-size: 13px; margin: 0; padding-left: 20px;">
+              <li>Company Overview</li>
+              <li>Business Domains & Segments</li>
+              <li>Products & Services</li>
+              <li>Competitive Landscape</li>
+              <li>Strategic Direction</li>
+              <li>Geographic Presence</li>
+              <li>M&A Appetite & Target Profile</li>
+              <li>Key Considerations for Engagement</li>
+            </ul>
+          </div>
+
+          ${context ? `
+          <div style="background: #eff6ff; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #2563eb;">
+            <h4 style="color: #1a365d; margin: 0 0 8px 0; font-size: 13px;">Research Context Provided:</h4>
+            <p style="color: #475569; font-size: 12px; margin: 0;">${context.substring(0, 200)}${context.length > 200 ? '...' : ''}</p>
+          </div>
+          ` : ''}
+
+          <p style="color: #64748b; font-size: 12px; margin-top: 20px;">
+            Generated: ${new Date().toLocaleString()}<br>
+            This report is for internal use only.
+          </p>
+        </div>
+      </div>
+    `;
+
+    // Send email with PDF attachment
+    await sendEmail(
+      email,
+      `UTB Report: ${companyName}`,
+      emailHtml,
+      {
+        content: pdfBase64,
+        name: `UTB_Report_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`
+      }
+    );
+
+    console.log(`UTB report email sent to ${email}`);
+    console.log('='.repeat(50));
+
+  } catch (error) {
+    console.error('UTB error:', error);
+    try {
+      await sendEmail(
+        email,
+        `UTB Report Error - ${companyName}`,
+        `<p>Error generating UTB report for ${companyName}: ${error.message}</p><p>Please try again or contact support.</p>`
+      );
+    } catch (e) {
+      console.error('Failed to send error email:', e);
+    }
+  }
+});
+
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v31 - Financial Chart' });
+  res.json({ status: 'ok', service: 'Find Target v32 - UTB' });
 });
 
 const PORT = process.env.PORT || 3000;
