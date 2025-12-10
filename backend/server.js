@@ -2642,8 +2642,9 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
 
     // Border styles (3pt white solid for header rows)
     const solidWhiteBorder = { type: 'solid', pt: 3, color: COLORS.white };
-    // Dotted border for horizontal lines between data rows (thin dotted line)
-    const dottedBorder = { type: 'dot', pt: 0.75, color: COLORS.lineGray };
+    // sysDash border for horizontal lines between data rows (from reference PPTX)
+    const sysDashBorder = { type: 'sysDash', pt: 0.5, color: COLORS.lineGray };
+    const noBorder = { type: 'none' };
 
     // Row 1 style: DARK BLUE with solid white borders - font 14
     const row1DarkStyle = {
@@ -2682,7 +2683,8 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       border: solidWhiteBorder
     };
 
-    // Data row style - dotted horizontal borders between rows, font 14
+    // Data row style - sysDash horizontal borders between rows, font 14
+    // Border order: [top, right, bottom, left]
     const dataStyle = {
       fill: COLORS.white,
       color: COLORS.black,
@@ -2690,10 +2692,10 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fontSize: 14,
       valign: 'middle',
       margin: cellMargin,
-      border: [dottedBorder, solidWhiteBorder, dottedBorder, solidWhiteBorder]
+      border: [sysDashBorder, solidWhiteBorder, sysDashBorder, solidWhiteBorder]
     };
 
-    // Median "Median" label style - light blue (#007FFF) with white text, font 14
+    // Median "Median" label style - light blue with sysDash top border
     const medianLabelStyle = {
       fill: COLORS.lightBlue,
       color: COLORS.white,
@@ -2702,10 +2704,10 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       bold: true,
       valign: 'middle',
       margin: cellMargin,
-      border: solidWhiteBorder
+      border: [sysDashBorder, solidWhiteBorder, solidWhiteBorder, solidWhiteBorder]
     };
 
-    // Median value cells - white background with bold black text, font 14
+    // Median value cells - white background with sysDash top border
     const medianValueStyle = {
       fill: COLORS.white,
       color: COLORS.black,
@@ -2714,11 +2716,10 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       bold: true,
       valign: 'middle',
       margin: cellMargin,
-      border: solidWhiteBorder
+      border: [sysDashBorder, solidWhiteBorder, solidWhiteBorder, solidWhiteBorder]
     };
 
-    // Median empty cells - NO horizontal borders (no lines from last company to Median)
-    const noBorder = { type: 'none' };
+    // Median empty cells - NO borders (no lines from last company to Median)
     const medianEmptyStyle = {
       fill: COLORS.white,
       color: COLORS.black,
@@ -2729,7 +2730,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       border: [noBorder, noBorder, noBorder, noBorder]
     };
 
-    // Last data row style - solid border at bottom
+    // Last data row style - sysDash border at bottom (line below last company)
     const lastDataStyle = {
       fill: COLORS.white,
       color: COLORS.black,
@@ -2737,7 +2738,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fontSize: 14,
       valign: 'middle',
       margin: cellMargin,
-      border: [dottedBorder, solidWhiteBorder, solidWhiteBorder, solidWhiteBorder]
+      border: [sysDashBorder, solidWhiteBorder, sysDashBorder, solidWhiteBorder]
     };
 
     // === ROW 1: Dark blue merged headers ===
