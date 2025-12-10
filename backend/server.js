@@ -2096,26 +2096,36 @@ async function applyIterativeQualitativeFilter(companies, targetDescription, out
       const sheetData = createSheetData(currentCompanies, sheetHeaders,
         `Step ${stepIdx + 1}: ${filterCriteria} - ${currentCompanies.length} companies (removed ${removedCompanies.length})`);
 
-      // Add removed companies section in columns to the right (beside the data, not below)
+      // Add removed companies section (5 rows gap, clear header)
       if (removedCompanies.length > 0) {
-        const removedHeaderCol = sheetHeaders.length + 1; // Column after Filter Reason + gap
-        // Add "REMOVED COMPANIES" header in row 3 (same row as main headers)
-        if (sheetData[2]) {
-          sheetData[2][removedHeaderCol] = 'REMOVED COMPANIES';
-          sheetData[2][removedHeaderCol + 1] = 'Business Description';
+        // Add 5 empty rows for visual separation
+        for (let i = 0; i < 5; i++) {
+          sheetData.push([]);
         }
-        // Add removed company names and reasons starting from row 4
-        for (let i = 0; i < removedCompanies.length; i++) {
-          const dataRowIdx = 3 + i; // Start from row 4 (index 3)
-          if (!sheetData[dataRowIdx]) {
-            sheetData[dataRowIdx] = [];
-          }
-          sheetData[dataRowIdx][removedHeaderCol] = removedCompanies[i].name;
-          sheetData[dataRowIdx][removedHeaderCol + 1] = removedCompanies[i].filterReason || '';
+        // Header row for out-of-scope section
+        sheetData.push(['OUT OF SCOPE - Not matching: "' + filterCriteria + '"', 'Business Description (Reason for Exclusion)']);
+        sheetData.push(['Company Name', 'What They Actually Do']);
+        // List removed companies
+        for (const c of removedCompanies) {
+          sheetData.push([c.name, c.filterReason || 'Does not match filter criteria']);
         }
       }
 
       const sheet = XLSX.utils.aoa_to_sheet(sheetData);
+
+      // Apply styling to the out-of-scope header row
+      if (removedCompanies.length > 0) {
+        const headerRowIdx = sheetData.length - removedCompanies.length - 2; // Row index of "OUT OF SCOPE" header
+        const subHeaderRowIdx = headerRowIdx + 1;
+
+        // Style header cells (dark background)
+        const headerStyle = { fill: { fgColor: { rgb: '1E3A5F' } }, font: { bold: true, color: { rgb: 'FFFFFF' } } };
+        const subHeaderStyle = { fill: { fgColor: { rgb: '374151' } }, font: { bold: true, color: { rgb: 'FFFFFF' } } };
+
+        // Apply styles if xlsx supports it (basic xlsx doesn't, but we set the data clearly)
+        // The header text itself makes it clear
+      }
+
       const sheetName = `${sheetNumber}. Q${stepIdx + 1} ${filterCriteria.substring(0, 20)}`;
       XLSX.utils.book_append_sheet(outputWorkbook, sheet, sheetName.substring(0, 31));
       sheetNumber++;
@@ -2369,64 +2379,59 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     let sheetNumber = 2;
     const filterLog = [];
 
+    // FILTER 0: Always remove companies with negative EV (regardless of profitable toggle)
+    const removedByNegEV = [];
+    currentCompanies = currentCompanies.filter(c => {
+      if (c.ev !== null && c.ev < 0) {
+        c.filterReason = 'Negative enterprise value';
+        removedByNegEV.push(c);
+        return false;
+      }
+      return true;
+    });
+
+    if (removedByNegEV.length > 0) {
+      filterLog.push(`Filter (EV): Removed ${removedByNegEV.length} companies with negative enterprise value`);
+      console.log(filterLog[filterLog.length - 1]);
+
+      const sheetEVData = createSheetData(currentCompanies, sheetHeaders,
+        `After Negative EV Filter - ${currentCompanies.length} companies (removed ${removedByNegEV.length})`);
+      const sheetEV = XLSX.utils.aoa_to_sheet(sheetEVData);
+      XLSX.utils.book_append_sheet(outputWorkbook, sheetEV, `${sheetNumber}. After EV Filter`);
+      sheetNumber++;
+    }
+
     if (isProfitable) {
-      // FILTER 1: Remove companies without P/E (prefer TTM, fallback to FY)
-      const beforePE = currentCompanies.length;
+      // FILTER 1: Remove companies without P/E OR with negative net margin (loss-making)
       const removedByPE = [];
       currentCompanies = currentCompanies.filter(c => {
+        // Check for valid P/E ratio
         const hasPE = (c.peTTM !== null && c.peTTM > 0) || (c.peFY !== null && c.peFY > 0);
+        // Check for negative net margin (loss-making company)
+        const hasNegativeMargin = c.netMargin !== null && c.netMargin < 0;
+
         if (!hasPE) {
           c.filterReason = 'No P/E ratio';
           removedByPE.push(c);
+          return false;
         }
-        return hasPE;
+        if (hasNegativeMargin) {
+          c.filterReason = 'Negative net margin (loss-making)';
+          removedByPE.push(c);
+          return false;
+        }
+        return true;
       });
 
-      filterLog.push(`Filter 1 (P/E): Removed ${removedByPE.length} companies without P/E ratio`);
+      filterLog.push(`Filter (P/E + Margin): Removed ${removedByPE.length} companies without P/E or with negative margin`);
       console.log(filterLog[filterLog.length - 1]);
 
       // Sheet: After P/E filter
       const sheetPEData = createSheetData(currentCompanies, sheetHeaders,
-        `After P/E Filter - ${currentCompanies.length} companies (removed ${removedByPE.length})`);
+        `After P/E & Margin Filter - ${currentCompanies.length} companies (removed ${removedByPE.length})`);
       const sheetPE = XLSX.utils.aoa_to_sheet(sheetPEData);
       XLSX.utils.book_append_sheet(outputWorkbook, sheetPE, `${sheetNumber}. After PE Filter`);
       sheetNumber++;
-
-      // FILTER 2: Remove companies with negative margins (net margin, operating margin, EBITDA margin)
-      // Only applies when user requests profitable companies
-      if (currentCompanies.length > 30 && isProfitable) {
-        const beforeMargin = currentCompanies.length;
-        const removedByMargin = [];
-        currentCompanies = currentCompanies.filter(c => {
-          // Check for negative margins - any negative margin means unprofitable
-          const hasNegativeNetMargin = c.netMargin !== null && c.netMargin < 0;
-          const hasNegativeOpMargin = c.opMargin !== null && c.opMargin < 0;
-          const hasNegativeEbitdaMargin = c.ebitdaMargin !== null && c.ebitdaMargin < 0;
-
-          const hasNegativeMargin = hasNegativeNetMargin || hasNegativeOpMargin || hasNegativeEbitdaMargin;
-
-          if (hasNegativeMargin) {
-            const reasons = [];
-            if (hasNegativeNetMargin) reasons.push(`Net Margin: ${c.netMargin}%`);
-            if (hasNegativeOpMargin) reasons.push(`Op Margin: ${c.opMargin}%`);
-            if (hasNegativeEbitdaMargin) reasons.push(`EBITDA Margin: ${c.ebitdaMargin}%`);
-            c.filterReason = `Negative margin (${reasons.join(', ')})`;
-            removedByMargin.push(c);
-            return false;
-          }
-          return true;
-        });
-
-        filterLog.push(`Filter 2 (Margin): Removed ${removedByMargin.length} companies with negative margins`);
-        console.log(filterLog[filterLog.length - 1]);
-
-        // Sheet: After Margin filter
-        const sheetMarginData = createSheetData(currentCompanies, sheetHeaders,
-          `After Margin Filter - ${currentCompanies.length} companies (removed ${removedByMargin.length})`);
-        const sheetMargin = XLSX.utils.aoa_to_sheet(sheetMarginData);
-        XLSX.utils.book_append_sheet(outputWorkbook, sheetMargin, `${sheetNumber}. After Margin Filter`);
-        sheetNumber++;
-      }
     }
 
     // QUALITATIVE FILTER: Apply iterative multi-AI filtering
