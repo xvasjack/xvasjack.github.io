@@ -2096,12 +2096,22 @@ async function applyIterativeQualitativeFilter(companies, targetDescription, out
       const sheetData = createSheetData(currentCompanies, sheetHeaders,
         `Step ${stepIdx + 1}: ${filterCriteria} - ${currentCompanies.length} companies (removed ${removedCompanies.length})`);
 
-      // Add removed companies section
+      // Add removed companies section in columns to the right (beside the data, not below)
       if (removedCompanies.length > 0) {
-        sheetData.push([]);
-        sheetData.push(['REMOVED COMPANIES (with business description):']);
-        for (const c of removedCompanies) {
-          sheetData.push([c.name, '', '', '', '', '', '', '', '', '', '', c.filterReason]);
+        const removedHeaderCol = sheetHeaders.length + 1; // Column after Filter Reason + gap
+        // Add "REMOVED COMPANIES" header in row 3 (same row as main headers)
+        if (sheetData[2]) {
+          sheetData[2][removedHeaderCol] = 'REMOVED COMPANIES';
+          sheetData[2][removedHeaderCol + 1] = 'Business Description';
+        }
+        // Add removed company names and reasons starting from row 4
+        for (let i = 0; i < removedCompanies.length; i++) {
+          const dataRowIdx = 3 + i; // Start from row 4 (index 3)
+          if (!sheetData[dataRowIdx]) {
+            sheetData[dataRowIdx] = [];
+          }
+          sheetData[dataRowIdx][removedHeaderCol] = removedCompanies[i].name;
+          sheetData[dataRowIdx][removedHeaderCol + 1] = removedCompanies[i].filterReason || '';
         }
       }
 
@@ -2136,6 +2146,8 @@ function createSheetData(companies, headers, title) {
       c.ev,
       c.ebitda,
       c.netMargin,
+      c.opMargin,
+      c.ebitdaMargin,
       c.evEbitda,
       c.peTTM,
       c.peFY,
@@ -2155,6 +2167,8 @@ function createSheetData(companies, headers, title) {
       calculateMedian(companies.map(c => c.ev)),
       calculateMedian(companies.map(c => c.ebitda)),
       calculateMedian(companies.map(c => c.netMargin)),
+      calculateMedian(companies.map(c => c.opMargin)),
+      calculateMedian(companies.map(c => c.ebitdaMargin)),
       calculateMedian(companies.map(c => c.evEbitda)),
       calculateMedian(companies.map(c => c.peTTM)),
       calculateMedian(companies.map(c => c.peFY)),
@@ -2276,6 +2290,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       ebitda: findCol(['ebitda']),
       netMargin: findCol(['net margin', 'net income margin', 'profit margin', 'net profit margin']),
       opMargin: findCol(['operating margin', 'op margin', 'oper margin', 'opm']),
+      ebitdaMargin: findCol(['ebitda margin', 'ebitda %', 'ebitda/sales']),
       evEbitda: findCol(['ev/ebitda', 'ev / ebitda']),
       peTTM: peTTMCol,
       peFY: peFYCol,
@@ -2317,6 +2332,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
         ebitda: parseNum(cols.ebitda),
         netMargin: parseNum(cols.netMargin),
         opMargin: parseNum(cols.opMargin),
+        ebitdaMargin: parseNum(cols.ebitdaMargin),
         evEbitda: parseNum(cols.evEbitda),
         peTTM: parseNum(cols.peTTM),
         peFY: parseNum(cols.peFY),
@@ -2341,7 +2357,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
 
     // Create output workbook
     const outputWorkbook = XLSX.utils.book_new();
-    const sheetHeaders = ['Company', 'Country', 'Sales', 'Market Cap', 'EV', 'EBITDA', 'Net Margin %', 'EV/EBITDA', 'P/E (TTM)', 'P/E (FY)', 'P/BV', 'Filter Reason'];
+    const sheetHeaders = ['Company', 'Country', 'Sales', 'Market Cap', 'EV', 'EBITDA', 'Net Margin %', 'Op Margin %', 'EBITDA Margin %', 'EV/EBITDA', 'P/E (TTM)', 'P/E (FY)', 'P/BV', 'Filter Reason'];
 
     // Sheet 1: All Original Companies
     const sheet1Data = createSheetData(allCompanies, sheetHeaders, `Original Data - ${allCompanies.length} companies`);
@@ -2376,20 +2392,32 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       XLSX.utils.book_append_sheet(outputWorkbook, sheetPE, `${sheetNumber}. After PE Filter`);
       sheetNumber++;
 
-      // FILTER 2: Remove companies without net margin (or operating margin)
-      if (currentCompanies.length > 30) {
+      // FILTER 2: Remove companies with negative margins (net margin, operating margin, EBITDA margin)
+      // Only applies when user requests profitable companies
+      if (currentCompanies.length > 30 && isProfitable) {
         const beforeMargin = currentCompanies.length;
         const removedByMargin = [];
         currentCompanies = currentCompanies.filter(c => {
-          const hasMargin = (c.netMargin !== null) || (c.opMargin !== null);
-          if (!hasMargin) {
-            c.filterReason = 'No margin data';
+          // Check for negative margins - any negative margin means unprofitable
+          const hasNegativeNetMargin = c.netMargin !== null && c.netMargin < 0;
+          const hasNegativeOpMargin = c.opMargin !== null && c.opMargin < 0;
+          const hasNegativeEbitdaMargin = c.ebitdaMargin !== null && c.ebitdaMargin < 0;
+
+          const hasNegativeMargin = hasNegativeNetMargin || hasNegativeOpMargin || hasNegativeEbitdaMargin;
+
+          if (hasNegativeMargin) {
+            const reasons = [];
+            if (hasNegativeNetMargin) reasons.push(`Net Margin: ${c.netMargin}%`);
+            if (hasNegativeOpMargin) reasons.push(`Op Margin: ${c.opMargin}%`);
+            if (hasNegativeEbitdaMargin) reasons.push(`EBITDA Margin: ${c.ebitdaMargin}%`);
+            c.filterReason = `Negative margin (${reasons.join(', ')})`;
             removedByMargin.push(c);
+            return false;
           }
-          return hasMargin;
+          return true;
         });
 
-        filterLog.push(`Filter 2 (Margin): Removed ${removedByMargin.length} companies without margin data`);
+        filterLog.push(`Filter 2 (Margin): Removed ${removedByMargin.length} companies with negative margins`);
         console.log(filterLog[filterLog.length - 1]);
 
         // Sheet: After Margin filter
@@ -2424,6 +2452,8 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       ev: calculateMedian(finalCompanies.map(c => c.ev)),
       ebitda: calculateMedian(finalCompanies.map(c => c.ebitda)),
       netMargin: calculateMedian(finalCompanies.map(c => c.netMargin)),
+      opMargin: calculateMedian(finalCompanies.map(c => c.opMargin)),
+      ebitdaMargin: calculateMedian(finalCompanies.map(c => c.ebitdaMargin)),
       evEbitda: calculateMedian(finalCompanies.map(c => c.evEbitda)),
       peTTM: calculateMedian(finalCompanies.map(c => c.peTTM)),
       peFY: calculateMedian(finalCompanies.map(c => c.peFY)),
@@ -2447,14 +2477,14 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     for (const c of finalCompanies) {
       summaryData.push([
         c.name, c.country || '-', c.sales, c.marketCap, c.ev, c.ebitda, c.netMargin,
-        c.evEbitda, c.peTTM, c.peFY, c.pb, ''
+        c.opMargin, c.ebitdaMargin, c.evEbitda, c.peTTM, c.peFY, c.pb, ''
       ]);
     }
 
     summaryData.push([]);
     summaryData.push([
       'MEDIAN', '', medians.sales, medians.marketCap, medians.ev, medians.ebitda, medians.netMargin,
-      medians.evEbitda, medians.peTTM, medians.peFY, medians.pb, ''
+      medians.opMargin, medians.ebitdaMargin, medians.evEbitda, medians.peTTM, medians.peFY, medians.pb, ''
     ]);
 
     const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
