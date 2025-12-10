@@ -2837,13 +2837,21 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
         /\s+(SpA|SPA|S\.p\.A\.)\.?$/i,
         /\s+(Pte|PTE)\.?\s*(Ltd|LTD)?\.?$/i,
         /\s+(Sdn|SDN)\.?\s*(Bhd|BHD)?\.?$/i,
-        /,\s*(Inc|Ltd|LLC|Corp)\.?$/i
+        /,\s*(Inc|Ltd|LLC|Corp)\.?$/i,
+        /\s+Holdings?$/i,
+        /\s+Group$/i,
+        /\s+International$/i
       ];
       let cleaned = String(name).trim();
       for (const suffix of suffixes) {
         cleaned = cleaned.replace(suffix, '');
       }
-      return cleaned.trim();
+      cleaned = cleaned.trim();
+      // Truncate to 20 chars max to fit on one line
+      if (cleaned.length > 20) {
+        cleaned = cleaned.substring(0, 18) + '..';
+      }
+      return cleaned;
     };
 
     // Helper functions
@@ -2935,7 +2943,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       border: [dashBorder, dataVerticalBorder, dashBorder, dataVerticalBorder]
     };
 
-    // Median "Median" label style - light blue with sysDash top border
+    // Median "Median" label style - light blue with dash top and bottom borders
     const medianLabelStyle = {
       fill: COLORS.lightBlue,
       color: COLORS.white,
@@ -2944,10 +2952,10 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       bold: true,
       valign: 'middle',
       margin: cellMargin,
-      border: [dashBorder, solidWhiteBorder, solidWhiteBorder, solidWhiteBorder]
+      border: [dashBorder, solidWhiteBorder, dashBorder, solidWhiteBorder]
     };
 
-    // Median value cells - white background with sysDash top border
+    // Median value cells - white background with dash top and bottom borders
     const medianValueStyle = {
       fill: COLORS.white,
       color: COLORS.black,
@@ -2956,7 +2964,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       bold: true,
       valign: 'middle',
       margin: cellMargin,
-      border: [dashBorder, solidWhiteBorder, solidWhiteBorder, solidWhiteBorder]
+      border: [dashBorder, solidWhiteBorder, dashBorder, solidWhiteBorder]
     };
 
     // Median empty cells - NO borders (no lines from last company to Median)
