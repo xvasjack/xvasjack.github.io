@@ -31,7 +31,7 @@ const openai = new OpenAI({
 });
 
 // Send email using Brevo API
-async function sendEmail(to, subject, html, attachment = null) {
+async function sendEmail(to, subject, html, attachments = null) {
   const senderEmail = process.env.BREVO_SENDER_EMAIL || 'xvasjack@gmail.com';
   const emailData = {
     sender: { name: 'Find Target', email: senderEmail },
@@ -40,11 +40,13 @@ async function sendEmail(to, subject, html, attachment = null) {
     htmlContent: html
   };
 
-  if (attachment) {
-    emailData.attachment = [{
-      content: attachment.content,
-      name: attachment.name
-    }];
+  if (attachments) {
+    // Support both single attachment object and array of attachments
+    const attachmentList = Array.isArray(attachments) ? attachments : [attachments];
+    emailData.attachment = attachmentList.map(a => ({
+      content: a.content,
+      name: a.name
+    }));
   }
 
   const response = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -2498,10 +2500,124 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     // Generate Excel buffer
     const excelBuffer = XLSX.write(outputWorkbook, { type: 'base64', bookType: 'xlsx' });
 
-    // Send email with Excel attachment
+    // Generate PPT slide
+    const pptx = new pptxgen();
+    pptx.layout = 'LAYOUT_WIDE'; // 13.33 x 7.5 inches
+
+    // Add a slide
+    const slide = pptx.addSlide();
+
+    // Title: Trading Comparable – [Target Description]
+    slide.addText(`Trading Comparable – ${TargetCompanyOrIndustry}`, {
+      x: 0.5, y: 0.3, w: 12.33, h: 0.5,
+      fontSize: 24, bold: true, color: '1e3a5f'
+    });
+
+    // Subtitle: Considering financial data availability, profitability and business relevance, X companies are considered as peers
+    slide.addText(`Considering financial data availability, profitability and business relevance, ${finalCompanies.length} companies are considered as peers`, {
+      x: 0.5, y: 0.8, w: 12.33, h: 0.4,
+      fontSize: 12, color: '666666', italic: true
+    });
+
+    // Currency note
+    slide.addText('Currency: USD M', {
+      x: 0.5, y: 1.2, w: 12.33, h: 0.3,
+      fontSize: 10, color: '888888'
+    });
+
+    // Helper function to format numbers for PPT
+    const formatPPTNum = (val) => {
+      if (val === null || val === undefined) return '-';
+      if (typeof val === 'number') {
+        if (Math.abs(val) >= 1000) return val.toLocaleString('en-US', { maximumFractionDigits: 0 });
+        if (Math.abs(val) >= 10) return val.toFixed(1);
+        return val.toFixed(2);
+      }
+      return String(val);
+    };
+
+    // Table headers
+    const tableHeaders = [
+      { text: '#', options: { bold: true, fill: '1e3a5f', color: 'ffffff', align: 'center' } },
+      { text: 'Company Name', options: { bold: true, fill: '1e3a5f', color: 'ffffff', align: 'left' } },
+      { text: 'Country', options: { bold: true, fill: '1e3a5f', color: 'ffffff', align: 'center' } },
+      { text: 'Sales', options: { bold: true, fill: '1e3a5f', color: 'ffffff', align: 'right' } },
+      { text: 'Market Cap', options: { bold: true, fill: '1e3a5f', color: 'ffffff', align: 'right' } },
+      { text: 'EV', options: { bold: true, fill: '1e3a5f', color: 'ffffff', align: 'right' } },
+      { text: 'EBITDA', options: { bold: true, fill: '1e3a5f', color: 'ffffff', align: 'right' } },
+      { text: 'Net Margin', options: { bold: true, fill: '1e3a5f', color: 'ffffff', align: 'right' } },
+      { text: 'EV/EBITDA', options: { bold: true, fill: '1e3a5f', color: 'ffffff', align: 'right' } },
+      { text: 'PER', options: { bold: true, fill: '1e3a5f', color: 'ffffff', align: 'right' } },
+      { text: 'PBR', options: { bold: true, fill: '1e3a5f', color: 'ffffff', align: 'right' } }
+    ];
+
+    // Build table rows
+    const tableRows = [tableHeaders];
+
+    // Add company rows (limit to 20 for readability)
+    const displayCompanies = finalCompanies.slice(0, 20);
+    displayCompanies.forEach((c, idx) => {
+      const peValue = c.peTTM !== null ? c.peTTM : c.peFY;
+      tableRows.push([
+        { text: String(idx + 1), options: { align: 'center' } },
+        { text: String(c.name || '-'), options: { align: 'left' } },
+        { text: String(c.country || '-'), options: { align: 'center' } },
+        { text: formatPPTNum(c.sales), options: { align: 'right' } },
+        { text: formatPPTNum(c.marketCap), options: { align: 'right' } },
+        { text: formatPPTNum(c.ev), options: { align: 'right' } },
+        { text: formatPPTNum(c.ebitda), options: { align: 'right' } },
+        { text: c.netMargin !== null ? `${c.netMargin.toFixed(1)}%` : '-', options: { align: 'right' } },
+        { text: formatPPTNum(c.evEbitda), options: { align: 'right' } },
+        { text: formatPPTNum(peValue), options: { align: 'right' } },
+        { text: formatPPTNum(c.pb), options: { align: 'right' } }
+      ]);
+    });
+
+    // Add median row
+    const medianPE = medians.peTTM !== null ? medians.peTTM : medians.peFY;
+    tableRows.push([
+      { text: '', options: { fill: 'e8e8e8' } },
+      { text: 'Median', options: { bold: true, fill: 'e8e8e8', align: 'left' } },
+      { text: '', options: { fill: 'e8e8e8' } },
+      { text: formatPPTNum(medians.sales), options: { bold: true, fill: 'e8e8e8', align: 'right' } },
+      { text: formatPPTNum(medians.marketCap), options: { bold: true, fill: 'e8e8e8', align: 'right' } },
+      { text: formatPPTNum(medians.ev), options: { bold: true, fill: 'e8e8e8', align: 'right' } },
+      { text: formatPPTNum(medians.ebitda), options: { bold: true, fill: 'e8e8e8', align: 'right' } },
+      { text: medians.netMargin !== null ? `${medians.netMargin.toFixed(1)}%` : '-', options: { bold: true, fill: 'e8e8e8', align: 'right' } },
+      { text: formatPPTNum(medians.evEbitda), options: { bold: true, fill: 'e8e8e8', align: 'right' } },
+      { text: formatPPTNum(medianPE), options: { bold: true, fill: 'e8e8e8', align: 'right' } },
+      { text: formatPPTNum(medians.pb), options: { bold: true, fill: 'e8e8e8', align: 'right' } }
+    ]);
+
+    // Add table to slide
+    slide.addTable(tableRows, {
+      x: 0.3, y: 1.5, w: 12.73,
+      fontSize: 9,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [0.4, 2.2, 0.9, 1.0, 1.0, 1.0, 1.0, 0.9, 0.9, 0.8, 0.8]
+    });
+
+    // Add source note at bottom
+    slide.addText(`Source: Speeda | Data as of ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`, {
+      x: 0.5, y: 6.9, w: 12.33, h: 0.3,
+      fontSize: 8, color: '888888'
+    });
+
+    // Note if more than 20 companies
+    if (finalCompanies.length > 20) {
+      slide.addText(`Note: Showing top 20 of ${finalCompanies.length} companies. See Excel file for complete list.`, {
+        x: 0.5, y: 7.1, w: 12.33, h: 0.2,
+        fontSize: 8, color: 'cc6600', italic: true
+      });
+    }
+
+    // Generate PPT buffer
+    const pptBuffer = await pptx.write({ outputType: 'base64' });
+
+    // Send email with Excel and PPT attachments
     const emailHTML = `
 <h2 style="color: #1e3a5f;">Trading Comparable Analysis – ${TargetCompanyOrIndustry}</h2>
-<p style="color: #374151;">Please find attached the Excel file with your trading comparable analysis.</p>
+<p style="color: #374151;">Please find attached the Excel file and PowerPoint slide with your trading comparable analysis.</p>
 
 <h3 style="color: #1e3a5f;">Filter Summary</h3>
 <ul style="color: #374151;">
@@ -2527,20 +2643,30 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
 </table>
 
 <p style="font-size: 12px; color: #6b7280; margin-top: 20px;">
-The Excel file contains multiple sheets showing each filtering step.<br>
+<strong>Attachments:</strong><br>
+• Excel file - contains multiple sheets showing each filtering step<br>
+• PowerPoint slide - summary view for presentations<br>
+<br>
 Data as of ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}<br>
 Source: Speeda
 </p>
 `;
 
+    const sanitizedName = TargetCompanyOrIndustry.replace(/[^a-zA-Z0-9]/g, '_');
     await sendEmail(
       Email,
       `Trading Comps: ${TargetCompanyOrIndustry} - ${finalCompanies.length} peers`,
       emailHTML,
-      {
-        content: excelBuffer,
-        name: `Trading_Comparable_${TargetCompanyOrIndustry.replace(/[^a-zA-Z0-9]/g, '_')}.xlsx`
-      }
+      [
+        {
+          content: excelBuffer,
+          name: `Trading_Comparable_${sanitizedName}.xlsx`
+        },
+        {
+          content: pptBuffer,
+          name: `Trading_Comparable_${sanitizedName}.pptx`
+        }
+      ]
     );
 
     console.log(`\n${'='.repeat(50)}`);
