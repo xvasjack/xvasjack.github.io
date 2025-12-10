@@ -2607,15 +2607,15 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
 
     // Border styles (3pt white solid for header rows)
     const solidWhiteBorder = { type: 'solid', pt: 3, color: COLORS.white };
-    // Dashed border for horizontal lines between data rows
-    const dashedBorder = { type: 'dash', pt: 0.5, color: COLORS.lineGray };
+    // Dotted border for horizontal lines between data rows (thin dotted line)
+    const dottedBorder = { type: 'dot', pt: 0.75, color: COLORS.lineGray };
 
-    // Row 1 style: DARK BLUE with solid white borders
+    // Row 1 style: DARK BLUE with solid white borders - font 14
     const row1DarkStyle = {
       fill: COLORS.darkBlue,
       color: COLORS.white,
       fontFace: 'Segoe UI',
-      fontSize: 11,
+      fontSize: 14,
       bold: false,
       valign: 'middle',
       align: 'center',
@@ -2623,12 +2623,12 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       border: solidWhiteBorder
     };
 
-    // Row 1 empty cells (white background) with solid white borders
+    // Row 1 empty cells (white background) with solid white borders - font 14
     const row1EmptyStyle = {
       fill: COLORS.white,
       color: COLORS.black,
       fontFace: 'Segoe UI',
-      fontSize: 11,
+      fontSize: 14,
       valign: 'middle',
       margin: cellMargin,
       border: solidWhiteBorder
@@ -2647,47 +2647,47 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       border: solidWhiteBorder
     };
 
-    // Data row style - dashed horizontal borders between rows
+    // Data row style - dotted horizontal borders between rows, font 14
     const dataStyle = {
       fill: COLORS.white,
       color: COLORS.black,
       fontFace: 'Segoe UI',
-      fontSize: 10,
+      fontSize: 14,
       valign: 'middle',
       margin: cellMargin,
-      border: [dashedBorder, solidWhiteBorder, dashedBorder, solidWhiteBorder]
+      border: [dottedBorder, solidWhiteBorder, dottedBorder, solidWhiteBorder]
     };
 
-    // Median "Median" label style - light blue (#007FFF) with white text
+    // Median "Median" label style - light blue (#007FFF) with white text, font 14
     const medianLabelStyle = {
       fill: COLORS.lightBlue,
       color: COLORS.white,
       fontFace: 'Segoe UI',
-      fontSize: 10,
+      fontSize: 14,
       bold: true,
       valign: 'middle',
       margin: cellMargin,
       border: solidWhiteBorder
     };
 
-    // Median value cells - white background with bold black text
+    // Median value cells - white background with bold black text, font 14
     const medianValueStyle = {
       fill: COLORS.white,
       color: COLORS.black,
       fontFace: 'Segoe UI',
-      fontSize: 10,
+      fontSize: 14,
       bold: true,
       valign: 'middle',
       margin: cellMargin,
       border: solidWhiteBorder
     };
 
-    // Median empty cells
+    // Median empty cells - font 14
     const medianEmptyStyle = {
       fill: COLORS.white,
       color: COLORS.black,
       fontFace: 'Segoe UI',
-      fontSize: 10,
+      fontSize: 14,
       valign: 'middle',
       margin: cellMargin,
       border: solidWhiteBorder
@@ -2766,7 +2766,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       x: 0.38,
       y: 1.47,
       w: tableWidth,
-      fontSize: 10,
+      fontSize: 14,
       fontFace: 'Segoe UI',
       colW: colWidths,
       rowH: rowHeight
