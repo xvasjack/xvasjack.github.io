@@ -1268,10 +1268,16 @@ app.post('/api/find-target-slow', async (req, res) => {
 // Multi-model AI expansion to find additional companies
 async function expandWithMultiModelAI(existingCompanies, business, country, iteration) {
   console.log(`\n--- Multi-Model AI Expansion (Iteration ${iteration}) ---`);
-  const existingNames = existingCompanies.map(c => c.name.toLowerCase());
+  const existingNames = existingCompanies
+    .filter(c => c && c.name)
+    .map(c => c.name.toLowerCase());
 
   // Build context of what we already found
-  const existingList = existingCompanies.slice(0, 50).map(c => c.name).join(', ');
+  const existingList = existingCompanies
+    .filter(c => c && c.name)
+    .slice(0, 50)
+    .map(c => c.name)
+    .join(', ');
 
   // Create prompts for different AI models - search WITHOUT exclusion for maximum coverage
   const expansionPrompt = `You are helping find ALL ${business} companies in ${country} for M&A research.
@@ -1320,6 +1326,7 @@ List at least 20 new companies if possible.`;
   // Combine and filter out duplicates (compared to existing)
   const allNewCompanies = [...gptCompanies, ...geminiCompanies, ...perplexityCompanies];
   const trulyNew = allNewCompanies.filter(c => {
+    if (!c || !c.name) return false;
     const nameLower = c.name.toLowerCase();
     return !existingNames.some(existing =>
       existing.includes(nameLower) || nameLower.includes(existing) ||
