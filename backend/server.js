@@ -4684,33 +4684,99 @@ try {
   console.warn('PDFKit not available - UTB PDF generation disabled');
 }
 
-// UTB Research & Synthesis - Deep thinking approach
+// UTB Research & Synthesis - Parallel multi-language approach
 async function conductUTBResearch(companyName, website, additionalContext) {
   console.log(`Starting UTB research for: ${companyName}`);
 
-  // Step 1: Gather raw facts with Perplexity
-  console.log('Step 1: Gathering facts with Perplexity...');
-  const factGatheringPrompt = `Research ${companyName} (${website}). I need FACTS only - be specific with numbers, names, dates:
+  // Detect local language from website domain
+  const domainMatch = website.match(/\.([a-z]{2,3})(?:\/|$)/i);
+  const tld = domainMatch ? domainMatch[1].toLowerCase() : '';
+  const languageMap = {
+    'jp': { lang: 'Japanese', searchLang: '日本語で検索' },
+    'cn': { lang: 'Chinese', searchLang: '用中文搜索' },
+    'kr': { lang: 'Korean', searchLang: '한국어로 검색' },
+    'de': { lang: 'German', searchLang: 'Auf Deutsch suchen' },
+    'fr': { lang: 'French', searchLang: 'Rechercher en français' },
+    'th': { lang: 'Thai', searchLang: 'ค้นหาเป็นภาษาไทย' },
+    'vn': { lang: 'Vietnamese', searchLang: 'Tìm kiếm bằng tiếng Việt' },
+    'id': { lang: 'Indonesian', searchLang: 'Cari dalam Bahasa Indonesia' },
+    'tw': { lang: 'Chinese (Traditional)', searchLang: '用繁體中文搜索' }
+  };
+  const localLang = languageMap[tld] || null;
 
-1. COMPANY BASICS: HQ location, founding year, ownership (public/private), revenue, employees, key executives
-2. BUSINESS: Main products/services, key customer segments, manufacturing locations
-3. MARKET POSITION: Main competitors, market share if known, competitive advantages
-4. RECENT NEWS: Any M&A activity, strategic announcements, expansion plans in last 2 years
-5. GEOGRAPHIC: Countries of operation, % revenue by region if available
+  console.log(`Detected TLD: ${tld}, Local language: ${localLang?.lang || 'English only'}`);
 
+  // Step 1: Run PARALLEL research queries
+  console.log('Step 1: Running parallel research queries...');
+
+  const researchPromises = [];
+
+  // Query 1: English - General company facts
+  researchPromises.push(
+    callPerplexity(`Research ${companyName} (${website}). FACTS only - numbers, names, dates:
+1. BASICS: HQ, founding year, ownership, revenue, employees, CEO/key executives
+2. BUSINESS: Products/services, customer segments, manufacturing locations
+3. COMPETITORS: Main competitors, market position, competitive advantages
+4. GEOGRAPHIC: Countries of operation, revenue by region
 ${additionalContext ? `CONTEXT: ${additionalContext}` : ''}
+Be specific and factual.`).catch(e => { console.error('English query error:', e.message); return ''; })
+  );
 
-Be factual and specific. No fluff.`;
+  // Query 2: M&A History and Partnerships (critical for UTB)
+  researchPromises.push(
+    callPerplexity(`Research ${companyName} M&A activity and strategic partnerships:
+1. PAST M&A: Any acquisitions or mergers in last 5 years - target names, deal sizes, rationale
+2. PARTNERSHIPS: Key strategic alliances, JVs, distribution agreements
+3. INVESTMENT: Any minority investments made or received
+4. ANNOUNCED INTENTIONS: Any public statements about M&A strategy or expansion plans
+5. INTEGRATION: How they've integrated past acquisitions
+Be specific with names, dates, deal values if available.`).catch(e => { console.error('M&A query error:', e.message); return ''; })
+  );
 
-  let rawFacts = '';
-  try {
-    rawFacts = await callPerplexity(factGatheringPrompt);
-  } catch (error) {
-    console.error('Fact gathering error:', error.message);
-    rawFacts = 'Limited information available';
+  // Query 3: Local language search (if applicable)
+  if (localLang) {
+    researchPromises.push(
+      callPerplexity(`${localLang.searchLang}: ${companyName}
+Research in ${localLang.lang} for deeper local insights:
+- Recent news and press releases
+- Local market position and reputation
+- Management interviews or statements
+- Industry awards or recognition
+- Local partnerships or expansions
+Provide facts in English.`).catch(e => { console.error('Local lang query error:', e.message); return ''; })
+    );
   }
 
-  // Step 2: Deep synthesis with GPT-4o - THINK, don't just summarize
+  // Query 4: Gemini for additional perspective (parallel)
+  researchPromises.push(
+    callGemini(`Analyze ${companyName} (${website}) for M&A advisory:
+- What makes this company strategically valuable?
+- What are their likely growth constraints?
+- What type of acquisitions would make sense for them?
+Be analytical and concise.`).catch(e => { console.error('Gemini query error:', e.message); return ''; })
+  );
+
+  // Wait for all queries in parallel
+  const [englishFacts, maHistory, localFacts, geminiAnalysis] = await Promise.all(researchPromises);
+
+  // Combine all research
+  const combinedResearch = `
+=== COMPANY OVERVIEW (English) ===
+${englishFacts || 'Limited information'}
+
+=== M&A HISTORY & PARTNERSHIPS ===
+${maHistory || 'No M&A history found'}
+
+${localLang ? `=== LOCAL INSIGHTS (${localLang.lang}) ===
+${localFacts || 'No local language results'}` : ''}
+
+=== STRATEGIC ANALYSIS ===
+${geminiAnalysis || 'No additional analysis'}
+`.trim();
+
+  console.log('Step 1 complete. Combined research length:', combinedResearch.length);
+
+  // Step 2: Deep synthesis with GPT-4o
   console.log('Step 2: Synthesizing with GPT-4o...');
   const synthesisPrompt = `You are a senior M&A advisor preparing for a client meeting. Based on the research below, THINK DEEPLY and provide STRUCTURED ANALYSIS.
 
@@ -4718,12 +4784,12 @@ COMPANY: ${companyName}
 WEBSITE: ${website}
 ${additionalContext ? `CLIENT CONTEXT: ${additionalContext}` : ''}
 
-RAW RESEARCH:
-${rawFacts}
+RESEARCH:
+${combinedResearch}
 
 ---
 
-TASK: Synthesize this into actionable M&A intelligence. Don't just summarize - ANALYZE and INFER.
+TASK: Synthesize into actionable M&A intelligence. ANALYZE and INFER - don't just summarize.
 
 Respond in this EXACT JSON format (no markdown, just JSON):
 {
@@ -4737,9 +4803,14 @@ Respond in this EXACT JSON format (no markdown, just JSON):
     "industry": "Primary industry"
   },
   "business_summary": "2-3 sentences on what they do and why they matter. Be specific.",
-  "competitive_position": "2-3 sentences on where they stand vs competitors. Strengths and weaknesses.",
+  "competitive_position": "2-3 sentences on market position vs competitors. Strengths and weaknesses.",
+  "partnerships_ma_history": {
+    "past_acquisitions": ["List key acquisitions with year if known"],
+    "key_partnerships": ["List 2-3 important strategic partnerships"],
+    "pattern": "1 sentence on their M&A/partnership pattern or style"
+  },
   "ma_motivation": {
-    "primary_drivers": ["List 2-3 likely reasons they want to do M&A based on evidence"],
+    "primary_drivers": ["2-3 likely reasons they want to do M&A based on evidence"],
     "urgency": "High/Medium/Low with 1 sentence explanation",
     "budget_indication": "Deal size range they likely target, with reasoning"
   },
@@ -4760,14 +4831,13 @@ Respond in this EXACT JSON format (no markdown, just JSON):
 
 IMPORTANT:
 - Infer from evidence, don't just repeat facts
-- If uncertain, say so but still give your best assessment
+- Include M&A history insights in your analysis
 - Be concise - each field should be brief
 - Think like an advisor: what does this client ACTUALLY want?`;
 
   let analysis = null;
   try {
     const response = await callChatGPT(synthesisPrompt);
-    // Extract JSON from response
     const jsonMatch = response.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       analysis = JSON.parse(jsonMatch[0]);
@@ -4776,19 +4846,20 @@ IMPORTANT:
     console.error('Synthesis error:', error.message);
   }
 
-  // Fallback structure if parsing fails
+  // Fallback structure
   if (!analysis) {
     analysis = {
       snapshot: { name: companyName, hq: 'Unknown', founded: 'Unknown', ownership: 'Unknown', revenue: 'Unknown', employees: 'Unknown', industry: 'Unknown' },
-      business_summary: 'Analysis could not be completed. Please review raw research.',
+      business_summary: 'Analysis could not be completed.',
       competitive_position: 'Unable to assess.',
+      partnerships_ma_history: { past_acquisitions: [], key_partnerships: [], pattern: 'Unknown' },
       ma_motivation: { primary_drivers: ['Unknown'], urgency: 'Unknown', budget_indication: 'Unknown' },
       target_profile: { industries: ['Unknown'], geographies: ['Unknown'], company_stage: 'Unknown', capabilities_sought: ['Unknown'], deal_structure: 'Unknown' },
       engagement_approach: { key_decision_makers: 'Unknown', hot_buttons: ['Unknown'], concerns: ['Unknown'], recommended_angle: 'Further research needed.' }
     };
   }
 
-  return { analysis, rawFacts };
+  return { analysis, rawFacts: combinedResearch };
 }
 
 // Generate concise 3-page UTB PDF
@@ -4892,6 +4963,25 @@ async function generateUTBPDF(companyName, website, research, additionalContext)
     doc.rect(0, 0, doc.page.width, 35).fill(blue);
     doc.fontSize(14).font('Helvetica-Bold').fillColor('white').text('M&A Strategic Analysis', 50, 10);
     doc.y = 50;
+
+    // M&A History & Partnerships (new section)
+    const history = analysis.partnerships_ma_history || {};
+    sectionHeader('M&A History & Partnerships');
+
+    if (history.past_acquisitions && history.past_acquisitions.length > 0) {
+      doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Past Acquisitions:');
+      bulletList(history.past_acquisitions);
+    }
+
+    if (history.key_partnerships && history.key_partnerships.length > 0) {
+      doc.fontSize(9).font('Helvetica-Bold').fillColor(gray).text('Key Partnerships:');
+      bulletList(history.key_partnerships);
+    }
+
+    if (history.pattern && history.pattern !== 'Unknown') {
+      labelValue('M&A Pattern', history.pattern);
+    }
+    doc.moveDown(0.4);
 
     const ma = analysis.ma_motivation || {};
 
