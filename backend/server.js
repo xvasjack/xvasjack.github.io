@@ -3840,55 +3840,95 @@ async function generateFinancialChartPPTX(financialDataArray) {
         const hasMarginData = selectedMarginType && marginValues.some(v => v !== 0);
 
         if (hasMarginData) {
-          // Two overlapping charts approach since COMBO chart has issues
-          // First: BAR chart for revenue (primary axis, left)
+          // Two overlapping charts since COMBO has issues
+          // Calculate max margin for proper scaling (round up to nearest 5%)
+          const maxMargin = Math.max(...marginValues);
+          const marginAxisMax = Math.ceil(maxMargin / 5) * 5 + 5; // e.g., if max is 13, axis max is 20
+
+          // First: BAR chart for revenue (axis on left)
           slide.addChart(pptx.charts.BAR, [
-            { name: revenueLabel, labels: chartLabels, values: revenueValues }
+            { name: 'Revenue', labels: chartLabels, values: revenueValues }
           ], {
-            x: chartX, y: chartY, w: chartW, h: chartH,
+            x: chartX, y: chartY, w: chartW - 0.4, h: chartH, // slightly narrower for right axis
             barDir: 'col',
             barGapWidthPct: 50,
-            chartColors: ['4472C4'],
+            chartColors: ['5B9BD5'],
             showValue: true,
             dataLabelFontFace: 'Segoe UI',
-            dataLabelFontSize: 9,
+            dataLabelFontSize: 10,
+            dataLabelFontBold: true,
             dataLabelColor: '000000',
+            dataLabelPosition: 'outEnd',
+            dataLabelFormatCode: '#,##0',
             catAxisLabelFontFace: 'Segoe UI',
             catAxisLabelFontSize: 10,
+            catAxisLabelColor: '000000',
+            valAxisLabelFontFace: 'Segoe UI',
+            valAxisLabelFontSize: 9,
+            valAxisLabelColor: '000000',
             valAxisDisplayUnits: 'none',
             valAxisMajorGridLine: { style: 'solid', color: 'D9D9D9', size: 0.5 },
+            valAxisMinorGridLine: { style: 'none' },
             showLegend: true,
             legendPos: 't',
             legendFontFace: 'Segoe UI',
             legendFontSize: 10
           });
 
-          // Second: LINE chart for margin overlaid on top (transparent background)
+          // Second: LINE chart for margin (axis hidden, will add manual right axis)
           slide.addChart(pptx.charts.LINE, [
             { name: marginLabel, labels: chartLabels, values: marginValues }
           ], {
-            x: chartX, y: chartY, w: chartW, h: chartH,
+            x: chartX, y: chartY, w: chartW - 0.4, h: chartH,
             lineSmooth: false,
-            lineSize: 2,
+            lineSize: 2.5,
             lineDataSymbolSize: 8,
             chartColors: ['ED7D31'],
             showValue: true,
             dataLabelFontFace: 'Segoe UI',
-            dataLabelFontSize: 9,
+            dataLabelFontSize: 10,
             dataLabelColor: 'ED7D31',
-            dataLabelPosition: 't',
+            dataLabelPosition: 'b',
+            dataLabelFormatCode: '0.0"%"',
             catAxisHidden: true,
-            valAxisHidden: false,
-            valAxisDisplayUnits: 'none',
+            valAxisHidden: true,
             valAxisMinVal: 0,
-            valAxisMaxVal: 100,
+            valAxisMaxVal: marginAxisMax,
             valAxisMajorGridLine: { style: 'none' },
-            valAxisLabelColor: 'ED7D31',
-            valAxisLabelFontFace: 'Segoe UI',
-            valAxisLabelFontSize: 9,
             showLegend: false,
-            fill: 'FFFFFF00',
+            fill: { type: 'none' },
             plotArea: { fill: { type: 'none' } }
+          });
+
+          // Add margin legend entry manually (orange line + text)
+          slide.addShape(pptx.shapes.LINE, {
+            x: chartX + 2.0, y: chartY + 0.12, w: 0.3, h: 0,
+            line: { color: 'ED7D31', width: 2 }
+          });
+          slide.addText(marginLabel.replace(' (%)', ''), {
+            x: chartX + 2.35, y: chartY + 0.02, w: 1.5, h: 0.25,
+            fontSize: 10, fontFace: 'Segoe UI', color: '000000'
+          });
+
+          // Add right axis scale manually
+          const rightAxisX = chartX + chartW - 0.35;
+          const axisSteps = [0, marginAxisMax/4, marginAxisMax/2, marginAxisMax*3/4, marginAxisMax];
+          const chartBottom = chartY + chartH - 0.35;
+          const chartTop = chartY + 0.45;
+          const chartHeight = chartBottom - chartTop;
+
+          axisSteps.forEach((val, i) => {
+            const yPos = chartBottom - (i / (axisSteps.length - 1)) * chartHeight;
+            slide.addText(`${val.toFixed(1)}%`, {
+              x: rightAxisX, y: yPos - 0.08, w: 0.5, h: 0.16,
+              fontSize: 9, fontFace: 'Segoe UI', color: '000000', align: 'left'
+            });
+          });
+
+          // Add left axis label (currency unit)
+          slide.addText(`(${currency} ${unitDisplay === '百万' ? 'M' : unitDisplay === '十億' ? 'B' : ''})`, {
+            x: chartX - 0.1, y: chartY + 0.25, w: 0.8, h: 0.2,
+            fontSize: 9, fontFace: 'Segoe UI', color: '000000', align: 'right'
           });
         } else {
           // Create simple BAR chart for revenue only (no margin data)
