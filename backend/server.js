@@ -5048,7 +5048,7 @@ Respond in this EXACT JSON format:
 IMPORTANT: Use SPECIFIC numbers and names. If information is not available, write "Not disclosed" rather than making things up.`).catch(e => ({ section: 'profile', error: e.message })),
 
     // Synthesis 2: Products, Services & Operations
-    callChatGPT(`You are a senior M&A advisor analyzing a company's products and operations.
+    callChatGPT(`You are writing for M&A ADVISORS who need to understand a company's business quickly. NOT engineers.
 
 COMPANY: ${companyName}
 
@@ -5060,43 +5060,47 @@ ${research.operations}
 
 ---
 
+CRITICAL INSTRUCTIONS:
+- Do NOT list technical model numbers or product codes (e.g., "SYSTEM 800 SE", "Model X-7000")
+- Instead, explain what the business DOES and WHY IT MATTERS for an acquirer
+- Write like you're briefing a Managing Director before a client meeting
+- Focus on: revenue drivers, competitive advantages, customer value proposition
+
 Respond in this EXACT JSON format:
 {
   "products_and_services": {
-    "overview": "2-3 sentences on what they offer and to whom",
+    "overview": "2-3 sentences explaining the business in plain English. What do they sell, to whom, and why do customers choose them?",
     "product_lines": [
       {
-        "name": "Product line or brand name",
-        "description": "What it does",
-        "key_products": ["Specific model/product names"],
-        "target_market": "Who buys this",
-        "competitive_position": "Leader/Challenger/Niche"
+        "name": "Business segment name (not model numbers)",
+        "what_it_does": "Plain English explanation of customer value",
+        "revenue_significance": "High/Medium/Low revenue contributor",
+        "why_it_matters": "Why an acquirer should care - moat, growth, margins"
       }
     ],
-    "services": [
-      {"name": "Service name", "description": "What it includes"}
-    ],
-    "technology_ip": ["List proprietary technologies, patents, or unique capabilities"]
+    "strategic_capabilities": [
+      {
+        "capability": "What they can do that competitors struggle with",
+        "business_impact": "How this translates to customer wins or pricing power",
+        "defensibility": "Why this is hard to replicate"
+      }
+    ]
   },
   "operations": {
     "manufacturing_footprint": [
-      {"location": "City, Country", "function": "What is made/done there", "capacity": "If known"}
-    ],
-    "rd_centers": [
-      {"location": "City, Country", "focus": "What they research"}
+      {"location": "City, Country", "strategic_value": "Why this location matters (cost, market access, talent)"}
     ],
     "global_presence": {
-      "countries_with_operations": "Number",
-      "key_markets": ["List top markets"],
-      "recent_expansions": "Any recent geographic moves"
+      "summary": "Brief description of geographic reach and key markets",
+      "expansion_trajectory": "Where they're growing and why"
     }
   }
 }
 
-IMPORTANT: Be SPECIFIC with product names, locations, and capabilities. Generic descriptions are not useful for M&A advisors.`).catch(e => ({ section: 'products', error: e.message })),
+REMEMBER: An M&A advisor reading this should understand the business model and competitive position in 2 minutes. No jargon.`).catch(e => ({ section: 'products', error: e.message })),
 
     // Synthesis 3: Competitive Landscape
-    callChatGPT(`You are a senior M&A advisor analyzing competitive dynamics.
+    callChatGPT(`You are writing a competitive analysis for M&A ADVISORS. Focus on deal implications.
 
 COMPANY: ${companyName}
 
@@ -5108,37 +5112,41 @@ ${research.products}
 
 ---
 
+CRITICAL INSTRUCTIONS:
+- Write for someone evaluating this company as an acquisition target or buyer
+- Focus on: market position, competitive moat, vulnerability to disruption
+- Explain WHY competitive dynamics matter for valuation and deal thesis
+
 Respond in this EXACT JSON format:
 {
   "competitive_landscape": {
     "market_overview": {
       "market_size": "Total addressable market in USD",
       "growth_rate": "Market CAGR",
-      "key_trends": ["3-5 major trends affecting the market"]
+      "market_maturity": "Emerging / Growth / Mature / Declining - with brief explanation"
     },
     "company_position": {
-      "market_share": "Estimated % or rank",
-      "positioning": "How they compete (cost, quality, innovation, etc.)",
-      "key_strengths": ["3-4 competitive advantages"],
-      "key_weaknesses": ["2-3 competitive gaps or challenges"]
+      "market_rank": "#1, #2, Top 5, etc. with context",
+      "how_they_win": "Plain English: why do customers choose them over alternatives?",
+      "competitive_moat": "What protects their position - switching costs, brand, scale, IP, relationships?",
+      "vulnerability": "Biggest competitive threat or disruption risk"
     },
-    "competitors": [
+    "key_competitors": [
       {
         "name": "Competitor name",
-        "hq": "Country",
-        "revenue": "Approximate",
-        "key_differentiator": "What makes them different",
-        "threat_level": "High/Medium/Low"
+        "size_comparison": "Larger/Similar/Smaller than target",
+        "threat_to_position": "Why they matter - are they gaining share, attacking same customers?",
+        "ma_relevance": "Could they be acquirer, target, or consolidation partner?"
       }
     ],
-    "competitive_dynamics": "2-3 sentences on how competition is evolving"
+    "deal_implications": "2-3 sentences on what competitive dynamics mean for valuation or strategic fit"
   }
 }
 
-IMPORTANT: Name SPECIFIC competitors with data. Do not use generic descriptions.`).catch(e => ({ section: 'competitors', error: e.message })),
+REMEMBER: Help an MD quickly understand if this company has a defensible position worth paying for.`).catch(e => ({ section: 'competitors', error: e.message })),
 
     // Synthesis 4: M&A Analysis & Acquisition Appetite
-    callChatGPT(`You are a senior M&A advisor analyzing a company's M&A track record and future appetite.
+    callChatGPT(`You are preparing an M&A buyer intelligence brief. This is THE most important section.
 
 COMPANY: ${companyName}
 
@@ -5153,7 +5161,12 @@ ${research.financials}
 
 ---
 
-Think deeply and INFER from the evidence. This is the most critical section.
+CRITICAL INSTRUCTIONS:
+- This section determines if we should pursue this buyer. Be ACTIONABLE.
+- Don't just list facts - INTERPRET what they mean for pitching deals
+- "Capabilities sought" should be plain English business needs, NOT technical jargon
+- Example good: "Companies with strong distribution in Southeast Asia"
+- Example bad: "Advanced polymer processing technology capabilities"
 
 Respond in this EXACT JSON format:
 {
@@ -5163,44 +5176,35 @@ Respond in this EXACT JSON format:
         "year": "Year",
         "target": "Company name",
         "deal_value": "Amount or Not disclosed",
-        "rationale": "Why they did it",
-        "outcome": "How it worked out if known"
+        "what_they_bought": "Plain English - what capability/market did they acquire?",
+        "pattern_signal": "What this tells us about their M&A strategy"
       }
     ],
-    "partnerships_jvs": [
-      {"partner": "Name", "year": "Year", "nature": "What kind of partnership"}
-    ],
-    "pattern_analysis": "2-3 sentences on their M&A style (bolt-on vs transformational, integration approach, deal frequency)"
+    "deal_style": "2-3 sentences: Do they do bolt-ons or transformational? Fast or slow integration? Aggressive or conservative valuations?"
   },
   "acquisition_appetite": {
-    "strategic_drivers": [
-      {"driver": "Reason they'd acquire", "evidence": "What suggests this", "priority": "High/Medium/Low"}
+    "buying_motivation": [
+      {"need": "What business problem are they trying to solve through M&A?", "urgency": "High/Medium/Low", "evidence": "What signals this?"}
     ],
-    "likely_deal_size": {
-      "range": "$X-Y million",
-      "rationale": "Why this range based on past deals and financial capacity"
-    },
-    "preferred_deal_structure": "Acquisition / JV / Minority stake - with reasoning",
-    "urgency": {
-      "level": "High/Medium/Low",
-      "rationale": "Why this urgency level"
+    "deal_parameters": {
+      "sweet_spot_size": "$X-Y million - based on past deals and balance sheet",
+      "structure_preference": "Full acquisition / JV / Minority - and why",
+      "decision_speed": "Fast mover / Deliberate / Slow - with evidence"
     }
   },
-  "target_profile": {
-    "industries_of_interest": [
-      {"sector": "Sector name", "interest_level": "High/Medium/Low", "rationale": "Why interested"}
+  "what_they_want": {
+    "business_types": [
+      {"description": "Plain English description of target company type", "fit_level": "High/Medium/Low", "why": "How this fits their strategy"}
     ],
-    "geographic_preferences": [
-      {"region": "Region", "interest_level": "High/Medium/Low", "rationale": "Why interested"}
+    "geographic_focus": [
+      {"region": "Region name", "interest": "High/Medium/Low", "reasoning": "Why this geography"}
     ],
-    "company_stage": "Early-stage / Growth / Mature - with reasoning",
-    "capabilities_sought": ["Specific technologies, capabilities, or assets they'd want"],
-    "exclusions": ["Types of deals they'd likely avoid"]
+    "deal_breakers": ["What would make them walk away from a deal"]
   },
   "country_sector_matrix": {
-    "explanation": "This matrix shows estimated interest level (H=High, M=Medium, L=Low, N=No interest) by country and sector",
-    "sectors": ["List 4-6 relevant sectors"],
-    "countries": ["List 6-8 relevant countries/regions"],
+    "explanation": "Interest level by country and business type (H=High, M=Medium, L=Low)",
+    "sectors": ["Use plain business descriptions, not technical terms"],
+    "countries": ["Key geographies"],
     "matrix": {
       "Japan": {"sector1": "H", "sector2": "M"},
       "USA": {"sector1": "M", "sector2": "H"}
@@ -5208,7 +5212,7 @@ Respond in this EXACT JSON format:
   }
 }
 
-IMPORTANT: INFER intelligently from evidence. This analysis should demonstrate deep thinking, not just data regurgitation.`).catch(e => ({ section: 'ma_analysis', error: e.message })),
+REMEMBER: An MD should read this and immediately know if they have a deal worth pitching.`).catch(e => ({ section: 'ma_analysis', error: e.message })),
 
     // Synthesis 5: Engagement Strategy
     callChatGPT(`You are a senior M&A advisor preparing for a client meeting. How should we engage with this company?
@@ -5529,36 +5533,43 @@ async function generateUTBExcel(companyName, website, research, additionalContex
   let pr = 1;
 
   // Products Overview
-  pr = addSectionTitle(prodSheet, 'Products & Services Overview', pr);
+  pr = addSectionTitle(prodSheet, 'Business Overview', pr);
   prodSheet.mergeCells(`A${pr}:C${pr}`);
   prodSheet.getCell(`A${pr}`).value = prod.overview || 'No overview available';
   prodSheet.getCell(`A${pr}`).alignment = { wrapText: true };
-  prodSheet.getRow(pr).height = 40;
+  prodSheet.getRow(pr).height = 50;
   pr += 2;
 
-  // Product Lines
+  // Business Segments (renamed from Product Lines)
   if (prod.product_lines && prod.product_lines.length > 0) {
-    pr = addSectionTitle(prodSheet, 'Product Lines', pr);
+    pr = addSectionTitle(prodSheet, 'Business Segments', pr);
     const plHeader = prodSheet.getRow(pr);
-    plHeader.values = ['Product Line', 'Description', 'Key Products'];
+    plHeader.values = ['Segment', 'What It Does', 'Why It Matters'];
     styleHeaderRow(plHeader, blue);
     pr++;
     prod.product_lines.forEach((line, i) => {
       prodSheet.getCell(`A${pr}`).value = line.name;
       prodSheet.getCell(`A${pr}`).font = { bold: true };
-      prodSheet.getCell(`B${pr}`).value = line.description;
-      prodSheet.getCell(`C${pr}`).value = (line.key_products || []).join(', ');
+      prodSheet.getCell(`B${pr}`).value = line.what_it_does || line.description || '';
+      prodSheet.getCell(`C${pr}`).value = line.why_it_matters || '';
       styleDataRow(prodSheet.getRow(pr), i % 2 === 0);
       pr++;
     });
     pr++;
   }
 
-  // Technology & IP
-  if (prod.technology_ip && prod.technology_ip.length > 0) {
-    pr = addSectionTitle(prodSheet, 'Technology & IP', pr);
-    prod.technology_ip.forEach((tech, i) => {
-      prodSheet.getCell(`A${pr}`).value = `• ${tech}`;
+  // Strategic Capabilities (replaces Technology & IP)
+  if (prod.strategic_capabilities && prod.strategic_capabilities.length > 0) {
+    pr = addSectionTitle(prodSheet, 'Strategic Capabilities (Why Customers Choose Them)', pr);
+    const capHeader = prodSheet.getRow(pr);
+    capHeader.values = ['Capability', 'Business Impact', 'Defensibility'];
+    styleHeaderRow(capHeader, navy);
+    pr++;
+    prod.strategic_capabilities.forEach((cap, i) => {
+      prodSheet.getCell(`A${pr}`).value = cap.capability;
+      prodSheet.getCell(`A${pr}`).font = { bold: true };
+      prodSheet.getCell(`B${pr}`).value = cap.business_impact || '';
+      prodSheet.getCell(`C${pr}`).value = cap.defensibility || '';
       styleDataRow(prodSheet.getRow(pr), i % 2 === 0);
       pr++;
     });
@@ -5568,42 +5579,49 @@ async function generateUTBExcel(companyName, website, research, additionalContex
   // Operations
   const ops = synthesis.operations || {};
   if (ops.manufacturing_footprint && ops.manufacturing_footprint.length > 0) {
-    pr = addSectionTitle(prodSheet, 'Manufacturing Footprint', pr);
+    pr = addSectionTitle(prodSheet, 'Manufacturing & Operations', pr);
     const mfgHeader = prodSheet.getRow(pr);
-    mfgHeader.values = ['Location', 'Function', 'Capacity'];
+    mfgHeader.values = ['Location', 'Strategic Value', ''];
     styleHeaderRow(mfgHeader);
     pr++;
     ops.manufacturing_footprint.forEach((mfg, i) => {
       prodSheet.getCell(`A${pr}`).value = mfg.location;
-      prodSheet.getCell(`B${pr}`).value = mfg.function;
-      prodSheet.getCell(`C${pr}`).value = mfg.capacity || '-';
+      prodSheet.getCell(`A${pr}`).font = { bold: true };
+      prodSheet.mergeCells(`B${pr}:C${pr}`);
+      prodSheet.getCell(`B${pr}`).value = mfg.strategic_value || mfg.function || '';
       styleDataRow(prodSheet.getRow(pr), i % 2 === 0);
       pr++;
     });
     pr++;
   }
 
-  if (ops.rd_centers && ops.rd_centers.length > 0) {
-    pr = addSectionTitle(prodSheet, 'R&D Centers', pr);
-    const rdHeader = prodSheet.getRow(pr);
-    rdHeader.values = ['Location', 'Focus Area', ''];
-    styleHeaderRow(rdHeader);
-    pr++;
-    ops.rd_centers.forEach((rd, i) => {
-      prodSheet.getCell(`A${pr}`).value = rd.location;
-      prodSheet.getCell(`B${pr}`).value = rd.focus;
-      styleDataRow(prodSheet.getRow(pr), i % 2 === 0);
+  // Global Presence
+  if (ops.global_presence) {
+    pr = addSectionTitle(prodSheet, 'Global Footprint', pr);
+    if (ops.global_presence.summary) {
+      prodSheet.getCell(`A${pr}`).value = 'Presence';
+      prodSheet.getCell(`A${pr}`).font = { bold: true };
+      prodSheet.mergeCells(`B${pr}:C${pr}`);
+      prodSheet.getCell(`B${pr}`).value = ops.global_presence.summary;
+      styleDataRow(prodSheet.getRow(pr));
       pr++;
-    });
+    }
+    if (ops.global_presence.expansion_trajectory) {
+      prodSheet.getCell(`A${pr}`).value = 'Growth Direction';
+      prodSheet.getCell(`A${pr}`).font = { bold: true };
+      prodSheet.mergeCells(`B${pr}:C${pr}`);
+      prodSheet.getCell(`B${pr}`).value = ops.global_presence.expansion_trajectory;
+      styleDataRow(prodSheet.getRow(pr), true);
+      pr++;
+    }
   }
 
   // ========== SHEET 4: COMPETITIVE LANDSCAPE ==========
   const compSheet = workbook.addWorksheet('Competitive Landscape');
   compSheet.columns = [
     { key: 'a', width: 25 },
-    { key: 'b', width: 20 },
-    { key: 'c', width: 25 },
-    { key: 'd', width: 30 }
+    { key: 'b', width: 35 },
+    { key: 'c', width: 40 }
   ];
 
   const comp = synthesis.competitive_landscape || {};
@@ -5614,224 +5632,230 @@ async function generateUTBExcel(companyName, website, research, additionalContex
   cr = addSectionTitle(compSheet, 'Market Overview', cr);
   const mktData = [
     ['Market Size', mkt.market_size || 'Not disclosed'],
-    ['Growth Rate', mkt.growth_rate || 'Not disclosed']
+    ['Growth Rate', mkt.growth_rate || 'Not disclosed'],
+    ['Market Stage', mkt.market_maturity || 'Not disclosed']
   ];
   mktData.forEach((item, i) => {
     compSheet.getCell(`A${cr}`).value = item[0];
     compSheet.getCell(`A${cr}`).font = { bold: true };
+    compSheet.mergeCells(`B${cr}:C${cr}`);
     compSheet.getCell(`B${cr}`).value = item[1];
     styleDataRow(compSheet.getRow(cr), i % 2 === 0);
     cr++;
   });
-  if (mkt.key_trends && mkt.key_trends.length > 0) {
-    compSheet.getCell(`A${cr}`).value = 'Key Trends';
-    compSheet.getCell(`A${cr}`).font = { bold: true };
-    compSheet.mergeCells(`B${cr}:D${cr}`);
-    compSheet.getCell(`B${cr}`).value = mkt.key_trends.join('; ');
-    compSheet.getCell(`B${cr}`).alignment = { wrapText: true };
-    styleDataRow(compSheet.getRow(cr));
-    cr++;
-  }
   cr++;
 
-  // Company Position
+  // Company Position - Deal Focused
   const pos = comp.company_position || {};
-  cr = addSectionTitle(compSheet, 'Company Competitive Position', cr);
-  const posData = [
-    ['Market Share', pos.market_share || 'Not disclosed'],
-    ['Positioning', pos.positioning || 'Not disclosed']
-  ];
-  posData.forEach((item, i) => {
-    compSheet.getCell(`A${cr}`).value = item[0];
+  cr = addSectionTitle(compSheet, 'Why This Company Wins', cr);
+
+  if (pos.market_rank) {
+    compSheet.getCell(`A${cr}`).value = 'Market Position';
     compSheet.getCell(`A${cr}`).font = { bold: true };
-    compSheet.mergeCells(`B${cr}:D${cr}`);
-    compSheet.getCell(`B${cr}`).value = item[1];
-    styleDataRow(compSheet.getRow(cr), i % 2 === 0);
+    compSheet.mergeCells(`B${cr}:C${cr}`);
+    compSheet.getCell(`B${cr}`).value = pos.market_rank;
+    styleDataRow(compSheet.getRow(cr));
     cr++;
-  });
-  if (pos.key_strengths && pos.key_strengths.length > 0) {
-    compSheet.getCell(`A${cr}`).value = 'Key Strengths';
+  }
+  if (pos.how_they_win) {
+    compSheet.getCell(`A${cr}`).value = 'Why Customers Buy';
     compSheet.getCell(`A${cr}`).font = { bold: true, color: { argb: 'FF16A34A' } };
-    compSheet.mergeCells(`B${cr}:D${cr}`);
-    compSheet.getCell(`B${cr}`).value = pos.key_strengths.join('; ');
+    compSheet.mergeCells(`B${cr}:C${cr}`);
+    compSheet.getCell(`B${cr}`).value = pos.how_they_win;
+    compSheet.getCell(`B${cr}`).alignment = { wrapText: true };
+    styleDataRow(compSheet.getRow(cr), true);
+    cr++;
+  }
+  if (pos.competitive_moat) {
+    compSheet.getCell(`A${cr}`).value = 'Competitive Moat';
+    compSheet.getCell(`A${cr}`).font = { bold: true, color: { argb: 'FF16A34A' } };
+    compSheet.mergeCells(`B${cr}:C${cr}`);
+    compSheet.getCell(`B${cr}`).value = pos.competitive_moat;
     compSheet.getCell(`B${cr}`).alignment = { wrapText: true };
     styleDataRow(compSheet.getRow(cr));
     cr++;
   }
-  if (pos.key_weaknesses && pos.key_weaknesses.length > 0) {
-    compSheet.getCell(`A${cr}`).value = 'Key Weaknesses';
+  if (pos.vulnerability) {
+    compSheet.getCell(`A${cr}`).value = 'Key Vulnerability';
     compSheet.getCell(`A${cr}`).font = { bold: true, color: { argb: 'FFDC2626' } };
-    compSheet.mergeCells(`B${cr}:D${cr}`);
-    compSheet.getCell(`B${cr}`).value = pos.key_weaknesses.join('; ');
+    compSheet.mergeCells(`B${cr}:C${cr}`);
+    compSheet.getCell(`B${cr}`).value = pos.vulnerability;
     compSheet.getCell(`B${cr}`).alignment = { wrapText: true };
-    styleDataRow(compSheet.getRow(cr));
+    styleDataRow(compSheet.getRow(cr), true);
     cr++;
   }
   cr++;
 
-  // Competitors Table
-  if (comp.competitors && comp.competitors.length > 0) {
-    cr = addSectionTitle(compSheet, 'Key Competitors', cr);
+  // Competitors Table - M&A Focused
+  const competitors = comp.key_competitors || comp.competitors || [];
+  if (competitors.length > 0) {
+    cr = addSectionTitle(compSheet, 'Competitive Landscape & M&A Implications', cr);
     const compHeader = compSheet.getRow(cr);
-    compHeader.values = ['Company', 'HQ', 'Revenue', 'Threat Level'];
+    compHeader.values = ['Competitor', 'Threat to Position', 'M&A Relevance'];
     styleHeaderRow(compHeader, blue);
     cr++;
-    comp.competitors.forEach((c, i) => {
-      compSheet.getCell(`A${cr}`).value = c.name;
+    competitors.forEach((c, i) => {
+      compSheet.getCell(`A${cr}`).value = `${c.name}${c.size_comparison ? ' (' + c.size_comparison + ')' : ''}`;
       compSheet.getCell(`A${cr}`).font = { bold: true };
-      compSheet.getCell(`B${cr}`).value = c.hq;
-      compSheet.getCell(`C${cr}`).value = c.revenue;
-      compSheet.getCell(`D${cr}`).value = c.threat_level;
-      // Color code threat level
-      if (c.threat_level === 'High') {
-        compSheet.getCell(`D${cr}`).font = { color: { argb: 'FFDC2626' }, bold: true };
-      } else if (c.threat_level === 'Medium') {
-        compSheet.getCell(`D${cr}`).font = { color: { argb: 'FFD97706' } };
-      }
+      compSheet.getCell(`B${cr}`).value = c.threat_to_position || c.key_differentiator || '';
+      compSheet.getCell(`C${cr}`).value = c.ma_relevance || '';
       styleDataRow(compSheet.getRow(cr), i % 2 === 0);
       cr++;
     });
+    cr++;
+  }
+
+  // Deal Implications
+  if (comp.deal_implications) {
+    cr = addSectionTitle(compSheet, 'What This Means for a Deal', cr);
+    compSheet.mergeCells(`A${cr}:C${cr}`);
+    compSheet.getCell(`A${cr}`).value = comp.deal_implications;
+    compSheet.getCell(`A${cr}`).alignment = { wrapText: true };
+    compSheet.getCell(`A${cr}`).font = { italic: true };
+    compSheet.getRow(cr).height = 50;
   }
 
   // ========== SHEET 5: M&A ANALYSIS ==========
   const maSheet = workbook.addWorksheet('M&A Analysis');
   maSheet.columns = [
-    { key: 'a', width: 15 },
+    { key: 'a', width: 20 },
     { key: 'b', width: 25 },
-    { key: 'c', width: 20 },
-    { key: 'd', width: 40 }
+    { key: 'c', width: 55 }
   ];
 
   const maTrack = synthesis.ma_track_record || {};
   let mr = 1;
 
-  // Acquisition History
+  // Acquisition History - What They've Done
   if (maTrack.acquisition_history && maTrack.acquisition_history.length > 0) {
-    mr = addSectionTitle(maSheet, 'Acquisition History', mr);
+    mr = addSectionTitle(maSheet, 'Past Deals - What They\'ve Bought', mr);
     const acqHeader = maSheet.getRow(mr);
-    acqHeader.values = ['Year', 'Target', 'Deal Value', 'Rationale'];
+    acqHeader.values = ['Year / Target', 'What They Acquired', 'What This Tells Us'];
     styleHeaderRow(acqHeader);
     mr++;
     maTrack.acquisition_history.forEach((acq, i) => {
-      maSheet.getCell(`A${mr}`).value = acq.year;
-      maSheet.getCell(`B${mr}`).value = acq.target;
-      maSheet.getCell(`B${mr}`).font = { bold: true };
-      maSheet.getCell(`C${mr}`).value = acq.deal_value;
-      maSheet.getCell(`D${mr}`).value = acq.rationale;
+      maSheet.getCell(`A${mr}`).value = `${acq.year}: ${acq.target}`;
+      maSheet.getCell(`A${mr}`).font = { bold: true };
+      maSheet.getCell(`B${mr}`).value = acq.what_they_bought || acq.deal_value || '';
+      maSheet.getCell(`C${mr}`).value = acq.pattern_signal || acq.rationale || '';
       styleDataRow(maSheet.getRow(mr), i % 2 === 0);
       mr++;
     });
     mr++;
   }
 
-  // M&A Pattern
-  if (maTrack.pattern_analysis) {
-    mr = addSectionTitle(maSheet, 'M&A Pattern Analysis', mr);
-    maSheet.mergeCells(`A${mr}:D${mr}`);
-    maSheet.getCell(`A${mr}`).value = maTrack.pattern_analysis;
+  // Deal Style
+  if (maTrack.deal_style || maTrack.pattern_analysis) {
+    mr = addSectionTitle(maSheet, 'How They Do Deals', mr);
+    maSheet.mergeCells(`A${mr}:C${mr}`);
+    maSheet.getCell(`A${mr}`).value = maTrack.deal_style || maTrack.pattern_analysis;
     maSheet.getCell(`A${mr}`).alignment = { wrapText: true };
     maSheet.getRow(mr).height = 50;
     mr += 2;
   }
 
-  // Acquisition Appetite
+  // Why They're Buying - Motivations
   const appetite = synthesis.acquisition_appetite || {};
-  mr = addSectionTitle(maSheet, 'Acquisition Appetite', mr);
-  const appData = [
-    ['Target Deal Size', appetite.likely_deal_size?.range || 'Not disclosed', appetite.likely_deal_size?.rationale || ''],
-    ['Deal Structure', appetite.preferred_deal_structure || 'Not disclosed', ''],
-    ['Urgency Level', appetite.urgency?.level || 'Not disclosed', appetite.urgency?.rationale || '']
-  ];
-  appData.forEach((item, i) => {
-    maSheet.getCell(`A${mr}`).value = item[0];
-    maSheet.getCell(`A${mr}`).font = { bold: true };
-    maSheet.getCell(`B${mr}`).value = item[1];
-    maSheet.mergeCells(`C${mr}:D${mr}`);
-    maSheet.getCell(`C${mr}`).value = item[2];
-    styleDataRow(maSheet.getRow(mr), i % 2 === 0);
+  const motivations = appetite.buying_motivation || appetite.strategic_drivers || [];
+  if (motivations.length > 0) {
+    mr = addSectionTitle(maSheet, 'Why They\'re Looking to Buy', mr);
+    const motHeader = maSheet.getRow(mr);
+    motHeader.values = ['Business Need', 'Urgency', 'Evidence'];
+    styleHeaderRow(motHeader, blue);
     mr++;
-  });
-  mr++;
-
-  // Strategic Drivers
-  if (appetite.strategic_drivers && appetite.strategic_drivers.length > 0) {
-    mr = addSectionTitle(maSheet, 'Strategic Drivers', mr);
-    const sdHeader = maSheet.getRow(mr);
-    sdHeader.values = ['Driver', 'Priority', 'Evidence', ''];
-    styleHeaderRow(sdHeader, blue);
-    mr++;
-    appetite.strategic_drivers.forEach((sd, i) => {
-      maSheet.getCell(`A${mr}`).value = sd.driver;
+    motivations.forEach((mot, i) => {
+      maSheet.getCell(`A${mr}`).value = mot.need || mot.driver || '';
       maSheet.getCell(`A${mr}`).font = { bold: true };
-      maSheet.getCell(`B${mr}`).value = sd.priority;
-      if (sd.priority === 'High') {
-        maSheet.getCell(`B${mr}`).font = { color: { argb: 'FF16A34A' }, bold: true };
+      maSheet.getCell(`B${mr}`).value = mot.urgency || mot.priority || '';
+      if ((mot.urgency || mot.priority) === 'High') {
+        maSheet.getCell(`B${mr}`).font = { color: { argb: 'FFDC2626' }, bold: true };
       }
-      maSheet.mergeCells(`C${mr}:D${mr}`);
-      maSheet.getCell(`C${mr}`).value = sd.evidence;
+      maSheet.getCell(`C${mr}`).value = mot.evidence || '';
       styleDataRow(maSheet.getRow(mr), i % 2 === 0);
       mr++;
     });
+    mr++;
   }
 
-  // ========== SHEET 6: TARGET PROFILE ==========
-  const tpSheet = workbook.addWorksheet('Target Profile');
+  // Deal Parameters
+  const dealParams = appetite.deal_parameters || {};
+  mr = addSectionTitle(maSheet, 'Deal Parameters', mr);
+  const paramData = [
+    ['Sweet Spot Size', dealParams.sweet_spot_size || appetite.likely_deal_size?.range || 'Not disclosed'],
+    ['Structure Preference', dealParams.structure_preference || appetite.preferred_deal_structure || 'Not disclosed'],
+    ['Decision Speed', dealParams.decision_speed || appetite.urgency?.level || 'Not disclosed']
+  ];
+  paramData.forEach((item, i) => {
+    maSheet.getCell(`A${mr}`).value = item[0];
+    maSheet.getCell(`A${mr}`).font = { bold: true };
+    maSheet.mergeCells(`B${mr}:C${mr}`);
+    maSheet.getCell(`B${mr}`).value = item[1];
+    styleDataRow(maSheet.getRow(mr), i % 2 === 0);
+    mr++;
+  });
+
+  // ========== SHEET 6: WHAT THEY WANT ==========
+  const tpSheet = workbook.addWorksheet('What They Want');
   tpSheet.columns = [
-    { key: 'a', width: 25 },
+    { key: 'a', width: 30 },
     { key: 'b', width: 15 },
     { key: 'c', width: 50 }
   ];
 
-  const tp = synthesis.target_profile || {};
+  const whatTheyWant = synthesis.what_they_want || synthesis.target_profile || {};
   let tr = 1;
 
-  // Industries of Interest
-  if (tp.industries_of_interest && tp.industries_of_interest.length > 0) {
-    tr = addSectionTitle(tpSheet, 'Industries of Interest', tr);
-    const indHeader = tpSheet.getRow(tr);
-    indHeader.values = ['Sector', 'Interest', 'Rationale'];
-    styleHeaderRow(indHeader);
+  // Types of Businesses
+  const businessTypes = whatTheyWant.business_types || whatTheyWant.industries_of_interest || [];
+  if (businessTypes.length > 0) {
+    tr = addSectionTitle(tpSheet, 'Types of Companies They Want', tr);
+    const btHeader = tpSheet.getRow(tr);
+    btHeader.values = ['Target Description', 'Fit Level', 'Why This Fits'];
+    styleHeaderRow(btHeader);
     tr++;
-    tp.industries_of_interest.forEach((ind, i) => {
-      tpSheet.getCell(`A${tr}`).value = ind.sector;
+    businessTypes.forEach((bt, i) => {
+      tpSheet.getCell(`A${tr}`).value = bt.description || bt.sector || '';
       tpSheet.getCell(`A${tr}`).font = { bold: true };
-      tpSheet.getCell(`B${tr}`).value = ind.interest_level;
-      if (ind.interest_level === 'High') {
+      tpSheet.getCell(`B${tr}`).value = bt.fit_level || bt.interest_level || '';
+      if ((bt.fit_level || bt.interest_level) === 'High') {
         tpSheet.getCell(`B${tr}`).font = { color: { argb: 'FF16A34A' }, bold: true };
       }
-      tpSheet.getCell(`C${tr}`).value = ind.rationale;
+      tpSheet.getCell(`C${tr}`).value = bt.why || bt.rationale || '';
       styleDataRow(tpSheet.getRow(tr), i % 2 === 0);
       tr++;
     });
     tr++;
   }
 
-  // Geographic Preferences
-  if (tp.geographic_preferences && tp.geographic_preferences.length > 0) {
-    tr = addSectionTitle(tpSheet, 'Geographic Preferences', tr);
+  // Geographic Focus
+  const geoFocus = whatTheyWant.geographic_focus || whatTheyWant.geographic_preferences || [];
+  if (geoFocus.length > 0) {
+    tr = addSectionTitle(tpSheet, 'Geographic Focus', tr);
     const geoHeader = tpSheet.getRow(tr);
-    geoHeader.values = ['Region', 'Interest', 'Rationale'];
+    geoHeader.values = ['Region', 'Interest', 'Reasoning'];
     styleHeaderRow(geoHeader, blue);
     tr++;
-    tp.geographic_preferences.forEach((geo, i) => {
+    geoFocus.forEach((geo, i) => {
       tpSheet.getCell(`A${tr}`).value = geo.region;
       tpSheet.getCell(`A${tr}`).font = { bold: true };
-      tpSheet.getCell(`B${tr}`).value = geo.interest_level;
-      if (geo.interest_level === 'High') {
+      tpSheet.getCell(`B${tr}`).value = geo.interest || geo.interest_level || '';
+      if ((geo.interest || geo.interest_level) === 'High') {
         tpSheet.getCell(`B${tr}`).font = { color: { argb: 'FF16A34A' }, bold: true };
       }
-      tpSheet.getCell(`C${tr}`).value = geo.rationale;
+      tpSheet.getCell(`C${tr}`).value = geo.reasoning || geo.rationale || '';
       styleDataRow(tpSheet.getRow(tr), i % 2 === 0);
       tr++;
     });
     tr++;
   }
 
-  // Capabilities Sought
-  if (tp.capabilities_sought && tp.capabilities_sought.length > 0) {
-    tr = addSectionTitle(tpSheet, 'Capabilities Sought', tr);
-    tp.capabilities_sought.forEach((cap, i) => {
-      tpSheet.getCell(`A${tr}`).value = `• ${cap}`;
+  // Deal Breakers
+  const dealBreakers = whatTheyWant.deal_breakers || [];
+  if (dealBreakers.length > 0) {
+    tr = addSectionTitle(tpSheet, 'Deal Breakers - What Makes Them Walk Away', tr);
+    dealBreakers.forEach((db, i) => {
+      tpSheet.getCell(`A${tr}`).value = `• ${db}`;
+      tpSheet.getCell(`A${tr}`).font = { color: { argb: 'FFDC2626' } };
       styleDataRow(tpSheet.getRow(tr), i % 2 === 0);
       tr++;
     });
