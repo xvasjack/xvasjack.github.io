@@ -3846,26 +3846,44 @@ async function generateFinancialChartPPTX(financialDataArray) {
 
         // Create chart - use COMBO if we have margin data, otherwise just BAR
         if (chartDataArray.length > 1) {
-          // Combo chart: Bar for revenue + Line for margin on secondary axis
-          slide.addChart(pptx.charts.COMBO, chartDataArray, {
+          // For COMBO chart in pptxgenjs, structure data with options per series
+          const comboChartData = [
+            {
+              type: pptx.charts.BAR,
+              data: [{
+                name: chartDataArray[0].name,
+                labels: chartDataArray[0].labels,
+                values: chartDataArray[0].values
+              }],
+              options: {
+                barDir: 'col',
+                barGapWidthPct: 50,
+                chartColors: [COLORS.chartBlue]
+              }
+            },
+            {
+              type: pptx.charts.LINE,
+              data: [{
+                name: chartDataArray[1].name,
+                labels: chartDataArray[1].labels,
+                values: chartDataArray[1].values
+              }],
+              options: {
+                secondaryValAxis: true,
+                lineDataSymbol: 'circle',
+                lineDataSymbolSize: 6,
+                chartColors: [COLORS.chartOrange]
+              }
+            }
+          ];
+
+          slide.addChart(comboChartData, {
             x: 6.86, y: 4.75, w: 6.0, h: 2.35,
-            chartColors: [COLORS.chartBlue, COLORS.chartOrange],
-            showValue: true,
-            dataLabelFontSize: 8,
             catAxisLabelFontSize: 9,
             valAxisLabelFontSize: 8,
             showLegend: true,
             legendPos: 'b',
-            legendFontSize: 8,
-            barDir: 'col',
-            barGapWidthPct: 50,
-            lineDataSymbol: 'circle',
-            lineDataSymbolSize: 6,
-            // Define which series uses which chart type
-            chartTypes: [
-              { type: pptx.charts.BAR, secondaryValAxis: false },
-              { type: pptx.charts.LINE, secondaryValAxis: true }
-            ]
+            legendFontSize: 8
           });
         } else {
           // Simple bar chart (no margin data)
