@@ -4695,50 +4695,36 @@ async function generateFinancialChartPPTX(financialDataArray) {
         const hasMarginData = selectedMarginType && marginValues.some(v => v !== 0);
 
         if (hasMarginData) {
-          // COMBO chart: BAR (revenue) + LINE (margin on secondary axis)
-          slide.addChart(pptx.charts.COMBO, [
+          // SIMPLE APPROACH: Revenue bars only, margin shown as text annotation
+          // This is the most reliable way to avoid PPTX corruption
+
+          // Create BAR chart for revenue
+          slide.addChart(pptx.charts.BAR, [
             {
               name: revenueLabel,
               labels: chartLabels,
               values: revenueValues
-            },
-            {
-              name: marginLabel,
-              labels: chartLabels,
-              values: marginValues
             }
           ], {
             x: chartX, y: chartY, w: chartW, h: chartH,
-            chartTypes: [
-              {
-                type: pptx.charts.BAR,
-                barDir: 'col',
-                barGapWidthPct: 50
-              },
-              {
-                type: pptx.charts.LINE,
-                lineSmooth: false,
-                lineSize: 2,
-                lineDataSymbolSize: 6,
-                secondaryValAxis: true
-              }
-            ],
-            chartColors: ['5B9BD5', 'ED7D31'],
+            barDir: 'col',
+            barGapWidthPct: 50,
+            chartColors: ['5B9BD5'],
             showValue: true,
             dataLabelPosition: 'outEnd',
             dataLabelFontFace: 'Segoe UI',
-            dataLabelFontSize: 9,
+            dataLabelFontSize: 8,
             dataLabelColor: '000000',
-            // Category axis (bottom) with border and tick marks
+            // Category axis (bottom)
             catAxisLabelFontFace: 'Segoe UI',
-            catAxisLabelFontSize: 10,
+            catAxisLabelFontSize: 9,
             catAxisLabelColor: '000000',
             catAxisLineShow: true,
             catAxisLineColor: '000000',
             catAxisMajorTickMark: 'out',
-            // Primary value axis (left - revenue)
+            // Value axis (left - revenue)
             valAxisLabelFontFace: 'Segoe UI',
-            valAxisLabelFontSize: 9,
+            valAxisLabelFontSize: 8,
             valAxisLabelColor: '000000',
             valAxisDisplayUnits: 'none',
             valAxisLineShow: true,
@@ -4746,21 +4732,30 @@ async function generateFinancialChartPPTX(financialDataArray) {
             valAxisMajorTickMark: 'out',
             valAxisMajorGridLine: { style: 'solid', color: 'D9D9D9', size: 0.5 },
             valAxisMinorGridLine: { style: 'none' },
-            // Secondary value axis (right - margin %)
-            showSecValAxis: true,
-            secValAxisLabelFontFace: 'Segoe UI',
-            secValAxisLabelFontSize: 9,
-            secValAxisLabelColor: 'ED7D31',
-            secValAxisMinVal: 0,
-            secValAxisMaxVal: 25,
-            secValAxisDisplayUnits: 'none',
-            secValAxisLineShow: true,
-            secValAxisLineColor: '000000',
-            secValAxisMajorTickMark: 'out',
-            secValAxisMajorGridLine: { style: 'none' },
-            // Legend - PPT built-in, positioned at top
+            // Legend
             showLegend: true,
             legendPos: 't'
+          });
+
+          // Add margin data as a small table below the chart
+          const marginTableData = [
+            [{ text: marginLabel, options: { bold: true, fontSize: 8, color: 'ED7D31' } }].concat(
+              chartLabels.map(label => ({ text: label, options: { bold: true, fontSize: 8 } }))
+            ),
+            [{ text: '', options: { fontSize: 8 } }].concat(
+              marginValues.map(v => ({ text: v.toFixed(1) + '%', options: { fontSize: 8, color: 'ED7D31' } }))
+            )
+          ];
+
+          slide.addTable(marginTableData, {
+            x: chartX,
+            y: chartY + chartH + 0.05,
+            w: chartW,
+            colW: [1.5].concat(chartLabels.map(() => (chartW - 1.5) / chartLabels.length)),
+            fontFace: 'Segoe UI',
+            border: { type: 'none' },
+            align: 'center',
+            valign: 'middle'
           });
         } else {
           // Create simple BAR chart for revenue only (no margin data)
