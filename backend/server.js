@@ -2373,52 +2373,59 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     let sheetNumber = 2;
     const filterLog = [];
 
+    // FILTER 0: Always remove companies with negative EV (regardless of profitable toggle)
+    const removedByNegEV = [];
+    currentCompanies = currentCompanies.filter(c => {
+      if (c.ev !== null && c.ev < 0) {
+        c.filterReason = 'Negative enterprise value';
+        removedByNegEV.push(c);
+        return false;
+      }
+      return true;
+    });
+
+    if (removedByNegEV.length > 0) {
+      filterLog.push(`Filter (EV): Removed ${removedByNegEV.length} companies with negative enterprise value`);
+      console.log(filterLog[filterLog.length - 1]);
+
+      const sheetEVData = createSheetData(currentCompanies, sheetHeaders,
+        `After Negative EV Filter - ${currentCompanies.length} companies (removed ${removedByNegEV.length})`);
+      const sheetEV = XLSX.utils.aoa_to_sheet(sheetEVData);
+      XLSX.utils.book_append_sheet(outputWorkbook, sheetEV, `${sheetNumber}. After EV Filter`);
+      sheetNumber++;
+    }
+
     if (isProfitable) {
-      // FILTER 1: Remove companies without P/E (prefer TTM, fallback to FY)
-      const beforePE = currentCompanies.length;
+      // FILTER 1: Remove companies without P/E OR with negative net margin (loss-making)
       const removedByPE = [];
       currentCompanies = currentCompanies.filter(c => {
+        // Check for valid P/E ratio
         const hasPE = (c.peTTM !== null && c.peTTM > 0) || (c.peFY !== null && c.peFY > 0);
+        // Check for negative net margin (loss-making company)
+        const hasNegativeMargin = c.netMargin !== null && c.netMargin < 0;
+
         if (!hasPE) {
           c.filterReason = 'No P/E ratio';
           removedByPE.push(c);
+          return false;
         }
-        return hasPE;
+        if (hasNegativeMargin) {
+          c.filterReason = 'Negative net margin (loss-making)';
+          removedByPE.push(c);
+          return false;
+        }
+        return true;
       });
 
-      filterLog.push(`Filter 1 (P/E): Removed ${removedByPE.length} companies without P/E ratio`);
+      filterLog.push(`Filter (P/E + Margin): Removed ${removedByPE.length} companies without P/E or with negative margin`);
       console.log(filterLog[filterLog.length - 1]);
 
       // Sheet: After P/E filter
       const sheetPEData = createSheetData(currentCompanies, sheetHeaders,
-        `After P/E Filter - ${currentCompanies.length} companies (removed ${removedByPE.length})`);
+        `After P/E & Margin Filter - ${currentCompanies.length} companies (removed ${removedByPE.length})`);
       const sheetPE = XLSX.utils.aoa_to_sheet(sheetPEData);
       XLSX.utils.book_append_sheet(outputWorkbook, sheetPE, `${sheetNumber}. After PE Filter`);
       sheetNumber++;
-
-      // FILTER 2: Remove companies without net margin (or operating margin)
-      if (currentCompanies.length > 30) {
-        const beforeMargin = currentCompanies.length;
-        const removedByMargin = [];
-        currentCompanies = currentCompanies.filter(c => {
-          const hasMargin = (c.netMargin !== null) || (c.opMargin !== null);
-          if (!hasMargin) {
-            c.filterReason = 'No margin data';
-            removedByMargin.push(c);
-          }
-          return hasMargin;
-        });
-
-        filterLog.push(`Filter 2 (Margin): Removed ${removedByMargin.length} companies without margin data`);
-        console.log(filterLog[filterLog.length - 1]);
-
-        // Sheet: After Margin filter
-        const sheetMarginData = createSheetData(currentCompanies, sheetHeaders,
-          `After Margin Filter - ${currentCompanies.length} companies (removed ${removedByMargin.length})`);
-        const sheetMargin = XLSX.utils.aoa_to_sheet(sheetMarginData);
-        XLSX.utils.book_append_sheet(outputWorkbook, sheetMargin, `${sheetNumber}. After Margin Filter`);
-        sheetNumber++;
-      }
     }
 
     // QUALITATIVE FILTER: Apply iterative multi-AI filtering
