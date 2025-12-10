@@ -2940,17 +2940,17 @@ async function generatePPTX(companies) {
       const formatCellText = (text) => {
         if (!text || typeof text !== 'string') return text;
 
-        // Check if text contains bullet points (■ or starts with ■)
-        if (text.includes('■')) {
+        // Check if text contains bullet points (■, -, or •)
+        if (text.includes('■') || text.includes('\n-') || text.startsWith('-')) {
           // Split by newline and filter out empty lines
           const lines = text.split('\n').filter(line => line.trim());
 
           // Convert to array of text objects with bullet formatting
           return lines.map((line, index) => {
-            const cleanLine = line.replace(/^■\s*/, '').trim();
+            const cleanLine = line.replace(/^[■\-•]\s*/, '').trim();
             return {
               text: cleanLine + (index < lines.length - 1 ? '\n' : ''),
-              options: { bullet: { type: 'bullet' } }
+              options: { bullet: true }
             };
           });
         }
@@ -3271,9 +3271,9 @@ INPUT:
 - Previously extracted: company name, year, location
 
 OUTPUT JSON:
-1. business: Detailed description of what company does. Format each business line on separate line starting with "■ " (black square bullet).
+1. business: Detailed description of what company does. Format each business line on separate line starting with "- ".
    Example:
-   "■ Manufacture high-quality printing inks\\n■ Provide services related to printing technology\\n■ Distribute industrial chemicals across Southeast Asia"
+   "- Manufacture high-quality printing inks\\n- Provide services related to printing technology\\n- Distribute industrial chemicals across Southeast Asia"
    Be comprehensive - include manufacturing, distribution, services, R&D activities.
 
 2. message: One-liner introductory message about the company. Example: "Malaysia-based distributor specializing in electronic components and industrial automation products across Southeast Asia."
@@ -3286,7 +3286,7 @@ OUTPUT JSON:
 4. title: Company name WITHOUT suffix (remove Pte Ltd, Sdn Bhd, Co Ltd, JSC, PT, Inc, etc.)
 
 RULES:
-- All bullet points must use "■ " (black square followed by space)
+- All bullet points must use "- " (dash followed by space)
 - Each bullet point on new line using "\\n"
 - Be thorough and extract ALL business activities mentioned
 - Return ONLY valid JSON`
@@ -3358,7 +3358,7 @@ OUTPUT JSON:
 {
   "key_metrics": [
     {"label": "Shareholding", "value": "Family owned (100%)"},
-    {"label": "Key Metrics", "value": "■ Production capacity of 800+ tons per month\\n■ 250+ machines\\n■ 300+ employees"},
+    {"label": "Key Metrics", "value": "- Production capacity of 800+ tons per month\\n- 250+ machines\\n- 300+ employees"},
     {"label": "Export Countries", "value": "SEA, South Asia, North Africa"},
     {"label": "Distribution Network", "value": "700 domestic distribution partners"},
     {"label": "Certification", "value": "ISO 9001, ISO 14001"},
@@ -3368,7 +3368,7 @@ OUTPUT JSON:
 
 RULES:
 - Extract as many metrics as found (8-15 ideally)
-- For metrics with multiple items, use "■ " bullet points separated by "\\n"
+- For metrics with multiple items, use "- " bullet points separated by "\\n"
 - Labels should be 1-3 words
 - Be specific with numbers when available
 - Include shareholding structure if mentioned
