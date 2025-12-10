@@ -2491,19 +2491,17 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     // Generate Excel buffer
     const excelBuffer = XLSX.write(outputWorkbook, { type: 'base64', bookType: 'xlsx' });
 
-    // Generate PPT slide - matching trading comps template exactly
-    // POSITIONS FROM REFERENCE:
-    // - Title/message: x=0.38", y=0.05"
-    // - Table: x=0.38", y=1.47"
-    // - Footnote: x=0.38", y=6.66"
-    // FORMATTING:
-    // - Title: font 24, not bold, same text box as message
-    // - Message: font 16, below title
-    // - Table: dotted borders, 2 header rows
-    // - Header row 1: dark blue (#011AB7), white text
-    // - Header row 2: light blue (#B4C6E7), black text
-    // - Median: in Net Margin column, colored background
-    // - Cell margins: left/right 0.04", top/bottom 0"
+    // Generate PPT slide - matching trading comps template EXACTLY
+    // Reference template structure:
+    // - Top blue bar (full width)
+    // - Title (large) + subtitle (smaller)
+    // - Table with:
+    //   - Row 1: "Financial Information (USD M)" and "Multiples" in dark blue boxes
+    //   - Row 2: Column headers in blue text with underline (no fill)
+    //   - Data rows: horizontal dotted lines only (no vertical lines)
+    //   - Median row: only last 4 cells have blue background
+    // - Footer: Note, Date, Source on left / YCP logo + copyright in center / page number on right
+    // - Bottom blue bar (full width)
 
     const pptx = new pptxgen();
     pptx.author = 'YCP';
@@ -2513,34 +2511,42 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     pptx.defineLayout({ name: 'TRADING', width: 13.333, height: 7.5 });
     pptx.layout = 'TRADING';
 
-    // Template colors (from reference PPTX)
+    // Template colors
     const COLORS = {
-      headerDarkBlue: '011AB7',   // Dark blue for row 1 merged headers
-      headerLightBlue: 'B4C6E7',  // Light blue for row 2 column headers
-      medianBlue: '011AB7',       // Blue for median row
+      headerBlue: '003399',       // Dark blue for header boxes and bars
+      headerTextBlue: '003399',   // Blue for column header text
+      medianBlue: '003399',       // Blue for median cells
       white: 'FFFFFF',
-      black: '000000'
+      black: '000000',
+      gray: '808080',
+      dottedLine: 'A0A0A0'        // Gray for dotted lines
     };
 
     const slide = pptx.addSlide();
 
-    // ===== TITLE + MESSAGE (same text box) =====
-    // Position: x=0.38", y=0.05" from top left corner
-    // Title: font 24, NOT bold
-    // Message: font 16, below title
-    slide.addText([
-      { text: `Trading Comparable – ${TargetCompanyOrIndustry}`, options: { fontSize: 24, bold: false, fontFace: 'Segoe UI', breakLine: true } },
-      { text: `Considering financial data availability, profitability and business relevance, ${finalCompanies.length} companies are considered as peers`, options: { fontSize: 16, bold: false, fontFace: 'Segoe UI' } }
-    ], {
-      x: 0.38, y: 0.05, w: 12.5, h: 1.2,
-      color: COLORS.black,
-      valign: 'top'
+    // ===== TOP BLUE BAR =====
+    slide.addShape(pptx.shapes.RECTANGLE, {
+      x: 0, y: 0, w: 13.333, h: 0.08,
+      fill: { color: COLORS.headerBlue },
+      line: { color: COLORS.headerBlue }
     });
 
-    // Helper function to clean company name (remove suffixes like Bhd, PCL, JSC, Ltd, Inc, etc.)
+    // ===== TITLE + SUBTITLE =====
+    slide.addText(`Trading Comparable – ${TargetCompanyOrIndustry}`, {
+      x: 0.38, y: 0.25, w: 12.5, h: 0.55,
+      fontSize: 28, bold: true, fontFace: 'Segoe UI',
+      color: COLORS.black
+    });
+
+    slide.addText(`Considering financial data availability, profitability and business relevance, ${finalCompanies.length} companies are considered as peers`, {
+      x: 0.38, y: 0.75, w: 12.5, h: 0.35,
+      fontSize: 14, bold: false, fontFace: 'Segoe UI',
+      color: COLORS.black
+    });
+
+    // Helper function to clean company name
     const cleanCompanyName = (name) => {
       if (!name) return '-';
-      // Remove common corporate suffixes
       const suffixes = [
         /\s+(Bhd|BHD|Berhad|BERHAD)\.?$/i,
         /\s+(PCL|Pcl|P\.C\.L\.)\.?$/i,
@@ -2562,7 +2568,6 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
         /\s+(Sdn|SDN)\.?\s*(Bhd|BHD)?\.?$/i,
         /,\s*(Inc|Ltd|LLC|Corp)\.?$/i
       ];
-
       let cleaned = String(name).trim();
       for (const suffix of suffixes) {
         cleaned = cleaned.replace(suffix, '');
@@ -2570,183 +2575,196 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       return cleaned.trim();
     };
 
-    // Helper function to format financial numbers (with commas, no decimals)
+    // Helper functions for formatting
     const formatFinNum = (val) => {
       if (val === null || val === undefined) return '-';
-      if (typeof val === 'number') {
-        return Math.round(val).toLocaleString('en-US');
-      }
+      if (typeof val === 'number') return Math.round(val).toLocaleString('en-US');
       return String(val);
     };
 
-    // Helper function to format multiples (with x suffix)
     const formatMultipleX = (val) => {
       if (val === null || val === undefined) return '-';
-      if (typeof val === 'number') {
-        return val.toFixed(1) + 'x';
-      }
+      if (typeof val === 'number') return val.toFixed(1) + 'x';
       return String(val);
     };
 
-    // Helper function to format percentage
     const formatPct = (val) => {
       if (val === null || val === undefined) return '-';
-      if (typeof val === 'number') {
-        return val.toFixed(1) + '%';
-      }
+      if (typeof val === 'number') return val.toFixed(1) + '%';
       return String(val);
     };
 
-    // ===== TABLE =====
-    // Cell margin settings: left/right 0.04", top/bottom 0"
-    const cellMargin = [0, 0.04, 0, 0.04]; // [top, right, bottom, left] in inches
+    // ===== TABLE STRUCTURE =====
+    const tableX = 0.38;
+    const tableY = 1.25;
+    const displayCompanies = finalCompanies.slice(0, 30);
 
-    // Row 1 style: dark blue background, white text (for merged headers)
-    const row1Style = {
-      bold: false,
-      fill: COLORS.headerDarkBlue,
-      color: COLORS.white,
-      fontFace: 'Segoe UI',
-      valign: 'middle',
-      align: 'center',
-      margin: cellMargin
-    };
+    // Column widths (total ~12.5")
+    const colWidths = [2.0, 1.0, 0.85, 1.05, 0.85, 0.9, 1.0, 1.05, 0.85, 0.85];
+    const colPositions = [tableX];
+    for (let i = 0; i < colWidths.length - 1; i++) {
+      colPositions.push(colPositions[i] + colWidths[i]);
+    }
 
-    // Row 2 style: light blue background, black text (for column headers)
-    const row2Style = {
-      bold: false,
-      fill: COLORS.headerLightBlue,
-      color: COLORS.black,
-      fontFace: 'Segoe UI',
-      valign: 'middle',
-      margin: cellMargin
-    };
+    const rowHeight = 0.18;
+    const headerRowY = tableY;
+    const subHeaderRowY = tableY + rowHeight;
+    const dataStartY = tableY + rowHeight * 2;
 
-    // Data row style: white background, black text
-    const dataStyle = {
-      fill: COLORS.white,
-      color: COLORS.black,
-      fontFace: 'Segoe UI',
-      valign: 'middle',
-      margin: cellMargin
-    };
+    // ===== HEADER ROW 1: "Financial Information" and "Multiples" boxes =====
+    // Calculate positions for the merged headers
+    const finInfoStartX = colPositions[2];
+    const finInfoWidth = colWidths[2] + colWidths[3] + colWidths[4] + colWidths[5] + colWidths[6];
+    const multiplesStartX = colPositions[7];
+    const multiplesWidth = colWidths[7] + colWidths[8] + colWidths[9];
 
-    // Median row style: blue background, white text
-    const medianStyle = {
-      bold: true,
-      fill: COLORS.medianBlue,
-      color: COLORS.white,
-      fontFace: 'Segoe UI',
-      valign: 'middle',
-      margin: cellMargin
-    };
+    // Financial Information box
+    slide.addShape(pptx.shapes.RECTANGLE, {
+      x: finInfoStartX, y: headerRowY, w: finInfoWidth, h: rowHeight,
+      fill: { color: COLORS.headerBlue },
+      line: { color: COLORS.headerBlue }
+    });
+    slide.addText('Financial Information (USD M)', {
+      x: finInfoStartX, y: headerRowY, w: finInfoWidth, h: rowHeight,
+      fontSize: 11, bold: false, fontFace: 'Segoe UI',
+      color: COLORS.white, align: 'center', valign: 'middle'
+    });
 
-    // Build table rows
-    const tableRows = [];
+    // Multiples box
+    slide.addShape(pptx.shapes.RECTANGLE, {
+      x: multiplesStartX, y: headerRowY, w: multiplesWidth, h: rowHeight,
+      fill: { color: COLORS.headerBlue },
+      line: { color: COLORS.headerBlue }
+    });
+    slide.addText('Multiples', {
+      x: multiplesStartX, y: headerRowY, w: multiplesWidth, h: rowHeight,
+      fontSize: 11, bold: false, fontFace: 'Segoe UI',
+      color: COLORS.white, align: 'center', valign: 'middle'
+    });
 
-    // Header row 1: merged cells for "Financial Information (USD M)" and "Multiples"
-    tableRows.push([
-      { text: '', options: { ...row1Style, fill: COLORS.white } },  // Company Name col - empty (white bg)
-      { text: '', options: { ...row1Style, fill: COLORS.white } },  // Country col - empty (white bg)
-      { text: 'Financial Information (USD M)', options: { ...row1Style, colspan: 5 } },
-      { text: 'Multiples', options: { ...row1Style, colspan: 3 } }
-    ]);
+    // ===== HEADER ROW 2: Column headers (blue text with underline) =====
+    const columnHeaders = ['Company Name', 'Country', 'Sales', 'Market Cap', 'EV', 'EBITDA', 'Net Margin', 'EV/ EBITDA', 'PER', 'PBR'];
+    const headerAligns = ['left', 'left', 'right', 'right', 'right', 'right', 'right', 'right', 'right', 'right'];
 
-    // Header row 2: actual column headers (light blue background, black text)
-    tableRows.push([
-      { text: 'Company Name', options: { ...row2Style, align: 'left' } },
-      { text: 'Country', options: { ...row2Style, align: 'center' } },
-      { text: 'Sales', options: { ...row2Style, align: 'center' } },
-      { text: 'Market Cap', options: { ...row2Style, align: 'center' } },
-      { text: 'EV', options: { ...row2Style, align: 'center' } },
-      { text: 'EBITDA', options: { ...row2Style, align: 'center' } },
-      { text: 'Net Margin', options: { ...row2Style, align: 'center' } },
-      { text: 'EV/ EBITDA', options: { ...row2Style, align: 'center' } },
-      { text: 'PER', options: { ...row2Style, align: 'center' } },
-      { text: 'PBR', options: { ...row2Style, align: 'center' } }
-    ]);
+    columnHeaders.forEach((header, idx) => {
+      slide.addText(header, {
+        x: colPositions[idx], y: subHeaderRowY, w: colWidths[idx], h: rowHeight,
+        fontSize: 11, bold: false, fontFace: 'Segoe UI',
+        color: COLORS.headerTextBlue, align: headerAligns[idx], valign: 'middle'
+      });
+    });
 
-    // Data rows - show all companies (reference shows 26)
-    const displayCompanies = finalCompanies.slice(0, 30); // Show up to 30 companies
+    // Underline for header row 2
+    slide.addShape(pptx.shapes.LINE, {
+      x: tableX, y: subHeaderRowY + rowHeight,
+      w: colWidths.reduce((a, b) => a + b, 0), h: 0,
+      line: { color: COLORS.headerTextBlue, width: 1, dashType: 'solid' }
+    });
+
+    // ===== DATA ROWS =====
     displayCompanies.forEach((c, idx) => {
+      const rowY = dataStartY + (idx * rowHeight);
       const peValue = c.peTTM !== null ? c.peTTM : c.peFY;
-      // Company name format: "#. Company Name" (with suffixes removed)
       const companyName = `${idx + 1}. ${cleanCompanyName(c.name)}`;
 
-      tableRows.push([
-        { text: companyName, options: { ...dataStyle, align: 'left' } },
-        { text: String(c.country || '-'), options: { ...dataStyle, align: 'left' } },  // Country align LEFT
-        { text: formatFinNum(c.sales), options: { ...dataStyle, align: 'right' } },
-        { text: formatFinNum(c.marketCap), options: { ...dataStyle, align: 'right' } },
-        { text: formatFinNum(c.ev), options: { ...dataStyle, align: 'right' } },
-        { text: formatFinNum(c.ebitda), options: { ...dataStyle, align: 'right' } },
-        { text: formatPct(c.netMargin), options: { ...dataStyle, align: 'right' } },
-        { text: formatMultipleX(c.evEbitda), options: { ...dataStyle, align: 'right' } },
-        { text: formatMultipleX(peValue), options: { ...dataStyle, align: 'right' } },
-        { text: formatMultipleX(c.pb), options: { ...dataStyle, align: 'right' } }
-      ]);
+      const rowData = [
+        companyName,
+        String(c.country || '-'),
+        formatFinNum(c.sales),
+        formatFinNum(c.marketCap),
+        formatFinNum(c.ev),
+        formatFinNum(c.ebitda),
+        formatPct(c.netMargin),
+        formatMultipleX(c.evEbitda),
+        formatMultipleX(peValue),
+        formatMultipleX(c.pb)
+      ];
+
+      rowData.forEach((text, colIdx) => {
+        slide.addText(text, {
+          x: colPositions[colIdx], y: rowY, w: colWidths[colIdx], h: rowHeight,
+          fontSize: 10, fontFace: 'Segoe UI',
+          color: COLORS.black, align: headerAligns[colIdx], valign: 'middle'
+        });
+      });
+
+      // Dotted line after each row
+      slide.addShape(pptx.shapes.LINE, {
+        x: tableX, y: rowY + rowHeight,
+        w: colWidths.reduce((a, b) => a + b, 0), h: 0,
+        line: { color: COLORS.dottedLine, width: 0.5, dashType: 'dash' }
+      });
     });
 
-    // Median row - "Median" in Net Margin column (col 7), values in EV/EBITDA, PER, PBR
+    // ===== MEDIAN ROW =====
+    const medianRowY = dataStartY + (displayCompanies.length * rowHeight);
     const medianPE = medians.peTTM !== null ? medians.peTTM : medians.peFY;
-    tableRows.push([
-      { text: '', options: { ...medianStyle } },
-      { text: '', options: { ...medianStyle } },
-      { text: '', options: { ...medianStyle } },
-      { text: '', options: { ...medianStyle } },
-      { text: '', options: { ...medianStyle } },
-      { text: '', options: { ...medianStyle } },
-      { text: 'Median', options: { ...medianStyle, align: 'right' } },  // "Median" in Net Margin column
-      { text: formatMultipleX(medians.evEbitda), options: { ...medianStyle, align: 'right' } },
-      { text: formatMultipleX(medianPE), options: { ...medianStyle, align: 'right' } },
-      { text: formatMultipleX(medians.pb), options: { ...medianStyle, align: 'right' } }
-    ]);
 
-    // Calculate row height based on number of companies
-    const tableY = 1.47;  // Position from reference: y=1.47"
-    const availableHeight = 5.0;
-    const numRows = displayCompanies.length + 3; // 2 header rows + data rows + median row
-    const rowHeight = Math.min(0.17, availableHeight / numRows);
+    // Median label cell with blue background (in Net Margin column position)
+    const medianStartX = colPositions[6];
+    const medianWidth = colWidths[6] + colWidths[7] + colWidths[8] + colWidths[9];
 
-    // Column widths matching reference (10 columns)
-    // Company Name | Country | Sales | Market Cap | EV | EBITDA | Net Margin | EV/EBITDA | PER | PBR
-    const colWidths = [2.3, 1.2, 1.05, 1.05, 1.05, 1.05, 1.05, 1.05, 1.05, 1.05];
-
-    // Add table to slide with DOTTED borders
-    slide.addTable(tableRows, {
-      x: 0.38, y: tableY,  // Position from reference
-      w: 11.95,
-      fontSize: 12,
-      fontFace: 'Segoe UI',
-      border: { type: 'dash', pt: 0.5, color: COLORS.black },  // DOTTED lines
-      colW: colWidths,
-      rowH: rowHeight
+    slide.addShape(pptx.shapes.RECTANGLE, {
+      x: medianStartX, y: medianRowY, w: medianWidth, h: rowHeight,
+      fill: { color: COLORS.medianBlue },
+      line: { color: COLORS.medianBlue }
     });
 
-    // ===== FOOTER ELEMENTS =====
-    // Position: x=0.38", y=6.66"
+    // Median text and values
+    slide.addText('Median', {
+      x: colPositions[6], y: medianRowY, w: colWidths[6], h: rowHeight,
+      fontSize: 10, bold: true, fontFace: 'Segoe UI',
+      color: COLORS.white, align: 'right', valign: 'middle'
+    });
+    slide.addText(formatMultipleX(medians.evEbitda), {
+      x: colPositions[7], y: medianRowY, w: colWidths[7], h: rowHeight,
+      fontSize: 10, bold: true, fontFace: 'Segoe UI',
+      color: COLORS.white, align: 'right', valign: 'middle'
+    });
+    slide.addText(formatMultipleX(medianPE), {
+      x: colPositions[8], y: medianRowY, w: colWidths[8], h: rowHeight,
+      fontSize: 10, bold: true, fontFace: 'Segoe UI',
+      color: COLORS.white, align: 'right', valign: 'middle'
+    });
+    slide.addText(formatMultipleX(medians.pb), {
+      x: colPositions[9], y: medianRowY, w: colWidths[9], h: rowHeight,
+      fontSize: 10, bold: true, fontFace: 'Segoe UI',
+      color: COLORS.white, align: 'right', valign: 'middle'
+    });
+
+    // ===== FOOTER LEFT: Note, Date, Source =====
     const footerY = 6.66;
-
-    // Note: EV (Enterprise Value)
     slide.addText('Note: EV (Enterprise Value)', {
-      x: 0.38, y: footerY, w: 6, h: 0.2,
-      fontSize: 10, fontFace: 'Segoe UI',
-      color: COLORS.black
+      x: 0.38, y: footerY, w: 4, h: 0.18,
+      fontSize: 9, fontFace: 'Segoe UI', color: COLORS.black
     });
-
-    // Data as of date
     const dataDate = new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
     slide.addText(`Data as of ${dataDate}`, {
-      x: 0.38, y: footerY + 0.2, w: 6, h: 0.2,
-      fontSize: 10, fontFace: 'Segoe UI',
-      color: COLORS.black
+      x: 0.38, y: footerY + 0.18, w: 4, h: 0.18,
+      fontSize: 9, fontFace: 'Segoe UI', color: COLORS.black
+    });
+    slide.addText('Source: Speeda', {
+      x: 0.38, y: footerY + 0.36, w: 4, h: 0.18,
+      fontSize: 9, fontFace: 'Segoe UI', color: COLORS.black
     });
 
-    // Source: Speeda
-    slide.addText('Source: Speeda', {
-      x: 0.38, y: footerY + 0.4, w: 6, h: 0.2,
-      fontSize: 10, fontFace: 'Segoe UI',
-      color: COLORS.black
+    // ===== FOOTER CENTER: Copyright =====
+    slide.addText('(C) YCP 2025 all rights reserved', {
+      x: 4.5, y: 7.1, w: 4.5, h: 0.25,
+      fontSize: 9, fontFace: 'Segoe UI', color: COLORS.gray, align: 'center'
+    });
+
+    // ===== FOOTER RIGHT: Page number =====
+    slide.addText('1', {
+      x: 12.5, y: 7.1, w: 0.5, h: 0.25,
+      fontSize: 9, fontFace: 'Segoe UI', color: COLORS.black, align: 'right'
+    });
+
+    // ===== BOTTOM BLUE BAR =====
+    slide.addShape(pptx.shapes.RECTANGLE, {
+      x: 0, y: 7.42, w: 13.333, h: 0.08,
+      fill: { color: COLORS.headerBlue },
+      line: { color: COLORS.headerBlue }
     });
 
     // Generate PPT buffer
