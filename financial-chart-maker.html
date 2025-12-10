@@ -58,7 +58,7 @@
             <div class="form-group">
               <label>Financial Data Excel Files</label>
               <div class="upload-zone" id="uploadZone">
-                <input type="file" id="excelFiles" name="excelFiles" accept=".xlsx,.xls,.csv" multiple required>
+                <input type="file" id="excelFiles" name="excelFiles" accept=".xlsx,.xls,.csv" multiple>
                 <div class="upload-content">
                   <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
@@ -217,16 +217,18 @@
           body: formData
         });
 
-        const result = await response.json();
+        const result = await response.json().catch(() => null);
 
-        if (response.ok) {
+        if (response.ok && result) {
           successText.textContent = `Request received! ${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''} will be processed. PowerPoint will be emailed to ${email} within 5-10 minutes.`;
           successMessage.classList.add('show');
           form.reset();
           selectedFiles = [];
           updateFileList();
+        } else if (!response.ok && response.status === 404) {
+          throw new Error('API endpoint not available. Please try again later.');
         } else {
-          throw new Error(result.error || 'Request failed');
+          throw new Error(result?.error || 'Request failed');
         }
       } catch (err) {
         console.error('Error:', err);
