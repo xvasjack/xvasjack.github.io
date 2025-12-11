@@ -4690,16 +4690,13 @@ async function generateFinancialChartExcel(financialDataArray) {
   });
 }
 
-// Generate financial chart PowerPoint with embedded Excel charts
-// Uses embedded Excel workbook for reliable chart rendering (avoids pptxgenjs chart corruption)
+// Generate financial chart PowerPoint with data table (no charts - they corrupt files)
+// Both pptxgenjs charts and manual OOXML embedding cause file corruption
 async function generateFinancialChartPPTX(financialDataArray) {
-  const JSZip = require('jszip');
-
   try {
-    // Ensure we have an array
     const dataArray = Array.isArray(financialDataArray) ? financialDataArray : [financialDataArray];
 
-    console.log('Generating Financial Chart PPTX with embedded Excel charts...');
+    console.log('Generating Financial Chart PPTX (table-based)...');
     console.log(`Processing ${dataArray.length} company/companies`);
 
     const pptx = new pptxgen();
@@ -4707,661 +4704,95 @@ async function generateFinancialChartPPTX(financialDataArray) {
     pptx.title = 'Financial Charts';
     pptx.subject = 'Financial Performance';
 
-    // Set exact slide size to match template (13.333" x 7.5" = 16:9 widescreen)
     pptx.defineLayout({ name: 'YCP', width: 13.333, height: 7.5 });
     pptx.layout = 'YCP';
 
-    // YCP Theme Colors (from template)
     const COLORS = {
       headerLine: '293F55',
-      accent3: '011AB7',
       white: 'FFFFFF',
       black: '000000',
-      gray: 'BFBFBF',
       dk2: '1F497D',
       footerText: '808080',
-      chartBlue: '4472C4',
+      chartBlue: '5B9BD5',
       chartOrange: 'ED7D31'
     };
 
-    // Store chart data for each slide to embed later
-    const slideChartData = [];
-
-    // Generate one slide per company
-    for (let slideIndex = 0; slideIndex < dataArray.length; slideIndex++) {
-      const financialData = dataArray[slideIndex];
+    for (const financialData of dataArray) {
       if (!financialData) continue;
 
       const slide = pptx.addSlide();
 
-      // ===== HEADER LINES (from template) =====
-      slide.addShape(pptx.shapes.LINE, {
-        x: 0, y: 1.02, w: 13.333, h: 0,
-        line: { color: COLORS.headerLine, width: 4.5 }
-      });
-      slide.addShape(pptx.shapes.LINE, {
-        x: 0, y: 1.10, w: 13.333, h: 0,
-        line: { color: COLORS.headerLine, width: 2.25 }
-      });
+      // Header lines
+      slide.addShape(pptx.shapes.LINE, { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } });
+      slide.addShape(pptx.shapes.LINE, { x: 0, y: 1.10, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } });
 
-      // ===== FOOTER LINE =====
-      slide.addShape(pptx.shapes.LINE, {
-        x: 0, y: 7.24, w: 13.333, h: 0,
-        line: { color: COLORS.headerLine, width: 2.25 }
-      });
+      // Footer line
+      slide.addShape(pptx.shapes.LINE, { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } });
+      slide.addText('(C) YCP 2025 all rights reserved', { x: 4.1, y: 7.26, w: 5.1, h: 0.2, fontSize: 8, fontFace: 'Segoe UI', color: COLORS.footerText, align: 'center' });
 
-      // Footer copyright text
-      slide.addText('(C) YCP 2025 all rights reserved', {
-        x: 4.1, y: 7.26, w: 5.1, h: 0.2,
-        fontSize: 8, fontFace: 'Segoe UI',
-        color: COLORS.footerText, align: 'center'
-      });
-
-      // ===== TITLE (top left) =====
+      // Title
       const companyName = financialData.company_name || 'Financial Performance';
-      slide.addText(companyName, {
-        x: 0.38, y: 0.05, w: 9.5, h: 0.6,
-        fontSize: 24, bold: false, fontFace: 'Segoe UI',
-        color: COLORS.black, valign: 'bottom'
-      });
-
-      // Subtitle with currency info
       const currency = financialData.currency || 'USD';
       const currencyUnit = financialData.revenue_unit || 'millions';
-      slide.addText(`Financial Overview (${currency}, ${currencyUnit})`, {
-        x: 0.38, y: 0.65, w: 9.5, h: 0.3,
-        fontSize: 14, fontFace: 'Segoe UI',
-        color: COLORS.footerText
-      });
 
-      // ===== SECTION HEADER: 財務実績 (Financial Performance) - Bottom Right =====
-      slide.addText('財務実績', {
-        x: 6.86, y: 4.35, w: 6.1, h: 0.30,
-        fontSize: 14, fontFace: 'Segoe UI',
-        color: COLORS.black, align: 'center'
-      });
-      slide.addShape(pptx.shapes.LINE, {
-        x: 6.86, y: 4.65, w: 6.1, h: 0,
-        line: { color: COLORS.dk2, width: 1.75 }
-      });
+      slide.addText(companyName, { x: 0.38, y: 0.05, w: 9.5, h: 0.6, fontSize: 24, fontFace: 'Segoe UI', color: COLORS.black, valign: 'bottom' });
+      slide.addText(`Financial Overview (${currency}, ${currencyUnit})`, { x: 0.38, y: 0.65, w: 9.5, h: 0.3, fontSize: 14, fontFace: 'Segoe UI', color: COLORS.footerText });
 
-      // ===== Prepare chart data for embedding =====
+      // Section header
+      slide.addText('財務実績', { x: 6.86, y: 4.35, w: 6.1, h: 0.30, fontSize: 14, fontFace: 'Segoe UI', color: COLORS.black, align: 'center' });
+      slide.addShape(pptx.shapes.LINE, { x: 6.86, y: 4.65, w: 6.1, h: 0, line: { color: COLORS.dk2, width: 1.75 } });
+
+      // Financial data table
       const revenueData = financialData.revenue_data || [];
       const marginData = financialData.margin_data || [];
 
       if (revenueData.length > 0) {
-        // Sort revenue by period
-        revenueData.sort((a, b) => {
-          const yearA = parseInt(String(a.period).replace(/\D/g, ''));
-          const yearB = parseInt(String(b.period).replace(/\D/g, ''));
-          return yearA - yearB;
-        });
+        revenueData.sort((a, b) => parseInt(String(a.period).replace(/\D/g, '')) - parseInt(String(b.period).replace(/\D/g, '')));
 
-        const chartLabels = revenueData.map(d => String(d.period));
-        const revenueValues = revenueData.map(d => d.value || 0);
+        const periods = revenueData.map(d => String(d.period));
+        const revenues = revenueData.map(d => d.value || 0);
 
-        // Get the highest priority margin available
+        // Find margin data
         const marginPriority = ['operating', 'ebitda', 'pretax', 'net', 'gross'];
-        const marginLabelMap = {
-          'operating': '営業利益率',
-          'ebitda': 'EBITDA利益率',
-          'pretax': '税前利益率',
-          'net': '純利益率',
-          'gross': '粗利益率'
-        };
+        const marginLabelMap = { 'operating': '営業利益率', 'ebitda': 'EBITDA利益率', 'pretax': '税前利益率', 'net': '純利益率', 'gross': '粗利益率' };
 
-        let selectedMarginType = null;
-        let marginValues = [];
-
-        // Find highest priority margin that has data
-        for (const marginType of marginPriority) {
-          const typeData = marginData.filter(m => m.margin_type === marginType);
-          if (typeData.length > 0) {
-            selectedMarginType = marginType;
-            marginValues = chartLabels.map(period => {
-              const found = typeData.find(m => String(m.period) === period);
-              return found ? found.value : 0;
-            });
+        let marginType = null, margins = [];
+        for (const mt of marginPriority) {
+          const data = marginData.filter(m => m.margin_type === mt);
+          if (data.length > 0) {
+            marginType = mt;
+            margins = periods.map(p => { const f = data.find(m => String(m.period) === p); return f ? f.value : 0; });
             break;
           }
         }
 
-        // Determine unit display
         const unitDisplay = currencyUnit === 'millions' ? '百万' : (currencyUnit === 'billions' ? '十億' : '');
-        const revenueLabel = `売上高 (${currency}${unitDisplay})`;
-        const marginLabel = selectedMarginType ? marginLabelMap[selectedMarginType] || '利益率' : null;
-        const hasMarginData = selectedMarginType && marginValues.some(v => v !== 0);
+        const revLabel = `売上高 (${currency}${unitDisplay})`;
 
-        // Store chart data for embedding
-        slideChartData.push({
-          slideIndex: slideIndex + 1,
-          chartLabels,
-          revenueValues,
-          revenueLabel,
-          marginValues: hasMarginData ? marginValues : null,
-          marginLabel: hasMarginData ? marginLabel : null,
-          hasMarginData
-        });
+        // Build table
+        const tableRows = [];
+        tableRows.push([{ text: '', options: { fill: COLORS.dk2 } }, ...periods.map(p => ({ text: p, options: { fill: COLORS.dk2, color: COLORS.white, bold: true, align: 'center' } }))]);
+        tableRows.push([{ text: revLabel, options: { fill: COLORS.chartBlue, color: COLORS.white, bold: true } }, ...revenues.map(v => ({ text: v.toLocaleString(), options: { align: 'right' } }))]);
+
+        if (marginType && margins.some(v => v !== 0)) {
+          tableRows.push([{ text: marginLabelMap[marginType] + ' (%)', options: { fill: COLORS.chartOrange, color: COLORS.white, bold: true } }, ...margins.map(v => ({ text: v.toFixed(1) + '%', options: { align: 'right', color: COLORS.chartOrange } }))]);
+        }
+
+        const colW = [1.8, ...periods.map(() => (6.0 - 1.8) / periods.length)];
+        slide.addTable(tableRows, { x: 6.86, y: 4.75, w: 6.0, colW, fontFace: 'Segoe UI', fontSize: 10, border: { type: 'solid', pt: 0.5, color: 'CCCCCC' }, valign: 'middle' });
       }
 
-      // ===== FOOTNOTE =====
-      slide.addText('Source: Company financial data', {
-        x: 0.38, y: 6.90, w: 12.5, h: 0.18,
-        fontSize: 10, fontFace: 'Segoe UI',
-        color: COLORS.black
-      });
-
-    } // End of for loop (one slide per company)
-
-    // Generate base PPTX without charts
-    const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
-
-    // Now modify the PPTX to add embedded Excel charts
-    const zip = await JSZip.loadAsync(pptxBuffer);
-
-    // Add charts for each slide
-    for (let i = 0; i < slideChartData.length; i++) {
-      const chartData = slideChartData[i];
-      const chartNum = i + 1;
-      const slideNum = chartData.slideIndex;
-
-      // Create embedded Excel workbook for chart data
-      const excelBuffer = await createChartExcelWorkbook(chartData);
-
-      // Add Excel embedding to PPTX
-      zip.file(`ppt/embeddings/Microsoft_Excel_Worksheet${chartNum}.xlsx`, excelBuffer);
-
-      // Create chart XML
-      const chartXml = createChartXml(chartData, chartNum);
-      zip.file(`ppt/charts/chart${chartNum}.xml`, chartXml);
-
-      // Create chart colors XML
-      const chartColorsXml = createChartColorsXml();
-      zip.file(`ppt/charts/colors${chartNum}.xml`, chartColorsXml);
-
-      // Create chart style XML
-      const chartStyleXml = createChartStyleXml();
-      zip.file(`ppt/charts/style${chartNum}.xml`, chartStyleXml);
-
-      // Create chart relationships
-      const chartRelsXml = createChartRelsXml(chartNum);
-      zip.folder('ppt/charts/_rels').file(`chart${chartNum}.xml.rels`, chartRelsXml);
-
-      // Update slide XML to include chart reference
-      const slideXmlPath = `ppt/slides/slide${slideNum}.xml`;
-      let slideXml = await zip.file(slideXmlPath).async('string');
-      slideXml = addChartToSlideXml(slideXml, chartNum);
-      zip.file(slideXmlPath, slideXml);
-
-      // Update slide relationships
-      const slideRelsPath = `ppt/slides/_rels/slide${slideNum}.xml.rels`;
-      let slideRels = await zip.file(slideRelsPath).async('string');
-      slideRels = addChartRelationship(slideRels, chartNum);
-      zip.file(slideRelsPath, slideRels);
+      slide.addText('Source: Company financial data', { x: 0.38, y: 6.90, w: 12.5, h: 0.18, fontSize: 10, fontFace: 'Segoe UI', color: COLORS.black });
     }
 
-    // Update [Content_Types].xml to include chart content types
-    let contentTypes = await zip.file('[Content_Types].xml').async('string');
-    contentTypes = updateContentTypes(contentTypes, slideChartData.length);
-    zip.file('[Content_Types].xml', contentTypes);
+    const base64Content = await pptx.write({ outputType: 'base64' });
+    console.log('Financial Chart PPTX generated successfully');
 
-    // Generate final PPTX
-    const finalBuffer = await zip.generateAsync({ type: 'nodebuffer' });
-    const base64Content = finalBuffer.toString('base64');
-
-    console.log('Financial Chart PPTX with embedded Excel charts generated successfully');
-
-    return {
-      success: true,
-      content: base64Content
-    };
+    return { success: true, content: base64Content };
   } catch (error) {
     console.error('Financial Chart PPTX error:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    return { success: false, error: error.message };
   }
-}
-
-// Create Excel workbook buffer for chart data source
-async function createChartExcelWorkbook(chartData) {
-  const ExcelJS = require('exceljs');
-  const workbook = new ExcelJS.Workbook();
-  const sheet = workbook.addWorksheet('Sheet1');
-
-  // Row 1: Headers (Period labels)
-  const row1 = ['', ...chartData.chartLabels];
-  sheet.addRow(row1);
-
-  // Row 2: Revenue data
-  const row2 = [chartData.revenueLabel, ...chartData.revenueValues];
-  sheet.addRow(row2);
-
-  // Row 3: Margin data (if available)
-  if (chartData.hasMarginData && chartData.marginValues) {
-    const row3 = [chartData.marginLabel, ...chartData.marginValues.map(v => v / 100)]; // Convert to decimal for %
-    sheet.addRow(row3);
-  }
-
-  return await workbook.xlsx.writeBuffer();
-}
-
-// Create chart XML for embedded chart
-function createChartXml(chartData, chartNum) {
-  const { chartLabels, revenueValues, revenueLabel, marginValues, marginLabel, hasMarginData } = chartData;
-  const numPts = chartLabels.length;
-
-  // Build category (X-axis) labels
-  const catPts = chartLabels.map((label, idx) =>
-    `<c:pt idx="${idx}"><c:v>${label}</c:v></c:pt>`
-  ).join('');
-
-  // Build revenue values
-  const revValPts = revenueValues.map((val, idx) =>
-    `<c:pt idx="${idx}"><c:v>${val}</c:v></c:pt>`
-  ).join('');
-
-  // Column chart series for revenue
-  let revenueSeries = `
-    <c:ser>
-      <c:idx val="0"/>
-      <c:order val="0"/>
-      <c:tx><c:v>${revenueLabel}</c:v></c:tx>
-      <c:spPr>
-        <a:solidFill><a:srgbClr val="5B9BD5"/></a:solidFill>
-        <a:ln><a:noFill/></a:ln>
-      </c:spPr>
-      <c:invertIfNegative val="0"/>
-      <c:dLbls>
-        <c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>
-        <c:txPr>
-          <a:bodyPr/>
-          <a:lstStyle/>
-          <a:p><a:pPr><a:defRPr sz="800" b="0"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:latin typeface="Segoe UI"/></a:defRPr></a:pPr></a:p>
-        </c:txPr>
-        <c:dLblPos val="outEnd"/>
-        <c:showLegendKey val="0"/>
-        <c:showVal val="1"/>
-        <c:showCatName val="0"/>
-        <c:showSerName val="0"/>
-        <c:showPercent val="0"/>
-      </c:dLbls>
-      <c:cat>
-        <c:strRef>
-          <c:f>Sheet1!$B$1:$${String.fromCharCode(65 + numPts)}$1</c:f>
-          <c:strCache>
-            <c:ptCount val="${numPts}"/>
-            ${catPts}
-          </c:strCache>
-        </c:strRef>
-      </c:cat>
-      <c:val>
-        <c:numRef>
-          <c:f>Sheet1!$B$2:$${String.fromCharCode(65 + numPts)}$2</c:f>
-          <c:numCache>
-            <c:formatCode>#,##0</c:formatCode>
-            <c:ptCount val="${numPts}"/>
-            ${revValPts}
-          </c:numCache>
-        </c:numRef>
-      </c:val>
-    </c:ser>`;
-
-  // Line chart series for margin (if available)
-  let marginSeries = '';
-  let lineChart = '';
-  if (hasMarginData && marginValues) {
-    const marginValPts = marginValues.map((val, idx) =>
-      `<c:pt idx="${idx}"><c:v>${val / 100}</c:v></c:pt>`
-    ).join('');
-
-    lineChart = `
-    <c:lineChart>
-      <c:grouping val="standard"/>
-      <c:varyColors val="0"/>
-      <c:ser>
-        <c:idx val="1"/>
-        <c:order val="1"/>
-        <c:tx><c:v>${marginLabel} (%)</c:v></c:tx>
-        <c:spPr>
-          <a:ln w="28575"><a:solidFill><a:srgbClr val="ED7D31"/></a:solidFill></a:ln>
-        </c:spPr>
-        <c:marker>
-          <c:symbol val="circle"/>
-          <c:size val="5"/>
-          <c:spPr>
-            <a:solidFill><a:srgbClr val="ED7D31"/></a:solidFill>
-            <a:ln><a:solidFill><a:srgbClr val="ED7D31"/></a:solidFill></a:ln>
-          </c:spPr>
-        </c:marker>
-        <c:dLbls>
-          <c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr>
-          <c:txPr>
-            <a:bodyPr/>
-            <a:lstStyle/>
-            <a:p><a:pPr><a:defRPr sz="800" b="0"><a:solidFill><a:srgbClr val="ED7D31"/></a:solidFill><a:latin typeface="Segoe UI"/></a:defRPr></a:pPr></a:p>
-          </c:txPr>
-          <c:numFmt formatCode="0.0%" sourceLinked="0"/>
-          <c:dLblPos val="t"/>
-          <c:showLegendKey val="0"/>
-          <c:showVal val="1"/>
-          <c:showCatName val="0"/>
-          <c:showSerName val="0"/>
-          <c:showPercent val="0"/>
-        </c:dLbls>
-        <c:cat>
-          <c:strRef>
-            <c:f>Sheet1!$B$1:$${String.fromCharCode(65 + numPts)}$1</c:f>
-            <c:strCache>
-              <c:ptCount val="${numPts}"/>
-              ${catPts}
-            </c:strCache>
-          </c:strRef>
-        </c:cat>
-        <c:val>
-          <c:numRef>
-            <c:f>Sheet1!$B$3:$${String.fromCharCode(65 + numPts)}$3</c:f>
-            <c:numCache>
-              <c:formatCode>0.0%</c:formatCode>
-              <c:ptCount val="${numPts}"/>
-              ${marginValPts}
-            </c:numCache>
-          </c:numRef>
-        </c:val>
-        <c:smooth val="0"/>
-      </c:ser>
-      <c:dLbls>
-        <c:showLegendKey val="0"/>
-        <c:showVal val="0"/>
-        <c:showCatName val="0"/>
-        <c:showSerName val="0"/>
-        <c:showPercent val="0"/>
-      </c:dLbls>
-      <c:marker val="1"/>
-      <c:axId val="100"/>
-      <c:axId val="101"/>
-    </c:lineChart>
-    <c:valAx>
-      <c:axId val="101"/>
-      <c:scaling><c:orientation val="minMax"/></c:scaling>
-      <c:delete val="0"/>
-      <c:axPos val="r"/>
-      <c:numFmt formatCode="0%" sourceLinked="0"/>
-      <c:majorTickMark val="out"/>
-      <c:minorTickMark val="none"/>
-      <c:tickLblPos val="nextTo"/>
-      <c:spPr><a:ln><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln></c:spPr>
-      <c:txPr>
-        <a:bodyPr/>
-        <a:lstStyle/>
-        <a:p><a:pPr><a:defRPr sz="800"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:latin typeface="Segoe UI"/></a:defRPr></a:pPr></a:p>
-      </c:txPr>
-      <c:crossAx val="100"/>
-      <c:crosses val="max"/>
-      <c:crossBetween val="between"/>
-    </c:valAx>`;
-  }
-
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
-  <c:date1904 val="0"/>
-  <c:lang val="en-US"/>
-  <c:roundedCorners val="0"/>
-  <c:chart>
-    <c:autoTitleDeleted val="1"/>
-    <c:plotArea>
-      <c:layout/>
-      <c:barChart>
-        <c:barDir val="col"/>
-        <c:grouping val="clustered"/>
-        <c:varyColors val="0"/>
-        ${revenueSeries}
-        <c:dLbls>
-          <c:showLegendKey val="0"/>
-          <c:showVal val="0"/>
-          <c:showCatName val="0"/>
-          <c:showSerName val="0"/>
-          <c:showPercent val="0"/>
-        </c:dLbls>
-        <c:gapWidth val="150"/>
-        <c:axId val="100"/>
-        <c:axId val="200"/>
-      </c:barChart>
-      ${lineChart}
-      <c:catAx>
-        <c:axId val="100"/>
-        <c:scaling><c:orientation val="minMax"/></c:scaling>
-        <c:delete val="0"/>
-        <c:axPos val="b"/>
-        <c:majorTickMark val="out"/>
-        <c:minorTickMark val="none"/>
-        <c:tickLblPos val="nextTo"/>
-        <c:spPr><a:ln><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln></c:spPr>
-        <c:txPr>
-          <a:bodyPr/>
-          <a:lstStyle/>
-          <a:p><a:pPr><a:defRPr sz="900"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:latin typeface="Segoe UI"/></a:defRPr></a:pPr></a:p>
-        </c:txPr>
-        <c:crossAx val="200"/>
-        <c:crosses val="autoZero"/>
-        <c:auto val="1"/>
-        <c:lblAlgn val="ctr"/>
-      </c:catAx>
-      <c:valAx>
-        <c:axId val="200"/>
-        <c:scaling><c:orientation val="minMax"/></c:scaling>
-        <c:delete val="0"/>
-        <c:axPos val="l"/>
-        <c:majorGridlines>
-          <c:spPr><a:ln w="6350"><a:solidFill><a:srgbClr val="D9D9D9"/></a:solidFill></a:ln></c:spPr>
-        </c:majorGridlines>
-        <c:numFmt formatCode="#,##0" sourceLinked="0"/>
-        <c:majorTickMark val="out"/>
-        <c:minorTickMark val="none"/>
-        <c:tickLblPos val="nextTo"/>
-        <c:spPr><a:ln><a:solidFill><a:srgbClr val="000000"/></a:solidFill></a:ln></c:spPr>
-        <c:txPr>
-          <a:bodyPr/>
-          <a:lstStyle/>
-          <a:p><a:pPr><a:defRPr sz="800"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:latin typeface="Segoe UI"/></a:defRPr></a:pPr></a:p>
-        </c:txPr>
-        <c:crossAx val="100"/>
-        <c:crosses val="autoZero"/>
-        <c:crossBetween val="between"/>
-      </c:valAx>
-    </c:plotArea>
-    <c:legend>
-      <c:legendPos val="t"/>
-      <c:layout/>
-      <c:overlay val="0"/>
-      <c:txPr>
-        <a:bodyPr/>
-        <a:lstStyle/>
-        <a:p><a:pPr><a:defRPr sz="900"><a:solidFill><a:srgbClr val="000000"/></a:solidFill><a:latin typeface="Segoe UI"/></a:defRPr></a:pPr></a:p>
-      </c:txPr>
-    </c:legend>
-    <c:plotVisOnly val="1"/>
-    <c:dispBlanksAs val="gap"/>
-  </c:chart>
-  <c:spPr>
-    <a:noFill/>
-    <a:ln><a:noFill/></a:ln>
-  </c:spPr>
-  <c:externalData r:id="rId1">
-    <c:autoUpdate val="0"/>
-  </c:externalData>
-</c:chartSpace>`;
-}
-
-// Create chart colors XML
-function createChartColorsXml() {
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<cs:colorStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" meth="cycle" id="10">
-  <a:schemeClr val="accent1"/>
-  <a:schemeClr val="accent2"/>
-  <a:schemeClr val="accent3"/>
-  <a:schemeClr val="accent4"/>
-  <a:schemeClr val="accent5"/>
-  <a:schemeClr val="accent6"/>
-  <cs:variation/>
-</cs:colorStyle>`;
-}
-
-// Create chart style XML
-function createChartStyleXml() {
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<cs:chartStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" id="201">
-  <cs:axisTitle>
-    <cs:lnRef idx="0"/>
-    <cs:fillRef idx="0"/>
-    <cs:effectRef idx="0"/>
-    <cs:fontRef idx="minor"><a:schemeClr val="tx1"/></cs:fontRef>
-    <cs:defRPr sz="1000" kern="1200"/>
-  </cs:axisTitle>
-  <cs:categoryAxis>
-    <cs:lnRef idx="0"/>
-    <cs:fillRef idx="0"/>
-    <cs:effectRef idx="0"/>
-    <cs:fontRef idx="minor"><a:schemeClr val="tx1"/></cs:fontRef>
-  </cs:categoryAxis>
-  <cs:chartArea mods="allowNoFillOverride allowNoLineOverride">
-    <cs:lnRef idx="0"/>
-    <cs:fillRef idx="0"/>
-    <cs:effectRef idx="0"/>
-    <cs:fontRef idx="minor"><a:schemeClr val="tx1"/></cs:fontRef>
-  </cs:chartArea>
-  <cs:dataLabel>
-    <cs:lnRef idx="0"/>
-    <cs:fillRef idx="0"/>
-    <cs:effectRef idx="0"/>
-    <cs:fontRef idx="minor"><a:schemeClr val="tx1"/></cs:fontRef>
-  </cs:dataLabel>
-  <cs:dataPoint>
-    <cs:lnRef idx="0"/>
-    <cs:fillRef idx="1"><cs:styleClr val="auto"/></cs:fillRef>
-    <cs:effectRef idx="0"/>
-    <cs:fontRef idx="minor"><a:schemeClr val="tx1"/></cs:fontRef>
-  </cs:dataPoint>
-  <cs:legend>
-    <cs:lnRef idx="0"/>
-    <cs:fillRef idx="0"/>
-    <cs:effectRef idx="0"/>
-    <cs:fontRef idx="minor"><a:schemeClr val="tx1"/></cs:fontRef>
-  </cs:legend>
-  <cs:plotArea mods="allowNoFillOverride allowNoLineOverride">
-    <cs:lnRef idx="0"/>
-    <cs:fillRef idx="0"/>
-    <cs:effectRef idx="0"/>
-    <cs:fontRef idx="minor"><a:schemeClr val="tx1"/></cs:fontRef>
-  </cs:plotArea>
-  <cs:valueAxis>
-    <cs:lnRef idx="0"/>
-    <cs:fillRef idx="0"/>
-    <cs:effectRef idx="0"/>
-    <cs:fontRef idx="minor"><a:schemeClr val="tx1"/></cs:fontRef>
-  </cs:valueAxis>
-</cs:chartStyle>`;
-}
-
-// Create chart relationships XML
-function createChartRelsXml(chartNum) {
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
-  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/package" Target="../embeddings/Microsoft_Excel_Worksheet${chartNum}.xlsx"/>
-  <Relationship Id="rId2" Type="http://schemas.microsoft.com/office/2011/relationships/chartColorStyle" Target="colors${chartNum}.xml"/>
-  <Relationship Id="rId3" Type="http://schemas.microsoft.com/office/2011/relationships/chartStyle" Target="style${chartNum}.xml"/>
-</Relationships>`;
-}
-
-// Add chart reference to slide XML
-function addChartToSlideXml(slideXml, chartNum) {
-  // Chart position: x=6.86", y=4.75", w=6.0", h=2.0" (converted to EMUs: 1 inch = 914400 EMUs)
-  const chartX = Math.round(6.86 * 914400);
-  const chartY = Math.round(4.75 * 914400);
-  const chartW = Math.round(6.0 * 914400);
-  const chartH = Math.round(2.0 * 914400);
-
-  // Find the highest rId in the slide
-  const rIdMatches = slideXml.match(/r:id="rId(\d+)"/g) || [];
-  let maxRId = 0;
-  rIdMatches.forEach(match => {
-    const id = parseInt(match.match(/rId(\d+)/)[1]);
-    if (id > maxRId) maxRId = id;
-  });
-  const chartRId = `rId${maxRId + 1}`;
-
-  // Create chart graphicFrame
-  const chartGraphicFrame = `
-    <p:graphicFrame>
-      <p:nvGraphicFramePr>
-        <p:cNvPr id="${100 + chartNum}" name="Chart ${chartNum}"/>
-        <p:cNvGraphicFramePr><a:graphicFrameLocks noGrp="1"/></p:cNvGraphicFramePr>
-        <p:nvPr/>
-      </p:nvGraphicFramePr>
-      <p:xfrm>
-        <a:off x="${chartX}" y="${chartY}"/>
-        <a:ext cx="${chartW}" cy="${chartH}"/>
-      </p:xfrm>
-      <a:graphic>
-        <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart">
-          <c:chart xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:id="${chartRId}"/>
-        </a:graphicData>
-      </a:graphic>
-    </p:graphicFrame>`;
-
-  // Insert before closing </p:spTree>
-  slideXml = slideXml.replace('</p:spTree>', chartGraphicFrame + '</p:spTree>');
-
-  // Store the rId for relationship update
-  slideXml = slideXml.replace('__CHART_RID__', chartRId);
-
-  return slideXml;
-}
-
-// Add chart relationship to slide relationships
-function addChartRelationship(slideRels, chartNum) {
-  // Find highest rId
-  const rIdMatches = slideRels.match(/Id="rId(\d+)"/g) || [];
-  let maxRId = 0;
-  rIdMatches.forEach(match => {
-    const id = parseInt(match.match(/rId(\d+)/)[1]);
-    if (id > maxRId) maxRId = id;
-  });
-  const newRId = maxRId + 1;
-
-  const chartRel = `<Relationship Id="rId${newRId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/chart" Target="../charts/chart${chartNum}.xml"/>`;
-
-  slideRels = slideRels.replace('</Relationships>', chartRel + '</Relationships>');
-
-  return slideRels;
-}
-
-// Update Content_Types.xml
-function updateContentTypes(contentTypes, numCharts) {
-  // Add chart-related content types if not present
-  const chartType = '<Override PartName="/ppt/charts/chart1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>';
-
-  if (!contentTypes.includes('drawingml.chart+xml')) {
-    // Add Override entries for each chart
-    let chartOverrides = '';
-    for (let i = 1; i <= numCharts; i++) {
-      chartOverrides += `<Override PartName="/ppt/charts/chart${i}.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/>`;
-      chartOverrides += `<Override PartName="/ppt/charts/colors${i}.xml" ContentType="application/vnd.ms-office.chartcolorstyle+xml"/>`;
-      chartOverrides += `<Override PartName="/ppt/charts/style${i}.xml" ContentType="application/vnd.ms-office.chartstyle+xml"/>`;
-    }
-    contentTypes = contentTypes.replace('</Types>', chartOverrides + '</Types>');
-  }
-
-  // Add xlsx content type if not present
-  if (!contentTypes.includes('spreadsheetml.sheet')) {
-    for (let i = 1; i <= numCharts; i++) {
-      const xlsxOverride = `<Override PartName="/ppt/embeddings/Microsoft_Excel_Worksheet${i}.xlsx" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/>`;
-      contentTypes = contentTypes.replace('</Types>', xlsxOverride + '</Types>');
-    }
-  }
-
-  return contentTypes;
 }
 
 // Financial Chart API endpoint - supports multiple files (up to 20)
