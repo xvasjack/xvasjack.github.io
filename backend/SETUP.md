@@ -14,13 +14,10 @@ You need these 3 things:
 - Generate an API key
 - Copy the key (starts with `pplx-`)
 
-### Gmail App Password
-- Go to: https://myaccount.google.com/apppasswords
-- You need 2FA enabled on your Google account
-- Select app: "Mail"
-- Select device: "Other" → type "Find Target"
-- Click "Generate"
-- Copy the 16-character password (like: `abcd efgh ijkl mnop`)
+### Brevo API Key (for sending emails)
+- Go to: https://app.brevo.com/settings/keys/api
+- Create an API key
+- Copy the key
 
 ---
 
@@ -42,8 +39,8 @@ In Railway dashboard, go to your project → Variables tab → Add these:
 ```
 OPENAI_API_KEY = sk-your-key-here
 PERPLEXITY_API_KEY = pplx-your-key-here
-GMAIL_USER = your-email@gmail.com
-GMAIL_APP_PASSWORD = your-16-char-password
+BREVO_API_KEY = your-brevo-api-key
+BREVO_SENDER_EMAIL = sj.goh@bluerockvent.com
 ```
 
 ### 2.4 Get Your Backend URL
