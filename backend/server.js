@@ -33,7 +33,7 @@ const openai = new OpenAI({
 
 // Send email using Brevo API
 async function sendEmail(to, subject, html, attachments = null) {
-  const senderEmail = process.env.BREVO_SENDER_EMAIL || 'xvasjack@gmail.com';
+  const senderEmail = process.env.BREVO_SENDER_EMAIL || 'sj.goh@bluerockvent.com';
   const emailData = {
     sender: { name: 'Find Target', email: senderEmail },
     to: [{ email: to }],
