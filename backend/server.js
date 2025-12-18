@@ -1514,23 +1514,26 @@ app.post('/api/find-target-v4', async (req, res) => {
   try {
     const totalStart = Date.now();
 
-    // ========== PHASE 1: Base Search (3x v3) ==========
+    // ========== PHASE 1: Base Search (3x v3 SEQUENTIAL) ==========
     console.log('\n' + '='.repeat(50));
-    console.log('PHASE 1: BASE SEARCH (3x v3)');
+    console.log('PHASE 1: BASE SEARCH (3x v3 - Sequential)');
     console.log('='.repeat(50));
 
-    const [companies1, companies2, companies3] = await Promise.all([
-      exhaustiveSearch(Business, Country, Exclusion),
-      exhaustiveSearch(`${Business} supplier vendor distributor`, Country, Exclusion),
-      exhaustiveSearch(`${Business} manufacturer producer factory`, Country, Exclusion)
-    ]);
+    // Run sequentially to avoid overwhelming the server
+    console.log('\n--- Search 1: Primary ---');
+    const companies1 = await exhaustiveSearch(Business, Country, Exclusion);
+    console.log(`Search 1 (primary): ${companies1.length} companies`);
 
-    console.log(`Search 1 (primary): ${companies1.length}`);
-    console.log(`Search 2 (supplier/vendor): ${companies2.length}`);
-    console.log(`Search 3 (manufacturer): ${companies3.length}`);
+    console.log('\n--- Search 2: Supplier/Vendor ---');
+    const companies2 = await exhaustiveSearch(`${Business} supplier vendor distributor`, Country, Exclusion);
+    console.log(`Search 2 (supplier/vendor): ${companies2.length} companies`);
+
+    console.log('\n--- Search 3: Manufacturer ---');
+    const companies3 = await exhaustiveSearch(`${Business} manufacturer producer factory`, Country, Exclusion);
+    console.log(`Search 3 (manufacturer): ${companies3.length} companies`);
 
     const phase1Raw = dedupeCompanies([...companies1, ...companies2, ...companies3]);
-    console.log(`Phase 1 raw total: ${phase1Raw.length} unique companies`);
+    console.log(`\nPhase 1 raw total: ${phase1Raw.length} unique companies`);
 
     // ========== PHASE 1.5: Initial Validation ==========
     console.log('\n' + '='.repeat(50));
