@@ -14,7 +14,7 @@ You need these 3 things:
 - Generate an API key
 - Copy the key (starts with `pplx-`)
 
-### Gmail App Password
+### Gmail App Password (for sending emails)
 - Go to: https://myaccount.google.com/apppasswords
 - You need 2FA enabled on your Google account
 - Select app: "Mail"
@@ -43,7 +43,7 @@ In Railway dashboard, go to your project → Variables tab → Add these:
 OPENAI_API_KEY = sk-your-key-here
 PERPLEXITY_API_KEY = pplx-your-key-here
 GMAIL_USER = your-email@gmail.com
-GMAIL_APP_PASSWORD = your-16-char-password
+GMAIL_APP_PASSWORD = your-16-char-app-password
 ```
 
 ### 2.4 Get Your Backend URL

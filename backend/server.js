@@ -16,7 +16,7 @@ app.use(express.json());
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Check required environment variables
-const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'BREVO_API_KEY'];
+const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
 const optionalEnvVars = ['SERPAPI_API_KEY', 'DEEPSEEK_API_KEY']; // Optional but recommended
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
@@ -25,35 +25,39 @@ if (missingVars.length > 0) {
 if (!process.env.SERPAPI_API_KEY) {
   console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
 }
+if (!process.env.DEEPSEEK_API_KEY) {
+  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
+}
 
 // Initialize OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
 
-// Send email using Brevo API
+// Send email using SendGrid API
 async function sendEmail(to, subject, html, attachments = null) {
-  const senderEmail = process.env.BREVO_SENDER_EMAIL || 'xvasjack@gmail.com';
+  const senderEmail = process.env.SENDER_EMAIL;
   const emailData = {
-    sender: { name: 'Find Target', email: senderEmail },
-    to: [{ email: to }],
+    personalizations: [{ to: [{ email: to }] }],
+    from: { email: senderEmail, name: 'Find Target' },
     subject: subject,
-    htmlContent: html
+    content: [{ type: 'text/html', value: html }]
   };
 
   if (attachments) {
-    // Support both single attachment object and array of attachments
     const attachmentList = Array.isArray(attachments) ? attachments : [attachments];
-    emailData.attachment = attachmentList.map(a => ({
+    emailData.attachments = attachmentList.map(a => ({
+      filename: a.name,
       content: a.content,
-      name: a.name
+      type: 'application/octet-stream',
+      disposition: 'attachment'
     }));
   }
 
-  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+  const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
     headers: {
-      'api-key': process.env.BREVO_API_KEY,
+      'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(emailData)
@@ -64,7 +68,7 @@ async function sendEmail(to, subject, html, attachments = null) {
     throw new Error(`Email failed: ${error}`);
   }
 
-  return await response.json();
+  return { success: true };
 }
 
 // ============ AI TOOLS ============
@@ -94,7 +98,7 @@ async function callPerplexity(prompt) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'sonar-pro',
+        model: 'sonar',
         messages: [{ role: 'user', content: prompt }]
       }),
       timeout: 90000
@@ -122,11 +126,11 @@ async function callChatGPT(prompt) {
 }
 
 // OpenAI Search model - has real-time web search capability
-// Note: gpt-4o-search-preview does NOT support temperature parameter
+// Note: gpt-4o-mini-search-preview does NOT support temperature parameter
 async function callOpenAISearch(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-search-preview',
+      model: 'gpt-4o-mini-search-preview',
       messages: [{ role: 'user', content: prompt }]
     });
     return response.choices[0].message.content || '';
@@ -223,6 +227,39 @@ async function callSerpAPI(query) {
   } catch (error) {
     console.error('SerpAPI error:', error.message);
     return '';
+  }
+}
+
+// DeepSeek V3.2 - Cost-effective alternative to GPT-4o
+async function callDeepSeek(prompt, maxTokens = 4000) {
+  if (!process.env.DEEPSEEK_API_KEY) {
+    console.warn('DeepSeek API key not set, falling back to GPT-4o');
+    return null; // Caller should handle fallback
+  }
+  try {
+    const response = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: maxTokens,
+        temperature: 0.3
+      }),
+      timeout: 120000
+    });
+    const data = await response.json();
+    if (data.error) {
+      console.error('DeepSeek API error:', data.error);
+      return null;
+    }
+    return data.choices?.[0]?.message?.content || '';
+  } catch (error) {
+    console.error('DeepSeek error:', error.message);
+    return null;
   }
 }
 
@@ -1317,6 +1354,389 @@ app.post('/api/find-target-slow', async (req, res) => {
   }
 });
 
+// ============ V4 ULTRA-EXHAUSTIVE ENDPOINT ============
+
+// Simple Levenshtein similarity for fuzzy matching
+function levenshteinSimilarity(s1, s2) {
+  if (!s1 || !s2) return 0;
+  const longer = s1.length > s2.length ? s1 : s2;
+  const shorter = s1.length > s2.length ? s2 : s1;
+  if (longer.length === 0) return 1.0;
+
+  const costs = [];
+  for (let i = 0; i <= s1.length; i++) {
+    let lastValue = i;
+    for (let j = 0; j <= s2.length; j++) {
+      if (i === 0) {
+        costs[j] = j;
+      } else if (j > 0) {
+        let newValue = costs[j - 1];
+        if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
+          newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+        }
+        costs[j - 1] = lastValue;
+        lastValue = newValue;
+      }
+    }
+    if (i > 0) costs[s2.length] = lastValue;
+  }
+  return (longer.length - costs[s2.length]) / longer.length;
+}
+
+// Get cities for a country (dynamic)
+function getCitiesForCountry(country) {
+  const countryLower = country.toLowerCase();
+  for (const [key, cities] of Object.entries(CITY_MAP)) {
+    if (countryLower.includes(key)) return cities;
+  }
+  // Default: ask AI to determine cities
+  return null;
+}
+
+// Get company suffixes for a country (dynamic)
+function getSuffixesForCountry(country) {
+  const countryLower = country.toLowerCase();
+  for (const [key, suffixes] of Object.entries(LOCAL_SUFFIXES)) {
+    if (countryLower.includes(key)) return suffixes;
+  }
+  return ['Ltd', 'Co', 'Inc', 'Corp'];
+}
+
+// Get domain for a country (dynamic)
+function getDomainForCountry(country) {
+  const countryLower = country.toLowerCase();
+  for (const [key, domain] of Object.entries(DOMAIN_MAP)) {
+    if (countryLower.includes(key)) return domain;
+  }
+  return null;
+}
+
+// Generate dynamic expansion prompts based on round number
+function generateExpansionPrompt(round, business, country, existingList, shortlistSample) {
+  const baseInstruction = `You are a thorough M&A researcher finding ALL ${business} companies in ${country}.
+Return results as: Company Name | Website (must start with http)
+Find at least 20 NEW companies not in our existing list.
+DO NOT include companies from this list: ${existingList}`;
+
+  const cities = getCitiesForCountry(country);
+  const suffixes = getSuffixesForCountry(country);
+  const domain = getDomainForCountry(country);
+  const localLang = LOCAL_LANGUAGE_MAP[country.toLowerCase()];
+
+  const prompts = {
+    1: `${baseInstruction}
+
+ROUND 1 - COMPETITOR SEARCH:
+For each of these companies: ${shortlistSample}
+Find their direct competitors in ${country}.
+Also find companies that do similar business but with slightly different focus.`,
+
+    2: `${baseInstruction}
+
+ROUND 2 - CITY-BY-CITY DEEP DIVE:
+Search for ${business} companies in each of these cities/regions:
+${cities ? cities.join(', ') : `Major cities and industrial areas in ${country}`}
+Include companies in industrial estates, free trade zones, and business parks.`,
+
+    3: `${baseInstruction}
+
+ROUND 3 - INDUSTRIAL PARKS & TRADE ZONES:
+Find ${business} companies located in:
+- Industrial parks and estates
+- Free trade zones / Special economic zones
+- Manufacturing hubs
+- Technology parks
+in ${country}. Search for tenant lists and company directories of these zones.`,
+
+    4: `${baseInstruction}
+
+ROUND 4 - TRADE ASSOCIATIONS & MEMBER DIRECTORIES:
+Find ${business} companies that are members of:
+- Industry associations
+- Trade organizations
+- Chamber of commerce
+- Business federations
+in ${country}. Look for member directories and lists.`,
+
+    5: localLang ? `${baseInstruction}
+
+ROUND 5 - LOCAL LANGUAGE SEARCH:
+Search for ${business} companies using ${localLang.lang} terms.
+Search queries should include local business terminology.
+Focus on companies that may only have local language websites.
+Look for: ${localLang.examples.join(', ')} related businesses.` : `${baseInstruction}
+
+ROUND 5 - ALTERNATIVE NAMING:
+Search for ${business} companies using:
+- Local language business names
+- Alternative industry terminology
+- Regional naming conventions
+in ${country}.`,
+
+    6: `${baseInstruction}
+
+ROUND 6 - SUPPLY CHAIN SEARCH:
+For companies like: ${shortlistSample}
+Find their:
+- Suppliers (who supplies to them)
+- Customers (who buys from them)
+- Distributors and agents
+that are also ${business} companies in ${country}.`,
+
+    7: `${baseInstruction}
+
+ROUND 7 - GOVERNMENT & BUSINESS REGISTRIES:
+Search for ${business} companies registered in ${country} through:
+- Company registration databases
+- Business license directories
+- Government contractor lists
+- Import/export license holders
+${suffixes.length > 0 ? `Look for companies with suffixes: ${suffixes.join(', ')}` : ''}`,
+
+    8: `${baseInstruction}
+
+ROUND 8 - TRADE SHOWS & EXHIBITIONS:
+Find ${business} companies that exhibited at:
+- Industry trade shows (past 3 years)
+- B2B exhibitions
+- Trade fairs
+in ${country} or international shows with ${country} exhibitors.`,
+
+    9: `${baseInstruction}
+
+ROUND 9 - PROFESSIONAL NETWORKS & JOB POSTINGS:
+Find ${business} companies in ${country} through:
+- LinkedIn company profiles
+- Job posting sites (companies hiring for ${business} roles)
+- Professional directories
+- Industry expert networks`,
+
+    10: `${baseInstruction}
+
+ROUND 10 - NEWS & MEDIA MENTIONS:
+Find ${business} companies in ${country} mentioned in:
+- News articles (past 2 years)
+- Industry publications
+- Press releases
+- Business news
+${domain ? `Also search for companies with ${domain} domains.` : ''}
+Look for any company we might have missed.`
+  };
+
+  return prompts[round] || prompts[1];
+}
+
+// Run a single expansion round with all 3 search-enabled models
+async function runExpansionRound(round, business, country, existingCompanies) {
+  console.log(`\n--- Expansion Round ${round}/10 ---`);
+
+  const existingNames = existingCompanies
+    .filter(c => c && c.company_name)
+    .map(c => c.company_name.toLowerCase());
+
+  const existingList = existingCompanies
+    .filter(c => c && c.company_name)
+    .slice(0, 30)
+    .map(c => c.company_name)
+    .join(', ');
+
+  const shortlistSample = existingCompanies
+    .filter(c => c && c.company_name)
+    .slice(0, 10)
+    .map(c => c.company_name)
+    .join(', ');
+
+  const prompt = generateExpansionPrompt(round, business, country, existingList, shortlistSample);
+
+  // Run all 3 search-enabled models in parallel
+  console.log(`  Querying GPT-4o-mini Search, Gemini 2.0 Flash, Perplexity Sonar...`);
+  const [gptResult, geminiResult, perplexityResult] = await Promise.all([
+    callOpenAISearch(prompt),
+    callGemini(prompt),
+    callPerplexity(prompt)
+  ]);
+
+  // Extract companies from each result
+  const [gptCompanies, geminiCompanies, perplexityCompanies] = await Promise.all([
+    extractCompanies(gptResult, country),
+    extractCompanies(geminiResult, country),
+    extractCompanies(perplexityResult, country)
+  ]);
+
+  console.log(`  GPT-4o-mini: ${gptCompanies.length} | Gemini: ${geminiCompanies.length} | Perplexity: ${perplexityCompanies.length}`);
+
+  // Combine and filter out duplicates
+  const allNewCompanies = [...gptCompanies, ...geminiCompanies, ...perplexityCompanies];
+  const trulyNew = allNewCompanies.filter(c => {
+    if (!c || !c.company_name) return false;
+    const nameLower = c.company_name.toLowerCase();
+    return !existingNames.some(existing =>
+      existing.includes(nameLower) || nameLower.includes(existing) ||
+      levenshteinSimilarity(existing, nameLower) > 0.8
+    );
+  });
+
+  const uniqueNew = dedupeCompanies(trulyNew);
+  console.log(`  New unique companies: ${uniqueNew.length}`);
+
+  return uniqueNew;
+}
+
+app.post('/api/find-target-v4', async (req, res) => {
+  const { Business, Country, Exclusion, Email } = req.body;
+
+  if (!Business || !Country || !Exclusion || !Email) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+
+  console.log(`\n${'='.repeat(70)}`);
+  console.log(`V4 ULTRA-EXHAUSTIVE SEARCH: ${new Date().toISOString()}`);
+  console.log(`Business: ${Business}`);
+  console.log(`Country: ${Country}`);
+  console.log(`Exclusion: ${Exclusion}`);
+  console.log(`Email: ${Email}`);
+  console.log('='.repeat(70));
+
+  res.json({
+    success: true,
+    message: 'Request received. Ultra-exhaustive search running. Results will be emailed in ~30-45 minutes.'
+  });
+
+  try {
+    const totalStart = Date.now();
+
+    // ========== PHASE 1: HIGH VOLUME BASE SEARCH ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('PHASE 1: HIGH VOLUME BASE SEARCH (18 query variations)');
+    console.log('='.repeat(50));
+
+    // Many different search query phrasings - pure volume approach
+    const searchQueries = [
+      // Direct searches
+      `${Business}`,
+      `${Business} manufacturer`,
+      `${Business} producer`,
+      `${Business} maker`,
+      `${Business} factory`,
+      `${Business} supplier`,
+      `${Business} company`,
+      // List-style searches
+      `list of ${Business} companies`,
+      `${Business} companies list`,
+      `top ${Business} companies`,
+      `leading ${Business}`,
+      `${Business} industry`,
+      // Directory-style searches
+      `${Business} directory`,
+      `${Business} manufacturers directory`,
+      // B2B searches
+      `${Business} B2B`,
+      `${Business} wholesale`,
+      `${Business} industrial`,
+      `${Business} vendors`,
+    ];
+
+    let allPhase1Companies = [];
+
+    // Run all search queries sequentially (18 searches × exhaustiveSearch internals)
+    for (let i = 0; i < searchQueries.length; i++) {
+      const query = searchQueries[i];
+      console.log(`\n[${i + 1}/${searchQueries.length}] "${query}"`);
+
+      const companies = await exhaustiveSearch(query, Country, Exclusion);
+      console.log(`  Found: ${companies.length} companies`);
+
+      allPhase1Companies = [...allPhase1Companies, ...companies];
+
+      // Dedupe every 6 queries to manage memory
+      if ((i + 1) % 6 === 0) {
+        allPhase1Companies = dedupeCompanies(allPhase1Companies);
+        console.log(`  Running total (deduped): ${allPhase1Companies.length}`);
+      }
+    }
+
+    const phase1Raw = dedupeCompanies(allPhase1Companies);
+    console.log(`\nPhase 1 total: ${phase1Raw.length} unique companies from ${searchQueries.length} query variations`);
+
+    // ========== PHASE 1.5: Initial Validation ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('PHASE 1.5: INITIAL VALIDATION → SHORTLIST');
+    console.log('='.repeat(50));
+
+    const preFiltered1 = preFilterCompanies(phase1Raw);
+    console.log(`After pre-filter: ${preFiltered1.length}`);
+
+    const shortlistA = await parallelValidationStrict(preFiltered1, Business, Country, Exclusion);
+    console.log(`Shortlist A (validated): ${shortlistA.length} companies`);
+
+    // ========== PHASE 2: EXPANSION ROUNDS WITH AI SEARCH ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('PHASE 2: 10 EXPANSION ROUNDS (3 AI search models × 10 strategies)');
+    console.log('='.repeat(50));
+
+    let allCompanies = [...shortlistA];
+    let totalNewFound = 0;
+
+    for (let round = 1; round <= 10; round++) {
+      const roundStart = Date.now();
+      const newCompanies = await runExpansionRound(round, Business, Country, allCompanies);
+
+      if (newCompanies.length > 0) {
+        allCompanies = dedupeCompanies([...allCompanies, ...newCompanies]);
+        totalNewFound += newCompanies.length;
+      }
+
+      const roundTime = ((Date.now() - roundStart) / 1000).toFixed(1);
+      console.log(`  Round ${round}/10: +${newCompanies.length} new (${roundTime}s). Total: ${allCompanies.length}`);
+    }
+
+    console.log(`\nPhase 2 complete. Found ${totalNewFound} additional companies across 10 rounds.`);
+
+    // ========== PHASE 3: Final Validation ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('PHASE 3: FINAL VALIDATION');
+    console.log('='.repeat(50));
+
+    console.log(`Total candidates: ${allCompanies.length}`);
+
+    const phase2New = allCompanies.filter(c =>
+      !shortlistA.some(s => s.company_name === c.company_name)
+    );
+    console.log(`New from Phase 2 (need validation): ${phase2New.length}`);
+
+    const preFiltered2 = preFilterCompanies(phase2New);
+    const validated2 = await parallelValidationStrict(preFiltered2, Business, Country, Exclusion);
+    console.log(`Phase 2 validated: ${validated2.length}`);
+
+    const finalCompanies = dedupeCompanies([...shortlistA, ...validated2]);
+    console.log(`FINAL TOTAL: ${finalCompanies.length} validated companies`);
+
+    // ========== Send Results ==========
+    const htmlContent = buildEmailHTML(finalCompanies, Business, Country, Exclusion);
+    await sendEmail(
+      Email,
+      `[V4 EXHAUSTIVE] ${Business} in ${Country} (${finalCompanies.length} companies)`,
+      htmlContent
+    );
+
+    const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
+    console.log('\n' + '='.repeat(70));
+    console.log(`V4 ULTRA-EXHAUSTIVE COMPLETE!`);
+    console.log(`Email sent to: ${Email}`);
+    console.log(`Final companies: ${finalCompanies.length}`);
+    console.log(`Total time: ${totalTime} minutes`);
+    console.log('='.repeat(70));
+
+  } catch (error) {
+    console.error('V4 Processing error:', error);
+    try {
+      await sendEmail(Email, `Find Target V4 - Error`, `<p>Error: ${error.message}</p>`);
+    } catch (e) {
+      console.error('Failed to send error email:', e);
+    }
+  }
+});
+
 // ============ VALIDATION ENDPOINT ============
 
 // Parse company names from text (one per line)
@@ -2001,7 +2421,7 @@ async function checkRelevanceWithGemini(companies, filterCriteria) {
   }
 }
 
-// Helper: Check business relevance using Perplexity sonar-pro (best with web search)
+// Helper: Check business relevance using Perplexity sonar (best with web search)
 async function checkRelevanceWithPerplexity(companies, filterCriteria) {
   const companyNames = companies.map(c => c.name);
   const prompt = buildReasoningPrompt(companyNames, filterCriteria);
@@ -2014,7 +2434,7 @@ async function checkRelevanceWithPerplexity(companies, filterCriteria) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'sonar-pro',
+        model: 'sonar',
         messages: [{ role: 'user', content: prompt + '\n\nRespond with valid JSON only.' }]
       })
     });
@@ -2027,7 +2447,7 @@ async function checkRelevanceWithPerplexity(companies, filterCriteria) {
     }
     return null;
   } catch (error) {
-    console.error('Perplexity sonar-pro error:', error.message);
+    console.error('Perplexity sonar error:', error.message);
     return null;
   }
 }
@@ -4454,7 +4874,7 @@ async function searchMissingInfo(companyName, website, missingFields) {
     const searchQuery = `${companyName} company ${missingFields.includes('established_year') ? 'founded year established' : ''} ${missingFields.includes('location') ? 'headquarters location country' : ''}`.trim();
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-search-preview',
+      model: 'gpt-4o-mini-search-preview',
       messages: [
         {
           role: 'user',
@@ -4519,7 +4939,7 @@ async function searchAdditionalMetrics(companyName, website, existingMetrics) {
     console.log(`  Step 6: Searching web for additional metrics...`);
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-search-preview',
+      model: 'gpt-4o-mini-search-preview',
       messages: [
         {
           role: 'user',
@@ -4878,14 +5298,136 @@ RULES:
   }
 }
 
-// Generate financial chart PowerPoint (supports multiple companies/slides)
-// Creates a single combo chart (column for revenue + line for margin on secondary axis) at bottom right
+// Initialize xlsx-chart for Excel chart generation
+const XLSXChart = require('xlsx-chart');
+
+// Generate financial chart Excel workbook with COMBO chart (column + line)
+// Uses xlsx-chart library which properly supports combo charts
+async function generateFinancialChartExcel(financialDataArray) {
+  return new Promise((resolve) => {
+    try {
+      const dataArray = Array.isArray(financialDataArray) ? financialDataArray : [financialDataArray];
+      console.log('Generating Financial Chart Excel with xlsx-chart...');
+      console.log(`Processing ${dataArray.length} company/companies`);
+
+      // For now, we'll generate one file for the first company
+      // xlsx-chart doesn't support multiple sheets easily, so we use the first company
+      const financialData = dataArray[0];
+      if (!financialData) {
+        return resolve({ success: false, error: 'No financial data provided' });
+      }
+
+      const currency = financialData.currency || 'USD';
+      const currencyUnit = financialData.revenue_unit || 'millions';
+      const revenueData = financialData.revenue_data || [];
+      const marginData = financialData.margin_data || [];
+
+      if (revenueData.length === 0) {
+        return resolve({ success: false, error: 'No revenue data found' });
+      }
+
+      // Sort revenue by period
+      revenueData.sort((a, b) => {
+        const yearA = parseInt(String(a.period).replace(/\D/g, ''));
+        const yearB = parseInt(String(b.period).replace(/\D/g, ''));
+        return yearA - yearB;
+      });
+
+      const chartLabels = revenueData.map(d => String(d.period));
+      const revenueValues = revenueData.map(d => d.value || 0);
+
+      // Get highest priority margin
+      const marginPriority = ['operating', 'ebitda', 'pretax', 'net', 'gross'];
+      const marginLabelMap = {
+        'operating': '営業利益率 (%)',
+        'ebitda': 'EBITDA利益率 (%)',
+        'pretax': '税前利益率 (%)',
+        'net': '純利益率 (%)',
+        'gross': '粗利益率 (%)'
+      };
+
+      let selectedMarginType = null;
+      let marginValues = [];
+
+      for (const marginType of marginPriority) {
+        const typeData = marginData.filter(m => m.margin_type === marginType);
+        if (typeData.length > 0) {
+          selectedMarginType = marginType;
+          marginValues = chartLabels.map(period => {
+            const found = typeData.find(m => String(m.period) === period);
+            return found ? found.value : 0;
+          });
+          break;
+        }
+      }
+
+      const unitDisplay = currencyUnit === 'millions' ? '百万' : (currencyUnit === 'billions' ? '十億' : '');
+      const revenueLabel = `売上高 (${currency}${unitDisplay})`;
+      const marginLabel = selectedMarginType ? marginLabelMap[selectedMarginType] : '利益率 (%)';
+      const companyName = financialData.company_name || 'Financial Performance';
+
+      // Build xlsx-chart options
+      const titles = [revenueLabel];
+      if (selectedMarginType && marginValues.some(v => v !== 0)) {
+        titles.push(marginLabel);
+      }
+
+      // Build data object for xlsx-chart
+      const data = {};
+
+      // Revenue series (column chart)
+      data[revenueLabel] = { chart: 'column' };
+      chartLabels.forEach((label, i) => {
+        data[revenueLabel][label] = revenueValues[i];
+      });
+
+      // Margin series (line chart) if available
+      if (selectedMarginType && marginValues.some(v => v !== 0)) {
+        data[marginLabel] = { chart: 'line' };
+        chartLabels.forEach((label, i) => {
+          data[marginLabel][label] = marginValues[i];
+        });
+      }
+
+      const opts = {
+        titles: titles,
+        fields: chartLabels,
+        data: data,
+        chartTitle: companyName + ' - 財務実績'
+      };
+
+      const xlsxChart = new XLSXChart();
+      xlsxChart.generate(opts, (err, buffer) => {
+        if (err) {
+          console.error('xlsx-chart error:', err);
+          return resolve({ success: false, error: err.message || 'Chart generation failed' });
+        }
+
+        const base64Content = buffer.toString('base64');
+        console.log('Financial Chart Excel generated successfully');
+        resolve({
+          success: true,
+          content: base64Content
+        });
+      });
+
+    } catch (error) {
+      console.error('Financial Chart Excel error:', error);
+      resolve({
+        success: false,
+        error: error.message
+      });
+    }
+  });
+}
+
+// Generate financial chart PowerPoint with data table (no charts - they corrupt files)
+// Both pptxgenjs charts and manual OOXML embedding cause file corruption
 async function generateFinancialChartPPTX(financialDataArray) {
   try {
-    // Ensure we have an array
     const dataArray = Array.isArray(financialDataArray) ? financialDataArray : [financialDataArray];
 
-    console.log('Generating Financial Chart PPTX...');
+    console.log('Generating Financial Chart PPTX (table-based)...');
     console.log(`Processing ${dataArray.length} company/companies`);
 
     const pptx = new pptxgen();
@@ -4893,284 +5435,94 @@ async function generateFinancialChartPPTX(financialDataArray) {
     pptx.title = 'Financial Charts';
     pptx.subject = 'Financial Performance';
 
-    // Set exact slide size to match template (13.333" x 7.5" = 16:9 widescreen)
     pptx.defineLayout({ name: 'YCP', width: 13.333, height: 7.5 });
     pptx.layout = 'YCP';
 
-    // YCP Theme Colors (from template)
     const COLORS = {
       headerLine: '293F55',
-      accent3: '011AB7',
       white: 'FFFFFF',
       black: '000000',
-      gray: 'BFBFBF',
       dk2: '1F497D',
       footerText: '808080',
-      chartBlue: '4472C4',
+      chartBlue: '5B9BD5',
       chartOrange: 'ED7D31'
     };
 
-    // Generate one slide per company
     for (const financialData of dataArray) {
       if (!financialData) continue;
 
       const slide = pptx.addSlide();
 
-      // ===== HEADER LINES (from template) =====
-      slide.addShape(pptx.shapes.LINE, {
-        x: 0, y: 1.02, w: 13.333, h: 0,
-        line: { color: COLORS.headerLine, width: 4.5 }
-      });
-      slide.addShape(pptx.shapes.LINE, {
-        x: 0, y: 1.10, w: 13.333, h: 0,
-        line: { color: COLORS.headerLine, width: 2.25 }
-      });
+      // Header lines
+      slide.addShape(pptx.shapes.LINE, { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } });
+      slide.addShape(pptx.shapes.LINE, { x: 0, y: 1.10, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } });
 
-      // ===== FOOTER LINE =====
-      slide.addShape(pptx.shapes.LINE, {
-        x: 0, y: 7.24, w: 13.333, h: 0,
-        line: { color: COLORS.headerLine, width: 2.25 }
-      });
+      // Footer line
+      slide.addShape(pptx.shapes.LINE, { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } });
+      slide.addText('(C) YCP 2025 all rights reserved', { x: 4.1, y: 7.26, w: 5.1, h: 0.2, fontSize: 8, fontFace: 'Segoe UI', color: COLORS.footerText, align: 'center' });
 
-      // Footer copyright text
-      slide.addText('(C) YCP 2025 all rights reserved', {
-        x: 4.1, y: 7.26, w: 5.1, h: 0.2,
-        fontSize: 8, fontFace: 'Segoe UI',
-        color: COLORS.footerText, align: 'center'
-      });
-
-      // ===== TITLE (top left) =====
+      // Title
       const companyName = financialData.company_name || 'Financial Performance';
-      slide.addText(companyName, {
-        x: 0.38, y: 0.05, w: 9.5, h: 0.6,
-        fontSize: 24, bold: false, fontFace: 'Segoe UI',
-        color: COLORS.black, valign: 'bottom'
-      });
-
-      // Subtitle with currency info
       const currency = financialData.currency || 'USD';
       const currencyUnit = financialData.revenue_unit || 'millions';
-      slide.addText(`Financial Overview (${currency}, ${currencyUnit})`, {
-        x: 0.38, y: 0.65, w: 9.5, h: 0.3,
-        fontSize: 14, fontFace: 'Segoe UI',
-        color: COLORS.footerText
-      });
 
-      // ===== SECTION HEADER: 財務実績 (Financial Performance) - Bottom Right =====
-      slide.addText('財務実績', {
-        x: 6.86, y: 4.35, w: 6.1, h: 0.30,
-        fontSize: 14, fontFace: 'Segoe UI',
-        color: COLORS.black, align: 'center'
-      });
-      slide.addShape(pptx.shapes.LINE, {
-        x: 6.86, y: 4.65, w: 6.1, h: 0,
-        line: { color: COLORS.dk2, width: 1.75 }
-      });
+      slide.addText(companyName, { x: 0.38, y: 0.05, w: 9.5, h: 0.6, fontSize: 24, fontFace: 'Segoe UI', color: COLORS.black, valign: 'bottom' });
+      slide.addText(`Financial Overview (${currency}, ${currencyUnit})`, { x: 0.38, y: 0.65, w: 9.5, h: 0.3, fontSize: 14, fontFace: 'Segoe UI', color: COLORS.footerText });
 
-      // ===== FINANCIAL CHART - Bottom Right =====
+      // Section header
+      slide.addText('財務実績', { x: 6.86, y: 4.35, w: 6.1, h: 0.30, fontSize: 14, fontFace: 'Segoe UI', color: COLORS.black, align: 'center' });
+      slide.addShape(pptx.shapes.LINE, { x: 6.86, y: 4.65, w: 6.1, h: 0, line: { color: COLORS.dk2, width: 1.75 } });
+
+      // Financial data table
       const revenueData = financialData.revenue_data || [];
       const marginData = financialData.margin_data || [];
 
       if (revenueData.length > 0) {
-        // Sort revenue by period
-        revenueData.sort((a, b) => {
-          const yearA = parseInt(String(a.period).replace(/\D/g, ''));
-          const yearB = parseInt(String(b.period).replace(/\D/g, ''));
-          return yearA - yearB;
-        });
+        revenueData.sort((a, b) => parseInt(String(a.period).replace(/\D/g, '')) - parseInt(String(b.period).replace(/\D/g, '')));
 
-        const chartLabels = revenueData.map(d => String(d.period));
-        const revenueValues = revenueData.map(d => d.value || 0);
+        const periods = revenueData.map(d => String(d.period));
+        const revenues = revenueData.map(d => d.value || 0);
 
-        // Get the highest priority margin available
+        // Find margin data
         const marginPriority = ['operating', 'ebitda', 'pretax', 'net', 'gross'];
-        const marginLabelMap = {
-          'operating': '営業利益率',
-          'ebitda': 'EBITDA利益率',
-          'pretax': '税前利益率',
-          'net': '純利益率',
-          'gross': '粗利益率'
-        };
+        const marginLabelMap = { 'operating': '営業利益率', 'ebitda': 'EBITDA利益率', 'pretax': '税前利益率', 'net': '純利益率', 'gross': '粗利益率' };
 
-        let selectedMarginType = null;
-        let marginValues = [];
-
-        // Find highest priority margin that has data
-        for (const marginType of marginPriority) {
-          const typeData = marginData.filter(m => m.margin_type === marginType);
-          if (typeData.length > 0) {
-            selectedMarginType = marginType;
-            marginValues = chartLabels.map(period => {
-              const found = typeData.find(m => String(m.period) === period);
-              return found ? found.value : 0;
-            });
+        let marginType = null, margins = [];
+        for (const mt of marginPriority) {
+          const data = marginData.filter(m => m.margin_type === mt);
+          if (data.length > 0) {
+            marginType = mt;
+            margins = periods.map(p => { const f = data.find(m => String(m.period) === p); return f ? f.value : 0; });
             break;
           }
         }
 
-        // Determine unit display
         const unitDisplay = currencyUnit === 'millions' ? '百万' : (currencyUnit === 'billions' ? '十億' : '');
-        const revenueLabel = `売上高 (${currency}${unitDisplay})`;
-        const marginLabel = selectedMarginType ? `${marginLabelMap[selectedMarginType] || '利益率'} (%)` : '利益率 (%)';
+        const revLabel = `売上高 (${currency}${unitDisplay})`;
 
-        // Chart position and size
-        const chartX = 6.86;
-        const chartY = 4.75;
-        const chartW = 6.0;
-        const chartH = 2.0;
+        // Build table
+        const tableRows = [];
+        tableRows.push([{ text: '', options: { fill: COLORS.dk2 } }, ...periods.map(p => ({ text: p, options: { fill: COLORS.dk2, color: COLORS.white, bold: true, align: 'center' } }))]);
+        tableRows.push([{ text: revLabel, options: { fill: COLORS.chartBlue, color: COLORS.white, bold: true } }, ...revenues.map(v => ({ text: v.toLocaleString(), options: { align: 'right' } }))]);
 
-        // Check if we have margin data for combo chart
-        const hasMarginData = selectedMarginType && marginValues.some(v => v !== 0);
-
-        if (hasMarginData) {
-          // COMBO chart: BAR (revenue) + LINE (margin on secondary axis)
-          slide.addChart(pptx.charts.COMBO, [
-            {
-              name: revenueLabel,
-              labels: chartLabels,
-              values: revenueValues
-            },
-            {
-              name: marginLabel,
-              labels: chartLabels,
-              values: marginValues
-            }
-          ], {
-            x: chartX, y: chartY, w: chartW, h: chartH,
-            chartTypes: [
-              {
-                type: pptx.charts.BAR,
-                barDir: 'col',
-                barGapWidthPct: 50
-              },
-              {
-                type: pptx.charts.LINE,
-                lineSmooth: false,
-                lineSize: 2,
-                lineDataSymbolSize: 6,
-                secondaryValAxis: true,
-                secondaryCatAxis: true
-              }
-            ],
-            chartColors: ['5B9BD5', 'ED7D31'],
-            showValue: true,
-            dataLabelPosition: 'outEnd',
-            dataLabelFontFace: 'Segoe UI',
-            dataLabelFontSize: 9,
-            dataLabelColor: '000000',
-            // Category axis (bottom) with border and tick marks
-            catAxisLabelFontFace: 'Segoe UI',
-            catAxisLabelFontSize: 10,
-            catAxisLabelColor: '000000',
-            catAxisLineShow: true,
-            catAxisLineColor: '000000',
-            catAxisMajorTickMark: 'out',
-            // Value axes configuration
-            valAxes: [
-              {
-                // Primary axis (left - revenue) with border and tick marks
-                showValAxisTitle: false,
-                valAxisLabelFontFace: 'Segoe UI',
-                valAxisLabelFontSize: 9,
-                valAxisLabelColor: '000000',
-                valAxisDisplayUnits: 'none',
-                valAxisLineShow: true,
-                valAxisLineColor: '000000',
-                valAxisMajorTickMark: 'out',
-                valAxisMajorGridLine: { style: 'solid', color: 'D9D9D9', size: 0.5 },
-                valAxisMinorGridLine: { style: 'none' }
-              },
-              {
-                // Secondary axis (right - margin %) with border and tick marks
-                showValAxisTitle: false,
-                valAxisLabelFontFace: 'Segoe UI',
-                valAxisLabelFontSize: 9,
-                valAxisLabelColor: 'ED7D31',
-                valAxisMinVal: 0,
-                valAxisMaxVal: 25,
-                valAxisDisplayUnits: 'none',
-                valAxisLineShow: true,
-                valAxisLineColor: '000000',
-                valAxisMajorTickMark: 'out',
-                valAxisMajorGridLine: { style: 'none' },
-                valAxisMinorGridLine: { style: 'none' }
-              }
-            ],
-            catAxes: [
-              { catAxisTitle: '', catAxisLineShow: true, catAxisMajorTickMark: 'out' },
-              { catAxisHidden: true }
-            ],
-            // Legend - PPT built-in, positioned at top
-            showLegend: true,
-            legendPos: 't'
-          });
-        } else {
-          // Create simple BAR chart for revenue only (no margin data)
-          slide.addChart(pptx.charts.BAR, [
-            {
-              name: revenueLabel,
-              labels: chartLabels,
-              values: revenueValues
-            }
-          ], {
-            x: chartX, y: chartY, w: chartW, h: chartH,
-            barDir: 'col',
-            barGapWidthPct: 50,
-            chartColors: ['5B9BD5'],
-            showValue: true,
-            dataLabelPosition: 'outEnd',
-            dataLabelFontFace: 'Segoe UI',
-            dataLabelFontSize: 9,
-            dataLabelColor: '000000',
-            dataLabelFormatCode: '#,##0',
-            // Category axis (bottom) with border and tick marks
-            catAxisLabelFontFace: 'Segoe UI',
-            catAxisLabelFontSize: 10,
-            catAxisLabelColor: '000000',
-            catAxisLineShow: true,
-            catAxisLineColor: '000000',
-            catAxisMajorTickMark: 'out',
-            // Value axis (left) with border and tick marks
-            valAxisLabelFontFace: 'Segoe UI',
-            valAxisLabelFontSize: 9,
-            valAxisLabelColor: '000000',
-            valAxisDisplayUnits: 'none',
-            valAxisLineShow: true,
-            valAxisLineColor: '000000',
-            valAxisMajorTickMark: 'out',
-            valAxisMajorGridLine: { style: 'solid', color: 'D9D9D9', size: 0.5 },
-            valAxisMinorGridLine: { style: 'none' },
-            // Legend - PPT built-in, positioned at top
-            showLegend: true,
-            legendPos: 't'
-          });
+        if (marginType && margins.some(v => v !== 0)) {
+          tableRows.push([{ text: marginLabelMap[marginType] + ' (%)', options: { fill: COLORS.chartOrange, color: COLORS.white, bold: true } }, ...margins.map(v => ({ text: v.toFixed(1) + '%', options: { align: 'right', color: COLORS.chartOrange } }))]);
         }
+
+        const colW = [1.8, ...periods.map(() => (6.0 - 1.8) / periods.length)];
+        slide.addTable(tableRows, { x: 6.86, y: 4.75, w: 6.0, colW, fontFace: 'Segoe UI', fontSize: 10, border: { type: 'solid', pt: 0.5, color: 'CCCCCC' }, valign: 'middle' });
       }
 
-      // ===== FOOTNOTE =====
-      slide.addText('Source: Company financial data', {
-        x: 0.38, y: 6.90, w: 12.5, h: 0.18,
-        fontSize: 10, fontFace: 'Segoe UI',
-        color: COLORS.black
-      });
+      slide.addText('Source: Company financial data', { x: 0.38, y: 6.90, w: 12.5, h: 0.18, fontSize: 10, fontFace: 'Segoe UI', color: COLORS.black });
+    }
 
-    } // End of for loop (one slide per company)
-
-    // Generate base64
     const base64Content = await pptx.write({ outputType: 'base64' });
-
     console.log('Financial Chart PPTX generated successfully');
 
-    return {
-      success: true,
-      content: base64Content
-    };
+    return { success: true, content: base64Content };
   } catch (error) {
     console.error('Financial Chart PPTX error:', error);
-    return {
-      success: false,
-      error: error.message
-    };
+    return { success: false, error: error.message };
   }
 }
 
@@ -5239,7 +5591,8 @@ app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res
 
     console.log(`\nSuccessfully processed ${allFinancialData.length}/${excelFiles.length} files`);
 
-    // Generate PowerPoint with all charts (one slide per company)
+    // Generate PowerPoint with embedded Excel charts (one slide per company)
+    // Uses OOXML chart embedding for reliable chart rendering
     const pptxResult = await generateFinancialChartPPTX(allFinancialData);
 
     if (!pptxResult.success) {
@@ -5301,7 +5654,7 @@ app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res
       }
     );
 
-    console.log(`Financial chart email sent to ${email}`);
+    console.log(`Financial chart PPTX sent to ${email}`);
     console.log('='.repeat(50));
 
   } catch (error) {
@@ -5593,7 +5946,7 @@ Respond in this EXACT JSON format:
 IMPORTANT: Use SPECIFIC numbers and names. If information is not available, write "Not disclosed" rather than making things up.`).catch(e => ({ section: 'profile', error: e.message })),
 
     // Synthesis 2: Products, Services & Operations
-    callChatGPT(`You are a senior M&A advisor analyzing a company's products and operations.
+    callChatGPT(`You are writing for M&A ADVISORS who need to understand a company's business quickly. NOT engineers.
 
 COMPANY: ${companyName}
 
@@ -5605,43 +5958,47 @@ ${research.operations}
 
 ---
 
+CRITICAL INSTRUCTIONS:
+- Do NOT list technical model numbers or product codes (e.g., "SYSTEM 800 SE", "Model X-7000")
+- Instead, explain what the business DOES and WHY IT MATTERS for an acquirer
+- Write like you're briefing a Managing Director before a client meeting
+- Focus on: revenue drivers, competitive advantages, customer value proposition
+
 Respond in this EXACT JSON format:
 {
   "products_and_services": {
-    "overview": "2-3 sentences on what they offer and to whom",
+    "overview": "2-3 sentences explaining the business in plain English. What do they sell, to whom, and why do customers choose them?",
     "product_lines": [
       {
-        "name": "Product line or brand name",
-        "description": "What it does",
-        "key_products": ["Specific model/product names"],
-        "target_market": "Who buys this",
-        "competitive_position": "Leader/Challenger/Niche"
+        "name": "Business segment name (not model numbers)",
+        "what_it_does": "Plain English explanation of customer value",
+        "revenue_significance": "High/Medium/Low revenue contributor",
+        "why_it_matters": "Why an acquirer should care - moat, growth, margins"
       }
     ],
-    "services": [
-      {"name": "Service name", "description": "What it includes"}
-    ],
-    "technology_ip": ["List proprietary technologies, patents, or unique capabilities"]
+    "strategic_capabilities": [
+      {
+        "capability": "What they can do that competitors struggle with",
+        "business_impact": "How this translates to customer wins or pricing power",
+        "defensibility": "Why this is hard to replicate"
+      }
+    ]
   },
   "operations": {
     "manufacturing_footprint": [
-      {"location": "City, Country", "function": "What is made/done there", "capacity": "If known"}
-    ],
-    "rd_centers": [
-      {"location": "City, Country", "focus": "What they research"}
+      {"location": "City, Country", "strategic_value": "Why this location matters (cost, market access, talent)"}
     ],
     "global_presence": {
-      "countries_with_operations": "Number",
-      "key_markets": ["List top markets"],
-      "recent_expansions": "Any recent geographic moves"
+      "summary": "Brief description of geographic reach and key markets",
+      "expansion_trajectory": "Where they're growing and why"
     }
   }
 }
 
-IMPORTANT: Be SPECIFIC with product names, locations, and capabilities. Generic descriptions are not useful for M&A advisors.`).catch(e => ({ section: 'products', error: e.message })),
+REMEMBER: An M&A advisor reading this should understand the business model and competitive position in 2 minutes. No jargon.`).catch(e => ({ section: 'products', error: e.message })),
 
     // Synthesis 3: Competitive Landscape
-    callChatGPT(`You are a senior M&A advisor analyzing competitive dynamics.
+    callChatGPT(`You are writing a competitive analysis for M&A ADVISORS. Focus on deal implications.
 
 COMPANY: ${companyName}
 
@@ -5653,37 +6010,41 @@ ${research.products}
 
 ---
 
+CRITICAL INSTRUCTIONS:
+- Write for someone evaluating this company as an acquisition target or buyer
+- Focus on: market position, competitive moat, vulnerability to disruption
+- Explain WHY competitive dynamics matter for valuation and deal thesis
+
 Respond in this EXACT JSON format:
 {
   "competitive_landscape": {
     "market_overview": {
       "market_size": "Total addressable market in USD",
       "growth_rate": "Market CAGR",
-      "key_trends": ["3-5 major trends affecting the market"]
+      "market_maturity": "Emerging / Growth / Mature / Declining - with brief explanation"
     },
     "company_position": {
-      "market_share": "Estimated % or rank",
-      "positioning": "How they compete (cost, quality, innovation, etc.)",
-      "key_strengths": ["3-4 competitive advantages"],
-      "key_weaknesses": ["2-3 competitive gaps or challenges"]
+      "market_rank": "#1, #2, Top 5, etc. with context",
+      "how_they_win": "Plain English: why do customers choose them over alternatives?",
+      "competitive_moat": "What protects their position - switching costs, brand, scale, IP, relationships?",
+      "vulnerability": "Biggest competitive threat or disruption risk"
     },
-    "competitors": [
+    "key_competitors": [
       {
         "name": "Competitor name",
-        "hq": "Country",
-        "revenue": "Approximate",
-        "key_differentiator": "What makes them different",
-        "threat_level": "High/Medium/Low"
+        "size_comparison": "Larger/Similar/Smaller than target",
+        "threat_to_position": "Why they matter - are they gaining share, attacking same customers?",
+        "ma_relevance": "Could they be acquirer, target, or consolidation partner?"
       }
     ],
-    "competitive_dynamics": "2-3 sentences on how competition is evolving"
+    "deal_implications": "2-3 sentences on what competitive dynamics mean for valuation or strategic fit"
   }
 }
 
-IMPORTANT: Name SPECIFIC competitors with data. Do not use generic descriptions.`).catch(e => ({ section: 'competitors', error: e.message })),
+REMEMBER: Help an MD quickly understand if this company has a defensible position worth paying for.`).catch(e => ({ section: 'competitors', error: e.message })),
 
-    // Synthesis 4: M&A Analysis & Acquisition Appetite
-    callChatGPT(`You are a senior M&A advisor analyzing a company's M&A track record and future appetite.
+    // Synthesis 4: M&A Deep Dive - Full Story Analysis
+    callChatGPT(`You are an M&A advisor writing a DEEP intelligence brief on a company's acquisition behavior.
 
 COMPANY: ${companyName}
 
@@ -5693,113 +6054,84 @@ ${research.maHistory}
 RESEARCH ON LEADERSHIP & STRATEGY:
 ${research.leadership}
 
-RESEARCH ON FINANCIALS (for capacity assessment):
+RESEARCH ON FINANCIALS:
 ${research.financials}
 
 ---
 
-Think deeply and INFER from the evidence. This is the most critical section.
+CRITICAL: I need DEPTH, not breadth. Don't give me 10 shallow bullet points. Give me 3-4 deals analyzed DEEPLY.
+
+For EACH significant acquisition, write 3-5 sentences explaining:
+1. What they bought and why (the strategic logic)
+2. What it tells us about their priorities
+3. How they executed (price paid, integration approach)
+4. What it means for future deals they'd consider
+
+Then synthesize: What patterns emerge? What does this tell us about how they think about M&A?
 
 Respond in this EXACT JSON format:
 {
-  "ma_track_record": {
-    "acquisition_history": [
+  "ma_deep_dive": {
+    "deal_stories": [
       {
-        "year": "Year",
-        "target": "Company name",
-        "deal_value": "Amount or Not disclosed",
-        "rationale": "Why they did it",
-        "outcome": "How it worked out if known"
+        "deal": "Target company name (Year)",
+        "full_story": "3-5 sentence deep analysis of this deal - what they bought, why, how, and what it tells us"
       }
     ],
-    "partnerships_jvs": [
-      {"partner": "Name", "year": "Year", "nature": "What kind of partnership"}
-    ],
-    "pattern_analysis": "2-3 sentences on their M&A style (bolt-on vs transformational, integration approach, deal frequency)"
-  },
-  "acquisition_appetite": {
-    "strategic_drivers": [
-      {"driver": "Reason they'd acquire", "evidence": "What suggests this", "priority": "High/Medium/Low"}
-    ],
-    "likely_deal_size": {
-      "range": "$X-Y million",
-      "rationale": "Why this range based on past deals and financial capacity"
-    },
-    "preferred_deal_structure": "Acquisition / JV / Minority stake - with reasoning",
-    "urgency": {
-      "level": "High/Medium/Low",
-      "rationale": "Why this urgency level"
-    }
-  },
-  "target_profile": {
-    "industries_of_interest": [
-      {"sector": "Sector name", "interest_level": "High/Medium/Low", "rationale": "Why interested"}
-    ],
-    "geographic_preferences": [
-      {"region": "Region", "interest_level": "High/Medium/Low", "rationale": "Why interested"}
-    ],
-    "company_stage": "Early-stage / Growth / Mature - with reasoning",
-    "capabilities_sought": ["Specific technologies, capabilities, or assets they'd want"],
-    "exclusions": ["Types of deals they'd likely avoid"]
-  },
-  "country_sector_matrix": {
-    "explanation": "This matrix shows estimated interest level (H=High, M=Medium, L=Low, N=No interest) by country and sector",
-    "sectors": ["List 4-6 relevant sectors"],
-    "countries": ["List 6-8 relevant countries/regions"],
-    "matrix": {
-      "Japan": {"sector1": "H", "sector2": "M"},
-      "USA": {"sector1": "M", "sector2": "H"}
+    "ma_philosophy": "2-3 paragraphs synthesizing their overall M&A philosophy. Are they empire builders or focused acquirers? Do they buy technology, market access, or capacity? How aggressive are they on valuation? How do they integrate - hands-off or full absorption?",
+    "deal_capacity": {
+      "financial_firepower": "Based on balance sheet and past deals, what can they spend?",
+      "appetite_level": "High/Medium/Low - are they actively hunting or opportunistic?",
+      "decision_process": "Fast/Deliberate/Slow - how long do their deals take?"
     }
   }
 }
 
-IMPORTANT: INFER intelligently from evidence. This analysis should demonstrate deep thinking, not just data regurgitation.`).catch(e => ({ section: 'ma_analysis', error: e.message })),
+REMEMBER: An MD reading this should deeply understand HOW this company thinks about M&A.`).catch(e => ({ section: 'ma_analysis', error: e.message })),
 
-    // Synthesis 5: Engagement Strategy
-    callChatGPT(`You are a senior M&A advisor preparing for a client meeting. How should we engage with this company?
+    // Synthesis 5: Ideal Target Profile - Deep Strategic Analysis
+    callChatGPT(`You are an M&A advisor writing THE most important page of a buyer brief: What exactly should we pitch them?
 
 COMPANY: ${companyName}
 
-RESEARCH ON LEADERSHIP:
-${research.leadership}
-
-RESEARCH ON M&A:
-${research.maHistory}
-
-RESEARCH ON STRATEGY:
+ALL RESEARCH:
 ${research.products}
+${research.maHistory}
+${research.leadership}
+${research.financials}
 
 ${context ? `CLIENT CONTEXT: ${context}` : ''}
 
 ---
 
-Think like a seasoned dealmaker. What would actually work with this company?
+CRITICAL: Don't give me a checklist of shallow criteria. Give me ONE deep, insightful analysis.
+
+Write 2-3 paragraphs that answer: "If I had to describe the PERFECT acquisition target for ${companyName}, what would it look like and WHY?"
+
+Consider and SYNTHESIZE:
+- Value chain position: Do they want upstream suppliers, downstream distribution, or horizontal competitors?
+- Industry adjacencies: Which specific sectors fit their strategy and why?
+- Geography: Which countries/regions and why (market access, cost, talent)?
+- Company stage: Early-stage tech, growth companies, or mature cash-flow businesses?
+- Size: What's their sweet spot and why?
+
+Then give me ONE specific example: "A company like [description] in [country] would be highly attractive because [specific reasons tied to their strategy]"
 
 Respond in this EXACT JSON format:
 {
-  "engagement_strategy": {
-    "key_decision_makers": [
-      {"name": "Name if known", "title": "Title", "role_in_ma": "Their role in M&A decisions", "approach": "How to engage them"}
-    ],
-    "hot_buttons": [
-      {"topic": "What excites them", "evidence": "Why we think this", "how_to_leverage": "How to use this"}
-    ],
-    "concerns_objections": [
-      {"concern": "What might worry them", "evidence": "Why we think this", "how_to_address": "How to overcome"}
-    ],
-    "recommended_approach": {
-      "positioning": "How to position opportunities to them",
-      "timing": "Any timing considerations",
-      "channel": "How to reach them (direct, advisor, event, etc.)",
-      "key_messages": ["3-4 key messages that would resonate"]
+  "ideal_target": {
+    "strategic_analysis": "2-3 paragraphs of deep analysis on what they want and WHY. Connect dots between their strategy, past deals, and future needs. This should read like insight, not a checklist.",
+    "sweet_spot": {
+      "value_chain": "Where in the value chain (upstream/midstream/downstream) and why",
+      "industries": "Which specific industries/segments and why",
+      "geographies": "Which countries/regions and why",
+      "size_range": "Revenue or deal size range and why this fits",
+      "stage": "Growth stage preference and why"
     },
-    "next_steps": [
-      {"action": "Specific action to take", "priority": "High/Medium/Low", "owner": "Who should do this"}
-    ]
+    "example_target": "One specific, concrete example: 'A company like [X] that does [Y] in [Z country] would be attractive because [specific strategic fit]'",
+    "what_to_avoid": "1-2 sentences on what would NOT fit and why"
   }
-}
-
-IMPORTANT: Be SPECIFIC and ACTIONABLE. This should be immediately useful for a meeting prep.`).catch(e => ({ section: 'engagement', error: e.message }))
+}`).catch(e => ({ section: 'ideal_target', error: e.message }))
   ];
 
   // Add local insights synthesis if available
@@ -6074,36 +6406,43 @@ async function generateUTBExcel(companyName, website, research, additionalContex
   let pr = 1;
 
   // Products Overview
-  pr = addSectionTitle(prodSheet, 'Products & Services Overview', pr);
+  pr = addSectionTitle(prodSheet, 'Business Overview', pr);
   prodSheet.mergeCells(`A${pr}:C${pr}`);
   prodSheet.getCell(`A${pr}`).value = prod.overview || 'No overview available';
   prodSheet.getCell(`A${pr}`).alignment = { wrapText: true };
-  prodSheet.getRow(pr).height = 40;
+  prodSheet.getRow(pr).height = 50;
   pr += 2;
 
-  // Product Lines
+  // Business Segments (renamed from Product Lines)
   if (prod.product_lines && prod.product_lines.length > 0) {
-    pr = addSectionTitle(prodSheet, 'Product Lines', pr);
+    pr = addSectionTitle(prodSheet, 'Business Segments', pr);
     const plHeader = prodSheet.getRow(pr);
-    plHeader.values = ['Product Line', 'Description', 'Key Products'];
+    plHeader.values = ['Segment', 'What It Does', 'Why It Matters'];
     styleHeaderRow(plHeader, blue);
     pr++;
     prod.product_lines.forEach((line, i) => {
       prodSheet.getCell(`A${pr}`).value = line.name;
       prodSheet.getCell(`A${pr}`).font = { bold: true };
-      prodSheet.getCell(`B${pr}`).value = line.description;
-      prodSheet.getCell(`C${pr}`).value = (line.key_products || []).join(', ');
+      prodSheet.getCell(`B${pr}`).value = line.what_it_does || line.description || '';
+      prodSheet.getCell(`C${pr}`).value = line.why_it_matters || '';
       styleDataRow(prodSheet.getRow(pr), i % 2 === 0);
       pr++;
     });
     pr++;
   }
 
-  // Technology & IP
-  if (prod.technology_ip && prod.technology_ip.length > 0) {
-    pr = addSectionTitle(prodSheet, 'Technology & IP', pr);
-    prod.technology_ip.forEach((tech, i) => {
-      prodSheet.getCell(`A${pr}`).value = `• ${tech}`;
+  // Strategic Capabilities (replaces Technology & IP)
+  if (prod.strategic_capabilities && prod.strategic_capabilities.length > 0) {
+    pr = addSectionTitle(prodSheet, 'Strategic Capabilities (Why Customers Choose Them)', pr);
+    const capHeader = prodSheet.getRow(pr);
+    capHeader.values = ['Capability', 'Business Impact', 'Defensibility'];
+    styleHeaderRow(capHeader, navy);
+    pr++;
+    prod.strategic_capabilities.forEach((cap, i) => {
+      prodSheet.getCell(`A${pr}`).value = cap.capability;
+      prodSheet.getCell(`A${pr}`).font = { bold: true };
+      prodSheet.getCell(`B${pr}`).value = cap.business_impact || '';
+      prodSheet.getCell(`C${pr}`).value = cap.defensibility || '';
       styleDataRow(prodSheet.getRow(pr), i % 2 === 0);
       pr++;
     });
@@ -6113,42 +6452,49 @@ async function generateUTBExcel(companyName, website, research, additionalContex
   // Operations
   const ops = synthesis.operations || {};
   if (ops.manufacturing_footprint && ops.manufacturing_footprint.length > 0) {
-    pr = addSectionTitle(prodSheet, 'Manufacturing Footprint', pr);
+    pr = addSectionTitle(prodSheet, 'Manufacturing & Operations', pr);
     const mfgHeader = prodSheet.getRow(pr);
-    mfgHeader.values = ['Location', 'Function', 'Capacity'];
+    mfgHeader.values = ['Location', 'Strategic Value', ''];
     styleHeaderRow(mfgHeader);
     pr++;
     ops.manufacturing_footprint.forEach((mfg, i) => {
       prodSheet.getCell(`A${pr}`).value = mfg.location;
-      prodSheet.getCell(`B${pr}`).value = mfg.function;
-      prodSheet.getCell(`C${pr}`).value = mfg.capacity || '-';
+      prodSheet.getCell(`A${pr}`).font = { bold: true };
+      prodSheet.mergeCells(`B${pr}:C${pr}`);
+      prodSheet.getCell(`B${pr}`).value = mfg.strategic_value || mfg.function || '';
       styleDataRow(prodSheet.getRow(pr), i % 2 === 0);
       pr++;
     });
     pr++;
   }
 
-  if (ops.rd_centers && ops.rd_centers.length > 0) {
-    pr = addSectionTitle(prodSheet, 'R&D Centers', pr);
-    const rdHeader = prodSheet.getRow(pr);
-    rdHeader.values = ['Location', 'Focus Area', ''];
-    styleHeaderRow(rdHeader);
-    pr++;
-    ops.rd_centers.forEach((rd, i) => {
-      prodSheet.getCell(`A${pr}`).value = rd.location;
-      prodSheet.getCell(`B${pr}`).value = rd.focus;
-      styleDataRow(prodSheet.getRow(pr), i % 2 === 0);
+  // Global Presence
+  if (ops.global_presence) {
+    pr = addSectionTitle(prodSheet, 'Global Footprint', pr);
+    if (ops.global_presence.summary) {
+      prodSheet.getCell(`A${pr}`).value = 'Presence';
+      prodSheet.getCell(`A${pr}`).font = { bold: true };
+      prodSheet.mergeCells(`B${pr}:C${pr}`);
+      prodSheet.getCell(`B${pr}`).value = ops.global_presence.summary;
+      styleDataRow(prodSheet.getRow(pr));
       pr++;
-    });
+    }
+    if (ops.global_presence.expansion_trajectory) {
+      prodSheet.getCell(`A${pr}`).value = 'Growth Direction';
+      prodSheet.getCell(`A${pr}`).font = { bold: true };
+      prodSheet.mergeCells(`B${pr}:C${pr}`);
+      prodSheet.getCell(`B${pr}`).value = ops.global_presence.expansion_trajectory;
+      styleDataRow(prodSheet.getRow(pr), true);
+      pr++;
+    }
   }
 
   // ========== SHEET 4: COMPETITIVE LANDSCAPE ==========
   const compSheet = workbook.addWorksheet('Competitive Landscape');
   compSheet.columns = [
     { key: 'a', width: 25 },
-    { key: 'b', width: 20 },
-    { key: 'c', width: 25 },
-    { key: 'd', width: 30 }
+    { key: 'b', width: 35 },
+    { key: 'c', width: 40 }
   ];
 
   const comp = synthesis.competitive_landscape || {};
@@ -6159,398 +6505,219 @@ async function generateUTBExcel(companyName, website, research, additionalContex
   cr = addSectionTitle(compSheet, 'Market Overview', cr);
   const mktData = [
     ['Market Size', mkt.market_size || 'Not disclosed'],
-    ['Growth Rate', mkt.growth_rate || 'Not disclosed']
+    ['Growth Rate', mkt.growth_rate || 'Not disclosed'],
+    ['Market Stage', mkt.market_maturity || 'Not disclosed']
   ];
   mktData.forEach((item, i) => {
     compSheet.getCell(`A${cr}`).value = item[0];
     compSheet.getCell(`A${cr}`).font = { bold: true };
+    compSheet.mergeCells(`B${cr}:C${cr}`);
     compSheet.getCell(`B${cr}`).value = item[1];
     styleDataRow(compSheet.getRow(cr), i % 2 === 0);
     cr++;
   });
-  if (mkt.key_trends && mkt.key_trends.length > 0) {
-    compSheet.getCell(`A${cr}`).value = 'Key Trends';
-    compSheet.getCell(`A${cr}`).font = { bold: true };
-    compSheet.mergeCells(`B${cr}:D${cr}`);
-    compSheet.getCell(`B${cr}`).value = mkt.key_trends.join('; ');
-    compSheet.getCell(`B${cr}`).alignment = { wrapText: true };
-    styleDataRow(compSheet.getRow(cr));
-    cr++;
-  }
   cr++;
 
-  // Company Position
+  // Company Position - Deal Focused
   const pos = comp.company_position || {};
-  cr = addSectionTitle(compSheet, 'Company Competitive Position', cr);
-  const posData = [
-    ['Market Share', pos.market_share || 'Not disclosed'],
-    ['Positioning', pos.positioning || 'Not disclosed']
-  ];
-  posData.forEach((item, i) => {
-    compSheet.getCell(`A${cr}`).value = item[0];
+  cr = addSectionTitle(compSheet, 'Why This Company Wins', cr);
+
+  if (pos.market_rank) {
+    compSheet.getCell(`A${cr}`).value = 'Market Position';
     compSheet.getCell(`A${cr}`).font = { bold: true };
-    compSheet.mergeCells(`B${cr}:D${cr}`);
-    compSheet.getCell(`B${cr}`).value = item[1];
-    styleDataRow(compSheet.getRow(cr), i % 2 === 0);
+    compSheet.mergeCells(`B${cr}:C${cr}`);
+    compSheet.getCell(`B${cr}`).value = pos.market_rank;
+    styleDataRow(compSheet.getRow(cr));
     cr++;
-  });
-  if (pos.key_strengths && pos.key_strengths.length > 0) {
-    compSheet.getCell(`A${cr}`).value = 'Key Strengths';
+  }
+  if (pos.how_they_win) {
+    compSheet.getCell(`A${cr}`).value = 'Why Customers Buy';
     compSheet.getCell(`A${cr}`).font = { bold: true, color: { argb: 'FF16A34A' } };
-    compSheet.mergeCells(`B${cr}:D${cr}`);
-    compSheet.getCell(`B${cr}`).value = pos.key_strengths.join('; ');
+    compSheet.mergeCells(`B${cr}:C${cr}`);
+    compSheet.getCell(`B${cr}`).value = pos.how_they_win;
+    compSheet.getCell(`B${cr}`).alignment = { wrapText: true };
+    styleDataRow(compSheet.getRow(cr), true);
+    cr++;
+  }
+  if (pos.competitive_moat) {
+    compSheet.getCell(`A${cr}`).value = 'Competitive Moat';
+    compSheet.getCell(`A${cr}`).font = { bold: true, color: { argb: 'FF16A34A' } };
+    compSheet.mergeCells(`B${cr}:C${cr}`);
+    compSheet.getCell(`B${cr}`).value = pos.competitive_moat;
     compSheet.getCell(`B${cr}`).alignment = { wrapText: true };
     styleDataRow(compSheet.getRow(cr));
     cr++;
   }
-  if (pos.key_weaknesses && pos.key_weaknesses.length > 0) {
-    compSheet.getCell(`A${cr}`).value = 'Key Weaknesses';
+  if (pos.vulnerability) {
+    compSheet.getCell(`A${cr}`).value = 'Key Vulnerability';
     compSheet.getCell(`A${cr}`).font = { bold: true, color: { argb: 'FFDC2626' } };
-    compSheet.mergeCells(`B${cr}:D${cr}`);
-    compSheet.getCell(`B${cr}`).value = pos.key_weaknesses.join('; ');
+    compSheet.mergeCells(`B${cr}:C${cr}`);
+    compSheet.getCell(`B${cr}`).value = pos.vulnerability;
     compSheet.getCell(`B${cr}`).alignment = { wrapText: true };
-    styleDataRow(compSheet.getRow(cr));
+    styleDataRow(compSheet.getRow(cr), true);
     cr++;
   }
   cr++;
 
-  // Competitors Table
-  if (comp.competitors && comp.competitors.length > 0) {
-    cr = addSectionTitle(compSheet, 'Key Competitors', cr);
+  // Competitors Table - M&A Focused
+  const competitors = comp.key_competitors || comp.competitors || [];
+  if (competitors.length > 0) {
+    cr = addSectionTitle(compSheet, 'Competitive Landscape & M&A Implications', cr);
     const compHeader = compSheet.getRow(cr);
-    compHeader.values = ['Company', 'HQ', 'Revenue', 'Threat Level'];
+    compHeader.values = ['Competitor', 'Threat to Position', 'M&A Relevance'];
     styleHeaderRow(compHeader, blue);
     cr++;
-    comp.competitors.forEach((c, i) => {
-      compSheet.getCell(`A${cr}`).value = c.name;
+    competitors.forEach((c, i) => {
+      compSheet.getCell(`A${cr}`).value = `${c.name}${c.size_comparison ? ' (' + c.size_comparison + ')' : ''}`;
       compSheet.getCell(`A${cr}`).font = { bold: true };
-      compSheet.getCell(`B${cr}`).value = c.hq;
-      compSheet.getCell(`C${cr}`).value = c.revenue;
-      compSheet.getCell(`D${cr}`).value = c.threat_level;
-      // Color code threat level
-      if (c.threat_level === 'High') {
-        compSheet.getCell(`D${cr}`).font = { color: { argb: 'FFDC2626' }, bold: true };
-      } else if (c.threat_level === 'Medium') {
-        compSheet.getCell(`D${cr}`).font = { color: { argb: 'FFD97706' } };
-      }
+      compSheet.getCell(`B${cr}`).value = c.threat_to_position || c.key_differentiator || '';
+      compSheet.getCell(`C${cr}`).value = c.ma_relevance || '';
       styleDataRow(compSheet.getRow(cr), i % 2 === 0);
       cr++;
     });
+    cr++;
   }
 
-  // ========== SHEET 5: M&A ANALYSIS ==========
-  const maSheet = workbook.addWorksheet('M&A Analysis');
+  // Deal Implications
+  if (comp.deal_implications) {
+    cr = addSectionTitle(compSheet, 'What This Means for a Deal', cr);
+    compSheet.mergeCells(`A${cr}:C${cr}`);
+    compSheet.getCell(`A${cr}`).value = comp.deal_implications;
+    compSheet.getCell(`A${cr}`).alignment = { wrapText: true };
+    compSheet.getCell(`A${cr}`).font = { italic: true };
+    compSheet.getRow(cr).height = 50;
+  }
+
+  // ========== SHEET 5: M&A DEEP DIVE ==========
+  const maSheet = workbook.addWorksheet('M&A Deep Dive');
   maSheet.columns = [
-    { key: 'a', width: 15 },
-    { key: 'b', width: 25 },
-    { key: 'c', width: 20 },
-    { key: 'd', width: 40 }
+    { key: 'a', width: 25 },
+    { key: 'b', width: 75 }
   ];
 
-  const maTrack = synthesis.ma_track_record || {};
+  const maDeepDive = synthesis.ma_deep_dive || {};
   let mr = 1;
 
-  // Acquisition History
-  if (maTrack.acquisition_history && maTrack.acquisition_history.length > 0) {
-    mr = addSectionTitle(maSheet, 'Acquisition History', mr);
-    const acqHeader = maSheet.getRow(mr);
-    acqHeader.values = ['Year', 'Target', 'Deal Value', 'Rationale'];
-    styleHeaderRow(acqHeader);
-    mr++;
-    maTrack.acquisition_history.forEach((acq, i) => {
-      maSheet.getCell(`A${mr}`).value = acq.year;
-      maSheet.getCell(`B${mr}`).value = acq.target;
-      maSheet.getCell(`B${mr}`).font = { bold: true };
-      maSheet.getCell(`C${mr}`).value = acq.deal_value;
-      maSheet.getCell(`D${mr}`).value = acq.rationale;
+  // Deal Stories - Deep Analysis Per Deal
+  const dealStories = maDeepDive.deal_stories || [];
+  if (dealStories.length > 0) {
+    mr = addSectionTitle(maSheet, 'Deal-by-Deal Analysis', mr);
+    dealStories.forEach((story, i) => {
+      maSheet.getCell(`A${mr}`).value = story.deal;
+      maSheet.getCell(`A${mr}`).font = { bold: true, size: 11, color: { argb: blue } };
+      mr++;
+      maSheet.mergeCells(`A${mr}:B${mr}`);
+      maSheet.getCell(`A${mr}`).value = story.full_story;
+      maSheet.getCell(`A${mr}`).alignment = { wrapText: true, vertical: 'top' };
+      maSheet.getRow(mr).height = 80;
       styleDataRow(maSheet.getRow(mr), i % 2 === 0);
       mr++;
+      mr++; // Extra space between deals
     });
-    mr++;
   }
 
-  // M&A Pattern
-  if (maTrack.pattern_analysis) {
-    mr = addSectionTitle(maSheet, 'M&A Pattern Analysis', mr);
-    maSheet.mergeCells(`A${mr}:D${mr}`);
-    maSheet.getCell(`A${mr}`).value = maTrack.pattern_analysis;
-    maSheet.getCell(`A${mr}`).alignment = { wrapText: true };
-    maSheet.getRow(mr).height = 50;
+  // M&A Philosophy - Deep Synthesis
+  if (maDeepDive.ma_philosophy) {
+    mr = addSectionTitle(maSheet, 'How They Think About M&A', mr);
+    maSheet.mergeCells(`A${mr}:B${mr}`);
+    maSheet.getCell(`A${mr}`).value = maDeepDive.ma_philosophy;
+    maSheet.getCell(`A${mr}`).alignment = { wrapText: true, vertical: 'top' };
+    maSheet.getRow(mr).height = 120;
     mr += 2;
   }
 
-  // Acquisition Appetite
-  const appetite = synthesis.acquisition_appetite || {};
-  mr = addSectionTitle(maSheet, 'Acquisition Appetite', mr);
-  const appData = [
-    ['Target Deal Size', appetite.likely_deal_size?.range || 'Not disclosed', appetite.likely_deal_size?.rationale || ''],
-    ['Deal Structure', appetite.preferred_deal_structure || 'Not disclosed', ''],
-    ['Urgency Level', appetite.urgency?.level || 'Not disclosed', appetite.urgency?.rationale || '']
-  ];
-  appData.forEach((item, i) => {
-    maSheet.getCell(`A${mr}`).value = item[0];
-    maSheet.getCell(`A${mr}`).font = { bold: true };
-    maSheet.getCell(`B${mr}`).value = item[1];
-    maSheet.mergeCells(`C${mr}:D${mr}`);
-    maSheet.getCell(`C${mr}`).value = item[2];
-    styleDataRow(maSheet.getRow(mr), i % 2 === 0);
-    mr++;
-  });
-  mr++;
-
-  // Strategic Drivers
-  if (appetite.strategic_drivers && appetite.strategic_drivers.length > 0) {
-    mr = addSectionTitle(maSheet, 'Strategic Drivers', mr);
-    const sdHeader = maSheet.getRow(mr);
-    sdHeader.values = ['Driver', 'Priority', 'Evidence', ''];
-    styleHeaderRow(sdHeader, blue);
-    mr++;
-    appetite.strategic_drivers.forEach((sd, i) => {
-      maSheet.getCell(`A${mr}`).value = sd.driver;
+  // Deal Capacity
+  const capacity = maDeepDive.deal_capacity || {};
+  if (capacity.financial_firepower || capacity.appetite_level) {
+    mr = addSectionTitle(maSheet, 'Deal Capacity', mr);
+    if (capacity.financial_firepower) {
+      maSheet.getCell(`A${mr}`).value = 'Financial Firepower';
       maSheet.getCell(`A${mr}`).font = { bold: true };
-      maSheet.getCell(`B${mr}`).value = sd.priority;
-      if (sd.priority === 'High') {
+      maSheet.getCell(`B${mr}`).value = capacity.financial_firepower;
+      styleDataRow(maSheet.getRow(mr));
+      mr++;
+    }
+    if (capacity.appetite_level) {
+      maSheet.getCell(`A${mr}`).value = 'Appetite Level';
+      maSheet.getCell(`A${mr}`).font = { bold: true };
+      maSheet.getCell(`B${mr}`).value = capacity.appetite_level;
+      if (capacity.appetite_level.includes('High')) {
         maSheet.getCell(`B${mr}`).font = { color: { argb: 'FF16A34A' }, bold: true };
       }
-      maSheet.mergeCells(`C${mr}:D${mr}`);
-      maSheet.getCell(`C${mr}`).value = sd.evidence;
-      styleDataRow(maSheet.getRow(mr), i % 2 === 0);
+      styleDataRow(maSheet.getRow(mr), true);
       mr++;
-    });
+    }
+    if (capacity.decision_process) {
+      maSheet.getCell(`A${mr}`).value = 'Decision Speed';
+      maSheet.getCell(`A${mr}`).font = { bold: true };
+      maSheet.getCell(`B${mr}`).value = capacity.decision_process;
+      styleDataRow(maSheet.getRow(mr));
+      mr++;
+    }
   }
 
-  // ========== SHEET 6: TARGET PROFILE ==========
-  const tpSheet = workbook.addWorksheet('Target Profile');
+  // ========== SHEET 6: IDEAL TARGET (Deep Analysis) ==========
+  const tpSheet = workbook.addWorksheet('Ideal Target');
   tpSheet.columns = [
     { key: 'a', width: 25 },
-    { key: 'b', width: 15 },
-    { key: 'c', width: 50 }
+    { key: 'b', width: 75 }
   ];
 
-  const tp = synthesis.target_profile || {};
+  const idealTarget = synthesis.ideal_target || {};
   let tr = 1;
 
-  // Industries of Interest
-  if (tp.industries_of_interest && tp.industries_of_interest.length > 0) {
-    tr = addSectionTitle(tpSheet, 'Industries of Interest', tr);
-    const indHeader = tpSheet.getRow(tr);
-    indHeader.values = ['Sector', 'Interest', 'Rationale'];
-    styleHeaderRow(indHeader);
-    tr++;
-    tp.industries_of_interest.forEach((ind, i) => {
-      tpSheet.getCell(`A${tr}`).value = ind.sector;
+  // Strategic Analysis - The Deep Insight
+  if (idealTarget.strategic_analysis) {
+    tr = addSectionTitle(tpSheet, 'What They\'re Really Looking For', tr);
+    tpSheet.mergeCells(`A${tr}:B${tr}`);
+    tpSheet.getCell(`A${tr}`).value = idealTarget.strategic_analysis;
+    tpSheet.getCell(`A${tr}`).alignment = { wrapText: true, vertical: 'top' };
+    tpSheet.getRow(tr).height = 150;
+    tr += 2;
+  }
+
+  // Sweet Spot - Key Criteria
+  const sweetSpot = idealTarget.sweet_spot || {};
+  if (Object.keys(sweetSpot).length > 0) {
+    tr = addSectionTitle(tpSheet, 'The Sweet Spot', tr);
+    const spotData = [
+      ['Value Chain Position', sweetSpot.value_chain],
+      ['Target Industries', sweetSpot.industries],
+      ['Target Geographies', sweetSpot.geographies],
+      ['Size Range', sweetSpot.size_range],
+      ['Company Stage', sweetSpot.stage]
+    ].filter(item => item[1]);
+
+    spotData.forEach((item, i) => {
+      tpSheet.getCell(`A${tr}`).value = item[0];
       tpSheet.getCell(`A${tr}`).font = { bold: true };
-      tpSheet.getCell(`B${tr}`).value = ind.interest_level;
-      if (ind.interest_level === 'High') {
-        tpSheet.getCell(`B${tr}`).font = { color: { argb: 'FF16A34A' }, bold: true };
-      }
-      tpSheet.getCell(`C${tr}`).value = ind.rationale;
+      tpSheet.getCell(`B${tr}`).value = item[1];
+      tpSheet.getCell(`B${tr}`).alignment = { wrapText: true };
       styleDataRow(tpSheet.getRow(tr), i % 2 === 0);
       tr++;
     });
     tr++;
   }
 
-  // Geographic Preferences
-  if (tp.geographic_preferences && tp.geographic_preferences.length > 0) {
-    tr = addSectionTitle(tpSheet, 'Geographic Preferences', tr);
-    const geoHeader = tpSheet.getRow(tr);
-    geoHeader.values = ['Region', 'Interest', 'Rationale'];
-    styleHeaderRow(geoHeader, blue);
-    tr++;
-    tp.geographic_preferences.forEach((geo, i) => {
-      tpSheet.getCell(`A${tr}`).value = geo.region;
-      tpSheet.getCell(`A${tr}`).font = { bold: true };
-      tpSheet.getCell(`B${tr}`).value = geo.interest_level;
-      if (geo.interest_level === 'High') {
-        tpSheet.getCell(`B${tr}`).font = { color: { argb: 'FF16A34A' }, bold: true };
-      }
-      tpSheet.getCell(`C${tr}`).value = geo.rationale;
-      styleDataRow(tpSheet.getRow(tr), i % 2 === 0);
-      tr++;
-    });
-    tr++;
+  // Concrete Example
+  if (idealTarget.example_target) {
+    tr = addSectionTitle(tpSheet, 'Example of an Ideal Target', tr);
+    tpSheet.mergeCells(`A${tr}:B${tr}`);
+    tpSheet.getCell(`A${tr}`).value = idealTarget.example_target;
+    tpSheet.getCell(`A${tr}`).alignment = { wrapText: true, vertical: 'top' };
+    tpSheet.getCell(`A${tr}`).font = { italic: true, color: { argb: 'FF16A34A' } };
+    tpSheet.getRow(tr).height = 60;
+    tr += 2;
   }
 
-  // Capabilities Sought
-  if (tp.capabilities_sought && tp.capabilities_sought.length > 0) {
-    tr = addSectionTitle(tpSheet, 'Capabilities Sought', tr);
-    tp.capabilities_sought.forEach((cap, i) => {
-      tpSheet.getCell(`A${tr}`).value = `• ${cap}`;
-      styleDataRow(tpSheet.getRow(tr), i % 2 === 0);
-      tr++;
-    });
-    tr++;
-  }
-
-  // Country-Sector Matrix
-  const matrix = synthesis.country_sector_matrix || {};
-  if (matrix.sectors && matrix.countries && matrix.matrix) {
-    tr = addSectionTitle(tpSheet, 'Country × Sector Interest Matrix', tr);
-
-    // Adjust columns for matrix
-    const sectors = matrix.sectors.slice(0, 6);
-    const matrixHeader = tpSheet.getRow(tr);
-    matrixHeader.values = ['Country', ...sectors];
-    styleHeaderRow(matrixHeader);
-    tr++;
-
-    matrix.countries.forEach((country, ci) => {
-      const cd = matrix.matrix[country] || {};
-      const rowData = [country];
-      sectors.forEach((s, i) => {
-        const k = s.toLowerCase().replace(/\s+/g, '_');
-        rowData.push(cd[k] || cd[s] || cd[`sector${i+1}`] || '-');
-      });
-      const row = tpSheet.getRow(tr);
-      row.values = rowData;
-      row.getCell(1).font = { bold: true };
-      // Color code interest levels
-      for (let c = 2; c <= sectors.length + 1; c++) {
-        const val = row.getCell(c).value;
-        if (val === 'H') {
-          row.getCell(c).font = { color: { argb: 'FF16A34A' }, bold: true };
-          row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFDCFCE7' } };
-        } else if (val === 'M') {
-          row.getCell(c).font = { color: { argb: 'FFD97706' } };
-          row.getCell(c).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF3C7' } };
-        } else if (val === 'L') {
-          row.getCell(c).font = { color: { argb: 'FF64748B' } };
-        }
-        row.getCell(c).alignment = { horizontal: 'center' };
-      }
-      styleDataRow(row, ci % 2 === 0);
-      tr++;
-    });
-    tr++;
-    tpSheet.getCell(`A${tr}`).value = 'H=High  M=Medium  L=Low  N=None';
-    tpSheet.getCell(`A${tr}`).font = { size: 9, color: { argb: 'FF64748B' }, italic: true };
-  }
-
-  // ========== SHEET 7: ENGAGEMENT STRATEGY ==========
-  const engSheet = workbook.addWorksheet('Engagement Strategy');
-  engSheet.columns = [
-    { key: 'a', width: 25 },
-    { key: 'b', width: 30 },
-    { key: 'c', width: 45 }
-  ];
-
-  const eng = synthesis.engagement_strategy || {};
-  let er = 1;
-
-  // Key Decision Makers
-  if (eng.key_decision_makers && eng.key_decision_makers.length > 0) {
-    er = addSectionTitle(engSheet, 'Key Decision Makers', er);
-    const dmHeader = engSheet.getRow(er);
-    dmHeader.values = ['Name', 'Title', 'Approach'];
-    styleHeaderRow(dmHeader);
-    er++;
-    eng.key_decision_makers.forEach((dm, i) => {
-      engSheet.getCell(`A${er}`).value = dm.name || 'TBD';
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.getCell(`B${er}`).value = dm.title;
-      engSheet.getCell(`C${er}`).value = dm.approach;
-      styleDataRow(engSheet.getRow(er), i % 2 === 0);
-      er++;
-    });
-    er++;
-  }
-
-  // Hot Buttons
-  if (eng.hot_buttons && eng.hot_buttons.length > 0) {
-    er = addSectionTitle(engSheet, 'Hot Buttons (Topics That Resonate)', er);
-    const hbHeader = engSheet.getRow(er);
-    hbHeader.values = ['Topic', 'Evidence', 'How to Leverage'];
-    styleHeaderRow(hbHeader, 'FF16A34A');
-    er++;
-    eng.hot_buttons.forEach((hb, i) => {
-      engSheet.getCell(`A${er}`).value = hb.topic;
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.getCell(`B${er}`).value = hb.evidence;
-      engSheet.getCell(`C${er}`).value = hb.how_to_leverage;
-      styleDataRow(engSheet.getRow(er), i % 2 === 0);
-      er++;
-    });
-    er++;
-  }
-
-  // Concerns & Objections
-  if (eng.concerns_objections && eng.concerns_objections.length > 0) {
-    er = addSectionTitle(engSheet, 'Potential Concerns & Objections', er);
-    const coHeader = engSheet.getRow(er);
-    coHeader.values = ['Concern', 'Evidence', 'How to Address'];
-    styleHeaderRow(coHeader, 'FFDC2626');
-    er++;
-    eng.concerns_objections.forEach((co, i) => {
-      engSheet.getCell(`A${er}`).value = co.concern;
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.getCell(`B${er}`).value = co.evidence;
-      engSheet.getCell(`C${er}`).value = co.how_to_address;
-      styleDataRow(engSheet.getRow(er), i % 2 === 0);
-      er++;
-    });
-    er++;
-  }
-
-  // Recommended Approach
-  const appr = eng.recommended_approach || {};
-  if (appr.positioning || appr.key_messages) {
-    er = addSectionTitle(engSheet, 'Recommended Approach', er);
-    if (appr.positioning) {
-      engSheet.getCell(`A${er}`).value = 'Positioning';
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.mergeCells(`B${er}:C${er}`);
-      engSheet.getCell(`B${er}`).value = appr.positioning;
-      engSheet.getCell(`B${er}`).alignment = { wrapText: true };
-      styleDataRow(engSheet.getRow(er));
-      er++;
-    }
-    if (appr.timing) {
-      engSheet.getCell(`A${er}`).value = 'Timing';
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.mergeCells(`B${er}:C${er}`);
-      engSheet.getCell(`B${er}`).value = appr.timing;
-      styleDataRow(engSheet.getRow(er), true);
-      er++;
-    }
-    if (appr.channel) {
-      engSheet.getCell(`A${er}`).value = 'Channel';
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.mergeCells(`B${er}:C${er}`);
-      engSheet.getCell(`B${er}`).value = appr.channel;
-      styleDataRow(engSheet.getRow(er));
-      er++;
-    }
-    if (appr.key_messages && appr.key_messages.length > 0) {
-      engSheet.getCell(`A${er}`).value = 'Key Messages';
-      engSheet.getCell(`A${er}`).font = { bold: true };
-      engSheet.mergeCells(`B${er}:C${er}`);
-      engSheet.getCell(`B${er}`).value = appr.key_messages.map((m, i) => `${i+1}. ${m}`).join('\n');
-      engSheet.getCell(`B${er}`).alignment = { wrapText: true };
-      engSheet.getRow(er).height = Math.max(20, appr.key_messages.length * 18);
-      styleDataRow(engSheet.getRow(er), true);
-      er++;
-    }
-    er++;
-  }
-
-  // Next Steps
-  if (eng.next_steps && eng.next_steps.length > 0) {
-    er = addSectionTitle(engSheet, 'Next Steps', er);
-    const nsHeader = engSheet.getRow(er);
-    nsHeader.values = ['Action', 'Priority', 'Owner'];
-    styleHeaderRow(nsHeader);
-    er++;
-    eng.next_steps.forEach((ns, i) => {
-      engSheet.getCell(`A${er}`).value = ns.action;
-      engSheet.getCell(`B${er}`).value = ns.priority;
-      if (ns.priority === 'High') {
-        engSheet.getCell(`B${er}`).font = { color: { argb: 'FFDC2626' }, bold: true };
-      }
-      engSheet.getCell(`C${er}`).value = ns.owner || 'TBD';
-      styleDataRow(engSheet.getRow(er), i % 2 === 0);
-      er++;
-    });
+  // What to Avoid
+  if (idealTarget.what_to_avoid) {
+    tr = addSectionTitle(tpSheet, 'What NOT to Pitch', tr);
+    tpSheet.mergeCells(`A${tr}:B${tr}`);
+    tpSheet.getCell(`A${tr}`).value = idealTarget.what_to_avoid;
+    tpSheet.getCell(`A${tr}`).alignment = { wrapText: true };
+    tpSheet.getCell(`A${tr}`).font = { color: { argb: 'FFDC2626' } };
+    tpSheet.getRow(tr).height = 40;
   }
 
   // Generate buffer
@@ -6590,15 +6757,14 @@ app.post('/api/utb', async (req, res) => {
       `<div style="font-family:Arial,sans-serif;max-width:500px;">
         <h2 style="color:#1a365d;margin-bottom:5px;">${companyName}</h2>
         <p style="color:#64748b;margin-top:0;">${website}</p>
-        <p>Your UTB Excel report is attached with 7 structured sheets:</p>
+        <p>Your UTB buyer intelligence report is attached:</p>
         <ul style="font-size:13px;color:#475569;">
-          <li>Executive Summary</li>
-          <li>Financials</li>
-          <li>Products & Operations</li>
-          <li>Competitive Landscape</li>
-          <li>M&A Analysis</li>
-          <li>Target Profile</li>
-          <li>Engagement Strategy</li>
+          <li><b>Executive Summary</b> - Company profile & leadership</li>
+          <li><b>Financials</b> - Revenue breakdown & margins</li>
+          <li><b>Products & Operations</b> - Business segments & capabilities</li>
+          <li><b>Competitive Landscape</b> - Market position & moat</li>
+          <li><b>M&A Deep Dive</b> - Deal-by-deal analysis & M&A philosophy</li>
+          <li><b>Ideal Target</b> - Deep strategic analysis of what to pitch</li>
         </ul>
         <p style="font-size:12px;color:#94a3b8;">Generated: ${new Date().toLocaleString()}</p>
       </div>`,
@@ -6612,8 +6778,260 @@ app.post('/api/utb', async (req, res) => {
   }
 });
 
+// ============ DUE DILIGENCE REPORT GENERATOR ============
+
+async function generateDueDiligenceReport(files, instructions, reportLength) {
+  // Combine all file contents
+  let combinedContent = '';
+  const filesSummary = [];
+
+  for (const file of files) {
+    filesSummary.push(`- ${file.name} (${file.type.toUpperCase()})`);
+
+    // Handle base64 encoded files (binary formats)
+    if (file.content.startsWith('[BASE64:')) {
+      combinedContent += `\n\n=== FILE: ${file.name} ===\n[Binary file - content summarized by AI]\n`;
+    } else {
+      combinedContent += `\n\n=== FILE: ${file.name} ===\n${file.content.substring(0, 50000)}\n`;
+    }
+  }
+
+  const lengthInstructions = {
+    short: `Create a concise 1-PAGE EXECUTIVE SUMMARY. Focus only on:
+- Key business overview (2-3 sentences)
+- Critical financial highlights (revenue, growth, margins)
+- Top 3 opportunities
+- Top 3 risks/red flags
+- Clear recommendation (proceed/proceed with caution/pass)
+Keep it extremely concise - this should fit on one page.`,
+
+    medium: `Create a 2-3 PAGE due diligence report with these sections:
+1. EXECUTIVE SUMMARY (1 paragraph)
+2. BUSINESS OVERVIEW
+   - Company description
+   - Products/services
+   - Market position
+3. FINANCIAL ANALYSIS
+   - Key metrics and trends
+   - Revenue and profitability
+4. KEY RISKS
+   - Business risks
+   - Financial risks
+   - Operational concerns
+5. OPPORTUNITIES
+   - Growth potential
+   - Synergies
+6. RECOMMENDATION
+Be thorough but concise. Focus on actionable insights.`,
+
+    long: `Create a COMPREHENSIVE due diligence report with detailed analysis:
+
+1. EXECUTIVE SUMMARY
+   - Investment thesis
+   - Key findings
+   - Recommendation
+
+2. COMPANY OVERVIEW
+   - Business description
+   - History and milestones
+   - Corporate structure
+   - Management team
+
+3. INDUSTRY & MARKET ANALYSIS
+   - Market size and growth
+   - Competitive landscape
+   - Industry trends
+   - Regulatory environment
+
+4. BUSINESS MODEL ANALYSIS
+   - Revenue streams
+   - Customer segments
+   - Value proposition
+   - Competitive advantages
+
+5. FINANCIAL ANALYSIS
+   - Historical performance
+   - Revenue analysis
+   - Profitability metrics
+   - Cash flow analysis
+   - Balance sheet review
+   - Key ratios
+
+6. OPERATIONAL REVIEW
+   - Operations overview
+   - Technology and systems
+   - Supply chain
+   - Human resources
+
+7. RISK ASSESSMENT
+   - Strategic risks
+   - Operational risks
+   - Financial risks
+   - Legal/regulatory risks
+   - Market risks
+
+8. OPPORTUNITIES & SYNERGIES
+   - Growth opportunities
+   - Cost synergies
+   - Revenue synergies
+   - Strategic benefits
+
+9. VALUATION CONSIDERATIONS
+   - Comparable analysis
+   - Key value drivers
+   - Valuation ranges
+
+10. DEAL CONSIDERATIONS
+    - Key due diligence items
+    - Critical success factors
+    - Potential deal breakers
+    - Next steps
+
+11. APPENDICES
+    - Key data tables
+    - Supporting analysis
+
+Be extremely thorough and detailed. Extract all relevant information from the materials.`
+  };
+
+  const prompt = `You are an expert M&A advisor creating a due diligence report.
+
+MATERIALS PROVIDED:
+${filesSummary.join('\n')}
+
+${instructions ? `SPECIAL INSTRUCTIONS FROM CLIENT:\n${instructions}\n` : ''}
+
+REPORT REQUIREMENTS:
+${lengthInstructions[reportLength]}
+
+MATERIAL CONTENTS:
+${combinedContent.substring(0, 100000)}
+
+Generate a professional due diligence report in HTML format. Use proper headings (<h1>, <h2>, <h3>), bullet points (<ul>, <li>), and tables where appropriate. Make it visually structured and easy to read.
+
+IMPORTANT:
+- Be specific with numbers, names, and facts from the materials
+- Highlight red flags clearly
+- Provide actionable recommendations
+- Use professional M&A language
+- If information is missing, note it as "Not provided in materials"`;
+
+  try {
+    const maxTokens = reportLength === 'short' ? 2000 : reportLength === 'medium' ? 4000 : 8000;
+
+    // Try DeepSeek V3.2 first (more cost-effective)
+    const deepseekResult = await callDeepSeek(prompt, maxTokens);
+    if (deepseekResult) {
+      console.log('[DD] Report generated using DeepSeek V3.2');
+      return deepseekResult;
+    }
+
+    // Fallback to GPT-4o if DeepSeek unavailable
+    console.log('[DD] Falling back to GPT-4o');
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      max_tokens: maxTokens
+    });
+
+    return response.choices[0].message.content || '';
+  } catch (error) {
+    console.error('Error in DD report generation:', error.message);
+    throw error;
+  }
+}
+
+app.post('/api/due-diligence', async (req, res) => {
+  const { files, instructions, reportLength, email } = req.body;
+
+  if (!files || files.length === 0 || !email) {
+    return res.status(400).json({ error: 'Files and email are required' });
+  }
+
+  const validLengths = ['short', 'medium', 'long'];
+  const length = validLengths.includes(reportLength) ? reportLength : 'medium';
+
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`[DD] NEW DUE DILIGENCE REQUEST: ${new Date().toISOString()}`);
+  console.log(`[DD] Files: ${files.length}`);
+  files.forEach(f => console.log(`     - ${f.name} (${f.type})`));
+  console.log(`[DD] Report Length: ${length}`);
+  console.log(`[DD] Email: ${email}`);
+  console.log(`[DD] Special Instructions: ${instructions ? instructions.substring(0, 100) + '...' : 'None'}`);
+  console.log('='.repeat(60));
+
+  // Respond immediately
+  res.json({
+    success: true,
+    message: `Due diligence report request received. Results will be emailed within 10-15 minutes.`
+  });
+
+  try {
+    // Generate the report
+    const report = await generateDueDiligenceReport(files, instructions, length);
+
+    // Format the report email
+    const lengthLabel = { short: '1-Page Summary', medium: '2-3 Page Report', long: 'Comprehensive Report' };
+    const fileList = files.map(f => `<li>${f.name}</li>`).join('');
+
+    const emailHtml = `
+    <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto;">
+      <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 30px; border-radius: 12px 12px 0 0;">
+        <h1 style="color: white; margin: 0; font-size: 24px;">Due Diligence Report</h1>
+        <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0 0;">${lengthLabel[length]}</p>
+      </div>
+
+      <div style="background: #f8fafc; padding: 20px; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0;">
+        <p style="margin: 0; color: #64748b; font-size: 14px;">
+          <strong>Materials Analyzed:</strong>
+        </p>
+        <ul style="margin: 8px 0; padding-left: 20px; color: #475569; font-size: 13px;">
+          ${fileList}
+        </ul>
+        ${instructions ? `<p style="margin: 12px 0 0 0; color: #64748b; font-size: 13px;"><strong>Special Instructions:</strong> ${instructions}</p>` : ''}
+      </div>
+
+      <div style="background: white; padding: 30px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
+        ${report}
+      </div>
+
+      <div style="margin-top: 20px; padding: 15px; background: #f1f5f9; border-radius: 8px; font-size: 12px; color: #64748b;">
+        <p style="margin: 0;">Generated: ${new Date().toLocaleString()}</p>
+        <p style="margin: 4px 0 0 0;">This report is AI-generated and should be reviewed by qualified professionals before making investment decisions.</p>
+      </div>
+    </div>`;
+
+    // Send email
+    await sendEmail(
+      email,
+      `Due Diligence Report - ${files[0]?.name || 'Analysis'} (${lengthLabel[length]})`,
+      emailHtml
+    );
+
+    console.log(`[DD] Report sent successfully to ${email}`);
+
+  } catch (error) {
+    console.error('[DD] Error generating report:', error);
+    try {
+      await sendEmail(
+        email,
+        'Due Diligence Report - Error',
+        `<div style="font-family: Arial, sans-serif; padding: 20px;">
+          <h2 style="color: #dc2626;">Error Generating Report</h2>
+          <p>We encountered an error while generating your due diligence report:</p>
+          <p style="background: #fee2e2; padding: 12px; border-radius: 6px; color: #991b1b;">${error.message}</p>
+          <p>Please try again or contact support if the issue persists.</p>
+        </div>`
+      );
+    } catch (emailError) {
+      console.error('[DD] Failed to send error email:', emailError);
+    }
+  }
+});
+
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v36 - UTB Excel' });
+  res.json({ status: 'ok', service: 'Find Target v38 - Due Diligence Report' });
 });
 
 const PORT = process.env.PORT || 3000;
