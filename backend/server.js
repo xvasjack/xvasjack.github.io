@@ -98,7 +98,7 @@ async function callPerplexity(prompt) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'sonar-pro',
+        model: 'sonar',
         messages: [{ role: 'user', content: prompt }]
       }),
       timeout: 90000
@@ -126,11 +126,11 @@ async function callChatGPT(prompt) {
 }
 
 // OpenAI Search model - has real-time web search capability
-// Note: gpt-4o-search-preview does NOT support temperature parameter
+// Note: gpt-4o-mini-search-preview does NOT support temperature parameter
 async function callOpenAISearch(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-search-preview',
+      model: 'gpt-4o-mini-search-preview',
       messages: [{ role: 'user', content: prompt }]
     });
     return response.choices[0].message.content || '';
@@ -1495,7 +1495,7 @@ async function runExpansionRound(round, business, country, existingCompanies) {
   const prompt = generateExpansionPrompt(round, business, country, existingList, shortlistSample);
 
   // Run all 3 search-enabled models in parallel
-  console.log(`  Querying GPT-4o Search, Gemini 2.0 Flash, Perplexity Sonar Pro...`);
+  console.log(`  Querying GPT-4o-mini Search, Gemini 2.0 Flash, Perplexity Sonar...`);
   const [gptResult, geminiResult, perplexityResult] = await Promise.all([
     callOpenAISearch(prompt),
     callGemini(prompt),
@@ -1509,7 +1509,7 @@ async function runExpansionRound(round, business, country, existingCompanies) {
     extractCompanies(perplexityResult, country)
   ]);
 
-  console.log(`  GPT-4o Search: ${gptCompanies.length} | Gemini: ${geminiCompanies.length} | Perplexity: ${perplexityCompanies.length}`);
+  console.log(`  GPT-4o-mini: ${gptCompanies.length} | Gemini: ${geminiCompanies.length} | Perplexity: ${perplexityCompanies.length}`);
 
   // Combine and filter out duplicates
   const allNewCompanies = [...gptCompanies, ...geminiCompanies, ...perplexityCompanies];
@@ -2342,7 +2342,7 @@ async function checkRelevanceWithGemini(companies, filterCriteria) {
   }
 }
 
-// Helper: Check business relevance using Perplexity sonar-pro (best with web search)
+// Helper: Check business relevance using Perplexity sonar (best with web search)
 async function checkRelevanceWithPerplexity(companies, filterCriteria) {
   const companyNames = companies.map(c => c.name);
   const prompt = buildReasoningPrompt(companyNames, filterCriteria);
@@ -2355,7 +2355,7 @@ async function checkRelevanceWithPerplexity(companies, filterCriteria) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'sonar-pro',
+        model: 'sonar',
         messages: [{ role: 'user', content: prompt + '\n\nRespond with valid JSON only.' }]
       })
     });
@@ -2368,7 +2368,7 @@ async function checkRelevanceWithPerplexity(companies, filterCriteria) {
     }
     return null;
   } catch (error) {
-    console.error('Perplexity sonar-pro error:', error.message);
+    console.error('Perplexity sonar error:', error.message);
     return null;
   }
 }
@@ -4328,7 +4328,7 @@ async function searchMissingInfo(companyName, website, missingFields) {
     const searchQuery = `${companyName} company ${missingFields.includes('established_year') ? 'founded year established' : ''} ${missingFields.includes('location') ? 'headquarters location country' : ''}`.trim();
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-search-preview',
+      model: 'gpt-4o-mini-search-preview',
       messages: [
         {
           role: 'user',
@@ -4393,7 +4393,7 @@ async function searchAdditionalMetrics(companyName, website, existingMetrics) {
     console.log(`  Step 6: Searching web for additional metrics...`);
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-search-preview',
+      model: 'gpt-4o-mini-search-preview',
       messages: [
         {
           role: 'user',
