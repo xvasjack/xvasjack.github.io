@@ -1008,21 +1008,18 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
 // ============ VALIDATION (v23 - n8n-style PAGE SIGNAL detection) ============
 
 async function validateCompanyStrict(company, business, country, exclusion, pageText) {
-  // If we couldn't fetch the website, skip (can't verify)
-  if (!pageText) {
-    console.log(`    Skipped: ${company.company_name} - Website unreachable`);
-    return { valid: false };
-  }
+  // If we couldn't fetch the website, validate by name only (give benefit of doubt)
+  const contentToValidate = pageText || `Company name: ${company.company_name}. Validate based on name only.`;
 
   const exclusionRules = buildExclusionRules(exclusion, business);
 
   try {
     const validation = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4o',  // Use smarter model for better validation
       messages: [
         {
           role: 'system',
-          content: `You are a company validator. Be LENIENT on business match. Be STRICT on exclusions by detecting signals in page content.
+          content: `You are a company validator for M&A research. Be LENIENT - when in doubt, ACCEPT.
 
 VALIDATION TASK:
 - Business sought: "${business}"
@@ -1032,19 +1029,25 @@ VALIDATION TASK:
 VALIDATION RULES:
 
 1. LOCATION CHECK:
-- Is HQ actually in one of the target countries (${country})?
-- If HQ is outside these countries → REJECT
+- Is HQ in one of the target countries (${country})?
+- IMPORTANT: If country is a REGION like "Southeast Asia", accept companies in ANY Southeast Asian country (Malaysia, Thailand, Vietnam, Indonesia, Philippines, Singapore, etc.)
+- If HQ is clearly outside the target region → REJECT
 
 2. BUSINESS MATCH (BE LENIENT):
 - Does the company's business relate to "${business}"?
-- Accept related products, services, or sub-categories
-- Only reject if completely unrelated
+- Accept related products, services, manufacturers, suppliers
+- Only reject if COMPLETELY unrelated
 
-3. EXCLUSION CHECK - DETECT VIA PAGE SIGNALS:
+3. EXCLUSION CHECK:
 ${exclusionRules}
+- IMPORTANT for "large companies": Only reject if the company itself is a GLOBAL GIANT (like 3M, BASF)
+- Local subsidiaries of large companies in the target country ARE VALID TARGETS
+- Example: "DIC Indonesia" is VALID even though DIC is large globally
 
 4. SPAM CHECK:
-- Is this a directory, marketplace, domain-for-sale, or aggregator site? → REJECT
+- Only reject obvious directories, marketplaces, domain-for-sale sites
+
+WHEN IN DOUBT → ACCEPT (better to include than miss a potential target)
 
 OUTPUT: Return JSON only: {"valid": true/false, "reason": "one sentence"}`
         },
@@ -1055,7 +1058,7 @@ WEBSITE: ${company.website}
 HQ: ${company.hq}
 
 PAGE CONTENT:
-${pageText.substring(0, 10000)}`
+${contentToValidate.substring(0, 10000)}`
         }
       ],
       response_format: { type: 'json_object' }
