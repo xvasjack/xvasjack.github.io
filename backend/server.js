@@ -7,7 +7,6 @@ const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
 const XLSX = require('xlsx');
 const multer = require('multer');
-const nodemailer = require('nodemailer');
 
 const app = express();
 app.use(cors());
@@ -17,7 +16,7 @@ app.use(express.json());
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Check required environment variables
-const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'GMAIL_USER', 'GMAIL_APP_PASSWORD'];
+const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
 const optionalEnvVars = ['SERPAPI_API_KEY']; // Optional but recommended
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
@@ -32,34 +31,41 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
 
-// Send email using Gmail SMTP
+// Send email using SendGrid API
 async function sendEmail(to, subject, html, attachments = null) {
-  const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.GMAIL_USER,
-      pass: process.env.GMAIL_APP_PASSWORD
-    }
-  });
-
-  const mailOptions = {
-    from: `Find Target <${process.env.GMAIL_USER}>`,
-    to: to,
+  const senderEmail = process.env.SENDER_EMAIL;
+  const emailData = {
+    personalizations: [{ to: [{ email: to }] }],
+    from: { email: senderEmail, name: 'Find Target' },
     subject: subject,
-    html: html
+    content: [{ type: 'text/html', value: html }]
   };
 
   if (attachments) {
-    // Support both single attachment object and array of attachments
     const attachmentList = Array.isArray(attachments) ? attachments : [attachments];
-    mailOptions.attachments = attachmentList.map(a => ({
+    emailData.attachments = attachmentList.map(a => ({
       filename: a.name,
-      content: Buffer.from(a.content, 'base64')
+      content: a.content,
+      type: 'application/octet-stream',
+      disposition: 'attachment'
     }));
   }
 
-  const result = await transporter.sendMail(mailOptions);
-  return result;
+  const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(emailData)
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Email failed: ${error}`);
+  }
+
+  return { success: true };
 }
 
 // ============ AI TOOLS ============
