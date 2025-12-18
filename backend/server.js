@@ -6192,8 +6192,250 @@ app.post('/api/utb', async (req, res) => {
   }
 });
 
+// ============ DUE DILIGENCE REPORT GENERATOR ============
+
+async function generateDueDiligenceReport(files, instructions, reportLength) {
+  // Combine all file contents
+  let combinedContent = '';
+  const filesSummary = [];
+
+  for (const file of files) {
+    filesSummary.push(`- ${file.name} (${file.type.toUpperCase()})`);
+
+    // Handle base64 encoded files (binary formats)
+    if (file.content.startsWith('[BASE64:')) {
+      combinedContent += `\n\n=== FILE: ${file.name} ===\n[Binary file - content summarized by AI]\n`;
+    } else {
+      combinedContent += `\n\n=== FILE: ${file.name} ===\n${file.content.substring(0, 50000)}\n`;
+    }
+  }
+
+  const lengthInstructions = {
+    short: `Create a concise 1-PAGE EXECUTIVE SUMMARY. Focus only on:
+- Key business overview (2-3 sentences)
+- Critical financial highlights (revenue, growth, margins)
+- Top 3 opportunities
+- Top 3 risks/red flags
+- Clear recommendation (proceed/proceed with caution/pass)
+Keep it extremely concise - this should fit on one page.`,
+
+    medium: `Create a 2-3 PAGE due diligence report with these sections:
+1. EXECUTIVE SUMMARY (1 paragraph)
+2. BUSINESS OVERVIEW
+   - Company description
+   - Products/services
+   - Market position
+3. FINANCIAL ANALYSIS
+   - Key metrics and trends
+   - Revenue and profitability
+4. KEY RISKS
+   - Business risks
+   - Financial risks
+   - Operational concerns
+5. OPPORTUNITIES
+   - Growth potential
+   - Synergies
+6. RECOMMENDATION
+Be thorough but concise. Focus on actionable insights.`,
+
+    long: `Create a COMPREHENSIVE due diligence report with detailed analysis:
+
+1. EXECUTIVE SUMMARY
+   - Investment thesis
+   - Key findings
+   - Recommendation
+
+2. COMPANY OVERVIEW
+   - Business description
+   - History and milestones
+   - Corporate structure
+   - Management team
+
+3. INDUSTRY & MARKET ANALYSIS
+   - Market size and growth
+   - Competitive landscape
+   - Industry trends
+   - Regulatory environment
+
+4. BUSINESS MODEL ANALYSIS
+   - Revenue streams
+   - Customer segments
+   - Value proposition
+   - Competitive advantages
+
+5. FINANCIAL ANALYSIS
+   - Historical performance
+   - Revenue analysis
+   - Profitability metrics
+   - Cash flow analysis
+   - Balance sheet review
+   - Key ratios
+
+6. OPERATIONAL REVIEW
+   - Operations overview
+   - Technology and systems
+   - Supply chain
+   - Human resources
+
+7. RISK ASSESSMENT
+   - Strategic risks
+   - Operational risks
+   - Financial risks
+   - Legal/regulatory risks
+   - Market risks
+
+8. OPPORTUNITIES & SYNERGIES
+   - Growth opportunities
+   - Cost synergies
+   - Revenue synergies
+   - Strategic benefits
+
+9. VALUATION CONSIDERATIONS
+   - Comparable analysis
+   - Key value drivers
+   - Valuation ranges
+
+10. DEAL CONSIDERATIONS
+    - Key due diligence items
+    - Critical success factors
+    - Potential deal breakers
+    - Next steps
+
+11. APPENDICES
+    - Key data tables
+    - Supporting analysis
+
+Be extremely thorough and detailed. Extract all relevant information from the materials.`
+  };
+
+  const prompt = `You are an expert M&A advisor creating a due diligence report.
+
+MATERIALS PROVIDED:
+${filesSummary.join('\n')}
+
+${instructions ? `SPECIAL INSTRUCTIONS FROM CLIENT:\n${instructions}\n` : ''}
+
+REPORT REQUIREMENTS:
+${lengthInstructions[reportLength]}
+
+MATERIAL CONTENTS:
+${combinedContent.substring(0, 100000)}
+
+Generate a professional due diligence report in HTML format. Use proper headings (<h1>, <h2>, <h3>), bullet points (<ul>, <li>), and tables where appropriate. Make it visually structured and easy to read.
+
+IMPORTANT:
+- Be specific with numbers, names, and facts from the materials
+- Highlight red flags clearly
+- Provide actionable recommendations
+- Use professional M&A language
+- If information is missing, note it as "Not provided in materials"`;
+
+  try {
+    // Use GPT-4o for comprehensive analysis
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      max_tokens: reportLength === 'short' ? 2000 : reportLength === 'medium' ? 4000 : 8000
+    });
+
+    return response.choices[0].message.content || '';
+  } catch (error) {
+    console.error('OpenAI error in DD report:', error.message);
+    throw error;
+  }
+}
+
+app.post('/api/due-diligence', async (req, res) => {
+  const { files, instructions, reportLength, email } = req.body;
+
+  if (!files || files.length === 0 || !email) {
+    return res.status(400).json({ error: 'Files and email are required' });
+  }
+
+  const validLengths = ['short', 'medium', 'long'];
+  const length = validLengths.includes(reportLength) ? reportLength : 'medium';
+
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`[DD] NEW DUE DILIGENCE REQUEST: ${new Date().toISOString()}`);
+  console.log(`[DD] Files: ${files.length}`);
+  files.forEach(f => console.log(`     - ${f.name} (${f.type})`));
+  console.log(`[DD] Report Length: ${length}`);
+  console.log(`[DD] Email: ${email}`);
+  console.log(`[DD] Special Instructions: ${instructions ? instructions.substring(0, 100) + '...' : 'None'}`);
+  console.log('='.repeat(60));
+
+  // Respond immediately
+  res.json({
+    success: true,
+    message: `Due diligence report request received. Results will be emailed within 10-15 minutes.`
+  });
+
+  try {
+    // Generate the report
+    const report = await generateDueDiligenceReport(files, instructions, length);
+
+    // Format the report email
+    const lengthLabel = { short: '1-Page Summary', medium: '2-3 Page Report', long: 'Comprehensive Report' };
+    const fileList = files.map(f => `<li>${f.name}</li>`).join('');
+
+    const emailHtml = `
+    <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto;">
+      <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 30px; border-radius: 12px 12px 0 0;">
+        <h1 style="color: white; margin: 0; font-size: 24px;">Due Diligence Report</h1>
+        <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0 0;">${lengthLabel[length]}</p>
+      </div>
+
+      <div style="background: #f8fafc; padding: 20px; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0;">
+        <p style="margin: 0; color: #64748b; font-size: 14px;">
+          <strong>Materials Analyzed:</strong>
+        </p>
+        <ul style="margin: 8px 0; padding-left: 20px; color: #475569; font-size: 13px;">
+          ${fileList}
+        </ul>
+        ${instructions ? `<p style="margin: 12px 0 0 0; color: #64748b; font-size: 13px;"><strong>Special Instructions:</strong> ${instructions}</p>` : ''}
+      </div>
+
+      <div style="background: white; padding: 30px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
+        ${report}
+      </div>
+
+      <div style="margin-top: 20px; padding: 15px; background: #f1f5f9; border-radius: 8px; font-size: 12px; color: #64748b;">
+        <p style="margin: 0;">Generated: ${new Date().toLocaleString()}</p>
+        <p style="margin: 4px 0 0 0;">This report is AI-generated and should be reviewed by qualified professionals before making investment decisions.</p>
+      </div>
+    </div>`;
+
+    // Send email
+    await sendEmail(
+      email,
+      `Due Diligence Report - ${files[0]?.name || 'Analysis'} (${lengthLabel[length]})`,
+      emailHtml
+    );
+
+    console.log(`[DD] Report sent successfully to ${email}`);
+
+  } catch (error) {
+    console.error('[DD] Error generating report:', error);
+    try {
+      await sendEmail(
+        email,
+        'Due Diligence Report - Error',
+        `<div style="font-family: Arial, sans-serif; padding: 20px;">
+          <h2 style="color: #dc2626;">Error Generating Report</h2>
+          <p>We encountered an error while generating your due diligence report:</p>
+          <p style="background: #fee2e2; padding: 12px; border-radius: 6px; color: #991b1b;">${error.message}</p>
+          <p>Please try again or contact support if the issue persists.</p>
+        </div>`
+      );
+    } catch (emailError) {
+      console.error('[DD] Failed to send error email:', emailError);
+    }
+  }
+});
+
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v37 - UTB Deep Dive' });
+  res.json({ status: 'ok', service: 'Find Target v38 - Due Diligence Report' });
 });
 
 const PORT = process.env.PORT || 3000;
