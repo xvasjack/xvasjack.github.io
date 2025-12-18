@@ -16,7 +16,7 @@ app.use(express.json());
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Check required environment variables
-const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'BREVO_API_KEY'];
+const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
 const optionalEnvVars = ['SERPAPI_API_KEY', 'DEEPSEEK_API_KEY']; // Optional but recommended
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
@@ -34,29 +34,30 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
 
-// Send email using Resend API
+// Send email using SendGrid API
 async function sendEmail(to, subject, html, attachments = null) {
-  const senderEmail = process.env.SENDER_EMAIL || 'onboarding@resend.dev';
+  const senderEmail = process.env.SENDER_EMAIL;
   const emailData = {
-    from: `Find Target <${senderEmail}>`,
-    to: [to],
+    personalizations: [{ to: [{ email: to }] }],
+    from: { email: senderEmail, name: 'Find Target' },
     subject: subject,
-    html: html
+    content: [{ type: 'text/html', value: html }]
   };
 
   if (attachments) {
-    // Support both single attachment object and array of attachments
     const attachmentList = Array.isArray(attachments) ? attachments : [attachments];
     emailData.attachments = attachmentList.map(a => ({
       filename: a.name,
-      content: a.content
+      content: a.content,
+      type: 'application/octet-stream',
+      disposition: 'attachment'
     }));
   }
 
-  const response = await fetch('https://api.resend.com/emails', {
+  const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+      'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(emailData)
@@ -67,7 +68,7 @@ async function sendEmail(to, subject, html, attachments = null) {
     throw new Error(`Email failed: ${error}`);
   }
 
-  return await response.json();
+  return { success: true };
 }
 
 // ============ AI TOOLS ============

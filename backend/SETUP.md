@@ -14,10 +14,13 @@ You need these 3 things:
 - Generate an API key
 - Copy the key (starts with `pplx-`)
 
-### Resend API Key (for sending emails)
-- Go to: https://resend.com/api-keys
-- Create an API key
-- Copy the key
+### Gmail App Password (for sending emails)
+- Go to: https://myaccount.google.com/apppasswords
+- You need 2FA enabled on your Google account
+- Select app: "Mail"
+- Select device: "Other" → type "Find Target"
+- Click "Generate"
+- Copy the 16-character password (like: `abcd efgh ijkl mnop`)
 
 ---
 
@@ -39,8 +42,8 @@ In Railway dashboard, go to your project → Variables tab → Add these:
 ```
 OPENAI_API_KEY = sk-your-key-here
 PERPLEXITY_API_KEY = pplx-your-key-here
-RESEND_API_KEY = your-resend-api-key
-SENDER_EMAIL = onboarding@resend.dev
+GMAIL_USER = your-email@gmail.com
+GMAIL_APP_PASSWORD = your-16-char-app-password
 ```
 
 ### 2.4 Get Your Backend URL
