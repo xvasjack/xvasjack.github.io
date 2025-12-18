@@ -17,13 +17,16 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Check required environment variables
 const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'BREVO_API_KEY'];
-const optionalEnvVars = ['SERPAPI_API_KEY']; // Optional but recommended
+const optionalEnvVars = ['SERPAPI_API_KEY', 'DEEPSEEK_API_KEY']; // Optional but recommended
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
 }
 if (!process.env.SERPAPI_API_KEY) {
   console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
+}
+if (!process.env.DEEPSEEK_API_KEY) {
+  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
 }
 
 // Initialize OpenAI
@@ -169,6 +172,39 @@ async function callSerpAPI(query) {
   } catch (error) {
     console.error('SerpAPI error:', error.message);
     return '';
+  }
+}
+
+// DeepSeek V3.2 - Cost-effective alternative to GPT-4o
+async function callDeepSeek(prompt, maxTokens = 4000) {
+  if (!process.env.DEEPSEEK_API_KEY) {
+    console.warn('DeepSeek API key not set, falling back to GPT-4o');
+    return null; // Caller should handle fallback
+  }
+  try {
+    const response = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: maxTokens,
+        temperature: 0.3
+      }),
+      timeout: 120000
+    });
+    const data = await response.json();
+    if (data.error) {
+      console.error('DeepSeek API error:', data.error);
+      return null;
+    }
+    return data.choices?.[0]?.message?.content || '';
+  } catch (error) {
+    console.error('DeepSeek error:', error.message);
+    return null;
   }
 }
 
@@ -6331,17 +6367,27 @@ IMPORTANT:
 - If information is missing, note it as "Not provided in materials"`;
 
   try {
-    // Use GPT-4o for comprehensive analysis
+    const maxTokens = reportLength === 'short' ? 2000 : reportLength === 'medium' ? 4000 : 8000;
+
+    // Try DeepSeek V3.2 first (more cost-effective)
+    const deepseekResult = await callDeepSeek(prompt, maxTokens);
+    if (deepseekResult) {
+      console.log('[DD] Report generated using DeepSeek V3.2');
+      return deepseekResult;
+    }
+
+    // Fallback to GPT-4o if DeepSeek unavailable
+    console.log('[DD] Falling back to GPT-4o');
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.3,
-      max_tokens: reportLength === 'short' ? 2000 : reportLength === 'medium' ? 4000 : 8000
+      max_tokens: maxTokens
     });
 
     return response.choices[0].message.content || '';
   } catch (error) {
-    console.error('OpenAI error in DD report:', error.message);
+    console.error('Error in DD report generation:', error.message);
     throw error;
   }
 }
