@@ -9,13 +9,14 @@
   <style>
     .dd-upload-zone {
       border: 2px dashed var(--border-medium);
-      border-radius: var(--radius-lg);
-      padding: 32px 24px;
+      border-radius: var(--radius-md);
+      padding: 20px 16px;
       text-align: center;
       cursor: pointer;
       transition: all 0.2s ease;
       background: var(--bg-body);
       position: relative;
+      overflow: hidden;
     }
     .dd-upload-zone:hover, .dd-upload-zone.active {
       border-color: var(--accent);
@@ -34,19 +35,19 @@
       display: none;
     }
     .dd-upload-zone svg {
-      width: 48px;
-      height: 48px;
+      width: 32px;
+      height: 32px;
       color: var(--accent);
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
     .dd-upload-zone h3 {
-      font-size: 16px;
+      font-size: 14px;
       font-weight: 600;
       color: var(--text-main);
-      margin: 0 0 4px 0;
+      margin: 0 0 2px 0;
     }
     .dd-upload-zone p {
-      font-size: 14px;
+      font-size: 12px;
       color: var(--text-muted);
       margin: 0;
     }
