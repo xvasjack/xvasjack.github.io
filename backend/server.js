@@ -31,29 +31,29 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
 
-// Send email using Brevo API
+// Send email using Resend API
 async function sendEmail(to, subject, html, attachments = null) {
-  const senderEmail = process.env.BREVO_SENDER_EMAIL || 'sj.goh@bluerockvent.com';
+  const senderEmail = process.env.SENDER_EMAIL || 'sj.goh@bluerockvent.com';
   const emailData = {
-    sender: { name: 'Find Target', email: senderEmail },
-    to: [{ email: to }],
+    from: `Find Target <${senderEmail}>`,
+    to: [to],
     subject: subject,
-    htmlContent: html
+    html: html
   };
 
   if (attachments) {
     // Support both single attachment object and array of attachments
     const attachmentList = Array.isArray(attachments) ? attachments : [attachments];
-    emailData.attachment = attachmentList.map(a => ({
-      content: a.content,
-      name: a.name
+    emailData.attachments = attachmentList.map(a => ({
+      filename: a.name,
+      content: a.content
     }));
   }
 
-  const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+  const response = await fetch('https://api.resend.com/emails', {
     method: 'POST',
     headers: {
-      'api-key': process.env.BREVO_API_KEY,
+      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify(emailData)
