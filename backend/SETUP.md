@@ -18,7 +18,6 @@ You need these 3 things:
 - Go to: https://resend.com/api-keys
 - Create an API key
 - Copy the key
-- **Important**: Add and verify your domain at https://resend.com/domains
 
 ---
 
@@ -41,7 +40,7 @@ In Railway dashboard, go to your project → Variables tab → Add these:
 OPENAI_API_KEY = sk-your-key-here
 PERPLEXITY_API_KEY = pplx-your-key-here
 RESEND_API_KEY = your-resend-api-key
-SENDER_EMAIL = sj.goh@bluerockvent.com
+SENDER_EMAIL = onboarding@resend.dev
 ```
 
 ### 2.4 Get Your Backend URL

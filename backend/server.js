@@ -33,7 +33,7 @@ const openai = new OpenAI({
 
 // Send email using Resend API
 async function sendEmail(to, subject, html, attachments = null) {
-  const senderEmail = process.env.SENDER_EMAIL || 'sj.goh@bluerockvent.com';
+  const senderEmail = process.env.SENDER_EMAIL || 'onboarding@resend.dev';
   const emailData = {
     from: `Find Target <${senderEmail}>`,
     to: [to],
