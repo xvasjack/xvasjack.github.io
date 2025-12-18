@@ -17,7 +17,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Check required environment variables
 const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'BREVO_API_KEY'];
-const optionalEnvVars = ['SERPAPI_API_KEY']; // Optional but recommended
+const optionalEnvVars = ['SERPAPI_API_KEY', 'DEEPSEEK_API_KEY']; // Optional but recommended
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
@@ -134,6 +134,60 @@ async function callOpenAISearch(prompt) {
     console.error('OpenAI Search error:', error.message);
     // Fallback to regular gpt-4o if search model not available
     return callChatGPT(prompt);
+  }
+}
+
+// DeepSeek Reasoner - for deep thinking/analysis tasks
+async function callDeepSeekReasoner(prompt, maxTokens = 8000) {
+  try {
+    const response = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'deepseek-reasoner',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: maxTokens
+      }),
+      timeout: 120000
+    });
+    const data = await response.json();
+
+    // DeepSeek reasoner returns reasoning_content and content
+    const reasoning = data.choices?.[0]?.message?.reasoning_content || '';
+    const content = data.choices?.[0]?.message?.content || '';
+
+    return { reasoning, content, raw: data };
+  } catch (error) {
+    console.error('DeepSeek Reasoner error:', error.message);
+    return { reasoning: '', content: '', error: error.message };
+  }
+}
+
+// DeepSeek Chat - for faster, simpler tasks
+async function callDeepSeekChat(prompt, maxTokens = 4000) {
+  try {
+    const response = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'deepseek-chat',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: maxTokens,
+        temperature: 0.3
+      }),
+      timeout: 60000
+    });
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || '';
+  } catch (error) {
+    console.error('DeepSeek Chat error:', error.message);
+    return '';
   }
 }
 
@@ -2040,6 +2094,452 @@ async function checkBusinessRelevanceMultiAI(companies, filterCriteria) {
   return mergedResults;
 }
 
+// ============ NEW 3-PHASE FILTERING SYSTEM (DeepSeek-powered) ============
+
+/**
+ * PHASE 1: Deep Analysis
+ * Analyze all companies first, understand the landscape, create filtering strategy
+ */
+async function phase1DeepAnalysis(companies, targetDescription) {
+  console.log('\n' + '='.repeat(60));
+  console.log('PHASE 1: DEEP ANALYSIS (DeepSeek Reasoner)');
+  console.log('='.repeat(60));
+
+  const companyList = companies.map((c, i) => `${i + 1}. ${c.name} (${c.country || 'Unknown'})`).join('\n');
+
+  const prompt = `You are a senior investment banking analyst preparing a trading comparable analysis.
+
+TARGET PEER GROUP: "${targetDescription}"
+
+COMPANY LIST (${companies.length} companies from Speeda database):
+${companyList}
+
+TASK: Analyze this company list deeply before any filtering.
+
+THINK THROUGH:
+1. What industries/sectors are represented in this list?
+2. What does "${targetDescription}" ACTUALLY mean in precise business terms?
+   - What specific products/services?
+   - What business model characteristics?
+   - What geographic considerations?
+3. Looking at the company names, identify:
+   - Companies that are OBVIOUSLY relevant (core peers)
+   - Companies that are OBVIOUSLY irrelevant (different industry entirely)
+   - Companies that need careful evaluation (could go either way)
+4. What are common "false positive" traps to avoid?
+   - Holding companies that own the business but aren't pure-play
+   - Diversified conglomerates where target segment is small
+   - Companies with similar names but different businesses
+5. What are common "false negative" mistakes to avoid?
+   - Regional naming variations
+   - Companies that changed names or rebranded
+
+OUTPUT FORMAT (JSON):
+{
+  "targetAnalysis": {
+    "businessDefinition": "precise definition of what constitutes a peer",
+    "keyCharacteristics": ["characteristic 1", "characteristic 2", ...],
+    "mustHave": ["criteria that a peer MUST meet"],
+    "mustNotHave": ["criteria that should EXCLUDE a company"]
+  },
+  "companyCategories": {
+    "obviouslyRelevant": [{"index": 0, "name": "Company", "reason": "why obviously relevant"}],
+    "obviouslyIrrelevant": [{"index": 1, "name": "Company", "reason": "why obviously not relevant"}],
+    "needsEvaluation": [{"index": 2, "name": "Company", "concern": "what needs to be verified"}]
+  },
+  "filteringStrategy": {
+    "approach": "description of recommended filtering approach",
+    "steps": [
+      {"step": 1, "criteria": "specific criteria", "rationale": "why this step"},
+      {"step": 2, "criteria": "specific criteria", "rationale": "why this step"}
+    ]
+  },
+  "warnings": ["potential pitfalls to watch for"]
+}`;
+
+  // Use DeepSeek Reasoner if available, fallback to GPT-4o
+  let analysisResult;
+  if (process.env.DEEPSEEK_API_KEY) {
+    console.log('Using DeepSeek Reasoner for deep analysis...');
+    const result = await callDeepSeekReasoner(prompt, 12000);
+
+    if (result.content) {
+      console.log('\n--- DeepSeek Reasoning Process ---');
+      if (result.reasoning) {
+        // Show first 500 chars of reasoning
+        console.log(result.reasoning.substring(0, 500) + '...\n');
+      }
+      analysisResult = result.content;
+    }
+  }
+
+  // Fallback to GPT-4o if DeepSeek not available or failed
+  if (!analysisResult) {
+    console.log('Using GPT-4o for analysis (DeepSeek not available)...');
+    try {
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.2,
+        response_format: { type: 'json_object' }
+      });
+      analysisResult = response.choices[0].message.content;
+    } catch (error) {
+      console.error('GPT-4o analysis error:', error.message);
+    }
+  }
+
+  // Parse the result
+  try {
+    const jsonMatch = analysisResult.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      console.log('\n--- Analysis Summary ---');
+      console.log('Target Definition:', parsed.targetAnalysis?.businessDefinition);
+      console.log('Obviously Relevant:', parsed.companyCategories?.obviouslyRelevant?.length || 0);
+      console.log('Obviously Irrelevant:', parsed.companyCategories?.obviouslyIrrelevant?.length || 0);
+      console.log('Needs Evaluation:', parsed.companyCategories?.needsEvaluation?.length || 0);
+      console.log('Filter Steps:', parsed.filteringStrategy?.steps?.length || 0);
+      return parsed;
+    }
+  } catch (error) {
+    console.error('Failed to parse analysis result:', error.message);
+  }
+
+  return null;
+}
+
+/**
+ * PHASE 2: Deliberate Filtering
+ * Evaluate each company carefully against the strategy from Phase 1
+ */
+async function phase2DeliberateFiltering(companies, analysis, targetDescription, outputWorkbook, sheetHeaders, startSheetNumber) {
+  console.log('\n' + '='.repeat(60));
+  console.log('PHASE 2: DELIBERATE FILTERING');
+  console.log('='.repeat(60));
+
+  let currentCompanies = [...companies];
+  let sheetNumber = startSheetNumber;
+  const filterLog = [];
+  const allReasoning = [];
+
+  // If analysis failed, use simple approach
+  if (!analysis) {
+    console.log('No analysis available, using simple filtering...');
+    return { companies: currentCompanies, filterLog, sheetNumber, reasoning: allReasoning };
+  }
+
+  // First, apply obvious exclusions from Phase 1
+  const obviouslyIrrelevant = analysis.companyCategories?.obviouslyIrrelevant || [];
+  if (obviouslyIrrelevant.length > 0) {
+    const irrelevantIndices = new Set(obviouslyIrrelevant.map(c => c.index));
+    const removedCompanies = [];
+    const keptCompanies = [];
+
+    currentCompanies.forEach((c, idx) => {
+      if (irrelevantIndices.has(idx)) {
+        const match = obviouslyIrrelevant.find(x => x.index === idx);
+        c.filterReason = match?.reason || 'Obviously not in target industry';
+        removedCompanies.push(c);
+      } else {
+        keptCompanies.push(c);
+      }
+    });
+
+    if (removedCompanies.length > 0 && keptCompanies.length >= 3) {
+      currentCompanies = keptCompanies;
+      const logEntry = `Phase 1 Quick Filter: Removed ${removedCompanies.length} obviously irrelevant companies`;
+      filterLog.push(logEntry);
+      console.log(logEntry);
+
+      // Create sheet
+      const sheetData = createSheetData(currentCompanies, sheetHeaders,
+        `After Quick Filter - ${currentCompanies.length} companies`);
+
+      // Add removed section
+      sheetData.push([], [], ['REMOVED - Obviously Not Relevant'], ['Company', 'Reason']);
+      removedCompanies.forEach(c => sheetData.push([c.name, c.filterReason]));
+
+      const sheet = XLSX.utils.aoa_to_sheet(sheetData);
+      XLSX.utils.book_append_sheet(outputWorkbook, sheet, `${sheetNumber}. Quick Filter`);
+      sheetNumber++;
+    }
+  }
+
+  // Now apply each filter step from the strategy
+  const filterSteps = analysis.filteringStrategy?.steps || [];
+  const targetDef = analysis.targetAnalysis?.businessDefinition || targetDescription;
+
+  for (let stepIdx = 0; stepIdx < filterSteps.length; stepIdx++) {
+    const step = filterSteps[stepIdx];
+    console.log(`\nFilter Step ${stepIdx + 1}: ${step.criteria}`);
+    console.log(`Rationale: ${step.rationale}`);
+
+    if (currentCompanies.length <= 5) {
+      console.log('Skipping - already at minimum company count');
+      break;
+    }
+
+    // Evaluate each company against this criterion
+    const evaluationPrompt = `You are evaluating companies for a trading comparable analysis.
+
+TARGET PEER GROUP: "${targetDescription}"
+BUSINESS DEFINITION: "${targetDef}"
+
+CURRENT FILTER CRITERION: "${step.criteria}"
+RATIONALE: "${step.rationale}"
+
+Companies to evaluate:
+${currentCompanies.map((c, i) => `${i + 1}. ${c.name} (${c.country || 'Unknown'})`).join('\n')}
+
+For EACH company, evaluate against the criterion "${step.criteria}":
+
+THINK CAREFULLY for each company:
+1. What is this company's actual primary business?
+2. Does it meet the criterion "${step.criteria}"?
+3. How confident are you? (0-100%)
+
+OUTPUT JSON:
+{
+  "evaluations": [
+    {
+      "index": 0,
+      "name": "Company Name",
+      "passes": true/false,
+      "confidence": 85,
+      "business": "what this company actually does",
+      "reasoning": "why it passes/fails this criterion"
+    }
+  ]
+}
+
+IMPORTANT: Only mark passes=false if you are >70% confident the company does NOT meet the criterion.
+When uncertain, keep the company (passes=true) for manual review.`;
+
+    let evalResult;
+    if (process.env.DEEPSEEK_API_KEY) {
+      const result = await callDeepSeekReasoner(evaluationPrompt, 8000);
+      if (result.content) {
+        evalResult = result.content;
+        if (result.reasoning) {
+          allReasoning.push({
+            step: stepIdx + 1,
+            criterion: step.criteria,
+            reasoning: result.reasoning
+          });
+        }
+      }
+    }
+
+    if (!evalResult) {
+      try {
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [{ role: 'user', content: evaluationPrompt }],
+          temperature: 0.2,
+          response_format: { type: 'json_object' }
+        });
+        evalResult = response.choices[0].message.content;
+      } catch (error) {
+        console.error('Evaluation error:', error.message);
+        continue;
+      }
+    }
+
+    // Parse and apply results
+    try {
+      const jsonMatch = evalResult.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        const evaluations = parsed.evaluations || [];
+
+        const removedCompanies = [];
+        const keptCompanies = [];
+
+        currentCompanies.forEach((c, idx) => {
+          const eval_ = evaluations.find(e => e.index === idx);
+          if (eval_ && !eval_.passes && eval_.confidence >= 70) {
+            c.filterReason = `${eval_.business} - ${eval_.reasoning}`;
+            c.confidence = eval_.confidence;
+            removedCompanies.push(c);
+          } else {
+            if (eval_) {
+              c.businessDescription = eval_.business;
+            }
+            keptCompanies.push(c);
+          }
+        });
+
+        // Only apply if we keep enough companies
+        if (keptCompanies.length >= 5 && removedCompanies.length > 0) {
+          currentCompanies = keptCompanies;
+          const logEntry = `Step ${stepIdx + 1} (${step.criteria}): Removed ${removedCompanies.length} companies`;
+          filterLog.push(logEntry);
+          console.log(`  ${logEntry}`);
+
+          // Create sheet
+          const sheetData = createSheetData(currentCompanies, sheetHeaders,
+            `Step ${stepIdx + 1}: ${step.criteria} - ${currentCompanies.length} remaining`);
+
+          sheetData.push([], [], [`REMOVED - Did not meet: "${step.criteria}"`], ['Company', 'Business', 'Reason', 'Confidence']);
+          removedCompanies.forEach(c => sheetData.push([c.name, '', c.filterReason, `${c.confidence}%`]));
+
+          const sheet = XLSX.utils.aoa_to_sheet(sheetData);
+          const sheetName = `${sheetNumber}. Step ${stepIdx + 1}`;
+          XLSX.utils.book_append_sheet(outputWorkbook, sheet, sheetName.substring(0, 31));
+          sheetNumber++;
+        } else {
+          console.log(`  Skipping - would remove too many (${removedCompanies.length}) or keep too few (${keptCompanies.length})`);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to parse evaluation:', error.message);
+    }
+  }
+
+  return { companies: currentCompanies, filterLog, sheetNumber, reasoning: allReasoning };
+}
+
+/**
+ * PHASE 3: Self-Validation
+ * Review the final peer set for coherence and catch any mistakes
+ */
+async function phase3Validation(companies, targetDescription, analysis) {
+  console.log('\n' + '='.repeat(60));
+  console.log('PHASE 3: SELF-VALIDATION');
+  console.log('='.repeat(60));
+
+  if (companies.length === 0) {
+    return { valid: false, issues: ['No companies remaining'], suggestions: [] };
+  }
+
+  const validationPrompt = `You are a senior investment banker reviewing a trading comparable peer set.
+
+TARGET: "${targetDescription}"
+
+FINAL PEER SET (${companies.length} companies):
+${companies.map((c, i) => `${i + 1}. ${c.name} (${c.country || 'Unknown'})${c.businessDescription ? ' - ' + c.businessDescription : ''}`).join('\n')}
+
+VALIDATION CHECKLIST:
+1. COHERENCE: Do all these companies belong together as peers?
+   - Are they in the same/similar industry?
+   - Are there any obvious outliers that don't fit?
+
+2. COMPLETENESS: Is this a reasonable peer set?
+   - Are there enough companies (ideally 5-15)?
+   - Is there geographic diversity appropriate for the target?
+
+3. MISTAKES: Were any obvious errors made?
+   - Any company that clearly doesn't belong?
+   - Any naming confusion (similar name, different business)?
+
+4. QUALITY: Would an investment banker accept this peer set?
+   - Are these companies that would typically be used in a real analysis?
+
+OUTPUT JSON:
+{
+  "overallAssessment": "good/acceptable/poor",
+  "coherenceScore": 85,
+  "issues": [
+    {"company": "Name", "issue": "description of problem", "severity": "high/medium/low"}
+  ],
+  "suggestions": [
+    "suggestion for improvement"
+  ],
+  "finalVerdict": "one sentence summary"
+}`;
+
+  let validationResult;
+  if (process.env.DEEPSEEK_API_KEY) {
+    const result = await callDeepSeekReasoner(validationPrompt, 4000);
+    if (result.content) {
+      validationResult = result.content;
+      if (result.reasoning) {
+        console.log('\n--- Validation Reasoning (excerpt) ---');
+        console.log(result.reasoning.substring(0, 300) + '...');
+      }
+    }
+  }
+
+  if (!validationResult) {
+    try {
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: validationPrompt }],
+        temperature: 0.2,
+        response_format: { type: 'json_object' }
+      });
+      validationResult = response.choices[0].message.content;
+    } catch (error) {
+      console.error('Validation error:', error.message);
+      return { valid: true, issues: [], suggestions: [] };
+    }
+  }
+
+  try {
+    const jsonMatch = validationResult.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      console.log('\n--- Validation Result ---');
+      console.log('Assessment:', parsed.overallAssessment);
+      console.log('Coherence Score:', parsed.coherenceScore);
+      console.log('Issues Found:', parsed.issues?.length || 0);
+      console.log('Verdict:', parsed.finalVerdict);
+      return parsed;
+    }
+  } catch (error) {
+    console.error('Failed to parse validation:', error.message);
+  }
+
+  return { valid: true, issues: [], suggestions: [] };
+}
+
+/**
+ * MAIN: Apply the 3-phase filtering pipeline
+ */
+async function applyThreePhaseFiltering(companies, targetDescription, outputWorkbook, sheetHeaders, startSheetNumber) {
+  console.log('\n' + '█'.repeat(60));
+  console.log('STARTING 3-PHASE FILTERING PIPELINE');
+  console.log('█'.repeat(60));
+  console.log(`Companies: ${companies.length}`);
+  console.log(`Target: ${targetDescription}`);
+
+  // Phase 1: Deep Analysis
+  const analysis = await phase1DeepAnalysis(companies, targetDescription);
+
+  // Phase 2: Deliberate Filtering
+  const filterResult = await phase2DeliberateFiltering(
+    companies,
+    analysis,
+    targetDescription,
+    outputWorkbook,
+    sheetHeaders,
+    startSheetNumber
+  );
+
+  // Phase 3: Validation
+  const validation = await phase3Validation(filterResult.companies, targetDescription, analysis);
+
+  // Add validation info to filter log
+  if (validation.overallAssessment) {
+    filterResult.filterLog.push(`Validation: ${validation.overallAssessment} (coherence: ${validation.coherenceScore}%)`);
+  }
+  if (validation.issues?.length > 0) {
+    filterResult.filterLog.push(`Validation Issues: ${validation.issues.map(i => i.company + ' - ' + i.issue).join('; ')}`);
+  }
+
+  return {
+    companies: filterResult.companies,
+    filterLog: filterResult.filterLog,
+    sheetNumber: filterResult.sheetNumber,
+    analysis,
+    validation,
+    reasoning: filterResult.reasoning
+  };
+}
+
+// ============ END 3-PHASE FILTERING SYSTEM ============
+
 // Helper: Generate filtering steps based on target description
 async function generateFilteringSteps(targetDescription, companyCount) {
   const prompt = `You are creating a methodical filtering approach for trading comparable analysis.
@@ -2498,10 +2998,12 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       sheetNumber++;
     }
 
-    // QUALITATIVE FILTER: Apply iterative multi-AI filtering
-    // Uses multiple AIs in parallel, applies progressive filtering steps
-    console.log(`\nStarting qualitative filtering with ${currentCompanies.length} companies...`);
-    const qualResult = await applyIterativeQualitativeFilter(
+    // QUALITATIVE FILTER: Apply 3-phase filtering pipeline (DeepSeek-powered)
+    // Phase 1: Deep Analysis - understand companies and create strategy
+    // Phase 2: Deliberate Filtering - evaluate each company carefully
+    // Phase 3: Self-Validation - review final peer set
+    console.log(`\nStarting 3-phase filtering with ${currentCompanies.length} companies...`);
+    const qualResult = await applyThreePhaseFiltering(
       currentCompanies,
       TargetCompanyOrIndustry,
       outputWorkbook,
@@ -2512,6 +3014,10 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     currentCompanies = qualResult.companies;
     filterLog.push(...qualResult.filterLog);
     sheetNumber = qualResult.sheetNumber;
+
+    // Store analysis and validation results for potential use in email/output
+    const analysisResult = qualResult.analysis;
+    const validationResult = qualResult.validation;
 
     // FINAL SHEET: Summary with medians
     const finalCompanies = currentCompanies;
@@ -2920,6 +3426,19 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     const pptBuffer = await pptx.write({ outputType: 'base64' });
 
     // Send email with Excel and PPT attachments
+    const validationSection = validationResult ? `
+<h3 style="color: #1e3a5f;">AI Validation</h3>
+<p style="color: #374151;">
+  <strong>Assessment:</strong> ${validationResult.overallAssessment || 'N/A'}
+  (Coherence: ${validationResult.coherenceScore || 'N/A'}%)<br>
+  <strong>Verdict:</strong> ${validationResult.finalVerdict || 'Analysis complete'}
+</p>
+${validationResult.issues?.length > 0 ? `
+<p style="color: #d97706; font-size: 12px;">
+  <strong>Notes:</strong> ${validationResult.issues.map(i => i.company + ' - ' + i.issue).join('; ')}
+</p>` : ''}
+` : '';
+
     const emailHTML = `
 <h2 style="color: #1e3a5f;">Trading Comparable Analysis – ${TargetCompanyOrIndustry}</h2>
 <p style="color: #374151;">Please find attached the Excel file and PowerPoint slide with your trading comparable analysis.</p>
@@ -2930,6 +3449,8 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
   ${filterLog.map(f => `<li>${f}</li>`).join('\n')}
   <li><strong>Final shortlist: ${finalCompanies.length} companies</strong></li>
 </ul>
+
+${validationSection}
 
 <h3 style="color: #1e3a5f;">Median Multiples</h3>
 <table border="1" cellpadding="8" style="border-collapse: collapse;">
