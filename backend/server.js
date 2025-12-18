@@ -7,6 +7,7 @@ const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
 const XLSX = require('xlsx');
 const multer = require('multer');
+const nodemailer = require('nodemailer');
 
 const app = express();
 app.use(cors());
@@ -16,7 +17,7 @@ app.use(express.json());
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Check required environment variables
-const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'BREVO_API_KEY'];
+const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'GMAIL_USER', 'GMAIL_APP_PASSWORD'];
 const optionalEnvVars = ['SERPAPI_API_KEY']; // Optional but recommended
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
@@ -31,16 +32,19 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
 
-// Send email using Resend API
+// Send email using Gmail SMTP
 async function sendEmail(to, subject, html, attachments = null) {
-  const senderEmail = process.env.SENDER_EMAIL || 'onboarding@resend.dev';
-  // Use simple format for Resend's test domain, custom name for verified domains
-  const fromField = senderEmail === 'onboarding@resend.dev'
-    ? 'onboarding@resend.dev'
-    : `Find Target <${senderEmail}>`;
-  const emailData = {
-    from: fromField,
-    to: [to],
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASSWORD
+    }
+  });
+
+  const mailOptions = {
+    from: `Find Target <${process.env.GMAIL_USER}>`,
+    to: to,
     subject: subject,
     html: html
   };
@@ -48,27 +52,14 @@ async function sendEmail(to, subject, html, attachments = null) {
   if (attachments) {
     // Support both single attachment object and array of attachments
     const attachmentList = Array.isArray(attachments) ? attachments : [attachments];
-    emailData.attachments = attachmentList.map(a => ({
+    mailOptions.attachments = attachmentList.map(a => ({
       filename: a.name,
-      content: a.content
+      content: Buffer.from(a.content, 'base64')
     }));
   }
 
-  const response = await fetch('https://api.resend.com/emails', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(emailData)
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Email failed: ${error}`);
-  }
-
-  return await response.json();
+  const result = await transporter.sendMail(mailOptions);
+  return result;
 }
 
 // ============ AI TOOLS ============
