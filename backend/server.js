@@ -1265,96 +1265,6 @@ app.post('/api/find-target-slow', async (req, res) => {
 
 // ============ V4 ULTRA-EXHAUSTIVE ENDPOINT ============
 
-// Region to countries mapping - breaks down regions into individual countries
-const REGION_TO_COUNTRIES = {
-  'southeast asia': ['Malaysia', 'Thailand', 'Vietnam', 'Indonesia', 'Philippines', 'Singapore', 'Myanmar', 'Cambodia', 'Laos', 'Brunei'],
-  'asean': ['Malaysia', 'Thailand', 'Vietnam', 'Indonesia', 'Philippines', 'Singapore', 'Myanmar', 'Cambodia', 'Laos', 'Brunei'],
-  'south east asia': ['Malaysia', 'Thailand', 'Vietnam', 'Indonesia', 'Philippines', 'Singapore', 'Myanmar', 'Cambodia', 'Laos', 'Brunei'],
-  'east asia': ['China', 'Japan', 'South Korea', 'Taiwan', 'Hong Kong'],
-  'south asia': ['India', 'Pakistan', 'Bangladesh', 'Sri Lanka', 'Nepal'],
-  'middle east': ['UAE', 'Saudi Arabia', 'Qatar', 'Kuwait', 'Bahrain', 'Oman', 'Jordan', 'Lebanon', 'Israel'],
-  'gcc': ['UAE', 'Saudi Arabia', 'Qatar', 'Kuwait', 'Bahrain', 'Oman'],
-  'europe': ['Germany', 'France', 'UK', 'Italy', 'Spain', 'Netherlands', 'Belgium', 'Poland', 'Czech Republic', 'Austria', 'Switzerland'],
-  'western europe': ['Germany', 'France', 'UK', 'Italy', 'Spain', 'Netherlands', 'Belgium', 'Switzerland', 'Austria'],
-  'eastern europe': ['Poland', 'Czech Republic', 'Hungary', 'Romania', 'Bulgaria', 'Slovakia', 'Slovenia', 'Croatia'],
-  'latin america': ['Mexico', 'Brazil', 'Argentina', 'Chile', 'Colombia', 'Peru', 'Ecuador'],
-  'north america': ['USA', 'Canada', 'Mexico'],
-  'oceania': ['Australia', 'New Zealand'],
-  'africa': ['South Africa', 'Nigeria', 'Kenya', 'Egypt', 'Morocco', 'Ghana', 'Tanzania']
-};
-
-// Expand region into individual countries
-function expandRegionToCountries(country) {
-  const countryLower = country.toLowerCase().trim();
-  for (const [region, countries] of Object.entries(REGION_TO_COUNTRIES)) {
-    if (countryLower === region || countryLower.includes(region)) {
-      return countries;
-    }
-  }
-  // Not a region, return as single country
-  return [country];
-}
-
-// Industry terminology expansion - maps common terms to all variations
-const TERMINOLOGY_EXPANSIONS = {
-  'gravure': ['gravure', 'rotogravure', 'intaglio'],
-  'flexure': ['flexographic', 'flexo', 'flexure'],
-  'flexographic': ['flexographic', 'flexo', 'flexure'],
-  'ink': ['ink', 'inks', 'printing ink', 'printing inks'],
-  'manufacturer': ['manufacturer', 'producer', 'maker', 'factory', 'plant'],
-  'distributor': ['distributor', 'dealer', 'supplier', 'vendor', 'wholesaler'],
-  'semiconductor': ['semiconductor', 'chip', 'IC', 'integrated circuit', 'wafer'],
-  'plastic': ['plastic', 'plastics', 'polymer', 'resin'],
-  'packaging': ['packaging', 'packing', 'package'],
-  'automotive': ['automotive', 'auto parts', 'car parts', 'vehicle'],
-  'electronics': ['electronics', 'electronic', 'electrical'],
-  'chemical': ['chemical', 'chemicals', 'petrochemical'],
-  'textile': ['textile', 'textiles', 'fabric', 'garment'],
-  'food': ['food', 'food processing', 'F&B', 'food and beverage'],
-  'pharmaceutical': ['pharmaceutical', 'pharma', 'drug', 'medicine'],
-  'medical': ['medical', 'healthcare', 'medical device'],
-  'machinery': ['machinery', 'machine', 'equipment', 'industrial equipment'],
-  'metal': ['metal', 'metals', 'steel', 'aluminum', 'metalworking']
-};
-
-// Expand business terms into all variations
-function expandBusinessTerms(business) {
-  const businessLower = business.toLowerCase();
-  const variations = new Set();
-  variations.add(business); // Original term
-
-  // Check each word in the business description
-  const words = businessLower.split(/\s+/);
-
-  for (const word of words) {
-    for (const [term, expansions] of Object.entries(TERMINOLOGY_EXPANSIONS)) {
-      if (word.includes(term) || term.includes(word)) {
-        expansions.forEach(exp => variations.add(exp));
-      }
-    }
-  }
-
-  // Generate combined variations
-  const expanded = Array.from(variations);
-  const combinations = [];
-
-  // If we found gravure/flexo and ink expansions, create combinations
-  const printingTypes = expanded.filter(e =>
-    e.includes('gravure') || e.includes('flexo') || e.includes('rotogravure') || e.includes('intaglio')
-  );
-  const inkTypes = expanded.filter(e => e.includes('ink'));
-
-  if (printingTypes.length > 0 && inkTypes.length > 0) {
-    for (const pType of printingTypes) {
-      for (const iType of inkTypes) {
-        combinations.push(`${pType} ${iType}`);
-      }
-    }
-  }
-
-  return [...new Set([...expanded, ...combinations])];
-}
-
 // Simple Levenshtein similarity for fuzzy matching
 function levenshteinSimilarity(s1, s2) {
   if (!s1 || !s2) return 0;
@@ -1588,67 +1498,74 @@ app.post('/api/find-target-v4', async (req, res) => {
     return res.status(400).json({ error: 'All fields are required' });
   }
 
-  // Expand region into individual countries
-  const countries = expandRegionToCountries(Country);
-  const isRegion = countries.length > 1;
-
-  // Expand business terms into all variations
-  const businessTerms = expandBusinessTerms(Business);
-
   console.log(`\n${'='.repeat(70)}`);
   console.log(`V4 ULTRA-EXHAUSTIVE SEARCH: ${new Date().toISOString()}`);
   console.log(`Business: ${Business}`);
-  console.log(`  → Expanded terms: ${businessTerms.slice(0, 10).join(', ')}${businessTerms.length > 10 ? '...' : ''}`);
   console.log(`Country: ${Country}`);
-  if (isRegion) {
-    console.log(`  → Expanded to ${countries.length} countries: ${countries.join(', ')}`);
-  }
   console.log(`Exclusion: ${Exclusion}`);
   console.log(`Email: ${Email}`);
   console.log('='.repeat(70));
 
   res.json({
     success: true,
-    message: `Request received. Ultra-exhaustive search running across ${countries.length} countries. Results will be emailed in ~30-45 minutes.`
+    message: 'Request received. Ultra-exhaustive search running. Results will be emailed in ~30-45 minutes.'
   });
 
   try {
     const totalStart = Date.now();
-    let allPhase1Companies = [];
 
-    // ========== PHASE 1: Country-by-Country Base Search ==========
+    // ========== PHASE 1: HIGH VOLUME BASE SEARCH ==========
     console.log('\n' + '='.repeat(50));
-    console.log(`PHASE 1: BASE SEARCH (${countries.length} countries × ${Math.min(businessTerms.length, 5)} terms)`);
+    console.log('PHASE 1: HIGH VOLUME BASE SEARCH (18 query variations)');
     console.log('='.repeat(50));
 
-    // Search each country with multiple business term variations
-    for (const targetCountry of countries) {
-      console.log(`\n--- Searching: ${targetCountry} ---`);
+    // Many different search query phrasings - pure volume approach
+    const searchQueries = [
+      // Direct searches
+      `${Business}`,
+      `${Business} manufacturer`,
+      `${Business} producer`,
+      `${Business} maker`,
+      `${Business} factory`,
+      `${Business} supplier`,
+      `${Business} company`,
+      // List-style searches
+      `list of ${Business} companies`,
+      `${Business} companies list`,
+      `top ${Business} companies`,
+      `leading ${Business}`,
+      `${Business} industry`,
+      // Directory-style searches
+      `${Business} directory`,
+      `${Business} manufacturers directory`,
+      // B2B searches
+      `${Business} B2B`,
+      `${Business} wholesale`,
+      `${Business} industrial`,
+      `${Business} vendors`,
+    ];
 
-      // Use top 5 business term variations for Phase 1
-      const termsToSearch = businessTerms.slice(0, 5);
+    let allPhase1Companies = [];
 
-      for (const term of termsToSearch) {
-        console.log(`  Term: "${term}"`);
+    // Run all search queries sequentially (18 searches × exhaustiveSearch internals)
+    for (let i = 0; i < searchQueries.length; i++) {
+      const query = searchQueries[i];
+      console.log(`\n[${i + 1}/${searchQueries.length}] "${query}"`);
 
-        // Primary search
-        const companies1 = await exhaustiveSearch(term, targetCountry, Exclusion);
-        console.log(`    Primary: ${companies1.length} companies`);
+      const companies = await exhaustiveSearch(query, Country, Exclusion);
+      console.log(`  Found: ${companies.length} companies`);
 
-        // Manufacturer variation
-        const companies2 = await exhaustiveSearch(`${term} manufacturer producer`, targetCountry, Exclusion);
-        console.log(`    Manufacturer: ${companies2.length} companies`);
+      allPhase1Companies = [...allPhase1Companies, ...companies];
 
-        allPhase1Companies = [...allPhase1Companies, ...companies1, ...companies2];
+      // Dedupe every 6 queries to manage memory
+      if ((i + 1) % 6 === 0) {
+        allPhase1Companies = dedupeCompanies(allPhase1Companies);
+        console.log(`  Running total (deduped): ${allPhase1Companies.length}`);
       }
-
-      // Dedupe after each country to keep memory manageable
-      allPhase1Companies = dedupeCompanies(allPhase1Companies);
-      console.log(`  ${targetCountry} subtotal: ${allPhase1Companies.length} unique companies so far`);
     }
 
     const phase1Raw = dedupeCompanies(allPhase1Companies);
-    console.log(`\nPhase 1 raw total: ${phase1Raw.length} unique companies`);
+    console.log(`\nPhase 1 total: ${phase1Raw.length} unique companies from ${searchQueries.length} query variations`);
 
     // ========== PHASE 1.5: Initial Validation ==========
     console.log('\n' + '='.repeat(50));
@@ -1658,46 +1575,31 @@ app.post('/api/find-target-v4', async (req, res) => {
     const preFiltered1 = preFilterCompanies(phase1Raw);
     console.log(`After pre-filter: ${preFiltered1.length}`);
 
-    // Use original Country for validation (accept any country in region)
     const shortlistA = await parallelValidationStrict(preFiltered1, Business, Country, Exclusion);
     console.log(`Shortlist A (validated): ${shortlistA.length} companies`);
 
-    // ========== PHASE 2: 20 Expansion Rounds ==========
+    // ========== PHASE 2: EXPANSION ROUNDS WITH AI SEARCH ==========
     console.log('\n' + '='.repeat(50));
-    console.log('PHASE 2: 20 EXPANSION ROUNDS (3 AI models each)');
+    console.log('PHASE 2: 10 EXPANSION ROUNDS (3 AI search models × 10 strategies)');
     console.log('='.repeat(50));
 
     let allCompanies = [...shortlistA];
     let totalNewFound = 0;
-    let consecutiveLowYield = 0;
 
-    for (let round = 1; round <= 20; round++) {
+    for (let round = 1; round <= 10; round++) {
       const roundStart = Date.now();
-
-      // For regions, cycle through countries for expansion rounds
-      const targetCountry = isRegion ? countries[(round - 1) % countries.length] : Country;
-
-      const newCompanies = await runExpansionRound(round, Business, targetCountry, allCompanies);
+      const newCompanies = await runExpansionRound(round, Business, Country, allCompanies);
 
       if (newCompanies.length > 0) {
         allCompanies = dedupeCompanies([...allCompanies, ...newCompanies]);
         totalNewFound += newCompanies.length;
-        consecutiveLowYield = 0;
-      } else {
-        consecutiveLowYield++;
       }
 
       const roundTime = ((Date.now() - roundStart) / 1000).toFixed(1);
-      console.log(`  Round ${round}/20 [${targetCountry}]: +${newCompanies.length} new (${roundTime}s). Total: ${allCompanies.length}`);
-
-      // Stop early only if 5 consecutive rounds found nothing AND we've done at least 10 rounds
-      if (round >= 10 && consecutiveLowYield >= 5) {
-        console.log(`  Stopping early: 5 consecutive rounds with no new companies.`);
-        break;
-      }
+      console.log(`  Round ${round}/10: +${newCompanies.length} new (${roundTime}s). Total: ${allCompanies.length}`);
     }
 
-    console.log(`\nPhase 2 complete. Found ${totalNewFound} additional companies.`);
+    console.log(`\nPhase 2 complete. Found ${totalNewFound} additional companies across 10 rounds.`);
 
     // ========== PHASE 3: Final Validation ==========
     console.log('\n' + '='.repeat(50));
@@ -1706,7 +1608,6 @@ app.post('/api/find-target-v4', async (req, res) => {
 
     console.log(`Total candidates: ${allCompanies.length}`);
 
-    // Pre-filter and validate all new companies found in Phase 2
     const phase2New = allCompanies.filter(c =>
       !shortlistA.some(s => s.company_name === c.company_name)
     );
@@ -1716,7 +1617,6 @@ app.post('/api/find-target-v4', async (req, res) => {
     const validated2 = await parallelValidationStrict(preFiltered2, Business, Country, Exclusion);
     console.log(`Phase 2 validated: ${validated2.length}`);
 
-    // Combine shortlistA + validated Phase 2 companies
     const finalCompanies = dedupeCompanies([...shortlistA, ...validated2]);
     console.log(`FINAL TOTAL: ${finalCompanies.length} validated companies`);
 
@@ -1733,8 +1633,6 @@ app.post('/api/find-target-v4', async (req, res) => {
     console.log(`V4 ULTRA-EXHAUSTIVE COMPLETE!`);
     console.log(`Email sent to: ${Email}`);
     console.log(`Final companies: ${finalCompanies.length}`);
-    console.log(`Countries searched: ${countries.join(', ')}`);
-    console.log(`Business terms used: ${businessTerms.length}`);
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(70));
 
