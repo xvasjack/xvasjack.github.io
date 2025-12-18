@@ -1545,32 +1545,64 @@ app.post('/api/find-target-v4', async (req, res) => {
 
   res.json({
     success: true,
-    message: 'Request received. Ultra-exhaustive search running. Results will be emailed in ~25-30 minutes.'
+    message: 'Request received. Ultra-exhaustive search running. Results will be emailed in ~30-45 minutes.'
   });
 
   try {
     const totalStart = Date.now();
 
-    // ========== PHASE 1: Base Search (3x v3 SEQUENTIAL) ==========
+    // ========== PHASE 1: HIGH VOLUME BASE SEARCH ==========
     console.log('\n' + '='.repeat(50));
-    console.log('PHASE 1: BASE SEARCH (3x v3 - Sequential)');
+    console.log('PHASE 1: HIGH VOLUME BASE SEARCH (18 query variations)');
     console.log('='.repeat(50));
 
-    // Run sequentially to avoid overwhelming the server
-    console.log('\n--- Search 1: Primary ---');
-    const companies1 = await exhaustiveSearch(Business, Country, Exclusion);
-    console.log(`Search 1 (primary): ${companies1.length} companies`);
+    // Many different search query phrasings - pure volume approach
+    const searchQueries = [
+      // Direct searches
+      `${Business}`,
+      `${Business} manufacturer`,
+      `${Business} producer`,
+      `${Business} maker`,
+      `${Business} factory`,
+      `${Business} supplier`,
+      `${Business} company`,
+      // List-style searches
+      `list of ${Business} companies`,
+      `${Business} companies list`,
+      `top ${Business} companies`,
+      `leading ${Business}`,
+      `${Business} industry`,
+      // Directory-style searches
+      `${Business} directory`,
+      `${Business} manufacturers directory`,
+      // B2B searches
+      `${Business} B2B`,
+      `${Business} wholesale`,
+      `${Business} industrial`,
+      `${Business} vendors`,
+    ];
 
-    console.log('\n--- Search 2: Supplier/Vendor ---');
-    const companies2 = await exhaustiveSearch(`${Business} supplier vendor distributor`, Country, Exclusion);
-    console.log(`Search 2 (supplier/vendor): ${companies2.length} companies`);
+    let allPhase1Companies = [];
 
-    console.log('\n--- Search 3: Manufacturer ---');
-    const companies3 = await exhaustiveSearch(`${Business} manufacturer producer factory`, Country, Exclusion);
-    console.log(`Search 3 (manufacturer): ${companies3.length} companies`);
+    // Run all search queries sequentially (18 searches × exhaustiveSearch internals)
+    for (let i = 0; i < searchQueries.length; i++) {
+      const query = searchQueries[i];
+      console.log(`\n[${i + 1}/${searchQueries.length}] "${query}"`);
 
-    const phase1Raw = dedupeCompanies([...companies1, ...companies2, ...companies3]);
-    console.log(`\nPhase 1 raw total: ${phase1Raw.length} unique companies`);
+      const companies = await exhaustiveSearch(query, Country, Exclusion);
+      console.log(`  Found: ${companies.length} companies`);
+
+      allPhase1Companies = [...allPhase1Companies, ...companies];
+
+      // Dedupe every 6 queries to manage memory
+      if ((i + 1) % 6 === 0) {
+        allPhase1Companies = dedupeCompanies(allPhase1Companies);
+        console.log(`  Running total (deduped): ${allPhase1Companies.length}`);
+      }
+    }
+
+    const phase1Raw = dedupeCompanies(allPhase1Companies);
+    console.log(`\nPhase 1 total: ${phase1Raw.length} unique companies from ${searchQueries.length} query variations`);
 
     // ========== PHASE 1.5: Initial Validation ==========
     console.log('\n' + '='.repeat(50));
@@ -1583,9 +1615,9 @@ app.post('/api/find-target-v4', async (req, res) => {
     const shortlistA = await parallelValidationStrict(preFiltered1, Business, Country, Exclusion);
     console.log(`Shortlist A (validated): ${shortlistA.length} companies`);
 
-    // ========== PHASE 2: 10 Expansion Rounds ==========
+    // ========== PHASE 2: EXPANSION ROUNDS WITH AI SEARCH ==========
     console.log('\n' + '='.repeat(50));
-    console.log('PHASE 2: 10 EXPANSION ROUNDS (3 AI models each)');
+    console.log('PHASE 2: 10 EXPANSION ROUNDS (3 AI search models × 10 strategies)');
     console.log('='.repeat(50));
 
     let allCompanies = [...shortlistA];
@@ -1601,12 +1633,7 @@ app.post('/api/find-target-v4', async (req, res) => {
       }
 
       const roundTime = ((Date.now() - roundStart) / 1000).toFixed(1);
-      console.log(`  Round ${round} complete in ${roundTime}s. Total: ${allCompanies.length} companies`);
-
-      // Early stop if last 3 rounds found very few new companies
-      if (round >= 5 && newCompanies.length < 2) {
-        console.log(`  Low yield in round ${round}. Continuing to ensure exhaustiveness...`);
-      }
+      console.log(`  Round ${round}/10: +${newCompanies.length} new (${roundTime}s). Total: ${allCompanies.length}`);
     }
 
     console.log(`\nPhase 2 complete. Found ${totalNewFound} additional companies across 10 rounds.`);
@@ -1618,7 +1645,6 @@ app.post('/api/find-target-v4', async (req, res) => {
 
     console.log(`Total candidates: ${allCompanies.length}`);
 
-    // Pre-filter and validate all new companies found in Phase 2
     const phase2New = allCompanies.filter(c =>
       !shortlistA.some(s => s.company_name === c.company_name)
     );
@@ -1628,7 +1654,6 @@ app.post('/api/find-target-v4', async (req, res) => {
     const validated2 = await parallelValidationStrict(preFiltered2, Business, Country, Exclusion);
     console.log(`Phase 2 validated: ${validated2.length}`);
 
-    // Combine shortlistA + validated Phase 2 companies
     const finalCompanies = dedupeCompanies([...shortlistA, ...validated2]);
     console.log(`FINAL TOTAL: ${finalCompanies.length} validated companies`);
 
