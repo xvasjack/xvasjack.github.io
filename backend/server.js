@@ -2549,36 +2549,19 @@ OUTPUT FORMAT (JSON):
   "warnings": ["potential pitfalls to watch for"]
 }`;
 
-  // Use DeepSeek Reasoner if available, fallback to GPT-4o
+  // Use GPT-4o for deep analysis
   let analysisResult;
-  if (process.env.DEEPSEEK_API_KEY) {
-    console.log('Using DeepSeek Reasoner for deep analysis...');
-    const result = await callDeepSeekReasoner(prompt, 12000);
-
-    if (result.content) {
-      console.log('\n--- DeepSeek Reasoning Process ---');
-      if (result.reasoning) {
-        // Show first 500 chars of reasoning
-        console.log(result.reasoning.substring(0, 500) + '...\n');
-      }
-      analysisResult = result.content;
-    }
-  }
-
-  // Fallback to GPT-4o if DeepSeek not available or failed
-  if (!analysisResult) {
-    console.log('Using GPT-4o for analysis (DeepSeek not available)...');
-    try {
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [{ role: 'user', content: prompt }],
-        temperature: 0.2,
-        response_format: { type: 'json_object' }
-      });
-      analysisResult = response.choices[0].message.content;
-    } catch (error) {
-      console.error('GPT-4o analysis error:', error.message);
-    }
+  console.log('Using GPT-4o for deep analysis...');
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2,
+      response_format: { type: 'json_object' }
+    });
+    analysisResult = response.choices[0].message.content;
+  } catch (error) {
+    console.error('GPT-4o analysis error:', error.message);
   }
 
   // Parse the result
@@ -2709,33 +2692,17 @@ IMPORTANT: Only mark passes=false if you are >70% confident the company does NOT
 When uncertain, keep the company (passes=true) for manual review.`;
 
     let evalResult;
-    if (process.env.DEEPSEEK_API_KEY) {
-      const result = await callDeepSeekReasoner(evaluationPrompt, 8000);
-      if (result.content) {
-        evalResult = result.content;
-        if (result.reasoning) {
-          allReasoning.push({
-            step: stepIdx + 1,
-            criterion: step.criteria,
-            reasoning: result.reasoning
-          });
-        }
-      }
-    }
-
-    if (!evalResult) {
-      try {
-        const response = await openai.chat.completions.create({
-          model: 'gpt-4o',
-          messages: [{ role: 'user', content: evaluationPrompt }],
-          temperature: 0.2,
-          response_format: { type: 'json_object' }
-        });
-        evalResult = response.choices[0].message.content;
-      } catch (error) {
-        console.error('Evaluation error:', error.message);
-        continue;
-      }
+    try {
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: evaluationPrompt }],
+        temperature: 0.2,
+        response_format: { type: 'json_object' }
+      });
+      evalResult = response.choices[0].message.content;
+    } catch (error) {
+      console.error('Evaluation error:', error.message);
+      continue;
     }
 
     // Parse and apply results
@@ -2842,30 +2809,17 @@ OUTPUT JSON:
 }`;
 
   let validationResult;
-  if (process.env.DEEPSEEK_API_KEY) {
-    const result = await callDeepSeekReasoner(validationPrompt, 4000);
-    if (result.content) {
-      validationResult = result.content;
-      if (result.reasoning) {
-        console.log('\n--- Validation Reasoning (excerpt) ---');
-        console.log(result.reasoning.substring(0, 300) + '...');
-      }
-    }
-  }
-
-  if (!validationResult) {
-    try {
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [{ role: 'user', content: validationPrompt }],
-        temperature: 0.2,
-        response_format: { type: 'json_object' }
-      });
-      validationResult = response.choices[0].message.content;
-    } catch (error) {
-      console.error('Validation error:', error.message);
-      return { valid: true, issues: [], suggestions: [] };
-    }
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: validationPrompt }],
+      temperature: 0.2,
+      response_format: { type: 'json_object' }
+    });
+    validationResult = response.choices[0].message.content;
+  } catch (error) {
+    console.error('Validation error:', error.message);
+    return { valid: true, issues: [], suggestions: [] };
   }
 
   try {
