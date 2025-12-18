@@ -24,8 +24,14 @@
     .dd-upload-zone input[type="file"] {
       position: absolute;
       inset: 0;
+      width: 100%;
+      height: 100%;
       opacity: 0;
       cursor: pointer;
+      font-size: 0;
+    }
+    .dd-upload-zone input[type="file"]::-webkit-file-upload-button {
+      display: none;
     }
     .dd-upload-zone svg {
       width: 48px;
