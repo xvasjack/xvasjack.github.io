@@ -1599,83 +1599,33 @@ app.post('/api/find-target-v4', async (req, res) => {
 
   res.json({
     success: true,
-    message: 'Request received. Exhaustive search running. Results will be emailed in ~20-30 minutes.'
+    message: 'Request received. Exhaustive search running. Results will be emailed in ~25-35 minutes.'
   });
 
   try {
     const totalStart = Date.now();
 
-    // ========== PHASE 1: HIGH VOLUME LIGHTWEIGHT SEARCH ==========
-    // Use direct AI model calls (3 per query) instead of exhaustiveSearch (124 per query)
+    // ========== PHASE 1: 3x exhaustiveSearch (SEQUENTIAL like v3 slow) ==========
+    // This uses SerpAPI + multiple AI models = finds diverse companies
     console.log('\n' + '='.repeat(50));
-    console.log('PHASE 1: HIGH VOLUME SEARCH (20 queries × 3 AI models = 60 searches)');
+    console.log('PHASE 1: BASE SEARCH (3x exhaustiveSearch - Sequential)');
     console.log('='.repeat(50));
 
-    const basePrompt = (query) => `Find ALL ${query} companies in ${Country}.
-Exclude: ${Exclusion}.
-Return as: Company Name | Website (must start with http)
-Find as many companies as possible. Include SMEs and lesser-known companies.`;
+    // Run sequentially to avoid overwhelming the server
+    console.log('\n--- Search 1: Primary ---');
+    const companies1 = await exhaustiveSearch(Business, Country, Exclusion);
+    console.log(`Search 1 (primary): ${companies1.length} companies`);
 
-    // 20 different query variations
-    const searchQueries = [
-      `${Business}`,
-      `${Business} manufacturer`,
-      `${Business} producer`,
-      `${Business} factory`,
-      `${Business} supplier`,
-      `${Business} company`,
-      `${Business} companies list`,
-      `top ${Business}`,
-      `leading ${Business}`,
-      `${Business} SME`,
-      `${Business} local companies`,
-      `small ${Business}`,
-      `${Business} industry players`,
-      `${Business} makers`,
-      `${Business} vendors`,
-      `${Business} firms`,
-      `${Business} businesses`,
-      `${Business} enterprises`,
-      `${Business} plants`,
-      `${Business} operations`,
-    ];
+    console.log('\n--- Search 2: Supplier/Vendor ---');
+    const companies2 = await exhaustiveSearch(`${Business} supplier vendor distributor`, Country, Exclusion);
+    console.log(`Search 2 (supplier/vendor): ${companies2.length} companies`);
 
-    let allPhase1Companies = [];
+    console.log('\n--- Search 3: Manufacturer ---');
+    const companies3 = await exhaustiveSearch(`${Business} manufacturer producer factory`, Country, Exclusion);
+    console.log(`Search 3 (manufacturer): ${companies3.length} companies`);
 
-    // Run each query with 3 AI search models (sequentially to avoid server crash)
-    for (let i = 0; i < searchQueries.length; i++) {
-      const query = searchQueries[i];
-      const prompt = basePrompt(query);
-      console.log(`\n[${i + 1}/${searchQueries.length}] "${query}"`);
-
-      // Call 3 AI search models in parallel (only 3 concurrent calls, not 124)
-      const [gptResult, geminiResult, perplexityResult] = await Promise.all([
-        callOpenAISearch(prompt),
-        callGemini(prompt),
-        callPerplexity(prompt)
-      ]);
-
-      // Extract companies from each
-      const [gptCompanies, geminiCompanies, perplexityCompanies] = await Promise.all([
-        extractCompanies(gptResult, Country),
-        extractCompanies(geminiResult, Country),
-        extractCompanies(perplexityResult, Country)
-      ]);
-
-      const queryTotal = gptCompanies.length + geminiCompanies.length + perplexityCompanies.length;
-      console.log(`  GPT: ${gptCompanies.length} | Gemini: ${geminiCompanies.length} | Perplexity: ${perplexityCompanies.length} = ${queryTotal}`);
-
-      allPhase1Companies = [...allPhase1Companies, ...gptCompanies, ...geminiCompanies, ...perplexityCompanies];
-
-      // Dedupe every 5 queries
-      if ((i + 1) % 5 === 0) {
-        allPhase1Companies = dedupeCompanies(allPhase1Companies);
-        console.log(`  Running total (deduped): ${allPhase1Companies.length}`);
-      }
-    }
-
-    const phase1Raw = dedupeCompanies(allPhase1Companies);
-    console.log(`\nPhase 1 total: ${phase1Raw.length} unique companies from ${searchQueries.length * 3} AI searches`);
+    const phase1Raw = dedupeCompanies([...companies1, ...companies2, ...companies3]);
+    console.log(`\nPhase 1 raw total: ${phase1Raw.length} unique companies`);
 
     // ========== PHASE 1.5: Initial Validation ==========
     console.log('\n' + '='.repeat(50));
