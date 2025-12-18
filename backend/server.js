@@ -1590,7 +1590,7 @@ app.post('/api/find-target-v4', async (req, res) => {
   }
 
   console.log(`\n${'='.repeat(70)}`);
-  console.log(`V4 ULTRA-EXHAUSTIVE SEARCH: ${new Date().toISOString()}`);
+  console.log(`V4 EXHAUSTIVE SEARCH: ${new Date().toISOString()}`);
   console.log(`Business: ${Business}`);
   console.log(`Country: ${Country}`);
   console.log(`Exclusion: ${Exclusion}`);
@@ -1599,64 +1599,83 @@ app.post('/api/find-target-v4', async (req, res) => {
 
   res.json({
     success: true,
-    message: 'Request received. Ultra-exhaustive search running. Results will be emailed in ~30-45 minutes.'
+    message: 'Request received. Exhaustive search running. Results will be emailed in ~20-30 minutes.'
   });
 
   try {
     const totalStart = Date.now();
 
-    // ========== PHASE 1: HIGH VOLUME BASE SEARCH ==========
+    // ========== PHASE 1: HIGH VOLUME LIGHTWEIGHT SEARCH ==========
+    // Use direct AI model calls (3 per query) instead of exhaustiveSearch (124 per query)
     console.log('\n' + '='.repeat(50));
-    console.log('PHASE 1: HIGH VOLUME BASE SEARCH (18 query variations)');
+    console.log('PHASE 1: HIGH VOLUME SEARCH (20 queries × 3 AI models = 60 searches)');
     console.log('='.repeat(50));
 
-    // Many different search query phrasings - pure volume approach
+    const basePrompt = (query) => `Find ALL ${query} companies in ${Country}.
+Exclude: ${Exclusion}.
+Return as: Company Name | Website (must start with http)
+Find as many companies as possible. Include SMEs and lesser-known companies.`;
+
+    // 20 different query variations
     const searchQueries = [
-      // Direct searches
       `${Business}`,
       `${Business} manufacturer`,
       `${Business} producer`,
-      `${Business} maker`,
       `${Business} factory`,
       `${Business} supplier`,
       `${Business} company`,
-      // List-style searches
-      `list of ${Business} companies`,
       `${Business} companies list`,
-      `top ${Business} companies`,
+      `top ${Business}`,
       `leading ${Business}`,
-      `${Business} industry`,
-      // Directory-style searches
-      `${Business} directory`,
-      `${Business} manufacturers directory`,
-      // B2B searches
-      `${Business} B2B`,
-      `${Business} wholesale`,
-      `${Business} industrial`,
+      `${Business} SME`,
+      `${Business} local companies`,
+      `small ${Business}`,
+      `${Business} industry players`,
+      `${Business} makers`,
       `${Business} vendors`,
+      `${Business} firms`,
+      `${Business} businesses`,
+      `${Business} enterprises`,
+      `${Business} plants`,
+      `${Business} operations`,
     ];
 
     let allPhase1Companies = [];
 
-    // Run all search queries sequentially (18 searches × exhaustiveSearch internals)
+    // Run each query with 3 AI search models (sequentially to avoid server crash)
     for (let i = 0; i < searchQueries.length; i++) {
       const query = searchQueries[i];
+      const prompt = basePrompt(query);
       console.log(`\n[${i + 1}/${searchQueries.length}] "${query}"`);
 
-      const companies = await exhaustiveSearch(query, Country, Exclusion);
-      console.log(`  Found: ${companies.length} companies`);
+      // Call 3 AI search models in parallel (only 3 concurrent calls, not 124)
+      const [gptResult, geminiResult, perplexityResult] = await Promise.all([
+        callOpenAISearch(prompt),
+        callGemini(prompt),
+        callPerplexity(prompt)
+      ]);
 
-      allPhase1Companies = [...allPhase1Companies, ...companies];
+      // Extract companies from each
+      const [gptCompanies, geminiCompanies, perplexityCompanies] = await Promise.all([
+        extractCompanies(gptResult, Country),
+        extractCompanies(geminiResult, Country),
+        extractCompanies(perplexityResult, Country)
+      ]);
 
-      // Dedupe every 6 queries to manage memory
-      if ((i + 1) % 6 === 0) {
+      const queryTotal = gptCompanies.length + geminiCompanies.length + perplexityCompanies.length;
+      console.log(`  GPT: ${gptCompanies.length} | Gemini: ${geminiCompanies.length} | Perplexity: ${perplexityCompanies.length} = ${queryTotal}`);
+
+      allPhase1Companies = [...allPhase1Companies, ...gptCompanies, ...geminiCompanies, ...perplexityCompanies];
+
+      // Dedupe every 5 queries
+      if ((i + 1) % 5 === 0) {
         allPhase1Companies = dedupeCompanies(allPhase1Companies);
         console.log(`  Running total (deduped): ${allPhase1Companies.length}`);
       }
     }
 
     const phase1Raw = dedupeCompanies(allPhase1Companies);
-    console.log(`\nPhase 1 total: ${phase1Raw.length} unique companies from ${searchQueries.length} query variations`);
+    console.log(`\nPhase 1 total: ${phase1Raw.length} unique companies from ${searchQueries.length * 3} AI searches`);
 
     // ========== PHASE 1.5: Initial Validation ==========
     console.log('\n' + '='.repeat(50));
@@ -1669,9 +1688,9 @@ app.post('/api/find-target-v4', async (req, res) => {
     const shortlistA = await parallelValidationStrict(preFiltered1, Business, Country, Exclusion);
     console.log(`Shortlist A (validated): ${shortlistA.length} companies`);
 
-    // ========== PHASE 2: EXPANSION ROUNDS WITH AI SEARCH ==========
+    // ========== PHASE 2: EXPANSION ROUNDS ==========
     console.log('\n' + '='.repeat(50));
-    console.log('PHASE 2: 10 EXPANSION ROUNDS (3 AI search models × 10 strategies)');
+    console.log('PHASE 2: 10 EXPANSION ROUNDS (3 AI models × 10 strategies)');
     console.log('='.repeat(50));
 
     let allCompanies = [...shortlistA];
@@ -1690,7 +1709,7 @@ app.post('/api/find-target-v4', async (req, res) => {
       console.log(`  Round ${round}/10: +${newCompanies.length} new (${roundTime}s). Total: ${allCompanies.length}`);
     }
 
-    console.log(`\nPhase 2 complete. Found ${totalNewFound} additional companies across 10 rounds.`);
+    console.log(`\nPhase 2 complete. Found ${totalNewFound} additional companies.`);
 
     // ========== PHASE 3: Final Validation ==========
     console.log('\n' + '='.repeat(50));
@@ -1721,7 +1740,7 @@ app.post('/api/find-target-v4', async (req, res) => {
 
     const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
     console.log('\n' + '='.repeat(70));
-    console.log(`V4 ULTRA-EXHAUSTIVE COMPLETE!`);
+    console.log(`V4 EXHAUSTIVE COMPLETE!`);
     console.log(`Email sent to: ${Email}`);
     console.log(`Final companies: ${finalCompanies.length}`);
     console.log(`Total time: ${totalTime} minutes`);
