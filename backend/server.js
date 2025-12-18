@@ -34,8 +34,12 @@ const openai = new OpenAI({
 // Send email using Resend API
 async function sendEmail(to, subject, html, attachments = null) {
   const senderEmail = process.env.SENDER_EMAIL || 'onboarding@resend.dev';
+  // Use simple format for Resend's test domain, custom name for verified domains
+  const fromField = senderEmail === 'onboarding@resend.dev'
+    ? 'onboarding@resend.dev'
+    : `Find Target <${senderEmail}>`;
   const emailData = {
-    from: `Find Target <${senderEmail}>`,
+    from: fromField,
     to: [to],
     subject: subject,
     html: html
