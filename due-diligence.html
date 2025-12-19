@@ -78,11 +78,11 @@
     /* Record Mode - Split Layout */
     .dd-record-layout {
       display: grid;
-      grid-template-columns: 240px 1fr;
-      gap: 16px;
-      min-height: 320px;
+      grid-template-columns: 280px 1fr;
+      gap: 20px;
+      min-height: 400px;
     }
-    @media (max-width: 800px) {
+    @media (max-width: 900px) {
       .dd-record-layout { grid-template-columns: 1fr; }
     }
 
@@ -96,6 +96,7 @@
       flex-direction: column;
       align-items: center;
       gap: 12px;
+      height: fit-content;
     }
     .dd-record-btn {
       width: 64px;
@@ -157,11 +158,12 @@
       color: white;
     }
 
-    /* Transcript Panels - Wider */
+    /* Transcript Panels - Main Focus */
     .dd-transcript-panels {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 12px;
+      min-width: 0;
     }
     .dd-transcript-panel {
       flex: 1;
@@ -170,7 +172,7 @@
       border-radius: var(--radius-md);
       display: flex;
       flex-direction: column;
-      min-height: 180px;
+      min-height: 300px;
     }
     .dd-panel-header {
       padding: 10px 14px;
@@ -193,9 +195,9 @@
     }
     .dd-panel-content {
       flex: 1;
-      padding: 12px;
-      font-size: 13px;
-      line-height: 1.5;
+      padding: 16px;
+      font-size: 15px;
+      line-height: 1.7;
       overflow-y: auto;
       max-height: 300px;
       color: var(--text-main);
