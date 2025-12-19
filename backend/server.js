@@ -4608,13 +4608,6 @@ async function generatePPTX(companies) {
         line: { color: COLORS.headerLine, width: 2.25 }
       });
 
-      // Footer copyright text
-      slide.addText('(C) YCP 2025 all rights reserved', {
-        x: 4.1, y: 7.26, w: 5.1, h: 0.2,
-        fontSize: 8, fontFace: 'Segoe UI',
-        color: COLORS.footerText, align: 'center'
-      });
-
       // ===== TITLE + MESSAGE (combined in one text box) =====
       const titleText = company.title || company.company_name || 'Company Profile';
       const messageText = company.message || '';
@@ -4628,7 +4621,8 @@ async function generatePPTX(companies) {
       slide.addText(titleContent, {
         x: 0.38, y: 0.07, w: 9.5, h: 0.9,
         fontSize: 24, fontFace: 'Segoe UI',
-        color: COLORS.black, valign: 'bottom'
+        color: COLORS.black, valign: 'bottom',
+        margin: [0, 0, 0, 0]  // No left/right margin
       });
 
       // ===== FLAG (top right) =====
@@ -4671,9 +4665,11 @@ async function generatePPTX(companies) {
           }
 
           if (logoBase64) {
+            // Use sizing: 'contain' to maintain aspect ratio and prevent stretching
             slide.addImage({
               data: `data:image/png;base64,${logoBase64}`,
-              x: 12.0, y: 0.15, w: 1.0, h: 0.50
+              x: 12.0, y: 0.15, w: 1.0, h: 0.65,
+              sizing: { type: 'contain', w: 1.0, h: 0.65 }
             });
           } else {
             console.log(`  Logo not available for ${domain} from any source`);
@@ -4714,22 +4710,56 @@ async function generatePPTX(companies) {
       const isSingleLocation = locationLines.length <= 1 && !locationText.toLowerCase().includes('branch') && !locationText.toLowerCase().includes('factory') && !locationText.toLowerCase().includes('warehouse');
       const locationLabel = isSingleLocation ? 'HQ' : 'Location';
 
-      // Base company info rows
-      const tableData = [
-        ['Name', company.company_name || '', company.website || null], // Third element is hyperlink URL
-        ['Est. Year', company.established_year || '', null],
-        [locationLabel, company.location || '', null],
-        ['Business', company.business || '', null]
-      ];
+      // Helper function to check if value is empty or "not specified"
+      const isEmptyValue = (val) => {
+        if (!val) return true;
+        const lower = val.toLowerCase().trim();
+        return lower === '' || lower === 'not specified' || lower === 'n/a' || lower === 'unknown' || lower === 'not available' || lower === 'not found';
+      };
 
-      // Add key metrics as separate rows if available
+      // Base company info rows - only add if value exists
+      const tableData = [];
+
+      // Always add Name with hyperlink
+      if (!isEmptyValue(company.company_name)) {
+        tableData.push(['Name', company.company_name, company.website || null]);
+      }
+
+      // Add Est. Year if available
+      if (!isEmptyValue(company.established_year)) {
+        tableData.push(['Est. Year', company.established_year, null]);
+      }
+
+      // Add Location if available
+      if (!isEmptyValue(company.location)) {
+        tableData.push([locationLabel, company.location, null]);
+      }
+
+      // Add Business if available
+      if (!isEmptyValue(company.business)) {
+        tableData.push(['Business', company.business, null]);
+      }
+
+      // Track existing labels to prevent duplicates
+      const existingLabels = new Set(tableData.map(row => row[0].toLowerCase()));
+
+      // Add key metrics as separate rows if available (skip duplicates and empty values)
       if (company.key_metrics && Array.isArray(company.key_metrics)) {
         company.key_metrics.forEach(metric => {
-          if (metric.label && metric.value) {
-            tableData.push([metric.label, metric.value, null]);
+          if (metric.label && metric.value && !isEmptyValue(metric.value)) {
+            const labelLower = metric.label.toLowerCase();
+            // Skip if this label already exists or is duplicate of business/location
+            if (!existingLabels.has(labelLower) &&
+                !labelLower.includes('business') &&
+                !labelLower.includes('location') &&
+                !labelLower.includes('product') &&
+                !labelLower.includes('service')) {
+              tableData.push([metric.label, metric.value, null]);
+              existingLabels.add(labelLower);
+            }
           }
         });
-      } else if (company.metrics) {
+      } else if (company.metrics && !isEmptyValue(company.metrics)) {
         // Fallback for old format (single string)
         tableData.push(['Key Metrics', company.metrics, null]);
       }
@@ -4806,50 +4836,67 @@ async function generatePPTX(companies) {
         margin: [0, 0.04, 0, 0.04]
       });
 
-      // ===== RIGHT TABLE (Products/Applications breakdown) =====
-      // Use breakdown_items from AI extraction
-      const rightTableData = company.breakdown_items && company.breakdown_items.length > 0
-        ? company.breakdown_items.map(item => [item.label || '', item.value || ''])
-        : [['', ''], ['', ''], ['', '']]; // Fallback empty rows
+      // ===== RIGHT SECTION (Products/Applications breakdown) =====
+      // Filter valid breakdown items (non-empty)
+      const validBreakdownItems = (company.breakdown_items || []).filter(item =>
+        item.label && item.value && !isEmptyValue(item.label) && !isEmptyValue(item.value)
+      );
 
-      const rightRows = rightTableData.map((row) => [
-        {
-          text: row[0],
-          options: {
-            fill: { color: COLORS.accent3 },
-            color: COLORS.white,
-            align: 'center',
-            bold: false
-          }
-        },
-        {
-          text: row[1],
-          options: {
-            fill: { color: COLORS.white },
-            color: COLORS.black,
-            align: 'left',
-            border: [
-              { pt: 1, color: COLORS.gray, type: 'dash' },
-              { pt: 0 },
-              { pt: 1, color: COLORS.gray, type: 'dash' },
-              { pt: 0 }
-            ]
-          }
-        }
-      ]);
+      // If at least 2 valid items, use table format; otherwise use text box
+      if (validBreakdownItems.length >= 2) {
+        // Use table format
+        const rightTableData = validBreakdownItems.map(item => [item.label, item.value]);
 
-      // Position at 6.86" horizontally and 1.91" vertically as requested
-      slide.addTable(rightRows, {
-        x: 6.86, y: 1.91,
-        w: 6.1,
-        colW: [1.4, 4.7],
-        rowH: rowHeight,
-        fontFace: 'Segoe UI',
-        fontSize: 14,
-        valign: 'middle',
-        border: { pt: 2.5, color: COLORS.white },
-        margin: [0, 0.04, 0, 0.04]
-      });
+        const rightRows = rightTableData.map((row) => [
+          {
+            text: row[0],
+            options: {
+              fill: { color: COLORS.accent3 },
+              color: COLORS.white,
+              align: 'center',
+              bold: false
+            }
+          },
+          {
+            text: row[1],
+            options: {
+              fill: { color: COLORS.white },
+              color: COLORS.black,
+              align: 'left',
+              border: [
+                { pt: 1, color: COLORS.gray, type: 'dash' },
+                { pt: 0 },
+                { pt: 1, color: COLORS.gray, type: 'dash' },
+                { pt: 0 }
+              ]
+            }
+          }
+        ]);
+
+        // Position at 6.86" horizontally and 1.91" vertically as requested
+        slide.addTable(rightRows, {
+          x: 6.86, y: 1.91,
+          w: 6.1,
+          colW: [1.4, 4.7],
+          rowH: rowHeight,
+          fontFace: 'Segoe UI',
+          fontSize: 14,
+          valign: 'middle',
+          border: { pt: 2.5, color: COLORS.white },
+          margin: [0, 0.04, 0, 0.04]
+        });
+      } else if (validBreakdownItems.length > 0) {
+        // Use text box with point form format: "Segment: A, B, C"
+        const textContent = validBreakdownItems.map(item => `${item.label}: ${item.value}`).join('\n');
+
+        slide.addText(textContent, {
+          x: 6.86, y: 1.91, w: 6.1, h: 2.0,
+          fontSize: 14, fontFace: 'Segoe UI',
+          color: COLORS.black, valign: 'top',
+          margin: [0, 0, 0, 0]
+        });
+      }
+      // If no valid items, don't add anything to the right section
 
       // ===== FOOTNOTE (single text box with stacked content) =====
       const footnoteLines = [];
@@ -4876,7 +4923,8 @@ async function generatePPTX(companies) {
       slide.addText(footnoteContent, {
         x: 0.38, y: 6.85, w: 12.5, h: footnoteHeight,
         fontSize: 10, fontFace: 'Segoe UI',
-        color: COLORS.black, valign: 'top'
+        color: COLORS.black, valign: 'top',
+        margin: [0, 0, 0, 0]  // No left/right margin
       });
     }
 
@@ -5557,45 +5605,23 @@ app.post('/api/profile-slides', async (req, res) => {
           business: businessInfo.business
         });
 
-        // Step 5: Search for missing info (est year, location) if not found on website
-        let searchedInfo = {};
-        const missingFields = [];
-        if (!basicInfo.established_year) missingFields.push('established_year');
-        if (!basicInfo.location) missingFields.push('location');
+        // Note: Web search agents removed to prevent hallucination
+        // All data now comes exclusively from scraped website content
 
-        if (missingFields.length > 0 && basicInfo.company_name) {
-          console.log('  Step 5: Searching for missing info...');
-          searchedInfo = await searchMissingInfo(basicInfo.company_name, website, missingFields);
-        }
+        // Use only key metrics from scraped website (no web search)
+        const allKeyMetrics = metricsInfo.key_metrics || [];
 
-        // Step 6: Search web for additional metrics (especially for large companies)
-        let additionalMetrics = [];
-        if (basicInfo.company_name) {
-          const additionalInfo = await searchAdditionalMetrics(
-            basicInfo.company_name,
-            website,
-            metricsInfo.key_metrics || []
-          );
-          additionalMetrics = additionalInfo.additional_metrics || [];
-        }
-
-        // Combine all key metrics (website + web search)
-        const allKeyMetrics = [
-          ...(metricsInfo.key_metrics || []),
-          ...additionalMetrics
-        ];
-
-        // Combine all extracted data (use searched info as fallback)
+        // Combine all extracted data (only from scraped content, no web search)
         const companyData = {
           website: scraped.url,
           company_name: basicInfo.company_name || '',
-          established_year: basicInfo.established_year || searchedInfo.established_year || '',
-          location: basicInfo.location || searchedInfo.location || '',
+          established_year: basicInfo.established_year || '',  // Only from website
+          location: basicInfo.location || '',  // Only from website
           business: businessInfo.business || '',
           message: businessInfo.message || '',
           footnote: businessInfo.footnote || '',
           title: businessInfo.title || '',
-          key_metrics: allKeyMetrics,  // Combined metrics from website + web search
+          key_metrics: allKeyMetrics,  // Only from scraped website
           breakdown_title: productsBreakdown.breakdown_title || 'Products and Applications',
           breakdown_items: productsBreakdown.breakdown_items || [],
           metrics: metricsInfo.metrics || ''  // Fallback for old format
