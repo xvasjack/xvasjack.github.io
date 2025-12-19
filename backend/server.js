@@ -11,6 +11,7 @@ const XLSX = require('xlsx');
 const multer = require('multer');
 const { createClient } = require('@deepgram/sdk');
 const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } = require('docx');
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
 const app = express();
 app.use(cors());
@@ -44,6 +45,90 @@ const openai = new OpenAI({
 
 // Initialize Deepgram
 const deepgram = process.env.DEEPGRAM_API_KEY ? createClient(process.env.DEEPGRAM_API_KEY) : null;
+
+// Initialize Cloudflare R2 (S3-compatible)
+const r2Client = (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY)
+  ? new S3Client({
+      region: 'auto',
+      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+      }
+    })
+  : null;
+
+const R2_BUCKET = process.env.R2_BUCKET_NAME || 'dd-recordings';
+
+if (!r2Client) {
+  console.warn('R2 not configured - recordings will only be stored in memory. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME');
+}
+
+// R2 Upload function
+async function uploadToR2(key, data, contentType = 'audio/webm') {
+  if (!r2Client) {
+    console.warn('[R2] R2 not configured, skipping upload');
+    return null;
+  }
+
+  try {
+    const command = new PutObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: key,
+      Body: data,
+      ContentType: contentType
+    });
+    await r2Client.send(command);
+    console.log(`[R2] Uploaded ${key} (${data.length} bytes)`);
+    return key;
+  } catch (error) {
+    console.error('[R2] Upload error:', error.message);
+    return null;
+  }
+}
+
+// R2 Download function
+async function downloadFromR2(key) {
+  if (!r2Client) {
+    return null;
+  }
+
+  try {
+    const command = new GetObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: key
+    });
+    const response = await r2Client.send(command);
+    const chunks = [];
+    for await (const chunk of response.Body) {
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
+  } catch (error) {
+    console.error('[R2] Download error:', error.message);
+    return null;
+  }
+}
+
+// R2 Delete function (cleanup old recordings)
+async function deleteFromR2(key) {
+  if (!r2Client) {
+    return false;
+  }
+
+  try {
+    const command = new DeleteObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: key
+    });
+    await r2Client.send(command);
+    console.log(`[R2] Deleted ${key}`);
+    return true;
+  } catch (error) {
+    console.error('[R2] Delete error:', error.message);
+    return false;
+  }
+}
 
 // Send email using SendGrid API
 async function sendEmail(to, subject, html, attachments = null) {
@@ -7154,18 +7239,22 @@ app.post('/api/due-diligence', async (req, res) => {
     audioLang = 'auto',
     translateToEnglish = true,
     generateWord = true,
-    email
+    email,
+    // Real-time recording data
+    rawTranscript,
+    translatedTranscript,
+    detectedLanguage,
+    sessionId
   } = req.body;
 
-  // Validate: need at least one file (document or audio) and email
-  if ((files.length === 0 && audioFiles.length === 0) || !email) {
-    return res.status(400).json({ error: 'At least one file and email are required' });
+  // Validate: need at least one file (document or audio) or transcript and email
+  const hasContent = files.length > 0 || audioFiles.length > 0 || rawTranscript;
+  if (!hasContent || !email) {
+    return res.status(400).json({ error: 'At least one file/recording and email are required' });
   }
 
   const validLengths = ['short', 'medium', 'long'];
   const length = validLengths.includes(reportLength) ? reportLength : 'medium';
-  const validOutputTypes = ['dd_report', 'meeting_minutes', 'transcript'];
-  const output = validOutputTypes.includes(outputType) ? outputType : 'dd_report';
 
   console.log(`\n${'='.repeat(60)}`);
   console.log(`[DD] NEW DUE DILIGENCE REQUEST: ${new Date().toISOString()}`);
@@ -7173,24 +7262,17 @@ app.post('/api/due-diligence', async (req, res) => {
   files.forEach(f => console.log(`     - ${f.name} (${f.type})`));
   console.log(`[DD] Audio Files: ${audioFiles.length}`);
   audioFiles.forEach(f => console.log(`     - ${f.name} (${f.mimeType})`));
-  console.log(`[DD] Output Type: ${output}`);
+  console.log(`[DD] Real-time Session: ${sessionId || 'None'}`);
+  console.log(`[DD] Has Raw Transcript: ${rawTranscript ? 'Yes (' + rawTranscript.length + ' chars)' : 'No'}`);
   console.log(`[DD] Report Length: ${length}`);
-  console.log(`[DD] Audio Language: ${audioLang}`);
-  console.log(`[DD] Translate to English: ${translateToEnglish}`);
-  console.log(`[DD] Generate Word: ${generateWord}`);
   console.log(`[DD] Email: ${email}`);
   console.log(`[DD] Special Instructions: ${instructions ? instructions.substring(0, 100) + '...' : 'None'}`);
   console.log('='.repeat(60));
 
   // Respond immediately
-  const outputLabel = {
-    dd_report: 'Due diligence report',
-    meeting_minutes: 'Meeting minutes',
-    transcript: 'Transcript'
-  };
   res.json({
     success: true,
-    message: `${outputLabel[output]} request received. Results will be emailed within 10-15 minutes.`
+    message: `DD Report & Transcript will be emailed within 10-15 minutes.`
   });
 
   try {
@@ -7323,8 +7405,11 @@ app.post('/api/due-diligence', async (req, res) => {
       </div>
     </div>`;
 
-    // Step 6: Generate Word document if requested
-    let attachments = null;
+    // Step 6: Generate attachments (Word doc, transcript, audio)
+    let attachments = [];
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    // 6a: Word document
     if (generateWord) {
       console.log('[DD] Generating Word document...');
       try {
@@ -7332,20 +7417,51 @@ app.post('/api/due-diligence', async (req, res) => {
           date: new Date().toLocaleDateString(),
           preparedFor: email
         });
-
-        const filename = `${docTitle.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.docx`;
-        attachments = [{
-          filename,
+        attachments.push({
+          filename: `${docTitle.replace(/\s+/g, '_')}_${dateStr}.docx`,
           content: wordBuffer.toString('base64')
-        }];
-        console.log(`[DD] Word document generated: ${filename}`);
+        });
+        console.log('[DD] Word document generated');
       } catch (docError) {
         console.error('[DD] Word document generation failed:', docError.message);
       }
     }
 
+    // 6b: Transcript text file (for safekeeping)
+    const transcriptText = rawTranscript || combinedTranscript;
+    if (transcriptText) {
+      const transcriptContent = `TRANSCRIPT - ${new Date().toLocaleString()}
+${'='.repeat(50)}
+
+${translatedTranscript ? `ORIGINAL (${detectedLanguage || 'detected'}):\n${rawTranscript}\n\n${'='.repeat(50)}\n\nENGLISH TRANSLATION:\n${translatedTranscript}` : transcriptText}
+`;
+      attachments.push({
+        filename: `Transcript_${dateStr}.txt`,
+        content: Buffer.from(transcriptContent).toString('base64')
+      });
+      console.log('[DD] Transcript file attached');
+    }
+
+    // 6c: Audio recording (if from real-time session)
+    if (sessionId && activeSessions.has(sessionId)) {
+      const session = activeSessions.get(sessionId);
+      if (session.audioChunks && session.audioChunks.length > 0) {
+        console.log('[DD] Attaching audio recording from session...');
+        try {
+          const audioBuffer = Buffer.concat(session.audioChunks);
+          attachments.push({
+            filename: `Recording_${dateStr}.webm`,
+            content: audioBuffer.toString('base64')
+          });
+          console.log(`[DD] Audio attached: ${audioBuffer.length} bytes`);
+        } catch (audioError) {
+          console.error('[DD] Audio attachment failed:', audioError.message);
+        }
+      }
+    }
+
     // Step 7: Send email
-    await sendEmail(email, emailSubject, emailHtml, attachments);
+    await sendEmail(email, emailSubject, emailHtml, attachments.length > 0 ? attachments : null);
     console.log(`[DD] ${docTitle} sent successfully to ${email}`);
 
   } catch (error) {
@@ -7371,11 +7487,34 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'Find Target v40 - DD Report with Real-Time Transcription' });
 });
 
+// Check if real-time transcription is available
+app.get('/api/transcription-status', (req, res) => {
+  res.json({
+    available: !!process.env.DEEPGRAM_API_KEY,
+    message: process.env.DEEPGRAM_API_KEY ? 'Ready for real-time transcription' : 'DEEPGRAM_API_KEY not configured'
+  });
+});
+
 // ============ WEBSOCKET SERVER FOR REAL-TIME TRANSCRIPTION ============
 
 const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server, path: '/ws/transcribe' });
+
+// Use noServer mode for better Railway compatibility
+const wss = new WebSocket.Server({ noServer: true });
+
+// Handle WebSocket upgrade manually
+server.on('upgrade', (request, socket, head) => {
+  const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
+
+  if (pathname === '/ws/transcribe') {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  } else {
+    socket.destroy();
+  }
+});
 
 // Store active sessions for recording storage
 const activeSessions = new Map();
@@ -7419,20 +7558,22 @@ wss.on('connection', (ws, req) => {
 
           const dgOptions = {
             model: 'nova-2',
-            language: data.language === 'auto' ? undefined : data.language,
             smart_format: true,
             interim_results: true,
             utterance_end_ms: 1000,
-            vad_events: true,
             encoding: 'linear16',
             sample_rate: 16000,
-            channels: 1
+            channels: 1,
+            punctuate: true
           };
 
-          // If language is auto, enable language detection
-          if (data.language === 'auto') {
-            dgOptions.detect_language = true;
+          // Set language - if not auto, use specific language
+          if (data.language && data.language !== 'auto') {
+            dgOptions.language = data.language;
           }
+          // Note: removed detect_language as it may cause 400 errors
+
+          console.log('[WS] Deepgram options:', JSON.stringify(dgOptions));
 
           deepgramConnection = deepgram.listen.live(dgOptions);
 
@@ -7501,15 +7642,35 @@ wss.on('connection', (ws, req) => {
             deepgramConnection = null;
           }
 
-          // Send final results
+          // Get session data
           const session = activeSessions.get(sessionId);
+          const duration = Math.round((Date.now() - session.startTime.getTime()) / 1000);
+
+          // Upload audio to R2 if available
+          let r2Key = null;
+          if (session.audioChunks && session.audioChunks.length > 0) {
+            const audioBuffer = Buffer.concat(session.audioChunks);
+            const dateStr = new Date().toISOString().split('T')[0];
+            r2Key = `recordings/${dateStr}/${sessionId}.pcm`;
+
+            // Upload async - don't block response
+            uploadToR2(r2Key, audioBuffer, 'audio/pcm').then(key => {
+              if (key) {
+                session.r2Key = key;
+                console.log(`[WS] Recording saved to R2: ${key}`);
+              }
+            });
+          }
+
+          // Send final results
           ws.send(JSON.stringify({
             type: 'complete',
             sessionId,
             transcript: fullTranscript.trim(),
             translatedTranscript: translatedTranscript.trim(),
             language: detectedLanguage,
-            duration: Math.round((Date.now() - session.startTime.getTime()) / 1000)
+            duration,
+            r2Key: r2Key // Include R2 key so frontend can download later
           }));
         }
 
@@ -7575,6 +7736,56 @@ app.get('/api/transcription-session/:sessionId/audio', (req, res) => {
     mimeType: 'audio/webm',
     size: audioBuffer.length
   });
+});
+
+// Download recording from R2
+app.get('/api/recording/:r2Key(*)', async (req, res) => {
+  const r2Key = req.params.r2Key;
+
+  if (!r2Key) {
+    return res.status(400).json({ error: 'R2 key required' });
+  }
+
+  try {
+    const audioBuffer = await downloadFromR2(r2Key);
+
+    if (!audioBuffer) {
+      return res.status(404).json({ error: 'Recording not found in R2' });
+    }
+
+    // Set headers for file download
+    const filename = r2Key.split('/').pop() || 'recording.pcm';
+    res.setHeader('Content-Type', 'audio/pcm');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', audioBuffer.length);
+    res.send(audioBuffer);
+
+  } catch (error) {
+    console.error('[R2] Download endpoint error:', error);
+    res.status(500).json({ error: 'Failed to download recording' });
+  }
+});
+
+// List recordings for a session (checks both memory and R2)
+app.get('/api/recording-status/:sessionId', async (req, res) => {
+  const sessionId = req.params.sessionId;
+  const session = activeSessions.get(sessionId);
+
+  const result = {
+    inMemory: false,
+    inR2: false,
+    r2Key: null,
+    memorySize: 0
+  };
+
+  if (session) {
+    result.inMemory = session.audioChunks && session.audioChunks.length > 0;
+    result.memorySize = result.inMemory ? Buffer.concat(session.audioChunks).length : 0;
+    result.r2Key = session.r2Key || null;
+    result.inR2 = !!session.r2Key;
+  }
+
+  res.json(result);
 });
 
 server.listen(PORT, () => {
