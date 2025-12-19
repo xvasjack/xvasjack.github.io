@@ -6673,18 +6673,22 @@ app.post('/api/due-diligence', async (req, res) => {
     audioLang = 'auto',
     translateToEnglish = true,
     generateWord = true,
-    email
+    email,
+    // Real-time recording data
+    rawTranscript,
+    translatedTranscript,
+    detectedLanguage,
+    sessionId
   } = req.body;
 
-  // Validate: need at least one file (document or audio) and email
-  if ((files.length === 0 && audioFiles.length === 0) || !email) {
-    return res.status(400).json({ error: 'At least one file and email are required' });
+  // Validate: need at least one file (document or audio) or transcript and email
+  const hasContent = files.length > 0 || audioFiles.length > 0 || rawTranscript;
+  if (!hasContent || !email) {
+    return res.status(400).json({ error: 'At least one file/recording and email are required' });
   }
 
   const validLengths = ['short', 'medium', 'long'];
   const length = validLengths.includes(reportLength) ? reportLength : 'medium';
-  const validOutputTypes = ['dd_report', 'meeting_minutes', 'transcript'];
-  const output = validOutputTypes.includes(outputType) ? outputType : 'dd_report';
 
   console.log(`\n${'='.repeat(60)}`);
   console.log(`[DD] NEW DUE DILIGENCE REQUEST: ${new Date().toISOString()}`);
@@ -6692,24 +6696,17 @@ app.post('/api/due-diligence', async (req, res) => {
   files.forEach(f => console.log(`     - ${f.name} (${f.type})`));
   console.log(`[DD] Audio Files: ${audioFiles.length}`);
   audioFiles.forEach(f => console.log(`     - ${f.name} (${f.mimeType})`));
-  console.log(`[DD] Output Type: ${output}`);
+  console.log(`[DD] Real-time Session: ${sessionId || 'None'}`);
+  console.log(`[DD] Has Raw Transcript: ${rawTranscript ? 'Yes (' + rawTranscript.length + ' chars)' : 'No'}`);
   console.log(`[DD] Report Length: ${length}`);
-  console.log(`[DD] Audio Language: ${audioLang}`);
-  console.log(`[DD] Translate to English: ${translateToEnglish}`);
-  console.log(`[DD] Generate Word: ${generateWord}`);
   console.log(`[DD] Email: ${email}`);
   console.log(`[DD] Special Instructions: ${instructions ? instructions.substring(0, 100) + '...' : 'None'}`);
   console.log('='.repeat(60));
 
   // Respond immediately
-  const outputLabel = {
-    dd_report: 'Due diligence report',
-    meeting_minutes: 'Meeting minutes',
-    transcript: 'Transcript'
-  };
   res.json({
     success: true,
-    message: `${outputLabel[output]} request received. Results will be emailed within 10-15 minutes.`
+    message: `DD Report & Transcript will be emailed within 10-15 minutes.`
   });
 
   try {
@@ -6842,8 +6839,11 @@ app.post('/api/due-diligence', async (req, res) => {
       </div>
     </div>`;
 
-    // Step 6: Generate Word document if requested
-    let attachments = null;
+    // Step 6: Generate attachments (Word doc, transcript, audio)
+    let attachments = [];
+    const dateStr = new Date().toISOString().slice(0, 10);
+
+    // 6a: Word document
     if (generateWord) {
       console.log('[DD] Generating Word document...');
       try {
@@ -6851,20 +6851,51 @@ app.post('/api/due-diligence', async (req, res) => {
           date: new Date().toLocaleDateString(),
           preparedFor: email
         });
-
-        const filename = `${docTitle.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.docx`;
-        attachments = [{
-          filename,
+        attachments.push({
+          filename: `${docTitle.replace(/\s+/g, '_')}_${dateStr}.docx`,
           content: wordBuffer.toString('base64')
-        }];
-        console.log(`[DD] Word document generated: ${filename}`);
+        });
+        console.log('[DD] Word document generated');
       } catch (docError) {
         console.error('[DD] Word document generation failed:', docError.message);
       }
     }
 
+    // 6b: Transcript text file (for safekeeping)
+    const transcriptText = rawTranscript || combinedTranscript;
+    if (transcriptText) {
+      const transcriptContent = `TRANSCRIPT - ${new Date().toLocaleString()}
+${'='.repeat(50)}
+
+${translatedTranscript ? `ORIGINAL (${detectedLanguage || 'detected'}):\n${rawTranscript}\n\n${'='.repeat(50)}\n\nENGLISH TRANSLATION:\n${translatedTranscript}` : transcriptText}
+`;
+      attachments.push({
+        filename: `Transcript_${dateStr}.txt`,
+        content: Buffer.from(transcriptContent).toString('base64')
+      });
+      console.log('[DD] Transcript file attached');
+    }
+
+    // 6c: Audio recording (if from real-time session)
+    if (sessionId && activeSessions.has(sessionId)) {
+      const session = activeSessions.get(sessionId);
+      if (session.audioChunks && session.audioChunks.length > 0) {
+        console.log('[DD] Attaching audio recording from session...');
+        try {
+          const audioBuffer = Buffer.concat(session.audioChunks);
+          attachments.push({
+            filename: `Recording_${dateStr}.webm`,
+            content: audioBuffer.toString('base64')
+          });
+          console.log(`[DD] Audio attached: ${audioBuffer.length} bytes`);
+        } catch (audioError) {
+          console.error('[DD] Audio attachment failed:', audioError.message);
+        }
+      }
+    }
+
     // Step 7: Send email
-    await sendEmail(email, emailSubject, emailHtml, attachments);
+    await sendEmail(email, emailSubject, emailHtml, attachments.length > 0 ? attachments : null);
     console.log(`[DD] ${docTitle} sent successfully to ${email}`);
 
   } catch (error) {

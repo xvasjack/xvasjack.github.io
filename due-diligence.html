@@ -78,30 +78,30 @@
     /* Record Mode - Split Layout */
     .dd-record-layout {
       display: grid;
-      grid-template-columns: 350px 1fr;
-      gap: 20px;
-      min-height: 400px;
+      grid-template-columns: 240px 1fr;
+      gap: 16px;
+      min-height: 320px;
     }
-    @media (max-width: 900px) {
+    @media (max-width: 800px) {
       .dd-record-layout { grid-template-columns: 1fr; }
     }
 
-    /* Recording Controls */
+    /* Recording Controls - Compact */
     .dd-record-controls {
       background: var(--bg-surface);
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-md);
-      padding: 24px;
+      padding: 16px;
       display: flex;
       flex-direction: column;
       align-items: center;
-      gap: 20px;
+      gap: 12px;
     }
     .dd-record-btn {
-      width: 100px;
-      height: 100px;
+      width: 64px;
+      height: 64px;
       border-radius: 50%;
-      border: 4px solid var(--error);
+      border: 3px solid var(--error);
       background: white;
       cursor: pointer;
       display: flex;
@@ -115,21 +115,21 @@
       background: var(--error);
       border-color: var(--error);
     }
-    .dd-record-btn svg { width: 40px; height: 40px; color: var(--error); }
+    .dd-record-btn svg { width: 28px; height: 28px; color: var(--error); }
     .dd-record-btn.recording svg { color: white; }
     @keyframes pulse-record {
       0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-      50% { box-shadow: 0 0 0 20px rgba(239, 68, 68, 0); }
+      50% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
     }
     .dd-record-timer {
       font-family: monospace;
-      font-size: 32px;
+      font-size: 20px;
       font-weight: 700;
       color: var(--text-main);
     }
     .dd-record-timer.recording { color: var(--error); }
     .dd-record-status {
-      font-size: 14px;
+      font-size: 12px;
       color: var(--text-muted);
       text-align: center;
     }
@@ -138,16 +138,16 @@
     .dd-lang-select {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 4px;
       justify-content: center;
     }
     .dd-lang-btn {
-      padding: 6px 12px;
+      padding: 4px 8px;
       border: 1px solid var(--border-medium);
       border-radius: var(--radius-sm);
       background: var(--bg-body);
       cursor: pointer;
-      font-size: 12px;
+      font-size: 11px;
       transition: all 0.15s;
     }
     .dd-lang-btn:hover { border-color: var(--accent); }
@@ -157,11 +157,11 @@
       color: white;
     }
 
-    /* Transcript Panels */
+    /* Transcript Panels - Wider */
     .dd-transcript-panels {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 10px;
     }
     .dd-transcript-panel {
       flex: 1;
@@ -193,11 +193,11 @@
     }
     .dd-panel-content {
       flex: 1;
-      padding: 14px;
-      font-size: 14px;
-      line-height: 1.6;
+      padding: 12px;
+      font-size: 13px;
+      line-height: 1.5;
       overflow-y: auto;
-      max-height: 250px;
+      max-height: 300px;
       color: var(--text-main);
     }
     .dd-panel-content.empty {
@@ -207,6 +207,32 @@
       align-items: center;
       justify-content: center;
     }
+
+    /* Recovery Banner */
+    .dd-recovery-banner {
+      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+      border: 1px solid #f59e0b;
+      border-radius: var(--radius-md);
+      padding: 12px 16px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .dd-recovery-banner p { margin: 0; font-size: 13px; color: #92400e; }
+    .dd-recovery-banner strong { color: #78350f; }
+    .dd-recovery-actions { display: flex; gap: 8px; }
+    .dd-recovery-btn {
+      padding: 6px 12px;
+      border: none;
+      border-radius: var(--radius-sm);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .dd-recovery-btn.restore { background: #f59e0b; color: white; }
+    .dd-recovery-btn.dismiss { background: white; color: #92400e; border: 1px solid #f59e0b; }
     .dd-panel-content .interim { color: var(--text-muted); }
     .dd-transcript-panel.translation { border-left: 3px solid var(--success); }
     .dd-transcript-panel.translation .dd-panel-header { color: var(--success); }
@@ -316,6 +342,14 @@
 
       <!-- Record Mode -->
       <div class="dd-mode" id="recordMode">
+        <!-- Recovery Banner (hidden by default) -->
+        <div class="dd-recovery-banner" id="recoveryBanner" style="display: none;">
+          <p><strong>Unsaved recording found!</strong> Your previous session was interrupted.</p>
+          <div class="dd-recovery-actions">
+            <button class="dd-recovery-btn restore" onclick="restoreSession()">Restore</button>
+            <button class="dd-recovery-btn dismiss" onclick="dismissRecovery()">Dismiss</button>
+          </div>
+        </div>
         <div class="dd-record-layout">
           <!-- Left: Recording Controls -->
           <div class="dd-record-controls">
@@ -426,6 +460,77 @@
     let finalTranscript = '';
     let finalTranslation = '';
     let currentLanguage = 'en';
+    let autoSaveInterval = null;
+
+    // ============ AUTO-SAVE & RECOVERY ============
+    const STORAGE_KEY = 'dd_recording_backup';
+
+    function saveToLocalStorage() {
+      if (!finalTranscript && !finalTranslation) return;
+      const backup = {
+        transcript: finalTranscript,
+        translation: finalTranslation,
+        language: currentLanguage,
+        timestamp: Date.now(),
+        duration: recordingStartTime ? Math.floor((Date.now() - recordingStartTime) / 1000) : 0
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(backup));
+      console.log('[AutoSave] Backup saved');
+    }
+
+    function checkForRecovery() {
+      const backup = localStorage.getItem(STORAGE_KEY);
+      if (backup) {
+        try {
+          const data = JSON.parse(backup);
+          // Only show recovery if backup is less than 24 hours old
+          if (Date.now() - data.timestamp < 24 * 60 * 60 * 1000 && data.transcript) {
+            document.getElementById('recoveryBanner').style.display = 'flex';
+            return data;
+          }
+        } catch (e) { console.error('Recovery parse error:', e); }
+      }
+      return null;
+    }
+
+    window.restoreSession = function() {
+      const backup = localStorage.getItem(STORAGE_KEY);
+      if (backup) {
+        try {
+          const data = JSON.parse(backup);
+          finalTranscript = data.transcript || '';
+          finalTranslation = data.translation || '';
+          currentLanguage = data.language || 'en';
+
+          transcriptContent.innerHTML = finalTranscript;
+          transcriptContent.classList.remove('empty');
+          detectedLang.textContent = currentLanguage.toUpperCase();
+
+          if (finalTranslation) {
+            translationContent.textContent = finalTranslation;
+            translationPanel.style.display = 'flex';
+          }
+
+          recordSubmitBtn.disabled = false;
+          recordStatus.textContent = `Restored ${Math.floor(data.duration / 60)}m ${data.duration % 60}s of transcript`;
+
+          // Switch to record tab
+          tabs.forEach(t => t.classList.remove('active'));
+          modes.forEach(m => m.classList.remove('active'));
+          document.querySelector('[data-mode="record"]').classList.add('active');
+          document.getElementById('recordMode').classList.add('active');
+        } catch (e) { console.error('Restore error:', e); }
+      }
+      document.getElementById('recoveryBanner').style.display = 'none';
+    };
+
+    window.dismissRecovery = function() {
+      localStorage.removeItem(STORAGE_KEY);
+      document.getElementById('recoveryBanner').style.display = 'none';
+    };
+
+    // Check for recovery on page load
+    checkForRecovery();
 
     // Tab switching
     tabs.forEach(tab => {
@@ -669,15 +774,20 @@
         recordingStartTime = Date.now();
         timerInterval = setInterval(updateTimer, 1000);
 
-        // Clear previous transcript
+        // Start auto-save every 10 seconds
+        autoSaveInterval = setInterval(saveToLocalStorage, 10000);
+
+        // Clear previous transcript and backup
         finalTranscript = '';
         finalTranslation = '';
+        localStorage.removeItem(STORAGE_KEY);
         transcriptContent.innerHTML = '';
         transcriptContent.classList.add('empty');
         transcriptContent.textContent = 'Listening...';
         translationContent.textContent = '';
         translationPanel.style.display = 'none';
         detectedLang.textContent = '--';
+        document.getElementById('recoveryBanner').style.display = 'none';
 
       } catch (err) {
         console.error('Recording error:', err);
@@ -688,8 +798,12 @@
     function stopRecording() {
       isRecording = false;
 
-      // Stop timer
+      // Stop timer and auto-save
       clearInterval(timerInterval);
+      clearInterval(autoSaveInterval);
+
+      // Final save to localStorage (in case user doesn't submit immediately)
+      saveToLocalStorage();
 
       // Update UI
       recordBtn.classList.remove('recording');
@@ -766,6 +880,9 @@
         if (!response.ok) throw new Error('Request failed');
 
         showSuccess(`DD Report & Transcript will be emailed to ${email} within 10-15 minutes.`);
+
+        // Clear backup since successfully submitted
+        localStorage.removeItem(STORAGE_KEY);
 
         // Reset
         finalTranscript = '';
