@@ -5033,12 +5033,19 @@ OUTPUT JSON with these fields:
   - "Batam, Riau Islands, Indonesia"
   EXCEPTION: For Singapore, just use "Singapore" (single location) or include the area like "Jurong, Singapore"
 
-  For multiple locations, use point form with type prefix:
-  - "HQ: Puchong, Selangor, Malaysia"
-  - "Factory: Batam, Riau Islands, Indonesia"
-  - "Branch: Ho Chi Minh City, Vietnam"
+  For multiple locations, group by type with sub-bullet points:
+  Example format:
+  "- HQ: Puchong, Selangor, Malaysia
+  - Factories:
+    - Batam, Riau Islands, Indonesia
+    - Rayong, Thailand
+  - Branches:
+    - Ho Chi Minh City, Vietnam
+    - Jakarta, Indonesia
+    - Manila, Philippines"
 
-  Types: HQ, warehouse, factory, branch, office. No postcodes or full addresses.
+  IMPORTANT: When multiple locations of same type (e.g., 3 branches), group under one header with sub-bullets. Don't repeat "Branch 1:", "Branch 2:" etc.
+  Types: HQ, Warehouses, Factories, Branches, Offices. No postcodes or full addresses.
 
 RULES:
 - Write ALL text using regular English alphabet only (no diacritics/accents)
