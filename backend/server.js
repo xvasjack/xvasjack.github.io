@@ -949,14 +949,12 @@ VALIDATION RULES:
 
 3. EXCLUSION CHECK:
 ${exclusionRules}
-- IMPORTANT for "large companies": Only reject if the company itself is a GLOBAL GIANT (like 3M, BASF)
-- Local subsidiaries of large companies in the target country ARE VALID TARGETS
-- Example: "DIC Indonesia" is VALID even though DIC is large globally
+- For "large companies" exclusion: REJECT both large multinationals AND their subsidiaries
+- Example: "DIC Indonesia", "Toyo Ink Philippines", "Sun Chemical" → REJECT (subsidiaries of large corporations)
+- Only accept truly independent SMEs and local companies
 
 4. SPAM CHECK:
 - Only reject obvious directories, marketplaces, domain-for-sale sites
-
-WHEN IN DOUBT → ACCEPT (better to include than miss a potential target)
 
 OUTPUT: Return JSON only: {"valid": true/false, "reason": "one sentence"}`
         },
