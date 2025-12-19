@@ -5191,7 +5191,6 @@ GEOGRAPHIC REACH:
 
 QUALITY & COMPLIANCE:
 - Certifications (ISO, HACCP, GMP, FDA, CE, halal, etc.)
-- Awards and recognitions
 - Patents or proprietary technology
 
 OUTPUT JSON:
@@ -5225,6 +5224,7 @@ RULES:
 - Labels should be 1-3 words
 - Be specific with numbers when available
 - Include shareholding structure if mentioned
+- DO NOT include: years of experience, awards, recognitions (not useful for M&A)
 - NEVER make up data - only include what's explicitly stated
 - Return ONLY valid JSON`
         },
