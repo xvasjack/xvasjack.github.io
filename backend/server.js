@@ -4910,7 +4910,7 @@ async function generatePPTX(companies) {
         footnoteLines.push(shortformNote);
       }
 
-      // Line 2: Exchange rate (reuse countryCode from flag section)
+      // Line 2: Exchange rate - always add for countries with pre-set rates (especially SEA)
       const exchangeRate = countryCode ? EXCHANGE_RATE_MAP[countryCode] : null;
       if (exchangeRate) {
         footnoteLines.push(exchangeRate);
@@ -5188,14 +5188,14 @@ OUTPUT JSON:
 }
 
 SEGMENTATION REQUIREMENT:
-For metrics with MANY items (e.g., Customers, Suppliers), segment them by category:
+For metrics with MANY items (e.g., Customers, Suppliers), segment them by category using POINT FORM:
 Example for Customers:
-{"label": "Customers", "value": "Residential: Customer1, Customer2, Customer3\\nCommercial: Customer4, Customer5\\nIndustrial: Customer6, Customer7"}
+{"label": "Customers", "value": "- Residential: Customer1, Customer2, Customer3\\n- Commercial: Customer4, Customer5\\n- Industrial: Customer6, Customer7"}
 
 Example for Suppliers:
-{"label": "Suppliers", "value": "Raw Materials: Supplier1, Supplier2\\nPackaging: Supplier3, Supplier4\\nEquipment: Supplier5"}
+{"label": "Suppliers", "value": "- Raw Materials: Supplier1, Supplier2\\n- Packaging: Supplier3, Supplier4\\n- Equipment: Supplier5"}
 
-This helps organize large lists into meaningful segments.
+IMPORTANT: Always use "- " prefix for each segment line to create point form for easier reading.
 
 RULES:
 - Write ALL text using regular English alphabet only (no diacritics/accents)
