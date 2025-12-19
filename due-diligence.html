@@ -369,6 +369,10 @@
 
             <div class="dd-record-timer" id="recordTimer">00:00</div>
             <div class="dd-record-status" id="recordStatus">Click to start recording</div>
+            <button type="button" class="dd-download-btn" id="downloadRecordingBtn" style="display: none; padding: 6px 12px; font-size: 11px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 6px; color: var(--text-secondary); cursor: pointer; margin-top: 4px;">
+              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 4px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              Download Recording
+            </button>
 
             <div style="width: 100%; margin-top: auto;">
               <div class="form-group" style="margin: 0;">
@@ -437,6 +441,7 @@
     const recordIcon = document.getElementById('recordIcon');
     const recordTimer = document.getElementById('recordTimer');
     const recordStatus = document.getElementById('recordStatus');
+    const downloadRecordingBtn = document.getElementById('downloadRecordingBtn');
     const recordSubmitBtn = document.getElementById('recordSubmitBtn');
     const transcriptContent = document.getElementById('transcriptContent');
     const translationContent = document.getElementById('translationContent');
@@ -461,6 +466,7 @@
     let finalTranslation = '';
     let currentLanguage = 'en';
     let autoSaveInterval = null;
+    let currentR2Key = null;
 
     // ============ AUTO-SAVE & RECOVERY ============
     const STORAGE_KEY = 'dd_recording_backup';
@@ -734,6 +740,12 @@
             finalTranslation = data.fullTranslation;
             translationContent.textContent = finalTranslation;
             translationContent.scrollTop = translationContent.scrollHeight;
+          } else if (data.type === 'complete') {
+            // Recording complete - store R2 key for download
+            if (data.r2Key) {
+              currentR2Key = data.r2Key;
+              downloadRecordingBtn.style.display = 'inline-block';
+            }
           } else if (data.type === 'error') {
             showError(data.message);
           }
@@ -780,6 +792,7 @@
         // Clear previous transcript and backup
         finalTranscript = '';
         finalTranslation = '';
+        currentR2Key = null;
         localStorage.removeItem(STORAGE_KEY);
         transcriptContent.innerHTML = '';
         transcriptContent.classList.add('empty');
@@ -787,6 +800,7 @@
         translationContent.textContent = '';
         translationPanel.style.display = 'none';
         detectedLang.textContent = '--';
+        downloadRecordingBtn.style.display = 'none';
         document.getElementById('recoveryBanner').style.display = 'none';
 
       } catch (err) {
@@ -842,6 +856,18 @@
       recordTimer.textContent = `${mins}:${secs}`;
     }
 
+    // Download recording from R2
+    downloadRecordingBtn.addEventListener('click', () => {
+      if (!currentR2Key) {
+        showError('No recording available');
+        return;
+      }
+
+      // Open download in new tab
+      const downloadUrl = `${API_BASE}/api/recording/${encodeURIComponent(currentR2Key)}`;
+      window.open(downloadUrl, '_blank');
+    });
+
     recordSubmitBtn.addEventListener('click', async () => {
       const email = document.getElementById('recordEmail').value.trim();
       const instructions = document.getElementById('recordInstructions').value.trim();
@@ -887,11 +913,13 @@
         // Reset
         finalTranscript = '';
         finalTranslation = '';
+        currentR2Key = null;
         transcriptContent.innerHTML = '';
         transcriptContent.classList.add('empty');
         transcriptContent.textContent = 'Start recording to see live transcription...';
         translationContent.textContent = '';
         translationPanel.style.display = 'none';
+        downloadRecordingBtn.style.display = 'none';
         recordTimer.textContent = '00:00';
         document.getElementById('recordInstructions').value = '';
       } catch (err) {

@@ -11,6 +11,7 @@ const XLSX = require('xlsx');
 const multer = require('multer');
 const { createClient } = require('@deepgram/sdk');
 const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } = require('docx');
+const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
 const app = express();
 app.use(cors());
@@ -44,6 +45,90 @@ const openai = new OpenAI({
 
 // Initialize Deepgram
 const deepgram = process.env.DEEPGRAM_API_KEY ? createClient(process.env.DEEPGRAM_API_KEY) : null;
+
+// Initialize Cloudflare R2 (S3-compatible)
+const r2Client = (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY)
+  ? new S3Client({
+      region: 'auto',
+      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+      credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
+      }
+    })
+  : null;
+
+const R2_BUCKET = process.env.R2_BUCKET_NAME || 'dd-recordings';
+
+if (!r2Client) {
+  console.warn('R2 not configured - recordings will only be stored in memory. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME');
+}
+
+// R2 Upload function
+async function uploadToR2(key, data, contentType = 'audio/webm') {
+  if (!r2Client) {
+    console.warn('[R2] R2 not configured, skipping upload');
+    return null;
+  }
+
+  try {
+    const command = new PutObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: key,
+      Body: data,
+      ContentType: contentType
+    });
+    await r2Client.send(command);
+    console.log(`[R2] Uploaded ${key} (${data.length} bytes)`);
+    return key;
+  } catch (error) {
+    console.error('[R2] Upload error:', error.message);
+    return null;
+  }
+}
+
+// R2 Download function
+async function downloadFromR2(key) {
+  if (!r2Client) {
+    return null;
+  }
+
+  try {
+    const command = new GetObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: key
+    });
+    const response = await r2Client.send(command);
+    const chunks = [];
+    for await (const chunk of response.Body) {
+      chunks.push(chunk);
+    }
+    return Buffer.concat(chunks);
+  } catch (error) {
+    console.error('[R2] Download error:', error.message);
+    return null;
+  }
+}
+
+// R2 Delete function (cleanup old recordings)
+async function deleteFromR2(key) {
+  if (!r2Client) {
+    return false;
+  }
+
+  try {
+    const command = new DeleteObjectCommand({
+      Bucket: R2_BUCKET,
+      Key: key
+    });
+    await r2Client.send(command);
+    console.log(`[R2] Deleted ${key}`);
+    return true;
+  } catch (error) {
+    console.error('[R2] Delete error:', error.message);
+    return false;
+  }
+}
 
 // Send email using SendGrid API
 async function sendEmail(to, subject, html, attachments = null) {
@@ -7074,15 +7159,35 @@ wss.on('connection', (ws, req) => {
             deepgramConnection = null;
           }
 
-          // Send final results
+          // Get session data
           const session = activeSessions.get(sessionId);
+          const duration = Math.round((Date.now() - session.startTime.getTime()) / 1000);
+
+          // Upload audio to R2 if available
+          let r2Key = null;
+          if (session.audioChunks && session.audioChunks.length > 0) {
+            const audioBuffer = Buffer.concat(session.audioChunks);
+            const dateStr = new Date().toISOString().split('T')[0];
+            r2Key = `recordings/${dateStr}/${sessionId}.pcm`;
+
+            // Upload async - don't block response
+            uploadToR2(r2Key, audioBuffer, 'audio/pcm').then(key => {
+              if (key) {
+                session.r2Key = key;
+                console.log(`[WS] Recording saved to R2: ${key}`);
+              }
+            });
+          }
+
+          // Send final results
           ws.send(JSON.stringify({
             type: 'complete',
             sessionId,
             transcript: fullTranscript.trim(),
             translatedTranscript: translatedTranscript.trim(),
             language: detectedLanguage,
-            duration: Math.round((Date.now() - session.startTime.getTime()) / 1000)
+            duration,
+            r2Key: r2Key // Include R2 key so frontend can download later
           }));
         }
 
@@ -7148,6 +7253,56 @@ app.get('/api/transcription-session/:sessionId/audio', (req, res) => {
     mimeType: 'audio/webm',
     size: audioBuffer.length
   });
+});
+
+// Download recording from R2
+app.get('/api/recording/:r2Key(*)', async (req, res) => {
+  const r2Key = req.params.r2Key;
+
+  if (!r2Key) {
+    return res.status(400).json({ error: 'R2 key required' });
+  }
+
+  try {
+    const audioBuffer = await downloadFromR2(r2Key);
+
+    if (!audioBuffer) {
+      return res.status(404).json({ error: 'Recording not found in R2' });
+    }
+
+    // Set headers for file download
+    const filename = r2Key.split('/').pop() || 'recording.pcm';
+    res.setHeader('Content-Type', 'audio/pcm');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', audioBuffer.length);
+    res.send(audioBuffer);
+
+  } catch (error) {
+    console.error('[R2] Download endpoint error:', error);
+    res.status(500).json({ error: 'Failed to download recording' });
+  }
+});
+
+// List recordings for a session (checks both memory and R2)
+app.get('/api/recording-status/:sessionId', async (req, res) => {
+  const sessionId = req.params.sessionId;
+  const session = activeSessions.get(sessionId);
+
+  const result = {
+    inMemory: false,
+    inR2: false,
+    r2Key: null,
+    memorySize: 0
+  };
+
+  if (session) {
+    result.inMemory = session.audioChunks && session.audioChunks.length > 0;
+    result.memorySize = result.inMemory ? Buffer.concat(session.audioChunks).length : 0;
+    result.r2Key = session.r2Key || null;
+    result.inR2 = !!session.r2Key;
+  }
+
+  res.json(result);
 });
 
 server.listen(PORT, () => {
