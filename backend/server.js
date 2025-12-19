@@ -1697,33 +1697,38 @@ DO NOT include companies from this list: ${existingList}`;
   const prompts = {
     1: `${baseInstruction}
 
-ROUND 1 - COMPETITOR SEARCH:
-For each of these companies: ${shortlistSample}
-Find their direct competitors in ${country}.
-Also find companies that do similar business but with slightly different focus.`,
+ROUND 1 - RELATED TERMINOLOGY SEARCH:
+The user searched for "${business}" but companies may use different terms.
+Search for companies using ALL related terminology:
+- If searching for "ink": also search coating, water-based ink, solvent ink, UV ink, flexo ink, gravure ink, printing ink, packaging ink, OPV, overprint varnish
+- If searching for "manufacturer": also search producer, maker, factory, plant, works
+- Search for companies that might describe themselves differently but do the same business
+Find local/domestic companies that may not appear in typical searches.`,
 
     2: `${baseInstruction}
 
-ROUND 2 - CITY-BY-CITY DEEP DIVE:
-Search for ${business} companies in each of these cities/regions:
-${cities ? cities.join(', ') : `Major cities and industrial areas in ${country}`}
-Include companies in industrial estates, free trade zones, and business parks.`,
+ROUND 2 - DOMESTIC & LOCAL COMPANIES:
+Focus ONLY on locally-owned, independent companies in ${country}.
+Ignore subsidiaries of multinational corporations.
+Look for:
+- Family-owned businesses
+- Local SMEs
+- Domestic manufacturers
+- Companies founded locally (not foreign subsidiaries)
+These are often harder to find but are the real targets.`,
 
     3: `${baseInstruction}
 
-ROUND 3 - INDUSTRIAL PARKS & TRADE ZONES:
-Find ${business} companies located in:
-- Industrial parks and estates
-- Free trade zones / Special economic zones
-- Manufacturing hubs
-- Technology parks
-in ${country}. Search for tenant lists and company directories of these zones.`,
+ROUND 3 - CITY-BY-CITY DEEP DIVE:
+Search for ${business} companies in each of these cities/regions:
+${cities ? cities.join(', ') : `Major cities and industrial areas in ${country}`}
+Include companies in industrial estates, free trade zones, and business parks.`,
 
     4: `${baseInstruction}
 
 ROUND 4 - TRADE ASSOCIATIONS & MEMBER DIRECTORIES:
 Find ${business} companies that are members of:
-- Industry associations
+- Industry associations (printing, packaging, ink, coating associations)
 - Trade organizations
 - Chamber of commerce
 - Business federations
@@ -1740,7 +1745,7 @@ Look for: ${localLang.examples.join(', ')} related businesses.` : `${baseInstruc
 ROUND 5 - ALTERNATIVE NAMING:
 Search for ${business} companies using:
 - Local language business names
-- Alternative industry terminology
+- Alternative industry terminology (coating, printing, packaging)
 - Regional naming conventions
 in ${country}.`,
 
@@ -1751,47 +1756,50 @@ For companies like: ${shortlistSample}
 Find their:
 - Suppliers (who supplies to them)
 - Customers (who buys from them)
-- Distributors and agents
+- Raw material suppliers
 that are also ${business} companies in ${country}.`,
 
     7: `${baseInstruction}
 
-ROUND 7 - GOVERNMENT & BUSINESS REGISTRIES:
-Search for ${business} companies registered in ${country} through:
-- Company registration databases
-- Business license directories
-- Government contractor lists
-- Import/export license holders
-${suffixes.length > 0 ? `Look for companies with suffixes: ${suffixes.join(', ')}` : ''}`,
+ROUND 7 - INDUSTRY PUBLICATIONS & ARTICLES:
+Search for ${business} companies mentioned in:
+- Industry magazines (Ink World, Flexo, Packaging magazines)
+- News articles about the ${business} industry in ${country}
+- Trade publication interviews
+- Company profiles in business journals`,
 
     8: `${baseInstruction}
 
 ROUND 8 - TRADE SHOWS & EXHIBITIONS:
 Find ${business} companies that exhibited at:
 - Industry trade shows (past 3 years)
-- B2B exhibitions
-- Trade fairs
+- Packaging exhibitions
+- Printing technology fairs
 in ${country} or international shows with ${country} exhibitors.`,
 
     9: `${baseInstruction}
 
-ROUND 9 - PROFESSIONAL NETWORKS & JOB POSTINGS:
-Find ${business} companies in ${country} through:
-- LinkedIn company profiles
-- Job posting sites (companies hiring for ${business} roles)
-- Professional directories
-- Industry expert networks`,
+ROUND 9 - WHAT AM I MISSING?
+I already found these companies: ${shortlistSample}
+Think step by step: What ${business} companies in ${country} might I have MISSED?
+- Companies with unusual names
+- Companies that don't advertise much
+- Companies in smaller cities
+- Companies that use different terminology
+- Older established companies
+- Newer startups
+Find companies that wouldn't appear in a typical Google search.`,
 
     10: `${baseInstruction}
 
-ROUND 10 - NEWS & MEDIA MENTIONS:
-Find ${business} companies in ${country} mentioned in:
-- News articles (past 2 years)
-- Industry publications
-- Press releases
-- Business news
-${domain ? `Also search for companies with ${domain} domains.` : ''}
-Look for any company we might have missed.`
+ROUND 10 - FINAL DISCOVERY:
+This is the last round. Search EXHAUSTIVELY for any ${business} company in ${country} not yet found.
+- Search in local business directories
+- Look for companies in industrial zones
+- Check import/export records
+- Find any company we might have missed
+The goal is to find EVERY company, no matter how small or obscure.
+${domain ? `Also search for companies with ${domain} domains.` : ''}`
   };
 
   return prompts[round] || prompts[1];
