@@ -4665,11 +4665,11 @@ async function generatePPTX(companies) {
           }
 
           if (logoBase64) {
-            // Use sizing: 'contain' to maintain aspect ratio and prevent stretching
+            // Use square container to prevent stretching (logos are typically square)
             slide.addImage({
               data: `data:image/png;base64,${logoBase64}`,
-              x: 12.0, y: 0.15, w: 1.0, h: 0.65,
-              sizing: { type: 'contain', w: 1.0, h: 0.65 }
+              x: 12.1, y: 0.12, w: 0.7, h: 0.7,
+              sizing: { type: 'contain', w: 0.7, h: 0.7 }
             });
           } else {
             console.log(`  Logo not available for ${domain} from any source`);
@@ -5038,7 +5038,8 @@ OUTPUT JSON with these fields:
   Types: HQ, warehouse, factory, branch, office. No postcodes or full addresses.
 
 RULES:
-- Write proper English (e.g., "Việt Nam" → "Vietnam")
+- Write ALL text using regular English alphabet only (no diacritics/accents)
+- Convert foreign characters: "Việt Nam" → "Vietnam", "São Paulo" → "Sao Paulo", "北京" → "Beijing"
 - Leave fields empty if information not found
 - Return ONLY valid JSON`
         },
@@ -5101,9 +5102,11 @@ OUTPUT JSON:
 4. title: Company name WITHOUT suffix (remove Pte Ltd, Sdn Bhd, Co Ltd, JSC, PT, Inc, etc.)
 
 RULES:
+- Write ALL text using regular English alphabet only (no diacritics/accents)
+- Convert foreign characters: "Việt Nam" → "Vietnam", "São Paulo" → "Sao Paulo", "北京" → "Beijing"
 - All bullet points must use "- " (dash followed by space)
 - Each bullet point on new line using "\\n"
-- Be thorough and extract ALL business activities mentioned
+- Keep it to the MOST KEY items only (3 bullet points max)
 - Return ONLY valid JSON`
         },
         {
@@ -5192,6 +5195,8 @@ Example for Suppliers:
 This helps organize large lists into meaningful segments.
 
 RULES:
+- Write ALL text using regular English alphabet only (no diacritics/accents)
+- Convert foreign characters: "Việt Nam" → "Vietnam", "São Paulo" → "Sao Paulo", "北京" → "Beijing"
 - Extract as many metrics as found (8-15 ideally)
 - For metrics with multiple items, use "- " bullet points separated by "\\n"
 - For long lists of customers/suppliers, SEGMENT by category as shown above
@@ -5251,6 +5256,8 @@ OUTPUT JSON:
 }
 
 RULES:
+- Write ALL text using regular English alphabet only (no diacritics/accents)
+- Convert foreign characters: "Việt Nam" → "Vietnam", "São Paulo" → "Sao Paulo", "北京" → "Beijing"
 - Choose the breakdown category that best showcases the company's value proposition
 - Use 3-6 items maximum
 - Labels should be segment/category names (1-3 words)
