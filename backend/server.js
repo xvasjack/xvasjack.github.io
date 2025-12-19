@@ -6890,11 +6890,34 @@ app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'Find Target v40 - DD Report with Real-Time Transcription' });
 });
 
+// Check if real-time transcription is available
+app.get('/api/transcription-status', (req, res) => {
+  res.json({
+    available: !!process.env.DEEPGRAM_API_KEY,
+    message: process.env.DEEPGRAM_API_KEY ? 'Ready for real-time transcription' : 'DEEPGRAM_API_KEY not configured'
+  });
+});
+
 // ============ WEBSOCKET SERVER FOR REAL-TIME TRANSCRIPTION ============
 
 const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server, path: '/ws/transcribe' });
+
+// Use noServer mode for better Railway compatibility
+const wss = new WebSocket.Server({ noServer: true });
+
+// Handle WebSocket upgrade manually
+server.on('upgrade', (request, socket, head) => {
+  const pathname = new URL(request.url, `http://${request.headers.host}`).pathname;
+
+  if (pathname === '/ws/transcribe') {
+    wss.handleUpgrade(request, socket, head, (ws) => {
+      wss.emit('connection', ws, request);
+    });
+  } else {
+    socket.destroy();
+  }
+});
 
 // Store active sessions for recording storage
 const activeSessions = new Map();
