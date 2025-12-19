@@ -5246,14 +5246,21 @@ async function extractProductsBreakdown(scrapedContent, previousData) {
           role: 'system',
           content: `You are an M&A analyst extracting a breakdown of important information for the right-side table on a company profile slide.
 
-DETERMINE THE BEST CATEGORY for this company's breakdown. Choose ONE of these:
+IMPORTANT: Choose the category that has THE MOST CONTENT in the website. Look at what the website emphasizes most:
+- If website lists MANY customers/clients → use "Customers"
+- If website shows MANY products with details → use "Products and Applications"
+- If website highlights MANY services → use "Services"
+- If website shows diverse business units → use "Business Segments"
 
-1. "Products and Applications" - For manufacturers/producers (list product categories and their applications)
-2. "Products and Services" - For companies offering both products and services
-3. "Services" - For pure service companies (consulting, logistics, etc.)
-4. "Customers" - When customer segmentation is the key differentiator
-5. "Product Categories" - For distributors/retailers with product portfolio
-6. "Business Segments" - For diversified companies with multiple business lines
+Pick the category where you can extract the MOST detailed information.
+
+CATEGORY OPTIONS:
+1. "Products and Applications" - When website shows many products with their uses
+2. "Products and Services" - When website shows both products and services
+3. "Services" - When website emphasizes service offerings
+4. "Customers" - When website lists many clients or customer segments
+5. "Product Categories" - When website shows product catalog/portfolio
+6. "Business Segments" - When website shows multiple distinct business units
 
 OUTPUT JSON:
 {
@@ -5268,7 +5275,7 @@ OUTPUT JSON:
 RULES:
 - Write ALL text using regular English alphabet only (no diacritics/accents)
 - Convert foreign characters: "Việt Nam" → "Vietnam", "São Paulo" → "Sao Paulo", "北京" → "Beijing"
-- Choose the breakdown category that best showcases the company's value proposition
+- PRIORITIZE the category with MOST available content from the website
 - Use 3-6 items maximum
 - Labels should be segment/category names (1-3 words)
 - Values should be comma-separated examples (3-5 items each)
