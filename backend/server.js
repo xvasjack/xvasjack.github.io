@@ -4495,10 +4495,13 @@ const COMMON_SHORTFORMS = [
   'M', 'B', 'K',           // Million, Billion, Thousand
   'HQ',                    // Headquarters
   'CEO', 'CFO', 'COO',     // C-suite titles
-  'USD', 'EUR', 'GBP',     // Major currencies
+  // All currency codes - well known
+  'USD', 'EUR', 'GBP', 'JPY', 'CNY', 'KRW', 'TWD',
+  'IDR', 'SGD', 'MYR', 'THB', 'PHP', 'VND', 'INR', 'HKD', 'AUD',
   'ISO',                   // Well-known standard
   'FY',                    // Fiscal Year
-  'YoY', 'QoQ'             // Year over Year, Quarter over Quarter
+  'YoY', 'QoQ',            // Year over Year, Quarter over Quarter
+  'B2B', 'B2C'             // Business models
 ];
 
 // Detect shortforms in text and return formatted note (only uncommon ones)
@@ -4665,11 +4668,11 @@ async function generatePPTX(companies) {
           }
 
           if (logoBase64) {
-            // Use sizing: 'contain' to maintain aspect ratio and prevent stretching
+            // Use square container to prevent stretching (logos are typically square)
             slide.addImage({
               data: `data:image/png;base64,${logoBase64}`,
-              x: 12.0, y: 0.15, w: 1.0, h: 0.65,
-              sizing: { type: 'contain', w: 1.0, h: 0.65 }
+              x: 12.1, y: 0.12, w: 0.7, h: 0.7,
+              sizing: { type: 'contain', w: 0.7, h: 0.7 }
             });
           } else {
             console.log(`  Logo not available for ${domain} from any source`);
@@ -4765,6 +4768,14 @@ async function generatePPTX(companies) {
       }
 
       // Helper function to format cell text with proper PowerPoint bullets
+      // Using Wingdings character code 006E (hex) = filled square bullet
+      // Indentation: Before text 0.24", Hanging 0.24", Single line spacing
+      const WINGDINGS_BULLET = {
+        type: 'bullet',
+        characterCode: '006E',
+        indent: 0.24  // Hanging indent 0.24"
+      };
+
       const formatCellText = (text) => {
         if (!text || typeof text !== 'string') return text;
 
@@ -4773,12 +4784,16 @@ async function generatePPTX(companies) {
           // Split by newline and filter out empty lines
           const lines = text.split('\n').filter(line => line.trim());
 
-          // Convert to array of text objects with bullet formatting
+          // Convert to array of text objects with Wingdings bullet formatting
           return lines.map((line, index) => {
             const cleanLine = line.replace(/^[■\-•]\s*/, '').trim();
             return {
               text: cleanLine + (index < lines.length - 1 ? '\n' : ''),
-              options: { bullet: true }
+              options: {
+                bullet: WINGDINGS_BULLET,
+                paraSpaceBefore: 0,
+                paraSpaceAfter: 0
+              }
             };
           });
         }
@@ -4907,7 +4922,7 @@ async function generatePPTX(companies) {
         footnoteLines.push(shortformNote);
       }
 
-      // Line 2: Exchange rate (reuse countryCode from flag section)
+      // Line 2: Exchange rate - always add for countries with pre-set rates (especially SEA)
       const exchangeRate = countryCode ? EXCHANGE_RATE_MAP[countryCode] : null;
       if (exchangeRate) {
         footnoteLines.push(exchangeRate);
@@ -5030,15 +5045,23 @@ OUTPUT JSON with these fields:
   - "Batam, Riau Islands, Indonesia"
   EXCEPTION: For Singapore, just use "Singapore" (single location) or include the area like "Jurong, Singapore"
 
-  For multiple locations, use point form with type prefix:
-  - "HQ: Puchong, Selangor, Malaysia"
-  - "Factory: Batam, Riau Islands, Indonesia"
-  - "Branch: Ho Chi Minh City, Vietnam"
+  For multiple locations, group by type with sub-bullet points:
+  Example format:
+  "- HQ: Puchong, Selangor, Malaysia
+  - Factories:
+    - Batam, Riau Islands, Indonesia
+    - Rayong, Thailand
+  - Branches:
+    - Ho Chi Minh City, Vietnam
+    - Jakarta, Indonesia
+    - Manila, Philippines"
 
-  Types: HQ, warehouse, factory, branch, office. No postcodes or full addresses.
+  IMPORTANT: When multiple locations of same type (e.g., 3 branches), group under one header with sub-bullets. Don't repeat "Branch 1:", "Branch 2:" etc.
+  Types: HQ, Warehouses, Factories, Branches, Offices. No postcodes or full addresses.
 
 RULES:
-- Write proper English (e.g., "Việt Nam" → "Vietnam")
+- Write ALL text using regular English alphabet only (no diacritics/accents)
+- Convert foreign characters: "Việt Nam" → "Vietnam", "São Paulo" → "Sao Paulo", "北京" → "Beijing"
 - Leave fields empty if information not found
 - Return ONLY valid JSON`
         },
@@ -5101,9 +5124,11 @@ OUTPUT JSON:
 4. title: Company name WITHOUT suffix (remove Pte Ltd, Sdn Bhd, Co Ltd, JSC, PT, Inc, etc.)
 
 RULES:
+- Write ALL text using regular English alphabet only (no diacritics/accents)
+- Convert foreign characters: "Việt Nam" → "Vietnam", "São Paulo" → "Sao Paulo", "北京" → "Beijing"
 - All bullet points must use "- " (dash followed by space)
 - Each bullet point on new line using "\\n"
-- Be thorough and extract ALL business activities mentioned
+- Keep it to the MOST KEY items only (3 bullet points max)
 - Return ONLY valid JSON`
         },
         {
@@ -5166,7 +5191,6 @@ GEOGRAPHIC REACH:
 
 QUALITY & COMPLIANCE:
 - Certifications (ISO, HACCP, GMP, FDA, CE, halal, etc.)
-- Awards and recognitions
 - Patents or proprietary technology
 
 OUTPUT JSON:
@@ -5182,22 +5206,25 @@ OUTPUT JSON:
 }
 
 SEGMENTATION REQUIREMENT:
-For metrics with MANY items (e.g., Customers, Suppliers), segment them by category:
+For metrics with MANY items (e.g., Customers, Suppliers), segment them by category using POINT FORM:
 Example for Customers:
-{"label": "Customers", "value": "Residential: Customer1, Customer2, Customer3\\nCommercial: Customer4, Customer5\\nIndustrial: Customer6, Customer7"}
+{"label": "Customers", "value": "- Residential: Customer1, Customer2, Customer3\\n- Commercial: Customer4, Customer5\\n- Industrial: Customer6, Customer7"}
 
 Example for Suppliers:
-{"label": "Suppliers", "value": "Raw Materials: Supplier1, Supplier2\\nPackaging: Supplier3, Supplier4\\nEquipment: Supplier5"}
+{"label": "Suppliers", "value": "- Raw Materials: Supplier1, Supplier2\\n- Packaging: Supplier3, Supplier4\\n- Equipment: Supplier5"}
 
-This helps organize large lists into meaningful segments.
+IMPORTANT: Always use "- " prefix for each segment line to create point form for easier reading.
 
 RULES:
+- Write ALL text using regular English alphabet only (no diacritics/accents)
+- Convert foreign characters: "Việt Nam" → "Vietnam", "São Paulo" → "Sao Paulo", "北京" → "Beijing"
 - Extract as many metrics as found (8-15 ideally)
 - For metrics with multiple items, use "- " bullet points separated by "\\n"
 - For long lists of customers/suppliers, SEGMENT by category as shown above
 - Labels should be 1-3 words
 - Be specific with numbers when available
 - Include shareholding structure if mentioned
+- DO NOT include: years of experience, awards, recognitions (not useful for M&A)
 - NEVER make up data - only include what's explicitly stated
 - Return ONLY valid JSON`
         },
@@ -5231,14 +5258,21 @@ async function extractProductsBreakdown(scrapedContent, previousData) {
           role: 'system',
           content: `You are an M&A analyst extracting a breakdown of important information for the right-side table on a company profile slide.
 
-DETERMINE THE BEST CATEGORY for this company's breakdown. Choose ONE of these:
+IMPORTANT: Choose the category that has THE MOST CONTENT in the website. Look at what the website emphasizes most:
+- If website lists MANY customers/clients → use "Customers"
+- If website shows MANY products with details → use "Products and Applications"
+- If website highlights MANY services → use "Services"
+- If website shows diverse business units → use "Business Segments"
 
-1. "Products and Applications" - For manufacturers/producers (list product categories and their applications)
-2. "Products and Services" - For companies offering both products and services
-3. "Services" - For pure service companies (consulting, logistics, etc.)
-4. "Customers" - When customer segmentation is the key differentiator
-5. "Product Categories" - For distributors/retailers with product portfolio
-6. "Business Segments" - For diversified companies with multiple business lines
+Pick the category where you can extract the MOST detailed information.
+
+CATEGORY OPTIONS:
+1. "Products and Applications" - When website shows many products with their uses
+2. "Products and Services" - When website shows both products and services
+3. "Services" - When website emphasizes service offerings
+4. "Customers" - When website lists many clients or customer segments
+5. "Product Categories" - When website shows product catalog/portfolio
+6. "Business Segments" - When website shows multiple distinct business units
 
 OUTPUT JSON:
 {
@@ -5251,7 +5285,9 @@ OUTPUT JSON:
 }
 
 RULES:
-- Choose the breakdown category that best showcases the company's value proposition
+- Write ALL text using regular English alphabet only (no diacritics/accents)
+- Convert foreign characters: "Việt Nam" → "Vietnam", "São Paulo" → "Sao Paulo", "北京" → "Beijing"
+- PRIORITIZE the category with MOST available content from the website
 - Use 3-6 items maximum
 - Labels should be segment/category names (1-3 words)
 - Values should be comma-separated examples (3-5 items each)
