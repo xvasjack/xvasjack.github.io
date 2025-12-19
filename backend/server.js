@@ -1712,6 +1712,41 @@ app.post('/api/find-target-slow', async (req, res) => {
 
 // ============ V4 ULTRA-EXHAUSTIVE ENDPOINT ============
 
+// Ask AI to expand a region into individual countries (no hardcoding)
+async function expandRegionToCountries(region) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `You help identify countries in geographic regions. Return a JSON array of country names only.`
+        },
+        {
+          role: 'user',
+          content: `If "${region}" is a geographic region (like "Southeast Asia", "Europe", "Middle East"), list all the countries in it.
+If "${region}" is already a single country, just return that country.
+Return ONLY a JSON array of country names, nothing else.
+Example: ["Malaysia", "Thailand", "Indonesia"]`
+        }
+      ],
+      response_format: { type: 'json_object' }
+    });
+
+    const result = JSON.parse(response.choices[0].message.content);
+    const countries = result.countries || result;
+
+    if (Array.isArray(countries) && countries.length > 0) {
+      console.log(`  Region "${region}" expanded to: ${countries.join(', ')}`);
+      return countries;
+    }
+    return [region]; // Return original if not a region
+  } catch (e) {
+    console.log(`  Could not expand region, using as-is: ${region}`);
+    return [region];
+  }
+}
+
 // Simple Levenshtein similarity for fuzzy matching
 function levenshteinSimilarity(s1, s2) {
   if (!s1 || !s2) return 0;
@@ -1965,33 +2000,68 @@ app.post('/api/find-target-v4', async (req, res) => {
 
   res.json({
     success: true,
-    message: 'Request received. Exhaustive search running. Results will be emailed in ~25-35 minutes.'
+    message: 'Request received. Exhaustive search running. Results will be emailed in ~30-45 minutes.'
   });
 
   try {
     const totalStart = Date.now();
 
-    // ========== PHASE 1: 3x exhaustiveSearch (SEQUENTIAL like v3 slow) ==========
-    // This uses SerpAPI + multiple AI models = finds diverse companies
+    // ========== PHASE 0: Expand Region to Countries ==========
     console.log('\n' + '='.repeat(50));
-    console.log('PHASE 1: BASE SEARCH (3x exhaustiveSearch - Sequential)');
+    console.log('PHASE 0: REGION EXPANSION');
     console.log('='.repeat(50));
 
-    // Run sequentially to avoid overwhelming the server
-    console.log('\n--- Search 1: Primary ---');
-    const companies1 = await exhaustiveSearch(Business, Country, Exclusion);
-    console.log(`Search 1 (primary): ${companies1.length} companies`);
+    const countries = await expandRegionToCountries(Country);
+    console.log(`Will search ${countries.length} countries: ${countries.join(', ')}`);
 
-    console.log('\n--- Search 2: Supplier/Vendor ---');
-    const companies2 = await exhaustiveSearch(`${Business} supplier vendor distributor`, Country, Exclusion);
-    console.log(`Search 2 (supplier/vendor): ${companies2.length} companies`);
+    // ========== PHASE 1: Country-by-Country Direct Search ==========
+    console.log('\n' + '='.repeat(50));
+    console.log(`PHASE 1: COUNTRY-BY-COUNTRY SEARCH (${countries.length} countries)`);
+    console.log('='.repeat(50));
 
-    console.log('\n--- Search 3: Manufacturer ---');
-    const companies3 = await exhaustiveSearch(`${Business} manufacturer producer factory`, Country, Exclusion);
-    console.log(`Search 3 (manufacturer): ${companies3.length} companies`);
+    let allPhase1Companies = [];
 
-    const phase1Raw = dedupeCompanies([...companies1, ...companies2, ...companies3]);
-    console.log(`\nPhase 1 raw total: ${phase1Raw.length} unique companies`);
+    // For each country, do a direct AI search (like asking ChatGPT)
+    for (const targetCountry of countries) {
+      console.log(`\n--- Searching: ${targetCountry} ---`);
+
+      // Direct prompt - like you'd ask in ChatGPT chat
+      const directPrompt = `List ALL ${Business} companies in ${targetCountry}.
+Include:
+- Large and small companies
+- Local/domestic companies
+- Lesser-known companies
+- Companies that may use different terminology
+Exclude: ${Exclusion}
+Return as: Company Name | Website (must start with http)
+Find as many as possible - be exhaustive.`;
+
+      // Ask all 3 AI models the same direct question
+      const [gptResult, geminiResult, perplexityResult] = await Promise.all([
+        callOpenAISearch(directPrompt),
+        callGemini(directPrompt),
+        callPerplexity(directPrompt)
+      ]);
+
+      // Extract companies
+      const [gptCompanies, geminiCompanies, perplexityCompanies] = await Promise.all([
+        extractCompanies(gptResult, targetCountry),
+        extractCompanies(geminiResult, targetCountry),
+        extractCompanies(perplexityResult, targetCountry)
+      ]);
+
+      console.log(`  GPT: ${gptCompanies.length} | Gemini: ${geminiCompanies.length} | Perplexity: ${perplexityCompanies.length}`);
+      allPhase1Companies = [...allPhase1Companies, ...gptCompanies, ...geminiCompanies, ...perplexityCompanies];
+    }
+
+    // Also run the original exhaustiveSearch for the full region (catches different results)
+    console.log(`\n--- Full Region Search: ${Country} ---`);
+    const regionCompanies = await exhaustiveSearch(Business, Country, Exclusion);
+    console.log(`Region search: ${regionCompanies.length} companies`);
+    allPhase1Companies = [...allPhase1Companies, ...regionCompanies];
+
+    const phase1Raw = dedupeCompanies(allPhase1Companies);
+    console.log(`\nPhase 1 total: ${phase1Raw.length} unique companies`);
 
     // ========== PHASE 1.5: Initial Validation ==========
     console.log('\n' + '='.repeat(50));
@@ -2014,7 +2084,10 @@ app.post('/api/find-target-v4', async (req, res) => {
 
     for (let round = 1; round <= 10; round++) {
       const roundStart = Date.now();
-      const newCompanies = await runExpansionRound(round, Business, Country, allCompanies);
+
+      // Cycle through countries for each round
+      const targetCountry = countries[round % countries.length];
+      const newCompanies = await runExpansionRound(round, Business, targetCountry, allCompanies);
 
       if (newCompanies.length > 0) {
         allCompanies = dedupeCompanies([...allCompanies, ...newCompanies]);
@@ -2022,7 +2095,7 @@ app.post('/api/find-target-v4', async (req, res) => {
       }
 
       const roundTime = ((Date.now() - roundStart) / 1000).toFixed(1);
-      console.log(`  Round ${round}/10: +${newCompanies.length} new (${roundTime}s). Total: ${allCompanies.length}`);
+      console.log(`  Round ${round}/10 [${targetCountry}]: +${newCompanies.length} new (${roundTime}s). Total: ${allCompanies.length}`);
     }
 
     console.log(`\nPhase 2 complete. Found ${totalNewFound} additional companies.`);
