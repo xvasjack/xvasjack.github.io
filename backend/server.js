@@ -4769,7 +4769,12 @@ async function generatePPTX(companies) {
 
       // Helper function to format cell text with proper PowerPoint bullets
       // Using Wingdings character code 006E (hex) = filled square bullet
-      const WINGDINGS_BULLET = { type: 'bullet', characterCode: '006E' };
+      // Indentation: Before text 0.24", Hanging 0.24", Single line spacing
+      const WINGDINGS_BULLET = {
+        type: 'bullet',
+        characterCode: '006E',
+        indent: 0.24  // Hanging indent 0.24"
+      };
 
       const formatCellText = (text) => {
         if (!text || typeof text !== 'string') return text;
@@ -4784,7 +4789,11 @@ async function generatePPTX(companies) {
             const cleanLine = line.replace(/^[■\-•]\s*/, '').trim();
             return {
               text: cleanLine + (index < lines.length - 1 ? '\n' : ''),
-              options: { bullet: WINGDINGS_BULLET }
+              options: {
+                bullet: WINGDINGS_BULLET,
+                paraSpaceBefore: 0,
+                paraSpaceAfter: 0
+              }
             };
           });
         }
