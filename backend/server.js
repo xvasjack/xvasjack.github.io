@@ -2,23 +2,27 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const http = require('http');
+const WebSocket = require('ws');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
 const XLSX = require('xlsx');
 const multer = require('multer');
+const { createClient } = require('@deepgram/sdk');
 const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } = require('docx');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 // Multer configuration for file uploads (memory storage)
 const upload = multer({ storage: multer.memoryStorage() });
 
 // Check required environment variables
 const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
-const optionalEnvVars = ['SERPAPI_API_KEY', 'DEEPSEEK_API_KEY']; // Optional but recommended
+const optionalEnvVars = ['SERPAPI_API_KEY', 'DEEPSEEK_API_KEY', 'DEEPGRAM_API_KEY']; // Optional but recommended
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
@@ -29,11 +33,17 @@ if (!process.env.SERPAPI_API_KEY) {
 if (!process.env.DEEPSEEK_API_KEY) {
   console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
 }
+if (!process.env.DEEPGRAM_API_KEY) {
+  console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
+}
 
 // Initialize OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
+
+// Initialize Deepgram
+const deepgram = process.env.DEEPGRAM_API_KEY ? createClient(process.env.DEEPGRAM_API_KEY) : null;
 
 // Send email using SendGrid API
 async function sendEmail(to, subject, html, attachments = null) {
@@ -6877,10 +6887,216 @@ app.post('/api/due-diligence', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v39 - DD Report with Audio Transcription' });
+  res.json({ status: 'ok', service: 'Find Target v40 - DD Report with Real-Time Transcription' });
 });
 
+// ============ WEBSOCKET SERVER FOR REAL-TIME TRANSCRIPTION ============
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server, path: '/ws/transcribe' });
+
+// Store active sessions for recording storage
+const activeSessions = new Map();
+
+wss.on('connection', (ws, req) => {
+  console.log('[WS] New client connected for real-time transcription');
+
+  let deepgramConnection = null;
+  let sessionId = Date.now().toString();
+  let audioChunks = [];
+  let fullTranscript = '';
+  let detectedLanguage = 'en';
+  let translatedTranscript = '';
+
+  // Store session data
+  activeSessions.set(sessionId, {
+    startTime: new Date(),
+    audioChunks: [],
+    transcript: '',
+    translatedTranscript: '',
+    language: 'en'
+  });
+
+  // Send session ID to client
+  ws.send(JSON.stringify({ type: 'session', sessionId }));
+
+  ws.on('message', async (message) => {
+    try {
+      // Check if it's a control message (JSON) or audio data (binary)
+      if (typeof message === 'string' || (message instanceof Buffer && message[0] === 123)) {
+        const data = JSON.parse(message.toString());
+
+        if (data.type === 'start') {
+          // Start Deepgram connection
+          console.log(`[WS] Starting transcription session ${sessionId}, language: ${data.language || 'auto'}`);
+
+          if (!deepgram) {
+            ws.send(JSON.stringify({ type: 'error', message: 'Deepgram API key not configured' }));
+            return;
+          }
+
+          const dgOptions = {
+            model: 'nova-2',
+            language: data.language === 'auto' ? undefined : data.language,
+            smart_format: true,
+            interim_results: true,
+            utterance_end_ms: 1000,
+            vad_events: true,
+            encoding: 'linear16',
+            sample_rate: 16000,
+            channels: 1
+          };
+
+          // If language is auto, enable language detection
+          if (data.language === 'auto') {
+            dgOptions.detect_language = true;
+          }
+
+          deepgramConnection = deepgram.listen.live(dgOptions);
+
+          deepgramConnection.on('open', () => {
+            console.log(`[WS] Deepgram connection opened for session ${sessionId}`);
+            ws.send(JSON.stringify({ type: 'ready' }));
+          });
+
+          deepgramConnection.on('transcript', async (dgData) => {
+            const transcript = dgData.channel?.alternatives?.[0]?.transcript;
+            const isFinal = dgData.is_final;
+            const detLang = dgData.channel?.detected_language || detectedLanguage;
+
+            if (detLang && detLang !== detectedLanguage) {
+              detectedLanguage = detLang;
+              activeSessions.get(sessionId).language = detLang;
+            }
+
+            if (transcript) {
+              // Send interim results to client
+              ws.send(JSON.stringify({
+                type: 'transcript',
+                text: transcript,
+                isFinal,
+                language: detectedLanguage
+              }));
+
+              // Accumulate final transcripts
+              if (isFinal) {
+                fullTranscript += transcript + ' ';
+                activeSessions.get(sessionId).transcript = fullTranscript;
+
+                // If non-English, translate in real-time
+                if (detectedLanguage !== 'en' && transcript.length > 5) {
+                  try {
+                    const translated = await translateText(transcript, 'en');
+                    translatedTranscript += translated + ' ';
+                    activeSessions.get(sessionId).translatedTranscript = translatedTranscript;
+                    ws.send(JSON.stringify({
+                      type: 'translation',
+                      text: translated,
+                      fullTranslation: translatedTranscript
+                    }));
+                  } catch (e) {
+                    console.error('[WS] Translation error:', e.message);
+                  }
+                }
+              }
+            }
+          });
+
+          deepgramConnection.on('error', (error) => {
+            console.error(`[WS] Deepgram error for session ${sessionId}:`, error);
+            ws.send(JSON.stringify({ type: 'error', message: error.message }));
+          });
+
+          deepgramConnection.on('close', () => {
+            console.log(`[WS] Deepgram connection closed for session ${sessionId}`);
+          });
+
+        } else if (data.type === 'stop') {
+          // Stop transcription
+          console.log(`[WS] Stopping transcription session ${sessionId}`);
+          if (deepgramConnection) {
+            deepgramConnection.finish();
+            deepgramConnection = null;
+          }
+
+          // Send final results
+          const session = activeSessions.get(sessionId);
+          ws.send(JSON.stringify({
+            type: 'complete',
+            sessionId,
+            transcript: fullTranscript.trim(),
+            translatedTranscript: translatedTranscript.trim(),
+            language: detectedLanguage,
+            duration: Math.round((Date.now() - session.startTime.getTime()) / 1000)
+          }));
+        }
+
+      } else {
+        // Binary audio data - forward to Deepgram
+        if (deepgramConnection && deepgramConnection.getReadyState() === 1) {
+          deepgramConnection.send(message);
+
+          // Store audio chunk for later saving
+          audioChunks.push(message);
+          activeSessions.get(sessionId).audioChunks.push(message);
+        }
+      }
+    } catch (error) {
+      console.error('[WS] Error processing message:', error);
+      ws.send(JSON.stringify({ type: 'error', message: error.message }));
+    }
+  });
+
+  ws.on('close', () => {
+    console.log(`[WS] Client disconnected from session ${sessionId}`);
+    if (deepgramConnection) {
+      deepgramConnection.finish();
+    }
+    // Keep session data for 1 hour for retrieval
+    setTimeout(() => {
+      activeSessions.delete(sessionId);
+    }, 3600000);
+  });
+
+  ws.on('error', (error) => {
+    console.error(`[WS] WebSocket error for session ${sessionId}:`, error);
+  });
+});
+
+// Endpoint to get session data (for generating reports after recording)
+app.get('/api/transcription-session/:sessionId', (req, res) => {
+  const session = activeSessions.get(req.params.sessionId);
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found or expired' });
+  }
+  res.json({
+    transcript: session.transcript,
+    translatedTranscript: session.translatedTranscript,
+    language: session.language,
+    duration: Math.round((Date.now() - session.startTime.getTime()) / 1000)
+  });
+});
+
+// Endpoint to get audio from session (base64)
+app.get('/api/transcription-session/:sessionId/audio', (req, res) => {
+  const session = activeSessions.get(req.params.sessionId);
+  if (!session) {
+    return res.status(404).json({ error: 'Session not found or expired' });
+  }
+
+  // Combine audio chunks into single buffer
+  const audioBuffer = Buffer.concat(session.audioChunks);
+  const audioBase64 = audioBuffer.toString('base64');
+
+  res.json({
+    audio: audioBase64,
+    mimeType: 'audio/webm',
+    size: audioBuffer.length
+  });
+});
+
+server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log(`WebSocket available at ws://localhost:${PORT}/ws/transcribe`);
 });
