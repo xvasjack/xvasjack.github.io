@@ -7101,7 +7101,8 @@ wss.on('connection', (ws, req) => {
             ws.send(JSON.stringify({ type: 'ready' }));
           });
 
-          deepgramConnection.on('transcript', async (dgData) => {
+          deepgramConnection.on('Results', async (dgData) => {
+            console.log('[WS] Deepgram data received:', JSON.stringify(dgData).substring(0, 200));
             const transcript = dgData.channel?.alternatives?.[0]?.transcript;
             const isFinal = dgData.is_final;
             const detLang = dgData.channel?.detected_language || detectedLanguage;
@@ -7112,6 +7113,7 @@ wss.on('connection', (ws, req) => {
             }
 
             if (transcript) {
+              console.log(`[WS] Transcript: "${transcript}" (final: ${isFinal})`);
               // Send interim results to client
               ws.send(JSON.stringify({
                 type: 'transcript',
