@@ -4490,7 +4490,18 @@ function getCountryCode(location) {
   return null;
 }
 
-// Detect shortforms in text and return formatted note
+// Common shortforms that don't need explanation
+const COMMON_SHORTFORMS = [
+  'M', 'B', 'K',           // Million, Billion, Thousand
+  'HQ',                    // Headquarters
+  'CEO', 'CFO', 'COO',     // C-suite titles
+  'USD', 'EUR', 'GBP',     // Major currencies
+  'ISO',                   // Well-known standard
+  'FY',                    // Fiscal Year
+  'YoY', 'QoQ'             // Year over Year, Quarter over Quarter
+];
+
+// Detect shortforms in text and return formatted note (only uncommon ones)
 function detectShortforms(companyData) {
   // Collect all text including key_metrics array
   const textParts = [
@@ -4509,11 +4520,22 @@ function detectShortforms(companyData) {
     });
   }
 
+  // Also include breakdown_items
+  if (companyData.breakdown_items && Array.isArray(companyData.breakdown_items)) {
+    companyData.breakdown_items.forEach(item => {
+      if (item.label) textParts.push(item.label);
+      if (item.value) textParts.push(item.value);
+    });
+  }
+
   const allText = textParts.filter(Boolean).join(' ');
 
   const foundShortforms = [];
 
   for (const [shortform, definition] of Object.entries(SHORTFORM_DEFINITIONS)) {
+    // Skip common shortforms that don't need explanation
+    if (COMMON_SHORTFORMS.includes(shortform)) continue;
+
     // Match shortform as whole word (with word boundaries)
     const regex = new RegExp(`\\b${shortform}\\b`, 'i');
     if (regex.test(allText)) {
@@ -4673,36 +4695,43 @@ async function generatePPTX(companies) {
         line: { color: COLORS.dk2, width: 1.75 }
       });
 
-      // Right: "Product Photos" - positioned per ref v4
-      slide.addText('Products and Applications', {
-        x: 6.87, y: 1.37, w: 6.1, h: 0.35,
+      // Right: Dynamic title based on breakdown_title - positioned at 6.86" x 1.37"
+      const rightSectionTitle = company.breakdown_title || 'Products and Applications';
+      slide.addText(rightSectionTitle, {
+        x: 6.86, y: 1.37, w: 6.1, h: 0.35,
         fontSize: 14, fontFace: 'Segoe UI',
         color: COLORS.black, align: 'center'
       });
       slide.addShape(pptx.shapes.LINE, {
-        x: 6.87, y: 1.79, w: 6.1, h: 0,
+        x: 6.86, y: 1.79, w: 6.1, h: 0,
         line: { color: COLORS.dk2, width: 1.75 }
       });
 
       // ===== LEFT TABLE (会社概要資料) =====
+      // Determine if single location (for HQ label)
+      const locationText = company.location || '';
+      const locationLines = locationText.split('\n').filter(line => line.trim());
+      const isSingleLocation = locationLines.length <= 1 && !locationText.toLowerCase().includes('branch') && !locationText.toLowerCase().includes('factory') && !locationText.toLowerCase().includes('warehouse');
+      const locationLabel = isSingleLocation ? 'HQ' : 'Location';
+
       // Base company info rows
       const tableData = [
-        ['Name', company.company_name || ''],
-        ['Est. Year', company.established_year || ''],
-        ['Location', company.location || ''],
-        ['Business', company.business || '']
+        ['Name', company.company_name || '', company.website || null], // Third element is hyperlink URL
+        ['Est. Year', company.established_year || '', null],
+        [locationLabel, company.location || '', null],
+        ['Business', company.business || '', null]
       ];
 
       // Add key metrics as separate rows if available
       if (company.key_metrics && Array.isArray(company.key_metrics)) {
         company.key_metrics.forEach(metric => {
           if (metric.label && metric.value) {
-            tableData.push([metric.label, metric.value]);
+            tableData.push([metric.label, metric.value, null]);
           }
         });
       } else if (company.metrics) {
         // Fallback for old format (single string)
-        tableData.push(['Key Metrics', company.metrics]);
+        tableData.push(['Key Metrics', company.metrics, null]);
       }
 
       // Helper function to format cell text with proper PowerPoint bullets
@@ -4726,17 +4755,8 @@ async function generatePPTX(companies) {
         return text;
       };
 
-      const rows = tableData.map((row) => [
-        {
-          text: row[0],
-          options: {
-            fill: { color: COLORS.accent3 },
-            color: COLORS.white,
-            align: 'center',
-            bold: false
-          }
-        },
-        {
+      const rows = tableData.map((row) => {
+        const valueCell = {
           text: formatCellText(row[1]),
           options: {
             fill: { color: COLORS.white },
@@ -4749,8 +4769,27 @@ async function generatePPTX(companies) {
               { pt: 0 }
             ]
           }
+        };
+
+        // Add hyperlink if URL is provided (third element in row array)
+        if (row[2]) {
+          valueCell.options.hyperlink = { url: row[2], tooltip: 'Visit company website' };
+          valueCell.options.color = '0563C1'; // Blue hyperlink color
         }
-      ]);
+
+        return [
+          {
+            text: row[0],
+            options: {
+              fill: { color: COLORS.accent3 },
+              color: COLORS.white,
+              align: 'center',
+              bold: false
+            }
+          },
+          valueCell
+        ];
+      });
 
       const tableStartY = 1.85;
       const rowHeight = 0.35;
@@ -4767,13 +4806,11 @@ async function generatePPTX(companies) {
         margin: [0, 0.04, 0, 0.04]
       });
 
-      // ===== RIGHT TABLE (Product Photos placeholder) =====
-      // 3 empty rows for product photos
-      const rightTableData = [
-        ['', ''],
-        ['', ''],
-        ['', '']
-      ];
+      // ===== RIGHT TABLE (Products/Applications breakdown) =====
+      // Use breakdown_items from AI extraction
+      const rightTableData = company.breakdown_items && company.breakdown_items.length > 0
+        ? company.breakdown_items.map(item => [item.label || '', item.value || ''])
+        : [['', ''], ['', ''], ['', '']]; // Fallback empty rows
 
       const rightRows = rightTableData.map((row) => [
         {
@@ -4801,8 +4838,9 @@ async function generatePPTX(companies) {
         }
       ]);
 
+      // Position at 6.86" horizontally and 1.91" vertically as requested
       slide.addTable(rightRows, {
-        x: 6.87, y: tableStartY,
+        x: 6.86, y: 1.91,
         w: 6.1,
         colW: [1.4, 4.7],
         rowH: rowHeight,
@@ -4813,91 +4851,32 @@ async function generatePPTX(companies) {
         margin: [0, 0.04, 0, 0.04]
       });
 
-      // ===== 財務実績 SECTION (Financial Performance) - RIGHT SIDE =====
-      // Section header: "財務実績" at fixed position (6.87, 4.29)
-      slide.addText('財務実績', {
-        x: 6.87, y: 4.29, w: 6.1, h: 0.35,
-        fontSize: 14, fontFace: 'Segoe UI',
-        color: COLORS.black, align: 'center'
-      });
-      slide.addShape(pptx.shapes.LINE, {
-        x: 6.87, y: 4.71, w: 6.1, h: 0,
-        line: { color: COLORS.dk2, width: 1.75 }
-      });
+      // ===== FOOTNOTE (single text box with stacked content) =====
+      const footnoteLines = [];
 
-      // Financial data table (if financial metrics available)
-      if (company.financial_metrics && Array.isArray(company.financial_metrics) && company.financial_metrics.length > 0) {
-        const financialRows = company.financial_metrics.map((metric) => [
-          {
-            text: metric.label || '',
-            options: {
-              fill: { color: COLORS.accent3 },
-              color: COLORS.white,
-              align: 'center',
-              bold: false
-            }
-          },
-          {
-            text: metric.value || '',
-            options: {
-              fill: { color: COLORS.white },
-              color: COLORS.black,
-              align: 'left',
-              border: [
-                { pt: 1, color: COLORS.gray, type: 'dash' },
-                { pt: 0 },
-                { pt: 1, color: COLORS.gray, type: 'dash' },
-                { pt: 0 }
-              ]
-            }
-          }
-        ]);
-
-        slide.addTable(financialRows, {
-          x: 6.87, y: 4.77,
-          w: 6.1,
-          colW: [1.4, 4.7],
-          rowH: rowHeight,
-          fontFace: 'Segoe UI',
-          fontSize: 14,
-          valign: 'middle',
-          border: { pt: 2.5, color: COLORS.white },
-          margin: [0, 0.04, 0, 0.04]
-        });
-      }
-
-      // ===== FOOTNOTE (fixed position per ref v4) =====
-      const footnoteY = 6.85;  // Fixed position per ref v4
-      const footnoteLineHeight = 0.18;
-      let currentFootnoteY = footnoteY;
-
-      // Line 1: Note with shortform explanations
+      // Line 1: Note with shortform explanations (only uncommon ones)
       const shortformNote = detectShortforms(company);
       if (shortformNote) {
-        slide.addText(shortformNote, {
-          x: 0.38, y: currentFootnoteY, w: 12.5, h: footnoteLineHeight,
-          fontSize: 10, fontFace: 'Segoe UI',
-          color: COLORS.black
-        });
-        currentFootnoteY += footnoteLineHeight;
+        footnoteLines.push(shortformNote);
       }
 
       // Line 2: Exchange rate (reuse countryCode from flag section)
       const exchangeRate = countryCode ? EXCHANGE_RATE_MAP[countryCode] : null;
       if (exchangeRate) {
-        slide.addText(exchangeRate, {
-          x: 0.38, y: currentFootnoteY, w: 12.5, h: footnoteLineHeight,
-          fontSize: 10, fontFace: 'Segoe UI',
-          color: COLORS.black
-        });
-        currentFootnoteY += footnoteLineHeight;
+        footnoteLines.push(exchangeRate);
       }
 
       // Line 3: Source
-      slide.addText('Source: Company website', {
-        x: 0.38, y: currentFootnoteY, w: 12.5, h: footnoteLineHeight,
+      footnoteLines.push('Source: Company website');
+
+      // Create single text box with all footnote content stacked
+      const footnoteContent = footnoteLines.join('\n');
+      const footnoteHeight = 0.18 * footnoteLines.length;
+
+      slide.addText(footnoteContent, {
+        x: 0.38, y: 6.85, w: 12.5, h: footnoteHeight,
         fontSize: 10, fontFace: 'Segoe UI',
-        color: COLORS.black
+        color: COLORS.black, valign: 'top'
       });
     }
 
@@ -4996,7 +4975,19 @@ async function extractBasicInfo(scrapedContent, websiteUrl) {
 OUTPUT JSON with these fields:
 - company_name: Company name with first letter of each word capitalized
 - established_year: Clean numbers only (e.g., "1995"), leave empty if not found
-- location: Format as "type: city, state, country" for each location. Types: HQ, warehouse, factory, branch, etc. Multiple locations in point form. If Singapore, include which area. No postcodes or full addresses.
+- location: Format locations 3 levels deep: "District/Area, City/State, Country"
+  Examples:
+  - "Puchong, Selangor, Malaysia"
+  - "Bangna, Bangkok, Thailand"
+  - "Batam, Riau Islands, Indonesia"
+  EXCEPTION: For Singapore, just use "Singapore" (single location) or include the area like "Jurong, Singapore"
+
+  For multiple locations, use point form with type prefix:
+  - "HQ: Puchong, Selangor, Malaysia"
+  - "Factory: Batam, Riau Islands, Indonesia"
+  - "Branch: Ho Chi Minh City, Vietnam"
+
+  Types: HQ, warehouse, factory, branch, office. No postcodes or full addresses.
 
 RULES:
 - Write proper English (e.g., "Việt Nam" → "Vietnam")
@@ -5040,10 +5031,17 @@ INPUT:
 - Previously extracted: company name, year, location
 
 OUTPUT JSON:
-1. business: Detailed description of what company does. Format each business line on separate line starting with "- ".
-   Example:
-   "- Manufacture high-quality printing inks\\n- Provide services related to printing technology\\n- Distribute industrial chemicals across Southeast Asia"
-   Be comprehensive - include manufacturing, distribution, services, R&D activities.
+1. business: Description of what company does. MAXIMUM 3 bullet points. Format each business line starting with "- ".
+
+   FORMAT REQUIREMENT: Use this structure:
+   - "Manufacture [category] such as [top 3 products]"
+   - "Distribute [category] such as [top 3 products]"
+   - "Provide [service type] such as [top 3 services]"
+
+   Examples:
+   "- Manufacture industrial chemicals such as adhesives, solvents, coatings\\n- Distribute automotive products such as lubricants, filters, batteries\\n- Provide technical services such as installation, maintenance, training"
+
+   Keep it to the MOST KEY items only (3 bullet points max, 3 examples per bullet).
 
 2. message: One-liner introductory message about the company. Example: "Malaysia-based distributor specializing in electronic components and industrial automation products across Southeast Asia."
 
@@ -5135,9 +5133,20 @@ OUTPUT JSON:
   ]
 }
 
+SEGMENTATION REQUIREMENT:
+For metrics with MANY items (e.g., Customers, Suppliers), segment them by category:
+Example for Customers:
+{"label": "Customers", "value": "Residential: Customer1, Customer2, Customer3\\nCommercial: Customer4, Customer5\\nIndustrial: Customer6, Customer7"}
+
+Example for Suppliers:
+{"label": "Suppliers", "value": "Raw Materials: Supplier1, Supplier2\\nPackaging: Supplier3, Supplier4\\nEquipment: Supplier5"}
+
+This helps organize large lists into meaningful segments.
+
 RULES:
 - Extract as many metrics as found (8-15 ideally)
 - For metrics with multiple items, use "- " bullet points separated by "\\n"
+- For long lists of customers/suppliers, SEGMENT by category as shown above
 - Labels should be 1-3 words
 - Be specific with numbers when available
 - Include shareholding structure if mentioned
@@ -5164,7 +5173,65 @@ ${scrapedContent.substring(0, 18000)}`
   }
 }
 
-// AI Agent 3b: Extract financial metrics for 財務実績 section
+// AI Agent 3b: Extract products/applications breakdown for right table
+async function extractProductsBreakdown(scrapedContent, previousData) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an M&A analyst extracting a breakdown of important information for the right-side table on a company profile slide.
+
+DETERMINE THE BEST CATEGORY for this company's breakdown. Choose ONE of these:
+
+1. "Products and Applications" - For manufacturers/producers (list product categories and their applications)
+2. "Products and Services" - For companies offering both products and services
+3. "Services" - For pure service companies (consulting, logistics, etc.)
+4. "Customers" - When customer segmentation is the key differentiator
+5. "Product Categories" - For distributors/retailers with product portfolio
+6. "Business Segments" - For diversified companies with multiple business lines
+
+OUTPUT JSON:
+{
+  "breakdown_title": "Products and Applications",
+  "breakdown_items": [
+    {"label": "Industrial", "value": "Lubricants, Adhesives, Solvents"},
+    {"label": "Consumer", "value": "Cleaning products, Personal care"},
+    {"label": "Automotive", "value": "Engine oils, Brake fluids, Coolants"}
+  ]
+}
+
+RULES:
+- Choose the breakdown category that best showcases the company's value proposition
+- Use 3-6 items maximum
+- Labels should be segment/category names (1-3 words)
+- Values should be comma-separated examples (3-5 items each)
+- For customers, segment by industry/type (e.g., "Residential", "Commercial", "Industrial")
+- For products, segment by application/industry/type
+- Return ONLY valid JSON`
+        },
+        {
+          role: 'user',
+          content: `Company: ${previousData.company_name}
+Industry/Business: ${previousData.business}
+
+Website Content:
+${scrapedContent.substring(0, 15000)}`
+        }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.3
+    });
+
+    return JSON.parse(response.choices[0].message.content);
+  } catch (e) {
+    console.error('Agent 3b (products) error:', e.message);
+    return { breakdown_title: 'Products and Applications', breakdown_items: [] };
+  }
+}
+
+// AI Agent 3c: Extract financial metrics for 財務実績 section
 async function extractFinancialMetrics(scrapedContent, previousData) {
   try {
     const response = await openai.chat.completions.create({
@@ -5483,9 +5550,9 @@ app.post('/api/profile-slides', async (req, res) => {
           business: businessInfo.business
         });
 
-        // Step 4b: Extract financial metrics for 財務実績 section
-        console.log('  Step 4b: Extracting financial metrics...');
-        const financialInfo = await extractFinancialMetrics(scraped.content, {
+        // Step 4b: Extract products/applications breakdown for right table
+        console.log('  Step 4b: Extracting products/applications breakdown...');
+        const productsBreakdown = await extractProductsBreakdown(scraped.content, {
           company_name: basicInfo.company_name,
           business: businessInfo.business
         });
@@ -5529,7 +5596,8 @@ app.post('/api/profile-slides', async (req, res) => {
           footnote: businessInfo.footnote || '',
           title: businessInfo.title || '',
           key_metrics: allKeyMetrics,  // Combined metrics from website + web search
-          financial_metrics: financialInfo.financial_metrics || [],  // For 財務実績 section
+          breakdown_title: productsBreakdown.breakdown_title || 'Products and Applications',
+          breakdown_items: productsBreakdown.breakdown_items || [],
           metrics: metricsInfo.metrics || ''  // Fallback for old format
         };
 
