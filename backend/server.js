@@ -7077,20 +7077,22 @@ wss.on('connection', (ws, req) => {
 
           const dgOptions = {
             model: 'nova-2',
-            language: data.language === 'auto' ? undefined : data.language,
             smart_format: true,
             interim_results: true,
             utterance_end_ms: 1000,
-            vad_events: true,
             encoding: 'linear16',
             sample_rate: 16000,
-            channels: 1
+            channels: 1,
+            punctuate: true
           };
 
-          // If language is auto, enable language detection
-          if (data.language === 'auto') {
-            dgOptions.detect_language = true;
+          // Set language - if not auto, use specific language
+          if (data.language && data.language !== 'auto') {
+            dgOptions.language = data.language;
           }
+          // Note: removed detect_language as it may cause 400 errors
+
+          console.log('[WS] Deepgram options:', JSON.stringify(dgOptions));
 
           deepgramConnection = deepgram.listen.live(dgOptions);
 
