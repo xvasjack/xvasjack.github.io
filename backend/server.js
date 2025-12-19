@@ -4768,6 +4768,9 @@ async function generatePPTX(companies) {
       }
 
       // Helper function to format cell text with proper PowerPoint bullets
+      // Using Wingdings character code 006E (hex) = filled square bullet
+      const WINGDINGS_BULLET = { type: 'bullet', characterCode: '006E' };
+
       const formatCellText = (text) => {
         if (!text || typeof text !== 'string') return text;
 
@@ -4776,12 +4779,12 @@ async function generatePPTX(companies) {
           // Split by newline and filter out empty lines
           const lines = text.split('\n').filter(line => line.trim());
 
-          // Convert to array of text objects with bullet formatting
+          // Convert to array of text objects with Wingdings bullet formatting
           return lines.map((line, index) => {
             const cleanLine = line.replace(/^[■\-•]\s*/, '').trim();
             return {
               text: cleanLine + (index < lines.length - 1 ? '\n' : ''),
-              options: { bullet: true }
+              options: { bullet: WINGDINGS_BULLET }
             };
           });
         }
