@@ -4458,7 +4458,16 @@ const SHORTFORM_DEFINITIONS = {
   'BKK': 'Bangkok',
   'JKT': 'Jakarta',
   'MNL': 'Manila',
-  'SG': 'Singapore'
+  'SG': 'Singapore',
+  'ISP': 'Internet Service Provider',
+  'IBC': 'International Broadcasting',
+  'IT': 'Information Technology',
+  'AI': 'Artificial Intelligence',
+  'IoT': 'Internet of Things',
+  'ERP': 'Enterprise Resource Planning',
+  'CRM': 'Customer Relationship Management',
+  'SaaS': 'Software as a Service',
+  'API': 'Application Programming Interface'
 };
 
 // Exchange rate mapping by country (for footnote)
@@ -5060,8 +5069,9 @@ OUTPUT JSON with these fields:
   Types: HQ, Warehouses, Factories, Branches, Offices. No postcodes or full addresses.
 
 RULES:
-- Write ALL text using regular English alphabet only (no diacritics/accents)
-- Convert foreign characters: "Việt Nam" → "Vietnam", "São Paulo" → "Sao Paulo", "北京" → "Beijing"
+- Write ALL text using regular English alphabet only (A-Z, no diacritics/accents)
+- Convert ALL Vietnamese: "Phú" → "Phu", "Đông" → "Dong", "Nguyễn" → "Nguyen", "Bình" → "Binh", "Thạnh" → "Thanh", "Cương" → "Cuong"
+- Convert ALL foreign characters: "São" → "Sao", "北京" → "Beijing", "東京" → "Tokyo"
 - Leave fields empty if information not found
 - Return ONLY valid JSON`
         },
@@ -5124,8 +5134,9 @@ OUTPUT JSON:
 4. title: Company name WITHOUT suffix (remove Pte Ltd, Sdn Bhd, Co Ltd, JSC, PT, Inc, etc.)
 
 RULES:
-- Write ALL text using regular English alphabet only (no diacritics/accents)
-- Convert foreign characters: "Việt Nam" → "Vietnam", "São Paulo" → "Sao Paulo", "北京" → "Beijing"
+- Write ALL text using regular English alphabet only (A-Z, no diacritics/accents)
+- Convert ALL Vietnamese: "Phú" → "Phu", "Đông" → "Dong", "Nguyễn" → "Nguyen", "Bình" → "Binh", "Thạnh" → "Thanh", "Cương" → "Cuong"
+- Convert ALL foreign characters: "São" → "Sao", "北京" → "Beijing", "東京" → "Tokyo"
 - All bullet points must use "- " (dash followed by space)
 - Each bullet point on new line using "\\n"
 - Keep it to the MOST KEY items only (3 bullet points max)
@@ -5216,8 +5227,10 @@ Example for Suppliers:
 IMPORTANT: Always use "- " prefix for each segment line to create point form for easier reading.
 
 RULES:
-- Write ALL text using regular English alphabet only (no diacritics/accents)
-- Convert foreign characters: "Việt Nam" → "Vietnam", "São Paulo" → "Sao Paulo", "北京" → "Beijing"
+- Write ALL text using regular English alphabet only (A-Z, no diacritics/accents)
+- Convert ALL Vietnamese: "Phú" → "Phu", "Đông" → "Dong", "Nguyễn" → "Nguyen", "Bình" → "Binh", "Thạnh" → "Thanh", "Cương" → "Cuong", "Thiêm" → "Thiem"
+- Convert ALL foreign characters: "São" → "Sao", "北京" → "Beijing", "東京" → "Tokyo"
+- Remove company suffixes from ALL names: Co., Ltd, JSC, Sdn Bhd, Pte Ltd, Inc, Corp, LLC, GmbH
 - Extract as many metrics as found (8-15 ideally)
 - For metrics with multiple items, use "- " bullet points separated by "\\n"
 - For long lists of customers/suppliers, SEGMENT by category as shown above
@@ -5285,8 +5298,10 @@ OUTPUT JSON:
 }
 
 RULES:
-- Write ALL text using regular English alphabet only (no diacritics/accents)
-- Convert foreign characters: "Việt Nam" → "Vietnam", "São Paulo" → "Sao Paulo", "北京" → "Beijing"
+- Write ALL text using regular English alphabet only (A-Z, no diacritics/accents)
+- Convert ALL Vietnamese: "Phú" → "Phu", "Đông" → "Dong", "Nguyễn" → "Nguyen", "Bình" → "Binh", "Thạnh" → "Thanh", "Cương" → "Cuong"
+- Convert ALL foreign characters: "São" → "Sao", "北京" → "Beijing", "東京" → "Tokyo"
+- Remove company suffixes from ALL names: Co., Ltd, JSC, Sdn Bhd, Pte Ltd, Inc, Corp, LLC, GmbH
 - PRIORITIZE the category with MOST available content from the website
 - Use 3-6 items maximum
 - Labels should be segment/category names (1-3 words)
