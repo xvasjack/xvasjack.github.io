@@ -4495,10 +4495,13 @@ const COMMON_SHORTFORMS = [
   'M', 'B', 'K',           // Million, Billion, Thousand
   'HQ',                    // Headquarters
   'CEO', 'CFO', 'COO',     // C-suite titles
-  'USD', 'EUR', 'GBP',     // Major currencies
+  // All currency codes - well known
+  'USD', 'EUR', 'GBP', 'JPY', 'CNY', 'KRW', 'TWD',
+  'IDR', 'SGD', 'MYR', 'THB', 'PHP', 'VND', 'INR', 'HKD', 'AUD',
   'ISO',                   // Well-known standard
   'FY',                    // Fiscal Year
-  'YoY', 'QoQ'             // Year over Year, Quarter over Quarter
+  'YoY', 'QoQ',            // Year over Year, Quarter over Quarter
+  'B2B', 'B2C'             // Business models
 ];
 
 // Detect shortforms in text and return formatted note (only uncommon ones)
