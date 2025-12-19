@@ -7,6 +7,15 @@
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <style>
+    .dd-section { margin-bottom: 16px; }
+    .dd-section-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
     .dd-upload-zone {
       border: 2px dashed var(--border-medium);
       border-radius: var(--radius-md);
@@ -20,7 +29,7 @@
       border-color: var(--accent);
       background: var(--accent-soft);
     }
-    #fileInput { display: none; }
+    #fileInput, #audioInput { display: none; }
     .dd-upload-zone svg {
       width: 24px;
       height: 24px;
@@ -38,30 +47,84 @@
       color: var(--text-muted);
       margin: 2px 0 0 0;
     }
+    .dd-upload-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .dd-upload-zone.audio-zone { border-color: var(--success); }
+    .dd-upload-zone.audio-zone:hover { background: rgba(34, 197, 94, 0.1); }
+    .dd-upload-zone.audio-zone svg { color: var(--success); }
+
+    .dd-record-section {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+    }
+    .dd-record-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      border: none;
+      background: var(--error);
+      color: white;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s;
+      flex-shrink: 0;
+    }
+    .dd-record-btn:hover { transform: scale(1.05); }
+    .dd-record-btn.recording {
+      animation: pulse 1.5s infinite;
+      background: var(--error);
+    }
+    .dd-record-btn svg { width: 20px; height: 20px; }
+    @keyframes pulse {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+      50% { box-shadow: 0 0 0 10px rgba(239, 68, 68, 0); }
+    }
+    .dd-record-info { flex: 1; }
+    .dd-record-info h4 { font-size: 13px; margin: 0; color: var(--text-main); }
+    .dd-record-info p { font-size: 11px; margin: 2px 0 0; color: var(--text-muted); }
+    .dd-record-timer {
+      font-family: monospace;
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--error);
+    }
+
     .dd-file-list {
       margin-top: 12px;
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 6px;
     }
     .dd-file-item {
       display: flex;
       align-items: center;
       gap: 10px;
-      padding: 10px 14px;
+      padding: 8px 12px;
       background: var(--bg-surface);
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-md);
     }
+    .dd-file-item.audio { border-left: 3px solid var(--success); }
     .dd-file-item svg {
-      width: 20px;
-      height: 20px;
+      width: 18px;
+      height: 18px;
       color: var(--accent);
       flex-shrink: 0;
     }
+    .dd-file-item.audio svg { color: var(--success); }
     .dd-file-item span {
       flex: 1;
-      font-size: 14px;
+      font-size: 13px;
       color: var(--text-main);
       overflow: hidden;
       text-overflow: ellipsis;
@@ -75,18 +138,75 @@
       padding: 4px;
       border-radius: 4px;
       transition: all 0.15s;
+      font-size: 16px;
     }
     .dd-file-item button:hover {
       color: var(--error);
       background: var(--error-soft);
     }
+
+    .dd-lang-select {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .dd-lang-option {
+      padding: 6px 12px;
+      border: 1px solid var(--border-medium);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      font-size: 12px;
+      transition: all 0.15s;
+      background: var(--bg-surface);
+    }
+    .dd-lang-option:hover { border-color: var(--accent); }
+    .dd-lang-option.selected {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+    .dd-lang-option input { display: none; }
+
+    .dd-output-options {
+      display: flex;
+      gap: 8px;
+    }
+    .dd-output-option {
+      flex: 1;
+      padding: 10px 8px;
+      border: 2px solid var(--border-medium);
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: all 0.15s ease;
+      text-align: center;
+      background: var(--bg-surface);
+    }
+    .dd-output-option:hover { border-color: var(--accent); }
+    .dd-output-option.selected {
+      border-color: var(--accent);
+      background: var(--accent-soft);
+    }
+    .dd-output-option input { display: none; }
+    .dd-output-option h4 {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-main);
+      margin: 0;
+    }
+    .dd-output-option p {
+      font-size: 10px;
+      color: var(--text-muted);
+      margin: 2px 0 0 0;
+    }
+    .dd-output-option.selected h4 { color: var(--accent); }
+
     .dd-length-options {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
       gap: 8px;
     }
     .dd-length-option {
-      padding: 10px 8px;
+      padding: 8px 6px;
       border: 2px solid var(--border-medium);
       border-radius: var(--radius-sm);
       cursor: pointer;
@@ -101,7 +221,7 @@
     }
     .dd-length-option input { display: none; }
     .dd-length-option h4 {
-      font-size: 13px;
+      font-size: 12px;
       font-weight: 600;
       color: var(--text-main);
       margin: 0;
@@ -112,6 +232,15 @@
       margin: 2px 0 0 0;
     }
     .dd-length-option.selected h4 { color: var(--accent); }
+
+    .dd-checkbox {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .dd-checkbox input { width: 16px; height: 16px; }
   </style>
 </head>
 <body>
@@ -141,32 +270,113 @@
     <section class="page-info">
       <span class="status-badge">Online</span>
       <h1 class="page-title">Due Diligence Report</h1>
-      <p class="page-description">Generate professional due diligence reports from your M&A materials. Upload documents and receive a structured analysis via email.</p>
+      <p class="page-description">Upload documents, audio recordings, or record meetings directly. Get transcription, translation, meeting minutes, and professional DD reports.</p>
     </section>
 
-    <section class="page-content" style="max-width: 600px;">
+    <section class="page-content" style="max-width: 650px;">
       <div class="form-card">
         <form id="dueDiligenceForm">
-          <div class="form-body" style="display: flex; flex-direction: column; gap: 12px;">
+          <div class="form-body" style="display: flex; flex-direction: column; gap: 14px;">
 
-            <!-- Hidden file input -->
+            <!-- Hidden file inputs -->
             <input type="file" id="fileInput" multiple accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.rtf,.csv,.xlsx,.xls">
+            <input type="file" id="audioInput" multiple accept="audio/*,.mp3,.wav,.m4a,.webm,.ogg,.aac,.flac">
 
-            <!-- Upload Zone -->
-            <div class="dd-upload-zone" id="uploadZone">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-              </svg>
-              <h3>Drop files here or click to upload</h3>
-              <p>PDF, PPT, DOC, TXT, Excel (max 10 files, 20MB each)</p>
+            <!-- Upload Section -->
+            <div class="dd-section">
+              <div class="dd-section-title">📁 Upload Materials</div>
+              <div class="dd-upload-grid">
+                <div class="dd-upload-zone" id="uploadZone">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                  </svg>
+                  <h3>Documents</h3>
+                  <p>PDF, PPT, Word, Excel</p>
+                </div>
+                <div class="dd-upload-zone audio-zone" id="audioZone">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+                  </svg>
+                  <h3>Audio Files</h3>
+                  <p>MP3, WAV, M4A, WebM</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Record Section -->
+            <div class="dd-section">
+              <div class="dd-section-title">🎙️ Or Record Meeting</div>
+              <div class="dd-record-section">
+                <button type="button" class="dd-record-btn" id="recordBtn">
+                  <svg fill="currentColor" viewBox="0 0 24 24" id="recordIcon">
+                    <circle cx="12" cy="12" r="6"/>
+                  </svg>
+                </button>
+                <div class="dd-record-info">
+                  <h4 id="recordStatus">Click to start recording</h4>
+                  <p id="recordHint">Record directly from your microphone</p>
+                </div>
+                <span class="dd-record-timer" id="recordTimer" style="display: none;">00:00</span>
+              </div>
             </div>
 
             <!-- File List -->
             <div class="dd-file-list" id="fileList" style="display: none;"></div>
 
-            <!-- Report Length -->
-            <div class="form-group" style="margin: 0;">
-              <label style="margin-bottom: 6px; display: block;">Report Length</label>
+            <!-- Audio Language -->
+            <div class="dd-section" id="langSection" style="display: none;">
+              <div class="dd-section-title">🌐 Audio Language (for transcription)</div>
+              <div class="dd-lang-select">
+                <label class="dd-lang-option selected" data-value="auto">
+                  <input type="radio" name="audioLang" value="auto" checked>Auto-detect
+                </label>
+                <label class="dd-lang-option" data-value="en">
+                  <input type="radio" name="audioLang" value="en">English
+                </label>
+                <label class="dd-lang-option" data-value="zh">
+                  <input type="radio" name="audioLang" value="zh">Chinese
+                </label>
+                <label class="dd-lang-option" data-value="ms">
+                  <input type="radio" name="audioLang" value="ms">Malay
+                </label>
+                <label class="dd-lang-option" data-value="ja">
+                  <input type="radio" name="audioLang" value="ja">Japanese
+                </label>
+                <label class="dd-lang-option" data-value="ko">
+                  <input type="radio" name="audioLang" value="ko">Korean
+                </label>
+              </div>
+              <label class="dd-checkbox" style="margin-top: 8px;">
+                <input type="checkbox" id="translateToEnglish" checked>
+                Translate to English (if non-English)
+              </label>
+            </div>
+
+            <!-- Output Type -->
+            <div class="dd-section">
+              <div class="dd-section-title">📄 Output Type</div>
+              <div class="dd-output-options">
+                <label class="dd-output-option selected" data-value="dd_report">
+                  <input type="radio" name="outputType" value="dd_report" checked>
+                  <h4>DD Report</h4>
+                  <p>Full due diligence</p>
+                </label>
+                <label class="dd-output-option" data-value="meeting_minutes">
+                  <input type="radio" name="outputType" value="meeting_minutes">
+                  <h4>Meeting Minutes</h4>
+                  <p>Structured summary</p>
+                </label>
+                <label class="dd-output-option" data-value="transcript">
+                  <input type="radio" name="outputType" value="transcript">
+                  <h4>Transcript Only</h4>
+                  <p>Audio to text</p>
+                </label>
+              </div>
+            </div>
+
+            <!-- Report Length (for DD Report only) -->
+            <div class="dd-section" id="lengthSection">
+              <div class="dd-section-title">📏 Report Length</div>
               <div class="dd-length-options">
                 <label class="dd-length-option" data-value="short">
                   <input type="radio" name="reportLength" value="short">
@@ -186,10 +396,16 @@
               </div>
             </div>
 
+            <!-- Word Doc Option -->
+            <label class="dd-checkbox">
+              <input type="checkbox" id="generateWord" checked>
+              Generate Word document (.docx) attachment
+            </label>
+
             <!-- Instructions -->
             <div class="form-group" style="margin: 0;">
               <label for="instructions">Special Requests <span class="label-hint">(optional)</span></label>
-              <textarea id="instructions" name="instructions" rows="2" placeholder="e.g., Focus on financial risks, evaluate synergies..."></textarea>
+              <textarea id="instructions" name="instructions" rows="2" placeholder="e.g., Focus on financial risks, include action items, translate to Chinese..."></textarea>
             </div>
 
             <!-- Email -->
@@ -230,30 +446,65 @@
     const successText = document.getElementById('successText');
     const errorText = document.getElementById('errorText');
     const uploadZone = document.getElementById('uploadZone');
+    const audioZone = document.getElementById('audioZone');
     const fileInput = document.getElementById('fileInput');
+    const audioInput = document.getElementById('audioInput');
     const fileListEl = document.getElementById('fileList');
+    const langSection = document.getElementById('langSection');
+    const lengthSection = document.getElementById('lengthSection');
+    const recordBtn = document.getElementById('recordBtn');
+    const recordStatus = document.getElementById('recordStatus');
+    const recordHint = document.getElementById('recordHint');
+    const recordTimer = document.getElementById('recordTimer');
+    const recordIcon = document.getElementById('recordIcon');
 
     let selectedFiles = [];
+    let audioFiles = [];
+    let mediaRecorder = null;
+    let recordedChunks = [];
+    let recordingStartTime = null;
+    let timerInterval = null;
 
-    // Length option click
-    document.querySelectorAll('.dd-length-option').forEach(opt => {
+    // Option clicks
+    document.querySelectorAll('.dd-length-option, .dd-output-option, .dd-lang-option').forEach(opt => {
       opt.addEventListener('click', () => {
-        document.querySelectorAll('.dd-length-option').forEach(o => o.classList.remove('selected'));
+        const parent = opt.parentElement;
+        parent.querySelectorAll('label').forEach(o => o.classList.remove('selected'));
         opt.classList.add('selected');
         opt.querySelector('input').checked = true;
+        updateUI();
       });
     });
 
-    // Click to upload
-    uploadZone.addEventListener('click', () => { fileInput.click(); });
+    function updateUI() {
+      const outputType = document.querySelector('input[name="outputType"]:checked').value;
+      const hasAudio = audioFiles.length > 0;
 
-    // Drag and drop
+      // Show/hide language section based on audio files
+      langSection.style.display = hasAudio ? 'block' : 'none';
+
+      // Show/hide length section based on output type
+      lengthSection.style.display = outputType === 'dd_report' ? 'block' : 'none';
+    }
+
+    // File upload handlers
+    uploadZone.addEventListener('click', () => { fileInput.click(); });
+    audioZone.addEventListener('click', () => { audioInput.click(); });
+
+    // Drag and drop for documents
     uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.classList.add('active'); });
     uploadZone.addEventListener('dragleave', () => { uploadZone.classList.remove('active'); });
-    uploadZone.addEventListener('drop', (e) => { e.preventDefault(); uploadZone.classList.remove('active'); handleFiles(e.dataTransfer.files); });
-    fileInput.addEventListener('change', (e) => { handleFiles(e.target.files); });
+    uploadZone.addEventListener('drop', (e) => { e.preventDefault(); uploadZone.classList.remove('active'); handleDocFiles(e.dataTransfer.files); });
 
-    function handleFiles(files) {
+    // Drag and drop for audio
+    audioZone.addEventListener('dragover', (e) => { e.preventDefault(); audioZone.classList.add('active'); });
+    audioZone.addEventListener('dragleave', () => { audioZone.classList.remove('active'); });
+    audioZone.addEventListener('drop', (e) => { e.preventDefault(); audioZone.classList.remove('active'); handleAudioFiles(e.dataTransfer.files); });
+
+    fileInput.addEventListener('change', (e) => { handleDocFiles(e.target.files); });
+    audioInput.addEventListener('change', (e) => { handleAudioFiles(e.target.files); });
+
+    function handleDocFiles(files) {
       const newFiles = Array.from(files).filter(f => {
         const ext = f.name.split('.').pop().toLowerCase();
         const allowed = ['pdf', 'ppt', 'pptx', 'doc', 'docx', 'txt', 'rtf', 'csv', 'xlsx', 'xls'];
@@ -263,22 +514,104 @@
       updateFileList();
     }
 
+    function handleAudioFiles(files) {
+      const newFiles = Array.from(files).filter(f => {
+        const ext = f.name.split('.').pop().toLowerCase();
+        const allowed = ['mp3', 'wav', 'm4a', 'webm', 'ogg', 'aac', 'flac', 'mp4'];
+        return (allowed.includes(ext) || f.type.startsWith('audio/')) && f.size <= 100 * 1024 * 1024;
+      });
+      audioFiles = [...audioFiles, ...newFiles].slice(0, 5);
+      updateFileList();
+      updateUI();
+    }
+
     function updateFileList() {
-      if (selectedFiles.length === 0) {
+      const allFiles = [
+        ...selectedFiles.map(f => ({ file: f, type: 'doc' })),
+        ...audioFiles.map(f => ({ file: f, type: 'audio' }))
+      ];
+
+      if (allFiles.length === 0) {
         fileListEl.style.display = 'none';
         return;
       }
+
       fileListEl.style.display = 'flex';
-      fileListEl.innerHTML = selectedFiles.map((f, i) => `
-        <div class="dd-file-item">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-          <span>${f.name}</span>
-          <button type="button" onclick="removeFile(${i})">&times;</button>
+      fileListEl.innerHTML = allFiles.map((item, i) => `
+        <div class="dd-file-item ${item.type === 'audio' ? 'audio' : ''}">
+          ${item.type === 'audio'
+            ? '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>'
+            : '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>'
+          }
+          <span>${item.file.name}</span>
+          <button type="button" onclick="removeFile('${item.type}', ${item.type === 'doc' ? selectedFiles.indexOf(item.file) : audioFiles.indexOf(item.file)})">&times;</button>
         </div>
       `).join('');
     }
 
-    window.removeFile = function(i) { selectedFiles.splice(i, 1); updateFileList(); };
+    window.removeFile = function(type, i) {
+      if (type === 'doc') {
+        selectedFiles.splice(i, 1);
+      } else {
+        audioFiles.splice(i, 1);
+      }
+      updateFileList();
+      updateUI();
+    };
+
+    // Recording functionality
+    recordBtn.addEventListener('click', async () => {
+      if (mediaRecorder && mediaRecorder.state === 'recording') {
+        // Stop recording
+        mediaRecorder.stop();
+        recordBtn.classList.remove('recording');
+        recordStatus.textContent = 'Processing recording...';
+        recordIcon.innerHTML = '<circle cx="12" cy="12" r="6"/>';
+        clearInterval(timerInterval);
+      } else {
+        // Start recording
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+          recordedChunks = [];
+
+          mediaRecorder.ondataavailable = (e) => {
+            if (e.data.size > 0) recordedChunks.push(e.data);
+          };
+
+          mediaRecorder.onstop = () => {
+            const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+            const file = new File([blob], `recording_${new Date().toISOString().slice(0,19).replace(/[:-]/g,'')}.webm`, { type: 'audio/webm' });
+            audioFiles.push(file);
+            updateFileList();
+            updateUI();
+            recordStatus.textContent = 'Recording saved!';
+            recordHint.textContent = 'Click to record another';
+            recordTimer.style.display = 'none';
+            stream.getTracks().forEach(track => track.stop());
+          };
+
+          mediaRecorder.start();
+          recordBtn.classList.add('recording');
+          recordStatus.textContent = 'Recording...';
+          recordHint.textContent = 'Click to stop';
+          recordIcon.innerHTML = '<rect x="6" y="6" width="12" height="12" rx="2"/>';
+          recordTimer.style.display = 'block';
+          recordingStartTime = Date.now();
+
+          timerInterval = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+            const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
+            const secs = (elapsed % 60).toString().padStart(2, '0');
+            recordTimer.textContent = `${mins}:${secs}`;
+          }, 1000);
+
+        } catch (err) {
+          alert('Could not access microphone. Please allow microphone access.');
+          console.error(err);
+        }
+      }
+    });
 
     async function extractPDFText(file) {
       try {
@@ -303,6 +636,15 @@
       });
     }
 
+    async function fileToBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result.split(',')[1]);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+    }
+
     async function processFiles(files) {
       const results = [];
       for (const file of files) {
@@ -313,11 +655,26 @@
         } else if (['txt', 'rtf', 'csv'].includes(ext)) {
           content = await extractTextFile(file);
         } else {
-          const arrayBuffer = await file.arrayBuffer();
-          const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+          const base64 = await fileToBase64(file);
           content = `[BASE64:${ext}]${base64}`;
         }
-        results.push({ name: file.name, type: ext, content });
+        results.push({ name: file.name, type: ext, content, isAudio: false });
+      }
+      return results;
+    }
+
+    async function processAudioFiles(files) {
+      const results = [];
+      for (const file of files) {
+        const ext = file.name.split('.').pop().toLowerCase();
+        const base64 = await fileToBase64(file);
+        results.push({
+          name: file.name,
+          type: ext,
+          content: base64,
+          mimeType: file.type || `audio/${ext}`,
+          isAudio: true
+        });
       }
       return results;
     }
@@ -327,36 +684,63 @@
       const email = document.getElementById('email').value.trim();
       const instructions = document.getElementById('instructions').value.trim();
       const reportLength = document.querySelector('input[name="reportLength"]:checked').value;
+      const outputType = document.querySelector('input[name="outputType"]:checked').value;
+      const audioLang = document.querySelector('input[name="audioLang"]:checked').value;
+      const translateToEnglish = document.getElementById('translateToEnglish').checked;
+      const generateWord = document.getElementById('generateWord').checked;
 
-      if (selectedFiles.length === 0) { alert('Please upload at least one file'); return; }
+      if (selectedFiles.length === 0 && audioFiles.length === 0) {
+        alert('Please upload at least one file or record audio');
+        return;
+      }
       if (!email) { alert('Please enter your email address'); return; }
 
       submitBtn.disabled = true;
-      submitBtn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Processing...';
+      submitBtn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Processing files...';
       successMessage.classList.remove('show');
       errorMessage.classList.remove('show');
 
       try {
-        const processedFiles = await processFiles(selectedFiles);
+        const processedDocs = await processFiles(selectedFiles);
+        const processedAudio = await processAudioFiles(audioFiles);
+
         submitBtn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Submitting...';
 
         const response = await fetch('https://xvasjackgithubio-production.up.railway.app/api/due-diligence', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ files: processedFiles, instructions, reportLength, email })
+          body: JSON.stringify({
+            files: processedDocs,
+            audioFiles: processedAudio,
+            instructions,
+            reportLength,
+            outputType,
+            audioLang,
+            translateToEnglish,
+            generateWord,
+            email
+          })
         });
 
         if (!response.ok) throw new Error('Request failed');
 
-        const lengthText = { short: '1-page summary', medium: '2-3 page report', long: 'comprehensive report' };
-        successText.textContent = `Your ${lengthText[reportLength]} will be emailed to ${email} within 10-15 minutes.`;
+        const outputText = {
+          dd_report: 'due diligence report',
+          meeting_minutes: 'meeting minutes',
+          transcript: 'transcript'
+        };
+        successText.textContent = `Your ${outputText[outputType]} will be emailed to ${email} within 10-15 minutes.`;
         successMessage.classList.add('show');
 
         form.reset();
         selectedFiles = [];
+        audioFiles = [];
         updateFileList();
-        document.querySelectorAll('.dd-length-option').forEach(o => o.classList.remove('selected'));
+        updateUI();
+        document.querySelectorAll('.dd-length-option, .dd-output-option, .dd-lang-option').forEach(o => o.classList.remove('selected'));
         document.querySelector('.dd-length-option[data-value="medium"]').classList.add('selected');
+        document.querySelector('.dd-output-option[data-value="dd_report"]').classList.add('selected');
+        document.querySelector('.dd-lang-option[data-value="auto"]').classList.add('selected');
       } catch (err) {
         errorText.textContent = err.message || 'Error submitting request. Please try again.';
         errorMessage.classList.add('show');

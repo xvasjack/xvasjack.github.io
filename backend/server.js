@@ -7,6 +7,7 @@ const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
 const XLSX = require('xlsx');
 const multer = require('multer');
+const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } = require('docx');
 
 const app = express();
 app.use(cors());
@@ -207,6 +208,265 @@ async function callDeepSeek(prompt, maxTokens = 4000) {
     console.error('DeepSeek error:', error.message);
     return null;
   }
+}
+
+// Transcribe audio using OpenAI Whisper
+async function transcribeAudio(audioBase64, mimeType, language = 'auto') {
+  try {
+    // Convert base64 to buffer
+    const audioBuffer = Buffer.from(audioBase64, 'base64');
+
+    // Create form data for OpenAI API
+    const FormData = require('form-data');
+    const formData = new FormData();
+
+    // Determine file extension from mime type
+    const extMap = {
+      'audio/webm': 'webm',
+      'audio/mp3': 'mp3',
+      'audio/mpeg': 'mp3',
+      'audio/wav': 'wav',
+      'audio/m4a': 'm4a',
+      'audio/mp4': 'm4a',
+      'audio/ogg': 'ogg',
+      'audio/flac': 'flac'
+    };
+    const ext = extMap[mimeType] || 'webm';
+
+    formData.append('file', audioBuffer, { filename: `audio.${ext}`, contentType: mimeType });
+    formData.append('model', 'whisper-1');
+    formData.append('response_format', 'verbose_json');
+
+    // If specific language is provided (not auto), use it
+    if (language && language !== 'auto') {
+      formData.append('language', language);
+    }
+
+    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+        ...formData.getHeaders()
+      },
+      body: formData
+    });
+
+    const data = await response.json();
+    if (data.error) {
+      console.error('Whisper API error:', data.error);
+      return { text: '', language: 'unknown', error: data.error.message };
+    }
+
+    return {
+      text: data.text || '',
+      language: data.language || 'unknown',
+      duration: data.duration || 0,
+      segments: data.segments || []
+    };
+  } catch (error) {
+    console.error('Whisper transcription error:', error.message);
+    return { text: '', language: 'unknown', error: error.message };
+  }
+}
+
+// Translate text using GPT-4o
+async function translateText(text, targetLang = 'en') {
+  if (!text || text.length < 10) return text;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{
+        role: 'user',
+        content: `Translate the following text to ${targetLang === 'en' ? 'English' : targetLang}. Only output the translation, nothing else:\n\n${text}`
+      }],
+      temperature: 0.2
+    });
+    return response.choices[0].message.content || text;
+  } catch (error) {
+    console.error('Translation error:', error.message);
+    return text;
+  }
+}
+
+// Generate meeting minutes from transcript
+async function generateMeetingMinutes(transcript, instructions = '') {
+  const prompt = `You are an expert meeting summarizer. Create structured meeting minutes from the following transcript.
+
+TRANSCRIPT:
+${transcript}
+
+${instructions ? `SPECIAL INSTRUCTIONS: ${instructions}\n` : ''}
+
+Generate professional meeting minutes in HTML format with the following structure:
+1. <h2>Meeting Summary</h2> - Brief overview (2-3 sentences)
+2. <h2>Key Discussion Points</h2> - Main topics discussed
+3. <h2>Decisions Made</h2> - Any decisions or conclusions reached
+4. <h2>Action Items</h2> - Tasks assigned with responsible parties if mentioned
+5. <h2>Next Steps</h2> - Follow-up items or future meetings
+
+Use proper HTML formatting with bullet points (<ul><li>) where appropriate.
+Be concise but capture all important information.`;
+
+  const result = await callDeepSeek(prompt, 3000);
+  if (result) return result;
+
+  // Fallback to GPT-4o
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.3,
+      max_tokens: 3000
+    });
+    return response.choices[0].message.content || '';
+  } catch (error) {
+    console.error('Meeting minutes error:', error.message);
+    return `<h2>Transcript</h2><p>${transcript}</p>`;
+  }
+}
+
+// Generate Word document from HTML content
+async function generateWordDocument(title, htmlContent, metadata = {}) {
+  // Parse HTML content into sections
+  const sections = [];
+
+  // Add title
+  sections.push(new Paragraph({
+    text: title,
+    heading: HeadingLevel.TITLE,
+    spacing: { after: 400 }
+  }));
+
+  // Add metadata
+  if (metadata.date) {
+    sections.push(new Paragraph({
+      children: [
+        new TextRun({ text: 'Date: ', bold: true }),
+        new TextRun({ text: metadata.date })
+      ],
+      spacing: { after: 100 }
+    }));
+  }
+  if (metadata.preparedFor) {
+    sections.push(new Paragraph({
+      children: [
+        new TextRun({ text: 'Prepared For: ', bold: true }),
+        new TextRun({ text: metadata.preparedFor })
+      ],
+      spacing: { after: 200 }
+    }));
+  }
+
+  // Simple HTML to docx conversion
+  const cleanHtml = htmlContent
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<\/h[1-6]>/gi, '\n');
+
+  // Extract headings and content
+  const h1Regex = /<h1[^>]*>(.*?)<\/h1>/gi;
+  const h2Regex = /<h2[^>]*>(.*?)<\/h2>/gi;
+  const h3Regex = /<h3[^>]*>(.*?)<\/h3>/gi;
+
+  // Split content by headings and process
+  let processedContent = htmlContent;
+
+  // Replace headings with markers
+  processedContent = processedContent.replace(h1Regex, '|||H1|||$1|||/H1|||');
+  processedContent = processedContent.replace(h2Regex, '|||H2|||$1|||/H2|||');
+  processedContent = processedContent.replace(h3Regex, '|||H3|||$1|||/H3|||');
+
+  // Remove other HTML tags
+  processedContent = processedContent
+    .replace(/<ul>/gi, '')
+    .replace(/<\/ul>/gi, '')
+    .replace(/<ol>/gi, '')
+    .replace(/<\/ol>/gi, '')
+    .replace(/<li>/gi, '• ')
+    .replace(/<\/li>/gi, '\n')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<p>/gi, '')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<strong>/gi, '**')
+    .replace(/<\/strong>/gi, '**')
+    .replace(/<b>/gi, '**')
+    .replace(/<\/b>/gi, '**')
+    .replace(/<em>/gi, '_')
+    .replace(/<\/em>/gi, '_')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"');
+
+  // Process the content with markers
+  const parts = processedContent.split('|||');
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i].trim();
+    if (!part) continue;
+
+    if (part === 'H1' && parts[i + 1]) {
+      sections.push(new Paragraph({
+        text: parts[i + 1].replace('/H1', '').trim(),
+        heading: HeadingLevel.HEADING_1,
+        spacing: { before: 400, after: 200 }
+      }));
+      i++;
+    } else if (part === 'H2' && parts[i + 1]) {
+      sections.push(new Paragraph({
+        text: parts[i + 1].replace('/H2', '').trim(),
+        heading: HeadingLevel.HEADING_2,
+        spacing: { before: 300, after: 150 }
+      }));
+      i++;
+    } else if (part === 'H3' && parts[i + 1]) {
+      sections.push(new Paragraph({
+        text: parts[i + 1].replace('/H3', '').trim(),
+        heading: HeadingLevel.HEADING_3,
+        spacing: { before: 200, after: 100 }
+      }));
+      i++;
+    } else if (!part.startsWith('/H')) {
+      // Regular text
+      const lines = part.split('\n').filter(l => l.trim());
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (!trimmedLine) continue;
+
+        // Handle bold text markers
+        const children = [];
+        const boldParts = trimmedLine.split('**');
+        for (let j = 0; j < boldParts.length; j++) {
+          if (boldParts[j]) {
+            children.push(new TextRun({
+              text: boldParts[j],
+              bold: j % 2 === 1
+            }));
+          }
+        }
+
+        if (children.length > 0) {
+          sections.push(new Paragraph({
+            children,
+            spacing: { after: 100 }
+          }));
+        }
+      }
+    }
+  }
+
+  const doc = new Document({
+    sections: [{
+      properties: {},
+      children: sections
+    }]
+  });
+
+  return await Packer.toBuffer(doc);
 }
 
 // ============ SEARCH CONFIGURATION ============
@@ -6394,83 +6654,218 @@ IMPORTANT:
 }
 
 app.post('/api/due-diligence', async (req, res) => {
-  const { files, instructions, reportLength, email } = req.body;
+  const {
+    files = [],
+    audioFiles = [],
+    instructions,
+    reportLength,
+    outputType = 'dd_report',
+    audioLang = 'auto',
+    translateToEnglish = true,
+    generateWord = true,
+    email
+  } = req.body;
 
-  if (!files || files.length === 0 || !email) {
-    return res.status(400).json({ error: 'Files and email are required' });
+  // Validate: need at least one file (document or audio) and email
+  if ((files.length === 0 && audioFiles.length === 0) || !email) {
+    return res.status(400).json({ error: 'At least one file and email are required' });
   }
 
   const validLengths = ['short', 'medium', 'long'];
   const length = validLengths.includes(reportLength) ? reportLength : 'medium';
+  const validOutputTypes = ['dd_report', 'meeting_minutes', 'transcript'];
+  const output = validOutputTypes.includes(outputType) ? outputType : 'dd_report';
 
   console.log(`\n${'='.repeat(60)}`);
   console.log(`[DD] NEW DUE DILIGENCE REQUEST: ${new Date().toISOString()}`);
-  console.log(`[DD] Files: ${files.length}`);
+  console.log(`[DD] Documents: ${files.length}`);
   files.forEach(f => console.log(`     - ${f.name} (${f.type})`));
+  console.log(`[DD] Audio Files: ${audioFiles.length}`);
+  audioFiles.forEach(f => console.log(`     - ${f.name} (${f.mimeType})`));
+  console.log(`[DD] Output Type: ${output}`);
   console.log(`[DD] Report Length: ${length}`);
+  console.log(`[DD] Audio Language: ${audioLang}`);
+  console.log(`[DD] Translate to English: ${translateToEnglish}`);
+  console.log(`[DD] Generate Word: ${generateWord}`);
   console.log(`[DD] Email: ${email}`);
   console.log(`[DD] Special Instructions: ${instructions ? instructions.substring(0, 100) + '...' : 'None'}`);
   console.log('='.repeat(60));
 
   // Respond immediately
+  const outputLabel = {
+    dd_report: 'Due diligence report',
+    meeting_minutes: 'Meeting minutes',
+    transcript: 'Transcript'
+  };
   res.json({
     success: true,
-    message: `Due diligence report request received. Results will be emailed within 10-15 minutes.`
+    message: `${outputLabel[output]} request received. Results will be emailed within 10-15 minutes.`
   });
 
   try {
-    // Generate the report
-    const report = await generateDueDiligenceReport(files, instructions, length);
+    // Step 1: Transcribe all audio files
+    let transcripts = [];
+    let detectedLanguages = [];
 
-    // Format the report email
-    const lengthLabel = { short: '1-Page Summary', medium: '2-3 Page Report', long: 'Comprehensive Report' };
-    const fileList = files.map(f => `<li>${f.name}</li>`).join('');
+    for (const audioFile of audioFiles) {
+      console.log(`[DD] Transcribing: ${audioFile.name}`);
+      const result = await transcribeAudio(audioFile.content, audioFile.mimeType, audioLang);
+
+      if (result.error) {
+        console.error(`[DD] Transcription failed for ${audioFile.name}: ${result.error}`);
+        transcripts.push({ name: audioFile.name, text: `[Transcription failed: ${result.error}]`, language: 'unknown' });
+      } else {
+        console.log(`[DD] Transcribed ${audioFile.name}: ${result.text.substring(0, 100)}... (${result.language})`);
+        transcripts.push({
+          name: audioFile.name,
+          text: result.text,
+          language: result.language,
+          duration: result.duration
+        });
+        if (result.language && result.language !== 'unknown') {
+          detectedLanguages.push(result.language);
+        }
+      }
+    }
+
+    // Step 2: Translate if needed
+    let translatedTranscripts = [];
+    for (const t of transcripts) {
+      if (translateToEnglish && t.language !== 'en' && t.language !== 'english' && t.text.length > 10) {
+        console.log(`[DD] Translating from ${t.language} to English: ${t.name}`);
+        const translated = await translateText(t.text, 'en');
+        translatedTranscripts.push({
+          ...t,
+          originalText: t.text,
+          text: translated,
+          wasTranslated: true
+        });
+      } else {
+        translatedTranscripts.push({ ...t, wasTranslated: false });
+      }
+    }
+
+    // Step 3: Combine all content
+    let combinedTranscript = translatedTranscripts.map(t =>
+      `=== ${t.name} ${t.wasTranslated ? `(Translated from ${t.language})` : ''} ===\n${t.text}`
+    ).join('\n\n');
+
+    // Step 4: Generate output based on type
+    let outputContent = '';
+    let emailSubject = '';
+    let docTitle = '';
+
+    if (output === 'transcript') {
+      // Just return the transcript
+      outputContent = `<h2>Transcripts</h2>`;
+      for (const t of translatedTranscripts) {
+        outputContent += `
+          <div style="margin-bottom: 20px; padding: 15px; background: #f8fafc; border-radius: 8px;">
+            <h3 style="margin: 0 0 10px 0; color: #1e40af;">${t.name}</h3>
+            ${t.wasTranslated ? `<p style="font-size: 12px; color: #64748b; margin: 0 0 10px 0;"><em>Translated from ${t.language}</em></p>` : ''}
+            ${t.duration ? `<p style="font-size: 12px; color: #64748b; margin: 0 0 10px 0;">Duration: ${Math.round(t.duration / 60)} minutes</p>` : ''}
+            <p style="white-space: pre-wrap; line-height: 1.6;">${t.text}</p>
+            ${t.wasTranslated ? `<details style="margin-top: 15px;"><summary style="cursor: pointer; color: #64748b;">Show Original (${t.language})</summary><p style="white-space: pre-wrap; margin-top: 10px; padding: 10px; background: #e2e8f0; border-radius: 4px;">${t.originalText}</p></details>` : ''}
+          </div>`;
+      }
+      emailSubject = `Transcript - ${audioFiles[0]?.name || 'Recording'}`;
+      docTitle = 'Transcript';
+
+    } else if (output === 'meeting_minutes') {
+      // Generate meeting minutes
+      console.log('[DD] Generating meeting minutes...');
+      outputContent = await generateMeetingMinutes(combinedTranscript, instructions);
+      emailSubject = `Meeting Minutes - ${new Date().toLocaleDateString()}`;
+      docTitle = 'Meeting Minutes';
+
+    } else {
+      // Generate full DD report
+      console.log('[DD] Generating due diligence report...');
+
+      // Add transcripts to files for processing
+      const allFiles = [...files];
+      if (combinedTranscript) {
+        allFiles.push({
+          name: 'Meeting Transcripts',
+          type: 'transcript',
+          content: combinedTranscript
+        });
+      }
+
+      outputContent = await generateDueDiligenceReport(allFiles, instructions, length);
+      const lengthLabel = { short: '1-Page Summary', medium: '2-3 Page Report', long: 'Comprehensive Report' };
+      emailSubject = `Due Diligence Report - ${files[0]?.name || audioFiles[0]?.name || 'Analysis'} (${lengthLabel[length]})`;
+      docTitle = 'Due Diligence Report';
+    }
+
+    // Step 5: Build email HTML
+    const allFileNames = [...files.map(f => f.name), ...audioFiles.map(f => f.name)];
+    const fileList = allFileNames.map(n => `<li>${n}</li>`).join('');
+
+    const headerColors = {
+      dd_report: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)',
+      meeting_minutes: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
+      transcript: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)'
+    };
 
     const emailHtml = `
     <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto;">
-      <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 30px; border-radius: 12px 12px 0 0;">
-        <h1 style="color: white; margin: 0; font-size: 24px;">Due Diligence Report</h1>
-        <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0 0;">${lengthLabel[length]}</p>
+      <div style="background: ${headerColors[output]}; padding: 30px; border-radius: 12px 12px 0 0;">
+        <h1 style="color: white; margin: 0; font-size: 24px;">${docTitle}</h1>
+        <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0 0;">${new Date().toLocaleDateString()}</p>
       </div>
 
       <div style="background: #f8fafc; padding: 20px; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0;">
-        <p style="margin: 0; color: #64748b; font-size: 14px;">
-          <strong>Materials Analyzed:</strong>
-        </p>
-        <ul style="margin: 8px 0; padding-left: 20px; color: #475569; font-size: 13px;">
-          ${fileList}
-        </ul>
+        <p style="margin: 0; color: #64748b; font-size: 14px;"><strong>Materials Processed:</strong></p>
+        <ul style="margin: 8px 0; padding-left: 20px; color: #475569; font-size: 13px;">${fileList}</ul>
+        ${transcripts.length > 0 ? `<p style="margin: 8px 0 0 0; color: #64748b; font-size: 13px;"><strong>Audio Transcribed:</strong> ${transcripts.length} file(s) ${detectedLanguages.length > 0 ? `(${[...new Set(detectedLanguages)].join(', ')})` : ''}</p>` : ''}
         ${instructions ? `<p style="margin: 12px 0 0 0; color: #64748b; font-size: 13px;"><strong>Special Instructions:</strong> ${instructions}</p>` : ''}
       </div>
 
       <div style="background: white; padding: 30px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
-        ${report}
+        ${outputContent}
       </div>
 
       <div style="margin-top: 20px; padding: 15px; background: #f1f5f9; border-radius: 8px; font-size: 12px; color: #64748b;">
         <p style="margin: 0;">Generated: ${new Date().toLocaleString()}</p>
-        <p style="margin: 4px 0 0 0;">This report is AI-generated and should be reviewed by qualified professionals before making investment decisions.</p>
+        <p style="margin: 4px 0 0 0;">This ${docTitle.toLowerCase()} is AI-generated and should be reviewed for accuracy.</p>
       </div>
     </div>`;
 
-    // Send email
-    await sendEmail(
-      email,
-      `Due Diligence Report - ${files[0]?.name || 'Analysis'} (${lengthLabel[length]})`,
-      emailHtml
-    );
+    // Step 6: Generate Word document if requested
+    let attachments = null;
+    if (generateWord) {
+      console.log('[DD] Generating Word document...');
+      try {
+        const wordBuffer = await generateWordDocument(docTitle, outputContent, {
+          date: new Date().toLocaleDateString(),
+          preparedFor: email
+        });
 
-    console.log(`[DD] Report sent successfully to ${email}`);
+        const filename = `${docTitle.replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}.docx`;
+        attachments = [{
+          filename,
+          content: wordBuffer.toString('base64')
+        }];
+        console.log(`[DD] Word document generated: ${filename}`);
+      } catch (docError) {
+        console.error('[DD] Word document generation failed:', docError.message);
+      }
+    }
+
+    // Step 7: Send email
+    await sendEmail(email, emailSubject, emailHtml, attachments);
+    console.log(`[DD] ${docTitle} sent successfully to ${email}`);
 
   } catch (error) {
-    console.error('[DD] Error generating report:', error);
+    console.error('[DD] Error:', error);
     try {
       await sendEmail(
         email,
         'Due Diligence Report - Error',
         `<div style="font-family: Arial, sans-serif; padding: 20px;">
-          <h2 style="color: #dc2626;">Error Generating Report</h2>
-          <p>We encountered an error while generating your due diligence report:</p>
+          <h2 style="color: #dc2626;">Error Processing Request</h2>
+          <p>We encountered an error while processing your request:</p>
           <p style="background: #fee2e2; padding: 12px; border-radius: 6px; color: #991b1b;">${error.message}</p>
           <p>Please try again or contact support if the issue persists.</p>
         </div>`
@@ -6482,7 +6877,7 @@ app.post('/api/due-diligence', async (req, res) => {
 });
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'Find Target v38 - Due Diligence Report' });
+  res.json({ status: 'ok', service: 'Find Target v39 - DD Report with Audio Transcription' });
 });
 
 const PORT = process.env.PORT || 3000;
