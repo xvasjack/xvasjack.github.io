@@ -1338,11 +1338,13 @@ DO NOT include companies from this list: ${existingList}`;
 
 ROUND 1 - RELATED TERMINOLOGY SEARCH:
 The user searched for "${business}" but companies may use different terms.
-Search for companies using ALL related terminology:
-- If searching for "ink": also search coating, water-based ink, solvent ink, UV ink, flexo ink, gravure ink, printing ink, packaging ink, OPV, overprint varnish
-- If searching for "manufacturer": also search producer, maker, factory, plant, works
-- Search for companies that might describe themselves differently but do the same business
-Find local/domestic companies that may not appear in typical searches.`,
+Think about what OTHER words or phrases companies in this industry might use to describe themselves.
+Consider:
+- Alternative industry terminology
+- Different product descriptions
+- Related processes or services
+- Synonyms and variations
+Search using ALL these related terms to find companies we might otherwise miss.`,
 
     2: `${baseInstruction}
 
@@ -1367,7 +1369,7 @@ Include companies in industrial estates, free trade zones, and business parks.`,
 
 ROUND 4 - TRADE ASSOCIATIONS & MEMBER DIRECTORIES:
 Find ${business} companies that are members of:
-- Industry associations (printing, packaging, ink, coating associations)
+- Industry associations relevant to ${business}
 - Trade organizations
 - Chamber of commerce
 - Business federations
@@ -1384,7 +1386,7 @@ Look for: ${localLang.examples.join(', ')} related businesses.` : `${baseInstruc
 ROUND 5 - ALTERNATIVE NAMING:
 Search for ${business} companies using:
 - Local language business names
-- Alternative industry terminology (coating, printing, packaging)
+- Alternative industry terminology
 - Regional naming conventions
 in ${country}.`,
 
@@ -1402,7 +1404,7 @@ that are also ${business} companies in ${country}.`,
 
 ROUND 7 - INDUSTRY PUBLICATIONS & ARTICLES:
 Search for ${business} companies mentioned in:
-- Industry magazines (Ink World, Flexo, Packaging magazines)
+- Industry magazines and trade publications for ${business}
 - News articles about the ${business} industry in ${country}
 - Trade publication interviews
 - Company profiles in business journals`,
@@ -1411,9 +1413,9 @@ Search for ${business} companies mentioned in:
 
 ROUND 8 - TRADE SHOWS & EXHIBITIONS:
 Find ${business} companies that exhibited at:
-- Industry trade shows (past 3 years)
-- Packaging exhibitions
-- Printing technology fairs
+- Industry trade shows relevant to ${business} (past 3 years)
+- B2B exhibitions
+- Industry-specific fairs
 in ${country} or international shows with ${country} exhibitors.`,
 
     9: `${baseInstruction}
