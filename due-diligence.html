@@ -520,14 +520,21 @@
 
         // Update hint text based on selection
         const langHint = document.getElementById('langHint');
+        // Languages NOT supported for code-switching (must use single-language mode)
+        const noCodeSwitchLangs = ['zh', 'th', 'ar'];
+
         if (selectedLang === 'multi') {
-          langHint.innerHTML = '<strong style="color: #1e40af;">Multi-language mode:</strong> <span style="color: #1e3a5f;">Auto-detects language switches. Non-English will be translated.</span>';
+          langHint.innerHTML = '<strong style="color: #1e40af;">Multi-language mode:</strong> <span style="color: #1e3a5f;">EN/ES/FR/DE/JA/KO/VI + more. Non-English translated.</span><br><span style="font-size: 10px; color: #64748b;">Note: Chinese/Thai/Arabic not supported - select those languages directly.</span>';
           langHint.style.background = 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)';
           langHint.style.borderColor = '#3b82f6';
         } else if (selectedLang === 'en') {
           langHint.innerHTML = '<strong style="color: #166534;">English mode:</strong> <span style="color: #14532d;">Optimized for English-only meetings.</span>';
           langHint.style.background = 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)';
           langHint.style.borderColor = '#22c55e';
+        } else if (noCodeSwitchLangs.includes(selectedLang)) {
+          langHint.innerHTML = '<strong style="color: #92400e;">Selected: ' + e.target.textContent + '</strong> <span style="color: #78350f;">Single-language mode. Will be translated to English.</span>';
+          langHint.style.background = 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)';
+          langHint.style.borderColor = '#f59e0b';
         } else {
           langHint.innerHTML = '<strong style="color: #92400e;">Selected: ' + e.target.textContent + '</strong> <span style="color: #78350f;">Will be translated to English.</span>';
           langHint.style.background = 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)';
