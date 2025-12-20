@@ -576,6 +576,7 @@
     let autoSaveInterval = null;
     let currentR2Key = null;
     let currentSpeaker = null;  // Track current speaker for diarization
+    let currentTranslationSpeaker = null;  // Track speaker for translation panel
 
     // ============ AUTO-SAVE & RECOVERY ============
     const STORAGE_KEY = 'dd_recording_backup';
@@ -824,6 +825,7 @@
       try {
         // Reset speaker tracking for new recording
         currentSpeaker = null;
+        currentTranslationSpeaker = null;
 
         // Get microphone access
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -884,8 +886,13 @@
               translationPanel.style.display = 'flex';
             }
           } else if (data.type === 'translation') {
-            finalTranslation = data.fullTranslation;
-            translationContent.textContent = finalTranslation;
+            // Add speaker label if speaker changed (same as transcript panel)
+            if (data.speaker !== null && data.speaker !== currentTranslationSpeaker) {
+              currentTranslationSpeaker = data.speaker;
+              finalTranslation += '<br><span class="speaker-label">Speaker ' + data.speaker + ':</span> ';
+            }
+            finalTranslation += data.text + ' ';
+            translationContent.innerHTML = finalTranslation;
             translationContent.scrollTop = translationContent.scrollHeight;
           } else if (data.type === 'complete') {
             // Recording complete - store R2 key for download
