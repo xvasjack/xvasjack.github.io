@@ -667,17 +667,22 @@
     }
 
     function updateFileList() {
+      console.log('[DD] updateFileList called, selectedFiles:', selectedFiles.length);
+      console.log('[DD] fileList element:', fileList);
       if (selectedFiles.length === 0) {
         fileList.innerHTML = '';
         return;
       }
-      fileList.innerHTML = selectedFiles.map((f, i) => `
+      const html = selectedFiles.map((f, i) => `
         <div class="dd-file-item">
           <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
           <span>${f.name}</span>
           <button onclick="removeFile(${i})">&times;</button>
         </div>
       `).join('');
+      console.log('[DD] Setting innerHTML to:', html);
+      fileList.innerHTML = html;
+      console.log('[DD] fileList.innerHTML after set:', fileList.innerHTML.substring(0, 100));
     }
 
     window.removeFile = function(i) { selectedFiles.splice(i, 1); updateFileList(); };
