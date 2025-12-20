@@ -8486,6 +8486,9 @@ wss.on('connection', (ws, req) => {
           // For streaming, use language='multi' which enables multilingual code-switching
           if (data.language && data.language !== 'auto') {
             dgOptions.language = data.language;
+            // Set detected language to selected language
+            detectedLanguage = data.language;
+            activeSessions.get(sessionId).language = data.language;
           } else {
             dgOptions.language = 'multi';  // Multilingual mode for auto-detection in streaming
           }
