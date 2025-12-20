@@ -4788,23 +4788,30 @@ async function generatePPTX(companies) {
       const formatCellText = (text) => {
         if (!text || typeof text !== 'string') return text;
 
-        // Check if text contains bullet points (■, -, or •)
-        if (text.includes('■') || text.includes('\n-') || text.startsWith('-')) {
+        // Check if text has multiple lines - if so, format as bullet points
+        // Also check for explicit bullet markers (■, -, •)
+        const hasMultipleLines = text.includes('\n');
+        const hasBulletMarkers = text.includes('■') || text.includes('\n-') || text.startsWith('-') || text.startsWith('•');
+
+        if (hasMultipleLines || hasBulletMarkers) {
           // Split by newline and filter out empty lines
           const lines = text.split('\n').filter(line => line.trim());
 
-          // Convert to array of text objects with square bullet formatting
-          return lines.map((line, index) => {
-            const cleanLine = line.replace(/^[■\-•]\s*/, '').trim();
-            return {
-              text: cleanLine + (index < lines.length - 1 ? '\n' : ''),
-              options: {
-                bullet: SQUARE_BULLET,
-                paraSpaceBefore: 0,
-                paraSpaceAfter: 0
-              }
-            };
-          });
+          // Only format as bullets if we have 2+ lines
+          if (lines.length >= 2) {
+            // Convert to array of text objects with square bullet formatting
+            return lines.map((line, index) => {
+              const cleanLine = line.replace(/^[■\-•]\s*/, '').trim();
+              return {
+                text: cleanLine + (index < lines.length - 1 ? '\n' : ''),
+                options: {
+                  bullet: SQUARE_BULLET,
+                  paraSpaceBefore: 0,
+                  paraSpaceAfter: 0
+                }
+              };
+            });
+          }
         }
         return text;
       };
