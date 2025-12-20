@@ -512,17 +512,6 @@
     // Check for recovery on page load
     checkForRecovery();
 
-    // Tab switching
-    tabs.forEach(tab => {
-      tab.addEventListener('click', () => {
-        const mode = tab.dataset.mode;
-        tabs.forEach(t => t.classList.remove('active'));
-        modes.forEach(m => m.classList.remove('active'));
-        tab.classList.add('active');
-        document.getElementById(mode + 'Mode').classList.add('active');
-      });
-    });
-
     // ============ UPLOAD MODE ============
 
     uploadZone.addEventListener('click', () => fileInput.click());
