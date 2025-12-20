@@ -651,12 +651,18 @@
     fileInput.addEventListener('change', e => handleFiles(e.target.files));
 
     function handleFiles(files) {
+      console.log('[DD] handleFiles called with:', files);
+      console.log('[DD] Number of files:', files?.length);
       const allowed = ['pdf', 'ppt', 'pptx', 'doc', 'docx', 'txt', 'rtf', 'csv', 'xlsx', 'xls', 'mp3', 'wav', 'm4a', 'webm', 'ogg'];
       const newFiles = Array.from(files).filter(f => {
         const ext = f.name.split('.').pop().toLowerCase();
-        return allowed.includes(ext) && f.size <= 50 * 1024 * 1024;
+        const isAllowed = allowed.includes(ext) && f.size <= 50 * 1024 * 1024;
+        console.log('[DD] File:', f.name, 'ext:', ext, 'allowed:', isAllowed, 'size:', f.size);
+        return isAllowed;
       });
+      console.log('[DD] Filtered files:', newFiles.length);
       selectedFiles = [...selectedFiles, ...newFiles].slice(0, 10);
+      console.log('[DD] Total selectedFiles:', selectedFiles.length);
       updateFileList();
     }
 
