@@ -500,12 +500,24 @@ async function translateText(text, targetLang = 'en') {
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [{
-        role: 'user',
-        content: `Translate the following text to ${targetLang === 'en' ? 'English' : targetLang}. Only output the translation, nothing else:\n\n${text}`
-      }],
-      temperature: 0.2
+      model: 'gpt-4o',  // Use GPT-4o for better translation quality
+      messages: [
+        {
+          role: 'system',
+          content: `You are a professional translator specializing in business meeting transcriptions.
+Translate accurately while:
+- Preserving the original meaning and tone
+- Using natural, fluent ${targetLang === 'en' ? 'English' : targetLang}
+- Keeping business/technical terms accurate
+- Not adding or omitting information
+Output only the translation, nothing else.`
+        },
+        {
+          role: 'user',
+          content: text
+        }
+      ],
+      temperature: 0.1  // Lower temperature for more consistent translations
     });
     return response.choices[0].message.content || text;
   } catch (error) {
@@ -8796,6 +8808,7 @@ wss.on('connection', (ws, req) => {
                         type: 'translation',
                         text: translated,
                         originalLang: thisSegmentLang,
+                        speaker: speaker !== null ? speaker + 1 : null,  // Include speaker for translation
                         fullTranslation: translatedTranscript
                       }));
                     }
