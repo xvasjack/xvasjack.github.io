@@ -3885,7 +3885,8 @@ function createSheetData(companies, headers, title) {
       c.peTTM,
       c.peFY,
       c.pb,
-      c.filterReason || ''
+      c.filterReason || '',
+      (c.dataWarnings && c.dataWarnings.length > 0) ? c.dataWarnings.join('; ') : ''
     ];
     data.push(row);
   }
@@ -3906,6 +3907,7 @@ function createSheetData(companies, headers, title) {
       calculateMedian(companies.map(c => c.peTTM)),
       calculateMedian(companies.map(c => c.peFY)),
       calculateMedian(companies.map(c => c.pb)),
+      '',
       ''
     ];
     data.push([]);
@@ -4105,8 +4107,60 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
         peTTM: parseNum(cols.peTTM),
         peFY: parseNum(cols.peFY),
         pb: parseNum(cols.pb),
-        filterReason: ''
+        filterReason: '',
+        dataWarnings: []
       };
+
+      // DATA VALIDATION: Check for suspicious/inconsistent financial data
+      const warnings = [];
+
+      // Check 1: EBITDA should be less than Sales (EBITDA margin > 100% is very suspicious)
+      if (company.sales && company.ebitda && company.ebitda > company.sales) {
+        warnings.push(`EBITDA (${company.ebitda}) > Sales (${company.sales}) - possible unit mismatch`);
+      }
+
+      // Check 2: Sales should be reasonable compared to Market Cap (PSR typically 0.1x - 50x)
+      if (company.sales && company.marketCap) {
+        const psr = company.marketCap / company.sales;
+        if (psr > 100) {
+          warnings.push(`PSR ${psr.toFixed(1)}x is extremely high - check Sales units`);
+        } else if (psr < 0.01) {
+          warnings.push(`PSR ${psr.toFixed(3)}x is extremely low - check Market Cap units`);
+        }
+      }
+
+      // Check 3: EV should be in similar ballpark as Market Cap (typically 0.5x - 3x)
+      if (company.ev && company.marketCap) {
+        const evToMcap = company.ev / company.marketCap;
+        if (evToMcap > 10) {
+          warnings.push(`EV/Market Cap ratio ${evToMcap.toFixed(1)}x is unusual - verify data`);
+        } else if (evToMcap < 0.1) {
+          warnings.push(`EV/Market Cap ratio ${evToMcap.toFixed(2)}x is unusual - verify data`);
+        }
+      }
+
+      // Check 4: If EV/EBITDA is provided, verify it roughly matches EV / EBITDA calculation
+      if (company.evEbitda && company.ev && company.ebitda && company.ebitda > 0) {
+        const calculatedEvEbitda = company.ev / company.ebitda;
+        const diff = Math.abs(calculatedEvEbitda - company.evEbitda) / company.evEbitda;
+        if (diff > 0.5) { // More than 50% difference
+          warnings.push(`EV/EBITDA mismatch: provided ${company.evEbitda.toFixed(1)}x vs calculated ${calculatedEvEbitda.toFixed(1)}x`);
+        }
+      }
+
+      // Check 5: Very small Sales compared to other metrics (possible unit issue - e.g., Sales in billions but others in millions)
+      if (company.sales && company.sales < 100) {
+        if ((company.marketCap && company.marketCap > 1000) ||
+            (company.ev && company.ev > 1000) ||
+            (company.ebitda && company.ebitda > 100)) {
+          warnings.push(`Sales (${company.sales}) seems too small relative to other metrics - possible unit mismatch`);
+        }
+      }
+
+      company.dataWarnings = warnings;
+      if (warnings.length > 0) {
+        console.log(`Data warning for ${companyName}: ${warnings.join('; ')}`);
+      }
 
       // Only include if it has at least some financial data
       const hasData = company.sales || company.marketCap || company.evEbitda || company.peTTM || company.peFY || company.pb;
@@ -4125,7 +4179,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
 
     // Create output workbook
     const outputWorkbook = XLSX.utils.book_new();
-    const sheetHeaders = ['Company', 'Country', 'Sales', 'Market Cap', 'EV', 'EBITDA', 'Net Margin %', 'Op Margin %', 'EBITDA Margin %', 'EV/EBITDA', 'P/E (TTM)', 'P/E (FY)', 'P/BV', 'Filter Reason'];
+    const sheetHeaders = ['Company', 'Country', 'Sales', 'Market Cap', 'EV', 'EBITDA', 'Net Margin %', 'Op Margin %', 'EBITDA Margin %', 'EV/EBITDA', 'P/E (TTM)', 'P/E (FY)', 'P/BV', 'Filter Reason', 'Data Warnings'];
 
     // Sheet 1: All Original Companies
     const sheet1Data = createSheetData(allCompanies, sheetHeaders, `Original Data - ${allCompanies.length} companies`);
@@ -4315,6 +4369,14 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     // Helper function to clean company name
     const cleanCompanyName = (name) => {
       if (!name) return '-';
+
+      // First remove prefixes (PT for Indonesian companies, etc.)
+      const prefixes = [
+        /^PT\s+/i,           // Indonesian: PT Mitra Keluarga -> Mitra Keluarga
+        /^CV\s+/i,           // Indonesian: CV Company Name
+        /^P\.?T\.?\s+/i,     // Variations: P.T. or P T
+      ];
+
       const suffixes = [
         /\s+(Bhd|BHD|Berhad|BERHAD)\.?$/i,
         /\s+(PCL|Pcl|P\.C\.L\.)\.?$/i,
@@ -4328,7 +4390,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
         /\s+(SA|S\.A\.|S\.A)\.?$/i,
         /\s+(NV|N\.V\.)\.?$/i,
         /\s+(GmbH|GMBH)\.?$/i,
-        /\s+(Tbk|TBK|PT)\.?$/i,
+        /\s+(Tbk|TBK)\.?$/i,  // Indonesian suffix (removed PT from here since it's a prefix)
         /\s+(Oyj|OYJ|AB)\.?$/i,
         /\s+(SE)\.?$/i,
         /\s+(SpA|SPA|S\.p\.A\.)\.?$/i,
@@ -4337,17 +4399,31 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
         /,\s*(Inc|Ltd|LLC|Corp)\.?$/i,
         /\s+Holdings?$/i,
         /\s+Group$/i,
-        /\s+International$/i
+        /\s+International$/i,
+        /\s+Healthcare$/i,
+        /\s+Hospital$/i,
+        /\s+Medical$/i,
+        /\s+Services?$/i,
+        /\s+Systems?$/i
       ];
+
       let cleaned = String(name).trim();
-      for (const suffix of suffixes) {
-        cleaned = cleaned.replace(suffix, '');
+
+      // Remove prefixes first
+      for (const prefix of prefixes) {
+        cleaned = cleaned.replace(prefix, '');
       }
+
+      // Remove suffixes (run multiple passes to catch compound suffixes)
+      for (let i = 0; i < 3; i++) {
+        for (const suffix of suffixes) {
+          cleaned = cleaned.replace(suffix, '');
+        }
+      }
+
       cleaned = cleaned.trim();
-      // Truncate to 20 chars max to fit on one line
-      if (cleaned.length > 20) {
-        cleaned = cleaned.substring(0, 18) + '..';
-      }
+
+      // No truncation - show full name even if long (PowerPoint will wrap to second line)
       return cleaned;
     };
 
