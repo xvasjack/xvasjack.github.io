@@ -8709,6 +8709,14 @@ wss.on('connection', (ws, req) => {
                   // For English segments in multilingual meetings, add to translation too
                   translatedTranscript += transcript + ' ';
                   if (session) session.translatedTranscript = translatedTranscript;
+                  // Send English segments to translation panel too (with speaker info)
+                  ws.send(JSON.stringify({
+                    type: 'translation',
+                    text: transcript,
+                    originalLang: 'en',
+                    speaker: speaker !== null ? speaker + 1 : null,
+                    fullTranslation: translatedTranscript
+                  }));
                 }
               }
             }
