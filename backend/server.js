@@ -4755,13 +4755,27 @@ async function generatePPTX(companies) {
       // Track existing labels to prevent duplicates
       const existingLabels = new Set(tableData.map(row => row[0].toLowerCase()));
 
+      // Metrics to exclude (worthless or duplicate)
+      const EXCLUDED_METRICS = [
+        'market position', 'market share', 'market leader',
+        'number of branches', 'branches', 'number of locations', 'locations',
+        'operating hours', 'business hours', 'office hours',
+        'years of experience', 'experience', 'years in business',
+        'awards', 'recognitions', 'achievements'
+      ];
+
       // Add key metrics as separate rows if available (skip duplicates and empty values)
       if (company.key_metrics && Array.isArray(company.key_metrics)) {
         company.key_metrics.forEach(metric => {
           if (metric.label && metric.value && !isEmptyValue(metric.value)) {
             const labelLower = metric.label.toLowerCase();
-            // Skip if this label already exists or is duplicate of business/location
-            if (!existingLabels.has(labelLower) &&
+
+            // Skip excluded metrics
+            const isExcluded = EXCLUDED_METRICS.some(ex => labelLower.includes(ex));
+
+            // Skip if this label already exists or is duplicate of business/location/products
+            if (!isExcluded &&
+                !existingLabels.has(labelLower) &&
                 !labelLower.includes('business') &&
                 !labelLower.includes('location') &&
                 !labelLower.includes('product') &&
@@ -5244,7 +5258,7 @@ RULES:
 - Labels should be 1-3 words
 - Be specific with numbers when available
 - Include shareholding structure if mentioned
-- DO NOT include: years of experience, awards, recognitions (not useful for M&A)
+- DO NOT include: years of experience, awards, recognitions, market position, operating hours, number of branches/locations (not useful for M&A)
 - NEVER make up data - only include what's explicitly stated
 - Return ONLY valid JSON`
         },
