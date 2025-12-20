@@ -1749,6 +1749,155 @@ Example: ["Malaysia", "Thailand", "Indonesia"]`
   }
 }
 
+// ============ PHASE 0.5: INDUSTRY TERMINOLOGY DISCOVERY ============
+
+// Dynamically discover all terminology and sub-segments for any industry
+async function discoverIndustryTerminology(business, countries) {
+  console.log('\n' + '='.repeat(50));
+  console.log('PHASE 0.5: INDUSTRY TERMINOLOGY DISCOVERY');
+  console.log('='.repeat(50));
+
+  const countryList = countries.join(', ');
+
+  const discoveryPrompt = `You are an industry research expert preparing for an EXHAUSTIVE company search.
+
+TASK: Before searching for "${business}" companies, I need to understand ALL terminology and sub-segments used in this industry globally and specifically in ${countryList}.
+
+Think deeply about this industry. Consider:
+- How do companies in this industry describe themselves?
+- What are all the technical terms, trade names, and jargon used?
+- What sub-categories and niches exist?
+- How might smaller local companies describe themselves differently than large corporations?
+
+Provide a comprehensive list:
+
+1. ALTERNATIVE TERMINOLOGY (at least 10-15 terms)
+   - Synonyms and variations of "${business}"
+   - Technical/trade terms that mean the same thing
+   - How different companies might describe this business differently
+   - Older/traditional terms vs modern terms
+
+2. SUB-SEGMENTS (at least 8-10 segments)
+   - All sub-categories within "${business}"
+   - Specialized niches
+   - Product-type or application-based variations
+   - Process-based variations
+
+3. RELATED/ADJACENT CATEGORIES (at least 5-8 categories)
+   - Closely related businesses that might also qualify
+   - Companies that do "${business}" as part of their broader offering
+
+4. LOCAL LANGUAGE TERMS FOR ${countryList}
+   - Translations of "${business}" and key terms into local languages
+   - Local business terminology used in each country
+   - How local companies might name themselves
+
+Return as JSON:
+{
+  "primary_term": "${business}",
+  "alternative_terms": ["term1", "term2", ...],
+  "sub_segments": ["segment1", "segment2", ...],
+  "related_categories": ["category1", "category2", ...],
+  "local_terms": {
+    "Country1": ["term1", "term2"],
+    "Country2": ["term1", "term2"]
+  }
+}
+
+Be EXHAUSTIVE. The goal is to ensure we don't miss any company due to terminology differences.`;
+
+  try {
+    // Query multiple AI models for comprehensive coverage
+    console.log('  Querying GPT-4o, Gemini, and Perplexity for terminology discovery...');
+    const [gptResult, geminiResult, perplexityResult] = await Promise.all([
+      callOpenAISearch(discoveryPrompt),
+      callGemini(discoveryPrompt),
+      callPerplexity(discoveryPrompt)
+    ]);
+
+    // Extract JSON from each result
+    const extractJSON = (text) => {
+      try {
+        // Try to find JSON in the response
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          return JSON.parse(jsonMatch[0]);
+        }
+      } catch (e) {}
+      return null;
+    };
+
+    const gptTerms = extractJSON(gptResult);
+    const geminiTerms = extractJSON(geminiResult);
+    const perplexityTerms = extractJSON(perplexityResult);
+
+    // Merge all discovered terms
+    const allTerms = new Set([business]); // Always include the original term
+    const allSubSegments = new Set();
+    const allRelated = new Set();
+    const allLocalTerms = new Set();
+
+    for (const result of [gptTerms, geminiTerms, perplexityTerms]) {
+      if (!result) continue;
+
+      if (Array.isArray(result.alternative_terms)) {
+        result.alternative_terms.forEach(t => allTerms.add(t));
+      }
+      if (Array.isArray(result.sub_segments)) {
+        result.sub_segments.forEach(t => allSubSegments.add(t));
+      }
+      if (Array.isArray(result.related_categories)) {
+        result.related_categories.forEach(t => allRelated.add(t));
+      }
+      if (result.local_terms) {
+        if (Array.isArray(result.local_terms)) {
+          result.local_terms.forEach(t => allLocalTerms.add(t));
+        } else if (typeof result.local_terms === 'object') {
+          Object.values(result.local_terms).forEach(terms => {
+            if (Array.isArray(terms)) {
+              terms.forEach(t => allLocalTerms.add(t));
+            }
+          });
+        }
+      }
+    }
+
+    const terminology = {
+      primary_term: business,
+      alternative_terms: [...allTerms],
+      sub_segments: [...allSubSegments],
+      related_categories: [...allRelated],
+      local_terms: [...allLocalTerms],
+      all_search_terms: [...allTerms, ...allSubSegments, ...allRelated, ...allLocalTerms]
+    };
+
+    console.log(`  Discovered terminology:`);
+    console.log(`    Alternative terms: ${terminology.alternative_terms.length}`);
+    console.log(`    Sub-segments: ${terminology.sub_segments.length}`);
+    console.log(`    Related categories: ${terminology.related_categories.length}`);
+    console.log(`    Local language terms: ${terminology.local_terms.length}`);
+    console.log(`    Total unique search terms: ${terminology.all_search_terms.length}`);
+
+    // Log some examples
+    if (terminology.alternative_terms.length > 0) {
+      console.log(`    Examples: ${terminology.alternative_terms.slice(0, 5).join(', ')}...`);
+    }
+
+    return terminology;
+  } catch (error) {
+    console.error('  Error in terminology discovery:', error.message);
+    // Return minimal terminology with just the original term
+    return {
+      primary_term: business,
+      alternative_terms: [business],
+      sub_segments: [],
+      related_categories: [],
+      local_terms: [],
+      all_search_terms: [business]
+    };
+  }
+}
+
 // Simple Levenshtein similarity for fuzzy matching
 function levenshteinSimilarity(s1, s2) {
   if (!s1 || !s2) return 0;
@@ -1805,29 +1954,33 @@ function getDomainForCountry(country) {
 }
 
 // Generate dynamic expansion prompts based on round number
-function generateExpansionPrompt(round, business, country, existingList, shortlistSample) {
+// terminology parameter contains dynamically discovered terms from Phase 0.5
+function generateExpansionPrompt(round, business, country, existingList, shortlistSample, terminology = null) {
   const baseInstruction = `You are a thorough M&A researcher finding ALL ${business} companies in ${country}.
 Return results as: Company Name | Website (must start with http)
 Find at least 20 NEW companies not in our existing list.
 DO NOT include companies from this list: ${existingList}`;
 
   const cities = getCitiesForCountry(country);
-  const suffixes = getSuffixesForCountry(country);
   const domain = getDomainForCountry(country);
-  const localLang = LOCAL_LANGUAGE_MAP[country.toLowerCase()];
+
+  // Use dynamically discovered terminology if available
+  const altTerms = terminology?.alternative_terms?.slice(0, 10).join(', ') || '';
+  const subSegments = terminology?.sub_segments?.slice(0, 8).join(', ') || '';
+  const localTerms = terminology?.local_terms?.slice(0, 10).join(', ') || '';
+  const relatedCats = terminology?.related_categories?.slice(0, 5).join(', ') || '';
 
   const prompts = {
     1: `${baseInstruction}
 
 ROUND 1 - RELATED TERMINOLOGY SEARCH:
 The user searched for "${business}" but companies may use different terms.
-Think about what OTHER words or phrases companies in this industry might use to describe themselves.
-Consider:
-- Alternative industry terminology
-- Different product descriptions
-- Related processes or services
-- Synonyms and variations
-Search using ALL these related terms to find companies we might otherwise miss.`,
+${altTerms ? `We have discovered these alternative terms used in the industry: ${altTerms}` : ''}
+${subSegments ? `Industry sub-segments to search: ${subSegments}` : ''}
+${relatedCats ? `Related categories: ${relatedCats}` : ''}
+
+Search using ALL these terminology variations to find companies we might otherwise miss.
+Think about what OTHER words or phrases companies in this industry might use to describe themselves.`,
 
     2: `${baseInstruction}
 
@@ -1839,6 +1992,7 @@ Look for:
 - Local SMEs
 - Domestic manufacturers
 - Companies founded locally (not foreign subsidiaries)
+${altTerms ? `Search using these terms: ${business}, ${altTerms}` : ''}
 These are often harder to find but are the real targets.`,
 
     3: `${baseInstruction}
@@ -1846,7 +2000,8 @@ These are often harder to find but are the real targets.`,
 ROUND 3 - CITY-BY-CITY DEEP DIVE:
 Search for ${business} companies in each of these cities/regions:
 ${cities ? cities.join(', ') : `Major cities and industrial areas in ${country}`}
-Include companies in industrial estates, free trade zones, and business parks.`,
+Include companies in industrial estates, free trade zones, and business parks.
+${subSegments ? `Also search for these sub-segments: ${subSegments}` : ''}`,
 
     4: `${baseInstruction}
 
@@ -1856,22 +2011,22 @@ Find ${business} companies that are members of:
 - Trade organizations
 - Chamber of commerce
 - Business federations
-in ${country}. Look for member directories and lists.`,
+in ${country}. Look for member directories and lists.
+${altTerms ? `Search for associations related to: ${altTerms}` : ''}`,
 
-    5: localLang ? `${baseInstruction}
+    5: `${baseInstruction}
 
 ROUND 5 - LOCAL LANGUAGE SEARCH:
-Search for ${business} companies using ${localLang.lang} terms.
-Search queries should include local business terminology.
-Focus on companies that may only have local language websites.
-Look for: ${localLang.examples.join(', ')} related businesses.` : `${baseInstruction}
+Search for ${business} companies in ${country} using LOCAL LANGUAGE terms.
 
-ROUND 5 - ALTERNATIVE NAMING:
-Search for ${business} companies using:
-- Local language business names
-- Alternative industry terminology
-- Regional naming conventions
-in ${country}.`,
+${localTerms ? `Use these discovered local language terms: ${localTerms}` : `First, translate "${business}" into the local language(s) of ${country}.`}
+
+IMPORTANT:
+- Search using the local language translations
+- Look for companies with local language names (not English names)
+- Focus on companies that may only have local language websites
+- Search local business directories using local language
+- Think about how local entrepreneurs would name their company in their native language`,
 
     6: `${baseInstruction}
 
@@ -1881,7 +2036,8 @@ Find their:
 - Suppliers (who supplies to them)
 - Customers (who buys from them)
 - Raw material suppliers
-that are also ${business} companies in ${country}.`,
+that are also ${business} companies in ${country}.
+${relatedCats ? `Also look for companies in related categories: ${relatedCats}` : ''}`,
 
     7: `${baseInstruction}
 
@@ -1890,7 +2046,8 @@ Search for ${business} companies mentioned in:
 - Industry magazines and trade publications for ${business}
 - News articles about the ${business} industry in ${country}
 - Trade publication interviews
-- Company profiles in business journals`,
+- Company profiles in business journals
+${subSegments ? `Also search for coverage of: ${subSegments}` : ''}`,
 
     8: `${baseInstruction}
 
@@ -1899,17 +2056,21 @@ Find ${business} companies that exhibited at:
 - Industry trade shows relevant to ${business} (past 3 years)
 - B2B exhibitions
 - Industry-specific fairs
-in ${country} or international shows with ${country} exhibitors.`,
+in ${country} or international shows with ${country} exhibitors.
+${altTerms ? `Search for exhibitors in: ${altTerms}` : ''}`,
 
     9: `${baseInstruction}
 
 ROUND 9 - WHAT AM I MISSING?
 I already found these companies: ${shortlistSample}
+${altTerms ? `We searched for: ${business}, ${altTerms}` : ''}
+${localTerms ? `Local terms used: ${localTerms}` : ''}
+
 Think step by step: What ${business} companies in ${country} might I have MISSED?
-- Companies with unusual names
+- Companies with unusual names (especially local language names)
 - Companies that don't advertise much
 - Companies in smaller cities
-- Companies that use different terminology
+- Companies that use completely different terminology to describe themselves
 - Older established companies
 - Newer startups
 Find companies that wouldn't appear in a typical Google search.`,
@@ -1922,15 +2083,18 @@ This is the last round. Search EXHAUSTIVELY for any ${business} company in ${cou
 - Look for companies in industrial zones
 - Check import/export records
 - Find any company we might have missed
-The goal is to find EVERY company, no matter how small or obscure.
-${domain ? `Also search for companies with ${domain} domains.` : ''}`
+${altTerms ? `Search using ALL these terms: ${business}, ${altTerms}` : ''}
+${localTerms ? `Don't forget local language searches: ${localTerms}` : ''}
+${domain ? `Also search for companies with ${domain} domains.` : ''}
+The goal is to find EVERY company, no matter how small or obscure.`
   };
 
   return prompts[round] || prompts[1];
 }
 
 // Run a single expansion round with all 3 search-enabled models
-async function runExpansionRound(round, business, country, existingCompanies) {
+// terminology parameter contains dynamically discovered terms from Phase 0.5
+async function runExpansionRound(round, business, country, existingCompanies, terminology = null) {
   console.log(`\n--- Expansion Round ${round}/10 ---`);
 
   const existingNames = existingCompanies
@@ -1949,7 +2113,8 @@ async function runExpansionRound(round, business, country, existingCompanies) {
     .map(c => c.company_name)
     .join(', ');
 
-  const prompt = generateExpansionPrompt(round, business, country, existingList, shortlistSample);
+  // Pass terminology to the prompt generator for dynamic term usage
+  const prompt = generateExpansionPrompt(round, business, country, existingList, shortlistSample, terminology);
 
   // Run all 3 search-enabled models in parallel
   console.log(`  Querying GPT-4o-mini Search, Gemini 2.0 Flash, Perplexity Sonar...`);
@@ -2016,6 +2181,13 @@ app.post('/api/find-target-v4', async (req, res) => {
     const countries = await expandRegionToCountries(Country);
     console.log(`Will search ${countries.length} countries: ${countries.join(', ')}`);
 
+    // ========== PHASE 0.5: Industry Terminology Discovery ==========
+    const terminology = await discoverIndustryTerminology(Business, countries);
+
+    // Build expanded search terms string for prompts
+    const expandedTerms = terminology.all_search_terms.slice(0, 20).join(', '); // Top 20 terms
+    const localTermsStr = terminology.local_terms.slice(0, 10).join(', '); // Top 10 local terms
+
     // ========== PHASE 1: Country-by-Country Direct Search ==========
     console.log('\n' + '='.repeat(50));
     console.log(`PHASE 1: COUNTRY-BY-COUNTRY SEARCH (${countries.length} countries)`);
@@ -2023,20 +2195,24 @@ app.post('/api/find-target-v4', async (req, res) => {
 
     let allPhase1Companies = [];
 
-    // For each country, do a direct AI search (like asking ChatGPT)
+    // For each country, do a direct AI search using discovered terminology
     for (const targetCountry of countries) {
       console.log(`\n--- Searching: ${targetCountry} ---`);
 
-      // Direct prompt - like you'd ask in ChatGPT chat
-      const directPrompt = `List ALL ${Business} companies in ${targetCountry}.
+      // Enhanced prompt using discovered terminology
+      const directPrompt = `List ALL companies in ${targetCountry} that are in ANY of these categories:
+- ${Business}
+- Alternative terms: ${expandedTerms}
+${localTermsStr ? `- Local language terms: ${localTermsStr}` : ''}
+
 Include:
 - Large and small companies
 - Local/domestic companies
 - Lesser-known companies
-- Companies that may use different terminology
+- Companies that may describe themselves differently but do the same business
 Exclude: ${Exclusion}
 Return as: Company Name | Website (must start with http)
-Find as many as possible - be exhaustive.`;
+Find as many as possible - be exhaustive. Search using ALL the terminology variations above.`;
 
       // Ask all 3 AI models the same direct question
       const [gptResult, geminiResult, perplexityResult] = await Promise.all([
@@ -2056,10 +2232,30 @@ Find as many as possible - be exhaustive.`;
       allPhase1Companies = [...allPhase1Companies, ...gptCompanies, ...geminiCompanies, ...perplexityCompanies];
     }
 
-    // Also run the original exhaustiveSearch for the full region (catches different results)
-    console.log(`\n--- Full Region Search: ${Country} ---`);
-    const regionCompanies = await exhaustiveSearch(Business, Country, Exclusion);
-    console.log(`Region search: ${regionCompanies.length} companies`);
+    // Also run terminology-enhanced exhaustive search for the full region
+    console.log(`\n--- Full Region Search with Expanded Terminology: ${Country} ---`);
+
+    // Run searches with multiple terminology variations
+    const searchPromises = [];
+
+    // Search with primary term
+    searchPromises.push(exhaustiveSearch(Business, Country, Exclusion));
+
+    // Search with top alternative terms (limit to avoid too many API calls)
+    const topAlternatives = terminology.alternative_terms.slice(1, 4); // Skip first (it's the primary), take next 3
+    for (const altTerm of topAlternatives) {
+      searchPromises.push(exhaustiveSearch(altTerm, Country, Exclusion));
+    }
+
+    // Search with top sub-segments
+    const topSubSegments = terminology.sub_segments.slice(0, 2); // Take top 2
+    for (const segment of topSubSegments) {
+      searchPromises.push(exhaustiveSearch(segment, Country, Exclusion));
+    }
+
+    const allRegionResults = await Promise.all(searchPromises);
+    const regionCompanies = allRegionResults.flat();
+    console.log(`Region search (${searchPromises.length} term variations): ${regionCompanies.length} companies`);
     allPhase1Companies = [...allPhase1Companies, ...regionCompanies];
 
     const phase1Raw = dedupeCompanies(allPhase1Companies);
@@ -2089,7 +2285,8 @@ Find as many as possible - be exhaustive.`;
 
       // Cycle through countries for each round
       const targetCountry = countries[round % countries.length];
-      const newCompanies = await runExpansionRound(round, Business, targetCountry, allCompanies);
+      // Pass terminology to enable dynamic term usage in expansion rounds
+      const newCompanies = await runExpansionRound(round, Business, targetCountry, allCompanies, terminology);
 
       if (newCompanies.length > 0) {
         allCompanies = dedupeCompanies([...allCompanies, ...newCompanies]);
