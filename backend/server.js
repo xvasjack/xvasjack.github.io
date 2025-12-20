@@ -8530,8 +8530,12 @@ wss.on('connection', (ws, req) => {
             return;
           }
 
+          // Check if multi-language mode is requested
+          const isMultiLang = !data.language || data.language === 'auto' || data.language === 'multi';
+
           const dgOptions = {
-            model: 'nova-2',
+            // Use nova-3 for multi-language (best code-switching), nova-2 for single language
+            model: isMultiLang ? 'nova-3' : 'nova-2',
             smart_format: true,
             interim_results: true,
             utterance_end_ms: 1000,
@@ -8543,17 +8547,17 @@ wss.on('connection', (ws, req) => {
           };
 
           // Set language - if specific language requested, use it; otherwise use 'multi' for auto-detection
-          // Note: detect_language only works for pre-recorded audio, not streaming
-          // For streaming, use language='multi' which enables multilingual code-switching
-          if (data.language && data.language !== 'auto' && data.language !== 'multi') {
-            dgOptions.language = data.language;
-            // Set detected language to selected language
-            detectedLanguage = data.language;
-            activeSessions.get(sessionId).language = data.language;
-          } else {
-            dgOptions.language = 'multi';  // Multilingual mode for auto-detection in streaming
+          // Nova-3 with language='multi' enables true multilingual code-switching
+          // See: https://developers.deepgram.com/docs/multilingual-code-switching
+          if (isMultiLang) {
+            dgOptions.language = 'multi';  // Multilingual code-switching mode
+            dgOptions.endpointing = 100;   // Recommended for code-switching (100ms)
             detectedLanguage = 'multi';
             activeSessions.get(sessionId).language = 'multi';
+          } else {
+            dgOptions.language = data.language;
+            detectedLanguage = data.language;
+            activeSessions.get(sessionId).language = data.language;
           }
 
           console.log('[WS] Deepgram options:', JSON.stringify(dgOptions));
@@ -8596,17 +8600,41 @@ wss.on('connection', (ws, req) => {
             const words = alternative?.words || [];
             const isFinal = dgData.is_final;
 
-            // Try Deepgram's detected_language first, then detect from text
-            let detLang = dgData.channel?.detected_language;
+            // Nova-3 multi-language: get language from multiple sources
+            // 1. Per-word language tags (most accurate for code-switching)
+            // 2. Channel-level languages array (sorted by word count)
+            // 3. detected_language field
+            // 4. Text-based detection as fallback
+            let detLang = null;
+
+            // Check channel-level languages array (Nova-3 multi format)
+            if (dgData.channel?.languages && dgData.channel.languages.length > 0) {
+              detLang = dgData.channel.languages[0];  // Primary language by word count
+            }
+
+            // Check for per-word language (code-switching detection)
+            let segmentLang = null;
+            if (words.length > 0 && words[0].language) {
+              segmentLang = words[0].language;  // Language of first word in segment
+            }
+
+            // Fallback to detected_language field
+            if (!detLang) {
+              detLang = dgData.channel?.detected_language;
+            }
+
+            // Final fallback: text-based detection
             if (!detLang && transcript) {
               detLang = detectLanguageFromText(transcript);
             }
-            detLang = detLang || detectedLanguage;
 
-            if (detLang && detLang !== detectedLanguage) {
-              detectedLanguage = detLang;
-              activeSessions.get(sessionId).language = detLang;
-              console.log(`[WS] Language detected: ${detLang}`);
+            // Use segment language if available, else channel language
+            const effectiveLang = segmentLang || detLang || detectedLanguage;
+
+            if (effectiveLang && effectiveLang !== detectedLanguage) {
+              detectedLanguage = effectiveLang;
+              activeSessions.get(sessionId).language = effectiveLang;
+              console.log(`[WS] Language detected: ${effectiveLang}`);
             }
 
             if (transcript) {
@@ -8616,13 +8644,16 @@ wss.on('connection', (ws, req) => {
                 speaker = words[0].speaker;  // Speaker number (0, 1, 2, etc.)
               }
 
-              console.log(`[WS] Transcript: "${transcript}" (final: ${isFinal}, speaker: ${speaker})`);
-              // Send interim results to client with speaker info
+              // Use per-segment language for accurate code-switching detection
+              const thisSegmentLang = segmentLang || effectiveLang;
+
+              console.log(`[WS] Transcript: "${transcript}" (final: ${isFinal}, lang: ${thisSegmentLang}, speaker: ${speaker})`);
+              // Send interim results to client with speaker info and per-segment language
               ws.send(JSON.stringify({
                 type: 'transcript',
                 text: transcript,
                 isFinal,
-                language: detectedLanguage,
+                language: thisSegmentLang,
                 speaker: speaker !== null ? speaker + 1 : null  // Convert to 1-indexed
               }));
 
@@ -8631,12 +8662,13 @@ wss.on('connection', (ws, req) => {
                 fullTranscript += transcript + ' ';
                 activeSessions.get(sessionId).transcript = fullTranscript;
 
-                // Check if this segment contains non-English text (for multilingual meetings)
-                const hasNonEnglish = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af\u0900-\u097f\u0e00-\u0e7f\u0600-\u06ff]/.test(transcript) ||
-                                     (detectedLanguage && detectedLanguage !== 'en');
+                // Check if this segment is non-English (using per-segment language detection)
+                const isNonEnglishLang = thisSegmentLang && thisSegmentLang !== 'en' && !thisSegmentLang.startsWith('en');
+                const hasNonEnglishChars = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af\u0900-\u097f\u0e00-\u0e7f\u0600-\u06ff]/.test(transcript);
+                const needsTranslation = isNonEnglishLang || hasNonEnglishChars;
 
                 // Translate non-English segments in real-time
-                if (hasNonEnglish && transcript.length >= 3) {
+                if (needsTranslation && transcript.length >= 3) {
                   try {
                     const translated = await translateText(transcript, 'en');
                     // Only add if translation is different from original
@@ -8646,13 +8678,14 @@ wss.on('connection', (ws, req) => {
                       ws.send(JSON.stringify({
                         type: 'translation',
                         text: translated,
+                        originalLang: thisSegmentLang,
                         fullTranslation: translatedTranscript
                       }));
                     }
                   } catch (e) {
                     console.error('[WS] Translation error:', e.message);
                   }
-                } else if (!hasNonEnglish && transcript.length >= 3) {
+                } else if (!needsTranslation && transcript.length >= 3) {
                   // For English segments in multilingual meetings, add to translation too
                   translatedTranscript += transcript + ' ';
                   activeSessions.get(sessionId).translatedTranscript = translatedTranscript;
