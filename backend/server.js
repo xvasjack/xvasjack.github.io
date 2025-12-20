@@ -4730,11 +4730,16 @@ async function generatePPTX(companies) {
       const isSingleLocation = locationLines.length <= 1 && !locationText.toLowerCase().includes('branch') && !locationText.toLowerCase().includes('factory') && !locationText.toLowerCase().includes('warehouse');
       const locationLabel = isSingleLocation ? 'HQ' : 'Location';
 
-      // Helper function to check if value is empty or "not specified"
+      // Helper function to check if value is empty or placeholder text
       const isEmptyValue = (val) => {
         if (!val) return true;
         const lower = val.toLowerCase().trim();
-        return lower === '' || lower === 'not specified' || lower === 'n/a' || lower === 'unknown' || lower === 'not available' || lower === 'not found';
+        const emptyPhrases = [
+          '', 'not specified', 'n/a', 'unknown', 'not available', 'not found',
+          'not explicitly mentioned', 'not mentioned', 'none', 'none specified',
+          'not disclosed', 'not provided', 'no information', 'no data'
+        ];
+        return emptyPhrases.includes(lower) || lower.startsWith('not explicitly');
       };
 
       // Helper function to remove company suffixes
