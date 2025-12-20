@@ -7866,103 +7866,64 @@ async function generateUTBExcel(companyName, website, research, additionalContex
     });
   }
 
-  // ========== SHEET 2: M&A & TARGETS (only if there's data) ==========
+  // ========== M&A DATA (on same sheet) ==========
   const maDeepDive = synthesis.ma_deep_dive || {};
-  const idealTarget = synthesis.ideal_target || {};
   const dealStories = maDeepDive.deal_stories || [];
-  const targetList = idealTarget.target_list || [];
 
-  const hasMAData = dealStories.length > 0 || maDeepDive.ma_philosophy || targetList.length > 0;
+  // M&A History
+  if (dealStories.length > 0) {
+    r++;
+    r = addSectionTitle(sheet1, 'M&A History', r);
+    dealStories.forEach((story, i) => {
+      sheet1.getCell(`A${r}`).value = story.deal;
+      sheet1.getCell(`A${r}`).font = { bold: true, color: { argb: blue } };
+      sheet1.mergeCells(`B${r}:F${r}`);
+      sheet1.getCell(`B${r}`).value = story.full_story;
+      sheet1.getCell(`B${r}`).alignment = { wrapText: true, vertical: 'top' };
+      sheet1.getRow(r).height = 60;
+      styleDataRow(sheet1.getRow(r), i % 2 === 0);
+      r++;
+    });
+    r++;
+  }
 
-  if (hasMAData) {
-    const sheet2 = workbook.addWorksheet('M&A & Targets');
-    sheet2.columns = [
-      { key: 'a', width: 25 },
-      { key: 'b', width: 20 },
-      { key: 'c', width: 25 },
-      { key: 'd', width: 20 },
-      { key: 'e', width: 30 },
-      { key: 'f', width: 30 }
-    ];
+  // M&A Philosophy
+  if (maDeepDive.ma_philosophy) {
+    r = addSectionTitle(sheet1, 'M&A Philosophy', r);
+    sheet1.mergeCells(`A${r}:F${r}`);
+    sheet1.getCell(`A${r}`).value = maDeepDive.ma_philosophy;
+    sheet1.getCell(`A${r}`).alignment = { wrapText: true, vertical: 'top' };
+    sheet1.getRow(r).height = 80;
+    r += 2;
+  }
 
-    let mr = 1;
-
-    // M&A History
-    if (dealStories.length > 0) {
-      mr = addSectionTitle(sheet2, 'M&A History', mr);
-      dealStories.forEach((story, i) => {
-        sheet2.getCell(`A${mr}`).value = story.deal;
-        sheet2.getCell(`A${mr}`).font = { bold: true, color: { argb: blue } };
-        sheet2.mergeCells(`B${mr}:F${mr}`);
-        sheet2.getCell(`B${mr}`).value = story.full_story;
-        sheet2.getCell(`B${mr}`).alignment = { wrapText: true, vertical: 'top' };
-        sheet2.getRow(mr).height = 60;
-        styleDataRow(sheet2.getRow(mr), i % 2 === 0);
-        mr++;
-      });
-      mr++;
+  // Deal Capacity
+  const capacity = maDeepDive.deal_capacity || {};
+  if (capacity.financial_firepower || capacity.appetite_level) {
+    r = addSectionTitle(sheet1, 'Deal Capacity', r);
+    if (capacity.financial_firepower) {
+      sheet1.getCell(`A${r}`).value = 'Financial Firepower';
+      sheet1.getCell(`A${r}`).font = { bold: true };
+      sheet1.mergeCells(`B${r}:D${r}`);
+      sheet1.getCell(`B${r}`).value = capacity.financial_firepower;
+      styleDataRow(sheet1.getRow(r));
+      r++;
     }
-
-    // M&A Philosophy
-    if (maDeepDive.ma_philosophy) {
-      mr = addSectionTitle(sheet2, 'M&A Philosophy', mr);
-      sheet2.mergeCells(`A${mr}:F${mr}`);
-      sheet2.getCell(`A${mr}`).value = maDeepDive.ma_philosophy;
-      sheet2.getCell(`A${mr}`).alignment = { wrapText: true, vertical: 'top' };
-      sheet2.getRow(mr).height = 80;
-      mr += 2;
+    if (capacity.appetite_level) {
+      sheet1.getCell(`A${r}`).value = 'Appetite Level';
+      sheet1.getCell(`A${r}`).font = { bold: true };
+      sheet1.mergeCells(`B${r}:D${r}`);
+      sheet1.getCell(`B${r}`).value = capacity.appetite_level;
+      styleDataRow(sheet1.getRow(r), true);
+      r++;
     }
-
-    // Deal Capacity
-    const capacity = maDeepDive.deal_capacity || {};
-    if (capacity.financial_firepower || capacity.appetite_level) {
-      mr = addSectionTitle(sheet2, 'Deal Capacity', mr);
-      if (capacity.financial_firepower) {
-        sheet2.getCell(`A${mr}`).value = 'Financial Firepower';
-        sheet2.getCell(`A${mr}`).font = { bold: true };
-        sheet2.mergeCells(`B${mr}:D${mr}`);
-        sheet2.getCell(`B${mr}`).value = capacity.financial_firepower;
-        styleDataRow(sheet2.getRow(mr));
-        mr++;
-      }
-      if (capacity.appetite_level) {
-        sheet2.getCell(`A${mr}`).value = 'Appetite Level';
-        sheet2.getCell(`A${mr}`).font = { bold: true };
-        sheet2.mergeCells(`B${mr}:D${mr}`);
-        sheet2.getCell(`B${mr}`).value = capacity.appetite_level;
-        styleDataRow(sheet2.getRow(mr), true);
-        mr++;
-      }
-      if (capacity.decision_process) {
-        sheet2.getCell(`A${mr}`).value = 'Decision Speed';
-        sheet2.getCell(`A${mr}`).font = { bold: true };
-        sheet2.mergeCells(`B${mr}:D${mr}`);
-        sheet2.getCell(`B${mr}`).value = capacity.decision_process;
-        styleDataRow(sheet2.getRow(mr));
-        mr++;
-      }
-      mr++;
-    }
-
-    // Target Companies (10 real companies)
-    if (targetList.length > 0) {
-      mr = addSectionTitle(sheet2, 'Potential Acquisition Targets', mr);
-      const targetHeader = sheet2.getRow(mr);
-      targetHeader.values = ['Company', 'HQ', 'Revenue', 'Ownership', 'What They Do', 'Strategic Fit'];
-      styleHeaderRow(targetHeader, navy);
-      mr++;
-      targetList.forEach((target, i) => {
-        sheet2.getCell(`A${mr}`).value = target.company_name;
-        sheet2.getCell(`A${mr}`).font = { bold: true };
-        sheet2.getCell(`B${mr}`).value = target.hq_country || '';
-        sheet2.getCell(`C${mr}`).value = target.estimated_revenue || '';
-        sheet2.getCell(`D${mr}`).value = target.ownership || '';
-        sheet2.getCell(`E${mr}`).value = target.what_they_do || '';
-        sheet2.getCell(`F${mr}`).value = target.strategic_fit || '';
-        sheet2.getRow(mr).height = 35;
-        styleDataRow(sheet2.getRow(mr), i % 2 === 0);
-        mr++;
-      });
+    if (capacity.decision_process) {
+      sheet1.getCell(`A${r}`).value = 'Decision Speed';
+      sheet1.getCell(`A${r}`).font = { bold: true };
+      sheet1.mergeCells(`B${r}:D${r}`);
+      sheet1.getCell(`B${r}`).value = capacity.decision_process;
+      styleDataRow(sheet1.getRow(r));
+      r++;
     }
   }
 
