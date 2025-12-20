@@ -7,43 +7,14 @@
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <style>
-    .dd-container { max-width: 1200px; margin: 0 auto; }
-
-    /* Mode Tabs */
-    .dd-tabs {
-      display: flex;
-      gap: 0;
-      margin-bottom: 20px;
-      border-radius: var(--radius-md);
-      overflow: hidden;
-      border: 2px solid var(--border-medium);
+    /* Override page-content flex layout */
+    .page-content.dd-container {
+      display: block !important;
+      align-items: unset !important;
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 20px;
     }
-    .dd-tab {
-      flex: 1;
-      padding: 14px 20px;
-      border: none;
-      background: var(--bg-surface);
-      cursor: pointer;
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text-muted);
-      transition: all 0.2s;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-    }
-    .dd-tab:first-child { border-right: 1px solid var(--border-medium); }
-    .dd-tab:hover { background: var(--bg-body); }
-    .dd-tab.active {
-      background: var(--accent);
-      color: white;
-    }
-    .dd-tab svg { width: 20px; height: 20px; }
-
-    /* Mode Content */
-    .dd-mode { display: none; }
-    .dd-mode.active { display: block; }
 
     /* Upload Mode */
     .dd-upload-zone {
