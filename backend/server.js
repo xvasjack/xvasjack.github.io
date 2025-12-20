@@ -8449,7 +8449,7 @@ app.post('/api/due-diligence', async (req, res) => {
 
     const emailHtml = `
     <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto;">
-      <div style="background: ${headerColors[output]}; padding: 30px; border-radius: 12px 12px 0 0;">
+      <div style="background: ${headerColors[outputType] || headerColors.dd_report}; padding: 30px; border-radius: 12px 12px 0 0;">
         <h1 style="color: white; margin: 0; font-size: 24px;">${docTitle}</h1>
         <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0 0;">${new Date().toLocaleDateString()}</p>
       </div>
