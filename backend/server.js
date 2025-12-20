@@ -436,7 +436,9 @@ async function transcribeAudio(audioBase64, mimeType, language = 'auto') {
 
 // Translate text using GPT-4o
 async function translateText(text, targetLang = 'en') {
-  if (!text || text.length < 10) return text;
+  // Minimum length check - 3 chars for CJK languages, 10 for others
+  const minLength = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(text) ? 3 : 10;
+  if (!text || text.length < minLength) return text;
 
   try {
     const response = await openai.chat.completions.create({
@@ -8375,20 +8377,31 @@ wss.on('connection', (ws, req) => {
                 fullTranscript += transcript + ' ';
                 activeSessions.get(sessionId).transcript = fullTranscript;
 
-                // If non-English, translate in real-time
-                if (detectedLanguage !== 'en' && transcript.length > 5) {
+                // Check if this segment contains non-English text (for multilingual meetings)
+                const hasNonEnglish = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af\u0900-\u097f\u0e00-\u0e7f\u0600-\u06ff]/.test(transcript) ||
+                                     (detectedLanguage && detectedLanguage !== 'en');
+
+                // Translate non-English segments in real-time
+                if (hasNonEnglish && transcript.length >= 3) {
                   try {
                     const translated = await translateText(transcript, 'en');
-                    translatedTranscript += translated + ' ';
-                    activeSessions.get(sessionId).translatedTranscript = translatedTranscript;
-                    ws.send(JSON.stringify({
-                      type: 'translation',
-                      text: translated,
-                      fullTranslation: translatedTranscript
-                    }));
+                    // Only add if translation is different from original
+                    if (translated !== transcript) {
+                      translatedTranscript += translated + ' ';
+                      activeSessions.get(sessionId).translatedTranscript = translatedTranscript;
+                      ws.send(JSON.stringify({
+                        type: 'translation',
+                        text: translated,
+                        fullTranslation: translatedTranscript
+                      }));
+                    }
                   } catch (e) {
                     console.error('[WS] Translation error:', e.message);
                   }
+                } else if (!hasNonEnglish && transcript.length >= 3) {
+                  // For English segments in multilingual meetings, add to translation too
+                  translatedTranscript += transcript + ' ';
+                  activeSessions.get(sessionId).translatedTranscript = translatedTranscript;
                 }
               }
             }
