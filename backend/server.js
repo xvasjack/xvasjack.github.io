@@ -5216,10 +5216,9 @@ OPERATIONS & SCALE:
 - Number of SKUs/products
 
 GEOGRAPHIC REACH:
-- Export countries (list regions/countries)
+- Export countries (only if exports to multiple countries, list regions)
 - Distribution network (number of distributors/partners)
-- Number of branches/offices/locations
-- Markets served
+- Markets served (if domestic only, write "Nationwide" instead of listing regions)
 
 QUALITY & COMPLIANCE:
 - Certifications (ISO, HACCP, GMP, FDA, CE, halal, etc.)
