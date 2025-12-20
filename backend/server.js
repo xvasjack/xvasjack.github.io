@@ -4709,7 +4709,8 @@ const COMMON_SHORTFORMS = [
   'ISO',                   // Well-known standard
   'FY',                    // Fiscal Year
   'YoY', 'QoQ',            // Year over Year, Quarter over Quarter
-  'B2B', 'B2C'             // Business models
+  'B2B', 'B2C',            // Business models
+  'AI', 'IT', 'IoT'        // Tech terms - widely known
 ];
 
 // Detect shortforms in text and return formatted note (only uncommon ones)
@@ -4936,9 +4937,10 @@ async function generatePPTX(companies) {
         const emptyPhrases = [
           '', 'not specified', 'n/a', 'unknown', 'not available', 'not found',
           'not explicitly mentioned', 'not mentioned', 'none', 'none specified',
-          'not disclosed', 'not provided', 'no information', 'no data'
+          'not disclosed', 'not provided', 'no information', 'no data',
+          'none explicitly mentioned'
         ];
-        return emptyPhrases.includes(lower) || lower.startsWith('not explicitly');
+        return emptyPhrases.includes(lower) || lower.startsWith('not explicitly') || lower.startsWith('none explicitly');
       };
 
       // Helper function to remove company suffixes
@@ -4952,9 +4954,9 @@ async function generatePPTX(companies) {
       // Helper function to clean location value (remove "HQ:" prefix if column is already HQ)
       const cleanLocationValue = (location, label) => {
         if (!location) return location;
-        // If label is HQ, remove "HQ:" prefix from value
+        // If label is HQ, remove "- HQ:" or "HQ:" prefix from value
         if (label === 'HQ') {
-          return location.replace(/^HQ:\s*/i, '').trim();
+          return location.replace(/^-?\s*HQ:\s*/i, '').trim();
         }
         return location;
       };
@@ -5307,7 +5309,7 @@ OUTPUT JSON with these fields:
   - "Puchong, Selangor, Malaysia"
   - "Bangna, Bangkok, Thailand"
   - "Batam, Riau Islands, Indonesia"
-  SINGAPORE RULE: Always use 2 levels: "Area, Singapore" (e.g., "Jurong, Singapore", "Changi, Singapore", "Tuas, Singapore"). Never just "Singapore" alone.
+  SINGAPORE RULE: Always use 2 levels: "Area, Singapore" (e.g., "Jurong, Singapore", "Changi, Singapore", "Tuas, Singapore"). If no specific area is found, use "Singapore, Singapore". Never just "Singapore" alone.
 
   For multiple locations, group by type with sub-bullet points:
   Example format:
