@@ -239,6 +239,18 @@
     .dd-transcript-panel.translation { border-left: 3px solid var(--success); }
     .dd-transcript-panel.translation .dd-panel-header { color: var(--success); }
 
+    /* Section Headers */
+    .dd-section-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
+      margin-bottom: 12px;
+    }
+    .dd-section-header svg { color: var(--accent); }
+
     /* Form Section */
     .dd-form-section {
       margin-top: 24px;
@@ -282,136 +294,102 @@
     <section class="page-info">
       <span class="status-badge">Online</span>
       <h1 class="page-title">Due Diligence Report</h1>
-      <p class="page-description">Upload materials or record meetings in real-time. Get both a full DD report and transcript emailed with Word attachment.</p>
+      <p class="page-description">Record meetings and upload materials. Get a comprehensive DD report with transcript emailed as Word attachment.</p>
     </section>
 
     <section class="page-content dd-container">
-      <!-- Mode Selection Tabs -->
-      <div class="dd-tabs">
-        <button class="dd-tab active" data-mode="upload">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-          Upload Materials
-        </button>
-        <button class="dd-tab" data-mode="record">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
-          Record Now
-        </button>
+      <!-- Recovery Banner (hidden by default) -->
+      <div class="dd-recovery-banner" id="recoveryBanner" style="display: none;">
+        <p><strong>Unsaved recording found!</strong> Your previous session was interrupted.</p>
+        <div class="dd-recovery-actions">
+          <button class="dd-recovery-btn restore" onclick="restoreSession()">Restore</button>
+          <button class="dd-recovery-btn dismiss" onclick="dismissRecovery()">Dismiss</button>
+        </div>
       </div>
 
-      <!-- Upload Mode -->
-      <div class="dd-mode active" id="uploadMode">
-        <div class="form-card">
-          <input type="file" id="fileInput" multiple accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.rtf,.csv,.xlsx,.xls,.mp3,.wav,.m4a,.webm,.ogg">
+      <!-- Section 1: Recording (Top Priority) -->
+      <div class="dd-section-header">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+        <span>Record Meeting / Interview</span>
+      </div>
+      <div class="dd-record-layout">
+        <!-- Left: Recording Controls -->
+        <div class="dd-record-controls">
+          <div class="dd-lang-select">
+            <button class="dd-lang-btn active" data-lang="auto">Auto</button>
+            <button class="dd-lang-btn" data-lang="en">English</button>
+            <button class="dd-lang-btn" data-lang="zh">Chinese</button>
+            <button class="dd-lang-btn" data-lang="ms">Malay</button>
+            <button class="dd-lang-btn" data-lang="ja">Japanese</button>
+          </div>
 
-          <div class="dd-upload-zone" id="uploadZone">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          <button class="dd-record-btn" id="recordBtn">
+            <svg fill="currentColor" viewBox="0 0 24 24" id="recordIcon">
+              <circle cx="12" cy="12" r="8"/>
             </svg>
-            <h3>Drop files here or click to upload</h3>
-            <p>PDF, PPT, Word, Excel, Audio files (max 10 files)</p>
+          </button>
+
+          <div class="dd-record-timer" id="recordTimer">00:00</div>
+          <div class="dd-record-status" id="recordStatus">Click to start recording</div>
+          <button type="button" class="dd-download-btn" id="downloadRecordingBtn" style="display: none; padding: 6px 12px; font-size: 11px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 6px; color: var(--text-secondary); cursor: pointer; margin-top: 4px;">
+            <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 4px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            Download Recording
+          </button>
+        </div>
+
+        <!-- Right: Live Transcript (Main Focus) -->
+        <div class="dd-transcript-panels">
+          <div class="dd-transcript-panel">
+            <div class="dd-panel-header">
+              <span>Live Transcript</span>
+              <span class="lang-badge" id="detectedLang">--</span>
+            </div>
+            <div class="dd-panel-content empty" id="transcriptContent">
+              Start recording to see live transcription...
+            </div>
           </div>
 
-          <div class="dd-file-list" id="fileList"></div>
-
-          <div class="dd-form-section">
-            <div class="form-group">
-              <label for="uploadInstructions">Special Requests <span class="label-hint">(optional)</span></label>
-              <textarea id="uploadInstructions" rows="2" placeholder="e.g., Focus on financial risks, highlight synergies..."></textarea>
+          <div class="dd-transcript-panel translation" id="translationPanel" style="display: none;">
+            <div class="dd-panel-header">
+              <span>English Translation</span>
             </div>
-
-            <div class="dd-form-row">
-              <div class="form-group">
-                <label for="uploadEmail">Email Address</label>
-                <input type="email" id="uploadEmail" required placeholder="your@company.com">
-              </div>
-              <div class="form-group">
-                <label>Report Length</label>
-                <select id="uploadLength" style="width: 100%; padding: 10px; border: 1px solid var(--border-medium); border-radius: var(--radius-sm);">
-                  <option value="short">Short (1 page)</option>
-                  <option value="medium" selected>Medium (2-3 pages)</option>
-                  <option value="long">Full (Comprehensive)</option>
-                </select>
-              </div>
-            </div>
-
-            <button type="button" class="submit-btn" id="uploadSubmitBtn">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-              Generate DD Report & Transcript
-            </button>
+            <div class="dd-panel-content" id="translationContent"></div>
           </div>
         </div>
       </div>
 
-      <!-- Record Mode -->
-      <div class="dd-mode" id="recordMode">
-        <!-- Recovery Banner (hidden by default) -->
-        <div class="dd-recovery-banner" id="recoveryBanner" style="display: none;">
-          <p><strong>Unsaved recording found!</strong> Your previous session was interrupted.</p>
-          <div class="dd-recovery-actions">
-            <button class="dd-recovery-btn restore" onclick="restoreSession()">Restore</button>
-            <button class="dd-recovery-btn dismiss" onclick="dismissRecovery()">Dismiss</button>
-          </div>
+      <!-- Section 2: Upload Materials -->
+      <div class="dd-section-header" style="margin-top: 24px;">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+        <span>Upload Materials <span style="font-weight: 400; color: var(--text-muted);">(optional)</span></span>
+      </div>
+      <div class="form-card" style="padding: 16px;">
+        <input type="file" id="fileInput" multiple accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.rtf,.csv,.xlsx,.xls,.mp3,.wav,.m4a,.webm,.ogg">
+        <div class="dd-upload-zone" id="uploadZone" style="padding: 20px;">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="32" height="32">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+          <p style="margin: 8px 0 0 0; font-size: 13px;">Drop files here or click to upload (PDF, PPT, Word, Excel, Audio)</p>
         </div>
-        <div class="dd-record-layout">
-          <!-- Left: Recording Controls -->
-          <div class="dd-record-controls">
-            <div class="dd-lang-select">
-              <button class="dd-lang-btn active" data-lang="auto">Auto</button>
-              <button class="dd-lang-btn" data-lang="en">English</button>
-              <button class="dd-lang-btn" data-lang="zh">Chinese</button>
-              <button class="dd-lang-btn" data-lang="ms">Malay</button>
-              <button class="dd-lang-btn" data-lang="ja">Japanese</button>
-            </div>
+        <div class="dd-file-list" id="fileList"></div>
+      </div>
 
-            <button class="dd-record-btn" id="recordBtn">
-              <svg fill="currentColor" viewBox="0 0 24 24" id="recordIcon">
-                <circle cx="12" cy="12" r="8"/>
-              </svg>
-            </button>
-
-            <div class="dd-record-timer" id="recordTimer">00:00</div>
-            <div class="dd-record-status" id="recordStatus">Click to start recording</div>
-            <button type="button" class="dd-download-btn" id="downloadRecordingBtn" style="display: none; padding: 6px 12px; font-size: 11px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 6px; color: var(--text-secondary); cursor: pointer; margin-top: 4px;">
-              <svg width="14" height="14" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="vertical-align: middle; margin-right: 4px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-              Download Recording
-            </button>
-
-            <div style="width: 100%; margin-top: auto;">
-              <div class="form-group" style="margin: 0;">
-                <label for="recordInstructions">Special Requests <span class="label-hint">(optional)</span></label>
-                <textarea id="recordInstructions" rows="2" placeholder="e.g., Focus on action items..."></textarea>
-              </div>
-              <div class="form-group" style="margin: 12px 0 0 0;">
-                <label for="recordEmail">Email Address</label>
-                <input type="email" id="recordEmail" required placeholder="your@company.com">
-              </div>
-              <button type="button" class="submit-btn" id="recordSubmitBtn" disabled style="margin-top: 12px;">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-                Send DD Report & Transcript
-              </button>
-            </div>
-          </div>
-
-          <!-- Right: Live Transcript -->
-          <div class="dd-transcript-panels">
-            <div class="dd-transcript-panel">
-              <div class="dd-panel-header">
-                <span>Live Transcript</span>
-                <span class="lang-badge" id="detectedLang">--</span>
-              </div>
-              <div class="dd-panel-content empty" id="transcriptContent">
-                Start recording to see live transcription...
-              </div>
-            </div>
-
-            <div class="dd-transcript-panel translation" id="translationPanel" style="display: none;">
-              <div class="dd-panel-header">
-                <span>English Translation</span>
-              </div>
-              <div class="dd-panel-content" id="translationContent"></div>
-            </div>
-          </div>
+      <!-- Section 3: Submit Form -->
+      <div class="dd-form-section" style="margin-top: 24px; padding-top: 0; border-top: none;">
+        <div class="form-group">
+          <label for="ddInstructions">Additional Context <span class="label-hint">(optional)</span></label>
+          <textarea id="ddInstructions" rows="2" placeholder="e.g., Focus on financial risks, highlight synergies, key action items..."></textarea>
         </div>
+
+        <div class="form-group">
+          <label for="ddEmail">Email Address</label>
+          <input type="email" id="ddEmail" required placeholder="your@company.com" style="max-width: 400px;">
+        </div>
+
+        <button type="button" class="submit-btn" id="ddSubmitBtn">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          Generate DD Report & Transcript
+        </button>
       </div>
 
       <!-- Messages -->
@@ -433,18 +411,17 @@
     const WS_BASE = API_BASE.replace('https://', 'wss://').replace('http://', 'ws://');
 
     // Elements
-    const tabs = document.querySelectorAll('.dd-tab');
-    const modes = document.querySelectorAll('.dd-mode');
     const uploadZone = document.getElementById('uploadZone');
     const fileInput = document.getElementById('fileInput');
     const fileList = document.getElementById('fileList');
-    const uploadSubmitBtn = document.getElementById('uploadSubmitBtn');
     const recordBtn = document.getElementById('recordBtn');
     const recordIcon = document.getElementById('recordIcon');
     const recordTimer = document.getElementById('recordTimer');
     const recordStatus = document.getElementById('recordStatus');
     const downloadRecordingBtn = document.getElementById('downloadRecordingBtn');
-    const recordSubmitBtn = document.getElementById('recordSubmitBtn');
+    const ddSubmitBtn = document.getElementById('ddSubmitBtn');
+    const ddEmail = document.getElementById('ddEmail');
+    const ddInstructions = document.getElementById('ddInstructions');
     const transcriptContent = document.getElementById('transcriptContent');
     const translationContent = document.getElementById('translationContent');
     const translationPanel = document.getElementById('translationPanel');
@@ -519,14 +496,7 @@
             translationPanel.style.display = 'flex';
           }
 
-          recordSubmitBtn.disabled = false;
           recordStatus.textContent = `Restored ${Math.floor(data.duration / 60)}m ${data.duration % 60}s of transcript`;
-
-          // Switch to record tab
-          tabs.forEach(t => t.classList.remove('active'));
-          modes.forEach(m => m.classList.remove('active'));
-          document.querySelector('[data-mode="record"]').classList.add('active');
-          document.getElementById('recordMode').classList.add('active');
         } catch (e) { console.error('Restore error:', e); }
       }
       document.getElementById('recoveryBanner').style.display = 'none';
@@ -642,20 +612,40 @@
       return results;
     }
 
-    uploadSubmitBtn.addEventListener('click', async () => {
-      const email = document.getElementById('uploadEmail').value.trim();
-      const instructions = document.getElementById('uploadInstructions').value.trim();
-      const reportLength = document.getElementById('uploadLength').value;
+    // Combined submission - handles both transcript and uploaded materials
+    ddSubmitBtn.addEventListener('click', async () => {
+      const email = ddEmail.value.trim();
+      const instructions = ddInstructions.value.trim();
+      const hasTranscript = finalTranscript.trim().length > 0;
+      const hasFiles = selectedFiles.length > 0;
 
-      if (selectedFiles.length === 0) { alert('Please upload at least one file'); return; }
+      // Need at least transcript or files
+      if (!hasTranscript && !hasFiles) {
+        alert('Please record a meeting or upload materials');
+        return;
+      }
       if (!email) { alert('Please enter your email'); return; }
 
-      uploadSubmitBtn.disabled = true;
-      uploadSubmitBtn.innerHTML = '<svg class="spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25" fill="none"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Processing...';
+      ddSubmitBtn.disabled = true;
+      ddSubmitBtn.innerHTML = '<svg class="spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25" fill="none"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Processing...';
       hideMessages();
 
       try {
-        const processed = await processFiles(selectedFiles);
+        // Process uploaded files (if any)
+        let processed = { documents: [], audioFiles: [] };
+        if (hasFiles) {
+          processed = await processFiles(selectedFiles);
+        }
+
+        // Add transcript as a document if available
+        if (hasTranscript) {
+          processed.documents.unshift({
+            name: `Meeting_Recording_${new Date().toISOString().slice(0,10)}`,
+            type: 'transcript',
+            content: finalTranslation || finalTranscript,
+            isAudio: false
+          });
+        }
 
         const response = await fetch(`${API_BASE}/api/due-diligence`, {
           method: 'POST',
@@ -664,23 +654,45 @@
             files: processed.documents,
             audioFiles: processed.audioFiles,
             instructions,
-            reportLength,
+            reportLength: 'medium',
             email,
-            generateWord: true
+            generateWord: true,
+            rawTranscript: finalTranscript,
+            translatedTranscript: finalTranslation,
+            detectedLanguage: currentLanguage,
+            sessionId
           })
         });
 
         if (!response.ok) throw new Error('Request failed');
 
         showSuccess(`DD Report & Transcript will be emailed to ${email} within 10-15 minutes.`);
+
+        // Clear backup
+        localStorage.removeItem(STORAGE_KEY);
+
+        // Reset transcript
+        finalTranscript = '';
+        finalTranslation = '';
+        currentR2Key = null;
+        transcriptContent.innerHTML = '';
+        transcriptContent.classList.add('empty');
+        transcriptContent.textContent = 'Start recording to see live transcription...';
+        translationContent.textContent = '';
+        translationPanel.style.display = 'none';
+        downloadRecordingBtn.style.display = 'none';
+        recordTimer.textContent = '00:00';
+
+        // Reset files
         selectedFiles = [];
         updateFileList();
-        document.getElementById('uploadInstructions').value = '';
+        ddInstructions.value = '';
+
       } catch (err) {
         showError(err.message);
       } finally {
-        uploadSubmitBtn.disabled = false;
-        uploadSubmitBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Generate DD Report & Transcript';
+        ddSubmitBtn.disabled = false;
+        ddSubmitBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg> Generate DD Report & Transcript';
       }
     });
 
@@ -782,7 +794,6 @@
         recordTimer.classList.add('recording');
         recordStatus.classList.add('recording');
         recordStatus.textContent = 'Recording... Click to stop';
-        recordSubmitBtn.disabled = true;
 
         // Start timer
         recordingStartTime = Date.now();
@@ -845,10 +856,6 @@
         ws.send(JSON.stringify({ type: 'stop' }));
       }
 
-      // Enable submit if we have transcript
-      if (finalTranscript.trim()) {
-        recordSubmitBtn.disabled = false;
-      }
     }
 
     function updateTimer() {
@@ -870,67 +877,6 @@
       window.open(downloadUrl, '_blank');
     });
 
-    recordSubmitBtn.addEventListener('click', async () => {
-      const email = document.getElementById('recordEmail').value.trim();
-      const instructions = document.getElementById('recordInstructions').value.trim();
-
-      if (!finalTranscript.trim()) { alert('No transcript available'); return; }
-      if (!email) { alert('Please enter your email'); return; }
-
-      recordSubmitBtn.disabled = true;
-      recordSubmitBtn.innerHTML = '<svg class="spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25" fill="none"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Sending...';
-      hideMessages();
-
-      try {
-        // Send transcript directly for report generation
-        const response = await fetch(`${API_BASE}/api/due-diligence`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            files: [{
-              name: `Recording_${new Date().toISOString().slice(0,10)}`,
-              type: 'transcript',
-              content: finalTranslation || finalTranscript,
-              isAudio: false
-            }],
-            audioFiles: [],
-            instructions,
-            reportLength: 'medium',
-            email,
-            generateWord: true,
-            rawTranscript: finalTranscript,
-            translatedTranscript: finalTranslation,
-            detectedLanguage: currentLanguage,
-            sessionId
-          })
-        });
-
-        if (!response.ok) throw new Error('Request failed');
-
-        showSuccess(`DD Report & Transcript will be emailed to ${email} within 10-15 minutes.`);
-
-        // Clear backup since successfully submitted
-        localStorage.removeItem(STORAGE_KEY);
-
-        // Reset
-        finalTranscript = '';
-        finalTranslation = '';
-        currentR2Key = null;
-        transcriptContent.innerHTML = '';
-        transcriptContent.classList.add('empty');
-        transcriptContent.textContent = 'Start recording to see live transcription...';
-        translationContent.textContent = '';
-        translationPanel.style.display = 'none';
-        downloadRecordingBtn.style.display = 'none';
-        recordTimer.textContent = '00:00';
-        document.getElementById('recordInstructions').value = '';
-      } catch (err) {
-        showError(err.message);
-      } finally {
-        recordSubmitBtn.disabled = false;
-        recordSubmitBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg> Send DD Report & Transcript';
-      }
-    });
 
     // ============ HELPERS ============
 
