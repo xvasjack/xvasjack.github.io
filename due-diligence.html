@@ -332,7 +332,7 @@
       <!-- How to Use Instructions -->
       <div class="dd-instructions">
         <strong>How to use:</strong>
-        <span>1. Click record to capture meeting audio (auto-detects language & speakers)</span>
+        <span>1. Select language (or Auto) and click record</span>
         <span>2. Edit transcript if needed</span>
         <span>3. Optionally upload supporting materials (PDF, PPT, Word)</span>
         <span>4. Add context and submit to receive DD report via email</span>
@@ -355,6 +355,16 @@
           <div class="dd-section-header">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
             <span>Record Meeting</span>
+          </div>
+          <!-- Language Selector -->
+          <div class="dd-lang-select" id="langSelect">
+            <button type="button" class="dd-lang-btn active" data-lang="auto">Auto</button>
+            <button type="button" class="dd-lang-btn" data-lang="en">EN</button>
+            <button type="button" class="dd-lang-btn" data-lang="zh">中文</button>
+            <button type="button" class="dd-lang-btn" data-lang="ja">日本語</button>
+            <button type="button" class="dd-lang-btn" data-lang="hi">हिंदी</button>
+            <button type="button" class="dd-lang-btn" data-lang="id">ID</button>
+            <button type="button" class="dd-lang-btn" data-lang="vi">VN</button>
           </div>
           <div class="dd-record-controls">
             <button class="dd-record-btn" id="recordBtn">
@@ -468,6 +478,22 @@
     let selectedFiles = [];
     let selectedLang = 'auto';
     let isRecording = false;
+
+    // Language selector click handler
+    document.getElementById('langSelect').addEventListener('click', (e) => {
+      if (e.target.classList.contains('dd-lang-btn')) {
+        // Don't allow changing language while recording
+        if (isRecording) {
+          alert('Stop recording before changing language');
+          return;
+        }
+        // Update selection
+        document.querySelectorAll('#langSelect .dd-lang-btn').forEach(btn => btn.classList.remove('active'));
+        e.target.classList.add('active');
+        selectedLang = e.target.dataset.lang;
+        console.log('Language selected:', selectedLang);
+      }
+    });
     let mediaRecorder = null;
     let audioContext = null;
     let ws = null;
