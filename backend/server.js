@@ -4777,12 +4777,12 @@ async function generatePPTX(companies) {
       }
 
       // Helper function to format cell text with proper PowerPoint bullets
-      // Using Wingdings character code 006E (hex) = filled square bullet
-      // Indentation: Before text 0.24", Hanging 0.24", Single line spacing
-      const WINGDINGS_BULLET = {
+      // Wingdings 006E = Unicode U+25A0 (BLACK SQUARE ■)
+      // Indentation: 0.24" = ~17 points
+      const SQUARE_BULLET = {
         type: 'bullet',
-        characterCode: '006E',
-        indent: 0.24  // Hanging indent 0.24"
+        characterCode: '25A0',  // Unicode BLACK SQUARE (equivalent to Wingdings 006E)
+        indent: 17              // 0.24 inches ≈ 17 points
       };
 
       const formatCellText = (text) => {
@@ -4793,13 +4793,13 @@ async function generatePPTX(companies) {
           // Split by newline and filter out empty lines
           const lines = text.split('\n').filter(line => line.trim());
 
-          // Convert to array of text objects with Wingdings bullet formatting
+          // Convert to array of text objects with square bullet formatting
           return lines.map((line, index) => {
             const cleanLine = line.replace(/^[■\-•]\s*/, '').trim();
             return {
               text: cleanLine + (index < lines.length - 1 ? '\n' : ''),
               options: {
-                bullet: WINGDINGS_BULLET,
+                bullet: SQUARE_BULLET,
                 paraSpaceBefore: 0,
                 paraSpaceAfter: 0
               }
