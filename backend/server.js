@@ -13,6 +13,22 @@ const { createClient } = require('@deepgram/sdk');
 const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } = require('docx');
 const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 
+// ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('=== UNHANDLED PROMISE REJECTION ===');
+  console.error('Reason:', reason);
+  console.error('Promise:', promise);
+  console.error('Stack:', reason?.stack || 'No stack trace');
+  // Don't exit - keep the server running
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('=== UNCAUGHT EXCEPTION ===');
+  console.error('Error:', error.message);
+  console.error('Stack:', error.stack);
+  // Don't exit - keep the server running
+});
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
@@ -1437,27 +1453,57 @@ async function parallelValidationStrict(companies, business, country, exclusion)
   const validated = [];
 
   for (let i = 0; i < companies.length; i += batchSize) {
-    const batch = companies.slice(i, i + batchSize);
-    // Use cached _pageContent from verification step, or fetch if not available
-    const pageTexts = await Promise.all(
-      batch.map(c => c._pageContent ? Promise.resolve(c._pageContent) : fetchWebsite(c.website))
-    );
-    const validations = await Promise.all(
-      batch.map((company, idx) => validateCompanyStrict(company, business, country, exclusion, pageTexts[idx]))
-    );
+    try {
+      const batch = companies.slice(i, i + batchSize);
+      if (!batch || batch.length === 0) continue;
 
-    batch.forEach((company, idx) => {
-      if (validations[idx].valid) {
-        // Remove internal _pageContent before adding to results
-        const { _pageContent, ...cleanCompany } = company;
-        validated.push({
-          ...cleanCompany,
-          hq: validations[idx].corrected_hq || company.hq
-        });
-      }
-    });
+      // Use cached _pageContent from verification step, or fetch if not available
+      // Add .catch() to prevent any single failure from crashing the batch
+      const pageTexts = await Promise.all(
+        batch.map(c => {
+          try {
+            return c?._pageContent ? Promise.resolve(c._pageContent) : fetchWebsite(c?.website).catch(() => null);
+          } catch (e) {
+            return Promise.resolve(null);
+          }
+        })
+      );
 
-    console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
+      // Add .catch() to each validation to prevent single failures from crashing batch
+      const validations = await Promise.all(
+        batch.map((company, idx) => {
+          try {
+            return validateCompanyStrict(company, business, country, exclusion, pageTexts[idx])
+              .catch(e => {
+                console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
+                return { valid: true, corrected_hq: company?.hq }; // Accept on error
+              });
+          } catch (e) {
+            return Promise.resolve({ valid: true, corrected_hq: company?.hq });
+          }
+        })
+      );
+
+      batch.forEach((company, idx) => {
+        try {
+          if (validations[idx]?.valid && company) {
+            // Remove internal _pageContent before adding to results
+            const { _pageContent, ...cleanCompany } = company;
+            validated.push({
+              ...cleanCompany,
+              hq: validations[idx].corrected_hq || company.hq
+            });
+          }
+        } catch (e) {
+          console.error(`  Error processing company ${company?.company_name}: ${e.message}`);
+        }
+      });
+
+      console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
+    } catch (batchError) {
+      console.error(`  Batch error at ${i}-${i + batchSize}: ${batchError.message}`);
+      // Continue to next batch instead of crashing
+    }
   }
 
   console.log(`STRICT Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
@@ -1534,22 +1580,40 @@ async function parallelValidation(companies, business, country, exclusion) {
   const validated = [];
 
   for (let i = 0; i < companies.length; i += batchSize) {
-    const batch = companies.slice(i, i + batchSize);
-    const pageTexts = await Promise.all(batch.map(c => fetchWebsite(c.website)));
-    const validations = await Promise.all(
-      batch.map((company, idx) => validateCompany(company, business, country, exclusion, pageTexts[idx]))
-    );
+    try {
+      const batch = companies.slice(i, i + batchSize);
+      if (!batch || batch.length === 0) continue;
 
-    batch.forEach((company, idx) => {
-      if (validations[idx].valid) {
-        validated.push({
-          ...company,
-          hq: validations[idx].corrected_hq || company.hq
-        });
-      }
-    });
+      const pageTexts = await Promise.all(
+        batch.map(c => fetchWebsite(c?.website).catch(() => null))
+      );
+      const validations = await Promise.all(
+        batch.map((company, idx) =>
+          validateCompany(company, business, country, exclusion, pageTexts[idx])
+            .catch(e => {
+              console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
+              return { valid: true, corrected_hq: company?.hq };
+            })
+        )
+      );
 
-    console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
+      batch.forEach((company, idx) => {
+        try {
+          if (validations[idx]?.valid && company) {
+            validated.push({
+              ...company,
+              hq: validations[idx].corrected_hq || company.hq
+            });
+          }
+        } catch (e) {
+          console.error(`  Error processing company ${company?.company_name}: ${e.message}`);
+        }
+      });
+
+      console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
+    } catch (batchError) {
+      console.error(`  Batch error at ${i}-${i + batchSize}: ${batchError.message}`);
+    }
   }
 
   console.log(`Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
@@ -2100,57 +2164,62 @@ The goal is to find EVERY company, no matter how small or obscure.`
 async function runExpansionRound(round, business, country, existingCompanies, terminology = null) {
   console.log(`\n--- Expansion Round ${round}/10 ---`);
 
-  const existingNames = existingCompanies
-    .filter(c => c && c.company_name)
-    .map(c => c.company_name.toLowerCase());
+  try {
+    const existingNames = (existingCompanies || [])
+      .filter(c => c && c.company_name)
+      .map(c => c.company_name.toLowerCase());
 
-  const existingList = existingCompanies
-    .filter(c => c && c.company_name)
-    .slice(0, 30)
-    .map(c => c.company_name)
-    .join(', ');
+    const existingList = (existingCompanies || [])
+      .filter(c => c && c.company_name)
+      .slice(0, 30)
+      .map(c => c.company_name)
+      .join(', ');
 
-  const shortlistSample = existingCompanies
-    .filter(c => c && c.company_name)
-    .slice(0, 10)
-    .map(c => c.company_name)
-    .join(', ');
+    const shortlistSample = (existingCompanies || [])
+      .filter(c => c && c.company_name)
+      .slice(0, 10)
+      .map(c => c.company_name)
+      .join(', ');
 
-  // Pass terminology to the prompt generator for dynamic term usage
-  const prompt = generateExpansionPrompt(round, business, country, existingList, shortlistSample, terminology);
+    // Pass terminology to the prompt generator for dynamic term usage
+    const prompt = generateExpansionPrompt(round, business, country, existingList, shortlistSample, terminology);
 
-  // Run all 3 search-enabled models in parallel
-  console.log(`  Querying GPT-4o-mini Search, Gemini 2.0 Flash, Perplexity Sonar...`);
-  const [gptResult, geminiResult, perplexityResult] = await Promise.all([
-    callOpenAISearch(prompt),
-    callGemini(prompt),
-    callPerplexity(prompt)
-  ]);
+    // Run all 3 search-enabled models in parallel with error handling
+    console.log(`  Querying GPT-4o-mini Search, Gemini 2.0 Flash, Perplexity Sonar...`);
+    const [gptResult, geminiResult, perplexityResult] = await Promise.all([
+      callOpenAISearch(prompt).catch(e => { console.error(`  GPT error: ${e.message}`); return ''; }),
+      callGemini(prompt).catch(e => { console.error(`  Gemini error: ${e.message}`); return ''; }),
+      callPerplexity(prompt).catch(e => { console.error(`  Perplexity error: ${e.message}`); return ''; })
+    ]);
 
-  // Extract companies from each result
-  const [gptCompanies, geminiCompanies, perplexityCompanies] = await Promise.all([
-    extractCompanies(gptResult, country),
-    extractCompanies(geminiResult, country),
-    extractCompanies(perplexityResult, country)
-  ]);
+    // Extract companies from each result with error handling
+    const [gptCompanies, geminiCompanies, perplexityCompanies] = await Promise.all([
+      extractCompanies(gptResult, country).catch(() => []),
+      extractCompanies(geminiResult, country).catch(() => []),
+      extractCompanies(perplexityResult, country).catch(() => [])
+    ]);
 
-  console.log(`  GPT-4o-mini: ${gptCompanies.length} | Gemini: ${geminiCompanies.length} | Perplexity: ${perplexityCompanies.length}`);
+    console.log(`  GPT-4o-mini: ${gptCompanies.length} | Gemini: ${geminiCompanies.length} | Perplexity: ${perplexityCompanies.length}`);
 
-  // Combine and filter out duplicates
-  const allNewCompanies = [...gptCompanies, ...geminiCompanies, ...perplexityCompanies];
-  const trulyNew = allNewCompanies.filter(c => {
-    if (!c || !c.company_name) return false;
-    const nameLower = c.company_name.toLowerCase();
-    return !existingNames.some(existing =>
-      existing.includes(nameLower) || nameLower.includes(existing) ||
-      levenshteinSimilarity(existing, nameLower) > 0.8
-    );
-  });
+    // Combine and filter out duplicates
+    const allNewCompanies = [...gptCompanies, ...geminiCompanies, ...perplexityCompanies];
+    const trulyNew = allNewCompanies.filter(c => {
+      if (!c || !c.company_name) return false;
+      const nameLower = c.company_name.toLowerCase();
+      return !existingNames.some(existing =>
+        existing.includes(nameLower) || nameLower.includes(existing) ||
+        levenshteinSimilarity(existing, nameLower) > 0.8
+      );
+    });
 
-  const uniqueNew = dedupeCompanies(trulyNew);
-  console.log(`  New unique companies: ${uniqueNew.length}`);
+    const uniqueNew = dedupeCompanies(trulyNew);
+    console.log(`  New unique companies: ${uniqueNew.length}`);
 
-  return uniqueNew;
+    return uniqueNew;
+  } catch (error) {
+    console.error(`  Expansion round ${round} error: ${error.message}`);
+    return []; // Return empty array on error instead of crashing
+  }
 }
 
 app.post('/api/find-target-v4', async (req, res) => {
@@ -2213,10 +2282,11 @@ app.post('/api/find-target-v4', async (req, res) => {
 
     // For each country, do a direct AI search using discovered terminology
     for (const targetCountry of countries) {
-      console.log(`\n--- Searching: ${targetCountry} ---`);
+      try {
+        console.log(`\n--- Searching: ${targetCountry} ---`);
 
-      // Enhanced prompt using discovered terminology
-      const directPrompt = `List ALL companies in ${targetCountry} that are in ANY of these categories:
+        // Enhanced prompt using discovered terminology
+        const directPrompt = `List ALL companies in ${targetCountry} that are in ANY of these categories:
 - ${Business}
 - Alternative terms: ${expandedTerms}
 ${localTermsStr ? `- Local language terms: ${localTermsStr}` : ''}
@@ -2230,32 +2300,41 @@ Exclude: ${Exclusion}
 Return as: Company Name | Website (must start with http)
 Find as many as possible - be exhaustive. Search using ALL the terminology variations above.`;
 
-      // Ask all 3 AI models the same direct question
-      const [gptResult, geminiResult, perplexityResult] = await Promise.all([
-        callOpenAISearch(directPrompt),
-        callGemini(directPrompt),
-        callPerplexity(directPrompt)
-      ]);
+        // Ask all 3 AI models the same direct question with error handling
+        const [gptResult, geminiResult, perplexityResult] = await Promise.all([
+          callOpenAISearch(directPrompt).catch(e => { console.error(`  GPT error: ${e.message}`); return ''; }),
+          callGemini(directPrompt).catch(e => { console.error(`  Gemini error: ${e.message}`); return ''; }),
+          callPerplexity(directPrompt).catch(e => { console.error(`  Perplexity error: ${e.message}`); return ''; })
+        ]);
 
-      // Extract companies
-      const [gptCompanies, geminiCompanies, perplexityCompanies] = await Promise.all([
-        extractCompanies(gptResult, targetCountry),
-        extractCompanies(geminiResult, targetCountry),
-        extractCompanies(perplexityResult, targetCountry)
-      ]);
+        // Extract companies with error handling
+        const [gptCompanies, geminiCompanies, perplexityCompanies] = await Promise.all([
+          extractCompanies(gptResult, targetCountry).catch(() => []),
+          extractCompanies(geminiResult, targetCountry).catch(() => []),
+          extractCompanies(perplexityResult, targetCountry).catch(() => [])
+        ]);
 
-      console.log(`  GPT: ${gptCompanies.length} | Gemini: ${geminiCompanies.length} | Perplexity: ${perplexityCompanies.length}`);
-      allPhase1Companies = [...allPhase1Companies, ...gptCompanies, ...geminiCompanies, ...perplexityCompanies];
+        console.log(`  GPT: ${gptCompanies.length} | Gemini: ${geminiCompanies.length} | Perplexity: ${perplexityCompanies.length}`);
+        allPhase1Companies = [...allPhase1Companies, ...gptCompanies, ...geminiCompanies, ...perplexityCompanies];
+      } catch (countryError) {
+        console.error(`  Error searching ${targetCountry}: ${countryError.message}`);
+        // Continue to next country instead of crashing
+      }
     }
 
     // Also run terminology-enhanced exhaustive search for the full region
     console.log(`\n--- Full Region Search with Expanded Terminology: ${Country} ---`);
 
-    // Run primary search first
+    // Run primary search first with error handling
+    let regionCompanies = [];
     console.log(`  Searching with primary term: ${Business}`);
-    const primaryResults = await exhaustiveSearch(Business, Country, Exclusion);
-    let regionCompanies = [...primaryResults];
-    console.log(`  Primary term found: ${primaryResults.length} companies`);
+    try {
+      const primaryResults = await exhaustiveSearch(Business, Country, Exclusion);
+      regionCompanies = [...primaryResults];
+      console.log(`  Primary term found: ${primaryResults.length} companies`);
+    } catch (e) {
+      console.error(`  Primary search error: ${e.message}`);
+    }
 
     // Then run ONE additional search with the best alternative term (sequential to avoid overwhelming APIs)
     const altTerms = terminology.alternative_terms || [];
@@ -2297,20 +2376,25 @@ Find as many as possible - be exhaustive. Search using ALL the terminology varia
     let totalNewFound = 0;
 
     for (let round = 1; round <= 10; round++) {
-      const roundStart = Date.now();
+      try {
+        const roundStart = Date.now();
 
-      // Cycle through countries for each round
-      const targetCountry = countries[round % countries.length];
-      // Pass terminology to enable dynamic term usage in expansion rounds
-      const newCompanies = await runExpansionRound(round, Business, targetCountry, allCompanies, terminology);
+        // Cycle through countries for each round
+        const targetCountry = countries[round % countries.length];
+        // Pass terminology to enable dynamic term usage in expansion rounds
+        const newCompanies = await runExpansionRound(round, Business, targetCountry, allCompanies, terminology);
 
-      if (newCompanies.length > 0) {
-        allCompanies = dedupeCompanies([...allCompanies, ...newCompanies]);
-        totalNewFound += newCompanies.length;
+        if (newCompanies && newCompanies.length > 0) {
+          allCompanies = dedupeCompanies([...allCompanies, ...newCompanies]);
+          totalNewFound += newCompanies.length;
+        }
+
+        const roundTime = ((Date.now() - roundStart) / 1000).toFixed(1);
+        console.log(`  Round ${round}/10 [${targetCountry}]: +${(newCompanies || []).length} new (${roundTime}s). Total: ${allCompanies.length}`);
+      } catch (roundError) {
+        console.error(`  Round ${round} error: ${roundError.message}`);
+        // Continue to next round instead of crashing
       }
-
-      const roundTime = ((Date.now() - roundStart) / 1000).toFixed(1);
-      console.log(`  Round ${round}/10 [${targetCountry}]: +${newCompanies.length} new (${roundTime}s). Total: ${allCompanies.length}`);
     }
 
     console.log(`\nPhase 2 complete. Found ${totalNewFound} additional companies.`);
@@ -2320,18 +2404,27 @@ Find as many as possible - be exhaustive. Search using ALL the terminology varia
     console.log('PHASE 3: FINAL VALIDATION');
     console.log('='.repeat(50));
 
-    console.log(`Total candidates: ${allCompanies.length}`);
+    let finalCompanies = [...shortlistA]; // Start with already validated companies
 
-    const phase2New = allCompanies.filter(c =>
-      !shortlistA.some(s => s.company_name === c.company_name)
-    );
-    console.log(`New from Phase 2 (need validation): ${phase2New.length}`);
+    try {
+      console.log(`Total candidates: ${allCompanies.length}`);
 
-    const preFiltered2 = preFilterCompanies(phase2New);
-    const validated2 = await parallelValidationStrict(preFiltered2, Business, Country, Exclusion);
-    console.log(`Phase 2 validated: ${validated2.length}`);
+      const phase2New = allCompanies.filter(c =>
+        !shortlistA.some(s => s.company_name === c.company_name)
+      );
+      console.log(`New from Phase 2 (need validation): ${phase2New.length}`);
 
-    const finalCompanies = dedupeCompanies([...shortlistA, ...validated2]);
+      if (phase2New.length > 0) {
+        const preFiltered2 = preFilterCompanies(phase2New);
+        const validated2 = await parallelValidationStrict(preFiltered2, Business, Country, Exclusion);
+        console.log(`Phase 2 validated: ${validated2.length}`);
+        finalCompanies = dedupeCompanies([...shortlistA, ...validated2]);
+      }
+    } catch (phase3Error) {
+      console.error(`Phase 3 validation error: ${phase3Error.message}`);
+      // Continue with what we have from shortlistA
+    }
+
     console.log(`FINAL TOTAL: ${finalCompanies.length} validated companies`);
 
     // ========== Send Results ==========
