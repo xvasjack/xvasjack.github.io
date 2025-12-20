@@ -4810,20 +4810,12 @@ async function generatePPTX(companies) {
         tableData.push(['Key Metrics', company.metrics, null]);
       }
 
-      // Helper function to format cell text with proper PowerPoint bullets
-      // Wingdings 006E = Unicode U+25A0 (BLACK SQUARE ■)
-      // Indentation: 0.24" = ~17 points
-      const SQUARE_BULLET = {
-        type: 'bullet',
-        characterCode: '25A0',  // Unicode BLACK SQUARE (equivalent to Wingdings 006E)
-        indent: 17              // 0.24 inches ≈ 17 points
-      };
-
+      // Helper function to format cell text with bullet points
+      // Uses Unicode BLACK SQUARE ■ (U+25A0) directly in text for reliability
       const formatCellText = (text) => {
         if (!text || typeof text !== 'string') return text;
 
         // Check if text has multiple lines - if so, format as bullet points
-        // Also check for explicit bullet markers (■, -, •)
         const hasMultipleLines = text.includes('\n');
         const hasBulletMarkers = text.includes('■') || text.includes('\n-') || text.startsWith('-') || text.startsWith('•');
 
@@ -4833,18 +4825,12 @@ async function generatePPTX(companies) {
 
           // Only format as bullets if we have 2+ lines
           if (lines.length >= 2) {
-            // Convert to array of text objects with square bullet formatting
-            return lines.map((line, index) => {
+            // Clean each line and prepend bullet character directly
+            const formattedLines = lines.map(line => {
               const cleanLine = line.replace(/^[■\-•]\s*/, '').trim();
-              return {
-                text: cleanLine + (index < lines.length - 1 ? '\n' : ''),
-                options: {
-                  bullet: SQUARE_BULLET,
-                  paraSpaceBefore: 0,
-                  paraSpaceAfter: 0
-                }
-              };
+              return '■ ' + cleanLine;
             });
+            return formattedLines.join('\n');
           }
         }
         return text;
@@ -5309,31 +5295,39 @@ async function extractProductsBreakdown(scrapedContent, previousData) {
       messages: [
         {
           role: 'system',
-          content: `You are an M&A analyst extracting a breakdown of important information for the right-side table on a company profile slide.
+          content: `You are an M&A analyst deciding what to put in the RIGHT-SIDE TABLE of a company profile slide.
 
-IMPORTANT: Choose the category that has THE MOST CONTENT in the website. Look at what the website emphasizes most:
-- If website lists MANY customers/clients → use "Customers"
-- If website shows MANY products with details → use "Products and Applications"
-- If website highlights MANY services → use "Services"
-- If website shows diverse business units → use "Business Segments"
+THE RIGHT SIDE HAS MORE SPACE - use it for the content with THE MOST DATA.
 
-Pick the category where you can extract the MOST detailed information.
+DECISION PROCESS:
+1. Count how many items each category has:
+   - How many CUSTOMERS are listed?
+   - How many PRODUCTS are shown?
+   - How many SERVICES are offered?
+   - How many SUPPLIERS/PARTNERS are mentioned?
+2. Pick the category with THE HIGHEST COUNT to display on the right side
+3. The right table can show more detail, so put the richest content there
+
+EXAMPLE:
+- If website lists 20 customers but only 5 services → use "Customers"
+- If website shows 15 products but only 3 customers → use "Products and Applications"
+- If website has 10 suppliers but only 2 products → use "Key Suppliers"
 
 CATEGORY OPTIONS:
-1. "Products and Applications" - When website shows many products with their uses
-2. "Products and Services" - When website shows both products and services
-3. "Services" - When website emphasizes service offerings
-4. "Customers" - When website lists many clients or customer segments
-5. "Product Categories" - When website shows product catalog/portfolio
-6. "Business Segments" - When website shows multiple distinct business units
+1. "Customers" - When many clients listed (segment by industry: Educational, Government, Healthcare, etc.)
+2. "Products and Applications" - When many products shown (segment by type/application)
+3. "Services" - When many services offered (segment by service type)
+4. "Key Suppliers" - When many suppliers/partners mentioned
+5. "Product Categories" - When product catalog is extensive
+6. "Business Segments" - When multiple distinct business units
 
 OUTPUT JSON:
 {
-  "breakdown_title": "Products and Applications",
+  "breakdown_title": "Customers",
   "breakdown_items": [
-    {"label": "Industrial", "value": "Lubricants, Adhesives, Solvents"},
-    {"label": "Consumer", "value": "Cleaning products, Personal care"},
-    {"label": "Automotive", "value": "Engine oils, Brake fluids, Coolants"}
+    {"label": "Educational", "value": "University A, Polytechnic B, School C"},
+    {"label": "Government", "value": "Agency X, Ministry Y"},
+    {"label": "Healthcare", "value": "Hospital A, Clinic B"}
   ]
 }
 
