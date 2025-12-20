@@ -6427,11 +6427,11 @@ function buildProfileSlidesEmailHTML(companies, errors, hasPPTX) {
     companies.forEach((c, i) => {
       html += `
         <div style="margin: 16px 0; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px;">
-          <h4 style="margin: 0 0 8px 0;">${i + 1}. ${c.title || c.company_name || 'Unknown'}</h4>
-          <p style="margin: 4px 0; font-size: 13px;"><strong>Website:</strong> ${c.website}</p>
-          <p style="margin: 4px 0; font-size: 13px;"><strong>Established:</strong> ${c.established_year || '-'}</p>
-          <p style="margin: 4px 0; font-size: 13px;"><strong>Location:</strong> ${c.location || '-'}</p>
-          <p style="margin: 4px 0; font-size: 13px;"><strong>Business:</strong> ${c.business || '-'}</p>
+          <h4 style="margin: 0 0 8px 0;">${i + 1}. ${ensureString(c.title || c.company_name) || 'Unknown'}</h4>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Website:</strong> ${ensureString(c.website)}</p>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Established:</strong> ${ensureString(c.established_year) || '-'}</p>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Location:</strong> ${ensureString(c.location) || '-'}</p>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Business:</strong> ${ensureString(c.business) || '-'}</p>
         </div>
       `;
     });
@@ -6547,19 +6547,20 @@ app.post('/api/profile-slides', async (req, res) => {
         const allKeyMetrics = metricsInfo.key_metrics || [];
 
         // Combine all extracted data (mandatory fields supplemented by web search)
+        // Use ensureString() for all AI-generated fields to prevent [object Object] issues
         const companyData = {
           website: scraped.url,
-          company_name: basicInfo.company_name || '',
-          established_year: basicInfo.established_year || searchedInfo.established_year || '',
-          location: basicInfo.location || searchedInfo.location || '',
-          business: businessInfo.business || '',
-          message: businessInfo.message || '',
-          footnote: businessInfo.footnote || '',
-          title: businessInfo.title || '',
+          company_name: ensureString(basicInfo.company_name),
+          established_year: ensureString(basicInfo.established_year || searchedInfo.established_year),
+          location: ensureString(basicInfo.location || searchedInfo.location),
+          business: ensureString(businessInfo.business),
+          message: ensureString(businessInfo.message),
+          footnote: ensureString(businessInfo.footnote),
+          title: ensureString(businessInfo.title),
           key_metrics: allKeyMetrics,  // Only from scraped website
-          breakdown_title: productsBreakdown.breakdown_title || 'Products and Applications',
+          breakdown_title: ensureString(productsBreakdown.breakdown_title) || 'Products and Applications',
           breakdown_items: productsBreakdown.breakdown_items || [],
-          metrics: metricsInfo.metrics || ''  // Fallback for old format
+          metrics: ensureString(metricsInfo.metrics)  // Fallback for old format
         };
 
         console.log(`  ✓ Completed: ${companyData.title || companyData.company_name} (${allKeyMetrics.length} metrics)`);
