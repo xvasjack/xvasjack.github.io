@@ -20,13 +20,13 @@
     .dd-instructions {
       background: var(--accent-soft);
       border: 1px solid var(--accent);
-      border-radius: 8px;
-      padding: 10px 14px;
-      margin-bottom: 16px;
-      font-size: 12px;
+      border-radius: 6px;
+      padding: 8px 12px;
+      margin-bottom: 12px;
+      font-size: 11px;
       display: flex;
       flex-wrap: wrap;
-      gap: 8px 16px;
+      gap: 4px 14px;
       align-items: center;
     }
     .dd-instructions strong { color: var(--accent); }
@@ -35,9 +35,8 @@
     /* Main 2-column grid */
     .dd-two-col {
       display: grid;
-      grid-template-columns: 320px 1fr;
-      gap: 20px;
-      min-height: 400px;
+      grid-template-columns: 300px 1fr;
+      gap: 18px;
     }
     @media (max-width: 900px) {
       .dd-two-col { grid-template-columns: 1fr; }
@@ -47,55 +46,62 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
+      max-height: calc(100vh - 180px);
+      overflow-y: auto;
+      padding-right: 4px;
     }
 
     /* Upload Zone - Compact */
     .dd-upload-zone {
-      border: 2px dashed var(--border-medium);
+      border: 1px dashed var(--border-medium);
       border-radius: var(--radius-md);
-      padding: 16px 12px;
+      padding: 10px;
       text-align: center;
       cursor: pointer;
       transition: all 0.2s ease;
       background: var(--bg-body);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
     }
     .dd-upload-zone:hover, .dd-upload-zone.active {
       border-color: var(--accent);
       background: var(--accent-soft);
     }
-    .dd-upload-zone svg { color: var(--accent); margin-bottom: 4px; }
-    .dd-upload-zone p { font-size: 11px; color: var(--text-muted); margin: 0; }
+    .dd-upload-zone svg { color: var(--accent); width: 18px; height: 18px; }
+    .dd-upload-zone p { font-size: 12px; color: var(--text-muted); margin: 0; }
     #fileInput { display: none; }
 
-    .dd-file-list { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .dd-file-list { margin-top: 6px; display: flex; flex-direction: column; gap: 3px; max-height: 80px; overflow-y: auto; }
     .dd-file-item {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 14px; background: var(--bg-surface);
-      border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+      display: flex; align-items: center; gap: 8px;
+      padding: 6px 10px; background: var(--bg-surface);
+      border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
     }
-    .dd-file-item svg { width: 20px; height: 20px; color: var(--accent); }
-    .dd-file-item span { flex: 1; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .dd-file-item button { background: none; border: none; color: var(--text-light); cursor: pointer; font-size: 18px; }
+    .dd-file-item svg { width: 16px; height: 16px; color: var(--accent); flex-shrink: 0; }
+    .dd-file-item span { flex: 1; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dd-file-item button { background: none; border: none; color: var(--text-light); cursor: pointer; font-size: 16px; padding: 0; line-height: 1; }
     .dd-file-item button:hover { color: var(--error); }
 
-    /* Recording Controls - Very Compact */
+    /* Recording Controls */
     .dd-record-controls {
       background: var(--bg-surface);
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-md);
       padding: 12px;
       display: flex;
-      flex-direction: column;
       align-items: center;
-      gap: 8px;
+      gap: 14px;
     }
     .dd-record-btn {
-      width: 48px;
-      height: 48px;
+      width: 44px;
+      height: 44px;
       border-radius: 50%;
       border: 3px solid var(--error);
       background: white;
       cursor: pointer;
+      flex-shrink: 0;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -107,11 +113,16 @@
       background: var(--error);
       border-color: var(--error);
     }
-    .dd-record-btn svg { width: 20px; height: 20px; color: var(--error); }
+    .dd-record-btn svg { width: 22px; height: 22px; color: var(--error); }
     .dd-record-btn.recording svg { color: white; }
     @keyframes pulse-record {
       0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
       50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+    }
+    .dd-record-info {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
     }
     .dd-record-timer {
       font-family: monospace;
@@ -123,23 +134,22 @@
     .dd-record-status {
       font-size: 12px;
       color: var(--text-muted);
-      text-align: center;
     }
     .dd-record-status.recording { color: var(--error); font-weight: 600; }
 
     .dd-lang-select {
       display: flex;
       flex-wrap: wrap;
-      gap: 4px;
+      gap: 5px;
       justify-content: center;
     }
     .dd-lang-btn {
-      padding: 4px 8px;
+      padding: 5px 10px;
       border: 1px solid var(--border-medium);
       border-radius: var(--radius-sm);
       background: var(--bg-body);
       cursor: pointer;
-      font-size: 11px;
+      font-size: 12px;
       transition: all 0.15s;
     }
     .dd-lang-btn:hover { border-color: var(--accent); }
@@ -153,7 +163,7 @@
     .dd-transcript-panels {
       display: flex;
       flex-direction: column;
-      gap: 12px;
+      gap: 14px;
       min-width: 0;
     }
     .dd-transcript-panel {
@@ -163,34 +173,33 @@
       border-radius: var(--radius-md);
       display: flex;
       flex-direction: column;
-      min-height: 380px;
+      min-height: 220px;
     }
     .dd-panel-header {
       padding: 8px 12px;
       border-bottom: 1px solid var(--border-subtle);
-      font-size: 11px;
+      font-size: 12px;
       font-weight: 600;
       color: var(--text-muted);
       text-transform: uppercase;
       letter-spacing: 0.5px;
       display: flex;
       align-items: center;
-      gap: 8px;
+      gap: 10px;
     }
     .dd-panel-header .lang-badge {
       background: var(--accent-soft);
       color: var(--accent);
-      padding: 2px 6px;
+      padding: 3px 8px;
       border-radius: 10px;
-      font-size: 10px;
+      font-size: 11px;
     }
     .dd-panel-content {
       flex: 1;
-      padding: 14px;
+      padding: 16px;
       font-size: 14px;
-      line-height: 1.7;
+      line-height: 1.6;
       overflow-y: auto;
-      min-height: 320px;
       color: var(--text-main);
     }
     .dd-panel-content:focus {
@@ -215,21 +224,21 @@
       background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
       border: 1px solid #f59e0b;
       border-radius: var(--radius-md);
-      padding: 12px 16px;
+      padding: 14px 18px;
       margin-bottom: 16px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
+      gap: 14px;
     }
-    .dd-recovery-banner p { margin: 0; font-size: 13px; color: #92400e; }
+    .dd-recovery-banner p { margin: 0; font-size: 14px; color: #92400e; }
     .dd-recovery-banner strong { color: #78350f; }
-    .dd-recovery-actions { display: flex; gap: 8px; }
+    .dd-recovery-actions { display: flex; gap: 10px; }
     .dd-recovery-btn {
-      padding: 6px 12px;
+      padding: 8px 14px;
       border: none;
       border-radius: var(--radius-sm);
-      font-size: 12px;
+      font-size: 13px;
       font-weight: 600;
       cursor: pointer;
     }
@@ -239,7 +248,7 @@
     .dd-panel-content .speaker-label {
       color: var(--accent);
       font-weight: 600;
-      font-size: 11px;
+      font-size: 12px;
       text-transform: uppercase;
     }
     .dd-transcript-panel.translation { border-left: 3px solid var(--success); }
@@ -250,18 +259,22 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       color: var(--text-main);
-      margin-bottom: 12px;
+      margin-bottom: 8px;
     }
-    .dd-section-header svg { color: var(--accent); }
+    .dd-section-header svg { color: var(--accent); width: 16px; height: 16px; }
 
     /* Form Section */
     .dd-form-section {
-      margin-top: 24px;
-      padding-top: 24px;
+      margin-top: 12px;
+      padding-top: 12px;
       border-top: 1px solid var(--border-subtle);
+      position: sticky;
+      bottom: 0;
+      background: var(--bg-body);
+      padding-bottom: 4px;
     }
     .dd-form-row {
       display: grid;
@@ -270,6 +283,25 @@
     }
     @media (max-width: 600px) {
       .dd-form-row { grid-template-columns: 1fr; }
+    }
+
+    /* Mode Toggle Buttons */
+    .dd-mode-btn {
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      border: 1px solid var(--border-medium);
+      border-radius: 4px;
+      background: var(--bg-body);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .dd-mode-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .dd-mode-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
     }
   </style>
 </head>
@@ -299,15 +331,15 @@
   <main class="app-main" style="padding-top: 10px;">
     <section class="page-content dd-container">
       <!-- Compact Header -->
-      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-        <span class="status-badge coming-soon" style="margin: 0; background: #fef3c7; color: #92400e;">Coming Soon</span>
-        <h1 style="font-size: 18px; margin: 0; font-weight: 600;">Due Diligence Report</h1>
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+        <span class="status-badge coming-soon" style="margin: 0; background: #fef3c7; color: #92400e; font-size: 10px; padding: 2px 8px;">Coming Soon</span>
+        <h1 style="font-size: 16px; margin: 0; font-weight: 600;">Due Diligence Report</h1>
       </div>
 
       <!-- How to Use Instructions -->
       <div class="dd-instructions">
         <strong>How to use:</strong>
-        <span>1. Click record to capture meeting audio (auto-detects language & speakers)</span>
+        <span>1. Select your language and click record</span>
         <span>2. Edit transcript if needed</span>
         <span>3. Optionally upload supporting materials (PDF, PPT, Word)</span>
         <span>4. Add context and submit to receive DD report via email</span>
@@ -331,17 +363,39 @@
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
             <span>Record Meeting</span>
           </div>
+          <!-- Language Selector -->
+          <div class="dd-lang-select" id="langSelect">
+            <button type="button" class="dd-lang-btn" data-lang="en">EN</button>
+            <button type="button" class="dd-lang-btn" data-lang="zh">中文</button>
+            <button type="button" class="dd-lang-btn" data-lang="ja">日本語</button>
+            <button type="button" class="dd-lang-btn" data-lang="ko">한국어</button>
+            <button type="button" class="dd-lang-btn" data-lang="hi">हिंदी</button>
+            <button type="button" class="dd-lang-btn" data-lang="id">ID</button>
+            <button type="button" class="dd-lang-btn" data-lang="vi">VN</button>
+            <button type="button" class="dd-lang-btn" data-lang="th">ไทย</button>
+            <button type="button" class="dd-lang-btn" data-lang="es">ES</button>
+            <button type="button" class="dd-lang-btn" data-lang="fr">FR</button>
+            <button type="button" class="dd-lang-btn" data-lang="de">DE</button>
+            <button type="button" class="dd-lang-btn" data-lang="pt">PT</button>
+            <button type="button" class="dd-lang-btn" data-lang="ru">RU</button>
+            <button type="button" class="dd-lang-btn" data-lang="ar">AR</button>
+          </div>
+          <div style="font-size: 11px; color: var(--text-main); text-align: center; margin-bottom: 6px; padding: 6px 8px; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 4px; border: 1px solid #f59e0b;">
+            <strong style="color: #92400e;">Select your main speaking language.</strong> <span style="color: #78350f;">Non-English will be translated to English.</span>
+          </div>
           <div class="dd-record-controls">
             <button class="dd-record-btn" id="recordBtn">
               <svg fill="currentColor" viewBox="0 0 24 24" id="recordIcon"><circle cx="12" cy="12" r="8"/></svg>
             </button>
-            <div class="dd-record-timer" id="recordTimer">00:00</div>
-            <div class="dd-record-status" id="recordStatus">Click to start recording</div>
-            <button type="button" id="downloadRecordingBtn" style="display: none; padding: 4px 8px; font-size: 10px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-muted); cursor: pointer;">Download</button>
+            <div class="dd-record-info">
+              <div class="dd-record-timer" id="recordTimer">00:00</div>
+              <div class="dd-record-status" id="recordStatus">Click to start</div>
+            </div>
+            <button type="button" id="downloadRecordingBtn" style="display: none; margin-left: auto; padding: 4px 8px; font-size: 10px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-muted); cursor: pointer;">Download</button>
           </div>
 
           <!-- Upload Section -->
-          <div class="dd-section-header" style="margin-top: 16px;">
+          <div class="dd-section-header" style="margin-top: 10px;">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
             <span>Upload Materials <span style="font-weight: 400; color: var(--text-muted);">(optional)</span></span>
           </div>
@@ -353,16 +407,29 @@
           <div class="dd-file-list" id="fileList"></div>
 
           <!-- Form Section -->
-          <div class="dd-form-section" style="margin-top: 16px;">
-            <label style="font-size: 12px; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 6px;">Additional Context & Instructions</label>
-            <textarea id="ddInstructions" rows="5" placeholder="Add any context about the meeting, specific areas to focus on, questions to address, or special instructions for the DD report..." style="width: 100%; padding: 10px; border: 1px solid var(--border-medium); border-radius: 6px; font-size: 13px; resize: vertical; min-height: 100px;"></textarea>
+          <div class="dd-form-section">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+              <label style="font-size: 13px; font-weight: 600; color: var(--text-main);">Instructions</label>
+              <div class="dd-mode-toggle" style="display: flex; gap: 5px;">
+                <button type="button" class="dd-mode-btn active" id="autoModeBtn" onclick="setInstructionMode('auto')">Auto</button>
+                <button type="button" class="dd-mode-btn" id="manualModeBtn" onclick="setInstructionMode('manual')">Manual</button>
+              </div>
+            </div>
+            <div id="autoModeHint" style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px; padding: 8px 10px; background: var(--accent-soft); border-radius: 4px;">
+              AI will automatically analyze the transcript and materials to generate a comprehensive DD report.
+            </div>
+            <textarea id="ddInstructions" rows="4" placeholder="Example instructions:
+• We are YCP, representing Speaker 1 (the buyer)
+• Speaker 2 is the target company CEO
+• Focus on: financials, risks, synergies
+• Summarize from our client's perspective" style="width: 100%; padding: 10px; border: 1px solid var(--border-medium); border-radius: 4px; font-size: 12px; resize: vertical; display: none; line-height: 1.5;"></textarea>
 
-            <div style="margin-top: 12px;">
-              <label style="font-size: 12px; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 6px;">Email Address</label>
-              <input type="email" id="ddEmail" required placeholder="your@email.com" style="width: 100%; padding: 10px; border: 1px solid var(--border-medium); border-radius: 6px; font-size: 13px;">
+            <div style="margin-top: 10px;">
+              <label style="font-size: 13px; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 5px;">Email</label>
+              <input type="email" id="ddEmail" required placeholder="your@email.com" style="width: 100%; padding: 10px; border: 1px solid var(--border-medium); border-radius: 4px; font-size: 13px;">
             </div>
 
-            <button type="button" class="submit-btn" id="ddSubmitBtn" style="width: 100%; padding: 12px; font-size: 14px; margin-top: 12px;">
+            <button type="button" class="submit-btn" id="ddSubmitBtn" style="width: 100%; padding: 12px; font-size: 14px; margin-top: 10px;">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
               Generate DD Report
             </button>
@@ -375,7 +442,7 @@
             <div class="dd-panel-header">
               <span>Live Transcript</span>
               <span class="lang-badge" id="detectedLang">--</span>
-              <span style="margin-left: auto; font-size: 10px; color: var(--text-muted);">Click to edit</span>
+              <span style="margin-left: auto; font-size: 11px; color: var(--text-muted);">Click to edit</span>
             </div>
             <div class="dd-panel-content empty" id="transcriptContent" contenteditable="true" style="cursor: text;">Start recording to see live transcription...</div>
           </div>
@@ -426,8 +493,27 @@
     const errorText = document.getElementById('errorText');
 
     let selectedFiles = [];
-    let selectedLang = 'auto';
+    let selectedLang = 'en';  // Default to English
     let isRecording = false;
+
+    // Set English as default selected on page load
+    document.querySelector('#langSelect .dd-lang-btn[data-lang="en"]').classList.add('active');
+
+    // Language selector click handler
+    document.getElementById('langSelect').addEventListener('click', (e) => {
+      if (e.target.classList.contains('dd-lang-btn')) {
+        // Don't allow changing language while recording
+        if (isRecording) {
+          alert('Stop recording before changing language');
+          return;
+        }
+        // Update selection
+        document.querySelectorAll('#langSelect .dd-lang-btn').forEach(btn => btn.classList.remove('active'));
+        e.target.classList.add('active');
+        selectedLang = e.target.dataset.lang;
+        console.log('Language selected:', selectedLang);
+      }
+    });
     let mediaRecorder = null;
     let audioContext = null;
     let ws = null;
@@ -437,6 +523,28 @@
     let finalTranscript = '';
     let finalTranslation = '';
     let currentLanguage = 'en';
+    let instructionMode = 'auto';  // 'auto' or 'manual'
+
+    // Instruction mode toggle
+    window.setInstructionMode = function(mode) {
+      instructionMode = mode;
+      const autoBtn = document.getElementById('autoModeBtn');
+      const manualBtn = document.getElementById('manualModeBtn');
+      const autoHint = document.getElementById('autoModeHint');
+      const instructionsBox = document.getElementById('ddInstructions');
+
+      if (mode === 'auto') {
+        autoBtn.classList.add('active');
+        manualBtn.classList.remove('active');
+        autoHint.style.display = 'block';
+        instructionsBox.style.display = 'none';
+      } else {
+        autoBtn.classList.remove('active');
+        manualBtn.classList.add('active');
+        autoHint.style.display = 'none';
+        instructionsBox.style.display = 'block';
+      }
+    };
     let autoSaveInterval = null;
     let currentR2Key = null;
     let currentSpeaker = null;  // Track current speaker for diarization
@@ -503,17 +611,6 @@
 
     // Check for recovery on page load
     checkForRecovery();
-
-    // Tab switching
-    tabs.forEach(tab => {
-      tab.addEventListener('click', () => {
-        const mode = tab.dataset.mode;
-        tabs.forEach(t => t.classList.remove('active'));
-        modes.forEach(m => m.classList.remove('active'));
-        tab.classList.add('active');
-        document.getElementById(mode + 'Mode').classList.add('active');
-      });
-    });
 
     // ============ UPLOAD MODE ============
 
@@ -641,7 +738,8 @@
           body: JSON.stringify({
             files: processed.documents,
             audioFiles: processed.audioFiles,
-            instructions,
+            instructions: instructionMode === 'manual' ? instructions : '',
+            instructionMode,
             reportLength: 'medium',
             email,
             generateWord: true,
@@ -716,7 +814,13 @@
         };
 
         ws.onmessage = (event) => {
-          const data = JSON.parse(event.data);
+          let data;
+          try {
+            data = JSON.parse(event.data);
+          } catch (e) {
+            console.error('Failed to parse WebSocket message:', e, event.data);
+            return;  // Skip invalid messages
+          }
 
           if (data.type === 'session') {
             sessionId = data.sessionId;
