@@ -16,28 +16,37 @@
       padding: 12px 20px;
     }
 
-    /* Main 3-column grid */
-    .dd-main-grid {
+    /* Instructions */
+    .dd-instructions {
+      background: var(--accent-soft);
+      border: 1px solid var(--accent);
+      border-radius: 8px;
+      padding: 10px 14px;
+      margin-bottom: 16px;
+      font-size: 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 16px;
+      align-items: center;
+    }
+    .dd-instructions strong { color: var(--accent); }
+    .dd-instructions span { color: var(--text-main); }
+
+    /* Main 2-column grid */
+    .dd-two-col {
       display: grid;
-      grid-template-columns: 140px 1fr 240px;
-      gap: 16px;
-      min-height: 320px;
+      grid-template-columns: 320px 1fr;
+      gap: 20px;
+      min-height: 400px;
     }
     @media (max-width: 900px) {
-      .dd-main-grid { grid-template-columns: 1fr; }
+      .dd-two-col { grid-template-columns: 1fr; }
     }
 
-    .dd-left-col, .dd-right-col {
+    .dd-left-col {
       display: flex;
       flex-direction: column;
       gap: 8px;
-    }
-
-    .dd-compact-form {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-top: 12px;
     }
 
     /* Upload Zone - Compact */
@@ -154,7 +163,7 @@
       border-radius: var(--radius-md);
       display: flex;
       flex-direction: column;
-      min-height: 200px;
+      min-height: 380px;
     }
     .dd-panel-header {
       padding: 8px 12px;
@@ -177,12 +186,21 @@
     }
     .dd-panel-content {
       flex: 1;
-      padding: 12px;
-      font-size: 13px;
-      line-height: 1.6;
+      padding: 14px;
+      font-size: 14px;
+      line-height: 1.7;
       overflow-y: auto;
-      max-height: 220px;
+      min-height: 320px;
       color: var(--text-main);
+    }
+    .dd-panel-content:focus {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+    .dd-panel-content .speaker {
+      color: var(--accent);
+      font-weight: 600;
+      margin-right: 4px;
     }
     .dd-panel-content.empty {
       color: var(--text-light);
@@ -218,6 +236,12 @@
     .dd-recovery-btn.restore { background: #f59e0b; color: white; }
     .dd-recovery-btn.dismiss { background: white; color: #92400e; border: 1px solid #f59e0b; }
     .dd-panel-content .interim { color: var(--text-muted); }
+    .dd-panel-content .speaker-label {
+      color: var(--accent);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+    }
     .dd-transcript-panel.translation { border-left: 3px solid var(--success); }
     .dd-transcript-panel.translation .dd-panel-header { color: var(--success); }
 
@@ -275,10 +299,18 @@
   <main class="app-main" style="padding-top: 10px;">
     <section class="page-content dd-container">
       <!-- Compact Header -->
-      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
-        <span class="status-badge" style="margin: 0;">Online</span>
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
+        <span class="status-badge coming-soon" style="margin: 0; background: #fef3c7; color: #92400e;">Coming Soon</span>
         <h1 style="font-size: 18px; margin: 0; font-weight: 600;">Due Diligence Report</h1>
-        <span style="color: var(--text-muted); font-size: 13px;">— Record meetings & upload materials</span>
+      </div>
+
+      <!-- How to Use Instructions -->
+      <div class="dd-instructions">
+        <strong>How to use:</strong>
+        <span>1. Click record to capture meeting audio (auto-detects language & speakers)</span>
+        <span>2. Edit transcript if needed</span>
+        <span>3. Optionally upload supporting materials (PDF, PPT, Word)</span>
+        <span>4. Add context and submit to receive DD report via email</span>
       </div>
 
       <!-- Recovery Banner (hidden by default) -->
@@ -290,51 +322,28 @@
         </div>
       </div>
 
-      <!-- Main Grid: Recording + Upload side by side -->
-      <div class="dd-main-grid">
-        <!-- Left Column: Recording -->
+      <!-- Main 2-Column Layout -->
+      <div class="dd-two-col">
+        <!-- Left Column: Recording + Upload + Form -->
         <div class="dd-left-col">
+          <!-- Recording Section -->
           <div class="dd-section-header">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
-            <span>Record</span>
+            <span>Record Meeting</span>
           </div>
           <div class="dd-record-controls">
-            <div class="dd-lang-select">
-              <button class="dd-lang-btn active" data-lang="auto">Auto</button>
-              <button class="dd-lang-btn" data-lang="en">EN</button>
-              <button class="dd-lang-btn" data-lang="zh">中</button>
-              <button class="dd-lang-btn" data-lang="ms">MY</button>
-              <button class="dd-lang-btn" data-lang="ja">日</button>
-            </div>
             <button class="dd-record-btn" id="recordBtn">
               <svg fill="currentColor" viewBox="0 0 24 24" id="recordIcon"><circle cx="12" cy="12" r="8"/></svg>
             </button>
             <div class="dd-record-timer" id="recordTimer">00:00</div>
-            <div class="dd-record-status" id="recordStatus">Click to record</div>
+            <div class="dd-record-status" id="recordStatus">Click to start recording</div>
             <button type="button" id="downloadRecordingBtn" style="display: none; padding: 4px 8px; font-size: 10px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-muted); cursor: pointer;">Download</button>
           </div>
-        </div>
 
-        <!-- Middle Column: Transcript -->
-        <div class="dd-transcript-panels">
-          <div class="dd-transcript-panel">
-            <div class="dd-panel-header">
-              <span>Live Transcript</span>
-              <span class="lang-badge" id="detectedLang">--</span>
-            </div>
-            <div class="dd-panel-content empty" id="transcriptContent">Start recording to see live transcription...</div>
-          </div>
-          <div class="dd-transcript-panel translation" id="translationPanel" style="display: none;">
-            <div class="dd-panel-header"><span>English Translation</span></div>
-            <div class="dd-panel-content" id="translationContent"></div>
-          </div>
-        </div>
-
-        <!-- Right Column: Upload + Form -->
-        <div class="dd-right-col">
-          <div class="dd-section-header">
+          <!-- Upload Section -->
+          <div class="dd-section-header" style="margin-top: 16px;">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-            <span>Upload <span style="font-weight: 400; color: var(--text-muted);">(optional)</span></span>
+            <span>Upload Materials <span style="font-weight: 400; color: var(--text-muted);">(optional)</span></span>
           </div>
           <input type="file" id="fileInput" multiple accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.rtf,.csv,.xlsx,.xls,.mp3,.wav,.m4a,.webm,.ogg">
           <div class="dd-upload-zone" id="uploadZone">
@@ -343,13 +352,36 @@
           </div>
           <div class="dd-file-list" id="fileList"></div>
 
-          <div class="dd-compact-form">
-            <input type="email" id="ddEmail" required placeholder="your@email.com" style="width: 100%; padding: 8px; border: 1px solid var(--border-medium); border-radius: 6px; font-size: 13px;">
-            <textarea id="ddInstructions" rows="2" placeholder="Additional context (optional)" style="width: 100%; padding: 8px; border: 1px solid var(--border-medium); border-radius: 6px; font-size: 12px; resize: none;"></textarea>
-            <button type="button" class="submit-btn" id="ddSubmitBtn" style="width: 100%; padding: 10px; font-size: 13px;">
+          <!-- Form Section -->
+          <div class="dd-form-section" style="margin-top: 16px;">
+            <label style="font-size: 12px; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 6px;">Additional Context & Instructions</label>
+            <textarea id="ddInstructions" rows="5" placeholder="Add any context about the meeting, specific areas to focus on, questions to address, or special instructions for the DD report..." style="width: 100%; padding: 10px; border: 1px solid var(--border-medium); border-radius: 6px; font-size: 13px; resize: vertical; min-height: 100px;"></textarea>
+
+            <div style="margin-top: 12px;">
+              <label style="font-size: 12px; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 6px;">Email Address</label>
+              <input type="email" id="ddEmail" required placeholder="your@email.com" style="width: 100%; padding: 10px; border: 1px solid var(--border-medium); border-radius: 6px; font-size: 13px;">
+            </div>
+
+            <button type="button" class="submit-btn" id="ddSubmitBtn" style="width: 100%; padding: 12px; font-size: 14px; margin-top: 12px;">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-              Generate Report
+              Generate DD Report
             </button>
+          </div>
+        </div>
+
+        <!-- Right Column: Editable Transcript -->
+        <div class="dd-transcript-panels">
+          <div class="dd-transcript-panel">
+            <div class="dd-panel-header">
+              <span>Live Transcript</span>
+              <span class="lang-badge" id="detectedLang">--</span>
+              <span style="margin-left: auto; font-size: 10px; color: var(--text-muted);">Click to edit</span>
+            </div>
+            <div class="dd-panel-content empty" id="transcriptContent" contenteditable="true" style="cursor: text;">Start recording to see live transcription...</div>
+          </div>
+          <div class="dd-transcript-panel translation" id="translationPanel" style="display: none;">
+            <div class="dd-panel-header"><span>English Translation</span></div>
+            <div class="dd-panel-content" id="translationContent" contenteditable="true"></div>
           </div>
         </div>
       </div>
@@ -388,7 +420,6 @@
     const translationContent = document.getElementById('translationContent');
     const translationPanel = document.getElementById('translationPanel');
     const detectedLang = document.getElementById('detectedLang');
-    const langBtns = document.querySelectorAll('.dd-lang-btn');
     const successMessage = document.getElementById('successMessage');
     const errorMessage = document.getElementById('errorMessage');
     const successText = document.getElementById('successText');
@@ -408,6 +439,7 @@
     let currentLanguage = 'en';
     let autoSaveInterval = null;
     let currentR2Key = null;
+    let currentSpeaker = null;  // Track current speaker for diarization
 
     // ============ AUTO-SAVE & RECOVERY ============
     const STORAGE_KEY = 'dd_recording_backup';
@@ -480,15 +512,6 @@
         modes.forEach(m => m.classList.remove('active'));
         tab.classList.add('active');
         document.getElementById(mode + 'Mode').classList.add('active');
-      });
-    });
-
-    // Language selection
-    langBtns.forEach(btn => {
-      btn.addEventListener('click', () => {
-        langBtns.forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        selectedLang = btn.dataset.lang;
       });
     });
 
@@ -599,12 +622,15 @@
           processed = await processFiles(selectedFiles);
         }
 
+        // Get edited transcript from contenteditable element
+        const editedTranscript = transcriptContent.innerText.trim();
+
         // Add transcript as a document if available
         if (hasTranscript) {
           processed.documents.unshift({
             name: `Meeting_Recording_${new Date().toISOString().slice(0,10)}`,
             type: 'transcript',
-            content: finalTranslation || finalTranscript,
+            content: finalTranslation || editedTranscript,
             isAudio: false
           });
         }
@@ -619,7 +645,7 @@
             reportLength: 'medium',
             email,
             generateWord: true,
-            rawTranscript: finalTranscript,
+            rawTranscript: editedTranscript,
             translatedTranscript: finalTranslation,
             detectedLanguage: currentLanguage,
             sessionId
@@ -670,6 +696,9 @@
 
     async function startRecording() {
       try {
+        // Reset speaker tracking for new recording
+        currentSpeaker = null;
+
         // Get microphone access
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
@@ -700,10 +729,20 @@
             detectedLang.textContent = data.language?.toUpperCase() || '--';
 
             if (data.isFinal) {
+              // Add speaker label if speaker changed
+              if (data.speaker !== null && data.speaker !== currentSpeaker) {
+                currentSpeaker = data.speaker;
+                finalTranscript += '<br><span class="speaker-label">Speaker ' + data.speaker + ':</span> ';
+              }
               finalTranscript += data.text + ' ';
               transcriptContent.innerHTML = finalTranscript;
             } else {
-              transcriptContent.innerHTML = finalTranscript + '<span class="interim">' + data.text + '</span>';
+              // Show interim with speaker label if needed
+              let interimPrefix = '';
+              if (data.speaker !== null && data.speaker !== currentSpeaker) {
+                interimPrefix = '<br><span class="speaker-label">Speaker ' + data.speaker + ':</span> ';
+              }
+              transcriptContent.innerHTML = finalTranscript + interimPrefix + '<span class="interim">' + data.text + '</span>';
             }
             transcriptContent.classList.remove('empty');
             transcriptContent.scrollTop = transcriptContent.scrollHeight;

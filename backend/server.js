@@ -7849,7 +7849,8 @@ wss.on('connection', (ws, req) => {
             encoding: 'linear16',
             sample_rate: 16000,
             channels: 1,
-            punctuate: true
+            punctuate: true,
+            diarize: true  // Enable speaker identification
           };
 
           // Set language - if not auto, use specific language
@@ -7869,7 +7870,9 @@ wss.on('connection', (ws, req) => {
 
           deepgramConnection.on('Results', async (dgData) => {
             console.log('[WS] Deepgram data received:', JSON.stringify(dgData).substring(0, 200));
-            const transcript = dgData.channel?.alternatives?.[0]?.transcript;
+            const alternative = dgData.channel?.alternatives?.[0];
+            const transcript = alternative?.transcript;
+            const words = alternative?.words || [];
             const isFinal = dgData.is_final;
             const detLang = dgData.channel?.detected_language || detectedLanguage;
 
@@ -7879,13 +7882,20 @@ wss.on('connection', (ws, req) => {
             }
 
             if (transcript) {
-              console.log(`[WS] Transcript: "${transcript}" (final: ${isFinal})`);
-              // Send interim results to client
+              // Extract speaker info from words array (diarization)
+              let speaker = null;
+              if (words.length > 0 && words[0].speaker !== undefined) {
+                speaker = words[0].speaker;  // Speaker number (0, 1, 2, etc.)
+              }
+
+              console.log(`[WS] Transcript: "${transcript}" (final: ${isFinal}, speaker: ${speaker})`);
+              // Send interim results to client with speaker info
               ws.send(JSON.stringify({
                 type: 'transcript',
                 text: transcript,
                 isFinal,
-                language: detectedLanguage
+                language: detectedLanguage,
+                speaker: speaker !== null ? speaker + 1 : null  // Convert to 1-indexed
               }));
 
               // Accumulate final transcripts
