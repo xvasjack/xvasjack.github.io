@@ -7636,7 +7636,7 @@ app.post('/api/due-diligence', async (req, res) => {
     let emailSubject = '';
     let docTitle = '';
 
-    if (output === 'transcript') {
+    if (outputType === 'transcript') {
       // Just return the transcript
       outputContent = `<h2>Transcripts</h2>`;
       for (const t of translatedTranscripts) {
@@ -7652,7 +7652,7 @@ app.post('/api/due-diligence', async (req, res) => {
       emailSubject = `Transcript - ${audioFiles[0]?.name || 'Recording'}`;
       docTitle = 'Transcript';
 
-    } else if (output === 'meeting_minutes') {
+    } else if (outputType === 'meeting_minutes') {
       // Generate meeting minutes
       console.log('[DD] Generating meeting minutes...');
       outputContent = await generateMeetingMinutes(combinedTranscript, instructions);
