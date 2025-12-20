@@ -8494,9 +8494,16 @@ wss.on('connection', (ws, req) => {
           // Check if multi-language mode is requested
           const isMultiLang = !data.language || data.language === 'auto' || data.language === 'multi';
 
+          // Languages supported by Nova-3 (use Nova-2 for unsupported languages)
+          // Nova-3 supports: en, es, fr, de, hi, ru, pt, ja, it, nl, bg, ca, cs, da, et, fi,
+          // el, hu, id, ko, lv, lt, ms, no, pl, ro, sk, sv, tr, uk, vi, zh
+          // Nova-2 needed for: ar (Arabic), th (Thai) - not yet in Nova-3
+          const nova2OnlyLangs = ['ar', 'th'];
+          const useNova2 = !isMultiLang && nova2OnlyLangs.includes(data.language);
+
           const dgOptions = {
-            // Use nova-3 for multi-language (best code-switching), nova-2 for single language
-            model: isMultiLang ? 'nova-3' : 'nova-2',
+            // Use Nova-3 for most languages (better accuracy), Nova-2 for unsupported ones
+            model: useNova2 ? 'nova-2' : 'nova-3',
             smart_format: true,
             interim_results: true,
             utterance_end_ms: 1000,
