@@ -20,13 +20,13 @@
     .dd-instructions {
       background: var(--accent-soft);
       border: 1px solid var(--accent);
-      border-radius: 8px;
-      padding: 10px 14px;
-      margin-bottom: 16px;
-      font-size: 12px;
+      border-radius: 6px;
+      padding: 6px 10px;
+      margin-bottom: 10px;
+      font-size: 10px;
       display: flex;
       flex-wrap: wrap;
-      gap: 8px 16px;
+      gap: 4px 12px;
       align-items: center;
     }
     .dd-instructions strong { color: var(--accent); }
@@ -35,9 +35,8 @@
     /* Main 2-column grid */
     .dd-two-col {
       display: grid;
-      grid-template-columns: 320px 1fr;
-      gap: 20px;
-      min-height: 400px;
+      grid-template-columns: 280px 1fr;
+      gap: 16px;
     }
     @media (max-width: 900px) {
       .dd-two-col { grid-template-columns: 1fr; }
@@ -51,23 +50,27 @@
 
     /* Upload Zone - Compact */
     .dd-upload-zone {
-      border: 2px dashed var(--border-medium);
+      border: 1px dashed var(--border-medium);
       border-radius: var(--radius-md);
-      padding: 16px 12px;
+      padding: 8px;
       text-align: center;
       cursor: pointer;
       transition: all 0.2s ease;
       background: var(--bg-body);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
     }
     .dd-upload-zone:hover, .dd-upload-zone.active {
       border-color: var(--accent);
       background: var(--accent-soft);
     }
-    .dd-upload-zone svg { color: var(--accent); margin-bottom: 4px; }
+    .dd-upload-zone svg { color: var(--accent); width: 16px; height: 16px; }
     .dd-upload-zone p { font-size: 11px; color: var(--text-muted); margin: 0; }
     #fileInput { display: none; }
 
-    .dd-file-list { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+    .dd-file-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
     .dd-file-item {
       display: flex; align-items: center; gap: 10px;
       padding: 10px 14px; background: var(--bg-surface);
@@ -83,19 +86,19 @@
       background: var(--bg-surface);
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-md);
-      padding: 12px;
+      padding: 10px;
       display: flex;
-      flex-direction: column;
       align-items: center;
-      gap: 8px;
+      gap: 12px;
     }
     .dd-record-btn {
-      width: 48px;
-      height: 48px;
+      width: 40px;
+      height: 40px;
       border-radius: 50%;
       border: 3px solid var(--error);
       background: white;
       cursor: pointer;
+      flex-shrink: 0;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -113,17 +116,21 @@
       0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
       50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
     }
+    .dd-record-info {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
     .dd-record-timer {
       font-family: monospace;
-      font-size: 16px;
+      font-size: 14px;
       font-weight: 700;
       color: var(--text-main);
     }
     .dd-record-timer.recording { color: var(--error); }
     .dd-record-status {
-      font-size: 12px;
+      font-size: 10px;
       color: var(--text-muted);
-      text-align: center;
     }
     .dd-record-status.recording { color: var(--error); font-weight: 600; }
 
@@ -163,10 +170,10 @@
       border-radius: var(--radius-md);
       display: flex;
       flex-direction: column;
-      min-height: 380px;
+      min-height: 200px;
     }
     .dd-panel-header {
-      padding: 8px 12px;
+      padding: 6px 10px;
       border-bottom: 1px solid var(--border-subtle);
       font-size: 11px;
       font-weight: 600;
@@ -187,10 +194,9 @@
     .dd-panel-content {
       flex: 1;
       padding: 14px;
-      font-size: 14px;
-      line-height: 1.7;
+      font-size: 13px;
+      line-height: 1.6;
       overflow-y: auto;
-      min-height: 320px;
       color: var(--text-main);
     }
     .dd-panel-content:focus {
@@ -249,18 +255,18 @@
     .dd-section-header {
       display: flex;
       align-items: center;
-      gap: 8px;
-      font-size: 14px;
+      gap: 6px;
+      font-size: 12px;
       font-weight: 600;
       color: var(--text-main);
-      margin-bottom: 12px;
+      margin-bottom: 6px;
     }
-    .dd-section-header svg { color: var(--accent); }
+    .dd-section-header svg { color: var(--accent); width: 14px; height: 14px; }
 
     /* Form Section */
     .dd-form-section {
-      margin-top: 24px;
-      padding-top: 24px;
+      margin-top: 12px;
+      padding-top: 12px;
       border-top: 1px solid var(--border-subtle);
     }
     .dd-form-row {
@@ -299,9 +305,9 @@
   <main class="app-main" style="padding-top: 10px;">
     <section class="page-content dd-container">
       <!-- Compact Header -->
-      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 12px;">
-        <span class="status-badge coming-soon" style="margin: 0; background: #fef3c7; color: #92400e;">Coming Soon</span>
-        <h1 style="font-size: 18px; margin: 0; font-weight: 600;">Due Diligence Report</h1>
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+        <span class="status-badge coming-soon" style="margin: 0; background: #fef3c7; color: #92400e; font-size: 10px; padding: 2px 8px;">Coming Soon</span>
+        <h1 style="font-size: 16px; margin: 0; font-weight: 600;">Due Diligence Report</h1>
       </div>
 
       <!-- How to Use Instructions -->
@@ -335,13 +341,15 @@
             <button class="dd-record-btn" id="recordBtn">
               <svg fill="currentColor" viewBox="0 0 24 24" id="recordIcon"><circle cx="12" cy="12" r="8"/></svg>
             </button>
-            <div class="dd-record-timer" id="recordTimer">00:00</div>
-            <div class="dd-record-status" id="recordStatus">Click to start recording</div>
-            <button type="button" id="downloadRecordingBtn" style="display: none; padding: 4px 8px; font-size: 10px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-muted); cursor: pointer;">Download</button>
+            <div class="dd-record-info">
+              <div class="dd-record-timer" id="recordTimer">00:00</div>
+              <div class="dd-record-status" id="recordStatus">Click to start</div>
+            </div>
+            <button type="button" id="downloadRecordingBtn" style="display: none; margin-left: auto; padding: 3px 6px; font-size: 9px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-muted); cursor: pointer;">Download</button>
           </div>
 
           <!-- Upload Section -->
-          <div class="dd-section-header" style="margin-top: 16px;">
+          <div class="dd-section-header" style="margin-top: 10px;">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
             <span>Upload Materials <span style="font-weight: 400; color: var(--text-muted);">(optional)</span></span>
           </div>
@@ -353,17 +361,17 @@
           <div class="dd-file-list" id="fileList"></div>
 
           <!-- Form Section -->
-          <div class="dd-form-section" style="margin-top: 16px;">
-            <label style="font-size: 12px; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 6px;">Additional Context & Instructions</label>
-            <textarea id="ddInstructions" rows="5" placeholder="Add any context about the meeting, specific areas to focus on, questions to address, or special instructions for the DD report..." style="width: 100%; padding: 10px; border: 1px solid var(--border-medium); border-radius: 6px; font-size: 13px; resize: vertical; min-height: 100px;"></textarea>
+          <div class="dd-form-section">
+            <label style="font-size: 11px; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 4px;">Additional Context</label>
+            <textarea id="ddInstructions" rows="2" placeholder="Context, focus areas, questions..." style="width: 100%; padding: 8px; border: 1px solid var(--border-medium); border-radius: 4px; font-size: 12px; resize: vertical;"></textarea>
 
-            <div style="margin-top: 12px;">
-              <label style="font-size: 12px; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 6px;">Email Address</label>
-              <input type="email" id="ddEmail" required placeholder="your@email.com" style="width: 100%; padding: 10px; border: 1px solid var(--border-medium); border-radius: 6px; font-size: 13px;">
+            <div style="margin-top: 8px;">
+              <label style="font-size: 11px; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 4px;">Email</label>
+              <input type="email" id="ddEmail" required placeholder="your@email.com" style="width: 100%; padding: 8px; border: 1px solid var(--border-medium); border-radius: 4px; font-size: 12px;">
             </div>
 
-            <button type="button" class="submit-btn" id="ddSubmitBtn" style="width: 100%; padding: 12px; font-size: 14px; margin-top: 12px;">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+            <button type="button" class="submit-btn" id="ddSubmitBtn" style="width: 100%; padding: 10px; font-size: 13px; margin-top: 8px;">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="14" height="14"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
               Generate DD Report
             </button>
           </div>
