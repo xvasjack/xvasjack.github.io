@@ -8339,17 +8339,48 @@ wss.on('connection', (ws, req) => {
             ws.send(JSON.stringify({ type: 'ready' }));
           });
 
+          // Helper function to detect language from text content
+          function detectLanguageFromText(text) {
+            if (!text || text.length < 3) return null;
+
+            // Check for Chinese characters (CJK Unified Ideographs)
+            if (/[\u4e00-\u9fff]/.test(text)) return 'zh';
+            // Check for Japanese (Hiragana, Katakana)
+            if (/[\u3040-\u309f\u30a0-\u30ff]/.test(text)) return 'ja';
+            // Check for Korean (Hangul)
+            if (/[\uac00-\ud7af\u1100-\u11ff]/.test(text)) return 'ko';
+            // Check for Thai
+            if (/[\u0e00-\u0e7f]/.test(text)) return 'th';
+            // Check for Vietnamese (special diacritics)
+            if (/[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i.test(text)) return 'vi';
+            // Check for Hindi/Devanagari
+            if (/[\u0900-\u097f]/.test(text)) return 'hi';
+            // Check for Arabic
+            if (/[\u0600-\u06ff]/.test(text)) return 'ar';
+            // Check for Indonesian/Malay (common words)
+            if (/\b(dan|yang|untuk|dengan|ini|itu|dari|ke|tidak|ada|akan|pada|sudah|juga|saya|kami|mereka)\b/i.test(text)) return 'id';
+
+            return 'en';  // Default to English
+          }
+
           deepgramConnection.on('Results', async (dgData) => {
             console.log('[WS] Deepgram data received:', JSON.stringify(dgData).substring(0, 200));
             const alternative = dgData.channel?.alternatives?.[0];
             const transcript = alternative?.transcript;
             const words = alternative?.words || [];
             const isFinal = dgData.is_final;
-            const detLang = dgData.channel?.detected_language || detectedLanguage;
+
+            // Try Deepgram's detected_language first, then detect from text
+            let detLang = dgData.channel?.detected_language;
+            if (!detLang && transcript) {
+              detLang = detectLanguageFromText(transcript);
+            }
+            detLang = detLang || detectedLanguage;
 
             if (detLang && detLang !== detectedLanguage) {
               detectedLanguage = detLang;
               activeSessions.get(sessionId).language = detLang;
+              console.log(`[WS] Language detected: ${detLang}`);
             }
 
             if (transcript) {
