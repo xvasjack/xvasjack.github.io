@@ -1810,20 +1810,23 @@ Be EXHAUSTIVE. The goal is to ensure we don't miss any company due to terminolog
     // Query multiple AI models for comprehensive coverage
     console.log('  Querying GPT-4o, Gemini, and Perplexity for terminology discovery...');
     const [gptResult, geminiResult, perplexityResult] = await Promise.all([
-      callOpenAISearch(discoveryPrompt),
-      callGemini(discoveryPrompt),
-      callPerplexity(discoveryPrompt)
+      callOpenAISearch(discoveryPrompt).catch(e => { console.error('  GPT error:', e.message); return ''; }),
+      callGemini(discoveryPrompt).catch(e => { console.error('  Gemini error:', e.message); return ''; }),
+      callPerplexity(discoveryPrompt).catch(e => { console.error('  Perplexity error:', e.message); return ''; })
     ]);
 
-    // Extract JSON from each result
+    // Extract JSON from each result (with null safety)
     const extractJSON = (text) => {
+      if (!text || typeof text !== 'string') return null;
       try {
         // Try to find JSON in the response
         const jsonMatch = text.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           return JSON.parse(jsonMatch[0]);
         }
-      } catch (e) {}
+      } catch (e) {
+        console.error('  JSON extraction error:', e.message);
+      }
       return null;
     };
 
@@ -2182,11 +2185,24 @@ app.post('/api/find-target-v4', async (req, res) => {
     console.log(`Will search ${countries.length} countries: ${countries.join(', ')}`);
 
     // ========== PHASE 0.5: Industry Terminology Discovery ==========
-    const terminology = await discoverIndustryTerminology(Business, countries);
+    let terminology;
+    try {
+      terminology = await discoverIndustryTerminology(Business, countries);
+    } catch (termError) {
+      console.error('Terminology discovery failed, using defaults:', termError.message);
+      terminology = {
+        primary_term: Business,
+        alternative_terms: [Business],
+        sub_segments: [],
+        related_categories: [],
+        local_terms: [],
+        all_search_terms: [Business]
+      };
+    }
 
-    // Build expanded search terms string for prompts
-    const expandedTerms = terminology.all_search_terms.slice(0, 20).join(', '); // Top 20 terms
-    const localTermsStr = terminology.local_terms.slice(0, 10).join(', '); // Top 10 local terms
+    // Build expanded search terms string for prompts (with null safety)
+    const expandedTerms = (terminology.all_search_terms || [Business]).slice(0, 20).join(', ');
+    const localTermsStr = (terminology.local_terms || []).slice(0, 10).join(', ');
 
     // ========== PHASE 1: Country-by-Country Direct Search ==========
     console.log('\n' + '='.repeat(50));
@@ -2235,27 +2251,27 @@ Find as many as possible - be exhaustive. Search using ALL the terminology varia
     // Also run terminology-enhanced exhaustive search for the full region
     console.log(`\n--- Full Region Search with Expanded Terminology: ${Country} ---`);
 
-    // Run searches with multiple terminology variations
-    const searchPromises = [];
+    // Run primary search first
+    console.log(`  Searching with primary term: ${Business}`);
+    const primaryResults = await exhaustiveSearch(Business, Country, Exclusion);
+    let regionCompanies = [...primaryResults];
+    console.log(`  Primary term found: ${primaryResults.length} companies`);
 
-    // Search with primary term
-    searchPromises.push(exhaustiveSearch(Business, Country, Exclusion));
-
-    // Search with top alternative terms (limit to avoid too many API calls)
-    const topAlternatives = terminology.alternative_terms.slice(1, 4); // Skip first (it's the primary), take next 3
-    for (const altTerm of topAlternatives) {
-      searchPromises.push(exhaustiveSearch(altTerm, Country, Exclusion));
+    // Then run ONE additional search with the best alternative term (sequential to avoid overwhelming APIs)
+    const altTerms = terminology.alternative_terms || [];
+    const topAlternative = altTerms.find(t => t !== Business && t.length > 3);
+    if (topAlternative) {
+      console.log(`  Searching with alternative term: ${topAlternative}`);
+      try {
+        const altResults = await exhaustiveSearch(topAlternative, Country, Exclusion);
+        regionCompanies = [...regionCompanies, ...altResults];
+        console.log(`  Alternative term found: ${altResults.length} companies`);
+      } catch (e) {
+        console.error(`  Alternative search error: ${e.message}`);
+      }
     }
 
-    // Search with top sub-segments
-    const topSubSegments = terminology.sub_segments.slice(0, 2); // Take top 2
-    for (const segment of topSubSegments) {
-      searchPromises.push(exhaustiveSearch(segment, Country, Exclusion));
-    }
-
-    const allRegionResults = await Promise.all(searchPromises);
-    const regionCompanies = allRegionResults.flat();
-    console.log(`Region search (${searchPromises.length} term variations): ${regionCompanies.length} companies`);
+    console.log(`Region search total: ${regionCompanies.length} companies`);
     allPhase1Companies = [...allPhase1Companies, ...regionCompanies];
 
     const phase1Raw = dedupeCompanies(allPhase1Companies);
