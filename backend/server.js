@@ -4751,8 +4751,10 @@ async function generatePPTX(companies) {
       const tableData = [];
 
       // Always add Name with hyperlink (remove company suffix)
-      if (!isEmptyValue(company.company_name)) {
-        const cleanName = removeCompanySuffix(company.company_name);
+      // Use title as fallback if company_name is empty
+      const companyName = company.company_name || company.title || '';
+      if (!isEmptyValue(companyName)) {
+        const cleanName = removeCompanySuffix(companyName);
         tableData.push(['Name', cleanName, company.website || null]);
       }
 
@@ -4784,6 +4786,18 @@ async function generatePPTX(companies) {
         'awards', 'recognitions', 'achievements'
       ];
 
+      // Get the right table category to exclude from left table (prevent duplication)
+      const rightTableCategory = (company.breakdown_title || '').toLowerCase();
+      // Map breakdown titles to keywords to exclude
+      const categoryKeywords = {
+        'customers': ['customer', 'client', 'buyer'],
+        'services': ['service'],
+        'products and applications': ['product', 'application'],
+        'key suppliers': ['supplier', 'vendor', 'partner'],
+        'key partnerships': ['partner', 'partnership']
+      };
+      const excludeKeywords = categoryKeywords[rightTableCategory] || [];
+
       // Add key metrics as separate rows if available (skip duplicates and empty values)
       if (company.key_metrics && Array.isArray(company.key_metrics)) {
         company.key_metrics.forEach(metric => {
@@ -4793,13 +4807,15 @@ async function generatePPTX(companies) {
             // Skip excluded metrics
             const isExcluded = EXCLUDED_METRICS.some(ex => labelLower.includes(ex));
 
-            // Skip if this label already exists or is duplicate of business/location/products
+            // Skip if this category is already shown on the right table
+            const isInRightTable = excludeKeywords.some(kw => labelLower.includes(kw));
+
+            // Skip if this label already exists or is duplicate of business/location
             if (!isExcluded &&
+                !isInRightTable &&
                 !existingLabels.has(labelLower) &&
                 !labelLower.includes('business') &&
-                !labelLower.includes('location') &&
-                !labelLower.includes('product') &&
-                !labelLower.includes('service')) {
+                !labelLower.includes('location')) {
               tableData.push([metric.label, metric.value, null]);
               existingLabels.add(labelLower);
             }
@@ -4811,13 +4827,13 @@ async function generatePPTX(companies) {
       }
 
       // Helper function to format cell text with bullet points
-      // Uses Unicode BLACK SQUARE ■ (U+25A0) directly in text for reliability
+      // Uses regular bullet • (U+2022) directly in text
       const formatCellText = (text) => {
         if (!text || typeof text !== 'string') return text;
 
         // Check if text has multiple lines - if so, format as bullet points
         const hasMultipleLines = text.includes('\n');
-        const hasBulletMarkers = text.includes('■') || text.includes('\n-') || text.startsWith('-') || text.startsWith('•');
+        const hasBulletMarkers = text.includes('■') || text.includes('•') || text.includes('\n-') || text.startsWith('-');
 
         if (hasMultipleLines || hasBulletMarkers) {
           // Split by newline and filter out empty lines
@@ -4828,7 +4844,7 @@ async function generatePPTX(companies) {
             // Clean each line and prepend bullet character directly
             const formattedLines = lines.map(line => {
               const cleanLine = line.replace(/^[■\-•]\s*/, '').trim();
-              return '■ ' + cleanLine;
+              return '• ' + cleanLine;
             });
             return formattedLines.join('\n');
           }
