@@ -7567,7 +7567,7 @@ app.post('/api/utb', async (req, res) => {
 
 // ============ DUE DILIGENCE REPORT GENERATOR ============
 
-async function generateDueDiligenceReport(files, instructions, reportLength) {
+async function generateDueDiligenceReport(files, instructions, reportLength, instructionMode = 'auto') {
   // Combine all file contents
   let combinedContent = '';
   const filesSummary = [];
@@ -7681,13 +7681,34 @@ Be thorough but concise. Focus on actionable insights.`,
 Be extremely thorough and detailed. Extract all relevant information from the materials.`
   };
 
+  // Build instruction section based on mode
+  let instructionSection = '';
+  if (instructionMode === 'manual' && instructions) {
+    instructionSection = `
+CLIENT INSTRUCTIONS (IMPORTANT - Follow these closely):
+${instructions}
+
+Use these instructions to understand:
+- Who the client is and who they represent
+- Which speaker/party is the client vs the target
+- What specific aspects to focus on
+- The perspective from which to write the report
+`;
+  } else {
+    instructionSection = `
+MODE: Automatic Analysis
+- Analyze all materials comprehensively
+- Identify all parties involved and their roles
+- Determine the most likely perspective (buyer analyzing seller)
+- Highlight key findings, risks, and opportunities
+`;
+  }
+
   const prompt = `You are an expert M&A advisor creating a due diligence report.
 
 MATERIALS PROVIDED:
 ${filesSummary.join('\n')}
-
-${instructions ? `SPECIAL INSTRUCTIONS FROM CLIENT:\n${instructions}\n` : ''}
-
+${instructionSection}
 REPORT REQUIREMENTS:
 ${lengthInstructions[reportLength]}
 
@@ -7734,6 +7755,7 @@ app.post('/api/due-diligence', async (req, res) => {
     files = [],
     audioFiles = [],
     instructions,
+    instructionMode = 'auto',  // 'auto' or 'manual'
     reportLength,
     outputType = 'dd_report',
     audioLang = 'auto',
@@ -7766,7 +7788,8 @@ app.post('/api/due-diligence', async (req, res) => {
   console.log(`[DD] Has Raw Transcript: ${rawTranscript ? 'Yes (' + rawTranscript.length + ' chars)' : 'No'}`);
   console.log(`[DD] Report Length: ${length}`);
   console.log(`[DD] Email: ${email}`);
-  console.log(`[DD] Special Instructions: ${instructions ? instructions.substring(0, 100) + '...' : 'None'}`);
+  console.log(`[DD] Instruction Mode: ${instructionMode}`);
+  console.log(`[DD] Instructions: ${instructions ? instructions.substring(0, 100) + '...' : 'None'}`);
   console.log('='.repeat(60));
 
   // Respond immediately
@@ -7865,7 +7888,7 @@ app.post('/api/due-diligence', async (req, res) => {
         });
       }
 
-      outputContent = await generateDueDiligenceReport(allFiles, instructions, length);
+      outputContent = await generateDueDiligenceReport(allFiles, instructions, length, instructionMode);
       const lengthLabel = { short: '1-Page Summary', medium: '2-3 Page Report', long: 'Comprehensive Report' };
       emailSubject = `Due Diligence Report - ${files[0]?.name || audioFiles[0]?.name || 'Analysis'} (${lengthLabel[length]})`;
       docTitle = 'Due Diligence Report';
@@ -8068,12 +8091,13 @@ wss.on('connection', (ws, req) => {
             diarize: true  // Enable speaker identification
           };
 
-          // Set language - if specific language requested, use it; otherwise enable auto-detection
+          // Set language - if specific language requested, use it; otherwise use 'multi' for auto-detection
+          // Note: detect_language only works for pre-recorded audio, not streaming
+          // For streaming, use language='multi' which enables multilingual code-switching
           if (data.language && data.language !== 'auto') {
             dgOptions.language = data.language;
           } else {
-            // Enable multi-language detection for auto mode
-            dgOptions.detect_language = true;
+            dgOptions.language = 'multi';  // Multilingual mode for auto-detection in streaming
           }
 
           console.log('[WS] Deepgram options:', JSON.stringify(dgOptions));
