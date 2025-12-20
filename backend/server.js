@@ -8052,11 +8052,13 @@ wss.on('connection', (ws, req) => {
             diarize: true  // Enable speaker identification
           };
 
-          // Set language - if not auto, use specific language
+          // Set language - if specific language requested, use it; otherwise enable auto-detection
           if (data.language && data.language !== 'auto') {
             dgOptions.language = data.language;
+          } else {
+            // Enable multi-language detection for auto mode
+            dgOptions.detect_language = true;
           }
-          // Note: removed detect_language as it may cause 400 errors
 
           console.log('[WS] Deepgram options:', JSON.stringify(dgOptions));
 
