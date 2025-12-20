@@ -7853,12 +7853,13 @@ wss.on('connection', (ws, req) => {
             diarize: true  // Enable speaker identification
           };
 
-          // Set language - if specific language requested, use it; otherwise enable auto-detection
+          // Set language - if specific language requested, use it; otherwise use 'multi' for auto-detection
+          // Note: detect_language only works for pre-recorded audio, not streaming
+          // For streaming, use language='multi' which enables multilingual code-switching
           if (data.language && data.language !== 'auto') {
             dgOptions.language = data.language;
           } else {
-            // Enable multi-language detection for auto mode
-            dgOptions.detect_language = true;
+            dgOptions.language = 'multi';  // Multilingual mode for auto-detection in streaming
           }
 
           console.log('[WS] Deepgram options:', JSON.stringify(dgOptions));
