@@ -5095,7 +5095,7 @@ OUTPUT JSON with these fields:
   - "Puchong, Selangor, Malaysia"
   - "Bangna, Bangkok, Thailand"
   - "Batam, Riau Islands, Indonesia"
-  EXCEPTION: For Singapore, just use "Singapore" (single location) or include the area like "Jurong, Singapore"
+  SINGAPORE RULE: Always use 2 levels: "Area, Singapore" (e.g., "Jurong, Singapore", "Changi, Singapore", "Tuas, Singapore"). Never just "Singapore" alone.
 
   For multiple locations, group by type with sub-bullet points:
   Example format:
