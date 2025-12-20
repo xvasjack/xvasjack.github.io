@@ -5111,14 +5111,27 @@ async function generatePPTX(companies, targetDescription = '') {
     };
 
     // ===== TARGET LIST SLIDE (FIRST SLIDE) =====
-    // Based on template analysis: NO header/footer lines, specific positions and colors
     if (targetDescription && companies.length > 0) {
       console.log('Generating Target List slide...');
       const meceData = await generateMECESegments(targetDescription, companies);
 
       const targetSlide = pptx.addSlide();
 
-      // NOTE: Target list slide does NOT have header/footer lines (unlike profile slides)
+      // ===== HEADER LINES (same as profile slides) =====
+      targetSlide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 1.02, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 4.5 }
+      });
+      targetSlide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 1.10, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 2.25 }
+      });
+
+      // ===== FOOTER LINE =====
+      targetSlide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 7.24, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 2.25 }
+      });
 
       // Title Case helper function
       const toTitleCase = (str) => {
@@ -5126,12 +5139,12 @@ async function generatePPTX(companies, targetDescription = '') {
       };
 
       // Title: "Target List – {Target Description}" in Title Case
-      // Position from template: x=0.3663", y=0.0576", w=12.6007", h=0.9094"
+      // Position same as profile slides, valign: bottom
       const formattedTitle = `Target List – ${toTitleCase(targetDescription)}`;
       targetSlide.addText(formattedTitle, {
-        x: 0.37, y: 0.06, w: 12.6, h: 0.9,
+        x: 0.38, y: 0.07, w: 9.5, h: 0.9,
         fontSize: 24, fontFace: 'Segoe UI',
-        color: '000000', valign: 'top'
+        color: '000000', valign: 'bottom'
       });
 
       // Group companies by country
