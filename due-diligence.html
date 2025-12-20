@@ -70,15 +70,15 @@
     .dd-upload-zone p { font-size: 11px; color: var(--text-muted); margin: 0; }
     #fileInput { display: none; }
 
-    .dd-file-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+    .dd-file-list { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; max-height: 100px; overflow-y: auto; }
     .dd-file-item {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 14px; background: var(--bg-surface);
-      border: 1px solid var(--border-subtle); border-radius: var(--radius-md);
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 8px; background: var(--bg-surface);
+      border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
     }
-    .dd-file-item svg { width: 20px; height: 20px; color: var(--accent); }
-    .dd-file-item span { flex: 1; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .dd-file-item button { background: none; border: none; color: var(--text-light); cursor: pointer; font-size: 18px; }
+    .dd-file-item svg { width: 14px; height: 14px; color: var(--accent); flex-shrink: 0; }
+    .dd-file-item span { flex: 1; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dd-file-item button { background: none; border: none; color: var(--text-light); cursor: pointer; font-size: 14px; padding: 0; line-height: 1; }
     .dd-file-item button:hover { color: var(--error); }
 
     /* Recording Controls - Very Compact */
