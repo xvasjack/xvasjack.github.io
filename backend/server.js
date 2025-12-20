@@ -1412,98 +1412,73 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
   return rules;
 }
 
-// ============ VALIDATION (v24 - Gemini 2.5 Flash with STRICT filtering) ============
+// ============ VALIDATION (v24 - GPT-4o with LENIENT filtering) ============
 
 async function validateCompanyStrict(company, business, country, exclusion, pageText) {
-  // If we couldn't fetch the website, be more cautious - reject unless name is clearly relevant
-  const contentToValidate = pageText || `Company name: ${company.company_name}. No website content available - validate strictly by name.`;
+  // If we couldn't fetch the website, validate by name only (give benefit of doubt)
+  const contentToValidate = pageText || `Company name: ${company.company_name}. Validate based on name only.`;
 
   const exclusionRules = buildExclusionRules(exclusion, business);
 
-  // Build the validation prompt for Gemini
-  const validationPrompt = `You are a STRICT company validator for M&A target research. When in doubt, REJECT.
+  try {
+    const validation = await openai.chat.completions.create({
+      model: 'gpt-4o',  // Use smarter model for better validation
+      messages: [
+        {
+          role: 'system',
+          content: `You are a company validator for M&A research. Be LENIENT - when in doubt, ACCEPT.
 
 VALIDATION TASK:
 - Business sought: "${business}"
 - Target countries: ${country}
 - Exclusions: ${exclusion}
 
-STRICT VALIDATION RULES:
+VALIDATION RULES:
 
-1. LOCATION CHECK (STRICT):
-- Is HQ ACTUALLY in one of the target countries (${country})?
-- If country is "Southeast Asia", only accept: Malaysia, Thailand, Vietnam, Indonesia, Philippines, Singapore
-- REJECT if HQ is in Japan, China, Korea, India, USA, Europe, or other non-target regions
-- REJECT if the company is clearly a foreign company with just a sales office in the region
+1. LOCATION CHECK:
+- Is HQ in one of the target countries (${country})?
+- IMPORTANT: If country is a REGION like "Southeast Asia", accept companies in ANY Southeast Asian country (Malaysia, Thailand, Vietnam, Indonesia, Philippines, Singapore, etc.)
+- If HQ is clearly outside the target region → REJECT
 
-2. BUSINESS MATCH (STRICT):
-- The company must be a DIRECT match for "${business}"
-- REJECT trading companies, distributors, or agents unless they also manufacture
-- REJECT companies that only tangentially relate to the business
-- REJECT general chemical companies unless they specifically produce ${business}
-- The company should PRIMARILY be in the ${business} business, not just have it as a side product
+2. BUSINESS MATCH (BE LENIENT):
+- Does the company's business relate to "${business}"?
+- Accept related products, services, manufacturers, suppliers
+- Only reject if COMPLETELY unrelated
 
-3. EXCLUSION CHECK (VERY STRICT):
+3. EXCLUSION CHECK:
 ${exclusionRules}
-- For "large companies" exclusion: REJECT ALL of these:
-  * Multinational corporations (any company with global operations)
-  * Subsidiaries of multinationals (e.g., "Toyo Ink Indonesia", "DIC Philippines", "Sun Chemical")
-  * Listed/public companies (look for Tbk, Plc, stock tickers)
-  * Companies with revenue >$50M or >500 employees
-  * Companies that are part of larger groups
-- ONLY accept truly independent, locally-owned SMEs
+- For "large companies" exclusion: REJECT both large multinationals AND their subsidiaries
+- Example: "DIC Indonesia", "Toyo Ink Philippines", "Sun Chemical" → REJECT (subsidiaries of large corporations)
+- Only accept truly independent SMEs and local companies
 
-4. SPAM/INVALID CHECK:
-- REJECT directories, marketplaces, aggregator sites
-- REJECT if website is parked, for sale, or non-functional
-- REJECT if company name is too generic or doesn't match website
+4. SPAM CHECK:
+- Only reject obvious directories, marketplaces, domain-for-sale sites
 
-5. EVIDENCE REQUIREMENT:
-- The page content MUST show clear evidence the company does "${business}"
-- If no clear evidence, REJECT
-
-COMPANY TO VALIDATE:
-- Name: ${company.company_name}
-- Website: ${company.website}
-- HQ: ${company.hq}
+OUTPUT: Return JSON only: {"valid": true/false, "reason": "one sentence"}`
+        },
+        {
+          role: 'user',
+          content: `COMPANY: ${company.company_name}
+WEBSITE: ${company.website}
+HQ: ${company.hq}
 
 PAGE CONTENT:
-${contentToValidate.substring(0, 8000)}
+${contentToValidate.substring(0, 10000)}`
+        }
+      ],
+      response_format: { type: 'json_object' }
+    });
 
-OUTPUT: Return ONLY valid JSON: {"valid": true/false, "reason": "brief explanation"}`;
-
-  try {
-    const response = await callGemini3Flash(validationPrompt, true);
-
-    if (!response) {
-      console.log(`    No response for ${company.company_name}, rejecting`);
-      return { valid: false };
-    }
-
-    // Parse JSON response
-    let result;
-    try {
-      // Try to extract JSON from the response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        result = JSON.parse(jsonMatch[0]);
-      } else {
-        result = JSON.parse(response);
-      }
-    } catch (parseError) {
-      console.log(`    Parse error for ${company.company_name}, rejecting`);
-      return { valid: false };
-    }
-
+    const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
       return { valid: true, corrected_hq: company.hq };
     }
     console.log(`    Rejected: ${company.company_name} - ${result.reason}`);
     return { valid: false };
   } catch (e) {
-    // On error, REJECT (strict approach)
-    console.log(`    Error validating ${company.company_name}: ${e.message}, rejecting`);
-    return { valid: false };
+    // On error, accept (benefit of doubt)
+    console.log(`    Error validating ${company.company_name}, accepting`);
+    return { valid: true, corrected_hq: company.hq };
   }
 }
 
@@ -1531,19 +1506,16 @@ async function parallelValidationStrict(companies, business, country, exclusion)
       );
 
       // Add .catch() to each validation to prevent single failures from crashing batch
-      // Still validate even if website fetch failed - Gemini can validate by name
-      // REJECT only on Gemini API errors
       const validations = await Promise.all(
         batch.map((company, idx) => {
           try {
-            // Pass pageText (may be null - Gemini will validate by name if so)
             return validateCompanyStrict(company, business, country, exclusion, pageTexts[idx])
               .catch(e => {
                 console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
-                return { valid: false }; // REJECT on Gemini error
+                return { valid: true, corrected_hq: company?.hq }; // Accept on error
               });
           } catch (e) {
-            return Promise.resolve({ valid: false }); // REJECT on error
+            return Promise.resolve({ valid: true, corrected_hq: company?.hq });
           }
         })
       );
@@ -1579,80 +1551,61 @@ async function parallelValidationStrict(companies, business, country, exclusion)
 async function validateCompany(company, business, country, exclusion, pageText) {
   const exclusionRules = buildExclusionRules(exclusion, business);
 
-  const validationPrompt = `You are a STRICT company validator for M&A target research. When in doubt, REJECT.
+  try {
+    const validation = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `You are a company validator. Be LENIENT on business match. Be STRICT on exclusions by detecting signals in page content.
 
 VALIDATION TASK:
 - Business sought: "${business}"
 - Target countries: ${country}
 - Exclusions: ${exclusion}
 
-COMPANY TO VALIDATE:
-- Name: ${company.company_name}
-- Website: ${company.website}
-- HQ: ${company.hq}
+VALIDATION RULES:
 
-PAGE CONTENT:
-${pageText ? pageText.substring(0, 8000) : 'Could not fetch - validate by name only'}
-
-STRICT VALIDATION RULES:
-
-1. LOCATION CHECK (STRICT):
+1. LOCATION CHECK:
 - Is HQ actually in one of the target countries (${country})?
 - If HQ is outside these countries → REJECT
-- If HQ location is ambiguous or unclear → REJECT
 
-2. BUSINESS MATCH (STRICT):
-- Does the company's CORE business DIRECTLY match "${business}"?
-- Must be a DIRECT match, not tangentially related
-- If company is primarily in a different industry with only minor overlap → REJECT
-- If unclear what the company actually does → REJECT
+2. BUSINESS MATCH (BE LENIENT):
+- Does the company's business relate to "${business}"?
+- Accept related products, services, or sub-categories
+- Only reject if completely unrelated
 
-3. EXCLUSION CHECK (VERY STRICT):
+3. EXCLUSION CHECK - DETECT VIA PAGE SIGNALS:
 ${exclusionRules}
-- ANY mention of parent company, "part of", "subsidiary of", "a division of" → REJECT
-- ANY multinational corporation signals → REJECT
 
-4. SPAM/INVALID CHECK:
+4. SPAM CHECK:
 - Is this a directory, marketplace, domain-for-sale, or aggregator site? → REJECT
-- Is website non-functional or showing errors? → REJECT
 
-5. EVIDENCE REQUIREMENT:
-- You must find CLEAR evidence the company fits the criteria
-- If no clear evidence of business match on the page → REJECT
+OUTPUT: Return JSON: {"valid": true/false, "reason": "brief", "corrected_hq": "City, Country or null"}`
+        },
+        {
+          role: 'user',
+          content: `COMPANY: ${company.company_name}
+WEBSITE: ${company.website}
+HQ: ${company.hq}
 
-Return ONLY valid JSON: {"valid": true/false, "reason": "brief explanation", "corrected_hq": "City, Country or null"}`;
+PAGE CONTENT:
+${pageText ? pageText.substring(0, 8000) : 'Could not fetch - validate by name only'}`
+        }
+      ],
+      response_format: { type: 'json_object' }
+    });
 
-  try {
-    const response = await callGemini3Flash(validationPrompt, true);
-
-    if (!response) {
-      console.log(`    Gemini returned empty for ${company.company_name}, rejecting`);
-      return { valid: false };
-    }
-
-    let result;
-    try {
-      result = JSON.parse(response);
-    } catch (parseError) {
-      // Try to extract JSON from response
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        result = JSON.parse(jsonMatch[0]);
-      } else {
-        console.log(`    Could not parse validation response for ${company.company_name}, rejecting`);
-        return { valid: false };
-      }
-    }
-
+    const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
       return { valid: true, corrected_hq: result.corrected_hq || company.hq };
     }
     console.log(`    Rejected: ${company.company_name} - ${result.reason}`);
     return { valid: false };
   } catch (e) {
-    // On error, REJECT (strict approach)
-    console.log(`    Error validating ${company.company_name}: ${e.message}, rejecting`);
-    return { valid: false };
+    // On error, accept (benefit of doubt)
+    console.log(`    Error validating ${company.company_name}, accepting`);
+    return { valid: true, corrected_hq: company.hq };
   }
 }
 
@@ -1670,17 +1623,14 @@ async function parallelValidation(companies, business, country, exclusion) {
       const pageTexts = await Promise.all(
         batch.map(c => fetchWebsite(c?.website).catch(() => null))
       );
-      // Still validate even if website fetch failed - Gemini can validate by name
-      // REJECT only on Gemini API errors
       const validations = await Promise.all(
-        batch.map((company, idx) => {
-          // Pass pageText (may be null - Gemini will validate by name if so)
-          return validateCompany(company, business, country, exclusion, pageTexts[idx])
+        batch.map((company, idx) =>
+          validateCompany(company, business, country, exclusion, pageTexts[idx])
             .catch(e => {
               console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
-              return { valid: false }; // REJECT on error
-            });
-        })
+              return { valid: true, corrected_hq: company?.hq };
+            })
+        )
       );
 
       batch.forEach((company, idx) => {
