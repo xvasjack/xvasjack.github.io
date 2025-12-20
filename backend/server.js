@@ -1278,7 +1278,9 @@ async function expandRegionToCountries(region) {
         },
         {
           role: 'user',
-          content: `If "${region}" is a geographic region (like "Southeast Asia", "Europe", "Middle East"), list all the countries in it.
+          content: `If "${region}" is a geographic region (like "Southeast Asia", "Europe", "Middle East"), list only the MAJOR MARKETS in it.
+For Southeast Asia: Malaysia, Thailand, Indonesia, Vietnam, Philippines, Singapore (exclude Cambodia, Laos, Myanmar, Brunei unless explicitly mentioned).
+For other regions: focus on the main industrial/commercial markets, not every small country.
 If "${region}" is already a single country, just return that country.
 Return ONLY a JSON array of country names, nothing else.
 Example: ["Malaysia", "Thailand", "Indonesia"]`
