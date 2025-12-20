@@ -4578,7 +4578,7 @@ async function fetchImageAsBase64(url) {
 }
 
 // Generate PPTX using PptxGenJS - matching YCP template
-async function generatePPTX(companies) {
+async function generatePPTX(companies, targetDescription = '') {
   try {
     console.log('Generating PPTX with PptxGenJS...');
 
@@ -4602,6 +4602,143 @@ async function generatePPTX(companies) {
       footerText: '808080'     // Gray footer text
     };
 
+    // ===== TARGET LIST SLIDE (FIRST SLIDE) =====
+    if (targetDescription && companies.length > 0) {
+      console.log('Generating Target List slide...');
+      const meceData = await generateMECESegments(targetDescription, companies);
+
+      const targetSlide = pptx.addSlide();
+
+      // Header lines (same as profile slides)
+      targetSlide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 1.02, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 4.5 }
+      });
+      targetSlide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 1.10, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 2.25 }
+      });
+
+      // Footer line
+      targetSlide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 7.24, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 2.25 }
+      });
+
+      // Title: "Target List – {targetDescription}"
+      targetSlide.addText(`Target List – ${targetDescription}`, {
+        x: 0.38, y: 0.3, w: 12.5, h: 0.6,
+        fontSize: 28, fontFace: 'Segoe UI Semibold',
+        color: COLORS.black, valign: 'top'
+      });
+
+      // Group companies by country
+      const companyByCountry = {};
+      companies.forEach((c, i) => {
+        const loc = c.location || '';
+        // Extract country from location (last part after comma)
+        const parts = loc.split(',').map(p => p.trim());
+        const country = parts[parts.length - 1] || 'Other';
+        if (!companyByCountry[country]) companyByCountry[country] = [];
+        companyByCountry[country].push({ ...c, index: i + 1 });
+      });
+
+      // Build table data
+      const segments = meceData.segments || [];
+      const companySegments = meceData.companySegments || {};
+
+      // Table header row
+      const headerRow = [
+        { text: 'Country', options: { bold: true, fill: COLORS.accent3, color: COLORS.white, align: 'center', valign: 'middle' } },
+        { text: 'Company', options: { bold: true, fill: COLORS.accent3, color: COLORS.white, align: 'center', valign: 'middle' } }
+      ];
+      segments.forEach(seg => {
+        headerRow.push({ text: seg, options: { bold: true, fill: COLORS.accent3, color: COLORS.white, align: 'center', valign: 'middle', fontSize: 9 } });
+      });
+
+      const tableRows = [headerRow];
+      let rowIndex = 0;
+
+      // Add rows grouped by country
+      Object.keys(companyByCountry).forEach(country => {
+        const countryCompanies = companyByCountry[country];
+        countryCompanies.forEach((comp, idx) => {
+          const row = [];
+
+          // Country column (only show for first company in group)
+          if (idx === 0) {
+            row.push({
+              text: country,
+              options: {
+                rowspan: countryCompanies.length,
+                fill: COLORS.accent3,
+                color: COLORS.white,
+                bold: true,
+                align: 'center',
+                valign: 'middle',
+                fontSize: 10
+              }
+            });
+          }
+
+          // Company name with numbering and hyperlink
+          const companyName = comp.title || comp.company_name || 'Unknown';
+          row.push({
+            text: `${comp.index}. ${companyName}`,
+            options: {
+              hyperlink: { url: comp.website || '' },
+              color: '0563C1',
+              align: 'left',
+              valign: 'middle',
+              fontSize: 10
+            }
+          });
+
+          // Segment tick marks
+          const compSegments = companySegments[String(comp.index)] || [];
+          segments.forEach((seg, segIdx) => {
+            const hasTick = compSegments[segIdx] === true;
+            row.push({
+              text: hasTick ? '✓' : '',
+              options: { align: 'center', valign: 'middle', fontSize: 12 }
+            });
+          });
+
+          tableRows.push(row);
+          rowIndex++;
+        });
+      });
+
+      // Calculate column widths
+      const countryColWidth = 1.2;
+      const companyColWidth = 2.8;
+      const remainingWidth = 13.333 - 0.38 - 0.38 - countryColWidth - companyColWidth;
+      const segmentColWidth = segments.length > 0 ? remainingWidth / segments.length : 1;
+
+      const colWidths = [countryColWidth, companyColWidth];
+      segments.forEach(() => colWidths.push(segmentColWidth));
+
+      // Add target list table
+      targetSlide.addTable(tableRows, {
+        x: 0.38, y: 1.3, w: 12.5,
+        colW: colWidths,
+        fontFace: 'Segoe UI',
+        fontSize: 10,
+        border: { pt: 0.5, color: COLORS.gray },
+        rowH: 0.4
+      });
+
+      // Source footnote
+      targetSlide.addText('出典: Company websites', {
+        x: 0.38, y: 6.95, w: 12.5, h: 0.2,
+        fontSize: 10, fontFace: 'Segoe UI',
+        color: COLORS.footerText, valign: 'top'
+      });
+
+      console.log('Target List slide generated');
+    }
+
+    // ===== INDIVIDUAL COMPANY PROFILE SLIDES =====
     for (const company of companies) {
       const slide = pptx.addSlide();
 
@@ -4743,7 +4880,16 @@ async function generatePPTX(companies) {
           'not disclosed', 'not provided', 'no information', 'no data',
           'none explicitly mentioned'
         ];
-        return emptyPhrases.includes(lower) || lower.startsWith('not explicitly') || lower.startsWith('none explicitly');
+        // Check exact match or if value contains placeholder phrases
+        if (emptyPhrases.includes(lower)) return true;
+        // Check if value contains placeholder phrases (e.g., "Number of Employees: Not specified")
+        const containsPhrases = ['not specified', 'not available', 'not found', 'not disclosed',
+                                  'not provided', 'not mentioned', 'not explicitly', 'none explicitly',
+                                  'no information', 'no data', 'n/a', 'unknown'];
+        for (const phrase of containsPhrases) {
+          if (lower.includes(phrase)) return true;
+        }
+        return false;
       };
 
       // Helper function to remove company suffixes
@@ -4800,7 +4946,8 @@ async function generatePPTX(companies) {
         'number of branches', 'branches', 'number of locations', 'locations',
         'operating hours', 'business hours', 'office hours',
         'years of experience', 'experience', 'years in business',
-        'awards', 'recognitions', 'achievements'
+        'awards', 'recognitions', 'achievements',
+        'certification', 'certifications', 'iso', 'accreditation', 'accreditations'
       ];
 
       // Get the right table category to exclude from left table (prevent duplication)
@@ -5112,7 +5259,7 @@ OUTPUT JSON with these fields:
   - "Puchong, Selangor, Malaysia"
   - "Bangna, Bangkok, Thailand"
   - "Batam, Riau Islands, Indonesia"
-  SINGAPORE RULE: Always use 2 levels: "Area, Singapore" (e.g., "Jurong, Singapore", "Changi, Singapore", "Tuas, Singapore"). If no specific area is found, use "Singapore, Singapore". Never just "Singapore" alone.
+  SINGAPORE RULE: Always use 2 levels: "District/Area, Singapore". Look for specific district from the address (e.g., "Jurong West, Singapore", "Ang Mo Kio, Singapore", "Tuas, Singapore", "Clarke Quay, Singapore", "CBD, Singapore", "Changi, Singapore"). Extract the neighborhood/district/area name from the street address. NEVER use "Singapore, Singapore" - always find the specific area.
 
   For multiple locations, group by type with sub-bullet points:
   Example format:
@@ -5603,6 +5750,75 @@ Return ONLY valid JSON.`
   }
 }
 
+// AI Agent 6: Generate MECE segments for target list slide
+async function generateMECESegments(targetDescription, companies) {
+  if (!targetDescription || companies.length === 0) {
+    return { segments: [], companySegments: {} };
+  }
+
+  try {
+    console.log('Generating MECE segments for target list...');
+
+    // Prepare company summaries for AI
+    const companySummaries = companies.map((c, i) => ({
+      id: i + 1,
+      name: c.title || c.company_name || 'Unknown',
+      business: c.business || '',
+      location: c.location || ''
+    }));
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an M&A analyst creating a target list slide. Given a target description and company information, create MECE (Mutually Exclusive, Collectively Exhaustive) segments to categorize these companies.
+
+Create 4-6 segment columns that are:
+1. Relevant to the target description (e.g., for "security product distributors" → segments could be product types like "CCTV", "Access Control", "Fire Safety", etc.)
+2. Mutually exclusive (each segment is distinct)
+3. Collectively exhaustive (covers all relevant categories for this industry)
+
+For each company, mark which segments apply to them based on their business description.
+
+OUTPUT JSON:
+{
+  "segments": ["Segment 1", "Segment 2", "Segment 3", "Segment 4", "Segment 5"],
+  "companySegments": {
+    "1": [true, false, true, false, true],
+    "2": [false, true, true, true, false]
+  }
+}
+
+Where:
+- "segments" is an array of 4-6 segment names (short, 2-3 words each)
+- "companySegments" maps company ID to an array of booleans indicating which segments apply
+
+Return ONLY valid JSON.`
+        },
+        {
+          role: 'user',
+          content: `Target Description: ${targetDescription}
+
+Companies:
+${companySummaries.map(c => `${c.id}. ${c.name}\n   Business: ${c.business}\n   Location: ${c.location}`).join('\n\n')}
+
+Create MECE segments for these ${targetDescription} companies and mark which segments apply to each.`
+        }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.3
+    });
+
+    const result = JSON.parse(response.choices[0].message.content);
+    console.log(`Generated ${result.segments?.length || 0} MECE segments`);
+    return result;
+  } catch (e) {
+    console.error('MECE segmentation error:', e.message);
+    return { segments: [], companySegments: {} };
+  }
+}
+
 // Build profile slides email HTML (simple version with PPTX attached)
 function buildProfileSlidesEmailHTML(companies, errors, hasPPTX) {
   const companyNames = companies.map(c => c.title || c.company_name).join(', ');
@@ -5649,7 +5865,7 @@ function buildProfileSlidesEmailHTML(companies, errors, hasPPTX) {
 
 // Main profile slides endpoint
 app.post('/api/profile-slides', async (req, res) => {
-  const { websites, email } = req.body;
+  const { websites, email, targetDescription } = req.body;
 
   if (!websites || !Array.isArray(websites) || websites.length === 0) {
     return res.status(400).json({ error: 'Please provide an array of website URLs' });
@@ -5659,8 +5875,13 @@ app.post('/api/profile-slides', async (req, res) => {
     return res.status(400).json({ error: 'Please provide an email address' });
   }
 
+  if (!targetDescription) {
+    return res.status(400).json({ error: 'Please provide a target description' });
+  }
+
   console.log(`\n${'='.repeat(50)}`);
   console.log(`PROFILE SLIDES REQUEST: ${new Date().toISOString()}`);
+  console.log(`Target: ${targetDescription}`);
   console.log(`Processing ${websites.length} website(s)`);
   console.log(`Email: ${email}`);
   console.log('='.repeat(50));
@@ -5723,18 +5944,27 @@ app.post('/api/profile-slides', async (req, res) => {
           business: businessInfo.business
         });
 
-        // Note: Web search agents removed to prevent hallucination
-        // All data now comes exclusively from scraped website content
+        // Step 5: Search online for missing mandatory info (established_year, location)
+        // These are mandatory fields - search online if not found on website
+        const missingFields = [];
+        if (!basicInfo.established_year) missingFields.push('established_year');
+        if (!basicInfo.location) missingFields.push('location');
 
-        // Use only key metrics from scraped website (no web search)
+        let searchedInfo = {};
+        if (missingFields.length > 0 && basicInfo.company_name) {
+          console.log(`  Step 5: Searching online for missing mandatory info: ${missingFields.join(', ')}...`);
+          searchedInfo = await searchMissingInfo(basicInfo.company_name, website, missingFields);
+        }
+
+        // Use only key metrics from scraped website (no web search for metrics to prevent hallucination)
         const allKeyMetrics = metricsInfo.key_metrics || [];
 
-        // Combine all extracted data (only from scraped content, no web search)
+        // Combine all extracted data (mandatory fields supplemented by web search)
         const companyData = {
           website: scraped.url,
           company_name: basicInfo.company_name || '',
-          established_year: basicInfo.established_year || '',  // Only from website
-          location: basicInfo.location || '',  // Only from website
+          established_year: basicInfo.established_year || searchedInfo.established_year || '',
+          location: basicInfo.location || searchedInfo.location || '',
           business: businessInfo.business || '',
           message: businessInfo.message || '',
           footnote: businessInfo.footnote || '',
@@ -5766,10 +5996,10 @@ app.post('/api/profile-slides', async (req, res) => {
     console.log(`Extracted: ${companies.length}/${websites.length} successful`);
     console.log('='.repeat(50));
 
-    // Generate PPTX using PptxGenJS
+    // Generate PPTX using PptxGenJS (with target list slide)
     let pptxResult = null;
     if (companies.length > 0) {
-      pptxResult = await generatePPTX(companies);
+      pptxResult = await generatePPTX(companies, targetDescription);
     }
 
     // Build email content
