@@ -6985,9 +6985,140 @@ function detectLanguage(website) {
 }
 
 // UTB Phase 1: Deep Fact-Finding with 6 parallel specialized queries
-async function utbPhase1Research(companyName, website, context) {
+// ============ UTB PHASE 0: DOCUMENT FETCHING ============
+// Actually fetch and read company documents (annual reports, mid-term plans, etc.)
+
+async function utbPhase0FetchDocuments(companyName, website, context) {
+  console.log(`[UTB Phase 0] Fetching company documents for: ${companyName}`);
+
+  const documents = {
+    irPage: '',
+    annualReport: '',
+    midtermPlan: '',
+    mergerInfo: '',
+    recentDisclosures: ''
+  };
+
+  try {
+    // 1. Find and fetch IR page
+    const baseUrl = website.replace(/\/$/, '');
+    const irUrls = [
+      `${baseUrl}/ir/`,
+      `${baseUrl}/investor/`,
+      `${baseUrl}/investors/`,
+      `${baseUrl}/ir`,
+      `${baseUrl}/investor-relations/`,
+      `${baseUrl}/en/ir/`,
+      `${baseUrl}/english/ir/`
+    ];
+
+    for (const irUrl of irUrls) {
+      const irContent = await fetchWebsite(irUrl);
+      if (irContent && irContent.length > 200) {
+        documents.irPage = irContent;
+        console.log(`[UTB Phase 0] Found IR page at: ${irUrl}`);
+        break;
+      }
+    }
+
+    // 2. Use Perplexity to find specific document content
+    const docSearchPromises = [
+      // Search for annual report data
+      callPerplexity(`Find the OFFICIAL ANNUAL REPORT data for ${companyName} (${website}).
+
+Search for their latest:
+- 有価証券報告書 (Securities Report) if Japanese company
+- Annual Report / 10-K / 20-F if listed
+- Official financial statements
+
+EXTRACT and return the EXACT data:
+1. Revenue breakdown by segment (exact percentages from the report)
+2. Revenue breakdown by geography (exact percentages)
+3. Employee count
+4. Key financial metrics
+
+For EACH number, cite: "X% (Source: [Document Name] FY20XX, page Y)"
+
+If you cannot find the official document, state "Official document not accessible".`).catch(e => ''),
+
+      // Search for mid-term plan
+      callPerplexity(`Find the OFFICIAL MID-TERM MANAGEMENT PLAN (中期経営計画) for ${companyName} (${website}).
+
+Search for their:
+- Medium-term management plan
+- 中期経営計画 / 中計
+- Strategic plan / business plan
+
+EXTRACT and return:
+1. Plan period (e.g., FY2024-2026)
+2. Key numerical targets (revenue, profit, ROIC, etc.)
+3. Strategic priorities and focus areas
+4. Investment priorities
+5. M&A strategy if mentioned
+
+Cite the source document name and date for each piece of data.`).catch(e => ''),
+
+      // Search for M&A/merger announcements
+      callPerplexity(`Find any MERGER, ACQUISITION, or CORPORATE ACTION announcements for ${companyName} (${website}).
+
+Search for:
+- Recent M&A announcements
+- Merger agreements (合併契約)
+- Business integration news
+- Corporate restructuring
+${context && context.toLowerCase().includes('nissei') ? `- Specifically look for merger with Nissei` : ''}
+${context && context.toLowerCase().includes('merg') ? `- Focus on: ${context}` : ''}
+
+Return:
+1. Target/partner company name
+2. Transaction type and terms
+3. Timeline and status
+4. Strategic rationale
+5. Source document (press release date, disclosure number)`).catch(e => ''),
+
+      // Search for recent disclosures
+      callPerplexity(`Find the most recent OFFICIAL DISCLOSURES and IR materials for ${companyName} (${website}).
+
+Look for:
+- Latest earnings release (決算短信)
+- Recent investor presentations
+- Timely disclosures (適時開示)
+- Press releases from last 6 months
+
+Return key announcements with:
+1. Date
+2. Type of disclosure
+3. Key content
+4. Source URL if available`).catch(e => '')
+    ];
+
+    const [annualReport, midtermPlan, mergerInfo, recentDisclosures] = await Promise.all(docSearchPromises);
+
+    documents.annualReport = annualReport || '';
+    documents.midtermPlan = midtermPlan || '';
+    documents.mergerInfo = mergerInfo || '';
+    documents.recentDisclosures = recentDisclosures || '';
+
+    console.log(`[UTB Phase 0] Documents fetched - IR: ${documents.irPage.length}chars, Annual: ${documents.annualReport.length}chars, Midterm: ${documents.midtermPlan.length}chars, Merger: ${documents.mergerInfo.length}chars`);
+
+  } catch (error) {
+    console.error(`[UTB Phase 0] Error fetching documents:`, error.message);
+  }
+
+  return documents;
+}
+
+async function utbPhase1Research(companyName, website, context, officialDocs = {}) {
   console.log(`[UTB Phase 1] Starting deep fact-finding for: ${companyName}`);
   const localLang = detectLanguage(website);
+
+  // Build document context string from Phase 0
+  const docContext = [];
+  if (officialDocs.annualReport) docContext.push(`ANNUAL REPORT DATA:\n${officialDocs.annualReport}`);
+  if (officialDocs.midtermPlan) docContext.push(`MID-TERM PLAN DATA:\n${officialDocs.midtermPlan}`);
+  if (officialDocs.mergerInfo) docContext.push(`MERGER/M&A INFO:\n${officialDocs.mergerInfo}`);
+  if (officialDocs.recentDisclosures) docContext.push(`RECENT DISCLOSURES:\n${officialDocs.recentDisclosures}`);
+  const documentContext = docContext.length > 0 ? `\n\nOFFICIAL DOCUMENT DATA (use this as primary source):\n${docContext.join('\n\n')}` : '';
 
   const queries = [
     // Query 1: Company Deep Dive - Products & Services
@@ -7013,6 +7144,7 @@ ${context ? `CONTEXT: ${context}` : ''}`).catch(e => ({ type: 'products', data: 
 
     // Query 2: Financial Analysis FROM OFFICIAL DOCUMENTS
     callPerplexity(`Research ${companyName} financial data - DATA MUST COME FROM OFFICIAL COMPANY DOCUMENTS:
+${documentContext}
 
 CRITICAL: Only provide data you can source from:
 - Annual reports (有価証券報告書 for Japanese companies)
@@ -7181,8 +7313,15 @@ Provide findings in English with specific details.`).catch(e => ({ type: 'local'
 }
 
 // UTB Phase 2: Section-by-Section Synthesis
-async function utbPhase2Synthesis(companyName, website, research, context) {
+async function utbPhase2Synthesis(companyName, website, research, context, officialDocs = {}) {
   console.log(`[UTB Phase 2] Synthesizing intelligence for: ${companyName}`);
+
+  // Build document context for synthesis
+  const docContext = [];
+  if (officialDocs.annualReport) docContext.push(`ANNUAL REPORT:\n${officialDocs.annualReport}`);
+  if (officialDocs.midtermPlan) docContext.push(`MID-TERM PLAN:\n${officialDocs.midtermPlan}`);
+  if (officialDocs.mergerInfo) docContext.push(`MERGER INFO:\n${officialDocs.mergerInfo}`);
+  const officialDocContext = docContext.length > 0 ? `\n\nOFFICIAL DOCUMENTS (PRIMARY SOURCE - use this data):\n${docContext.join('\n\n')}` : '';
 
   const synthesisPrompts = [
     // Synthesis 1: Revenue Breakdown Only
@@ -7191,6 +7330,7 @@ async function utbPhase2Synthesis(companyName, website, research, context) {
 COMPANY: ${companyName}
 WEBSITE: ${website}
 ${context ? `CLIENT CONTEXT: ${context}` : ''}
+${officialDocContext}
 
 RESEARCH ON FINANCIALS:
 ${research.financials}
@@ -7463,11 +7603,14 @@ async function conductUTBResearch(companyName, website, additionalContext) {
   console.log(`[UTB] Website: ${website}`);
   console.log('='.repeat(60));
 
-  // Phase 1: Deep fact-finding
-  const rawResearch = await utbPhase1Research(companyName, website, additionalContext);
+  // Phase 0: Fetch official documents (annual reports, mid-term plans, merger info)
+  const officialDocs = await utbPhase0FetchDocuments(companyName, website, additionalContext);
 
-  // Phase 2: Section-by-section synthesis
-  const synthesis = await utbPhase2Synthesis(companyName, website, rawResearch, additionalContext);
+  // Phase 1: Deep fact-finding (with document context)
+  const rawResearch = await utbPhase1Research(companyName, website, additionalContext, officialDocs);
+
+  // Phase 2: Section-by-section synthesis (with document context)
+  const synthesis = await utbPhase2Synthesis(companyName, website, rawResearch, additionalContext, officialDocs);
 
   console.log(`[UTB] Research complete for: ${companyName}`);
 
