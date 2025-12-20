@@ -5366,7 +5366,8 @@ Content: ${scrapedContent.substring(0, 12000)}`
 
 // AI Agent 2: Extract business, message, footnote, title
 async function extractBusinessInfo(scrapedContent, basicInfo) {
-  const locationText = basicInfo.location || '';
+  // Ensure locationText is always a string (AI might return object/array)
+  const locationText = typeof basicInfo.location === 'string' ? basicInfo.location : '';
   const hqMatch = locationText.match(/HQ:\s*([^,\n]+),\s*([^\n]+)/i);
   const hqCountry = hqMatch ? hqMatch[2].trim().toLowerCase() : '';
   const currencyExchange = CURRENCY_EXCHANGE[hqCountry] || '';
