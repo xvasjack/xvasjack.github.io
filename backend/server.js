@@ -4644,9 +4644,17 @@ async function generatePPTX(companies) {
           const flagUrl = `https://flagcdn.com/w80/${countryCode.toLowerCase()}.png`;
           const flagBase64 = await fetchImageAsBase64(flagUrl);
           if (flagBase64) {
+            const flagX = 10.64, flagY = 0.22, flagW = 0.83, flagH = 0.55;
+            // Add flag image
             slide.addImage({
               data: `data:image/png;base64,${flagBase64}`,
-              x: 10.64, y: 0.22, w: 0.83, h: 0.55
+              x: flagX, y: flagY, w: flagW, h: flagH
+            });
+            // Add 1pt black outline around flag
+            slide.addShape(pptx.shapes.RECTANGLE, {
+              x: flagX, y: flagY, w: flagW, h: flagH,
+              fill: { type: 'none' },
+              line: { color: '000000', width: 1 }
             });
           }
         } catch (e) {
@@ -4722,11 +4730,16 @@ async function generatePPTX(companies) {
       const isSingleLocation = locationLines.length <= 1 && !locationText.toLowerCase().includes('branch') && !locationText.toLowerCase().includes('factory') && !locationText.toLowerCase().includes('warehouse');
       const locationLabel = isSingleLocation ? 'HQ' : 'Location';
 
-      // Helper function to check if value is empty or "not specified"
+      // Helper function to check if value is empty or placeholder text
       const isEmptyValue = (val) => {
         if (!val) return true;
         const lower = val.toLowerCase().trim();
-        return lower === '' || lower === 'not specified' || lower === 'n/a' || lower === 'unknown' || lower === 'not available' || lower === 'not found';
+        const emptyPhrases = [
+          '', 'not specified', 'n/a', 'unknown', 'not available', 'not found',
+          'not explicitly mentioned', 'not mentioned', 'none', 'none specified',
+          'not disclosed', 'not provided', 'no information', 'no data'
+        ];
+        return emptyPhrases.includes(lower) || lower.startsWith('not explicitly');
       };
 
       // Helper function to remove company suffixes
@@ -5095,7 +5108,7 @@ OUTPUT JSON with these fields:
   - "Puchong, Selangor, Malaysia"
   - "Bangna, Bangkok, Thailand"
   - "Batam, Riau Islands, Indonesia"
-  EXCEPTION: For Singapore, just use "Singapore" (single location) or include the area like "Jurong, Singapore"
+  SINGAPORE RULE: Always use 2 levels: "Area, Singapore" (e.g., "Jurong, Singapore", "Changi, Singapore", "Tuas, Singapore"). Never just "Singapore" alone.
 
   For multiple locations, group by type with sub-bullet points:
   Example format:
