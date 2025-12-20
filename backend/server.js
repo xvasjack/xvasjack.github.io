@@ -5038,16 +5038,16 @@ function detectShortforms(companyData) {
   // Also include key_metrics array values
   if (companyData.key_metrics && Array.isArray(companyData.key_metrics)) {
     companyData.key_metrics.forEach(metric => {
-      if (metric.label) textParts.push(metric.label);
-      if (metric.value) textParts.push(metric.value);
+      if (metric?.label) textParts.push(ensureString(metric.label));
+      if (metric?.value) textParts.push(ensureString(metric.value));
     });
   }
 
   // Also include breakdown_items
   if (companyData.breakdown_items && Array.isArray(companyData.breakdown_items)) {
     companyData.breakdown_items.forEach(item => {
-      if (item.label) textParts.push(item.label);
-      if (item.value) textParts.push(item.value);
+      if (item?.label) textParts.push(ensureString(item.label));
+      if (item?.value) textParts.push(ensureString(item.value));
     });
   }
 
@@ -5539,8 +5539,12 @@ async function generatePPTX(companies, targetDescription = '') {
       // Add key metrics as separate rows if available (skip duplicates and empty values)
       if (company.key_metrics && Array.isArray(company.key_metrics)) {
         company.key_metrics.forEach(metric => {
-          if (metric.label && metric.value && !isEmptyValue(metric.value)) {
-            const labelLower = metric.label.toLowerCase();
+          // Ensure label and value are strings (AI may return objects/arrays)
+          const metricLabel = ensureString(metric?.label);
+          const metricValue = ensureString(metric?.value);
+
+          if (metricLabel && metricValue && !isEmptyValue(metricValue)) {
+            const labelLower = metricLabel.toLowerCase();
 
             // Skip excluded metrics
             const isExcluded = EXCLUDED_METRICS.some(ex => labelLower.includes(ex));
@@ -5554,7 +5558,7 @@ async function generatePPTX(companies, targetDescription = '') {
                 !existingLabels.has(labelLower) &&
                 !labelLower.includes('business') &&
                 !labelLower.includes('location')) {
-              tableData.push([metric.label, metric.value, null]);
+              tableData.push([metricLabel, metricValue, null]);
               existingLabels.add(labelLower);
             }
           }
@@ -5642,10 +5646,13 @@ async function generatePPTX(companies, targetDescription = '') {
       });
 
       // ===== RIGHT SECTION (Products/Applications breakdown) =====
-      // Filter valid breakdown items (non-empty)
-      const validBreakdownItems = (company.breakdown_items || []).filter(item =>
-        item.label && item.value && !isEmptyValue(item.label) && !isEmptyValue(item.value)
-      );
+      // Filter valid breakdown items (non-empty) and ensure string types
+      const validBreakdownItems = (company.breakdown_items || [])
+        .map(item => ({
+          label: ensureString(item?.label),
+          value: ensureString(item?.value)
+        }))
+        .filter(item => item.label && item.value && !isEmptyValue(item.label) && !isEmptyValue(item.value));
 
       // If at least 2 valid items, use table format; otherwise use text box
       if (validBreakdownItems.length >= 2) {
