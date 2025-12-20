@@ -4729,12 +4729,31 @@ async function generatePPTX(companies) {
         return lower === '' || lower === 'not specified' || lower === 'n/a' || lower === 'unknown' || lower === 'not available' || lower === 'not found';
       };
 
+      // Helper function to remove company suffixes
+      const removeCompanySuffix = (name) => {
+        if (!name) return name;
+        return name
+          .replace(/\s*(Co\.,?\s*Ltd\.?|Ltd\.?|Sdn\.?\s*Bhd\.?|Pte\.?\s*Ltd\.?|Inc\.?|Corp\.?|LLC|GmbH|JSC|PT\.?|Tbk\.?|S\.?A\.?|PLC)\s*$/gi, '')
+          .trim();
+      };
+
+      // Helper function to clean location value (remove "HQ:" prefix if column is already HQ)
+      const cleanLocationValue = (location, label) => {
+        if (!location) return location;
+        // If label is HQ, remove "HQ:" prefix from value
+        if (label === 'HQ') {
+          return location.replace(/^HQ:\s*/i, '').trim();
+        }
+        return location;
+      };
+
       // Base company info rows - only add if value exists
       const tableData = [];
 
-      // Always add Name with hyperlink
+      // Always add Name with hyperlink (remove company suffix)
       if (!isEmptyValue(company.company_name)) {
-        tableData.push(['Name', company.company_name, company.website || null]);
+        const cleanName = removeCompanySuffix(company.company_name);
+        tableData.push(['Name', cleanName, company.website || null]);
       }
 
       // Add Est. Year if available
@@ -4742,9 +4761,10 @@ async function generatePPTX(companies) {
         tableData.push(['Est. Year', company.established_year, null]);
       }
 
-      // Add Location if available
+      // Add Location if available (clean up HQ: prefix if needed)
       if (!isEmptyValue(company.location)) {
-        tableData.push([locationLabel, company.location, null]);
+        const cleanLocation = cleanLocationValue(company.location, locationLabel);
+        tableData.push([locationLabel, cleanLocation, null]);
       }
 
       // Add Business if available
