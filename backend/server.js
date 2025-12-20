@@ -29,6 +29,27 @@ process.on('uncaughtException', (error) => {
   // Don't exit - keep the server running
 });
 
+// ============ TYPE SAFETY HELPERS ============
+// Ensure a value is a string (AI models may return objects/arrays instead of strings)
+function ensureString(value, defaultValue = '') {
+  if (typeof value === 'string') return value;
+  if (value === null || value === undefined) return defaultValue;
+  // Handle arrays - join with comma
+  if (Array.isArray(value)) return value.map(v => ensureString(v)).join(', ');
+  // Handle objects - try to extract meaningful string
+  if (typeof value === 'object') {
+    // Common patterns from AI responses
+    if (value.city && value.country) return `${value.city}, ${value.country}`;
+    if (value.text) return ensureString(value.text);
+    if (value.value) return ensureString(value.value);
+    if (value.name) return ensureString(value.name);
+    // Fallback: stringify
+    try { return JSON.stringify(value); } catch { return defaultValue; }
+  }
+  // Convert other types to string
+  return String(value);
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
@@ -5040,7 +5061,7 @@ async function generatePPTX(companies, targetDescription = '') {
       // Group companies by country
       const companyByCountry = {};
       companies.forEach((c, i) => {
-        const loc = c.location || '';
+        const loc = ensureString(c.location);
         // Extract country from location (last part after comma)
         const parts = loc.split(',').map(p => p.trim());
         const country = parts[parts.length - 1] || 'Other';
@@ -5279,7 +5300,7 @@ async function generatePPTX(companies, targetDescription = '') {
       }
 
       // ===== LOGO (top right of slide) =====
-      if (company.website) {
+      if (company.website && typeof company.website === 'string') {
         try {
           const domain = company.website.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
 
@@ -5341,7 +5362,7 @@ async function generatePPTX(companies, targetDescription = '') {
 
       // ===== LEFT TABLE (会社概要資料) =====
       // Determine if single location (for HQ label)
-      const locationText = company.location || '';
+      const locationText = ensureString(company.location);
       const locationLines = locationText.split('\n').filter(line => line.trim());
       const isSingleLocation = locationLines.length <= 1 && !locationText.toLowerCase().includes('branch') && !locationText.toLowerCase().includes('factory') && !locationText.toLowerCase().includes('warehouse');
       const locationLabel = isSingleLocation ? 'HQ' : 'Location';
@@ -5349,7 +5370,8 @@ async function generatePPTX(companies, targetDescription = '') {
       // Helper function to check if value is empty or placeholder text
       const isEmptyValue = (val) => {
         if (!val) return true;
-        const lower = val.toLowerCase().trim();
+        const strVal = ensureString(val);
+        const lower = strVal.toLowerCase().trim();
         const emptyPhrases = [
           '', 'not specified', 'n/a', 'unknown', 'not available', 'not found',
           'not explicitly mentioned', 'not mentioned', 'none', 'none specified',
@@ -5427,7 +5449,7 @@ async function generatePPTX(companies, targetDescription = '') {
       ];
 
       // Get the right table category to exclude from left table (prevent duplication)
-      const rightTableCategory = (company.breakdown_title || '').toLowerCase();
+      const rightTableCategory = ensureString(company.breakdown_title).toLowerCase();
       // Map breakdown titles to keywords to exclude
       const categoryKeywords = {
         'customers': ['customer', 'client', 'buyer'],
@@ -8453,9 +8475,34 @@ server.on('upgrade', (request, socket, head) => {
 
 // Store active sessions for recording storage
 const activeSessions = new Map();
+const MAX_ACTIVE_SESSIONS = 50; // Prevent memory exhaustion from too many concurrent sessions
+
+// Periodic cleanup of stale sessions (every 10 minutes)
+setInterval(() => {
+  const now = Date.now();
+  let cleaned = 0;
+  for (const [sessionId, session] of activeSessions.entries()) {
+    // Remove sessions older than 2 hours (safety net for missed cleanups)
+    if (session.startTime && (now - session.startTime.getTime() > 2 * 60 * 60 * 1000)) {
+      activeSessions.delete(sessionId);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) {
+    console.log(`[WS] Periodic cleanup: removed ${cleaned} stale sessions. Active: ${activeSessions.size}`);
+  }
+}, 10 * 60 * 1000);
 
 wss.on('connection', (ws, req) => {
   console.log('[WS] New client connected for real-time transcription');
+
+  // Check session limit to prevent memory exhaustion
+  if (activeSessions.size >= MAX_ACTIVE_SESSIONS) {
+    console.warn(`[WS] Session limit reached (${MAX_ACTIVE_SESSIONS}), rejecting connection`);
+    ws.send(JSON.stringify({ type: 'error', message: 'Server busy. Please try again later.' }));
+    ws.close();
+    return;
+  }
 
   let deepgramConnection = null;
   let sessionId = Date.now().toString();
@@ -8472,6 +8519,7 @@ wss.on('connection', (ws, req) => {
     translatedTranscript: '',
     language: 'en'
   });
+  console.log(`[WS] Session ${sessionId} created. Active sessions: ${activeSessions.size}`);
 
   // Send session ID to client
   ws.send(JSON.stringify({ type: 'session', sessionId }));
@@ -8517,15 +8565,16 @@ wss.on('connection', (ws, req) => {
           // Set language - if specific language requested, use it; otherwise use 'multi' for auto-detection
           // Nova-3 with language='multi' enables true multilingual code-switching
           // See: https://developers.deepgram.com/docs/multilingual-code-switching
+          const currentSession = activeSessions.get(sessionId);
           if (isMultiLang) {
             dgOptions.language = 'multi';  // Multilingual code-switching mode
             dgOptions.endpointing = 100;   // Recommended for code-switching (100ms)
             detectedLanguage = 'multi';
-            activeSessions.get(sessionId).language = 'multi';
+            if (currentSession) currentSession.language = 'multi';
           } else {
             dgOptions.language = data.language;
             detectedLanguage = data.language;
-            activeSessions.get(sessionId).language = data.language;
+            if (currentSession) currentSession.language = data.language;
           }
 
           console.log('[WS] Deepgram options:', JSON.stringify(dgOptions));
@@ -8599,9 +8648,12 @@ wss.on('connection', (ws, req) => {
             // Use segment language if available, else channel language
             const effectiveLang = segmentLang || detLang || detectedLanguage;
 
+            // Get session with null safety
+            const session = activeSessions.get(sessionId);
+
             if (effectiveLang && effectiveLang !== detectedLanguage) {
               detectedLanguage = effectiveLang;
-              activeSessions.get(sessionId).language = effectiveLang;
+              if (session) session.language = effectiveLang;
               console.log(`[WS] Language detected: ${effectiveLang}`);
             }
 
@@ -8628,7 +8680,7 @@ wss.on('connection', (ws, req) => {
               // Accumulate final transcripts
               if (isFinal) {
                 fullTranscript += transcript + ' ';
-                activeSessions.get(sessionId).transcript = fullTranscript;
+                if (session) session.transcript = fullTranscript;
 
                 // Check if this segment is non-English (using per-segment language detection)
                 const isNonEnglishLang = thisSegmentLang && thisSegmentLang !== 'en' && !thisSegmentLang.startsWith('en');
@@ -8642,7 +8694,7 @@ wss.on('connection', (ws, req) => {
                     // Only add if translation is different from original
                     if (translated !== transcript) {
                       translatedTranscript += translated + ' ';
-                      activeSessions.get(sessionId).translatedTranscript = translatedTranscript;
+                      if (session) session.translatedTranscript = translatedTranscript;
                       ws.send(JSON.stringify({
                         type: 'translation',
                         text: translated,
@@ -8656,7 +8708,7 @@ wss.on('connection', (ws, req) => {
                 } else if (!needsTranslation && transcript.length >= 3) {
                   // For English segments in multilingual meetings, add to translation too
                   translatedTranscript += transcript + ' ';
-                  activeSessions.get(sessionId).translatedTranscript = translatedTranscript;
+                  if (session) session.translatedTranscript = translatedTranscript;
                 }
               }
             }
@@ -8716,9 +8768,18 @@ wss.on('connection', (ws, req) => {
         if (deepgramConnection && deepgramConnection.getReadyState() === 1) {
           deepgramConnection.send(message);
 
-          // Store audio chunk for later saving
+          // Store audio chunk for later saving (with null safety)
           audioChunks.push(message);
-          activeSessions.get(sessionId).audioChunks.push(message);
+          const audioSession = activeSessions.get(sessionId);
+          if (audioSession && audioSession.audioChunks) {
+            // Memory limit: max 100MB per session to prevent memory exhaustion
+            const currentSize = audioSession.audioChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+            if (currentSize < 100 * 1024 * 1024) {
+              audioSession.audioChunks.push(message);
+            } else {
+              console.warn(`[WS] Session ${sessionId} audio limit reached (100MB), skipping chunk storage`);
+            }
+          }
         }
       }
     } catch (error) {
@@ -8732,10 +8793,16 @@ wss.on('connection', (ws, req) => {
     if (deepgramConnection) {
       deepgramConnection.finish();
     }
-    // Keep session data for 1 hour for retrieval
+    // Keep session data for 30 minutes for retrieval (reduced from 1 hour to save memory)
+    // Clear audio chunks immediately to free memory, keep only transcript
+    const closingSession = activeSessions.get(sessionId);
+    if (closingSession) {
+      closingSession.audioChunks = []; // Free audio memory immediately
+    }
     setTimeout(() => {
       activeSessions.delete(sessionId);
-    }, 3600000);
+      console.log(`[WS] Session ${sessionId} cleaned up`);
+    }, 1800000); // 30 minutes
   });
 
   ws.on('error', (error) => {
