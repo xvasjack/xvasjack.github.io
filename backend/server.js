@@ -1531,19 +1531,16 @@ async function parallelValidationStrict(companies, business, country, exclusion)
       );
 
       // Add .catch() to each validation to prevent single failures from crashing batch
-      // REJECT on error - do not accept hallucinated companies
+      // Still validate even if website fetch failed - Gemini can validate by name
+      // REJECT only on Gemini API errors
       const validations = await Promise.all(
         batch.map((company, idx) => {
           try {
-            // If we couldn't fetch the website, REJECT - company may be hallucinated
-            if (!pageTexts[idx]) {
-              console.log(`    No website content for ${company?.company_name}, rejecting (may be hallucinated)`);
-              return Promise.resolve({ valid: false });
-            }
+            // Pass pageText (may be null - Gemini will validate by name if so)
             return validateCompanyStrict(company, business, country, exclusion, pageTexts[idx])
               .catch(e => {
                 console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
-                return { valid: false }; // REJECT on error
+                return { valid: false }; // REJECT on Gemini error
               });
           } catch (e) {
             return Promise.resolve({ valid: false }); // REJECT on error
@@ -1673,14 +1670,11 @@ async function parallelValidation(companies, business, country, exclusion) {
       const pageTexts = await Promise.all(
         batch.map(c => fetchWebsite(c?.website).catch(() => null))
       );
-      // REJECT on error or missing website - do not accept hallucinated companies
+      // Still validate even if website fetch failed - Gemini can validate by name
+      // REJECT only on Gemini API errors
       const validations = await Promise.all(
         batch.map((company, idx) => {
-          // If we couldn't fetch the website, REJECT
-          if (!pageTexts[idx]) {
-            console.log(`    No website content for ${company?.company_name}, rejecting`);
-            return Promise.resolve({ valid: false });
-          }
+          // Pass pageText (may be null - Gemini will validate by name if so)
           return validateCompany(company, business, country, exclusion, pageTexts[idx])
             .catch(e => {
               console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
