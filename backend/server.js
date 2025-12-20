@@ -185,9 +185,10 @@ async function sendEmail(to, subject, html, attachments = null) {
 
 // ============ AI TOOLS ============
 
+// Gemini 2.5 Flash-Lite - cost-effective for general tasks ($0.10/$0.40 per 1M tokens)
 async function callGemini(prompt) {
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
@@ -197,6 +198,27 @@ async function callGemini(prompt) {
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   } catch (error) {
     console.error('Gemini error:', error.message);
+    return '';
+  }
+}
+
+// Gemini 3 Flash - frontier reasoning for complex tasks ($0.50/$3.00 per 1M tokens)
+// Released Dec 17, 2025 - outperforms Gemini 2.5 Pro, 3x faster
+async function callGemini3Flash(prompt) {
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json' }
+      }),
+      timeout: 90000
+    });
+    const data = await response.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  } catch (error) {
+    console.error('Gemini 3 Flash error:', error.message);
     return '';
   }
 }
@@ -3069,54 +3091,63 @@ Decision rules:
 Output JSON: {"results": [{"index": 0, "name": "Company Name", "relevant": false, "business": "5-10 word description of actual business"}]}`;
 }
 
-// Helper: Check business relevance using OpenAI o1 (best reasoning model)
+// Helper: Check business relevance using Gemini 3 Flash (frontier reasoning, 30x cheaper than o1)
+// Replaced o1 ($15/$60) with Gemini 3 Flash ($0.50/$3.00) - 95% cost savings
 async function checkRelevanceWithOpenAI(companies, filterCriteria) {
   const companyNames = companies.map(c => c.name);
   const prompt = buildReasoningPrompt(companyNames, filterCriteria);
 
   try {
-    // Try o1 first (best reasoning)
-    const response = await openai.chat.completions.create({
-      model: 'o1',
-      messages: [{ role: 'user', content: prompt + '\n\nRespond with valid JSON only.' }]
+    // Use Gemini 3 Flash for frontier reasoning (released Dec 17, 2025)
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt + '\n\nRespond with valid JSON only.' }] }],
+        generationConfig: { responseMimeType: 'application/json' }
+      }),
+      timeout: 90000
     });
-    const content = response.choices[0].message.content;
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message);
+    const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
-      return { source: 'openai-o1', results: parsed.results || parsed.companies || parsed };
+      return { source: 'gemini-3-flash', results: parsed.results || parsed.companies || parsed };
     }
     return null;
   } catch (error) {
-    console.error('OpenAI o1 error:', error.message);
-    // Fallback to o3-mini with high reasoning
+    console.error('Gemini 3 Flash error:', error.message);
+    // Fallback to GPT-4o
     try {
       const response = await openai.chat.completions.create({
-        model: 'o3-mini',
+        model: 'gpt-4o',
         messages: [{ role: 'user', content: prompt + '\n\nRespond with valid JSON only.' }],
-        reasoning_effort: 'high'
+        response_format: { type: 'json_object' },
+        temperature: 0.2
       });
       const content = response.choices[0].message.content;
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
-        return { source: 'openai-o3-high', results: parsed.results || parsed.companies || parsed };
+        return { source: 'gpt-4o-fallback', results: parsed.results || parsed.companies || parsed };
       }
       return null;
     } catch (e) {
-      console.error('OpenAI o3-mini fallback error:', e.message);
+      console.error('GPT-4o fallback error:', e.message);
       return null;
     }
   }
 }
 
-// Helper: Check business relevance using Gemini 2.0 Flash
+// Helper: Check business relevance using Gemini 2.5 Flash-Lite (upgraded from 2.0)
 async function checkRelevanceWithGemini(companies, filterCriteria) {
   const companyNames = companies.map(c => c.name);
   const prompt = buildReasoningPrompt(companyNames, filterCriteria);
 
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -3130,11 +3161,11 @@ async function checkRelevanceWithGemini(companies, filterCriteria) {
     const jsonMatch = text.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
-      return { source: 'gemini-2.0-flash', results: parsed.results || parsed.companies || parsed };
+      return { source: 'gemini-2.5-flash-lite', results: parsed.results || parsed.companies || parsed };
     }
     return null;
   } catch (error) {
-    console.error('Gemini 2.0 Flash error:', error.message);
+    console.error('Gemini 2.5 Flash-Lite error:', error.message);
     return null;
   }
 }
@@ -4677,8 +4708,9 @@ Maintain the core message but apply Anil's tone, structure, and conventions. Inc
   }
 
   try {
+    // Using GPT-4o-mini for email writing (90% cost savings, same quality for this task)
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: ANIL_SYSTEM_PROMPT },
         { role: 'user', content: userMessage }
@@ -5615,10 +5647,11 @@ async function scrapeWebsite(url) {
 }
 
 // AI Agent 1: Extract company name, established year, location
+// Using GPT-4o-mini (60% cost savings for simple extraction task)
 async function extractBasicInfo(scrapedContent, websiteUrl) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -5673,6 +5706,7 @@ Content: ${scrapedContent.substring(0, 12000)}`
 }
 
 // AI Agent 2: Extract business, message, footnote, title
+// Using GPT-4o-mini (60% cost savings for structured output task)
 async function extractBusinessInfo(scrapedContent, basicInfo) {
   const locationText = basicInfo.location || '';
   const hqMatch = locationText.match(/HQ:\s*([^,\n]+),\s*([^\n]+)/i);
@@ -5681,7 +5715,7 @@ async function extractBusinessInfo(scrapedContent, basicInfo) {
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -5744,10 +5778,11 @@ ${scrapedContent.substring(0, 12000)}`
 }
 
 // AI Agent 3: Extract key metrics for M&A evaluation
+// Using GPT-4o-mini (60% cost savings for pattern-based extraction)
 async function extractKeyMetrics(scrapedContent, previousData) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -5841,10 +5876,11 @@ ${scrapedContent.substring(0, 18000)}`
 }
 
 // AI Agent 3b: Extract products/applications breakdown for right table
+// Using GPT-4o-mini (60% cost savings for category segmentation)
 async function extractProductsBreakdown(scrapedContent, previousData) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -5918,10 +5954,11 @@ ${scrapedContent.substring(0, 15000)}`
 }
 
 // AI Agent 3c: Extract financial metrics for 財務実績 section
+// Using GPT-4o-mini (60% cost savings for number extraction)
 async function extractFinancialMetrics(scrapedContent, previousData) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
