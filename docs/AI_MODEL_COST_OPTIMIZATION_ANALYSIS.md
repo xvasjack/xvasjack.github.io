@@ -19,12 +19,22 @@ This analysis identifies opportunities to reduce AI costs across the platform's 
 | **GPT-4o-mini** | $0.15 | $0.60 | Good for simpler tasks |
 | **o1** | $15.00 | $60.00 | Best reasoning, very expensive |
 | **o3-mini** | $1.10 | $4.40 | Good reasoning, expensive |
-| **Gemini 2.0 Flash** | $0.10 | $0.40 | Currently in use |
+| **Gemini 2.0 Flash** | $0.10 | $0.40 | Currently in use (being deprecated) |
 | **Gemini 2.5 Flash-Lite** | $0.10 | $0.40 | Same price as 2.0, better quality |
 | **Gemini 2.5 Flash** | $0.30 | $2.50 | With thinking capability |
+| **Gemini 3 Flash** ⭐ NEW | $0.50 | $3.00 | Released Dec 17, 2025 - frontier performance |
 | **DeepSeek V3.2** | $0.28 | $0.42 | Cache miss pricing |
 | **DeepSeek V3.2** | $0.028 | $0.42 | Cache hit (90% cheaper) |
 | **Perplexity Sonar** | $1.00 + $5/1K searches | $1.00 | Web search capability |
+
+### ⭐ Gemini 3 Flash (Released December 17, 2025)
+
+Google's newest model with frontier-class performance:
+- **Model ID:** `gemini-3-flash-preview`
+- **Context:** 1M input tokens, 65K output tokens
+- **Benchmarks:** GPQA Diamond 90.4%, SWE-bench 78%
+- **Performance:** Outperforms Gemini 2.5 Pro while being 3x faster
+- **Best for:** Complex reasoning, agentic coding, visual/spatial reasoning
 
 ---
 
@@ -68,15 +78,21 @@ This analysis identifies opportunities to reduce AI costs across the platform's 
 
 **Cost Impact:** VERY HIGH - o1 is $15/$60 per million tokens
 
-**Recommendation: Replace o1 with Gemini 2.5 Flash (thinking mode)**
+**Recommendation: Replace o1 with Gemini 3 Flash** ⭐
 
 | Phase | Current Model | Recommended Model | Rationale |
 |-------|---------------|-------------------|-----------|
-| Phase 1 (Deep Analysis) | o1 ($15/$60) | **Gemini 2.5 Flash** ($0.30/$2.50) | 10x cheaper, comparable reasoning |
-| Fallback | o3-mini ($1.10/$4.40) | **DeepSeek V3.2 Reasoner** | 3x cheaper |
+| Phase 1 (Deep Analysis) | o1 ($15/$60) | **Gemini 3 Flash** ($0.50/$3.00) | 30x cheaper, frontier reasoning (90.4% GPQA) |
+| Fallback | o3-mini ($1.10/$4.40) | **Gemini 2.5 Flash** ($0.30/$2.50) | 4x cheaper |
 | Phase 2 | Gemini 2.0 Flash | **Gemini 2.5 Flash-Lite** | Better quality, same price |
 
-**Estimated Savings:** 80-90% per request
+**Why Gemini 3 Flash for Trading Comparable:**
+- SWE-bench 78% score shows excellent structured reasoning
+- Outperforms Gemini 2.5 Pro (which already matches o1 in many tasks)
+- 3x faster than previous models = better user experience
+- Native JSON output mode for reliable structured responses
+
+**Estimated Savings:** 95%+ per request ($15→$0.50 input, $60→$3 output)
 
 ---
 
@@ -181,7 +197,7 @@ This analysis identifies opportunities to reduce AI costs across the platform's 
 
 ## Recommended Code Changes
 
-### 1. Trading Comparable - Replace o1 with Gemini 2.5 Flash
+### 1. Trading Comparable - Replace o1 with Gemini 3 Flash ⭐
 
 ```javascript
 // Current (server.js line ~3080)
@@ -190,8 +206,8 @@ const response = await openai.chat.completions.create({
   messages: [{ role: 'user', content: prompt + '\n\nRespond with valid JSON only.' }]
 });
 
-// Recommended
-const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+// Recommended - Gemini 3 Flash (30x cheaper, frontier reasoning)
+const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${process.env.GEMINI_API_KEY}`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({
@@ -201,7 +217,31 @@ const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/m
 });
 ```
 
-### 2. Profile Slides - Replace GPT-4o with Gemini 2.5 Flash-Lite for basic extraction
+### 2. Add Gemini 3 Flash Helper Function
+
+```javascript
+// Add new helper function for Gemini 3 Flash (frontier reasoning)
+async function callGemini3Flash(prompt) {
+  try {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json' }
+      }),
+      timeout: 90000
+    });
+    const data = await response.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  } catch (error) {
+    console.error('Gemini 3 Flash error:', error.message);
+    return '';
+  }
+}
+```
+
+### 3. Profile Slides - Replace GPT-4o with Gemini 2.5 Flash-Lite for basic extraction
 
 ```javascript
 // Create new helper function
@@ -219,7 +259,7 @@ async function callGeminiFlashLite(prompt) {
 }
 ```
 
-### 3. Write Like Anil - Use GPT-4o-mini
+### 4. Write Like Anil - Use GPT-4o-mini
 
 ```javascript
 // Current (server.js line ~4681)
@@ -284,3 +324,6 @@ Before deploying model changes:
 - [DeepSeek API Pricing](https://api-docs.deepseek.com/quick_start/pricing)
 - [Perplexity API Pricing](https://docs.perplexity.ai/getting-started/pricing)
 - [Gemini 2.5 Flash-Lite Announcement](https://developers.googleblog.com/en/gemini-25-flash-lite-is-now-stable-and-generally-available/)
+- [Gemini 3 Flash Launch (Dec 17, 2025)](https://blog.google/products/gemini/gemini-3-flash/)
+- [Build with Gemini 3 Flash - Developer Guide](https://blog.google/technology/developers/build-with-gemini-3-flash/)
+- [Gemini 3 Flash in Gemini CLI](https://developers.googleblog.com/gemini-3-flash-is-now-available-in-gemini-cli/)
