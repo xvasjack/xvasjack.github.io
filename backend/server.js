@@ -4609,7 +4609,7 @@ async function generatePPTX(companies, targetDescription = '') {
 
       const targetSlide = pptx.addSlide();
 
-      // Header lines (same as profile slides)
+      // Header lines (same as profile slides - no left/right margin)
       targetSlide.addShape(pptx.shapes.LINE, {
         x: 0, y: 1.02, w: 13.333, h: 0,
         line: { color: COLORS.headerLine, width: 4.5 }
@@ -4625,10 +4625,16 @@ async function generatePPTX(companies, targetDescription = '') {
         line: { color: COLORS.headerLine, width: 2.25 }
       });
 
-      // Title: "Target List – {targetDescription}"
-      targetSlide.addText(`Target List – ${targetDescription}`, {
+      // Title Case helper function
+      const toTitleCase = (str) => {
+        return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
+      };
+
+      // Title: "Target List – {Target Description}" in Title Case
+      const formattedTitle = `Target List – ${toTitleCase(targetDescription)}`;
+      targetSlide.addText(formattedTitle, {
         x: 0.38, y: 0.3, w: 12.5, h: 0.6,
-        fontSize: 28, fontFace: 'Segoe UI Semibold',
+        fontSize: 24, fontFace: 'Segoe UI Semibold',
         color: COLORS.black, valign: 'top'
       });
 
@@ -4643,42 +4649,87 @@ async function generatePPTX(companies, targetDescription = '') {
         companyByCountry[country].push({ ...c, index: i + 1 });
       });
 
+      // Determine if single country or multi-country
+      const countries = Object.keys(companyByCountry);
+      const isMultiCountry = countries.length > 1;
+
       // Build table data
       const segments = meceData.segments || [];
       const companySegments = meceData.companySegments || {};
 
+      // Colors
+      const LIGHT_BLUE = '4472C4';  // Lighter blue for company column in single-country mode
+
       // Table header row
-      const headerRow = [
-        { text: 'Country', options: { bold: true, fill: COLORS.accent3, color: COLORS.white, align: 'center', valign: 'middle' } },
-        { text: 'Company', options: { bold: true, fill: COLORS.accent3, color: COLORS.white, align: 'center', valign: 'middle' } }
-      ];
+      const headerRow = [];
+
+      if (isMultiCountry) {
+        // Multi-country: empty top-left cell (no text, no color)
+        headerRow.push({ text: '', options: { fill: COLORS.white, border: { pt: 3, color: COLORS.gray } } });
+      }
+
+      // Company column header
+      headerRow.push({
+        text: '',
+        options: {
+          bold: true,
+          fill: isMultiCountry ? COLORS.accent3 : LIGHT_BLUE,
+          color: COLORS.white,
+          align: 'center',
+          valign: 'middle',
+          border: { pt: 3, color: COLORS.gray }
+        }
+      });
+
+      // Segment headers
       segments.forEach(seg => {
-        headerRow.push({ text: seg, options: { bold: true, fill: COLORS.accent3, color: COLORS.white, align: 'center', valign: 'middle', fontSize: 9 } });
+        headerRow.push({
+          text: seg,
+          options: {
+            bold: true,
+            fill: COLORS.accent3,
+            color: COLORS.white,
+            align: 'center',
+            valign: 'middle',
+            border: { pt: 3, color: COLORS.gray }
+          }
+        });
       });
 
       const tableRows = [headerRow];
-      let rowIndex = 0;
 
       // Add rows grouped by country
-      Object.keys(companyByCountry).forEach(country => {
+      const countryKeys = Object.keys(companyByCountry);
+      countryKeys.forEach((country, countryIdx) => {
         const countryCompanies = companyByCountry[country];
         countryCompanies.forEach((comp, idx) => {
           const row = [];
+          const isFirstInCountry = idx === 0;
+          const isLastInCountry = idx === countryCompanies.length - 1;
+          const isLastCountry = countryIdx === countryKeys.length - 1;
 
-          // Country column (only show for first company in group)
-          if (idx === 0) {
-            row.push({
-              text: country,
-              options: {
-                rowspan: countryCompanies.length,
-                fill: COLORS.accent3,
-                color: COLORS.white,
-                bold: true,
-                align: 'center',
-                valign: 'middle',
-                fontSize: 10
-              }
-            });
+          if (isMultiCountry) {
+            // Country column (only show for first company in group)
+            if (isFirstInCountry) {
+              row.push({
+                text: country,
+                options: {
+                  rowspan: countryCompanies.length,
+                  fill: COLORS.accent3,
+                  color: COLORS.white,
+                  bold: true,
+                  align: 'center',
+                  valign: 'middle',
+                  // Thicker border between countries, thin within
+                  border: [
+                    { pt: 3, color: COLORS.gray },  // top
+                    { pt: 3, color: COLORS.gray },  // right
+                    { pt: isLastCountry ? 3 : 3, color: COLORS.gray },  // bottom
+                    { pt: 3, color: COLORS.gray }   // left
+                  ]
+                }
+              });
+            }
           }
 
           // Company name with numbering and hyperlink
@@ -4688,9 +4739,10 @@ async function generatePPTX(companies, targetDescription = '') {
             options: {
               hyperlink: { url: comp.website || '' },
               color: '0563C1',
+              fill: COLORS.white,
               align: 'left',
               valign: 'middle',
-              fontSize: 10
+              border: { pt: 3, color: COLORS.gray }
             }
           });
 
@@ -4700,31 +4752,46 @@ async function generatePPTX(companies, targetDescription = '') {
             const hasTick = compSegments[segIdx] === true;
             row.push({
               text: hasTick ? '✓' : '',
-              options: { align: 'center', valign: 'middle', fontSize: 12 }
+              options: {
+                align: 'center',
+                valign: 'middle',
+                fill: COLORS.white,
+                border: { pt: 3, color: COLORS.gray }
+              }
             });
           });
 
           tableRows.push(row);
-          rowIndex++;
         });
       });
 
       // Calculate column widths
-      const countryColWidth = 1.2;
-      const companyColWidth = 2.8;
-      const remainingWidth = 13.333 - 0.38 - 0.38 - countryColWidth - companyColWidth;
-      const segmentColWidth = segments.length > 0 ? remainingWidth / segments.length : 1;
+      const tableWidth = 12.5;
+      let colWidths = [];
 
-      const colWidths = [countryColWidth, companyColWidth];
-      segments.forEach(() => colWidths.push(segmentColWidth));
+      if (isMultiCountry) {
+        const countryColWidth = 1.2;
+        const companyColWidth = 2.8;
+        const remainingWidth = tableWidth - countryColWidth - companyColWidth;
+        const segmentColWidth = segments.length > 0 ? remainingWidth / segments.length : 1;
+        colWidths = [countryColWidth, companyColWidth];
+        segments.forEach(() => colWidths.push(segmentColWidth));
+      } else {
+        // Single country - no country column
+        const companyColWidth = 3.0;
+        const remainingWidth = tableWidth - companyColWidth;
+        const segmentColWidth = segments.length > 0 ? remainingWidth / segments.length : 1;
+        colWidths = [companyColWidth];
+        segments.forEach(() => colWidths.push(segmentColWidth));
+      }
 
       // Add target list table
       targetSlide.addTable(tableRows, {
-        x: 0.38, y: 1.3, w: 12.5,
+        x: 0.38, y: 1.3, w: tableWidth,
         colW: colWidths,
         fontFace: 'Segoe UI',
-        fontSize: 10,
-        border: { pt: 0.5, color: COLORS.gray },
+        fontSize: 14,
+        valign: 'middle',
         rowH: 0.4
       });
 
