@@ -4644,9 +4644,17 @@ async function generatePPTX(companies) {
           const flagUrl = `https://flagcdn.com/w80/${countryCode.toLowerCase()}.png`;
           const flagBase64 = await fetchImageAsBase64(flagUrl);
           if (flagBase64) {
+            const flagX = 10.64, flagY = 0.22, flagW = 0.83, flagH = 0.55;
+            // Add flag image
             slide.addImage({
               data: `data:image/png;base64,${flagBase64}`,
-              x: 10.64, y: 0.22, w: 0.83, h: 0.55
+              x: flagX, y: flagY, w: flagW, h: flagH
+            });
+            // Add 1pt black outline around flag
+            slide.addShape(pptx.shapes.RECTANGLE, {
+              x: flagX, y: flagY, w: flagW, h: flagH,
+              fill: { type: 'none' },
+              line: { color: '000000', width: 1 }
             });
           }
         } catch (e) {
