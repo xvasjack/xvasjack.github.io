@@ -46,6 +46,9 @@
       display: flex;
       flex-direction: column;
       gap: 8px;
+      max-height: calc(100vh - 180px);
+      overflow-y: auto;
+      padding-right: 4px;
     }
 
     /* Upload Zone - Compact */
@@ -70,7 +73,7 @@
     .dd-upload-zone p { font-size: 12px; color: var(--text-muted); margin: 0; }
     #fileInput { display: none; }
 
-    .dd-file-list { margin-top: 6px; display: flex; flex-direction: column; gap: 3px; max-height: 110px; overflow-y: auto; }
+    .dd-file-list { margin-top: 6px; display: flex; flex-direction: column; gap: 3px; max-height: 80px; overflow-y: auto; }
     .dd-file-item {
       display: flex; align-items: center; gap: 8px;
       padding: 6px 10px; background: var(--bg-surface);
@@ -268,6 +271,10 @@
       margin-top: 12px;
       padding-top: 12px;
       border-top: 1px solid var(--border-subtle);
+      position: sticky;
+      bottom: 0;
+      background: var(--bg-body);
+      padding-bottom: 4px;
     }
     .dd-form-row {
       display: grid;
@@ -366,8 +373,16 @@
             <button type="button" class="dd-lang-btn" data-lang="id">ID</button>
             <button type="button" class="dd-lang-btn" data-lang="vi">VN</button>
             <button type="button" class="dd-lang-btn" data-lang="th">ไทย</button>
+            <button type="button" class="dd-lang-btn" data-lang="es">ES</button>
+            <button type="button" class="dd-lang-btn" data-lang="fr">FR</button>
+            <button type="button" class="dd-lang-btn" data-lang="de">DE</button>
+            <button type="button" class="dd-lang-btn" data-lang="pt">PT</button>
+            <button type="button" class="dd-lang-btn" data-lang="ru">RU</button>
+            <button type="button" class="dd-lang-btn" data-lang="ar">AR</button>
           </div>
-          <div style="font-size: 10px; color: var(--text-muted); text-align: center; margin-bottom: 4px;">⚠️ Select your language before recording</div>
+          <div style="font-size: 11px; color: var(--text-main); text-align: center; margin-bottom: 6px; padding: 6px 8px; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 4px; border: 1px solid #f59e0b;">
+            <strong style="color: #92400e;">Select your main speaking language.</strong> <span style="color: #78350f;">Non-English will be translated to English.</span>
+          </div>
           <div class="dd-record-controls">
             <button class="dd-record-btn" id="recordBtn">
               <svg fill="currentColor" viewBox="0 0 24 24" id="recordIcon"><circle cx="12" cy="12" r="8"/></svg>
