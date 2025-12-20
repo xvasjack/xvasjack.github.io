@@ -277,6 +277,25 @@
     @media (max-width: 600px) {
       .dd-form-row { grid-template-columns: 1fr; }
     }
+
+    /* Mode Toggle Buttons */
+    .dd-mode-btn {
+      padding: 3px 8px;
+      font-size: 10px;
+      font-weight: 600;
+      border: 1px solid var(--border-medium);
+      border-radius: 4px;
+      background: var(--bg-body);
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .dd-mode-btn:hover { border-color: var(--accent); color: var(--accent); }
+    .dd-mode-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
   </style>
 </head>
 <body>
@@ -362,8 +381,21 @@
 
           <!-- Form Section -->
           <div class="dd-form-section">
-            <label style="font-size: 11px; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 4px;">Additional Context</label>
-            <textarea id="ddInstructions" rows="2" placeholder="Context, focus areas, questions..." style="width: 100%; padding: 8px; border: 1px solid var(--border-medium); border-radius: 4px; font-size: 12px; resize: vertical;"></textarea>
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px;">
+              <label style="font-size: 11px; font-weight: 600; color: var(--text-main);">Instructions</label>
+              <div class="dd-mode-toggle" style="display: flex; gap: 4px;">
+                <button type="button" class="dd-mode-btn active" id="autoModeBtn" onclick="setInstructionMode('auto')">Auto</button>
+                <button type="button" class="dd-mode-btn" id="manualModeBtn" onclick="setInstructionMode('manual')">Manual</button>
+              </div>
+            </div>
+            <div id="autoModeHint" style="font-size: 10px; color: var(--text-muted); margin-bottom: 6px; padding: 6px 8px; background: var(--accent-soft); border-radius: 4px;">
+              AI will automatically analyze the transcript and materials to generate a comprehensive DD report.
+            </div>
+            <textarea id="ddInstructions" rows="4" placeholder="Example instructions:
+• We are YCP, representing Speaker 1 (the buyer)
+• Speaker 2 is the target company CEO
+• Focus on: financials, risks, synergies
+• Summarize from our client's perspective" style="width: 100%; padding: 8px; border: 1px solid var(--border-medium); border-radius: 4px; font-size: 11px; resize: vertical; display: none; line-height: 1.4;"></textarea>
 
             <div style="margin-top: 8px;">
               <label style="font-size: 11px; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 4px;">Email</label>
@@ -445,6 +477,28 @@
     let finalTranscript = '';
     let finalTranslation = '';
     let currentLanguage = 'en';
+    let instructionMode = 'auto';  // 'auto' or 'manual'
+
+    // Instruction mode toggle
+    window.setInstructionMode = function(mode) {
+      instructionMode = mode;
+      const autoBtn = document.getElementById('autoModeBtn');
+      const manualBtn = document.getElementById('manualModeBtn');
+      const autoHint = document.getElementById('autoModeHint');
+      const instructionsBox = document.getElementById('ddInstructions');
+
+      if (mode === 'auto') {
+        autoBtn.classList.add('active');
+        manualBtn.classList.remove('active');
+        autoHint.style.display = 'block';
+        instructionsBox.style.display = 'none';
+      } else {
+        autoBtn.classList.remove('active');
+        manualBtn.classList.add('active');
+        autoHint.style.display = 'none';
+        instructionsBox.style.display = 'block';
+      }
+    };
     let autoSaveInterval = null;
     let currentR2Key = null;
     let currentSpeaker = null;  // Track current speaker for diarization
@@ -638,7 +692,8 @@
           body: JSON.stringify({
             files: processed.documents,
             audioFiles: processed.audioFiles,
-            instructions,
+            instructions: instructionMode === 'manual' ? instructions : '',
+            instructionMode,
             reportLength: 'medium',
             email,
             generateWord: true,
