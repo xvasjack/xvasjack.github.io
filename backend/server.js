@@ -29,6 +29,27 @@ process.on('uncaughtException', (error) => {
   // Don't exit - keep the server running
 });
 
+// ============ TYPE SAFETY HELPERS ============
+// Ensure a value is a string (AI models may return objects/arrays instead of strings)
+function ensureString(value, defaultValue = '') {
+  if (typeof value === 'string') return value;
+  if (value === null || value === undefined) return defaultValue;
+  // Handle arrays - join with comma
+  if (Array.isArray(value)) return value.map(v => ensureString(v)).join(', ');
+  // Handle objects - try to extract meaningful string
+  if (typeof value === 'object') {
+    // Common patterns from AI responses
+    if (value.city && value.country) return `${value.city}, ${value.country}`;
+    if (value.text) return ensureString(value.text);
+    if (value.value) return ensureString(value.value);
+    if (value.name) return ensureString(value.name);
+    // Fallback: stringify
+    try { return JSON.stringify(value); } catch { return defaultValue; }
+  }
+  // Convert other types to string
+  return String(value);
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
@@ -202,20 +223,35 @@ async function callGemini(prompt) {
   }
 }
 
-// Gemini 3 Flash - frontier reasoning for complex tasks ($0.50/$3.00 per 1M tokens)
+// Gemini 3 Flash - frontier reasoning for validation tasks ($0.50/$3.00 per 1M tokens)
 // Released Dec 17, 2025 - outperforms Gemini 2.5 Pro, 3x faster
-async function callGemini3Flash(prompt) {
+async function callGemini3Flash(prompt, jsonMode = false) {
   try {
+    const requestBody = {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.1  // Low temperature for consistent validation
+      }
+    };
+
+    // Add JSON mode if requested
+    if (jsonMode) {
+      requestBody.generationConfig.responseMimeType = 'application/json';
+    }
+
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { responseMimeType: 'application/json' }
-      }),
-      timeout: 90000
+      body: JSON.stringify(requestBody),
+      timeout: 120000
     });
     const data = await response.json();
+
+    if (data.error) {
+      console.error('Gemini 3 Flash API error:', data.error.message);
+      return '';
+    }
+
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   } catch (error) {
     console.error('Gemini 3 Flash error:', error.message);
@@ -1412,73 +1448,98 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
   return rules;
 }
 
-// ============ VALIDATION (v23 - n8n-style PAGE SIGNAL detection) ============
+// ============ VALIDATION (v24 - Gemini 2.5 Flash with STRICT filtering) ============
 
 async function validateCompanyStrict(company, business, country, exclusion, pageText) {
-  // If we couldn't fetch the website, validate by name only (give benefit of doubt)
-  const contentToValidate = pageText || `Company name: ${company.company_name}. Validate based on name only.`;
+  // If we couldn't fetch the website, be more cautious - reject unless name is clearly relevant
+  const contentToValidate = pageText || `Company name: ${company.company_name}. No website content available - validate strictly by name.`;
 
   const exclusionRules = buildExclusionRules(exclusion, business);
 
-  try {
-    const validation = await openai.chat.completions.create({
-      model: 'gpt-4o',  // Use smarter model for better validation
-      messages: [
-        {
-          role: 'system',
-          content: `You are a company validator for M&A research. Be LENIENT - when in doubt, ACCEPT.
+  // Build the validation prompt for Gemini
+  const validationPrompt = `You are a STRICT company validator for M&A target research. When in doubt, REJECT.
 
 VALIDATION TASK:
 - Business sought: "${business}"
 - Target countries: ${country}
 - Exclusions: ${exclusion}
 
-VALIDATION RULES:
+STRICT VALIDATION RULES:
 
-1. LOCATION CHECK:
-- Is HQ in one of the target countries (${country})?
-- IMPORTANT: If country is a REGION like "Southeast Asia", accept companies in ANY Southeast Asian country (Malaysia, Thailand, Vietnam, Indonesia, Philippines, Singapore, etc.)
-- If HQ is clearly outside the target region → REJECT
+1. LOCATION CHECK (STRICT):
+- Is HQ ACTUALLY in one of the target countries (${country})?
+- If country is "Southeast Asia", only accept: Malaysia, Thailand, Vietnam, Indonesia, Philippines, Singapore
+- REJECT if HQ is in Japan, China, Korea, India, USA, Europe, or other non-target regions
+- REJECT if the company is clearly a foreign company with just a sales office in the region
 
-2. BUSINESS MATCH (BE LENIENT):
-- Does the company's business relate to "${business}"?
-- Accept related products, services, manufacturers, suppliers
-- Only reject if COMPLETELY unrelated
+2. BUSINESS MATCH (STRICT):
+- The company must be a DIRECT match for "${business}"
+- REJECT trading companies, distributors, or agents unless they also manufacture
+- REJECT companies that only tangentially relate to the business
+- REJECT general chemical companies unless they specifically produce ${business}
+- The company should PRIMARILY be in the ${business} business, not just have it as a side product
 
-3. EXCLUSION CHECK:
+3. EXCLUSION CHECK (VERY STRICT):
 ${exclusionRules}
-- For "large companies" exclusion: REJECT both large multinationals AND their subsidiaries
-- Example: "DIC Indonesia", "Toyo Ink Philippines", "Sun Chemical" → REJECT (subsidiaries of large corporations)
-- Only accept truly independent SMEs and local companies
+- For "large companies" exclusion: REJECT ALL of these:
+  * Multinational corporations (any company with global operations)
+  * Subsidiaries of multinationals (e.g., "Toyo Ink Indonesia", "DIC Philippines", "Sun Chemical")
+  * Listed/public companies (look for Tbk, Plc, stock tickers)
+  * Companies with revenue >$50M or >500 employees
+  * Companies that are part of larger groups
+- ONLY accept truly independent, locally-owned SMEs
 
-4. SPAM CHECK:
-- Only reject obvious directories, marketplaces, domain-for-sale sites
+4. SPAM/INVALID CHECK:
+- REJECT directories, marketplaces, aggregator sites
+- REJECT if website is parked, for sale, or non-functional
+- REJECT if company name is too generic or doesn't match website
 
-OUTPUT: Return JSON only: {"valid": true/false, "reason": "one sentence"}`
-        },
-        {
-          role: 'user',
-          content: `COMPANY: ${company.company_name}
-WEBSITE: ${company.website}
-HQ: ${company.hq}
+5. EVIDENCE REQUIREMENT:
+- The page content MUST show clear evidence the company does "${business}"
+- If no clear evidence, REJECT
+
+COMPANY TO VALIDATE:
+- Name: ${company.company_name}
+- Website: ${company.website}
+- HQ: ${company.hq}
 
 PAGE CONTENT:
-${contentToValidate.substring(0, 10000)}`
-        }
-      ],
-      response_format: { type: 'json_object' }
-    });
+${contentToValidate.substring(0, 8000)}
 
-    const result = JSON.parse(validation.choices[0].message.content);
+OUTPUT: Return ONLY valid JSON: {"valid": true/false, "reason": "brief explanation"}`;
+
+  try {
+    const response = await callGemini3Flash(validationPrompt, true);
+
+    if (!response) {
+      console.log(`    No response for ${company.company_name}, rejecting`);
+      return { valid: false };
+    }
+
+    // Parse JSON response
+    let result;
+    try {
+      // Try to extract JSON from the response
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        result = JSON.parse(jsonMatch[0]);
+      } else {
+        result = JSON.parse(response);
+      }
+    } catch (parseError) {
+      console.log(`    Parse error for ${company.company_name}, rejecting`);
+      return { valid: false };
+    }
+
     if (result.valid === true) {
       return { valid: true, corrected_hq: company.hq };
     }
     console.log(`    Rejected: ${company.company_name} - ${result.reason}`);
     return { valid: false };
   } catch (e) {
-    // On error, accept (benefit of doubt)
-    console.log(`    Error validating ${company.company_name}, accepting`);
-    return { valid: true, corrected_hq: company.hq };
+    // On error, REJECT (strict approach)
+    console.log(`    Error validating ${company.company_name}: ${e.message}, rejecting`);
+    return { valid: false };
   }
 }
 
@@ -1506,16 +1567,22 @@ async function parallelValidationStrict(companies, business, country, exclusion)
       );
 
       // Add .catch() to each validation to prevent single failures from crashing batch
+      // REJECT on error - do not accept hallucinated companies
       const validations = await Promise.all(
         batch.map((company, idx) => {
           try {
+            // If we couldn't fetch the website, REJECT - company may be hallucinated
+            if (!pageTexts[idx]) {
+              console.log(`    No website content for ${company?.company_name}, rejecting (may be hallucinated)`);
+              return Promise.resolve({ valid: false });
+            }
             return validateCompanyStrict(company, business, country, exclusion, pageTexts[idx])
               .catch(e => {
                 console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
-                return { valid: true, corrected_hq: company?.hq }; // Accept on error
+                return { valid: false }; // REJECT on error
               });
           } catch (e) {
-            return Promise.resolve({ valid: true, corrected_hq: company?.hq });
+            return Promise.resolve({ valid: false }); // REJECT on error
           }
         })
       );
@@ -1551,61 +1618,80 @@ async function parallelValidationStrict(companies, business, country, exclusion)
 async function validateCompany(company, business, country, exclusion, pageText) {
   const exclusionRules = buildExclusionRules(exclusion, business);
 
-  try {
-    const validation = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a company validator. Be LENIENT on business match. Be STRICT on exclusions by detecting signals in page content.
+  const validationPrompt = `You are a STRICT company validator for M&A target research. When in doubt, REJECT.
 
 VALIDATION TASK:
 - Business sought: "${business}"
 - Target countries: ${country}
 - Exclusions: ${exclusion}
 
-VALIDATION RULES:
-
-1. LOCATION CHECK:
-- Is HQ actually in one of the target countries (${country})?
-- If HQ is outside these countries → REJECT
-
-2. BUSINESS MATCH (BE LENIENT):
-- Does the company's business relate to "${business}"?
-- Accept related products, services, or sub-categories
-- Only reject if completely unrelated
-
-3. EXCLUSION CHECK - DETECT VIA PAGE SIGNALS:
-${exclusionRules}
-
-4. SPAM CHECK:
-- Is this a directory, marketplace, domain-for-sale, or aggregator site? → REJECT
-
-OUTPUT: Return JSON: {"valid": true/false, "reason": "brief", "corrected_hq": "City, Country or null"}`
-        },
-        {
-          role: 'user',
-          content: `COMPANY: ${company.company_name}
-WEBSITE: ${company.website}
-HQ: ${company.hq}
+COMPANY TO VALIDATE:
+- Name: ${company.company_name}
+- Website: ${company.website}
+- HQ: ${company.hq}
 
 PAGE CONTENT:
-${pageText ? pageText.substring(0, 8000) : 'Could not fetch - validate by name only'}`
-        }
-      ],
-      response_format: { type: 'json_object' }
-    });
+${pageText ? pageText.substring(0, 8000) : 'Could not fetch - validate by name only'}
 
-    const result = JSON.parse(validation.choices[0].message.content);
+STRICT VALIDATION RULES:
+
+1. LOCATION CHECK (STRICT):
+- Is HQ actually in one of the target countries (${country})?
+- If HQ is outside these countries → REJECT
+- If HQ location is ambiguous or unclear → REJECT
+
+2. BUSINESS MATCH (STRICT):
+- Does the company's CORE business DIRECTLY match "${business}"?
+- Must be a DIRECT match, not tangentially related
+- If company is primarily in a different industry with only minor overlap → REJECT
+- If unclear what the company actually does → REJECT
+
+3. EXCLUSION CHECK (VERY STRICT):
+${exclusionRules}
+- ANY mention of parent company, "part of", "subsidiary of", "a division of" → REJECT
+- ANY multinational corporation signals → REJECT
+
+4. SPAM/INVALID CHECK:
+- Is this a directory, marketplace, domain-for-sale, or aggregator site? → REJECT
+- Is website non-functional or showing errors? → REJECT
+
+5. EVIDENCE REQUIREMENT:
+- You must find CLEAR evidence the company fits the criteria
+- If no clear evidence of business match on the page → REJECT
+
+Return ONLY valid JSON: {"valid": true/false, "reason": "brief explanation", "corrected_hq": "City, Country or null"}`;
+
+  try {
+    const response = await callGemini3Flash(validationPrompt, true);
+
+    if (!response) {
+      console.log(`    Gemini returned empty for ${company.company_name}, rejecting`);
+      return { valid: false };
+    }
+
+    let result;
+    try {
+      result = JSON.parse(response);
+    } catch (parseError) {
+      // Try to extract JSON from response
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        result = JSON.parse(jsonMatch[0]);
+      } else {
+        console.log(`    Could not parse validation response for ${company.company_name}, rejecting`);
+        return { valid: false };
+      }
+    }
+
     if (result.valid === true) {
       return { valid: true, corrected_hq: result.corrected_hq || company.hq };
     }
     console.log(`    Rejected: ${company.company_name} - ${result.reason}`);
     return { valid: false };
   } catch (e) {
-    // On error, accept (benefit of doubt)
-    console.log(`    Error validating ${company.company_name}, accepting`);
-    return { valid: true, corrected_hq: company.hq };
+    // On error, REJECT (strict approach)
+    console.log(`    Error validating ${company.company_name}: ${e.message}, rejecting`);
+    return { valid: false };
   }
 }
 
@@ -1623,14 +1709,20 @@ async function parallelValidation(companies, business, country, exclusion) {
       const pageTexts = await Promise.all(
         batch.map(c => fetchWebsite(c?.website).catch(() => null))
       );
+      // REJECT on error or missing website - do not accept hallucinated companies
       const validations = await Promise.all(
-        batch.map((company, idx) =>
-          validateCompany(company, business, country, exclusion, pageTexts[idx])
+        batch.map((company, idx) => {
+          // If we couldn't fetch the website, REJECT
+          if (!pageTexts[idx]) {
+            console.log(`    No website content for ${company?.company_name}, rejecting`);
+            return Promise.resolve({ valid: false });
+          }
+          return validateCompany(company, business, country, exclusion, pageTexts[idx])
             .catch(e => {
               console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
-              return { valid: true, corrected_hq: company?.hq };
-            })
-        )
+              return { valid: false }; // REJECT on error
+            });
+        })
       );
 
       batch.forEach((company, idx) => {
@@ -3826,7 +3918,8 @@ function createSheetData(companies, headers, title) {
       c.peTTM,
       c.peFY,
       c.pb,
-      c.filterReason || ''
+      c.filterReason || '',
+      (c.dataWarnings && c.dataWarnings.length > 0) ? c.dataWarnings.join('; ') : ''
     ];
     data.push(row);
   }
@@ -3847,6 +3940,7 @@ function createSheetData(companies, headers, title) {
       calculateMedian(companies.map(c => c.peTTM)),
       calculateMedian(companies.map(c => c.peFY)),
       calculateMedian(companies.map(c => c.pb)),
+      '',
       ''
     ];
     data.push([]);
@@ -4046,8 +4140,60 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
         peTTM: parseNum(cols.peTTM),
         peFY: parseNum(cols.peFY),
         pb: parseNum(cols.pb),
-        filterReason: ''
+        filterReason: '',
+        dataWarnings: []
       };
+
+      // DATA VALIDATION: Check for suspicious/inconsistent financial data
+      const warnings = [];
+
+      // Check 1: EBITDA should be less than Sales (EBITDA margin > 100% is very suspicious)
+      if (company.sales && company.ebitda && company.ebitda > company.sales) {
+        warnings.push(`EBITDA (${company.ebitda}) > Sales (${company.sales}) - possible unit mismatch`);
+      }
+
+      // Check 2: Sales should be reasonable compared to Market Cap (PSR typically 0.1x - 50x)
+      if (company.sales && company.marketCap) {
+        const psr = company.marketCap / company.sales;
+        if (psr > 100) {
+          warnings.push(`PSR ${psr.toFixed(1)}x is extremely high - check Sales units`);
+        } else if (psr < 0.01) {
+          warnings.push(`PSR ${psr.toFixed(3)}x is extremely low - check Market Cap units`);
+        }
+      }
+
+      // Check 3: EV should be in similar ballpark as Market Cap (typically 0.5x - 3x)
+      if (company.ev && company.marketCap) {
+        const evToMcap = company.ev / company.marketCap;
+        if (evToMcap > 10) {
+          warnings.push(`EV/Market Cap ratio ${evToMcap.toFixed(1)}x is unusual - verify data`);
+        } else if (evToMcap < 0.1) {
+          warnings.push(`EV/Market Cap ratio ${evToMcap.toFixed(2)}x is unusual - verify data`);
+        }
+      }
+
+      // Check 4: If EV/EBITDA is provided, verify it roughly matches EV / EBITDA calculation
+      if (company.evEbitda && company.ev && company.ebitda && company.ebitda > 0) {
+        const calculatedEvEbitda = company.ev / company.ebitda;
+        const diff = Math.abs(calculatedEvEbitda - company.evEbitda) / company.evEbitda;
+        if (diff > 0.5) { // More than 50% difference
+          warnings.push(`EV/EBITDA mismatch: provided ${company.evEbitda.toFixed(1)}x vs calculated ${calculatedEvEbitda.toFixed(1)}x`);
+        }
+      }
+
+      // Check 5: Very small Sales compared to other metrics (possible unit issue - e.g., Sales in billions but others in millions)
+      if (company.sales && company.sales < 100) {
+        if ((company.marketCap && company.marketCap > 1000) ||
+            (company.ev && company.ev > 1000) ||
+            (company.ebitda && company.ebitda > 100)) {
+          warnings.push(`Sales (${company.sales}) seems too small relative to other metrics - possible unit mismatch`);
+        }
+      }
+
+      company.dataWarnings = warnings;
+      if (warnings.length > 0) {
+        console.log(`Data warning for ${companyName}: ${warnings.join('; ')}`);
+      }
 
       // Only include if it has at least some financial data
       const hasData = company.sales || company.marketCap || company.evEbitda || company.peTTM || company.peFY || company.pb;
@@ -4066,7 +4212,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
 
     // Create output workbook
     const outputWorkbook = XLSX.utils.book_new();
-    const sheetHeaders = ['Company', 'Country', 'Sales', 'Market Cap', 'EV', 'EBITDA', 'Net Margin %', 'Op Margin %', 'EBITDA Margin %', 'EV/EBITDA', 'P/E (TTM)', 'P/E (FY)', 'P/BV', 'Filter Reason'];
+    const sheetHeaders = ['Company', 'Country', 'Sales', 'Market Cap', 'EV', 'EBITDA', 'Net Margin %', 'Op Margin %', 'EBITDA Margin %', 'EV/EBITDA', 'P/E (TTM)', 'P/E (FY)', 'P/BV', 'Filter Reason', 'Data Warnings'];
 
     // Sheet 1: All Original Companies
     const sheet1Data = createSheetData(allCompanies, sheetHeaders, `Original Data - ${allCompanies.length} companies`);
@@ -4256,6 +4402,14 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     // Helper function to clean company name
     const cleanCompanyName = (name) => {
       if (!name) return '-';
+
+      // First remove prefixes (PT for Indonesian companies, etc.)
+      const prefixes = [
+        /^PT\s+/i,           // Indonesian: PT Mitra Keluarga -> Mitra Keluarga
+        /^CV\s+/i,           // Indonesian: CV Company Name
+        /^P\.?T\.?\s+/i,     // Variations: P.T. or P T
+      ];
+
       const suffixes = [
         /\s+(Bhd|BHD|Berhad|BERHAD)\.?$/i,
         /\s+(PCL|Pcl|P\.C\.L\.)\.?$/i,
@@ -4269,7 +4423,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
         /\s+(SA|S\.A\.|S\.A)\.?$/i,
         /\s+(NV|N\.V\.)\.?$/i,
         /\s+(GmbH|GMBH)\.?$/i,
-        /\s+(Tbk|TBK|PT)\.?$/i,
+        /\s+(Tbk|TBK)\.?$/i,  // Indonesian suffix (removed PT from here since it's a prefix)
         /\s+(Oyj|OYJ|AB)\.?$/i,
         /\s+(SE)\.?$/i,
         /\s+(SpA|SPA|S\.p\.A\.)\.?$/i,
@@ -4278,17 +4432,31 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
         /,\s*(Inc|Ltd|LLC|Corp)\.?$/i,
         /\s+Holdings?$/i,
         /\s+Group$/i,
-        /\s+International$/i
+        /\s+International$/i,
+        /\s+Healthcare$/i,
+        /\s+Hospital$/i,
+        /\s+Medical$/i,
+        /\s+Services?$/i,
+        /\s+Systems?$/i
       ];
+
       let cleaned = String(name).trim();
-      for (const suffix of suffixes) {
-        cleaned = cleaned.replace(suffix, '');
+
+      // Remove prefixes first
+      for (const prefix of prefixes) {
+        cleaned = cleaned.replace(prefix, '');
       }
+
+      // Remove suffixes (run multiple passes to catch compound suffixes)
+      for (let i = 0; i < 3; i++) {
+        for (const suffix of suffixes) {
+          cleaned = cleaned.replace(suffix, '');
+        }
+      }
+
       cleaned = cleaned.trim();
-      // Truncate to 20 chars max to fit on one line
-      if (cleaned.length > 20) {
-        cleaned = cleaned.substring(0, 18) + '..';
-      }
+
+      // No truncation - show full name even if long (PowerPoint will wrap to second line)
       return cleaned;
     };
 
@@ -4882,16 +5050,16 @@ function detectShortforms(companyData) {
   // Also include key_metrics array values
   if (companyData.key_metrics && Array.isArray(companyData.key_metrics)) {
     companyData.key_metrics.forEach(metric => {
-      if (metric.label) textParts.push(metric.label);
-      if (metric.value) textParts.push(metric.value);
+      if (metric?.label) textParts.push(ensureString(metric.label));
+      if (metric?.value) textParts.push(ensureString(metric.value));
     });
   }
 
   // Also include breakdown_items
   if (companyData.breakdown_items && Array.isArray(companyData.breakdown_items)) {
     companyData.breakdown_items.forEach(item => {
-      if (item.label) textParts.push(item.label);
-      if (item.value) textParts.push(item.value);
+      if (item?.label) textParts.push(ensureString(item.label));
+      if (item?.value) textParts.push(ensureString(item.value));
     });
   }
 
@@ -4955,14 +5123,27 @@ async function generatePPTX(companies, targetDescription = '') {
     };
 
     // ===== TARGET LIST SLIDE (FIRST SLIDE) =====
-    // Based on template analysis: NO header/footer lines, specific positions and colors
     if (targetDescription && companies.length > 0) {
       console.log('Generating Target List slide...');
       const meceData = await generateMECESegments(targetDescription, companies);
 
       const targetSlide = pptx.addSlide();
 
-      // NOTE: Target list slide does NOT have header/footer lines (unlike profile slides)
+      // ===== HEADER LINES (same as profile slides) =====
+      targetSlide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 1.02, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 4.5 }
+      });
+      targetSlide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 1.10, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 2.25 }
+      });
+
+      // ===== FOOTER LINE =====
+      targetSlide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 7.24, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 2.25 }
+      });
 
       // Title Case helper function
       const toTitleCase = (str) => {
@@ -4970,18 +5151,18 @@ async function generatePPTX(companies, targetDescription = '') {
       };
 
       // Title: "Target List – {Target Description}" in Title Case
-      // Position from template: x=0.3663", y=0.0576", w=12.6007", h=0.9094"
+      // Position same as profile slides, valign: bottom
       const formattedTitle = `Target List – ${toTitleCase(targetDescription)}`;
       targetSlide.addText(formattedTitle, {
-        x: 0.37, y: 0.06, w: 12.6, h: 0.9,
+        x: 0.38, y: 0.07, w: 9.5, h: 0.9,
         fontSize: 24, fontFace: 'Segoe UI',
-        color: '000000', valign: 'top'
+        color: '000000', valign: 'bottom'
       });
 
       // Group companies by country
       const companyByCountry = {};
       companies.forEach((c, i) => {
-        const loc = c.location || '';
+        const loc = ensureString(c.location);
         // Extract country from location (last part after comma)
         const parts = loc.split(',').map(p => p.trim());
         const country = parts[parts.length - 1] || 'Other';
@@ -5220,7 +5401,7 @@ async function generatePPTX(companies, targetDescription = '') {
       }
 
       // ===== LOGO (top right of slide) =====
-      if (company.website) {
+      if (company.website && typeof company.website === 'string') {
         try {
           const domain = company.website.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
 
@@ -5282,7 +5463,7 @@ async function generatePPTX(companies, targetDescription = '') {
 
       // ===== LEFT TABLE (会社概要資料) =====
       // Determine if single location (for HQ label)
-      const locationText = company.location || '';
+      const locationText = ensureString(company.location);
       const locationLines = locationText.split('\n').filter(line => line.trim());
       const isSingleLocation = locationLines.length <= 1 && !locationText.toLowerCase().includes('branch') && !locationText.toLowerCase().includes('factory') && !locationText.toLowerCase().includes('warehouse');
       const locationLabel = isSingleLocation ? 'HQ' : 'Location';
@@ -5290,7 +5471,8 @@ async function generatePPTX(companies, targetDescription = '') {
       // Helper function to check if value is empty or placeholder text
       const isEmptyValue = (val) => {
         if (!val) return true;
-        const lower = val.toLowerCase().trim();
+        const strVal = ensureString(val);
+        const lower = strVal.toLowerCase().trim();
         const emptyPhrases = [
           '', 'not specified', 'n/a', 'unknown', 'not available', 'not found',
           'not explicitly mentioned', 'not mentioned', 'none', 'none specified',
@@ -5368,7 +5550,7 @@ async function generatePPTX(companies, targetDescription = '') {
       ];
 
       // Get the right table category to exclude from left table (prevent duplication)
-      const rightTableCategory = (company.breakdown_title || '').toLowerCase();
+      const rightTableCategory = ensureString(company.breakdown_title).toLowerCase();
       // Map breakdown titles to keywords to exclude
       const categoryKeywords = {
         'customers': ['customer', 'client', 'buyer'],
@@ -5382,8 +5564,12 @@ async function generatePPTX(companies, targetDescription = '') {
       // Add key metrics as separate rows if available (skip duplicates and empty values)
       if (company.key_metrics && Array.isArray(company.key_metrics)) {
         company.key_metrics.forEach(metric => {
-          if (metric.label && metric.value && !isEmptyValue(metric.value)) {
-            const labelLower = metric.label.toLowerCase();
+          // Ensure label and value are strings (AI may return objects/arrays)
+          const metricLabel = ensureString(metric?.label);
+          const metricValue = ensureString(metric?.value);
+
+          if (metricLabel && metricValue && !isEmptyValue(metricValue)) {
+            const labelLower = metricLabel.toLowerCase();
 
             // Skip excluded metrics
             const isExcluded = EXCLUDED_METRICS.some(ex => labelLower.includes(ex));
@@ -5397,7 +5583,7 @@ async function generatePPTX(companies, targetDescription = '') {
                 !existingLabels.has(labelLower) &&
                 !labelLower.includes('business') &&
                 !labelLower.includes('location')) {
-              tableData.push([metric.label, metric.value, null]);
+              tableData.push([metricLabel, metricValue, null]);
               existingLabels.add(labelLower);
             }
           }
@@ -5485,10 +5671,13 @@ async function generatePPTX(companies, targetDescription = '') {
       });
 
       // ===== RIGHT SECTION (Products/Applications breakdown) =====
-      // Filter valid breakdown items (non-empty)
-      const validBreakdownItems = (company.breakdown_items || []).filter(item =>
-        item.label && item.value && !isEmptyValue(item.label) && !isEmptyValue(item.value)
-      );
+      // Filter valid breakdown items (non-empty) and ensure string types
+      const validBreakdownItems = (company.breakdown_items || [])
+        .map(item => ({
+          label: ensureString(item?.label),
+          value: ensureString(item?.value)
+        }))
+        .filter(item => item.label && item.value && !isEmptyValue(item.label) && !isEmptyValue(item.value));
 
       // If at least 2 valid items, use table format; otherwise use text box
       if (validBreakdownItems.length >= 2) {
@@ -5720,7 +5909,8 @@ Content: ${scrapedContent.substring(0, 12000)}`
 // AI Agent 2: Extract business, message, footnote, title
 // Using GPT-4o-mini (60% cost savings for structured output task)
 async function extractBusinessInfo(scrapedContent, basicInfo) {
-  const locationText = basicInfo.location || '';
+  // Ensure locationText is always a string (AI might return object/array)
+  const locationText = typeof basicInfo.location === 'string' ? basicInfo.location : '';
   const hqMatch = locationText.match(/HQ:\s*([^,\n]+),\s*([^\n]+)/i);
   const hqCountry = hqMatch ? hqMatch[2].trim().toLowerCase() : '';
   const currencyExchange = CURRENCY_EXCHANGE[hqCountry] || '';
@@ -6262,11 +6452,11 @@ function buildProfileSlidesEmailHTML(companies, errors, hasPPTX) {
     companies.forEach((c, i) => {
       html += `
         <div style="margin: 16px 0; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px;">
-          <h4 style="margin: 0 0 8px 0;">${i + 1}. ${c.title || c.company_name || 'Unknown'}</h4>
-          <p style="margin: 4px 0; font-size: 13px;"><strong>Website:</strong> ${c.website}</p>
-          <p style="margin: 4px 0; font-size: 13px;"><strong>Established:</strong> ${c.established_year || '-'}</p>
-          <p style="margin: 4px 0; font-size: 13px;"><strong>Location:</strong> ${c.location || '-'}</p>
-          <p style="margin: 4px 0; font-size: 13px;"><strong>Business:</strong> ${c.business || '-'}</p>
+          <h4 style="margin: 0 0 8px 0;">${i + 1}. ${ensureString(c.title || c.company_name) || 'Unknown'}</h4>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Website:</strong> ${ensureString(c.website)}</p>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Established:</strong> ${ensureString(c.established_year) || '-'}</p>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Location:</strong> ${ensureString(c.location) || '-'}</p>
+          <p style="margin: 4px 0; font-size: 13px;"><strong>Business:</strong> ${ensureString(c.business) || '-'}</p>
         </div>
       `;
     });
@@ -6382,19 +6572,20 @@ app.post('/api/profile-slides', async (req, res) => {
         const allKeyMetrics = metricsInfo.key_metrics || [];
 
         // Combine all extracted data (mandatory fields supplemented by web search)
+        // Use ensureString() for all AI-generated fields to prevent [object Object] issues
         const companyData = {
           website: scraped.url,
-          company_name: basicInfo.company_name || '',
-          established_year: basicInfo.established_year || searchedInfo.established_year || '',
-          location: basicInfo.location || searchedInfo.location || '',
-          business: businessInfo.business || '',
-          message: businessInfo.message || '',
-          footnote: businessInfo.footnote || '',
-          title: businessInfo.title || '',
+          company_name: ensureString(basicInfo.company_name),
+          established_year: ensureString(basicInfo.established_year || searchedInfo.established_year),
+          location: ensureString(basicInfo.location || searchedInfo.location),
+          business: ensureString(businessInfo.business),
+          message: ensureString(businessInfo.message),
+          footnote: ensureString(businessInfo.footnote),
+          title: ensureString(businessInfo.title),
           key_metrics: allKeyMetrics,  // Only from scraped website
-          breakdown_title: productsBreakdown.breakdown_title || 'Products and Applications',
+          breakdown_title: ensureString(productsBreakdown.breakdown_title) || 'Products and Applications',
           breakdown_items: productsBreakdown.breakdown_items || [],
-          metrics: metricsInfo.metrics || ''  // Fallback for old format
+          metrics: ensureString(metricsInfo.metrics)  // Fallback for old format
         };
 
         console.log(`  ✓ Completed: ${companyData.title || companyData.company_name} (${allKeyMetrics.length} metrics)`);
@@ -6926,9 +7117,140 @@ function detectLanguage(website) {
 }
 
 // UTB Phase 1: Deep Fact-Finding with 6 parallel specialized queries
-async function utbPhase1Research(companyName, website, context) {
+// ============ UTB PHASE 0: DOCUMENT FETCHING ============
+// Actually fetch and read company documents (annual reports, mid-term plans, etc.)
+
+async function utbPhase0FetchDocuments(companyName, website, context) {
+  console.log(`[UTB Phase 0] Fetching company documents for: ${companyName}`);
+
+  const documents = {
+    irPage: '',
+    annualReport: '',
+    midtermPlan: '',
+    mergerInfo: '',
+    recentDisclosures: ''
+  };
+
+  try {
+    // 1. Find and fetch IR page
+    const baseUrl = website.replace(/\/$/, '');
+    const irUrls = [
+      `${baseUrl}/ir/`,
+      `${baseUrl}/investor/`,
+      `${baseUrl}/investors/`,
+      `${baseUrl}/ir`,
+      `${baseUrl}/investor-relations/`,
+      `${baseUrl}/en/ir/`,
+      `${baseUrl}/english/ir/`
+    ];
+
+    for (const irUrl of irUrls) {
+      const irContent = await fetchWebsite(irUrl);
+      if (irContent && irContent.length > 200) {
+        documents.irPage = irContent;
+        console.log(`[UTB Phase 0] Found IR page at: ${irUrl}`);
+        break;
+      }
+    }
+
+    // 2. Use Perplexity to find specific document content
+    const docSearchPromises = [
+      // Search for annual report data
+      callPerplexity(`Find the OFFICIAL ANNUAL REPORT data for ${companyName} (${website}).
+
+Search for their latest:
+- 有価証券報告書 (Securities Report) if Japanese company
+- Annual Report / 10-K / 20-F if listed
+- Official financial statements
+
+EXTRACT and return the EXACT data:
+1. Revenue breakdown by segment (exact percentages from the report)
+2. Revenue breakdown by geography (exact percentages)
+3. Employee count
+4. Key financial metrics
+
+For EACH number, cite: "X% (Source: [Document Name] FY20XX, page Y)"
+
+If you cannot find the official document, state "Official document not accessible".`).catch(e => ''),
+
+      // Search for mid-term plan
+      callPerplexity(`Find the OFFICIAL MID-TERM MANAGEMENT PLAN (中期経営計画) for ${companyName} (${website}).
+
+Search for their:
+- Medium-term management plan
+- 中期経営計画 / 中計
+- Strategic plan / business plan
+
+EXTRACT and return:
+1. Plan period (e.g., FY2024-2026)
+2. Key numerical targets (revenue, profit, ROIC, etc.)
+3. Strategic priorities and focus areas
+4. Investment priorities
+5. M&A strategy if mentioned
+
+Cite the source document name and date for each piece of data.`).catch(e => ''),
+
+      // Search for M&A/merger announcements
+      callPerplexity(`Find any MERGER, ACQUISITION, or CORPORATE ACTION announcements for ${companyName} (${website}).
+
+Search for:
+- Recent M&A announcements
+- Merger agreements (合併契約)
+- Business integration news
+- Corporate restructuring
+${context && context.toLowerCase().includes('nissei') ? `- Specifically look for merger with Nissei` : ''}
+${context && context.toLowerCase().includes('merg') ? `- Focus on: ${context}` : ''}
+
+Return:
+1. Target/partner company name
+2. Transaction type and terms
+3. Timeline and status
+4. Strategic rationale
+5. Source document (press release date, disclosure number)`).catch(e => ''),
+
+      // Search for recent disclosures
+      callPerplexity(`Find the most recent OFFICIAL DISCLOSURES and IR materials for ${companyName} (${website}).
+
+Look for:
+- Latest earnings release (決算短信)
+- Recent investor presentations
+- Timely disclosures (適時開示)
+- Press releases from last 6 months
+
+Return key announcements with:
+1. Date
+2. Type of disclosure
+3. Key content
+4. Source URL if available`).catch(e => '')
+    ];
+
+    const [annualReport, midtermPlan, mergerInfo, recentDisclosures] = await Promise.all(docSearchPromises);
+
+    documents.annualReport = annualReport || '';
+    documents.midtermPlan = midtermPlan || '';
+    documents.mergerInfo = mergerInfo || '';
+    documents.recentDisclosures = recentDisclosures || '';
+
+    console.log(`[UTB Phase 0] Documents fetched - IR: ${documents.irPage.length}chars, Annual: ${documents.annualReport.length}chars, Midterm: ${documents.midtermPlan.length}chars, Merger: ${documents.mergerInfo.length}chars`);
+
+  } catch (error) {
+    console.error(`[UTB Phase 0] Error fetching documents:`, error.message);
+  }
+
+  return documents;
+}
+
+async function utbPhase1Research(companyName, website, context, officialDocs = {}) {
   console.log(`[UTB Phase 1] Starting deep fact-finding for: ${companyName}`);
   const localLang = detectLanguage(website);
+
+  // Build document context string from Phase 0
+  const docContext = [];
+  if (officialDocs.annualReport) docContext.push(`ANNUAL REPORT DATA:\n${officialDocs.annualReport}`);
+  if (officialDocs.midtermPlan) docContext.push(`MID-TERM PLAN DATA:\n${officialDocs.midtermPlan}`);
+  if (officialDocs.mergerInfo) docContext.push(`MERGER/M&A INFO:\n${officialDocs.mergerInfo}`);
+  if (officialDocs.recentDisclosures) docContext.push(`RECENT DISCLOSURES:\n${officialDocs.recentDisclosures}`);
+  const documentContext = docContext.length > 0 ? `\n\nOFFICIAL DOCUMENT DATA (use this as primary source):\n${docContext.join('\n\n')}` : '';
 
   const queries = [
     // Query 1: Company Deep Dive - Products & Services
@@ -6954,6 +7276,7 @@ ${context ? `CONTEXT: ${context}` : ''}`).catch(e => ({ type: 'products', data: 
 
     // Query 2: Financial Analysis FROM OFFICIAL DOCUMENTS
     callPerplexity(`Research ${companyName} financial data - DATA MUST COME FROM OFFICIAL COMPANY DOCUMENTS:
+${documentContext}
 
 CRITICAL: Only provide data you can source from:
 - Annual reports (有価証券報告書 for Japanese companies)
@@ -7122,8 +7445,15 @@ Provide findings in English with specific details.`).catch(e => ({ type: 'local'
 }
 
 // UTB Phase 2: Section-by-Section Synthesis
-async function utbPhase2Synthesis(companyName, website, research, context) {
+async function utbPhase2Synthesis(companyName, website, research, context, officialDocs = {}) {
   console.log(`[UTB Phase 2] Synthesizing intelligence for: ${companyName}`);
+
+  // Build document context for synthesis
+  const docContext = [];
+  if (officialDocs.annualReport) docContext.push(`ANNUAL REPORT:\n${officialDocs.annualReport}`);
+  if (officialDocs.midtermPlan) docContext.push(`MID-TERM PLAN:\n${officialDocs.midtermPlan}`);
+  if (officialDocs.mergerInfo) docContext.push(`MERGER INFO:\n${officialDocs.mergerInfo}`);
+  const officialDocContext = docContext.length > 0 ? `\n\nOFFICIAL DOCUMENTS (PRIMARY SOURCE - use this data):\n${docContext.join('\n\n')}` : '';
 
   const synthesisPrompts = [
     // Synthesis 1: Revenue Breakdown Only
@@ -7132,6 +7462,7 @@ async function utbPhase2Synthesis(companyName, website, research, context) {
 COMPANY: ${companyName}
 WEBSITE: ${website}
 ${context ? `CLIENT CONTEXT: ${context}` : ''}
+${officialDocContext}
 
 RESEARCH ON FINANCIALS:
 ${research.financials}
@@ -7404,11 +7735,14 @@ async function conductUTBResearch(companyName, website, additionalContext) {
   console.log(`[UTB] Website: ${website}`);
   console.log('='.repeat(60));
 
-  // Phase 1: Deep fact-finding
-  const rawResearch = await utbPhase1Research(companyName, website, additionalContext);
+  // Phase 0: Fetch official documents (annual reports, mid-term plans, merger info)
+  const officialDocs = await utbPhase0FetchDocuments(companyName, website, additionalContext);
 
-  // Phase 2: Section-by-section synthesis
-  const synthesis = await utbPhase2Synthesis(companyName, website, rawResearch, additionalContext);
+  // Phase 1: Deep fact-finding (with document context)
+  const rawResearch = await utbPhase1Research(companyName, website, additionalContext, officialDocs);
+
+  // Phase 2: Section-by-section synthesis (with document context)
+  const synthesis = await utbPhase2Synthesis(companyName, website, rawResearch, additionalContext, officialDocs);
 
   console.log(`[UTB] Research complete for: ${companyName}`);
 
@@ -7663,103 +7997,64 @@ async function generateUTBExcel(companyName, website, research, additionalContex
     });
   }
 
-  // ========== SHEET 2: M&A & TARGETS (only if there's data) ==========
+  // ========== M&A DATA (on same sheet) ==========
   const maDeepDive = synthesis.ma_deep_dive || {};
-  const idealTarget = synthesis.ideal_target || {};
   const dealStories = maDeepDive.deal_stories || [];
-  const targetList = idealTarget.target_list || [];
 
-  const hasMAData = dealStories.length > 0 || maDeepDive.ma_philosophy || targetList.length > 0;
+  // M&A History
+  if (dealStories.length > 0) {
+    r++;
+    r = addSectionTitle(sheet1, 'M&A History', r);
+    dealStories.forEach((story, i) => {
+      sheet1.getCell(`A${r}`).value = story.deal;
+      sheet1.getCell(`A${r}`).font = { bold: true, color: { argb: blue } };
+      sheet1.mergeCells(`B${r}:F${r}`);
+      sheet1.getCell(`B${r}`).value = story.full_story;
+      sheet1.getCell(`B${r}`).alignment = { wrapText: true, vertical: 'top' };
+      sheet1.getRow(r).height = 60;
+      styleDataRow(sheet1.getRow(r), i % 2 === 0);
+      r++;
+    });
+    r++;
+  }
 
-  if (hasMAData) {
-    const sheet2 = workbook.addWorksheet('M&A & Targets');
-    sheet2.columns = [
-      { key: 'a', width: 25 },
-      { key: 'b', width: 20 },
-      { key: 'c', width: 25 },
-      { key: 'd', width: 20 },
-      { key: 'e', width: 30 },
-      { key: 'f', width: 30 }
-    ];
+  // M&A Philosophy
+  if (maDeepDive.ma_philosophy) {
+    r = addSectionTitle(sheet1, 'M&A Philosophy', r);
+    sheet1.mergeCells(`A${r}:F${r}`);
+    sheet1.getCell(`A${r}`).value = maDeepDive.ma_philosophy;
+    sheet1.getCell(`A${r}`).alignment = { wrapText: true, vertical: 'top' };
+    sheet1.getRow(r).height = 80;
+    r += 2;
+  }
 
-    let mr = 1;
-
-    // M&A History
-    if (dealStories.length > 0) {
-      mr = addSectionTitle(sheet2, 'M&A History', mr);
-      dealStories.forEach((story, i) => {
-        sheet2.getCell(`A${mr}`).value = story.deal;
-        sheet2.getCell(`A${mr}`).font = { bold: true, color: { argb: blue } };
-        sheet2.mergeCells(`B${mr}:F${mr}`);
-        sheet2.getCell(`B${mr}`).value = story.full_story;
-        sheet2.getCell(`B${mr}`).alignment = { wrapText: true, vertical: 'top' };
-        sheet2.getRow(mr).height = 60;
-        styleDataRow(sheet2.getRow(mr), i % 2 === 0);
-        mr++;
-      });
-      mr++;
+  // Deal Capacity
+  const capacity = maDeepDive.deal_capacity || {};
+  if (capacity.financial_firepower || capacity.appetite_level) {
+    r = addSectionTitle(sheet1, 'Deal Capacity', r);
+    if (capacity.financial_firepower) {
+      sheet1.getCell(`A${r}`).value = 'Financial Firepower';
+      sheet1.getCell(`A${r}`).font = { bold: true };
+      sheet1.mergeCells(`B${r}:D${r}`);
+      sheet1.getCell(`B${r}`).value = capacity.financial_firepower;
+      styleDataRow(sheet1.getRow(r));
+      r++;
     }
-
-    // M&A Philosophy
-    if (maDeepDive.ma_philosophy) {
-      mr = addSectionTitle(sheet2, 'M&A Philosophy', mr);
-      sheet2.mergeCells(`A${mr}:F${mr}`);
-      sheet2.getCell(`A${mr}`).value = maDeepDive.ma_philosophy;
-      sheet2.getCell(`A${mr}`).alignment = { wrapText: true, vertical: 'top' };
-      sheet2.getRow(mr).height = 80;
-      mr += 2;
+    if (capacity.appetite_level) {
+      sheet1.getCell(`A${r}`).value = 'Appetite Level';
+      sheet1.getCell(`A${r}`).font = { bold: true };
+      sheet1.mergeCells(`B${r}:D${r}`);
+      sheet1.getCell(`B${r}`).value = capacity.appetite_level;
+      styleDataRow(sheet1.getRow(r), true);
+      r++;
     }
-
-    // Deal Capacity
-    const capacity = maDeepDive.deal_capacity || {};
-    if (capacity.financial_firepower || capacity.appetite_level) {
-      mr = addSectionTitle(sheet2, 'Deal Capacity', mr);
-      if (capacity.financial_firepower) {
-        sheet2.getCell(`A${mr}`).value = 'Financial Firepower';
-        sheet2.getCell(`A${mr}`).font = { bold: true };
-        sheet2.mergeCells(`B${mr}:D${mr}`);
-        sheet2.getCell(`B${mr}`).value = capacity.financial_firepower;
-        styleDataRow(sheet2.getRow(mr));
-        mr++;
-      }
-      if (capacity.appetite_level) {
-        sheet2.getCell(`A${mr}`).value = 'Appetite Level';
-        sheet2.getCell(`A${mr}`).font = { bold: true };
-        sheet2.mergeCells(`B${mr}:D${mr}`);
-        sheet2.getCell(`B${mr}`).value = capacity.appetite_level;
-        styleDataRow(sheet2.getRow(mr), true);
-        mr++;
-      }
-      if (capacity.decision_process) {
-        sheet2.getCell(`A${mr}`).value = 'Decision Speed';
-        sheet2.getCell(`A${mr}`).font = { bold: true };
-        sheet2.mergeCells(`B${mr}:D${mr}`);
-        sheet2.getCell(`B${mr}`).value = capacity.decision_process;
-        styleDataRow(sheet2.getRow(mr));
-        mr++;
-      }
-      mr++;
-    }
-
-    // Target Companies (10 real companies)
-    if (targetList.length > 0) {
-      mr = addSectionTitle(sheet2, 'Potential Acquisition Targets', mr);
-      const targetHeader = sheet2.getRow(mr);
-      targetHeader.values = ['Company', 'HQ', 'Revenue', 'Ownership', 'What They Do', 'Strategic Fit'];
-      styleHeaderRow(targetHeader, navy);
-      mr++;
-      targetList.forEach((target, i) => {
-        sheet2.getCell(`A${mr}`).value = target.company_name;
-        sheet2.getCell(`A${mr}`).font = { bold: true };
-        sheet2.getCell(`B${mr}`).value = target.hq_country || '';
-        sheet2.getCell(`C${mr}`).value = target.estimated_revenue || '';
-        sheet2.getCell(`D${mr}`).value = target.ownership || '';
-        sheet2.getCell(`E${mr}`).value = target.what_they_do || '';
-        sheet2.getCell(`F${mr}`).value = target.strategic_fit || '';
-        sheet2.getRow(mr).height = 35;
-        styleDataRow(sheet2.getRow(mr), i % 2 === 0);
-        mr++;
-      });
+    if (capacity.decision_process) {
+      sheet1.getCell(`A${r}`).value = 'Decision Speed';
+      sheet1.getCell(`A${r}`).font = { bold: true };
+      sheet1.mergeCells(`B${r}:D${r}`);
+      sheet1.getCell(`B${r}`).value = capacity.decision_process;
+      styleDataRow(sheet1.getRow(r));
+      r++;
     }
   }
 
@@ -8289,9 +8584,34 @@ server.on('upgrade', (request, socket, head) => {
 
 // Store active sessions for recording storage
 const activeSessions = new Map();
+const MAX_ACTIVE_SESSIONS = 50; // Prevent memory exhaustion from too many concurrent sessions
+
+// Periodic cleanup of stale sessions (every 10 minutes)
+setInterval(() => {
+  const now = Date.now();
+  let cleaned = 0;
+  for (const [sessionId, session] of activeSessions.entries()) {
+    // Remove sessions older than 2 hours (safety net for missed cleanups)
+    if (session.startTime && (now - session.startTime.getTime() > 2 * 60 * 60 * 1000)) {
+      activeSessions.delete(sessionId);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) {
+    console.log(`[WS] Periodic cleanup: removed ${cleaned} stale sessions. Active: ${activeSessions.size}`);
+  }
+}, 10 * 60 * 1000);
 
 wss.on('connection', (ws, req) => {
   console.log('[WS] New client connected for real-time transcription');
+
+  // Check session limit to prevent memory exhaustion
+  if (activeSessions.size >= MAX_ACTIVE_SESSIONS) {
+    console.warn(`[WS] Session limit reached (${MAX_ACTIVE_SESSIONS}), rejecting connection`);
+    ws.send(JSON.stringify({ type: 'error', message: 'Server busy. Please try again later.' }));
+    ws.close();
+    return;
+  }
 
   let deepgramConnection = null;
   let sessionId = Date.now().toString();
@@ -8308,6 +8628,7 @@ wss.on('connection', (ws, req) => {
     translatedTranscript: '',
     language: 'en'
   });
+  console.log(`[WS] Session ${sessionId} created. Active sessions: ${activeSessions.size}`);
 
   // Send session ID to client
   ws.send(JSON.stringify({ type: 'session', sessionId }));
@@ -8353,15 +8674,16 @@ wss.on('connection', (ws, req) => {
           // Set language - if specific language requested, use it; otherwise use 'multi' for auto-detection
           // Nova-3 with language='multi' enables true multilingual code-switching
           // See: https://developers.deepgram.com/docs/multilingual-code-switching
+          const currentSession = activeSessions.get(sessionId);
           if (isMultiLang) {
             dgOptions.language = 'multi';  // Multilingual code-switching mode
             dgOptions.endpointing = 100;   // Recommended for code-switching (100ms)
             detectedLanguage = 'multi';
-            activeSessions.get(sessionId).language = 'multi';
+            if (currentSession) currentSession.language = 'multi';
           } else {
             dgOptions.language = data.language;
             detectedLanguage = data.language;
-            activeSessions.get(sessionId).language = data.language;
+            if (currentSession) currentSession.language = data.language;
           }
 
           console.log('[WS] Deepgram options:', JSON.stringify(dgOptions));
@@ -8435,9 +8757,12 @@ wss.on('connection', (ws, req) => {
             // Use segment language if available, else channel language
             const effectiveLang = segmentLang || detLang || detectedLanguage;
 
+            // Get session with null safety
+            const session = activeSessions.get(sessionId);
+
             if (effectiveLang && effectiveLang !== detectedLanguage) {
               detectedLanguage = effectiveLang;
-              activeSessions.get(sessionId).language = effectiveLang;
+              if (session) session.language = effectiveLang;
               console.log(`[WS] Language detected: ${effectiveLang}`);
             }
 
@@ -8464,7 +8789,7 @@ wss.on('connection', (ws, req) => {
               // Accumulate final transcripts
               if (isFinal) {
                 fullTranscript += transcript + ' ';
-                activeSessions.get(sessionId).transcript = fullTranscript;
+                if (session) session.transcript = fullTranscript;
 
                 // Check if this segment is non-English (using per-segment language detection)
                 const isNonEnglishLang = thisSegmentLang && thisSegmentLang !== 'en' && !thisSegmentLang.startsWith('en');
@@ -8478,7 +8803,7 @@ wss.on('connection', (ws, req) => {
                     // Only add if translation is different from original
                     if (translated !== transcript) {
                       translatedTranscript += translated + ' ';
-                      activeSessions.get(sessionId).translatedTranscript = translatedTranscript;
+                      if (session) session.translatedTranscript = translatedTranscript;
                       ws.send(JSON.stringify({
                         type: 'translation',
                         text: translated,
@@ -8493,7 +8818,7 @@ wss.on('connection', (ws, req) => {
                 } else if (!needsTranslation && transcript.length >= 3) {
                   // For English segments in multilingual meetings, add to translation too
                   translatedTranscript += transcript + ' ';
-                  activeSessions.get(sessionId).translatedTranscript = translatedTranscript;
+                  if (session) session.translatedTranscript = translatedTranscript;
                   // Send English segments to translation panel too (with speaker info)
                   ws.send(JSON.stringify({
                     type: 'translation',
@@ -8561,9 +8886,18 @@ wss.on('connection', (ws, req) => {
         if (deepgramConnection && deepgramConnection.getReadyState() === 1) {
           deepgramConnection.send(message);
 
-          // Store audio chunk for later saving
+          // Store audio chunk for later saving (with null safety)
           audioChunks.push(message);
-          activeSessions.get(sessionId).audioChunks.push(message);
+          const audioSession = activeSessions.get(sessionId);
+          if (audioSession && audioSession.audioChunks) {
+            // Memory limit: max 100MB per session to prevent memory exhaustion
+            const currentSize = audioSession.audioChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+            if (currentSize < 100 * 1024 * 1024) {
+              audioSession.audioChunks.push(message);
+            } else {
+              console.warn(`[WS] Session ${sessionId} audio limit reached (100MB), skipping chunk storage`);
+            }
+          }
         }
       }
     } catch (error) {
@@ -8577,10 +8911,16 @@ wss.on('connection', (ws, req) => {
     if (deepgramConnection) {
       deepgramConnection.finish();
     }
-    // Keep session data for 1 hour for retrieval
+    // Keep session data for 30 minutes for retrieval (reduced from 1 hour to save memory)
+    // Clear audio chunks immediately to free memory, keep only transcript
+    const closingSession = activeSessions.get(sessionId);
+    if (closingSession) {
+      closingSession.audioChunks = []; // Free audio memory immediately
+    }
     setTimeout(() => {
       activeSessions.delete(sessionId);
-    }, 3600000);
+      console.log(`[WS] Session ${sessionId} cleaned up`);
+    }, 1800000); // 30 minutes
   });
 
   ws.on('error', (error) => {
