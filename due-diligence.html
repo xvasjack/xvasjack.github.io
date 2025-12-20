@@ -158,6 +158,10 @@
       border-color: var(--accent);
       color: white;
     }
+    .dd-lang-multi.active {
+      background: linear-gradient(135deg, #4f46e5, #7c3aed) !important;
+      border-color: #4f46e5 !important;
+    }
 
     /* Transcript Panels - Main Focus */
     .dd-transcript-panels {
@@ -365,6 +369,7 @@
           </div>
           <!-- Language Selector -->
           <div class="dd-lang-select" id="langSelect">
+            <button type="button" class="dd-lang-btn dd-lang-multi" data-lang="multi" style="background: linear-gradient(135deg, #4f46e5, #7c3aed); color: white; font-weight: 600;">Multi</button>
             <button type="button" class="dd-lang-btn" data-lang="en">EN</button>
             <button type="button" class="dd-lang-btn" data-lang="zh">中文</button>
             <button type="button" class="dd-lang-btn" data-lang="ja">日本語</button>
@@ -380,8 +385,8 @@
             <button type="button" class="dd-lang-btn" data-lang="ru">RU</button>
             <button type="button" class="dd-lang-btn" data-lang="ar">AR</button>
           </div>
-          <div style="font-size: 11px; color: var(--text-main); text-align: center; margin-bottom: 6px; padding: 6px 8px; background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 4px; border: 1px solid #f59e0b;">
-            <strong style="color: #92400e;">Select your main speaking language.</strong> <span style="color: #78350f;">Non-English will be translated to English.</span>
+          <div id="langHint" style="font-size: 11px; color: var(--text-main); text-align: center; margin-bottom: 6px; padding: 6px 8px; background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); border-radius: 4px; border: 1px solid #22c55e;">
+            <strong style="color: #166534;">English mode:</strong> <span style="color: #14532d;">Optimized for English-only meetings.</span>
           </div>
           <div class="dd-record-controls">
             <button class="dd-record-btn" id="recordBtn">
@@ -512,6 +517,22 @@
         e.target.classList.add('active');
         selectedLang = e.target.dataset.lang;
         console.log('Language selected:', selectedLang);
+
+        // Update hint text based on selection
+        const langHint = document.getElementById('langHint');
+        if (selectedLang === 'multi') {
+          langHint.innerHTML = '<strong style="color: #1e40af;">Multi-language mode:</strong> <span style="color: #1e3a5f;">Auto-detects language switches. Non-English will be translated.</span>';
+          langHint.style.background = 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)';
+          langHint.style.borderColor = '#3b82f6';
+        } else if (selectedLang === 'en') {
+          langHint.innerHTML = '<strong style="color: #166534;">English mode:</strong> <span style="color: #14532d;">Optimized for English-only meetings.</span>';
+          langHint.style.background = 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)';
+          langHint.style.borderColor = '#22c55e';
+        } else {
+          langHint.innerHTML = '<strong style="color: #92400e;">Selected: ' + e.target.textContent + '</strong> <span style="color: #78350f;">Will be translated to English.</span>';
+          langHint.style.background = 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)';
+          langHint.style.borderColor = '#f59e0b';
+        }
       }
     });
     let mediaRecorder = null;
