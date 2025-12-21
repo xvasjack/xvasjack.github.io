@@ -396,7 +396,7 @@
             <button type="button" class="dd-lang-btn" data-lang="tl">Filipino</button>
           </div>
           <div id="langHint" style="font-size: 13px; color: var(--text-main); text-align: center; margin-bottom: 8px; padding: 8px 10px; background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); border-radius: 4px; border: 1px solid #3b82f6;">
-            <strong style="color: #1e40af;">Multi-language mode:</strong> <span style="color: #1e3a5f;">Auto-detects EN/JA/KO/VI/HI + more.</span><br><span style="font-size: 11px; color: #64748b;">Note: Chinese/Thai/Malay/Filipino - select directly.</span>
+            <strong style="color: #1e40af;">Multi-language mode:</strong> <span style="color: #1e3a5f;">Auto-detects English, Japanese, Korean, Vietnamese, Hindi and more.</span><br><span style="font-size: 11px; color: #64748b;">Note: Chinese, Thai, Malay, Filipino - select directly.</span>
           </div>
           <div class="dd-record-controls">
             <button class="dd-record-btn" id="recordBtn">
@@ -419,7 +419,7 @@
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
             <p>Drop files or click</p>
           </div>
-          <div class="dd-file-list" id="fileList" style="display: none;"></div>
+          <div id="fileList"></div>
 
           <!-- Form Section -->
           <div class="dd-form-section">
@@ -534,7 +534,7 @@
         const noCodeSwitchLangs = ['zh', 'th', 'ms', 'tl'];
 
         if (selectedLang === 'multi') {
-          langHint.innerHTML = '<strong style="color: #1e40af;">Multi-language mode:</strong> <span style="color: #1e3a5f;">Auto-detects EN/JA/KO/VI/HI + more.</span><br><span style="font-size: 11px; color: #64748b;">Note: Chinese/Thai/Malay/Filipino - select directly.</span>';
+          langHint.innerHTML = '<strong style="color: #1e40af;">Multi-language mode:</strong> <span style="color: #1e3a5f;">Auto-detects English, Japanese, Korean, Vietnamese, Hindi and more.</span><br><span style="font-size: 11px; color: #64748b;">Note: Chinese, Thai, Malay, Filipino - select directly.</span>';
           langHint.style.background = 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)';
           langHint.style.borderColor = '#3b82f6';
         } else if (selectedLang === 'en') {
@@ -676,44 +676,37 @@
     }
 
     function updateFileList() {
-      try {
-        console.log('[DD] updateFileList called, selectedFiles:', selectedFiles.length);
+      const container = document.getElementById('fileList');
+      if (!container) return;
 
-        // Get the file list element fresh each time (in case it was re-rendered)
-        const fileListEl = document.getElementById('fileList');
-        if (!fileListEl) {
-          console.error('[DD] ERROR: fileList element not found!');
-          return;
-        }
+      // Clear existing content
+      container.innerHTML = '';
 
-        if (selectedFiles.length === 0) {
-          fileListEl.innerHTML = '';
-          fileListEl.style.display = 'none';
-          return;
-        }
+      if (selectedFiles.length === 0) return;
 
-        // Show the container and apply inline styles to ensure visibility
-        fileListEl.style.display = 'flex';
-        fileListEl.style.flexDirection = 'column';
-        fileListEl.style.gap = '6px';
-        fileListEl.style.marginTop = '8px';
-        fileListEl.style.maxHeight = '150px';
-        fileListEl.style.overflowY = 'auto';
+      // Create file items using DOM methods (more reliable than innerHTML)
+      selectedFiles.forEach((file, index) => {
+        const item = document.createElement('div');
+        item.style.cssText = 'display:flex; align-items:center; gap:8px; padding:10px 12px; background:#e2e8f0; border:2px solid #64748b; border-radius:6px; margin-top:6px;';
 
-        // Build HTML with ALL styles inline to guarantee visibility
-        const html = selectedFiles.map((f, i) => `
-          <div style="display: flex !important; visibility: visible !important; opacity: 1 !important; align-items: center; gap: 8px; padding: 10px 12px; background-color: #e2e8f0; border: 2px solid #94a3b8; border-radius: 6px; min-height: 44px; margin-bottom: 4px;">
-            <svg fill="none" stroke="#3b82f6" viewBox="0 0 24 24" style="width: 18px; height: 18px; flex-shrink: 0;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-            <span style="flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #1e293b; font-weight: 500;">${f.name}</span>
-            <button onclick="removeFile(${i})" style="background: #fee2e2; border: 1px solid #fca5a5; color: #dc2626; cursor: pointer; font-size: 16px; padding: 2px 8px; border-radius: 4px; font-weight: bold;">&times;</button>
-          </div>
-        `).join('');
+        const icon = document.createElement('span');
+        icon.textContent = '📄';
+        icon.style.fontSize = '16px';
 
-        fileListEl.innerHTML = html;
-        console.log('[DD] File list updated with', selectedFiles.length, 'files, children:', fileListEl.children.length);
-      } catch (err) {
-        console.error('[DD] updateFileList ERROR:', err);
-      }
+        const name = document.createElement('span');
+        name.textContent = file.name;
+        name.style.cssText = 'flex:1; font-size:13px; color:#1e293b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+
+        const removeBtn = document.createElement('button');
+        removeBtn.textContent = '✕';
+        removeBtn.style.cssText = 'background:#fee2e2; border:1px solid #fca5a5; color:#dc2626; cursor:pointer; padding:2px 8px; border-radius:4px; font-weight:bold;';
+        removeBtn.onclick = () => { selectedFiles.splice(index, 1); updateFileList(); };
+
+        item.appendChild(icon);
+        item.appendChild(name);
+        item.appendChild(removeBtn);
+        container.appendChild(item);
+      });
     }
 
     window.removeFile = function(i) { selectedFiles.splice(i, 1); updateFileList(); };
