@@ -116,26 +116,7 @@ Google's newest model with frontier-class performance:
 
 ---
 
-### 4. Write Like Anil (`/api/write-like-anil`)
-
-**Current Usage:**
-- Single call to **GPT-4o** with custom system prompt
-- Two modes: generate or rewrite
-
-**Cost Impact:** LOW-MEDIUM - ~$0.01-0.03 per email
-
-**Recommendation: Use GPT-4o-mini**
-
-| Mode | Current Model | Recommended Model | Rationale |
-|------|---------------|-------------------|-----------|
-| Generate | GPT-4o | **GPT-4o-mini** | Email writing doesn't need GPT-4o |
-| Rewrite | GPT-4o | **GPT-4o-mini** | Style mimicking works well with mini |
-
-**Estimated Savings:** 90% per email ($0.02 → $0.002)
-
----
-
-### 5. Due Diligence Report (`/api/due-diligence`)
+### 4. Due Diligence Report (`/api/due-diligence`)
 
 **Current Usage:**
 - Primary: **DeepSeek V3.2** (already optimized!)
@@ -149,7 +130,7 @@ Google's newest model with frontier-class performance:
 
 ---
 
-### 6. Find Target v3/v4 (`/api/find-target`, `/api/find-target-slow`, `/api/find-target-v4`)
+### 5. Find Target v3/v4 (`/api/find-target`, `/api/find-target-slow`, `/api/find-target-v4`)
 
 **Current Usage:**
 - 14 parallel search strategies using:
@@ -173,7 +154,7 @@ Google's newest model with frontier-class performance:
 
 ---
 
-### 7. Understanding The Business (UTB) (`/api/utb`)
+### 6. Understanding The Business (UTB) (`/api/utb`)
 
 **Current Usage:**
 - Research: Multiple Perplexity calls
@@ -189,9 +170,8 @@ Google's newest model with frontier-class performance:
 |----------|---------|--------------|-------------------|--------|
 | 1 | Trading Comparable | Very High | 80-90% | Low |
 | 2 | Profile Slides | High | 60-70% | Medium |
-| 3 | Write Like Anil | Medium | 90% | Very Low |
-| 4 | Validation | Medium | 40-50% | Low |
-| 5 | Find Target | High | 5-10% quality boost | Very Low |
+| 3 | Validation | Medium | 40-50% | Low |
+| 4 | Find Target | High | 5-10% quality boost | Very Low |
 
 ---
 
@@ -259,18 +239,6 @@ async function callGeminiFlashLite(prompt) {
 }
 ```
 
-### 4. Write Like Anil - Use GPT-4o-mini
-
-```javascript
-// Current (server.js line ~4681)
-model: 'gpt-4o',
-
-// Recommended
-model: 'gpt-4o-mini',
-```
-
----
-
 ## Model Upgrade Path: Gemini 2.0 → 2.5
 
 Since Gemini 2.0 Flash is being deprecated, all Gemini 2.0 Flash calls should migrate to either:
@@ -297,7 +265,6 @@ const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/m
 |---------|--------------------------|-------------------|---------------------------|
 | Profile Slides | $0.12 | $0.04 | $8.00 |
 | Trading Comparable | $0.50+ | $0.05 | $45.00 |
-| Write Like Anil | $0.02 | $0.002 | $1.80 |
 | Validation (per company) | $0.04 | $0.02 | $2.00 |
 | Find Target | $0.80 | $0.75 | $5.00 |
 | **TOTAL MONTHLY SAVINGS** | | | **~$60+** |
