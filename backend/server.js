@@ -778,32 +778,11 @@ async function generateWordDocument(title, htmlContent, metadata = {}) {
   // Parse HTML content into sections
   const sections = [];
 
-  // Add title
+  // Add title with Calibri font
   sections.push(new Paragraph({
-    text: title,
-    heading: HeadingLevel.TITLE,
+    children: [new TextRun({ text: title, font: 'Calibri', size: 48, bold: true })],
     spacing: { after: 400 }
   }));
-
-  // Add metadata
-  if (metadata.date) {
-    sections.push(new Paragraph({
-      children: [
-        new TextRun({ text: 'Date: ', bold: true }),
-        new TextRun({ text: metadata.date })
-      ],
-      spacing: { after: 100 }
-    }));
-  }
-  if (metadata.preparedFor) {
-    sections.push(new Paragraph({
-      children: [
-        new TextRun({ text: 'Prepared For: ', bold: true }),
-        new TextRun({ text: metadata.preparedFor })
-      ],
-      spacing: { after: 200 }
-    }));
-  }
 
   // Simple HTML to docx conversion
   const cleanHtml = htmlContent
@@ -858,22 +837,19 @@ async function generateWordDocument(title, htmlContent, metadata = {}) {
 
     if (part === 'H1' && parts[i + 1]) {
       sections.push(new Paragraph({
-        text: parts[i + 1].replace('/H1', '').trim(),
-        heading: HeadingLevel.HEADING_1,
+        children: [new TextRun({ text: parts[i + 1].replace('/H1', '').trim(), font: 'Calibri', size: 36, bold: true })],
         spacing: { before: 400, after: 200 }
       }));
       i++;
     } else if (part === 'H2' && parts[i + 1]) {
       sections.push(new Paragraph({
-        text: parts[i + 1].replace('/H2', '').trim(),
-        heading: HeadingLevel.HEADING_2,
+        children: [new TextRun({ text: parts[i + 1].replace('/H2', '').trim(), font: 'Calibri', size: 28, bold: true })],
         spacing: { before: 300, after: 150 }
       }));
       i++;
     } else if (part === 'H3' && parts[i + 1]) {
       sections.push(new Paragraph({
-        text: parts[i + 1].replace('/H3', '').trim(),
-        heading: HeadingLevel.HEADING_3,
+        children: [new TextRun({ text: parts[i + 1].replace('/H3', '').trim(), font: 'Calibri', size: 24, bold: true })],
         spacing: { before: 200, after: 100 }
       }));
       i++;
@@ -884,6 +860,9 @@ async function generateWordDocument(title, htmlContent, metadata = {}) {
         const trimmedLine = line.trim();
         if (!trimmedLine) continue;
 
+        // Check if this line contains [Online Source] - highlight it yellow
+        const isOnlineSource = trimmedLine.includes('[Online Source]');
+
         // Handle bold text markers
         const children = [];
         const boldParts = trimmedLine.split('**');
@@ -891,7 +870,10 @@ async function generateWordDocument(title, htmlContent, metadata = {}) {
           if (boldParts[j]) {
             children.push(new TextRun({
               text: boldParts[j],
-              bold: j % 2 === 1
+              font: 'Calibri',
+              size: 22,
+              bold: j % 2 === 1,
+              highlight: isOnlineSource ? 'yellow' : undefined
             }));
           }
         }
@@ -9710,11 +9692,14 @@ app.post('/api/utb', async (req, res) => {
 // ============ DUE DILIGENCE REPORT GENERATOR ============
 
 async function generateDueDiligenceReport(files, instructions, reportLength, instructionMode = 'auto') {
+  console.log(`[DD] Processing ${files.length} source files...`);
+
   // Combine all file contents
   let combinedContent = '';
   const filesSummary = [];
 
   for (const file of files) {
+    console.log(`[DD] - File: ${file.name} (${file.type}) - ${file.content?.length || 0} chars`);
     filesSummary.push(`- ${file.name} (${file.type.toUpperCase()})`);
 
     // Handle base64 encoded files (binary formats)
@@ -9724,6 +9709,8 @@ async function generateDueDiligenceReport(files, instructions, reportLength, ins
       combinedContent += `\n\n=== SOURCE: ${file.name} ===\n${file.content.substring(0, 50000)}\n`;
     }
   }
+
+  console.log(`[DD] Total combined content: ${combinedContent.length} chars`);
 
   // Extract URLs from instructions and fetch them
   let onlineResearchContent = '';
@@ -9786,33 +9773,37 @@ ${instructions}
     ? `\nONLINE SOURCES RESEARCHED:\n${onlineSourcesUsed.map(u => `- ${u}`).join('\n')}\n\nIMPORTANT: Any information from online sources MUST be clearly marked with [Online Source] at the start of that bullet point or paragraph.`
     : '';
 
-  const prompt = `You are an M&A advisor writing a due diligence summary for a partner to quickly understand a target company.
+  const prompt = `You are writing a factual due diligence summary. Your job is to extract and organize information from the provided materials.
 
-SOURCE MATERIALS PROVIDED:
+SOURCE MATERIALS (${filesSummary.length} files):
 ${filesSummary.join('\n')}
-${onlineSourceNote}
 ${instructionSection}
+=== BEGIN SOURCE CONTENT ===
+${combinedContent.substring(0, 80000)}
+=== END SOURCE CONTENT ===
+
+${onlineResearchContent ? `=== BEGIN ONLINE RESEARCH (from websites) ===
+${onlineResearchContent.substring(0, 20000)}
+=== END ONLINE RESEARCH ===` : ''}
+
 REPORT STRUCTURE:
 ${lengthInstructions[reportLength]}
 
-USER-PROVIDED CONTENT:
-${combinedContent.substring(0, 80000)}
+CRITICAL RULES - FOLLOW EXACTLY:
+1. **NO HALLUCINATION**: ONLY include facts explicitly stated in the source materials above. Do NOT make up or assume any information.
+2. If something is not mentioned in the sources, do NOT include it. Do NOT write generic statements.
+3. Quote specific names, numbers, dates, and facts directly from the materials.
+4. For each fact you include, it must be traceable to the source content above.
 
-${onlineResearchContent ? `ONLINE RESEARCH CONTENT (mark any info from here with [Online Source]):
-${onlineResearchContent.substring(0, 20000)}` : ''}
+${onlineResearchContent ? `5. Any information from ONLINE RESEARCH section must be prefixed with **[Online Source]** - this text will be highlighted yellow in the final document.` : ''}
 
-CRITICAL OUTPUT RULES:
-1. Start with a TITLE using <h1 style="font-family: Calibri, sans-serif;">Due Diligence: [Company/Entity Name]</h1> - extract the actual company or entity name from the materials
-2. Use ONLY Calibri font: style="font-family: Calibri, sans-serif;" on all elements
-3. Generate CLEAN HTML only - no markdown, no code blocks, no \`\`\`
-4. SKIP sections entirely if there is no content for them - do NOT write "Not available"
-5. Be DIRECT - no filler phrases, no "this report...", no "executive summary"
-6. Professional tone but PLAIN LANGUAGE - no M&A jargon like "synergies", "value proposition"
-7. NO recommendation or opinion sections - this is a factual summary only
-8. NO "CONFIDENTIAL", dates, disclaimers, or footers
-9. Any info from online research MUST start with [Online Source] in bold
-10. Focus on FACTS from the materials - names, numbers, dates, specifics
-11. Output the report ONLY ONCE - do not repeat any sections`;
+OUTPUT FORMAT:
+- Start with: <h1 style="font-family: Calibri, sans-serif;">Due Diligence: [Actual Company Name from materials]</h1>
+- Use <h2> for section headers, <ul><li> for bullet points
+- Add style="font-family: Calibri, sans-serif;" to all elements
+- Generate CLEAN HTML only - no markdown, no \`\`\`
+- SKIP sections with no relevant content from sources
+- Output the report ONCE only`;
 
   try {
     const maxTokens = reportLength === 'short' ? 2000 : reportLength === 'medium' ? 4000 : 8000;
@@ -10006,20 +9997,10 @@ app.post('/api/due-diligence', async (req, res) => {
     };
 
     const emailHtml = `
-    <div style="font-family: Calibri, 'Segoe UI', sans-serif; max-width: 800px; margin: 0 auto;">
-      <div style="background: ${headerColors[outputType] || headerColors.dd_report}; padding: 30px; border-radius: 12px 12px 0 0;">
-        <h1 style="font-family: Calibri, 'Segoe UI', sans-serif; color: white; margin: 0; font-size: 24px;">${docTitle}</h1>
-      </div>
-
-      <div style="background: #f8fafc; padding: 20px; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; font-family: Calibri, 'Segoe UI', sans-serif;">
-        <p style="margin: 0; color: #64748b; font-size: 14px;"><strong>Source Materials:</strong></p>
-        <ul style="margin: 8px 0; padding-left: 20px; color: #475569; font-size: 13px;">${fileList}</ul>
-        ${transcripts.length > 0 ? `<p style="margin: 8px 0 0 0; color: #64748b; font-size: 13px;"><strong>Audio Transcribed:</strong> ${transcripts.length} file(s) ${detectedLanguages.length > 0 ? `(${[...new Set(detectedLanguages)].join(', ')})` : ''}</p>` : ''}
-      </div>
-
-      <div style="background: white; padding: 30px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px; font-family: Calibri, 'Segoe UI', sans-serif;">
-        ${outputContent}
-      </div>
+    <div style="font-family: Calibri, 'Segoe UI', sans-serif; max-width: 600px; margin: 0 auto; padding: 30px;">
+      <p style="font-size: 16px; color: #333;">Please find the ${docTitle} attached.</p>
+      <p style="font-size: 14px; color: #666; margin-top: 20px;"><strong>Source Materials:</strong></p>
+      <ul style="margin: 8px 0; padding-left: 20px; color: #666; font-size: 13px;">${fileList}</ul>
     </div>`;
 
     // Step 6: Generate attachments (Word doc, transcript, audio)
