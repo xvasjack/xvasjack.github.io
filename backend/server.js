@@ -10334,6 +10334,8 @@ app.post('/api/due-diligence', async (req, res) => {
     } else {
       // Generate full DD report
       console.log('[DD] Generating due diligence report...');
+      console.log(`[DD] Input files array length: ${files.length}`);
+      files.forEach((f, i) => console.log(`[DD]   File ${i + 1}: ${f.name} (${f.type}) - ${f.content?.length || 0} chars`));
 
       // Add transcripts to files for processing
       const allFiles = [...files];
@@ -10372,6 +10374,9 @@ app.post('/api/due-diligence', async (req, res) => {
         });
         console.log(`[DD] Added real-time transcript to report: ${cleanRaw.length} chars`);
       }
+
+      console.log(`[DD] Final allFiles count before report generation: ${allFiles.length}`);
+      allFiles.forEach((f, i) => console.log(`[DD]   Final file ${i + 1}: ${f.name}`));
 
       outputContent = await generateDueDiligenceReport(allFiles, instructions, length, instructionMode);
       const lengthLabel = { short: '1-Page Summary', medium: '2-3 Page Report', long: 'Comprehensive Report' };
