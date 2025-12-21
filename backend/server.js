@@ -2623,17 +2623,18 @@ Find as many as possible - be exhaustive. Search using ALL the terminology varia
 
 // ============ V5 AGENTIC SEARCH ============
 
-// Gemini 3 Flash with Google Search grounding - for deep agentic search
+// Gemini 2.0 Flash with Google Search grounding - for deep agentic search
 // The model can execute multiple searches per request and iterate until exhaustive
-async function callGemini3FlashWithSearch(prompt, maxRetries = 2) {
+async function callGemini2FlashWithSearch(prompt, maxRetries = 2) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      // Use gemini-2.0-flash-exp which supports Google Search grounding
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: prompt }] }],
-          tools: [{ googleSearch: {} }],
+          tools: [{ google_search: {} }],
           generationConfig: {
             temperature: 0.2,
             maxOutputTokens: 8192
@@ -2645,7 +2646,7 @@ async function callGemini3FlashWithSearch(prompt, maxRetries = 2) {
       const data = await response.json();
 
       if (data.error) {
-        console.error(`Gemini 3 Flash Search error (attempt ${attempt + 1}):`, data.error.message);
+        console.error(`Gemini 2.0 Flash Search error (attempt ${attempt + 1}):`, data.error.message);
         if (attempt === maxRetries) return { text: '', groundingMetadata: null };
         await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
         continue;
@@ -2654,9 +2655,14 @@ async function callGemini3FlashWithSearch(prompt, maxRetries = 2) {
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
       const groundingMetadata = data.candidates?.[0]?.groundingMetadata || null;
 
+      // Log grounding info for debugging
+      if (groundingMetadata) {
+        console.log(`    Grounding: ${groundingMetadata.webSearchQueries?.length || 0} queries, ${groundingMetadata.groundingChunks?.length || 0} chunks`);
+      }
+
       return { text, groundingMetadata };
     } catch (error) {
-      console.error(`Gemini 3 Flash Search error (attempt ${attempt + 1}):`, error.message);
+      console.error(`Gemini 2.0 Flash Search error (attempt ${attempt + 1}):`, error.message);
       if (attempt === maxRetries) return { text: '', groundingMetadata: null };
       await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
     }
@@ -2704,7 +2710,7 @@ async function runAgenticSearchTask(taskPrompt, country, searchLog) {
   const startTime = Date.now();
 
   console.log(`  Executing agentic search task...`);
-  const result = await callGemini3FlashWithSearch(taskPrompt);
+  const result = await callGemini2FlashWithSearch(taskPrompt);
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);
 
@@ -3328,7 +3334,7 @@ Return JSON: {"websites": [{"company_name": "...", "website": "https://..."}]}
 
 Only include real company websites (not LinkedIn, Facebook, directories). If you can't find a website, omit that company.`;
 
-      const websiteResult = await callGemini3FlashWithSearch(websitePrompt);
+      const websiteResult = await callGemini2FlashWithSearch(websitePrompt);
       try {
         const jsonMatch = websiteResult.text.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
