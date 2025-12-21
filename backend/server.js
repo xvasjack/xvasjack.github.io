@@ -9753,82 +9753,114 @@ async function generateDueDiligenceReport(files, instructions, reportLength, ins
   // Combine all file contents
   let combinedContent = '';
   const filesSummary = [];
+  let reportTitle = 'Due Diligence Report';
+
+  // Try to extract a meaningful title from file names
+  const meaningfulFiles = files.filter(f => f.name && !f.name.includes('transcript'));
+  if (meaningfulFiles.length > 0) {
+    reportTitle = `Due Diligence: ${meaningfulFiles[0].name.replace(/\.[^/.]+$/, '').replace(/_/g, ' ')}`;
+  } else if (files.length > 0) {
+    reportTitle = `Due Diligence: ${files[0].name.replace(/\.[^/.]+$/, '').replace(/_/g, ' ')}`;
+  }
 
   for (const file of files) {
     filesSummary.push(`- ${file.name} (${file.type.toUpperCase()})`);
 
     // Handle base64 encoded files (binary formats)
     if (file.content.startsWith('[BASE64:')) {
-      combinedContent += `\n\n=== FILE: ${file.name} ===\n[Binary file - content summarized by AI]\n`;
+      combinedContent += `\n\n=== SOURCE: ${file.name} ===\n[Binary file - content summarized by AI]\n`;
     } else {
-      combinedContent += `\n\n=== FILE: ${file.name} ===\n${file.content.substring(0, 50000)}\n`;
+      combinedContent += `\n\n=== SOURCE: ${file.name} ===\n${file.content.substring(0, 50000)}\n`;
+    }
+  }
+
+  // Extract URLs from instructions and fetch them
+  let onlineResearchContent = '';
+  let onlineSourcesUsed = [];
+  if (instructions) {
+    const urlRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)/gi;
+    const urls = instructions.match(urlRegex) || [];
+
+    for (const url of urls.slice(0, 3)) { // Limit to 3 URLs
+      console.log(`[DD] Fetching URL for research: ${url}`);
+      try {
+        const scraped = await scrapeWebsite(url);
+        if (scraped.success) {
+          onlineSourcesUsed.push(scraped.url);
+          onlineResearchContent += `\n\n=== ONLINE SOURCE: ${scraped.url} ===\n${scraped.content.substring(0, 15000)}\n`;
+          console.log(`[DD] Fetched ${scraped.content.length} chars from ${url}`);
+        } else {
+          console.log(`[DD] Failed to fetch ${url}: ${scraped.error}`);
+        }
+      } catch (e) {
+        console.log(`[DD] Error fetching ${url}: ${e.message}`);
+      }
     }
   }
 
   const lengthInstructions = {
-    short: `Create a 1-PAGE EXECUTIVE SUMMARY with:
-- Business overview (2-3 sentences)
-- Key financial highlights
-- Top 3 opportunities
-- Top 3 risks
-- Recommendation (proceed/proceed with caution/pass)`,
+    short: `Create a 1-PAGE summary covering:
+- Business overview (what does the company do)
+- Key facts and figures mentioned
+- Notable risks or concerns
+- Growth potential or opportunities`,
 
-    medium: `Create a 2-3 PAGE report with:
-1. EXECUTIVE SUMMARY (1 paragraph)
-2. BUSINESS OVERVIEW - Company description, products/services, market position
-3. FINANCIAL ANALYSIS - Key metrics, revenue, profitability
-4. KEY RISKS - Business, financial, operational
-5. OPPORTUNITIES - Growth potential, synergies
-6. RECOMMENDATION`,
+    medium: `Create a 2-3 PAGE report with these sections (SKIP any section that has no relevant content):
+1. BUSINESS OVERVIEW - What the company does, products/services, market position
+2. KEY FACTS & FIGURES - Financial metrics, revenue, growth, any numbers mentioned
+3. RISKS & CONCERNS - Business, financial, operational issues identified
+4. OPPORTUNITIES - Growth potential, market opportunities, synergies`,
 
-    long: `Create a COMPREHENSIVE report covering:
-1. EXECUTIVE SUMMARY - Key findings, recommendation
-2. COMPANY OVERVIEW - Business, history, structure, management
-3. INDUSTRY & MARKET - Market size, competition, trends, regulations
-4. BUSINESS MODEL - Revenue streams, customers, competitive advantages
-5. FINANCIAL ANALYSIS - Performance, revenue, profitability, cash flow, ratios
-6. OPERATIONAL REVIEW - Operations, technology, supply chain, HR
-7. RISK ASSESSMENT - Strategic, operational, financial, legal, market risks
-8. OPPORTUNITIES & SYNERGIES
-9. VALUATION CONSIDERATIONS
-10. NEXT STEPS`
+    long: `Create a COMPREHENSIVE report (SKIP any section that has no relevant content):
+1. COMPANY OVERVIEW - Business description, history, structure, management
+2. INDUSTRY & MARKET - Market context, competition, trends
+3. BUSINESS MODEL - Revenue streams, customers, competitive advantages
+4. FINANCIAL OVERVIEW - Any financial data, metrics, performance indicators
+5. OPERATIONS - How the business operates, technology, processes
+6. RISKS & CONCERNS - All identified risks and red flags
+7. OPPORTUNITIES - Growth potential, synergies, strategic options
+8. KEY QUESTIONS - What additional information would be needed`
   };
 
   // Build instruction section based on mode
   let instructionSection = '';
   if (instructionMode === 'manual' && instructions) {
     instructionSection = `
-CLIENT INSTRUCTIONS (Follow these):
+CONTEXT FROM USER:
 ${instructions}
-`;
-  } else {
-    instructionSection = `
-Analyze objectively from a neutral advisory perspective. Present facts and findings without bias toward buyer or seller.
 `;
   }
 
-  const prompt = `You are an M&A advisor at a top firm writing a due diligence report for a partner and client.
+  const onlineSourceNote = onlineSourcesUsed.length > 0
+    ? `\nONLINE SOURCES RESEARCHED:\n${onlineSourcesUsed.map(u => `- ${u}`).join('\n')}\n\nIMPORTANT: Any information from online sources MUST be clearly marked with [Online Source] at the start of that bullet point or paragraph.`
+    : '';
 
-MATERIALS:
+  const prompt = `You are an M&A advisor writing a due diligence summary for a partner to quickly understand a target company.
+
+SOURCE MATERIALS PROVIDED:
 ${filesSummary.join('\n')}
+${onlineSourceNote}
 ${instructionSection}
-STRUCTURE:
+REPORT STRUCTURE:
 ${lengthInstructions[reportLength]}
 
-CONTENT:
-${combinedContent.substring(0, 100000)}
+USER-PROVIDED CONTENT:
+${combinedContent.substring(0, 80000)}
 
-OUTPUT REQUIREMENTS:
-- Generate clean HTML with proper headings (<h2>, <h3>), bullet points (<ul>, <li>), and tables where useful
-- Style: Use font-family: 'Calibri', 'Segoe UI', sans-serif throughout
-- Be DIRECT and CONCISE - no filler phrases like "this report analyzes..." or "the following sections..."
-- Use professional but plain language - avoid unnecessary jargon
-- Be SPECIFIC with numbers, names, and facts from the materials
-- Present information OBJECTIVELY - do not assume buyer/seller perspective unless instructed
-- Do NOT include: "CONFIDENTIAL" labels, dates, "Prepared For" headers, disclaimers, or footers
-- Do NOT use CSS style blocks - just inline styles if needed
-- Start directly with the content - no meta-commentary about the report itself
-- If information is missing, state "Not available in materials provided"`;
+${onlineResearchContent ? `ONLINE RESEARCH CONTENT (mark any info from here with [Online Source]):
+${onlineResearchContent.substring(0, 20000)}` : ''}
+
+CRITICAL OUTPUT RULES:
+1. Start with: <h1 style="font-family: Calibri, sans-serif;">${reportTitle}</h1>
+2. Use ONLY Calibri font: style="font-family: Calibri, sans-serif;" on all elements
+3. Generate CLEAN HTML only - no markdown, no code blocks, no \`\`\`
+4. SKIP sections entirely if there is no content for them - do NOT write "Not available"
+5. Be DIRECT - no filler phrases, no "this report...", no "executive summary"
+6. Professional tone but PLAIN LANGUAGE - no M&A jargon like "synergies", "value proposition"
+7. NO recommendation or opinion sections - this is a factual summary only
+8. NO "CONFIDENTIAL", dates, disclaimers, or footers
+9. Any info from online research MUST start with [Online Source] in bold
+10. Focus on FACTS from the materials - names, numbers, dates, specifics`;
 
   try {
     const maxTokens = reportLength === 'short' ? 2000 : reportLength === 'medium' ? 4000 : 8000;
@@ -9838,11 +9870,15 @@ OUTPUT REQUIREMENTS:
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
+      temperature: 0.2,
       max_tokens: maxTokens
     });
 
-    const result = response.choices[0].message.content || '';
+    let result = response.choices[0].message.content || '';
+
+    // Clean up any markdown artifacts
+    result = result.replace(/```html/gi, '').replace(/```/g, '').trim();
+
     console.log(`[DD] Report generated using GPT-4o (${result.length} chars)`);
     return result;
   } catch (error) {
