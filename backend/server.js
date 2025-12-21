@@ -232,6 +232,7 @@ async function callGemini(prompt) {
 
 // Gemini 3 Flash - frontier reasoning for validation tasks ($0.50/$3.00 per 1M tokens)
 // Released Dec 17, 2025 - outperforms Gemini 2.5 Pro, 3x faster
+// With GPT-4o fallback when Gemini 3 Flash fails or times out
 async function callGemini3Flash(prompt, jsonMode = false) {
   try {
     const requestBody = {
@@ -256,13 +257,49 @@ async function callGemini3Flash(prompt, jsonMode = false) {
 
     if (data.error) {
       console.error('Gemini 3 Flash API error:', data.error.message);
-      return '';
+      // Fallback to GPT-4o
+      return await callGPT4oFallback(prompt, jsonMode, 'Gemini 3 Flash API error');
     }
 
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const result = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!result) {
+      // Empty response, try fallback
+      return await callGPT4oFallback(prompt, jsonMode, 'Gemini 3 Flash empty response');
+    }
+    return result;
   } catch (error) {
     console.error('Gemini 3 Flash error:', error.message);
-    return '';
+    // Fallback to GPT-4o on network timeout or other errors
+    return await callGPT4oFallback(prompt, jsonMode, `Gemini 3 Flash error: ${error.message}`);
+  }
+}
+
+// GPT-4o fallback function for when Gemini 3 Flash fails
+async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
+  try {
+    console.log(`  Falling back to GPT-4o (reason: ${reason})...`);
+
+    const requestOptions = {
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.1
+    };
+
+    // Add JSON mode if requested
+    if (jsonMode) {
+      requestOptions.response_format = { type: 'json_object' };
+    }
+
+    const response = await openai.chat.completions.create(requestOptions);
+    const result = response.choices?.[0]?.message?.content || '';
+
+    if (result) {
+      console.log('  GPT-4o fallback successful');
+    }
+    return result;
+  } catch (fallbackError) {
+    console.error('GPT-4o fallback error:', fallbackError.message);
+    return ''; // Return empty if both fail
   }
 }
 
@@ -7811,10 +7848,10 @@ Create MECE segments for these ${targetDescription} companies and mark which seg
 }
 
 // AI Review Agent: Clean up and remove duplicative/unnecessary information
-// Uses Gemini 3 Flash for frontier reasoning - better at identifying duplicates and merging data
+// Uses Gemini 3 Flash for frontier reasoning - with GPT-4o fallback if Gemini fails
 async function reviewAndCleanData(companyData) {
   try {
-    console.log('  Step 6: Running AI review agent (Gemini 3 Flash)...');
+    console.log('  Step 6: Running AI review agent (Gemini 3 Flash with GPT-4o fallback)...');
 
     const prompt = `You are a data quality reviewer for M&A company profiles. Review the extracted data and clean it up by:
 
@@ -7861,7 +7898,7 @@ Return ONLY valid JSON.`;
     const result = await callGemini3Flash(prompt, true);
 
     if (!result) {
-      console.log('  Gemini 3 Flash returned empty, keeping original data');
+      console.log('  AI review agent (both Gemini 3 Flash and GPT-4o) returned empty, keeping original data');
       return companyData;
     }
 
