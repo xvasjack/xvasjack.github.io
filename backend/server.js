@@ -222,16 +222,32 @@ async function callGemini(prompt) {
       body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
       timeout: 90000
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Gemini 2.5 Flash-Lite HTTP error ${response.status}:`, errorText.substring(0, 200));
+      return '';
+    }
+
     const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+    if (data.error) {
+      console.error('Gemini 2.5 Flash-Lite API error:', data.error.message);
+      return '';
+    }
+
+    const result = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!result) {
+      console.warn('Gemini 2.5 Flash-Lite returned empty response');
+    }
+    return result;
   } catch (error) {
-    console.error('Gemini error:', error.message);
+    console.error('Gemini 2.5 Flash-Lite error:', error.message);
     return '';
   }
 }
 
-// Gemini 3 Flash - frontier reasoning for validation tasks ($0.50/$3.00 per 1M tokens)
-// Released Dec 17, 2025 - outperforms Gemini 2.5 Pro, 3x faster
+// Gemini 2.5 Flash - stable model for validation tasks (upgraded from gemini-3-flash-preview which was unstable)
 async function callGemini3Flash(prompt, jsonMode = false) {
   try {
     const requestBody = {
@@ -246,22 +262,34 @@ async function callGemini3Flash(prompt, jsonMode = false) {
       requestBody.generationConfig.responseMimeType = 'application/json';
     }
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    // Using stable gemini-2.5-flash instead of preview model for reliability
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
       timeout: 120000
     });
-    const data = await response.json();
 
-    if (data.error) {
-      console.error('Gemini 3 Flash API error:', data.error.message);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Gemini 2.5 Flash HTTP error ${response.status}:`, errorText.substring(0, 200));
       return '';
     }
 
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const data = await response.json();
+
+    if (data.error) {
+      console.error('Gemini 2.5 Flash API error:', data.error.message);
+      return '';
+    }
+
+    const result = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!result) {
+      console.warn('Gemini 2.5 Flash returned empty response for prompt:', prompt.substring(0, 100));
+    }
+    return result;
   } catch (error) {
-    console.error('Gemini 3 Flash error:', error.message);
+    console.error('Gemini 2.5 Flash error:', error.message);
     return '';
   }
 }
@@ -363,13 +391,30 @@ async function callPerplexity(prompt) {
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'sonar',
+        model: 'sonar-pro',  // Upgraded from 'sonar' for better search results
         messages: [{ role: 'user', content: prompt }]
       }),
       timeout: 90000
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`Perplexity HTTP error ${response.status}:`, errorText.substring(0, 200));
+      return '';
+    }
+
     const data = await response.json();
-    return data.choices?.[0]?.message?.content || '';
+
+    if (data.error) {
+      console.error('Perplexity API error:', data.error.message || data.error);
+      return '';
+    }
+
+    const result = data.choices?.[0]?.message?.content || '';
+    if (!result) {
+      console.warn('Perplexity returned empty response for prompt:', prompt.substring(0, 100));
+    }
+    return result;
   } catch (error) {
     console.error('Perplexity error:', error.message);
     return '';
@@ -383,7 +428,11 @@ async function callChatGPT(prompt) {
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2
     });
-    return response.choices[0].message.content || '';
+    const result = response.choices[0].message.content || '';
+    if (!result) {
+      console.warn('ChatGPT returned empty response for prompt:', prompt.substring(0, 100));
+    }
+    return result;
   } catch (error) {
     console.error('ChatGPT error:', error.message);
     return '';
@@ -391,16 +440,21 @@ async function callChatGPT(prompt) {
 }
 
 // OpenAI Search model - has real-time web search capability
-// Note: gpt-4o-mini-search-preview does NOT support temperature parameter
+// Updated to use gpt-4o-search-preview (more stable than mini version)
 async function callOpenAISearch(prompt) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini-search-preview',
+      model: 'gpt-4o-search-preview',
       messages: [{ role: 'user', content: prompt }]
     });
-    return response.choices[0].message.content || '';
+    const result = response.choices[0].message.content || '';
+    if (!result) {
+      console.warn('OpenAI Search returned empty response, falling back to ChatGPT');
+      return callChatGPT(prompt);
+    }
+    return result;
   } catch (error) {
-    console.error('OpenAI Search error:', error.message);
+    console.error('OpenAI Search error:', error.message, '- falling back to ChatGPT');
     // Fallback to regular gpt-4o if search model not available
     return callChatGPT(prompt);
   }
@@ -2642,10 +2696,18 @@ async function callGemini2FlashWithSearch(prompt, maxRetries = 2) {
         timeout: 180000  // 3 minutes for deep search
       });
 
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`Gemini 2.5 Flash Search HTTP error ${response.status} (attempt ${attempt + 1}):`, errorText.substring(0, 200));
+        if (attempt === maxRetries) return { text: '', groundingMetadata: null };
+        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+        continue;
+      }
+
       const data = await response.json();
 
       if (data.error) {
-        console.error(`Gemini 2.5 Flash Search error (attempt ${attempt + 1}):`, data.error.message);
+        console.error(`Gemini 2.5 Flash Search API error (attempt ${attempt + 1}):`, data.error.message);
         if (attempt === maxRetries) return { text: '', groundingMetadata: null };
         await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
         continue;
@@ -2657,6 +2719,12 @@ async function callGemini2FlashWithSearch(prompt, maxRetries = 2) {
       // Log grounding info for debugging
       if (groundingMetadata) {
         console.log(`    Grounding: ${groundingMetadata.webSearchQueries?.length || 0} queries, ${groundingMetadata.groundingChunks?.length || 0} chunks`);
+      } else {
+        console.warn('    No grounding metadata returned - search may not have executed');
+      }
+
+      if (!text) {
+        console.warn('    Gemini 2.5 Flash Search returned empty text');
       }
 
       return { text, groundingMetadata };
@@ -4038,15 +4106,14 @@ Decision rules:
 Output JSON: {"results": [{"index": 0, "name": "Company Name", "relevant": false, "business": "5-10 word description of actual business"}]}`;
 }
 
-// Helper: Check business relevance using Gemini 3 Flash (frontier reasoning, 30x cheaper than o1)
-// Replaced o1 ($15/$60) with Gemini 3 Flash ($0.50/$3.00) - 95% cost savings
+// Helper: Check business relevance using Gemini 2.5 Flash (stable, cost-effective)
 async function checkRelevanceWithOpenAI(companies, filterCriteria) {
   const companyNames = companies.map(c => c.name);
   const prompt = buildReasoningPrompt(companyNames, filterCriteria);
 
   try {
-    // Use Gemini 3 Flash for frontier reasoning (released Dec 17, 2025)
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    // Use stable Gemini 2.5 Flash (upgraded from gemini-3-flash-preview)
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -4055,17 +4122,23 @@ async function checkRelevanceWithOpenAI(companies, filterCriteria) {
       }),
       timeout: 90000
     });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${errorText.substring(0, 100)}`);
+    }
+
     const data = await response.json();
     if (data.error) throw new Error(data.error.message);
     const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
-      return { source: 'gemini-3-flash', results: parsed.results || parsed.companies || parsed };
+      return { source: 'gemini-2.5-flash', results: parsed.results || parsed.companies || parsed };
     }
     return null;
   } catch (error) {
-    console.error('Gemini 3 Flash error:', error.message);
+    console.error('Gemini 2.5 Flash relevance check error:', error.message);
     // Fallback to GPT-4o
     try {
       const response = await openai.chat.completions.create({
@@ -7397,7 +7470,7 @@ async function searchMissingInfo(companyName, website, missingFields) {
     const searchQuery = `${companyName} company ${missingFields.includes('established_year') ? 'founded year established' : ''} ${missingFields.includes('location') ? 'headquarters location country' : ''}`.trim();
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini-search-preview',
+      model: 'gpt-4o-search-preview',
       messages: [
         {
           role: 'user',
@@ -7462,7 +7535,7 @@ async function searchAdditionalMetrics(companyName, website, existingMetrics) {
     console.log(`  Step 6: Searching web for additional metrics...`);
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini-search-preview',
+      model: 'gpt-4o-search-preview',
       messages: [
         {
           role: 'user',
