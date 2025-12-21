@@ -12,6 +12,7 @@ const multer = require('multer');
 const { createClient } = require('@deepgram/sdk');
 const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } = require('docx');
 const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const Anthropic = require('@anthropic-ai/sdk');
 
 // ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
 process.on('unhandledRejection', (reason, promise) => {
@@ -60,7 +61,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Check required environment variables
 const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
-const optionalEnvVars = ['SERPAPI_API_KEY', 'DEEPSEEK_API_KEY', 'DEEPGRAM_API_KEY']; // Optional but recommended
+const optionalEnvVars = ['SERPAPI_API_KEY', 'DEEPSEEK_API_KEY', 'DEEPGRAM_API_KEY', 'ANTHROPIC_API_KEY']; // Optional but recommended
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
@@ -74,11 +75,19 @@ if (!process.env.DEEPSEEK_API_KEY) {
 if (!process.env.DEEPGRAM_API_KEY) {
   console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
 }
+if (!process.env.ANTHROPIC_API_KEY) {
+  console.warn('ANTHROPIC_API_KEY not set - V5 will use Gemini-only mode');
+}
 
 // Initialize OpenAI
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
+
+// Initialize Anthropic (Claude)
+const anthropic = process.env.ANTHROPIC_API_KEY
+  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+  : null;
 
 // Initialize Deepgram
 const deepgram = process.env.DEEPGRAM_API_KEY ? createClient(process.env.DEEPGRAM_API_KEY) : null;
@@ -257,6 +266,58 @@ async function callGemini3Flash(prompt, jsonMode = false) {
     console.error('Gemini 3 Flash error:', error.message);
     return '';
   }
+}
+
+// Claude (Anthropic) - excellent reasoning and analysis
+async function callClaude(prompt, systemPrompt = null, jsonMode = false) {
+  if (!anthropic) {
+    console.warn('Claude not available - ANTHROPIC_API_KEY not set');
+    return '';
+  }
+  try {
+    const messages = [{ role: 'user', content: prompt }];
+    const requestParams = {
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 8192,
+      messages
+    };
+
+    if (systemPrompt) {
+      requestParams.system = systemPrompt;
+    }
+
+    const response = await anthropic.messages.create(requestParams);
+    const text = response.content?.[0]?.text || '';
+
+    return text;
+  } catch (error) {
+    console.error('Claude error:', error.message);
+    return '';
+  }
+}
+
+// Claude with web search via Perplexity - Claude reasons, Perplexity searches
+async function callClaudeWithSearch(searchPrompt, reasoningTask) {
+  // Step 1: Use Perplexity to search the web
+  const searchResults = await callPerplexity(searchPrompt);
+
+  if (!searchResults) {
+    return { searchResults: '', analysis: '' };
+  }
+
+  // Step 2: Use Claude to analyze and reason about the results
+  const analysis = await callClaude(
+    `Here are search results about: ${searchPrompt}
+
+SEARCH RESULTS:
+${searchResults}
+
+YOUR TASK:
+${reasoningTask}`,
+    'You are an expert M&A research analyst. Analyze the search results thoroughly and extract all relevant information.'
+  );
+
+  return { searchResults, analysis };
 }
 
 async function callPerplexity(prompt) {
@@ -2634,6 +2695,70 @@ async function runAgenticSearchTask(taskPrompt, country, searchLog) {
   return companies;
 }
 
+// Run a Claude-powered search task (Claude reasoning + Perplexity search)
+async function runClaudeSearchTask(searchQuery, reasoningTask, country, searchLog) {
+  if (!anthropic) {
+    console.log(`  Skipping Claude task - API key not set`);
+    return [];
+  }
+
+  const startTime = Date.now();
+  console.log(`  Executing Claude + Perplexity search task...`);
+
+  // Step 1: Perplexity searches
+  const searchResult = await callPerplexity(searchQuery);
+
+  if (!searchResult) {
+    console.log(`    Perplexity returned no results`);
+    searchLog.push({
+      task: `[Claude] ${searchQuery.substring(0, 80)}...`,
+      duration: ((Date.now() - startTime) / 1000),
+      searchQueries: [searchQuery],
+      sourceCount: 0,
+      responseLength: 0,
+      model: 'claude+perplexity'
+    });
+    return [];
+  }
+
+  // Step 2: Claude analyzes and extracts
+  const claudePrompt = `You are an M&A research analyst. Analyze these search results and extract ALL company information.
+
+SEARCH QUERY: ${searchQuery}
+
+SEARCH RESULTS:
+${searchResult}
+
+TASK: ${reasoningTask}
+
+For each company found, provide:
+- Company name (official name)
+- Website (if mentioned)
+- Headquarters location (City, Country)
+
+Be thorough - extract EVERY company mentioned, even if only briefly. Return as a structured list.`;
+
+  const claudeResult = await callClaude(claudePrompt);
+
+  const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`    Completed in ${duration}s`);
+
+  searchLog.push({
+    task: `[Claude] ${searchQuery.substring(0, 80)}...`,
+    duration: parseFloat(duration),
+    searchQueries: [searchQuery],
+    sourceCount: 1,
+    responseLength: claudeResult.length,
+    model: 'claude+perplexity'
+  });
+
+  // Extract companies from Claude's response
+  const companies = await extractCompaniesV5(claudeResult, country);
+  console.log(`    Extracted ${companies.length} companies`);
+
+  return companies;
+}
+
 // Generate diverse search tasks for a business/country
 function generateSearchTasks(business, country, exclusion) {
   const countries = country.split(',').map(c => c.trim());
@@ -2832,8 +2957,16 @@ Return JSON: {"valid": true/false, "reason": "one sentence explanation", "correc
 
 // Build email with search log summary
 function buildV5EmailHTML(companies, business, country, exclusion, searchLog) {
-  const searchSummary = searchLog.map((s, i) =>
-    `<li>Task ${i + 1}: ${s.searchQueries.length} searches, ${s.sourceCount} sources, ${s.duration}s</li>`
+  // Separate Gemini and Claude tasks
+  const geminiTasks = searchLog.filter(s => !s.model || s.model !== 'claude+perplexity');
+  const claudeTasks = searchLog.filter(s => s.model === 'claude+perplexity');
+
+  const geminiSummary = geminiTasks.map((s, i) =>
+    `<li><strong>[Gemini]</strong> Task ${i + 1}: ${s.searchQueries.length} searches, ${s.sourceCount} sources, ${s.duration}s</li>`
+  ).join('');
+
+  const claudeSummary = claudeTasks.map((s, i) =>
+    `<li><strong>[Claude]</strong> Task ${i + 1}: ${s.duration}s</li>`
   ).join('');
 
   const totalSearches = searchLog.reduce((sum, s) => sum + s.searchQueries.length, 0);
@@ -2848,8 +2981,14 @@ function buildV5EmailHTML(companies, business, country, exclusion, searchLog) {
     <p><strong>Companies Found:</strong> ${companies.length}</p>
 
     <h3>Search Summary</h3>
+    <p><strong>Models Used:</strong> Gemini 3 Flash (${geminiTasks.length} tasks) + Claude Sonnet (${claudeTasks.length} tasks)</p>
     <p>Total internal searches: ${totalSearches} | Sources consulted: ${totalSources} | Search time: ${totalDuration.toFixed(1)}s</p>
-    <ul>${searchSummary}</ul>
+
+    <h4>Gemini Tasks</h4>
+    <ul>${geminiSummary || '<li>None</li>'}</ul>
+
+    <h4>Claude Tasks</h4>
+    <ul>${claudeSummary || '<li>None (API key not set)</li>'}</ul>
 
     <h3>Companies</h3>
     <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
@@ -2917,7 +3056,7 @@ app.post('/api/find-target-v5', async (req, res) => {
     let allCompanies = [];
 
     for (let i = 0; i < tasks.length; i++) {
-      console.log(`\n--- Task ${i + 1}/${tasks.length} ---`);
+      console.log(`\n--- Gemini Task ${i + 1}/${tasks.length} ---`);
       try {
         const companies = await runAgenticSearchTask(tasks[i], Country, searchLog);
         allCompanies = [...allCompanies, ...companies];
@@ -2925,6 +3064,57 @@ app.post('/api/find-target-v5', async (req, res) => {
       } catch (taskError) {
         console.error(`  Task ${i + 1} failed: ${taskError.message}`);
       }
+    }
+
+    // ========== PHASE 2.5: Claude-Powered Searches ==========
+    if (anthropic) {
+      console.log('\n' + '='.repeat(50));
+      console.log('PHASE 2.5: CLAUDE + PERPLEXITY SEARCHES');
+      console.log('='.repeat(50));
+
+      const countries = Country.split(',').map(c => c.trim());
+
+      // Claude search tasks - different angles that Claude might excel at
+      const claudeSearches = [
+        {
+          query: `Complete list of ${Business} companies in ${Country}. Include all manufacturers, suppliers, and producers.`,
+          reasoning: `Extract ALL ${Business} companies. Focus on companies that might be acquisition targets.`
+        },
+        {
+          query: `Lesser known ${Business} SMEs and family businesses in ${Country}`,
+          reasoning: `Find smaller, local companies that might not appear in mainstream searches. These are often the best M&A targets.`
+        },
+        {
+          query: `${Business} industry ${Country} market players manufacturers list`,
+          reasoning: `Identify all market participants including niche players and specialists.`
+        }
+      ];
+
+      // Add country-specific searches
+      for (const c of countries.slice(0, 3)) {
+        claudeSearches.push({
+          query: `${Business} companies manufacturers ${c} complete list`,
+          reasoning: `Find all ${Business} companies specifically in ${c}. Be thorough.`
+        });
+      }
+
+      for (let i = 0; i < claudeSearches.length; i++) {
+        console.log(`\n--- Claude Task ${i + 1}/${claudeSearches.length} ---`);
+        try {
+          const companies = await runClaudeSearchTask(
+            claudeSearches[i].query,
+            claudeSearches[i].reasoning,
+            Country,
+            searchLog
+          );
+          allCompanies = [...allCompanies, ...companies];
+          console.log(`  Running total: ${allCompanies.length} companies (before dedup)`);
+        } catch (claudeError) {
+          console.error(`  Claude task ${i + 1} failed: ${claudeError.message}`);
+        }
+      }
+    } else {
+      console.log('\n(Skipping Claude searches - ANTHROPIC_API_KEY not set)');
     }
 
     // ========== PHASE 3: Deduplication ==========
