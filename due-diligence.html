@@ -76,16 +76,21 @@
 
     .dd-file-list {
       margin-top: 8px;
-      display: flex;
+      display: flex !important;
       flex-direction: column;
-      gap: 4px;
+      gap: 6px;
       max-height: 150px;
       overflow-y: auto;
     }
     .dd-file-item {
-      display: flex; align-items: center; gap: 8px;
-      padding: 10px 12px; background: #f8fafc;
-      border: 1px solid #e2e8f0; border-radius: 6px;
+      display: flex !important;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      background: #f1f5f9 !important;
+      border: 1px solid #cbd5e1 !important;
+      border-radius: 6px;
+      min-height: 40px;
     }
     .dd-file-item svg { width: 16px; height: 16px; color: #3b82f6; flex-shrink: 0; }
     .dd-file-item span { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #1e293b; }
@@ -389,8 +394,8 @@
             <button type="button" class="dd-lang-btn" data-lang="hi">Hindi</button>
             <button type="button" class="dd-lang-btn" data-lang="tl">Filipino</button>
           </div>
-          <div id="langHint" style="font-size: 13px; color: var(--text-main); text-align: center; margin-bottom: 8px; padding: 8px 10px; background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); border-radius: 4px; border: 1px solid #22c55e;">
-            <strong style="color: #166534;">English mode:</strong> <span style="color: #14532d;">Optimized for English-only meetings.</span>
+          <div id="langHint" style="font-size: 13px; color: var(--text-main); text-align: center; margin-bottom: 8px; padding: 8px 10px; background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); border-radius: 4px; border: 1px solid #3b82f6;">
+            <strong style="color: #1e40af;">Multi-language mode:</strong> <span style="color: #1e3a5f;">Auto-detects EN/JA/KO/VI/HI + more.</span><br><span style="font-size: 11px; color: #64748b;">Note: Chinese/Thai/Malay/Filipino - select directly.</span>
           </div>
           <div class="dd-record-controls">
             <button class="dd-record-btn" id="recordBtn">
@@ -502,11 +507,11 @@
     const errorText = document.getElementById('errorText');
 
     let selectedFiles = [];
-    let selectedLang = 'en';  // Default to English
+    let selectedLang = 'multi';  // Default to Multi (auto-detect)
     let isRecording = false;
 
-    // Set English as default selected on page load
-    document.querySelector('#langSelect .dd-lang-btn[data-lang="en"]').classList.add('active');
+    // Set Multi as default selected on page load
+    document.querySelector('#langSelect .dd-lang-btn[data-lang="multi"]').classList.add('active');
 
     // Language selector click handler
     document.getElementById('langSelect').addEventListener('click', (e) => {
