@@ -5118,9 +5118,13 @@ async function generatePPTX(companies, targetDescription = '') {
       });
 
       // Helper function to parse location (handles JSON format like {"HQ":"Singapore"})
+      // Also cleans up "HQ:", "- HQ:" prefixes from location values
       const parseLocation = (location) => {
         if (!location) return { country: 'Other', hqCity: '' };
-        const loc = ensureString(location);
+        let loc = ensureString(location);
+
+        // Clean up "- HQ:" or "HQ:" prefix from the start
+        loc = loc.replace(/^-?\s*HQ:\s*/i, '').trim();
 
         // Check if location is JSON format (e.g., {"HQ":"Chatuchak, Bangkok, Thailand"})
         if (loc.includes('{') && loc.includes('}')) {
@@ -5128,12 +5132,14 @@ async function generatePPTX(companies, targetDescription = '') {
             // Try to extract the value from JSON-like string
             const match = loc.match(/"HQ"\s*:\s*"([^"]+)"/i) || loc.match(/"([^"]+)"\s*:\s*"([^"]+)"/);
             if (match) {
-              const hqValue = match[1] || match[2] || '';
+              let hqValue = match[1] || match[2] || '';
+              // Clean up any remaining "HQ:" prefix
+              hqValue = hqValue.replace(/^-?\s*HQ:\s*/i, '').trim();
               const parts = hqValue.split(',').map(p => p.trim());
               // Country is always last part
               const country = parts[parts.length - 1] || 'Other';
-              // HQ city is first part (or first two for City, State format)
-              const hqCity = parts.length >= 2 ? parts.slice(0, -1).join(', ') : parts[0] || '';
+              // HQ city is first part only (just the district/area, not including state)
+              const hqCity = parts[0] || '';
               return { country, hqCity };
             }
           } catch (e) {
@@ -5144,8 +5150,8 @@ async function generatePPTX(companies, targetDescription = '') {
         // Normal parsing - extract country from location (last part after comma)
         const parts = loc.split(',').map(p => p.trim());
         const country = parts[parts.length - 1] || 'Other';
-        // HQ city is first part (or first two for City, State format)
-        const hqCity = parts.length >= 2 ? parts.slice(0, -1).join(', ') : parts[0] || '';
+        // HQ city is first part only (just the district/area)
+        const hqCity = parts[0] || '';
         return { country, hqCity };
       };
 
@@ -5275,12 +5281,12 @@ async function generatePPTX(companies, targetDescription = '') {
         }
       });
 
-      // Segment headers (dark blue background, white text)
+      // Segment headers (bright blue background like company names, white text)
       segments.forEach(seg => {
         headerRow.push({
           text: seg,
           options: {
-            fill: TL_COLORS.headerBg,
+            fill: TL_COLORS.companyBg,
             color: TL_COLORS.white,
             bold: false,
             align: 'center',
@@ -5329,6 +5335,7 @@ async function generatePPTX(companies, targetDescription = '') {
           }
 
           // Company name with numbering (bright blue background, WHITE text, left-aligned)
+          // Keep 3pt white borders on ALL sides for company name cells
           const companyName = comp.title || comp.company_name || 'Unknown';
           row.push({
             text: `${comp.index}. ${companyName}`,
@@ -5338,12 +5345,7 @@ async function generatePPTX(companies, targetDescription = '') {
               bold: false,
               align: 'left',
               valign: 'middle',
-              border: [
-                { pt: 3, color: TL_COLORS.white },    // top
-                { pt: 3, color: TL_COLORS.white },    // right
-                rowBottomBorder,                       // bottom (dotted between rows)
-                { pt: 3, color: TL_COLORS.white }     // left
-              ],
+              border: { pt: 3, color: TL_COLORS.white },
               hyperlink: { url: comp.website || '' }
             }
           });
@@ -5415,13 +5417,15 @@ async function generatePPTX(companies, targetDescription = '') {
       }
 
       // Add target list table (position from template: x=0.3663", y=1.467")
+      // Cell margins: 0.1 inch left/right, 0 inch top/bottom
       targetSlide.addTable(tableRows, {
         x: 0.37, y: 1.47, w: tableWidth,
         colW: colWidths,
         fontFace: 'Segoe UI',
         fontSize: 14,
         valign: 'middle',
-        rowH: 0.32
+        rowH: 0.32,
+        margin: [0, 0.1, 0, 0.1]  // [top, right, bottom, left] in inches
       });
 
       // Footnote (from template: x=0.3754", y=6.6723", font 10pt)
