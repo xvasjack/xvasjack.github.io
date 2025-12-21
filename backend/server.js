@@ -9763,160 +9763,75 @@ async function generateDueDiligenceReport(files, instructions, reportLength, ins
   }
 
   const lengthInstructions = {
-    short: `Create a concise 1-PAGE EXECUTIVE SUMMARY. Focus only on:
-- Key business overview (2-3 sentences)
-- Critical financial highlights (revenue, growth, margins)
+    short: `Create a 1-PAGE EXECUTIVE SUMMARY with:
+- Business overview (2-3 sentences)
+- Key financial highlights
 - Top 3 opportunities
-- Top 3 risks/red flags
-- Clear recommendation (proceed/proceed with caution/pass)
-Keep it extremely concise - this should fit on one page.`,
+- Top 3 risks
+- Recommendation (proceed/proceed with caution/pass)`,
 
-    medium: `Create a 2-3 PAGE due diligence report with these sections:
+    medium: `Create a 2-3 PAGE report with:
 1. EXECUTIVE SUMMARY (1 paragraph)
-2. BUSINESS OVERVIEW
-   - Company description
-   - Products/services
-   - Market position
-3. FINANCIAL ANALYSIS
-   - Key metrics and trends
-   - Revenue and profitability
-4. KEY RISKS
-   - Business risks
-   - Financial risks
-   - Operational concerns
-5. OPPORTUNITIES
-   - Growth potential
-   - Synergies
-6. RECOMMENDATION
-Be thorough but concise. Focus on actionable insights.`,
+2. BUSINESS OVERVIEW - Company description, products/services, market position
+3. FINANCIAL ANALYSIS - Key metrics, revenue, profitability
+4. KEY RISKS - Business, financial, operational
+5. OPPORTUNITIES - Growth potential, synergies
+6. RECOMMENDATION`,
 
-    long: `Create a COMPREHENSIVE due diligence report with detailed analysis:
-
-1. EXECUTIVE SUMMARY
-   - Investment thesis
-   - Key findings
-   - Recommendation
-
-2. COMPANY OVERVIEW
-   - Business description
-   - History and milestones
-   - Corporate structure
-   - Management team
-
-3. INDUSTRY & MARKET ANALYSIS
-   - Market size and growth
-   - Competitive landscape
-   - Industry trends
-   - Regulatory environment
-
-4. BUSINESS MODEL ANALYSIS
-   - Revenue streams
-   - Customer segments
-   - Value proposition
-   - Competitive advantages
-
-5. FINANCIAL ANALYSIS
-   - Historical performance
-   - Revenue analysis
-   - Profitability metrics
-   - Cash flow analysis
-   - Balance sheet review
-   - Key ratios
-
-6. OPERATIONAL REVIEW
-   - Operations overview
-   - Technology and systems
-   - Supply chain
-   - Human resources
-
-7. RISK ASSESSMENT
-   - Strategic risks
-   - Operational risks
-   - Financial risks
-   - Legal/regulatory risks
-   - Market risks
-
+    long: `Create a COMPREHENSIVE report covering:
+1. EXECUTIVE SUMMARY - Key findings, recommendation
+2. COMPANY OVERVIEW - Business, history, structure, management
+3. INDUSTRY & MARKET - Market size, competition, trends, regulations
+4. BUSINESS MODEL - Revenue streams, customers, competitive advantages
+5. FINANCIAL ANALYSIS - Performance, revenue, profitability, cash flow, ratios
+6. OPERATIONAL REVIEW - Operations, technology, supply chain, HR
+7. RISK ASSESSMENT - Strategic, operational, financial, legal, market risks
 8. OPPORTUNITIES & SYNERGIES
-   - Growth opportunities
-   - Cost synergies
-   - Revenue synergies
-   - Strategic benefits
-
 9. VALUATION CONSIDERATIONS
-   - Comparable analysis
-   - Key value drivers
-   - Valuation ranges
-
-10. DEAL CONSIDERATIONS
-    - Key due diligence items
-    - Critical success factors
-    - Potential deal breakers
-    - Next steps
-
-11. APPENDICES
-    - Key data tables
-    - Supporting analysis
-
-Be extremely thorough and detailed. Extract all relevant information from the materials.`
+10. NEXT STEPS`
   };
 
   // Build instruction section based on mode
   let instructionSection = '';
   if (instructionMode === 'manual' && instructions) {
     instructionSection = `
-CLIENT INSTRUCTIONS (IMPORTANT - Follow these closely):
+CLIENT INSTRUCTIONS (Follow these):
 ${instructions}
-
-Use these instructions to understand:
-- Who the client is and who they represent
-- Which speaker/party is the client vs the target
-- What specific aspects to focus on
-- The perspective from which to write the report
 `;
   } else {
     instructionSection = `
-MODE: Automatic Analysis
-- Analyze all materials comprehensively
-- Identify all parties involved and their roles
-- Determine the most likely perspective (buyer analyzing seller)
-- Highlight key findings, risks, and opportunities
+Analyze objectively from a neutral advisory perspective. Present facts and findings without bias toward buyer or seller.
 `;
   }
 
-  const prompt = `You are an expert M&A advisor creating a due diligence report.
+  const prompt = `You are an M&A advisor at a top firm writing a due diligence report for a partner and client.
 
-MATERIALS PROVIDED:
+MATERIALS:
 ${filesSummary.join('\n')}
 ${instructionSection}
-REPORT REQUIREMENTS:
+STRUCTURE:
 ${lengthInstructions[reportLength]}
 
-MATERIAL CONTENTS:
+CONTENT:
 ${combinedContent.substring(0, 100000)}
 
-Generate a professional due diligence report in HTML format. Use proper headings (<h1>, <h2>, <h3>), bullet points (<ul>, <li>), and tables where appropriate. Make it visually structured and easy to read.
-
-IMPORTANT:
-- Be specific with numbers, names, and facts from the materials
-- Highlight red flags clearly
-- Provide actionable recommendations
-- Use professional M&A language
-- If information is missing, note it as "Not provided in materials"`;
+OUTPUT REQUIREMENTS:
+- Generate clean HTML with proper headings (<h2>, <h3>), bullet points (<ul>, <li>), and tables where useful
+- Style: Use font-family: 'Calibri', 'Segoe UI', sans-serif throughout
+- Be DIRECT and CONCISE - no filler phrases like "this report analyzes..." or "the following sections..."
+- Use professional but plain language - avoid unnecessary jargon
+- Be SPECIFIC with numbers, names, and facts from the materials
+- Present information OBJECTIVELY - do not assume buyer/seller perspective unless instructed
+- Do NOT include: "CONFIDENTIAL" labels, dates, "Prepared For" headers, disclaimers, or footers
+- Do NOT use CSS style blocks - just inline styles if needed
+- Start directly with the content - no meta-commentary about the report itself
+- If information is missing, state "Not available in materials provided"`;
 
   try {
     const maxTokens = reportLength === 'short' ? 2000 : reportLength === 'medium' ? 4000 : 8000;
-    console.log(`[DD] Starting AI generation (maxTokens: ${maxTokens})...`);
+    console.log(`[DD] Starting AI generation with GPT-4o (maxTokens: ${maxTokens})...`);
 
-    // Try DeepSeek V3.2 first (more cost-effective)
-    console.log('[DD] Trying DeepSeek...');
-    const deepseekResult = await callDeepSeek(prompt, maxTokens);
-    if (deepseekResult) {
-      console.log(`[DD] Report generated using DeepSeek (${deepseekResult.length} chars)`);
-      return deepseekResult;
-    }
-
-    // Fallback to GPT-4o if DeepSeek unavailable
-    console.log('[DD] DeepSeek unavailable, falling back to GPT-4o...');
+    // Use GPT-4o directly for quality DD reports
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
