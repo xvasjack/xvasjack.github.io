@@ -825,22 +825,11 @@
 
         showSuccess(`DD Report & Transcript will be emailed to ${email} within 10-15 minutes.`);
 
-        // Clear backup
+        // Clear backup only - keep transcript visible for user reference
         localStorage.removeItem(STORAGE_KEY);
 
-        // Reset transcript
-        finalTranscript = '';
-        finalTranslation = '';
-        currentR2Key = null;
-        transcriptContent.innerHTML = '';
-        transcriptContent.classList.add('empty');
-        transcriptContent.textContent = 'Start recording to see live transcription...';
-        translationContent.textContent = '';
-        translationPanel.style.display = 'none';
-        downloadRecordingBtn.style.display = 'none';
-        recordTimer.textContent = '00:00';
-
-        // Reset files
+        // Don't reset transcript - user may want to review it
+        // Only reset files and instructions for next submission
         selectedFiles = [];
         updateFileList();
         ddInstructions.value = '';
@@ -1066,6 +1055,10 @@
       successText.textContent = msg;
       successMessage.classList.add('show');
       errorMessage.classList.remove('show');
+      // Auto-hide after 5 seconds so it doesn't block the UI
+      setTimeout(() => {
+        successMessage.classList.remove('show');
+      }, 5000);
     }
 
     function showError(msg) {

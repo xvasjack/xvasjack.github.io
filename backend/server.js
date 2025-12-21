@@ -10182,12 +10182,29 @@ app.post('/api/due-diligence', async (req, res) => {
 
       // Add transcripts to files for processing
       const allFiles = [...files];
+
+      // Add audio file transcripts (from uploaded audio)
       if (combinedTranscript) {
         allFiles.push({
-          name: 'Meeting Transcripts',
+          name: 'Audio File Transcripts',
           type: 'transcript',
           content: combinedTranscript
         });
+      }
+
+      // Add real-time recording transcript (CRITICAL: this was missing!)
+      if (rawTranscript && rawTranscript.trim().length > 0) {
+        // Use translated transcript if available, otherwise use raw
+        const transcriptToUse = translatedTranscript && translatedTranscript.trim().length > 0
+          ? `ENGLISH TRANSLATION:\n${translatedTranscript}\n\n${'='.repeat(40)}\n\nORIGINAL (${detectedLanguage || 'detected language'}):\n${rawTranscript}`
+          : rawTranscript;
+
+        allFiles.push({
+          name: 'Real-Time Meeting Recording',
+          type: 'transcript',
+          content: transcriptToUse
+        });
+        console.log(`[DD] Added real-time transcript to report: ${rawTranscript.length} chars`);
       }
 
       outputContent = await generateDueDiligenceReport(allFiles, instructions, length, instructionMode);
