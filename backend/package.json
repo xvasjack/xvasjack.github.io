@@ -4,8 +4,8 @@
   "description": "Backend for Find Target company search",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
+    "start": "node --expose-gc --max-old-space-size=450 server.js",
+    "dev": "node --expose-gc server.js"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.52.0",

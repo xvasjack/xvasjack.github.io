@@ -15,11 +15,21 @@ const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = re
 const Anthropic = require('@anthropic-ai/sdk');
 
 // ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
+// Memory logging helper for debugging Railway OOM issues
+function logMemoryUsage(label = '') {
+  const mem = process.memoryUsage();
+  const heapUsedMB = Math.round(mem.heapUsed / 1024 / 1024);
+  const heapTotalMB = Math.round(mem.heapTotal / 1024 / 1024);
+  const rssMB = Math.round(mem.rss / 1024 / 1024);
+  console.log(`  [Memory${label ? ': ' + label : ''}] Heap: ${heapUsedMB}/${heapTotalMB}MB, RSS: ${rssMB}MB`);
+}
+
 process.on('unhandledRejection', (reason, promise) => {
   console.error('=== UNHANDLED PROMISE REJECTION ===');
   console.error('Reason:', reason);
   console.error('Promise:', promise);
   console.error('Stack:', reason?.stack || 'No stack trace');
+  logMemoryUsage('at rejection');
   // Don't exit - keep the server running
 });
 
@@ -27,6 +37,7 @@ process.on('uncaughtException', (error) => {
   console.error('=== UNCAUGHT EXCEPTION ===');
   console.error('Error:', error.message);
   console.error('Stack:', error.stack);
+  logMemoryUsage('at exception');
   // Don't exit - keep the server running
 });
 
@@ -57,7 +68,11 @@ app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 // Multer configuration for file uploads (memory storage)
-const upload = multer({ storage: multer.memoryStorage() });
+// Add 50MB limit to prevent OOM on Railway containers
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 }  // 50MB max
+});
 
 // Check required environment variables
 const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
@@ -8042,6 +8057,7 @@ app.post('/api/profile-slides', async (req, res) => {
       if (!website) continue;
 
       console.log(`\n[${i + 1}/${websites.length}] Processing: ${website}`);
+      logMemoryUsage(`start company ${i + 1}`);
 
       try {
         // Step 1: Scrape website
@@ -8120,6 +8136,10 @@ app.post('/api/profile-slides', async (req, res) => {
         console.log(`  ✓ Completed: ${companyData.title || companyData.company_name} (${companyData.key_metrics?.length || 0} metrics after review)`);
         results.push(companyData);
 
+        // Memory cleanup: Release large objects to prevent OOM on Railway
+        // scraped.content can be 1-5MB per website, must release before next iteration
+        if (scraped) scraped.content = null;
+
       } catch (error) {
         console.error(`  Error processing ${website}:`, error.message);
         results.push({
@@ -8127,6 +8147,12 @@ app.post('/api/profile-slides', async (req, res) => {
           error: error.message,
           step: 0
         });
+      }
+
+      // Force garbage collection hint between companies (if available)
+      // This helps Railway containers stay under memory limits
+      if (global.gc) {
+        global.gc();
       }
     }
 
@@ -8138,10 +8164,17 @@ app.post('/api/profile-slides', async (req, res) => {
     console.log(`Extracted: ${companies.length}/${websites.length} successful`);
     console.log('='.repeat(50));
 
+    // Memory cleanup before PPTX generation (which is memory-intensive)
+    // Clear the results array since we only need companies/errors now
+    results.length = 0;
+    if (global.gc) global.gc();
+    logMemoryUsage('before PPTX generation');
+
     // Generate PPTX using PptxGenJS (with target list slide)
     let pptxResult = null;
     if (companies.length > 0) {
       pptxResult = await generatePPTX(companies, targetDescription);
+      logMemoryUsage('after PPTX generation');
     }
 
     // Build email content
@@ -8159,6 +8192,10 @@ app.post('/api/profile-slides', async (req, res) => {
 
     console.log(`Email sent to ${email}${attachment ? ' with PPTX attachment' : ''}`);
     console.log('='.repeat(50));
+
+    // Memory cleanup after email sent
+    if (pptxResult) pptxResult.content = null;
+    pptxResult = null;
 
   } catch (error) {
     console.error('Profile slides error:', error);
