@@ -6573,17 +6573,12 @@ Create MECE segments for these ${targetDescription} companies and mark which seg
 }
 
 // AI Review Agent: Clean up and remove duplicative/unnecessary information
-// This agent reviews all extracted data and removes redundant rows, merges duplicate info
+// Uses Gemini 3 Flash for frontier reasoning - better at identifying duplicates and merging data
 async function reviewAndCleanData(companyData) {
   try {
-    console.log('  Step 6: Running AI review agent...');
+    console.log('  Step 6: Running AI review agent (Gemini 3 Flash)...');
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a data quality reviewer for M&A company profiles. Review the extracted data and clean it up by:
+    const prompt = `You are a data quality reviewer for M&A company profiles. Review the extracted data and clean it up by:
 
 1. REMOVE DUPLICATIVE ROWS:
    - If "Number of X" appears alongside "Key X names", merge them into one row
@@ -6605,6 +6600,10 @@ async function reviewAndCleanData(companyData) {
    - If location looks like JSON ({"HQ":"..."}), extract the actual location value
    - Format should be: "City, State/Province, Country" or "District, Singapore" for Singapore
 
+Review and clean this company data:
+
+${JSON.stringify(companyData, null, 2)}
+
 OUTPUT JSON with the same structure but cleaned up:
 {
   "company_name": "...",
@@ -6618,22 +6617,30 @@ OUTPUT JSON with the same structure but cleaned up:
   "breakdown_items": [cleaned array]
 }
 
-Return ONLY valid JSON.`
-        },
-        {
-          role: 'user',
-          content: `Review and clean this company data:
+Return ONLY valid JSON.`;
 
-${JSON.stringify(companyData, null, 2)}
+    // Use Gemini 3 Flash with JSON mode for frontier reasoning
+    const result = await callGemini3Flash(prompt, true);
 
-Return the cleaned data as JSON.`
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2
-    });
+    if (!result) {
+      console.log('  Gemini 3 Flash returned empty, keeping original data');
+      return companyData;
+    }
 
-    const cleaned = JSON.parse(response.choices[0].message.content);
+    // Parse JSON from response
+    let cleaned;
+    try {
+      cleaned = JSON.parse(result);
+    } catch (parseError) {
+      // Try to extract JSON from response if not pure JSON
+      const jsonMatch = result.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleaned = JSON.parse(jsonMatch[0]);
+      } else {
+        console.log('  Failed to parse Gemini response, keeping original data');
+        return companyData;
+      }
+    }
 
     // Merge cleaned data with original (preserve fields not in prompt)
     return {
