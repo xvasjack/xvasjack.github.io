@@ -419,7 +419,7 @@
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
             <p>Drop files or click</p>
           </div>
-          <div class="dd-file-list" id="fileList"></div>
+          <div class="dd-file-list" id="fileList" style="display: none;"></div>
 
           <!-- Form Section -->
           <div class="dd-form-section">
@@ -678,25 +678,39 @@
     function updateFileList() {
       try {
         console.log('[DD] updateFileList called, selectedFiles:', selectedFiles.length);
-        console.log('[DD] fileList element:', fileList, 'exists:', !!fileList);
-        if (!fileList) {
-          console.error('[DD] ERROR: fileList element is null!');
+
+        // Get the file list element fresh each time (in case it was re-rendered)
+        const fileListEl = document.getElementById('fileList');
+        if (!fileListEl) {
+          console.error('[DD] ERROR: fileList element not found!');
           return;
         }
+
         if (selectedFiles.length === 0) {
-          fileList.innerHTML = '';
+          fileListEl.innerHTML = '';
+          fileListEl.style.display = 'none';
           return;
         }
+
+        // Show the container and apply inline styles to ensure visibility
+        fileListEl.style.display = 'flex';
+        fileListEl.style.flexDirection = 'column';
+        fileListEl.style.gap = '6px';
+        fileListEl.style.marginTop = '8px';
+        fileListEl.style.maxHeight = '150px';
+        fileListEl.style.overflowY = 'auto';
+
+        // Build HTML with ALL styles inline to guarantee visibility
         const html = selectedFiles.map((f, i) => `
-          <div class="dd-file-item">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-            <span>${f.name}</span>
-            <button onclick="removeFile(${i})">&times;</button>
+          <div style="display: flex !important; visibility: visible !important; opacity: 1 !important; align-items: center; gap: 8px; padding: 10px 12px; background-color: #e2e8f0; border: 2px solid #94a3b8; border-radius: 6px; min-height: 44px; margin-bottom: 4px;">
+            <svg fill="none" stroke="#3b82f6" viewBox="0 0 24 24" style="width: 18px; height: 18px; flex-shrink: 0;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <span style="flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #1e293b; font-weight: 500;">${f.name}</span>
+            <button onclick="removeFile(${i})" style="background: #fee2e2; border: 1px solid #fca5a5; color: #dc2626; cursor: pointer; font-size: 16px; padding: 2px 8px; border-radius: 4px; font-weight: bold;">&times;</button>
           </div>
         `).join('');
-        console.log('[DD] Setting innerHTML, html length:', html.length);
-        fileList.innerHTML = html;
-        console.log('[DD] Success! fileList now has', fileList.children.length, 'children');
+
+        fileListEl.innerHTML = html;
+        console.log('[DD] File list updated with', selectedFiles.length, 'files, children:', fileListEl.children.length);
       } catch (err) {
         console.error('[DD] updateFileList ERROR:', err);
       }
