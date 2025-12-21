@@ -10390,7 +10390,17 @@ wss.on('connection', (ws, req) => {
   ws.on('message', async (message) => {
     try {
       // Check if it's a control message (JSON) or audio data (binary)
-      if (typeof message === 'string' || (message instanceof Buffer && message[0] === 123)) {
+      // JSON messages start with '{' (ASCII 123), but audio can also start with this byte
+      // So we try to parse as JSON first, and if it fails, treat as audio
+      let isJsonMessage = typeof message === 'string';
+      if (!isJsonMessage && message instanceof Buffer) {
+        // Quick heuristic: JSON messages are usually small (<1KB), audio chunks are larger
+        // Also check if it starts with '{' and contains common JSON characters
+        isJsonMessage = message.length < 1024 && message[0] === 123 &&
+                       (message.includes(0x22) || message.toString().includes('"type"'));
+      }
+
+      if (isJsonMessage) {
         const data = JSON.parse(message.toString());
 
         if (data.type === 'start') {
@@ -10730,23 +10740,29 @@ wss.on('connection', (ws, req) => {
             }
           }
 
-          // Upload audio to R2 if available
+          // Upload audio to R2 if available (wait for upload to complete)
           let r2Key = null;
           if (session.audioChunks && session.audioChunks.length > 0) {
             const audioBuffer = Buffer.concat(session.audioChunks);
             const dateStr = new Date().toISOString().split('T')[0];
-            r2Key = `recordings/${dateStr}/${sessionId}.pcm`;
+            const keyPath = `recordings/${dateStr}/${sessionId}.pcm`;
 
-            // Upload async - don't block response
-            uploadToR2(r2Key, audioBuffer, 'audio/pcm').then(key => {
-              if (key) {
-                session.r2Key = key;
-                console.log(`[WS] Recording saved to R2: ${key}`);
+            // Wait for upload to complete before sending response
+            try {
+              const uploadedKey = await uploadToR2(keyPath, audioBuffer, 'audio/pcm');
+              if (uploadedKey) {
+                r2Key = uploadedKey;
+                session.r2Key = uploadedKey;
+                console.log(`[WS] Recording saved to R2: ${uploadedKey}`);
+              } else {
+                console.warn(`[WS] R2 upload returned null for session ${sessionId}`);
               }
-            });
+            } catch (uploadError) {
+              console.error(`[WS] R2 upload failed for session ${sessionId}:`, uploadError.message);
+            }
           }
 
-          // Send final results
+          // Send final results (only include r2Key if upload succeeded)
           ws.send(JSON.stringify({
             type: 'complete',
             sessionId,
@@ -10754,7 +10770,7 @@ wss.on('connection', (ws, req) => {
             translatedTranscript: translatedTranscript.trim(),
             language: detectedLanguage,
             duration,
-            r2Key: r2Key // Include R2 key so frontend can download later
+            r2Key: r2Key // Only set if upload actually succeeded
           }));
         }
 
@@ -10778,8 +10794,13 @@ wss.on('connection', (ws, req) => {
         }
       }
     } catch (error) {
-      console.error('[WS] Error processing message:', error);
-      ws.send(JSON.stringify({ type: 'error', message: error.message }));
+      // Don't send JSON parse errors to client - they're usually from binary data misdetection
+      if (error instanceof SyntaxError && error.message.includes('JSON')) {
+        console.warn('[WS] Ignoring JSON parse error (likely binary data):', error.message);
+      } else {
+        console.error('[WS] Error processing message:', error);
+        ws.send(JSON.stringify({ type: 'error', message: error.message }));
+      }
     }
   });
 
