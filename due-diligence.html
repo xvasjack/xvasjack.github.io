@@ -78,18 +78,19 @@
       margin-top: 8px;
       display: flex !important;
       flex-direction: column;
-      gap: 4px;
-      min-height: 40px;
-      padding: 8px;
-      background: #fef2f2 !important;
-      border: 2px solid #ef4444 !important;
-      border-radius: 6px;
+      gap: 6px;
+      max-height: 150px;
+      overflow-y: auto;
     }
     .dd-file-item {
-      display: flex !important; align-items: center; gap: 8px;
-      padding: 8px 12px; background: #ffffff !important;
-      border: 1px solid #3b82f6 !important; border-radius: 6px;
-      min-height: 38px;
+      display: flex !important;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      background: #f1f5f9 !important;
+      border: 1px solid #cbd5e1 !important;
+      border-radius: 6px;
+      min-height: 40px;
     }
     .dd-file-item svg { width: 16px; height: 16px; color: #3b82f6; flex-shrink: 0; }
     .dd-file-item span { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #1e293b; }
@@ -383,23 +384,19 @@
           <!-- Language Selector -->
           <div class="dd-lang-select" id="langSelect">
             <button type="button" class="dd-lang-btn dd-lang-multi" data-lang="multi" style="background: linear-gradient(135deg, #4f46e5, #7c3aed); color: white; font-weight: 600;">Multi</button>
-            <button type="button" class="dd-lang-btn" data-lang="en">EN</button>
-            <button type="button" class="dd-lang-btn" data-lang="zh">中文</button>
-            <button type="button" class="dd-lang-btn" data-lang="ja">日本語</button>
-            <button type="button" class="dd-lang-btn" data-lang="ko">한국어</button>
-            <button type="button" class="dd-lang-btn" data-lang="hi">हिंदी</button>
-            <button type="button" class="dd-lang-btn" data-lang="id">ID</button>
-            <button type="button" class="dd-lang-btn" data-lang="vi">VN</button>
-            <button type="button" class="dd-lang-btn" data-lang="th">ไทย</button>
-            <button type="button" class="dd-lang-btn" data-lang="es">ES</button>
-            <button type="button" class="dd-lang-btn" data-lang="fr">FR</button>
-            <button type="button" class="dd-lang-btn" data-lang="de">DE</button>
-            <button type="button" class="dd-lang-btn" data-lang="pt">PT</button>
-            <button type="button" class="dd-lang-btn" data-lang="ru">RU</button>
-            <button type="button" class="dd-lang-btn" data-lang="ar">AR</button>
+            <button type="button" class="dd-lang-btn" data-lang="en">English</button>
+            <button type="button" class="dd-lang-btn" data-lang="zh">Chinese</button>
+            <button type="button" class="dd-lang-btn" data-lang="ja">Japanese</button>
+            <button type="button" class="dd-lang-btn" data-lang="ko">Korean</button>
+            <button type="button" class="dd-lang-btn" data-lang="vi">Vietnamese</button>
+            <button type="button" class="dd-lang-btn" data-lang="id">Indonesian</button>
+            <button type="button" class="dd-lang-btn" data-lang="ms">Malay</button>
+            <button type="button" class="dd-lang-btn" data-lang="th">Thai</button>
+            <button type="button" class="dd-lang-btn" data-lang="hi">Hindi</button>
+            <button type="button" class="dd-lang-btn" data-lang="tl">Filipino</button>
           </div>
-          <div id="langHint" style="font-size: 13px; color: var(--text-main); text-align: center; margin-bottom: 8px; padding: 8px 10px; background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); border-radius: 4px; border: 1px solid #22c55e;">
-            <strong style="color: #166534;">English mode:</strong> <span style="color: #14532d;">Optimized for English-only meetings.</span>
+          <div id="langHint" style="font-size: 13px; color: var(--text-main); text-align: center; margin-bottom: 8px; padding: 8px 10px; background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); border-radius: 4px; border: 1px solid #3b82f6;">
+            <strong style="color: #1e40af;">Multi-language mode:</strong> <span style="color: #1e3a5f;">Auto-detects English, Japanese, Korean, Vietnamese, Hindi and more.</span><br><span style="font-size: 11px; color: #64748b;">Note: Chinese, Thai, Malay, Filipino - select directly.</span>
           </div>
           <div class="dd-record-controls">
             <button class="dd-record-btn" id="recordBtn">
@@ -422,7 +419,7 @@
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
             <p>Drop files or click</p>
           </div>
-          <div class="dd-file-list" id="fileList"></div>
+          <div id="fileList"></div>
 
           <!-- Form Section -->
           <div class="dd-form-section">
@@ -511,11 +508,11 @@
     const errorText = document.getElementById('errorText');
 
     let selectedFiles = [];
-    let selectedLang = 'en';  // Default to English
+    let selectedLang = 'multi';  // Default to Multi (auto-detect)
     let isRecording = false;
 
-    // Set English as default selected on page load
-    document.querySelector('#langSelect .dd-lang-btn[data-lang="en"]').classList.add('active');
+    // Set Multi as default selected on page load
+    document.querySelector('#langSelect .dd-lang-btn[data-lang="multi"]').classList.add('active');
 
     // Language selector click handler
     document.getElementById('langSelect').addEventListener('click', (e) => {
@@ -533,11 +530,11 @@
 
         // Update hint text based on selection
         const langHint = document.getElementById('langHint');
-        // Languages NOT supported for code-switching (must use single-language mode)
-        const noCodeSwitchLangs = ['zh', 'th', 'ar'];
+        // Languages that don't support code-switching (need single-language mode)
+        const noCodeSwitchLangs = ['zh', 'th', 'ms', 'tl'];
 
         if (selectedLang === 'multi') {
-          langHint.innerHTML = '<strong style="color: #1e40af;">Multi-language mode:</strong> <span style="color: #1e3a5f;">EN/ES/FR/DE/JA/KO/VI + more. Non-English translated.</span><br><span style="font-size: 10px; color: #64748b;">Note: Chinese/Thai/Arabic not supported - select those languages directly.</span>';
+          langHint.innerHTML = '<strong style="color: #1e40af;">Multi-language mode:</strong> <span style="color: #1e3a5f;">Auto-detects English, Japanese, Korean, Vietnamese, Hindi and more.</span><br><span style="font-size: 11px; color: #64748b;">Note: Chinese, Thai, Malay, Filipino - select directly.</span>';
           langHint.style.background = 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)';
           langHint.style.borderColor = '#3b82f6';
         } else if (selectedLang === 'en') {
@@ -545,11 +542,11 @@
           langHint.style.background = 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)';
           langHint.style.borderColor = '#22c55e';
         } else if (noCodeSwitchLangs.includes(selectedLang)) {
-          langHint.innerHTML = '<strong style="color: #92400e;">Selected: ' + e.target.textContent + '</strong> <span style="color: #78350f;">Single-language mode. Will be translated to English.</span>';
+          langHint.innerHTML = '<strong style="color: #92400e;">' + e.target.textContent + ':</strong> <span style="color: #78350f;">Single-language mode. Translated to English.</span>';
           langHint.style.background = 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)';
           langHint.style.borderColor = '#f59e0b';
         } else {
-          langHint.innerHTML = '<strong style="color: #92400e;">Selected: ' + e.target.textContent + '</strong> <span style="color: #78350f;">Will be translated to English.</span>';
+          langHint.innerHTML = '<strong style="color: #92400e;">' + e.target.textContent + ':</strong> <span style="color: #78350f;">Will be translated to English.</span>';
           langHint.style.background = 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)';
           langHint.style.borderColor = '#f59e0b';
         }
@@ -679,30 +676,37 @@
     }
 
     function updateFileList() {
-      try {
-        console.log('[DD] updateFileList called, selectedFiles:', selectedFiles.length);
-        console.log('[DD] fileList element:', fileList, 'exists:', !!fileList);
-        if (!fileList) {
-          console.error('[DD] ERROR: fileList element is null!');
-          return;
-        }
-        if (selectedFiles.length === 0) {
-          fileList.innerHTML = '';
-          return;
-        }
-        const html = selectedFiles.map((f, i) => `
-          <div class="dd-file-item">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-            <span>${f.name}</span>
-            <button onclick="removeFile(${i})">&times;</button>
-          </div>
-        `).join('');
-        console.log('[DD] Setting innerHTML, html length:', html.length);
-        fileList.innerHTML = html;
-        console.log('[DD] Success! fileList now has', fileList.children.length, 'children');
-      } catch (err) {
-        console.error('[DD] updateFileList ERROR:', err);
-      }
+      const container = document.getElementById('fileList');
+      if (!container) return;
+
+      // Clear existing content
+      container.innerHTML = '';
+
+      if (selectedFiles.length === 0) return;
+
+      // Create file items using DOM methods (more reliable than innerHTML)
+      selectedFiles.forEach((file, index) => {
+        const item = document.createElement('div');
+        item.style.cssText = 'display:flex; align-items:center; gap:8px; padding:10px 12px; background:#e2e8f0; border:2px solid #64748b; border-radius:6px; margin-top:6px;';
+
+        const icon = document.createElement('span');
+        icon.textContent = '📄';
+        icon.style.fontSize = '16px';
+
+        const name = document.createElement('span');
+        name.textContent = file.name;
+        name.style.cssText = 'flex:1; font-size:13px; color:#1e293b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
+
+        const removeBtn = document.createElement('button');
+        removeBtn.textContent = '✕';
+        removeBtn.style.cssText = 'background:#fee2e2; border:1px solid #fca5a5; color:#dc2626; cursor:pointer; padding:2px 8px; border-radius:4px; font-weight:bold;';
+        removeBtn.onclick = () => { selectedFiles.splice(index, 1); updateFileList(); };
+
+        item.appendChild(icon);
+        item.appendChild(name);
+        item.appendChild(removeBtn);
+        container.appendChild(item);
+      });
     }
 
     window.removeFile = function(i) { selectedFiles.splice(i, 1); updateFileList(); };
