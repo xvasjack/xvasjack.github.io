@@ -9713,15 +9713,6 @@ async function generateDueDiligenceReport(files, instructions, reportLength, ins
   // Combine all file contents
   let combinedContent = '';
   const filesSummary = [];
-  let reportTitle = 'Due Diligence Report';
-
-  // Try to extract a meaningful title from file names
-  const meaningfulFiles = files.filter(f => f.name && !f.name.includes('transcript'));
-  if (meaningfulFiles.length > 0) {
-    reportTitle = `Due Diligence: ${meaningfulFiles[0].name.replace(/\.[^/.]+$/, '').replace(/_/g, ' ')}`;
-  } else if (files.length > 0) {
-    reportTitle = `Due Diligence: ${files[0].name.replace(/\.[^/.]+$/, '').replace(/_/g, ' ')}`;
-  }
 
   for (const file of files) {
     filesSummary.push(`- ${file.name} (${file.type.toUpperCase()})`);
@@ -9811,7 +9802,7 @@ ${onlineResearchContent ? `ONLINE RESEARCH CONTENT (mark any info from here with
 ${onlineResearchContent.substring(0, 20000)}` : ''}
 
 CRITICAL OUTPUT RULES:
-1. Start with: <h1 style="font-family: Calibri, sans-serif;">${reportTitle}</h1>
+1. Start with a TITLE using <h1 style="font-family: Calibri, sans-serif;">Due Diligence: [Company/Entity Name]</h1> - extract the actual company or entity name from the materials
 2. Use ONLY Calibri font: style="font-family: Calibri, sans-serif;" on all elements
 3. Generate CLEAN HTML only - no markdown, no code blocks, no \`\`\`
 4. SKIP sections entirely if there is no content for them - do NOT write "Not available"
@@ -9820,13 +9811,25 @@ CRITICAL OUTPUT RULES:
 7. NO recommendation or opinion sections - this is a factual summary only
 8. NO "CONFIDENTIAL", dates, disclaimers, or footers
 9. Any info from online research MUST start with [Online Source] in bold
-10. Focus on FACTS from the materials - names, numbers, dates, specifics`;
+10. Focus on FACTS from the materials - names, numbers, dates, specifics
+11. Output the report ONLY ONCE - do not repeat any sections`;
 
   try {
     const maxTokens = reportLength === 'short' ? 2000 : reportLength === 'medium' ? 4000 : 8000;
-    console.log(`[DD] Starting AI generation with GPT-4o (maxTokens: ${maxTokens})...`);
+    console.log(`[DD] Starting AI generation with Gemini 2.5 Pro...`);
 
-    // Use GPT-4o directly for quality DD reports
+    // Use Gemini 2.5 Pro for best quality DD reports
+    const geminiResult = await callGemini2Pro(prompt);
+    if (geminiResult) {
+      let result = geminiResult;
+      // Clean up any markdown artifacts
+      result = result.replace(/```html/gi, '').replace(/```/g, '').trim();
+      console.log(`[DD] Report generated using Gemini 2.5 Pro (${result.length} chars)`);
+      return result;
+    }
+
+    // Fallback to GPT-4o if Gemini fails
+    console.log('[DD] Gemini unavailable, falling back to GPT-4o...');
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
@@ -10003,26 +10006,19 @@ app.post('/api/due-diligence', async (req, res) => {
     };
 
     const emailHtml = `
-    <div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto;">
+    <div style="font-family: Calibri, 'Segoe UI', sans-serif; max-width: 800px; margin: 0 auto;">
       <div style="background: ${headerColors[outputType] || headerColors.dd_report}; padding: 30px; border-radius: 12px 12px 0 0;">
-        <h1 style="color: white; margin: 0; font-size: 24px;">${docTitle}</h1>
-        <p style="color: rgba(255,255,255,0.8); margin: 8px 0 0 0;">${new Date().toLocaleDateString()}</p>
+        <h1 style="font-family: Calibri, 'Segoe UI', sans-serif; color: white; margin: 0; font-size: 24px;">${docTitle}</h1>
       </div>
 
-      <div style="background: #f8fafc; padding: 20px; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0;">
-        <p style="margin: 0; color: #64748b; font-size: 14px;"><strong>Materials Processed:</strong></p>
+      <div style="background: #f8fafc; padding: 20px; border-left: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; font-family: Calibri, 'Segoe UI', sans-serif;">
+        <p style="margin: 0; color: #64748b; font-size: 14px;"><strong>Source Materials:</strong></p>
         <ul style="margin: 8px 0; padding-left: 20px; color: #475569; font-size: 13px;">${fileList}</ul>
         ${transcripts.length > 0 ? `<p style="margin: 8px 0 0 0; color: #64748b; font-size: 13px;"><strong>Audio Transcribed:</strong> ${transcripts.length} file(s) ${detectedLanguages.length > 0 ? `(${[...new Set(detectedLanguages)].join(', ')})` : ''}</p>` : ''}
-        ${instructions ? `<p style="margin: 12px 0 0 0; color: #64748b; font-size: 13px;"><strong>Special Instructions:</strong> ${instructions}</p>` : ''}
       </div>
 
-      <div style="background: white; padding: 30px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px;">
+      <div style="background: white; padding: 30px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 12px 12px; font-family: Calibri, 'Segoe UI', sans-serif;">
         ${outputContent}
-      </div>
-
-      <div style="margin-top: 20px; padding: 15px; background: #f1f5f9; border-radius: 8px; font-size: 12px; color: #64748b;">
-        <p style="margin: 0;">Generated: ${new Date().toLocaleString()}</p>
-        <p style="margin: 4px 0 0 0;">This ${docTitle.toLowerCase()} is AI-generated and should be reviewed for accuracy.</p>
       </div>
     </div>`;
 
@@ -10034,10 +10030,7 @@ app.post('/api/due-diligence', async (req, res) => {
     if (generateWord) {
       console.log('[DD] Generating Word document...');
       try {
-        const wordBuffer = await generateWordDocument(docTitle, outputContent, {
-          date: new Date().toLocaleDateString(),
-          preparedFor: email
-        });
+        const wordBuffer = await generateWordDocument(docTitle, outputContent, {});
         attachments.push({
           filename: `${docTitle.replace(/\s+/g, '_')}_${dateStr}.docx`,
           content: wordBuffer.toString('base64')
