@@ -75,9 +75,7 @@ if (!process.env.DEEPSEEK_API_KEY) {
 if (!process.env.DEEPGRAM_API_KEY) {
   console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
 }
-if (!process.env.ANTHROPIC_API_KEY) {
-  console.warn('ANTHROPIC_API_KEY not set - V5 will use Gemini-only mode');
-}
+// Note: ANTHROPIC_API_KEY is optional - V5 uses Gemini + ChatGPT for search/validation
 
 // Initialize OpenAI
 const openai = new OpenAI({
@@ -2628,8 +2626,8 @@ Find as many as possible - be exhaustive. Search using ALL the terminology varia
 async function callGemini2FlashWithSearch(prompt, maxRetries = 2) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
-      // Use gemini-2.0-flash-exp which supports Google Search grounding
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      // Use gemini-2.5-flash which supports Google Search grounding (upgraded from 2.0-flash-exp due to quota limits)
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -2646,7 +2644,7 @@ async function callGemini2FlashWithSearch(prompt, maxRetries = 2) {
       const data = await response.json();
 
       if (data.error) {
-        console.error(`Gemini 2.0 Flash Search error (attempt ${attempt + 1}):`, data.error.message);
+        console.error(`Gemini 2.5 Flash Search error (attempt ${attempt + 1}):`, data.error.message);
         if (attempt === maxRetries) return { text: '', groundingMetadata: null };
         await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
         continue;
@@ -2662,7 +2660,7 @@ async function callGemini2FlashWithSearch(prompt, maxRetries = 2) {
 
       return { text, groundingMetadata };
     } catch (error) {
-      console.error(`Gemini 2.0 Flash Search error (attempt ${attempt + 1}):`, error.message);
+      console.error(`Gemini 2.5 Flash Search error (attempt ${attempt + 1}):`, error.message);
       if (attempt === maxRetries) return { text: '', groundingMetadata: null };
       await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
     }
