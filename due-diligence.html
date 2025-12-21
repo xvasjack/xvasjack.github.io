@@ -35,7 +35,7 @@
     /* Main 2-column grid */
     .dd-two-col {
       display: grid;
-      grid-template-columns: 300px 1fr;
+      grid-template-columns: 400px 1fr;
       gap: 18px;
     }
     @media (max-width: 900px) {
@@ -45,10 +45,11 @@
     .dd-left-col {
       display: flex;
       flex-direction: column;
-      gap: 8px;
+      gap: 10px;
       max-height: calc(100vh - 180px);
       overflow-y: auto;
       padding-right: 4px;
+      font-size: 14px;
     }
 
     /* Upload Zone - Compact */
@@ -69,8 +70,8 @@
       border-color: var(--accent);
       background: var(--accent-soft);
     }
-    .dd-upload-zone svg { color: var(--accent); width: 18px; height: 18px; }
-    .dd-upload-zone p { font-size: 12px; color: var(--text-muted); margin: 0; }
+    .dd-upload-zone svg { color: var(--accent); width: 20px; height: 20px; }
+    .dd-upload-zone p { font-size: 14px; color: var(--text-muted); margin: 0; }
     #fileInput { display: none; }
 
     .dd-file-list { margin-top: 6px; display: flex; flex-direction: column; gap: 3px; max-height: 80px; overflow-y: auto; }
@@ -126,13 +127,13 @@
     }
     .dd-record-timer {
       font-family: monospace;
-      font-size: 16px;
+      font-size: 20px;
       font-weight: 700;
       color: var(--text-main);
     }
     .dd-record-timer.recording { color: var(--error); }
     .dd-record-status {
-      font-size: 12px;
+      font-size: 14px;
       color: var(--text-muted);
     }
     .dd-record-status.recording { color: var(--error); font-weight: 600; }
@@ -144,12 +145,12 @@
       justify-content: center;
     }
     .dd-lang-btn {
-      padding: 5px 10px;
+      padding: 6px 12px;
       border: 1px solid var(--border-medium);
       border-radius: var(--radius-sm);
       background: var(--bg-body);
       cursor: pointer;
-      font-size: 12px;
+      font-size: 13px;
       transition: all 0.15s;
     }
     .dd-lang-btn:hover { border-color: var(--accent); }
@@ -263,7 +264,7 @@
       display: flex;
       align-items: center;
       gap: 8px;
-      font-size: 13px;
+      font-size: 15px;
       font-weight: 600;
       color: var(--text-main);
       margin-bottom: 8px;
@@ -321,8 +322,8 @@
     </a>
     <nav>
       <a href="find-target.html">v3 Fast</a>
-      <a href="find-target-slow.html">v3 Slow</a>
       <a href="find-target-v4.html">v4 Search</a>
+      <a href="find-target-v5.html">v5 Agentic</a>
       <a href="validation.html">Validation</a>
       <a href="trading-comparable.html">Trading Comp</a>
       <a href="profile-slides.html">Slides</a>
@@ -385,7 +386,7 @@
             <button type="button" class="dd-lang-btn" data-lang="ru">RU</button>
             <button type="button" class="dd-lang-btn" data-lang="ar">AR</button>
           </div>
-          <div id="langHint" style="font-size: 11px; color: var(--text-main); text-align: center; margin-bottom: 6px; padding: 6px 8px; background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); border-radius: 4px; border: 1px solid #22c55e;">
+          <div id="langHint" style="font-size: 13px; color: var(--text-main); text-align: center; margin-bottom: 8px; padding: 8px 10px; background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); border-radius: 4px; border: 1px solid #22c55e;">
             <strong style="color: #166534;">English mode:</strong> <span style="color: #14532d;">Optimized for English-only meetings.</span>
           </div>
           <div class="dd-record-controls">
@@ -576,6 +577,7 @@
     let autoSaveInterval = null;
     let currentR2Key = null;
     let currentSpeaker = null;  // Track current speaker for diarization
+    let currentTranslationSpeaker = null;  // Track speaker for translation panel
 
     // ============ AUTO-SAVE & RECOVERY ============
     const STORAGE_KEY = 'dd_recording_backup';
@@ -649,27 +651,46 @@
     fileInput.addEventListener('change', e => handleFiles(e.target.files));
 
     function handleFiles(files) {
+      console.log('[DD] handleFiles called with:', files);
+      console.log('[DD] Number of files:', files?.length);
       const allowed = ['pdf', 'ppt', 'pptx', 'doc', 'docx', 'txt', 'rtf', 'csv', 'xlsx', 'xls', 'mp3', 'wav', 'm4a', 'webm', 'ogg'];
       const newFiles = Array.from(files).filter(f => {
         const ext = f.name.split('.').pop().toLowerCase();
-        return allowed.includes(ext) && f.size <= 50 * 1024 * 1024;
+        const isAllowed = allowed.includes(ext) && f.size <= 50 * 1024 * 1024;
+        console.log('[DD] File:', f.name, 'ext:', ext, 'allowed:', isAllowed, 'size:', f.size);
+        return isAllowed;
       });
+      console.log('[DD] Filtered files:', newFiles.length);
       selectedFiles = [...selectedFiles, ...newFiles].slice(0, 10);
+      console.log('[DD] Total selectedFiles:', selectedFiles.length);
       updateFileList();
     }
 
     function updateFileList() {
-      if (selectedFiles.length === 0) {
-        fileList.innerHTML = '';
-        return;
+      try {
+        console.log('[DD] updateFileList called, selectedFiles:', selectedFiles.length);
+        console.log('[DD] fileList element:', fileList, 'exists:', !!fileList);
+        if (!fileList) {
+          console.error('[DD] ERROR: fileList element is null!');
+          return;
+        }
+        if (selectedFiles.length === 0) {
+          fileList.innerHTML = '';
+          return;
+        }
+        const html = selectedFiles.map((f, i) => `
+          <div class="dd-file-item">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <span>${f.name}</span>
+            <button onclick="removeFile(${i})">&times;</button>
+          </div>
+        `).join('');
+        console.log('[DD] Setting innerHTML, html length:', html.length);
+        fileList.innerHTML = html;
+        console.log('[DD] Success! fileList now has', fileList.children.length, 'children');
+      } catch (err) {
+        console.error('[DD] updateFileList ERROR:', err);
       }
-      fileList.innerHTML = selectedFiles.map((f, i) => `
-        <div class="dd-file-item">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-          <span>${f.name}</span>
-          <button onclick="removeFile(${i})">&times;</button>
-        </div>
-      `).join('');
     }
 
     window.removeFile = function(i) { selectedFiles.splice(i, 1); updateFileList(); };
@@ -824,6 +845,7 @@
       try {
         // Reset speaker tracking for new recording
         currentSpeaker = null;
+        currentTranslationSpeaker = null;
 
         // Get microphone access
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -884,8 +906,13 @@
               translationPanel.style.display = 'flex';
             }
           } else if (data.type === 'translation') {
-            finalTranslation = data.fullTranslation;
-            translationContent.textContent = finalTranslation;
+            // Add speaker label if speaker changed (same as transcript panel)
+            if (data.speaker !== null && data.speaker !== currentTranslationSpeaker) {
+              currentTranslationSpeaker = data.speaker;
+              finalTranslation += '<br><span class="speaker-label">Speaker ' + data.speaker + ':</span> ';
+            }
+            finalTranslation += data.text + ' ';
+            translationContent.innerHTML = finalTranslation;
             translationContent.scrollTop = translationContent.scrollHeight;
           } else if (data.type === 'complete') {
             // Recording complete - store R2 key for download
