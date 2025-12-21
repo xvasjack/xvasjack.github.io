@@ -10140,7 +10140,7 @@ SOURCE MATERIALS (${filesSummary.length} files):
 ${filesSummary.join('\n')}
 ${instructionSection}
 === BEGIN SOURCE CONTENT ===
-${combinedContent.substring(0, 80000)}
+${combinedContent.substring(0, 200000)}
 === END SOURCE CONTENT ===
 
 ${onlineResearchContent ? `=== BEGIN ONLINE RESEARCH (from websites) ===
