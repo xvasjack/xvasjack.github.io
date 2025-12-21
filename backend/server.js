@@ -717,32 +717,81 @@ async function transcribeAudio(audioBase64, mimeType, language = 'auto') {
   }
 }
 
-// Translate text using GPT-4o
-async function translateText(text, targetLang = 'en') {
+// Detect domain/context from text for domain-aware translation
+function detectMeetingDomain(text) {
+  const domains = {
+    financial: /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
+    legal: /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
+    medical: /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
+    technical: /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
+    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i
+  };
+
+  for (const [domain, pattern] of Object.entries(domains)) {
+    if (pattern.test(text)) {
+      return domain;
+    }
+  }
+  return 'general';
+}
+
+// Get domain-specific translation instructions
+function getDomainInstructions(domain) {
+  const instructions = {
+    financial: 'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
+    legal: 'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
+    medical: 'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
+    technical: 'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
+    hr: 'This is an HR/talent due diligence meeting. Preserve HR terminology and employment-related terms accurately.',
+    general: 'This is a business due diligence meeting. Preserve business terminology and professional tone.'
+  };
+  return instructions[domain] || instructions.general;
+}
+
+// Translate text using GPT-4o with context awareness
+async function translateText(text, targetLang = 'en', options = {}) {
+  const { previousSegments = [], domain = null } = options;
+
   // Minimum length check - 3 chars for CJK languages, 10 for others
   const minLength = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(text) ? 3 : 10;
   if (!text || text.length < minLength) return text;
 
   try {
+    // Auto-detect domain if not provided
+    const effectiveDomain = domain || detectMeetingDomain(text + ' ' + previousSegments.join(' '));
+    const domainInstructions = getDomainInstructions(effectiveDomain);
+
+    // Build context from previous segments
+    let contextSection = '';
+    if (previousSegments.length > 0) {
+      contextSection = `\n\nPrevious context (for reference only, do not translate these):
+${previousSegments.slice(-3).map((seg, i) => `[${i + 1}] ${seg}`).join('\n')}
+
+Now translate the following new segment, maintaining consistency with the context above:`;
+    }
+
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',  // Use GPT-4o for better translation quality
       messages: [
         {
           role: 'system',
           content: `You are a professional translator specializing in business meeting transcriptions.
+${domainInstructions}
+
 Translate accurately while:
 - Preserving the original meaning and tone
 - Using natural, fluent ${targetLang === 'en' ? 'English' : targetLang}
 - Keeping business/technical terms accurate
+- Maintaining consistency with any provided context
 - Not adding or omitting information
 Output only the translation, nothing else.`
         },
         {
           role: 'user',
-          content: text
+          content: contextSection ? `${contextSection}\n\n${text}` : text
         }
       ],
-      temperature: 0.1  // Lower temperature for more consistent translations
+      temperature: 0.3  // Balanced temperature for fluency while maintaining consistency
     });
     return response.choices[0].message.content || text;
   } catch (error) {
@@ -10073,17 +10122,21 @@ app.post('/api/due-diligence', async (req, res) => {
       }
     }
 
-    // Step 2: Translate if needed
+    // Step 2: Translate if needed (with domain awareness)
     let translatedTranscripts = [];
     for (const t of transcripts) {
       if (translateToEnglish && t.language !== 'en' && t.language !== 'english' && t.text.length > 10) {
         console.log(`[DD] Translating from ${t.language} to English: ${t.name}`);
-        const translated = await translateText(t.text, 'en');
+        // Detect domain from transcript content for better translation accuracy
+        const domain = detectMeetingDomain(t.text);
+        console.log(`[DD] Detected domain: ${domain}`);
+        const translated = await translateText(t.text, 'en', { domain });
         translatedTranscripts.push({
           ...t,
           originalText: t.text,
           text: translated,
-          wasTranslated: true
+          wasTranslated: true,
+          detectedDomain: domain
         });
       } else {
         translatedTranscripts.push({ ...t, wasTranslated: false });
@@ -10311,13 +10364,23 @@ wss.on('connection', (ws, req) => {
   let detectedLanguage = 'en';
   let translatedTranscript = '';
 
+  // Segment buffering for improved translation context
+  let segmentBuffer = [];  // Buffer to accumulate segments before translation
+  let translationContext = [];  // Previous translated segments for context
+  let detectedDomain = null;  // Auto-detected meeting domain
+  const SEGMENT_BUFFER_SIZE = 2;  // Number of segments to buffer before translating
+  const MAX_CONTEXT_SEGMENTS = 5;  // Maximum previous segments to keep for context
+
   // Store session data
   activeSessions.set(sessionId, {
     startTime: new Date(),
     audioChunks: [],
     transcript: '',
     translatedTranscript: '',
-    language: 'en'
+    language: 'en',
+    segmentBuffer: [],
+    translationContext: [],
+    detectedDomain: null
   });
   console.log(`[WS] Session ${sessionId} created. Active sessions: ${activeSessions.size}`);
 
@@ -10488,36 +10551,126 @@ wss.on('connection', (ws, req) => {
                 const hasNonEnglishChars = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af\u0900-\u097f\u0e00-\u0e7f\u0600-\u06ff]/.test(transcript);
                 const needsTranslation = isNonEnglishLang || hasNonEnglishChars;
 
-                // Translate non-English segments in real-time
+                // Translate non-English segments with buffering for better context
                 if (needsTranslation && transcript.length >= 3) {
-                  try {
-                    const translated = await translateText(transcript, 'en');
-                    // Only add if translation is different from original
-                    if (translated !== transcript) {
-                      translatedTranscript += translated + ' ';
-                      if (session) session.translatedTranscript = translatedTranscript;
-                      ws.send(JSON.stringify({
-                        type: 'translation',
-                        text: translated,
-                        originalLang: thisSegmentLang,
-                        speaker: speaker !== null ? speaker + 1 : null,  // Include speaker for translation
-                        fullTranslation: translatedTranscript
-                      }));
+                  // Add to segment buffer with metadata
+                  segmentBuffer.push({
+                    text: transcript,
+                    speaker: speaker,
+                    lang: thisSegmentLang
+                  });
+
+                  // Update domain detection with accumulated text
+                  if (!detectedDomain) {
+                    detectedDomain = detectMeetingDomain(fullTranscript);
+                    if (session) session.detectedDomain = detectedDomain;
+                  }
+
+                  // Translate when buffer reaches threshold OR segment is long enough (for responsiveness)
+                  const shouldTranslateNow = segmentBuffer.length >= SEGMENT_BUFFER_SIZE ||
+                                             transcript.length > 50 ||  // Long segments translate immediately
+                                             /[。！？.!?]$/.test(transcript);  // End of sentence
+
+                  if (shouldTranslateNow && segmentBuffer.length > 0) {
+                    try {
+                      // Combine buffered segments for translation
+                      const combinedText = segmentBuffer.map(s => s.text).join(' ');
+                      const primarySpeaker = segmentBuffer[0].speaker;
+                      const primaryLang = segmentBuffer[0].lang;
+
+                      // Translate with context
+                      const translated = await translateText(combinedText, 'en', {
+                        previousSegments: translationContext,
+                        domain: detectedDomain
+                      });
+
+                      // Only add if translation is different from original
+                      if (translated !== combinedText) {
+                        translatedTranscript += translated + ' ';
+                        if (session) session.translatedTranscript = translatedTranscript;
+
+                        // Update translation context (keep last N segments)
+                        translationContext.push(translated);
+                        if (translationContext.length > MAX_CONTEXT_SEGMENTS) {
+                          translationContext.shift();
+                        }
+                        if (session) session.translationContext = translationContext;
+
+                        ws.send(JSON.stringify({
+                          type: 'translation',
+                          text: translated,
+                          originalLang: primaryLang,
+                          speaker: primarySpeaker !== null ? primarySpeaker + 1 : null,
+                          fullTranslation: translatedTranscript,
+                          domain: detectedDomain  // Include detected domain for UI
+                        }));
+                      }
+
+                      // Clear buffer after translation
+                      segmentBuffer = [];
+                      if (session) session.segmentBuffer = [];
+                    } catch (e) {
+                      console.error('[WS] Translation error:', e.message);
                     }
-                  } catch (e) {
-                    console.error('[WS] Translation error:', e.message);
                   }
                 } else if (!needsTranslation && transcript.length >= 3) {
                   // For English segments in multilingual meetings, add to translation too
+                  // First, flush any pending non-English segments in buffer
+                  if (segmentBuffer.length > 0) {
+                    try {
+                      const combinedText = segmentBuffer.map(s => s.text).join(' ');
+                      const primarySpeaker = segmentBuffer[0].speaker;
+                      const primaryLang = segmentBuffer[0].lang;
+
+                      const translated = await translateText(combinedText, 'en', {
+                        previousSegments: translationContext,
+                        domain: detectedDomain
+                      });
+
+                      if (translated !== combinedText) {
+                        translatedTranscript += translated + ' ';
+                        if (session) session.translatedTranscript = translatedTranscript;
+
+                        translationContext.push(translated);
+                        if (translationContext.length > MAX_CONTEXT_SEGMENTS) {
+                          translationContext.shift();
+                        }
+                        if (session) session.translationContext = translationContext;
+
+                        ws.send(JSON.stringify({
+                          type: 'translation',
+                          text: translated,
+                          originalLang: primaryLang,
+                          speaker: primarySpeaker !== null ? primarySpeaker + 1 : null,
+                          fullTranslation: translatedTranscript,
+                          domain: detectedDomain
+                        }));
+                      }
+                      segmentBuffer = [];
+                      if (session) session.segmentBuffer = [];
+                    } catch (e) {
+                      console.error('[WS] Translation error (buffer flush):', e.message);
+                    }
+                  }
+
+                  // Add English segment to translation panel
                   translatedTranscript += transcript + ' ';
                   if (session) session.translatedTranscript = translatedTranscript;
-                  // Send English segments to translation panel too (with speaker info)
+
+                  // Update context with English segment too
+                  translationContext.push(transcript);
+                  if (translationContext.length > MAX_CONTEXT_SEGMENTS) {
+                    translationContext.shift();
+                  }
+                  if (session) session.translationContext = translationContext;
+
                   ws.send(JSON.stringify({
                     type: 'translation',
                     text: transcript,
                     originalLang: 'en',
                     speaker: speaker !== null ? speaker + 1 : null,
-                    fullTranslation: translatedTranscript
+                    fullTranslation: translatedTranscript,
+                    domain: detectedDomain
                   }));
                 }
               }
@@ -10544,6 +10697,38 @@ wss.on('connection', (ws, req) => {
           // Get session data
           const session = activeSessions.get(sessionId);
           const duration = Math.round((Date.now() - session.startTime.getTime()) / 1000);
+
+          // Flush any remaining segments in the translation buffer
+          if (segmentBuffer.length > 0) {
+            try {
+              const combinedText = segmentBuffer.map(s => s.text).join(' ');
+              const primarySpeaker = segmentBuffer[0].speaker;
+              const primaryLang = segmentBuffer[0].lang;
+
+              const translated = await translateText(combinedText, 'en', {
+                previousSegments: translationContext,
+                domain: detectedDomain
+              });
+
+              if (translated !== combinedText) {
+                translatedTranscript += translated + ' ';
+                if (session) session.translatedTranscript = translatedTranscript;
+
+                ws.send(JSON.stringify({
+                  type: 'translation',
+                  text: translated,
+                  originalLang: primaryLang,
+                  speaker: primarySpeaker !== null ? primarySpeaker + 1 : null,
+                  fullTranslation: translatedTranscript,
+                  domain: detectedDomain
+                }));
+              }
+              segmentBuffer = [];
+              console.log(`[WS] Flushed remaining translation buffer for session ${sessionId}`);
+            } catch (e) {
+              console.error('[WS] Translation error (final flush):', e.message);
+            }
+          }
 
           // Upload audio to R2 if available
           let r2Key = null;
