@@ -10062,12 +10062,12 @@ async function generateDueDiligenceReport(files, instructions, reportLength, ins
           extractedContent = `[Error extracting ${file.name}: ${extractError.message}]`;
         }
 
-        combinedContent += `\n\n=== SOURCE: ${file.name} ===\n${extractedContent.substring(0, 50000)}\n`;
+        combinedContent += `\n\n=== SOURCE: ${file.name} ===\n${extractedContent}\n`;
       } else {
         combinedContent += `\n\n=== SOURCE: ${file.name} ===\n[Could not parse binary content]\n`;
       }
     } else {
-      combinedContent += `\n\n=== SOURCE: ${file.name} ===\n${file.content.substring(0, 50000)}\n`;
+      combinedContent += `\n\n=== SOURCE: ${file.name} ===\n${file.content}\n`;
     }
   }
 
@@ -10140,11 +10140,11 @@ SOURCE MATERIALS (${filesSummary.length} files):
 ${filesSummary.join('\n')}
 ${instructionSection}
 === BEGIN SOURCE CONTENT ===
-${combinedContent.substring(0, 200000)}
+${combinedContent}
 === END SOURCE CONTENT ===
 
 ${onlineResearchContent ? `=== BEGIN ONLINE RESEARCH (from websites) ===
-${onlineResearchContent.substring(0, 20000)}
+${onlineResearchContent}
 === END ONLINE RESEARCH ===` : ''}
 
 REPORT STRUCTURE:
