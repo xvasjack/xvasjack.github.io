@@ -4944,7 +4944,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     const cols = {
       company: findCol(['company name', 'company', 'name']),
       country: findCol(['country', 'region', 'location']),
-      sales: findCol(['sales', 'revenue']),
+      sales: findCol(['sales', 'revenue', 'rev ', ' rev', 'turnover', 'net sales', 'total revenue', 'total sales', 'revenues']),
       marketCap: findCol(['market cap', 'mcap', 'market capitalization']),
       ev: findCol(['enterprise value', ' ev ', 'ev/']),
       ebitda: findCol(['ebitda']),
@@ -4960,6 +4960,12 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     if (cols.company === -1) cols.company = 0;
 
     console.log(`Column mapping:`, cols);
+    console.log(`Headers found: ${headers.join(' | ')}`);
+    if (cols.sales >= 0) {
+      console.log(`Sales column found at index ${cols.sales}: "${headers[cols.sales]}"`);
+    } else {
+      console.log(`WARNING: Sales/Revenue column NOT found in headers`);
+    }
 
     // Extract data rows
     const dataRows = allRows.slice(headerRowIndex + 1);
