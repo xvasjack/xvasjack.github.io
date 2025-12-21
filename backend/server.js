@@ -4909,17 +4909,39 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     }
 
     console.log(`Header row index: ${headerRowIndex}`);
-    console.log(`ALL HEADERS (${headers.length} columns):`);
-    headers.forEach((h, i) => {
-      if (h) console.log(`  Col ${i}: "${h}"`);
-    });
 
-    // Log first 3 data rows to verify parsing
-    console.log(`\nFIRST 3 DATA ROWS (after header):`);
+    // ========== COMPREHENSIVE RAW DATA DUMP ==========
+    // Show EVERY column with header and first 3 sample values
+    console.log(`\n${'='.repeat(60)}`);
+    console.log(`RAW EXCEL DATA INSPECTION (${headers.length} columns)`);
+    console.log(`${'='.repeat(60)}`);
+
+    const dataRowsPreview = allRows.slice(headerRowIndex + 1, headerRowIndex + 6); // First 5 data rows
+
+    for (let colIdx = 0; colIdx < headers.length; colIdx++) {
+      const header = headers[colIdx];
+      if (!header) continue;
+
+      // Get sample values from this column
+      const samples = [];
+      for (const row of dataRowsPreview) {
+        if (row && row[colIdx] !== undefined && row[colIdx] !== null && row[colIdx] !== '') {
+          samples.push(row[colIdx]);
+        }
+      }
+
+      console.log(`  Col ${colIdx}: "${header}"`);
+      console.log(`    Sample values: [${samples.slice(0, 3).join(', ')}]`);
+    }
+
+    console.log(`${'='.repeat(60)}\n`);
+
+    // Also log first 3 complete data rows for reference
+    console.log(`FIRST 3 COMPLETE DATA ROWS:`);
     for (let i = headerRowIndex + 1; i < Math.min(headerRowIndex + 4, allRows.length); i++) {
       const row = allRows[i];
       if (row) {
-        console.log(`  Row ${i}: ${row.slice(0, 12).map((v, idx) => `[${idx}]${v}`).join(' | ')}`);
+        console.log(`  Row ${i}: ${row.slice(0, 15).map((v, idx) => `[${idx}]${v}`).join(' | ')}`);
       }
     }
 
@@ -4942,36 +4964,121 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       return -1;
     };
 
-    // Find Sales/Revenue column - exclude growth, margin, rank columns
+    // Find Sales/Revenue column - with DATA VALIDATION to ensure correct column
     const findSalesCol = () => {
       const salesPatterns = ['net sales', 'total sales', 'total revenue', 'net revenue', 'sales', 'revenue', 'turnover', 'revenues'];
-      const excludePatterns = ['growth', 'margin', 'rank', 'yoy', 'change', '%', 'per ', 'ratio', 'count', '#'];
+      const excludePatterns = ['growth', 'margin', 'rank', 'yoy', 'change', '%', 'per ', 'ratio', 'count', '#', 'cagr', 'number'];
 
-      for (const pattern of salesPatterns) {
-        const idx = headers.findIndex(h => {
-          if (!h) return false;
-          const hLower = h.toString().toLowerCase();
-          if (!hLower.includes(pattern.toLowerCase())) return false;
-          // Exclude columns with growth, margin, rank, etc.
-          for (const exclude of excludePatterns) {
-            if (hLower.includes(exclude.toLowerCase())) return false;
+      // Find ALL candidate columns matching sales/revenue patterns
+      const candidates = [];
+      for (let idx = 0; idx < headers.length; idx++) {
+        const h = headers[idx];
+        if (!h) continue;
+        const hLower = h.toString().toLowerCase();
+
+        // Check if header matches any sales pattern
+        let matchesPattern = false;
+        for (const pattern of salesPatterns) {
+          if (hLower.includes(pattern.toLowerCase())) {
+            matchesPattern = true;
+            break;
           }
-          return true;
-        });
-        if (idx !== -1) {
-          console.log(`Found sales column at index ${idx}: "${headers[idx]}"`);
-          return idx;
         }
+        if (!matchesPattern) continue;
+
+        // Check for exclude patterns
+        let excluded = false;
+        for (const exclude of excludePatterns) {
+          if (hLower.includes(exclude.toLowerCase())) {
+            excluded = true;
+            console.log(`  Excluding col ${idx} "${h}" - contains "${exclude}"`);
+            break;
+          }
+        }
+        if (excluded) continue;
+
+        candidates.push({ idx, header: h });
       }
 
-      // Fallback: just find any column with sales/revenue
-      const fallbackIdx = headers.findIndex(h =>
-        h && (h.toString().toLowerCase().includes('sales') || h.toString().toLowerCase().includes('revenue'))
-      );
-      if (fallbackIdx !== -1) {
-        console.log(`Fallback sales column at index ${fallbackIdx}: "${headers[fallbackIdx]}"`);
+      console.log(`\n=== SALES COLUMN CANDIDATES ===`);
+      if (candidates.length === 0) {
+        console.log('  No candidate columns found!');
+        return -1;
       }
-      return fallbackIdx;
+
+      // Get data rows for validation
+      const dataRows = allRows.slice(headerRowIndex + 1);
+
+      // Validate each candidate by sampling actual data values
+      for (const candidate of candidates) {
+        console.log(`\n  Checking candidate: col ${candidate.idx} = "${candidate.header}"`);
+
+        // Sample first 10 non-empty values from this column
+        const sampleValues = [];
+        let rowsSampled = 0;
+        for (const row of dataRows) {
+          if (rowsSampled >= 10) break;
+          if (!row || row.length === 0) continue;
+
+          const cellValue = row[candidate.idx];
+          if (cellValue === undefined || cellValue === null || cellValue === '') continue;
+
+          const numVal = parseFloat(String(cellValue).replace(/[,%]/g, ''));
+          if (!isNaN(numVal)) {
+            sampleValues.push(numVal);
+            rowsSampled++;
+          }
+        }
+
+        console.log(`    Sample values (first ${sampleValues.length}): [${sampleValues.slice(0, 5).join(', ')}${sampleValues.length > 5 ? '...' : ''}]`);
+
+        if (sampleValues.length === 0) {
+          console.log(`    SKIP: No numeric values found`);
+          continue;
+        }
+
+        // Validate: Sales values should NOT be small sequential integers (ranks)
+        const allSmallIntegers = sampleValues.every(v => v >= 1 && v <= 20 && Number.isInteger(v));
+        if (allSmallIntegers && sampleValues.length >= 3) {
+          // Check if they look sequential (like ranks: 1,2,3,4...)
+          const sorted = [...sampleValues].sort((a, b) => a - b);
+          const looksLikeRank = sorted.every((v, i) => v >= 1 && v <= 20);
+          if (looksLikeRank) {
+            console.log(`    SKIP: Values look like ranking (small integers 1-20)`);
+            continue;
+          }
+        }
+
+        // Validate: Sales values should NOT all be percentages (0-100 range with decimals)
+        const avgValue = sampleValues.reduce((a, b) => a + b, 0) / sampleValues.length;
+        const maxValue = Math.max(...sampleValues);
+
+        if (maxValue < 100 && sampleValues.every(v => v >= -100 && v <= 100)) {
+          // Check if this looks like margin percentages
+          if (sampleValues.some(v => v < 0) || sampleValues.every(v => Math.abs(v) < 50)) {
+            console.log(`    SKIP: Values look like percentages/margins (avg: ${avgValue.toFixed(1)})`);
+            continue;
+          }
+        }
+
+        // Validate: At least some values should be substantial (>50 for typical sales in millions)
+        if (maxValue < 50) {
+          console.log(`    SKIP: All values too small for revenue (max: ${maxValue})`);
+          continue;
+        }
+
+        // This candidate passes validation
+        console.log(`    ACCEPTED: Values look like revenue (avg: ${avgValue.toFixed(0)}, max: ${maxValue.toFixed(0)})`);
+        return candidate.idx;
+      }
+
+      // If no validated candidate, fall back to first candidate with a warning
+      if (candidates.length > 0) {
+        console.log(`\n  WARNING: No validated sales column found, using first candidate: col ${candidates[0].idx}`);
+        return candidates[0].idx;
+      }
+
+      return -1;
     };
 
     // Find all columns matching a pattern (for TTM/FY detection)
@@ -5056,11 +5163,19 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       const companyName = cols.company >= 0 ? row[cols.company] : null;
       if (!companyName) continue;
 
-      const nameStr = String(companyName).toLowerCase();
+      const nameStr = String(companyName).toLowerCase().trim();
+
+      // Skip rows that are clearly NOT company names
       if (nameStr.includes('total') || nameStr.includes('median') || nameStr.includes('average') ||
           nameStr.includes('note:') || nameStr.includes('source:') || nameStr.includes('unit') ||
           nameStr.startsWith('*') || nameStr.length < 2) continue;
       if (nameStr.startsWith('spd') && nameStr.length > 10) continue;
+
+      // Skip sub-header rows (period indicators, unit indicators, etc.)
+      if (nameStr.includes('latest') || nameStr.includes('fiscal') || nameStr.includes('period') ||
+          nameStr === 'fy' || nameStr === 'ttm' || nameStr === 'ltm' ||
+          nameStr.includes('million') || nameStr.includes('billion') || nameStr.includes('usd') ||
+          nameStr.includes('currency') || nameStr.includes('local')) continue;
 
       const parseNum = (idx) => {
         if (idx < 0 || row[idx] === undefined || row[idx] === null || row[idx] === '') return null;
@@ -5098,7 +5213,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       // Log first 5 companies with their raw and parsed values
       if (loggedCount < 5) {
         console.log(`\n--- ${company.name} ---`);
-        console.log(`  RAW VALUES: Sales="${rawSales}" | MCap="${rawMarketCap}" | EV="${rawEV}"`);
+        console.log(`  RAW: Sales[col ${cols.sales}]="${rawSales}" | MCap[col ${cols.marketCap}]="${rawMarketCap}" | EV[col ${cols.ev}]="${rawEV}"`);
         console.log(`  PARSED: Sales=${company.sales} | MCap=${company.marketCap} | EV=${company.ev} | EBITDA=${company.ebitda}`);
         loggedCount++;
       }
