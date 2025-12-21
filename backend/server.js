@@ -175,7 +175,7 @@ async function deleteFromR2(key) {
 }
 
 // Send email using SendGrid API
-async function sendEmail(to, subject, html, attachments = null) {
+async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) {
   const senderEmail = process.env.SENDER_EMAIL;
   const emailData = {
     personalizations: [{ to: [{ email: to }] }],
@@ -194,21 +194,48 @@ async function sendEmail(to, subject, html, attachments = null) {
     }));
   }
 
-  const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(emailData)
-  });
+  // Retry logic with exponential backoff
+  let lastError;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(emailData)
+      });
 
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Email failed: ${error}`);
+      if (response.ok) {
+        if (attempt > 1) {
+          console.log(`  Email sent successfully on attempt ${attempt}`);
+        }
+        return { success: true };
+      }
+
+      const error = await response.text();
+      lastError = new Error(`Email failed (attempt ${attempt}/${maxRetries}): ${error}`);
+      console.error(lastError.message);
+
+      // Don't retry on 4xx client errors (except 429 rate limit)
+      if (response.status >= 400 && response.status < 500 && response.status !== 429) {
+        throw lastError;
+      }
+    } catch (fetchError) {
+      lastError = fetchError;
+      console.error(`  Email attempt ${attempt}/${maxRetries} failed:`, fetchError.message);
+    }
+
+    // Exponential backoff: 2s, 4s, 8s
+    if (attempt < maxRetries) {
+      const delay = Math.pow(2, attempt) * 1000;
+      console.log(`  Retrying email in ${delay / 1000}s...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
   }
 
-  return { success: true };
+  throw lastError || new Error('Email failed after all retries');
 }
 
 // ============ AI TOOLS ============
@@ -251,7 +278,7 @@ async function callGemini3Flash(prompt, jsonMode = false) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
-      timeout: 120000
+      timeout: 30000  // Reduced from 120s to 30s - fail fast and use GPT-4o fallback
     });
     const data = await response.json();
 
