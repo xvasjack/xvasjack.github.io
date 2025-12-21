@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Find Target - v3 Fast</title>
+  <title>Find Target - v5 Agentic</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -17,9 +17,9 @@
       Find Target
     </a>
     <nav>
-      <a href="find-target.html" class="active">v3 Fast</a>
+      <a href="find-target.html">v3 Fast</a>
       <a href="find-target-v4.html">v4 Search</a>
-      <a href="find-target-v5.html">v5 Agentic</a>
+      <a href="find-target-v5.html" class="active">v5 Agentic</a>
       <a href="validation.html">Validation</a>
       <a href="trading-comparable.html">Trading Comp</a>
       <a href="profile-slides.html">Slides</a>
@@ -31,14 +31,14 @@
 
   <main class="app-main">
     <section class="page-info">
-      <span class="status-badge">Online</span>
-      <h1 class="page-title">v3 Fast Search</h1>
-      <p class="page-description">Find potential targets quickly. Results in 5-10 minutes.</p>
+      <span class="status-badge new">New</span>
+      <h1 class="page-title">v5 Agentic Search</h1>
+      <p class="page-description">Deep agentic search using Gemini 3 Flash with Google Search grounding. The AI autonomously generates queries, searches multiple times, analyzes gaps, and iterates until exhaustive coverage. Each search task runs like a ChatGPT deep research session. Results in ~15-25 minutes.</p>
     </section>
 
     <section class="page-content">
       <div class="form-card">
-        <form id="findTargetForm" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/find-target">
+        <form id="findTargetForm" method="POST" action="https://xvasjackgithubio-production.up.railway.app/api/find-target-v5">
           <div class="form-grid">
             <div class="form-group full-width">
               <label for="business">Business Type</label>
@@ -62,7 +62,7 @@
 
           <div class="message success" id="successMessage">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-            Request submitted! Results will arrive in 5-10 minutes.
+            Request submitted! Agentic deep search running. Results will arrive in ~15-25 minutes.
           </div>
 
           <div class="message error" id="errorMessage">

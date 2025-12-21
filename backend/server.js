@@ -2525,6 +2525,521 @@ Find as many as possible - be exhaustive. Search using ALL the terminology varia
   }
 });
 
+// ============ V5 AGENTIC SEARCH ============
+
+// Gemini 3 Flash with Google Search grounding - for deep agentic search
+// The model can execute multiple searches per request and iterate until exhaustive
+async function callGemini3FlashWithSearch(prompt, maxRetries = 2) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          tools: [{ googleSearch: {} }],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 8192
+          }
+        }),
+        timeout: 180000  // 3 minutes for deep search
+      });
+
+      const data = await response.json();
+
+      if (data.error) {
+        console.error(`Gemini 3 Flash Search error (attempt ${attempt + 1}):`, data.error.message);
+        if (attempt === maxRetries) return { text: '', groundingMetadata: null };
+        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+        continue;
+      }
+
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      const groundingMetadata = data.candidates?.[0]?.groundingMetadata || null;
+
+      return { text, groundingMetadata };
+    } catch (error) {
+      console.error(`Gemini 3 Flash Search error (attempt ${attempt + 1}):`, error.message);
+      if (attempt === maxRetries) return { text: '', groundingMetadata: null };
+      await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+    }
+  }
+  return { text: '', groundingMetadata: null };
+}
+
+// Extract companies from Gemini search response using Gemini 3 Flash for quality
+async function extractCompaniesV5(text, country) {
+  if (!text || text.length < 50) return [];
+  try {
+    const extraction = await callGemini3Flash(`Extract company information from the text. Return JSON: {"companies": [{"company_name": "...", "website": "...", "hq": "..."}]}
+
+RULES:
+- Extract ALL companies mentioned that could be in: ${country}
+- website must start with http:// or https://
+- If website not mentioned, use "unknown" (we'll find it later)
+- hq must be "City, Country" format
+- Include companies even if some info is incomplete
+- Be THOROUGH - extract EVERY company mentioned, even briefly
+
+TEXT:
+${text.substring(0, 20000)}`, true);
+
+    // Parse JSON from response
+    try {
+      const jsonMatch = extraction.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        return Array.isArray(parsed.companies) ? parsed.companies : [];
+      }
+    } catch (e) {
+      console.error('V5 JSON parse error:', e.message);
+    }
+    return [];
+  } catch (e) {
+    console.error('V5 Extraction error:', e.message);
+    return [];
+  }
+}
+
+// Run a single deep agentic search task
+// This gives the AI full agency to search multiple times until exhaustive
+async function runAgenticSearchTask(taskPrompt, country, searchLog) {
+  const startTime = Date.now();
+
+  console.log(`  Executing agentic search task...`);
+  const result = await callGemini3FlashWithSearch(taskPrompt);
+
+  const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+
+  // Extract grounding info for logging
+  const searchQueries = result.groundingMetadata?.webSearchQueries || [];
+  const sources = result.groundingMetadata?.groundingChunks?.map(c => c.web?.uri).filter(Boolean) || [];
+
+  console.log(`    Completed in ${duration}s. Searches: ${searchQueries.length}. Sources: ${sources.length}`);
+
+  // Log this search
+  searchLog.push({
+    task: taskPrompt.substring(0, 100) + '...',
+    duration: parseFloat(duration),
+    searchQueries,
+    sourceCount: sources.length,
+    responseLength: result.text.length
+  });
+
+  // Extract companies from result
+  const companies = await extractCompaniesV5(result.text, country);
+  console.log(`    Extracted ${companies.length} companies`);
+
+  return companies;
+}
+
+// Generate diverse search tasks for a business/country
+function generateSearchTasks(business, country, exclusion) {
+  const countries = country.split(',').map(c => c.trim());
+  const countryList = countries.join(', ');
+
+  const tasks = [];
+
+  // Task 1: Comprehensive primary search
+  tasks.push(`You are an M&A research analyst. Find ALL ${business} companies in ${countryList}.
+
+YOUR TASK: Search exhaustively to build a comprehensive list. Do NOT give a partial answer.
+
+SEARCH STRATEGY:
+1. First search for "${business} companies ${country}"
+2. Then search for "${business} manufacturers ${country}"
+3. Then search for related terms (suppliers, producers, makers)
+4. Search each country individually if multiple countries
+5. Try local language terms if applicable
+
+For EACH company found, provide:
+- Company name (official name)
+- Website (must be real company website, not directory)
+- Headquarters location (City, Country)
+
+EXCLUSIONS: ${exclusion}
+
+Return a comprehensive list. Quality over quantity - only include real companies, not directories or articles.`);
+
+  // Task 2: SME and local company focus
+  tasks.push(`Find small and medium ${business} companies in ${countryList} that are locally owned.
+
+FOCUS ON:
+- Family-owned businesses
+- Independent local manufacturers
+- Domestic companies (not multinational subsidiaries)
+- Companies that may not appear in top search results
+
+Search using different terms:
+- "local ${business} company ${country}"
+- "SME ${business} ${country}"
+- "family owned ${business} ${country}"
+
+Exclude: ${exclusion}, and any subsidiaries of large multinationals.
+
+Return company name, website, and HQ location for each.`);
+
+  // Task 3: City-by-city search for each country
+  for (const c of countries) {
+    tasks.push(`Find ${business} companies in specific cities and industrial areas of ${c}.
+
+Search major cities and industrial zones one by one:
+- Capital city
+- Major industrial cities
+- Industrial estates and zones
+- Free trade zones
+
+For ${c}, think about where ${business} companies are typically located and search those areas specifically.
+
+Return company name, website, and HQ location (City, ${c}) for each company found.
+
+Exclude: ${exclusion}`);
+  }
+
+  // Task 4: Industry associations and directories
+  tasks.push(`Find ${business} companies that are members of industry associations in ${countryList}.
+
+Search for:
+- Industry association member lists for ${business} sector
+- Chamber of commerce directories
+- Trade federation member companies
+- Professional body registrations
+
+Also try:
+- Companies mentioned in industry magazines/trade publications
+- Companies that exhibited at relevant trade shows
+
+Return company name, website, and HQ for each.
+
+Exclude: ${exclusion}`);
+
+  // Task 5: Local language search
+  tasks.push(`Find ${business} companies in ${countryList} using LOCAL LANGUAGE search terms.
+
+Translate "${business}" and related terms into the local languages:
+${countries.map(c => `- Search in the local language of ${c}`).join('\n')}
+
+Many smaller local companies only have local language websites or names. These are often missed by English searches.
+
+Return company name (in original language is fine), website, and HQ location.
+
+Exclude: ${exclusion}`);
+
+  // Task 6: Supply chain and adjacent search
+  tasks.push(`Find additional ${business} companies in ${countryList} by exploring supply chains and adjacent industries.
+
+Search for:
+- Suppliers to known ${business} companies
+- Contract manufacturers in the ${business} space
+- OEM/ODM companies in this industry
+- Companies that do ${business} as part of broader operations
+
+Also search for:
+- Companies with related but different terminology
+- Niche specialists within ${business}
+- Newer/startup companies in this space
+
+Return company name, website, and HQ for each.
+
+Exclude: ${exclusion}`);
+
+  return tasks;
+}
+
+// Validate companies using Gemini 3 Flash with strict criteria
+async function validateCompaniesV5(companies, business, country, exclusion) {
+  console.log(`\nV5 Validating ${companies.length} companies with Gemini 3 Flash...`);
+  const startTime = Date.now();
+  const validated = [];
+  const batchSize = 10;
+
+  for (let i = 0; i < companies.length; i += batchSize) {
+    const batch = companies.slice(i, i + batchSize);
+
+    const validations = await Promise.all(batch.map(async (company) => {
+      try {
+        // Fetch website content for validation
+        let pageContent = '';
+        if (company.website && company.website.startsWith('http')) {
+          try {
+            pageContent = await fetchWebsite(company.website);
+          } catch (e) {
+            pageContent = '';
+          }
+        }
+
+        const validationPrompt = `Validate if this company matches the search criteria.
+
+COMPANY: ${company.company_name}
+WEBSITE: ${company.website}
+CLAIMED HQ: ${company.hq}
+
+WEBSITE CONTENT:
+${pageContent ? pageContent.substring(0, 8000) : 'Could not fetch website'}
+
+CRITERIA:
+- Business type: ${business}
+- Target countries: ${country}
+- Exclusions: ${exclusion}
+
+VALIDATION RULES:
+1. Is this a real company (not a directory, marketplace, or article)?
+2. Does their business relate to "${business}"?
+3. Is their HQ in one of the target countries (${country})?
+4. Do they violate any exclusion criteria (${exclusion})?
+
+Return JSON: {"valid": true/false, "reason": "one sentence explanation", "corrected_hq": "City, Country or null if unknown"}`;
+
+        const result = await callGemini3Flash(validationPrompt, true);
+
+        try {
+          const jsonMatch = result.match(/\{[\s\S]*?\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            return { company, valid: parsed.valid, reason: parsed.reason, corrected_hq: parsed.corrected_hq };
+          }
+        } catch (e) {
+          // Default to reject if can't parse
+          return { company, valid: false, reason: 'Validation parse error' };
+        }
+
+        return { company, valid: false, reason: 'No validation result' };
+      } catch (e) {
+        console.error(`  Validation error for ${company.company_name}: ${e.message}`);
+        return { company, valid: false, reason: 'Validation error' };
+      }
+    }));
+
+    for (const v of validations) {
+      if (v.valid) {
+        validated.push({
+          company_name: v.company.company_name,
+          website: v.company.website,
+          hq: v.corrected_hq || v.company.hq
+        });
+      } else {
+        console.log(`    Rejected: ${v.company.company_name} - ${v.reason}`);
+      }
+    }
+
+    console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
+  }
+
+  console.log(`V5 Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
+  return validated;
+}
+
+// Build email with search log summary
+function buildV5EmailHTML(companies, business, country, exclusion, searchLog) {
+  const searchSummary = searchLog.map((s, i) =>
+    `<li>Task ${i + 1}: ${s.searchQueries.length} searches, ${s.sourceCount} sources, ${s.duration}s</li>`
+  ).join('');
+
+  const totalSearches = searchLog.reduce((sum, s) => sum + s.searchQueries.length, 0);
+  const totalSources = searchLog.reduce((sum, s) => sum + s.sourceCount, 0);
+  const totalDuration = searchLog.reduce((sum, s) => sum + s.duration, 0);
+
+  let html = `
+    <h2>V5 Agentic Search Results</h2>
+    <p><strong>Business:</strong> ${business}</p>
+    <p><strong>Country:</strong> ${country}</p>
+    <p><strong>Exclusions:</strong> ${exclusion}</p>
+    <p><strong>Companies Found:</strong> ${companies.length}</p>
+
+    <h3>Search Summary</h3>
+    <p>Total internal searches: ${totalSearches} | Sources consulted: ${totalSources} | Search time: ${totalDuration.toFixed(1)}s</p>
+    <ul>${searchSummary}</ul>
+
+    <h3>Companies</h3>
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
+      <tr style="background-color: #f0f0f0;">
+        <th>#</th>
+        <th>Company</th>
+        <th>Website</th>
+        <th>Headquarters</th>
+      </tr>
+  `;
+
+  companies.forEach((c, i) => {
+    html += `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${c.company_name}</td>
+        <td><a href="${c.website}">${c.website}</a></td>
+        <td>${c.hq}</td>
+      </tr>
+    `;
+  });
+
+  html += '</table>';
+  return html;
+}
+
+// V5 ENDPOINT - Agentic Search
+app.post('/api/find-target-v5', async (req, res) => {
+  const { Business, Country, Exclusion, Email } = req.body;
+
+  if (!Business || !Country || !Exclusion || !Email) {
+    return res.status(400).json({ error: 'All fields are required' });
+  }
+
+  console.log(`\n${'='.repeat(70)}`);
+  console.log(`V5 AGENTIC SEARCH: ${new Date().toISOString()}`);
+  console.log(`Business: ${Business}`);
+  console.log(`Country: ${Country}`);
+  console.log(`Exclusion: ${Exclusion}`);
+  console.log(`Email: ${Email}`);
+  console.log('='.repeat(70));
+
+  res.json({
+    success: true,
+    message: 'Request received. Agentic deep search running. Results will be emailed in ~15-25 minutes.'
+  });
+
+  try {
+    const totalStart = Date.now();
+    const searchLog = [];
+
+    // ========== PHASE 1: Generate Search Tasks ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('PHASE 1: GENERATING AGENTIC SEARCH TASKS');
+    console.log('='.repeat(50));
+
+    const tasks = generateSearchTasks(Business, Country, Exclusion);
+    console.log(`Generated ${tasks.length} search tasks`);
+
+    // ========== PHASE 2: Execute Agentic Search Tasks ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('PHASE 2: EXECUTING AGENTIC SEARCHES');
+    console.log('='.repeat(50));
+
+    let allCompanies = [];
+
+    for (let i = 0; i < tasks.length; i++) {
+      console.log(`\n--- Task ${i + 1}/${tasks.length} ---`);
+      try {
+        const companies = await runAgenticSearchTask(tasks[i], Country, searchLog);
+        allCompanies = [...allCompanies, ...companies];
+        console.log(`  Running total: ${allCompanies.length} companies (before dedup)`);
+      } catch (taskError) {
+        console.error(`  Task ${i + 1} failed: ${taskError.message}`);
+      }
+    }
+
+    // ========== PHASE 3: Deduplication ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('PHASE 3: DEDUPLICATION');
+    console.log('='.repeat(50));
+
+    console.log(`Before dedup: ${allCompanies.length}`);
+    const uniqueCompanies = dedupeCompanies(allCompanies);
+    console.log(`After dedup: ${uniqueCompanies.length}`);
+
+    // ========== PHASE 4: Find Missing Websites ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('PHASE 4: FINDING MISSING WEBSITES');
+    console.log('='.repeat(50));
+
+    const companiesWithWebsites = [];
+    const needWebsite = uniqueCompanies.filter(c => !c.website || c.website === 'unknown' || !c.website.startsWith('http'));
+    const hasWebsite = uniqueCompanies.filter(c => c.website && c.website.startsWith('http'));
+
+    console.log(`Companies with websites: ${hasWebsite.length}`);
+    console.log(`Companies needing website lookup: ${needWebsite.length}`);
+
+    companiesWithWebsites.push(...hasWebsite);
+
+    // Batch lookup for missing websites
+    if (needWebsite.length > 0) {
+      const websitePrompt = `Find the official websites for these companies:
+
+${needWebsite.slice(0, 30).map(c => `- ${c.company_name} (${c.hq})`).join('\n')}
+
+Return JSON: {"websites": [{"company_name": "...", "website": "https://..."}]}
+
+Only include real company websites (not LinkedIn, Facebook, directories). If you can't find a website, omit that company.`;
+
+      const websiteResult = await callGemini3FlashWithSearch(websitePrompt);
+      try {
+        const jsonMatch = websiteResult.text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (Array.isArray(parsed.websites)) {
+            for (const w of parsed.websites) {
+              const original = needWebsite.find(c =>
+                c.company_name.toLowerCase().includes(w.company_name.toLowerCase()) ||
+                w.company_name.toLowerCase().includes(c.company_name.toLowerCase())
+              );
+              if (original && w.website && w.website.startsWith('http')) {
+                companiesWithWebsites.push({
+                  ...original,
+                  website: w.website
+                });
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Website lookup parse error:', e.message);
+      }
+
+      console.log(`After website lookup: ${companiesWithWebsites.length} companies with websites`);
+    }
+
+    // ========== PHASE 5: Validation ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('PHASE 5: STRICT VALIDATION');
+    console.log('='.repeat(50));
+
+    const preFiltered = preFilterCompanies(companiesWithWebsites);
+    console.log(`After pre-filter: ${preFiltered.length}`);
+
+    const validatedCompanies = await validateCompaniesV5(preFiltered, Business, Country, Exclusion);
+
+    // ========== PHASE 6: Final Dedup and Send Results ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('PHASE 6: FINAL RESULTS');
+    console.log('='.repeat(50));
+
+    const finalCompanies = dedupeCompanies(validatedCompanies);
+    console.log(`FINAL TOTAL: ${finalCompanies.length} validated companies`);
+
+    // Calculate stats
+    const totalSearches = searchLog.reduce((sum, s) => sum + s.searchQueries.length, 0);
+    const totalSources = searchLog.reduce((sum, s) => sum + s.sourceCount, 0);
+
+    console.log(`\nSearch Statistics:`);
+    console.log(`  Total agentic tasks: ${tasks.length}`);
+    console.log(`  Total internal searches: ${totalSearches}`);
+    console.log(`  Total sources consulted: ${totalSources}`);
+
+    // Send email
+    const htmlContent = buildV5EmailHTML(finalCompanies, Business, Country, Exclusion, searchLog);
+    await sendEmail(
+      Email,
+      `[V5 AGENTIC] ${Business} in ${Country} (${finalCompanies.length} companies)`,
+      htmlContent
+    );
+
+    const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
+    console.log('\n' + '='.repeat(70));
+    console.log(`V5 AGENTIC SEARCH COMPLETE!`);
+    console.log(`Email sent to: ${Email}`);
+    console.log(`Final companies: ${finalCompanies.length}`);
+    console.log(`Total time: ${totalTime} minutes`);
+    console.log('='.repeat(70));
+
+  } catch (error) {
+    console.error('V5 Processing error:', error);
+    try {
+      await sendEmail(Email, `Find Target V5 - Error`, `<p>Error: ${error.message}</p>`);
+    } catch (e) {
+      console.error('Failed to send error email:', e);
+    }
+  }
+});
+
 // ============ VALIDATION ENDPOINT ============
 
 // Parse company names from text (one per line)
