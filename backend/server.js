@@ -5329,6 +5329,7 @@ async function generatePPTX(companies, targetDescription = '') {
           }
 
           // Company name with numbering (bright blue background, WHITE text, left-aligned)
+          // Keep 3pt white borders on ALL sides for company name cells
           const companyName = comp.title || comp.company_name || 'Unknown';
           row.push({
             text: `${comp.index}. ${companyName}`,
@@ -5338,12 +5339,7 @@ async function generatePPTX(companies, targetDescription = '') {
               bold: false,
               align: 'left',
               valign: 'middle',
-              border: [
-                { pt: 3, color: TL_COLORS.white },    // top
-                { pt: 3, color: TL_COLORS.white },    // right
-                rowBottomBorder,                       // bottom (dotted between rows)
-                { pt: 3, color: TL_COLORS.white }     // left
-              ],
+              border: { pt: 3, color: TL_COLORS.white },
               hyperlink: { url: comp.website || '' }
             }
           });
