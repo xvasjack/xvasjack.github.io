@@ -9909,7 +9909,8 @@ wss.on('connection', (ws, req) => {
           // Nova-3 supports: en, es, fr, de, hi, ru, pt, ja, it, nl, bg, ca, cs, da, et, fi,
           // el, hu, id, ko, lv, lt, ms, no, pl, ro, sk, sv, tr, uk, vi, zh
           // Nova-2 needed for: ar (Arabic), th (Thai) - not yet in Nova-3
-          const nova2OnlyLangs = ['ar', 'th'];
+          // Languages that need Nova-2 (not well supported in Nova-3)
+          const nova2OnlyLangs = ['th', 'ms', 'tl'];
           const useNova2 = !isMultiLang && nova2OnlyLangs.includes(data.language);
 
           const dgOptions = {
