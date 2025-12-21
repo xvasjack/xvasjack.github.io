@@ -305,8 +305,8 @@ async function callGemini3Flash(prompt, jsonMode = false) {
       requestBody.generationConfig.responseMimeType = 'application/json';
     }
 
-    // Using stable gemini-2.5-flash instead of preview model for reliability
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    // Using gemini-3-flash-preview for validation (upgraded from 2.5-flash)
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
@@ -315,7 +315,7 @@ async function callGemini3Flash(prompt, jsonMode = false) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Gemini 2.5 Flash HTTP error ${response.status}:`, errorText.substring(0, 200));
+      console.error(`Gemini 3 Flash HTTP error ${response.status}:`, errorText.substring(0, 200));
       // Fallback to GPT-4o on HTTP errors
       return await callGPT4oFallback(prompt, jsonMode, `Gemini HTTP ${response.status}`);
     }
@@ -323,19 +323,19 @@ async function callGemini3Flash(prompt, jsonMode = false) {
     const data = await response.json();
 
     if (data.error) {
-      console.error('Gemini 2.5 Flash API error:', data.error.message);
+      console.error('Gemini 3 Flash API error:', data.error.message);
       // Fallback to GPT-4o
-      return await callGPT4oFallback(prompt, jsonMode, 'Gemini 2.5 Flash API error');
+      return await callGPT4oFallback(prompt, jsonMode, 'Gemini 3 Flash API error');
     }
 
     const result = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     if (!result) {
       // Empty response, try fallback
-      return await callGPT4oFallback(prompt, jsonMode, 'Gemini 2.5 Flash empty response');
+      return await callGPT4oFallback(prompt, jsonMode, 'Gemini 3 Flash empty response');
     }
     return result;
   } catch (error) {
-    console.error('Gemini 2.5 Flash error:', error.message);
+    console.error('Gemini 3 Flash error:', error.message);
     // Fallback to GPT-4o on network timeout or other errors
     return await callGPT4oFallback(prompt, jsonMode, `Gemini error: ${error.message}`);
   }
