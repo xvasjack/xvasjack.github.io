@@ -1582,28 +1582,69 @@ async function filterVerifiedWebsites(companies) {
 // ============ FETCH WEBSITE FOR VALIDATION ============
 
 async function fetchWebsite(url) {
+  // Try multiple URL paths before giving up
+  const urlPaths = ['', '/en', '/en/', '/home', '/index.html', '/about', '/about-us', '/company'];
+
+  const tryFetch = async (targetUrl) => {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 10000);
+      const response = await fetch(targetUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+        signal: controller.signal,
+        redirect: 'follow'
+      });
+      clearTimeout(timeout);
+      if (!response.ok) return null;
+      const html = await response.text();
+      const cleanText = html
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .substring(0, 15000);
+      return cleanText.length > 100 ? cleanText : null;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  // Parse base URL
+  let baseUrl = url;
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-      signal: controller.signal,
-      redirect: 'follow'
-    });
-    clearTimeout(timeout);
-    if (!response.ok) return null;
-    const html = await response.text();
-    const cleanText = html
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .substring(0, 15000);
-    return cleanText.length > 50 ? cleanText : null;
+    const parsed = new URL(url);
+    baseUrl = `${parsed.protocol}//${parsed.host}`;
   } catch (e) {
-    return null;
+    baseUrl = url.replace(/\/+$/, '');
   }
+
+  // Try original URL first
+  let content = await tryFetch(url);
+  if (content) return content;
+
+  // Try with/without www
+  const hasWww = baseUrl.includes('://www.');
+  const altBaseUrl = hasWww ? baseUrl.replace('://www.', '://') : baseUrl.replace('://', '://www.');
+
+  // Try alternative paths
+  for (const path of urlPaths) {
+    if (path === '') continue; // Already tried root
+    content = await tryFetch(baseUrl + path);
+    if (content) return content;
+    // Also try without www (or with www if original didn't have it)
+    content = await tryFetch(altBaseUrl + path);
+    if (content) return content;
+  }
+
+  // Try HTTPS if original was HTTP
+  if (url.startsWith('http://')) {
+    const httpsUrl = url.replace('http://', 'https://');
+    content = await tryFetch(httpsUrl);
+    if (content) return content;
+  }
+
+  return null;
 }
 
 // ============ DYNAMIC EXCLUSION RULES BUILDER (n8n-style PAGE SIGNAL detection) ============
@@ -2919,8 +2960,88 @@ Be thorough - find EVERY company you can. Return as a structured list.`;
   return companies;
 }
 
+// Expand regional inputs to individual countries using AI
+async function expandRegionToCountries(regionInput) {
+  // Check if input looks like a region rather than specific countries
+  const regionKeywords = ['asia', 'europe', 'africa', 'america', 'middle east', 'oceania', 'pacific', 'asean', 'eu', 'gcc', 'latam', 'apac', 'emea'];
+  const inputLower = regionInput.toLowerCase();
+
+  const isRegion = regionKeywords.some(keyword => inputLower.includes(keyword)) &&
+                   !inputLower.includes(','); // If comma-separated, user already specified countries
+
+  if (!isRegion) {
+    return regionInput; // Return as-is if not a region
+  }
+
+  console.log(`  Expanding region "${regionInput}" to specific countries...`);
+
+  const prompt = `The user wants to search for companies in: "${regionInput}"
+
+This appears to be a REGION, not specific countries. List ALL the specific countries in this region.
+
+Return ONLY a comma-separated list of country names, nothing else.
+Example output: Indonesia, Thailand, Vietnam, Malaysia, Singapore, Philippines
+
+Countries in "${regionInput}":`;
+
+  try {
+    const result = await callGemini3Flash(prompt, false);
+    if (result && result.length > 5) {
+      const expanded = result.trim().replace(/\n/g, ', ').replace(/,\s*,/g, ',');
+      console.log(`  Expanded to: ${expanded}`);
+      return expanded;
+    }
+  } catch (e) {
+    console.error(`  Region expansion failed: ${e.message}`);
+  }
+
+  return regionInput; // Return original if expansion fails
+}
+
+// Generate business term variations using AI (synonyms, industry terminology)
+async function generateBusinessTermVariations(business) {
+  console.log(`  Generating search term variations for "${business}"...`);
+
+  const prompt = `For M&A target search, generate alternative search terms for: "${business}"
+
+RULES:
+- Generate 3-5 alternative phrasings/synonyms that mean the SAME specific thing
+- Include common industry terminology variations
+- Include abbreviations if applicable
+- Do NOT broaden the scope (e.g., don't suggest "printing ink" for "gravure ink" - stay specific)
+- Focus on how different people might describe this EXACT business
+
+Examples:
+- "gravure ink manufacturer" → "rotogravure ink producer", "gravure printing ink maker", "intaglio ink manufacturer"
+- "flexure ink" → "flexographic ink", "flexo ink", "flexible packaging ink"
+- "CNC machining" → "computer numerical control machining", "precision CNC", "CNC manufacturing"
+
+Return ONLY a JSON array of strings, nothing else.
+Example: ["term1", "term2", "term3"]
+
+Variations for "${business}":`;
+
+  try {
+    const result = await callGemini3Flash(prompt, true);
+    if (result) {
+      const jsonMatch = result.match(/\[[\s\S]*?\]/);
+      if (jsonMatch) {
+        const variations = JSON.parse(jsonMatch[0]);
+        if (Array.isArray(variations) && variations.length > 0) {
+          console.log(`  Generated variations: ${variations.join(', ')}`);
+          return variations;
+        }
+      }
+    }
+  } catch (e) {
+    console.error(`  Term variation generation failed: ${e.message}`);
+  }
+
+  return []; // Return empty array if generation fails
+}
+
 // Generate diverse search tasks for a business/country
-function generateSearchTasks(business, country, exclusion) {
+function generateSearchTasks(business, country, exclusion, businessVariations = []) {
   const countries = country.split(',').map(c => c.trim());
   const countryList = countries.join(', ');
 
@@ -3028,6 +3149,28 @@ Also search for:
 Return company name, website, and HQ for each.
 
 Exclude: ${exclusion}`);
+
+  // Task 7: Search using term variations (if provided)
+  if (businessVariations && businessVariations.length > 0) {
+    const variationsList = businessVariations.slice(0, 5).join('", "');
+    tasks.push(`Find companies in ${countryList} using ALTERNATIVE INDUSTRY TERMINOLOGY.
+
+The user is looking for: "${business}"
+
+Search using these EQUIVALENT terms (they mean the same thing):
+${businessVariations.slice(0, 5).map(v => `- "${v}"`).join('\n')}
+
+These are industry synonyms - search for EACH term separately to find companies that might be missed by the primary search term.
+
+For EACH company found, provide:
+- Company name
+- Website
+- Headquarters location
+
+Exclude: ${exclusion}
+
+Be thorough - different companies may use different terminology to describe the same business.`);
+  }
 
   return tasks;
 }
@@ -3341,12 +3484,25 @@ app.post('/api/find-target-v5', async (req, res) => {
     const totalStart = Date.now();
     const searchLog = [];
 
+    // ========== PHASE 0: Expand Region & Generate Term Variations ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('PHASE 0: PREPROCESSING INPUT');
+    console.log('='.repeat(50));
+
+    // Expand regional inputs to specific countries (e.g., "southeast asia" → "Indonesia, Thailand, ...")
+    const expandedCountry = await expandRegionToCountries(Country);
+    console.log(`Country input: "${Country}" → "${expandedCountry}"`);
+
+    // Generate business term variations for broader search coverage
+    const businessVariations = await generateBusinessTermVariations(Business);
+    console.log(`Term variations: ${businessVariations.length > 0 ? businessVariations.join(', ') : 'none generated'}`);
+
     // ========== PHASE 1: Generate Search Tasks ==========
     console.log('\n' + '='.repeat(50));
     console.log('PHASE 1: GENERATING AGENTIC SEARCH TASKS');
     console.log('='.repeat(50));
 
-    const tasks = generateSearchTasks(Business, Country, Exclusion);
+    const tasks = generateSearchTasks(Business, expandedCountry, Exclusion, businessVariations);
     console.log(`Generated ${tasks.length} search tasks`);
 
     // ========== PHASE 2: Execute Agentic Search Tasks ==========
@@ -3361,7 +3517,7 @@ app.post('/api/find-target-v5', async (req, res) => {
       for (let run = 1; run <= 2; run++) {
         console.log(`\n--- Gemini Task ${i + 1}/${tasks.length} (Run ${run}/2) ---`);
         try {
-          const companies = await runAgenticSearchTask(tasks[i], Country, searchLog);
+          const companies = await runAgenticSearchTask(tasks[i], expandedCountry, searchLog);
           allCompanies = [...allCompanies, ...companies];
           console.log(`  Running total: ${allCompanies.length} companies (before dedup)`);
         } catch (taskError) {
@@ -3375,30 +3531,40 @@ app.post('/api/find-target-v5', async (req, res) => {
     console.log('PHASE 2.5: CHATGPT SEARCH (WEB GROUNDED)');
     console.log('='.repeat(50));
 
-    const countries = Country.split(',').map(c => c.trim());
+    const countries = expandedCountry.split(',').map(c => c.trim());
 
     // ChatGPT search tasks - different angles for comprehensive coverage
     const chatgptSearches = [
       {
-        query: `Complete list of ${Business} companies in ${Country}. Include all manufacturers, suppliers, and producers.`,
+        query: `Complete list of ${Business} companies in ${expandedCountry}. Include all manufacturers, suppliers, and producers.`,
         reasoning: `Extract ALL ${Business} companies. Focus on companies that might be acquisition targets.`
       },
       {
-        query: `Lesser known ${Business} SMEs and family businesses in ${Country}`,
+        query: `Lesser known ${Business} SMEs and family businesses in ${expandedCountry}`,
         reasoning: `Find smaller, local companies that might not appear in mainstream searches. These are often the best M&A targets.`
       },
       {
-        query: `${Business} industry ${Country} market players manufacturers list`,
+        query: `${Business} industry ${expandedCountry} market players manufacturers list`,
         reasoning: `Identify all market participants including niche players and specialists.`
       }
     ];
 
-    // Add country-specific searches
-    for (const c of countries.slice(0, 3)) {
+    // Add country-specific searches (search each expanded country individually)
+    for (const c of countries.slice(0, 6)) {
       chatgptSearches.push({
         query: `${Business} companies manufacturers ${c} complete list`,
         reasoning: `Find all ${Business} companies specifically in ${c}. Be thorough.`
       });
+    }
+
+    // Add term variation searches for ChatGPT too
+    if (businessVariations.length > 0) {
+      for (const variation of businessVariations.slice(0, 3)) {
+        chatgptSearches.push({
+          query: `${variation} companies in ${expandedCountry}`,
+          reasoning: `Search using alternative terminology: "${variation}" to find companies that might be missed.`
+        });
+      }
     }
 
     // Run each ChatGPT task 2x for more diverse results
@@ -3409,7 +3575,7 @@ app.post('/api/find-target-v5', async (req, res) => {
           const companies = await runChatGPTSearchTask(
             chatgptSearches[i].query,
             chatgptSearches[i].reasoning,
-            Country,
+            expandedCountry,
             searchLog
           );
           allCompanies = [...allCompanies, ...companies];
@@ -3489,7 +3655,7 @@ Only include real company websites (not LinkedIn, Facebook, directories). If you
     console.log(`After pre-filter: ${preFiltered.length}`);
 
     // Returns { validated, flagged, rejected }
-    const validationResults = await validateCompaniesV5(preFiltered, Business, Country, Exclusion);
+    const validationResults = await validateCompaniesV5(preFiltered, Business, expandedCountry, Exclusion);
 
     // ========== PHASE 6: Final Dedup and Send Results ==========
     console.log('\n' + '='.repeat(50));
@@ -3517,7 +3683,7 @@ Only include real company websites (not LinkedIn, Facebook, directories). If you
 
     // Send email with three-tier results
     const finalResults = { validated: finalValidated, flagged: finalFlagged, rejected: finalRejected };
-    const htmlContent = buildV5EmailHTML(finalResults, Business, Country, Exclusion, searchLog);
+    const htmlContent = buildV5EmailHTML(finalResults, Business, expandedCountry, Exclusion, searchLog);
 
     // Inaccessible websites are removed entirely, so flagged = model disagreements only
     await sendEmail(
