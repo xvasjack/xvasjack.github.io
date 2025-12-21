@@ -169,6 +169,39 @@ async function downloadFromR2(key) {
   }
 }
 
+// Convert PCM to WAV format (adds header for playability)
+function pcmToWav(pcmBuffer, sampleRate = 16000, numChannels = 1, bitsPerSample = 16) {
+  const byteRate = sampleRate * numChannels * bitsPerSample / 8;
+  const blockAlign = numChannels * bitsPerSample / 8;
+  const dataSize = pcmBuffer.length;
+  const headerSize = 44;
+  const fileSize = headerSize + dataSize;
+
+  const wavBuffer = Buffer.alloc(fileSize);
+
+  // RIFF header
+  wavBuffer.write('RIFF', 0);
+  wavBuffer.writeUInt32LE(fileSize - 8, 4);
+  wavBuffer.write('WAVE', 8);
+
+  // fmt chunk
+  wavBuffer.write('fmt ', 12);
+  wavBuffer.writeUInt32LE(16, 16); // fmt chunk size
+  wavBuffer.writeUInt16LE(1, 20);  // audio format (1 = PCM)
+  wavBuffer.writeUInt16LE(numChannels, 22);
+  wavBuffer.writeUInt32LE(sampleRate, 24);
+  wavBuffer.writeUInt32LE(byteRate, 28);
+  wavBuffer.writeUInt16LE(blockAlign, 32);
+  wavBuffer.writeUInt16LE(bitsPerSample, 34);
+
+  // data chunk
+  wavBuffer.write('data', 36);
+  wavBuffer.writeUInt32LE(dataSize, 40);
+  pcmBuffer.copy(wavBuffer, 44);
+
+  return wavBuffer;
+}
+
 // R2 Delete function (cleanup old recordings)
 async function deleteFromR2(key) {
   if (!r2Client) {
@@ -10751,13 +10784,16 @@ wss.on('connection', (ws, req) => {
           // Upload audio to R2 if available (wait for upload to complete)
           let r2Key = null;
           if (session.audioChunks && session.audioChunks.length > 0) {
-            const audioBuffer = Buffer.concat(session.audioChunks);
+            const pcmBuffer = Buffer.concat(session.audioChunks);
             const dateStr = new Date().toISOString().split('T')[0];
-            const keyPath = `recordings/${dateStr}/${sessionId}.pcm`;
+            const keyPath = `recordings/${dateStr}/${sessionId}.wav`;
+
+            // Convert PCM to WAV for playability (16kHz, 16-bit, mono)
+            const wavBuffer = pcmToWav(pcmBuffer, 16000, 1, 16);
 
             // Wait for upload to complete before sending response
             try {
-              const uploadedKey = await uploadToR2(keyPath, audioBuffer, 'audio/pcm');
+              const uploadedKey = await uploadToR2(keyPath, wavBuffer, 'audio/wav');
               if (uploadedKey) {
                 r2Key = uploadedKey;
                 session.r2Key = uploadedKey;
@@ -10882,8 +10918,9 @@ app.get('/api/recording/:r2Key(*)', async (req, res) => {
     }
 
     // Set headers for file download
-    const filename = r2Key.split('/').pop() || 'recording.pcm';
-    res.setHeader('Content-Type', 'audio/pcm');
+    const filename = r2Key.split('/').pop() || 'recording.wav';
+    const contentType = filename.endsWith('.wav') ? 'audio/wav' : 'audio/pcm';
+    res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', audioBuffer.length);
     res.send(audioBuffer);
