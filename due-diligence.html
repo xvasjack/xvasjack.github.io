@@ -650,6 +650,10 @@
     // Check for recovery on page load
     checkForRecovery();
 
+    // Clear any stale error messages on page load
+    errorMessage.classList.remove('show');
+    successMessage.classList.remove('show');
+
     // ============ UPLOAD MODE ============
 
     uploadZone.addEventListener('click', () => fileInput.click());
