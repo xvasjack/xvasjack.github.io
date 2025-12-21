@@ -3193,6 +3193,23 @@ async function validateCompaniesV5(companies, business, country, exclusion) {
 function buildV5EmailHTML(validationResults, business, country, exclusion, searchLog) {
   const { validated, flagged, rejected } = validationResults;
 
+  // Filter rejected companies:
+  // - Companies with inaccessible website or insufficient info → Move to "Flagged for Human Review"
+  // - Companies with wrong region, large company, wrong business → Remove completely (don't show)
+  const needsReviewKeywords = [
+    'inaccessible', 'insufficient', 'unable to verify', 'unable to access',
+    'website content', 'could not be verified', 'could not verify',
+    'no website', 'website not found', 'cannot access'
+  ];
+
+  const rejectedNeedsReview = rejected.filter(c => {
+    const reason = (c.reason || '').toLowerCase();
+    return needsReviewKeywords.some(keyword => reason.includes(keyword));
+  });
+
+  // Combine original flagged with rejected-needs-review
+  const allFlagged = [...flagged, ...rejectedNeedsReview];
+
   // Separate Gemini and ChatGPT tasks
   const geminiTasks = searchLog.filter(s => !s.model || (s.model !== 'chatgpt-search'));
   const chatgptTasks = searchLog.filter(s => s.model === 'chatgpt-search');
@@ -3216,12 +3233,12 @@ function buildV5EmailHTML(validationResults, business, country, exclusion, searc
     <p><strong>Exclusions:</strong> ${exclusion}</p>
 
     <h3>Validation Summary (Dual-Model Consensus)</h3>
-    <p>Each company was validated by <strong>both Gemini 3 Flash AND ChatGPT</strong>:</p>
+    <p>Each company was validated by <strong>both Gemini AND ChatGPT</strong>:</p>
     <ul>
       <li><span style="color: #22c55e; font-weight: bold;">VALIDATED (${validated.length})</span> - Both models agree this is a match</li>
-      <li><span style="color: #f59e0b; font-weight: bold;">FLAGGED (${flagged.length})</span> - Only one model agrees - needs human review</li>
-      <li><span style="color: #ef4444; font-weight: bold;">REJECTED (${rejected.length})</span> - Neither model agrees - likely not a match</li>
+      <li><span style="color: #f59e0b; font-weight: bold;">FLAGGED FOR REVIEW (${allFlagged.length})</span> - Needs human review (one model disagree or insufficient website info)</li>
     </ul>
+    <p style="font-size: 12px; color: #666;">Note: Companies clearly outside target region or business scope are automatically excluded.</p>
 
     <h3>Search Summary</h3>
     <p><strong>Models Used:</strong> Gemini 3 Flash (${geminiTasks.length} tasks) + ChatGPT Search (${chatgptTasks.length} tasks)</p>
@@ -3271,15 +3288,15 @@ function buildV5EmailHTML(validationResults, business, country, exclusion, searc
     html += '<p><em>No companies were validated by both models.</em></p>';
   }
 
-  // Section 2: Flagged for Review (One agrees)
+  // Section 2: Flagged for Human Review (includes model disagreements AND inaccessible websites)
   html += `
     <h3 style="color: #f59e0b; border-bottom: 2px solid #f59e0b; padding-bottom: 8px;">
-      ? FLAGGED FOR REVIEW (${flagged.length})
+      ? FLAGGED FOR HUMAN REVIEW (${allFlagged.length})
     </h3>
-    <p style="color: #666; font-size: 12px;">One model said yes, one said no - please review manually</p>
+    <p style="color: #666; font-size: 12px;">These need manual verification - either models disagreed or website was inaccessible</p>
   `;
 
-  if (flagged.length > 0) {
+  if (allFlagged.length > 0) {
     html += `
     <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; margin-bottom: 30px;">
       <tr style="background-color: #fef3c7;">
@@ -3287,61 +3304,40 @@ function buildV5EmailHTML(validationResults, business, country, exclusion, searc
         <th>Company</th>
         <th>Website</th>
         <th>Headquarters</th>
-        <th>Gemini</th>
-        <th>ChatGPT</th>
-      </tr>
-    `;
-    flagged.forEach((c, i) => {
-      html += `
-      <tr>
-        <td>${i + 1}</td>
-        <td>${c.company_name}</td>
-        <td><a href="${c.website}">${c.website}</a></td>
-        <td>${c.hq}</td>
-        <td style="color: ${c.geminiVote === 'YES' ? '#22c55e' : '#ef4444'};">${c.geminiVote === 'YES' ? '✓ YES' : '✗ NO'}</td>
-        <td style="color: ${c.chatgptVote === 'YES' ? '#22c55e' : '#ef4444'};">${c.chatgptVote === 'YES' ? '✓ YES' : '✗ NO'}</td>
-      </tr>
-      `;
-    });
-    html += '</table>';
-  } else {
-    html += '<p><em>No companies were flagged for review.</em></p>';
-  }
-
-  // Section 3: Rejected (None agree)
-  html += `
-    <h3 style="color: #ef4444; border-bottom: 2px solid #ef4444; padding-bottom: 8px;">
-      ✗ REJECTED (${rejected.length})
-    </h3>
-    <p style="color: #666; font-size: 12px;">Both models agreed these do not match your criteria</p>
-  `;
-
-  if (rejected.length > 0) {
-    html += `
-    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; margin-bottom: 30px;">
-      <tr style="background-color: #fee2e2;">
-        <th>#</th>
-        <th>Company</th>
-        <th>Website</th>
-        <th>Headquarters</th>
         <th>Reason</th>
       </tr>
     `;
-    rejected.forEach((c, i) => {
+    allFlagged.forEach((c, i) => {
+      // Determine reason to display
+      let displayReason = '';
+      if (c.geminiVote === 'YES' && c.chatgptVote === 'NO') {
+        displayReason = 'Gemini: Yes, ChatGPT: No';
+      } else if (c.geminiVote === 'NO' && c.chatgptVote === 'YES') {
+        displayReason = 'Gemini: No, ChatGPT: Yes';
+      } else if (c.reason && c.reason.toLowerCase().includes('inaccessible')) {
+        displayReason = 'Website inaccessible';
+      } else if (c.reason && c.reason.toLowerCase().includes('insufficient')) {
+        displayReason = 'Insufficient information';
+      } else {
+        displayReason = c.reason || 'Needs verification';
+      }
+
       html += `
       <tr>
         <td>${i + 1}</td>
         <td>${c.company_name}</td>
         <td><a href="${c.website}">${c.website}</a></td>
         <td>${c.hq}</td>
-        <td style="font-size: 11px; color: #666;">${c.reason || 'Not a match'}</td>
+        <td style="font-size: 11px; color: #666;">${displayReason}</td>
       </tr>
       `;
     });
     html += '</table>';
   } else {
-    html += '<p><em>No companies were rejected.</em></p>';
+    html += '<p><em>No companies need human review.</em></p>';
   }
+
+  // Note: Companies rejected for wrong region/large company/wrong business are not shown
 
   return html;
 }
@@ -3543,10 +3539,17 @@ Only include real company websites (not LinkedIn, Facebook, directories). If you
     const finalResults = { validated: finalValidated, flagged: finalFlagged, rejected: finalRejected };
     const htmlContent = buildV5EmailHTML(finalResults, Business, Country, Exclusion, searchLog);
 
-    const totalForSubject = finalValidated.length + finalFlagged.length;
+    // Calculate total flagged (includes original flagged + rejected with inaccessible websites)
+    const needsReviewKeywords = ['inaccessible', 'insufficient', 'unable to verify', 'unable to access', 'website content', 'could not be verified', 'could not verify', 'no website', 'website not found', 'cannot access'];
+    const rejectedNeedsReview = finalRejected.filter(c => {
+      const reason = (c.reason || '').toLowerCase();
+      return needsReviewKeywords.some(keyword => reason.includes(keyword));
+    });
+    const totalFlaggedForSubject = finalFlagged.length + rejectedNeedsReview.length;
+
     await sendEmail(
       Email,
-      `[V5 AGENTIC] ${Business} in ${Country} (${finalValidated.length} validated + ${finalFlagged.length} flagged)`,
+      `[V5 AGENTIC] ${Business} in ${Country} (${finalValidated.length} validated + ${totalFlaggedForSubject} flagged)`,
       htmlContent
     );
 
