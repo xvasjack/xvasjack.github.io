@@ -2920,23 +2920,31 @@ Be thorough - find EVERY company you can. Return as a structured list.`;
 }
 
 // Generate diverse search tasks for a business/country
+// Key insight: Exhaustiveness comes from DIFFERENT SEARCH ANGLES, not more search tools
 function generateSearchTasks(business, country, exclusion) {
   const countries = country.split(',').map(c => c.trim());
   const countryList = countries.join(', ');
 
   const tasks = [];
 
-  // Task 1: Comprehensive primary search
+  // Task 1: Comprehensive primary search with specific terminology variations
   tasks.push(`You are an M&A research analyst. Find ALL ${business} companies in ${countryList}.
 
-YOUR TASK: Search exhaustively to build a comprehensive list. Do NOT give a partial answer.
+YOUR TASK: Search exhaustively using MULTIPLE TERMINOLOGY VARIATIONS.
 
-SEARCH STRATEGY:
-1. First search for "${business} companies ${country}"
-2. Then search for "${business} manufacturers ${country}"
-3. Then search for related terms (suppliers, producers, makers)
-4. Search each country individually if multiple countries
-5. Try local language terms if applicable
+SEARCH STRATEGY - Execute ALL of these searches:
+1. "${business} companies ${country}"
+2. "${business} manufacturers ${country}"
+3. "${business} suppliers ${country}"
+4. "${business} producers ${country}"
+5. "list of ${business} companies ${country}"
+6. "${business} industry ${country} companies"
+
+ALSO try synonyms and related terms:
+- If looking for "packaging", also search: "carton", "box", "container", "corrugated"
+- If looking for "electronics", also search: "EMS", "PCB", "assembly", "components"
+- If looking for "food", also search: "processing", "manufacturing", "production"
+- Think of what PRODUCTS these companies make, not just the industry term
 
 For EACH company found, provide:
 - Company name (official name)
@@ -2945,85 +2953,186 @@ For EACH company found, provide:
 
 EXCLUSIONS: ${exclusion}
 
-Return a comprehensive list. Quality over quantity - only include real companies, not directories or articles.`);
+Return a comprehensive list. Include EVERY company mentioned.`);
 
-  // Task 2: SME and local company focus
+  // Task 2: SME and local company focus with specific search patterns
   tasks.push(`Find small and medium ${business} companies in ${countryList} that are locally owned.
 
-FOCUS ON:
-- Family-owned businesses
-- Independent local manufacturers
-- Domestic companies (not multinational subsidiaries)
-- Companies that may not appear in top search results
+IMPORTANT: These companies are HARDER to find - they don't rank high in Google.
 
-Search using different terms:
-- "local ${business} company ${country}"
+SEARCH STRATEGY - Try these specific patterns:
 - "SME ${business} ${country}"
-- "family owned ${business} ${country}"
+- "local ${business} manufacturer ${country}"
+- "family business ${business} ${country}"
+- "${business} ${country} private company"
+- "${country} ${business} domestic manufacturer"
+- "independent ${business} company ${country}"
 
-Exclude: ${exclusion}, and any subsidiaries of large multinationals.
+ALSO search for:
+- Companies mentioned in "top 10 local..." or "leading domestic..." lists
+- Companies mentioned in government SME directories or awards
+- Companies mentioned in local business news
+
+Exclude: ${exclusion}, and subsidiaries of large multinationals.
 
 Return company name, website, and HQ location for each.`);
 
-  // Task 3: City-by-city search for each country
+  // Task 3: Industrial estate/zone specific searches for each country
   for (const c of countries) {
-    tasks.push(`Find ${business} companies in specific cities and industrial areas of ${c}.
+    tasks.push(`Find ${business} companies located in SPECIFIC INDUSTRIAL ESTATES and ZONES in ${c}.
 
-Search major cities and industrial zones one by one:
-- Capital city
-- Major industrial cities
-- Industrial estates and zones
-- Free trade zones
+CRITICAL: Search for companies BY LOCATION, not just by industry.
 
-For ${c}, think about where ${business} companies are typically located and search those areas specifically.
+For ${c}, search these types of locations:
+- Industrial estates (search "${business} [estate name]")
+- Free trade zones / Special economic zones
+- Industrial parks
+- Manufacturing clusters
+- Export processing zones
 
-Return company name, website, and HQ location (City, ${c}) for each company found.
+EXAMPLES of search patterns:
+- "${business} companies Amata industrial estate" (Thailand)
+- "${business} manufacturer Penang" (Malaysia)
+- "${business} Batam free trade zone" (Indonesia)
+- "${business} VSIP industrial park" (Vietnam)
+
+Find WHICH industrial zones exist in ${c} for ${business} industry, then search each zone specifically.
+
+Return company name, website, and HQ location (specific city/zone, ${c}).
 
 Exclude: ${exclusion}`);
   }
 
-  // Task 4: Industry associations and directories
-  tasks.push(`Find ${business} companies that are members of industry associations in ${countryList}.
+  // Task 4: Industry associations, trade shows, and directories with SPECIFIC searches
+  tasks.push(`Find ${business} companies through INDUSTRY ASSOCIATIONS and TRADE EVENTS in ${countryList}.
 
-Search for:
-- Industry association member lists for ${business} sector
-- Chamber of commerce directories
-- Trade federation member companies
-- Professional body registrations
+SEARCH STRATEGY - Be SPECIFIC:
 
-Also try:
-- Companies mentioned in industry magazines/trade publications
-- Companies that exhibited at relevant trade shows
+1. INDUSTRY ASSOCIATIONS:
+   - "${business} association ${country} member list"
+   - "${country} ${business} federation members"
+   - Search for the actual association names, then find their member directories
+
+2. TRADE SHOWS (search for exhibitor lists):
+   - "${business} trade show ${country} exhibitors"
+   - "${business} expo ${country} participants"
+   - Search for major trade shows in this industry and find who exhibited
+
+3. CHAMBERS OF COMMERCE:
+   - "${country} chamber of commerce ${business} members"
+   - "German chamber ${country} ${business}" (foreign chambers often list suppliers)
+
+4. CERTIFICATION BODIES:
+   - "ISO certified ${business} ${country}"
+   - "${business} ${country} certified companies"
+
+Return company name, website, and HQ for each found.
+
+Exclude: ${exclusion}`);
+
+  // Task 5: Local language search with SPECIFIC terms
+  tasks.push(`Find ${business} companies in ${countryList} using LOCAL LANGUAGE search terms.
+
+CRITICAL: Many smaller companies ONLY appear in local language searches.
+
+SEARCH STRATEGY:
+${countries.map(c => {
+    if (c.toLowerCase().includes('thailand')) {
+      return `- For Thailand: Search using Thai script. Translate "${business}" to Thai and search.`;
+    } else if (c.toLowerCase().includes('vietnam')) {
+      return `- For Vietnam: Search using Vietnamese with diacritics. Example: "công ty ${business}"`;
+    } else if (c.toLowerCase().includes('indonesia')) {
+      return `- For Indonesia: Search "perusahaan ${business}" and "produsen ${business}"`;
+    } else if (c.toLowerCase().includes('malaysia')) {
+      return `- For Malaysia: Search in both Malay and Chinese.`;
+    } else if (c.toLowerCase().includes('philippines')) {
+      return `- For Philippines: Search in both English and Filipino.`;
+    } else {
+      return `- For ${c}: Search in the local language of ${c}`;
+    }
+  }).join('\n')}
+
+Also search for:
+- Company names that are in local language only
+- Local business directories in that language
+- Local industry news in that language
+
+Return company name (original language is fine), website, and HQ location.
+
+Exclude: ${exclusion}`);
+
+  // Task 6: Supply chain discovery - find suppliers/customers of known players
+  tasks.push(`Find ${business} companies in ${countryList} through SUPPLY CHAIN exploration.
+
+SEARCH STRATEGY - Look at the ECOSYSTEM:
+
+1. CONTRACT MANUFACTURING:
+   - "${business} OEM ${country}"
+   - "${business} ODM ${country}"
+   - "${business} contract manufacturer ${country}"
+   - "outsourced ${business} production ${country}"
+
+2. SUPPLIER RELATIONSHIPS:
+   - "suppliers to [major brand] ${country}"
+   - "${country} ${business} export to [major importing country]"
+   - Search for companies mentioned as suppliers in news articles
+
+3. ADJACENT SERVICES:
+   - Companies that do ${business} as PART of broader operations
+   - Companies that handle specific STAGES of ${business} production
+   - Niche specialists within the ${business} value chain
+
+4. RECENT ENTRANTS:
+   - "new ${business} company ${country}"
+   - "${business} startup ${country}"
+   - "recently established ${business} ${country}"
 
 Return company name, website, and HQ for each.
 
 Exclude: ${exclusion}`);
 
-  // Task 5: Local language search
-  tasks.push(`Find ${business} companies in ${countryList} using LOCAL LANGUAGE search terms.
+  // Task 7: Product-specific searches (NEW)
+  tasks.push(`Find ${business} companies in ${countryList} by searching for SPECIFIC PRODUCTS they make.
 
-Translate "${business}" and related terms into the local languages:
-${countries.map(c => `- Search in the local language of ${c}`).join('\n')}
+CRITICAL: Instead of searching for "${business} companies", search for WHAT THEY PRODUCE.
 
-Many smaller local companies only have local language websites or names. These are often missed by English searches.
+SEARCH STRATEGY:
+1. Think: What specific PRODUCTS do ${business} companies make?
+2. Search for those products + country, e.g.:
+   - "[specific product] manufacturer ${country}"
+   - "[product category] supplier ${country}"
+   - "[end product] maker ${country}"
 
-Return company name (in original language is fine), website, and HQ location.
+EXAMPLE: If searching for "packaging companies":
+- Search: "corrugated box manufacturer ${country}"
+- Search: "flexible packaging producer ${country}"
+- Search: "blister pack supplier ${country}"
+- Search: "shrink wrap manufacturer ${country}"
+
+For ${business}, identify 5-10 specific products and search for each.
+
+Return company name, website, and HQ for each.
 
 Exclude: ${exclusion}`);
 
-  // Task 6: Supply chain and adjacent search
-  tasks.push(`Find additional ${business} companies in ${countryList} by exploring supply chains and adjacent industries.
+  // Task 8: Competitor discovery (NEW)
+  tasks.push(`Find MORE ${business} companies in ${countryList} by discovering COMPETITORS of known companies.
 
-Search for:
-- Suppliers to known ${business} companies
-- Contract manufacturers in the ${business} space
-- OEM/ODM companies in this industry
-- Companies that do ${business} as part of broader operations
+SEARCH STRATEGY:
+1. Take well-known ${business} companies in ${countryList}
+2. Search for their competitors:
+   - "[known company] competitors ${country}"
+   - "companies like [known company] ${country}"
+   - "alternatives to [known company] ${country}"
 
-Also search for:
-- Companies with related but different terminology
-- Niche specialists within ${business}
-- Newer/startup companies in this space
+3. Also search for:
+   - "top ${business} companies ${country} ranked"
+   - "leading ${business} manufacturers ${country}"
+   - "market share ${business} ${country}" (often lists multiple players)
+
+4. Look at industry reports that compare companies
+
+This strategy finds companies that are in the SAME space but might use different terminology.
 
 Return company name, website, and HQ for each.
 
@@ -3382,7 +3491,7 @@ app.post('/api/find-target-v5', async (req, res) => {
 
     const countries = Country.split(',').map(c => c.trim());
 
-    // ChatGPT search tasks - different angles for comprehensive coverage
+    // ChatGPT search tasks - strategic angles that complement Gemini searches
     const chatgptSearches = [
       {
         query: `Complete list of ${Business} companies in ${Country}. Include all manufacturers, suppliers, and producers.`,
@@ -3390,19 +3499,27 @@ app.post('/api/find-target-v5', async (req, res) => {
       },
       {
         query: `Lesser known ${Business} SMEs and family businesses in ${Country}`,
-        reasoning: `Find smaller, local companies that might not appear in mainstream searches. These are often the best M&A targets.`
+        reasoning: `Find smaller, local companies that might not appear in mainstream searches.`
       },
       {
         query: `${Business} industry ${Country} market players manufacturers list`,
         reasoning: `Identify all market participants including niche players and specialists.`
+      },
+      {
+        query: `${Business} suppliers OEM ODM contract manufacturers ${Country}`,
+        reasoning: `Find contract manufacturers and OEM/ODM players - often hidden from direct searches.`
+      },
+      {
+        query: `${Business} trade associations member directory ${Country}`,
+        reasoning: `Find companies through industry association membership lists.`
       }
     ];
 
-    // Add country-specific searches
+    // Add country-specific searches with industrial zones
     for (const c of countries.slice(0, 3)) {
       chatgptSearches.push({
-        query: `${Business} companies manufacturers ${c} complete list`,
-        reasoning: `Find all ${Business} companies specifically in ${c}. Be thorough.`
+        query: `${Business} companies manufacturers industrial zones ${c}`,
+        reasoning: `Find all ${Business} companies in industrial zones of ${c}.`
       });
     }
 
