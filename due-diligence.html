@@ -74,11 +74,21 @@
     .dd-upload-zone p { font-size: 14px; color: var(--text-muted); margin: 0; }
     #fileInput { display: none; }
 
-    .dd-file-list { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; max-height: 120px; overflow-y: auto; }
+    .dd-file-list {
+      margin-top: 8px;
+      display: flex !important;
+      flex-direction: column;
+      gap: 4px;
+      min-height: 40px;
+      padding: 8px;
+      background: #fef2f2 !important;
+      border: 2px solid #ef4444 !important;
+      border-radius: 6px;
+    }
     .dd-file-item {
       display: flex !important; align-items: center; gap: 8px;
-      padding: 8px 12px; background: #f1f5f9 !important;
-      border: 1px solid #cbd5e1 !important; border-radius: 6px;
+      padding: 8px 12px; background: #ffffff !important;
+      border: 1px solid #3b82f6 !important; border-radius: 6px;
       min-height: 38px;
     }
     .dd-file-item svg { width: 16px; height: 16px; color: #3b82f6; flex-shrink: 0; }
