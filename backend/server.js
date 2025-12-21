@@ -4933,7 +4933,21 @@ const SHORTFORM_DEFINITIONS = {
   'ERP': 'Enterprise Resource Planning',
   'CRM': 'Customer Relationship Management',
   'SaaS': 'Software as a Service',
-  'API': 'Application Programming Interface'
+  'API': 'Application Programming Interface',
+  'IP-KVM': 'Internet Protocol Keyboard Video Mouse',
+  'KVM': 'Keyboard Video Mouse',
+  'CCTV': 'Closed-Circuit Television',
+  'UPS': 'Uninterruptible Power Supply',
+  'NEC': 'Nippon Electric Company',
+  'HACCP': 'Hazard Analysis Critical Control Point',
+  'GMP': 'Good Manufacturing Practice',
+  'CE': 'Conformité Européenne',
+  'FDA': 'Food and Drug Administration',
+  'SKU': 'Stock Keeping Unit',
+  'POE': 'Power over Ethernet',
+  'LAN': 'Local Area Network',
+  'WAN': 'Wide Area Network',
+  'VPN': 'Virtual Private Network'
 };
 
 // Exchange rate mapping by country (for footnote)
@@ -5103,15 +5117,44 @@ async function generatePPTX(companies, targetDescription = '') {
         color: '000000', valign: 'bottom'
       });
 
+      // Helper function to parse location (handles JSON format like {"HQ":"Singapore"})
+      const parseLocation = (location) => {
+        if (!location) return { country: 'Other', hqCity: '' };
+        const loc = ensureString(location);
+
+        // Check if location is JSON format (e.g., {"HQ":"Chatuchak, Bangkok, Thailand"})
+        if (loc.includes('{') && loc.includes('}')) {
+          try {
+            // Try to extract the value from JSON-like string
+            const match = loc.match(/"HQ"\s*:\s*"([^"]+)"/i) || loc.match(/"([^"]+)"\s*:\s*"([^"]+)"/);
+            if (match) {
+              const hqValue = match[1] || match[2] || '';
+              const parts = hqValue.split(',').map(p => p.trim());
+              // Country is always last part
+              const country = parts[parts.length - 1] || 'Other';
+              // HQ city is first part (or first two for City, State format)
+              const hqCity = parts.length >= 2 ? parts.slice(0, -1).join(', ') : parts[0] || '';
+              return { country, hqCity };
+            }
+          } catch (e) {
+            // Fall through to normal parsing
+          }
+        }
+
+        // Normal parsing - extract country from location (last part after comma)
+        const parts = loc.split(',').map(p => p.trim());
+        const country = parts[parts.length - 1] || 'Other';
+        // HQ city is first part (or first two for City, State format)
+        const hqCity = parts.length >= 2 ? parts.slice(0, -1).join(', ') : parts[0] || '';
+        return { country, hqCity };
+      };
+
       // Group companies by country
       const companyByCountry = {};
       companies.forEach((c, i) => {
-        const loc = ensureString(c.location);
-        // Extract country from location (last part after comma)
-        const parts = loc.split(',').map(p => p.trim());
-        const country = parts[parts.length - 1] || 'Other';
+        const { country, hqCity } = parseLocation(c.location);
         if (!companyByCountry[country]) companyByCountry[country] = [];
-        companyByCountry[country].push({ ...c, index: i + 1 });
+        companyByCountry[country].push({ ...c, index: i + 1, hqCity });
       });
 
       // Determine if single country or multi-country
@@ -5129,17 +5172,74 @@ async function generatePPTX(companies, targetDescription = '') {
         companyBg: '007FFF',     // Bright blue for company column (accent1)
         white: 'FFFFFF',
         black: '000000',
+        gray: 'BFBFBF',          // Gray for dotted borders between rows
         checkMark: '00B050'      // Green for check marks
       };
 
       // Build table rows
       const tableRows = [];
 
-      // Header row - segment names only (empty cells for country/company columns)
+      // Row 1: Merged header for products (spans all segment columns)
+      const productHeaderRow = [];
+
+      if (isMultiCountry) {
+        // Empty cell for country column header (white background)
+        productHeaderRow.push({
+          text: '',
+          options: {
+            fill: TL_COLORS.white,
+            valign: 'middle',
+            align: 'center',
+            border: { pt: 3, color: TL_COLORS.white }
+          }
+        });
+      }
+
+      // Empty cell for company column header
+      productHeaderRow.push({
+        text: '',
+        options: {
+          fill: TL_COLORS.white,
+          valign: 'middle',
+          align: 'center',
+          border: { pt: 3, color: TL_COLORS.white }
+        }
+      });
+
+      // Empty cell for HQ column header
+      productHeaderRow.push({
+        text: '',
+        options: {
+          fill: TL_COLORS.white,
+          valign: 'middle',
+          align: 'center',
+          border: { pt: 3, color: TL_COLORS.white }
+        }
+      });
+
+      // Merged header for all product columns (spans all segment columns)
+      if (segments.length > 0) {
+        productHeaderRow.push({
+          text: 'Products / Services',
+          options: {
+            colspan: segments.length,
+            fill: TL_COLORS.headerBg,
+            color: TL_COLORS.white,
+            bold: false,
+            align: 'center',
+            valign: 'middle',
+            border: { pt: 3, color: TL_COLORS.white }
+          }
+        });
+      }
+
+      tableRows.push(productHeaderRow);
+
+      // Row 2: Segment names (sub-headers for products)
       const headerRow = [];
 
       if (isMultiCountry) {
-        // Empty cell for country column header (white background, white border)
+        // Empty cell for country column header (white background)
         headerRow.push({
           text: '',
           options: {
@@ -5151,13 +5251,26 @@ async function generatePPTX(companies, targetDescription = '') {
         });
       }
 
-      // Empty cell for company column header (white background)
+      // Empty cell for company column header
       headerRow.push({
         text: '',
         options: {
           fill: TL_COLORS.white,
           valign: 'middle',
           align: 'center',
+          border: { pt: 3, color: TL_COLORS.white }
+        }
+      });
+
+      // HQ column header (dark blue background, white text)
+      headerRow.push({
+        text: 'HQ',
+        options: {
+          fill: TL_COLORS.headerBg,
+          color: TL_COLORS.white,
+          bold: false,
+          align: 'center',
+          valign: 'middle',
           border: { pt: 3, color: TL_COLORS.white }
         }
       });
@@ -5186,6 +5299,16 @@ async function generatePPTX(companies, targetDescription = '') {
         countryCompanies.forEach((comp, idx) => {
           const row = [];
           const isFirstInCountry = idx === 0;
+          const isLastInCountry = idx === countryCompanies.length - 1;
+
+          // Determine if this is the last company in the last country (for bottom border)
+          const isLastCountry = countryKeys.indexOf(country) === countryKeys.length - 1;
+          const isVeryLastRow = isLastCountry && isLastInCountry;
+
+          // Border style: dotted gray between rows, solid white on edges
+          const rowBottomBorder = isVeryLastRow
+            ? { pt: 3, color: TL_COLORS.white }
+            : { pt: 1, color: TL_COLORS.gray, type: 'dash' };
 
           if (isMultiCountry) {
             // Country column (only show text for first company in group, use rowspan)
@@ -5205,18 +5328,42 @@ async function generatePPTX(companies, targetDescription = '') {
             }
           }
 
-          // Company name with numbering (bright blue background, black text, left-aligned)
+          // Company name with numbering (bright blue background, WHITE text, left-aligned)
           const companyName = comp.title || comp.company_name || 'Unknown';
           row.push({
             text: `${comp.index}. ${companyName}`,
             options: {
               fill: TL_COLORS.companyBg,
+              color: TL_COLORS.white,
+              bold: false,
+              align: 'left',
+              valign: 'middle',
+              border: [
+                { pt: 3, color: TL_COLORS.white },    // top
+                { pt: 3, color: TL_COLORS.white },    // right
+                rowBottomBorder,                       // bottom (dotted between rows)
+                { pt: 3, color: TL_COLORS.white }     // left
+              ],
+              hyperlink: { url: comp.website || '' }
+            }
+          });
+
+          // HQ column (white background, black text)
+          const hqCity = comp.hqCity || '';
+          row.push({
+            text: hqCity,
+            options: {
+              fill: TL_COLORS.white,
               color: TL_COLORS.black,
               bold: false,
               align: 'left',
               valign: 'middle',
-              border: { pt: 3, color: TL_COLORS.white },
-              hyperlink: { url: comp.website || '' }
+              border: [
+                { pt: 3, color: TL_COLORS.white },    // top
+                { pt: 3, color: TL_COLORS.white },    // right
+                rowBottomBorder,                       // bottom (dotted between rows)
+                { pt: 3, color: TL_COLORS.white }     // left
+              ]
             }
           });
 
@@ -5231,7 +5378,12 @@ async function generatePPTX(companies, targetDescription = '') {
                 color: TL_COLORS.checkMark,
                 align: 'center',
                 valign: 'middle',
-                border: { pt: 3, color: TL_COLORS.white }
+                border: [
+                  { pt: 3, color: TL_COLORS.white },    // top
+                  { pt: 3, color: TL_COLORS.white },    // right
+                  rowBottomBorder,                       // bottom (dotted between rows)
+                  { pt: 3, color: TL_COLORS.white }     // left
+                ]
               }
             });
           });
@@ -5240,23 +5392,25 @@ async function generatePPTX(companies, targetDescription = '') {
         });
       });
 
-      // Calculate column widths (from template: Country=1.12", Company=2.14", Segments=~1.17" each)
+      // Calculate column widths (from template: Country=1.12", Company=2.14", HQ=1.5", Segments=~1.17" each)
       const tableWidth = 12.6;
       let colWidths = [];
 
       if (isMultiCountry) {
         const countryColWidth = 1.12;
         const companyColWidth = 2.14;
-        const remainingWidth = tableWidth - countryColWidth - companyColWidth;
+        const hqColWidth = 1.5;
+        const remainingWidth = tableWidth - countryColWidth - companyColWidth - hqColWidth;
         const segmentColWidth = segments.length > 0 ? remainingWidth / segments.length : 1.17;
-        colWidths = [countryColWidth, companyColWidth];
+        colWidths = [countryColWidth, companyColWidth, hqColWidth];
         segments.forEach(() => colWidths.push(segmentColWidth));
       } else {
         // Single country - no country column, company column takes more space
         const companyColWidth = 2.5;
-        const remainingWidth = tableWidth - companyColWidth;
+        const hqColWidth = 1.5;
+        const remainingWidth = tableWidth - companyColWidth - hqColWidth;
         const segmentColWidth = segments.length > 0 ? remainingWidth / segments.length : 1.17;
-        colWidths = [companyColWidth];
+        colWidths = [companyColWidth, hqColWidth];
         segments.forEach(() => colWidths.push(segmentColWidth));
       }
 
@@ -5443,14 +5597,30 @@ async function generatePPTX(companies, targetDescription = '') {
           .trim();
       };
 
-      // Helper function to clean location value (remove "HQ:" prefix if column is already HQ)
+      // Helper function to clean location value (remove JSON format and "HQ:" prefix)
       const cleanLocationValue = (location, label) => {
         if (!location) return location;
+        let cleaned = location;
+
+        // Handle JSON format like {"HQ":"Chatuchak, Bangkok, Thailand"} or {"HQ":"CBD, Singapore"}
+        if (cleaned.includes('{') && cleaned.includes('}')) {
+          try {
+            // Try to extract the value from JSON-like string
+            const match = cleaned.match(/"HQ"\s*:\s*"([^"]+)"/i) || cleaned.match(/"([^"]+)"\s*:\s*"([^"]+)"/);
+            if (match) {
+              cleaned = match[1] || match[2] || cleaned;
+            }
+          } catch (e) {
+            // Fall through to normal cleaning
+          }
+        }
+
         // If label is HQ, remove "- HQ:" or "HQ:" prefix from value
         if (label === 'HQ') {
-          return location.replace(/^-?\s*HQ:\s*/i, '').trim();
+          cleaned = cleaned.replace(/^-?\s*HQ:\s*/i, '').trim();
         }
-        return location;
+
+        return cleaned;
       };
 
       // Base company info rows - only add if value exists
@@ -5810,7 +5980,23 @@ OUTPUT JSON with these fields:
   - "Puchong, Selangor, Malaysia"
   - "Bangna, Bangkok, Thailand"
   - "Batam, Riau Islands, Indonesia"
-  SINGAPORE RULE: Always use 2 levels: "District/Area, Singapore". Look for specific district from the address (e.g., "Jurong West, Singapore", "Ang Mo Kio, Singapore", "Tuas, Singapore", "Clarke Quay, Singapore", "CBD, Singapore", "Changi, Singapore"). Extract the neighborhood/district/area name from the street address. NEVER use "Singapore, Singapore" - always find the specific area.
+  SINGAPORE RULE: Always use 2 levels: "District/Area, Singapore". Extract the specific neighborhood/district/area from the street address. NEVER use generic terms like "CBD" or "Central" - instead extract the actual neighborhood name from the address.
+  Singapore district examples by postal code prefix or road name:
+  - "Jurong West, Singapore" (Jurong area roads)
+  - "Woodlands, Singapore" (Woodlands area)
+  - "Yishun, Singapore" (Yishun area)
+  - "Ang Mo Kio, Singapore" (AMK area)
+  - "Tuas, Singapore" (Tuas industrial area)
+  - "Changi, Singapore" (Changi area)
+  - "Bedok, Singapore" (Bedok area)
+  - "Tampines, Singapore" (Tampines area)
+  - "Bukit Batok, Singapore" (Bukit Batok area)
+  - "Toa Payoh, Singapore" (Toa Payoh area)
+  - "Geylang, Singapore" (Geylang area)
+  - "Raffles Place, Singapore" (Financial district)
+  - "Marina Bay, Singapore" (Marina area)
+  - "Orchard, Singapore" (Orchard Road area)
+  If address has a specific road name like "Ubi", "Kaki Bukit", "Paya Lebar", etc., use that area name. NEVER use "Singapore, Singapore" - always find the specific area.
 
   For multiple locations, group by type with sub-bullet points:
   Example format:
@@ -5967,14 +6153,25 @@ QUALITY & COMPLIANCE:
 OUTPUT JSON:
 {
   "key_metrics": [
-    {"label": "Shareholding", "value": "Family owned (100%)"},
     {"label": "Key Metrics", "value": "- Production capacity of 800+ tons per month\\n- 250+ machines\\n- 300+ employees"},
+    {"label": "Key Suppliers", "value": "6 suppliers including Hikvision, Dahua, Paradox, ZKTeco, Ruijie"},
     {"label": "Export Countries", "value": "SEA, South Asia, North Africa"},
     {"label": "Distribution Network", "value": "700 domestic distribution partners"},
     {"label": "Certification", "value": "ISO 9001, ISO 14001"},
     {"label": "Notable Partnerships", "value": "Launch partnership with Dainichiseika Color & Chemicals (Japanese) in 2009 technology transfer, joint product development and marketing"}
   ]
 }
+
+MERGE DUPLICATIVE INFORMATION:
+When you find BOTH a count AND specific names for the same category, MERGE them into ONE coherent entry:
+- BAD: {"label": "Number of Suppliers", "value": "6"} AND {"label": "Key Suppliers", "value": "Hikvision, Dahua, Paradox"}
+- GOOD: {"label": "Key Suppliers", "value": "6 suppliers including Hikvision, Dahua, Paradox, ZKTeco, Ruijie"}
+
+- BAD: {"label": "Number of Customers", "value": "250,000"} AND {"label": "Key Customers", "value": "Installers, Dealers, Integrators"}
+- GOOD: {"label": "Key Customers", "value": "Over 250,000 installations including Installers, Dealers, System Integrators"}
+
+- BAD: {"label": "Number of Employees", "value": "100+"} in metrics array
+- GOOD: Include employee count in "Key Metrics" bullet point
 
 SEGMENTATION REQUIREMENT:
 For metrics with MANY items (e.g., Customers, Suppliers), segment them by category using POINT FORM:
@@ -5996,7 +6193,7 @@ RULES:
 - For long lists of customers/suppliers, SEGMENT by category as shown above
 - Labels should be 1-3 words
 - Be specific with numbers when available
-- Include shareholding structure if mentioned
+- For Shareholding: ONLY include if EXPLICITLY stated on website (e.g., "family-owned", "publicly traded", "PE-backed"). NEVER assume ownership structure.
 - DO NOT include: years of experience, awards, recognitions, market position, operating hours, number of branches/locations (not useful for M&A)
 - NEVER make up data - only include what's explicitly stated
 - Return ONLY valid JSON`
@@ -6375,6 +6572,89 @@ Create MECE segments for these ${targetDescription} companies and mark which seg
   }
 }
 
+// AI Review Agent: Clean up and remove duplicative/unnecessary information
+// Uses Gemini 3 Flash for frontier reasoning - better at identifying duplicates and merging data
+async function reviewAndCleanData(companyData) {
+  try {
+    console.log('  Step 6: Running AI review agent (Gemini 3 Flash)...');
+
+    const prompt = `You are a data quality reviewer for M&A company profiles. Review the extracted data and clean it up by:
+
+1. REMOVE DUPLICATIVE ROWS:
+   - If "Number of X" appears alongside "Key X names", merge them into one row
+   - Example: "Number of Suppliers: 6" + "Key Suppliers: A, B, C" → "Key Suppliers: 6 suppliers including A, B, C"
+   - Example: "Number of Customers" + "Key Customers" → merge into "Key Customers"
+
+2. REMOVE UNNECESSARY/WORTHLESS ROWS:
+   - Remove rows with vague values like "Various", "Multiple", "Several" without specifics
+   - Remove rows about awards, achievements, recognitions (not useful for M&A)
+   - Remove rows about years of experience (not useful for M&A)
+   - Remove rows about operating hours, office hours
+
+3. MERGE SIMILAR INFORMATION:
+   - "Customers" and "Customer Segments" → merge into one "Key Customers" row
+   - "Products" and "Product Categories" → keep only the more detailed one
+   - If breakdown_items and key_metrics have overlapping info, keep in key_metrics only
+
+4. CLEAN UP HQ/LOCATION:
+   - If location looks like JSON ({"HQ":"..."}), extract the actual location value
+   - Format should be: "City, State/Province, Country" or "District, Singapore" for Singapore
+
+Review and clean this company data:
+
+${JSON.stringify(companyData, null, 2)}
+
+OUTPUT JSON with the same structure but cleaned up:
+{
+  "company_name": "...",
+  "established_year": "...",
+  "location": "cleaned location",
+  "business": "...",
+  "message": "...",
+  "title": "...",
+  "key_metrics": [cleaned array],
+  "breakdown_title": "...",
+  "breakdown_items": [cleaned array]
+}
+
+Return ONLY valid JSON.`;
+
+    // Use Gemini 3 Flash with JSON mode for frontier reasoning
+    const result = await callGemini3Flash(prompt, true);
+
+    if (!result) {
+      console.log('  Gemini 3 Flash returned empty, keeping original data');
+      return companyData;
+    }
+
+    // Parse JSON from response
+    let cleaned;
+    try {
+      cleaned = JSON.parse(result);
+    } catch (parseError) {
+      // Try to extract JSON from response if not pure JSON
+      const jsonMatch = result.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        cleaned = JSON.parse(jsonMatch[0]);
+      } else {
+        console.log('  Failed to parse Gemini response, keeping original data');
+        return companyData;
+      }
+    }
+
+    // Merge cleaned data with original (preserve fields not in prompt)
+    return {
+      ...companyData,
+      location: cleaned.location || companyData.location,
+      key_metrics: cleaned.key_metrics || companyData.key_metrics,
+      breakdown_items: cleaned.breakdown_items || companyData.breakdown_items
+    };
+  } catch (e) {
+    console.error('Review agent error:', e.message);
+    return companyData; // Return original data if review fails
+  }
+}
+
 // Build profile slides email HTML (simple version with PPTX attached)
 function buildProfileSlidesEmailHTML(companies, errors, hasPPTX) {
   const companyNames = companies.map(c => c.title || c.company_name).join(', ');
@@ -6517,7 +6797,7 @@ app.post('/api/profile-slides', async (req, res) => {
 
         // Combine all extracted data (mandatory fields supplemented by web search)
         // Use ensureString() for all AI-generated fields to prevent [object Object] issues
-        const companyData = {
+        let companyData = {
           website: scraped.url,
           company_name: ensureString(basicInfo.company_name),
           established_year: ensureString(basicInfo.established_year || searchedInfo.established_year),
@@ -6532,7 +6812,10 @@ app.post('/api/profile-slides', async (req, res) => {
           metrics: ensureString(metricsInfo.metrics)  // Fallback for old format
         };
 
-        console.log(`  ✓ Completed: ${companyData.title || companyData.company_name} (${allKeyMetrics.length} metrics)`);
+        // Step 6: Run AI review agent to clean up duplicative/unnecessary data
+        companyData = await reviewAndCleanData(companyData);
+
+        console.log(`  ✓ Completed: ${companyData.title || companyData.company_name} (${companyData.key_metrics?.length || 0} metrics after review)`);
         results.push(companyData);
 
       } catch (error) {
