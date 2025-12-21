@@ -2695,65 +2695,59 @@ async function runAgenticSearchTask(taskPrompt, country, searchLog) {
   return companies;
 }
 
-// Run a Claude-powered search task (Claude reasoning + Perplexity search)
-async function runClaudeSearchTask(searchQuery, reasoningTask, country, searchLog) {
-  if (!anthropic) {
-    console.log(`  Skipping Claude task - API key not set`);
-    return [];
-  }
-
+// Run a ChatGPT-powered search task (GPT-4o Search with web grounding)
+async function runChatGPTSearchTask(searchQuery, reasoningTask, country, searchLog) {
   const startTime = Date.now();
-  console.log(`  Executing Claude + Perplexity search task...`);
+  console.log(`  Executing ChatGPT Search task...`);
 
-  // Step 1: Perplexity searches
-  const searchResult = await callPerplexity(searchQuery);
+  // ChatGPT Search - it has built-in web search and will return comprehensive results
+  const searchPrompt = `You are an M&A research analyst. Search the web and find ALL relevant companies.
+
+SEARCH QUERY: ${searchQuery}
+
+TASK: ${reasoningTask}
+
+INSTRUCTIONS:
+1. Search the web comprehensively for companies matching this query
+2. Look at multiple sources - company directories, industry associations, trade publications
+3. Don't stop at the first few results - dig deeper
+
+For EACH company found, provide:
+- Company name (official name)
+- Website (must be real company website, not directory)
+- Headquarters location (City, Country)
+
+Be thorough - find EVERY company you can. Return as a structured list.`;
+
+  const searchResult = await callOpenAISearch(searchPrompt);
 
   if (!searchResult) {
-    console.log(`    Perplexity returned no results`);
+    console.log(`    ChatGPT returned no results`);
     searchLog.push({
-      task: `[Claude] ${searchQuery.substring(0, 80)}...`,
+      task: `[ChatGPT] ${searchQuery.substring(0, 80)}...`,
       duration: ((Date.now() - startTime) / 1000),
       searchQueries: [searchQuery],
       sourceCount: 0,
       responseLength: 0,
-      model: 'claude+perplexity'
+      model: 'chatgpt-search'
     });
     return [];
   }
-
-  // Step 2: Claude analyzes and extracts
-  const claudePrompt = `You are an M&A research analyst. Analyze these search results and extract ALL company information.
-
-SEARCH QUERY: ${searchQuery}
-
-SEARCH RESULTS:
-${searchResult}
-
-TASK: ${reasoningTask}
-
-For each company found, provide:
-- Company name (official name)
-- Website (if mentioned)
-- Headquarters location (City, Country)
-
-Be thorough - extract EVERY company mentioned, even if only briefly. Return as a structured list.`;
-
-  const claudeResult = await callClaude(claudePrompt);
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);
   console.log(`    Completed in ${duration}s`);
 
   searchLog.push({
-    task: `[Claude] ${searchQuery.substring(0, 80)}...`,
+    task: `[ChatGPT] ${searchQuery.substring(0, 80)}...`,
     duration: parseFloat(duration),
     searchQueries: [searchQuery],
     sourceCount: 1,
-    responseLength: claudeResult.length,
-    model: 'claude+perplexity'
+    responseLength: searchResult.length,
+    model: 'chatgpt-search'
   });
 
-  // Extract companies from Claude's response
-  const companies = await extractCompaniesV5(claudeResult, country);
+  // Extract companies from ChatGPT's response
+  const companies = await extractCompaniesV5(searchResult, country);
   console.log(`    Extracted ${companies.length} companies`);
 
   return companies;
@@ -2872,29 +2866,9 @@ Exclude: ${exclusion}`);
   return tasks;
 }
 
-// Validate companies using Gemini 3 Flash with strict criteria
-async function validateCompaniesV5(companies, business, country, exclusion) {
-  console.log(`\nV5 Validating ${companies.length} companies with Gemini 3 Flash...`);
-  const startTime = Date.now();
-  const validated = [];
-  const batchSize = 10;
-
-  for (let i = 0; i < companies.length; i += batchSize) {
-    const batch = companies.slice(i, i + batchSize);
-
-    const validations = await Promise.all(batch.map(async (company) => {
-      try {
-        // Fetch website content for validation
-        let pageContent = '';
-        if (company.website && company.website.startsWith('http')) {
-          try {
-            pageContent = await fetchWebsite(company.website);
-          } catch (e) {
-            pageContent = '';
-          }
-        }
-
-        const validationPrompt = `Validate if this company matches the search criteria.
+// Validate a single company with one model
+async function validateSingleCompany(company, business, country, exclusion, pageContent, model) {
+  const validationPrompt = `Validate if this company matches the search criteria.
 
 COMPANY: ${company.company_name}
 WEBSITE: ${company.website}
@@ -2914,59 +2888,137 @@ VALIDATION RULES:
 3. Is their HQ in one of the target countries (${country})?
 4. Do they violate any exclusion criteria (${exclusion})?
 
-Return JSON: {"valid": true/false, "reason": "one sentence explanation", "corrected_hq": "City, Country or null if unknown"}`;
+Return JSON only: {"valid": true/false, "reason": "one sentence explanation", "corrected_hq": "City, Country or null if unknown"}`;
 
-        const result = await callGemini3Flash(validationPrompt, true);
+  try {
+    let result;
+    if (model === 'gemini') {
+      result = await callGemini3Flash(validationPrompt, true);
+    } else {
+      // ChatGPT validation
+      result = await callChatGPT(validationPrompt);
+    }
 
-        try {
-          const jsonMatch = result.match(/\{[\s\S]*?\}/);
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            return { company, valid: parsed.valid, reason: parsed.reason, corrected_hq: parsed.corrected_hq };
+    const jsonMatch = result.match(/\{[\s\S]*?\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      return { valid: parsed.valid === true, reason: parsed.reason || '', corrected_hq: parsed.corrected_hq };
+    }
+    return { valid: false, reason: 'Parse error' };
+  } catch (e) {
+    return { valid: false, reason: `Error: ${e.message}` };
+  }
+}
+
+// Validate companies using dual-model consensus (Gemini + ChatGPT)
+// Both say yes → Valid | One says yes → Flagged | None say yes → Rejected
+async function validateCompaniesV5(companies, business, country, exclusion) {
+  console.log(`\nV5 Dual-Model Validation: ${companies.length} companies with Gemini + ChatGPT consensus...`);
+  const startTime = Date.now();
+
+  const validated = [];   // Both models agree = Valid
+  const flagged = [];     // Only one model agrees = Flagged for review
+  const rejected = [];    // Neither model agrees = Rejected
+
+  const batchSize = 5; // Smaller batches since we're calling 2 models per company
+
+  for (let i = 0; i < companies.length; i += batchSize) {
+    const batch = companies.slice(i, i + batchSize);
+
+    const validations = await Promise.all(batch.map(async (company) => {
+      try {
+        // Fetch website content for validation (shared between both models)
+        let pageContent = '';
+        if (company.website && company.website.startsWith('http')) {
+          try {
+            pageContent = await fetchWebsite(company.website);
+          } catch (e) {
+            pageContent = '';
           }
-        } catch (e) {
-          // Default to reject if can't parse
-          return { company, valid: false, reason: 'Validation parse error' };
         }
 
-        return { company, valid: false, reason: 'No validation result' };
+        // Run both validations in parallel
+        const [geminiResult, chatgptResult] = await Promise.all([
+          validateSingleCompany(company, business, country, exclusion, pageContent, 'gemini'),
+          validateSingleCompany(company, business, country, exclusion, pageContent, 'chatgpt')
+        ]);
+
+        // Determine consensus status
+        const geminiValid = geminiResult.valid === true;
+        const chatgptValid = chatgptResult.valid === true;
+
+        let status;
+        if (geminiValid && chatgptValid) {
+          status = 'valid';
+        } else if (geminiValid || chatgptValid) {
+          status = 'flagged';
+        } else {
+          status = 'rejected';
+        }
+
+        return {
+          company,
+          status,
+          geminiValid,
+          chatgptValid,
+          geminiReason: geminiResult.reason,
+          chatgptReason: chatgptResult.reason,
+          corrected_hq: geminiResult.corrected_hq || chatgptResult.corrected_hq
+        };
       } catch (e) {
         console.error(`  Validation error for ${company.company_name}: ${e.message}`);
-        return { company, valid: false, reason: 'Validation error' };
+        return { company, status: 'rejected', geminiValid: false, chatgptValid: false, geminiReason: 'Error', chatgptReason: 'Error' };
       }
     }));
 
     for (const v of validations) {
-      if (v.valid) {
-        validated.push({
-          company_name: v.company.company_name,
-          website: v.company.website,
-          hq: v.corrected_hq || v.company.hq
-        });
+      const companyData = {
+        company_name: v.company.company_name,
+        website: v.company.website,
+        hq: v.corrected_hq || v.company.hq,
+        geminiVote: v.geminiValid ? 'YES' : 'NO',
+        chatgptVote: v.chatgptValid ? 'YES' : 'NO',
+        reason: v.geminiValid ? v.geminiReason : v.chatgptReason
+      };
+
+      if (v.status === 'valid') {
+        validated.push(companyData);
+        console.log(`    ✓ VALID: ${v.company.company_name} (Gemini: YES, ChatGPT: YES)`);
+      } else if (v.status === 'flagged') {
+        flagged.push(companyData);
+        console.log(`    ? FLAGGED: ${v.company.company_name} (Gemini: ${v.geminiValid ? 'YES' : 'NO'}, ChatGPT: ${v.chatgptValid ? 'YES' : 'NO'})`);
       } else {
-        console.log(`    Rejected: ${v.company.company_name} - ${v.reason}`);
+        rejected.push(companyData);
+        console.log(`    ✗ REJECTED: ${v.company.company_name} (Gemini: NO, ChatGPT: NO)`);
       }
     }
 
-    console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
+    console.log(`  Progress: ${Math.min(i + batchSize, companies.length)}/${companies.length} | Valid: ${validated.length} | Flagged: ${flagged.length} | Rejected: ${rejected.length}`);
   }
 
-  console.log(`V5 Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
-  return validated;
+  const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`\nV5 Dual-Model Validation done in ${duration}s`);
+  console.log(`  Valid (both agree): ${validated.length}`);
+  console.log(`  Flagged (one agrees): ${flagged.length}`);
+  console.log(`  Rejected (none agree): ${rejected.length}`);
+
+  return { validated, flagged, rejected };
 }
 
-// Build email with search log summary
-function buildV5EmailHTML(companies, business, country, exclusion, searchLog) {
-  // Separate Gemini and Claude tasks
-  const geminiTasks = searchLog.filter(s => !s.model || s.model !== 'claude+perplexity');
-  const claudeTasks = searchLog.filter(s => s.model === 'claude+perplexity');
+// Build email with search log summary and three-tier validation results
+function buildV5EmailHTML(validationResults, business, country, exclusion, searchLog) {
+  const { validated, flagged, rejected } = validationResults;
+
+  // Separate Gemini and ChatGPT tasks
+  const geminiTasks = searchLog.filter(s => !s.model || (s.model !== 'chatgpt-search'));
+  const chatgptTasks = searchLog.filter(s => s.model === 'chatgpt-search');
 
   const geminiSummary = geminiTasks.map((s, i) =>
     `<li><strong>[Gemini]</strong> Task ${i + 1}: ${s.searchQueries.length} searches, ${s.sourceCount} sources, ${s.duration}s</li>`
   ).join('');
 
-  const claudeSummary = claudeTasks.map((s, i) =>
-    `<li><strong>[Claude]</strong> Task ${i + 1}: ${s.duration}s</li>`
+  const chatgptSummary = chatgptTasks.map((s, i) =>
+    `<li><strong>[ChatGPT]</strong> Task ${i + 1}: ${s.duration}s</li>`
   ).join('');
 
   const totalSearches = searchLog.reduce((sum, s) => sum + s.searchQueries.length, 0);
@@ -2978,40 +3030,135 @@ function buildV5EmailHTML(companies, business, country, exclusion, searchLog) {
     <p><strong>Business:</strong> ${business}</p>
     <p><strong>Country:</strong> ${country}</p>
     <p><strong>Exclusions:</strong> ${exclusion}</p>
-    <p><strong>Companies Found:</strong> ${companies.length}</p>
+
+    <h3>Validation Summary (Dual-Model Consensus)</h3>
+    <p>Each company was validated by <strong>both Gemini 3 Flash AND ChatGPT</strong>:</p>
+    <ul>
+      <li><span style="color: #22c55e; font-weight: bold;">VALIDATED (${validated.length})</span> - Both models agree this is a match</li>
+      <li><span style="color: #f59e0b; font-weight: bold;">FLAGGED (${flagged.length})</span> - Only one model agrees - needs human review</li>
+      <li><span style="color: #ef4444; font-weight: bold;">REJECTED (${rejected.length})</span> - Neither model agrees - likely not a match</li>
+    </ul>
 
     <h3>Search Summary</h3>
-    <p><strong>Models Used:</strong> Gemini 3 Flash (${geminiTasks.length} tasks) + Claude Sonnet (${claudeTasks.length} tasks)</p>
+    <p><strong>Models Used:</strong> Gemini 3 Flash (${geminiTasks.length} tasks) + ChatGPT Search (${chatgptTasks.length} tasks)</p>
     <p>Total internal searches: ${totalSearches} | Sources consulted: ${totalSources} | Search time: ${totalDuration.toFixed(1)}s</p>
 
-    <h4>Gemini Tasks</h4>
+    <h4>Gemini Search Tasks</h4>
     <ul>${geminiSummary || '<li>None</li>'}</ul>
 
-    <h4>Claude Tasks</h4>
-    <ul>${claudeSummary || '<li>None (API key not set)</li>'}</ul>
+    <h4>ChatGPT Search Tasks</h4>
+    <ul>${chatgptSummary || '<li>None</li>'}</ul>
+  `;
 
-    <h3>Companies</h3>
-    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
-      <tr style="background-color: #f0f0f0;">
+  // Section 1: Validated Companies (Both agree)
+  html += `
+    <h3 style="color: #22c55e; border-bottom: 2px solid #22c55e; padding-bottom: 8px;">
+      ✓ VALIDATED COMPANIES (${validated.length})
+    </h3>
+    <p style="color: #666; font-size: 12px;">Both Gemini and ChatGPT confirmed these match your criteria</p>
+  `;
+
+  if (validated.length > 0) {
+    html += `
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; margin-bottom: 30px;">
+      <tr style="background-color: #dcfce7;">
         <th>#</th>
         <th>Company</th>
         <th>Website</th>
         <th>Headquarters</th>
+        <th>Gemini</th>
+        <th>ChatGPT</th>
       </tr>
-  `;
-
-  companies.forEach((c, i) => {
-    html += `
+    `;
+    validated.forEach((c, i) => {
+      html += `
       <tr>
         <td>${i + 1}</td>
         <td>${c.company_name}</td>
         <td><a href="${c.website}">${c.website}</a></td>
         <td>${c.hq}</td>
+        <td style="color: #22c55e;">✓ YES</td>
+        <td style="color: #22c55e;">✓ YES</td>
+      </tr>
+      `;
+    });
+    html += '</table>';
+  } else {
+    html += '<p><em>No companies were validated by both models.</em></p>';
+  }
+
+  // Section 2: Flagged for Review (One agrees)
+  html += `
+    <h3 style="color: #f59e0b; border-bottom: 2px solid #f59e0b; padding-bottom: 8px;">
+      ? FLAGGED FOR REVIEW (${flagged.length})
+    </h3>
+    <p style="color: #666; font-size: 12px;">One model said yes, one said no - please review manually</p>
+  `;
+
+  if (flagged.length > 0) {
+    html += `
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; margin-bottom: 30px;">
+      <tr style="background-color: #fef3c7;">
+        <th>#</th>
+        <th>Company</th>
+        <th>Website</th>
+        <th>Headquarters</th>
+        <th>Gemini</th>
+        <th>ChatGPT</th>
       </tr>
     `;
-  });
+    flagged.forEach((c, i) => {
+      html += `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${c.company_name}</td>
+        <td><a href="${c.website}">${c.website}</a></td>
+        <td>${c.hq}</td>
+        <td style="color: ${c.geminiVote === 'YES' ? '#22c55e' : '#ef4444'};">${c.geminiVote === 'YES' ? '✓ YES' : '✗ NO'}</td>
+        <td style="color: ${c.chatgptVote === 'YES' ? '#22c55e' : '#ef4444'};">${c.chatgptVote === 'YES' ? '✓ YES' : '✗ NO'}</td>
+      </tr>
+      `;
+    });
+    html += '</table>';
+  } else {
+    html += '<p><em>No companies were flagged for review.</em></p>';
+  }
 
-  html += '</table>';
+  // Section 3: Rejected (None agree)
+  html += `
+    <h3 style="color: #ef4444; border-bottom: 2px solid #ef4444; padding-bottom: 8px;">
+      ✗ REJECTED (${rejected.length})
+    </h3>
+    <p style="color: #666; font-size: 12px;">Both models agreed these do not match your criteria</p>
+  `;
+
+  if (rejected.length > 0) {
+    html += `
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; margin-bottom: 30px;">
+      <tr style="background-color: #fee2e2;">
+        <th>#</th>
+        <th>Company</th>
+        <th>Website</th>
+        <th>Headquarters</th>
+        <th>Reason</th>
+      </tr>
+    `;
+    rejected.forEach((c, i) => {
+      html += `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${c.company_name}</td>
+        <td><a href="${c.website}">${c.website}</a></td>
+        <td>${c.hq}</td>
+        <td style="font-size: 11px; color: #666;">${c.reason || 'Not a match'}</td>
+      </tr>
+      `;
+    });
+    html += '</table>';
+  } else {
+    html += '<p><em>No companies were rejected.</em></p>';
+  }
+
   return html;
 }
 
@@ -3066,55 +3213,51 @@ app.post('/api/find-target-v5', async (req, res) => {
       }
     }
 
-    // ========== PHASE 2.5: Claude-Powered Searches ==========
-    if (anthropic) {
-      console.log('\n' + '='.repeat(50));
-      console.log('PHASE 2.5: CLAUDE + PERPLEXITY SEARCHES');
-      console.log('='.repeat(50));
+    // ========== PHASE 2.5: ChatGPT-Powered Searches ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('PHASE 2.5: CHATGPT SEARCH (WEB GROUNDED)');
+    console.log('='.repeat(50));
 
-      const countries = Country.split(',').map(c => c.trim());
+    const countries = Country.split(',').map(c => c.trim());
 
-      // Claude search tasks - different angles that Claude might excel at
-      const claudeSearches = [
-        {
-          query: `Complete list of ${Business} companies in ${Country}. Include all manufacturers, suppliers, and producers.`,
-          reasoning: `Extract ALL ${Business} companies. Focus on companies that might be acquisition targets.`
-        },
-        {
-          query: `Lesser known ${Business} SMEs and family businesses in ${Country}`,
-          reasoning: `Find smaller, local companies that might not appear in mainstream searches. These are often the best M&A targets.`
-        },
-        {
-          query: `${Business} industry ${Country} market players manufacturers list`,
-          reasoning: `Identify all market participants including niche players and specialists.`
-        }
-      ];
-
-      // Add country-specific searches
-      for (const c of countries.slice(0, 3)) {
-        claudeSearches.push({
-          query: `${Business} companies manufacturers ${c} complete list`,
-          reasoning: `Find all ${Business} companies specifically in ${c}. Be thorough.`
-        });
+    // ChatGPT search tasks - different angles for comprehensive coverage
+    const chatgptSearches = [
+      {
+        query: `Complete list of ${Business} companies in ${Country}. Include all manufacturers, suppliers, and producers.`,
+        reasoning: `Extract ALL ${Business} companies. Focus on companies that might be acquisition targets.`
+      },
+      {
+        query: `Lesser known ${Business} SMEs and family businesses in ${Country}`,
+        reasoning: `Find smaller, local companies that might not appear in mainstream searches. These are often the best M&A targets.`
+      },
+      {
+        query: `${Business} industry ${Country} market players manufacturers list`,
+        reasoning: `Identify all market participants including niche players and specialists.`
       }
+    ];
 
-      for (let i = 0; i < claudeSearches.length; i++) {
-        console.log(`\n--- Claude Task ${i + 1}/${claudeSearches.length} ---`);
-        try {
-          const companies = await runClaudeSearchTask(
-            claudeSearches[i].query,
-            claudeSearches[i].reasoning,
-            Country,
-            searchLog
-          );
-          allCompanies = [...allCompanies, ...companies];
-          console.log(`  Running total: ${allCompanies.length} companies (before dedup)`);
-        } catch (claudeError) {
-          console.error(`  Claude task ${i + 1} failed: ${claudeError.message}`);
-        }
+    // Add country-specific searches
+    for (const c of countries.slice(0, 3)) {
+      chatgptSearches.push({
+        query: `${Business} companies manufacturers ${c} complete list`,
+        reasoning: `Find all ${Business} companies specifically in ${c}. Be thorough.`
+      });
+    }
+
+    for (let i = 0; i < chatgptSearches.length; i++) {
+      console.log(`\n--- ChatGPT Task ${i + 1}/${chatgptSearches.length} ---`);
+      try {
+        const companies = await runChatGPTSearchTask(
+          chatgptSearches[i].query,
+          chatgptSearches[i].reasoning,
+          Country,
+          searchLog
+        );
+        allCompanies = [...allCompanies, ...companies];
+        console.log(`  Running total: ${allCompanies.length} companies (before dedup)`);
+      } catch (chatgptError) {
+        console.error(`  ChatGPT task ${i + 1} failed: ${chatgptError.message}`);
       }
-    } else {
-      console.log('\n(Skipping Claude searches - ANTHROPIC_API_KEY not set)');
     }
 
     // ========== PHASE 3: Deduplication ==========
@@ -3177,23 +3320,31 @@ Only include real company websites (not LinkedIn, Facebook, directories). If you
       console.log(`After website lookup: ${companiesWithWebsites.length} companies with websites`);
     }
 
-    // ========== PHASE 5: Validation ==========
+    // ========== PHASE 5: Dual-Model Validation ==========
     console.log('\n' + '='.repeat(50));
-    console.log('PHASE 5: STRICT VALIDATION');
+    console.log('PHASE 5: DUAL-MODEL VALIDATION (Gemini + ChatGPT)');
     console.log('='.repeat(50));
 
     const preFiltered = preFilterCompanies(companiesWithWebsites);
     console.log(`After pre-filter: ${preFiltered.length}`);
 
-    const validatedCompanies = await validateCompaniesV5(preFiltered, Business, Country, Exclusion);
+    // Returns { validated, flagged, rejected }
+    const validationResults = await validateCompaniesV5(preFiltered, Business, Country, Exclusion);
 
     // ========== PHASE 6: Final Dedup and Send Results ==========
     console.log('\n' + '='.repeat(50));
     console.log('PHASE 6: FINAL RESULTS');
     console.log('='.repeat(50));
 
-    const finalCompanies = dedupeCompanies(validatedCompanies);
-    console.log(`FINAL TOTAL: ${finalCompanies.length} validated companies`);
+    // Dedup each category
+    const finalValidated = dedupeCompanies(validationResults.validated);
+    const finalFlagged = dedupeCompanies(validationResults.flagged);
+    const finalRejected = dedupeCompanies(validationResults.rejected);
+
+    console.log(`FINAL RESULTS:`);
+    console.log(`  ✓ VALIDATED (both models agree): ${finalValidated.length}`);
+    console.log(`  ? FLAGGED (one model agrees): ${finalFlagged.length}`);
+    console.log(`  ✗ REJECTED (neither agrees): ${finalRejected.length}`);
 
     // Calculate stats
     const totalSearches = searchLog.reduce((sum, s) => sum + s.searchQueries.length, 0);
@@ -3204,11 +3355,14 @@ Only include real company websites (not LinkedIn, Facebook, directories). If you
     console.log(`  Total internal searches: ${totalSearches}`);
     console.log(`  Total sources consulted: ${totalSources}`);
 
-    // Send email
-    const htmlContent = buildV5EmailHTML(finalCompanies, Business, Country, Exclusion, searchLog);
+    // Send email with three-tier results
+    const finalResults = { validated: finalValidated, flagged: finalFlagged, rejected: finalRejected };
+    const htmlContent = buildV5EmailHTML(finalResults, Business, Country, Exclusion, searchLog);
+
+    const totalForSubject = finalValidated.length + finalFlagged.length;
     await sendEmail(
       Email,
-      `[V5 AGENTIC] ${Business} in ${Country} (${finalCompanies.length} companies)`,
+      `[V5 AGENTIC] ${Business} in ${Country} (${finalValidated.length} validated + ${finalFlagged.length} flagged)`,
       htmlContent
     );
 
@@ -3216,7 +3370,7 @@ Only include real company websites (not LinkedIn, Facebook, directories). If you
     console.log('\n' + '='.repeat(70));
     console.log(`V5 AGENTIC SEARCH COMPLETE!`);
     console.log(`Email sent to: ${Email}`);
-    console.log(`Final companies: ${finalCompanies.length}`);
+    console.log(`Validated: ${finalValidated.length} | Flagged: ${finalFlagged.length} | Rejected: ${finalRejected.length}`);
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(70));
 
