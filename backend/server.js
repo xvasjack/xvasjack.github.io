@@ -10227,17 +10227,28 @@ app.post('/api/due-diligence', async (req, res) => {
 
       // Add real-time recording transcript (CRITICAL: this was missing!)
       if (rawTranscript && rawTranscript.trim().length > 0) {
+        // Strip HTML tags from transcripts (they come from UI with HTML formatting)
+        const stripHtml = (text) => text
+          .replace(/<br\s*\/?>/gi, '\n')
+          .replace(/<span[^>]*class="speaker-label"[^>]*>([^<]*)<\/span>/gi, '$1')
+          .replace(/<[^>]+>/g, '')
+          .replace(/\n\s*\n/g, '\n')
+          .trim();
+
+        const cleanRaw = stripHtml(rawTranscript);
+        const cleanTranslated = translatedTranscript ? stripHtml(translatedTranscript) : '';
+
         // Use translated transcript if available, otherwise use raw
-        const transcriptToUse = translatedTranscript && translatedTranscript.trim().length > 0
-          ? `ENGLISH TRANSLATION:\n${translatedTranscript}\n\n${'='.repeat(40)}\n\nORIGINAL (${detectedLanguage || 'detected language'}):\n${rawTranscript}`
-          : rawTranscript;
+        const transcriptToUse = cleanTranslated.length > 0
+          ? `ENGLISH TRANSLATION:\n${cleanTranslated}\n\n${'='.repeat(40)}\n\nORIGINAL (${detectedLanguage || 'detected language'}):\n${cleanRaw}`
+          : cleanRaw;
 
         allFiles.push({
           name: 'Real-Time Meeting Recording',
           type: 'transcript',
           content: transcriptToUse
         });
-        console.log(`[DD] Added real-time transcript to report: ${rawTranscript.length} chars`);
+        console.log(`[DD] Added real-time transcript to report: ${cleanRaw.length} chars`);
       }
 
       outputContent = await generateDueDiligenceReport(allFiles, instructions, length, instructionMode);
@@ -10285,10 +10296,29 @@ app.post('/api/due-diligence', async (req, res) => {
     // 6b: Transcript text file (for safekeeping)
     const transcriptText = rawTranscript || combinedTranscript;
     if (transcriptText) {
+      // Strip HTML tags from translated transcript (it comes from UI with HTML formatting)
+      const cleanTranslation = translatedTranscript
+        ? translatedTranscript
+            .replace(/<br\s*\/?>/gi, '\n')  // Convert <br> to newlines
+            .replace(/<span[^>]*class="speaker-label"[^>]*>([^<]*)<\/span>/gi, '$1')  // Keep speaker label text
+            .replace(/<[^>]+>/g, '')  // Remove any remaining HTML tags
+            .replace(/\n\s*\n/g, '\n')  // Clean up multiple newlines
+            .trim()
+        : '';
+
+      const cleanRawTranscript = rawTranscript
+        ? rawTranscript
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<span[^>]*class="speaker-label"[^>]*>([^<]*)<\/span>/gi, '$1')
+            .replace(/<[^>]+>/g, '')
+            .replace(/\n\s*\n/g, '\n')
+            .trim()
+        : '';
+
       const transcriptContent = `TRANSCRIPT - ${new Date().toLocaleString()}
 ${'='.repeat(50)}
 
-${translatedTranscript ? `ORIGINAL (${detectedLanguage || 'detected'}):\n${rawTranscript}\n\n${'='.repeat(50)}\n\nENGLISH TRANSLATION:\n${translatedTranscript}` : transcriptText}
+${cleanTranslation ? `ORIGINAL (${detectedLanguage || 'detected'}):\n${cleanRawTranscript}\n\n${'='.repeat(50)}\n\nENGLISH TRANSLATION:\n${cleanTranslation}` : transcriptText}
 `;
       attachments.push({
         filename: `Transcript_${dateStr}.txt`,
@@ -10303,12 +10333,14 @@ ${translatedTranscript ? `ORIGINAL (${detectedLanguage || 'detected'}):\n${rawTr
       if (session.audioChunks && session.audioChunks.length > 0) {
         console.log('[DD] Attaching audio recording from session...');
         try {
-          const audioBuffer = Buffer.concat(session.audioChunks);
+          const pcmBuffer = Buffer.concat(session.audioChunks);
+          // Convert PCM to WAV for playability (16kHz, 16-bit, mono)
+          const wavBuffer = pcmToWav(pcmBuffer, 16000, 1, 16);
           attachments.push({
-            filename: `Recording_${dateStr}.webm`,
-            content: audioBuffer.toString('base64')
+            filename: `Recording_${dateStr}.wav`,
+            content: wavBuffer.toString('base64')
           });
-          console.log(`[DD] Audio attached: ${audioBuffer.length} bytes`);
+          console.log(`[DD] Audio attached as WAV: ${wavBuffer.length} bytes`);
         } catch (audioError) {
           console.error('[DD] Audio attachment failed:', audioError.message);
         }
