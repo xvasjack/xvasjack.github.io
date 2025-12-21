@@ -266,9 +266,9 @@ async function callGemini3Flash(prompt, jsonMode = false) {
   }
 }
 
-// Gemini 3 Pro - Most capable model for critical validation tasks
+// Gemini 2.5 Pro - Most capable model for critical validation tasks
 // Use this for final data accuracy verification where errors are unacceptable
-async function callGemini3Pro(prompt, jsonMode = false) {
+async function callGemini2Pro(prompt, jsonMode = false) {
   try {
     const requestBody = {
       contents: [{ parts: [{ text: prompt }] }],
@@ -281,7 +281,8 @@ async function callGemini3Pro(prompt, jsonMode = false) {
       requestBody.generationConfig.responseMimeType = 'application/json';
     }
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-06-05:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+    // Using stable gemini-2.5-pro (upgraded from deprecated gemini-2.5-pro-preview-06-05)
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${process.env.GEMINI_API_KEY}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(requestBody),
@@ -290,13 +291,13 @@ async function callGemini3Pro(prompt, jsonMode = false) {
     const data = await response.json();
 
     if (data.error) {
-      console.error('Gemini 3 Pro API error:', data.error.message);
+      console.error('Gemini 2.5 Pro API error:', data.error.message);
       return '';
     }
 
     return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
   } catch (error) {
-    console.error('Gemini 3 Pro error:', error.message);
+    console.error('Gemini 2.5 Pro error:', error.message);
     return '';
   }
 }
@@ -5598,9 +5599,9 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     });
     let displayCompanies = sortedCompanies.slice(0, 30);
 
-    // ===== AI DATA VALIDATION using Gemini 3 Pro =====
+    // ===== AI DATA VALIDATION using Gemini 2.5 Pro =====
     // Critical validation step to ensure data accuracy before PowerPoint generation
-    console.log('Running Gemini 3 Pro validation for top 30 companies...');
+    console.log('Running Gemini 2.5 Pro validation for top 30 companies...');
 
     const validationPrompt = `You are a financial data validation expert. Verify the accuracy of these parsed company financial metrics.
 
@@ -5634,10 +5635,10 @@ Return JSON with this exact format:
 }`;
 
     try {
-      const validationResult = await callGemini3Pro(validationPrompt, true);
+      const validationResult = await callGemini2Pro(validationPrompt, true);
       if (validationResult) {
         const validation = JSON.parse(validationResult);
-        console.log('Gemini 3 Pro validation result:', JSON.stringify(validation, null, 2));
+        console.log('Gemini 2.5 Pro validation result:', JSON.stringify(validation, null, 2));
 
         // Apply corrections if any
         if (validation.corrections && validation.corrections.length > 0) {
