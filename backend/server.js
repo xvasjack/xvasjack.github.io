@@ -3966,21 +3966,51 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       const row = allRows[i];
       if (!row) continue;
       const rowStr = row.join(' ').toLowerCase();
+      // Look for row with "company" AND any financial column (sales, revenue, market, ebitda, etc.)
       if ((rowStr.includes('company') || rowStr.includes('name')) &&
-          (rowStr.includes('sales') || rowStr.includes('market') || rowStr.includes('ebitda') || rowStr.includes('p/e') || rowStr.includes('ev/'))) {
+          (rowStr.includes('sales') || rowStr.includes('revenue') || rowStr.includes('market') || rowStr.includes('ebitda') || rowStr.includes('p/e') || rowStr.includes('ev/') || rowStr.includes('ev '))) {
         headerRowIndex = i;
         headers = row;
+        console.log(`Found header row at index ${i}: ${row.slice(0, 10).join(', ')}`);
         break;
+      }
+    }
+
+    if (headerRowIndex === -1) {
+      // Fallback: find first row with "company" in it
+      for (let i = 0; i < Math.min(20, allRows.length); i++) {
+        const row = allRows[i];
+        if (!row) continue;
+        const rowStr = row.join(' ').toLowerCase();
+        if (rowStr.includes('company name') || rowStr.includes('company')) {
+          headerRowIndex = i;
+          headers = row;
+          console.log(`Fallback header row at index ${i}: ${row.slice(0, 10).join(', ')}`);
+          break;
+        }
       }
     }
 
     if (headerRowIndex === -1) {
       headerRowIndex = 0;
       headers = allRows[0] || [];
+      console.log(`Using first row as header: ${headers.slice(0, 10).join(', ')}`);
     }
 
     console.log(`Header row index: ${headerRowIndex}`);
-    console.log(`Headers: ${headers.slice(0, 15).join(', ')}...`);
+    console.log(`ALL HEADERS (${headers.length} columns):`);
+    headers.forEach((h, i) => {
+      if (h) console.log(`  Col ${i}: "${h}"`);
+    });
+
+    // Log first 3 data rows to verify parsing
+    console.log(`\nFIRST 3 DATA ROWS (after header):`);
+    for (let i = headerRowIndex + 1; i < Math.min(headerRowIndex + 4, allRows.length); i++) {
+      const row = allRows[i];
+      if (row) {
+        console.log(`  Row ${i}: ${row.slice(0, 12).map((v, idx) => `[${idx}]${v}`).join(' | ')}`);
+      }
+    }
 
     // Find column indices - enhanced to detect TTM vs FY columns
     const findCol = (patterns, excludePatterns = []) => {
@@ -4086,17 +4116,28 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
 
     if (cols.company === -1) cols.company = 0;
 
-    console.log(`Column mapping:`, cols);
-    console.log(`Headers found: ${headers.join(' | ')}`);
-    if (cols.sales >= 0) {
-      console.log(`Sales column found at index ${cols.sales}: "${headers[cols.sales]}"`);
-    } else {
-      console.log(`WARNING: Sales/Revenue column NOT found in headers`);
+    console.log(`\n=== COLUMN MAPPING ===`);
+    console.log(`  Company: col ${cols.company} = "${headers[cols.company] || 'N/A'}"`);
+    console.log(`  Country: col ${cols.country} = "${headers[cols.country] || 'N/A'}"`);
+    console.log(`  Sales/Revenue: col ${cols.sales} = "${headers[cols.sales] || 'NOT FOUND'}"`);
+    console.log(`  Market Cap: col ${cols.marketCap} = "${headers[cols.marketCap] || 'N/A'}"`);
+    console.log(`  EV: col ${cols.ev} = "${headers[cols.ev] || 'N/A'}"`);
+    console.log(`  EBITDA: col ${cols.ebitda} = "${headers[cols.ebitda] || 'N/A'}"`);
+    console.log(`  Net Margin: col ${cols.netMargin} = "${headers[cols.netMargin] || 'N/A'}"`);
+    console.log(`  EV/EBITDA: col ${cols.evEbitda} = "${headers[cols.evEbitda] || 'N/A'}"`);
+    console.log(`  P/E TTM: col ${cols.peTTM} = "${headers[cols.peTTM] || 'N/A'}"`);
+    console.log(`  P/E FY: col ${cols.peFY} = "${headers[cols.peFY] || 'N/A'}"`);
+    console.log(`  P/B: col ${cols.pb} = "${headers[cols.pb] || 'N/A'}"`);
+
+    if (cols.sales < 0) {
+      console.log(`\n*** WARNING: Sales/Revenue column NOT FOUND! Available headers:`);
+      headers.forEach((h, i) => console.log(`    [${i}] ${h}`));
     }
 
     // Extract data rows
     const dataRows = allRows.slice(headerRowIndex + 1);
     const allCompanies = [];
+    let loggedCount = 0;
 
     for (const row of dataRows) {
       if (!row || row.length === 0) continue;
@@ -4111,10 +4152,16 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       if (nameStr.startsWith('spd') && nameStr.length > 10) continue;
 
       const parseNum = (idx) => {
-        if (idx < 0 || !row[idx]) return null;
-        const val = parseFloat(String(row[idx]).replace(/[,%]/g, ''));
+        if (idx < 0 || row[idx] === undefined || row[idx] === null || row[idx] === '') return null;
+        const rawVal = row[idx];
+        const val = parseFloat(String(rawVal).replace(/[,%]/g, ''));
         return isNaN(val) ? null : val;
       };
+
+      // Get raw cell values for debugging
+      const rawSales = cols.sales >= 0 ? row[cols.sales] : 'N/A';
+      const rawMarketCap = cols.marketCap >= 0 ? row[cols.marketCap] : 'N/A';
+      const rawEV = cols.ev >= 0 ? row[cols.ev] : 'N/A';
 
       const company = {
         name: companyName,
@@ -4133,6 +4180,14 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
         filterReason: '',
         dataWarnings: []
       };
+
+      // Log first 5 companies with their raw and parsed values
+      if (loggedCount < 5) {
+        console.log(`\n--- ${company.name} ---`);
+        console.log(`  RAW VALUES: Sales="${rawSales}" | MCap="${rawMarketCap}" | EV="${rawEV}"`);
+        console.log(`  PARSED: Sales=${company.sales} | MCap=${company.marketCap} | EV=${company.ev} | EBITDA=${company.ebitda}`);
+        loggedCount++;
+      }
 
       // DATA VALIDATION: Check for suspicious/inconsistent financial data
       const warnings = [];
