@@ -76,20 +76,16 @@
 
     .dd-file-list {
       margin-top: 8px;
-      display: flex !important;
+      display: flex;
       flex-direction: column;
       gap: 4px;
-      min-height: 40px;
-      padding: 8px;
-      background: #fef2f2 !important;
-      border: 2px solid #ef4444 !important;
-      border-radius: 6px;
+      max-height: 150px;
+      overflow-y: auto;
     }
     .dd-file-item {
-      display: flex !important; align-items: center; gap: 8px;
-      padding: 8px 12px; background: #ffffff !important;
-      border: 1px solid #3b82f6 !important; border-radius: 6px;
-      min-height: 38px;
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 12px; background: #f8fafc;
+      border: 1px solid #e2e8f0; border-radius: 6px;
     }
     .dd-file-item svg { width: 16px; height: 16px; color: #3b82f6; flex-shrink: 0; }
     .dd-file-item span { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #1e293b; }
@@ -382,20 +378,16 @@
           <!-- Language Selector -->
           <div class="dd-lang-select" id="langSelect">
             <button type="button" class="dd-lang-btn dd-lang-multi" data-lang="multi" style="background: linear-gradient(135deg, #4f46e5, #7c3aed); color: white; font-weight: 600;">Multi</button>
-            <button type="button" class="dd-lang-btn" data-lang="en">EN</button>
-            <button type="button" class="dd-lang-btn" data-lang="zh">中文</button>
-            <button type="button" class="dd-lang-btn" data-lang="ja">日本語</button>
-            <button type="button" class="dd-lang-btn" data-lang="ko">한국어</button>
-            <button type="button" class="dd-lang-btn" data-lang="hi">हिंदी</button>
-            <button type="button" class="dd-lang-btn" data-lang="id">ID</button>
-            <button type="button" class="dd-lang-btn" data-lang="vi">VN</button>
-            <button type="button" class="dd-lang-btn" data-lang="th">ไทย</button>
-            <button type="button" class="dd-lang-btn" data-lang="es">ES</button>
-            <button type="button" class="dd-lang-btn" data-lang="fr">FR</button>
-            <button type="button" class="dd-lang-btn" data-lang="de">DE</button>
-            <button type="button" class="dd-lang-btn" data-lang="pt">PT</button>
-            <button type="button" class="dd-lang-btn" data-lang="ru">RU</button>
-            <button type="button" class="dd-lang-btn" data-lang="ar">AR</button>
+            <button type="button" class="dd-lang-btn" data-lang="en">English</button>
+            <button type="button" class="dd-lang-btn" data-lang="zh">Chinese</button>
+            <button type="button" class="dd-lang-btn" data-lang="ja">Japanese</button>
+            <button type="button" class="dd-lang-btn" data-lang="ko">Korean</button>
+            <button type="button" class="dd-lang-btn" data-lang="vi">Vietnamese</button>
+            <button type="button" class="dd-lang-btn" data-lang="id">Indonesian</button>
+            <button type="button" class="dd-lang-btn" data-lang="ms">Malay</button>
+            <button type="button" class="dd-lang-btn" data-lang="th">Thai</button>
+            <button type="button" class="dd-lang-btn" data-lang="hi">Hindi</button>
+            <button type="button" class="dd-lang-btn" data-lang="tl">Filipino</button>
           </div>
           <div id="langHint" style="font-size: 13px; color: var(--text-main); text-align: center; margin-bottom: 8px; padding: 8px 10px; background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%); border-radius: 4px; border: 1px solid #22c55e;">
             <strong style="color: #166534;">English mode:</strong> <span style="color: #14532d;">Optimized for English-only meetings.</span>
@@ -532,11 +524,11 @@
 
         // Update hint text based on selection
         const langHint = document.getElementById('langHint');
-        // Languages NOT supported for code-switching (must use single-language mode)
-        const noCodeSwitchLangs = ['zh', 'th', 'ar'];
+        // Languages that don't support code-switching (need single-language mode)
+        const noCodeSwitchLangs = ['zh', 'th', 'ms', 'tl'];
 
         if (selectedLang === 'multi') {
-          langHint.innerHTML = '<strong style="color: #1e40af;">Multi-language mode:</strong> <span style="color: #1e3a5f;">EN/ES/FR/DE/JA/KO/VI + more. Non-English translated.</span><br><span style="font-size: 10px; color: #64748b;">Note: Chinese/Thai/Arabic not supported - select those languages directly.</span>';
+          langHint.innerHTML = '<strong style="color: #1e40af;">Multi-language mode:</strong> <span style="color: #1e3a5f;">Auto-detects EN/JA/KO/VI/HI + more.</span><br><span style="font-size: 11px; color: #64748b;">Note: Chinese/Thai/Malay/Filipino - select directly.</span>';
           langHint.style.background = 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)';
           langHint.style.borderColor = '#3b82f6';
         } else if (selectedLang === 'en') {
@@ -544,11 +536,11 @@
           langHint.style.background = 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)';
           langHint.style.borderColor = '#22c55e';
         } else if (noCodeSwitchLangs.includes(selectedLang)) {
-          langHint.innerHTML = '<strong style="color: #92400e;">Selected: ' + e.target.textContent + '</strong> <span style="color: #78350f;">Single-language mode. Will be translated to English.</span>';
+          langHint.innerHTML = '<strong style="color: #92400e;">' + e.target.textContent + ':</strong> <span style="color: #78350f;">Single-language mode. Translated to English.</span>';
           langHint.style.background = 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)';
           langHint.style.borderColor = '#f59e0b';
         } else {
-          langHint.innerHTML = '<strong style="color: #92400e;">Selected: ' + e.target.textContent + '</strong> <span style="color: #78350f;">Will be translated to English.</span>';
+          langHint.innerHTML = '<strong style="color: #92400e;">' + e.target.textContent + ':</strong> <span style="color: #78350f;">Will be translated to English.</span>';
           langHint.style.background = 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)';
           langHint.style.borderColor = '#f59e0b';
         }
