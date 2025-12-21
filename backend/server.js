@@ -169,6 +169,39 @@ async function downloadFromR2(key) {
   }
 }
 
+// Convert PCM to WAV format (adds header for playability)
+function pcmToWav(pcmBuffer, sampleRate = 16000, numChannels = 1, bitsPerSample = 16) {
+  const byteRate = sampleRate * numChannels * bitsPerSample / 8;
+  const blockAlign = numChannels * bitsPerSample / 8;
+  const dataSize = pcmBuffer.length;
+  const headerSize = 44;
+  const fileSize = headerSize + dataSize;
+
+  const wavBuffer = Buffer.alloc(fileSize);
+
+  // RIFF header
+  wavBuffer.write('RIFF', 0);
+  wavBuffer.writeUInt32LE(fileSize - 8, 4);
+  wavBuffer.write('WAVE', 8);
+
+  // fmt chunk
+  wavBuffer.write('fmt ', 12);
+  wavBuffer.writeUInt32LE(16, 16); // fmt chunk size
+  wavBuffer.writeUInt16LE(1, 20);  // audio format (1 = PCM)
+  wavBuffer.writeUInt16LE(numChannels, 22);
+  wavBuffer.writeUInt32LE(sampleRate, 24);
+  wavBuffer.writeUInt32LE(byteRate, 28);
+  wavBuffer.writeUInt16LE(blockAlign, 32);
+  wavBuffer.writeUInt16LE(bitsPerSample, 34);
+
+  // data chunk
+  wavBuffer.write('data', 36);
+  wavBuffer.writeUInt32LE(dataSize, 40);
+  pcmBuffer.copy(wavBuffer, 44);
+
+  return wavBuffer;
+}
+
 // R2 Delete function (cleanup old recordings)
 async function deleteFromR2(key) {
   if (!r2Client) {
@@ -717,32 +750,81 @@ async function transcribeAudio(audioBase64, mimeType, language = 'auto') {
   }
 }
 
-// Translate text using GPT-4o
-async function translateText(text, targetLang = 'en') {
+// Detect domain/context from text for domain-aware translation
+function detectMeetingDomain(text) {
+  const domains = {
+    financial: /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
+    legal: /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
+    medical: /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
+    technical: /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
+    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i
+  };
+
+  for (const [domain, pattern] of Object.entries(domains)) {
+    if (pattern.test(text)) {
+      return domain;
+    }
+  }
+  return 'general';
+}
+
+// Get domain-specific translation instructions
+function getDomainInstructions(domain) {
+  const instructions = {
+    financial: 'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
+    legal: 'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
+    medical: 'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
+    technical: 'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
+    hr: 'This is an HR/talent due diligence meeting. Preserve HR terminology and employment-related terms accurately.',
+    general: 'This is a business due diligence meeting. Preserve business terminology and professional tone.'
+  };
+  return instructions[domain] || instructions.general;
+}
+
+// Translate text using GPT-4o with context awareness
+async function translateText(text, targetLang = 'en', options = {}) {
+  const { previousSegments = [], domain = null } = options;
+
   // Minimum length check - 3 chars for CJK languages, 10 for others
   const minLength = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(text) ? 3 : 10;
   if (!text || text.length < minLength) return text;
 
   try {
+    // Auto-detect domain if not provided
+    const effectiveDomain = domain || detectMeetingDomain(text + ' ' + previousSegments.join(' '));
+    const domainInstructions = getDomainInstructions(effectiveDomain);
+
+    // Build context from previous segments
+    let contextSection = '';
+    if (previousSegments.length > 0) {
+      contextSection = `\n\nPrevious context (for reference only, do not translate these):
+${previousSegments.slice(-3).map((seg, i) => `[${i + 1}] ${seg}`).join('\n')}
+
+Now translate the following new segment, maintaining consistency with the context above:`;
+    }
+
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',  // Use GPT-4o for better translation quality
       messages: [
         {
           role: 'system',
           content: `You are a professional translator specializing in business meeting transcriptions.
+${domainInstructions}
+
 Translate accurately while:
 - Preserving the original meaning and tone
 - Using natural, fluent ${targetLang === 'en' ? 'English' : targetLang}
 - Keeping business/technical terms accurate
+- Maintaining consistency with any provided context
 - Not adding or omitting information
 Output only the translation, nothing else.`
         },
         {
           role: 'user',
-          content: text
+          content: contextSection ? `${contextSection}\n\n${text}` : text
         }
       ],
-      temperature: 0.1  // Lower temperature for more consistent translations
+      temperature: 0.3  // Balanced temperature for fluency while maintaining consistency
     });
     return response.choices[0].message.content || text;
   } catch (error) {
@@ -3041,23 +3123,31 @@ Variations for "${business}":`;
 }
 
 // Generate diverse search tasks for a business/country
+// Key insight: Exhaustiveness comes from DIFFERENT SEARCH ANGLES, not more search tools
 function generateSearchTasks(business, country, exclusion, businessVariations = []) {
   const countries = country.split(',').map(c => c.trim());
   const countryList = countries.join(', ');
 
   const tasks = [];
 
-  // Task 1: Comprehensive primary search
+  // Task 1: Comprehensive primary search with specific terminology variations
   tasks.push(`You are an M&A research analyst. Find ALL ${business} companies in ${countryList}.
 
-YOUR TASK: Search exhaustively to build a comprehensive list. Do NOT give a partial answer.
+YOUR TASK: Search exhaustively using MULTIPLE TERMINOLOGY VARIATIONS.
 
-SEARCH STRATEGY:
-1. First search for "${business} companies ${country}"
-2. Then search for "${business} manufacturers ${country}"
-3. Then search for related terms (suppliers, producers, makers)
-4. Search each country individually if multiple countries
-5. Try local language terms if applicable
+SEARCH STRATEGY - Execute ALL of these searches:
+1. "${business} companies ${country}"
+2. "${business} manufacturers ${country}"
+3. "${business} suppliers ${country}"
+4. "${business} producers ${country}"
+5. "list of ${business} companies ${country}"
+6. "${business} industry ${country} companies"
+
+ALSO try synonyms and related terms:
+- If looking for "packaging", also search: "carton", "box", "container", "corrugated"
+- If looking for "electronics", also search: "EMS", "PCB", "assembly", "components"
+- If looking for "food", also search: "processing", "manufacturing", "production"
+- Think of what PRODUCTS these companies make, not just the industry term
 
 For EACH company found, provide:
 - Company name (official name)
@@ -3066,85 +3156,186 @@ For EACH company found, provide:
 
 EXCLUSIONS: ${exclusion}
 
-Return a comprehensive list. Quality over quantity - only include real companies, not directories or articles.`);
+Return a comprehensive list. Include EVERY company mentioned.`);
 
-  // Task 2: SME and local company focus
+  // Task 2: SME and local company focus with specific search patterns
   tasks.push(`Find small and medium ${business} companies in ${countryList} that are locally owned.
 
-FOCUS ON:
-- Family-owned businesses
-- Independent local manufacturers
-- Domestic companies (not multinational subsidiaries)
-- Companies that may not appear in top search results
+IMPORTANT: These companies are HARDER to find - they don't rank high in Google.
 
-Search using different terms:
-- "local ${business} company ${country}"
+SEARCH STRATEGY - Try these specific patterns:
 - "SME ${business} ${country}"
-- "family owned ${business} ${country}"
+- "local ${business} manufacturer ${country}"
+- "family business ${business} ${country}"
+- "${business} ${country} private company"
+- "${country} ${business} domestic manufacturer"
+- "independent ${business} company ${country}"
 
-Exclude: ${exclusion}, and any subsidiaries of large multinationals.
+ALSO search for:
+- Companies mentioned in "top 10 local..." or "leading domestic..." lists
+- Companies mentioned in government SME directories or awards
+- Companies mentioned in local business news
+
+Exclude: ${exclusion}, and subsidiaries of large multinationals.
 
 Return company name, website, and HQ location for each.`);
 
-  // Task 3: City-by-city search for each country
+  // Task 3: Industrial estate/zone specific searches for each country
   for (const c of countries) {
-    tasks.push(`Find ${business} companies in specific cities and industrial areas of ${c}.
+    tasks.push(`Find ${business} companies located in SPECIFIC INDUSTRIAL ESTATES and ZONES in ${c}.
 
-Search major cities and industrial zones one by one:
-- Capital city
-- Major industrial cities
-- Industrial estates and zones
-- Free trade zones
+CRITICAL: Search for companies BY LOCATION, not just by industry.
 
-For ${c}, think about where ${business} companies are typically located and search those areas specifically.
+For ${c}, search these types of locations:
+- Industrial estates (search "${business} [estate name]")
+- Free trade zones / Special economic zones
+- Industrial parks
+- Manufacturing clusters
+- Export processing zones
 
-Return company name, website, and HQ location (City, ${c}) for each company found.
+EXAMPLES of search patterns:
+- "${business} companies Amata industrial estate" (Thailand)
+- "${business} manufacturer Penang" (Malaysia)
+- "${business} Batam free trade zone" (Indonesia)
+- "${business} VSIP industrial park" (Vietnam)
+
+Find WHICH industrial zones exist in ${c} for ${business} industry, then search each zone specifically.
+
+Return company name, website, and HQ location (specific city/zone, ${c}).
 
 Exclude: ${exclusion}`);
   }
 
-  // Task 4: Industry associations and directories
-  tasks.push(`Find ${business} companies that are members of industry associations in ${countryList}.
+  // Task 4: Industry associations, trade shows, and directories with SPECIFIC searches
+  tasks.push(`Find ${business} companies through INDUSTRY ASSOCIATIONS and TRADE EVENTS in ${countryList}.
 
-Search for:
-- Industry association member lists for ${business} sector
-- Chamber of commerce directories
-- Trade federation member companies
-- Professional body registrations
+SEARCH STRATEGY - Be SPECIFIC:
 
-Also try:
-- Companies mentioned in industry magazines/trade publications
-- Companies that exhibited at relevant trade shows
+1. INDUSTRY ASSOCIATIONS:
+   - "${business} association ${country} member list"
+   - "${country} ${business} federation members"
+   - Search for the actual association names, then find their member directories
+
+2. TRADE SHOWS (search for exhibitor lists):
+   - "${business} trade show ${country} exhibitors"
+   - "${business} expo ${country} participants"
+   - Search for major trade shows in this industry and find who exhibited
+
+3. CHAMBERS OF COMMERCE:
+   - "${country} chamber of commerce ${business} members"
+   - "German chamber ${country} ${business}" (foreign chambers often list suppliers)
+
+4. CERTIFICATION BODIES:
+   - "ISO certified ${business} ${country}"
+   - "${business} ${country} certified companies"
+
+Return company name, website, and HQ for each found.
+
+Exclude: ${exclusion}`);
+
+  // Task 5: Local language search with SPECIFIC terms
+  tasks.push(`Find ${business} companies in ${countryList} using LOCAL LANGUAGE search terms.
+
+CRITICAL: Many smaller companies ONLY appear in local language searches.
+
+SEARCH STRATEGY:
+${countries.map(c => {
+    if (c.toLowerCase().includes('thailand')) {
+      return `- For Thailand: Search using Thai script. Translate "${business}" to Thai and search.`;
+    } else if (c.toLowerCase().includes('vietnam')) {
+      return `- For Vietnam: Search using Vietnamese with diacritics. Example: "công ty ${business}"`;
+    } else if (c.toLowerCase().includes('indonesia')) {
+      return `- For Indonesia: Search "perusahaan ${business}" and "produsen ${business}"`;
+    } else if (c.toLowerCase().includes('malaysia')) {
+      return `- For Malaysia: Search in both Malay and Chinese.`;
+    } else if (c.toLowerCase().includes('philippines')) {
+      return `- For Philippines: Search in both English and Filipino.`;
+    } else {
+      return `- For ${c}: Search in the local language of ${c}`;
+    }
+  }).join('\n')}
+
+Also search for:
+- Company names that are in local language only
+- Local business directories in that language
+- Local industry news in that language
+
+Return company name (original language is fine), website, and HQ location.
+
+Exclude: ${exclusion}`);
+
+  // Task 6: Supply chain discovery - find suppliers/customers of known players
+  tasks.push(`Find ${business} companies in ${countryList} through SUPPLY CHAIN exploration.
+
+SEARCH STRATEGY - Look at the ECOSYSTEM:
+
+1. CONTRACT MANUFACTURING:
+   - "${business} OEM ${country}"
+   - "${business} ODM ${country}"
+   - "${business} contract manufacturer ${country}"
+   - "outsourced ${business} production ${country}"
+
+2. SUPPLIER RELATIONSHIPS:
+   - "suppliers to [major brand] ${country}"
+   - "${country} ${business} export to [major importing country]"
+   - Search for companies mentioned as suppliers in news articles
+
+3. ADJACENT SERVICES:
+   - Companies that do ${business} as PART of broader operations
+   - Companies that handle specific STAGES of ${business} production
+   - Niche specialists within the ${business} value chain
+
+4. RECENT ENTRANTS:
+   - "new ${business} company ${country}"
+   - "${business} startup ${country}"
+   - "recently established ${business} ${country}"
 
 Return company name, website, and HQ for each.
 
 Exclude: ${exclusion}`);
 
-  // Task 5: Local language search
-  tasks.push(`Find ${business} companies in ${countryList} using LOCAL LANGUAGE search terms.
+  // Task 7: Product-specific searches (NEW)
+  tasks.push(`Find ${business} companies in ${countryList} by searching for SPECIFIC PRODUCTS they make.
 
-Translate "${business}" and related terms into the local languages:
-${countries.map(c => `- Search in the local language of ${c}`).join('\n')}
+CRITICAL: Instead of searching for "${business} companies", search for WHAT THEY PRODUCE.
 
-Many smaller local companies only have local language websites or names. These are often missed by English searches.
+SEARCH STRATEGY:
+1. Think: What specific PRODUCTS do ${business} companies make?
+2. Search for those products + country, e.g.:
+   - "[specific product] manufacturer ${country}"
+   - "[product category] supplier ${country}"
+   - "[end product] maker ${country}"
 
-Return company name (in original language is fine), website, and HQ location.
+EXAMPLE: If searching for "packaging companies":
+- Search: "corrugated box manufacturer ${country}"
+- Search: "flexible packaging producer ${country}"
+- Search: "blister pack supplier ${country}"
+- Search: "shrink wrap manufacturer ${country}"
+
+For ${business}, identify 5-10 specific products and search for each.
+
+Return company name, website, and HQ for each.
 
 Exclude: ${exclusion}`);
 
-  // Task 6: Supply chain and adjacent search
-  tasks.push(`Find additional ${business} companies in ${countryList} by exploring supply chains and adjacent industries.
+  // Task 8: Competitor discovery (NEW)
+  tasks.push(`Find MORE ${business} companies in ${countryList} by discovering COMPETITORS of known companies.
 
-Search for:
-- Suppliers to known ${business} companies
-- Contract manufacturers in the ${business} space
-- OEM/ODM companies in this industry
-- Companies that do ${business} as part of broader operations
+SEARCH STRATEGY:
+1. Take well-known ${business} companies in ${countryList}
+2. Search for their competitors:
+   - "[known company] competitors ${country}"
+   - "companies like [known company] ${country}"
+   - "alternatives to [known company] ${country}"
 
-Also search for:
-- Companies with related but different terminology
-- Niche specialists within ${business}
-- Newer/startup companies in this space
+3. Also search for:
+   - "top ${business} companies ${country} ranked"
+   - "leading ${business} manufacturers ${country}"
+   - "market share ${business} ${country}" (often lists multiple players)
+
+4. Look at industry reports that compare companies
+
+This strategy finds companies that are in the SAME space but might use different terminology.
 
 Return company name, website, and HQ for each.
 
@@ -3533,7 +3724,7 @@ app.post('/api/find-target-v5', async (req, res) => {
 
     const countries = expandedCountry.split(',').map(c => c.trim());
 
-    // ChatGPT search tasks - different angles for comprehensive coverage
+    // ChatGPT search tasks - strategic angles that complement Gemini searches
     const chatgptSearches = [
       {
         query: `Complete list of ${Business} companies in ${expandedCountry}. Include all manufacturers, suppliers, and producers.`,
@@ -3546,14 +3737,22 @@ app.post('/api/find-target-v5', async (req, res) => {
       {
         query: `${Business} industry ${expandedCountry} market players manufacturers list`,
         reasoning: `Identify all market participants including niche players and specialists.`
+      },
+      {
+        query: `${Business} suppliers OEM ODM contract manufacturers ${Country}`,
+        reasoning: `Find contract manufacturers and OEM/ODM players - often hidden from direct searches.`
+      },
+      {
+        query: `${Business} trade associations member directory ${Country}`,
+        reasoning: `Find companies through industry association membership lists.`
       }
     ];
 
-    // Add country-specific searches (search each expanded country individually)
+    // Add country-specific searches with industrial zones (search each expanded country individually)
     for (const c of countries.slice(0, 6)) {
       chatgptSearches.push({
-        query: `${Business} companies manufacturers ${c} complete list`,
-        reasoning: `Find all ${Business} companies specifically in ${c}. Be thorough.`
+        query: `${Business} companies manufacturers industrial zones ${c}`,
+        reasoning: `Find all ${Business} companies in industrial zones of ${c}.`
       });
     }
 
@@ -6280,100 +6479,6 @@ Source: Speeda
     } catch (e) {
       console.error('Failed to send error email:', e);
     }
-  }
-});
-
-// ============ WRITE LIKE ANIL ============
-
-const ANIL_SYSTEM_PROMPT = `You are helping users write emails in Anil's professional style.
-
-CONSTRAINTS:
-- Tone: polite, formal, concise, tactfully assertive; client-first; no hype.
-- Structure: greeting; 1-line context; purpose in line 1–2; facts (numbers/dates/acronyms); explicit ask; next step; polite close; sign-off "Best Regards," (NO name after - user will add their own).
-- Diction: prefer "Well noted.", "Do let me know…", "Happy to…", "We will keep you informed…"
-- BANNED words: "excited", "super", "thrilled", vague time ("soon", "ASAP", "at the earliest"), emotive over-apologies.
-- IMPORTANT: Do NOT invent specific dates, times, or deadlines. Only include dates/times if they were provided in the user's input. If no date given, use phrases like "at your earliest convenience" or leave the timing open.
-- Honorifics by region (e.g., "-san" for Japanese, "Dato" for Malaysian); short paragraphs with blank lines; numbered lists for terms.
-- When dates ARE provided: use absolute format + TZ (e.g., 09 Jan 2026, 14:00 SGT). Currencies spaced (USD 12m). Multiples like "7x EBITDA". FY labels (FY25).
-
-SUBJECT LINE PATTERNS:
-- Intro: {A} ↔ {B} — {topic}
-- {Deal/Company}: NDA + IM
-- {Project}: NBO status
-- Correction: aligned IM on {topic}
-- {Company}: exclusivity terms
-- Meeting: {topic}
-
-EXAMPLE STYLE (note the structure and tone):
-
-Dear Martin,
-
-As discussed, we have received two NBOs for Nimbus:
-1) NorthBridge: 0.9x FY25 Revenue; exclusivity 30 days; breakup fee USD 0.5m.
-2) Helios: 1.0x FY25 Revenue; exclusivity 21 days; no breakup fee.
-
-We suggest holding to at least 1.0x FY25 Revenue and requiring a modest breakup fee to avoid creep downwards.
-
-Do let me know if you prefer to invite management interviews before revisions.
-
-Thank you.
-
-Best Regards,
-
-OUTPUT FORMAT:
-- First line: Subject: [subject line]
-- Then blank line
-- Then email body
-- End with "Best Regards," (no name - user adds their own signature)`;
-
-app.post('/api/write-like-anil', async (req, res) => {
-  console.log('\n' + '='.repeat(50));
-  console.log('WRITE LIKE ANIL REQUEST');
-  console.log('='.repeat(50));
-
-  const { mode, prompt, context, draft, notes } = req.body;
-
-  let userMessage = '';
-
-  if (mode === 'generate') {
-    userMessage = `Generate a professional email for the following request:
-
-REQUEST: ${prompt}
-
-${context ? `ADDITIONAL CONTEXT: ${context}` : ''}
-
-Write the email in Anil's style. Include a suggested subject line.`;
-  } else if (mode === 'rewrite') {
-    userMessage = `Rewrite the following email draft in Anil's style:
-
-ORIGINAL DRAFT:
-${draft}
-
-${notes ? `REWRITE INSTRUCTIONS: ${notes}` : ''}
-
-Maintain the core message but apply Anil's tone, structure, and conventions. Include a suggested subject line.`;
-  } else {
-    return res.status(400).json({ error: 'Invalid mode. Use "generate" or "rewrite".' });
-  }
-
-  try {
-    // Using GPT-4o-mini for email writing (90% cost savings, same quality for this task)
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: ANIL_SYSTEM_PROMPT },
-        { role: 'user', content: userMessage }
-      ],
-      temperature: 0.3
-    });
-
-    const email = response.choices[0].message.content || '';
-    console.log('Generated email:', email.substring(0, 200) + '...');
-
-    res.json({ email });
-  } catch (error) {
-    console.error('Write Like Anil error:', error);
-    res.status(500).json({ error: 'Failed to generate email' });
   }
 });
 
@@ -10113,17 +10218,21 @@ app.post('/api/due-diligence', async (req, res) => {
       }
     }
 
-    // Step 2: Translate if needed
+    // Step 2: Translate if needed (with domain awareness)
     let translatedTranscripts = [];
     for (const t of transcripts) {
       if (translateToEnglish && t.language !== 'en' && t.language !== 'english' && t.text.length > 10) {
         console.log(`[DD] Translating from ${t.language} to English: ${t.name}`);
-        const translated = await translateText(t.text, 'en');
+        // Detect domain from transcript content for better translation accuracy
+        const domain = detectMeetingDomain(t.text);
+        console.log(`[DD] Detected domain: ${domain}`);
+        const translated = await translateText(t.text, 'en', { domain });
         translatedTranscripts.push({
           ...t,
           originalText: t.text,
           text: translated,
-          wasTranslated: true
+          wasTranslated: true,
+          detectedDomain: domain
         });
       } else {
         translatedTranscripts.push({ ...t, wasTranslated: false });
@@ -10169,12 +10278,40 @@ app.post('/api/due-diligence', async (req, res) => {
 
       // Add transcripts to files for processing
       const allFiles = [...files];
+
+      // Add audio file transcripts (from uploaded audio)
       if (combinedTranscript) {
         allFiles.push({
-          name: 'Meeting Transcripts',
+          name: 'Audio File Transcripts',
           type: 'transcript',
           content: combinedTranscript
         });
+      }
+
+      // Add real-time recording transcript (CRITICAL: this was missing!)
+      if (rawTranscript && rawTranscript.trim().length > 0) {
+        // Strip HTML tags from transcripts (they come from UI with HTML formatting)
+        const stripHtml = (text) => text
+          .replace(/<br\s*\/?>/gi, '\n')
+          .replace(/<span[^>]*class="speaker-label"[^>]*>([^<]*)<\/span>/gi, '$1')
+          .replace(/<[^>]+>/g, '')
+          .replace(/\n\s*\n/g, '\n')
+          .trim();
+
+        const cleanRaw = stripHtml(rawTranscript);
+        const cleanTranslated = translatedTranscript ? stripHtml(translatedTranscript) : '';
+
+        // Use translated transcript if available, otherwise use raw
+        const transcriptToUse = cleanTranslated.length > 0
+          ? `ENGLISH TRANSLATION:\n${cleanTranslated}\n\n${'='.repeat(40)}\n\nORIGINAL (${detectedLanguage || 'detected language'}):\n${cleanRaw}`
+          : cleanRaw;
+
+        allFiles.push({
+          name: 'Real-Time Meeting Recording',
+          type: 'transcript',
+          content: transcriptToUse
+        });
+        console.log(`[DD] Added real-time transcript to report: ${cleanRaw.length} chars`);
       }
 
       outputContent = await generateDueDiligenceReport(allFiles, instructions, length, instructionMode);
@@ -10222,10 +10359,29 @@ app.post('/api/due-diligence', async (req, res) => {
     // 6b: Transcript text file (for safekeeping)
     const transcriptText = rawTranscript || combinedTranscript;
     if (transcriptText) {
+      // Strip HTML tags from translated transcript (it comes from UI with HTML formatting)
+      const cleanTranslation = translatedTranscript
+        ? translatedTranscript
+            .replace(/<br\s*\/?>/gi, '\n')  // Convert <br> to newlines
+            .replace(/<span[^>]*class="speaker-label"[^>]*>([^<]*)<\/span>/gi, '$1')  // Keep speaker label text
+            .replace(/<[^>]+>/g, '')  // Remove any remaining HTML tags
+            .replace(/\n\s*\n/g, '\n')  // Clean up multiple newlines
+            .trim()
+        : '';
+
+      const cleanRawTranscript = rawTranscript
+        ? rawTranscript
+            .replace(/<br\s*\/?>/gi, '\n')
+            .replace(/<span[^>]*class="speaker-label"[^>]*>([^<]*)<\/span>/gi, '$1')
+            .replace(/<[^>]+>/g, '')
+            .replace(/\n\s*\n/g, '\n')
+            .trim()
+        : '';
+
       const transcriptContent = `TRANSCRIPT - ${new Date().toLocaleString()}
 ${'='.repeat(50)}
 
-${translatedTranscript ? `ORIGINAL (${detectedLanguage || 'detected'}):\n${rawTranscript}\n\n${'='.repeat(50)}\n\nENGLISH TRANSLATION:\n${translatedTranscript}` : transcriptText}
+${cleanTranslation ? `ORIGINAL (${detectedLanguage || 'detected'}):\n${cleanRawTranscript}\n\n${'='.repeat(50)}\n\nENGLISH TRANSLATION:\n${cleanTranslation}` : transcriptText}
 `;
       attachments.push({
         filename: `Transcript_${dateStr}.txt`,
@@ -10240,12 +10396,14 @@ ${translatedTranscript ? `ORIGINAL (${detectedLanguage || 'detected'}):\n${rawTr
       if (session.audioChunks && session.audioChunks.length > 0) {
         console.log('[DD] Attaching audio recording from session...');
         try {
-          const audioBuffer = Buffer.concat(session.audioChunks);
+          const pcmBuffer = Buffer.concat(session.audioChunks);
+          // Convert PCM to WAV for playability (16kHz, 16-bit, mono)
+          const wavBuffer = pcmToWav(pcmBuffer, 16000, 1, 16);
           attachments.push({
-            filename: `Recording_${dateStr}.webm`,
-            content: audioBuffer.toString('base64')
+            filename: `Recording_${dateStr}.wav`,
+            content: wavBuffer.toString('base64')
           });
-          console.log(`[DD] Audio attached: ${audioBuffer.length} bytes`);
+          console.log(`[DD] Audio attached as WAV: ${wavBuffer.length} bytes`);
         } catch (audioError) {
           console.error('[DD] Audio attachment failed:', audioError.message);
         }
@@ -10351,13 +10509,23 @@ wss.on('connection', (ws, req) => {
   let detectedLanguage = 'en';
   let translatedTranscript = '';
 
+  // Segment buffering for improved translation context
+  let segmentBuffer = [];  // Buffer to accumulate segments before translation
+  let translationContext = [];  // Previous translated segments for context
+  let detectedDomain = null;  // Auto-detected meeting domain
+  const SEGMENT_BUFFER_SIZE = 2;  // Number of segments to buffer before translating
+  const MAX_CONTEXT_SEGMENTS = 5;  // Maximum previous segments to keep for context
+
   // Store session data
   activeSessions.set(sessionId, {
     startTime: new Date(),
     audioChunks: [],
     transcript: '',
     translatedTranscript: '',
-    language: 'en'
+    language: 'en',
+    segmentBuffer: [],
+    translationContext: [],
+    detectedDomain: null
   });
   console.log(`[WS] Session ${sessionId} created. Active sessions: ${activeSessions.size}`);
 
@@ -10367,7 +10535,17 @@ wss.on('connection', (ws, req) => {
   ws.on('message', async (message) => {
     try {
       // Check if it's a control message (JSON) or audio data (binary)
-      if (typeof message === 'string' || (message instanceof Buffer && message[0] === 123)) {
+      // JSON messages start with '{' (ASCII 123), but audio can also start with this byte
+      // So we try to parse as JSON first, and if it fails, treat as audio
+      let isJsonMessage = typeof message === 'string';
+      if (!isJsonMessage && message instanceof Buffer) {
+        // Quick heuristic: JSON messages are usually small (<1KB), audio chunks are larger
+        // Also check if it starts with '{' and contains common JSON characters
+        isJsonMessage = message.length < 1024 && message[0] === 123 &&
+                       (message.includes(0x22) || message.toString().includes('"type"'));
+      }
+
+      if (isJsonMessage) {
         const data = JSON.parse(message.toString());
 
         if (data.type === 'start') {
@@ -10528,36 +10706,126 @@ wss.on('connection', (ws, req) => {
                 const hasNonEnglishChars = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af\u0900-\u097f\u0e00-\u0e7f\u0600-\u06ff]/.test(transcript);
                 const needsTranslation = isNonEnglishLang || hasNonEnglishChars;
 
-                // Translate non-English segments in real-time
+                // Translate non-English segments with buffering for better context
                 if (needsTranslation && transcript.length >= 3) {
-                  try {
-                    const translated = await translateText(transcript, 'en');
-                    // Only add if translation is different from original
-                    if (translated !== transcript) {
-                      translatedTranscript += translated + ' ';
-                      if (session) session.translatedTranscript = translatedTranscript;
-                      ws.send(JSON.stringify({
-                        type: 'translation',
-                        text: translated,
-                        originalLang: thisSegmentLang,
-                        speaker: speaker !== null ? speaker + 1 : null,  // Include speaker for translation
-                        fullTranslation: translatedTranscript
-                      }));
+                  // Add to segment buffer with metadata
+                  segmentBuffer.push({
+                    text: transcript,
+                    speaker: speaker,
+                    lang: thisSegmentLang
+                  });
+
+                  // Update domain detection with accumulated text
+                  if (!detectedDomain) {
+                    detectedDomain = detectMeetingDomain(fullTranscript);
+                    if (session) session.detectedDomain = detectedDomain;
+                  }
+
+                  // Translate when buffer reaches threshold OR segment is long enough (for responsiveness)
+                  const shouldTranslateNow = segmentBuffer.length >= SEGMENT_BUFFER_SIZE ||
+                                             transcript.length > 50 ||  // Long segments translate immediately
+                                             /[。！？.!?]$/.test(transcript);  // End of sentence
+
+                  if (shouldTranslateNow && segmentBuffer.length > 0) {
+                    try {
+                      // Combine buffered segments for translation
+                      const combinedText = segmentBuffer.map(s => s.text).join(' ');
+                      const primarySpeaker = segmentBuffer[0].speaker;
+                      const primaryLang = segmentBuffer[0].lang;
+
+                      // Translate with context
+                      const translated = await translateText(combinedText, 'en', {
+                        previousSegments: translationContext,
+                        domain: detectedDomain
+                      });
+
+                      // Only add if translation is different from original
+                      if (translated !== combinedText) {
+                        translatedTranscript += translated + ' ';
+                        if (session) session.translatedTranscript = translatedTranscript;
+
+                        // Update translation context (keep last N segments)
+                        translationContext.push(translated);
+                        if (translationContext.length > MAX_CONTEXT_SEGMENTS) {
+                          translationContext.shift();
+                        }
+                        if (session) session.translationContext = translationContext;
+
+                        ws.send(JSON.stringify({
+                          type: 'translation',
+                          text: translated,
+                          originalLang: primaryLang,
+                          speaker: primarySpeaker !== null ? primarySpeaker + 1 : null,
+                          fullTranslation: translatedTranscript,
+                          domain: detectedDomain  // Include detected domain for UI
+                        }));
+                      }
+
+                      // Clear buffer after translation
+                      segmentBuffer = [];
+                      if (session) session.segmentBuffer = [];
+                    } catch (e) {
+                      console.error('[WS] Translation error:', e.message);
                     }
-                  } catch (e) {
-                    console.error('[WS] Translation error:', e.message);
                   }
                 } else if (!needsTranslation && transcript.length >= 3) {
                   // For English segments in multilingual meetings, add to translation too
+                  // First, flush any pending non-English segments in buffer
+                  if (segmentBuffer.length > 0) {
+                    try {
+                      const combinedText = segmentBuffer.map(s => s.text).join(' ');
+                      const primarySpeaker = segmentBuffer[0].speaker;
+                      const primaryLang = segmentBuffer[0].lang;
+
+                      const translated = await translateText(combinedText, 'en', {
+                        previousSegments: translationContext,
+                        domain: detectedDomain
+                      });
+
+                      if (translated !== combinedText) {
+                        translatedTranscript += translated + ' ';
+                        if (session) session.translatedTranscript = translatedTranscript;
+
+                        translationContext.push(translated);
+                        if (translationContext.length > MAX_CONTEXT_SEGMENTS) {
+                          translationContext.shift();
+                        }
+                        if (session) session.translationContext = translationContext;
+
+                        ws.send(JSON.stringify({
+                          type: 'translation',
+                          text: translated,
+                          originalLang: primaryLang,
+                          speaker: primarySpeaker !== null ? primarySpeaker + 1 : null,
+                          fullTranslation: translatedTranscript,
+                          domain: detectedDomain
+                        }));
+                      }
+                      segmentBuffer = [];
+                      if (session) session.segmentBuffer = [];
+                    } catch (e) {
+                      console.error('[WS] Translation error (buffer flush):', e.message);
+                    }
+                  }
+
+                  // Add English segment to translation panel
                   translatedTranscript += transcript + ' ';
                   if (session) session.translatedTranscript = translatedTranscript;
-                  // Send English segments to translation panel too (with speaker info)
+
+                  // Update context with English segment too
+                  translationContext.push(transcript);
+                  if (translationContext.length > MAX_CONTEXT_SEGMENTS) {
+                    translationContext.shift();
+                  }
+                  if (session) session.translationContext = translationContext;
+
                   ws.send(JSON.stringify({
                     type: 'translation',
                     text: transcript,
                     originalLang: 'en',
                     speaker: speaker !== null ? speaker + 1 : null,
-                    fullTranslation: translatedTranscript
+                    fullTranslation: translatedTranscript,
+                    domain: detectedDomain
                   }));
                 }
               }
@@ -10585,23 +10853,64 @@ wss.on('connection', (ws, req) => {
           const session = activeSessions.get(sessionId);
           const duration = Math.round((Date.now() - session.startTime.getTime()) / 1000);
 
-          // Upload audio to R2 if available
-          let r2Key = null;
-          if (session.audioChunks && session.audioChunks.length > 0) {
-            const audioBuffer = Buffer.concat(session.audioChunks);
-            const dateStr = new Date().toISOString().split('T')[0];
-            r2Key = `recordings/${dateStr}/${sessionId}.pcm`;
+          // Flush any remaining segments in the translation buffer
+          if (segmentBuffer.length > 0) {
+            try {
+              const combinedText = segmentBuffer.map(s => s.text).join(' ');
+              const primarySpeaker = segmentBuffer[0].speaker;
+              const primaryLang = segmentBuffer[0].lang;
 
-            // Upload async - don't block response
-            uploadToR2(r2Key, audioBuffer, 'audio/pcm').then(key => {
-              if (key) {
-                session.r2Key = key;
-                console.log(`[WS] Recording saved to R2: ${key}`);
+              const translated = await translateText(combinedText, 'en', {
+                previousSegments: translationContext,
+                domain: detectedDomain
+              });
+
+              if (translated !== combinedText) {
+                translatedTranscript += translated + ' ';
+                if (session) session.translatedTranscript = translatedTranscript;
+
+                ws.send(JSON.stringify({
+                  type: 'translation',
+                  text: translated,
+                  originalLang: primaryLang,
+                  speaker: primarySpeaker !== null ? primarySpeaker + 1 : null,
+                  fullTranslation: translatedTranscript,
+                  domain: detectedDomain
+                }));
               }
-            });
+              segmentBuffer = [];
+              console.log(`[WS] Flushed remaining translation buffer for session ${sessionId}`);
+            } catch (e) {
+              console.error('[WS] Translation error (final flush):', e.message);
+            }
           }
 
-          // Send final results
+          // Upload audio to R2 if available (wait for upload to complete)
+          let r2Key = null;
+          if (session.audioChunks && session.audioChunks.length > 0) {
+            const pcmBuffer = Buffer.concat(session.audioChunks);
+            const dateStr = new Date().toISOString().split('T')[0];
+            const keyPath = `recordings/${dateStr}/${sessionId}.wav`;
+
+            // Convert PCM to WAV for playability (16kHz, 16-bit, mono)
+            const wavBuffer = pcmToWav(pcmBuffer, 16000, 1, 16);
+
+            // Wait for upload to complete before sending response
+            try {
+              const uploadedKey = await uploadToR2(keyPath, wavBuffer, 'audio/wav');
+              if (uploadedKey) {
+                r2Key = uploadedKey;
+                session.r2Key = uploadedKey;
+                console.log(`[WS] Recording saved to R2: ${uploadedKey}`);
+              } else {
+                console.warn(`[WS] R2 upload returned null for session ${sessionId}`);
+              }
+            } catch (uploadError) {
+              console.error(`[WS] R2 upload failed for session ${sessionId}:`, uploadError.message);
+            }
+          }
+
+          // Send final results (only include r2Key if upload succeeded)
           ws.send(JSON.stringify({
             type: 'complete',
             sessionId,
@@ -10609,7 +10918,7 @@ wss.on('connection', (ws, req) => {
             translatedTranscript: translatedTranscript.trim(),
             language: detectedLanguage,
             duration,
-            r2Key: r2Key // Include R2 key so frontend can download later
+            r2Key: r2Key // Only set if upload actually succeeded
           }));
         }
 
@@ -10633,8 +10942,13 @@ wss.on('connection', (ws, req) => {
         }
       }
     } catch (error) {
-      console.error('[WS] Error processing message:', error);
-      ws.send(JSON.stringify({ type: 'error', message: error.message }));
+      // Don't send JSON parse errors to client - they're usually from binary data misdetection
+      if (error instanceof SyntaxError && error.message.includes('JSON')) {
+        console.warn('[WS] Ignoring JSON parse error (likely binary data):', error.message);
+      } else {
+        console.error('[WS] Error processing message:', error);
+        ws.send(JSON.stringify({ type: 'error', message: error.message }));
+      }
     }
   });
 
@@ -10708,8 +11022,9 @@ app.get('/api/recording/:r2Key(*)', async (req, res) => {
     }
 
     // Set headers for file download
-    const filename = r2Key.split('/').pop() || 'recording.pcm';
-    res.setHeader('Content-Type', 'audio/pcm');
+    const filename = r2Key.split('/').pop() || 'recording.wav';
+    const contentType = filename.endsWith('.wav') ? 'audio/wav' : 'audio/pcm';
+    res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', audioBuffer.length);
     res.send(audioBuffer);

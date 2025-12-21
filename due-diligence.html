@@ -46,7 +46,7 @@
       display: flex;
       flex-direction: column;
       gap: 10px;
-      max-height: calc(100vh - 180px);
+      max-height: calc(100vh - 160px);
       overflow-y: auto;
       padding-right: 4px;
       font-size: 14px;
@@ -182,15 +182,18 @@
       flex-direction: column;
       gap: 14px;
       min-width: 0;
+      max-height: calc(100vh - 160px);
+      overflow-y: auto;
     }
     .dd-transcript-panel {
-      flex: 1;
+      flex: none;
       background: var(--bg-surface);
       border: 1px solid var(--border-subtle);
       border-radius: var(--radius-md);
       display: flex;
       flex-direction: column;
-      min-height: 220px;
+      min-height: 200px;
+      max-height: 350px;
     }
     .dd-panel-header {
       padding: 8px 12px;
@@ -338,7 +341,6 @@
       <a href="validation.html">Validation</a>
       <a href="trading-comparable.html">Trading Comp</a>
       <a href="profile-slides.html">Slides</a>
-      <a href="write-like-anil.html">Write Like Anil</a>
       <a href="find-target-v4.html">v4 Search</a>
       <a href="find-target-v5.html">v5 Search</a>
       <a href="due-diligence.html" class="active">Due Diligence</a>
@@ -651,6 +653,10 @@
     // Check for recovery on page load
     checkForRecovery();
 
+    // Clear any stale error messages on page load
+    errorMessage.classList.remove('show');
+    successMessage.classList.remove('show');
+
     // ============ UPLOAD MODE ============
 
     uploadZone.addEventListener('click', () => fileInput.click());
@@ -819,22 +825,11 @@
 
         showSuccess(`DD Report & Transcript will be emailed to ${email} within 10-15 minutes.`);
 
-        // Clear backup
+        // Clear backup only - keep transcript visible for user reference
         localStorage.removeItem(STORAGE_KEY);
 
-        // Reset transcript
-        finalTranscript = '';
-        finalTranslation = '';
-        currentR2Key = null;
-        transcriptContent.innerHTML = '';
-        transcriptContent.classList.add('empty');
-        transcriptContent.textContent = 'Start recording to see live transcription...';
-        translationContent.textContent = '';
-        translationPanel.style.display = 'none';
-        downloadRecordingBtn.style.display = 'none';
-        recordTimer.textContent = '00:00';
-
-        // Reset files
+        // Don't reset transcript - user may want to review it
+        // Only reset files and instructions for next submission
         selectedFiles = [];
         updateFileList();
         ddInstructions.value = '';
@@ -1060,6 +1055,10 @@
       successText.textContent = msg;
       successMessage.classList.add('show');
       errorMessage.classList.remove('show');
+      // Auto-hide after 5 seconds so it doesn't block the UI
+      setTimeout(() => {
+        successMessage.classList.remove('show');
+      }, 5000);
     }
 
     function showError(msg) {
