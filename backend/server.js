@@ -187,7 +187,7 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
   if (attachments) {
     const attachmentList = Array.isArray(attachments) ? attachments : [attachments];
     emailData.attachments = attachmentList.map(a => ({
-      filename: a.name,
+      filename: a.filename || a.name,  // Support both 'filename' and 'name' properties
       content: a.content,
       type: 'application/octet-stream',
       disposition: 'attachment'
@@ -9868,16 +9868,18 @@ IMPORTANT:
 
   try {
     const maxTokens = reportLength === 'short' ? 2000 : reportLength === 'medium' ? 4000 : 8000;
+    console.log(`[DD] Starting AI generation (maxTokens: ${maxTokens})...`);
 
     // Try DeepSeek V3.2 first (more cost-effective)
+    console.log('[DD] Trying DeepSeek...');
     const deepseekResult = await callDeepSeek(prompt, maxTokens);
     if (deepseekResult) {
-      console.log('[DD] Report generated using DeepSeek V3.2');
+      console.log(`[DD] Report generated using DeepSeek (${deepseekResult.length} chars)`);
       return deepseekResult;
     }
 
     // Fallback to GPT-4o if DeepSeek unavailable
-    console.log('[DD] Falling back to GPT-4o');
+    console.log('[DD] DeepSeek unavailable, falling back to GPT-4o...');
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
@@ -9885,9 +9887,12 @@ IMPORTANT:
       max_tokens: maxTokens
     });
 
-    return response.choices[0].message.content || '';
+    const result = response.choices[0].message.content || '';
+    console.log(`[DD] Report generated using GPT-4o (${result.length} chars)`);
+    return result;
   } catch (error) {
-    console.error('Error in DD report generation:', error.message);
+    console.error('[DD] Error in AI report generation:', error.message);
+    console.error('[DD] Stack:', error.stack);
     throw error;
   }
 }
@@ -10126,11 +10131,16 @@ ${translatedTranscript ? `ORIGINAL (${detectedLanguage || 'detected'}):\n${rawTr
     }
 
     // Step 7: Send email
+    console.log(`[DD] Sending email to ${email} with ${attachments.length} attachment(s)...`);
+    console.log(`[DD] Attachments: ${attachments.map(a => a.filename || a.name || 'unnamed').join(', ')}`);
     await sendEmail(email, emailSubject, emailHtml, attachments.length > 0 ? attachments : null);
-    console.log(`[DD] ${docTitle} sent successfully to ${email}`);
+    console.log(`[DD] ✓ ${docTitle} sent successfully to ${email}`);
+    console.log(`[DD] ====== DD REPORT COMPLETED SUCCESSFULLY ======`);
 
   } catch (error) {
-    console.error('[DD] Error:', error);
+    console.error('[DD] ====== DD REPORT FAILED ======');
+    console.error('[DD] Error:', error.message);
+    console.error('[DD] Stack:', error.stack);
     try {
       await sendEmail(
         email,
