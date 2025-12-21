@@ -354,6 +354,16 @@
         <h1 style="font-size: 16px; margin: 0; font-weight: 600;">Due Diligence Report</h1>
       </div>
 
+      <!-- Messages (moved to top for visibility) -->
+      <div class="message success" id="successMessage" style="margin-bottom: 12px;">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+        <span id="successText">Success!</span>
+      </div>
+      <div class="message error" id="errorMessage" style="margin-bottom: 12px;">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        <span id="errorText">Error</span>
+      </div>
+
       <!-- How to Use Instructions -->
       <div class="dd-instructions">
         <strong>How to use:</strong>
@@ -466,16 +476,6 @@
             <div class="dd-panel-content" id="translationContent" contenteditable="true"></div>
           </div>
         </div>
-      </div>
-
-      <!-- Messages -->
-      <div class="message success" id="successMessage" style="margin-top: 12px;">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-        <span id="successText">Success!</span>
-      </div>
-      <div class="message error" id="errorMessage" style="margin-top: 12px;">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-        <span id="errorText">Error</span>
       </div>
     </section>
   </main>
