@@ -3983,14 +3983,54 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     console.log(`Headers: ${headers.slice(0, 15).join(', ')}...`);
 
     // Find column indices - enhanced to detect TTM vs FY columns
-    const findCol = (patterns) => {
+    const findCol = (patterns, excludePatterns = []) => {
       for (const pattern of patterns) {
-        const idx = headers.findIndex(h =>
-          h && h.toString().toLowerCase().includes(pattern.toLowerCase())
-        );
+        const idx = headers.findIndex(h => {
+          if (!h) return false;
+          const hLower = h.toString().toLowerCase();
+          // Check if header matches pattern
+          if (!hLower.includes(pattern.toLowerCase())) return false;
+          // Check if header contains any exclude patterns
+          for (const exclude of excludePatterns) {
+            if (hLower.includes(exclude.toLowerCase())) return false;
+          }
+          return true;
+        });
         if (idx !== -1) return idx;
       }
       return -1;
+    };
+
+    // Find Sales/Revenue column - exclude growth, margin, rank columns
+    const findSalesCol = () => {
+      const salesPatterns = ['net sales', 'total sales', 'total revenue', 'net revenue', 'sales', 'revenue', 'turnover', 'revenues'];
+      const excludePatterns = ['growth', 'margin', 'rank', 'yoy', 'change', '%', 'per ', 'ratio', 'count', '#'];
+
+      for (const pattern of salesPatterns) {
+        const idx = headers.findIndex(h => {
+          if (!h) return false;
+          const hLower = h.toString().toLowerCase();
+          if (!hLower.includes(pattern.toLowerCase())) return false;
+          // Exclude columns with growth, margin, rank, etc.
+          for (const exclude of excludePatterns) {
+            if (hLower.includes(exclude.toLowerCase())) return false;
+          }
+          return true;
+        });
+        if (idx !== -1) {
+          console.log(`Found sales column at index ${idx}: "${headers[idx]}"`);
+          return idx;
+        }
+      }
+
+      // Fallback: just find any column with sales/revenue
+      const fallbackIdx = headers.findIndex(h =>
+        h && (h.toString().toLowerCase().includes('sales') || h.toString().toLowerCase().includes('revenue'))
+      );
+      if (fallbackIdx !== -1) {
+        console.log(`Fallback sales column at index ${fallbackIdx}: "${headers[fallbackIdx]}"`);
+      }
+      return fallbackIdx;
     };
 
     // Find all columns matching a pattern (for TTM/FY detection)
@@ -4031,7 +4071,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     const cols = {
       company: findCol(['company name', 'company', 'name']),
       country: findCol(['country', 'region', 'location']),
-      sales: findCol(['sales', 'revenue', 'rev ', ' rev', 'turnover', 'net sales', 'total revenue', 'total sales', 'revenues']),
+      sales: findSalesCol(),
       marketCap: findCol(['market cap', 'mcap', 'market capitalization']),
       ev: findCol(['enterprise value', ' ev ', 'ev/']),
       ebitda: findCol(['ebitda']),
