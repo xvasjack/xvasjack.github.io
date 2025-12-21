@@ -13,6 +13,7 @@ const { createClient } = require('@deepgram/sdk');
 const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } = require('docx');
 const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const Anthropic = require('@anthropic-ai/sdk');
+const JSZip = require('jszip');
 
 // ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
 // Memory logging helper for debugging Railway OOM issues
@@ -200,6 +201,103 @@ function pcmToWav(pcmBuffer, sampleRate = 16000, numChannels = 1, bitsPerSample 
   pcmBuffer.copy(wavBuffer, 44);
 
   return wavBuffer;
+}
+
+// Extract text from .docx files (Word documents)
+async function extractDocxText(base64Content) {
+  try {
+    const buffer = Buffer.from(base64Content, 'base64');
+    const zip = await JSZip.loadAsync(buffer);
+    const documentXml = await zip.file('word/document.xml')?.async('string');
+
+    if (!documentXml) {
+      return '[Could not extract text from Word document]';
+    }
+
+    // Extract text from XML, removing tags
+    let text = documentXml
+      .replace(/<w:t[^>]*>([^<]*)<\/w:t>/g, '$1')  // Extract text content
+      .replace(/<w:p[^>]*>/g, '\n')  // Paragraph breaks
+      .replace(/<[^>]+>/g, '')  // Remove remaining tags
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/\n\s*\n/g, '\n\n')  // Clean up multiple newlines
+      .trim();
+
+    console.log(`[DD] Extracted ${text.length} chars from DOCX`);
+    return text || '[Empty Word document]';
+  } catch (error) {
+    console.error('[DD] DOCX extraction error:', error.message);
+    return `[Error extracting Word document: ${error.message}]`;
+  }
+}
+
+// Extract text from .pptx files (PowerPoint)
+async function extractPptxText(base64Content) {
+  try {
+    const buffer = Buffer.from(base64Content, 'base64');
+    const zip = await JSZip.loadAsync(buffer);
+
+    let allText = [];
+    let slideNum = 1;
+
+    // Iterate through slide files
+    for (const filename of Object.keys(zip.files)) {
+      if (filename.match(/ppt\/slides\/slide\d+\.xml$/)) {
+        const slideXml = await zip.file(filename)?.async('string');
+        if (slideXml) {
+          // Extract text from slide
+          let slideText = slideXml
+            .replace(/<a:t>([^<]*)<\/a:t>/g, '$1 ')  // Extract text
+            .replace(/<a:p[^>]*>/g, '\n')  // Paragraph breaks
+            .replace(/<[^>]+>/g, '')  // Remove tags
+            .replace(/&amp;/g, '&')
+            .replace(/&lt;/g, '<')
+            .replace(/&gt;/g, '>')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+          if (slideText) {
+            allText.push(`[Slide ${slideNum}]\n${slideText}`);
+          }
+          slideNum++;
+        }
+      }
+    }
+
+    const result = allText.join('\n\n') || '[Empty PowerPoint]';
+    console.log(`[DD] Extracted ${result.length} chars from PPTX (${slideNum - 1} slides)`);
+    return result;
+  } catch (error) {
+    console.error('[DD] PPTX extraction error:', error.message);
+    return `[Error extracting PowerPoint: ${error.message}]`;
+  }
+}
+
+// Extract text from .xlsx files (Excel)
+async function extractXlsxText(base64Content) {
+  try {
+    const buffer = Buffer.from(base64Content, 'base64');
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+
+    let allText = [];
+    for (const sheetName of workbook.SheetNames) {
+      const sheet = workbook.Sheets[sheetName];
+      const csv = XLSX.utils.sheet_to_csv(sheet);
+      if (csv.trim()) {
+        allText.push(`[Sheet: ${sheetName}]\n${csv}`);
+      }
+    }
+
+    const result = allText.join('\n\n') || '[Empty Excel file]';
+    console.log(`[DD] Extracted ${result.length} chars from XLSX`);
+    return result;
+  } catch (error) {
+    console.error('[DD] XLSX extraction error:', error.message);
+    return `[Error extracting Excel: ${error.message}]`;
+  }
 }
 
 // R2 Delete function (cleanup old recordings)
@@ -9941,9 +10039,33 @@ async function generateDueDiligenceReport(files, instructions, reportLength, ins
     console.log(`[DD] - File: ${file.name} (${file.type}) - ${file.content?.length || 0} chars`);
     filesSummary.push(`- ${file.name} (${file.type.toUpperCase()})`);
 
-    // Handle base64 encoded files (binary formats)
+    // Handle base64 encoded files (binary formats) - extract actual content
     if (file.content.startsWith('[BASE64:')) {
-      combinedContent += `\n\n=== SOURCE: ${file.name} ===\n[Binary file - content summarized by AI]\n`;
+      const base64Match = file.content.match(/\[BASE64:(\w+)\](.+)/);
+      if (base64Match) {
+        const ext = base64Match[1].toLowerCase();
+        const base64Data = base64Match[2];
+
+        let extractedContent = '';
+        try {
+          if (ext === 'docx' || ext === 'doc') {
+            extractedContent = await extractDocxText(base64Data);
+          } else if (ext === 'pptx' || ext === 'ppt') {
+            extractedContent = await extractPptxText(base64Data);
+          } else if (ext === 'xlsx' || ext === 'xls') {
+            extractedContent = await extractXlsxText(base64Data);
+          } else {
+            extractedContent = `[Binary file type .${ext} - cannot extract text]`;
+          }
+        } catch (extractError) {
+          console.error(`[DD] Extraction error for ${file.name}:`, extractError.message);
+          extractedContent = `[Error extracting ${file.name}: ${extractError.message}]`;
+        }
+
+        combinedContent += `\n\n=== SOURCE: ${file.name} ===\n${extractedContent.substring(0, 50000)}\n`;
+      } else {
+        combinedContent += `\n\n=== SOURCE: ${file.name} ===\n[Could not parse binary content]\n`;
+      }
     } else {
       combinedContent += `\n\n=== SOURCE: ${file.name} ===\n${file.content.substring(0, 50000)}\n`;
     }
