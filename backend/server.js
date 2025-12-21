@@ -3103,6 +3103,12 @@ async function validateCompaniesV5(companies, business, country, exclusion) {
           }
         }
 
+        // Skip companies with inaccessible websites (remove them entirely)
+        if (!pageContent || pageContent.length < 100) {
+          console.log(`    ✗ REMOVED: ${company.company_name} (website inaccessible or insufficient content)`);
+          return { company, status: 'skipped' };
+        }
+
         // Run both validations in parallel
         const [geminiResult, chatgptResult] = await Promise.all([
           validateSingleCompany(company, business, country, exclusion, pageContent, 'gemini'),
@@ -3138,6 +3144,9 @@ async function validateCompaniesV5(companies, business, country, exclusion) {
     }));
 
     for (const v of validations) {
+      // Skip companies with inaccessible websites (already logged above)
+      if (v.status === 'skipped') continue;
+
       const companyData = {
         company_name: v.company.company_name,
         website: v.company.website,
@@ -3175,22 +3184,9 @@ async function validateCompaniesV5(companies, business, country, exclusion) {
 function buildV5EmailHTML(validationResults, business, country, exclusion, searchLog) {
   const { validated, flagged, rejected } = validationResults;
 
-  // Filter rejected companies:
-  // - Companies with inaccessible website or insufficient info → Move to "Flagged for Human Review"
-  // - Companies with wrong region, large company, wrong business → Remove completely (don't show)
-  const needsReviewKeywords = [
-    'inaccessible', 'insufficient', 'unable to verify', 'unable to access',
-    'website content', 'could not be verified', 'could not verify',
-    'no website', 'website not found', 'cannot access'
-  ];
-
-  const rejectedNeedsReview = rejected.filter(c => {
-    const reason = (c.reason || '').toLowerCase();
-    return needsReviewKeywords.some(keyword => reason.includes(keyword));
-  });
-
-  // Combine original flagged with rejected-needs-review
-  const allFlagged = [...flagged, ...rejectedNeedsReview];
+  // Note: Companies with inaccessible websites are removed entirely during validation (not shown)
+  // Flagged = companies where one model agrees but the other doesn't
+  const allFlagged = [...flagged];
 
   // Separate Gemini and ChatGPT tasks
   const geminiTasks = searchLog.filter(s => !s.model || (s.model !== 'chatgpt-search'));
@@ -3270,12 +3266,12 @@ function buildV5EmailHTML(validationResults, business, country, exclusion, searc
     html += '<p><em>No companies were validated by both models.</em></p>';
   }
 
-  // Section 2: Flagged for Human Review (includes model disagreements AND inaccessible websites)
+  // Section 2: Flagged for Human Review (model disagreements only - inaccessible websites are removed)
   html += `
     <h3 style="color: #f59e0b; border-bottom: 2px solid #f59e0b; padding-bottom: 8px;">
       ? FLAGGED FOR HUMAN REVIEW (${allFlagged.length})
     </h3>
-    <p style="color: #666; font-size: 12px;">These need manual verification - either models disagreed or website was inaccessible</p>
+    <p style="color: #666; font-size: 12px;">These need manual verification - models disagreed on whether they match criteria</p>
   `;
 
   if (allFlagged.length > 0) {
@@ -3290,16 +3286,12 @@ function buildV5EmailHTML(validationResults, business, country, exclusion, searc
       </tr>
     `;
     allFlagged.forEach((c, i) => {
-      // Determine reason to display
+      // Determine reason to display (inaccessible websites are removed, so only model disagreements here)
       let displayReason = '';
       if (c.geminiVote === 'YES' && c.chatgptVote === 'NO') {
         displayReason = 'Gemini: Yes, ChatGPT: No';
       } else if (c.geminiVote === 'NO' && c.chatgptVote === 'YES') {
         displayReason = 'Gemini: No, ChatGPT: Yes';
-      } else if (c.reason && c.reason.toLowerCase().includes('inaccessible')) {
-        displayReason = 'Website inaccessible';
-      } else if (c.reason && c.reason.toLowerCase().includes('insufficient')) {
-        displayReason = 'Insufficient information';
       } else {
         displayReason = c.reason || 'Needs verification';
       }
@@ -3364,14 +3356,17 @@ app.post('/api/find-target-v5', async (req, res) => {
 
     let allCompanies = [];
 
+    // Run each task 2x for more diverse results (model may return different companies each run)
     for (let i = 0; i < tasks.length; i++) {
-      console.log(`\n--- Gemini Task ${i + 1}/${tasks.length} ---`);
-      try {
-        const companies = await runAgenticSearchTask(tasks[i], Country, searchLog);
-        allCompanies = [...allCompanies, ...companies];
-        console.log(`  Running total: ${allCompanies.length} companies (before dedup)`);
-      } catch (taskError) {
-        console.error(`  Task ${i + 1} failed: ${taskError.message}`);
+      for (let run = 1; run <= 2; run++) {
+        console.log(`\n--- Gemini Task ${i + 1}/${tasks.length} (Run ${run}/2) ---`);
+        try {
+          const companies = await runAgenticSearchTask(tasks[i], Country, searchLog);
+          allCompanies = [...allCompanies, ...companies];
+          console.log(`  Running total: ${allCompanies.length} companies (before dedup)`);
+        } catch (taskError) {
+          console.error(`  Task ${i + 1} run ${run} failed: ${taskError.message}`);
+        }
       }
     }
 
@@ -3406,19 +3401,22 @@ app.post('/api/find-target-v5', async (req, res) => {
       });
     }
 
+    // Run each ChatGPT task 2x for more diverse results
     for (let i = 0; i < chatgptSearches.length; i++) {
-      console.log(`\n--- ChatGPT Task ${i + 1}/${chatgptSearches.length} ---`);
-      try {
-        const companies = await runChatGPTSearchTask(
-          chatgptSearches[i].query,
-          chatgptSearches[i].reasoning,
-          Country,
-          searchLog
-        );
-        allCompanies = [...allCompanies, ...companies];
-        console.log(`  Running total: ${allCompanies.length} companies (before dedup)`);
-      } catch (chatgptError) {
-        console.error(`  ChatGPT task ${i + 1} failed: ${chatgptError.message}`);
+      for (let run = 1; run <= 2; run++) {
+        console.log(`\n--- ChatGPT Task ${i + 1}/${chatgptSearches.length} (Run ${run}/2) ---`);
+        try {
+          const companies = await runChatGPTSearchTask(
+            chatgptSearches[i].query,
+            chatgptSearches[i].reasoning,
+            Country,
+            searchLog
+          );
+          allCompanies = [...allCompanies, ...companies];
+          console.log(`  Running total: ${allCompanies.length} companies (before dedup)`);
+        } catch (chatgptError) {
+          console.error(`  ChatGPT task ${i + 1} run ${run} failed: ${chatgptError.message}`);
+        }
       }
     }
 
@@ -3521,17 +3519,10 @@ Only include real company websites (not LinkedIn, Facebook, directories). If you
     const finalResults = { validated: finalValidated, flagged: finalFlagged, rejected: finalRejected };
     const htmlContent = buildV5EmailHTML(finalResults, Business, Country, Exclusion, searchLog);
 
-    // Calculate total flagged (includes original flagged + rejected with inaccessible websites)
-    const needsReviewKeywords = ['inaccessible', 'insufficient', 'unable to verify', 'unable to access', 'website content', 'could not be verified', 'could not verify', 'no website', 'website not found', 'cannot access'];
-    const rejectedNeedsReview = finalRejected.filter(c => {
-      const reason = (c.reason || '').toLowerCase();
-      return needsReviewKeywords.some(keyword => reason.includes(keyword));
-    });
-    const totalFlaggedForSubject = finalFlagged.length + rejectedNeedsReview.length;
-
+    // Inaccessible websites are removed entirely, so flagged = model disagreements only
     await sendEmail(
       Email,
-      `[V5 AGENTIC] ${Business} in ${Country} (${finalValidated.length} validated + ${totalFlaggedForSubject} flagged)`,
+      `[V5 AGENTIC] ${Business} in ${Country} (${finalValidated.length} validated + ${finalFlagged.length} flagged)`,
       htmlContent
     );
 
