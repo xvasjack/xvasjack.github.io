@@ -268,6 +268,41 @@ async function callGemini3Flash(prompt, jsonMode = false) {
   }
 }
 
+// Gemini 3 Pro - Most capable model for critical validation tasks
+// Use this for final data accuracy verification where errors are unacceptable
+async function callGemini3Pro(prompt, jsonMode = false) {
+  try {
+    const requestBody = {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.0  // Zero temperature for deterministic validation
+      }
+    };
+
+    if (jsonMode) {
+      requestBody.generationConfig.responseMimeType = 'application/json';
+    }
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro-preview-06-05:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(requestBody),
+      timeout: 180000  // Longer timeout for Pro model
+    });
+    const data = await response.json();
+
+    if (data.error) {
+      console.error('Gemini 3 Pro API error:', data.error.message);
+      return '';
+    }
+
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  } catch (error) {
+    console.error('Gemini 3 Pro error:', error.message);
+    return '';
+  }
+}
+
 // Claude (Anthropic) - excellent reasoning and analysis
 async function callClaude(prompt, systemPrompt = null, jsonMode = false) {
   if (!anthropic) {
@@ -4804,11 +4839,24 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
         }
       }
 
-      // Build dynamic title: "Listed Cosmetics Companies in Malaysia, Singapore and Thailand"
+      // Build dynamic title: "Listed Cosmetics Companies in Southeast Asia"
       if (industry || region) {
         const statusText = status.toLowerCase() === 'listed' ? 'Listed ' : '';
         const industryText = industry || '';
-        const regionText = region ? region.split(',').map(r => r.trim()).join(', ').replace(/, ([^,]*)$/, ' and $1') : '';
+
+        // Check if all countries are Southeast Asian - if so, use "Southeast Asia"
+        const seaCountries = ['singapore', 'malaysia', 'indonesia', 'thailand', 'philippines', 'vietnam'];
+        const regionCountries = region ? region.split(',').map(r => r.trim().toLowerCase()) : [];
+        const allAreSEA = regionCountries.length > 0 && regionCountries.every(c =>
+          seaCountries.some(sea => c.includes(sea))
+        );
+
+        let regionText;
+        if (allAreSEA && regionCountries.length >= 3) {
+          regionText = 'Southeast Asia';
+        } else {
+          regionText = region ? region.split(',').map(r => r.trim()).join(', ').replace(/, ([^,]*)$/, ' and $1') : '';
+        }
 
         slideTitle = `${statusText}${industryText} Companies in ${regionText}`.trim();
         console.log(`Dynamic slide title from Filter List: ${slideTitle}`);
@@ -4944,7 +4992,10 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
         peFY: parseNum(cols.peFY),
         pb: parseNum(cols.pb),
         filterReason: '',
-        dataWarnings: []
+        dataWarnings: [],
+        // Store raw row data for AI validation
+        _rawRow: row.slice(0, 20), // First 20 columns
+        _colMapping: { ...cols }
       };
 
       // DATA VALIDATION: Check for suspicious/inconsistent financial data
@@ -5237,11 +5288,33 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
         /\s+Group$/i,
         /\s+International$/i,
         /\s+Healthcare$/i,
-        /\s+Hospital$/i,
+        /\s+Hospitals?$/i,
         /\s+Medical$/i,
         /\s+Services?$/i,
-        /\s+Systems?$/i
+        /\s+Systems?$/i,
+        /\s+Center$/i,
+        /\s+Centre$/i,
+        /\s+Business$/i
       ];
+
+      // Abbreviations for common words (applied after suffix removal)
+      const abbreviations = {
+        'International': 'Intl',
+        'Holdings': 'Hldgs',
+        'Hospital': 'Hosp',
+        'Hospitals': 'Hosp',
+        'Medical': 'Med',
+        'Healthcare': 'HC',
+        'Metropolitan': 'Metro',
+        'Management': 'Mgmt',
+        'Corporation': 'Corp',
+        'Services': 'Svc',
+        'Technology': 'Tech',
+        'Development': 'Dev',
+        'Investment': 'Inv',
+        'Pharmaceutical': 'Pharma',
+        'Manufacturing': 'Mfg'
+      };
 
       let cleaned = String(name).trim();
 
@@ -5259,8 +5332,22 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
 
       cleaned = cleaned.trim();
 
-      // No truncation - show full name even if long (PowerPoint will wrap to second line)
-      return cleaned;
+      // Apply abbreviations if name is still long
+      const MAX_LENGTH = 22; // Max chars to fit single line at font 12 in 2.42" column
+      if (cleaned.length > MAX_LENGTH) {
+        for (const [full, abbr] of Object.entries(abbreviations)) {
+          cleaned = cleaned.replace(new RegExp(full, 'gi'), abbr);
+        }
+      }
+
+      // If still too long, remove words from the end until it fits
+      while (cleaned.length > MAX_LENGTH && cleaned.includes(' ')) {
+        const words = cleaned.split(' ');
+        words.pop(); // Remove last word
+        cleaned = words.join(' ');
+      }
+
+      return cleaned.trim();
     };
 
     // Helper functions
@@ -5289,7 +5376,74 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       const salesB = b.sales !== null && b.sales !== undefined ? b.sales : 0;
       return salesB - salesA;
     });
-    const displayCompanies = sortedCompanies.slice(0, 30);
+    let displayCompanies = sortedCompanies.slice(0, 30);
+
+    // ===== AI DATA VALIDATION using Gemini 3 Pro =====
+    // Critical validation step to ensure data accuracy before PowerPoint generation
+    console.log('Running Gemini 3 Pro validation for top 30 companies...');
+
+    const validationPrompt = `You are a financial data validation expert. Verify the accuracy of these parsed company financial metrics.
+
+HEADER ROW FROM EXCEL (for reference):
+${headers.slice(0, 15).join(' | ')}
+
+COMPANIES TO VALIDATE (showing parsed values and raw row data):
+${displayCompanies.slice(0, 15).map((c, i) => {
+  const rawValues = c._rawRow ? c._rawRow.slice(0, 15).map(v => v === null || v === undefined ? 'NULL' : String(v)).join(' | ') : 'N/A';
+  return `${i + 1}. ${c.name}
+   Parsed: Sales=${c.sales}, Market Cap=${c.marketCap}, EV=${c.ev}, EBITDA=${c.ebitda}, Net Margin=${c.netMargin}%
+   Raw Row: ${rawValues}
+   Column indices: sales=${c._colMapping?.sales}, marketCap=${c._colMapping?.marketCap}, ev=${c._colMapping?.ev}`;
+}).join('\n\n')}
+
+VALIDATION TASK:
+1. Check if the parsed Sales value correctly matches the Sales column in the raw data
+2. Check if Market Cap, EV, and EBITDA values are correctly extracted
+3. Identify any unit mismatches (e.g., Sales in billions vs others in millions)
+4. Flag any companies where the data looks incorrect
+
+Return JSON with this exact format:
+{
+  "validationPassed": true/false,
+  "issues": [
+    {"company": "Company Name", "field": "sales", "parsedValue": 6, "expectedValue": 6000, "issue": "Possible unit mismatch - value appears to be in billions, should be millions"}
+  ],
+  "corrections": [
+    {"company": "Company Name", "field": "sales", "correctedValue": 6000}
+  ]
+}`;
+
+    try {
+      const validationResult = await callGemini3Pro(validationPrompt, true);
+      if (validationResult) {
+        const validation = JSON.parse(validationResult);
+        console.log('Gemini 3 Pro validation result:', JSON.stringify(validation, null, 2));
+
+        // Apply corrections if any
+        if (validation.corrections && validation.corrections.length > 0) {
+          console.log(`Applying ${validation.corrections.length} data corrections from AI validation...`);
+          for (const correction of validation.corrections) {
+            const company = displayCompanies.find(c => c.name.toLowerCase().includes(correction.company.toLowerCase()));
+            if (company && correction.field && correction.correctedValue !== undefined) {
+              const oldValue = company[correction.field];
+              company[correction.field] = correction.correctedValue;
+              console.log(`  Corrected ${company.name}: ${correction.field} from ${oldValue} to ${correction.correctedValue}`);
+            }
+          }
+        }
+
+        // Log issues for review
+        if (validation.issues && validation.issues.length > 0) {
+          console.log('AI detected potential data issues:');
+          validation.issues.forEach(issue => {
+            console.log(`  - ${issue.company}: ${issue.field} = ${issue.parsedValue}, expected ${issue.expectedValue}. ${issue.issue}`);
+          });
+        }
+      }
+    } catch (validationError) {
+      console.error('AI validation error (non-fatal, continuing with original data):', validationError.message);
+    }
+
     const tableRows = [];
 
     // Cell margin
@@ -5303,12 +5457,12 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     const dataVerticalBorder = { type: 'solid', pt: 2.5, color: COLORS.white };
     const noBorder = { type: 'none' };
 
-    // Row 1 style: DARK BLUE with solid white borders - font 14
+    // Row 1 style: DARK BLUE with solid white borders - font 12
     const row1DarkStyle = {
       fill: COLORS.darkBlue,
       color: COLORS.white,
       fontFace: 'Segoe UI',
-      fontSize: 14,
+      fontSize: 12,
       bold: false,
       valign: 'middle',
       align: 'center',
@@ -5316,23 +5470,23 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       border: solidWhiteBorder
     };
 
-    // Row 1 empty cells (white background) with solid white borders - font 14
+    // Row 1 empty cells (white background) with solid white borders - font 12
     const row1EmptyStyle = {
       fill: COLORS.white,
       color: COLORS.black,
       fontFace: 'Segoe UI',
-      fontSize: 14,
+      fontSize: 12,
       valign: 'middle',
       margin: cellMargin,
       border: solidWhiteBorder
     };
 
-    // Row 2 style: LIGHT BLUE with WHITE text, font 14, center aligned, solid white borders
+    // Row 2 style: LIGHT BLUE with WHITE text, font 12, center aligned, solid white borders
     const row2Style = {
       fill: COLORS.lightBlue,
       color: COLORS.white,
       fontFace: 'Segoe UI',
-      fontSize: 14,
+      fontSize: 12,
       bold: false,
       valign: 'middle',
       align: 'center',
@@ -5346,7 +5500,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fill: COLORS.white,
       color: COLORS.black,
       fontFace: 'Segoe UI',
-      fontSize: 14,
+      fontSize: 12,
       valign: 'middle',
       margin: cellMargin,
       border: [dashBorder, dataVerticalBorder, dashBorder, dataVerticalBorder]
@@ -5357,7 +5511,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fill: COLORS.lightBlue,
       color: COLORS.white,
       fontFace: 'Segoe UI',
-      fontSize: 14,
+      fontSize: 12,
       bold: true,
       valign: 'middle',
       margin: cellMargin,
@@ -5369,7 +5523,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fill: COLORS.white,
       color: COLORS.black,
       fontFace: 'Segoe UI',
-      fontSize: 14,
+      fontSize: 12,
       bold: true,
       valign: 'middle',
       margin: cellMargin,
@@ -5381,7 +5535,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fill: COLORS.white,
       color: COLORS.black,
       fontFace: 'Segoe UI',
-      fontSize: 14,
+      fontSize: 12,
       valign: 'middle',
       margin: cellMargin,
       border: [noBorder, noBorder, noBorder, noBorder]
@@ -5392,7 +5546,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       fill: COLORS.white,
       color: COLORS.black,
       fontFace: 'Segoe UI',
-      fontSize: 14,
+      fontSize: 12,
       valign: 'middle',
       margin: cellMargin,
       border: [dashBorder, dataVerticalBorder, dashBorder, dataVerticalBorder]
@@ -5473,7 +5627,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       x: 0.38,
       y: 1.47,
       w: tableWidth,
-      fontSize: 14,
+      fontSize: 12,
       fontFace: 'Segoe UI',
       colW: colWidths,
       rowH: rowHeight
