@@ -26,6 +26,10 @@
     .compact-upload input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
     .compact-upload p { font-size: 14px; color: var(--text-muted); margin: 0; }
     .compact-upload .highlight { color: var(--accent); font-weight: 500; }
+    /* Consistent tab content height */
+    .tab-content { min-height: 130px; }
+    #manualTab .form-grid { gap: 12px; }
+    #manualTab textarea { resize: vertical; }
   </style>
 </head>
 <body>
@@ -91,18 +95,13 @@
           <!-- Manual Entry -->
           <div class="tab-content" id="manualTab">
             <div class="form-grid">
-              <div class="form-group full-width">
+              <div class="form-group">
                 <label for="companies">Company Names</label>
-                <textarea id="companies" name="Companies" rows="3" placeholder="One company per line (up to 200)"></textarea>
+                <textarea id="companies" name="Companies" rows="4" placeholder="One company per line (up to 200)"></textarea>
               </div>
-              <div class="form-group full-width">
+              <div class="form-group">
                 <label for="countries">Countries</label>
-                <textarea id="countries" name="Countries" rows="2" placeholder="One country per line
-
-e.g.
-Malaysia
-Thailand
-Singapore"></textarea>
+                <textarea id="countries" name="Countries" rows="4" placeholder="One country per line"></textarea>
               </div>
             </div>
           </div>
