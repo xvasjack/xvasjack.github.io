@@ -3511,7 +3511,7 @@ async function runIterativeSecondarySearches(plan, business, exclusion, searchLo
 
   const { expandedCountry, countries, businessVariations } = plan;
   const startTime = Date.now();
-  const NUM_ROUNDS = 4;
+  const NUM_ROUNDS = 12;
 
   // Track all validated and flagged companies across rounds
   const allValidated = [...existingValidated];
@@ -3519,66 +3519,84 @@ async function runIterativeSecondarySearches(plan, business, exclusion, searchLo
   const allRejected = [];
   const seenWebsites = new Set(existingValidated.map(c => c.website?.toLowerCase()).filter(Boolean));
 
-  // Search angle templates for variety across rounds
+  // Simple brute force prompts - just keep asking for more
   const geminiAngles = [
-    // Round 1: Comprehensive search
     (found) => `Find ALL ${business} companies in ${expandedCountry}.
-Search comprehensively: manufacturers, suppliers, producers, SMEs, family businesses.
-${found.length > 0 ? `\nALREADY FOUND (do NOT repeat these): ${found.join(', ')}\n\nFind ADDITIONAL companies NOT in this list.` : ''}
-Return company name, website, location for each. Exclude: ${exclusion}`,
-
-    // Round 2: Industrial zones and local companies
-    (found) => `Find ${business} companies in industrial zones across ${expandedCountry}:
-- Thailand: Amata, Rayong, Samut Prakan, Bang Pu
-- Indonesia: Bekasi, Cikarang, Karawang, MM2100, Jababeka
-- Vietnam: VSIP, Binh Duong, Dong Nai
-- Malaysia: Penang, Johor, Shah Alam
-${found.length > 0 ? `\nALREADY FOUND (do NOT repeat): ${found.join(', ')}\n\nFind MORE companies not in this list.` : ''}
+${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
 Return company name, website, location. Exclude: ${exclusion}`,
 
-    // Round 3: SME, local language, associations
-    (found) => `Find SMALL and LOCAL ${business} companies in ${expandedCountry} that are harder to find:
-- Search in local languages (Thai, Indonesian, Vietnamese)
-- Look at industry association member lists
-- Find family businesses and SMEs
-- Search government SME directories
-${found.length > 0 ? `\nALREADY FOUND (do NOT repeat): ${found.join(', ')}\n\nI need MORE companies beyond this list.` : ''}
+    (found) => `Find ${business} manufacturers in ${expandedCountry}.
+${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
 Return company name, website, location. Exclude: ${exclusion}`,
 
-    // Round 4: Deep dive and supply chain
-    (found) => `FINAL SEARCH: Find any remaining ${business} companies in ${expandedCountry} we might have missed.
-Search: OEM/ODM suppliers, contract manufacturers, trade show exhibitors, news mentions.
-${found.length > 0 ? `\nALREADY FOUND (${found.length} companies): ${found.join(', ')}\n\nFind ANY additional companies not in this list. Dig deep.` : ''}
+    (found) => `Find ${business} producers in ${expandedCountry}.
+${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
+Return company name, website, location. Exclude: ${exclusion}`,
+
+    (found) => `Find ${business} suppliers in ${expandedCountry}.
+${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
+Return company name, website, location. Exclude: ${exclusion}`,
+
+    (found) => `Find small ${business} companies in ${expandedCountry}.
+${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
+Return company name, website, location. Exclude: ${exclusion}`,
+
+    (found) => `Find local ${business} companies in ${expandedCountry}.
+${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
+Return company name, website, location. Exclude: ${exclusion}`,
+
+    (found) => `List of ${business} companies in ${expandedCountry}.
+${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
+Return company name, website, location. Exclude: ${exclusion}`,
+
+    (found) => `Find more ${business} companies in ${expandedCountry}.
+${found.length > 0 ? `ALREADY FOUND (${found.length} companies): ${found.join(', ')}\nFind ANY additional companies not in this list.` : ''}
 Return company name, website, location. Exclude: ${exclusion}`
   ];
 
   const chatgptAngles = [
-    // Round 1: Comprehensive search
     (found) => ({
-      query: `Complete list of ${business} companies manufacturers in ${expandedCountry}`,
-      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE not in this list.` : 'Find all companies.'
+      query: `${business} companies in ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
     }),
 
-    // Round 2: Hidden gems and directories
     (found) => ({
-      query: `${business} SMEs family businesses local manufacturers ${expandedCountry}`,
-      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find additional smaller/local companies.` : 'Find smaller companies.'
+      query: `${business} manufacturers ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
     }),
 
-    // Round 3: Associations and registries
     (found) => ({
-      query: `${business} industry association members trade directory ${expandedCountry}`,
-      context: found.length > 0 ? `Already found: ${found.join(', ')}. Search associations for more.` : 'Search industry associations.'
+      query: `${business} producers ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
     }),
 
-    // Round 4: Final sweep
     (found) => ({
-      query: `${business} manufacturers ${expandedCountry} complete list all companies`,
-      context: found.length > 0 ? `Found ${found.length} so far: ${found.join(', ')}. Find ANY remaining companies.` : 'Final comprehensive search.'
+      query: `${business} suppliers ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
+    }),
+
+    (found) => ({
+      query: `small ${business} companies ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
+    }),
+
+    (found) => ({
+      query: `local ${business} companies ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
+    }),
+
+    (found) => ({
+      query: `list of ${business} companies ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
+    }),
+
+    (found) => ({
+      query: `all ${business} companies ${expandedCountry}`,
+      context: found.length > 0 ? `Found ${found.length}: ${found.join(', ')}. Find ANY more.` : 'Find all.'
     })
   ];
 
-  // Run 4 rounds of search → validate
+  // Run 8 rounds of search → validate
   for (let round = 0; round < NUM_ROUNDS; round++) {
     console.log(`\n  --- ROUND ${round + 1}/${NUM_ROUNDS} ---`);
 
@@ -4288,8 +4306,8 @@ app.post('/api/find-target-v5', async (req, res) => {
 
     console.log(`\nSearch Statistics:`);
     console.log(`  Perplexity searches: ${perplexityTasks} (Phase 1 - batched)`);
-    console.log(`  Gemini searches: ${geminiTasks} (Phase 2 - 4 rounds)`);
-    console.log(`  ChatGPT searches: ${chatgptTasks} (Phase 2 - 4 rounds)`);
+    console.log(`  Gemini searches: ${geminiTasks} (Phase 2 - 8 rounds)`);
+    console.log(`  ChatGPT searches: ${chatgptTasks} (Phase 2 - 8 rounds)`);
     console.log(`  Total internal searches: ${totalSearches}`);
     console.log(`  Total sources consulted: ${totalSources}`);
 
