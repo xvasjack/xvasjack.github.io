@@ -10139,14 +10139,19 @@ ${instructions}
     ? `\nONLINE SOURCES RESEARCHED:\n${onlineSourcesUsed.map(u => `- ${u}`).join('\n')}\n\nIMPORTANT: Any information from online sources MUST be clearly marked with [Online Source] at the start of that bullet point or paragraph.`
     : '';
 
-  const prompt = `You are writing a factual due diligence summary. Your job is to extract and organize information from the provided materials.
+  // Build explicit file list for the prompt
+  const explicitFileList = files.map((f, i) => `   FILE ${i + 1}: "${f.name}"`).join('\n');
 
-SOURCE MATERIALS (${filesSummary.length} files):
-${filesSummary.join('\n')}
+  const prompt = `You are writing a factual due diligence summary. You have been provided ${filesSummary.length} source documents that you MUST ALL read completely.
+
+**MANDATORY: READ ALL ${filesSummary.length} FILES BELOW**
+${explicitFileList}
+
+You MUST extract and include information from EVERY SINGLE FILE listed above. Do not skip any file. Each file contains unique information that must be included in the report.
 ${instructionSection}
-=== BEGIN SOURCE CONTENT ===
+=== BEGIN ALL SOURCE CONTENT (${filesSummary.length} FILES) ===
 ${combinedContent}
-=== END SOURCE CONTENT ===
+=== END ALL SOURCE CONTENT ===
 
 ${onlineResearchContent ? `=== BEGIN ONLINE RESEARCH (from websites) ===
 ${onlineResearchContent}
@@ -10156,25 +10161,25 @@ REPORT STRUCTURE:
 ${lengthInstructions[reportLength]}
 
 CRITICAL RULES - FOLLOW EXACTLY:
-1. **PROCESS ALL FILES**: You MUST read and extract information from ALL ${filesSummary.length} source files listed above. Do NOT focus on just one file - include relevant facts from EVERY source document.
-2. **NO HALLUCINATION**: ONLY include facts explicitly stated in the source materials above. Do NOT make up or assume any information.
-3. If something is not mentioned in the sources, do NOT include it. Do NOT write generic statements.
-4. Quote specific names, numbers, dates, and facts directly from the materials.
-5. For each fact you include, it must be traceable to the source content above.
+1. **READ EVERY FILE**: You have ${filesSummary.length} source files. You MUST read and extract key information from ALL of them. Each "=== SOURCE: filename ===" section is a different file - process them ALL.
+2. **NO HALLUCINATION**: ONLY include facts explicitly stated in the source materials above.
+3. Quote specific names, numbers, dates, and facts directly from the materials.
+4. If a file contains meeting transcript or conversation, extract the key business facts discussed.
 
-${onlineResearchContent ? `6. Any information from ONLINE RESEARCH section must be prefixed with **[Online Source]** - this text will be highlighted yellow in the final document.` : ''}
+${onlineResearchContent ? `5. Any information from ONLINE RESEARCH section must be prefixed with **[Online Source]**.` : ''}
 
 OUTPUT FORMAT:
-- Start with: <h1 style="font-family: Calibri, sans-serif;">Due Diligence: [Actual Company Name from materials]</h1>
+- Start with: <h1 style="font-family: Calibri, sans-serif;">Due Diligence: [Company Name from materials]</h1>
 - Use <h2> for section headers, <ul><li> for bullet points
 - Add style="font-family: Calibri, sans-serif;" to all elements
-- Generate CLEAN HTML only - no markdown, no \`\`\`
-- SKIP sections with no relevant content from sources
-- Output the report ONCE only`;
+- Generate CLEAN HTML only - no markdown
+- SKIP sections with no relevant content
+- At the end, add a "Sources Referenced" section listing which files you extracted information from`;
 
   try {
-    const maxTokens = reportLength === 'short' ? 2000 : reportLength === 'medium' ? 4000 : 8000;
-    console.log(`[DD] Starting AI generation with Gemini 2.5 Pro...`);
+    const maxTokens = reportLength === 'short' ? 3000 : reportLength === 'medium' ? 6000 : 10000;
+    console.log(`[DD] Prompt length: ${prompt.length} chars`);
+    console.log(`[DD] Starting AI generation with Gemini 2.5 Pro (max ${maxTokens} tokens)...`);
 
     // Use Gemini 2.5 Pro for best quality DD reports
     const geminiResult = await callGemini2Pro(prompt);
