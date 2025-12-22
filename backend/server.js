@@ -1754,20 +1754,27 @@ async function fetchWebsite(url) {
   const hasWww = baseUrl.includes('://www.');
   const altBaseUrl = hasWww ? baseUrl.replace('://www.', '://') : baseUrl.replace('://', '://www.');
 
-  // Try alternative paths (limited to reduce time)
-  const urlPaths = ['/en', '/home', '/about'];
-  for (const path of urlPaths) {
-    result = await tryFetch(baseUrl + path);
-    if (result.status === 'ok') return result;
-    if (result.status === 'security_blocked') return result;
+  // Try alternative paths on BOTH original and www/non-www variants
+  const urlVariants = [baseUrl, altBaseUrl];
+  const urlPaths = ['', '/en', '/home', '/about', '/index.html', '/index.php'];
+
+  for (const variant of urlVariants) {
+    for (const path of urlPaths) {
+      const testUrl = variant + path;
+      result = await tryFetch(testUrl);
+      if (result.status === 'ok') return result;
+      if (result.status === 'security_blocked') return result;
+    }
   }
 
-  // Try HTTPS if original was HTTP
+  // Try HTTPS if original was HTTP (on both variants)
   if (url.startsWith('http://')) {
-    const httpsUrl = url.replace('http://', 'https://');
-    result = await tryFetch(httpsUrl);
-    if (result.status === 'ok') return result;
-    if (result.status === 'security_blocked') return result;
+    for (const variant of urlVariants) {
+      const httpsVariant = variant.replace('http://', 'https://');
+      result = await tryFetch(httpsVariant);
+      if (result.status === 'ok') return result;
+      if (result.status === 'security_blocked') return result;
+    }
   }
 
   return { status: 'inaccessible', reason: 'Could not fetch content from any URL variation' };
