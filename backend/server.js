@@ -3421,132 +3421,80 @@ async function runIterativeSecondarySearches(plan, business, exclusion, searchLo
   const allRejected = [];
   const seenWebsites = new Set(existingValidated.map(c => c.website?.toLowerCase()).filter(Boolean));
 
-  // Search angle templates for variety across rounds (8 angles each)
+  // Simple brute force prompts - just keep asking for more
   const geminiAngles = [
-    // Round 1: Comprehensive search
     (found) => `Find ALL ${business} companies in ${expandedCountry}.
-Search comprehensively: manufacturers, suppliers, producers, SMEs, family businesses.
-${found.length > 0 ? `\nALREADY FOUND (do NOT repeat these): ${found.join(', ')}\n\nFind ADDITIONAL companies NOT in this list.` : ''}
-Return company name, website, location for each. Exclude: ${exclusion}`,
-
-    // Round 2: Industrial zones
-    (found) => `Find ${business} companies in industrial zones across ${expandedCountry}:
-- Thailand: Amata, Rayong, Samut Prakan, Bang Pu, Chonburi, Eastern Seaboard
-- Indonesia: Bekasi, Cikarang, Karawang, MM2100, Jababeka, KIIC, Tangerang
-- Vietnam: VSIP, Binh Duong, Dong Nai, Long An, Hai Phong
-- Malaysia: Penang, Johor, Shah Alam, Klang, Selangor
-- Philippines: PEZA, Cavite, Laguna, Batangas
-- Singapore: Jurong, Tuas
-${found.length > 0 ? `\nALREADY FOUND (do NOT repeat): ${found.join(', ')}\n\nFind MORE companies not in this list.` : ''}
+${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
 Return company name, website, location. Exclude: ${exclusion}`,
 
-    // Round 3: SME and local language
-    (found) => `Find SMALL and LOCAL ${business} companies in ${expandedCountry}:
-- Search in local languages: Thai (ผู้ผลิต), Indonesian (produsen, pabrik), Vietnamese (nhà sản xuất)
-- Find family-owned businesses
-- Look for companies with local names (not English)
-${found.length > 0 ? `\nALREADY FOUND (do NOT repeat): ${found.join(', ')}\n\nI need MORE local companies beyond this list.` : ''}
+    (found) => `Find ${business} manufacturers in ${expandedCountry}.
+${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
 Return company name, website, location. Exclude: ${exclusion}`,
 
-    // Round 4: Industry associations
-    (found) => `Find ${business} companies through INDUSTRY ASSOCIATIONS in ${expandedCountry}:
-- Printing associations member lists
-- Packaging associations
-- Chemical industry federations
-- Manufacturing associations
-- Chamber of commerce directories
-${found.length > 0 ? `\nALREADY FOUND (do NOT repeat): ${found.join(', ')}\n\nSearch association member lists for MORE.` : ''}
+    (found) => `Find ${business} producers in ${expandedCountry}.
+${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
 Return company name, website, location. Exclude: ${exclusion}`,
 
-    // Round 5: Supply chain and OEM
-    (found) => `Find ${business} companies through supply chain in ${expandedCountry}:
-- OEM/ODM manufacturers
-- Contract manufacturers
-- Toll manufacturers
-- Private label producers
-- Raw material suppliers to the industry
-${found.length > 0 ? `\nALREADY FOUND (do NOT repeat): ${found.join(', ')}\n\nFind supply chain companies NOT in this list.` : ''}
+    (found) => `Find ${business} suppliers in ${expandedCountry}.
+${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
 Return company name, website, location. Exclude: ${exclusion}`,
 
-    // Round 6: Government directories
-    (found) => `Find ${business} companies through government registries in ${expandedCountry}:
-- Thailand: BOI promoted, DBD registered
-- Indonesia: BKPM, Ministry of Industry
-- Malaysia: MIDA promoted, SSM registered
-- Vietnam: DPI registered
-- Philippines: PEZA, DTI registered
-${found.length > 0 ? `\nALREADY FOUND (do NOT repeat): ${found.join(', ')}\n\nSearch government directories for MORE.` : ''}
+    (found) => `Find small ${business} companies in ${expandedCountry}.
+${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
 Return company name, website, location. Exclude: ${exclusion}`,
 
-    // Round 7: Trade shows and exhibitions
-    (found) => `Find ${business} companies that exhibited at trade shows in ${expandedCountry}:
-- Pack Print International exhibitors
-- ProPak Asia exhibitors
-- PrintTech exhibitors
-- Any printing/packaging/chemical exhibitions
-- Search exhibitor lists and directories
-${found.length > 0 ? `\nALREADY FOUND (do NOT repeat): ${found.join(', ')}\n\nFind exhibitors NOT in this list.` : ''}
+    (found) => `Find local ${business} companies in ${expandedCountry}.
+${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
 Return company name, website, location. Exclude: ${exclusion}`,
 
-    // Round 8: Final deep dive
-    (found) => `FINAL EXHAUSTIVE SEARCH for ${business} companies in ${expandedCountry}.
-Search EVERYWHERE we might have missed:
-- News articles mentioning companies
-- Business directories
-- Import/export records
-- LinkedIn company searches
-- Any remaining sources
-${found.length > 0 ? `\nALREADY FOUND (${found.length} companies): ${found.join(', ')}\n\nFind ANY companies not in this list. This is the final sweep.` : ''}
+    (found) => `List of ${business} companies in ${expandedCountry}.
+${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
+Return company name, website, location. Exclude: ${exclusion}`,
+
+    (found) => `Find more ${business} companies in ${expandedCountry}.
+${found.length > 0 ? `ALREADY FOUND (${found.length} companies): ${found.join(', ')}\nFind ANY additional companies not in this list.` : ''}
 Return company name, website, location. Exclude: ${exclusion}`
   ];
 
   const chatgptAngles = [
-    // Round 1: Comprehensive
     (found) => ({
-      query: `Complete list of ALL ${business} companies manufacturers producers in ${expandedCountry}`,
-      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE not in this list.` : 'Find all companies.'
+      query: `${business} companies in ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
     }),
 
-    // Round 2: SMEs and local
     (found) => ({
-      query: `${business} SMEs family businesses local manufacturers ${expandedCountry}`,
-      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find additional smaller/local companies.` : 'Find smaller companies.'
+      query: `${business} manufacturers ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
     }),
 
-    // Round 3: Industrial estates
     (found) => ({
-      query: `${business} companies industrial estates zones parks ${expandedCountry}`,
-      context: found.length > 0 ? `Already found: ${found.join(', ')}. Search industrial zones for more.` : 'Search industrial zones.'
+      query: `${business} producers ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
     }),
 
-    // Round 4: Associations
     (found) => ({
-      query: `${business} industry association members directory ${expandedCountry}`,
-      context: found.length > 0 ? `Already found: ${found.join(', ')}. Search associations for more.` : 'Search industry associations.'
+      query: `${business} suppliers ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
     }),
 
-    // Round 5: Contract manufacturing
     (found) => ({
-      query: `${business} OEM ODM contract manufacturer toll manufacturing ${expandedCountry}`,
-      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find contract manufacturers.` : 'Find contract manufacturers.'
+      query: `small ${business} companies ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
     }),
 
-    // Round 6: News and investments
     (found) => ({
-      query: `${business} companies ${expandedCountry} news investment expansion 2024 2025`,
-      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find companies in recent news.` : 'Search recent news.'
+      query: `local ${business} companies ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
     }),
 
-    // Round 7: Export and B2B directories
     (found) => ({
-      query: `${business} exporter manufacturer supplier B2B directory ${expandedCountry}`,
-      context: found.length > 0 ? `Already found: ${found.join(', ')}. Search B2B directories.` : 'Search B2B directories.'
+      query: `list of ${business} companies ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
     }),
 
-    // Round 8: Final sweep
     (found) => ({
-      query: `${business} manufacturers ${expandedCountry} complete exhaustive list all companies`,
-      context: found.length > 0 ? `Found ${found.length} so far: ${found.join(', ')}. Find ANY remaining companies we missed.` : 'Final comprehensive search.'
+      query: `all ${business} companies ${expandedCountry}`,
+      context: found.length > 0 ? `Found ${found.length}: ${found.join(', ')}. Find ANY more.` : 'Find all.'
     })
   ];
 
