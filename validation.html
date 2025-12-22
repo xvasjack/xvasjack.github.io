@@ -27,7 +27,8 @@
     .compact-upload p { font-size: 14px; color: var(--text-muted); margin: 0; }
     .compact-upload .highlight { color: var(--accent); font-weight: 500; }
     /* Consistent tab content height */
-    .tab-content { min-height: 130px; display: flex; flex-direction: column; }
+    .tab-content { min-height: 130px; display: none; flex-direction: column; }
+    .tab-content.active { display: flex; }
     #fileTab .compact-upload { flex: 1; }
     #manualTab .form-grid { gap: 12px; }
     #manualTab textarea { resize: vertical; }
