@@ -4597,7 +4597,7 @@ OUTPUT: Return JSON: {"in_scope": true/false, "confidence": "high/medium/low", "
 WEBSITE: ${company.website}
 
 WEBSITE CONTENT:
-${pageText.substring(0, 10000)}`;
+${pageText ? pageText.substring(0, 10000) : 'Could not fetch website - validate by company name only'}`;
 
   try {
     // First pass: gpt-4o-mini (fast and cheap)
