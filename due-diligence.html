@@ -811,8 +811,18 @@
           });
         }
 
-        console.log(`[DD] Sending to API: ${processed.documents.length} documents, ${processed.audioFiles.length} audio files`);
-        processed.documents.forEach((d, i) => console.log(`[DD]   Doc ${i + 1}: ${d.name} (${d.content?.length || 0} chars)`));
+        console.log(`[DD] ============================================`);
+        console.log(`[DD] SENDING TO API:`);
+        console.log(`[DD]   Total documents: ${processed.documents.length}`);
+        console.log(`[DD]   Total audio files: ${processed.audioFiles.length}`);
+        processed.documents.forEach((d, i) => {
+          console.log(`[DD]   Doc ${i + 1}: "${d.name}" (type: ${d.type}, content: ${d.content?.length || 0} chars)`);
+          // Log first 100 chars of content for debugging
+          if (d.content) {
+            console.log(`[DD]     Content preview: ${d.content.substring(0, 100)}...`);
+          }
+        });
+        console.log(`[DD] ============================================`);
 
         const response = await fetch(`${API_BASE}/api/due-diligence`, {
           method: 'POST',
