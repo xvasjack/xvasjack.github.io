@@ -1931,7 +1931,7 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
 
 async function validateCompanyStrict(company, business, country, exclusion, pageText) {
   // If we couldn't fetch the website, validate by name only (give benefit of doubt)
-  const contentToValidate = pageText || `Company name: ${company.company_name}. Validate based on name only.`;
+  const contentToValidate = (typeof pageText === 'string' && pageText) ? pageText : `Company name: ${company.company_name}. Validate based on name only.`;
 
   const exclusionRules = buildExclusionRules(exclusion, business);
 
@@ -2105,7 +2105,7 @@ WEBSITE: ${company.website}
 HQ: ${company.hq}
 
 PAGE CONTENT:
-${pageText ? pageText.substring(0, 8000) : 'Could not fetch - validate by name only'}`
+${(typeof pageText === 'string' && pageText) ? pageText.substring(0, 8000) : 'Could not fetch - validate by name only'}`
         }
       ],
       response_format: { type: 'json_object' }
@@ -4686,7 +4686,7 @@ async function findCompanyWebsiteMulti(companyName, countries) {
 
 // Validate if company matches target business - STRICTLY based on website content
 async function validateCompanyBusinessStrict(company, targetBusiness, pageText) {
-  if (!pageText || pageText.length < 100) {
+  if (!pageText || typeof pageText !== 'string' || pageText.length < 100) {
     return {
       in_scope: false,
       reason: 'Could not fetch sufficient website content',
@@ -4711,7 +4711,7 @@ OUTPUT: Return JSON: {"in_scope": true/false, "confidence": "high/medium/low", "
 WEBSITE: ${company.website}
 
 WEBSITE CONTENT:
-${pageText ? pageText.substring(0, 10000) : 'Could not fetch website - validate by company name only'}`;
+${(typeof pageText === 'string' && pageText) ? pageText.substring(0, 10000) : 'Could not fetch website - validate by company name only'}`;
 
   try {
     // First pass: gpt-4o-mini (fast and cheap)
