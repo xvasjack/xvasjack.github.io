@@ -3413,7 +3413,7 @@ async function runIterativeSecondarySearches(plan, business, exclusion, searchLo
 
   const { expandedCountry, countries, businessVariations } = plan;
   const startTime = Date.now();
-  const NUM_ROUNDS = 4;
+  const NUM_ROUNDS = 8;
 
   // Track all validated and flagged companies across rounds
   const allValidated = [...existingValidated];
@@ -3421,7 +3421,7 @@ async function runIterativeSecondarySearches(plan, business, exclusion, searchLo
   const allRejected = [];
   const seenWebsites = new Set(existingValidated.map(c => c.website?.toLowerCase()).filter(Boolean));
 
-  // Search angle templates for variety across rounds
+  // Search angle templates for variety across rounds (8 angles each)
   const geminiAngles = [
     // Round 1: Comprehensive search
     (found) => `Find ALL ${business} companies in ${expandedCountry}.
@@ -3429,58 +3429,128 @@ Search comprehensively: manufacturers, suppliers, producers, SMEs, family busine
 ${found.length > 0 ? `\nALREADY FOUND (do NOT repeat these): ${found.join(', ')}\n\nFind ADDITIONAL companies NOT in this list.` : ''}
 Return company name, website, location for each. Exclude: ${exclusion}`,
 
-    // Round 2: Industrial zones and local companies
+    // Round 2: Industrial zones
     (found) => `Find ${business} companies in industrial zones across ${expandedCountry}:
-- Thailand: Amata, Rayong, Samut Prakan, Bang Pu
-- Indonesia: Bekasi, Cikarang, Karawang, MM2100, Jababeka
-- Vietnam: VSIP, Binh Duong, Dong Nai
-- Malaysia: Penang, Johor, Shah Alam
+- Thailand: Amata, Rayong, Samut Prakan, Bang Pu, Chonburi, Eastern Seaboard
+- Indonesia: Bekasi, Cikarang, Karawang, MM2100, Jababeka, KIIC, Tangerang
+- Vietnam: VSIP, Binh Duong, Dong Nai, Long An, Hai Phong
+- Malaysia: Penang, Johor, Shah Alam, Klang, Selangor
+- Philippines: PEZA, Cavite, Laguna, Batangas
+- Singapore: Jurong, Tuas
 ${found.length > 0 ? `\nALREADY FOUND (do NOT repeat): ${found.join(', ')}\n\nFind MORE companies not in this list.` : ''}
 Return company name, website, location. Exclude: ${exclusion}`,
 
-    // Round 3: SME, local language, associations
-    (found) => `Find SMALL and LOCAL ${business} companies in ${expandedCountry} that are harder to find:
-- Search in local languages (Thai, Indonesian, Vietnamese)
-- Look at industry association member lists
-- Find family businesses and SMEs
-- Search government SME directories
-${found.length > 0 ? `\nALREADY FOUND (do NOT repeat): ${found.join(', ')}\n\nI need MORE companies beyond this list.` : ''}
+    // Round 3: SME and local language
+    (found) => `Find SMALL and LOCAL ${business} companies in ${expandedCountry}:
+- Search in local languages: Thai (ผู้ผลิต), Indonesian (produsen, pabrik), Vietnamese (nhà sản xuất)
+- Find family-owned businesses
+- Look for companies with local names (not English)
+${found.length > 0 ? `\nALREADY FOUND (do NOT repeat): ${found.join(', ')}\n\nI need MORE local companies beyond this list.` : ''}
 Return company name, website, location. Exclude: ${exclusion}`,
 
-    // Round 4: Deep dive and supply chain
-    (found) => `FINAL SEARCH: Find any remaining ${business} companies in ${expandedCountry} we might have missed.
-Search: OEM/ODM suppliers, contract manufacturers, trade show exhibitors, news mentions.
-${found.length > 0 ? `\nALREADY FOUND (${found.length} companies): ${found.join(', ')}\n\nFind ANY additional companies not in this list. Dig deep.` : ''}
+    // Round 4: Industry associations
+    (found) => `Find ${business} companies through INDUSTRY ASSOCIATIONS in ${expandedCountry}:
+- Printing associations member lists
+- Packaging associations
+- Chemical industry federations
+- Manufacturing associations
+- Chamber of commerce directories
+${found.length > 0 ? `\nALREADY FOUND (do NOT repeat): ${found.join(', ')}\n\nSearch association member lists for MORE.` : ''}
+Return company name, website, location. Exclude: ${exclusion}`,
+
+    // Round 5: Supply chain and OEM
+    (found) => `Find ${business} companies through supply chain in ${expandedCountry}:
+- OEM/ODM manufacturers
+- Contract manufacturers
+- Toll manufacturers
+- Private label producers
+- Raw material suppliers to the industry
+${found.length > 0 ? `\nALREADY FOUND (do NOT repeat): ${found.join(', ')}\n\nFind supply chain companies NOT in this list.` : ''}
+Return company name, website, location. Exclude: ${exclusion}`,
+
+    // Round 6: Government directories
+    (found) => `Find ${business} companies through government registries in ${expandedCountry}:
+- Thailand: BOI promoted, DBD registered
+- Indonesia: BKPM, Ministry of Industry
+- Malaysia: MIDA promoted, SSM registered
+- Vietnam: DPI registered
+- Philippines: PEZA, DTI registered
+${found.length > 0 ? `\nALREADY FOUND (do NOT repeat): ${found.join(', ')}\n\nSearch government directories for MORE.` : ''}
+Return company name, website, location. Exclude: ${exclusion}`,
+
+    // Round 7: Trade shows and exhibitions
+    (found) => `Find ${business} companies that exhibited at trade shows in ${expandedCountry}:
+- Pack Print International exhibitors
+- ProPak Asia exhibitors
+- PrintTech exhibitors
+- Any printing/packaging/chemical exhibitions
+- Search exhibitor lists and directories
+${found.length > 0 ? `\nALREADY FOUND (do NOT repeat): ${found.join(', ')}\n\nFind exhibitors NOT in this list.` : ''}
+Return company name, website, location. Exclude: ${exclusion}`,
+
+    // Round 8: Final deep dive
+    (found) => `FINAL EXHAUSTIVE SEARCH for ${business} companies in ${expandedCountry}.
+Search EVERYWHERE we might have missed:
+- News articles mentioning companies
+- Business directories
+- Import/export records
+- LinkedIn company searches
+- Any remaining sources
+${found.length > 0 ? `\nALREADY FOUND (${found.length} companies): ${found.join(', ')}\n\nFind ANY companies not in this list. This is the final sweep.` : ''}
 Return company name, website, location. Exclude: ${exclusion}`
   ];
 
   const chatgptAngles = [
-    // Round 1: Comprehensive search
+    // Round 1: Comprehensive
     (found) => ({
-      query: `Complete list of ${business} companies manufacturers in ${expandedCountry}`,
+      query: `Complete list of ALL ${business} companies manufacturers producers in ${expandedCountry}`,
       context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE not in this list.` : 'Find all companies.'
     }),
 
-    // Round 2: Hidden gems and directories
+    // Round 2: SMEs and local
     (found) => ({
       query: `${business} SMEs family businesses local manufacturers ${expandedCountry}`,
       context: found.length > 0 ? `Already found: ${found.join(', ')}. Find additional smaller/local companies.` : 'Find smaller companies.'
     }),
 
-    // Round 3: Associations and registries
+    // Round 3: Industrial estates
     (found) => ({
-      query: `${business} industry association members trade directory ${expandedCountry}`,
+      query: `${business} companies industrial estates zones parks ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Search industrial zones for more.` : 'Search industrial zones.'
+    }),
+
+    // Round 4: Associations
+    (found) => ({
+      query: `${business} industry association members directory ${expandedCountry}`,
       context: found.length > 0 ? `Already found: ${found.join(', ')}. Search associations for more.` : 'Search industry associations.'
     }),
 
-    // Round 4: Final sweep
+    // Round 5: Contract manufacturing
     (found) => ({
-      query: `${business} manufacturers ${expandedCountry} complete list all companies`,
-      context: found.length > 0 ? `Found ${found.length} so far: ${found.join(', ')}. Find ANY remaining companies.` : 'Final comprehensive search.'
+      query: `${business} OEM ODM contract manufacturer toll manufacturing ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find contract manufacturers.` : 'Find contract manufacturers.'
+    }),
+
+    // Round 6: News and investments
+    (found) => ({
+      query: `${business} companies ${expandedCountry} news investment expansion 2024 2025`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find companies in recent news.` : 'Search recent news.'
+    }),
+
+    // Round 7: Export and B2B directories
+    (found) => ({
+      query: `${business} exporter manufacturer supplier B2B directory ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Search B2B directories.` : 'Search B2B directories.'
+    }),
+
+    // Round 8: Final sweep
+    (found) => ({
+      query: `${business} manufacturers ${expandedCountry} complete exhaustive list all companies`,
+      context: found.length > 0 ? `Found ${found.length} so far: ${found.join(', ')}. Find ANY remaining companies we missed.` : 'Final comprehensive search.'
     })
   ];
 
-  // Run 4 rounds of search → validate
+  // Run 8 rounds of search → validate
   for (let round = 0; round < NUM_ROUNDS; round++) {
     console.log(`\n  --- ROUND ${round + 1}/${NUM_ROUNDS} ---`);
 
@@ -4190,8 +4260,8 @@ app.post('/api/find-target-v5', async (req, res) => {
 
     console.log(`\nSearch Statistics:`);
     console.log(`  Perplexity searches: ${perplexityTasks} (Phase 1 - batched)`);
-    console.log(`  Gemini searches: ${geminiTasks} (Phase 2 - 4 rounds)`);
-    console.log(`  ChatGPT searches: ${chatgptTasks} (Phase 2 - 4 rounds)`);
+    console.log(`  Gemini searches: ${geminiTasks} (Phase 2 - 8 rounds)`);
+    console.log(`  ChatGPT searches: ${chatgptTasks} (Phase 2 - 8 rounds)`);
     console.log(`  Total internal searches: ${totalSearches}`);
     console.log(`  Total sources consulted: ${totalSources}`);
 
