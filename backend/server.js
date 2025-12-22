@@ -10073,6 +10073,11 @@ async function generateDueDiligenceReport(files, instructions, reportLength, ins
 
   console.log(`[DD] Total combined content: ${combinedContent.length} chars`);
 
+  // Log all source headers to verify all files are included
+  const sourceHeaders = combinedContent.match(/=== SOURCE: [^=]+ ===/g) || [];
+  console.log(`[DD] Files included in combined content (${sourceHeaders.length}):`);
+  sourceHeaders.forEach((header, i) => console.log(`[DD]   ${i + 1}. ${header}`));
+
   // Extract URLs from instructions and fetch them
   let onlineResearchContent = '';
   let onlineSourcesUsed = [];
@@ -10151,12 +10156,13 @@ REPORT STRUCTURE:
 ${lengthInstructions[reportLength]}
 
 CRITICAL RULES - FOLLOW EXACTLY:
-1. **NO HALLUCINATION**: ONLY include facts explicitly stated in the source materials above. Do NOT make up or assume any information.
-2. If something is not mentioned in the sources, do NOT include it. Do NOT write generic statements.
-3. Quote specific names, numbers, dates, and facts directly from the materials.
-4. For each fact you include, it must be traceable to the source content above.
+1. **PROCESS ALL FILES**: You MUST read and extract information from ALL ${filesSummary.length} source files listed above. Do NOT focus on just one file - include relevant facts from EVERY source document.
+2. **NO HALLUCINATION**: ONLY include facts explicitly stated in the source materials above. Do NOT make up or assume any information.
+3. If something is not mentioned in the sources, do NOT include it. Do NOT write generic statements.
+4. Quote specific names, numbers, dates, and facts directly from the materials.
+5. For each fact you include, it must be traceable to the source content above.
 
-${onlineResearchContent ? `5. Any information from ONLINE RESEARCH section must be prefixed with **[Online Source]** - this text will be highlighted yellow in the final document.` : ''}
+${onlineResearchContent ? `6. Any information from ONLINE RESEARCH section must be prefixed with **[Online Source]** - this text will be highlighted yellow in the final document.` : ''}
 
 OUTPUT FORMAT:
 - Start with: <h1 style="font-family: Calibri, sans-serif;">Due Diligence: [Actual Company Name from materials]</h1>
@@ -10233,8 +10239,9 @@ app.post('/api/due-diligence', async (req, res) => {
 
   console.log(`\n${'='.repeat(60)}`);
   console.log(`[DD] NEW DUE DILIGENCE REQUEST: ${new Date().toISOString()}`);
-  console.log(`[DD] Documents: ${files.length}`);
-  files.forEach(f => console.log(`     - ${f.name} (${f.type})`));
+  console.log(`[DD] Request body size: ${JSON.stringify(req.body).length} bytes`);
+  console.log(`[DD] Documents received: ${files.length}`);
+  files.forEach((f, i) => console.log(`     ${i + 1}. ${f.name} (${f.type}) - content: ${f.content?.length || 0} chars`));
   console.log(`[DD] Audio Files: ${audioFiles.length}`);
   audioFiles.forEach(f => console.log(`     - ${f.name} (${f.mimeType})`));
   console.log(`[DD] Real-time Session: ${sessionId || 'None'}`);
