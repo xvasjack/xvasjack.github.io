@@ -1762,21 +1762,61 @@ async function filterVerifiedWebsites(companies) {
 // ============ FETCH WEBSITE FOR VALIDATION ============
 
 async function fetchWebsite(url) {
-  // Try multiple URL paths before giving up
-  const urlPaths = ['', '/en', '/en/', '/home', '/index.html', '/about', '/about-us', '/company'];
+  // Security block patterns - these indicate WAF/Cloudflare/bot protection
+  const securityBlockPatterns = [
+    'checking your browser',
+    'please wait',
+    'just a moment',
+    'ddos protection',
+    'cloudflare',
+    'security check',
+    'access denied',
+    'not acceptable',
+    'mod_security',
+    'forbidden',
+    'blocked',
+    'captcha',
+    'verify you are human',
+    'bot detection',
+    'please enable javascript',
+    'enable cookies'
+  ];
 
   const tryFetch = async (targetUrl) => {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
+      const timeout = setTimeout(() => controller.abort(), 20000); // Increased to 20 seconds
       const response = await fetch(targetUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1'
+        },
         signal: controller.signal,
         redirect: 'follow'
       });
       clearTimeout(timeout);
-      if (!response.ok) return null;
+
+      // Check for HTTP-level blocks
+      if (response.status === 403 || response.status === 406) {
+        return { status: 'security_blocked', reason: `HTTP ${response.status} - WAF/Security block` };
+      }
+      if (!response.ok) return { status: 'error', reason: `HTTP ${response.status}` };
+
       const html = await response.text();
+      const lowerHtml = html.toLowerCase();
+
+      // Check for security block patterns in content
+      for (const pattern of securityBlockPatterns) {
+        if (lowerHtml.includes(pattern) && html.length < 5000) {
+          // Only flag as security block if page is small (likely a challenge page)
+          return { status: 'security_blocked', reason: `Security protection detected: "${pattern}"` };
+        }
+      }
+
       const cleanText = html
         .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
         .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
@@ -1784,9 +1824,13 @@ async function fetchWebsite(url) {
         .replace(/\s+/g, ' ')
         .trim()
         .substring(0, 15000);
-      return cleanText.length > 100 ? cleanText : null;
+
+      if (cleanText.length > 100) {
+        return { status: 'ok', content: cleanText };
+      }
+      return { status: 'insufficient', reason: 'Content too short' };
     } catch (e) {
-      return null;
+      return { status: 'error', reason: e.message || 'Connection failed' };
     }
   };
 
@@ -1800,31 +1844,31 @@ async function fetchWebsite(url) {
   }
 
   // Try original URL first
-  let content = await tryFetch(url);
-  if (content) return content;
+  let result = await tryFetch(url);
+  if (result.status === 'ok') return result;
+  if (result.status === 'security_blocked') return result; // Return security block immediately
 
   // Try with/without www
   const hasWww = baseUrl.includes('://www.');
   const altBaseUrl = hasWww ? baseUrl.replace('://www.', '://') : baseUrl.replace('://', '://www.');
 
-  // Try alternative paths
+  // Try alternative paths (limited to reduce time)
+  const urlPaths = ['/en', '/home', '/about'];
   for (const path of urlPaths) {
-    if (path === '') continue; // Already tried root
-    content = await tryFetch(baseUrl + path);
-    if (content) return content;
-    // Also try without www (or with www if original didn't have it)
-    content = await tryFetch(altBaseUrl + path);
-    if (content) return content;
+    result = await tryFetch(baseUrl + path);
+    if (result.status === 'ok') return result;
+    if (result.status === 'security_blocked') return result;
   }
 
   // Try HTTPS if original was HTTP
   if (url.startsWith('http://')) {
     const httpsUrl = url.replace('http://', 'https://');
-    content = await tryFetch(httpsUrl);
-    if (content) return content;
+    result = await tryFetch(httpsUrl);
+    if (result.status === 'ok') return result;
+    if (result.status === 'security_blocked') return result;
   }
 
-  return null;
+  return { status: 'inaccessible', reason: 'Could not fetch content from any URL variation' };
 }
 
 // ============ DYNAMIC EXCLUSION RULES BUILDER (n8n-style PAGE SIGNAL detection) ============
@@ -3220,6 +3264,284 @@ Variations for "${business}":`;
   return []; // Return empty array if generation fails
 }
 
+// ============ V5 PARALLEL ARCHITECTURE ============
+
+// Phase 0: Plan search strategy - determine languages, generate comprehensive search plan
+async function planSearchStrategyV5(business, country, exclusion) {
+  console.log('\n' + '='.repeat(50));
+  console.log('PHASE 0: PLANNING SEARCH STRATEGY');
+  console.log('='.repeat(50));
+
+  const startTime = Date.now();
+
+  // Expand regional inputs to specific countries
+  const expandedCountry = await expandRegionToCountries(country);
+  console.log(`  Country input: "${country}" → "${expandedCountry}"`);
+
+  // Generate business term variations
+  const businessVariations = await generateBusinessTermVariations(business);
+  console.log(`  Term variations: ${businessVariations.length > 0 ? businessVariations.join(', ') : 'none generated'}`);
+
+  // Determine languages for each country
+  const countries = expandedCountry.split(',').map(c => c.trim());
+  const countryLanguages = {};
+  for (const c of countries) {
+    const cLower = c.toLowerCase();
+    if (cLower.includes('thailand')) countryLanguages[c] = 'Thai';
+    else if (cLower.includes('vietnam')) countryLanguages[c] = 'Vietnamese';
+    else if (cLower.includes('indonesia')) countryLanguages[c] = 'Indonesian/Bahasa';
+    else if (cLower.includes('malaysia')) countryLanguages[c] = 'Malay/Chinese';
+    else if (cLower.includes('philippines')) countryLanguages[c] = 'Filipino/English';
+    else if (cLower.includes('japan')) countryLanguages[c] = 'Japanese';
+    else if (cLower.includes('korea')) countryLanguages[c] = 'Korean';
+    else if (cLower.includes('china')) countryLanguages[c] = 'Chinese';
+    else if (cLower.includes('taiwan')) countryLanguages[c] = 'Chinese';
+    else countryLanguages[c] = 'English/Local';
+  }
+
+  console.log(`  Languages: ${Object.entries(countryLanguages).map(([c, l]) => `${c}=${l}`).join(', ')}`);
+  console.log(`  Planning completed in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
+
+  return {
+    expandedCountry,
+    countries,
+    businessVariations,
+    countryLanguages
+  };
+}
+
+// Run a single Perplexity search task
+async function runPerplexitySearchTask(searchPrompt, country, searchLog) {
+  const startTime = Date.now();
+
+  console.log(`  Executing Perplexity search...`);
+  const result = await callPerplexity(searchPrompt);
+
+  const duration = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`    Completed in ${duration}s`);
+
+  // Log this search
+  searchLog.push({
+    task: `[Perplexity] ${searchPrompt.substring(0, 80)}...`,
+    duration: parseFloat(duration),
+    searchQueries: [searchPrompt.substring(0, 100)],
+    sourceCount: 1,
+    responseLength: result.length,
+    model: 'perplexity-sonar-pro'
+  });
+
+  // Extract companies from result
+  const companies = await extractCompaniesV5(result, country);
+  console.log(`    Extracted ${companies.length} companies`);
+
+  return companies;
+}
+
+// Phase 1: Perplexity main search with parallel validation
+// Key: Validate companies AS they are found (streaming-like), don't wait for all searches
+async function runPerplexityMainSearchWithValidation(plan, business, exclusion, searchLog) {
+  console.log('\n' + '='.repeat(50));
+  console.log('PHASE 1: PERPLEXITY MAIN SEARCH + PARALLEL VALIDATION');
+  console.log('='.repeat(50));
+
+  const { expandedCountry, countries, businessVariations } = plan;
+  const startTime = Date.now();
+
+  // Generate Perplexity search queries - comprehensive but focused
+  const perplexityQueries = [
+    // Main comprehensive search
+    `List ALL ${business} companies, manufacturers, and producers in ${expandedCountry}.
+     Include: company names, official websites (not directories), headquarters locations.
+     Be EXHAUSTIVE - find every company you can. Include large, medium, and small companies.
+     EXCLUSIONS: ${exclusion}`,
+
+    // SME and local focus
+    `Find small and medium-sized ${business} companies in ${expandedCountry}.
+     Focus on: family businesses, local manufacturers, independent producers.
+     These are often acquisition targets. Include websites and HQ locations.
+     Exclude large multinationals and ${exclusion}`,
+
+    // Industry associations and directories
+    `Find ${business} companies through industry associations and trade directories in ${expandedCountry}.
+     Search: association member lists, trade show exhibitors, certification bodies.
+     Return company names, websites, and locations.`,
+
+    // Contract manufacturing and suppliers
+    `Find ${business} OEM, ODM, and contract manufacturers in ${expandedCountry}.
+     Include: toll manufacturers, private label producers, subcontractors.
+     Return company names, websites, and HQ locations.`,
+
+    // Supply chain exploration
+    `Who are the ${business} suppliers and manufacturers in ${expandedCountry}?
+     Look at: raw material suppliers, equipment manufacturers, finished goods producers.
+     Return company names, official websites, and headquarters.`
+  ];
+
+  // Add country-specific searches
+  for (const c of countries.slice(0, 4)) {
+    perplexityQueries.push(
+      `Complete list of ${business} companies in ${c}.
+       Include all manufacturers, industrial estates, and local producers.
+       Return company name, website, and city location.`
+    );
+  }
+
+  // Add term variation searches
+  for (const variation of businessVariations.slice(0, 3)) {
+    perplexityQueries.push(
+      `Find ${variation} companies and manufacturers in ${expandedCountry}.
+       Return company names, websites, and headquarters locations.`
+    );
+  }
+
+  console.log(`  Generated ${perplexityQueries.length} Perplexity search queries`);
+
+  // Run ALL Perplexity searches in PARALLEL
+  console.log(`  Running all Perplexity searches in parallel...`);
+  const searchPromises = perplexityQueries.map((query, idx) =>
+    runPerplexitySearchTask(query, expandedCountry, searchLog)
+      .catch(e => {
+        console.error(`    Perplexity query ${idx + 1} failed: ${e.message}`);
+        return [];
+      })
+  );
+
+  const searchResults = await Promise.all(searchPromises);
+  let allCompanies = searchResults.flat();
+
+  console.log(`  Total companies from Perplexity: ${allCompanies.length} (before dedup)`);
+
+  // Dedupe before validation
+  const uniqueCompanies = dedupeCompanies(allCompanies);
+  console.log(`  After dedup: ${uniqueCompanies.length} unique companies`);
+
+  // Pre-filter
+  const preFiltered = preFilterCompanies(uniqueCompanies);
+  console.log(`  After pre-filter: ${preFiltered.length} companies`);
+
+  // NOW validate companies in parallel (streaming validation)
+  console.log(`\n  Starting parallel validation of ${preFiltered.length} companies...`);
+
+  // Validate in larger batches for speed (validation already runs Gemini+ChatGPT in parallel internally)
+  const validatedResults = await validateCompaniesV5(preFiltered, business, expandedCountry, exclusion);
+
+  const duration = ((Date.now() - startTime) / 1000 / 60).toFixed(1);
+  console.log(`\n  Phase 1 completed in ${duration} minutes`);
+  console.log(`    Validated: ${validatedResults.validated.length}`);
+  console.log(`    Flagged: ${validatedResults.flagged.length}`);
+  console.log(`    Rejected: ${validatedResults.rejected.length}`);
+
+  return validatedResults;
+}
+
+// Phase 2: Parallel Gemini + ChatGPT secondary searches
+// Key: Run 5 Gemini and 5 ChatGPT searches SIMULTANEOUSLY (not sequentially)
+async function runParallelSecondarySearches(plan, business, exclusion, searchLog) {
+  console.log('\n' + '='.repeat(50));
+  console.log('PHASE 2: PARALLEL GEMINI + CHATGPT SEARCHES');
+  console.log('='.repeat(50));
+
+  const { expandedCountry, countries, businessVariations } = plan;
+  const startTime = Date.now();
+
+  // Generate 5 Gemini search tasks (diverse angles)
+  const geminiTasks = [
+    // Task 1: Industrial zones and estates
+    `Find ${business} companies in industrial zones and estates across ${expandedCountry}.
+Search for companies in: industrial parks, free trade zones, special economic zones, manufacturing clusters.
+Return company name, website, and specific location for each.
+Exclude: ${exclusion}`,
+
+    // Task 2: Local language searches
+    `Find ${business} companies in ${expandedCountry} using LOCAL LANGUAGE search terms.
+Many smaller companies ONLY appear in local language searches.
+Search in: Thai, Vietnamese, Indonesian, Malay, Chinese as appropriate.
+Return company names (original language OK), websites, and HQ locations.
+Exclude: ${exclusion}`,
+
+    // Task 3: Supply chain discovery
+    `Find ${business} companies through supply chain exploration in ${expandedCountry}.
+Search for: OEM suppliers, contract manufacturers, tier-2 suppliers, raw material suppliers.
+Look at supplier directories and procurement databases.
+Return company name, website, HQ location.
+Exclude: ${exclusion}`,
+
+    // Task 4: Government and certification directories
+    `Find ${business} companies through government directories and certifications in ${expandedCountry}.
+Search: BOI promoted companies, ISO certified manufacturers, export directories, SME registries.
+Return company name, website, and location.
+Exclude: ${exclusion}`,
+
+    // Task 5: Regional focus on top countries
+    `Find ALL ${business} companies specifically in ${countries.slice(0, 3).join(', ')}.
+Be EXHAUSTIVE - search each country individually and thoroughly.
+Include: large manufacturers, SMEs, family businesses, local producers.
+Return company name, website, and city/country for each.
+Exclude: ${exclusion}`
+  ];
+
+  // Generate 5 ChatGPT search tasks (complementary angles)
+  const chatgptTasks = [
+    // Task 1: Comprehensive market players
+    {
+      query: `Complete list of ${business} companies in ${expandedCountry}`,
+      reasoning: `Find ALL market participants - manufacturers, suppliers, producers. Focus on M&A targets.`
+    },
+    // Task 2: Hidden gems - smaller players
+    {
+      query: `Lesser known ${business} SMEs and family businesses in ${expandedCountry}`,
+      reasoning: `Find smaller companies that don't rank high in searches - often best M&A targets.`
+    },
+    // Task 3: Trade associations
+    {
+      query: `${business} trade associations member companies ${expandedCountry}`,
+      reasoning: `Find companies through industry association memberships and directories.`
+    },
+    // Task 4: Recent news and developments
+    {
+      query: `${business} companies ${expandedCountry} recent news acquisitions investments`,
+      reasoning: `Find companies mentioned in recent industry news, M&A activity, investments.`
+    },
+    // Task 5: Alternative terminology
+    {
+      query: `${businessVariations.length > 0 ? businessVariations[0] : business} manufacturers ${expandedCountry}`,
+      reasoning: `Search using alternative industry terminology to find missed companies.`
+    }
+  ];
+
+  console.log(`  Running ${geminiTasks.length} Gemini + ${chatgptTasks.length} ChatGPT searches in PARALLEL...`);
+
+  // Run ALL searches in parallel (not sequential!)
+  const allSearchPromises = [
+    // Gemini searches (all 5 in parallel)
+    ...geminiTasks.map((task, idx) =>
+      runAgenticSearchTask(task, expandedCountry, searchLog)
+        .catch(e => {
+          console.error(`  Gemini task ${idx + 1} failed: ${e.message}`);
+          return [];
+        })
+    ),
+    // ChatGPT searches (all 5 in parallel)
+    ...chatgptTasks.map((task, idx) =>
+      runChatGPTSearchTask(task.query, task.reasoning, expandedCountry, searchLog)
+        .catch(e => {
+          console.error(`  ChatGPT task ${idx + 1} failed: ${e.message}`);
+          return [];
+        })
+    )
+  ];
+
+  const searchResults = await Promise.all(allSearchPromises);
+  const allCompanies = searchResults.flat();
+
+  console.log(`  Total companies from Phase 2: ${allCompanies.length} (before dedup)`);
+
+  const duration = ((Date.now() - startTime) / 1000 / 60).toFixed(1);
+  console.log(`  Phase 2 completed in ${duration} minutes`);
+
+  return allCompanies;
+}
+
 // Generate diverse search tasks for a business/country
 // Key insight: Exhaustiveness comes from DIFFERENT SEARCH ANGLES, not more search tools
 function generateSearchTasks(business, country, exclusion, businessVariations = []) {
@@ -3527,19 +3849,38 @@ async function validateCompaniesV5(companies, business, country, exclusion) {
       try {
         // Fetch website content for validation (shared between both models)
         let pageContent = '';
+        let fetchResult = { status: 'error', reason: 'No website' };
+
         if (company.website && company.website.startsWith('http')) {
           try {
-            pageContent = await fetchWebsite(company.website);
+            fetchResult = await fetchWebsite(company.website);
           } catch (e) {
-            pageContent = '';
+            fetchResult = { status: 'error', reason: e.message };
           }
         }
 
-        // Skip companies with inaccessible websites (remove them entirely)
-        if (!pageContent || pageContent.length < 100) {
-          console.log(`    ✗ REMOVED: ${company.company_name} (website inaccessible or insufficient content)`);
+        // Handle different fetch results
+        if (fetchResult.status === 'security_blocked') {
+          // Website has security/Cloudflare protection - FLAG for human review, don't remove
+          console.log(`    ? SECURITY: ${company.company_name} (${fetchResult.reason}) - flagging for human review`);
+          return {
+            company,
+            status: 'flagged',
+            geminiValid: false,
+            chatgptValid: false,
+            geminiReason: `Security blocked: ${fetchResult.reason}`,
+            chatgptReason: `Security blocked: ${fetchResult.reason}`,
+            securityBlocked: true
+          };
+        }
+
+        if (fetchResult.status !== 'ok') {
+          // Website truly inaccessible - remove
+          console.log(`    ✗ REMOVED: ${company.company_name} (${fetchResult.reason})`);
           return { company, status: 'skipped' };
         }
+
+        pageContent = fetchResult.content;
 
         // Run both validations in parallel
         const [geminiResult, chatgptResult] = await Promise.all([
@@ -3585,7 +3926,8 @@ async function validateCompaniesV5(companies, business, country, exclusion) {
         hq: v.corrected_hq || v.company.hq,
         geminiVote: v.geminiValid ? 'YES' : 'NO',
         chatgptVote: v.chatgptValid ? 'YES' : 'NO',
-        reason: v.geminiValid ? v.geminiReason : v.chatgptReason
+        reason: v.geminiValid ? v.geminiReason : v.chatgptReason,
+        securityBlocked: v.securityBlocked || false
       };
 
       if (v.status === 'valid') {
@@ -3593,7 +3935,11 @@ async function validateCompaniesV5(companies, business, country, exclusion) {
         console.log(`    ✓ VALID: ${v.company.company_name} (Gemini: YES, ChatGPT: YES)`);
       } else if (v.status === 'flagged') {
         flagged.push(companyData);
-        console.log(`    ? FLAGGED: ${v.company.company_name} (Gemini: ${v.geminiValid ? 'YES' : 'NO'}, ChatGPT: ${v.chatgptValid ? 'YES' : 'NO'})`);
+        if (v.securityBlocked) {
+          console.log(`    ? FLAGGED: ${v.company.company_name} (Security/WAF blocked - needs human review)`);
+        } else {
+          console.log(`    ? FLAGGED: ${v.company.company_name} (Gemini: ${v.geminiValid ? 'YES' : 'NO'}, ChatGPT: ${v.chatgptValid ? 'YES' : 'NO'})`);
+        }
       } else {
         rejected.push(companyData);
         console.log(`    ✗ REJECTED: ${v.company.company_name} (Gemini: NO, ChatGPT: NO)`);
@@ -3718,9 +4064,14 @@ function buildV5EmailHTML(validationResults, business, country, exclusion, searc
       </tr>
     `;
     allFlagged.forEach((c, i) => {
-      // Determine reason to display (inaccessible websites are removed, so only model disagreements here)
+      // Determine reason to display
       let displayReason = '';
-      if (c.geminiVote === 'YES' && c.chatgptVote === 'NO') {
+      let reasonStyle = 'font-size: 11px; color: #666;';
+
+      if (c.securityBlocked) {
+        displayReason = '🔒 Security/WAF blocked - verify manually';
+        reasonStyle = 'font-size: 11px; color: #dc2626; font-weight: bold;';
+      } else if (c.geminiVote === 'YES' && c.chatgptVote === 'NO') {
         displayReason = 'Gemini: Yes, ChatGPT: No';
       } else if (c.geminiVote === 'NO' && c.chatgptVote === 'YES') {
         displayReason = 'Gemini: No, ChatGPT: Yes';
@@ -3734,7 +4085,7 @@ function buildV5EmailHTML(validationResults, business, country, exclusion, searc
         <td>${c.company_name}</td>
         <td><a href="${c.website}">${c.website}</a></td>
         <td>${c.hq}</td>
-        <td style="font-size: 11px; color: #666;">${displayReason}</td>
+        <td style="${reasonStyle}">${displayReason}</td>
       </tr>
       `;
     });
@@ -3748,7 +4099,7 @@ function buildV5EmailHTML(validationResults, business, country, exclusion, searc
   return html;
 }
 
-// V5 ENDPOINT - Agentic Search
+// V5 ENDPOINT - Parallel Architecture with Perplexity as Main Search
 app.post('/api/find-target-v5', async (req, res) => {
   const { Business, Country, Exclusion, Email } = req.body;
 
@@ -3757,7 +4108,7 @@ app.post('/api/find-target-v5', async (req, res) => {
   }
 
   console.log(`\n${'='.repeat(70)}`);
-  console.log(`V5 AGENTIC SEARCH: ${new Date().toISOString()}`);
+  console.log(`V5 PARALLEL SEARCH: ${new Date().toISOString()}`);
   console.log(`Business: ${Business}`);
   console.log(`Country: ${Country}`);
   console.log(`Exclusion: ${Exclusion}`);
@@ -3766,148 +4117,52 @@ app.post('/api/find-target-v5', async (req, res) => {
 
   res.json({
     success: true,
-    message: 'Request received. Agentic deep search running. Results will be emailed in ~15-25 minutes.'
+    message: 'Request received. Parallel search running. Results will be emailed in ~10-15 minutes.'
   });
 
   try {
     const totalStart = Date.now();
     const searchLog = [];
 
-    // ========== PHASE 0: Expand Region & Generate Term Variations ==========
+    // ========== PHASE 0: Plan Search Strategy ==========
+    const plan = await planSearchStrategyV5(Business, Country, Exclusion);
+
+    // ========== PHASE 1: Perplexity Main Search + Parallel Validation ==========
+    // This is the PRIMARY search - runs Perplexity searches in parallel, then validates immediately
+    const phase1Results = await runPerplexityMainSearchWithValidation(plan, Business, Exclusion, searchLog);
+
+    // ========== PHASE 2: Parallel Gemini + ChatGPT Secondary Searches ==========
+    // These run 5 Gemini + 5 ChatGPT searches SIMULTANEOUSLY (not sequentially)
+    const phase2Companies = await runParallelSecondarySearches(plan, Business, Exclusion, searchLog);
+
+    // ========== PHASE 3: Process Phase 2 Companies ==========
     console.log('\n' + '='.repeat(50));
-    console.log('PHASE 0: PREPROCESSING INPUT');
+    console.log('PHASE 3: PROCESS SECONDARY SEARCH RESULTS');
     console.log('='.repeat(50));
 
-    // Expand regional inputs to specific countries (e.g., "southeast asia" → "Indonesia, Thailand, ...")
-    const expandedCountry = await expandRegionToCountries(Country);
-    console.log(`Country input: "${Country}" → "${expandedCountry}"`);
+    // Dedupe Phase 2 companies
+    const uniquePhase2 = dedupeCompanies(phase2Companies);
+    console.log(`  Phase 2 companies after dedup: ${uniquePhase2.length}`);
 
-    // Generate business term variations for broader search coverage
-    const businessVariations = await generateBusinessTermVariations(Business);
-    console.log(`Term variations: ${businessVariations.length > 0 ? businessVariations.join(', ') : 'none generated'}`);
+    // Remove companies already validated/flagged in Phase 1
+    const phase1Websites = new Set([
+      ...phase1Results.validated.map(c => c.website?.toLowerCase()),
+      ...phase1Results.flagged.map(c => c.website?.toLowerCase())
+    ].filter(Boolean));
 
-    // ========== PHASE 1: Generate Search Tasks ==========
-    console.log('\n' + '='.repeat(50));
-    console.log('PHASE 1: GENERATING AGENTIC SEARCH TASKS');
-    console.log('='.repeat(50));
+    const newCompanies = uniquePhase2.filter(c => {
+      const website = c.website?.toLowerCase();
+      return website && !phase1Websites.has(website);
+    });
+    console.log(`  New companies (not in Phase 1): ${newCompanies.length}`);
 
-    const tasks = generateSearchTasks(Business, expandedCountry, Exclusion, businessVariations);
-    console.log(`Generated ${tasks.length} search tasks`);
+    // Find missing websites for new companies
+    const needWebsite = newCompanies.filter(c => !c.website || c.website === 'unknown' || !c.website.startsWith('http'));
+    const hasWebsite = newCompanies.filter(c => c.website && c.website.startsWith('http'));
+    const companiesWithWebsites = [...hasWebsite];
 
-    // ========== PHASE 2: Execute Agentic Search Tasks ==========
-    console.log('\n' + '='.repeat(50));
-    console.log('PHASE 2: EXECUTING AGENTIC SEARCHES');
-    console.log('='.repeat(50));
-
-    let allCompanies = [];
-
-    // Run each task 2x for more diverse results (model may return different companies each run)
-    for (let i = 0; i < tasks.length; i++) {
-      for (let run = 1; run <= 2; run++) {
-        console.log(`\n--- Gemini Task ${i + 1}/${tasks.length} (Run ${run}/2) ---`);
-        try {
-          const companies = await runAgenticSearchTask(tasks[i], expandedCountry, searchLog);
-          allCompanies = [...allCompanies, ...companies];
-          console.log(`  Running total: ${allCompanies.length} companies (before dedup)`);
-        } catch (taskError) {
-          console.error(`  Task ${i + 1} run ${run} failed: ${taskError.message}`);
-        }
-      }
-    }
-
-    // ========== PHASE 2.5: ChatGPT-Powered Searches ==========
-    console.log('\n' + '='.repeat(50));
-    console.log('PHASE 2.5: CHATGPT SEARCH (WEB GROUNDED)');
-    console.log('='.repeat(50));
-
-    const countries = expandedCountry.split(',').map(c => c.trim());
-
-    // ChatGPT search tasks - strategic angles that complement Gemini searches
-    const chatgptSearches = [
-      {
-        query: `Complete list of ${Business} companies in ${expandedCountry}. Include all manufacturers, suppliers, and producers.`,
-        reasoning: `Extract ALL ${Business} companies. Focus on companies that might be acquisition targets.`
-      },
-      {
-        query: `Lesser known ${Business} SMEs and family businesses in ${expandedCountry}`,
-        reasoning: `Find smaller, local companies that might not appear in mainstream searches. These are often the best M&A targets.`
-      },
-      {
-        query: `${Business} industry ${expandedCountry} market players manufacturers list`,
-        reasoning: `Identify all market participants including niche players and specialists.`
-      },
-      {
-        query: `${Business} suppliers OEM ODM contract manufacturers ${Country}`,
-        reasoning: `Find contract manufacturers and OEM/ODM players - often hidden from direct searches.`
-      },
-      {
-        query: `${Business} trade associations member directory ${Country}`,
-        reasoning: `Find companies through industry association membership lists.`
-      }
-    ];
-
-    // Add country-specific searches with industrial zones (search each expanded country individually)
-    for (const c of countries.slice(0, 6)) {
-      chatgptSearches.push({
-        query: `${Business} companies manufacturers industrial zones ${c}`,
-        reasoning: `Find all ${Business} companies in industrial zones of ${c}.`
-      });
-    }
-
-    // Add term variation searches for ChatGPT too
-    if (businessVariations.length > 0) {
-      for (const variation of businessVariations.slice(0, 3)) {
-        chatgptSearches.push({
-          query: `${variation} companies in ${expandedCountry}`,
-          reasoning: `Search using alternative terminology: "${variation}" to find companies that might be missed.`
-        });
-      }
-    }
-
-    // Run each ChatGPT task 2x for more diverse results
-    for (let i = 0; i < chatgptSearches.length; i++) {
-      for (let run = 1; run <= 2; run++) {
-        console.log(`\n--- ChatGPT Task ${i + 1}/${chatgptSearches.length} (Run ${run}/2) ---`);
-        try {
-          const companies = await runChatGPTSearchTask(
-            chatgptSearches[i].query,
-            chatgptSearches[i].reasoning,
-            expandedCountry,
-            searchLog
-          );
-          allCompanies = [...allCompanies, ...companies];
-          console.log(`  Running total: ${allCompanies.length} companies (before dedup)`);
-        } catch (chatgptError) {
-          console.error(`  ChatGPT task ${i + 1} run ${run} failed: ${chatgptError.message}`);
-        }
-      }
-    }
-
-    // ========== PHASE 3: Deduplication ==========
-    console.log('\n' + '='.repeat(50));
-    console.log('PHASE 3: DEDUPLICATION');
-    console.log('='.repeat(50));
-
-    console.log(`Before dedup: ${allCompanies.length}`);
-    const uniqueCompanies = dedupeCompanies(allCompanies);
-    console.log(`After dedup: ${uniqueCompanies.length}`);
-
-    // ========== PHASE 4: Find Missing Websites ==========
-    console.log('\n' + '='.repeat(50));
-    console.log('PHASE 4: FINDING MISSING WEBSITES');
-    console.log('='.repeat(50));
-
-    const companiesWithWebsites = [];
-    const needWebsite = uniqueCompanies.filter(c => !c.website || c.website === 'unknown' || !c.website.startsWith('http'));
-    const hasWebsite = uniqueCompanies.filter(c => c.website && c.website.startsWith('http'));
-
-    console.log(`Companies with websites: ${hasWebsite.length}`);
-    console.log(`Companies needing website lookup: ${needWebsite.length}`);
-
-    companiesWithWebsites.push(...hasWebsite);
-
-    // Batch lookup for missing websites
     if (needWebsite.length > 0) {
+      console.log(`  Looking up websites for ${needWebsite.length} companies...`);
       const websitePrompt = `Find the official websites for these companies:
 
 ${needWebsite.slice(0, 30).map(c => `- ${c.company_name} (${c.hq})`).join('\n')}
@@ -3928,70 +4183,76 @@ Only include real company websites (not LinkedIn, Facebook, directories). If you
                 w.company_name.toLowerCase().includes(c.company_name.toLowerCase())
               );
               if (original && w.website && w.website.startsWith('http')) {
-                companiesWithWebsites.push({
-                  ...original,
-                  website: w.website
-                });
+                companiesWithWebsites.push({ ...original, website: w.website });
               }
             }
           }
         }
       } catch (e) {
-        console.error('Website lookup parse error:', e.message);
+        console.error('  Website lookup parse error:', e.message);
       }
-
-      console.log(`After website lookup: ${companiesWithWebsites.length} companies with websites`);
+      console.log(`  Companies with websites: ${companiesWithWebsites.length}`);
     }
 
-    // ========== PHASE 5: Dual-Model Validation ==========
-    console.log('\n' + '='.repeat(50));
-    console.log('PHASE 5: DUAL-MODEL VALIDATION (Gemini + ChatGPT)');
-    console.log('='.repeat(50));
-
+    // Pre-filter and validate Phase 2 companies
     const preFiltered = preFilterCompanies(companiesWithWebsites);
-    console.log(`After pre-filter: ${preFiltered.length}`);
+    console.log(`  After pre-filter: ${preFiltered.length}`);
 
-    // Returns { validated, flagged, rejected }
-    const validationResults = await validateCompaniesV5(preFiltered, Business, expandedCountry, Exclusion);
+    let phase2Validated = { validated: [], flagged: [], rejected: [] };
+    if (preFiltered.length > 0) {
+      console.log(`  Validating ${preFiltered.length} Phase 2 companies...`);
+      phase2Validated = await validateCompaniesV5(preFiltered, Business, plan.expandedCountry, Exclusion);
+    }
 
-    // ========== PHASE 6: Final Dedup and Send Results ==========
+    // ========== PHASE 4: Merge and Final Results ==========
     console.log('\n' + '='.repeat(50));
-    console.log('PHASE 6: FINAL RESULTS');
+    console.log('PHASE 4: FINAL RESULTS');
     console.log('='.repeat(50));
 
-    // Dedup each category
-    const finalValidated = dedupeCompanies(validationResults.validated);
-    const finalFlagged = dedupeCompanies(validationResults.flagged);
-    const finalRejected = dedupeCompanies(validationResults.rejected);
+    // Merge Phase 1 and Phase 2 results
+    const allValidated = [...phase1Results.validated, ...phase2Validated.validated];
+    const allFlagged = [...phase1Results.flagged, ...phase2Validated.flagged];
+    const allRejected = [...phase1Results.rejected, ...phase2Validated.rejected];
 
-    console.log(`FINAL RESULTS:`);
+    // Final dedup
+    const finalValidated = dedupeCompanies(allValidated);
+    const finalFlagged = dedupeCompanies(allFlagged);
+    const finalRejected = dedupeCompanies(allRejected);
+
+    console.log(`FINAL MERGED RESULTS:`);
     console.log(`  ✓ VALIDATED (both models agree): ${finalValidated.length}`);
-    console.log(`  ? FLAGGED (one model agrees): ${finalFlagged.length}`);
+    console.log(`    - From Perplexity (Phase 1): ${phase1Results.validated.length}`);
+    console.log(`    - From Gemini/ChatGPT (Phase 2): ${phase2Validated.validated.length}`);
+    console.log(`  ? FLAGGED (needs review): ${finalFlagged.length}`);
     console.log(`  ✗ REJECTED (neither agrees): ${finalRejected.length}`);
 
     // Calculate stats
+    const perplexityTasks = searchLog.filter(s => s.model === 'perplexity-sonar-pro').length;
+    const geminiTasks = searchLog.filter(s => !s.model || s.model === 'gemini').length;
+    const chatgptTasks = searchLog.filter(s => s.model === 'chatgpt-search').length;
     const totalSearches = searchLog.reduce((sum, s) => sum + s.searchQueries.length, 0);
     const totalSources = searchLog.reduce((sum, s) => sum + s.sourceCount, 0);
 
     console.log(`\nSearch Statistics:`);
-    console.log(`  Total agentic tasks: ${tasks.length}`);
+    console.log(`  Perplexity searches: ${perplexityTasks}`);
+    console.log(`  Gemini searches: ${geminiTasks}`);
+    console.log(`  ChatGPT searches: ${chatgptTasks}`);
     console.log(`  Total internal searches: ${totalSearches}`);
     console.log(`  Total sources consulted: ${totalSources}`);
 
     // Send email with three-tier results
     const finalResults = { validated: finalValidated, flagged: finalFlagged, rejected: finalRejected };
-    const htmlContent = buildV5EmailHTML(finalResults, Business, expandedCountry, Exclusion, searchLog);
+    const htmlContent = buildV5EmailHTML(finalResults, Business, plan.expandedCountry, Exclusion, searchLog);
 
-    // Inaccessible websites are removed entirely, so flagged = model disagreements only
     await sendEmail(
       Email,
-      `[V5 AGENTIC] ${Business} in ${Country} (${finalValidated.length} validated + ${finalFlagged.length} flagged)`,
+      `[V5 PARALLEL] ${Business} in ${Country} (${finalValidated.length} validated + ${finalFlagged.length} flagged)`,
       htmlContent
     );
 
     const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
     console.log('\n' + '='.repeat(70));
-    console.log(`V5 AGENTIC SEARCH COMPLETE!`);
+    console.log(`V5 PARALLEL SEARCH COMPLETE!`);
     console.log(`Email sent to: ${Email}`);
     console.log(`Validated: ${finalValidated.length} | Flagged: ${finalFlagged.length} | Rejected: ${finalRejected.length}`);
     console.log(`Total time: ${totalTime} minutes`);
