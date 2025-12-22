@@ -3603,9 +3603,9 @@ Return company name, website, location. Exclude: ${exclusion}`
     // Get list of already-found company names for the prompt
     const foundCompanyNames = allValidated.map(c => c.company_name).slice(0, 50); // Limit to avoid prompt overflow
 
-    // Generate prompts for this round
-    const geminiPrompt = geminiAngles[round](foundCompanyNames);
-    const chatgptConfig = chatgptAngles[round](foundCompanyNames);
+    // Generate prompts for this round (cycle through available prompts)
+    const geminiPrompt = geminiAngles[round % geminiAngles.length](foundCompanyNames);
+    const chatgptConfig = chatgptAngles[round % chatgptAngles.length](foundCompanyNames);
 
     // Run Gemini and ChatGPT searches IN PARALLEL
     console.log(`    Running Gemini + ChatGPT searches in parallel...`);
