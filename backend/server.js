@@ -3502,219 +3502,158 @@ async function runPerplexityMainSearchWithValidation(plan, business, exclusion, 
   return { validated: allValidated, flagged: allFlagged, rejected: allRejected };
 }
 
-// Phase 2: Parallel Gemini + ChatGPT secondary searches
-// Enhanced with more targeted searches for harder-to-find companies
-async function runParallelSecondarySearches(plan, business, exclusion, searchLog) {
+// Phase 2: Iterative Gemini + ChatGPT searches with "find more" pressure
+// Key: Each round builds on validated companies, forcing models to find NEW ones
+async function runIterativeSecondarySearches(plan, business, exclusion, searchLog, existingValidated = []) {
   console.log('\n' + '='.repeat(50));
-  console.log('PHASE 2: PARALLEL GEMINI + CHATGPT SEARCHES (ENHANCED)');
+  console.log('PHASE 2: ITERATIVE GEMINI + CHATGPT SEARCHES');
   console.log('='.repeat(50));
 
   const { expandedCountry, countries, businessVariations } = plan;
   const startTime = Date.now();
+  const NUM_ROUNDS = 4;
 
-  // Local language search terms for each country
-  const localLanguageTerms = {
-    'Thailand': `ผู้ผลิต${business} บริษัท${business} โรงงาน${business}`,
-    'Indonesia': `produsen ${business} pabrik ${business} perusahaan ${business}`,
-    'Vietnam': `công ty ${business} nhà sản xuất ${business}`,
-    'Malaysia': `pengeluar ${business} syarikat ${business}`,
-    'Philippines': `${business} manufacturer Philippines company`
-  };
+  // Track all validated and flagged companies across rounds
+  const allValidated = [...existingValidated];
+  const allFlagged = [];
+  const allRejected = [];
+  const seenWebsites = new Set(existingValidated.map(c => c.website?.toLowerCase()).filter(Boolean));
 
-  // Industrial zones by country
-  const industrialZones = {
-    'Thailand': 'Amata, Eastern Seaboard, Rayong, Samut Prakan, Chonburi, Bang Pu',
-    'Indonesia': 'Bekasi, Cikarang, Karawang, Tangerang, Surabaya, KIIC, MM2100, Jababeka',
-    'Vietnam': 'VSIP, Binh Duong, Long An, Dong Nai, Hai Phong',
-    'Malaysia': 'Penang, Johor, Shah Alam, Klang, Selangor',
-    'Philippines': 'PEZA, Cavite, Laguna, Batangas, Clark, Subic',
-    'Singapore': 'Jurong, Tuas, Woodlands'
-  };
+  // Search angle templates for variety across rounds
+  const geminiAngles = [
+    // Round 1: Comprehensive search
+    (found) => `Find ALL ${business} companies in ${expandedCountry}.
+Search comprehensively: manufacturers, suppliers, producers, SMEs, family businesses.
+${found.length > 0 ? `\nALREADY FOUND (do NOT repeat these): ${found.join(', ')}\n\nFind ADDITIONAL companies NOT in this list.` : ''}
+Return company name, website, location for each. Exclude: ${exclusion}`,
 
-  // Generate enhanced Gemini search tasks (10 tasks)
-  const geminiTasks = [
-    // Task 1: Industrial zones comprehensive
-    `Find ${business} companies in these SPECIFIC industrial zones across ${expandedCountry}:
-${Object.entries(industrialZones).map(([c, zones]) => `- ${c}: ${zones}`).join('\n')}
-Search for companies located in each zone. Return company name, website, and specific location.
-Exclude: ${exclusion}`,
-
-    // Task 2: Local language searches - Thai
-    `Search for ${business} companies in Thailand using THAI LANGUAGE:
-${localLanguageTerms['Thailand'] || ''}
-Find Thai ink/printing companies that only appear in Thai language searches.
+    // Round 2: Industrial zones and local companies
+    (found) => `Find ${business} companies in industrial zones across ${expandedCountry}:
+- Thailand: Amata, Rayong, Samut Prakan, Bang Pu
+- Indonesia: Bekasi, Cikarang, Karawang, MM2100, Jababeka
+- Vietnam: VSIP, Binh Duong, Dong Nai
+- Malaysia: Penang, Johor, Shah Alam
+${found.length > 0 ? `\nALREADY FOUND (do NOT repeat): ${found.join(', ')}\n\nFind MORE companies not in this list.` : ''}
 Return company name, website, location. Exclude: ${exclusion}`,
 
-    // Task 3: Local language searches - Indonesian
-    `Search for ${business} companies in Indonesia using INDONESIAN LANGUAGE:
-${localLanguageTerms['Indonesia'] || ''}
-Find Indonesian companies that only appear in Bahasa Indonesia searches.
+    // Round 3: SME, local language, associations
+    (found) => `Find SMALL and LOCAL ${business} companies in ${expandedCountry} that are harder to find:
+- Search in local languages (Thai, Indonesian, Vietnamese)
+- Look at industry association member lists
+- Find family businesses and SMEs
+- Search government SME directories
+${found.length > 0 ? `\nALREADY FOUND (do NOT repeat): ${found.join(', ')}\n\nI need MORE companies beyond this list.` : ''}
 Return company name, website, location. Exclude: ${exclusion}`,
 
-    // Task 4: Supply chain and OEM
-    `Find ${business} companies through supply chain in ${expandedCountry}.
-Search for: OEM suppliers, contract manufacturers, toll manufacturers, private label producers.
-Also search: "supplier of [major brand]", "authorized manufacturer"
-Return company name, website, HQ location. Exclude: ${exclusion}`,
-
-    // Task 5: Government registries and BOI
-    `Find ${business} companies through government sources in ${expandedCountry}:
-- Thailand: BOI promoted companies, DBD registered
-- Indonesia: BKPM registered, Ministry of Industry
-- Malaysia: MIDA promoted, SSM registered
-- Vietnam: DPI registered companies
-Return company name, website, and location. Exclude: ${exclusion}`,
-
-    // Task 6: Industry association members
-    `Find ${business} companies through INDUSTRY ASSOCIATIONS in ${expandedCountry}:
-- Printing/packaging associations member lists
-- Chemical industry associations
-- Manufacturing federations
-- Chamber of commerce directories
-Return company name, website, and location. Exclude: ${exclusion}`,
-
-    // Task 7: SME directories and awards
-    `Find small ${business} companies in ${expandedCountry} through:
-- SME award winners
-- Government SME directories
-- Local business awards
-- Family business listings
-These are often hidden gems not found in regular searches.
-Return company name, website, location. Exclude: ${exclusion}`,
-
-    // Task 8: Trade show exhibitors
-    `Find ${business} companies that exhibited at trade shows in ${expandedCountry}:
-- Pack Print International
-- ProPak Asia
-- PrintTech
-- Any printing/packaging exhibitions
-Search for exhibitor lists and directories.
-Return company name, website, location. Exclude: ${exclusion}`,
-
-    // Task 9: Country-specific deep dive (first 3 countries)
-    `Find ALL ${business} companies in ${countries.slice(0, 3).join(', ')}.
-Be EXHAUSTIVE - search company registries, business directories, news articles.
-Include: large, medium, small, family-owned, local producers.
-Return company name, website, city/country. Exclude: ${exclusion}`,
-
-    // Task 10: Country-specific deep dive (remaining countries)
-    `Find ALL ${business} companies in ${countries.slice(3, 6).join(', ') || countries.slice(0, 3).join(', ')}.
-Be EXHAUSTIVE - search local directories, business registries.
-Include all sizes of companies.
-Return company name, website, city/country. Exclude: ${exclusion}`
+    // Round 4: Deep dive and supply chain
+    (found) => `FINAL SEARCH: Find any remaining ${business} companies in ${expandedCountry} we might have missed.
+Search: OEM/ODM suppliers, contract manufacturers, trade show exhibitors, news mentions.
+${found.length > 0 ? `\nALREADY FOUND (${found.length} companies): ${found.join(', ')}\n\nFind ANY additional companies not in this list. Dig deep.` : ''}
+Return company name, website, location. Exclude: ${exclusion}`
   ];
 
-  // Add term variation searches to Gemini
-  for (const variation of businessVariations.slice(0, 2)) {
-    geminiTasks.push(
-      `Find ${variation} companies and manufacturers in ${expandedCountry}.
-Search specifically for "${variation}" - this is an alternative term for ${business}.
-Return company names, websites, and headquarters locations.
-Exclude: ${exclusion}`
-    );
-  }
+  const chatgptAngles = [
+    // Round 1: Comprehensive search
+    (found) => ({
+      query: `Complete list of ${business} companies manufacturers in ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE not in this list.` : 'Find all companies.'
+    }),
 
-  // Generate enhanced ChatGPT search tasks (10 tasks)
-  const chatgptTasks = [
-    // Task 1: Comprehensive market players
-    {
-      query: `Complete list of ALL ${business} companies manufacturers producers in ${expandedCountry}`,
-      reasoning: `Find every market participant - large, medium, small. Be exhaustive.`
-    },
-    // Task 2: Hidden gems - smaller players
-    {
-      query: `Small local ${business} companies family businesses SMEs in ${expandedCountry}`,
-      reasoning: `Find smaller companies that don't rank high in searches - often best M&A targets.`
-    },
-    // Task 3: Trade associations members
-    {
-      query: `${business} printing packaging association member list directory ${expandedCountry}`,
-      reasoning: `Find companies through industry association memberships.`
-    },
-    // Task 4: Industrial estates specific
-    {
-      query: `${business} companies in industrial estates zones ${countries.slice(0, 3).join(' ')}`,
-      reasoning: `Find companies by searching specific industrial locations.`
-    },
-    // Task 5: Contract manufacturing
-    {
-      query: `${business} OEM ODM contract manufacturer toll manufacturing ${expandedCountry}`,
-      reasoning: `Find contract manufacturers and OEM/ODM players.`
-    },
-    // Task 6: Local business directories
-    {
-      query: `${business} manufacturer list directory ${countries[0]} ${countries[1] || ''}`,
-      reasoning: `Search local business directories and listings.`
-    },
-    // Task 7: Chemical/printing industry
-    {
-      query: `printing ink chemical manufacturer ${expandedCountry} local companies`,
-      reasoning: `Search using broader industry terms.`
-    },
-    // Task 8: Investment and news
-    {
-      query: `${business} companies ${expandedCountry} investment expansion news 2024 2025`,
-      reasoning: `Find companies mentioned in recent news and investments.`
-    },
-    // Task 9: Export directories
-    {
-      query: `${business} exporter manufacturer ${expandedCountry} export directory`,
-      reasoning: `Find companies through export/trade directories.`
-    },
-    // Task 10: Supplier databases
-    {
-      query: `${business} supplier vendor ${expandedCountry} B2B directory`,
-      reasoning: `Find companies through B2B supplier databases.`
+    // Round 2: Hidden gems and directories
+    (found) => ({
+      query: `${business} SMEs family businesses local manufacturers ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find additional smaller/local companies.` : 'Find smaller companies.'
+    }),
+
+    // Round 3: Associations and registries
+    (found) => ({
+      query: `${business} industry association members trade directory ${expandedCountry}`,
+      context: found.length > 0 ? `Already found: ${found.join(', ')}. Search associations for more.` : 'Search industry associations.'
+    }),
+
+    // Round 4: Final sweep
+    (found) => ({
+      query: `${business} manufacturers ${expandedCountry} complete list all companies`,
+      context: found.length > 0 ? `Found ${found.length} so far: ${found.join(', ')}. Find ANY remaining companies.` : 'Final comprehensive search.'
+    })
+  ];
+
+  // Run 4 rounds of search → validate
+  for (let round = 0; round < NUM_ROUNDS; round++) {
+    console.log(`\n  --- ROUND ${round + 1}/${NUM_ROUNDS} ---`);
+
+    // Get list of already-found company names for the prompt
+    const foundCompanyNames = allValidated.map(c => c.company_name).slice(0, 50); // Limit to avoid prompt overflow
+
+    // Generate prompts for this round
+    const geminiPrompt = geminiAngles[round](foundCompanyNames);
+    const chatgptConfig = chatgptAngles[round](foundCompanyNames);
+
+    // Run Gemini and ChatGPT searches IN PARALLEL
+    console.log(`    Running Gemini + ChatGPT searches in parallel...`);
+    const [geminiCompanies, chatgptCompanies] = await Promise.all([
+      runAgenticSearchTask(geminiPrompt, expandedCountry, searchLog)
+        .catch(e => { console.error(`    Gemini round ${round + 1} failed: ${e.message}`); return []; }),
+      runChatGPTSearchTask(
+        chatgptConfig.query,
+        chatgptConfig.context,
+        expandedCountry,
+        searchLog
+      ).catch(e => { console.error(`    ChatGPT round ${round + 1} failed: ${e.message}`); return []; })
+    ]);
+
+    console.log(`    Gemini found: ${geminiCompanies.length}, ChatGPT found: ${chatgptCompanies.length}`);
+
+    // Combine and dedupe
+    const roundCompanies = [...geminiCompanies, ...chatgptCompanies];
+    const uniqueRound = dedupeCompanies(roundCompanies);
+
+    // Filter out already-validated companies
+    const newCompanies = uniqueRound.filter(c => {
+      const website = c.website?.toLowerCase();
+      if (!website || seenWebsites.has(website)) return false;
+      return true;
+    });
+
+    console.log(`    New companies (not previously found): ${newCompanies.length}`);
+
+    if (newCompanies.length === 0) {
+      console.log(`    No new companies found in round ${round + 1}, continuing...`);
+      continue;
     }
-  ];
 
-  // Add term variation searches to ChatGPT
-  for (const variation of businessVariations.slice(0, 2)) {
-    chatgptTasks.push({
-      query: `${variation} manufacturers companies ${expandedCountry}`,
-      reasoning: `Search using alternative terminology: "${variation}"`
-    });
+    // Pre-filter
+    const preFiltered = preFilterCompanies(newCompanies);
+    console.log(`    After pre-filter: ${preFiltered.length}`);
+
+    if (preFiltered.length === 0) {
+      continue;
+    }
+
+    // Validate this round's companies
+    console.log(`    Validating ${preFiltered.length} companies...`);
+    const roundResults = await validateCompaniesV5(preFiltered, business, expandedCountry, exclusion);
+
+    // Add to cumulative results
+    allValidated.push(...roundResults.validated);
+    allFlagged.push(...roundResults.flagged);
+    allRejected.push(...roundResults.rejected);
+
+    // Track seen websites
+    for (const c of [...roundResults.validated, ...roundResults.flagged, ...roundResults.rejected]) {
+      if (c.website) seenWebsites.add(c.website.toLowerCase());
+    }
+
+    console.log(`    Round ${round + 1} results: ${roundResults.validated.length} valid, ${roundResults.flagged.length} flagged`);
+    console.log(`    Cumulative: ${allValidated.length} valid, ${allFlagged.length} flagged`);
   }
-
-  // Add country-specific searches
-  for (const country of countries.slice(0, 4)) {
-    chatgptTasks.push({
-      query: `all ${business} manufacturers companies list ${country}`,
-      reasoning: `Country-specific exhaustive search for ${country}`
-    });
-  }
-
-  console.log(`  Running ${geminiTasks.length} Gemini + ${chatgptTasks.length} ChatGPT searches in PARALLEL...`);
-
-  // Run ALL searches in parallel (not sequential!)
-  const allSearchPromises = [
-    // Gemini searches (all 5 in parallel)
-    ...geminiTasks.map((task, idx) =>
-      runAgenticSearchTask(task, expandedCountry, searchLog)
-        .catch(e => {
-          console.error(`  Gemini task ${idx + 1} failed: ${e.message}`);
-          return [];
-        })
-    ),
-    // ChatGPT searches (all 5 in parallel)
-    ...chatgptTasks.map((task, idx) =>
-      runChatGPTSearchTask(task.query, task.reasoning, expandedCountry, searchLog)
-        .catch(e => {
-          console.error(`  ChatGPT task ${idx + 1} failed: ${e.message}`);
-          return [];
-        })
-    )
-  ];
-
-  const searchResults = await Promise.all(allSearchPromises);
-  const allCompanies = searchResults.flat();
-
-  console.log(`  Total companies from Phase 2: ${allCompanies.length} (before dedup)`);
 
   const duration = ((Date.now() - startTime) / 1000 / 60).toFixed(1);
-  console.log(`  Phase 2 completed in ${duration} minutes`);
+  console.log(`\n  Phase 2 completed in ${duration} minutes`);
+  console.log(`    Total validated: ${allValidated.length}`);
+  console.log(`    Total flagged: ${allFlagged.length}`);
 
-  return allCompanies;
+  return { validated: allValidated, flagged: allFlagged, rejected: allRejected };
 }
 
 // Generate diverse search tasks for a business/country
@@ -4303,101 +4242,40 @@ app.post('/api/find-target-v5', async (req, res) => {
     const plan = await planSearchStrategyV5(Business, Country, Exclusion);
 
     // ========== PHASE 1: Perplexity Main Search + Parallel Validation ==========
-    // This is the PRIMARY search - runs Perplexity searches in parallel, then validates immediately
+    // This is the PRIMARY search - runs Perplexity searches in batches, then validates
     const phase1Results = await runPerplexityMainSearchWithValidation(plan, Business, Exclusion, searchLog);
 
-    // ========== PHASE 2: Parallel Gemini + ChatGPT Secondary Searches ==========
-    // These run 5 Gemini + 5 ChatGPT searches SIMULTANEOUSLY (not sequentially)
-    const phase2Companies = await runParallelSecondarySearches(plan, Business, Exclusion, searchLog);
+    // ========== PHASE 2: Iterative Gemini + ChatGPT with "Find More" Pressure ==========
+    // Runs 4 rounds of search → validate, each round building on validated companies
+    // This forces models to find NEW companies instead of repeating the same ones
+    const phase2Results = await runIterativeSecondarySearches(
+      plan,
+      Business,
+      Exclusion,
+      searchLog,
+      phase1Results.validated // Pass Phase 1 validated companies so Phase 2 knows what's already found
+    );
 
-    // ========== PHASE 3: Process Phase 2 Companies ==========
+    // ========== PHASE 3: Final Results ==========
     console.log('\n' + '='.repeat(50));
-    console.log('PHASE 3: PROCESS SECONDARY SEARCH RESULTS');
+    console.log('PHASE 3: FINAL RESULTS');
     console.log('='.repeat(50));
 
-    // Dedupe Phase 2 companies
-    const uniquePhase2 = dedupeCompanies(phase2Companies);
-    console.log(`  Phase 2 companies after dedup: ${uniquePhase2.length}`);
-
-    // Remove companies already validated/flagged in Phase 1
-    const phase1Websites = new Set([
-      ...phase1Results.validated.map(c => c.website?.toLowerCase()),
-      ...phase1Results.flagged.map(c => c.website?.toLowerCase())
-    ].filter(Boolean));
-
-    const newCompanies = uniquePhase2.filter(c => {
-      const website = c.website?.toLowerCase();
-      return website && !phase1Websites.has(website);
-    });
-    console.log(`  New companies (not in Phase 1): ${newCompanies.length}`);
-
-    // Find missing websites for new companies
-    const needWebsite = newCompanies.filter(c => !c.website || c.website === 'unknown' || !c.website.startsWith('http'));
-    const hasWebsite = newCompanies.filter(c => c.website && c.website.startsWith('http'));
-    const companiesWithWebsites = [...hasWebsite];
-
-    if (needWebsite.length > 0) {
-      console.log(`  Looking up websites for ${needWebsite.length} companies...`);
-      const websitePrompt = `Find the official websites for these companies:
-
-${needWebsite.slice(0, 30).map(c => `- ${c.company_name} (${c.hq})`).join('\n')}
-
-Return JSON: {"websites": [{"company_name": "...", "website": "https://..."}]}
-
-Only include real company websites (not LinkedIn, Facebook, directories). If you can't find a website, omit that company.`;
-
-      const websiteResult = await callGemini2FlashWithSearch(websitePrompt);
-      try {
-        const jsonMatch = websiteResult.text.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const parsed = JSON.parse(jsonMatch[0]);
-          if (Array.isArray(parsed.websites)) {
-            for (const w of parsed.websites) {
-              const original = needWebsite.find(c =>
-                c.company_name.toLowerCase().includes(w.company_name.toLowerCase()) ||
-                w.company_name.toLowerCase().includes(c.company_name.toLowerCase())
-              );
-              if (original && w.website && w.website.startsWith('http')) {
-                companiesWithWebsites.push({ ...original, website: w.website });
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.error('  Website lookup parse error:', e.message);
-      }
-      console.log(`  Companies with websites: ${companiesWithWebsites.length}`);
-    }
-
-    // Pre-filter and validate Phase 2 companies
-    const preFiltered = preFilterCompanies(companiesWithWebsites);
-    console.log(`  After pre-filter: ${preFiltered.length}`);
-
-    let phase2Validated = { validated: [], flagged: [], rejected: [] };
-    if (preFiltered.length > 0) {
-      console.log(`  Validating ${preFiltered.length} Phase 2 companies...`);
-      phase2Validated = await validateCompaniesV5(preFiltered, Business, plan.expandedCountry, Exclusion);
-    }
-
-    // ========== PHASE 4: Merge and Final Results ==========
-    console.log('\n' + '='.repeat(50));
-    console.log('PHASE 4: FINAL RESULTS');
-    console.log('='.repeat(50));
-
-    // Merge Phase 1 and Phase 2 results
-    const allValidated = [...phase1Results.validated, ...phase2Validated.validated];
-    const allFlagged = [...phase1Results.flagged, ...phase2Validated.flagged];
-    const allRejected = [...phase1Results.rejected, ...phase2Validated.rejected];
+    // Phase 2 already includes Phase 1 validated companies in its results
+    // Just need to merge flagged and rejected
+    const allValidated = phase2Results.validated;
+    const allFlagged = [...phase1Results.flagged, ...phase2Results.flagged];
+    const allRejected = [...phase1Results.rejected, ...phase2Results.rejected];
 
     // Final dedup
     const finalValidated = dedupeCompanies(allValidated);
     const finalFlagged = dedupeCompanies(allFlagged);
     const finalRejected = dedupeCompanies(allRejected);
 
-    console.log(`FINAL MERGED RESULTS:`);
+    console.log(`FINAL RESULTS:`);
     console.log(`  ✓ VALIDATED (both models agree): ${finalValidated.length}`);
     console.log(`    - From Perplexity (Phase 1): ${phase1Results.validated.length}`);
-    console.log(`    - From Gemini/ChatGPT (Phase 2): ${phase2Validated.validated.length}`);
+    console.log(`    - Added by Gemini/ChatGPT (Phase 2): ${phase2Results.validated.length - phase1Results.validated.length}`);
     console.log(`  ? FLAGGED (needs review): ${finalFlagged.length}`);
     console.log(`  ✗ REJECTED (neither agrees): ${finalRejected.length}`);
 
@@ -4409,9 +4287,9 @@ Only include real company websites (not LinkedIn, Facebook, directories). If you
     const totalSources = searchLog.reduce((sum, s) => sum + s.sourceCount, 0);
 
     console.log(`\nSearch Statistics:`);
-    console.log(`  Perplexity searches: ${perplexityTasks}`);
-    console.log(`  Gemini searches: ${geminiTasks}`);
-    console.log(`  ChatGPT searches: ${chatgptTasks}`);
+    console.log(`  Perplexity searches: ${perplexityTasks} (Phase 1 - batched)`);
+    console.log(`  Gemini searches: ${geminiTasks} (Phase 2 - 4 rounds)`);
+    console.log(`  ChatGPT searches: ${chatgptTasks} (Phase 2 - 4 rounds)`);
     console.log(`  Total internal searches: ${totalSearches}`);
     console.log(`  Total sources consulted: ${totalSources}`);
 
@@ -4421,13 +4299,13 @@ Only include real company websites (not LinkedIn, Facebook, directories). If you
 
     await sendEmail(
       Email,
-      `[V5 PARALLEL] ${Business} in ${Country} (${finalValidated.length} validated + ${finalFlagged.length} flagged)`,
+      `[V5 ITERATIVE] ${Business} in ${Country} (${finalValidated.length} validated + ${finalFlagged.length} flagged)`,
       htmlContent
     );
 
     const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
     console.log('\n' + '='.repeat(70));
-    console.log(`V5 PARALLEL SEARCH COMPLETE!`);
+    console.log(`V5 ITERATIVE SEARCH COMPLETE!`);
     console.log(`Email sent to: ${Email}`);
     console.log(`Validated: ${finalValidated.length} | Flagged: ${finalFlagged.length} | Rejected: ${finalRejected.length}`);
     console.log(`Total time: ${totalTime} minutes`);
