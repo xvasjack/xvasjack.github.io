@@ -3503,79 +3503,186 @@ async function runPerplexityMainSearchWithValidation(plan, business, exclusion, 
 }
 
 // Phase 2: Parallel Gemini + ChatGPT secondary searches
-// Key: Run 5 Gemini and 5 ChatGPT searches SIMULTANEOUSLY (not sequentially)
+// Enhanced with more targeted searches for harder-to-find companies
 async function runParallelSecondarySearches(plan, business, exclusion, searchLog) {
   console.log('\n' + '='.repeat(50));
-  console.log('PHASE 2: PARALLEL GEMINI + CHATGPT SEARCHES');
+  console.log('PHASE 2: PARALLEL GEMINI + CHATGPT SEARCHES (ENHANCED)');
   console.log('='.repeat(50));
 
   const { expandedCountry, countries, businessVariations } = plan;
   const startTime = Date.now();
 
-  // Generate 5 Gemini search tasks (diverse angles)
+  // Local language search terms for each country
+  const localLanguageTerms = {
+    'Thailand': `ผู้ผลิต${business} บริษัท${business} โรงงาน${business}`,
+    'Indonesia': `produsen ${business} pabrik ${business} perusahaan ${business}`,
+    'Vietnam': `công ty ${business} nhà sản xuất ${business}`,
+    'Malaysia': `pengeluar ${business} syarikat ${business}`,
+    'Philippines': `${business} manufacturer Philippines company`
+  };
+
+  // Industrial zones by country
+  const industrialZones = {
+    'Thailand': 'Amata, Eastern Seaboard, Rayong, Samut Prakan, Chonburi, Bang Pu',
+    'Indonesia': 'Bekasi, Cikarang, Karawang, Tangerang, Surabaya, KIIC, MM2100, Jababeka',
+    'Vietnam': 'VSIP, Binh Duong, Long An, Dong Nai, Hai Phong',
+    'Malaysia': 'Penang, Johor, Shah Alam, Klang, Selangor',
+    'Philippines': 'PEZA, Cavite, Laguna, Batangas, Clark, Subic',
+    'Singapore': 'Jurong, Tuas, Woodlands'
+  };
+
+  // Generate enhanced Gemini search tasks (10 tasks)
   const geminiTasks = [
-    // Task 1: Industrial zones and estates
-    `Find ${business} companies in industrial zones and estates across ${expandedCountry}.
-Search for companies in: industrial parks, free trade zones, special economic zones, manufacturing clusters.
-Return company name, website, and specific location for each.
+    // Task 1: Industrial zones comprehensive
+    `Find ${business} companies in these SPECIFIC industrial zones across ${expandedCountry}:
+${Object.entries(industrialZones).map(([c, zones]) => `- ${c}: ${zones}`).join('\n')}
+Search for companies located in each zone. Return company name, website, and specific location.
 Exclude: ${exclusion}`,
 
-    // Task 2: Local language searches
-    `Find ${business} companies in ${expandedCountry} using LOCAL LANGUAGE search terms.
-Many smaller companies ONLY appear in local language searches.
-Search in: Thai, Vietnamese, Indonesian, Malay, Chinese as appropriate.
-Return company names (original language OK), websites, and HQ locations.
-Exclude: ${exclusion}`,
+    // Task 2: Local language searches - Thai
+    `Search for ${business} companies in Thailand using THAI LANGUAGE:
+${localLanguageTerms['Thailand'] || ''}
+Find Thai ink/printing companies that only appear in Thai language searches.
+Return company name, website, location. Exclude: ${exclusion}`,
 
-    // Task 3: Supply chain discovery
-    `Find ${business} companies through supply chain exploration in ${expandedCountry}.
-Search for: OEM suppliers, contract manufacturers, tier-2 suppliers, raw material suppliers.
-Look at supplier directories and procurement databases.
-Return company name, website, HQ location.
-Exclude: ${exclusion}`,
+    // Task 3: Local language searches - Indonesian
+    `Search for ${business} companies in Indonesia using INDONESIAN LANGUAGE:
+${localLanguageTerms['Indonesia'] || ''}
+Find Indonesian companies that only appear in Bahasa Indonesia searches.
+Return company name, website, location. Exclude: ${exclusion}`,
 
-    // Task 4: Government and certification directories
-    `Find ${business} companies through government directories and certifications in ${expandedCountry}.
-Search: BOI promoted companies, ISO certified manufacturers, export directories, SME registries.
-Return company name, website, and location.
-Exclude: ${exclusion}`,
+    // Task 4: Supply chain and OEM
+    `Find ${business} companies through supply chain in ${expandedCountry}.
+Search for: OEM suppliers, contract manufacturers, toll manufacturers, private label producers.
+Also search: "supplier of [major brand]", "authorized manufacturer"
+Return company name, website, HQ location. Exclude: ${exclusion}`,
 
-    // Task 5: Regional focus on top countries
-    `Find ALL ${business} companies specifically in ${countries.slice(0, 3).join(', ')}.
-Be EXHAUSTIVE - search each country individually and thoroughly.
-Include: large manufacturers, SMEs, family businesses, local producers.
-Return company name, website, and city/country for each.
-Exclude: ${exclusion}`
+    // Task 5: Government registries and BOI
+    `Find ${business} companies through government sources in ${expandedCountry}:
+- Thailand: BOI promoted companies, DBD registered
+- Indonesia: BKPM registered, Ministry of Industry
+- Malaysia: MIDA promoted, SSM registered
+- Vietnam: DPI registered companies
+Return company name, website, and location. Exclude: ${exclusion}`,
+
+    // Task 6: Industry association members
+    `Find ${business} companies through INDUSTRY ASSOCIATIONS in ${expandedCountry}:
+- Printing/packaging associations member lists
+- Chemical industry associations
+- Manufacturing federations
+- Chamber of commerce directories
+Return company name, website, and location. Exclude: ${exclusion}`,
+
+    // Task 7: SME directories and awards
+    `Find small ${business} companies in ${expandedCountry} through:
+- SME award winners
+- Government SME directories
+- Local business awards
+- Family business listings
+These are often hidden gems not found in regular searches.
+Return company name, website, location. Exclude: ${exclusion}`,
+
+    // Task 8: Trade show exhibitors
+    `Find ${business} companies that exhibited at trade shows in ${expandedCountry}:
+- Pack Print International
+- ProPak Asia
+- PrintTech
+- Any printing/packaging exhibitions
+Search for exhibitor lists and directories.
+Return company name, website, location. Exclude: ${exclusion}`,
+
+    // Task 9: Country-specific deep dive (first 3 countries)
+    `Find ALL ${business} companies in ${countries.slice(0, 3).join(', ')}.
+Be EXHAUSTIVE - search company registries, business directories, news articles.
+Include: large, medium, small, family-owned, local producers.
+Return company name, website, city/country. Exclude: ${exclusion}`,
+
+    // Task 10: Country-specific deep dive (remaining countries)
+    `Find ALL ${business} companies in ${countries.slice(3, 6).join(', ') || countries.slice(0, 3).join(', ')}.
+Be EXHAUSTIVE - search local directories, business registries.
+Include all sizes of companies.
+Return company name, website, city/country. Exclude: ${exclusion}`
   ];
 
-  // Generate 5 ChatGPT search tasks (complementary angles)
+  // Add term variation searches to Gemini
+  for (const variation of businessVariations.slice(0, 2)) {
+    geminiTasks.push(
+      `Find ${variation} companies and manufacturers in ${expandedCountry}.
+Search specifically for "${variation}" - this is an alternative term for ${business}.
+Return company names, websites, and headquarters locations.
+Exclude: ${exclusion}`
+    );
+  }
+
+  // Generate enhanced ChatGPT search tasks (10 tasks)
   const chatgptTasks = [
     // Task 1: Comprehensive market players
     {
-      query: `Complete list of ${business} companies in ${expandedCountry}`,
-      reasoning: `Find ALL market participants - manufacturers, suppliers, producers. Focus on M&A targets.`
+      query: `Complete list of ALL ${business} companies manufacturers producers in ${expandedCountry}`,
+      reasoning: `Find every market participant - large, medium, small. Be exhaustive.`
     },
     // Task 2: Hidden gems - smaller players
     {
-      query: `Lesser known ${business} SMEs and family businesses in ${expandedCountry}`,
+      query: `Small local ${business} companies family businesses SMEs in ${expandedCountry}`,
       reasoning: `Find smaller companies that don't rank high in searches - often best M&A targets.`
     },
-    // Task 3: Trade associations
+    // Task 3: Trade associations members
     {
-      query: `${business} trade associations member companies ${expandedCountry}`,
-      reasoning: `Find companies through industry association memberships and directories.`
+      query: `${business} printing packaging association member list directory ${expandedCountry}`,
+      reasoning: `Find companies through industry association memberships.`
     },
-    // Task 4: Recent news and developments
+    // Task 4: Industrial estates specific
     {
-      query: `${business} companies ${expandedCountry} recent news acquisitions investments`,
-      reasoning: `Find companies mentioned in recent industry news, M&A activity, investments.`
+      query: `${business} companies in industrial estates zones ${countries.slice(0, 3).join(' ')}`,
+      reasoning: `Find companies by searching specific industrial locations.`
     },
-    // Task 5: Alternative terminology
+    // Task 5: Contract manufacturing
     {
-      query: `${businessVariations.length > 0 ? businessVariations[0] : business} manufacturers ${expandedCountry}`,
-      reasoning: `Search using alternative industry terminology to find missed companies.`
+      query: `${business} OEM ODM contract manufacturer toll manufacturing ${expandedCountry}`,
+      reasoning: `Find contract manufacturers and OEM/ODM players.`
+    },
+    // Task 6: Local business directories
+    {
+      query: `${business} manufacturer list directory ${countries[0]} ${countries[1] || ''}`,
+      reasoning: `Search local business directories and listings.`
+    },
+    // Task 7: Chemical/printing industry
+    {
+      query: `printing ink chemical manufacturer ${expandedCountry} local companies`,
+      reasoning: `Search using broader industry terms.`
+    },
+    // Task 8: Investment and news
+    {
+      query: `${business} companies ${expandedCountry} investment expansion news 2024 2025`,
+      reasoning: `Find companies mentioned in recent news and investments.`
+    },
+    // Task 9: Export directories
+    {
+      query: `${business} exporter manufacturer ${expandedCountry} export directory`,
+      reasoning: `Find companies through export/trade directories.`
+    },
+    // Task 10: Supplier databases
+    {
+      query: `${business} supplier vendor ${expandedCountry} B2B directory`,
+      reasoning: `Find companies through B2B supplier databases.`
     }
   ];
+
+  // Add term variation searches to ChatGPT
+  for (const variation of businessVariations.slice(0, 2)) {
+    chatgptTasks.push({
+      query: `${variation} manufacturers companies ${expandedCountry}`,
+      reasoning: `Search using alternative terminology: "${variation}"`
+    });
+  }
+
+  // Add country-specific searches
+  for (const country of countries.slice(0, 4)) {
+    chatgptTasks.push({
+      query: `all ${business} manufacturers companies list ${country}`,
+      reasoning: `Country-specific exhaustive search for ${country}`
+    });
+  }
 
   console.log(`  Running ${geminiTasks.length} Gemini + ${chatgptTasks.length} ChatGPT searches in PARALLEL...`);
 
