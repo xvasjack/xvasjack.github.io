@@ -3413,7 +3413,7 @@ async function runIterativeSecondarySearches(plan, business, exclusion, searchLo
 
   const { expandedCountry, countries, businessVariations } = plan;
   const startTime = Date.now();
-  const NUM_ROUNDS = 8;
+  const NUM_ROUNDS = 12;
 
   // Track all validated and flagged companies across rounds
   const allValidated = [...existingValidated];
