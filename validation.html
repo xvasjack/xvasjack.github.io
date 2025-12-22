@@ -21,13 +21,14 @@
     .file-status-name { font-weight: 600; color: var(--text-main); }
     .file-status-size { color: var(--text-muted); margin-left: 4px; }
     .file-remove-btn { margin-left: auto; padding: 2px 8px; font-size: 11px; color: var(--error); background: transparent; border: 1px solid var(--error-soft); border-radius: 4px; cursor: pointer; }
-    .compact-upload { padding: 12px; border: 2px dashed var(--border-medium); border-radius: var(--radius-md); text-align: center; cursor: pointer; transition: all 0.15s ease; position: relative; }
+    .compact-upload { padding: 12px; border: 2px dashed var(--border-medium); border-radius: var(--radius-md); text-align: center; cursor: pointer; transition: all 0.15s ease; position: relative; min-height: 110px; display: flex; align-items: center; justify-content: center; }
     .compact-upload:hover { border-color: var(--accent); background: var(--accent-soft); }
     .compact-upload input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
     .compact-upload p { font-size: 14px; color: var(--text-muted); margin: 0; }
     .compact-upload .highlight { color: var(--accent); font-weight: 500; }
     /* Consistent tab content height */
-    .tab-content { min-height: 130px; }
+    .tab-content { min-height: 130px; display: flex; flex-direction: column; }
+    #fileTab .compact-upload { flex: 1; }
     #manualTab .form-grid { gap: 12px; }
     #manualTab textarea { resize: vertical; }
   </style>
