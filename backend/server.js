@@ -1664,21 +1664,61 @@ async function filterVerifiedWebsites(companies) {
 // ============ FETCH WEBSITE FOR VALIDATION ============
 
 async function fetchWebsite(url) {
-  // Try multiple URL paths before giving up
-  const urlPaths = ['', '/en', '/en/', '/home', '/index.html', '/about', '/about-us', '/company'];
+  // Security block patterns - these indicate WAF/Cloudflare/bot protection
+  const securityBlockPatterns = [
+    'checking your browser',
+    'please wait',
+    'just a moment',
+    'ddos protection',
+    'cloudflare',
+    'security check',
+    'access denied',
+    'not acceptable',
+    'mod_security',
+    'forbidden',
+    'blocked',
+    'captcha',
+    'verify you are human',
+    'bot detection',
+    'please enable javascript',
+    'enable cookies'
+  ];
 
   const tryFetch = async (targetUrl) => {
     try {
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
+      const timeout = setTimeout(() => controller.abort(), 20000); // Increased to 20 seconds
       const response = await fetch(targetUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.5',
+          'Accept-Encoding': 'gzip, deflate',
+          'Connection': 'keep-alive',
+          'Upgrade-Insecure-Requests': '1'
+        },
         signal: controller.signal,
         redirect: 'follow'
       });
       clearTimeout(timeout);
-      if (!response.ok) return null;
+
+      // Check for HTTP-level blocks
+      if (response.status === 403 || response.status === 406) {
+        return { status: 'security_blocked', reason: `HTTP ${response.status} - WAF/Security block` };
+      }
+      if (!response.ok) return { status: 'error', reason: `HTTP ${response.status}` };
+
       const html = await response.text();
+      const lowerHtml = html.toLowerCase();
+
+      // Check for security block patterns in content
+      for (const pattern of securityBlockPatterns) {
+        if (lowerHtml.includes(pattern) && html.length < 5000) {
+          // Only flag as security block if page is small (likely a challenge page)
+          return { status: 'security_blocked', reason: `Security protection detected: "${pattern}"` };
+        }
+      }
+
       const cleanText = html
         .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
         .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
@@ -1686,9 +1726,13 @@ async function fetchWebsite(url) {
         .replace(/\s+/g, ' ')
         .trim()
         .substring(0, 15000);
-      return cleanText.length > 100 ? cleanText : null;
+
+      if (cleanText.length > 100) {
+        return { status: 'ok', content: cleanText };
+      }
+      return { status: 'insufficient', reason: 'Content too short' };
     } catch (e) {
-      return null;
+      return { status: 'error', reason: e.message || 'Connection failed' };
     }
   };
 
@@ -1702,31 +1746,31 @@ async function fetchWebsite(url) {
   }
 
   // Try original URL first
-  let content = await tryFetch(url);
-  if (content) return content;
+  let result = await tryFetch(url);
+  if (result.status === 'ok') return result;
+  if (result.status === 'security_blocked') return result; // Return security block immediately
 
   // Try with/without www
   const hasWww = baseUrl.includes('://www.');
   const altBaseUrl = hasWww ? baseUrl.replace('://www.', '://') : baseUrl.replace('://', '://www.');
 
-  // Try alternative paths
+  // Try alternative paths (limited to reduce time)
+  const urlPaths = ['/en', '/home', '/about'];
   for (const path of urlPaths) {
-    if (path === '') continue; // Already tried root
-    content = await tryFetch(baseUrl + path);
-    if (content) return content;
-    // Also try without www (or with www if original didn't have it)
-    content = await tryFetch(altBaseUrl + path);
-    if (content) return content;
+    result = await tryFetch(baseUrl + path);
+    if (result.status === 'ok') return result;
+    if (result.status === 'security_blocked') return result;
   }
 
   // Try HTTPS if original was HTTP
   if (url.startsWith('http://')) {
     const httpsUrl = url.replace('http://', 'https://');
-    content = await tryFetch(httpsUrl);
-    if (content) return content;
+    result = await tryFetch(httpsUrl);
+    if (result.status === 'ok') return result;
+    if (result.status === 'security_blocked') return result;
   }
 
-  return null;
+  return { status: 'inaccessible', reason: 'Could not fetch content from any URL variation' };
 }
 
 // ============ DYNAMIC EXCLUSION RULES BUILDER (n8n-style PAGE SIGNAL detection) ============
@@ -3429,19 +3473,38 @@ async function validateCompaniesV5(companies, business, country, exclusion) {
       try {
         // Fetch website content for validation (shared between both models)
         let pageContent = '';
+        let fetchResult = { status: 'error', reason: 'No website' };
+
         if (company.website && company.website.startsWith('http')) {
           try {
-            pageContent = await fetchWebsite(company.website);
+            fetchResult = await fetchWebsite(company.website);
           } catch (e) {
-            pageContent = '';
+            fetchResult = { status: 'error', reason: e.message };
           }
         }
 
-        // Skip companies with inaccessible websites (remove them entirely)
-        if (!pageContent || pageContent.length < 100) {
-          console.log(`    ✗ REMOVED: ${company.company_name} (website inaccessible or insufficient content)`);
+        // Handle different fetch results
+        if (fetchResult.status === 'security_blocked') {
+          // Website has security/Cloudflare protection - FLAG for human review, don't remove
+          console.log(`    ? SECURITY: ${company.company_name} (${fetchResult.reason}) - flagging for human review`);
+          return {
+            company,
+            status: 'flagged',
+            geminiValid: false,
+            chatgptValid: false,
+            geminiReason: `Security blocked: ${fetchResult.reason}`,
+            chatgptReason: `Security blocked: ${fetchResult.reason}`,
+            securityBlocked: true
+          };
+        }
+
+        if (fetchResult.status !== 'ok') {
+          // Website truly inaccessible - remove
+          console.log(`    ✗ REMOVED: ${company.company_name} (${fetchResult.reason})`);
           return { company, status: 'skipped' };
         }
+
+        pageContent = fetchResult.content;
 
         // Run both validations in parallel
         const [geminiResult, chatgptResult] = await Promise.all([
@@ -3487,7 +3550,8 @@ async function validateCompaniesV5(companies, business, country, exclusion) {
         hq: v.corrected_hq || v.company.hq,
         geminiVote: v.geminiValid ? 'YES' : 'NO',
         chatgptVote: v.chatgptValid ? 'YES' : 'NO',
-        reason: v.geminiValid ? v.geminiReason : v.chatgptReason
+        reason: v.geminiValid ? v.geminiReason : v.chatgptReason,
+        securityBlocked: v.securityBlocked || false
       };
 
       if (v.status === 'valid') {
@@ -3495,7 +3559,11 @@ async function validateCompaniesV5(companies, business, country, exclusion) {
         console.log(`    ✓ VALID: ${v.company.company_name} (Gemini: YES, ChatGPT: YES)`);
       } else if (v.status === 'flagged') {
         flagged.push(companyData);
-        console.log(`    ? FLAGGED: ${v.company.company_name} (Gemini: ${v.geminiValid ? 'YES' : 'NO'}, ChatGPT: ${v.chatgptValid ? 'YES' : 'NO'})`);
+        if (v.securityBlocked) {
+          console.log(`    ? FLAGGED: ${v.company.company_name} (Security/WAF blocked - needs human review)`);
+        } else {
+          console.log(`    ? FLAGGED: ${v.company.company_name} (Gemini: ${v.geminiValid ? 'YES' : 'NO'}, ChatGPT: ${v.chatgptValid ? 'YES' : 'NO'})`);
+        }
       } else {
         rejected.push(companyData);
         console.log(`    ✗ REJECTED: ${v.company.company_name} (Gemini: NO, ChatGPT: NO)`);
@@ -3620,9 +3688,14 @@ function buildV5EmailHTML(validationResults, business, country, exclusion, searc
       </tr>
     `;
     allFlagged.forEach((c, i) => {
-      // Determine reason to display (inaccessible websites are removed, so only model disagreements here)
+      // Determine reason to display
       let displayReason = '';
-      if (c.geminiVote === 'YES' && c.chatgptVote === 'NO') {
+      let reasonStyle = 'font-size: 11px; color: #666;';
+
+      if (c.securityBlocked) {
+        displayReason = '🔒 Security/WAF blocked - verify manually';
+        reasonStyle = 'font-size: 11px; color: #dc2626; font-weight: bold;';
+      } else if (c.geminiVote === 'YES' && c.chatgptVote === 'NO') {
         displayReason = 'Gemini: Yes, ChatGPT: No';
       } else if (c.geminiVote === 'NO' && c.chatgptVote === 'YES') {
         displayReason = 'Gemini: No, ChatGPT: Yes';
@@ -3636,7 +3709,7 @@ function buildV5EmailHTML(validationResults, business, country, exclusion, searc
         <td>${c.company_name}</td>
         <td><a href="${c.website}">${c.website}</a></td>
         <td>${c.hq}</td>
-        <td style="font-size: 11px; color: #666;">${displayReason}</td>
+        <td style="${reasonStyle}">${displayReason}</td>
       </tr>
       `;
     });
