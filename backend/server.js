@@ -3239,11 +3239,11 @@ async function runPerplexitySearchTask(searchPrompt, country, searchLog) {
   return companies;
 }
 
-// Phase 1: Perplexity main search with parallel validation
-// Key: Validate companies AS they are found (streaming-like), don't wait for all searches
+// Phase 1: Perplexity main search with batched validation
+// Key: Run searches in 4 batches to avoid rate limits, validate each batch before next
 async function runPerplexityMainSearchWithValidation(plan, business, exclusion, searchLog) {
   console.log('\n' + '='.repeat(50));
-  console.log('PHASE 1: PERPLEXITY MAIN SEARCH + PARALLEL VALIDATION');
+  console.log('PHASE 1: PERPLEXITY MAIN SEARCH (BATCHED) + VALIDATION');
   console.log('='.repeat(50));
 
   const { expandedCountry, countries, businessVariations } = plan;
@@ -3298,42 +3298,90 @@ async function runPerplexityMainSearchWithValidation(plan, business, exclusion, 
 
   console.log(`  Generated ${perplexityQueries.length} Perplexity search queries`);
 
-  // Run ALL Perplexity searches in PARALLEL
-  console.log(`  Running all Perplexity searches in parallel...`);
-  const searchPromises = perplexityQueries.map((query, idx) =>
-    runPerplexitySearchTask(query, expandedCountry, searchLog)
-      .catch(e => {
-        console.error(`    Perplexity query ${idx + 1} failed: ${e.message}`);
-        return [];
-      })
-  );
+  // Split queries into 4 batches to avoid rate limits
+  const batchSize = Math.ceil(perplexityQueries.length / 4);
+  const batches = [];
+  for (let i = 0; i < perplexityQueries.length; i += batchSize) {
+    batches.push(perplexityQueries.slice(i, i + batchSize));
+  }
 
-  const searchResults = await Promise.all(searchPromises);
-  let allCompanies = searchResults.flat();
+  console.log(`  Split into ${batches.length} batches (${batches.map(b => b.length).join(', ')} queries each)`);
 
-  console.log(`  Total companies from Perplexity: ${allCompanies.length} (before dedup)`);
+  // Accumulate results across batches
+  const allValidated = [];
+  const allFlagged = [];
+  const allRejected = [];
+  const seenWebsites = new Set(); // Track already validated websites
 
-  // Dedupe before validation
-  const uniqueCompanies = dedupeCompanies(allCompanies);
-  console.log(`  After dedup: ${uniqueCompanies.length} unique companies`);
+  // Process each batch: search → dedupe → validate → next batch
+  for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
+    const batch = batches[batchIdx];
+    console.log(`\n  --- BATCH ${batchIdx + 1}/${batches.length} (${batch.length} queries) ---`);
 
-  // Pre-filter
-  const preFiltered = preFilterCompanies(uniqueCompanies);
-  console.log(`  After pre-filter: ${preFiltered.length} companies`);
+    // Run this batch of Perplexity searches in parallel
+    const searchPromises = batch.map((query, idx) =>
+      runPerplexitySearchTask(query, expandedCountry, searchLog)
+        .catch(e => {
+          console.error(`    Perplexity batch ${batchIdx + 1} query ${idx + 1} failed: ${e.message}`);
+          return [];
+        })
+    );
 
-  // NOW validate companies in parallel (streaming validation)
-  console.log(`\n  Starting parallel validation of ${preFiltered.length} companies...`);
+    const searchResults = await Promise.all(searchPromises);
+    let batchCompanies = searchResults.flat();
+    console.log(`    Found ${batchCompanies.length} companies (before dedup)`);
 
-  // Validate in larger batches for speed (validation already runs Gemini+ChatGPT in parallel internally)
-  const validatedResults = await validateCompaniesV5(preFiltered, business, expandedCountry, exclusion);
+    // Dedupe within batch
+    const uniqueBatch = dedupeCompanies(batchCompanies);
+    console.log(`    After dedup: ${uniqueBatch.length} unique companies`);
+
+    // Remove companies already validated in previous batches
+    const newCompanies = uniqueBatch.filter(c => {
+      const website = c.website?.toLowerCase();
+      if (!website || seenWebsites.has(website)) return false;
+      return true;
+    });
+    console.log(`    New companies (not in previous batches): ${newCompanies.length}`);
+
+    if (newCompanies.length === 0) {
+      console.log(`    Skipping validation - no new companies`);
+      continue;
+    }
+
+    // Pre-filter
+    const preFiltered = preFilterCompanies(newCompanies);
+    console.log(`    After pre-filter: ${preFiltered.length} companies`);
+
+    if (preFiltered.length === 0) {
+      console.log(`    Skipping validation - no companies after pre-filter`);
+      continue;
+    }
+
+    // Validate this batch
+    console.log(`    Validating ${preFiltered.length} companies...`);
+    const batchResults = await validateCompaniesV5(preFiltered, business, expandedCountry, exclusion);
+
+    // Add to accumulated results
+    allValidated.push(...batchResults.validated);
+    allFlagged.push(...batchResults.flagged);
+    allRejected.push(...batchResults.rejected);
+
+    // Track validated websites to avoid re-validating
+    for (const c of [...batchResults.validated, ...batchResults.flagged, ...batchResults.rejected]) {
+      if (c.website) seenWebsites.add(c.website.toLowerCase());
+    }
+
+    console.log(`    Batch ${batchIdx + 1} results: ${batchResults.validated.length} valid, ${batchResults.flagged.length} flagged, ${batchResults.rejected.length} rejected`);
+    console.log(`    Running totals: ${allValidated.length} valid, ${allFlagged.length} flagged, ${allRejected.length} rejected`);
+  }
 
   const duration = ((Date.now() - startTime) / 1000 / 60).toFixed(1);
   console.log(`\n  Phase 1 completed in ${duration} minutes`);
-  console.log(`    Validated: ${validatedResults.validated.length}`);
-  console.log(`    Flagged: ${validatedResults.flagged.length}`);
-  console.log(`    Rejected: ${validatedResults.rejected.length}`);
+  console.log(`    Validated: ${allValidated.length}`);
+  console.log(`    Flagged: ${allFlagged.length}`);
+  console.log(`    Rejected: ${allRejected.length}`);
 
-  return validatedResults;
+  return { validated: allValidated, flagged: allFlagged, rejected: allRejected };
 }
 
 // Phase 2: Parallel Gemini + ChatGPT secondary searches
