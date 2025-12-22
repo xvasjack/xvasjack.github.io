@@ -10426,52 +10426,67 @@ app.post('/api/utb', async (req, res) => {
 async function generateDueDiligenceReport(files, instructions, reportLength, instructionMode = 'auto') {
   console.log(`[DD] Processing ${files.length} source files...`);
 
-  // Combine all file contents
+  // Combine all file contents with clear numbering
   let combinedContent = '';
   const filesSummary = [];
+  const totalFiles = files.length;
 
-  for (const file of files) {
-    console.log(`[DD] - File: ${file.name} (${file.type}) - ${file.content?.length || 0} chars`);
-    filesSummary.push(`- ${file.name} (${file.type.toUpperCase()})`);
+  for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
+    const file = files[fileIndex];
+    const fileNum = fileIndex + 1;
+    console.log(`[DD] - File ${fileNum}/${totalFiles}: ${file.name} (${file.type}) - ${file.content?.length || 0} chars`);
+    filesSummary.push(`${fileNum}. ${file.name} (${file.type.toUpperCase()})`);
 
     // Handle base64 encoded files (binary formats) - extract actual content
-    if (file.content.startsWith('[BASE64:')) {
-      const base64Match = file.content.match(/\[BASE64:(\w+)\](.+)/);
+    let fileContent = '';
+    if (file.content && file.content.startsWith('[BASE64:')) {
+      const base64Match = file.content.match(/\[BASE64:(\w+)\](.+)/s);
       if (base64Match) {
         const ext = base64Match[1].toLowerCase();
         const base64Data = base64Match[2];
 
-        let extractedContent = '';
         try {
           if (ext === 'docx' || ext === 'doc') {
-            extractedContent = await extractDocxText(base64Data);
+            fileContent = await extractDocxText(base64Data);
           } else if (ext === 'pptx' || ext === 'ppt') {
-            extractedContent = await extractPptxText(base64Data);
+            fileContent = await extractPptxText(base64Data);
           } else if (ext === 'xlsx' || ext === 'xls') {
-            extractedContent = await extractXlsxText(base64Data);
+            fileContent = await extractXlsxText(base64Data);
           } else {
-            extractedContent = `[Binary file type .${ext} - cannot extract text]`;
+            fileContent = `[Binary file type .${ext} - cannot extract text]`;
           }
         } catch (extractError) {
           console.error(`[DD] Extraction error for ${file.name}:`, extractError.message);
-          extractedContent = `[Error extracting ${file.name}: ${extractError.message}]`;
+          fileContent = `[Error extracting ${file.name}: ${extractError.message}]`;
         }
-
-        combinedContent += `\n\n=== SOURCE: ${file.name} ===\n${extractedContent}\n`;
       } else {
-        combinedContent += `\n\n=== SOURCE: ${file.name} ===\n[Could not parse binary content]\n`;
+        fileContent = '[Could not parse binary content]';
       }
     } else {
-      combinedContent += `\n\n=== SOURCE: ${file.name} ===\n${file.content}\n`;
+      fileContent = file.content || '[Empty file]';
     }
+
+    // Add clearly numbered section header for each file
+    const contentLength = fileContent.length;
+    combinedContent += `\n\n${'#'.repeat(60)}\n`;
+    combinedContent += `## [FILE ${fileNum} OF ${totalFiles}]: ${file.name}\n`;
+    combinedContent += `## Type: ${file.type.toUpperCase()} | Content Length: ${contentLength} characters\n`;
+    combinedContent += `${'#'.repeat(60)}\n\n`;
+    combinedContent += fileContent;
+    combinedContent += `\n\n[END OF FILE ${fileNum}: ${file.name}]\n`;
   }
 
   console.log(`[DD] Total combined content: ${combinedContent.length} chars`);
 
-  // Log all source headers to verify all files are included
-  const sourceHeaders = combinedContent.match(/=== SOURCE: [^=]+ ===/g) || [];
-  console.log(`[DD] Files included in combined content (${sourceHeaders.length}):`);
-  sourceHeaders.forEach((header, i) => console.log(`[DD]   ${i + 1}. ${header}`));
+  // Log all file headers to verify all files are included
+  const fileHeaders = combinedContent.match(/\[FILE \d+ OF \d+\]: [^\n]+/g) || [];
+  console.log(`[DD] Files included in combined content (${fileHeaders.length}/${totalFiles}):`);
+  fileHeaders.forEach((header, i) => console.log(`[DD]   ${header}`));
+
+  // Warn if file count mismatch
+  if (fileHeaders.length !== totalFiles) {
+    console.error(`[DD] WARNING: Expected ${totalFiles} files but found ${fileHeaders.length} in combined content!`);
+  }
 
   // Extract URLs from instructions and fetch them
   let onlineResearchContent = '';
@@ -10534,19 +10549,33 @@ ${instructions}
     ? `\nONLINE SOURCES RESEARCHED:\n${onlineSourcesUsed.map(u => `- ${u}`).join('\n')}\n\nIMPORTANT: Any information from online sources MUST be clearly marked with [Online Source] at the start of that bullet point or paragraph.`
     : '';
 
-  // Build explicit file list for the prompt
-  const explicitFileList = files.map((f, i) => `   FILE ${i + 1}: "${f.name}"`).join('\n');
+  // Build explicit file list for the prompt with numbering
+  const explicitFileList = filesSummary.join('\n');
 
-  const prompt = `You are writing a factual due diligence summary. You have been provided ${filesSummary.length} source documents that you MUST ALL read completely.
+  const prompt = `You are writing a factual due diligence summary. You have been provided ${totalFiles} source documents that you MUST ALL read completely.
 
-**MANDATORY: READ ALL ${filesSummary.length} FILES BELOW**
+╔══════════════════════════════════════════════════════════════╗
+║  CRITICAL: YOU HAVE ${totalFiles} FILES - READ ALL OF THEM  ║
+╚══════════════════════════════════════════════════════════════╝
+
+FILES TO PROCESS (ALL ${totalFiles} ARE REQUIRED):
 ${explicitFileList}
 
-You MUST extract and include information from EVERY SINGLE FILE listed above. Do not skip any file. Each file contains unique information that must be included in the report.
+IMPORTANT: Each file is marked with "[FILE X OF ${totalFiles}]" headers. You MUST:
+- Read EVERY file from FILE 1 to FILE ${totalFiles}
+- Extract key information from EACH file separately
+- Include facts from ALL ${totalFiles} files in your report
+- In your "Sources Referenced" section, list ALL ${totalFiles} files
+
 ${instructionSection}
-=== BEGIN ALL SOURCE CONTENT (${filesSummary.length} FILES) ===
+
+${'='.repeat(70)}
+BEGIN ALL SOURCE CONTENT (${totalFiles} FILES TOTAL)
+${'='.repeat(70)}
 ${combinedContent}
-=== END ALL SOURCE CONTENT ===
+${'='.repeat(70)}
+END ALL SOURCE CONTENT
+${'='.repeat(70)}
 
 ${onlineResearchContent ? `=== BEGIN ONLINE RESEARCH (from websites) ===
 ${onlineResearchContent}
@@ -10556,12 +10585,12 @@ REPORT STRUCTURE:
 ${lengthInstructions[reportLength]}
 
 CRITICAL RULES - FOLLOW EXACTLY:
-1. **READ EVERY FILE**: You have ${filesSummary.length} source files. You MUST read and extract key information from ALL of them. Each "=== SOURCE: filename ===" section is a different file - process them ALL.
-2. **NO HALLUCINATION**: ONLY include facts explicitly stated in the source materials above.
-3. Quote specific names, numbers, dates, and facts directly from the materials.
-4. If a file contains meeting transcript or conversation, extract the key business facts discussed.
-
-${onlineResearchContent ? `5. Any information from ONLINE RESEARCH section must be prefixed with **[Online Source]**.` : ''}
+1. **PROCESS ALL ${totalFiles} FILES**: Each "[FILE X OF ${totalFiles}]" section contains different content. Extract information from EVERY file.
+2. **VERIFY COVERAGE**: Before finishing, mentally check that you've included information from File 1, File 2, File 3... up to File ${totalFiles}.
+3. **NO HALLUCINATION**: ONLY include facts explicitly stated in the source materials above.
+4. Quote specific names, numbers, dates, and facts directly from the materials.
+5. If a file contains meeting transcript or conversation, extract the key business facts discussed.
+${onlineResearchContent ? `6. Any information from ONLINE RESEARCH section must be prefixed with **[Online Source]**.` : ''}
 
 OUTPUT FORMAT:
 - Start with: <h1 style="font-family: Calibri, sans-serif;">Due Diligence: [Company Name from materials]</h1>
@@ -10569,7 +10598,7 @@ OUTPUT FORMAT:
 - Add style="font-family: Calibri, sans-serif;" to all elements
 - Generate CLEAN HTML only - no markdown
 - SKIP sections with no relevant content
-- At the end, add a "Sources Referenced" section listing which files you extracted information from`;
+- At the end, add a "Sources Referenced" section that MUST list ALL ${totalFiles} source files by name`;
 
   try {
     const maxTokens = reportLength === 'short' ? 3000 : reportLength === 'medium' ? 6000 : 10000;
