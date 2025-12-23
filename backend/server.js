@@ -1601,25 +1601,25 @@ async function exhaustiveSearch(business, country, exclusion) {
   console.log(`    OpenAI Search: ${allOpenAISearchQueries.length} queries`);
   console.log(`    Total: ${allSerpQueries.length + allPerpQueries.length + allOpenAISearchQueries.length}`);
 
-  // Run all strategies in parallel
+  // Run all strategies in parallel (with error handling to prevent one failure from crashing all)
   const [serpResults, perpResults, openaiSearchResults, geminiResults] = await Promise.all([
     // SerpAPI queries
     process.env.SERPAPI_API_KEY
-      ? Promise.all(allSerpQueries.map(q => callSerpAPI(q)))
+      ? Promise.all(allSerpQueries.map(q => callSerpAPI(q).catch(e => { console.error(`SerpAPI error: ${e.message}`); return null; })))
       : Promise.resolve([]),
 
     // Perplexity queries
-    Promise.all(allPerpQueries.map(q => callPerplexity(q))),
+    Promise.all(allPerpQueries.map(q => callPerplexity(q).catch(e => { console.error(`Perplexity error: ${e.message}`); return null; }))),
 
     // OpenAI Search queries
-    Promise.all(allOpenAISearchQueries.map(q => callOpenAISearch(q))),
+    Promise.all(allOpenAISearchQueries.map(q => callOpenAISearch(q).catch(e => { console.error(`OpenAI Search error: ${e.message}`); return null; }))),
 
     // Also run some Gemini queries for diversity
     Promise.all([
       callGemini(`Find ALL ${business} companies in ${country}. Exclude ${exclusion}. ${buildOutputFormat()}`),
       callGemini(`List ${business} factories and manufacturing plants in ${country}. Not ${exclusion}. ${buildOutputFormat()}`),
       callGemini(`${business} SME and family businesses in ${country}. Exclude ${exclusion}. ${buildOutputFormat()}`)
-    ])
+    ].map(p => p.catch(e => { console.error(`Gemini error: ${e.message}`); return null; })))
   ]);
 
   console.log(`  All API calls done in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
@@ -1635,7 +1635,7 @@ async function exhaustiveSearch(business, country, exclusion) {
   // Extract from Perplexity results
   console.log(`  Extracting from ${perpResults.length} Perplexity results...`);
   const perpExtractions = await Promise.all(
-    perpResults.map(text => extractCompanies(text, country))
+    perpResults.filter(r => r).map(text => extractCompanies(text, country).catch(e => { console.error(`Extraction error: ${e.message}`); return []; }))
   );
   const perpCompanies = perpExtractions.flat();
   console.log(`    Extracted ${perpCompanies.length} companies from Perplexity`);
@@ -1643,7 +1643,7 @@ async function exhaustiveSearch(business, country, exclusion) {
   // Extract from OpenAI Search results
   console.log(`  Extracting from ${openaiSearchResults.length} OpenAI Search results...`);
   const openaiExtractions = await Promise.all(
-    openaiSearchResults.map(text => extractCompanies(text, country))
+    openaiSearchResults.filter(r => r).map(text => extractCompanies(text, country).catch(e => { console.error(`Extraction error: ${e.message}`); return []; }))
   );
   const openaiCompanies = openaiExtractions.flat();
   console.log(`    Extracted ${openaiCompanies.length} companies from OpenAI Search`);
@@ -1651,7 +1651,7 @@ async function exhaustiveSearch(business, country, exclusion) {
   // Extract from Gemini results
   console.log(`  Extracting from ${geminiResults.length} Gemini results...`);
   const geminiExtractions = await Promise.all(
-    geminiResults.map(text => extractCompanies(text, country))
+    geminiResults.filter(r => r).map(text => extractCompanies(text, country).catch(e => { console.error(`Extraction error: ${e.message}`); return []; }))
   );
   const geminiCompanies = geminiExtractions.flat();
   console.log(`    Extracted ${geminiCompanies.length} companies from Gemini`);
@@ -7670,9 +7670,12 @@ async function generatePPTX(companies, targetDescription = '') {
         if (cleaned.includes('{') && cleaned.includes('}')) {
           try {
             // Try to extract the value from JSON-like string
+            // First regex: /"HQ":"value"/ - match[1] is the value
+            // Second regex: /"key":"value"/ - match[1] is key, match[2] is value
             const match = cleaned.match(/"HQ"\s*:\s*"([^"]+)"/i) || cleaned.match(/"([^"]+)"\s*:\s*"([^"]+)"/);
             if (match) {
-              cleaned = match[1] || match[2] || cleaned;
+              // Prefer match[2] (value from second regex) over match[1] (could be key from second regex)
+              cleaned = match[2] || match[1] || cleaned;
             }
           } catch (e) {
             // Fall through to normal cleaning
