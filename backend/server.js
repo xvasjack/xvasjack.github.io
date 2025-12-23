@@ -4498,6 +4498,8 @@ app.post('/api/validation', async (req, res) => {
 
         const pageText = await fetchWebsite(website);
 
+        console.log(`  Fetched pageText for ${companyName}: type=${typeof pageText}, length=${pageText?.length || 0}`);
+
         if (!pageText || pageText.length < 100) {
           return {
             company_name: companyName,
