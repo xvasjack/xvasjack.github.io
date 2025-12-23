@@ -3097,51 +3097,51 @@ Be thorough - find EVERY company you can. Return as a structured list.`;
 async function expandRegionToCountries(regionInput) {
   const inputLower = regionInput.toLowerCase();
 
-  // If comma-separated, user already specified countries - return as-is
+  // If comma-separated, user already specified countries - return as array
   if (inputLower.includes(',')) {
-    return regionInput;
+    return regionInput.split(',').map(c => c.trim());
   }
 
   // Hardcoded region mappings (main business markets only)
   const regionMappings = {
     // Southeast Asia - 6 main markets (exclude Cambodia, Laos, Myanmar unless explicit)
-    'southeast asia': 'Malaysia, Indonesia, Singapore, Thailand, Vietnam, Philippines',
-    'south east asia': 'Malaysia, Indonesia, Singapore, Thailand, Vietnam, Philippines',
-    'sea': 'Malaysia, Indonesia, Singapore, Thailand, Vietnam, Philippines',
-    'asean': 'Malaysia, Indonesia, Singapore, Thailand, Vietnam, Philippines',
+    'southeast asia': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'],
+    'south east asia': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'],
+    'sea': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'],
+    'asean': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'],
 
     // Other common regions
-    'east asia': 'Japan, South Korea, Taiwan, China, Hong Kong',
-    'north asia': 'Japan, South Korea, Taiwan, China',
-    'south asia': 'India, Pakistan, Bangladesh, Sri Lanka',
-    'middle east': 'UAE, Saudi Arabia, Qatar, Kuwait, Bahrain, Oman',
-    'gcc': 'UAE, Saudi Arabia, Qatar, Kuwait, Bahrain, Oman',
-    'europe': 'Germany, France, UK, Italy, Spain, Netherlands, Poland',
-    'western europe': 'Germany, France, UK, Italy, Spain, Netherlands, Belgium',
-    'eastern europe': 'Poland, Czech Republic, Romania, Hungary, Slovakia',
-    'apac': 'Malaysia, Indonesia, Singapore, Thailand, Vietnam, Philippines, Japan, South Korea, Taiwan, China, India, Australia',
-    'asia pacific': 'Malaysia, Indonesia, Singapore, Thailand, Vietnam, Philippines, Japan, South Korea, Taiwan, China, India, Australia',
-    'latam': 'Brazil, Mexico, Argentina, Chile, Colombia, Peru',
-    'latin america': 'Brazil, Mexico, Argentina, Chile, Colombia, Peru'
+    'east asia': ['Japan', 'South Korea', 'Taiwan', 'China', 'Hong Kong'],
+    'north asia': ['Japan', 'South Korea', 'Taiwan', 'China'],
+    'south asia': ['India', 'Pakistan', 'Bangladesh', 'Sri Lanka'],
+    'middle east': ['UAE', 'Saudi Arabia', 'Qatar', 'Kuwait', 'Bahrain', 'Oman'],
+    'gcc': ['UAE', 'Saudi Arabia', 'Qatar', 'Kuwait', 'Bahrain', 'Oman'],
+    'europe': ['Germany', 'France', 'UK', 'Italy', 'Spain', 'Netherlands', 'Poland'],
+    'western europe': ['Germany', 'France', 'UK', 'Italy', 'Spain', 'Netherlands', 'Belgium'],
+    'eastern europe': ['Poland', 'Czech Republic', 'Romania', 'Hungary', 'Slovakia'],
+    'apac': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines', 'Japan', 'South Korea', 'Taiwan', 'China', 'India', 'Australia'],
+    'asia pacific': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines', 'Japan', 'South Korea', 'Taiwan', 'China', 'India', 'Australia'],
+    'latam': ['Brazil', 'Mexico', 'Argentina', 'Chile', 'Colombia', 'Peru'],
+    'latin america': ['Brazil', 'Mexico', 'Argentina', 'Chile', 'Colombia', 'Peru']
   };
 
   // Check for matching region
   for (const [region, countries] of Object.entries(regionMappings)) {
     if (inputLower.includes(region)) {
-      console.log(`  Expanding region "${regionInput}" → "${countries}"`);
+      console.log(`  Expanding region "${regionInput}" → "${countries.join(', ')}"`);
       return countries;
     }
   }
 
   // Check for generic "asia" (default to Southeast Asia main markets)
   if (inputLower === 'asia') {
-    const countries = 'Malaysia, Indonesia, Singapore, Thailand, Vietnam, Philippines';
-    console.log(`  Expanding region "${regionInput}" → "${countries}"`);
+    const countries = ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'];
+    console.log(`  Expanding region "${regionInput}" → "${countries.join(', ')}"`);
     return countries;
   }
 
-  // Return as-is if not a recognized region
-  return regionInput;
+  // Return as-is if not a recognized region (single country as array)
+  return [regionInput];
 }
 
 // Generate business term variations using AI (synonyms, industry terminology)
@@ -3196,8 +3196,9 @@ async function planSearchStrategyV5(business, country, exclusion) {
 
   const startTime = Date.now();
 
-  // Expand regional inputs to specific countries
-  const expandedCountry = await expandRegionToCountries(country);
+  // Expand regional inputs to specific countries (returns array)
+  const countries = await expandRegionToCountries(country);
+  const expandedCountry = countries.join(', '); // String for prompts
   console.log(`  Country input: "${country}" → "${expandedCountry}"`);
 
   // Generate business term variations
@@ -3205,7 +3206,6 @@ async function planSearchStrategyV5(business, country, exclusion) {
   console.log(`  Term variations: ${businessVariations.length > 0 ? businessVariations.join(', ') : 'none generated'}`);
 
   // Determine languages for each country
-  const countries = expandedCountry.split(',').map(c => c.trim());
   const countryLanguages = {};
   for (const c of countries) {
     const cLower = c.toLowerCase();
