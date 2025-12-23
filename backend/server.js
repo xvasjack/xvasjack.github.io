@@ -10552,20 +10552,25 @@ ${instructions}
   // Build explicit file list for the prompt with numbering
   const explicitFileList = filesSummary.join('\n');
 
-  const prompt = `You are writing a factual due diligence report. You have ${totalFiles} source documents that may contain information about MULTIPLE DIFFERENT COMPANIES.
+  const prompt = `You are writing a factual due diligence summary. You have been provided ${totalFiles} source documents that you MUST ALL read completely.
 
-╔════════════════════════════════════════════════════════════════════════╗
-║  CRITICAL: EACH FILE MAY BE ABOUT A DIFFERENT COMPANY                  ║
-║  You must create SEPARATE SECTIONS for EACH company discussed          ║
-╚════════════════════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════╗
+║  CRITICAL: YOU HAVE ${totalFiles} FILES - READ ALL OF THEM  ║
+╚══════════════════════════════════════════════════════════════╝
 
-FILES PROVIDED:
+FILES TO PROCESS (ALL ${totalFiles} ARE REQUIRED):
 ${explicitFileList}
+
+IMPORTANT: Each file is marked with "[FILE X OF ${totalFiles}]" headers. You MUST:
+- Read EVERY file from FILE 1 to FILE ${totalFiles}
+- Extract key information from EACH file separately
+- Include facts from ALL ${totalFiles} files in your report
+- In your "Sources Referenced" section, list ALL ${totalFiles} files
 
 ${instructionSection}
 
 ${'='.repeat(70)}
-BEGIN ALL SOURCE CONTENT (${totalFiles} FILES)
+BEGIN ALL SOURCE CONTENT (${totalFiles} FILES TOTAL)
 ${'='.repeat(70)}
 ${combinedContent}
 ${'='.repeat(70)}
@@ -10576,48 +10581,29 @@ ${onlineResearchContent ? `=== BEGIN ONLINE RESEARCH (from websites) ===
 ${onlineResearchContent}
 === END ONLINE RESEARCH ===` : ''}
 
-YOUR TASK - FOLLOW THIS EXACT PROCESS:
-
-STEP 1: IDENTIFY ALL COMPANIES
-- Read through ALL ${totalFiles} files
-- List every distinct company/business mentioned as a subject (not just mentioned in passing)
-- Each file likely discusses a DIFFERENT company - identify which company each file is about
-
-STEP 2: CREATE SEPARATE SECTIONS FOR EACH COMPANY
-For EACH company identified, create a dedicated section with:
-- Company name as header
-- Business overview (what they do)
-- Key facts and figures mentioned
-- Risks or concerns identified
-- Opportunities noted
-- Source attribution (which file this info came from)
-
+REPORT STRUCTURE:
 ${lengthInstructions[reportLength]}
 
-CRITICAL RULES:
-1. **MULTIPLE COMPANIES**: If File 1 is about "Company A" and File 2 is about "Company B", you MUST have separate sections for BOTH companies - not just one.
-2. **SOURCE ATTRIBUTION**: For each fact, note which file it came from, e.g., "(from Ang bro_original.txt)" or "(from Sfs_original.txt)"
-3. **NO MERGING**: Do NOT blend different companies into generic "industry context". Each company gets its own profile.
-4. **NO HALLUCINATION**: Only include facts explicitly stated in the materials.
-5. **VERIFY**: Before finishing, count how many company sections you created. It should match the number of distinct companies in the files.
-${onlineResearchContent ? `6. Online research info must be prefixed with **[Online Source]**.` : ''}
+CRITICAL RULES - FOLLOW EXACTLY:
+1. **PROCESS ALL ${totalFiles} FILES**: Each "[FILE X OF ${totalFiles}]" section contains different content. Extract information from EVERY file.
+2. **VERIFY COVERAGE**: Before finishing, mentally check that you've included information from File 1, File 2, File 3... up to File ${totalFiles}.
+3. **NO HALLUCINATION**: ONLY include facts explicitly stated in the source materials above.
+4. Quote specific names, numbers, dates, and facts directly from the materials.
+5. If a file contains meeting transcript or conversation, extract the key business facts discussed.
+${onlineResearchContent ? `6. Any information from ONLINE RESEARCH section must be prefixed with **[Online Source]**.` : ''}
 
 OUTPUT FORMAT:
-- Start with: <h1 style="font-family: Calibri, sans-serif;">Due Diligence Report - Multiple Companies</h1>
-- For each company: <h2 style="font-family: Calibri, sans-serif;">[Company Name]</h2>
-- Under each company header, include subsections for: Overview, Key Facts, Risks, Opportunities
-- Use <ul><li> for bullet points, include source file in parentheses
+- Start with: <h1 style="font-family: Calibri, sans-serif;">Due Diligence: [Company Name from materials]</h1>
+- Use <h2> for section headers, <ul><li> for bullet points
 - Add style="font-family: Calibri, sans-serif;" to all elements
 - Generate CLEAN HTML only - no markdown
-- At the end: "Sources Referenced" listing ALL ${totalFiles} files and which company each file covered`;
+- SKIP sections with no relevant content
+- At the end, add a "Sources Referenced" section that MUST list ALL ${totalFiles} source files by name`;
 
   try {
-    // Increased tokens to handle multiple companies - multiply by number of files
-    const baseTokens = reportLength === 'short' ? 3000 : reportLength === 'medium' ? 6000 : 10000;
-    const maxTokens = Math.min(baseTokens * Math.max(totalFiles, 1), 16000); // Scale with file count, cap at 16k
+    const maxTokens = reportLength === 'short' ? 3000 : reportLength === 'medium' ? 6000 : 10000;
     console.log(`[DD] Prompt length: ${prompt.length} chars`);
-    console.log(`[DD] Files: ${totalFiles}, Max tokens: ${maxTokens}`);
-    console.log(`[DD] Starting AI generation with Gemini 2.5 Pro...`);
+    console.log(`[DD] Starting AI generation with Gemini 2.5 Pro (max ${maxTokens} tokens)...`);
 
     // Use Gemini 2.5 Pro for best quality DD reports
     const geminiResult = await callGemini2Pro(prompt);
