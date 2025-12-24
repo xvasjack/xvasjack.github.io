@@ -6372,19 +6372,19 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       lineGray: 'A0A0A0'
     };
 
-    const slide = pptx.addSlide();
+    // ===== DEFINE MASTER SLIDE WITH FIXED LINES (CANNOT BE MOVED) =====
+    pptx.defineSlideMaster({
+      title: 'YCP_TRADING_MASTER',
+      background: { color: 'FFFFFF' },
+      objects: [
+        { line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.navyLine, width: 4.5 } } },
+        { line: { x: 0, y: 1.10, w: 13.333, h: 0, line: { color: COLORS.navyLine, width: 2.25 } } },
+        { line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.navyLine, width: 2.25 } } }
+      ]
+    });
 
-    // ===== HEADER LINES (from slideLayout1) =====
-    // Thick line at y=1.02" (933847 EMU), width 4.5pt (57150 EMU)
-    slide.addShape(pptx.shapes.LINE, {
-      x: 0, y: 1.02, w: 13.333, h: 0,
-      line: { color: COLORS.navyLine, width: 4.5 }
-    });
-    // Thin line at y=1.10" (1005855 EMU), width 2.25pt (28575 EMU)
-    slide.addShape(pptx.shapes.LINE, {
-      x: 0, y: 1.10, w: 13.333, h: 0,
-      line: { color: COLORS.navyLine, width: 2.25 }
-    });
+    // Use master slide - lines are fixed in background and cannot be moved
+    const slide = pptx.addSlide({ masterName: 'YCP_TRADING_MASTER' });
 
     // ===== TITLE + SUBTITLE (positioned per slideLayout1: x=0.38", y=0.05") =====
     // Title at top (font 24), subtitle below (font 16), combined text box
@@ -6792,11 +6792,7 @@ Return JSON with this exact format:
       fontSize: 9, fontFace: 'Segoe UI', color: COLORS.black
     });
 
-    // ===== FOOTER LINE (from slideLayout1: y=7.24", width 2.25pt) =====
-    slide.addShape(pptx.shapes.LINE, {
-      x: 0, y: 7.24, w: 13.333, h: 0,
-      line: { color: COLORS.navyLine, width: 2.25 }
-    });
+    // Footer line is now in master slide (cannot be moved)
 
     // ===== YCP LOGO (from slideLayout1: x=0.38", y=7.30") =====
     // Logo image stored in backend folder
@@ -7208,28 +7204,28 @@ async function generatePPTX(companies, targetDescription = '') {
       footerText: '808080'     // Gray footer text
     };
 
+    // ===== DEFINE MASTER SLIDE WITH FIXED LINES (CANNOT BE MOVED) =====
+    // Lines are part of the master template background, not individual shapes
+    pptx.defineSlideMaster({
+      title: 'YCP_MASTER',
+      background: { color: 'FFFFFF' },
+      objects: [
+        // Thick header line (y: 1.02")
+        { line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } } },
+        // Thin header line (y: 1.10")
+        { line: { x: 0, y: 1.10, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
+        // Footer line (y: 7.24")
+        { line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } }
+      ]
+    });
+
     // ===== TARGET LIST SLIDE (FIRST SLIDE) =====
     if (targetDescription && companies.length > 0) {
       console.log('Generating Target List slide...');
       const meceData = await generateMECESegments(targetDescription, companies);
 
-      const targetSlide = pptx.addSlide();
-
-      // ===== HEADER LINES (same as profile slides) =====
-      targetSlide.addShape(pptx.shapes.LINE, {
-        x: 0, y: 1.02, w: 13.333, h: 0,
-        line: { color: COLORS.headerLine, width: 4.5 }
-      });
-      targetSlide.addShape(pptx.shapes.LINE, {
-        x: 0, y: 1.10, w: 13.333, h: 0,
-        line: { color: COLORS.headerLine, width: 2.25 }
-      });
-
-      // ===== FOOTER LINE =====
-      targetSlide.addShape(pptx.shapes.LINE, {
-        x: 0, y: 7.24, w: 13.333, h: 0,
-        line: { color: COLORS.headerLine, width: 2.25 }
-      });
+      // Use master slide - lines are fixed in background
+      const targetSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
       // Title Case helper function
       const toTitleCase = (str) => {
@@ -7568,25 +7564,8 @@ async function generatePPTX(companies, targetDescription = '') {
 
     // ===== INDIVIDUAL COMPANY PROFILE SLIDES =====
     for (const company of companies) {
-      const slide = pptx.addSlide();
-
-      // ===== HEADER LINES (from template) =====
-      // Thick line under title area
-      slide.addShape(pptx.shapes.LINE, {
-        x: 0, y: 1.02, w: 13.333, h: 0,
-        line: { color: COLORS.headerLine, width: 4.5 }
-      });
-      // Thin line below
-      slide.addShape(pptx.shapes.LINE, {
-        x: 0, y: 1.10, w: 13.333, h: 0,
-        line: { color: COLORS.headerLine, width: 2.25 }
-      });
-
-      // ===== FOOTER LINE =====
-      slide.addShape(pptx.shapes.LINE, {
-        x: 0, y: 7.24, w: 13.333, h: 0,
-        line: { color: COLORS.headerLine, width: 2.25 }
-      });
+      // Use master slide - lines are fixed in background and cannot be moved
+      const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
       // ===== TITLE + MESSAGE (combined in one text box) =====
       const titleText = company.title || company.company_name || 'Company Profile';
@@ -9274,17 +9253,23 @@ async function generateFinancialChartPPTX(financialDataArray) {
       chartOrange: 'ED7D31'
     };
 
+    // ===== DEFINE MASTER SLIDE WITH FIXED LINES (CANNOT BE MOVED) =====
+    pptx.defineSlideMaster({
+      title: 'YCP_FINANCIAL_MASTER',
+      background: { color: 'FFFFFF' },
+      objects: [
+        { line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } } },
+        { line: { x: 0, y: 1.10, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
+        { line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } }
+      ]
+    });
+
     for (const financialData of dataArray) {
       if (!financialData) continue;
 
-      const slide = pptx.addSlide();
+      // Use master slide - lines are fixed in background and cannot be moved
+      const slide = pptx.addSlide({ masterName: 'YCP_FINANCIAL_MASTER' });
 
-      // Header lines
-      slide.addShape(pptx.shapes.LINE, { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } });
-      slide.addShape(pptx.shapes.LINE, { x: 0, y: 1.10, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } });
-
-      // Footer line
-      slide.addShape(pptx.shapes.LINE, { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } });
       slide.addText('(C) YCP 2025 all rights reserved', { x: 4.1, y: 7.26, w: 5.1, h: 0.2, fontSize: 8, fontFace: 'Segoe UI', color: COLORS.footerText, align: 'center' });
 
       // Title
