@@ -8320,13 +8320,10 @@ IMPORTANT: Always use "- " prefix for each segment line to create point form for
 
 RULES:
 - HARD RULE - TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH:
-  - Vietnamese seafood: "Muc" → "Squid", "Ca" → "Fish", "Tom" → "Shrimp", "Cua" → "Crab", "So Diep" → "Scallop", "Ca Hoi" → "Salmon"
-  - Vietnamese food: "Banh" → "Cake/Bread", "Pho" → "Noodle Soup", "Rong Nho" → "Sea Grape", "Yen Sao" → "Bird's Nest"
-  - Chinese/Thai/Indonesian: translate to English equivalents
-  - NEVER leave product names in Vietnamese, Thai, Chinese, Indonesian, or any non-English language. The user CANNOT translate - you MUST do it.
-- Write ALL text using regular English alphabet only (A-Z, no diacritics/accents)
-- Convert ALL Vietnamese diacritics: "Phú" → "Phu", "Đông" → "Dong", "Nguyễn" → "Nguyen", "Bình" → "Binh", "Thạnh" → "Thanh", "Cương" → "Cuong", "Thiêm" → "Thiem"
-- Convert ALL foreign characters: "São" → "Sao", "北京" → "Beijing", "東京" → "Tokyo"
+  - ALL product names, company names, and any other text in ANY non-English language MUST be translated to English
+  - This applies to ALL languages: Vietnamese, Chinese, Thai, Malay, Indonesian, Hindi, Korean, Japanese, Arabic, Spanish, etc.
+  - The user CANNOT translate - you MUST translate everything to English
+- Write ALL text using regular English alphabet only (A-Z, no diacritics, no foreign characters)
 - Remove company suffixes from ALL names: Co., Ltd, JSC, Sdn Bhd, Pte Ltd, Inc, Corp, LLC, GmbH
 - Extract as many metrics as found (8-15 ideally)
 - For metrics with multiple items, use "- " bullet points separated by "\\n"
@@ -8405,15 +8402,11 @@ OUTPUT JSON:
 }
 
 RULES:
-- HARD RULE - TRANSLATE ALL NON-ENGLISH PRODUCT NAMES TO ENGLISH:
-  - Vietnamese seafood: "Muc" → "Squid", "Ca" → "Fish", "Tom" → "Shrimp", "Cua" → "Crab", "So Diep" → "Scallop", "Ca Hoi" → "Salmon", "Rong Nho" → "Sea Grape", "Yen Sao" → "Bird's Nest"
-  - Vietnamese food: "Banh" → "Cake/Bread", "Pho" → "Noodle Soup", "Che" → "Dessert", "Goi" → "Salad", "Thit" → "Meat"
-  - Chinese: "豆腐" → "Tofu", "面" → "Noodles", "酱" → "Sauce"
-  - Thai: translate to English equivalents
-  - NEVER leave product names in Vietnamese, Thai, Chinese, or any non-English language. The user CANNOT translate - you MUST do it.
-- Write ALL text using regular English alphabet only (A-Z, no diacritics/accents)
-- Convert ALL Vietnamese diacritics: "Phú" → "Phu", "Đông" → "Dong", "Nguyễn" → "Nguyen", "Bình" → "Binh", "Thạnh" → "Thanh", "Cương" → "Cuong"
-- Convert ALL foreign characters: "São" → "Sao", "北京" → "Beijing", "東京" → "Tokyo"
+- HARD RULE - TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH:
+  - ALL product names, company names, and any other text in ANY non-English language MUST be translated to English
+  - This applies to ALL languages: Vietnamese, Chinese, Thai, Malay, Indonesian, Hindi, Korean, Japanese, Arabic, Spanish, etc.
+  - The user CANNOT translate - you MUST translate everything to English
+- Write ALL text using regular English alphabet only (A-Z, no diacritics, no foreign characters)
 - Remove company suffixes from ALL names: Co., Ltd, JSC, Sdn Bhd, Pte Ltd, Inc, Corp, LLC, GmbH
 - PRIORITIZE the category with MOST available content from the website
 - Use 3-6 items maximum
@@ -8744,9 +8737,10 @@ async function reviewAndCleanData(companyData) {
    - Remove rows about operating hours, office hours
 
 4. HARD RULE - TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH:
-   - Vietnamese: "Muc" → "Squid", "Ca" → "Fish", "Tom" → "Shrimp", "So Diep" → "Scallop", "Ca Hoi" → "Salmon", "Rong Nho" → "Sea Grape", "Yen Sao" → "Bird's Nest"
-   - Chinese/Thai/Indonesian: translate to English equivalents
-   - NEVER leave product names in non-English languages. The user CANNOT translate.
+   - ALL product names, company names, and any text in ANY non-English language MUST be translated to English
+   - This applies to ALL languages: Vietnamese, Chinese, Thai, Malay, Indonesian, Hindi, Korean, Japanese, Arabic, Spanish, etc.
+   - The user CANNOT translate - you MUST translate everything to English
+   - Write ALL text using regular English alphabet only (A-Z, no diacritics, no foreign characters)
 
 5. MERGE SIMILAR INFORMATION:
    - "Customers" and "Customer Segments" → merge into one "Key Customers" row
