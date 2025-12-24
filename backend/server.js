@@ -7031,14 +7031,80 @@ const EXCHANGE_RATE_MAP = {
   'HK': '為替レート: HKD 10M = 2億円'
 };
 
-// Get country code from location string
+// Get country code from location string - MUST match HQ country only
 function getCountryCode(location) {
   if (!location) return null;
   const loc = location.toLowerCase();
+
+  // HARD RULE: Extract HQ country FIRST - flag must match HQ, not other locations
+  // Check for "HQ:" prefix and extract only HQ location
+  const hqMatch = loc.match(/hq:\s*([^\n]+)/i);
+  if (hqMatch) {
+    const hqLocation = hqMatch[1].trim();
+    // Get country from the end of HQ line (last comma-separated part)
+    const parts = hqLocation.split(',').map(p => p.trim());
+    const country = parts[parts.length - 1];
+    for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
+      if (country.includes(key)) return code;
+    }
+  }
+
+  // If no HQ prefix, check if it's a simple location (City, Country format)
+  // Use the LAST part which should be the country
+  const parts = loc.split(',').map(p => p.trim());
+  if (parts.length >= 1) {
+    const lastPart = parts[parts.length - 1];
+    for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
+      if (lastPart.includes(key)) return code;
+    }
+  }
+
+  // Fallback: search entire string (but this shouldn't happen with proper location format)
   for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
     if (loc.includes(key)) return code;
   }
   return null;
+}
+
+// HARD RULE: Filter out empty/meaningless Key Metrics
+// Remove metrics that say "No specific X stated", "Not specified", etc.
+function filterEmptyMetrics(keyMetrics) {
+  if (!keyMetrics || !Array.isArray(keyMetrics)) return [];
+
+  // Patterns that indicate empty/meaningless metric values
+  const emptyPatterns = [
+    /no specific/i,
+    /not specified/i,
+    /not stated/i,
+    /not available/i,
+    /not found/i,
+    /not provided/i,
+    /not mentioned/i,
+    /not disclosed/i,
+    /unknown/i,
+    /n\/a/i,
+    /none listed/i,
+    /none specified/i,
+    /none stated/i,
+    /no information/i,
+    /no data/i,
+    /^\s*-?\s*$/,  // Empty or just dashes
+  ];
+
+  return keyMetrics.filter(metric => {
+    if (!metric || !metric.value) return false;
+    const value = String(metric.value).trim();
+    if (!value) return false;
+
+    // Check if value matches any empty pattern
+    for (const pattern of emptyPatterns) {
+      if (pattern.test(value)) {
+        console.log(`    Removing empty metric: "${metric.label}" = "${value}"`);
+        return false;
+      }
+    }
+    return true;
+  });
 }
 
 // Common shortforms that don't need explanation
@@ -8253,8 +8319,13 @@ Example for Suppliers:
 IMPORTANT: Always use "- " prefix for each segment line to create point form for easier reading.
 
 RULES:
+- HARD RULE - TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH:
+  - Vietnamese seafood: "Muc" → "Squid", "Ca" → "Fish", "Tom" → "Shrimp", "Cua" → "Crab", "So Diep" → "Scallop", "Ca Hoi" → "Salmon"
+  - Vietnamese food: "Banh" → "Cake/Bread", "Pho" → "Noodle Soup", "Rong Nho" → "Sea Grape", "Yen Sao" → "Bird's Nest"
+  - Chinese/Thai/Indonesian: translate to English equivalents
+  - NEVER leave product names in Vietnamese, Thai, Chinese, Indonesian, or any non-English language. The user CANNOT translate - you MUST do it.
 - Write ALL text using regular English alphabet only (A-Z, no diacritics/accents)
-- Convert ALL Vietnamese: "Phú" → "Phu", "Đông" → "Dong", "Nguyễn" → "Nguyen", "Bình" → "Binh", "Thạnh" → "Thanh", "Cương" → "Cuong", "Thiêm" → "Thiem"
+- Convert ALL Vietnamese diacritics: "Phú" → "Phu", "Đông" → "Dong", "Nguyễn" → "Nguyen", "Bình" → "Binh", "Thạnh" → "Thanh", "Cương" → "Cuong", "Thiêm" → "Thiem"
 - Convert ALL foreign characters: "São" → "Sao", "北京" → "Beijing", "東京" → "Tokyo"
 - Remove company suffixes from ALL names: Co., Ltd, JSC, Sdn Bhd, Pte Ltd, Inc, Corp, LLC, GmbH
 - Extract as many metrics as found (8-15 ideally)
@@ -8264,6 +8335,7 @@ RULES:
 - Be specific with numbers when available
 - For Shareholding: ONLY include if EXPLICITLY stated on website (e.g., "family-owned", "publicly traded", "PE-backed"). NEVER assume ownership structure.
 - DO NOT include: years of experience, awards, recognitions, market position, operating hours, number of branches/locations (not useful for M&A)
+- DO NOT include metrics with NO MEANINGFUL VALUES - if you don't have specific data, don't include the metric at all. NEVER write "No specific X stated" - just omit that metric entirely.
 - NEVER make up data - only include what's explicitly stated
 - Return ONLY valid JSON`
         },
@@ -8333,8 +8405,14 @@ OUTPUT JSON:
 }
 
 RULES:
+- HARD RULE - TRANSLATE ALL NON-ENGLISH PRODUCT NAMES TO ENGLISH:
+  - Vietnamese seafood: "Muc" → "Squid", "Ca" → "Fish", "Tom" → "Shrimp", "Cua" → "Crab", "So Diep" → "Scallop", "Ca Hoi" → "Salmon", "Rong Nho" → "Sea Grape", "Yen Sao" → "Bird's Nest"
+  - Vietnamese food: "Banh" → "Cake/Bread", "Pho" → "Noodle Soup", "Che" → "Dessert", "Goi" → "Salad", "Thit" → "Meat"
+  - Chinese: "豆腐" → "Tofu", "面" → "Noodles", "酱" → "Sauce"
+  - Thai: translate to English equivalents
+  - NEVER leave product names in Vietnamese, Thai, Chinese, or any non-English language. The user CANNOT translate - you MUST do it.
 - Write ALL text using regular English alphabet only (A-Z, no diacritics/accents)
-- Convert ALL Vietnamese: "Phú" → "Phu", "Đông" → "Dong", "Nguyễn" → "Nguyen", "Bình" → "Binh", "Thạnh" → "Thanh", "Cương" → "Cuong"
+- Convert ALL Vietnamese diacritics: "Phú" → "Phu", "Đông" → "Dong", "Nguyễn" → "Nguyen", "Bình" → "Binh", "Thạnh" → "Thanh", "Cương" → "Cuong"
 - Convert ALL foreign characters: "São" → "Sao", "北京" → "Beijing", "東京" → "Tokyo"
 - Remove company suffixes from ALL names: Co., Ltd, JSC, Sdn Bhd, Pte Ltd, Inc, Corp, LLC, GmbH
 - PRIORITIZE the category with MOST available content from the website
@@ -8654,18 +8732,28 @@ async function reviewAndCleanData(companyData) {
    - Example: "Number of Suppliers: 6" + "Key Suppliers: A, B, C" → "Key Suppliers: 6 suppliers including A, B, C"
    - Example: "Number of Customers" + "Key Customers" → merge into "Key Customers"
 
-2. REMOVE UNNECESSARY/WORTHLESS ROWS:
+2. HARD RULE - REMOVE EMPTY/MEANINGLESS METRICS:
+   - Remove ANY metric with values like: "No specific X stated", "Not specified", "Not available", "Unknown", "N/A", "None listed"
+   - If a metric has NO meaningful data, DELETE IT ENTIRELY. Do not include metrics with placeholder text.
+   - Example: {"label": "Key Metrics", "value": "- No specific production capacity stated\\n- No specific factory area stated"} → DELETE THIS ENTIRE METRIC
+
+3. REMOVE UNNECESSARY/WORTHLESS ROWS:
    - Remove rows with vague values like "Various", "Multiple", "Several" without specifics
    - Remove rows about awards, achievements, recognitions (not useful for M&A)
    - Remove rows about years of experience (not useful for M&A)
    - Remove rows about operating hours, office hours
 
-3. MERGE SIMILAR INFORMATION:
+4. HARD RULE - TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH:
+   - Vietnamese: "Muc" → "Squid", "Ca" → "Fish", "Tom" → "Shrimp", "So Diep" → "Scallop", "Ca Hoi" → "Salmon", "Rong Nho" → "Sea Grape", "Yen Sao" → "Bird's Nest"
+   - Chinese/Thai/Indonesian: translate to English equivalents
+   - NEVER leave product names in non-English languages. The user CANNOT translate.
+
+5. MERGE SIMILAR INFORMATION:
    - "Customers" and "Customer Segments" → merge into one "Key Customers" row
    - "Products" and "Product Categories" → keep only the more detailed one
    - If breakdown_items and key_metrics have overlapping info, keep in key_metrics only
 
-4. CLEAN UP HQ/LOCATION:
+6. CLEAN UP HQ/LOCATION:
    - If location looks like JSON ({"HQ":"..."}), extract the actual location value
    - Format should be: "City, State/Province, Country" or "District, Singapore" for Singapore
 
@@ -8884,6 +8972,15 @@ app.post('/api/profile-slides', async (req, res) => {
 
         // Step 6: Run AI review agent to clean up duplicative/unnecessary data
         companyData = await reviewAndCleanData(companyData);
+
+        // Step 7: HARD RULE - Filter out empty/meaningless Key Metrics
+        // Remove metrics that say "No specific X stated", "Not specified", etc.
+        const metricsBefore = companyData.key_metrics?.length || 0;
+        companyData.key_metrics = filterEmptyMetrics(companyData.key_metrics);
+        const metricsAfter = companyData.key_metrics?.length || 0;
+        if (metricsBefore !== metricsAfter) {
+          console.log(`  Step 7: Filtered ${metricsBefore - metricsAfter} empty metrics (${metricsBefore} → ${metricsAfter})`);
+        }
 
         console.log(`  ✓ Completed: ${companyData.title || companyData.company_name} (${companyData.key_metrics?.length || 0} metrics after review)`);
         results.push(companyData);
