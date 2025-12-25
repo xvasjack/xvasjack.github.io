@@ -6372,19 +6372,19 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       lineGray: 'A0A0A0'
     };
 
-    const slide = pptx.addSlide();
+    // ===== DEFINE MASTER SLIDE WITH FIXED LINES (CANNOT BE MOVED) =====
+    pptx.defineSlideMaster({
+      title: 'YCP_TRADING_MASTER',
+      background: { color: 'FFFFFF' },
+      objects: [
+        { line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.navyLine, width: 4.5 } } },
+        { line: { x: 0, y: 1.10, w: 13.333, h: 0, line: { color: COLORS.navyLine, width: 2.25 } } },
+        { line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.navyLine, width: 2.25 } } }
+      ]
+    });
 
-    // ===== HEADER LINES (from slideLayout1) =====
-    // Thick line at y=1.02" (933847 EMU), width 4.5pt (57150 EMU)
-    slide.addShape(pptx.shapes.LINE, {
-      x: 0, y: 1.02, w: 13.333, h: 0,
-      line: { color: COLORS.navyLine, width: 4.5 }
-    });
-    // Thin line at y=1.10" (1005855 EMU), width 2.25pt (28575 EMU)
-    slide.addShape(pptx.shapes.LINE, {
-      x: 0, y: 1.10, w: 13.333, h: 0,
-      line: { color: COLORS.navyLine, width: 2.25 }
-    });
+    // Use master slide - lines are fixed in background and cannot be moved
+    const slide = pptx.addSlide({ masterName: 'YCP_TRADING_MASTER' });
 
     // ===== TITLE + SUBTITLE (positioned per slideLayout1: x=0.38", y=0.05") =====
     // Title at top (font 24), subtitle below (font 16), combined text box
@@ -6792,11 +6792,7 @@ Return JSON with this exact format:
       fontSize: 9, fontFace: 'Segoe UI', color: COLORS.black
     });
 
-    // ===== FOOTER LINE (from slideLayout1: y=7.24", width 2.25pt) =====
-    slide.addShape(pptx.shapes.LINE, {
-      x: 0, y: 7.24, w: 13.333, h: 0,
-      line: { color: COLORS.navyLine, width: 2.25 }
-    });
+    // Footer line is now in master slide (cannot be moved)
 
     // ===== YCP LOGO (from slideLayout1: x=0.38", y=7.30") =====
     // Logo image stored in backend folder
@@ -7031,14 +7027,80 @@ const EXCHANGE_RATE_MAP = {
   'HK': '為替レート: HKD 10M = 2億円'
 };
 
-// Get country code from location string
+// Get country code from location string - MUST match HQ country only
 function getCountryCode(location) {
   if (!location) return null;
   const loc = location.toLowerCase();
+
+  // HARD RULE: Extract HQ country FIRST - flag must match HQ, not other locations
+  // Check for "HQ:" prefix and extract only HQ location
+  const hqMatch = loc.match(/hq:\s*([^\n]+)/i);
+  if (hqMatch) {
+    const hqLocation = hqMatch[1].trim();
+    // Get country from the end of HQ line (last comma-separated part)
+    const parts = hqLocation.split(',').map(p => p.trim());
+    const country = parts[parts.length - 1];
+    for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
+      if (country.includes(key)) return code;
+    }
+  }
+
+  // If no HQ prefix, check if it's a simple location (City, Country format)
+  // Use the LAST part which should be the country
+  const parts = loc.split(',').map(p => p.trim());
+  if (parts.length >= 1) {
+    const lastPart = parts[parts.length - 1];
+    for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
+      if (lastPart.includes(key)) return code;
+    }
+  }
+
+  // Fallback: search entire string (but this shouldn't happen with proper location format)
   for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
     if (loc.includes(key)) return code;
   }
   return null;
+}
+
+// HARD RULE: Filter out empty/meaningless Key Metrics
+// Remove metrics that say "No specific X stated", "Not specified", etc.
+function filterEmptyMetrics(keyMetrics) {
+  if (!keyMetrics || !Array.isArray(keyMetrics)) return [];
+
+  // Patterns that indicate empty/meaningless metric values
+  const emptyPatterns = [
+    /no specific/i,
+    /not specified/i,
+    /not stated/i,
+    /not available/i,
+    /not found/i,
+    /not provided/i,
+    /not mentioned/i,
+    /not disclosed/i,
+    /unknown/i,
+    /n\/a/i,
+    /none listed/i,
+    /none specified/i,
+    /none stated/i,
+    /no information/i,
+    /no data/i,
+    /^\s*-?\s*$/,  // Empty or just dashes
+  ];
+
+  return keyMetrics.filter(metric => {
+    if (!metric || !metric.value) return false;
+    const value = String(metric.value).trim();
+    if (!value) return false;
+
+    // Check if value matches any empty pattern
+    for (const pattern of emptyPatterns) {
+      if (pattern.test(value)) {
+        console.log(`    Removing empty metric: "${metric.label}" = "${value}"`);
+        return false;
+      }
+    }
+    return true;
+  });
 }
 
 // Common shortforms that don't need explanation
@@ -7142,28 +7204,28 @@ async function generatePPTX(companies, targetDescription = '') {
       footerText: '808080'     // Gray footer text
     };
 
+    // ===== DEFINE MASTER SLIDE WITH FIXED LINES (CANNOT BE MOVED) =====
+    // Lines are part of the master template background, not individual shapes
+    pptx.defineSlideMaster({
+      title: 'YCP_MASTER',
+      background: { color: 'FFFFFF' },
+      objects: [
+        // Thick header line (y: 1.02")
+        { line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } } },
+        // Thin header line (y: 1.10")
+        { line: { x: 0, y: 1.10, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
+        // Footer line (y: 7.24")
+        { line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } }
+      ]
+    });
+
     // ===== TARGET LIST SLIDE (FIRST SLIDE) =====
     if (targetDescription && companies.length > 0) {
       console.log('Generating Target List slide...');
       const meceData = await generateMECESegments(targetDescription, companies);
 
-      const targetSlide = pptx.addSlide();
-
-      // ===== HEADER LINES (same as profile slides) =====
-      targetSlide.addShape(pptx.shapes.LINE, {
-        x: 0, y: 1.02, w: 13.333, h: 0,
-        line: { color: COLORS.headerLine, width: 4.5 }
-      });
-      targetSlide.addShape(pptx.shapes.LINE, {
-        x: 0, y: 1.10, w: 13.333, h: 0,
-        line: { color: COLORS.headerLine, width: 2.25 }
-      });
-
-      // ===== FOOTER LINE =====
-      targetSlide.addShape(pptx.shapes.LINE, {
-        x: 0, y: 7.24, w: 13.333, h: 0,
-        line: { color: COLORS.headerLine, width: 2.25 }
-      });
+      // Use master slide - lines are fixed in background
+      const targetSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
       // Title Case helper function
       const toTitleCase = (str) => {
@@ -7502,25 +7564,8 @@ async function generatePPTX(companies, targetDescription = '') {
 
     // ===== INDIVIDUAL COMPANY PROFILE SLIDES =====
     for (const company of companies) {
-      const slide = pptx.addSlide();
-
-      // ===== HEADER LINES (from template) =====
-      // Thick line under title area
-      slide.addShape(pptx.shapes.LINE, {
-        x: 0, y: 1.02, w: 13.333, h: 0,
-        line: { color: COLORS.headerLine, width: 4.5 }
-      });
-      // Thin line below
-      slide.addShape(pptx.shapes.LINE, {
-        x: 0, y: 1.10, w: 13.333, h: 0,
-        line: { color: COLORS.headerLine, width: 2.25 }
-      });
-
-      // ===== FOOTER LINE =====
-      slide.addShape(pptx.shapes.LINE, {
-        x: 0, y: 7.24, w: 13.333, h: 0,
-        line: { color: COLORS.headerLine, width: 2.25 }
-      });
+      // Use master slide - lines are fixed in background and cannot be moved
+      const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
       // ===== TITLE + MESSAGE (combined in one text box) =====
       const titleText = company.title || company.company_name || 'Company Profile';
@@ -8253,9 +8298,11 @@ Example for Suppliers:
 IMPORTANT: Always use "- " prefix for each segment line to create point form for easier reading.
 
 RULES:
-- Write ALL text using regular English alphabet only (A-Z, no diacritics/accents)
-- Convert ALL Vietnamese: "Phú" → "Phu", "Đông" → "Dong", "Nguyễn" → "Nguyen", "Bình" → "Binh", "Thạnh" → "Thanh", "Cương" → "Cuong", "Thiêm" → "Thiem"
-- Convert ALL foreign characters: "São" → "Sao", "北京" → "Beijing", "東京" → "Tokyo"
+- HARD RULE - TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH:
+  - ALL product names, company names, and any other text in ANY non-English language MUST be translated to English
+  - This applies to ALL languages: Vietnamese, Chinese, Thai, Malay, Indonesian, Hindi, Korean, Japanese, Arabic, Spanish, etc.
+  - The user CANNOT translate - you MUST translate everything to English
+- Write ALL text using regular English alphabet only (A-Z, no diacritics, no foreign characters)
 - Remove company suffixes from ALL names: Co., Ltd, JSC, Sdn Bhd, Pte Ltd, Inc, Corp, LLC, GmbH
 - Extract as many metrics as found (8-15 ideally)
 - For metrics with multiple items, use "- " bullet points separated by "\\n"
@@ -8264,6 +8311,7 @@ RULES:
 - Be specific with numbers when available
 - For Shareholding: ONLY include if EXPLICITLY stated on website (e.g., "family-owned", "publicly traded", "PE-backed"). NEVER assume ownership structure.
 - DO NOT include: years of experience, awards, recognitions, market position, operating hours, number of branches/locations (not useful for M&A)
+- DO NOT include metrics with NO MEANINGFUL VALUES - if you don't have specific data, don't include the metric at all. NEVER write "No specific X stated" - just omit that metric entirely.
 - NEVER make up data - only include what's explicitly stated
 - Return ONLY valid JSON`
         },
@@ -8333,9 +8381,11 @@ OUTPUT JSON:
 }
 
 RULES:
-- Write ALL text using regular English alphabet only (A-Z, no diacritics/accents)
-- Convert ALL Vietnamese: "Phú" → "Phu", "Đông" → "Dong", "Nguyễn" → "Nguyen", "Bình" → "Binh", "Thạnh" → "Thanh", "Cương" → "Cuong"
-- Convert ALL foreign characters: "São" → "Sao", "北京" → "Beijing", "東京" → "Tokyo"
+- HARD RULE - TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH:
+  - ALL product names, company names, and any other text in ANY non-English language MUST be translated to English
+  - This applies to ALL languages: Vietnamese, Chinese, Thai, Malay, Indonesian, Hindi, Korean, Japanese, Arabic, Spanish, etc.
+  - The user CANNOT translate - you MUST translate everything to English
+- Write ALL text using regular English alphabet only (A-Z, no diacritics, no foreign characters)
 - Remove company suffixes from ALL names: Co., Ltd, JSC, Sdn Bhd, Pte Ltd, Inc, Corp, LLC, GmbH
 - PRIORITIZE the category with MOST available content from the website
 - Use 3-6 items maximum
@@ -8654,18 +8704,29 @@ async function reviewAndCleanData(companyData) {
    - Example: "Number of Suppliers: 6" + "Key Suppliers: A, B, C" → "Key Suppliers: 6 suppliers including A, B, C"
    - Example: "Number of Customers" + "Key Customers" → merge into "Key Customers"
 
-2. REMOVE UNNECESSARY/WORTHLESS ROWS:
+2. HARD RULE - REMOVE EMPTY/MEANINGLESS METRICS:
+   - Remove ANY metric with values like: "No specific X stated", "Not specified", "Not available", "Unknown", "N/A", "None listed"
+   - If a metric has NO meaningful data, DELETE IT ENTIRELY. Do not include metrics with placeholder text.
+   - Example: {"label": "Key Metrics", "value": "- No specific production capacity stated\\n- No specific factory area stated"} → DELETE THIS ENTIRE METRIC
+
+3. REMOVE UNNECESSARY/WORTHLESS ROWS:
    - Remove rows with vague values like "Various", "Multiple", "Several" without specifics
    - Remove rows about awards, achievements, recognitions (not useful for M&A)
    - Remove rows about years of experience (not useful for M&A)
    - Remove rows about operating hours, office hours
 
-3. MERGE SIMILAR INFORMATION:
+4. HARD RULE - TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH:
+   - ALL product names, company names, and any text in ANY non-English language MUST be translated to English
+   - This applies to ALL languages: Vietnamese, Chinese, Thai, Malay, Indonesian, Hindi, Korean, Japanese, Arabic, Spanish, etc.
+   - The user CANNOT translate - you MUST translate everything to English
+   - Write ALL text using regular English alphabet only (A-Z, no diacritics, no foreign characters)
+
+5. MERGE SIMILAR INFORMATION:
    - "Customers" and "Customer Segments" → merge into one "Key Customers" row
    - "Products" and "Product Categories" → keep only the more detailed one
    - If breakdown_items and key_metrics have overlapping info, keep in key_metrics only
 
-4. CLEAN UP HQ/LOCATION:
+6. CLEAN UP HQ/LOCATION:
    - If location looks like JSON ({"HQ":"..."}), extract the actual location value
    - Format should be: "City, State/Province, Country" or "District, Singapore" for Singapore
 
@@ -8884,6 +8945,15 @@ app.post('/api/profile-slides', async (req, res) => {
 
         // Step 6: Run AI review agent to clean up duplicative/unnecessary data
         companyData = await reviewAndCleanData(companyData);
+
+        // Step 7: HARD RULE - Filter out empty/meaningless Key Metrics
+        // Remove metrics that say "No specific X stated", "Not specified", etc.
+        const metricsBefore = companyData.key_metrics?.length || 0;
+        companyData.key_metrics = filterEmptyMetrics(companyData.key_metrics);
+        const metricsAfter = companyData.key_metrics?.length || 0;
+        if (metricsBefore !== metricsAfter) {
+          console.log(`  Step 7: Filtered ${metricsBefore - metricsAfter} empty metrics (${metricsBefore} → ${metricsAfter})`);
+        }
 
         console.log(`  ✓ Completed: ${companyData.title || companyData.company_name} (${companyData.key_metrics?.length || 0} metrics after review)`);
         results.push(companyData);
@@ -9183,17 +9253,23 @@ async function generateFinancialChartPPTX(financialDataArray) {
       chartOrange: 'ED7D31'
     };
 
+    // ===== DEFINE MASTER SLIDE WITH FIXED LINES (CANNOT BE MOVED) =====
+    pptx.defineSlideMaster({
+      title: 'YCP_FINANCIAL_MASTER',
+      background: { color: 'FFFFFF' },
+      objects: [
+        { line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } } },
+        { line: { x: 0, y: 1.10, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
+        { line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } }
+      ]
+    });
+
     for (const financialData of dataArray) {
       if (!financialData) continue;
 
-      const slide = pptx.addSlide();
+      // Use master slide - lines are fixed in background and cannot be moved
+      const slide = pptx.addSlide({ masterName: 'YCP_FINANCIAL_MASTER' });
 
-      // Header lines
-      slide.addShape(pptx.shapes.LINE, { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } });
-      slide.addShape(pptx.shapes.LINE, { x: 0, y: 1.10, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } });
-
-      // Footer line
-      slide.addShape(pptx.shapes.LINE, { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } });
       slide.addText('(C) YCP 2025 all rights reserved', { x: 4.1, y: 7.26, w: 5.1, h: 0.2, fontSize: 8, fontFace: 'Segoe UI', color: COLORS.footerText, align: 'center' });
 
       // Title
