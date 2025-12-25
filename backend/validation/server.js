@@ -2762,6 +2762,11 @@ app.post('/api/validation', async (req, res) => {
 
 
 
+// ============ HEALTHCHECK ============
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', service: 'validation' });
+});
+
 // ============ SERVER STARTUP ============
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

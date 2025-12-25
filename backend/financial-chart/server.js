@@ -2651,6 +2651,11 @@ app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res
 
 
 
+// ============ HEALTHCHECK ============
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', service: 'financial-chart' });
+});
+
 // ============ SERVER STARTUP ============
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
