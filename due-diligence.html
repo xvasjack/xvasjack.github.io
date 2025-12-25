@@ -743,33 +743,54 @@
     async function processFiles(files) {
       console.log('[DD] processFiles called with', files.length, 'files');
       const results = { documents: [], audioFiles: [] };
-      for (const file of files) {
+      const totalFiles = files.length;
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileNum = i + 1;
         const ext = file.name.split('.').pop().toLowerCase();
-        console.log(`[DD] Processing file: ${file.name} (${ext})`);
+        console.log(`[DD] Processing file ${fileNum}/${totalFiles}: ${file.name} (${ext})`);
         const audioExts = ['mp3', 'wav', 'm4a', 'webm', 'ogg', 'aac', 'flac'];
 
-        if (audioExts.includes(ext)) {
-          const base64 = await fileToBase64(file);
-          results.audioFiles.push({ name: file.name, type: ext, content: base64, mimeType: file.type || `audio/${ext}`, isAudio: true });
-          console.log(`[DD] Added audio file: ${file.name}`);
-        } else {
-          let content = '';
-          if (ext === 'pdf') {
-            content = await extractPDFText(file);
-            console.log(`[DD] Extracted PDF text: ${content.length} chars`);
-          } else if (['txt', 'rtf', 'csv'].includes(ext)) {
-            content = await new Promise(r => { const reader = new FileReader(); reader.onload = e => r(e.target.result); reader.readAsText(file); });
-            console.log(`[DD] Read text file: ${content.length} chars`);
-          } else {
+        try {
+          if (audioExts.includes(ext)) {
             const base64 = await fileToBase64(file);
-            content = `[BASE64:${ext}]${base64}`;
-            console.log(`[DD] Encoded binary file: ${base64.length} chars`);
+            results.audioFiles.push({ name: file.name, type: ext, content: base64, mimeType: file.type || `audio/${ext}`, isAudio: true });
+            console.log(`[DD] Added audio file ${fileNum}/${totalFiles}: ${file.name}`);
+          } else {
+            let content = '';
+            if (ext === 'pdf') {
+              content = await extractPDFText(file);
+              console.log(`[DD] Extracted PDF text from ${file.name}: ${content.length} chars`);
+            } else if (['txt', 'rtf', 'csv'].includes(ext)) {
+              content = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = e => resolve(e.target.result);
+                reader.onerror = () => reject(new Error('Failed to read text file'));
+                reader.readAsText(file);
+              });
+              console.log(`[DD] Read text file ${file.name}: ${content.length} chars`);
+            } else {
+              const base64 = await fileToBase64(file);
+              content = `[BASE64:${ext}]${base64}`;
+              console.log(`[DD] Encoded binary file ${file.name}: ${base64.length} chars`);
+            }
+            results.documents.push({ name: file.name, type: ext, content, isAudio: false });
+            console.log(`[DD] Added document ${fileNum}/${totalFiles}: ${file.name}`);
           }
-          results.documents.push({ name: file.name, type: ext, content, isAudio: false });
-          console.log(`[DD] Added document: ${file.name}`);
+        } catch (fileError) {
+          console.error(`[DD] Error processing file ${file.name}:`, fileError);
+          // Still add the file with an error message so it's not skipped
+          results.documents.push({
+            name: file.name,
+            type: ext,
+            content: `[Error processing file ${file.name}: ${fileError.message}]`,
+            isAudio: false
+          });
+          console.log(`[DD] Added document ${fileNum}/${totalFiles} with error: ${file.name}`);
         }
       }
-      console.log(`[DD] processFiles complete: ${results.documents.length} docs, ${results.audioFiles.length} audio`);
+      console.log(`[DD] processFiles complete: ${results.documents.length} docs, ${results.audioFiles.length} audio (expected ${totalFiles} total)`);
       return results;
     }
 
@@ -811,8 +832,18 @@
           });
         }
 
-        console.log(`[DD] Sending to API: ${processed.documents.length} documents, ${processed.audioFiles.length} audio files`);
-        processed.documents.forEach((d, i) => console.log(`[DD]   Doc ${i + 1}: ${d.name} (${d.content?.length || 0} chars)`));
+        console.log(`[DD] ============================================`);
+        console.log(`[DD] SENDING TO API:`);
+        console.log(`[DD]   Total documents: ${processed.documents.length}`);
+        console.log(`[DD]   Total audio files: ${processed.audioFiles.length}`);
+        processed.documents.forEach((d, i) => {
+          console.log(`[DD]   Doc ${i + 1}: "${d.name}" (type: ${d.type}, content: ${d.content?.length || 0} chars)`);
+          // Log first 100 chars of content for debugging
+          if (d.content) {
+            console.log(`[DD]     Content preview: ${d.content.substring(0, 100)}...`);
+          }
+        });
+        console.log(`[DD] ============================================`);
 
         const response = await fetch(`${API_BASE}/api/due-diligence`, {
           method: 'POST',
