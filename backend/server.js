@@ -1775,7 +1775,10 @@ async function fetchWebsite(url) {
         redirect: 'follow'
       });
       clearTimeout(timeout);
-      if (!response.ok) return null;
+      if (!response.ok) {
+        console.log(`    [fetchWebsite] ${targetUrl} - HTTP ${response.status}`);
+        return null;
+      }
       const html = await response.text();
       const cleanText = html
         .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
@@ -1784,8 +1787,12 @@ async function fetchWebsite(url) {
         .replace(/\s+/g, ' ')
         .trim()
         .substring(0, 15000);
+      if (cleanText.length <= 100) {
+        console.log(`    [fetchWebsite] ${targetUrl} - content too short (${cleanText.length} chars)`);
+      }
       return cleanText.length > 100 ? cleanText : null;
     } catch (e) {
+      console.log(`    [fetchWebsite] ${targetUrl} - ERROR: ${e.message}`);
       return null;
     }
   };
@@ -4498,7 +4505,7 @@ app.post('/api/validation', async (req, res) => {
 
         const pageText = await fetchWebsite(website);
 
-        console.log(`  Fetched pageText for ${companyName}: type=${typeof pageText}, length=${pageText?.length || 0}`);
+        console.log(`  Fetched pageText for ${companyName}: value=${pageText === null ? 'NULL' : (typeof pageText === 'string' ? `string(${pageText.length})` : typeof pageText)}`);
 
         if (!pageText || pageText.length < 100) {
           return {
