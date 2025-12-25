@@ -4317,6 +4317,11 @@ app.post('/api/profile-slides', async (req, res) => {
 
 
 
+// ============ HEALTHCHECK ============
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', service: 'profile-slides' });
+});
+
 // ============ SERVER STARTUP ============
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

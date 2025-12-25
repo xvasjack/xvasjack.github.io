@@ -2876,6 +2876,11 @@ Find as many as possible - be exhaustive. Search using ALL the terminology varia
 });
 
 
+// ============ HEALTHCHECK ============
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', service: 'target-v4' });
+});
+
 // ============ SERVER STARTUP ============
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

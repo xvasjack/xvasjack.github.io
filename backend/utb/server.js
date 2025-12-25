@@ -3218,6 +3218,11 @@ app.post('/api/utb', async (req, res) => {
 
 
 
+// ============ HEALTHCHECK ============
+app.get('/', (req, res) => {
+  res.json({ status: 'ok', service: 'utb' });
+});
+
 // ============ SERVER STARTUP ============
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
