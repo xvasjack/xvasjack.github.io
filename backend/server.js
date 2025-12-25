@@ -1601,25 +1601,25 @@ async function exhaustiveSearch(business, country, exclusion) {
   console.log(`    OpenAI Search: ${allOpenAISearchQueries.length} queries`);
   console.log(`    Total: ${allSerpQueries.length + allPerpQueries.length + allOpenAISearchQueries.length}`);
 
-  // Run all strategies in parallel (with error handling to prevent one failure from crashing all)
+  // Run all strategies in parallel
   const [serpResults, perpResults, openaiSearchResults, geminiResults] = await Promise.all([
     // SerpAPI queries
     process.env.SERPAPI_API_KEY
-      ? Promise.all(allSerpQueries.map(q => callSerpAPI(q).catch(e => { console.error(`SerpAPI error: ${e.message}`); return null; })))
+      ? Promise.all(allSerpQueries.map(q => callSerpAPI(q)))
       : Promise.resolve([]),
 
     // Perplexity queries
-    Promise.all(allPerpQueries.map(q => callPerplexity(q).catch(e => { console.error(`Perplexity error: ${e.message}`); return null; }))),
+    Promise.all(allPerpQueries.map(q => callPerplexity(q))),
 
     // OpenAI Search queries
-    Promise.all(allOpenAISearchQueries.map(q => callOpenAISearch(q).catch(e => { console.error(`OpenAI Search error: ${e.message}`); return null; }))),
+    Promise.all(allOpenAISearchQueries.map(q => callOpenAISearch(q))),
 
     // Also run some Gemini queries for diversity
     Promise.all([
       callGemini(`Find ALL ${business} companies in ${country}. Exclude ${exclusion}. ${buildOutputFormat()}`),
       callGemini(`List ${business} factories and manufacturing plants in ${country}. Not ${exclusion}. ${buildOutputFormat()}`),
       callGemini(`${business} SME and family businesses in ${country}. Exclude ${exclusion}. ${buildOutputFormat()}`)
-    ].map(p => p.catch(e => { console.error(`Gemini error: ${e.message}`); return null; })))
+    ])
   ]);
 
   console.log(`  All API calls done in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
@@ -1635,7 +1635,7 @@ async function exhaustiveSearch(business, country, exclusion) {
   // Extract from Perplexity results
   console.log(`  Extracting from ${perpResults.length} Perplexity results...`);
   const perpExtractions = await Promise.all(
-    perpResults.filter(r => r).map(text => extractCompanies(text, country).catch(e => { console.error(`Extraction error: ${e.message}`); return []; }))
+    perpResults.map(text => extractCompanies(text, country))
   );
   const perpCompanies = perpExtractions.flat();
   console.log(`    Extracted ${perpCompanies.length} companies from Perplexity`);
@@ -1643,7 +1643,7 @@ async function exhaustiveSearch(business, country, exclusion) {
   // Extract from OpenAI Search results
   console.log(`  Extracting from ${openaiSearchResults.length} OpenAI Search results...`);
   const openaiExtractions = await Promise.all(
-    openaiSearchResults.filter(r => r).map(text => extractCompanies(text, country).catch(e => { console.error(`Extraction error: ${e.message}`); return []; }))
+    openaiSearchResults.map(text => extractCompanies(text, country))
   );
   const openaiCompanies = openaiExtractions.flat();
   console.log(`    Extracted ${openaiCompanies.length} companies from OpenAI Search`);
@@ -1651,7 +1651,7 @@ async function exhaustiveSearch(business, country, exclusion) {
   // Extract from Gemini results
   console.log(`  Extracting from ${geminiResults.length} Gemini results...`);
   const geminiExtractions = await Promise.all(
-    geminiResults.filter(r => r).map(text => extractCompanies(text, country).catch(e => { console.error(`Extraction error: ${e.message}`); return []; }))
+    geminiResults.map(text => extractCompanies(text, country))
   );
   const geminiCompanies = geminiExtractions.flat();
   console.log(`    Extracted ${geminiCompanies.length} companies from Gemini`);
@@ -1762,120 +1762,34 @@ async function filterVerifiedWebsites(companies) {
 // ============ FETCH WEBSITE FOR VALIDATION ============
 
 async function fetchWebsite(url) {
-  // Security block patterns - these indicate WAF/Cloudflare/bot protection
-  const securityBlockPatterns = [
-    'checking your browser',
-    'please wait',
-    'just a moment',
-    'ddos protection',
-    'cloudflare',
-    'security check',
-    'access denied',
-    'not acceptable',
-    'mod_security',
-    'forbidden',
-    'blocked',
-    'captcha',
-    'verify you are human',
-    'bot detection',
-    'please enable javascript',
-    'enable cookies'
-  ];
-
-  const tryFetch = async (targetUrl) => {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 20000); // Increased to 20 seconds
-      const response = await fetch(targetUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-          'Accept-Encoding': 'gzip, deflate',
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1'
-        },
-        signal: controller.signal,
-        redirect: 'follow'
-      });
-      clearTimeout(timeout);
-
-      // Check for HTTP-level blocks
-      if (response.status === 403 || response.status === 406) {
-        return { status: 'security_blocked', reason: `HTTP ${response.status} - WAF/Security block` };
-      }
-      if (!response.ok) return { status: 'error', reason: `HTTP ${response.status}` };
-
-      const html = await response.text();
-      const lowerHtml = html.toLowerCase();
-
-      // Check for security block patterns in content
-      for (const pattern of securityBlockPatterns) {
-        if (lowerHtml.includes(pattern) && html.length < 5000) {
-          // Only flag as security block if page is small (likely a challenge page)
-          return { status: 'security_blocked', reason: `Security protection detected: "${pattern}"` };
-        }
-      }
-
-      const cleanText = html
-        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .substring(0, 15000);
-
-      if (cleanText.length > 100) {
-        return { status: 'ok', content: cleanText };
-      }
-      return { status: 'insufficient', reason: 'Content too short' };
-    } catch (e) {
-      return { status: 'error', reason: e.message || 'Connection failed' };
-    }
-  };
-
-  // Parse base URL
-  let baseUrl = url;
   try {
-    const parsed = new URL(url);
-    baseUrl = `${parsed.protocol}//${parsed.host}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      signal: controller.signal,
+      redirect: 'follow'
+    });
+    clearTimeout(timeout);
+    if (!response.ok) {
+      console.log(`  [fetchWebsite] ${url} - HTTP ${response.status}`);
+      return null;
+    }
+    const html = await response.text();
+    console.log(`  [fetchWebsite] ${url} - got ${html.length} chars HTML`);
+    const cleanText = html
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .substring(0, 15000);
+    console.log(`  [fetchWebsite] ${url} - cleaned to ${cleanText.length} chars`);
+    return cleanText.length > 50 ? cleanText : null;
   } catch (e) {
-    baseUrl = url.replace(/\/+$/, '');
+    console.log(`  [fetchWebsite] ${url} - ERROR: ${e.message}`);
+    return null;
   }
-
-  // Try original URL first
-  let result = await tryFetch(url);
-  if (result.status === 'ok') return result;
-  if (result.status === 'security_blocked') return result; // Return security block immediately
-
-  // Try with/without www
-  const hasWww = baseUrl.includes('://www.');
-  const altBaseUrl = hasWww ? baseUrl.replace('://www.', '://') : baseUrl.replace('://', '://www.');
-
-  // Try alternative paths on BOTH original and www/non-www variants
-  const urlVariants = [baseUrl, altBaseUrl];
-  const urlPaths = ['', '/en', '/home', '/about', '/index.html', '/index.php'];
-
-  for (const variant of urlVariants) {
-    for (const path of urlPaths) {
-      const testUrl = variant + path;
-      result = await tryFetch(testUrl);
-      if (result.status === 'ok') return result;
-      if (result.status === 'security_blocked') return result;
-    }
-  }
-
-  // Try HTTPS if original was HTTP (on both variants)
-  if (url.startsWith('http://')) {
-    for (const variant of urlVariants) {
-      const httpsVariant = variant.replace('http://', 'https://');
-      result = await tryFetch(httpsVariant);
-      if (result.status === 'ok') return result;
-      if (result.status === 'security_blocked') return result;
-    }
-  }
-
-  return { status: 'inaccessible', reason: 'Could not fetch content from any URL variation' };
 }
 
 // ============ DYNAMIC EXCLUSION RULES BUILDER (n8n-style PAGE SIGNAL detection) ============
@@ -3193,53 +3107,40 @@ Be thorough - find EVERY company you can. Return as a structured list.`;
 
 // Expand regional inputs to individual countries using AI
 async function expandRegionToCountries(regionInput) {
+  // Check if input looks like a region rather than specific countries
+  const regionKeywords = ['asia', 'europe', 'africa', 'america', 'middle east', 'oceania', 'pacific', 'asean', 'eu', 'gcc', 'latam', 'apac', 'emea'];
   const inputLower = regionInput.toLowerCase();
 
-  // If comma-separated, user already specified countries - return as array
-  if (inputLower.includes(',')) {
-    return regionInput.split(',').map(c => c.trim());
+  const isRegion = regionKeywords.some(keyword => inputLower.includes(keyword)) &&
+                   !inputLower.includes(','); // If comma-separated, user already specified countries
+
+  if (!isRegion) {
+    return regionInput; // Return as-is if not a region
   }
 
-  // Hardcoded region mappings (main business markets only)
-  const regionMappings = {
-    // Southeast Asia - 6 main markets (exclude Cambodia, Laos, Myanmar unless explicit)
-    'southeast asia': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'],
-    'south east asia': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'],
-    'sea': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'],
-    'asean': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'],
+  console.log(`  Expanding region "${regionInput}" to specific countries...`);
 
-    // Other common regions
-    'east asia': ['Japan', 'South Korea', 'Taiwan', 'China', 'Hong Kong'],
-    'north asia': ['Japan', 'South Korea', 'Taiwan', 'China'],
-    'south asia': ['India', 'Pakistan', 'Bangladesh', 'Sri Lanka'],
-    'middle east': ['UAE', 'Saudi Arabia', 'Qatar', 'Kuwait', 'Bahrain', 'Oman'],
-    'gcc': ['UAE', 'Saudi Arabia', 'Qatar', 'Kuwait', 'Bahrain', 'Oman'],
-    'europe': ['Germany', 'France', 'UK', 'Italy', 'Spain', 'Netherlands', 'Poland'],
-    'western europe': ['Germany', 'France', 'UK', 'Italy', 'Spain', 'Netherlands', 'Belgium'],
-    'eastern europe': ['Poland', 'Czech Republic', 'Romania', 'Hungary', 'Slovakia'],
-    'apac': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines', 'Japan', 'South Korea', 'Taiwan', 'China', 'India', 'Australia'],
-    'asia pacific': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines', 'Japan', 'South Korea', 'Taiwan', 'China', 'India', 'Australia'],
-    'latam': ['Brazil', 'Mexico', 'Argentina', 'Chile', 'Colombia', 'Peru'],
-    'latin america': ['Brazil', 'Mexico', 'Argentina', 'Chile', 'Colombia', 'Peru']
-  };
+  const prompt = `The user wants to search for companies in: "${regionInput}"
 
-  // Check for matching region
-  for (const [region, countries] of Object.entries(regionMappings)) {
-    if (inputLower.includes(region)) {
-      console.log(`  Expanding region "${regionInput}" → "${countries.join(', ')}"`);
-      return countries;
+This appears to be a REGION, not specific countries. List ALL the specific countries in this region.
+
+Return ONLY a comma-separated list of country names, nothing else.
+Example output: Indonesia, Thailand, Vietnam, Malaysia, Singapore, Philippines
+
+Countries in "${regionInput}":`;
+
+  try {
+    const result = await callGemini3Flash(prompt, false);
+    if (result && result.length > 5) {
+      const expanded = result.trim().replace(/\n/g, ', ').replace(/,\s*,/g, ',');
+      console.log(`  Expanded to: ${expanded}`);
+      return expanded;
     }
+  } catch (e) {
+    console.error(`  Region expansion failed: ${e.message}`);
   }
 
-  // Check for generic "asia" (default to Southeast Asia main markets)
-  if (inputLower === 'asia') {
-    const countries = ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'];
-    console.log(`  Expanding region "${regionInput}" → "${countries.join(', ')}"`);
-    return countries;
-  }
-
-  // Return as-is if not a recognized region (single country as array)
-  return [regionInput];
+  return regionInput; // Return original if expansion fails
 }
 
 // Generate business term variations using AI (synonyms, industry terminology)
@@ -3282,396 +3183,6 @@ Variations for "${business}":`;
   }
 
   return []; // Return empty array if generation fails
-}
-
-// ============ V5 PARALLEL ARCHITECTURE ============
-
-// Phase 0: Plan search strategy - determine languages, generate comprehensive search plan
-async function planSearchStrategyV5(business, country, exclusion) {
-  console.log('\n' + '='.repeat(50));
-  console.log('PHASE 0: PLANNING SEARCH STRATEGY');
-  console.log('='.repeat(50));
-
-  const startTime = Date.now();
-
-  // Expand regional inputs to specific countries (returns array)
-  const countries = await expandRegionToCountries(country);
-  const expandedCountry = countries.join(', '); // String for prompts
-  console.log(`  Country input: "${country}" → "${expandedCountry}"`);
-
-  // Generate business term variations
-  const businessVariations = await generateBusinessTermVariations(business);
-  console.log(`  Term variations: ${businessVariations.length > 0 ? businessVariations.join(', ') : 'none generated'}`);
-
-  // Determine languages for each country
-  const countryLanguages = {};
-  for (const c of countries) {
-    const cLower = c.toLowerCase();
-    if (cLower.includes('thailand')) countryLanguages[c] = 'Thai';
-    else if (cLower.includes('vietnam')) countryLanguages[c] = 'Vietnamese';
-    else if (cLower.includes('indonesia')) countryLanguages[c] = 'Indonesian/Bahasa';
-    else if (cLower.includes('malaysia')) countryLanguages[c] = 'Malay/Chinese';
-    else if (cLower.includes('philippines')) countryLanguages[c] = 'Filipino/English';
-    else if (cLower.includes('japan')) countryLanguages[c] = 'Japanese';
-    else if (cLower.includes('korea')) countryLanguages[c] = 'Korean';
-    else if (cLower.includes('china')) countryLanguages[c] = 'Chinese';
-    else if (cLower.includes('taiwan')) countryLanguages[c] = 'Chinese';
-    else countryLanguages[c] = 'English/Local';
-  }
-
-  console.log(`  Languages: ${Object.entries(countryLanguages).map(([c, l]) => `${c}=${l}`).join(', ')}`);
-  console.log(`  Planning completed in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
-
-  return {
-    expandedCountry,
-    countries,
-    businessVariations,
-    countryLanguages
-  };
-}
-
-// Run a single Perplexity search task
-async function runPerplexitySearchTask(searchPrompt, country, searchLog) {
-  const startTime = Date.now();
-
-  console.log(`  Executing Perplexity search...`);
-  const result = await callPerplexity(searchPrompt);
-
-  const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(`    Completed in ${duration}s`);
-
-  // Log this search
-  searchLog.push({
-    task: `[Perplexity] ${searchPrompt.substring(0, 80)}...`,
-    duration: parseFloat(duration),
-    searchQueries: [searchPrompt.substring(0, 100)],
-    sourceCount: 1,
-    responseLength: result.length,
-    model: 'perplexity-sonar-pro'
-  });
-
-  // Extract companies from result
-  const companies = await extractCompaniesV5(result, country);
-  console.log(`    Extracted ${companies.length} companies`);
-
-  return companies;
-}
-
-// Phase 1: Perplexity main search with batched validation
-// Key: Run searches in 4 batches to avoid rate limits, validate each batch before next
-async function runPerplexityMainSearchWithValidation(plan, business, exclusion, searchLog) {
-  console.log('\n' + '='.repeat(50));
-  console.log('PHASE 1: PERPLEXITY MAIN SEARCH (BATCHED) + VALIDATION');
-  console.log('='.repeat(50));
-
-  const { expandedCountry, countries, businessVariations } = plan;
-  const startTime = Date.now();
-
-  // Generate Perplexity search queries - comprehensive but focused
-  const perplexityQueries = [
-    // Main comprehensive search
-    `List ALL ${business} companies, manufacturers, and producers in ${expandedCountry}.
-     Include: company names, official websites (not directories), headquarters locations.
-     Be EXHAUSTIVE - find every company you can. Include large, medium, and small companies.
-     EXCLUSIONS: ${exclusion}`,
-
-    // SME and local focus
-    `Find small and medium-sized ${business} companies in ${expandedCountry}.
-     Focus on: family businesses, local manufacturers, independent producers.
-     These are often acquisition targets. Include websites and HQ locations.
-     Exclude large multinationals and ${exclusion}`,
-
-    // Industry associations and directories
-    `Find ${business} companies through industry associations and trade directories in ${expandedCountry}.
-     Search: association member lists, trade show exhibitors, certification bodies.
-     Return company names, websites, and locations.`,
-
-    // Contract manufacturing and suppliers
-    `Find ${business} OEM, ODM, and contract manufacturers in ${expandedCountry}.
-     Include: toll manufacturers, private label producers, subcontractors.
-     Return company names, websites, and HQ locations.`,
-
-    // Supply chain exploration
-    `Who are the ${business} suppliers and manufacturers in ${expandedCountry}?
-     Look at: raw material suppliers, equipment manufacturers, finished goods producers.
-     Return company names, official websites, and headquarters.`
-  ];
-
-  // Add country-specific searches
-  for (const c of countries.slice(0, 4)) {
-    perplexityQueries.push(
-      `Complete list of ${business} companies in ${c}.
-       Include all manufacturers, industrial estates, and local producers.
-       Return company name, website, and city location.`
-    );
-  }
-
-  // Add term variation searches
-  for (const variation of businessVariations.slice(0, 3)) {
-    perplexityQueries.push(
-      `Find ${variation} companies and manufacturers in ${expandedCountry}.
-       Return company names, websites, and headquarters locations.`
-    );
-  }
-
-  console.log(`  Generated ${perplexityQueries.length} Perplexity search queries`);
-
-  // Split queries into 4 batches to avoid rate limits
-  const batchSize = Math.ceil(perplexityQueries.length / 4);
-  const batches = [];
-  for (let i = 0; i < perplexityQueries.length; i += batchSize) {
-    batches.push(perplexityQueries.slice(i, i + batchSize));
-  }
-
-  console.log(`  Split into ${batches.length} batches (${batches.map(b => b.length).join(', ')} queries each)`);
-
-  // Accumulate results across batches
-  const allValidated = [];
-  const allFlagged = [];
-  const allRejected = [];
-  const seenWebsites = new Set(); // Track already validated websites
-
-  // Process each batch: search → dedupe → validate → next batch
-  for (let batchIdx = 0; batchIdx < batches.length; batchIdx++) {
-    const batch = batches[batchIdx];
-    console.log(`\n  --- BATCH ${batchIdx + 1}/${batches.length} (${batch.length} queries) ---`);
-
-    // Run this batch of Perplexity searches in parallel
-    const searchPromises = batch.map((query, idx) =>
-      runPerplexitySearchTask(query, expandedCountry, searchLog)
-        .catch(e => {
-          console.error(`    Perplexity batch ${batchIdx + 1} query ${idx + 1} failed: ${e.message}`);
-          return [];
-        })
-    );
-
-    const searchResults = await Promise.all(searchPromises);
-    let batchCompanies = searchResults.flat();
-    console.log(`    Found ${batchCompanies.length} companies (before dedup)`);
-
-    // Dedupe within batch
-    const uniqueBatch = dedupeCompanies(batchCompanies);
-    console.log(`    After dedup: ${uniqueBatch.length} unique companies`);
-
-    // Remove companies already validated in previous batches
-    const newCompanies = uniqueBatch.filter(c => {
-      const website = c.website?.toLowerCase();
-      if (!website || seenWebsites.has(website)) return false;
-      return true;
-    });
-    console.log(`    New companies (not in previous batches): ${newCompanies.length}`);
-
-    if (newCompanies.length === 0) {
-      console.log(`    Skipping validation - no new companies`);
-      continue;
-    }
-
-    // Pre-filter
-    const preFiltered = preFilterCompanies(newCompanies);
-    console.log(`    After pre-filter: ${preFiltered.length} companies`);
-
-    if (preFiltered.length === 0) {
-      console.log(`    Skipping validation - no companies after pre-filter`);
-      continue;
-    }
-
-    // Validate this batch
-    console.log(`    Validating ${preFiltered.length} companies...`);
-    const batchResults = await validateCompaniesV5(preFiltered, business, expandedCountry, exclusion);
-
-    // Add to accumulated results
-    allValidated.push(...batchResults.validated);
-    allFlagged.push(...batchResults.flagged);
-    allRejected.push(...batchResults.rejected);
-
-    // Track validated websites to avoid re-validating
-    for (const c of [...batchResults.validated, ...batchResults.flagged, ...batchResults.rejected]) {
-      if (c.website) seenWebsites.add(c.website.toLowerCase());
-    }
-
-    console.log(`    Batch ${batchIdx + 1} results: ${batchResults.validated.length} valid, ${batchResults.flagged.length} flagged, ${batchResults.rejected.length} rejected`);
-    console.log(`    Running totals: ${allValidated.length} valid, ${allFlagged.length} flagged, ${allRejected.length} rejected`);
-  }
-
-  const duration = ((Date.now() - startTime) / 1000 / 60).toFixed(1);
-  console.log(`\n  Phase 1 completed in ${duration} minutes`);
-  console.log(`    Validated: ${allValidated.length}`);
-  console.log(`    Flagged: ${allFlagged.length}`);
-  console.log(`    Rejected: ${allRejected.length}`);
-
-  return { validated: allValidated, flagged: allFlagged, rejected: allRejected };
-}
-
-// Phase 2: Iterative Gemini + ChatGPT searches with "find more" pressure
-// Key: Each round builds on validated companies, forcing models to find NEW ones
-async function runIterativeSecondarySearches(plan, business, exclusion, searchLog, existingValidated = []) {
-  console.log('\n' + '='.repeat(50));
-  console.log('PHASE 2: ITERATIVE GEMINI + CHATGPT SEARCHES');
-  console.log('='.repeat(50));
-
-  const { expandedCountry, countries, businessVariations } = plan;
-  const startTime = Date.now();
-  const NUM_ROUNDS = 12;
-
-  // Track all validated and flagged companies across rounds
-  const allValidated = [...existingValidated];
-  const allFlagged = [];
-  const allRejected = [];
-  const seenWebsites = new Set(existingValidated.map(c => c.website?.toLowerCase()).filter(Boolean));
-
-  // Simple brute force prompts - just keep asking for more
-  const geminiAngles = [
-    (found) => `Find ALL ${business} companies in ${expandedCountry}.
-${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
-Return company name, website, location. Exclude: ${exclusion}`,
-
-    (found) => `Find ${business} manufacturers in ${expandedCountry}.
-${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
-Return company name, website, location. Exclude: ${exclusion}`,
-
-    (found) => `Find ${business} producers in ${expandedCountry}.
-${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
-Return company name, website, location. Exclude: ${exclusion}`,
-
-    (found) => `Find ${business} suppliers in ${expandedCountry}.
-${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
-Return company name, website, location. Exclude: ${exclusion}`,
-
-    (found) => `Find small ${business} companies in ${expandedCountry}.
-${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
-Return company name, website, location. Exclude: ${exclusion}`,
-
-    (found) => `Find local ${business} companies in ${expandedCountry}.
-${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
-Return company name, website, location. Exclude: ${exclusion}`,
-
-    (found) => `List of ${business} companies in ${expandedCountry}.
-${found.length > 0 ? `ALREADY FOUND (do NOT repeat): ${found.join(', ')}\nFind MORE companies not in this list.` : ''}
-Return company name, website, location. Exclude: ${exclusion}`,
-
-    (found) => `Find more ${business} companies in ${expandedCountry}.
-${found.length > 0 ? `ALREADY FOUND (${found.length} companies): ${found.join(', ')}\nFind ANY additional companies not in this list.` : ''}
-Return company name, website, location. Exclude: ${exclusion}`
-  ];
-
-  const chatgptAngles = [
-    (found) => ({
-      query: `${business} companies in ${expandedCountry}`,
-      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
-    }),
-
-    (found) => ({
-      query: `${business} manufacturers ${expandedCountry}`,
-      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
-    }),
-
-    (found) => ({
-      query: `${business} producers ${expandedCountry}`,
-      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
-    }),
-
-    (found) => ({
-      query: `${business} suppliers ${expandedCountry}`,
-      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
-    }),
-
-    (found) => ({
-      query: `small ${business} companies ${expandedCountry}`,
-      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
-    }),
-
-    (found) => ({
-      query: `local ${business} companies ${expandedCountry}`,
-      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
-    }),
-
-    (found) => ({
-      query: `list of ${business} companies ${expandedCountry}`,
-      context: found.length > 0 ? `Already found: ${found.join(', ')}. Find MORE.` : 'Find all.'
-    }),
-
-    (found) => ({
-      query: `all ${business} companies ${expandedCountry}`,
-      context: found.length > 0 ? `Found ${found.length}: ${found.join(', ')}. Find ANY more.` : 'Find all.'
-    })
-  ];
-
-  // Run 8 rounds of search → validate
-  for (let round = 0; round < NUM_ROUNDS; round++) {
-    console.log(`\n  --- ROUND ${round + 1}/${NUM_ROUNDS} ---`);
-
-    // Get list of already-found company names for the prompt
-    const foundCompanyNames = allValidated.map(c => c.company_name).slice(0, 50); // Limit to avoid prompt overflow
-
-    // Generate prompts for this round (cycle through available prompts)
-    const geminiPrompt = geminiAngles[round % geminiAngles.length](foundCompanyNames);
-    const chatgptConfig = chatgptAngles[round % chatgptAngles.length](foundCompanyNames);
-
-    // Run Gemini and ChatGPT searches IN PARALLEL
-    console.log(`    Running Gemini + ChatGPT searches in parallel...`);
-    const [geminiCompanies, chatgptCompanies] = await Promise.all([
-      runAgenticSearchTask(geminiPrompt, expandedCountry, searchLog)
-        .catch(e => { console.error(`    Gemini round ${round + 1} failed: ${e.message}`); return []; }),
-      runChatGPTSearchTask(
-        chatgptConfig.query,
-        chatgptConfig.context,
-        expandedCountry,
-        searchLog
-      ).catch(e => { console.error(`    ChatGPT round ${round + 1} failed: ${e.message}`); return []; })
-    ]);
-
-    console.log(`    Gemini found: ${geminiCompanies.length}, ChatGPT found: ${chatgptCompanies.length}`);
-
-    // Combine and dedupe
-    const roundCompanies = [...geminiCompanies, ...chatgptCompanies];
-    const uniqueRound = dedupeCompanies(roundCompanies);
-
-    // Filter out already-validated companies
-    const newCompanies = uniqueRound.filter(c => {
-      const website = c.website?.toLowerCase();
-      if (!website || seenWebsites.has(website)) return false;
-      return true;
-    });
-
-    console.log(`    New companies (not previously found): ${newCompanies.length}`);
-
-    if (newCompanies.length === 0) {
-      console.log(`    No new companies found in round ${round + 1}, continuing...`);
-      continue;
-    }
-
-    // Pre-filter
-    const preFiltered = preFilterCompanies(newCompanies);
-    console.log(`    After pre-filter: ${preFiltered.length}`);
-
-    if (preFiltered.length === 0) {
-      continue;
-    }
-
-    // Validate this round's companies
-    console.log(`    Validating ${preFiltered.length} companies...`);
-    const roundResults = await validateCompaniesV5(preFiltered, business, expandedCountry, exclusion);
-
-    // Add to cumulative results
-    allValidated.push(...roundResults.validated);
-    allFlagged.push(...roundResults.flagged);
-    allRejected.push(...roundResults.rejected);
-
-    // Track seen websites
-    for (const c of [...roundResults.validated, ...roundResults.flagged, ...roundResults.rejected]) {
-      if (c.website) seenWebsites.add(c.website.toLowerCase());
-    }
-
-    console.log(`    Round ${round + 1} results: ${roundResults.validated.length} valid, ${roundResults.flagged.length} flagged`);
-    console.log(`    Cumulative: ${allValidated.length} valid, ${allFlagged.length} flagged`);
-  }
-
-  const duration = ((Date.now() - startTime) / 1000 / 60).toFixed(1);
-  console.log(`\n  Phase 2 completed in ${duration} minutes`);
-  console.log(`    Total validated: ${allValidated.length}`);
-  console.log(`    Total flagged: ${allFlagged.length}`);
-
-  return { validated: allValidated, flagged: allFlagged, rejected: allRejected };
 }
 
 // Generate diverse search tasks for a business/country
@@ -3981,38 +3492,19 @@ async function validateCompaniesV5(companies, business, country, exclusion) {
       try {
         // Fetch website content for validation (shared between both models)
         let pageContent = '';
-        let fetchResult = { status: 'error', reason: 'No website' };
-
         if (company.website && company.website.startsWith('http')) {
           try {
-            fetchResult = await fetchWebsite(company.website);
+            pageContent = await fetchWebsite(company.website);
           } catch (e) {
-            fetchResult = { status: 'error', reason: e.message };
+            pageContent = '';
           }
         }
 
-        // Handle different fetch results
-        if (fetchResult.status === 'security_blocked') {
-          // Website has security/Cloudflare protection - FLAG for human review, don't remove
-          console.log(`    ? SECURITY: ${company.company_name} (${fetchResult.reason}) - flagging for human review`);
-          return {
-            company,
-            status: 'flagged',
-            geminiValid: false,
-            chatgptValid: false,
-            geminiReason: `Security blocked: ${fetchResult.reason}`,
-            chatgptReason: `Security blocked: ${fetchResult.reason}`,
-            securityBlocked: true
-          };
-        }
-
-        if (fetchResult.status !== 'ok') {
-          // Website truly inaccessible - remove
-          console.log(`    ✗ REMOVED: ${company.company_name} (${fetchResult.reason})`);
+        // Skip companies with inaccessible websites (remove them entirely)
+        if (!pageContent || pageContent.length < 100) {
+          console.log(`    ✗ REMOVED: ${company.company_name} (website inaccessible or insufficient content)`);
           return { company, status: 'skipped' };
         }
-
-        pageContent = fetchResult.content;
 
         // Run both validations in parallel
         const [geminiResult, chatgptResult] = await Promise.all([
@@ -4058,8 +3550,7 @@ async function validateCompaniesV5(companies, business, country, exclusion) {
         hq: v.corrected_hq || v.company.hq,
         geminiVote: v.geminiValid ? 'YES' : 'NO',
         chatgptVote: v.chatgptValid ? 'YES' : 'NO',
-        reason: v.geminiValid ? v.geminiReason : v.chatgptReason,
-        securityBlocked: v.securityBlocked || false
+        reason: v.geminiValid ? v.geminiReason : v.chatgptReason
       };
 
       if (v.status === 'valid') {
@@ -4067,11 +3558,7 @@ async function validateCompaniesV5(companies, business, country, exclusion) {
         console.log(`    ✓ VALID: ${v.company.company_name} (Gemini: YES, ChatGPT: YES)`);
       } else if (v.status === 'flagged') {
         flagged.push(companyData);
-        if (v.securityBlocked) {
-          console.log(`    ? FLAGGED: ${v.company.company_name} (Security/WAF blocked - needs human review)`);
-        } else {
-          console.log(`    ? FLAGGED: ${v.company.company_name} (Gemini: ${v.geminiValid ? 'YES' : 'NO'}, ChatGPT: ${v.chatgptValid ? 'YES' : 'NO'})`);
-        }
+        console.log(`    ? FLAGGED: ${v.company.company_name} (Gemini: ${v.geminiValid ? 'YES' : 'NO'}, ChatGPT: ${v.chatgptValid ? 'YES' : 'NO'})`);
       } else {
         rejected.push(companyData);
         console.log(`    ✗ REJECTED: ${v.company.company_name} (Gemini: NO, ChatGPT: NO)`);
@@ -4196,14 +3683,9 @@ function buildV5EmailHTML(validationResults, business, country, exclusion, searc
       </tr>
     `;
     allFlagged.forEach((c, i) => {
-      // Determine reason to display
+      // Determine reason to display (inaccessible websites are removed, so only model disagreements here)
       let displayReason = '';
-      let reasonStyle = 'font-size: 11px; color: #666;';
-
-      if (c.securityBlocked) {
-        displayReason = '🔒 Security/WAF blocked - verify manually';
-        reasonStyle = 'font-size: 11px; color: #dc2626; font-weight: bold;';
-      } else if (c.geminiVote === 'YES' && c.chatgptVote === 'NO') {
+      if (c.geminiVote === 'YES' && c.chatgptVote === 'NO') {
         displayReason = 'Gemini: Yes, ChatGPT: No';
       } else if (c.geminiVote === 'NO' && c.chatgptVote === 'YES') {
         displayReason = 'Gemini: No, ChatGPT: Yes';
@@ -4217,7 +3699,7 @@ function buildV5EmailHTML(validationResults, business, country, exclusion, searc
         <td>${c.company_name}</td>
         <td><a href="${c.website}">${c.website}</a></td>
         <td>${c.hq}</td>
-        <td style="${reasonStyle}">${displayReason}</td>
+        <td style="font-size: 11px; color: #666;">${displayReason}</td>
       </tr>
       `;
     });
@@ -4231,7 +3713,7 @@ function buildV5EmailHTML(validationResults, business, country, exclusion, searc
   return html;
 }
 
-// V5 ENDPOINT - Parallel Architecture with Perplexity as Main Search
+// V5 ENDPOINT - Agentic Search
 app.post('/api/find-target-v5', async (req, res) => {
   const { Business, Country, Exclusion, Email } = req.body;
 
@@ -4240,7 +3722,7 @@ app.post('/api/find-target-v5', async (req, res) => {
   }
 
   console.log(`\n${'='.repeat(70)}`);
-  console.log(`V5 PARALLEL SEARCH: ${new Date().toISOString()}`);
+  console.log(`V5 AGENTIC SEARCH: ${new Date().toISOString()}`);
   console.log(`Business: ${Business}`);
   console.log(`Country: ${Country}`);
   console.log(`Exclusion: ${Exclusion}`);
@@ -4249,81 +3731,232 @@ app.post('/api/find-target-v5', async (req, res) => {
 
   res.json({
     success: true,
-    message: 'Request received. Parallel search running. Results will be emailed in ~10-15 minutes.'
+    message: 'Request received. Agentic deep search running. Results will be emailed in ~15-25 minutes.'
   });
 
   try {
     const totalStart = Date.now();
     const searchLog = [];
 
-    // ========== PHASE 0: Plan Search Strategy ==========
-    const plan = await planSearchStrategyV5(Business, Country, Exclusion);
-
-    // ========== PHASE 1: Perplexity Main Search + Parallel Validation ==========
-    // This is the PRIMARY search - runs Perplexity searches in batches, then validates
-    const phase1Results = await runPerplexityMainSearchWithValidation(plan, Business, Exclusion, searchLog);
-
-    // ========== PHASE 2: Iterative Gemini + ChatGPT with "Find More" Pressure ==========
-    // Runs 4 rounds of search → validate, each round building on validated companies
-    // This forces models to find NEW companies instead of repeating the same ones
-    const phase2Results = await runIterativeSecondarySearches(
-      plan,
-      Business,
-      Exclusion,
-      searchLog,
-      phase1Results.validated // Pass Phase 1 validated companies so Phase 2 knows what's already found
-    );
-
-    // ========== PHASE 3: Final Results ==========
+    // ========== PHASE 0: Expand Region & Generate Term Variations ==========
     console.log('\n' + '='.repeat(50));
-    console.log('PHASE 3: FINAL RESULTS');
+    console.log('PHASE 0: PREPROCESSING INPUT');
     console.log('='.repeat(50));
 
-    // Phase 2 already includes Phase 1 validated companies in its results
-    // Just need to merge flagged and rejected
-    const allValidated = phase2Results.validated;
-    const allFlagged = [...phase1Results.flagged, ...phase2Results.flagged];
-    const allRejected = [...phase1Results.rejected, ...phase2Results.rejected];
+    // Expand regional inputs to specific countries (e.g., "southeast asia" → "Indonesia, Thailand, ...")
+    const expandedCountry = await expandRegionToCountries(Country);
+    console.log(`Country input: "${Country}" → "${expandedCountry}"`);
 
-    // Final dedup
-    const finalValidated = dedupeCompanies(allValidated);
-    const finalFlagged = dedupeCompanies(allFlagged);
-    const finalRejected = dedupeCompanies(allRejected);
+    // Generate business term variations for broader search coverage
+    const businessVariations = await generateBusinessTermVariations(Business);
+    console.log(`Term variations: ${businessVariations.length > 0 ? businessVariations.join(', ') : 'none generated'}`);
+
+    // ========== PHASE 1: Generate Search Tasks ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('PHASE 1: GENERATING AGENTIC SEARCH TASKS');
+    console.log('='.repeat(50));
+
+    const tasks = generateSearchTasks(Business, expandedCountry, Exclusion, businessVariations);
+    console.log(`Generated ${tasks.length} search tasks`);
+
+    // ========== PHASE 2: Execute Agentic Search Tasks ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('PHASE 2: EXECUTING AGENTIC SEARCHES');
+    console.log('='.repeat(50));
+
+    let allCompanies = [];
+
+    // Run each task 2x for more diverse results (model may return different companies each run)
+    for (let i = 0; i < tasks.length; i++) {
+      for (let run = 1; run <= 2; run++) {
+        console.log(`\n--- Gemini Task ${i + 1}/${tasks.length} (Run ${run}/2) ---`);
+        try {
+          const companies = await runAgenticSearchTask(tasks[i], expandedCountry, searchLog);
+          allCompanies = [...allCompanies, ...companies];
+          console.log(`  Running total: ${allCompanies.length} companies (before dedup)`);
+        } catch (taskError) {
+          console.error(`  Task ${i + 1} run ${run} failed: ${taskError.message}`);
+        }
+      }
+    }
+
+    // ========== PHASE 2.5: ChatGPT-Powered Searches ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('PHASE 2.5: CHATGPT SEARCH (WEB GROUNDED)');
+    console.log('='.repeat(50));
+
+    const countries = expandedCountry.split(',').map(c => c.trim());
+
+    // ChatGPT search tasks - strategic angles that complement Gemini searches
+    const chatgptSearches = [
+      {
+        query: `Complete list of ${Business} companies in ${expandedCountry}. Include all manufacturers, suppliers, and producers.`,
+        reasoning: `Extract ALL ${Business} companies. Focus on companies that might be acquisition targets.`
+      },
+      {
+        query: `Lesser known ${Business} SMEs and family businesses in ${expandedCountry}`,
+        reasoning: `Find smaller, local companies that might not appear in mainstream searches. These are often the best M&A targets.`
+      },
+      {
+        query: `${Business} industry ${expandedCountry} market players manufacturers list`,
+        reasoning: `Identify all market participants including niche players and specialists.`
+      },
+      {
+        query: `${Business} suppliers OEM ODM contract manufacturers ${Country}`,
+        reasoning: `Find contract manufacturers and OEM/ODM players - often hidden from direct searches.`
+      },
+      {
+        query: `${Business} trade associations member directory ${Country}`,
+        reasoning: `Find companies through industry association membership lists.`
+      }
+    ];
+
+    // Add country-specific searches with industrial zones (search each expanded country individually)
+    for (const c of countries.slice(0, 6)) {
+      chatgptSearches.push({
+        query: `${Business} companies manufacturers industrial zones ${c}`,
+        reasoning: `Find all ${Business} companies in industrial zones of ${c}.`
+      });
+    }
+
+    // Add term variation searches for ChatGPT too
+    if (businessVariations.length > 0) {
+      for (const variation of businessVariations.slice(0, 3)) {
+        chatgptSearches.push({
+          query: `${variation} companies in ${expandedCountry}`,
+          reasoning: `Search using alternative terminology: "${variation}" to find companies that might be missed.`
+        });
+      }
+    }
+
+    // Run each ChatGPT task 2x for more diverse results
+    for (let i = 0; i < chatgptSearches.length; i++) {
+      for (let run = 1; run <= 2; run++) {
+        console.log(`\n--- ChatGPT Task ${i + 1}/${chatgptSearches.length} (Run ${run}/2) ---`);
+        try {
+          const companies = await runChatGPTSearchTask(
+            chatgptSearches[i].query,
+            chatgptSearches[i].reasoning,
+            expandedCountry,
+            searchLog
+          );
+          allCompanies = [...allCompanies, ...companies];
+          console.log(`  Running total: ${allCompanies.length} companies (before dedup)`);
+        } catch (chatgptError) {
+          console.error(`  ChatGPT task ${i + 1} run ${run} failed: ${chatgptError.message}`);
+        }
+      }
+    }
+
+    // ========== PHASE 3: Deduplication ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('PHASE 3: DEDUPLICATION');
+    console.log('='.repeat(50));
+
+    console.log(`Before dedup: ${allCompanies.length}`);
+    const uniqueCompanies = dedupeCompanies(allCompanies);
+    console.log(`After dedup: ${uniqueCompanies.length}`);
+
+    // ========== PHASE 4: Find Missing Websites ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('PHASE 4: FINDING MISSING WEBSITES');
+    console.log('='.repeat(50));
+
+    const companiesWithWebsites = [];
+    const needWebsite = uniqueCompanies.filter(c => !c.website || c.website === 'unknown' || !c.website.startsWith('http'));
+    const hasWebsite = uniqueCompanies.filter(c => c.website && c.website.startsWith('http'));
+
+    console.log(`Companies with websites: ${hasWebsite.length}`);
+    console.log(`Companies needing website lookup: ${needWebsite.length}`);
+
+    companiesWithWebsites.push(...hasWebsite);
+
+    // Batch lookup for missing websites
+    if (needWebsite.length > 0) {
+      const websitePrompt = `Find the official websites for these companies:
+
+${needWebsite.slice(0, 30).map(c => `- ${c.company_name} (${c.hq})`).join('\n')}
+
+Return JSON: {"websites": [{"company_name": "...", "website": "https://..."}]}
+
+Only include real company websites (not LinkedIn, Facebook, directories). If you can't find a website, omit that company.`;
+
+      const websiteResult = await callGemini2FlashWithSearch(websitePrompt);
+      try {
+        const jsonMatch = websiteResult.text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          if (Array.isArray(parsed.websites)) {
+            for (const w of parsed.websites) {
+              const original = needWebsite.find(c =>
+                c.company_name.toLowerCase().includes(w.company_name.toLowerCase()) ||
+                w.company_name.toLowerCase().includes(c.company_name.toLowerCase())
+              );
+              if (original && w.website && w.website.startsWith('http')) {
+                companiesWithWebsites.push({
+                  ...original,
+                  website: w.website
+                });
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.error('Website lookup parse error:', e.message);
+      }
+
+      console.log(`After website lookup: ${companiesWithWebsites.length} companies with websites`);
+    }
+
+    // ========== PHASE 5: Dual-Model Validation ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('PHASE 5: DUAL-MODEL VALIDATION (Gemini + ChatGPT)');
+    console.log('='.repeat(50));
+
+    const preFiltered = preFilterCompanies(companiesWithWebsites);
+    console.log(`After pre-filter: ${preFiltered.length}`);
+
+    // Returns { validated, flagged, rejected }
+    const validationResults = await validateCompaniesV5(preFiltered, Business, expandedCountry, Exclusion);
+
+    // ========== PHASE 6: Final Dedup and Send Results ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('PHASE 6: FINAL RESULTS');
+    console.log('='.repeat(50));
+
+    // Dedup each category
+    const finalValidated = dedupeCompanies(validationResults.validated);
+    const finalFlagged = dedupeCompanies(validationResults.flagged);
+    const finalRejected = dedupeCompanies(validationResults.rejected);
 
     console.log(`FINAL RESULTS:`);
     console.log(`  ✓ VALIDATED (both models agree): ${finalValidated.length}`);
-    console.log(`    - From Perplexity (Phase 1): ${phase1Results.validated.length}`);
-    console.log(`    - Added by Gemini/ChatGPT (Phase 2): ${phase2Results.validated.length - phase1Results.validated.length}`);
-    console.log(`  ? FLAGGED (needs review): ${finalFlagged.length}`);
+    console.log(`  ? FLAGGED (one model agrees): ${finalFlagged.length}`);
     console.log(`  ✗ REJECTED (neither agrees): ${finalRejected.length}`);
 
     // Calculate stats
-    const perplexityTasks = searchLog.filter(s => s.model === 'perplexity-sonar-pro').length;
-    const geminiTasks = searchLog.filter(s => !s.model || s.model === 'gemini').length;
-    const chatgptTasks = searchLog.filter(s => s.model === 'chatgpt-search').length;
     const totalSearches = searchLog.reduce((sum, s) => sum + s.searchQueries.length, 0);
     const totalSources = searchLog.reduce((sum, s) => sum + s.sourceCount, 0);
 
     console.log(`\nSearch Statistics:`);
-    console.log(`  Perplexity searches: ${perplexityTasks} (Phase 1 - batched)`);
-    console.log(`  Gemini searches: ${geminiTasks} (Phase 2 - 8 rounds)`);
-    console.log(`  ChatGPT searches: ${chatgptTasks} (Phase 2 - 8 rounds)`);
+    console.log(`  Total agentic tasks: ${tasks.length}`);
     console.log(`  Total internal searches: ${totalSearches}`);
     console.log(`  Total sources consulted: ${totalSources}`);
 
     // Send email with three-tier results
     const finalResults = { validated: finalValidated, flagged: finalFlagged, rejected: finalRejected };
-    const htmlContent = buildV5EmailHTML(finalResults, Business, plan.expandedCountry, Exclusion, searchLog);
+    const htmlContent = buildV5EmailHTML(finalResults, Business, expandedCountry, Exclusion, searchLog);
 
+    // Inaccessible websites are removed entirely, so flagged = model disagreements only
     await sendEmail(
       Email,
-      `[V5 ITERATIVE] ${Business} in ${Country} (${finalValidated.length} validated + ${finalFlagged.length} flagged)`,
+      `[V5 AGENTIC] ${Business} in ${Country} (${finalValidated.length} validated + ${finalFlagged.length} flagged)`,
       htmlContent
     );
 
     const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
     console.log('\n' + '='.repeat(70));
-    console.log(`V5 ITERATIVE SEARCH COMPLETE!`);
+    console.log(`V5 AGENTIC SEARCH COMPLETE!`);
     console.log(`Email sent to: ${Email}`);
     console.log(`Validated: ${finalValidated.length} | Flagged: ${finalFlagged.length} | Rejected: ${finalRejected.length}`);
     console.log(`Total time: ${totalTime} minutes`);
@@ -4830,7 +4463,7 @@ app.post('/api/validation', async (req, res) => {
 
         const pageText = await fetchWebsite(website);
 
-        console.log(`  Fetched pageText for ${companyName}: type=${typeof pageText}, length=${pageText?.length || 0}`);
+        console.log(`  Fetched pageText for ${companyName}: value=${pageText === null ? 'NULL' : (typeof pageText === 'string' ? `string(${pageText.length})` : typeof pageText)}`);
 
         if (!pageText || pageText.length < 100) {
           return {
@@ -6372,19 +6005,19 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       lineGray: 'A0A0A0'
     };
 
-    // ===== DEFINE MASTER SLIDE WITH FIXED LINES (CANNOT BE MOVED) =====
-    pptx.defineSlideMaster({
-      title: 'YCP_TRADING_MASTER',
-      background: { color: 'FFFFFF' },
-      objects: [
-        { line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.navyLine, width: 4.5 } } },
-        { line: { x: 0, y: 1.10, w: 13.333, h: 0, line: { color: COLORS.navyLine, width: 2.25 } } },
-        { line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.navyLine, width: 2.25 } } }
-      ]
-    });
+    const slide = pptx.addSlide();
 
-    // Use master slide - lines are fixed in background and cannot be moved
-    const slide = pptx.addSlide({ masterName: 'YCP_TRADING_MASTER' });
+    // ===== HEADER LINES (from slideLayout1) =====
+    // Thick line at y=1.02" (933847 EMU), width 4.5pt (57150 EMU)
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0, y: 1.02, w: 13.333, h: 0,
+      line: { color: COLORS.navyLine, width: 4.5 }
+    });
+    // Thin line at y=1.10" (1005855 EMU), width 2.25pt (28575 EMU)
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0, y: 1.10, w: 13.333, h: 0,
+      line: { color: COLORS.navyLine, width: 2.25 }
+    });
 
     // ===== TITLE + SUBTITLE (positioned per slideLayout1: x=0.38", y=0.05") =====
     // Title at top (font 24), subtitle below (font 16), combined text box
@@ -6792,7 +6425,11 @@ Return JSON with this exact format:
       fontSize: 9, fontFace: 'Segoe UI', color: COLORS.black
     });
 
-    // Footer line is now in master slide (cannot be moved)
+    // ===== FOOTER LINE (from slideLayout1: y=7.24", width 2.25pt) =====
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0, y: 7.24, w: 13.333, h: 0,
+      line: { color: COLORS.navyLine, width: 2.25 }
+    });
 
     // ===== YCP LOGO (from slideLayout1: x=0.38", y=7.30") =====
     // Logo image stored in backend folder
@@ -7027,80 +6664,14 @@ const EXCHANGE_RATE_MAP = {
   'HK': '為替レート: HKD 10M = 2億円'
 };
 
-// Get country code from location string - MUST match HQ country only
+// Get country code from location string
 function getCountryCode(location) {
   if (!location) return null;
   const loc = location.toLowerCase();
-
-  // HARD RULE: Extract HQ country FIRST - flag must match HQ, not other locations
-  // Check for "HQ:" prefix and extract only HQ location
-  const hqMatch = loc.match(/hq:\s*([^\n]+)/i);
-  if (hqMatch) {
-    const hqLocation = hqMatch[1].trim();
-    // Get country from the end of HQ line (last comma-separated part)
-    const parts = hqLocation.split(',').map(p => p.trim());
-    const country = parts[parts.length - 1];
-    for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
-      if (country.includes(key)) return code;
-    }
-  }
-
-  // If no HQ prefix, check if it's a simple location (City, Country format)
-  // Use the LAST part which should be the country
-  const parts = loc.split(',').map(p => p.trim());
-  if (parts.length >= 1) {
-    const lastPart = parts[parts.length - 1];
-    for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
-      if (lastPart.includes(key)) return code;
-    }
-  }
-
-  // Fallback: search entire string (but this shouldn't happen with proper location format)
   for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
     if (loc.includes(key)) return code;
   }
   return null;
-}
-
-// HARD RULE: Filter out empty/meaningless Key Metrics
-// Remove metrics that say "No specific X stated", "Not specified", etc.
-function filterEmptyMetrics(keyMetrics) {
-  if (!keyMetrics || !Array.isArray(keyMetrics)) return [];
-
-  // Patterns that indicate empty/meaningless metric values
-  const emptyPatterns = [
-    /no specific/i,
-    /not specified/i,
-    /not stated/i,
-    /not available/i,
-    /not found/i,
-    /not provided/i,
-    /not mentioned/i,
-    /not disclosed/i,
-    /unknown/i,
-    /n\/a/i,
-    /none listed/i,
-    /none specified/i,
-    /none stated/i,
-    /no information/i,
-    /no data/i,
-    /^\s*-?\s*$/,  // Empty or just dashes
-  ];
-
-  return keyMetrics.filter(metric => {
-    if (!metric || !metric.value) return false;
-    const value = String(metric.value).trim();
-    if (!value) return false;
-
-    // Check if value matches any empty pattern
-    for (const pattern of emptyPatterns) {
-      if (pattern.test(value)) {
-        console.log(`    Removing empty metric: "${metric.label}" = "${value}"`);
-        return false;
-      }
-    }
-    return true;
-  });
 }
 
 // Common shortforms that don't need explanation
@@ -7204,28 +6775,28 @@ async function generatePPTX(companies, targetDescription = '') {
       footerText: '808080'     // Gray footer text
     };
 
-    // ===== DEFINE MASTER SLIDE WITH FIXED LINES (CANNOT BE MOVED) =====
-    // Lines are part of the master template background, not individual shapes
-    pptx.defineSlideMaster({
-      title: 'YCP_MASTER',
-      background: { color: 'FFFFFF' },
-      objects: [
-        // Thick header line (y: 1.02")
-        { line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } } },
-        // Thin header line (y: 1.10")
-        { line: { x: 0, y: 1.10, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
-        // Footer line (y: 7.24")
-        { line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } }
-      ]
-    });
-
     // ===== TARGET LIST SLIDE (FIRST SLIDE) =====
     if (targetDescription && companies.length > 0) {
       console.log('Generating Target List slide...');
       const meceData = await generateMECESegments(targetDescription, companies);
 
-      // Use master slide - lines are fixed in background
-      const targetSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+      const targetSlide = pptx.addSlide();
+
+      // ===== HEADER LINES (same as profile slides) =====
+      targetSlide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 1.02, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 4.5 }
+      });
+      targetSlide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 1.10, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 2.25 }
+      });
+
+      // ===== FOOTER LINE =====
+      targetSlide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 7.24, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 2.25 }
+      });
 
       // Title Case helper function
       const toTitleCase = (str) => {
@@ -7564,8 +7135,25 @@ async function generatePPTX(companies, targetDescription = '') {
 
     // ===== INDIVIDUAL COMPANY PROFILE SLIDES =====
     for (const company of companies) {
-      // Use master slide - lines are fixed in background and cannot be moved
-      const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+      const slide = pptx.addSlide();
+
+      // ===== HEADER LINES (from template) =====
+      // Thick line under title area
+      slide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 1.02, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 4.5 }
+      });
+      // Thin line below
+      slide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 1.10, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 2.25 }
+      });
+
+      // ===== FOOTER LINE =====
+      slide.addShape(pptx.shapes.LINE, {
+        x: 0, y: 7.24, w: 13.333, h: 0,
+        line: { color: COLORS.headerLine, width: 2.25 }
+      });
 
       // ===== TITLE + MESSAGE (combined in one text box) =====
       const titleText = company.title || company.company_name || 'Company Profile';
@@ -7717,12 +7305,9 @@ async function generatePPTX(companies, targetDescription = '') {
         if (cleaned.includes('{') && cleaned.includes('}')) {
           try {
             // Try to extract the value from JSON-like string
-            // First regex: /"HQ":"value"/ - match[1] is the value
-            // Second regex: /"key":"value"/ - match[1] is key, match[2] is value
             const match = cleaned.match(/"HQ"\s*:\s*"([^"]+)"/i) || cleaned.match(/"([^"]+)"\s*:\s*"([^"]+)"/);
             if (match) {
-              // Prefer match[2] (value from second regex) over match[1] (could be key from second regex)
-              cleaned = match[2] || match[1] || cleaned;
+              cleaned = match[1] || match[2] || cleaned;
             }
           } catch (e) {
             // Fall through to normal cleaning
@@ -8298,11 +7883,9 @@ Example for Suppliers:
 IMPORTANT: Always use "- " prefix for each segment line to create point form for easier reading.
 
 RULES:
-- HARD RULE - TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH:
-  - ALL product names, company names, and any other text in ANY non-English language MUST be translated to English
-  - This applies to ALL languages: Vietnamese, Chinese, Thai, Malay, Indonesian, Hindi, Korean, Japanese, Arabic, Spanish, etc.
-  - The user CANNOT translate - you MUST translate everything to English
-- Write ALL text using regular English alphabet only (A-Z, no diacritics, no foreign characters)
+- Write ALL text using regular English alphabet only (A-Z, no diacritics/accents)
+- Convert ALL Vietnamese: "Phú" → "Phu", "Đông" → "Dong", "Nguyễn" → "Nguyen", "Bình" → "Binh", "Thạnh" → "Thanh", "Cương" → "Cuong", "Thiêm" → "Thiem"
+- Convert ALL foreign characters: "São" → "Sao", "北京" → "Beijing", "東京" → "Tokyo"
 - Remove company suffixes from ALL names: Co., Ltd, JSC, Sdn Bhd, Pte Ltd, Inc, Corp, LLC, GmbH
 - Extract as many metrics as found (8-15 ideally)
 - For metrics with multiple items, use "- " bullet points separated by "\\n"
@@ -8311,7 +7894,6 @@ RULES:
 - Be specific with numbers when available
 - For Shareholding: ONLY include if EXPLICITLY stated on website (e.g., "family-owned", "publicly traded", "PE-backed"). NEVER assume ownership structure.
 - DO NOT include: years of experience, awards, recognitions, market position, operating hours, number of branches/locations (not useful for M&A)
-- DO NOT include metrics with NO MEANINGFUL VALUES - if you don't have specific data, don't include the metric at all. NEVER write "No specific X stated" - just omit that metric entirely.
 - NEVER make up data - only include what's explicitly stated
 - Return ONLY valid JSON`
         },
@@ -8381,11 +7963,9 @@ OUTPUT JSON:
 }
 
 RULES:
-- HARD RULE - TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH:
-  - ALL product names, company names, and any other text in ANY non-English language MUST be translated to English
-  - This applies to ALL languages: Vietnamese, Chinese, Thai, Malay, Indonesian, Hindi, Korean, Japanese, Arabic, Spanish, etc.
-  - The user CANNOT translate - you MUST translate everything to English
-- Write ALL text using regular English alphabet only (A-Z, no diacritics, no foreign characters)
+- Write ALL text using regular English alphabet only (A-Z, no diacritics/accents)
+- Convert ALL Vietnamese: "Phú" → "Phu", "Đông" → "Dong", "Nguyễn" → "Nguyen", "Bình" → "Binh", "Thạnh" → "Thanh", "Cương" → "Cuong"
+- Convert ALL foreign characters: "São" → "Sao", "北京" → "Beijing", "東京" → "Tokyo"
 - Remove company suffixes from ALL names: Co., Ltd, JSC, Sdn Bhd, Pte Ltd, Inc, Corp, LLC, GmbH
 - PRIORITIZE the category with MOST available content from the website
 - Use 3-6 items maximum
@@ -8704,29 +8284,18 @@ async function reviewAndCleanData(companyData) {
    - Example: "Number of Suppliers: 6" + "Key Suppliers: A, B, C" → "Key Suppliers: 6 suppliers including A, B, C"
    - Example: "Number of Customers" + "Key Customers" → merge into "Key Customers"
 
-2. HARD RULE - REMOVE EMPTY/MEANINGLESS METRICS:
-   - Remove ANY metric with values like: "No specific X stated", "Not specified", "Not available", "Unknown", "N/A", "None listed"
-   - If a metric has NO meaningful data, DELETE IT ENTIRELY. Do not include metrics with placeholder text.
-   - Example: {"label": "Key Metrics", "value": "- No specific production capacity stated\\n- No specific factory area stated"} → DELETE THIS ENTIRE METRIC
-
-3. REMOVE UNNECESSARY/WORTHLESS ROWS:
+2. REMOVE UNNECESSARY/WORTHLESS ROWS:
    - Remove rows with vague values like "Various", "Multiple", "Several" without specifics
    - Remove rows about awards, achievements, recognitions (not useful for M&A)
    - Remove rows about years of experience (not useful for M&A)
    - Remove rows about operating hours, office hours
 
-4. HARD RULE - TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH:
-   - ALL product names, company names, and any text in ANY non-English language MUST be translated to English
-   - This applies to ALL languages: Vietnamese, Chinese, Thai, Malay, Indonesian, Hindi, Korean, Japanese, Arabic, Spanish, etc.
-   - The user CANNOT translate - you MUST translate everything to English
-   - Write ALL text using regular English alphabet only (A-Z, no diacritics, no foreign characters)
-
-5. MERGE SIMILAR INFORMATION:
+3. MERGE SIMILAR INFORMATION:
    - "Customers" and "Customer Segments" → merge into one "Key Customers" row
    - "Products" and "Product Categories" → keep only the more detailed one
    - If breakdown_items and key_metrics have overlapping info, keep in key_metrics only
 
-6. CLEAN UP HQ/LOCATION:
+4. CLEAN UP HQ/LOCATION:
    - If location looks like JSON ({"HQ":"..."}), extract the actual location value
    - Format should be: "City, State/Province, Country" or "District, Singapore" for Singapore
 
@@ -8945,15 +8514,6 @@ app.post('/api/profile-slides', async (req, res) => {
 
         // Step 6: Run AI review agent to clean up duplicative/unnecessary data
         companyData = await reviewAndCleanData(companyData);
-
-        // Step 7: HARD RULE - Filter out empty/meaningless Key Metrics
-        // Remove metrics that say "No specific X stated", "Not specified", etc.
-        const metricsBefore = companyData.key_metrics?.length || 0;
-        companyData.key_metrics = filterEmptyMetrics(companyData.key_metrics);
-        const metricsAfter = companyData.key_metrics?.length || 0;
-        if (metricsBefore !== metricsAfter) {
-          console.log(`  Step 7: Filtered ${metricsBefore - metricsAfter} empty metrics (${metricsBefore} → ${metricsAfter})`);
-        }
 
         console.log(`  ✓ Completed: ${companyData.title || companyData.company_name} (${companyData.key_metrics?.length || 0} metrics after review)`);
         results.push(companyData);
@@ -9253,23 +8813,17 @@ async function generateFinancialChartPPTX(financialDataArray) {
       chartOrange: 'ED7D31'
     };
 
-    // ===== DEFINE MASTER SLIDE WITH FIXED LINES (CANNOT BE MOVED) =====
-    pptx.defineSlideMaster({
-      title: 'YCP_FINANCIAL_MASTER',
-      background: { color: 'FFFFFF' },
-      objects: [
-        { line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } } },
-        { line: { x: 0, y: 1.10, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
-        { line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } }
-      ]
-    });
-
     for (const financialData of dataArray) {
       if (!financialData) continue;
 
-      // Use master slide - lines are fixed in background and cannot be moved
-      const slide = pptx.addSlide({ masterName: 'YCP_FINANCIAL_MASTER' });
+      const slide = pptx.addSlide();
 
+      // Header lines
+      slide.addShape(pptx.shapes.LINE, { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } });
+      slide.addShape(pptx.shapes.LINE, { x: 0, y: 1.10, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } });
+
+      // Footer line
+      slide.addShape(pptx.shapes.LINE, { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } });
       slide.addText('(C) YCP 2025 all rights reserved', { x: 4.1, y: 7.26, w: 5.1, h: 0.2, fontSize: 8, fontFace: 'Segoe UI', color: COLORS.footerText, align: 'center' });
 
       // Title
@@ -10507,67 +10061,47 @@ app.post('/api/utb', async (req, res) => {
 async function generateDueDiligenceReport(files, instructions, reportLength, instructionMode = 'auto') {
   console.log(`[DD] Processing ${files.length} source files...`);
 
-  // Combine all file contents with clear numbering
+  // Combine all file contents
   let combinedContent = '';
   const filesSummary = [];
-  const totalFiles = files.length;
 
-  for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
-    const file = files[fileIndex];
-    const fileNum = fileIndex + 1;
-    console.log(`[DD] - File ${fileNum}/${totalFiles}: ${file.name} (${file.type}) - ${file.content?.length || 0} chars`);
-    filesSummary.push(`${fileNum}. ${file.name} (${file.type.toUpperCase()})`);
+  for (const file of files) {
+    console.log(`[DD] - File: ${file.name} (${file.type}) - ${file.content?.length || 0} chars`);
+    filesSummary.push(`- ${file.name} (${file.type.toUpperCase()})`);
 
     // Handle base64 encoded files (binary formats) - extract actual content
-    let fileContent = '';
-    if (file.content && file.content.startsWith('[BASE64:')) {
-      const base64Match = file.content.match(/\[BASE64:(\w+)\](.+)/s);
+    if (file.content.startsWith('[BASE64:')) {
+      const base64Match = file.content.match(/\[BASE64:(\w+)\](.+)/);
       if (base64Match) {
         const ext = base64Match[1].toLowerCase();
         const base64Data = base64Match[2];
 
+        let extractedContent = '';
         try {
           if (ext === 'docx' || ext === 'doc') {
-            fileContent = await extractDocxText(base64Data);
+            extractedContent = await extractDocxText(base64Data);
           } else if (ext === 'pptx' || ext === 'ppt') {
-            fileContent = await extractPptxText(base64Data);
+            extractedContent = await extractPptxText(base64Data);
           } else if (ext === 'xlsx' || ext === 'xls') {
-            fileContent = await extractXlsxText(base64Data);
+            extractedContent = await extractXlsxText(base64Data);
           } else {
-            fileContent = `[Binary file type .${ext} - cannot extract text]`;
+            extractedContent = `[Binary file type .${ext} - cannot extract text]`;
           }
         } catch (extractError) {
           console.error(`[DD] Extraction error for ${file.name}:`, extractError.message);
-          fileContent = `[Error extracting ${file.name}: ${extractError.message}]`;
+          extractedContent = `[Error extracting ${file.name}: ${extractError.message}]`;
         }
+
+        combinedContent += `\n\n=== SOURCE: ${file.name} ===\n${extractedContent}\n`;
       } else {
-        fileContent = '[Could not parse binary content]';
+        combinedContent += `\n\n=== SOURCE: ${file.name} ===\n[Could not parse binary content]\n`;
       }
     } else {
-      fileContent = file.content || '[Empty file]';
+      combinedContent += `\n\n=== SOURCE: ${file.name} ===\n${file.content}\n`;
     }
-
-    // Add clearly numbered section header for each file
-    const contentLength = fileContent.length;
-    combinedContent += `\n\n${'#'.repeat(60)}\n`;
-    combinedContent += `## [FILE ${fileNum} OF ${totalFiles}]: ${file.name}\n`;
-    combinedContent += `## Type: ${file.type.toUpperCase()} | Content Length: ${contentLength} characters\n`;
-    combinedContent += `${'#'.repeat(60)}\n\n`;
-    combinedContent += fileContent;
-    combinedContent += `\n\n[END OF FILE ${fileNum}: ${file.name}]\n`;
   }
 
   console.log(`[DD] Total combined content: ${combinedContent.length} chars`);
-
-  // Log all file headers to verify all files are included
-  const fileHeaders = combinedContent.match(/\[FILE \d+ OF \d+\]: [^\n]+/g) || [];
-  console.log(`[DD] Files included in combined content (${fileHeaders.length}/${totalFiles}):`);
-  fileHeaders.forEach((header, i) => console.log(`[DD]   ${header}`));
-
-  // Warn if file count mismatch
-  if (fileHeaders.length !== totalFiles) {
-    console.error(`[DD] WARNING: Expected ${totalFiles} files but found ${fileHeaders.length} in combined content!`);
-  }
 
   // Extract URLs from instructions and fetch them
   let onlineResearchContent = '';
@@ -10630,33 +10164,14 @@ ${instructions}
     ? `\nONLINE SOURCES RESEARCHED:\n${onlineSourcesUsed.map(u => `- ${u}`).join('\n')}\n\nIMPORTANT: Any information from online sources MUST be clearly marked with [Online Source] at the start of that bullet point or paragraph.`
     : '';
 
-  // Build explicit file list for the prompt with numbering
-  const explicitFileList = filesSummary.join('\n');
+  const prompt = `You are writing a factual due diligence summary. Your job is to extract and organize information from the provided materials.
 
-  const prompt = `You are writing a factual due diligence summary. You have been provided ${totalFiles} source documents that you MUST ALL read completely.
-
-╔══════════════════════════════════════════════════════════════╗
-║  CRITICAL: YOU HAVE ${totalFiles} FILES - READ ALL OF THEM  ║
-╚══════════════════════════════════════════════════════════════╝
-
-FILES TO PROCESS (ALL ${totalFiles} ARE REQUIRED):
-${explicitFileList}
-
-IMPORTANT: Each file is marked with "[FILE X OF ${totalFiles}]" headers. You MUST:
-- Read EVERY file from FILE 1 to FILE ${totalFiles}
-- Extract key information from EACH file separately
-- Include facts from ALL ${totalFiles} files in your report
-- In your "Sources Referenced" section, list ALL ${totalFiles} files
-
+SOURCE MATERIALS (${filesSummary.length} files):
+${filesSummary.join('\n')}
 ${instructionSection}
-
-${'='.repeat(70)}
-BEGIN ALL SOURCE CONTENT (${totalFiles} FILES TOTAL)
-${'='.repeat(70)}
+=== BEGIN SOURCE CONTENT ===
 ${combinedContent}
-${'='.repeat(70)}
-END ALL SOURCE CONTENT
-${'='.repeat(70)}
+=== END SOURCE CONTENT ===
 
 ${onlineResearchContent ? `=== BEGIN ONLINE RESEARCH (from websites) ===
 ${onlineResearchContent}
@@ -10666,25 +10181,24 @@ REPORT STRUCTURE:
 ${lengthInstructions[reportLength]}
 
 CRITICAL RULES - FOLLOW EXACTLY:
-1. **PROCESS ALL ${totalFiles} FILES**: Each "[FILE X OF ${totalFiles}]" section contains different content. Extract information from EVERY file.
-2. **VERIFY COVERAGE**: Before finishing, mentally check that you've included information from File 1, File 2, File 3... up to File ${totalFiles}.
-3. **NO HALLUCINATION**: ONLY include facts explicitly stated in the source materials above.
-4. Quote specific names, numbers, dates, and facts directly from the materials.
-5. If a file contains meeting transcript or conversation, extract the key business facts discussed.
-${onlineResearchContent ? `6. Any information from ONLINE RESEARCH section must be prefixed with **[Online Source]**.` : ''}
+1. **NO HALLUCINATION**: ONLY include facts explicitly stated in the source materials above. Do NOT make up or assume any information.
+2. If something is not mentioned in the sources, do NOT include it. Do NOT write generic statements.
+3. Quote specific names, numbers, dates, and facts directly from the materials.
+4. For each fact you include, it must be traceable to the source content above.
+
+${onlineResearchContent ? `5. Any information from ONLINE RESEARCH section must be prefixed with **[Online Source]** - this text will be highlighted yellow in the final document.` : ''}
 
 OUTPUT FORMAT:
-- Start with: <h1 style="font-family: Calibri, sans-serif;">Due Diligence: [Company Name from materials]</h1>
+- Start with: <h1 style="font-family: Calibri, sans-serif;">Due Diligence: [Actual Company Name from materials]</h1>
 - Use <h2> for section headers, <ul><li> for bullet points
 - Add style="font-family: Calibri, sans-serif;" to all elements
-- Generate CLEAN HTML only - no markdown
-- SKIP sections with no relevant content
-- At the end, add a "Sources Referenced" section that MUST list ALL ${totalFiles} source files by name`;
+- Generate CLEAN HTML only - no markdown, no \`\`\`
+- SKIP sections with no relevant content from sources
+- Output the report ONCE only`;
 
   try {
-    const maxTokens = reportLength === 'short' ? 3000 : reportLength === 'medium' ? 6000 : 10000;
-    console.log(`[DD] Prompt length: ${prompt.length} chars`);
-    console.log(`[DD] Starting AI generation with Gemini 2.5 Pro (max ${maxTokens} tokens)...`);
+    const maxTokens = reportLength === 'short' ? 2000 : reportLength === 'medium' ? 4000 : 8000;
+    console.log(`[DD] Starting AI generation with Gemini 2.5 Pro...`);
 
     // Use Gemini 2.5 Pro for best quality DD reports
     const geminiResult = await callGemini2Pro(prompt);
@@ -10749,9 +10263,8 @@ app.post('/api/due-diligence', async (req, res) => {
 
   console.log(`\n${'='.repeat(60)}`);
   console.log(`[DD] NEW DUE DILIGENCE REQUEST: ${new Date().toISOString()}`);
-  console.log(`[DD] Request body size: ${JSON.stringify(req.body).length} bytes`);
-  console.log(`[DD] Documents received: ${files.length}`);
-  files.forEach((f, i) => console.log(`     ${i + 1}. ${f.name} (${f.type}) - content: ${f.content?.length || 0} chars`));
+  console.log(`[DD] Documents: ${files.length}`);
+  files.forEach(f => console.log(`     - ${f.name} (${f.type})`));
   console.log(`[DD] Audio Files: ${audioFiles.length}`);
   audioFiles.forEach(f => console.log(`     - ${f.name} (${f.mimeType})`));
   console.log(`[DD] Real-time Session: ${sessionId || 'None'}`);
