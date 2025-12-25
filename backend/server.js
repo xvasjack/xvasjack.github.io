@@ -1762,76 +1762,34 @@ async function filterVerifiedWebsites(companies) {
 // ============ FETCH WEBSITE FOR VALIDATION ============
 
 async function fetchWebsite(url) {
-  // Try multiple URL paths before giving up
-  const urlPaths = ['', '/en', '/en/', '/home', '/index.html', '/about', '/about-us', '/company'];
-
-  const tryFetch = async (targetUrl) => {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 10000);
-      const response = await fetch(targetUrl, {
-        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
-        signal: controller.signal,
-        redirect: 'follow'
-      });
-      clearTimeout(timeout);
-      if (!response.ok) {
-        console.log(`    [fetchWebsite] ${targetUrl} - HTTP ${response.status}`);
-        return null;
-      }
-      const html = await response.text();
-      const cleanText = html
-        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .substring(0, 15000);
-      if (cleanText.length <= 100) {
-        console.log(`    [fetchWebsite] ${targetUrl} - content too short (${cleanText.length} chars)`);
-      }
-      return cleanText.length > 100 ? cleanText : null;
-    } catch (e) {
-      console.log(`    [fetchWebsite] ${targetUrl} - ERROR: ${e.message}`);
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      signal: controller.signal,
+      redirect: 'follow'
+    });
+    clearTimeout(timeout);
+    if (!response.ok) {
+      console.log(`  [fetchWebsite] ${url} - HTTP ${response.status}`);
       return null;
     }
-  };
-
-  // Parse base URL
-  let baseUrl = url;
-  try {
-    const parsed = new URL(url);
-    baseUrl = `${parsed.protocol}//${parsed.host}`;
+    const html = await response.text();
+    console.log(`  [fetchWebsite] ${url} - got ${html.length} chars HTML`);
+    const cleanText = html
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .substring(0, 15000);
+    console.log(`  [fetchWebsite] ${url} - cleaned to ${cleanText.length} chars`);
+    return cleanText.length > 50 ? cleanText : null;
   } catch (e) {
-    baseUrl = url.replace(/\/+$/, '');
+    console.log(`  [fetchWebsite] ${url} - ERROR: ${e.message}`);
+    return null;
   }
-
-  // Try original URL first
-  let content = await tryFetch(url);
-  if (content) return content;
-
-  // Try with/without www
-  const hasWww = baseUrl.includes('://www.');
-  const altBaseUrl = hasWww ? baseUrl.replace('://www.', '://') : baseUrl.replace('://', '://www.');
-
-  // Try alternative paths
-  for (const path of urlPaths) {
-    if (path === '') continue; // Already tried root
-    content = await tryFetch(baseUrl + path);
-    if (content) return content;
-    // Also try without www (or with www if original didn't have it)
-    content = await tryFetch(altBaseUrl + path);
-    if (content) return content;
-  }
-
-  // Try HTTPS if original was HTTP
-  if (url.startsWith('http://')) {
-    const httpsUrl = url.replace('http://', 'https://');
-    content = await tryFetch(httpsUrl);
-    if (content) return content;
-  }
-
-  return null;
 }
 
 // ============ DYNAMIC EXCLUSION RULES BUILDER (n8n-style PAGE SIGNAL detection) ============
