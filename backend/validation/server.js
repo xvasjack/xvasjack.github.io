@@ -1763,38 +1763,135 @@ async function filterVerifiedWebsites(companies) {
 // Returns: string (cleaned website text) or null (on failure)
 
 async function fetchWebsite(url) {
-  try {
+  // Helper to try a single fetch with given URL
+  async function tryFetch(targetUrl, timeoutMs = 30000) {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-      signal: controller.signal,
-      redirect: 'follow'
-    });
-    clearTimeout(timeout);
-
-    if (!response.ok) {
-      console.log(`  [fetchWebsite] ${url} - HTTP ${response.status}`);
-      return null;
+    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(targetUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Connection': 'keep-alive',
+          'Cache-Control': 'no-cache'
+        },
+        signal: controller.signal,
+        redirect: 'follow'
+      });
+      clearTimeout(timeout);
+      return response;
+    } catch (e) {
+      clearTimeout(timeout);
+      throw e;
     }
+  }
 
-    const html = await response.text();
-    console.log(`  [fetchWebsite] ${url} - got ${html.length} chars HTML`);
+  // Helper to extract text from HTML
+  function extractText(html) {
+    // First extract meta description and title which often contain business info
+    const metaDesc = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)?.[1] || '';
+    const metaKeywords = html.match(/<meta[^>]*name=["']keywords["'][^>]*content=["']([^"']+)["']/i)?.[1] || '';
+    const title = html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] || '';
+    const ogDesc = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i)?.[1] || '';
 
-    const cleanText = html
+    // Extract text from body
+    const bodyText = html
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<noscript[^>]*>[\s\S]*?<\/noscript>/gi, '')
       .replace(/<[^>]+>/g, ' ')
+      .replace(/&nbsp;/gi, ' ')
+      .replace(/&amp;/gi, '&')
+      .replace(/&lt;/gi, '<')
+      .replace(/&gt;/gi, '>')
+      .replace(/&quot;/gi, '"')
+      .replace(/&#[0-9]+;/gi, ' ')
       .replace(/\s+/g, ' ')
-      .trim()
-      .substring(0, 15000);
+      .trim();
 
-    console.log(`  [fetchWebsite] ${url} - cleaned to ${cleanText.length} chars`);
-    return cleanText.length > 50 ? cleanText : null;
-  } catch (e) {
-    console.log(`  [fetchWebsite] ${url} - ERROR: ${e.message}`);
-    return null;
+    // Combine meta info with body text for better context
+    const combined = `${title}. ${metaDesc} ${ogDesc} ${metaKeywords}. ${bodyText}`.trim();
+    return combined.substring(0, 20000);
   }
+
+  // Generate URL variations to try
+  function getUrlVariations(originalUrl) {
+    const variations = [originalUrl];
+    try {
+      const parsed = new URL(originalUrl);
+
+      // Try without /en/ path if present (some sites redirect)
+      if (parsed.pathname.includes('/en')) {
+        const withoutEn = new URL(originalUrl);
+        withoutEn.pathname = parsed.pathname.replace(/\/en\/?/, '/');
+        variations.push(withoutEn.toString());
+      }
+
+      // Try base domain without path
+      if (parsed.pathname !== '/' && parsed.pathname !== '') {
+        const baseUrl = `${parsed.protocol}//${parsed.host}/`;
+        if (!variations.includes(baseUrl)) {
+          variations.push(baseUrl);
+        }
+      }
+
+      // Try with www if not present, or without www if present
+      if (parsed.host.startsWith('www.')) {
+        const withoutWww = new URL(originalUrl);
+        withoutWww.host = parsed.host.replace('www.', '');
+        variations.push(withoutWww.toString());
+      } else {
+        const withWww = new URL(originalUrl);
+        withWww.host = 'www.' + parsed.host;
+        variations.push(withWww.toString());
+      }
+    } catch (e) {
+      // URL parsing failed, just use original
+    }
+    return [...new Set(variations)]; // Remove duplicates
+  }
+
+  const urlVariations = getUrlVariations(url);
+  let lastError = null;
+
+  // Try each URL variation with retry logic
+  for (const targetUrl of urlVariations) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        console.log(`  [fetchWebsite] Trying ${targetUrl} (attempt ${attempt})`);
+        const response = await tryFetch(targetUrl);
+
+        // Accept any 2xx or 3xx response (redirects are followed automatically)
+        if (response.ok || (response.status >= 200 && response.status < 400)) {
+          const html = await response.text();
+          console.log(`  [fetchWebsite] ${targetUrl} - got ${html.length} chars HTML`);
+
+          const cleanText = extractText(html);
+          console.log(`  [fetchWebsite] ${targetUrl} - cleaned to ${cleanText.length} chars`);
+
+          if (cleanText.length > 50) {
+            return cleanText;
+          } else {
+            console.log(`  [fetchWebsite] ${targetUrl} - content too short after cleaning`);
+          }
+        } else {
+          console.log(`  [fetchWebsite] ${targetUrl} - HTTP ${response.status}`);
+        }
+      } catch (e) {
+        lastError = e;
+        console.log(`  [fetchWebsite] ${targetUrl} - ERROR: ${e.message}`);
+        // Wait before retry
+        if (attempt < 2) {
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+    }
+  }
+
+  console.log(`  [fetchWebsite] All variations failed for ${url}`);
+  return null;
 }
 
 // ============ DYNAMIC EXCLUSION RULES BUILDER (n8n-style PAGE SIGNAL detection) ============
