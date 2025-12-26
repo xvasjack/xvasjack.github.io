@@ -2140,6 +2140,10 @@ function isValidCompanyWebsite(url) {
   if (!url) return false;
   const urlLower = url.toLowerCase();
 
+  // Block PDFs and document files
+  if (urlLower.endsWith('.pdf') || urlLower.includes('.pdf?') || urlLower.includes('.pdf#')) return false;
+  if (urlLower.endsWith('.doc') || urlLower.endsWith('.docx') || urlLower.endsWith('.xls') || urlLower.endsWith('.xlsx')) return false;
+
   const invalidPatterns = [
     'google.com/maps',
     'google.com/search',
@@ -2163,7 +2167,23 @@ function isValidCompanyWebsite(url) {
     'crunchbase.com',
     'zoominfo.com',
     'dnb.com',
-    'opencorporates.com'
+    'opencorporates.com',
+    // Document and investor relations sites
+    'scribd.com',
+    'listedcompany.com',
+    'sec.gov',
+    'annualreports.com',
+    '/investor',
+    '/annual-report',
+    '/newsroom/',
+    '/misc/',
+    'pwc.com',
+    'deloitte.com',
+    'ey.com',
+    'kpmg.com',
+    'marketwatch.com',
+    'yahoo.com/finance',
+    'finance.yahoo'
   ];
 
   for (const pattern of invalidPatterns) {
@@ -2196,15 +2216,17 @@ function extractCleanURL(text) {
 async function findWebsiteViaSerpAPI(companyName, countries) {
   if (!process.env.SERPAPI_API_KEY) return null;
 
-  const countryStr = countries.slice(0, 2).join(' ');
-  const query = `"${companyName}" ${countryStr} official website`;
+  const countryStr = countries && countries.length > 0 ? countries.slice(0, 2).join(' ') : '';
+  const query = countryStr
+    ? `"${companyName}" ${countryStr} official website homepage`
+    : `"${companyName}" official website homepage -pdf -investor -annual`;
 
   try {
     const params = new URLSearchParams({
       q: query,
       api_key: process.env.SERPAPI_API_KEY,
       engine: 'google',
-      num: 10
+      num: 15
     });
 
     const response = await fetch(`https://serpapi.com/search?${params}`, { timeout: 15000 });
@@ -2244,14 +2266,20 @@ async function findWebsiteViaSerpAPI(companyName, countries) {
 
 // Method 2: Use Perplexity
 async function findWebsiteViaPerplexity(companyName, countries) {
-  const countryStr = countries.join(', ');
+  const countryStr = countries && countries.length > 0 ? countries.join(', ') : '';
+  const locationHint = countryStr ? ` located in ${countryStr}` : '';
 
   try {
     const result = await callPerplexity(
-      `What is the official company website URL for "${companyName}" located in ${countryStr}?
-       Return ONLY the direct website URL (like https://www.company.com).
-       Do NOT return Google Maps, LinkedIn, Facebook, or any directory links.
-       If you cannot find the official website, respond with "NOT_FOUND".`
+      `What is the official corporate website URL for "${companyName}"${locationHint}?
+       I need the MAIN company homepage URL (like https://www.company.com or https://company.co.th).
+       Do NOT return:
+       - PDF documents or annual reports
+       - Investor relations pages
+       - Google Maps, LinkedIn, Facebook, or social media
+       - News articles or directory listings
+       - Document hosting sites like Scribd
+       Return ONLY the direct homepage URL. If you cannot find it, respond with "NOT_FOUND".`
     );
 
     return extractCleanURL(result);
@@ -2263,14 +2291,20 @@ async function findWebsiteViaPerplexity(companyName, countries) {
 
 // Method 3: Use OpenAI Search
 async function findWebsiteViaOpenAISearch(companyName, countries) {
-  const countryStr = countries.join(', ');
+  const countryStr = countries && countries.length > 0 ? countries.join(', ') : '';
+  const locationHint = countryStr ? ` in ${countryStr}` : '';
 
   try {
     const result = await callOpenAISearch(
-      `Find the official company website for "${companyName}" in ${countryStr}.
-       Return ONLY the direct URL to their official website (e.g., https://www.companyname.com).
-       Do NOT return Google Maps links, LinkedIn, Facebook, or directory websites.
-       If the official website cannot be found, say "NOT_FOUND".`
+      `Find the official corporate homepage for "${companyName}"${locationHint}.
+       Return ONLY the main website URL (e.g., https://www.companyname.com or https://company.co.th).
+       Do NOT return:
+       - PDF files or annual reports
+       - Investor relations or /investor pages
+       - Google Maps, LinkedIn, Facebook, social media
+       - News articles, Scribd, or directory websites
+       I need the actual company homepage, not documents about the company.
+       If not found, say "NOT_FOUND".`
     );
 
     return extractCleanURL(result);
@@ -2282,14 +2316,19 @@ async function findWebsiteViaOpenAISearch(companyName, countries) {
 
 // Method 4: Use Gemini
 async function findWebsiteViaGemini(companyName, countries) {
-  const countryStr = countries.join(', ');
+  const countryStr = countries && countries.length > 0 ? countries.join(', ') : '';
+  const locationHint = countryStr ? ` based in ${countryStr}` : '';
 
   try {
     const result = await callGemini(
-      `What is the official website URL for the company "${companyName}" based in ${countryStr}?
-       Return only the URL starting with https:// or http://
-       Do not return Google Maps, social media, or directory links.
-       If unknown, respond with NOT_FOUND.`
+      `What is the official company website URL for "${companyName}"${locationHint}?
+       Return ONLY the main homepage URL starting with https:// or http://
+       Do NOT return:
+       - PDF documents or annual reports
+       - Investor relations pages
+       - Google Maps, social media, or directory links
+       - Document sites like Scribd
+       I need the actual corporate homepage. If unknown, respond with NOT_FOUND.`
     );
 
     return extractCleanURL(result);
