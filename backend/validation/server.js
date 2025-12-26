@@ -2552,8 +2552,8 @@ function buildValidationExcel(companies, targetBusiness, countries, outputOption
 app.post('/api/validation', async (req, res) => {
   const { Companies, Countries, TargetBusiness, OutputOption, Email } = req.body;
 
-  if (!Companies || !Countries || !TargetBusiness || !Email) {
-    return res.status(400).json({ error: 'All fields are required' });
+  if (!Companies || !TargetBusiness || !Email) {
+    return res.status(400).json({ error: 'Companies, TargetBusiness, and Email are required' });
   }
 
   console.log(`\n${'='.repeat(50)}`);
