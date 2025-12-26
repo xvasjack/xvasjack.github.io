@@ -1760,122 +1760,41 @@ async function filterVerifiedWebsites(companies) {
 }
 
 // ============ FETCH WEBSITE FOR VALIDATION ============
+// Returns: string (cleaned website text) or null (on failure)
 
 async function fetchWebsite(url) {
-  // Security block patterns - these indicate WAF/Cloudflare/bot protection
-  const securityBlockPatterns = [
-    'checking your browser',
-    'please wait',
-    'just a moment',
-    'ddos protection',
-    'cloudflare',
-    'security check',
-    'access denied',
-    'not acceptable',
-    'mod_security',
-    'forbidden',
-    'blocked',
-    'captcha',
-    'verify you are human',
-    'bot detection',
-    'please enable javascript',
-    'enable cookies'
-  ];
-
-  const tryFetch = async (targetUrl) => {
-    try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 20000); // Increased to 20 seconds
-      const response = await fetch(targetUrl, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.5',
-          'Accept-Encoding': 'gzip, deflate',
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1'
-        },
-        signal: controller.signal,
-        redirect: 'follow'
-      });
-      clearTimeout(timeout);
-
-      // Check for HTTP-level blocks
-      if (response.status === 403 || response.status === 406) {
-        return { status: 'security_blocked', reason: `HTTP ${response.status} - WAF/Security block` };
-      }
-      if (!response.ok) return { status: 'error', reason: `HTTP ${response.status}` };
-
-      const html = await response.text();
-      const lowerHtml = html.toLowerCase();
-
-      // Check for security block patterns in content
-      for (const pattern of securityBlockPatterns) {
-        if (lowerHtml.includes(pattern) && html.length < 5000) {
-          // Only flag as security block if page is small (likely a challenge page)
-          return { status: 'security_blocked', reason: `Security protection detected: "${pattern}"` };
-        }
-      }
-
-      const cleanText = html
-        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-        .replace(/<[^>]+>/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .substring(0, 15000);
-
-      if (cleanText.length > 100) {
-        return { status: 'ok', content: cleanText };
-      }
-      return { status: 'insufficient', reason: 'Content too short' };
-    } catch (e) {
-      return { status: 'error', reason: e.message || 'Connection failed' };
-    }
-  };
-
-  // Parse base URL
-  let baseUrl = url;
   try {
-    const parsed = new URL(url);
-    baseUrl = `${parsed.protocol}//${parsed.host}`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
+    const response = await fetch(url, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      signal: controller.signal,
+      redirect: 'follow'
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      console.log(`  [fetchWebsite] ${url} - HTTP ${response.status}`);
+      return null;
+    }
+
+    const html = await response.text();
+    console.log(`  [fetchWebsite] ${url} - got ${html.length} chars HTML`);
+
+    const cleanText = html
+      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .substring(0, 15000);
+
+    console.log(`  [fetchWebsite] ${url} - cleaned to ${cleanText.length} chars`);
+    return cleanText.length > 50 ? cleanText : null;
   } catch (e) {
-    baseUrl = url.replace(/\/+$/, '');
+    console.log(`  [fetchWebsite] ${url} - ERROR: ${e.message}`);
+    return null;
   }
-
-  // Try original URL first
-  let result = await tryFetch(url);
-  if (result.status === 'ok') return result;
-  if (result.status === 'security_blocked') return result; // Return security block immediately
-
-  // Try with/without www
-  const hasWww = baseUrl.includes('://www.');
-  const altBaseUrl = hasWww ? baseUrl.replace('://www.', '://') : baseUrl.replace('://', '://www.');
-
-  // Try alternative paths on BOTH original and www/non-www variants
-  const urlVariants = [baseUrl, altBaseUrl];
-  const urlPaths = ['', '/en', '/home', '/about', '/index.html', '/index.php'];
-
-  for (const variant of urlVariants) {
-    for (const path of urlPaths) {
-      const testUrl = variant + path;
-      result = await tryFetch(testUrl);
-      if (result.status === 'ok') return result;
-      if (result.status === 'security_blocked') return result;
-    }
-  }
-
-  // Try HTTPS if original was HTTP (on both variants)
-  if (url.startsWith('http://')) {
-    for (const variant of urlVariants) {
-      const httpsVariant = variant.replace('http://', 'https://');
-      result = await tryFetch(httpsVariant);
-      if (result.status === 'ok') return result;
-      if (result.status === 'security_blocked') return result;
-    }
-  }
-
-  return { status: 'inaccessible', reason: 'Could not fetch content from any URL variation' };
 }
 
 // ============ DYNAMIC EXCLUSION RULES BUILDER (n8n-style PAGE SIGNAL detection) ============
