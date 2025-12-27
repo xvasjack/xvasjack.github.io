@@ -3527,7 +3527,7 @@ function buildV6EmailHTML(validationResults, business, country, exclusion, searc
   return html;
 }
 
-// V6 ENDPOINT - Simplified Parallel Architecture
+// V6 ENDPOINT - Iterative Parallel Search Architecture
 app.post('/api/find-target-v6', async (req, res) => {
   const { Business, Country, Exclusion, Email } = req.body;
 
@@ -3536,7 +3536,7 @@ app.post('/api/find-target-v6', async (req, res) => {
   }
 
   console.log(`\n${'='.repeat(70)}`);
-  console.log(`V6 PARALLEL SEARCH: ${new Date().toISOString()}`);
+  console.log(`V6 ITERATIVE PARALLEL SEARCH: ${new Date().toISOString()}`);
   console.log(`Business: ${Business}`);
   console.log(`Country: ${Country}`);
   console.log(`Exclusion: ${Exclusion}`);
@@ -3545,7 +3545,7 @@ app.post('/api/find-target-v6', async (req, res) => {
 
   res.json({
     success: true,
-    message: 'Request received. Parallel search running. Results will be emailed in ~10-15 minutes.'
+    message: 'Request received. Iterative search running. Results will be emailed in ~12-15 minutes.'
   });
 
   try {
@@ -3559,77 +3559,126 @@ app.post('/api/find-target-v6', async (req, res) => {
     const plan = await planSearchStrategyV5(Business, Country, Exclusion);
     const { expandedCountry } = plan;
 
-    // ========== STEP 2: Run ALL Searches in Parallel ==========
-    // Perplexity + Gemini + ChatGPT all at once - no phases, no intermediate validation
+    // ========== STEP 2: Iterative Parallel Search (10 rounds) ==========
     console.log('\n' + '='.repeat(50));
-    console.log('STEP 2: PARALLEL SEARCH (Perplexity + Gemini + ChatGPT)');
+    console.log('STEP 2: ITERATIVE PARALLEL SEARCH (10 rounds)');
     console.log('='.repeat(50));
 
-    const searchStart = Date.now();
+    const NUM_ROUNDS = 10;
+    const allCompanies = [];
+    const seenWebsites = new Set();
 
-    // Generate search prompts
-    const basePrompt = `Find ALL ${Business} companies in ${expandedCountry}. Return company name, website, HQ location. Exclude: ${Exclusion}`;
-    const manufacturerPrompt = `Find ${Business} manufacturers and producers in ${expandedCountry}. Return company name, website, HQ. Exclude: ${Exclusion}`;
-    const smePrompt = `Find small and medium ${Business} companies in ${expandedCountry}. Focus on local/family businesses. Return company name, website, HQ. Exclude: ${Exclusion}`;
-    const supplierPrompt = `Find ${Business} suppliers, OEM, ODM companies in ${expandedCountry}. Return company name, website, HQ. Exclude: ${Exclusion}`;
-
-    // Run ALL searches in parallel
-    console.log('  Running Perplexity + Gemini + ChatGPT searches in parallel...');
-    const [
-      perplexity1, perplexity2,
-      gemini1, gemini2, gemini3, gemini4,
-      chatgpt1, chatgpt2
-    ] = await Promise.all([
-      // Perplexity searches
-      runPerplexitySearchTask(basePrompt, expandedCountry, searchLog).catch(e => { console.error('Perplexity-1 failed:', e.message); return []; }),
-      runPerplexitySearchTask(manufacturerPrompt, expandedCountry, searchLog).catch(e => { console.error('Perplexity-2 failed:', e.message); return []; }),
-      // Gemini searches (with Google Search grounding)
-      runAgenticSearchTask(basePrompt, expandedCountry, searchLog).catch(e => { console.error('Gemini-1 failed:', e.message); return []; }),
-      runAgenticSearchTask(manufacturerPrompt, expandedCountry, searchLog).catch(e => { console.error('Gemini-2 failed:', e.message); return []; }),
-      runAgenticSearchTask(smePrompt, expandedCountry, searchLog).catch(e => { console.error('Gemini-3 failed:', e.message); return []; }),
-      runAgenticSearchTask(supplierPrompt, expandedCountry, searchLog).catch(e => { console.error('Gemini-4 failed:', e.message); return []; }),
-      // ChatGPT searches
-      runChatGPTSearchTask(`${Business} companies ${expandedCountry}`, 'Find all companies', expandedCountry, searchLog).catch(e => { console.error('ChatGPT-1 failed:', e.message); return []; }),
-      runChatGPTSearchTask(`${Business} manufacturers ${expandedCountry}`, 'Find manufacturers', expandedCountry, searchLog).catch(e => { console.error('ChatGPT-2 failed:', e.message); return []; })
-    ]);
-
-    const searchDuration = ((Date.now() - searchStart) / 1000).toFixed(1);
-    console.log(`  Search completed in ${searchDuration}s`);
-
-    // Combine all results
-    const allCompanies = [
-      ...perplexity1, ...perplexity2,
-      ...gemini1, ...gemini2, ...gemini3, ...gemini4,
-      ...chatgpt1, ...chatgpt2
+    // Different search angles for variety
+    const searchAngles = [
+      { type: 'all', desc: 'all companies' },
+      { type: 'manufacturers', desc: 'manufacturers' },
+      { type: 'sme', desc: 'SME/local' },
+      { type: 'suppliers', desc: 'suppliers/OEM' },
+      { type: 'producers', desc: 'producers' },
+      { type: 'distributors', desc: 'distributors' },
+      { type: 'industrial', desc: 'industrial' },
+      { type: 'private', desc: 'private/family' },
+      { type: 'regional', desc: 'regional players' },
+      { type: 'niche', desc: 'niche/specialized' }
     ];
-    console.log(`  Total companies found: ${allCompanies.length}`);
-    console.log(`    Perplexity: ${perplexity1.length + perplexity2.length}`);
-    console.log(`    Gemini: ${gemini1.length + gemini2.length + gemini3.length + gemini4.length}`);
-    console.log(`    ChatGPT: ${chatgpt1.length + chatgpt2.length}`);
 
-    // ========== STEP 3: Dedupe ==========
+    for (let round = 0; round < NUM_ROUNDS; round++) {
+      const roundStart = Date.now();
+      const angle = searchAngles[round % searchAngles.length];
+
+      // Build "already found" list (company names only to save tokens)
+      const alreadyFound = allCompanies.slice(0, 100).map(c => c.company_name).join(', ');
+      const findMoreClause = alreadyFound
+        ? `\nALREADY FOUND (do NOT repeat these): ${alreadyFound}\nFind MORE companies not in this list.`
+        : '';
+
+      console.log(`\n  --- ROUND ${round + 1}/${NUM_ROUNDS} (${angle.desc}) ---`);
+
+      // Generate prompts for this round
+      let prompt;
+      switch (angle.type) {
+        case 'all':
+          prompt = `Find ALL ${Business} companies in ${expandedCountry}.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
+          break;
+        case 'manufacturers':
+          prompt = `Find ${Business} manufacturers and producers in ${expandedCountry}.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
+          break;
+        case 'sme':
+          prompt = `Find small and medium ${Business} companies in ${expandedCountry}. Focus on local/family-owned businesses.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
+          break;
+        case 'suppliers':
+          prompt = `Find ${Business} suppliers, OEM, ODM, contract manufacturers in ${expandedCountry}.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
+          break;
+        case 'producers':
+          prompt = `Find ${Business} producers and fabricators in ${expandedCountry}.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
+          break;
+        case 'distributors':
+          prompt = `Find ${Business} distributors and wholesalers who also manufacture in ${expandedCountry}.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
+          break;
+        case 'industrial':
+          prompt = `Find ${Business} companies in industrial estates and manufacturing zones in ${expandedCountry}.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
+          break;
+        case 'private':
+          prompt = `Find private and family-owned ${Business} companies in ${expandedCountry}.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
+          break;
+        case 'regional':
+          prompt = `Find regional ${Business} players in ${expandedCountry}. Look for companies serving specific provinces/states.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
+          break;
+        case 'niche':
+          prompt = `Find specialized/niche ${Business} companies in ${expandedCountry}.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
+          break;
+        default:
+          prompt = `Find ${Business} companies in ${expandedCountry}.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
+      }
+
+      // Run all 3 models in parallel
+      const [perplexityResults, geminiResults, chatgptResults] = await Promise.all([
+        runPerplexitySearchTask(prompt, expandedCountry, searchLog)
+          .catch(e => { console.error(`    Perplexity failed: ${e.message}`); return []; }),
+        runAgenticSearchTask(prompt, expandedCountry, searchLog)
+          .catch(e => { console.error(`    Gemini failed: ${e.message}`); return []; }),
+        runChatGPTSearchTask(`${Business} ${angle.desc} ${expandedCountry}`, prompt, expandedCountry, searchLog)
+          .catch(e => { console.error(`    ChatGPT failed: ${e.message}`); return []; })
+      ]);
+
+      // Combine results from this round
+      const roundCompanies = [...perplexityResults, ...geminiResults, ...chatgptResults];
+      console.log(`    Found: Perplexity ${perplexityResults.length}, Gemini ${geminiResults.length}, ChatGPT ${chatgptResults.length}`);
+
+      // Dedupe within round
+      const uniqueRound = dedupeCompanies(roundCompanies);
+
+      // Filter out already-seen companies
+      const newCompanies = uniqueRound.filter(c => {
+        const website = c.website?.toLowerCase();
+        if (!website || seenWebsites.has(website)) return false;
+        seenWebsites.add(website);
+        return true;
+      });
+
+      // Pre-filter (free - no API calls)
+      const preFiltered = preFilterCompanies(newCompanies);
+
+      // Add to master list
+      allCompanies.push(...preFiltered);
+
+      const roundDuration = ((Date.now() - roundStart) / 1000).toFixed(1);
+      console.log(`    New companies: ${preFiltered.length} | Total: ${allCompanies.length} | Time: ${roundDuration}s`);
+    }
+
+    console.log(`\n  Search complete. Total unique companies: ${allCompanies.length}`);
+
+    // ========== STEP 3: GPT-4o Validation ==========
     console.log('\n' + '='.repeat(50));
-    console.log('STEP 3: DEDUPLICATION');
+    console.log('STEP 3: GPT-4o VALIDATION');
     console.log('='.repeat(50));
 
-    const uniqueCompanies = dedupeCompanies(allCompanies);
-    console.log(`  After dedup: ${uniqueCompanies.length} unique companies`);
-
-    // Pre-filter
-    const preFiltered = preFilterCompanies(uniqueCompanies);
-    console.log(`  After pre-filter: ${preFiltered.length} companies`);
-
-    // ========== STEP 4: Validate with GPT-4o ==========
-    console.log('\n' + '='.repeat(50));
-    console.log('STEP 4: GPT-4o VALIDATION');
-    console.log('='.repeat(50));
-
-    const validationResults = await validateCompaniesV6(preFiltered, Business, expandedCountry, Exclusion);
+    const validationResults = await validateCompaniesV6(allCompanies, Business, expandedCountry, Exclusion);
     const { validated, flagged, rejected } = validationResults;
 
-    // ========== STEP 5: Results ==========
+    // ========== STEP 4: Results ==========
     console.log('\n' + '='.repeat(50));
-    console.log('STEP 5: FINAL RESULTS');
+    console.log('STEP 4: FINAL RESULTS');
     console.log('='.repeat(50));
 
     console.log(`V6 FINAL RESULTS:`);
@@ -3643,9 +3692,11 @@ app.post('/api/find-target-v6', async (req, res) => {
     const chatgptCount = searchLog.filter(s => s.model === 'chatgpt-search').length;
 
     console.log(`\nSearch Statistics:`);
+    console.log(`  Rounds: ${NUM_ROUNDS}`);
     console.log(`  Perplexity: ${perplexityCount} searches`);
     console.log(`  Gemini: ${geminiCount} searches`);
     console.log(`  ChatGPT: ${chatgptCount} searches`);
+    console.log(`  Total: ${perplexityCount + geminiCount + chatgptCount} searches`);
 
     // Send email
     const finalResults = { validated, flagged, rejected };
@@ -3659,7 +3710,7 @@ app.post('/api/find-target-v6', async (req, res) => {
 
     const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
     console.log('\n' + '='.repeat(70));
-    console.log(`V6 SEARCH COMPLETE!`);
+    console.log(`V6 ITERATIVE SEARCH COMPLETE!`);
     console.log(`Email sent to: ${Email}`);
     console.log(`Validated: ${validated.length} | Flagged: ${flagged.length} | Rejected: ${rejected.length}`);
     console.log(`Total time: ${totalTime} minutes`);
