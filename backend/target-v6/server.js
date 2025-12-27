@@ -3165,17 +3165,16 @@ Return JSON only: {"valid": true/false, "reason": "one sentence explanation", "c
   }
 }
 
-// V6 VALIDATION: Gemini-only parallel validation (faster than dual-model)
-// Uses gemini-2.5-flash for stability (gemini-3-flash-preview was unstable)
+// V6 VALIDATION: GPT-4o parallel validation (best reasoning for judgment tasks)
 async function validateCompaniesV6(companies, business, country, exclusion) {
-  console.log(`\nV6 Gemini-Only Validation: ${companies.length} companies...`);
+  console.log(`\nV6 GPT-4o Validation: ${companies.length} companies...`);
   const startTime = Date.now();
 
-  const validated = [];   // Gemini says valid
+  const validated = [];   // GPT-4o says valid
   const flagged = [];     // Security blocked - needs human review
-  const rejected = [];    // Gemini says invalid
+  const rejected = [];    // GPT-4o says invalid
 
-  const batchSize = 10; // Larger batches since we're only calling one model
+  const batchSize = 10; // Parallel validation
 
   for (let i = 0; i < companies.length; i += batchSize) {
     const batch = companies.slice(i, i + batchSize);
@@ -3196,53 +3195,75 @@ async function validateCompaniesV6(companies, business, country, exclusion) {
 
         // Handle different fetch results
         if (fetchResult.status === 'security_blocked') {
-          // Website has security/Cloudflare protection - FLAG for human review
           console.log(`    ? SECURITY: ${company.company_name} (${fetchResult.reason}) - flagging for human review`);
           return {
             company,
             status: 'flagged',
-            geminiValid: false,
-            geminiReason: `Security blocked: ${fetchResult.reason}`,
+            valid: false,
+            reason: `Security blocked: ${fetchResult.reason}`,
             securityBlocked: true
           };
         }
 
         if (fetchResult.status !== 'ok') {
-          // Website truly inaccessible - remove
           console.log(`    ✗ REMOVED: ${company.company_name} (${fetchResult.reason})`);
           return { company, status: 'skipped' };
         }
 
         pageContent = fetchResult.content;
 
-        // Run Gemini validation only
-        const geminiResult = await validateSingleCompany(company, business, country, exclusion, pageContent, 'gemini');
+        // GPT-4o validation
+        const validationPrompt = `Validate if this company matches the search criteria.
 
-        const geminiValid = geminiResult.valid === true;
+COMPANY: ${company.company_name}
+WEBSITE: ${company.website}
+CLAIMED HQ: ${company.hq}
 
+WEBSITE CONTENT:
+${pageContent ? pageContent.substring(0, 8000) : 'Could not fetch website'}
+
+CRITERIA:
+- Business type: ${business}
+- Target countries: ${country}
+- Exclusions: ${exclusion}
+
+VALIDATION RULES:
+1. Is this a real company (not a directory, marketplace, or article)?
+2. Does their business relate to "${business}"?
+3. Is their HQ in one of the target countries (${country})?
+4. Do they violate any exclusion criteria (${exclusion})?
+
+Return JSON only: {"valid": true/false, "reason": "one sentence explanation", "corrected_hq": "City, Country or null if unknown"}`;
+
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [{ role: 'user', content: validationPrompt }],
+          response_format: { type: 'json_object' },
+          temperature: 0.1
+        });
+
+        const result = JSON.parse(response.choices[0].message.content);
         return {
           company,
-          status: geminiValid ? 'valid' : 'rejected',
-          geminiValid,
-          geminiReason: geminiResult.reason,
-          corrected_hq: geminiResult.corrected_hq
+          status: result.valid === true ? 'valid' : 'rejected',
+          valid: result.valid === true,
+          reason: result.reason || '',
+          corrected_hq: result.corrected_hq
         };
       } catch (e) {
         console.error(`  Validation error for ${company.company_name}: ${e.message}`);
-        return { company, status: 'rejected', geminiValid: false, geminiReason: 'Error' };
+        return { company, status: 'rejected', valid: false, reason: 'Error' };
       }
     }));
 
     for (const v of validations) {
-      // Skip companies with inaccessible websites (already logged above)
       if (v.status === 'skipped') continue;
 
       const companyData = {
         company_name: v.company.company_name,
         website: v.company.website,
         hq: v.corrected_hq || v.company.hq,
-        geminiVote: v.geminiValid ? 'YES' : 'NO',
-        reason: v.geminiReason,
+        reason: v.reason,
         securityBlocked: v.securityBlocked || false
       };
 
@@ -3251,10 +3272,10 @@ async function validateCompaniesV6(companies, business, country, exclusion) {
         console.log(`    ✓ VALID: ${v.company.company_name}`);
       } else if (v.status === 'flagged') {
         flagged.push(companyData);
-        console.log(`    ? FLAGGED: ${v.company.company_name} (Security/WAF blocked - needs human review)`);
+        console.log(`    ? FLAGGED: ${v.company.company_name} (Security blocked)`);
       } else {
         rejected.push(companyData);
-        console.log(`    ✗ REJECTED: ${v.company.company_name} - ${v.geminiReason}`);
+        console.log(`    ✗ REJECTED: ${v.company.company_name} - ${v.reason}`);
       }
     }
 
@@ -3262,7 +3283,7 @@ async function validateCompaniesV6(companies, business, country, exclusion) {
   }
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(`\nV6 Gemini-Only Validation done in ${duration}s`);
+  console.log(`\nV6 GPT-4o Validation done in ${duration}s`);
   console.log(`  Valid: ${validated.length}`);
   console.log(`  Flagged (security): ${flagged.length}`);
   console.log(`  Rejected: ${rejected.length}`);
@@ -3411,7 +3432,102 @@ function buildV5EmailHTML(validationResults, business, country, exclusion, searc
   return html;
 }
 
-// V6 ENDPOINT - Parallel Architecture with Perplexity as Main Search
+// V6 Email HTML builder - simplified for GPT-4o validation
+function buildV6EmailHTML(validationResults, business, country, exclusion, searchLog) {
+  const { validated, flagged, rejected } = validationResults;
+
+  // Count searches by model
+  const perplexityTasks = searchLog.filter(s => s.model === 'perplexity-sonar-pro');
+  const geminiTasks = searchLog.filter(s => !s.model || s.model === 'gemini');
+  const chatgptTasks = searchLog.filter(s => s.model === 'chatgpt-search');
+
+  let html = `
+    <h2>V6 Find Target Results</h2>
+    <p><strong>Business:</strong> ${business}</p>
+    <p><strong>Country:</strong> ${country}</p>
+    <p><strong>Exclusions:</strong> ${exclusion}</p>
+
+    <h3>Search Summary</h3>
+    <p><strong>Architecture:</strong> Parallel search with 3 models, validated by GPT-4o</p>
+    <ul>
+      <li>Perplexity: ${perplexityTasks.length} searches</li>
+      <li>Gemini (with Google Search): ${geminiTasks.length} searches</li>
+      <li>ChatGPT Search: ${chatgptTasks.length} searches</li>
+    </ul>
+
+    <h3>Validation Summary</h3>
+    <p>All companies validated by <strong>GPT-4o</strong>:</p>
+    <ul>
+      <li><span style="color: #22c55e; font-weight: bold;">VALIDATED (${validated.length})</span> - Confirmed match</li>
+      <li><span style="color: #f59e0b; font-weight: bold;">FLAGGED (${flagged.length})</span> - Security blocked, needs manual check</li>
+      <li><span style="color: #999;">Rejected: ${rejected.length}</span> - Did not match criteria</li>
+    </ul>
+  `;
+
+  // Validated Companies
+  html += `
+    <h3 style="color: #22c55e; border-bottom: 2px solid #22c55e; padding-bottom: 8px;">
+      ✓ VALIDATED COMPANIES (${validated.length})
+    </h3>
+  `;
+
+  if (validated.length > 0) {
+    html += `
+    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; margin-bottom: 30px;">
+      <tr style="background-color: #dcfce7;">
+        <th>#</th>
+        <th>Company</th>
+        <th>Website</th>
+        <th>Headquarters</th>
+      </tr>
+    `;
+    validated.forEach((c, i) => {
+      html += `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${c.company_name}</td>
+        <td><a href="${c.website}">${c.website}</a></td>
+        <td>${c.hq}</td>
+      </tr>
+      `;
+    });
+    html += '</table>';
+  } else {
+    html += '<p><em>No companies validated.</em></p>';
+  }
+
+  // Flagged Companies (security blocked)
+  if (flagged.length > 0) {
+    html += `
+      <h3 style="color: #f59e0b; border-bottom: 2px solid #f59e0b; padding-bottom: 8px;">
+        ? FLAGGED FOR REVIEW (${flagged.length})
+      </h3>
+      <p style="color: #666; font-size: 12px;">Website security blocked validation - please check manually</p>
+      <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; margin-bottom: 30px;">
+        <tr style="background-color: #fef3c7;">
+          <th>#</th>
+          <th>Company</th>
+          <th>Website</th>
+          <th>HQ</th>
+        </tr>
+    `;
+    flagged.forEach((c, i) => {
+      html += `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${c.company_name}</td>
+        <td><a href="${c.website}">${c.website}</a></td>
+        <td>${c.hq || 'Unknown'}</td>
+      </tr>
+      `;
+    });
+    html += '</table>';
+  }
+
+  return html;
+}
+
+// V6 ENDPOINT - Simplified Parallel Architecture
 app.post('/api/find-target-v6', async (req, res) => {
   const { Business, Country, Exclusion, Email } = req.body;
 
@@ -3436,76 +3552,116 @@ app.post('/api/find-target-v6', async (req, res) => {
     const totalStart = Date.now();
     const searchLog = [];
 
-    // ========== PHASE 0: Plan Search Strategy ==========
-    const plan = await planSearchStrategyV5(Business, Country, Exclusion);
-
-    // ========== PHASE 1: Perplexity Main Search + Parallel Validation ==========
-    // This is the PRIMARY search - runs Perplexity searches in batches, then validates
-    const phase1Results = await runPerplexityMainSearchWithValidation(plan, Business, Exclusion, searchLog);
-
-    // ========== V6 PHASE 2: Gemini-Heavy Iterative Search ==========
-    // Runs 16 rounds with 3x Gemini + 1x ChatGPT per round
-    // Gemini-only validation for faster processing
-    const phase2Results = await runIterativeSecondarySearchesV6(
-      plan,
-      Business,
-      Exclusion,
-      searchLog,
-      phase1Results.validated // Pass Phase 1 validated companies so Phase 2 knows what's already found
-    );
-
-    // ========== V6 PHASE 3: Final Results ==========
+    // ========== STEP 1: Plan Search Strategy ==========
     console.log('\n' + '='.repeat(50));
-    console.log('V6 PHASE 3: FINAL RESULTS');
+    console.log('STEP 1: PLANNING');
+    console.log('='.repeat(50));
+    const plan = await planSearchStrategyV5(Business, Country, Exclusion);
+    const { expandedCountry } = plan;
+
+    // ========== STEP 2: Run ALL Searches in Parallel ==========
+    // Perplexity + Gemini + ChatGPT all at once - no phases, no intermediate validation
+    console.log('\n' + '='.repeat(50));
+    console.log('STEP 2: PARALLEL SEARCH (Perplexity + Gemini + ChatGPT)');
     console.log('='.repeat(50));
 
-    // Phase 2 already includes Phase 1 validated companies in its results
-    // Just need to merge flagged and rejected
-    const allValidated = phase2Results.validated;
-    const allFlagged = [...phase1Results.flagged, ...phase2Results.flagged];
-    const allRejected = [...phase1Results.rejected, ...phase2Results.rejected];
+    const searchStart = Date.now();
 
-    // Final dedup
-    const finalValidated = dedupeCompanies(allValidated);
-    const finalFlagged = dedupeCompanies(allFlagged);
-    const finalRejected = dedupeCompanies(allRejected);
+    // Generate search prompts
+    const basePrompt = `Find ALL ${Business} companies in ${expandedCountry}. Return company name, website, HQ location. Exclude: ${Exclusion}`;
+    const manufacturerPrompt = `Find ${Business} manufacturers and producers in ${expandedCountry}. Return company name, website, HQ. Exclude: ${Exclusion}`;
+    const smePrompt = `Find small and medium ${Business} companies in ${expandedCountry}. Focus on local/family businesses. Return company name, website, HQ. Exclude: ${Exclusion}`;
+    const supplierPrompt = `Find ${Business} suppliers, OEM, ODM companies in ${expandedCountry}. Return company name, website, HQ. Exclude: ${Exclusion}`;
+
+    // Run ALL searches in parallel
+    console.log('  Running Perplexity + Gemini + ChatGPT searches in parallel...');
+    const [
+      perplexity1, perplexity2,
+      gemini1, gemini2, gemini3, gemini4,
+      chatgpt1, chatgpt2
+    ] = await Promise.all([
+      // Perplexity searches
+      runPerplexitySearchTask(basePrompt, expandedCountry, searchLog).catch(e => { console.error('Perplexity-1 failed:', e.message); return []; }),
+      runPerplexitySearchTask(manufacturerPrompt, expandedCountry, searchLog).catch(e => { console.error('Perplexity-2 failed:', e.message); return []; }),
+      // Gemini searches (with Google Search grounding)
+      runAgenticSearchTask(basePrompt, expandedCountry, searchLog).catch(e => { console.error('Gemini-1 failed:', e.message); return []; }),
+      runAgenticSearchTask(manufacturerPrompt, expandedCountry, searchLog).catch(e => { console.error('Gemini-2 failed:', e.message); return []; }),
+      runAgenticSearchTask(smePrompt, expandedCountry, searchLog).catch(e => { console.error('Gemini-3 failed:', e.message); return []; }),
+      runAgenticSearchTask(supplierPrompt, expandedCountry, searchLog).catch(e => { console.error('Gemini-4 failed:', e.message); return []; }),
+      // ChatGPT searches
+      runChatGPTSearchTask(`${Business} companies ${expandedCountry}`, 'Find all companies', expandedCountry, searchLog).catch(e => { console.error('ChatGPT-1 failed:', e.message); return []; }),
+      runChatGPTSearchTask(`${Business} manufacturers ${expandedCountry}`, 'Find manufacturers', expandedCountry, searchLog).catch(e => { console.error('ChatGPT-2 failed:', e.message); return []; })
+    ]);
+
+    const searchDuration = ((Date.now() - searchStart) / 1000).toFixed(1);
+    console.log(`  Search completed in ${searchDuration}s`);
+
+    // Combine all results
+    const allCompanies = [
+      ...perplexity1, ...perplexity2,
+      ...gemini1, ...gemini2, ...gemini3, ...gemini4,
+      ...chatgpt1, ...chatgpt2
+    ];
+    console.log(`  Total companies found: ${allCompanies.length}`);
+    console.log(`    Perplexity: ${perplexity1.length + perplexity2.length}`);
+    console.log(`    Gemini: ${gemini1.length + gemini2.length + gemini3.length + gemini4.length}`);
+    console.log(`    ChatGPT: ${chatgpt1.length + chatgpt2.length}`);
+
+    // ========== STEP 3: Dedupe ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('STEP 3: DEDUPLICATION');
+    console.log('='.repeat(50));
+
+    const uniqueCompanies = dedupeCompanies(allCompanies);
+    console.log(`  After dedup: ${uniqueCompanies.length} unique companies`);
+
+    // Pre-filter
+    const preFiltered = preFilterCompanies(uniqueCompanies);
+    console.log(`  After pre-filter: ${preFiltered.length} companies`);
+
+    // ========== STEP 4: Validate with GPT-4o ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('STEP 4: GPT-4o VALIDATION');
+    console.log('='.repeat(50));
+
+    const validationResults = await validateCompaniesV6(preFiltered, Business, expandedCountry, Exclusion);
+    const { validated, flagged, rejected } = validationResults;
+
+    // ========== STEP 5: Results ==========
+    console.log('\n' + '='.repeat(50));
+    console.log('STEP 5: FINAL RESULTS');
+    console.log('='.repeat(50));
 
     console.log(`V6 FINAL RESULTS:`);
-    console.log(`  ✓ VALIDATED (Gemini-verified): ${finalValidated.length}`);
-    console.log(`    - From Perplexity (Phase 1): ${phase1Results.validated.length}`);
-    console.log(`    - Added by Gemini-heavy search (Phase 2): ${phase2Results.validated.length - phase1Results.validated.length}`);
-    console.log(`  ? FLAGGED (security blocked): ${finalFlagged.length}`);
-    console.log(`  ✗ REJECTED: ${finalRejected.length}`);
+    console.log(`  ✓ VALIDATED: ${validated.length}`);
+    console.log(`  ? FLAGGED (security blocked): ${flagged.length}`);
+    console.log(`  ✗ REJECTED: ${rejected.length}`);
 
-    // Calculate stats
-    const perplexityTasks = searchLog.filter(s => s.model === 'perplexity-sonar-pro').length;
-    const geminiTasks = searchLog.filter(s => !s.model || s.model === 'gemini').length;
-    const chatgptTasks = searchLog.filter(s => s.model === 'chatgpt-search').length;
-    const totalSearches = searchLog.reduce((sum, s) => sum + s.searchQueries.length, 0);
-    const totalSources = searchLog.reduce((sum, s) => sum + s.sourceCount, 0);
+    // Stats
+    const perplexityCount = searchLog.filter(s => s.model === 'perplexity-sonar-pro').length;
+    const geminiCount = searchLog.filter(s => !s.model || s.model === 'gemini').length;
+    const chatgptCount = searchLog.filter(s => s.model === 'chatgpt-search').length;
 
-    console.log(`\nV6 Search Statistics:`);
-    console.log(`  Perplexity searches: ${perplexityTasks} (Phase 1)`);
-    console.log(`  Gemini searches: ${geminiTasks} (Phase 2 - 3x per round, 16 rounds)`);
-    console.log(`  ChatGPT searches: ${chatgptTasks} (Phase 2 - 1x per round)`);
-    console.log(`  Total searches: ${totalSearches}`);
-    console.log(`  Total sources: ${totalSources}`);
+    console.log(`\nSearch Statistics:`);
+    console.log(`  Perplexity: ${perplexityCount} searches`);
+    console.log(`  Gemini: ${geminiCount} searches`);
+    console.log(`  ChatGPT: ${chatgptCount} searches`);
 
-    // Send email with three-tier results
-    const finalResults = { validated: finalValidated, flagged: finalFlagged, rejected: finalRejected };
-    const htmlContent = buildV5EmailHTML(finalResults, Business, plan.expandedCountry, Exclusion, searchLog);
+    // Send email
+    const finalResults = { validated, flagged, rejected };
+    const htmlContent = buildV6EmailHTML(finalResults, Business, expandedCountry, Exclusion, searchLog);
 
     await sendEmail(
       Email,
-      `[V6 ITERATIVE] ${Business} in ${Country} (${finalValidated.length} validated + ${finalFlagged.length} flagged)`,
+      `[V6] ${Business} in ${Country} (${validated.length} validated + ${flagged.length} flagged)`,
       htmlContent
     );
 
     const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
     console.log('\n' + '='.repeat(70));
-    console.log(`V6 ITERATIVE SEARCH COMPLETE!`);
+    console.log(`V6 SEARCH COMPLETE!`);
     console.log(`Email sent to: ${Email}`);
-    console.log(`Validated: ${finalValidated.length} | Flagged: ${finalFlagged.length} | Rejected: ${finalRejected.length}`);
+    console.log(`Validated: ${validated.length} | Flagged: ${flagged.length} | Rejected: ${rejected.length}`);
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(70));
 
