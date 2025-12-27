@@ -909,6 +909,7 @@
         const processor = audioContext.createScriptProcessor(4096, 1, 1);
 
         // Connect WebSocket
+        console.log('Connecting to WebSocket:', `${WS_BASE}/ws/transcribe`);
         ws = new WebSocket(`${WS_BASE}/ws/transcribe`);
 
         ws.onopen = () => {
@@ -980,8 +981,17 @@
 
         ws.onerror = (error) => {
           console.error('WebSocket error:', error);
+          console.error('WebSocket URL was:', `${WS_BASE}/ws/transcribe`);
           showError('Connection error. Please try again.');
           stopRecording();
+        };
+
+        ws.onclose = (event) => {
+          console.log('WebSocket closed:', event.code, event.reason);
+          if (!event.wasClean && isRecording) {
+            showError(`Connection closed unexpectedly (code: ${event.code})`);
+            stopRecording();
+          }
         };
 
         // Process audio and send to WebSocket
