@@ -3568,68 +3568,63 @@ app.post('/api/find-target-v6', async (req, res) => {
     const allCompanies = [];
     const seenWebsites = new Set();
 
-    // Different search angles for variety
-    const searchAngles = [
-      { type: 'all', desc: 'all companies' },
-      { type: 'manufacturers', desc: 'manufacturers' },
-      { type: 'sme', desc: 'SME/local' },
-      { type: 'suppliers', desc: 'suppliers/OEM' },
-      { type: 'producers', desc: 'producers' },
-      { type: 'distributors', desc: 'distributors' },
-      { type: 'industrial', desc: 'industrial' },
-      { type: 'private', desc: 'private/family' },
-      { type: 'regional', desc: 'regional players' },
-      { type: 'niche', desc: 'niche/specialized' }
+    // Generic search prompts that work for ANY business type
+    // Each round uses a different search angle to maximize coverage
+    const getSearchPrompt = (round, business, country, exclusion, alreadyFoundList) => {
+      const findMoreClause = alreadyFoundList
+        ? `\nALREADY FOUND (do NOT repeat these): ${alreadyFoundList}\nFind MORE companies not in this list.`
+        : '';
+
+      const prompts = [
+        // Round 1: Comprehensive search
+        `Find ALL ${business} companies in ${country}. Be exhaustive - include large, medium, and small companies.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+
+        // Round 2: Small and medium enterprises
+        `Find small and medium-sized ${business} companies in ${country}. Focus on companies that are potential acquisition targets.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+
+        // Round 3: Private and family-owned
+        `Find private and family-owned ${business} companies in ${country}. These are often not well-known but important players.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+
+        // Round 4: Regional/local players
+        `Find regional and local ${business} companies in ${country}. Look for companies operating in specific provinces, states, or cities.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+
+        // Round 5: Industry associations and directories
+        `Find ${business} companies in ${country} through industry associations, trade directories, and member lists.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+
+        // Round 6: Leading/established companies
+        `Find leading and established ${business} companies in ${country}. Include market leaders and well-known players.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+
+        // Round 7: Emerging/newer companies
+        `Find emerging and newer ${business} companies in ${country}. Look for companies founded in recent years.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+
+        // Round 8: Specialized/niche
+        `Find specialized and niche ${business} companies in ${country}. Look for companies with specific focus areas.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+
+        // Round 9: Alternative search terms
+        `List of ${business} companies operating in ${country}. Search using alternative industry terms and keywords.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+
+        // Round 10: Final sweep
+        `Find any remaining ${business} companies in ${country} that haven't been found yet. Be thorough.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`
+      ];
+
+      return prompts[round % prompts.length];
+    };
+
+    const roundDescriptions = [
+      'comprehensive', 'SME focus', 'private/family', 'regional/local',
+      'associations', 'leading', 'emerging', 'specialized', 'alternative terms', 'final sweep'
     ];
 
     for (let round = 0; round < NUM_ROUNDS; round++) {
       const roundStart = Date.now();
-      const angle = searchAngles[round % searchAngles.length];
 
       // Build "already found" list (company names only to save tokens)
       const alreadyFound = allCompanies.slice(0, 100).map(c => c.company_name).join(', ');
-      const findMoreClause = alreadyFound
-        ? `\nALREADY FOUND (do NOT repeat these): ${alreadyFound}\nFind MORE companies not in this list.`
-        : '';
 
-      console.log(`\n  --- ROUND ${round + 1}/${NUM_ROUNDS} (${angle.desc}) ---`);
+      console.log(`\n  --- ROUND ${round + 1}/${NUM_ROUNDS} (${roundDescriptions[round]}) ---`);
 
-      // Generate prompts for this round
-      let prompt;
-      switch (angle.type) {
-        case 'all':
-          prompt = `Find ALL ${Business} companies in ${expandedCountry}.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
-          break;
-        case 'manufacturers':
-          prompt = `Find ${Business} manufacturers and producers in ${expandedCountry}.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
-          break;
-        case 'sme':
-          prompt = `Find small and medium ${Business} companies in ${expandedCountry}. Focus on local/family-owned businesses.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
-          break;
-        case 'suppliers':
-          prompt = `Find ${Business} suppliers, OEM, ODM, contract manufacturers in ${expandedCountry}.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
-          break;
-        case 'producers':
-          prompt = `Find ${Business} producers and fabricators in ${expandedCountry}.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
-          break;
-        case 'distributors':
-          prompt = `Find ${Business} distributors and wholesalers who also manufacture in ${expandedCountry}.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
-          break;
-        case 'industrial':
-          prompt = `Find ${Business} companies in industrial estates and manufacturing zones in ${expandedCountry}.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
-          break;
-        case 'private':
-          prompt = `Find private and family-owned ${Business} companies in ${expandedCountry}.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
-          break;
-        case 'regional':
-          prompt = `Find regional ${Business} players in ${expandedCountry}. Look for companies serving specific provinces/states.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
-          break;
-        case 'niche':
-          prompt = `Find specialized/niche ${Business} companies in ${expandedCountry}.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
-          break;
-        default:
-          prompt = `Find ${Business} companies in ${expandedCountry}.${findMoreClause}\nReturn company name, website, HQ. Exclude: ${Exclusion}`;
-      }
+      // Generate prompt for this round
+      const prompt = getSearchPrompt(round, Business, expandedCountry, Exclusion, alreadyFound);
 
       // Run all 3 models in parallel
       const [perplexityResults, geminiResults, chatgptResults] = await Promise.all([
@@ -3637,7 +3632,7 @@ app.post('/api/find-target-v6', async (req, res) => {
           .catch(e => { console.error(`    Perplexity failed: ${e.message}`); return []; }),
         runAgenticSearchTask(prompt, expandedCountry, searchLog)
           .catch(e => { console.error(`    Gemini failed: ${e.message}`); return []; }),
-        runChatGPTSearchTask(`${Business} ${angle.desc} ${expandedCountry}`, prompt, expandedCountry, searchLog)
+        runChatGPTSearchTask(`${Business} companies ${expandedCountry}`, prompt, expandedCountry, searchLog)
           .catch(e => { console.error(`    ChatGPT failed: ${e.message}`); return []; })
       ]);
 
