@@ -98,6 +98,115 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
 
+// ============ OPENAI COST TRACKING ============
+// Pricing per 1M tokens (December 2025)
+const OPENAI_PRICING = {
+  'gpt-4o': { input: 2.50, output: 10.00 },
+  'gpt-4o-mini': { input: 0.15, output: 0.60 },
+  'gpt-4o-search-preview': { input: 2.50, output: 10.00 },
+  'gpt-4o-mini-search-preview': { input: 0.15, output: 0.60 },
+  'chatgpt-4o-latest': { input: 5.00, output: 15.00 },
+  'whisper-1': { input: 0.006, output: 0 }, // per second of audio
+  'o1': { input: 15.00, output: 60.00 },
+  'o1-mini': { input: 3.00, output: 12.00 }
+};
+
+// Cost tracker - resets daily
+const openaiCostTracker = {
+  date: new Date().toISOString().split('T')[0],
+  totalCost: 0,
+  totalInputTokens: 0,
+  totalOutputTokens: 0,
+  byFeature: {},  // e.g., { 'validation': { cost: 0, calls: 0 }, 'find-target-v5': {...} }
+  byModel: {},    // e.g., { 'gpt-4o': { cost: 0, inputTokens: 0, outputTokens: 0, calls: 0 } }
+  calls: []       // Recent calls with details (keep last 100)
+};
+
+// Reset tracker if new day
+function checkDailyReset() {
+  const today = new Date().toISOString().split('T')[0];
+  if (openaiCostTracker.date !== today) {
+    console.log(`[Cost Tracker] Daily reset from ${openaiCostTracker.date} to ${today}`);
+    console.log(`[Cost Tracker] Yesterday's total: $${openaiCostTracker.totalCost.toFixed(4)}`);
+    openaiCostTracker.date = today;
+    openaiCostTracker.totalCost = 0;
+    openaiCostTracker.totalInputTokens = 0;
+    openaiCostTracker.totalOutputTokens = 0;
+    openaiCostTracker.byFeature = {};
+    openaiCostTracker.byModel = {};
+    openaiCostTracker.calls = [];
+  }
+}
+
+// Track an OpenAI API call
+function trackOpenAICost(model, inputTokens, outputTokens, feature = 'unknown') {
+  checkDailyReset();
+
+  const pricing = OPENAI_PRICING[model] || OPENAI_PRICING['gpt-4o']; // Default to gpt-4o pricing
+  const inputCost = (inputTokens / 1000000) * pricing.input;
+  const outputCost = (outputTokens / 1000000) * pricing.output;
+  const totalCost = inputCost + outputCost;
+
+  // Update totals
+  openaiCostTracker.totalCost += totalCost;
+  openaiCostTracker.totalInputTokens += inputTokens;
+  openaiCostTracker.totalOutputTokens += outputTokens;
+
+  // Update by feature
+  if (!openaiCostTracker.byFeature[feature]) {
+    openaiCostTracker.byFeature[feature] = { cost: 0, calls: 0, inputTokens: 0, outputTokens: 0 };
+  }
+  openaiCostTracker.byFeature[feature].cost += totalCost;
+  openaiCostTracker.byFeature[feature].calls++;
+  openaiCostTracker.byFeature[feature].inputTokens += inputTokens;
+  openaiCostTracker.byFeature[feature].outputTokens += outputTokens;
+
+  // Update by model
+  if (!openaiCostTracker.byModel[model]) {
+    openaiCostTracker.byModel[model] = { cost: 0, calls: 0, inputTokens: 0, outputTokens: 0 };
+  }
+  openaiCostTracker.byModel[model].cost += totalCost;
+  openaiCostTracker.byModel[model].calls++;
+  openaiCostTracker.byModel[model].inputTokens += inputTokens;
+  openaiCostTracker.byModel[model].outputTokens += outputTokens;
+
+  // Keep track of recent calls (last 100)
+  openaiCostTracker.calls.push({
+    timestamp: new Date().toISOString(),
+    model,
+    feature,
+    inputTokens,
+    outputTokens,
+    cost: totalCost
+  });
+  if (openaiCostTracker.calls.length > 100) {
+    openaiCostTracker.calls.shift();
+  }
+
+  // Log significant costs (> $0.01)
+  if (totalCost > 0.01) {
+    console.log(`[Cost] ${feature} | ${model} | $${totalCost.toFixed(4)} (${inputTokens}/${outputTokens} tokens)`);
+  }
+
+  return totalCost;
+}
+
+// Wrapper for OpenAI chat completions that tracks costs
+async function trackedOpenAIChat(options, feature = 'unknown') {
+  const response = await openai.chat.completions.create(options);
+
+  if (response.usage) {
+    trackOpenAICost(
+      options.model || 'gpt-4o',
+      response.usage.prompt_tokens || 0,
+      response.usage.completion_tokens || 0,
+      feature
+    );
+  }
+
+  return response;
+}
+
 // Initialize Anthropic (Claude)
 const anthropic = process.env.ANTHROPIC_API_KEY
   ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -628,13 +737,13 @@ async function callPerplexity(prompt) {
   }
 }
 
-async function callChatGPT(prompt) {
+async function callChatGPT(prompt, feature = 'general') {
   try {
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAIChat({
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2
-    });
+    }, feature);
     const result = response.choices[0].message.content || '';
     if (!result) {
       console.warn('ChatGPT returned empty response for prompt:', prompt.substring(0, 100));
@@ -648,22 +757,22 @@ async function callChatGPT(prompt) {
 
 // OpenAI Search model - has real-time web search capability
 // Updated to use gpt-4o-search-preview (more stable than mini version)
-async function callOpenAISearch(prompt) {
+async function callOpenAISearch(prompt, feature = 'search') {
   try {
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAIChat({
       model: 'gpt-4o-search-preview',
       messages: [{ role: 'user', content: prompt }]
-    });
+    }, feature);
     const result = response.choices[0].message.content || '';
     if (!result) {
       console.warn('OpenAI Search returned empty response, falling back to ChatGPT');
-      return callChatGPT(prompt);
+      return callChatGPT(prompt, feature);
     }
     return result;
   } catch (error) {
     console.error('OpenAI Search error:', error.message, '- falling back to ChatGPT');
     // Fallback to regular gpt-4o if search model not available
-    return callChatGPT(prompt);
+    return callChatGPT(prompt, feature);
   }
 }
 
@@ -1430,7 +1539,7 @@ function strategy14_LocalLanguageOpenAISearch(business, country, exclusion) {
 async function extractCompanies(text, country) {
   if (!text || text.length < 50) return [];
   try {
-    const extraction = await openai.chat.completions.create({
+    const extraction = await trackedOpenAIChat({
       model: 'gpt-4o-mini',
       messages: [
         {
@@ -1448,7 +1557,7 @@ RULES:
         { role: 'user', content: text.substring(0, 15000) }
       ],
       response_format: { type: 'json_object' }
-    });
+    }, 'find-target-extraction');
     const parsed = JSON.parse(extraction.choices[0].message.content);
     return Array.isArray(parsed.companies) ? parsed.companies : [];
   } catch (e) {
@@ -1850,7 +1959,7 @@ async function validateCompanyStrict(company, business, country, exclusion, page
   const exclusionRules = buildExclusionRules(exclusion, business);
 
   try {
-    const validation = await openai.chat.completions.create({
+    const validation = await trackedOpenAIChat({
       model: 'gpt-4o',  // Use smarter model for better validation
       messages: [
         {
@@ -1896,7 +2005,7 @@ ${contentToValidate.substring(0, 10000)}`
         }
       ],
       response_format: { type: 'json_object' }
-    });
+    }, 'find-target-validation');
 
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
@@ -1981,7 +2090,7 @@ async function validateCompany(company, business, country, exclusion, pageText) 
   const exclusionRules = buildExclusionRules(exclusion, business);
 
   try {
-    const validation = await openai.chat.completions.create({
+    const validation = await trackedOpenAIChat({
       model: 'gpt-4o-mini',
       messages: [
         {
@@ -2023,7 +2132,7 @@ ${(typeof pageText === 'string' && pageText) ? pageText.substring(0, 8000) : 'Co
         }
       ],
       response_format: { type: 'json_object' }
-    });
+    }, 'find-target-validation');
 
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
@@ -2107,6 +2216,43 @@ function buildEmailHTML(companies, business, country, exclusion) {
   html += '</tbody></table>';
   return html;
 }
+
+// ============ COST TRACKING ENDPOINT ============
+app.get('/api/openai-costs', (req, res) => {
+  checkDailyReset();
+
+  // Sort features by cost (highest first)
+  const featuresSorted = Object.entries(openaiCostTracker.byFeature)
+    .sort((a, b) => b[1].cost - a[1].cost)
+    .map(([name, data]) => ({
+      name,
+      cost: `$${data.cost.toFixed(4)}`,
+      calls: data.calls,
+      inputTokens: data.inputTokens,
+      outputTokens: data.outputTokens
+    }));
+
+  // Sort models by cost (highest first)
+  const modelsSorted = Object.entries(openaiCostTracker.byModel)
+    .sort((a, b) => b[1].cost - a[1].cost)
+    .map(([name, data]) => ({
+      name,
+      cost: `$${data.cost.toFixed(4)}`,
+      calls: data.calls,
+      inputTokens: data.inputTokens,
+      outputTokens: data.outputTokens
+    }));
+
+  res.json({
+    date: openaiCostTracker.date,
+    totalCost: `$${openaiCostTracker.totalCost.toFixed(4)}`,
+    totalInputTokens: openaiCostTracker.totalInputTokens,
+    totalOutputTokens: openaiCostTracker.totalOutputTokens,
+    byFeature: featuresSorted,
+    byModel: modelsSorted,
+    recentCalls: openaiCostTracker.calls.slice(-20).reverse() // Last 20 calls, newest first
+  });
+});
 
 // ============ FAST ENDPOINT ============
 
@@ -2244,7 +2390,7 @@ app.post('/api/find-target-slow', async (req, res) => {
 // Ask AI to expand a region into individual countries (no hardcoding)
 async function expandRegionToCountries(region) {
   try {
-    const response = await openai.chat.completions.create({
+    const response = await trackedOpenAIChat({
       model: 'gpt-4o-mini',
       messages: [
         {
@@ -2262,7 +2408,7 @@ Example: ["Malaysia", "Thailand", "Indonesia"]`
         }
       ],
       response_format: { type: 'json_object' }
-    });
+    }, 'find-target-v4');
 
     const result = JSON.parse(response.choices[0].message.content);
     const countries = result.countries || result;
@@ -4244,14 +4390,14 @@ ${(typeof pageText === 'string' && pageText) ? pageText.substring(0, 10000) : 'C
 
   try {
     // First pass: gpt-4o-mini (fast and cheap)
-    const firstPass = await openai.chat.completions.create({
+    const firstPass = await trackedOpenAIChat({
       model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: systemPrompt('gpt-4o-mini') },
         { role: 'user', content: userPrompt }
       ],
       response_format: { type: 'json_object' }
-    });
+    }, 'validation');
 
     const result = JSON.parse(firstPass.choices[0].message.content);
 
@@ -4268,14 +4414,14 @@ ${(typeof pageText === 'string' && pageText) ? pageText.substring(0, 10000) : 'C
       console.log(`  → Re-validating ${company.company_name} with gpt-4o (confidence: ${result.confidence})`);
 
       // Second pass: gpt-4o (more accurate)
-      const secondPass = await openai.chat.completions.create({
+      const secondPass = await trackedOpenAIChat({
         model: 'gpt-4o',
         messages: [
           { role: 'system', content: systemPrompt('gpt-4o') },
           { role: 'user', content: userPrompt }
         ],
         response_format: { type: 'json_object' }
-      });
+      }, 'validation');
 
       const finalResult = JSON.parse(secondPass.choices[0].message.content);
       return {
