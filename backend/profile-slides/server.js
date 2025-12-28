@@ -2370,8 +2370,8 @@ function getCountryCode(location) {
 function filterEmptyMetrics(keyMetrics) {
   if (!keyMetrics || !Array.isArray(keyMetrics)) return [];
 
-  // Patterns that indicate empty/meaningless metric values
-  const emptyPatterns = [
+  // Patterns that indicate empty/meaningless metric VALUES
+  const emptyValuePatterns = [
     /no specific/i,
     /not specified/i,
     /not stated/i,
@@ -2388,17 +2388,60 @@ function filterEmptyMetrics(keyMetrics) {
     /no information/i,
     /no data/i,
     /^\s*-?\s*$/,  // Empty or just dashes
+    // Placeholder text patterns
+    /client\s*\d+/i,          // "Client 1", "Client 2", etc.
+    /customer\s*\d+/i,        // "Customer 1", "Customer 2", etc.
+    /supplier\s*\d+/i,        // "Supplier 1", "Supplier 2", etc.
+    /partner\s*\d+/i,         // "Partner 1", "Partner 2", etc.
+    /company\s*\d+/i,         // "Company 1", "Company 2", etc.
+    // Values without actual data (just descriptions)
+    /^-?\s*production capacity of(?!\s*\d)/i,  // "Production capacity of" without numbers
+    /^-?\s*factory area of(?!\s*\d)/i,         // "Factory area of" without numbers
+    /^-?\s*number of(?!\s*\d)/i,               // "Number of" without numbers
+    /intensive r&d/i,         // Generic R&D statements
+    /product improvement and innovation/i,
+    /focus(ing|ed)?\s+on\s+(quality|innovation|customer)/i,  // Generic focus statements
+    /commitment to/i,         // Generic commitment statements
+    /world of color/i,        // Corporate slogans
+    /value creation/i,        // Generic value statements
+    /environmental impact/i,  // Generic sustainability
+  ];
+
+  // Labels that should be filtered out entirely (inappropriate for M&A slides)
+  const badLabels = [
+    /corporate vision/i,
+    /vision statement/i,
+    /mission statement/i,
+    /company values/i,
+    /core values/i,
+    /our philosophy/i,
+    /company motto/i,
+    /slogan/i,
+    /tagline/i,
+    /years of experience/i,
+    /awards/i,
+    /achievements/i,
+    /recognitions/i,
   ];
 
   return keyMetrics.filter(metric => {
     if (!metric || !metric.value) return false;
     const value = String(metric.value).trim();
+    const label = String(metric.label || '').trim();
     if (!value) return false;
 
-    // Check if value matches any empty pattern
-    for (const pattern of emptyPatterns) {
+    // Check if label is inappropriate
+    for (const pattern of badLabels) {
+      if (pattern.test(label)) {
+        console.log(`    Removing inappropriate metric: "${label}" = "${value}"`);
+        return false;
+      }
+    }
+
+    // Check if value matches any empty/meaningless pattern
+    for (const pattern of emptyValuePatterns) {
       if (pattern.test(value)) {
-        console.log(`    Removing empty metric: "${metric.label}" = "${value}"`);
+        console.log(`    Removing empty/generic metric: "${label}" = "${value}"`);
         return false;
       }
     }
@@ -2541,9 +2584,37 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
       };
 
+      // Simplify country lists to regions
+      const simplifyRegion = (desc) => {
+        const seaCountries = ['malaysia', 'indonesia', 'singapore', 'thailand', 'vietnam', 'philippines', 'myanmar', 'cambodia', 'laos', 'brunei'];
+        const lowerDesc = desc.toLowerCase();
+
+        // Count how many SE Asian countries are mentioned
+        const mentionedSEA = seaCountries.filter(c => lowerDesc.includes(c));
+
+        // If 3+ SE Asian countries are listed, replace with "Southeast Asia"
+        if (mentionedSEA.length >= 3) {
+          // Build regex to match the country list (including "and", commas)
+          const countryListPattern = new RegExp(
+            `\\b(in|from)?\\s*(${seaCountries.join('|')})(\\s*,\\s*(${seaCountries.join('|')}))*\\s*(,?\\s*(and)?\\s*(${seaCountries.join('|')}))?`,
+            'gi'
+          );
+          return desc.replace(countryListPattern, (match) => {
+            // Check if it started with "in" or "from"
+            const startsWithIn = /^\s*in\s/i.test(match);
+            const startsWithFrom = /^\s*from\s/i.test(match);
+            if (startsWithIn) return 'in Southeast Asia';
+            if (startsWithFrom) return 'from Southeast Asia';
+            return 'Southeast Asia';
+          });
+        }
+        return desc;
+      };
+
       // Title: "Target List – {Target Description}" in Title Case
-      // Position same as profile slides, valign: bottom
-      const formattedTitle = `Target List – ${toTitleCase(targetDescription)}`;
+      // Simplify multi-country lists to region names
+      const simplifiedDesc = simplifyRegion(targetDescription);
+      const formattedTitle = `Target List – ${toTitleCase(simplifiedDesc)}`;
       targetSlide.addText(formattedTitle, {
         x: 0.38, y: 0.07, w: 9.5, h: 0.9,
         fontSize: 24, fontFace: 'Segoe UI',
@@ -2590,10 +2661,18 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
       // Group companies by country
       const companyByCountry = {};
-      companies.forEach((c, i) => {
+      companies.forEach((c) => {
         const { country, hqCity } = parseLocation(c.location);
         if (!companyByCountry[country]) companyByCountry[country] = [];
-        companyByCountry[country].push({ ...c, index: i + 1, hqCity });
+        companyByCountry[country].push({ ...c, hqCity });
+      });
+
+      // Assign sequential numbers AFTER grouping (so numbers are in order by country)
+      let sequentialIndex = 1;
+      Object.keys(companyByCountry).forEach(country => {
+        companyByCountry[country].forEach(comp => {
+          comp.index = sequentialIndex++;
+        });
       });
 
       // Determine if single country or multi-country
@@ -2850,7 +2929,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       }
 
       // Add target list table (position from template: x=0.3663", y=1.467")
-      // Cell margins: 0.1 inch left/right, 0 inch top/bottom
+      // Cell margins: 0.04 inch (0.1cm) left/right, 0 inch top/bottom
       targetSlide.addTable(tableRows, {
         x: 0.37, y: 1.47, w: tableWidth,
         colW: colWidths,
@@ -2858,7 +2937,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         fontSize: 14,
         valign: 'middle',
         rowH: 0.32,
-        margin: [0, 0.1, 0, 0.1]  // [top, right, bottom, left] in inches
+        margin: [0, 0.04, 0, 0.04]  // [top, right, bottom, left] in inches
       });
 
       // Footnote (from template: x=0.3754", y=6.6723", font 10pt)
@@ -3398,28 +3477,35 @@ async function extractBasicInfo(scrapedContent, websiteUrl) {
 OUTPUT JSON with these fields:
 - company_name: Company name with first letter of each word capitalized
 - established_year: Clean numbers only (e.g., "1995"), leave empty if not found
-- location: Format locations 3 levels deep: "District/Area, City/State, Country"
-  Examples:
+- location: MANDATORY 3 LEVELS for all countries except Singapore:
+
+  NON-SINGAPORE RULE: ALWAYS provide 3 levels: "District/Area, City/Province, Country"
+  - WRONG: "Jakarta, Indonesia" (only 2 levels!)
+  - CORRECT: "Tangerang, Banten, Indonesia"
+  - CORRECT: "Bojongkamal, Tangerang, Indonesia"
+  - WRONG: "Shah Alam, Malaysia" (only 2 levels!)
+  - CORRECT: "Shah Alam, Selangor, Malaysia"
+  - CORRECT: "Section 15, Shah Alam, Malaysia"
+
+  More examples:
   - "Puchong, Selangor, Malaysia"
   - "Bangna, Bangkok, Thailand"
   - "Batam, Riau Islands, Indonesia"
-  SINGAPORE RULE: Always use 2 levels: "District/Area, Singapore". Extract the specific neighborhood/district/area from the street address. NEVER use generic terms like "CBD" or "Central" - instead extract the actual neighborhood name from the address.
-  Singapore district examples by postal code prefix or road name:
+  - "Tangerang, Banten, Indonesia"
+  - "Bekasi, West Java, Indonesia"
+
+  SINGAPORE RULE: Always use 2 levels: "District/Area, Singapore". Extract the specific neighborhood/district/area from the street address. NEVER use just "Singapore" - find the area name.
+  Singapore district examples:
   - "Jurong West, Singapore" (Jurong area roads)
   - "Woodlands, Singapore" (Woodlands area)
-  - "Yishun, Singapore" (Yishun area)
-  - "Ang Mo Kio, Singapore" (AMK area)
+  - "Ubi, Singapore" (Ubi industrial area)
   - "Tuas, Singapore" (Tuas industrial area)
-  - "Changi, Singapore" (Changi area)
-  - "Bedok, Singapore" (Bedok area)
-  - "Tampines, Singapore" (Tampines area)
-  - "Bukit Batok, Singapore" (Bukit Batok area)
-  - "Toa Payoh, Singapore" (Toa Payoh area)
-  - "Geylang, Singapore" (Geylang area)
+  - "Kaki Bukit, Singapore" (Kaki Bukit area)
+  - "Paya Lebar, Singapore" (Paya Lebar area)
   - "Raffles Place, Singapore" (Financial district)
-  - "Marina Bay, Singapore" (Marina area)
-  - "Orchard, Singapore" (Orchard Road area)
-  If address has a specific road name like "Ubi", "Kaki Bukit", "Paya Lebar", etc., use that area name. NEVER use "Singapore, Singapore" - always find the specific area.
+  - "Tampines, Singapore" (Tampines area)
+  If address has a specific road name like "Ubi Road", "Kaki Bukit Ave", "Paya Lebar Road", etc., use that area name.
+  NEVER use "Singapore, Singapore" - always find the specific area from the address.
 
   For multiple locations, group by type with sub-bullet points:
   Example format:
@@ -3481,7 +3567,7 @@ INPUT:
 - Previously extracted: company name, year, location
 
 OUTPUT JSON:
-1. business: Description of what company does. MAXIMUM 3 bullet points. Format each business line starting with "- ".
+1. business: Description of what company does. Use 1-3 bullet points - ONLY as many as needed, NOT always 3. Format each line starting with "- ".
 
    FORMAT REQUIREMENT: Use this structure:
    - "Manufacture [category] such as [top 3 products]"
@@ -3489,9 +3575,14 @@ OUTPUT JSON:
    - "Provide [service type] such as [top 3 services]"
 
    Examples:
-   "- Manufacture industrial chemicals such as adhesives, solvents, coatings\\n- Distribute automotive products such as lubricants, filters, batteries\\n- Provide technical services such as installation, maintenance, training"
+   "- Manufacture industrial chemicals such as adhesives, solvents, coatings\\n- Distribute automotive products such as lubricants, filters, batteries"
 
-   Keep it to the MOST KEY items only (3 bullet points max, 3 examples per bullet).
+   RULES FOR BUSINESS POINTS:
+   - Use ONLY 1-3 points depending on what the company actually does
+   - If company only manufactures, use 1 point. Don't add filler.
+   - NEVER include generic statements like "Conduct R&D", "Provide quality products", "Focus on innovation"
+   - NEVER include vague services like "customized solutions", "quality assurance" unless those are their PRIMARY business
+   - Only include points with SPECIFIC, CONCRETE content
 
 2. message: One-liner introductory message about the company. Example: "Malaysia-based distributor specializing in electronic components and industrial automation products across Southeast Asia."
 
@@ -3620,7 +3711,12 @@ RULES:
 - Be specific with numbers when available
 - For Shareholding: ONLY include if EXPLICITLY stated on website (e.g., "family-owned", "publicly traded", "PE-backed"). NEVER assume ownership structure.
 - DO NOT include: years of experience, awards, recognitions, market position, operating hours, number of branches/locations (not useful for M&A)
-- DO NOT include metrics with NO MEANINGFUL VALUES - if you don't have specific data, don't include the metric at all. NEVER write "No specific X stated" - just omit that metric entirely.
+- DO NOT include: corporate vision, mission statement, company values, slogans, taglines
+- DO NOT include metrics with NO MEANINGFUL VALUES - if you don't have specific data, don't include the metric at all
+- NEVER write placeholder values like "Client 1, Client 2", "Customer A, Customer B", "Not specified", "Various"
+- NEVER include metrics without actual numbers. BAD: "Production capacity of solvent-based inks". GOOD: "Production capacity: 500 tons/month"
+- NEVER include generic R&D statements like "Intensive R&D for product improvement"
+- If you cannot find actual customer/supplier names, DO NOT include those metrics at all
 - NEVER make up data - only include what's explicitly stated
 - Return ONLY valid JSON`
         },
