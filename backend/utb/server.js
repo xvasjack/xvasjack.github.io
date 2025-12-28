@@ -2588,16 +2588,19 @@ Respond in this EXACT JSON format:
 {
   "financials": {
     "total_revenue": "Exact amount with currency and fiscal year, with source (e.g., 'USD 2.3B (FY2023 Annual Report)')",
+    "total_revenue_url": "Direct URL to the source document (e.g., 'https://company.com/ir/annual-report-2023.pdf')",
     "revenue_by_segment": [
-      {"segment": "Segment name", "percentage": "Exact % (e.g., '47%')", "source": "Where this data comes from"}
+      {"segment": "Segment name", "percentage": "Exact % (e.g., '47%')", "source": "Document name", "source_url": "Direct URL to source"}
     ],
     "revenue_by_geography": [
-      {"region": "Region name", "percentage": "Exact % (e.g., '32%')", "source": "Where this data comes from"}
+      {"region": "Region name", "percentage": "Exact % (e.g., '32%')", "source": "Document name", "source_url": "Direct URL to source"}
     ]
   }
 }
 
-IMPORTANT: If you cannot find EXACT percentages with sources, return empty arrays. No approximations allowed.`).catch(e => ({ section: 'profile', error: e.message })),
+IMPORTANT:
+- If you cannot find EXACT percentages with sources, return empty arrays. No approximations allowed.
+- Always include source_url when available. Use the most direct link to the source document.`).catch(e => ({ section: 'profile', error: e.message })),
 
     // Synthesis 2: Products, Services & Operations
     callChatGPT(`You are writing for M&A ADVISORS who need to understand a company's business quickly. NOT engineers.
@@ -2627,29 +2630,32 @@ For STRATEGIC CAPABILITIES - provide CONCRETE EXAMPLES with numbers:
 Respond in this EXACT JSON format:
 {
   "products_and_services": {
-    "overview": "2-3 sentences explaining the business in plain English. What do they sell, to whom?",
+    "overview": "1-2 sentences. What do they sell, to whom?",
     "product_lines": [
       {
         "name": "Business segment name",
-        "what_it_does": "Plain English explanation of customer value",
-        "revenue_significance": "High/Medium/Low revenue contributor"
+        "what_it_does": "One sentence - customer value",
+        "revenue_significance": "High/Medium/Low",
+        "source_url": "URL to source"
       }
     ],
     "strategic_capabilities": [
       {
-        "capability": "Specific capability with concrete details (e.g., '1,200+ patents in X technology')",
-        "evidence": "Concrete proof - numbers, examples, specifics from research"
+        "category": "Technology|Scale|Relationships|Cost|Brand",
+        "capability": "Specific capability with number (e.g., '1,200+ patents in polymer chemistry')",
+        "source": "Source document name",
+        "source_url": "URL to source"
       }
     ]
   },
   "operations": {
     "manufacturing_footprint": [
-      {"location": "City, Country", "details": "Specific details about this facility (capacity, employees, products made)"}
+      {"location": "City, Country", "type": "Manufacturing|R&D|HQ|Distribution", "details": "Capacity/employees/products", "source_url": "URL"}
     ]
   }
 }
 
-REMEMBER: Concrete facts only. No generic statements. If you cannot provide specific evidence, do not include the capability.`).catch(e => ({ section: 'products', error: e.message })),
+BE CONCISE. Each field should be brief and scannable. Include source_url for every data point.`).catch(e => ({ section: 'products', error: e.message })),
 
     // Synthesis 3: Competitive Landscape
     callChatGPT(`You are writing a COMPREHENSIVE competitive analysis for M&A ADVISORS.
@@ -2665,45 +2671,46 @@ ${research.products}
 ---
 
 CRITICAL INSTRUCTIONS:
-- Be concise, direct, and professional. No generic statements.
-- For "Why This Company Wins" - write clearly and elaborately. Each point must stand on its own with clear reasoning and evidence.
-- For competitors - this is a large global industry. List the TOP 10-12 global competitors comprehensively.
-- For each competitor, provide: their products, market positioning, estimated market share, revenue size.
-- If you don't have specific data on a competitor, still include them but note what's unknown.
+- Be concise. No verbose explanations.
+- For competitors - list 10-12 global competitors with key metrics.
+- Include source URLs for all data points.
 
 Respond in this EXACT JSON format:
 {
   "competitive_landscape": {
     "company_position": {
-      "market_rank": "#1, #2, Top 5, etc. with specific market share % if available",
+      "market_rank": "#1, #2, Top 5, etc.",
+      "market_share": "X%",
+      "source_url": "URL to market share source",
       "why_they_win": [
         {
-          "point": "Clear statement of competitive advantage",
-          "reasoning": "Detailed explanation with specific evidence - customer examples, data points, concrete proof"
+          "advantage_type": "Technology|Scale|Cost|Relationships|Brand|Geography",
+          "description": "One sentence with specific evidence",
+          "source_url": "URL"
         }
       ],
-      "vulnerability": "Specific competitive threat with concrete evidence"
+      "key_vulnerability": "One sentence",
+      "vulnerability_source_url": "URL"
     },
     "key_competitors": [
       {
         "name": "Competitor name",
         "hq_country": "Country",
-        "revenue": "Estimated revenue (with source if available)",
-        "market_share": "Estimated % (with source if available)",
-        "key_products": "Their main product lines in this market",
-        "positioning": "How they position vs the target company - premium/value, geographic focus, customer segments",
-        "competitive_threat": "Specific threat they pose - gaining share, attacking same customers, technology edge"
+        "revenue": "$XB",
+        "market_share": "X%",
+        "positioning": "Premium|Mid-tier|Value",
+        "key_strength": "One sentence",
+        "threat_level": "High|Medium|Low",
+        "source_url": "URL"
       }
     ]
   }
 }
 
-IMPORTANT: List at least 10 competitors. This should be a comprehensive view of the competitive landscape, not a shortlist.`).catch(e => ({ section: 'competitors', error: e.message })),
+IMPORTANT: List 10 competitors. Keep each field brief and scannable.`).catch(e => ({ section: 'competitors', error: e.message })),
 
-    // Synthesis 4: M&A Deep Dive - Full Story Analysis
-    callChatGPT(`You are an M&A advisor writing a DEEP intelligence brief on a company's acquisition behavior.
-
-COMPANY: ${companyName}
+    // Synthesis 4: M&A Deep Dive - Structured Analysis
+    callChatGPT(`Extract M&A intelligence for ${companyName}. BE CONCISE - one sentence per field max.
 
 RESEARCH ON M&A HISTORY:
 ${research.maHistory}
@@ -2716,42 +2723,42 @@ ${research.financials}
 
 ---
 
-CRITICAL: I need DEPTH, not breadth. Don't give me 10 shallow bullet points. Give me 3-4 deals analyzed DEEPLY.
-
-For EACH significant acquisition, write 3-5 sentences explaining:
-1. What they bought and why (the strategic logic)
-2. What it tells us about their priorities
-3. How they executed (price paid, integration approach)
-4. What it means for future deals they'd consider
-
-Then synthesize: What patterns emerge? What does this tell us about how they think about M&A?
-
 Respond in this EXACT JSON format:
 {
   "ma_deep_dive": {
-    "deal_stories": [
+    "deal_history": [
       {
-        "deal": "Target company name (Year)",
-        "full_story": "3-5 sentence deep analysis of this deal - what they bought, why, how, and what it tells us"
+        "target": "Company name",
+        "year": "YYYY",
+        "deal_value": "$XM or undisclosed",
+        "deal_type": "Acquisition|Merger|JV|Minority",
+        "strategic_rationale": "Technology|Market Access|Capacity|Talent|Vertical Integration",
+        "outcome": "Integrated|Standalone|Divested",
+        "source_url": "URL to announcement"
       }
     ],
-    "ma_philosophy": "2-3 paragraphs synthesizing their overall M&A philosophy. Are they empire builders or focused acquirers? Do they buy technology, market access, or capacity? How aggressive are they on valuation? How do they integrate - hands-off or full absorption?",
+    "ma_profile": {
+      "acquirer_type": "Serial Acquirer|Opportunistic|Transformational|Bolt-on Only",
+      "primary_focus": "Technology|Geography|Capacity|Vertical Integration",
+      "typical_deal_size": "$X-YM range",
+      "integration_style": "Full Absorption|Standalone|Hybrid",
+      "valuation_discipline": "Premium Payer|Disciplined|Value Buyer"
+    },
     "deal_capacity": {
-      "financial_firepower": "Based on balance sheet and past deals, what can they spend?",
-      "appetite_level": "High/Medium/Low - are they actively hunting or opportunistic?",
-      "decision_process": "Fast/Deliberate/Slow - how long do their deals take?"
+      "dry_powder": "$XM (cash + debt capacity)",
+      "appetite_level": "High|Medium|Low",
+      "decision_speed": "Fast (<6mo)|Normal (6-12mo)|Slow (>12mo)",
+      "source_url": "URL to financials"
     }
   }
 }
 
-REMEMBER: An MD reading this should deeply understand HOW this company thinks about M&A.`).catch(e => ({ section: 'ma_analysis', error: e.message })),
+Keep all fields brief. Include source_url for verifiable claims.`).catch(e => ({ section: 'ma_analysis', error: e.message })),
 
     // Synthesis 5: Ideal Target Profile - Concrete Target List
-    callChatGPT(`You are an M&A advisor identifying SPECIFIC acquisition targets for a buyer.
+    callChatGPT(`Identify 10 REAL acquisition targets for ${companyName}. BE CONCISE.
 
-COMPANY: ${companyName}
-
-ALL RESEARCH:
+RESEARCH:
 ${research.products}
 ${research.maHistory}
 ${research.leadership}
@@ -2761,15 +2768,6 @@ ${context ? `CLIENT CONTEXT: ${context}` : ''}
 
 ---
 
-CRITICAL: No generic analysis or paragraphs. Identify 10 REAL, SPECIFIC companies that would be good acquisition targets.
-
-Based on the buyer's strategy, past acquisitions, and market position, find 10 actual companies that:
-- Fill gaps in their product portfolio or geographic coverage
-- Align with their demonstrated M&A preferences
-- Are realistically acquirable (consider size, ownership, strategic fit)
-
-For each target, provide concrete details - not generic descriptions.
-
 Respond in this EXACT JSON format:
 {
   "ideal_target": {
@@ -2777,17 +2775,18 @@ Respond in this EXACT JSON format:
       {
         "company_name": "Actual company name",
         "hq_country": "Country",
-        "what_they_do": "Concise description of their business",
-        "estimated_revenue": "Revenue estimate with source if available",
-        "ownership": "Public (ticker) / Private / PE-backed",
-        "strategic_fit": "Specific reason why this target fits the buyer - what gap does it fill, what synergy does it create",
-        "key_products": "Their main products/services relevant to the buyer"
+        "revenue": "$XM",
+        "ownership": "Public|Private|PE-backed",
+        "fit_type": "Technology|Geography|Capacity|Vertical",
+        "strategic_fit": "One sentence - what gap it fills",
+        "website": "company URL",
+        "source_url": "URL to company info source"
       }
     ]
   }
 }
 
-IMPORTANT: These must be REAL companies, not hypothetical descriptions. If you cannot identify 10 real companies, include as many as you can find with confidence.`).catch(e => ({ section: 'ideal_target', error: e.message }))
+IMPORTANT: Real companies only. Keep strategic_fit to one sentence.`).catch(e => ({ section: 'ideal_target', error: e.message }))
   ];
 
   // Add local insights synthesis if available
@@ -3327,10 +3326,12 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     ];
 
     fin.revenue_by_segment.forEach((seg, i) => {
+      const sourceOpts = { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.blue, align: 'left' };
+      if (seg.source_url) sourceOpts.hyperlink = { url: seg.source_url };
       rows.push([
         { text: seg.segment || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, bold: true, align: 'left' } },
         { text: seg.percentage || seg.revenue || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
-        { text: seg.source || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: '64748B', align: 'left' } }
+        { text: seg.source || '', options: sourceOpts }
       ]);
     });
 
@@ -3362,10 +3363,12 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     ];
 
     fin.revenue_by_geography.forEach((geo, i) => {
+      const sourceOpts = { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.blue, align: 'left' };
+      if (geo.source_url) sourceOpts.hyperlink = { url: geo.source_url };
       rows.push([
         { text: geo.region || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, bold: true, align: 'left' } },
         { text: geo.percentage || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
-        { text: geo.source || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: '64748B', align: 'left' } }
+        { text: geo.source || '', options: sourceOpts }
       ]);
     });
 
@@ -3421,26 +3424,30 @@ async function generateUTBSlides(companyName, website, research, additionalConte
   if (prod.strategic_capabilities && prod.strategic_capabilities.length > 0) {
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
     addSlideTitle(slide, companyName, 'Strategic Capabilities');
-    addSectionHeader(slide, 'Key Competitive Advantages & Core Strengths');
+    addSectionHeader(slide, 'Key Competitive Advantages');
 
     const rows = [
       [
+        { text: 'Category', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center', valign: 'middle' } },
         { text: 'Capability', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
-        { text: 'Evidence / Business Impact', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } }
+        { text: 'Source', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } }
       ]
     ];
 
     prod.strategic_capabilities.forEach((cap, i) => {
+      const sourceOpts = { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.blue, align: 'left' };
+      if (cap.source_url) sourceOpts.hyperlink = { url: cap.source_url };
       rows.push([
-        { text: cap.capability || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, bold: true, align: 'left' } },
-        { text: cap.evidence || cap.business_impact || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'left' } }
+        { text: cap.category || '', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'center', valign: 'middle' } },
+        { text: cap.capability || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'left' } },
+        { text: cap.source || 'Source', options: sourceOpts }
       ]);
     });
 
     slide.addTable(rows, {
       x: 0.38, y: 1.7, w: 12.54,
-      colW: [4.0, 8.54],
-      rowH: 0.5,
+      colW: [2.0, 7.5, 3.04],
+      rowH: 0.45,
       fontFace: 'Segoe UI',
       fontSize: 11,
       valign: 'middle',
@@ -3450,32 +3457,38 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     addFootnote(slide);
   }
 
-  // ========== SLIDE 6: MANUFACTURING FOOTPRINT ==========
+  // ========== SLIDE 6: OPERATIONS FOOTPRINT ==========
   if (ops.manufacturing_footprint && ops.manufacturing_footprint.length > 0) {
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, companyName, 'Manufacturing Footprint');
-    addSectionHeader(slide, 'Production Facilities & Geographic Presence');
+    addSlideTitle(slide, companyName, 'Operations Footprint');
+    addSectionHeader(slide, 'Facilities by Type & Location');
 
     const rows = [
       [
+        { text: 'Type', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
         { text: 'Location', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
-        { text: 'Details / Strategic Value', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } }
+        { text: 'Details', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
+        { text: 'Source', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } }
       ]
     ];
 
     ops.manufacturing_footprint.forEach((mfg, i) => {
+      const sourceOpts = { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.blue, align: 'left' };
+      if (mfg.source_url) sourceOpts.hyperlink = { url: mfg.source_url };
       rows.push([
+        { text: mfg.type || 'Manufacturing', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'center' } },
         { text: mfg.location || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, bold: true, align: 'left' } },
-        { text: mfg.details || mfg.strategic_value || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'left' } }
+        { text: mfg.details || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'left' } },
+        { text: 'Source', options: sourceOpts }
       ]);
     });
 
     slide.addTable(rows, {
       x: 0.38, y: 1.7, w: 12.54,
-      colW: [4.0, 8.54],
-      rowH: 0.5,
+      colW: [2.0, 3.0, 5.5, 2.04],
+      rowH: 0.45,
       fontFace: 'Segoe UI',
-      fontSize: 11,
+      fontSize: 10,
       valign: 'middle',
       border: { pt: 1.5, color: COLORS.white }
     });
@@ -3483,65 +3496,77 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     addFootnote(slide);
   }
 
-  // ========== SLIDE 7: WHY THIS COMPANY WINS ==========
+  // ========== SLIDE 7: COMPETITIVE POSITION ==========
   const pos = comp.company_position || {};
-  if (pos.market_rank || pos.why_they_win || pos.vulnerability) {
+  if (pos.market_rank || pos.why_they_win || pos.key_vulnerability) {
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, companyName, 'Why This Company Wins');
-    addSectionHeader(slide, 'Competitive Position & Market Advantages');
+    addSlideTitle(slide, companyName, 'Competitive Position');
+    addSectionHeader(slide, 'Market Position & Advantages');
 
-    let yPos = 1.7;
+    // Market Position header row
+    const positionOpts = { fill: { color: COLORS.lightGray }, color: COLORS.black, align: 'left' };
+    if (pos.source_url) positionOpts.hyperlink = { url: pos.source_url };
 
-    // Market Position
-    if (pos.market_rank) {
-      slide.addText([
-        { text: 'Market Position: ', options: { bold: true, color: COLORS.navy } },
-        { text: pos.market_rank, options: { color: COLORS.black } }
-      ], {
-        x: 0.38, y: yPos, w: 12.54, h: 0.4,
-        fontSize: 12, fontFace: 'Segoe UI', valign: 'middle'
-      });
-      yPos += 0.5;
-    }
+    const headerRows = [
+      [
+        { text: 'Market Rank', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
+        { text: pos.market_rank || 'N/A', options: { fill: { color: COLORS.lightGray }, color: COLORS.black, align: 'left' } },
+        { text: 'Market Share', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
+        { text: pos.market_share || 'N/A', options: positionOpts }
+      ]
+    ];
 
-    // Why They Win
+    slide.addTable(headerRows, {
+      x: 0.38, y: 1.7, w: 12.54,
+      colW: [2.0, 4.27, 2.0, 4.27],
+      rowH: 0.4,
+      fontFace: 'Segoe UI',
+      fontSize: 11,
+      valign: 'middle',
+      border: { pt: 1.5, color: COLORS.white }
+    });
+
+    // Competitive Advantages table
     if (pos.why_they_win && Array.isArray(pos.why_they_win)) {
-      slide.addText('Competitive Advantages:', {
-        x: 0.38, y: yPos, w: 12.54, h: 0.35,
-        fontSize: 12, fontFace: 'Segoe UI', bold: true,
-        color: COLORS.green
-      });
-      yPos += 0.4;
+      const advRows = [
+        [
+          { text: 'Advantage Type', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
+          { text: 'Description', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
+          { text: 'Source', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } }
+        ]
+      ];
 
-      const rows = [];
       pos.why_they_win.forEach((item, i) => {
-        rows.push([
-          { text: item.point || '', options: { fill: { color: COLORS.accent }, color: COLORS.white, bold: false, align: 'left' } },
-          { text: item.reasoning || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'left' } }
+        const sourceOpts = { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.blue, align: 'left' };
+        if (item.source_url) sourceOpts.hyperlink = { url: item.source_url };
+        advRows.push([
+          { text: item.advantage_type || item.point || '', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'center' } },
+          { text: item.description || item.reasoning || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'left' } },
+          { text: 'Source', options: sourceOpts }
         ]);
       });
 
-      if (rows.length > 0) {
-        slide.addTable(rows, {
-          x: 0.38, y: yPos, w: 12.54,
-          colW: [3.5, 9.04],
-          rowH: 0.55,
-          fontFace: 'Segoe UI',
-          fontSize: 11,
-          valign: 'middle',
-          border: { pt: 1.5, color: COLORS.white }
-        });
-        yPos += rows.length * 0.55 + 0.3;
-      }
+      slide.addTable(advRows, {
+        x: 0.38, y: 2.25, w: 12.54,
+        colW: [2.0, 8.5, 2.04],
+        rowH: 0.45,
+        fontFace: 'Segoe UI',
+        fontSize: 10,
+        valign: 'middle',
+        border: { pt: 1.5, color: COLORS.white }
+      });
     }
 
     // Vulnerability
-    if (pos.vulnerability) {
+    const vulnY = pos.why_they_win ? 2.25 + (pos.why_they_win.length + 1) * 0.45 + 0.2 : 2.3;
+    if (pos.key_vulnerability || pos.vulnerability) {
+      const vulnOpts = { color: COLORS.black };
+      if (pos.vulnerability_source_url) vulnOpts.hyperlink = { url: pos.vulnerability_source_url };
       slide.addText([
-        { text: 'Vulnerability: ', options: { bold: true, color: COLORS.red } },
-        { text: pos.vulnerability, options: { color: COLORS.black } }
+        { text: 'Key Vulnerability: ', options: { bold: true, color: COLORS.red } },
+        { text: pos.key_vulnerability || pos.vulnerability, options: vulnOpts }
       ], {
-        x: 0.38, y: Math.min(yPos, 5.8), w: 12.54, h: 0.6,
+        x: 0.38, y: Math.min(vulnY, 5.8), w: 12.54, h: 0.5,
         fontSize: 11, fontFace: 'Segoe UI', valign: 'top'
       });
     }
@@ -3554,34 +3579,42 @@ async function generateUTBSlides(companyName, website, research, additionalConte
   if (competitors.length > 0) {
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
     addSlideTitle(slide, companyName, 'Competitive Landscape');
-    addSectionHeader(slide, 'Key Competitors & Market Dynamics');
+    addSectionHeader(slide, 'Top 10 Competitors');
 
     const rows = [
       [
         { text: 'Company', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
         { text: 'HQ', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
         { text: 'Revenue', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
-        { text: 'Key Products', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
-        { text: 'Threat Level', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } }
+        { text: 'Share', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
+        { text: 'Positioning', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
+        { text: 'Threat', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } }
       ]
     ];
 
+    // Color coding for threat levels
+    const threatColors = { 'High': COLORS.red, 'Medium': 'F59E0B', 'Low': COLORS.green };
+
     competitors.slice(0, 10).forEach((c, i) => {
+      const nameOpts = { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.blue, bold: true, align: 'left' };
+      if (c.source_url) nameOpts.hyperlink = { url: c.source_url };
+      const threatColor = threatColors[c.threat_level] || COLORS.black;
       rows.push([
-        { text: c.name || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, bold: true, align: 'left' } },
+        { text: c.name || '', options: nameOpts },
         { text: c.hq_country || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
         { text: c.revenue || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
-        { text: c.key_products || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'left' } },
-        { text: c.competitive_threat || c.positioning || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'left' } }
+        { text: c.market_share || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
+        { text: c.positioning || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
+        { text: c.threat_level || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: threatColor, bold: true, align: 'center' } }
       ]);
     });
 
     slide.addTable(rows, {
       x: 0.38, y: 1.7, w: 12.54,
-      colW: [2.5, 1.2, 1.5, 4.0, 3.34],
-      rowH: 0.45,
+      colW: [3.0, 1.2, 1.8, 1.5, 2.0, 1.5],
+      rowH: 0.42,
       fontFace: 'Segoe UI',
-      fontSize: 10,
+      fontSize: 9,
       valign: 'middle',
       border: { pt: 1.5, color: COLORS.white }
     });
@@ -3590,49 +3623,91 @@ async function generateUTBSlides(companyName, website, research, additionalConte
   }
 
   // ========== SLIDE 9: M&A HISTORY ==========
-  const dealStories = maDeepDive.deal_stories || [];
-  if (dealStories.length > 0) {
+  const dealHistory = maDeepDive.deal_history || maDeepDive.deal_stories || [];
+  if (dealHistory.length > 0) {
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
     addSlideTitle(slide, companyName, 'M&A History');
-    addSectionHeader(slide, 'Past Acquisitions & Deal Track Record');
+    addSectionHeader(slide, 'Deal Track Record');
 
     const rows = [
       [
-        { text: 'Deal', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
-        { text: 'Full Story', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } }
+        { text: 'Target', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
+        { text: 'Year', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
+        { text: 'Value', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
+        { text: 'Type', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
+        { text: 'Rationale', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
+        { text: 'Source', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } }
       ]
     ];
 
-    dealStories.forEach((story, i) => {
+    dealHistory.slice(0, 8).forEach((deal, i) => {
+      const sourceOpts = { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.blue, align: 'center' };
+      if (deal.source_url) sourceOpts.hyperlink = { url: deal.source_url };
       rows.push([
-        { text: story.deal || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.blue, bold: true, align: 'left' } },
-        { text: story.full_story || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'left' } }
+        { text: deal.target || deal.deal || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, bold: true, align: 'left' } },
+        { text: deal.year || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
+        { text: deal.deal_value || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
+        { text: deal.deal_type || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
+        { text: deal.strategic_rationale || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
+        { text: 'Link', options: sourceOpts }
       ]);
     });
 
     slide.addTable(rows, {
       x: 0.38, y: 1.7, w: 12.54,
-      colW: [3.5, 9.04],
-      rowH: 0.7,
+      colW: [3.0, 1.0, 1.5, 1.8, 2.5, 1.2],
+      rowH: 0.42,
       fontFace: 'Segoe UI',
-      fontSize: 10,
-      valign: 'top',
+      fontSize: 9,
+      valign: 'middle',
       border: { pt: 1.5, color: COLORS.white }
     });
 
     addFootnote(slide);
   }
 
-  // ========== SLIDE 10: M&A PHILOSOPHY ==========
-  if (maDeepDive.ma_philosophy) {
+  // ========== SLIDE 10: M&A PROFILE ==========
+  const maProfile = maDeepDive.ma_profile || {};
+  if (maProfile.acquirer_type || maProfile.primary_focus || maDeepDive.ma_philosophy) {
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, companyName, 'M&A Philosophy');
-    addSectionHeader(slide, 'Acquisition Strategy & Investment Thesis');
+    addSlideTitle(slide, companyName, 'M&A Profile');
+    addSectionHeader(slide, 'Acquisition Strategy Matrix');
 
-    slide.addText(maDeepDive.ma_philosophy, {
-      x: 0.38, y: 1.8, w: 12.54, h: 4.5,
-      fontSize: 13, fontFace: 'Segoe UI',
-      color: COLORS.black, valign: 'top'
+    const profileRows = [
+      [
+        { text: 'Dimension', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
+        { text: 'Profile', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } }
+      ],
+      [
+        { text: 'Acquirer Type', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
+        { text: maProfile.acquirer_type || 'N/A', options: { fill: { color: COLORS.lightGray }, color: COLORS.black, align: 'left' } }
+      ],
+      [
+        { text: 'Primary Focus', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
+        { text: maProfile.primary_focus || 'N/A', options: { fill: { color: COLORS.white }, color: COLORS.black, align: 'left' } }
+      ],
+      [
+        { text: 'Typical Deal Size', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
+        { text: maProfile.typical_deal_size || 'N/A', options: { fill: { color: COLORS.lightGray }, color: COLORS.black, align: 'left' } }
+      ],
+      [
+        { text: 'Integration Style', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
+        { text: maProfile.integration_style || 'N/A', options: { fill: { color: COLORS.white }, color: COLORS.black, align: 'left' } }
+      ],
+      [
+        { text: 'Valuation Discipline', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
+        { text: maProfile.valuation_discipline || 'N/A', options: { fill: { color: COLORS.lightGray }, color: COLORS.black, align: 'left' } }
+      ]
+    ];
+
+    slide.addTable(profileRows, {
+      x: 0.38, y: 1.7, w: 12.54,
+      colW: [3.5, 9.04],
+      rowH: 0.5,
+      fontFace: 'Segoe UI',
+      fontSize: 12,
+      valign: 'middle',
+      border: { pt: 1.5, color: COLORS.white }
     });
 
     addFootnote(slide);
@@ -3640,33 +3715,28 @@ async function generateUTBSlides(companyName, website, research, additionalConte
 
   // ========== SLIDE 11: DEAL CAPACITY ==========
   const capacity = maDeepDive.deal_capacity || {};
-  if (capacity.financial_firepower || capacity.appetite_level || capacity.decision_process) {
+  if (capacity.dry_powder || capacity.financial_firepower || capacity.appetite_level || capacity.decision_speed || capacity.decision_process) {
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
     addSlideTitle(slide, companyName, 'Deal Capacity');
     addSectionHeader(slide, 'Financial Firepower & Acquisition Appetite');
 
-    const rows = [];
+    const capSourceOpts = { fill: { color: COLORS.white }, color: COLORS.blue, align: 'left' };
+    if (capacity.source_url) capSourceOpts.hyperlink = { url: capacity.source_url };
 
-    if (capacity.financial_firepower) {
-      rows.push([
-        { text: 'Financial Firepower', options: { fill: { color: COLORS.accent }, color: COLORS.white, bold: false, align: 'left' } },
-        { text: capacity.financial_firepower, options: { fill: { color: COLORS.white }, color: COLORS.black, align: 'left' } }
-      ]);
-    }
-
-    if (capacity.appetite_level) {
-      rows.push([
-        { text: 'Appetite Level', options: { fill: { color: COLORS.accent }, color: COLORS.white, bold: false, align: 'left' } },
-        { text: capacity.appetite_level, options: { fill: { color: COLORS.lightGray }, color: COLORS.black, align: 'left' } }
-      ]);
-    }
-
-    if (capacity.decision_process) {
-      rows.push([
-        { text: 'Decision Speed', options: { fill: { color: COLORS.accent }, color: COLORS.white, bold: false, align: 'left' } },
-        { text: capacity.decision_process, options: { fill: { color: COLORS.white }, color: COLORS.black, align: 'left' } }
-      ]);
-    }
+    const rows = [
+      [
+        { text: 'Dry Powder', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
+        { text: capacity.dry_powder || capacity.financial_firepower || 'N/A', options: capSourceOpts }
+      ],
+      [
+        { text: 'Appetite Level', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
+        { text: capacity.appetite_level || 'N/A', options: { fill: { color: COLORS.lightGray }, color: COLORS.black, align: 'left' } }
+      ],
+      [
+        { text: 'Decision Speed', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
+        { text: capacity.decision_speed || capacity.decision_process || 'N/A', options: { fill: { color: COLORS.white }, color: COLORS.black, align: 'left' } }
+      ]
+    ];
 
     if (rows.length > 0) {
       slide.addTable(rows, {
@@ -3679,6 +3749,52 @@ async function generateUTBSlides(companyName, website, research, additionalConte
         border: { pt: 1.5, color: COLORS.white }
       });
     }
+
+    addFootnote(slide);
+  }
+
+  // ========== SLIDE 12: IDEAL ACQUISITION TARGETS ==========
+  const idealTarget = synthesis.ideal_target || {};
+  const targetList = idealTarget.target_list || [];
+  if (targetList.length > 0) {
+    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+    addSlideTitle(slide, companyName, 'Ideal Acquisition Targets');
+    addSectionHeader(slide, '10 Strategic Fit Targets');
+
+    const rows = [
+      [
+        { text: 'Company', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
+        { text: 'HQ', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
+        { text: 'Revenue', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
+        { text: 'Ownership', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
+        { text: 'Fit Type', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
+        { text: 'Strategic Fit', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } }
+      ]
+    ];
+
+    targetList.slice(0, 10).forEach((t, i) => {
+      const nameOpts = { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.blue, bold: true, align: 'left' };
+      if (t.website) nameOpts.hyperlink = { url: t.website };
+      else if (t.source_url) nameOpts.hyperlink = { url: t.source_url };
+      rows.push([
+        { text: t.company_name || '', options: nameOpts },
+        { text: t.hq_country || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
+        { text: t.revenue || t.estimated_revenue || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
+        { text: t.ownership || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
+        { text: t.fit_type || '', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'center' } },
+        { text: t.strategic_fit || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'left' } }
+      ]);
+    });
+
+    slide.addTable(rows, {
+      x: 0.38, y: 1.7, w: 12.54,
+      colW: [2.5, 1.0, 1.2, 1.3, 1.5, 5.04],
+      rowH: 0.42,
+      fontFace: 'Segoe UI',
+      fontSize: 9,
+      valign: 'middle',
+      border: { pt: 1.5, color: COLORS.white }
+    });
 
     addFootnote(slide);
   }
