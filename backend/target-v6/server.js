@@ -63,49 +63,10 @@ function ensureString(value, defaultValue = '') {
   return String(value);
 }
 
-const crypto = require('crypto');
-
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
-
-// ============ V6 RESULTS STORAGE ============
-// In-memory storage for v6 search results (expires after 7 days)
-const v6ResultsStore = new Map();
-const V6_RESULTS_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-
-function generateResultId() {
-  return crypto.randomBytes(16).toString('hex');
-}
-
-function storeV6Results(id, data) {
-  v6ResultsStore.set(id, {
-    ...data,
-    storedAt: Date.now()
-  });
-  // Clean up expired results periodically
-  cleanupExpiredResults();
-}
-
-function getV6Results(id) {
-  const result = v6ResultsStore.get(id);
-  if (!result) return null;
-  if (Date.now() - result.storedAt > V6_RESULTS_EXPIRY_MS) {
-    v6ResultsStore.delete(id);
-    return null;
-  }
-  return result;
-}
-
-function cleanupExpiredResults() {
-  const now = Date.now();
-  for (const [id, result] of v6ResultsStore.entries()) {
-    if (now - result.storedAt > V6_RESULTS_EXPIRY_MS) {
-      v6ResultsStore.delete(id);
-    }
-  }
-}
 
 // Multer configuration for file uploads (memory storage)
 // Add 50MB limit to prevent OOM on Railway containers
@@ -3472,16 +3433,12 @@ function buildV5EmailHTML(validationResults, business, country, exclusion, searc
 }
 
 // V6 Email HTML builder - clean and simple
-function buildV6EmailHTML(validationResults, business, country, exclusion, resultId) {
+function buildV6EmailHTML(validationResults, business, country, exclusion) {
   const { validated, flagged } = validationResults;
-  const resultsPageUrl = `https://xvasjack.github.io/v6-results.html?id=${resultId}`;
 
   let html = `
     <h2>${business} in ${country}</h2>
-    <p style="color: #666; margin-bottom: 10px;">Exclusions: ${exclusion}</p>
-    <p style="margin-bottom: 20px;">
-      <a href="${resultsPageUrl}" style="display: inline-block; background: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: 500;">Select Companies & Generate PPT</a>
-    </p>
+    <p style="color: #666; margin-bottom: 20px;">Exclusions: ${exclusion}</p>
   `;
 
   // Validated Companies
@@ -3549,12 +3506,8 @@ app.post('/api/find-target-v6', async (req, res) => {
     return res.status(400).json({ error: 'All fields are required' });
   }
 
-  // Generate result ID for this search
-  const resultId = generateResultId();
-
   console.log(`\n${'='.repeat(70)}`);
   console.log(`V6 ITERATIVE PARALLEL SEARCH: ${new Date().toISOString()}`);
-  console.log(`Result ID: ${resultId}`);
   console.log(`Business: ${Business}`);
   console.log(`Country: ${Country}`);
   console.log(`Exclusion: ${Exclusion}`);
@@ -3712,27 +3665,9 @@ app.post('/api/find-target-v6', async (req, res) => {
     console.log(`  ChatGPT: ${chatgptCount} searches`);
     console.log(`  Total: ${perplexityCount + geminiCount + chatgptCount} searches`);
 
-    // Store results for the results page
-    storeV6Results(resultId, {
-      business: Business,
-      country: expandedCountry,
-      exclusion: Exclusion,
-      email: Email,
-      validated: validated.map(c => ({
-        company_name: c.company_name,
-        website: c.website,
-        hq: c.hq
-      })),
-      flagged: flagged.map(c => ({
-        company_name: c.company_name,
-        website: c.website,
-        hq: c.hq || '-'
-      }))
-    });
-
-    // Send email with link to results page
+    // Send email with results
     const finalResults = { validated, flagged, rejected };
-    const htmlContent = buildV6EmailHTML(finalResults, Business, expandedCountry, Exclusion, resultId);
+    const htmlContent = buildV6EmailHTML(finalResults, Business, expandedCountry, Exclusion);
 
     sendEmail(
       Email,
@@ -3743,11 +3678,37 @@ app.post('/api/find-target-v6', async (req, res) => {
     const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
     console.log('\n' + '='.repeat(70));
     console.log(`V6 ITERATIVE SEARCH COMPLETE!`);
-    console.log(`Result ID: ${resultId}`);
     console.log(`Email sent to: ${Email}`);
     console.log(`Validated: ${validated.length} | Flagged: ${flagged.length} | Rejected: ${rejected.length}`);
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(70));
+
+    // ========== STEP 5: Auto-generate PPT for all companies ==========
+    const allWebsites = [
+      ...validated.map(c => c.website),
+      ...flagged.map(c => c.website)
+    ].filter(w => w);
+
+    if (allWebsites.length > 0) {
+      console.log('\n' + '='.repeat(50));
+      console.log('STEP 5: GENERATING PPT');
+      console.log(`Sending ${allWebsites.length} websites to profile-slides...`);
+      console.log('='.repeat(50));
+
+      // Call profile-slides API to generate PPT
+      fetch('https://xvasjackgithubio-production-fb38.up.railway.app/api/profile-slides', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          websites: allWebsites,
+          email: Email,
+          targetDescription: `${Business} in ${expandedCountry}`
+        })
+      })
+        .then(r => r.json())
+        .then(r => console.log(`PPT request submitted: ${r.message || 'success'}`))
+        .catch(e => console.error('Failed to submit PPT request:', e.message));
+    }
 
   } catch (error) {
     console.error('V6 Processing error:', error);
@@ -3755,19 +3716,6 @@ app.post('/api/find-target-v6', async (req, res) => {
     sendEmail(Email, `Find Target V6 - Error`, `<p>Error: ${error.message}</p>`)
       .catch(e => console.error('Failed to send error email:', e));
   }
-});
-
-
-// ============ V6 RESULTS ENDPOINT ============
-app.get('/api/v6-results/:id', (req, res) => {
-  const { id } = req.params;
-
-  const result = getV6Results(id);
-  if (!result) {
-    return res.status(404).json({ error: 'Results not found or expired' });
-  }
-
-  res.json(result);
 });
 
 // ============ HEALTHCHECK ============
