@@ -74,10 +74,6 @@
               <label for="exclusion">Exclusions</label>
               <input type="text" id="exclusion" name="Exclusion" required placeholder="e.g. MNC, Listed" value="Large companies">
             </div>
-            <div class="form-group full-width">
-              <label for="email">Email Address</label>
-              <input type="email" id="email" name="Email" required placeholder="your@company.com">
-            </div>
           </div>
 
           <button type="submit" class="submit-btn" id="submitBtn">Submit</button>
@@ -99,27 +95,32 @@
   <script>
     // Email caching
     const globalEmailInput = document.getElementById('globalEmail');
-    const formEmailInput = document.getElementById('email');
 
     const cachedEmail = localStorage.getItem('ycpUserEmail');
     if (cachedEmail) {
       globalEmailInput.value = cachedEmail;
-      formEmailInput.value = cachedEmail;
     }
 
     globalEmailInput.addEventListener('input', () => {
-      const email = globalEmailInput.value;
-      formEmailInput.value = email;
-      localStorage.setItem('ycpUserEmail', email);
+      localStorage.setItem('ycpUserEmail', globalEmailInput.value);
     });
 
-    formEmailInput.addEventListener('input', () => {
-      const email = formEmailInput.value;
-      globalEmailInput.value = email;
-      localStorage.setItem('ycpUserEmail', email);
-    });
-
-    document.getElementById('findTargetForm').addEventListener('submit', function() {
+    document.getElementById('findTargetForm').addEventListener('submit', function(e) {
+      const email = globalEmailInput.value || localStorage.getItem('ycpUserEmail');
+      if (!email) {
+        e.preventDefault();
+        alert('Please enter your email in the top right');
+        return;
+      }
+      // Add hidden email field for form submission
+      let emailInput = this.querySelector('input[name="Email"]');
+      if (!emailInput) {
+        emailInput = document.createElement('input');
+        emailInput.type = 'hidden';
+        emailInput.name = 'Email';
+        this.appendChild(emailInput);
+      }
+      emailInput.value = email;
       const btn = document.getElementById('submitBtn');
       const success = document.getElementById('successMessage');
 

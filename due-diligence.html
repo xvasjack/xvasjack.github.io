@@ -472,11 +472,6 @@
 • Focus on: financials, risks, synergies
 • Summarize from our client's perspective" style="width: 100%; padding: 10px; border: 1px solid var(--border-medium); border-radius: 4px; font-size: 12px; resize: vertical; display: none; line-height: 1.5;"></textarea>
 
-            <div style="margin-top: 10px;">
-              <label style="font-size: 13px; font-weight: 600; color: var(--text-main); display: block; margin-bottom: 5px;">Email</label>
-              <input type="email" id="ddEmail" required placeholder="your@email.com" style="width: 100%; padding: 10px; border: 1px solid var(--border-medium); border-radius: 4px; font-size: 13px;">
-            </div>
-
             <button type="button" class="submit-btn" id="ddSubmitBtn" style="width: 100%; padding: 12px; font-size: 14px; margin-top: 10px;">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
               Generate DD Report
@@ -508,24 +503,14 @@
 
     // Email caching
     const globalEmailInput = document.getElementById('globalEmail');
-    const ddEmailInput = document.getElementById('ddEmail');
 
     const cachedEmail = localStorage.getItem('ycpUserEmail');
     if (cachedEmail) {
       globalEmailInput.value = cachedEmail;
-      ddEmailInput.value = cachedEmail;
     }
 
     globalEmailInput.addEventListener('input', () => {
-      const email = globalEmailInput.value;
-      ddEmailInput.value = email;
-      localStorage.setItem('ycpUserEmail', email);
-    });
-
-    ddEmailInput.addEventListener('input', () => {
-      const email = ddEmailInput.value;
-      globalEmailInput.value = email;
-      localStorage.setItem('ycpUserEmail', email);
+      localStorage.setItem('ycpUserEmail', globalEmailInput.value);
     });
 
     const API_BASE = 'https://xvasjackgithubio-production.up.railway.app';
@@ -541,7 +526,6 @@
     const recordStatus = document.getElementById('recordStatus');
     const downloadRecordingBtn = document.getElementById('downloadRecordingBtn');
     const ddSubmitBtn = document.getElementById('ddSubmitBtn');
-    const ddEmail = document.getElementById('ddEmail');
     const ddInstructions = document.getElementById('ddInstructions');
     const transcriptContent = document.getElementById('transcriptContent');
     const translationContent = document.getElementById('translationContent');
@@ -840,7 +824,7 @@
 
     // Combined submission - handles both transcript and uploaded materials
     ddSubmitBtn.addEventListener('click', async () => {
-      const email = ddEmail.value.trim();
+      const email = globalEmailInput.value.trim() || localStorage.getItem('ycpUserEmail');
       const instructions = ddInstructions.value.trim();
       const hasTranscript = finalTranscript.trim().length > 0;
       const hasFiles = selectedFiles.length > 0;
@@ -850,7 +834,7 @@
         alert('Please record a meeting or upload materials');
         return;
       }
-      if (!email) { alert('Please enter your email'); return; }
+      if (!email) { alert('Please enter your email in the top right'); return; }
 
       ddSubmitBtn.disabled = true;
       ddSubmitBtn.innerHTML = '<svg class="spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25" fill="none"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Processing...';

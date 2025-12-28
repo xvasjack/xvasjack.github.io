@@ -74,10 +74,6 @@
                   <input type="text" id="website" name="website" required placeholder="https://www.company.com">
                 </div>
 
-                <div class="form-group" style="margin-top: 14px;">
-                  <label for="email">Email Address</label>
-                  <input type="email" id="email" name="email" required placeholder="your@company.com">
-                </div>
               </div>
 
               <!-- Right Column: Context -->
@@ -121,24 +117,14 @@
   <script>
     // Email caching
     const globalEmailInput = document.getElementById('globalEmail');
-    const formEmailInput = document.getElementById('email');
 
     const cachedEmail = localStorage.getItem('ycpUserEmail');
     if (cachedEmail) {
       globalEmailInput.value = cachedEmail;
-      formEmailInput.value = cachedEmail;
     }
 
     globalEmailInput.addEventListener('input', () => {
-      const email = globalEmailInput.value;
-      formEmailInput.value = email;
-      localStorage.setItem('ycpUserEmail', email);
-    });
-
-    formEmailInput.addEventListener('input', () => {
-      const email = formEmailInput.value;
-      globalEmailInput.value = email;
-      localStorage.setItem('ycpUserEmail', email);
+      localStorage.setItem('ycpUserEmail', globalEmailInput.value);
     });
 
     const form = document.getElementById('utbForm');
@@ -171,11 +157,15 @@
       const companyName = document.getElementById('companyName').value.trim();
       const website = document.getElementById('website').value.trim();
       const context = document.getElementById('context').value.trim();
-      const email = document.getElementById('email').value.trim();
+      const email = globalEmailInput.value.trim() || localStorage.getItem('ycpUserEmail');
       const file = contextFile.files[0];
 
-      if (!companyName || !website || !email) {
+      if (!companyName || !website) {
         alert('Please fill in all required fields');
+        return;
+      }
+      if (!email) {
+        alert('Please enter your email in the top right');
         return;
       }
 
