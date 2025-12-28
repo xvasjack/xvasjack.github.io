@@ -5,153 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Find Target - v6 Search</title>
   <link rel="stylesheet" href="styles.css">
-  <style>
-    .results-section {
-      margin-top: 30px;
-    }
-    .results-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 20px;
-    }
-    .results-table th,
-    .results-table td {
-      padding: 12px;
-      text-align: left;
-      border-bottom: 1px solid #e2e8f0;
-    }
-    .results-table th {
-      background: #f8fafc;
-      font-weight: 600;
-      font-size: 12px;
-      text-transform: uppercase;
-      color: #64748b;
-    }
-    .results-table tr:hover {
-      background: #f8fafc;
-    }
-    .results-table a {
-      color: #3b82f6;
-      text-decoration: none;
-    }
-    .results-table a:hover {
-      text-decoration: underline;
-    }
-    .section-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 15px;
-    }
-    .section-title {
-      font-size: 16px;
-      font-weight: 600;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .section-title.validated {
-      color: #22c55e;
-    }
-    .section-title.flagged {
-      color: #f59e0b;
-    }
-    .count-badge {
-      background: #e2e8f0;
-      padding: 2px 8px;
-      border-radius: 12px;
-      font-size: 12px;
-      color: #64748b;
-    }
-    .checkbox-cell {
-      width: 40px;
-      text-align: center;
-    }
-    .checkbox-cell input[type="checkbox"] {
-      width: 18px;
-      height: 18px;
-      cursor: pointer;
-    }
-    .generate-ppt-section {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 16px 20px;
-      background: #f8fafc;
-      border-radius: 8px;
-      margin-top: 20px;
-    }
-    .selected-count {
-      color: #64748b;
-      font-size: 14px;
-    }
-    .generate-ppt-btn {
-      background: #3b82f6;
-      color: white;
-      border: none;
-      padding: 10px 20px;
-      border-radius: 6px;
-      font-weight: 500;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    .generate-ppt-btn:hover:not(:disabled) {
-      background: #2563eb;
-    }
-    .generate-ppt-btn:disabled {
-      background: #94a3b8;
-      cursor: not-allowed;
-    }
-    .stats-bar {
-      display: flex;
-      gap: 20px;
-      margin-bottom: 20px;
-      padding: 12px 16px;
-      background: #f0fdf4;
-      border-radius: 8px;
-      font-size: 14px;
-    }
-    .stat-item {
-      color: #64748b;
-    }
-    .stat-item strong {
-      color: #1e293b;
-    }
-    .loading-indicator {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 60px 20px;
-      color: #64748b;
-    }
-    .loading-indicator .spinner-large {
-      width: 48px;
-      height: 48px;
-      border: 4px solid #e2e8f0;
-      border-top: 4px solid #3b82f6;
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-      margin-bottom: 20px;
-    }
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
-    }
-    .loading-indicator .time-elapsed {
-      font-size: 24px;
-      font-weight: 600;
-      color: #1e293b;
-      margin-bottom: 8px;
-    }
-    .loading-indicator .loading-text {
-      font-size: 14px;
-    }
-    .select-all-row {
-      background: #f8fafc;
-    }
-  </style>
 </head>
 <body>
   <header class="app-header">
@@ -185,9 +38,8 @@
     </section>
 
     <section class="page-content">
-      <!-- Search Form -->
-      <div class="form-card" id="searchFormCard">
-        <form id="findTargetForm">
+      <div class="form-card">
+        <form id="findTargetForm" method="POST" action="https://xvasjackgithubio-production-f428.up.railway.app/api/find-target-v6">
           <div class="form-grid">
             <div class="form-group full-width">
               <label for="business">Business Type</label>
@@ -209,311 +61,51 @@
 
           <button type="submit" class="submit-btn" id="submitBtn">Submit</button>
 
+          <div class="message success" id="successMessage">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            Request submitted! V6 parallel search running. Results will arrive in ~10-15 minutes.
+          </div>
+
           <div class="message error" id="errorMessage">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-            <span id="errorText">Error submitting request. Please try again.</span>
+            Error submitting request. Please try again.
           </div>
         </form>
-      </div>
-
-      <!-- Loading State -->
-      <div class="form-card" id="loadingCard" style="display: none;">
-        <div class="loading-indicator">
-          <div class="spinner-large"></div>
-          <div class="time-elapsed" id="timeElapsed">0:00</div>
-          <div class="loading-text">Searching for companies... This typically takes 10-15 minutes.</div>
-        </div>
-      </div>
-
-      <!-- Results Section -->
-      <div class="form-card" id="resultsCard" style="display: none;">
-        <div class="stats-bar" id="statsBar"></div>
-
-        <!-- Validated Companies -->
-        <div class="results-section" id="validatedSection" style="display: none;">
-          <div class="section-header">
-            <div class="section-title validated">
-              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-              Validated
-              <span class="count-badge" id="validatedCount">0</span>
-            </div>
-          </div>
-          <table class="results-table">
-            <thead>
-              <tr>
-                <th class="checkbox-cell"><input type="checkbox" id="selectAllValidated" title="Select all validated"></th>
-                <th>#</th>
-                <th>Company</th>
-                <th>Website</th>
-                <th>HQ</th>
-              </tr>
-            </thead>
-            <tbody id="validatedBody"></tbody>
-          </table>
-        </div>
-
-        <!-- Flagged Companies -->
-        <div class="results-section" id="flaggedSection" style="display: none;">
-          <div class="section-header">
-            <div class="section-title flagged">
-              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
-              Flagged - Check Manually
-              <span class="count-badge" id="flaggedCount">0</span>
-            </div>
-          </div>
-          <table class="results-table">
-            <thead>
-              <tr>
-                <th class="checkbox-cell"><input type="checkbox" id="selectAllFlagged" title="Select all flagged"></th>
-                <th>#</th>
-                <th>Company</th>
-                <th>Website</th>
-                <th>HQ</th>
-              </tr>
-            </thead>
-            <tbody id="flaggedBody"></tbody>
-          </table>
-        </div>
-
-        <!-- Generate PPT Section -->
-        <div class="generate-ppt-section">
-          <div class="selected-count"><span id="selectedCount">0</span> companies selected</div>
-          <button type="button" class="generate-ppt-btn" id="generatePptBtn" disabled>
-            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-            Generate PPT
-          </button>
-        </div>
-
-        <div class="message success" id="pptSuccessMessage" style="display: none;">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-          <span id="pptSuccessText">PPT generation started! Check your email in 5-10 minutes.</span>
-        </div>
       </div>
     </section>
   </main>
 
   <script>
-    // Store search parameters and results
-    let searchParams = {};
-    let allCompanies = [];
-
-    // Timer for loading state
-    let timerInterval = null;
-    let startTime = null;
-
-    function updateTimer() {
-      if (!startTime) return;
-      const elapsed = Math.floor((Date.now() - startTime) / 1000);
-      const minutes = Math.floor(elapsed / 60);
-      const seconds = elapsed % 60;
-      document.getElementById('timeElapsed').textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
-    }
-
-    function startTimer() {
-      startTime = Date.now();
-      timerInterval = setInterval(updateTimer, 1000);
-    }
-
-    function stopTimer() {
-      if (timerInterval) {
-        clearInterval(timerInterval);
-        timerInterval = null;
-      }
-    }
-
-    // Form submission
     document.getElementById('findTargetForm').addEventListener('submit', async function(e) {
       e.preventDefault();
       const btn = document.getElementById('submitBtn');
+      const success = document.getElementById('successMessage');
       const error = document.getElementById('errorMessage');
 
+      success.classList.remove('show');
       error.classList.remove('show');
-
-      // Store search params
-      const formData = new FormData(this);
-      searchParams = Object.fromEntries(formData);
-
-      // Show loading state
-      document.getElementById('searchFormCard').style.display = 'none';
-      document.getElementById('loadingCard').style.display = 'block';
-      document.getElementById('resultsCard').style.display = 'none';
-      startTimer();
-
-      try {
-        const response = await fetch('https://xvasjackgithubio-production-f428.up.railway.app/api/find-target-v6', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(searchParams)
-        });
-
-        const data = await response.json();
-        stopTimer();
-
-        if (data.success) {
-          displayResults(data);
-        } else {
-          throw new Error(data.error || 'Search failed');
-        }
-      } catch (err) {
-        stopTimer();
-        document.getElementById('searchFormCard').style.display = 'block';
-        document.getElementById('loadingCard').style.display = 'none';
-        document.getElementById('errorText').textContent = err.message || 'Error submitting request. Please try again.';
-        error.classList.add('show');
-      }
-    });
-
-    function displayResults(data) {
-      document.getElementById('loadingCard').style.display = 'none';
-      document.getElementById('resultsCard').style.display = 'block';
-
-      // Stats bar
-      const statsBar = document.getElementById('statsBar');
-      statsBar.innerHTML = `
-        <div class="stat-item"><strong>${data.stats.validated}</strong> validated</div>
-        <div class="stat-item"><strong>${data.stats.flagged}</strong> flagged</div>
-        <div class="stat-item"><strong>${data.stats.rejected}</strong> rejected</div>
-        <div class="stat-item">Completed in <strong>${data.stats.totalTime}</strong> minutes</div>
-      `;
-
-      // Reset companies list
-      allCompanies = [];
-
-      // Validated companies
-      const validatedSection = document.getElementById('validatedSection');
-      const validatedBody = document.getElementById('validatedBody');
-      validatedBody.innerHTML = '';
-
-      if (data.validated && data.validated.length > 0) {
-        validatedSection.style.display = 'block';
-        document.getElementById('validatedCount').textContent = data.validated.length;
-
-        data.validated.forEach((company, i) => {
-          const id = `validated-${i}`;
-          allCompanies.push({ id, ...company, type: 'validated' });
-
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td class="checkbox-cell"><input type="checkbox" class="company-checkbox" data-id="${id}" data-website="${company.website}"></td>
-            <td>${i + 1}</td>
-            <td>${company.company_name}</td>
-            <td><a href="${company.website}" target="_blank">${company.website}</a></td>
-            <td>${company.hq}</td>
-          `;
-          validatedBody.appendChild(tr);
-        });
-      } else {
-        validatedSection.style.display = 'none';
-      }
-
-      // Flagged companies
-      const flaggedSection = document.getElementById('flaggedSection');
-      const flaggedBody = document.getElementById('flaggedBody');
-      flaggedBody.innerHTML = '';
-
-      if (data.flagged && data.flagged.length > 0) {
-        flaggedSection.style.display = 'block';
-        document.getElementById('flaggedCount').textContent = data.flagged.length;
-
-        data.flagged.forEach((company, i) => {
-          const id = `flagged-${i}`;
-          allCompanies.push({ id, ...company, type: 'flagged' });
-
-          const tr = document.createElement('tr');
-          tr.innerHTML = `
-            <td class="checkbox-cell"><input type="checkbox" class="company-checkbox" data-id="${id}" data-website="${company.website}"></td>
-            <td>${i + 1}</td>
-            <td>${company.company_name}</td>
-            <td><a href="${company.website}" target="_blank">${company.website}</a></td>
-            <td>${company.hq}</td>
-          `;
-          flaggedBody.appendChild(tr);
-        });
-      } else {
-        flaggedSection.style.display = 'none';
-      }
-
-      // Setup checkbox handlers
-      setupCheckboxHandlers();
-      updateSelectedCount();
-    }
-
-    function setupCheckboxHandlers() {
-      // Individual checkboxes
-      document.querySelectorAll('.company-checkbox').forEach(cb => {
-        cb.addEventListener('change', updateSelectedCount);
-      });
-
-      // Select all validated
-      document.getElementById('selectAllValidated').addEventListener('change', function() {
-        document.querySelectorAll('#validatedBody .company-checkbox').forEach(cb => {
-          cb.checked = this.checked;
-        });
-        updateSelectedCount();
-      });
-
-      // Select all flagged
-      document.getElementById('selectAllFlagged').addEventListener('change', function() {
-        document.querySelectorAll('#flaggedBody .company-checkbox').forEach(cb => {
-          cb.checked = this.checked;
-        });
-        updateSelectedCount();
-      });
-    }
-
-    function updateSelectedCount() {
-      const selected = document.querySelectorAll('.company-checkbox:checked');
-      const count = selected.length;
-      document.getElementById('selectedCount').textContent = count;
-      document.getElementById('generatePptBtn').disabled = count === 0;
-    }
-
-    // Generate PPT
-    document.getElementById('generatePptBtn').addEventListener('click', async function() {
-      const btn = this;
-      const selectedCheckboxes = document.querySelectorAll('.company-checkbox:checked');
-
-      if (selectedCheckboxes.length === 0) {
-        alert('Please select at least one company');
-        return;
-      }
-
-      // Get selected websites
-      const websites = Array.from(selectedCheckboxes).map(cb => cb.dataset.website);
-
-      // Target description from search params
-      const targetDescription = `${searchParams.Business} in ${searchParams.Country}`;
-
       btn.disabled = true;
-      btn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Submitting...';
+      btn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Processing...';
 
       try {
-        const response = await fetch('https://xvasjackgithubio-production-fb38.up.railway.app/api/profile-slides', {
+        const formData = new FormData(this);
+        const data = Object.fromEntries(formData);
+        const response = await fetch(this.action, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            websites,
-            email: searchParams.Email,
-            targetDescription
-          })
+          body: JSON.stringify(data)
         });
-
-        if (!response.ok) {
-          throw new Error('Failed to submit PPT request');
+        if (response.ok) {
+          success.classList.add('show');
+          this.reset();
+        } else {
+          throw new Error();
         }
-
-        // Show success message
-        const successMsg = document.getElementById('pptSuccessMessage');
-        document.getElementById('pptSuccessText').textContent = `PPT generation started for ${websites.length} companies! Check your email (${searchParams.Email}) in 5-10 minutes.`;
-        successMsg.style.display = 'flex';
-        successMsg.classList.add('show');
-
-      } catch (err) {
-        alert('Failed to submit PPT request: ' + err.message);
+      } catch {
+        error.classList.add('show');
       } finally {
         btn.disabled = false;
-        btn.innerHTML = '<svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Generate PPT';
-        updateSelectedCount();
+        btn.innerHTML = 'Submit';
       }
     });
   </script>

@@ -3574,6 +3574,12 @@ app.post('/api/find-target-v6', async (req, res) => {
   console.log(`Email: ${Email}`);
   console.log('='.repeat(70));
 
+  // Return immediately - process in background
+  res.json({
+    success: true,
+    message: 'Request received. Results will be emailed in ~12-15 minutes.'
+  });
+
   try {
     const totalStart = Date.now();
     const searchLog = [];
@@ -3757,11 +3763,10 @@ app.post('/api/find-target-v6', async (req, res) => {
     console.log(`  ChatGPT: ${chatgptCount} searches`);
     console.log(`  Total: ${perplexityCount + geminiCount + chatgptCount} searches`);
 
-    // Send email
+    // Send email with results
     const finalResults = { validated, flagged, rejected };
     const htmlContent = buildV6EmailHTML(finalResults, Business, expandedCountry, Exclusion);
 
-    // Send email (don't await - let it send in background)
     sendEmail(
       Email,
       `[V6] ${Business} in ${Country} (${validated.length} validated + ${flagged.length} flagged)`,
@@ -3776,40 +3781,40 @@ app.post('/api/find-target-v6', async (req, res) => {
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(70));
 
-    // Return results to frontend
-    return res.json({
-      success: true,
-      validated: validated.map(c => ({
-        company_name: c.company_name,
-        website: c.website,
-        hq: c.hq
-      })),
-      flagged: flagged.map(c => ({
-        company_name: c.company_name,
-        website: c.website,
-        hq: c.hq || '-'
-      })),
-      stats: {
-        validated: validated.length,
-        flagged: flagged.length,
-        rejected: rejected.length,
-        totalTime
-      }
-    });
+    // ========== STEP 5: Auto-generate PPT for all companies ==========
+    const allWebsites = [
+      ...validated.map(c => c.website),
+      ...flagged.map(c => c.website)
+    ].filter(w => w);
+
+    if (allWebsites.length > 0) {
+      console.log('\n' + '='.repeat(50));
+      console.log('STEP 5: GENERATING PPT');
+      console.log(`Sending ${allWebsites.length} websites to profile-slides...`);
+      console.log('='.repeat(50));
+
+      // Call profile-slides API to generate PPT
+      fetch('https://xvasjackgithubio-production-fb38.up.railway.app/api/profile-slides', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          websites: allWebsites,
+          email: Email,
+          targetDescription: `${Business} in ${expandedCountry}`
+        })
+      })
+        .then(r => r.json())
+        .then(r => console.log(`PPT request submitted: ${r.message || 'success'}`))
+        .catch(e => console.error('Failed to submit PPT request:', e.message));
+    }
 
   } catch (error) {
     console.error('V6 Processing error:', error);
     // Try to send error email
     sendEmail(Email, `Find Target V6 - Error`, `<p>Error: ${error.message}</p>`)
       .catch(e => console.error('Failed to send error email:', e));
-
-    return res.status(500).json({
-      success: false,
-      error: error.message
-    });
   }
 });
-
 
 // ============ HEALTHCHECK ============
 app.get('/', (req, res) => {
