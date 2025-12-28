@@ -17,24 +17,32 @@
       Find Target
     </a>
     <nav>
-      <a href="find-target.html">v3 Fast</a>
-      <a href="find-target-slow.html">v3 Slow</a>
+      <a href="find-target.html">v3</a>
+      <a href="find-target-v5.html">v5 Search</a>
+      <a href="find-target-v6.html" class="active">v6 Search</a>
       <a href="validation.html">Validation</a>
       <a href="trading-comparable.html">Trading Comp</a>
       <a href="profile-slides.html">Slides</a>
-      <a href="find-target-v4.html">v4 Search</a>
-      <a href="find-target-v5.html">v5 Search</a>
-      <a href="find-target-v6.html" class="active">v6 Search</a>
-      <a href="due-diligence.html">Due Diligence</a>
       <a href="utb.html">UTB</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">
+          Other Tools
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div class="nav-dropdown-menu">
+          <a href="find-target-slow.html">v3 Slow</a>
+          <a href="find-target-v4.html">v4 Search</a>
+          <a href="due-diligence.html">Due Diligence</a>
+        </div>
+      </div>
     </nav>
   </header>
 
   <main class="app-main">
     <section class="page-info">
-      <span class="status-badge online">Online</span>
+      <span class="status-badge">Online</span>
       <h1 class="page-title">v6 Search</h1>
-      <p class="page-description">Latest iteration with enhanced parallel search architecture. Results in ~10-15 minutes.</p>
+      <p class="page-description">Slightly less exhaustive than v5, but much faster. Comes with profile slides done. Results in ~10-15 minutes.</p>
     </section>
 
     <section class="page-content">
@@ -63,7 +71,7 @@
 
           <div class="message success" id="successMessage">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-            Request submitted! V6 parallel search running. Results will arrive in ~10-15 minutes.
+            Request submitted! Results with profile slides will arrive in ~10-15 minutes.
           </div>
 
           <div class="message error" id="errorMessage">

@@ -17,24 +17,32 @@
       Find Target
     </a>
     <nav>
-      <a href="find-target.html">v3 Fast</a>
-      <a href="find-target-slow.html">v3 Slow</a>
+      <a href="find-target.html">v3</a>
+      <a href="find-target-v5.html">v5 Search</a>
+      <a href="find-target-v6.html">v6 Search</a>
       <a href="validation.html">Validation</a>
       <a href="trading-comparable.html">Trading Comp</a>
       <a href="profile-slides.html">Slides</a>
-      <a href="find-target-v4.html" class="active">v4 Search</a>
-      <a href="find-target-v5.html">v5 Search</a>
-      <a href="find-target-v6.html">v6 Search</a>
-      <a href="due-diligence.html">Due Diligence</a>
       <a href="utb.html">UTB</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">
+          Other Tools
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div class="nav-dropdown-menu">
+          <a href="find-target-slow.html">v3 Slow</a>
+          <a href="find-target-v4.html" class="active">v4 Search</a>
+          <a href="due-diligence.html">Due Diligence</a>
+        </div>
+      </div>
     </nav>
   </header>
 
   <main class="app-main">
     <section class="page-info">
-      <span class="status-badge coming-soon">Coming Soon</span>
+      <span class="status-badge">Online</span>
       <h1 class="page-title">v4 Search</h1>
-      <p class="page-description">Might give more targets than v3. Results in ~25-30 minutes.</p>
+      <p class="page-description">70% effectiveness but many targets might not be accurate in scope due to lenient validation process. Takes ~30 minutes. Run once is enough - more runs likely won't generate new targets.</p>
     </section>
 
     <section class="page-content">
@@ -63,7 +71,7 @@
 
           <div class="message success" id="successMessage">
             <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-            Request submitted! Ultra-exhaustive search running. Results will arrive in ~25-30 minutes.
+            Request submitted! Results will arrive in ~30 minutes. One run is sufficient.
           </div>
 
           <div class="message error" id="errorMessage">
