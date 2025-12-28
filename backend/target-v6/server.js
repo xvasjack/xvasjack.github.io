@@ -63,10 +63,49 @@ function ensureString(value, defaultValue = '') {
   return String(value);
 }
 
+const crypto = require('crypto');
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
+
+// ============ V6 RESULTS STORAGE ============
+// In-memory storage for v6 search results (expires after 7 days)
+const v6ResultsStore = new Map();
+const V6_RESULTS_EXPIRY_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+function generateResultId() {
+  return crypto.randomBytes(16).toString('hex');
+}
+
+function storeV6Results(id, data) {
+  v6ResultsStore.set(id, {
+    ...data,
+    storedAt: Date.now()
+  });
+  // Clean up expired results periodically
+  cleanupExpiredResults();
+}
+
+function getV6Results(id) {
+  const result = v6ResultsStore.get(id);
+  if (!result) return null;
+  if (Date.now() - result.storedAt > V6_RESULTS_EXPIRY_MS) {
+    v6ResultsStore.delete(id);
+    return null;
+  }
+  return result;
+}
+
+function cleanupExpiredResults() {
+  const now = Date.now();
+  for (const [id, result] of v6ResultsStore.entries()) {
+    if (now - result.storedAt > V6_RESULTS_EXPIRY_MS) {
+      v6ResultsStore.delete(id);
+    }
+  }
+}
 
 // Multer configuration for file uploads (memory storage)
 // Add 50MB limit to prevent OOM on Railway containers
@@ -3433,12 +3472,16 @@ function buildV5EmailHTML(validationResults, business, country, exclusion, searc
 }
 
 // V6 Email HTML builder - clean and simple
-function buildV6EmailHTML(validationResults, business, country, exclusion) {
+function buildV6EmailHTML(validationResults, business, country, exclusion, resultId) {
   const { validated, flagged } = validationResults;
+  const resultsPageUrl = `https://xvasjack.github.io/v6-results.html?id=${resultId}`;
 
   let html = `
     <h2>${business} in ${country}</h2>
-    <p style="color: #666; margin-bottom: 20px;">Exclusions: ${exclusion}</p>
+    <p style="color: #666; margin-bottom: 10px;">Exclusions: ${exclusion}</p>
+    <p style="margin-bottom: 20px;">
+      <a href="${resultsPageUrl}" style="display: inline-block; background: #3b82f6; color: white; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-weight: 500;">Select Companies & Generate PPT</a>
+    </p>
   `;
 
   // Validated Companies
@@ -3506,13 +3549,23 @@ app.post('/api/find-target-v6', async (req, res) => {
     return res.status(400).json({ error: 'All fields are required' });
   }
 
+  // Generate result ID for this search
+  const resultId = generateResultId();
+
   console.log(`\n${'='.repeat(70)}`);
   console.log(`V6 ITERATIVE PARALLEL SEARCH: ${new Date().toISOString()}`);
+  console.log(`Result ID: ${resultId}`);
   console.log(`Business: ${Business}`);
   console.log(`Country: ${Country}`);
   console.log(`Exclusion: ${Exclusion}`);
   console.log(`Email: ${Email}`);
   console.log('='.repeat(70));
+
+  // Return immediately - process in background
+  res.json({
+    success: true,
+    message: 'Request received. Results will be emailed in ~12-15 minutes.'
+  });
 
   try {
     const totalStart = Date.now();
@@ -3659,28 +3712,12 @@ app.post('/api/find-target-v6', async (req, res) => {
     console.log(`  ChatGPT: ${chatgptCount} searches`);
     console.log(`  Total: ${perplexityCount + geminiCount + chatgptCount} searches`);
 
-    // Send email
-    const finalResults = { validated, flagged, rejected };
-    const htmlContent = buildV6EmailHTML(finalResults, Business, expandedCountry, Exclusion);
-
-    // Send email (don't await - let it send in background)
-    sendEmail(
-      Email,
-      `[V6] ${Business} in ${Country} (${validated.length} validated + ${flagged.length} flagged)`,
-      htmlContent
-    ).catch(e => console.error('Failed to send email:', e));
-
-    const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
-    console.log('\n' + '='.repeat(70));
-    console.log(`V6 ITERATIVE SEARCH COMPLETE!`);
-    console.log(`Email sent to: ${Email}`);
-    console.log(`Validated: ${validated.length} | Flagged: ${flagged.length} | Rejected: ${rejected.length}`);
-    console.log(`Total time: ${totalTime} minutes`);
-    console.log('='.repeat(70));
-
-    // Return results to frontend
-    return res.json({
-      success: true,
+    // Store results for the results page
+    storeV6Results(resultId, {
+      business: Business,
+      country: expandedCountry,
+      exclusion: Exclusion,
+      email: Email,
       validated: validated.map(c => ({
         company_name: c.company_name,
         website: c.website,
@@ -3690,28 +3727,48 @@ app.post('/api/find-target-v6', async (req, res) => {
         company_name: c.company_name,
         website: c.website,
         hq: c.hq || '-'
-      })),
-      stats: {
-        validated: validated.length,
-        flagged: flagged.length,
-        rejected: rejected.length,
-        totalTime
-      }
+      }))
     });
+
+    // Send email with link to results page
+    const finalResults = { validated, flagged, rejected };
+    const htmlContent = buildV6EmailHTML(finalResults, Business, expandedCountry, Exclusion, resultId);
+
+    sendEmail(
+      Email,
+      `[V6] ${Business} in ${Country} (${validated.length} validated + ${flagged.length} flagged)`,
+      htmlContent
+    ).catch(e => console.error('Failed to send email:', e));
+
+    const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
+    console.log('\n' + '='.repeat(70));
+    console.log(`V6 ITERATIVE SEARCH COMPLETE!`);
+    console.log(`Result ID: ${resultId}`);
+    console.log(`Email sent to: ${Email}`);
+    console.log(`Validated: ${validated.length} | Flagged: ${flagged.length} | Rejected: ${rejected.length}`);
+    console.log(`Total time: ${totalTime} minutes`);
+    console.log('='.repeat(70));
 
   } catch (error) {
     console.error('V6 Processing error:', error);
     // Try to send error email
     sendEmail(Email, `Find Target V6 - Error`, `<p>Error: ${error.message}</p>`)
       .catch(e => console.error('Failed to send error email:', e));
-
-    return res.status(500).json({
-      success: false,
-      error: error.message
-    });
   }
 });
 
+
+// ============ V6 RESULTS ENDPOINT ============
+app.get('/api/v6-results/:id', (req, res) => {
+  const { id } = req.params;
+
+  const result = getV6Results(id);
+  if (!result) {
+    return res.status(404).json({ error: 'Results not found or expired' });
+  }
+
+  res.json(result);
+});
 
 // ============ HEALTHCHECK ============
 app.get('/', (req, res) => {

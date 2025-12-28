@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>V6 Search Results</title>
+  <link rel="stylesheet" href="styles.css">
+  <style>
+    .results-section {
+      margin-top: 30px;
+    }
+    .results-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 20px;
+    }
+    .results-table th,
+    .results-table td {
+      padding: 12px;
+      text-align: left;
+      border-bottom: 1px solid #e2e8f0;
+    }
+    .results-table th {
+      background: #f8fafc;
+      font-weight: 600;
+      font-size: 12px;
+      text-transform: uppercase;
+      color: #64748b;
+    }
+    .results-table tr:hover {
+      background: #f8fafc;
+    }
+    .results-table a {
+      color: #3b82f6;
+      text-decoration: none;
+    }
+    .results-table a:hover {
+      text-decoration: underline;
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 15px;
+    }
+    .section-title {
+      font-size: 16px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .section-title.validated {
+      color: #22c55e;
+    }
+    .section-title.flagged {
+      color: #f59e0b;
+    }
+    .count-badge {
+      background: #e2e8f0;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 12px;
+      color: #64748b;
+    }
+    .checkbox-cell {
+      width: 40px;
+      text-align: center;
+    }
+    .checkbox-cell input[type="checkbox"] {
+      width: 18px;
+      height: 18px;
+      cursor: pointer;
+    }
+    .generate-ppt-section {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 16px 20px;
+      background: #f8fafc;
+      border-radius: 8px;
+      margin-top: 20px;
+    }
+    .selected-count {
+      color: #64748b;
+      font-size: 14px;
+    }
+    .generate-ppt-btn {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 6px;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .generate-ppt-btn:hover:not(:disabled) {
+      background: #2563eb;
+    }
+    .generate-ppt-btn:disabled {
+      background: #94a3b8;
+      cursor: not-allowed;
+    }
+    .search-info {
+      margin-bottom: 20px;
+      padding: 16px;
+      background: #f0fdf4;
+      border-radius: 8px;
+    }
+    .search-info h2 {
+      margin: 0 0 8px 0;
+      font-size: 18px;
+      color: #1e293b;
+    }
+    .search-info p {
+      margin: 0;
+      color: #64748b;
+      font-size: 14px;
+    }
+    .loading-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #64748b;
+    }
+    .error-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: #ef4444;
+    }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <a href="find-target.html" class="logo">
+      <span class="logo-icon">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+      </span>
+      Find Target
+    </a>
+    <nav>
+      <a href="find-target.html">v3 Fast</a>
+      <a href="find-target-slow.html">v3 Slow</a>
+      <a href="validation.html">Validation</a>
+      <a href="trading-comparable.html">Trading Comp</a>
+      <a href="profile-slides.html">Slides</a>
+      <a href="find-target-v4.html">v4 Search</a>
+      <a href="find-target-v5.html">v5 Search</a>
+      <a href="find-target-v6.html">v6 Search</a>
+      <a href="due-diligence.html">Due Diligence</a>
+      <a href="utb.html">UTB</a>
+    </nav>
+  </header>
+
+  <main class="app-main">
+    <section class="page-info">
+      <h1 class="page-title">V6 Search Results</h1>
+      <p class="page-description">Select companies and generate profile slides</p>
+    </section>
+
+    <section class="page-content">
+      <div class="form-card" id="loadingCard">
+        <div class="loading-state">Loading results...</div>
+      </div>
+
+      <div class="form-card" id="errorCard" style="display: none;">
+        <div class="error-state">
+          <p id="errorText">Results not found or expired.</p>
+          <p><a href="find-target-v6.html">Run a new search</a></p>
+        </div>
+      </div>
+
+      <div class="form-card" id="resultsCard" style="display: none;">
+        <div class="search-info">
+          <h2 id="searchTitle"></h2>
+          <p id="searchMeta"></p>
+        </div>
+
+        <!-- Validated Companies -->
+        <div class="results-section" id="validatedSection" style="display: none;">
+          <div class="section-header">
+            <div class="section-title validated">
+              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              Validated
+              <span class="count-badge" id="validatedCount">0</span>
+            </div>
+          </div>
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Company</th>
+                <th>Website</th>
+                <th>HQ</th>
+                <th class="checkbox-cell"><input type="checkbox" id="selectAllValidated" title="Select all"></th>
+              </tr>
+            </thead>
+            <tbody id="validatedBody"></tbody>
+          </table>
+        </div>
+
+        <!-- Flagged Companies -->
+        <div class="results-section" id="flaggedSection" style="display: none;">
+          <div class="section-header">
+            <div class="section-title flagged">
+              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+              Flagged - Check Manually
+              <span class="count-badge" id="flaggedCount">0</span>
+            </div>
+          </div>
+          <table class="results-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Company</th>
+                <th>Website</th>
+                <th>HQ</th>
+                <th class="checkbox-cell"><input type="checkbox" id="selectAllFlagged" title="Select all"></th>
+              </tr>
+            </thead>
+            <tbody id="flaggedBody"></tbody>
+          </table>
+        </div>
+
+        <!-- Generate PPT Section -->
+        <div class="generate-ppt-section">
+          <div class="selected-count"><span id="selectedCount">0</span> companies selected</div>
+          <button type="button" class="generate-ppt-btn" id="generatePptBtn" disabled>
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            Generate PPT
+          </button>
+        </div>
+
+        <div class="message success" id="pptSuccessMessage" style="display: none;">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+          <span id="pptSuccessText">PPT generation started! Check your email in 5-10 minutes.</span>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    let searchData = null;
+
+    // Get result ID from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    const resultId = urlParams.get('id');
+
+    async function loadResults() {
+      if (!resultId) {
+        showError('No result ID provided');
+        return;
+      }
+
+      try {
+        const response = await fetch(`https://xvasjackgithubio-production-f428.up.railway.app/api/v6-results/${resultId}`);
+
+        if (!response.ok) {
+          throw new Error('Results not found or expired');
+        }
+
+        const data = await response.json();
+        searchData = data;
+        displayResults(data);
+      } catch (err) {
+        showError(err.message);
+      }
+    }
+
+    function showError(message) {
+      document.getElementById('loadingCard').style.display = 'none';
+      document.getElementById('errorCard').style.display = 'block';
+      document.getElementById('errorText').textContent = message;
+    }
+
+    function displayResults(data) {
+      document.getElementById('loadingCard').style.display = 'none';
+      document.getElementById('resultsCard').style.display = 'block';
+
+      // Search info
+      document.getElementById('searchTitle').textContent = `${data.business} in ${data.country}`;
+      document.getElementById('searchMeta').textContent = `Exclusions: ${data.exclusion}`;
+
+      // Validated companies
+      const validatedSection = document.getElementById('validatedSection');
+      const validatedBody = document.getElementById('validatedBody');
+      validatedBody.innerHTML = '';
+
+      if (data.validated && data.validated.length > 0) {
+        validatedSection.style.display = 'block';
+        document.getElementById('validatedCount').textContent = data.validated.length;
+
+        data.validated.forEach((company, i) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${i + 1}</td>
+            <td>${company.company_name}</td>
+            <td><a href="${company.website}" target="_blank">${company.website}</a></td>
+            <td>${company.hq}</td>
+            <td class="checkbox-cell"><input type="checkbox" class="company-checkbox" data-website="${company.website}"></td>
+          `;
+          validatedBody.appendChild(tr);
+        });
+      }
+
+      // Flagged companies
+      const flaggedSection = document.getElementById('flaggedSection');
+      const flaggedBody = document.getElementById('flaggedBody');
+      flaggedBody.innerHTML = '';
+
+      if (data.flagged && data.flagged.length > 0) {
+        flaggedSection.style.display = 'block';
+        document.getElementById('flaggedCount').textContent = data.flagged.length;
+
+        data.flagged.forEach((company, i) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${i + 1}</td>
+            <td>${company.company_name}</td>
+            <td><a href="${company.website}" target="_blank">${company.website}</a></td>
+            <td>${company.hq}</td>
+            <td class="checkbox-cell"><input type="checkbox" class="company-checkbox" data-website="${company.website}"></td>
+          `;
+          flaggedBody.appendChild(tr);
+        });
+      }
+
+      setupCheckboxHandlers();
+      updateSelectedCount();
+    }
+
+    function setupCheckboxHandlers() {
+      document.querySelectorAll('.company-checkbox').forEach(cb => {
+        cb.addEventListener('change', updateSelectedCount);
+      });
+
+      document.getElementById('selectAllValidated').addEventListener('change', function() {
+        document.querySelectorAll('#validatedBody .company-checkbox').forEach(cb => {
+          cb.checked = this.checked;
+        });
+        updateSelectedCount();
+      });
+
+      document.getElementById('selectAllFlagged').addEventListener('change', function() {
+        document.querySelectorAll('#flaggedBody .company-checkbox').forEach(cb => {
+          cb.checked = this.checked;
+        });
+        updateSelectedCount();
+      });
+    }
+
+    function updateSelectedCount() {
+      const count = document.querySelectorAll('.company-checkbox:checked').length;
+      document.getElementById('selectedCount').textContent = count;
+      document.getElementById('generatePptBtn').disabled = count === 0;
+    }
+
+    document.getElementById('generatePptBtn').addEventListener('click', async function() {
+      const btn = this;
+      const selectedCheckboxes = document.querySelectorAll('.company-checkbox:checked');
+
+      if (selectedCheckboxes.length === 0) {
+        alert('Please select at least one company');
+        return;
+      }
+
+      const websites = Array.from(selectedCheckboxes).map(cb => cb.dataset.website);
+      const targetDescription = `${searchData.business} in ${searchData.country}`;
+
+      btn.disabled = true;
+      btn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Submitting...';
+
+      try {
+        const response = await fetch('https://xvasjackgithubio-production-fb38.up.railway.app/api/profile-slides', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            websites,
+            email: searchData.email,
+            targetDescription
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to submit PPT request');
+        }
+
+        const successMsg = document.getElementById('pptSuccessMessage');
+        document.getElementById('pptSuccessText').textContent = `PPT generation started for ${websites.length} companies! Check your email (${searchData.email}) in 5-10 minutes.`;
+        successMsg.style.display = 'flex';
+        successMsg.classList.add('show');
+
+      } catch (err) {
+        alert('Failed to submit PPT request: ' + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Generate PPT';
+        updateSelectedCount();
+      }
+    });
+
+    // Load results on page load
+    loadResults();
+  </script>
+</body>
+</html>
