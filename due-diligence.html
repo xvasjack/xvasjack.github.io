@@ -590,6 +590,7 @@
     let currentR2Key = null;
     let currentSpeaker = null;  // Track current speaker for diarization
     let currentTranslationSpeaker = null;  // Track speaker for translation panel
+    let wsErrorShown = false;  // Prevent duplicate error messages from same connection failure
 
     // ============ AUTO-SAVE & RECOVERY ============
     const STORAGE_KEY = 'dd_recording_backup';
@@ -900,6 +901,7 @@
         // Reset speaker tracking for new recording
         currentSpeaker = null;
         currentTranslationSpeaker = null;
+        wsErrorShown = false;  // Reset error flag for new connection attempt
 
         // Get microphone access
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
@@ -983,13 +985,17 @@
         ws.onerror = (error) => {
           console.error('WebSocket error:', error);
           console.error('WebSocket URL was:', `${WS_BASE}/ws/transcribe`);
-          showError('Connection error. Please try again.');
+          if (!wsErrorShown) {
+            wsErrorShown = true;
+            showError('Connection error. Please try again.');
+          }
           stopRecording();
         };
 
         ws.onclose = (event) => {
           console.log('WebSocket closed:', event.code, event.reason);
-          if (!event.wasClean && isRecording) {
+          if (!event.wasClean && isRecording && !wsErrorShown) {
+            wsErrorShown = true;
             showError(`Connection closed unexpectedly (code: ${event.code})`);
             stopRecording();
           }
@@ -1075,9 +1081,21 @@
         audioContext = null;
       }
 
-      // Tell server to stop
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'stop' }));
+      // Tell server to stop and close WebSocket
+      if (ws) {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ type: 'stop' }));
+        }
+        // Remove event handlers to prevent further error messages
+        ws.onopen = null;
+        ws.onmessage = null;
+        ws.onerror = null;
+        ws.onclose = null;
+        // Close the WebSocket if still open or connecting
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.close();
+        }
+        ws = null;
       }
 
     }
@@ -1118,6 +1136,10 @@
       errorText.textContent = msg;
       errorMessage.classList.add('show');
       successMessage.classList.remove('show');
+      // Auto-hide after 5 seconds to prevent endless error display
+      setTimeout(() => {
+        errorMessage.classList.remove('show');
+      }, 5000);
     }
 
     function hideMessages() {
