@@ -3531,12 +3531,14 @@ app.post('/api/find-target-v6', async (req, res) => {
     const plan = await planSearchStrategyV5(Business, Country, Exclusion);
     const { expandedCountry } = plan;
 
-    // ========== STEP 2: Iterative Parallel Search (10 rounds) ==========
+    // ========== STEP 2: Iterative Parallel Search (dynamic rounds) ==========
     console.log('\n' + '='.repeat(50));
-    console.log('STEP 2: ITERATIVE PARALLEL SEARCH (10 rounds)');
+    console.log('STEP 2: ITERATIVE PARALLEL SEARCH (dynamic rounds)');
     console.log('='.repeat(50));
 
-    const NUM_ROUNDS = 10;
+    const MIN_ROUNDS = 10;
+    const MAX_ROUNDS = 15;
+    const MIN_NEW_TO_CONTINUE = 3; // Keep going if finding >= 3 new per round
     const allCompanies = [];
     const seenWebsites = new Set();
 
@@ -3585,7 +3587,18 @@ app.post('/api/find-target-v6', async (req, res) => {
         `List of ${business} companies operating in ${country}. Search using alternative industry terms and keywords.${pressureClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
 
         // Round 10: Final sweep
-        `Find any remaining ${business} companies in ${country} that haven't been found yet. Be thorough - dig into obscure sources.${pressureClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`
+        `Find any remaining ${business} companies in ${country} that haven't been found yet. Be thorough - dig into obscure sources.${pressureClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+
+        // Round 11+: Deep dive variations (for extended search)
+        `Search for hidden gems: small, family-run ${business} companies in ${country} that are not well-known online.${pressureClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+
+        `Find ${business} companies in ${country} by searching supplier/vendor lists of major brands in the industry.${pressureClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+
+        `Look for ${business} companies in ${country} through local business registries, chambers of commerce, and government databases.${pressureClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+
+        `Find ${business} companies in ${country} that exhibit at trade shows, industry conferences, or are mentioned in trade publications.${pressureClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+
+        `Search for ${business} companies in ${country} in secondary cities and industrial zones outside major metros.${pressureClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`
       ];
 
       return prompts[round % prompts.length];
@@ -3593,10 +3606,14 @@ app.post('/api/find-target-v6', async (req, res) => {
 
     const roundDescriptions = [
       'comprehensive', 'SME focus', 'private/family', 'regional/local',
-      'associations', 'leading', 'emerging', 'specialized', 'alternative terms', 'final sweep'
+      'associations', 'leading', 'emerging', 'specialized', 'alternative terms', 'final sweep',
+      'hidden gems', 'supplier lists', 'registries', 'trade shows', 'secondary cities'
     ];
 
-    for (let round = 0; round < NUM_ROUNDS; round++) {
+    let round = 0;
+    let consecutiveLowRounds = 0;
+
+    while (round < MAX_ROUNDS) {
       const roundStart = Date.now();
 
       // Build "already found" list with both names and domains for better dedup
@@ -3608,7 +3625,7 @@ app.post('/api/find-target-v6', async (req, res) => {
       }).filter(d => d);
       const alreadyFound = [...new Set([...alreadyFoundNames, ...alreadyFoundDomains])].join(', ');
 
-      console.log(`\n  --- ROUND ${round + 1}/${NUM_ROUNDS} (${roundDescriptions[round]}) ---`);
+      console.log(`\n  --- ROUND ${round + 1} (${roundDescriptions[round % roundDescriptions.length]}) ---`);
 
       // Generate prompt for this round with escalating pressure
       const prompt = getSearchPrompt(round, Business, expandedCountry, Exclusion, alreadyFound, allCompanies.length);
@@ -3646,9 +3663,22 @@ app.post('/api/find-target-v6', async (req, res) => {
 
       const roundDuration = ((Date.now() - roundStart) / 1000).toFixed(1);
       console.log(`    New companies: ${preFiltered.length} | Total: ${allCompanies.length} | Time: ${roundDuration}s`);
+
+      // Dynamic stopping logic
+      round++;
+
+      if (preFiltered.length < MIN_NEW_TO_CONTINUE) {
+        consecutiveLowRounds++;
+        if (round >= MIN_ROUNDS && consecutiveLowRounds >= 2) {
+          console.log(`    Stopping early: ${consecutiveLowRounds} consecutive rounds with < ${MIN_NEW_TO_CONTINUE} new companies`);
+          break;
+        }
+      } else {
+        consecutiveLowRounds = 0; // Reset if we found enough
+      }
     }
 
-    console.log(`\n  Search complete. Total unique companies: ${allCompanies.length}`);
+    console.log(`\n  Search complete after ${round} rounds. Total unique companies: ${allCompanies.length}`);
 
     // ========== STEP 3: GPT-4o Validation ==========
     console.log('\n' + '='.repeat(50));
