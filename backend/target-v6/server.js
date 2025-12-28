@@ -3432,53 +3432,25 @@ function buildV5EmailHTML(validationResults, business, country, exclusion, searc
   return html;
 }
 
-// V6 Email HTML builder - simplified for GPT-4o validation
-function buildV6EmailHTML(validationResults, business, country, exclusion, searchLog) {
-  const { validated, flagged, rejected } = validationResults;
-
-  // Count searches by model
-  const perplexityTasks = searchLog.filter(s => s.model === 'perplexity-sonar-pro');
-  const geminiTasks = searchLog.filter(s => !s.model || s.model === 'gemini');
-  const chatgptTasks = searchLog.filter(s => s.model === 'chatgpt-search');
+// V6 Email HTML builder - clean and simple
+function buildV6EmailHTML(validationResults, business, country, exclusion) {
+  const { validated, flagged } = validationResults;
 
   let html = `
-    <h2>V6 Find Target Results</h2>
-    <p><strong>Business:</strong> ${business}</p>
-    <p><strong>Country:</strong> ${country}</p>
-    <p><strong>Exclusions:</strong> ${exclusion}</p>
-
-    <h3>Search Summary</h3>
-    <p><strong>Architecture:</strong> Parallel search with 3 models, validated by GPT-4o</p>
-    <ul>
-      <li>Perplexity: ${perplexityTasks.length} searches</li>
-      <li>Gemini (with Google Search): ${geminiTasks.length} searches</li>
-      <li>ChatGPT Search: ${chatgptTasks.length} searches</li>
-    </ul>
-
-    <h3>Validation Summary</h3>
-    <p>All companies validated by <strong>GPT-4o</strong>:</p>
-    <ul>
-      <li><span style="color: #22c55e; font-weight: bold;">VALIDATED (${validated.length})</span> - Confirmed match</li>
-      <li><span style="color: #f59e0b; font-weight: bold;">FLAGGED (${flagged.length})</span> - Security blocked, needs manual check</li>
-      <li><span style="color: #999;">Rejected: ${rejected.length}</span> - Did not match criteria</li>
-    </ul>
+    <h2>${business} in ${country}</h2>
+    <p style="color: #666; margin-bottom: 20px;">Exclusions: ${exclusion}</p>
   `;
 
   // Validated Companies
-  html += `
-    <h3 style="color: #22c55e; border-bottom: 2px solid #22c55e; padding-bottom: 8px;">
-      ✓ VALIDATED COMPANIES (${validated.length})
-    </h3>
-  `;
-
   if (validated.length > 0) {
     html += `
+    <h3 style="color: #22c55e; margin-bottom: 10px;">Validated (${validated.length})</h3>
     <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; margin-bottom: 30px;">
       <tr style="background-color: #dcfce7;">
-        <th>#</th>
-        <th>Company</th>
-        <th>Website</th>
-        <th>Headquarters</th>
+        <th style="text-align: left;">#</th>
+        <th style="text-align: left;">Company</th>
+        <th style="text-align: left;">Website</th>
+        <th style="text-align: left;">HQ</th>
       </tr>
     `;
     validated.forEach((c, i) => {
@@ -3492,23 +3464,18 @@ function buildV6EmailHTML(validationResults, business, country, exclusion, searc
       `;
     });
     html += '</table>';
-  } else {
-    html += '<p><em>No companies validated.</em></p>';
   }
 
   // Flagged Companies (security blocked)
   if (flagged.length > 0) {
     html += `
-      <h3 style="color: #f59e0b; border-bottom: 2px solid #f59e0b; padding-bottom: 8px;">
-        ? FLAGGED FOR REVIEW (${flagged.length})
-      </h3>
-      <p style="color: #666; font-size: 12px;">Website security blocked validation - please check manually</p>
+      <h3 style="color: #f59e0b; margin-bottom: 10px;">Flagged - Check Manually (${flagged.length})</h3>
       <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%; margin-bottom: 30px;">
         <tr style="background-color: #fef3c7;">
-          <th>#</th>
-          <th>Company</th>
-          <th>Website</th>
-          <th>HQ</th>
+          <th style="text-align: left;">#</th>
+          <th style="text-align: left;">Company</th>
+          <th style="text-align: left;">Website</th>
+          <th style="text-align: left;">HQ</th>
         </tr>
     `;
     flagged.forEach((c, i) => {
@@ -3517,11 +3484,15 @@ function buildV6EmailHTML(validationResults, business, country, exclusion, searc
         <td>${i + 1}</td>
         <td>${c.company_name}</td>
         <td><a href="${c.website}">${c.website}</a></td>
-        <td>${c.hq || 'Unknown'}</td>
+        <td>${c.hq || '-'}</td>
       </tr>
       `;
     });
     html += '</table>';
+  }
+
+  if (validated.length === 0 && flagged.length === 0) {
+    html += '<p>No companies found matching your criteria.</p>';
   }
 
   return html;
@@ -3542,11 +3513,6 @@ app.post('/api/find-target-v6', async (req, res) => {
   console.log(`Exclusion: ${Exclusion}`);
   console.log(`Email: ${Email}`);
   console.log('='.repeat(70));
-
-  res.json({
-    success: true,
-    message: 'Request received. Iterative search running. Results will be emailed in ~12-15 minutes.'
-  });
 
   try {
     const totalStart = Date.now();
@@ -3695,13 +3661,14 @@ app.post('/api/find-target-v6', async (req, res) => {
 
     // Send email
     const finalResults = { validated, flagged, rejected };
-    const htmlContent = buildV6EmailHTML(finalResults, Business, expandedCountry, Exclusion, searchLog);
+    const htmlContent = buildV6EmailHTML(finalResults, Business, expandedCountry, Exclusion);
 
-    await sendEmail(
+    // Send email (don't await - let it send in background)
+    sendEmail(
       Email,
       `[V6] ${Business} in ${Country} (${validated.length} validated + ${flagged.length} flagged)`,
       htmlContent
-    );
+    ).catch(e => console.error('Failed to send email:', e));
 
     const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
     console.log('\n' + '='.repeat(70));
@@ -3711,13 +3678,37 @@ app.post('/api/find-target-v6', async (req, res) => {
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(70));
 
+    // Return results to frontend
+    return res.json({
+      success: true,
+      validated: validated.map(c => ({
+        company_name: c.company_name,
+        website: c.website,
+        hq: c.hq
+      })),
+      flagged: flagged.map(c => ({
+        company_name: c.company_name,
+        website: c.website,
+        hq: c.hq || '-'
+      })),
+      stats: {
+        validated: validated.length,
+        flagged: flagged.length,
+        rejected: rejected.length,
+        totalTime
+      }
+    });
+
   } catch (error) {
     console.error('V6 Processing error:', error);
-    try {
-      await sendEmail(Email, `Find Target V6 - Error`, `<p>Error: ${error.message}</p>`);
-    } catch (e) {
-      console.error('Failed to send error email:', e);
-    }
+    // Try to send error email
+    sendEmail(Email, `Find Target V6 - Error`, `<p>Error: ${error.message}</p>`)
+      .catch(e => console.error('Failed to send error email:', e));
+
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 });
 
