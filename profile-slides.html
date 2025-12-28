@@ -72,11 +72,6 @@
               <p class="hint-text">One URL per line. Up to 50 websites.</p>
             </div>
 
-            <div class="form-group">
-              <label for="email">Email Address</label>
-              <input type="email" id="email" name="email" required placeholder="your@company.com">
-            </div>
-
             <button type="submit" class="submit-btn" id="submitBtn">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
@@ -102,24 +97,14 @@
   <script>
     // Email caching
     const globalEmailInput = document.getElementById('globalEmail');
-    const formEmailInput = document.getElementById('email');
 
     const cachedEmail = localStorage.getItem('ycpUserEmail');
     if (cachedEmail) {
       globalEmailInput.value = cachedEmail;
-      formEmailInput.value = cachedEmail;
     }
 
     globalEmailInput.addEventListener('input', () => {
-      const email = globalEmailInput.value;
-      formEmailInput.value = email;
-      localStorage.setItem('ycpUserEmail', email);
-    });
-
-    formEmailInput.addEventListener('input', () => {
-      const email = formEmailInput.value;
-      globalEmailInput.value = email;
-      localStorage.setItem('ycpUserEmail', email);
+      localStorage.setItem('ycpUserEmail', globalEmailInput.value);
     });
 
     const form = document.getElementById('slidesForm');
@@ -133,10 +118,14 @@
 
       const targetDescription = document.getElementById('targetDescription').value.trim();
       const websitesInput = document.getElementById('websites').value.trim();
-      const email = document.getElementById('email').value.trim();
+      const email = globalEmailInput.value.trim() || localStorage.getItem('ycpUserEmail');
 
-      if (!targetDescription || !websitesInput || !email) {
+      if (!targetDescription || !websitesInput) {
         alert('Please fill in all fields');
+        return;
+      }
+      if (!email) {
+        alert('Please enter your email in the top right');
         return;
       }
 

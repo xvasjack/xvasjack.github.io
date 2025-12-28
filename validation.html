@@ -130,15 +130,9 @@
           </div>
 
           <!-- Common fields -->
-          <div class="form-grid" style="margin-top: 10px;">
-            <div class="form-group full-width">
-              <label for="targetBusiness">Target Should Be</label>
-              <input type="text" id="targetBusiness" name="TargetBusiness" required placeholder="e.g. Semiconductor distributor">
-            </div>
-            <div class="form-group full-width">
-              <label for="email">Email Address</label>
-              <input type="email" id="email" name="Email" required placeholder="your@company.com">
-            </div>
+          <div class="form-group" style="margin-top: 10px;">
+            <label for="targetBusiness">Target Should Be</label>
+            <input type="text" id="targetBusiness" name="TargetBusiness" required placeholder="e.g. Semiconductor distributor">
           </div>
 
           <button type="submit" class="submit-btn" id="submitBtn">Submit</button>
@@ -159,24 +153,14 @@
   <script>
     // Email caching
     const globalEmailInput = document.getElementById('globalEmail');
-    const formEmailInput = document.getElementById('email');
 
     const cachedEmail = localStorage.getItem('ycpUserEmail');
     if (cachedEmail) {
       globalEmailInput.value = cachedEmail;
-      formEmailInput.value = cachedEmail;
     }
 
     globalEmailInput.addEventListener('input', () => {
-      const email = globalEmailInput.value;
-      formEmailInput.value = email;
-      localStorage.setItem('ycpUserEmail', email);
-    });
-
-    formEmailInput.addEventListener('input', () => {
-      const email = formEmailInput.value;
-      globalEmailInput.value = email;
-      localStorage.setItem('ycpUserEmail', email);
+      localStorage.setItem('ycpUserEmail', globalEmailInput.value);
     });
 
     // Tab switching
@@ -308,6 +292,12 @@
         if (!countriesData.trim()) { alert('Please enter countries'); return; }
       }
 
+      const email = globalEmailInput.value || localStorage.getItem('ycpUserEmail');
+      if (!email) {
+        alert('Please enter your email in the top right');
+        return;
+      }
+
       btn.disabled = true;
       btn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Submitting...';
 
@@ -320,7 +310,7 @@
             Countries: countriesData,
             TargetBusiness: document.getElementById('targetBusiness').value,
             OutputOption: 'both_sheets',
-            Email: document.getElementById('email').value
+            Email: email
           })
         });
         if (res.ok) { success.classList.add('show'); this.reset(); resetFileUpload(); }

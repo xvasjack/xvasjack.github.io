@@ -74,15 +74,9 @@
             </div>
           </div>
 
-          <div class="form-grid" style="margin-top: 10px;">
-            <div class="form-group">
-              <label for="targetCompanyOrIndustry">Industry/Target Company Name/Website</label>
-              <input type="text" id="targetCompanyOrIndustry" name="TargetCompanyOrIndustry" required placeholder="e.g. Tesla or Electric vehicle manufacturer">
-            </div>
-            <div class="form-group">
-              <label for="email">Email</label>
-              <input type="email" id="email" name="Email" required placeholder="your@email.com">
-            </div>
+          <div class="form-group" style="margin-top: 10px;">
+            <label for="targetCompanyOrIndustry">Industry/Target Company Name/Website</label>
+            <input type="text" id="targetCompanyOrIndustry" name="TargetCompanyOrIndustry" required placeholder="e.g. Tesla or Electric vehicle manufacturer">
           </div>
 
           <div class="form-group" style="margin-top: 8px;">
@@ -118,24 +112,14 @@
   <script>
     // Email caching
     const globalEmailInput = document.getElementById('globalEmail');
-    const formEmailInput = document.getElementById('email');
 
     const cachedEmail = localStorage.getItem('ycpUserEmail');
     if (cachedEmail) {
       globalEmailInput.value = cachedEmail;
-      formEmailInput.value = cachedEmail;
     }
 
     globalEmailInput.addEventListener('input', () => {
-      const email = globalEmailInput.value;
-      formEmailInput.value = email;
-      localStorage.setItem('ycpUserEmail', email);
-    });
-
-    formEmailInput.addEventListener('input', () => {
-      const email = formEmailInput.value;
-      globalEmailInput.value = email;
-      localStorage.setItem('ycpUserEmail', email);
+      localStorage.setItem('ycpUserEmail', globalEmailInput.value);
     });
 
     const fileInput = document.getElementById('excelFile');
@@ -164,12 +148,20 @@
       const btn = document.getElementById('submitBtn');
       const success = document.getElementById('successMessage');
       const error = document.getElementById('errorMessage');
+
+      const email = globalEmailInput.value || localStorage.getItem('ycpUserEmail');
+      if (!email) {
+        alert('Please enter your email in the top right');
+        return;
+      }
+
       success.classList.remove('show');
       error.classList.remove('show');
       btn.disabled = true;
       btn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Uploading...';
       try {
         const formData = new FormData(this);
+        formData.set('Email', email);
         const response = await fetch(this.action, { method: 'POST', body: formData });
         if (response.ok) {
           success.classList.add('show');
