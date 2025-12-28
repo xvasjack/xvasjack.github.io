@@ -2624,10 +2624,10 @@ async function dualModelEvaluateCompanies(evaluationPrompt, companies) {
         consensusEval.consensusType = 'both_remove';
         agreementCount++;
       } else if (gpt4oFails !== geminiFails) {
-        // Models DISAGREE - keep the company (conservative approach)
+        // Models DISAGREE - keep the company (conservative approach, no manual review needed)
         consensusEval.passes = true;
-        consensusEval.reasoning = `[Models disagree - kept for review] GPT-4o: ${gpt4oEval.passes ? 'keep' : 'remove'}(${gpt4oEval.confidence}%), Gemini: ${geminiEval.passes ? 'keep' : 'remove'}(${geminiEval.confidence}%)`;
-        consensusEval.consensusType = 'disagreement';
+        consensusEval.business = gpt4oEval.business || geminiEval.business;
+        consensusEval.consensusType = 'kept_conservative';
         disagreementCount++;
       } else {
         // Both agree to keep
@@ -2784,7 +2784,6 @@ When uncertain, keep the company (passes=true) for manual review.`;
     const evaluations = dualResult.evaluations || [];
     const removedCompanies = [];
     const keptCompanies = [];
-    const disagreementCompanies = [];
 
     currentCompanies.forEach((c, idx) => {
       const eval_ = evaluations.find(e => e.index === idx);
@@ -2796,20 +2795,10 @@ When uncertain, keep the company (passes=true) for manual review.`;
       } else {
         if (eval_) {
           c.businessDescription = eval_.business;
-          // Track disagreements for logging
-          if (eval_.consensusType === 'disagreement') {
-            c.disagreementNote = eval_.reasoning;
-            disagreementCompanies.push(c);
-          }
         }
         keptCompanies.push(c);
       }
     });
-
-    // Log disagreements
-    if (disagreementCompanies.length > 0) {
-      console.log(`  Models disagreed on ${disagreementCompanies.length} companies (kept for review)`);
-    }
 
     // Only apply if we keep enough companies
     if (keptCompanies.length >= 5 && removedCompanies.length > 0) {
@@ -2822,14 +2811,8 @@ When uncertain, keep the company (passes=true) for manual review.`;
       const sheetData = createSheetData(currentCompanies, sheetHeaders,
         `Step ${stepIdx + 1}: ${step.criteria} - ${currentCompanies.length} remaining`);
 
-      sheetData.push([], [], [`REMOVED - Did not meet: "${step.criteria}" [Dual-Model Consensus]`], ['Company', 'Business', 'Reason', 'Confidence', 'Consensus']);
-      removedCompanies.forEach(c => sheetData.push([c.name, '', c.filterReason, `${c.confidence}%`, c.consensusType || '']));
-
-      // Add section for disagreements (companies kept due to model disagreement)
-      if (disagreementCompanies.length > 0) {
-        sheetData.push([], [], ['KEPT - Models Disagreed (Needs Manual Review)'], ['Company', 'Note']);
-        disagreementCompanies.forEach(c => sheetData.push([c.name, c.disagreementNote || '']));
-      }
+      sheetData.push([], [], [`REMOVED - Did not meet: "${step.criteria}" [Dual-Model Consensus]`], ['Company', 'Business', 'Reason', 'Confidence']);
+      removedCompanies.forEach(c => sheetData.push([c.name, '', c.filterReason, `${c.confidence}%`]));
 
       const sheet = XLSX.utils.aoa_to_sheet(sheetData);
       const sheetName = `${sheetNumber}. Step ${stepIdx + 1}`;
