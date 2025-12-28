@@ -2476,6 +2476,66 @@ Variations for "${business}":`;
   return []; // Return empty array if generation fails
 }
 
+// V6 Smart Planning with GPT-4o - generates comprehensive search strategy
+async function generateSmartSearchPlanV6(business, countries, exclusion) {
+  console.log(`  GPT-4o generating smart search plan...`);
+
+  const prompt = `You are an expert M&A researcher. Generate a comprehensive search plan to find ALL companies matching this criteria:
+
+BUSINESS TYPE: ${business}
+COUNTRIES: ${countries.join(', ')}
+EXCLUDE: ${exclusion}
+
+Generate a search plan with:
+
+1. "english_variations": Array of 5-8 alternative English terms/phrases for this business type. Think about:
+   - Industry-specific terminology (e.g., "flexure" = "flexographic", "flexo")
+   - Technical vs common terms
+   - Full names vs abbreviations
+   - How manufacturers vs buyers might describe it
+
+2. "local_language_terms": Object with country as key, array of local language search terms as value. For each country, provide 2-4 terms in the LOCAL LANGUAGE that locals would use to search for this business type.
+
+3. "key_industrial_areas": Object with country as key, array of major industrial cities/regions for this industry as value. These are areas where this type of business is likely concentrated.
+
+4. "search_angles": Array of 5 different search approaches to find companies (e.g., "industry associations", "trade directories", "supplier lists", etc.)
+
+Return ONLY valid JSON, no explanation:
+{
+  "english_variations": ["term1", "term2", ...],
+  "local_language_terms": {"Indonesia": ["term1", "term2"], "Thailand": ["term1", "term2"], ...},
+  "key_industrial_areas": {"Indonesia": ["city1", "city2"], "Thailand": ["city1", "city2"], ...},
+  "search_angles": ["angle1", "angle2", ...]
+}`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+      temperature: 0.3
+    });
+
+    const result = response.choices[0].message.content;
+    const plan = JSON.parse(result);
+
+    console.log(`  English variations: ${plan.english_variations?.join(', ') || 'none'}`);
+    console.log(`  Local terms: ${Object.keys(plan.local_language_terms || {}).length} countries`);
+    console.log(`  Industrial areas: ${Object.keys(plan.key_industrial_areas || {}).length} countries`);
+    console.log(`  Search angles: ${plan.search_angles?.length || 0}`);
+
+    return plan;
+  } catch (e) {
+    console.error(`  GPT-4o planning failed: ${e.message}`);
+    return {
+      english_variations: [],
+      local_language_terms: {},
+      key_industrial_areas: {},
+      search_angles: []
+    };
+  }
+}
+
 // ============ V5 PARALLEL ARCHITECTURE ============
 
 // Phase 0: Plan search strategy - determine languages, generate comprehensive search plan
@@ -3552,12 +3612,30 @@ app.post('/api/find-target-v6', async (req, res) => {
     const totalStart = Date.now();
     const searchLog = [];
 
-    // ========== STEP 1: Plan Search Strategy ==========
+    // ========== STEP 1: Smart Planning with GPT-4o ==========
     console.log('\n' + '='.repeat(50));
-    console.log('STEP 1: PLANNING');
+    console.log('STEP 1: GPT-4o SMART PLANNING');
     console.log('='.repeat(50));
-    const plan = await planSearchStrategyV5(Business, Country, Exclusion);
-    const { expandedCountry } = plan;
+
+    // Expand region to countries first
+    const countries = await expandRegionToCountries(Country);
+    const expandedCountry = countries.join(', ');
+    console.log(`  Country input: "${Country}" → "${expandedCountry}"`);
+
+    // Generate smart search plan with GPT-4o
+    const smartPlan = await generateSmartSearchPlanV6(Business, countries, Exclusion);
+
+    // Build comprehensive search terms from the plan
+    const allSearchTerms = [Business, ...smartPlan.english_variations];
+    const localTermsFlat = Object.values(smartPlan.local_language_terms || {}).flat();
+    const industrialAreasFlat = Object.values(smartPlan.key_industrial_areas || {}).flat();
+
+    console.log(`\n  SEARCH PLAN SUMMARY:`);
+    console.log(`  - Primary term: ${Business}`);
+    console.log(`  - English variations: ${smartPlan.english_variations?.join(', ') || 'none'}`);
+    console.log(`  - Local language terms: ${localTermsFlat.join(', ') || 'none'}`);
+    console.log(`  - Key industrial areas: ${industrialAreasFlat.join(', ') || 'none'}`);
+    console.log(`  - Search angles: ${smartPlan.search_angles?.join(', ') || 'none'}`);
 
     // ========== STEP 2: Iterative Parallel Search (10 rounds) ==========
     console.log('\n' + '='.repeat(50));
@@ -3568,51 +3646,71 @@ app.post('/api/find-target-v6', async (req, res) => {
     const allCompanies = [];
     const seenWebsites = new Set();
 
-    // Generic search prompts that work for ANY business type
-    // Each round uses a different search angle to maximize coverage
-    const getSearchPrompt = (round, business, country, exclusion, alreadyFoundList) => {
+    // Smart search prompts that USE the GPT-4o generated plan
+    const getSearchPrompt = (round, business, country, exclusion, alreadyFoundList, plan) => {
       const findMoreClause = alreadyFoundList
         ? `\nALREADY FOUND (do NOT repeat these): ${alreadyFoundList}\nFind MORE companies not in this list.`
         : '';
 
+      // Build terminology hint from plan
+      const termHint = plan.english_variations?.length > 0
+        ? `\nALTERNATIVE TERMS TO SEARCH: ${plan.english_variations.join(', ')}`
+        : '';
+
+      // Build local language hint
+      const localTerms = Object.entries(plan.local_language_terms || {})
+        .map(([c, terms]) => `${c}: ${terms.join(', ')}`)
+        .join('; ');
+      const localHint = localTerms
+        ? `\nLOCAL LANGUAGE TERMS: ${localTerms}`
+        : '';
+
+      // Build industrial areas hint
+      const areasHint = Object.entries(plan.key_industrial_areas || {})
+        .map(([c, areas]) => `${c}: ${areas.join(', ')}`)
+        .join('; ');
+      const citiesHint = areasHint
+        ? `\nKEY INDUSTRIAL AREAS: ${areasHint}`
+        : '';
+
       const prompts = [
-        // Round 1: Comprehensive search
-        `Find ALL ${business} companies in ${country}. Be exhaustive - include large, medium, and small companies.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+        // Round 1: Comprehensive with all variations
+        `Find ALL ${business} companies in ${country}. Be exhaustive - include large, medium, and small companies.${termHint}${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
 
-        // Round 2: Small and medium enterprises
-        `Find small and medium-sized ${business} companies in ${country}. Focus on companies that are potential acquisition targets.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+        // Round 2: Local language search
+        `Find ${business} companies in ${country}. Search using LOCAL LANGUAGE terms that businesses in these countries would use.${localHint}${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
 
-        // Round 3: Private and family-owned
-        `Find private and family-owned ${business} companies in ${country}. These are often not well-known but important players.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+        // Round 3: Industrial areas focus
+        `Find ${business} companies in ${country}. Focus on major industrial cities and manufacturing hubs.${citiesHint}${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
 
-        // Round 4: Regional/local players
-        `Find regional and local ${business} companies in ${country}. Look for companies operating in specific provinces, states, or cities.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+        // Round 4: SME and private companies
+        `Find small, medium, private, and family-owned ${business} companies in ${country}. These are often not well-known but important players.${termHint}${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
 
         // Round 5: Industry associations and directories
-        `Find ${business} companies in ${country} through industry associations, trade directories, and member lists.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+        `Find ${business} companies in ${country} through industry associations, trade directories, supplier lists, and member registries.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
 
-        // Round 6: Leading/established companies
-        `Find leading and established ${business} companies in ${country}. Include market leaders and well-known players.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+        // Round 6: Alternative terminology deep dive
+        `Find ${business} companies in ${country}. Use ALL alternative industry terms.${termHint}${localHint}${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
 
-        // Round 7: Emerging/newer companies
-        `Find emerging and newer ${business} companies in ${country}. Look for companies founded in recent years.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+        // Round 7: Regional players by city
+        `Find regional and local ${business} companies in ${country}. Search by specific cities and provinces.${citiesHint}${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
 
-        // Round 8: Specialized/niche
-        `Find specialized and niche ${business} companies in ${country}. Look for companies with specific focus areas.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+        // Round 8: Emerging and newer companies
+        `Find emerging and newer ${business} companies in ${country}. Look for companies founded in recent years.${termHint}${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
 
-        // Round 9: Alternative search terms
-        `List of ${business} companies operating in ${country}. Search using alternative industry terms and keywords.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+        // Round 9: Specialized/niche players
+        `Find specialized and niche ${business} companies in ${country}. Look for companies with specific focus areas within the industry.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
 
-        // Round 10: Final sweep
-        `Find any remaining ${business} companies in ${country} that haven't been found yet. Be thorough.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`
+        // Round 10: Final exhaustive sweep
+        `Find any remaining ${business} companies in ${country} not yet found. Use ALL search variations.${termHint}${localHint}${citiesHint}${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`
       ];
 
       return prompts[round % prompts.length];
     };
 
     const roundDescriptions = [
-      'comprehensive', 'SME focus', 'private/family', 'regional/local',
-      'associations', 'leading', 'emerging', 'specialized', 'alternative terms', 'final sweep'
+      'comprehensive', 'local language', 'industrial areas', 'SME/private',
+      'associations', 'alt terminology', 'regional/city', 'emerging', 'specialized', 'final sweep'
     ];
 
     for (let round = 0; round < NUM_ROUNDS; round++) {
@@ -3623,8 +3721,8 @@ app.post('/api/find-target-v6', async (req, res) => {
 
       console.log(`\n  --- ROUND ${round + 1}/${NUM_ROUNDS} (${roundDescriptions[round]}) ---`);
 
-      // Generate prompt for this round
-      const prompt = getSearchPrompt(round, Business, expandedCountry, Exclusion, alreadyFound);
+      // Generate prompt for this round (using GPT-4o smart plan)
+      const prompt = getSearchPrompt(round, Business, expandedCountry, Exclusion, alreadyFound, smartPlan);
 
       // Run all 3 models in parallel
       const [perplexityResults, geminiResults, chatgptResults] = await Promise.all([
