@@ -2524,6 +2524,147 @@ OUTPUT FORMAT (JSON):
 }
 
 /**
+ * Dual-Model Evaluation for Trading Comparable Filtering
+ * Uses both GPT-4o and Gemini 2.5 Pro to evaluate companies
+ * Only removes companies when BOTH models agree with high confidence
+ */
+async function dualModelEvaluateCompanies(evaluationPrompt, companies) {
+  console.log('  Running dual-model evaluation (GPT-4o + Gemini 2.5 Pro)...');
+
+  // Run both models in parallel for efficiency
+  const [gpt4oResult, geminiResult] = await Promise.all([
+    // GPT-4o evaluation
+    (async () => {
+      try {
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4o',
+          messages: [{ role: 'user', content: evaluationPrompt }],
+          temperature: 0.2,
+          response_format: { type: 'json_object' }
+        });
+        return response.choices[0].message.content;
+      } catch (error) {
+        console.error('  GPT-4o evaluation error:', error.message);
+        return null;
+      }
+    })(),
+    // Gemini 2.5 Pro evaluation
+    (async () => {
+      try {
+        const result = await callGemini2Pro(evaluationPrompt, true);
+        return result;
+      } catch (error) {
+        console.error('  Gemini 2.5 Pro evaluation error:', error.message);
+        return null;
+      }
+    })()
+  ]);
+
+  // Parse GPT-4o results
+  let gpt4oEvals = [];
+  if (gpt4oResult) {
+    try {
+      const jsonMatch = gpt4oResult.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        gpt4oEvals = parsed.evaluations || [];
+      }
+    } catch (error) {
+      console.error('  Failed to parse GPT-4o result:', error.message);
+    }
+  }
+
+  // Parse Gemini results
+  let geminiEvals = [];
+  if (geminiResult) {
+    try {
+      const jsonMatch = geminiResult.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        geminiEvals = parsed.evaluations || [];
+      }
+    } catch (error) {
+      console.error('  Failed to parse Gemini result:', error.message);
+    }
+  }
+
+  // Build consensus-based evaluations
+  const consensusEvals = [];
+  let agreementCount = 0;
+  let disagreementCount = 0;
+
+  companies.forEach((company, idx) => {
+    const gpt4oEval = gpt4oEvals.find(e => e.index === idx);
+    const geminiEval = geminiEvals.find(e => e.index === idx);
+
+    // Default: keep the company (passes = true)
+    const consensusEval = {
+      index: idx,
+      name: company.name,
+      passes: true,
+      confidence: 0,
+      business: gpt4oEval?.business || geminiEval?.business || '',
+      reasoning: '',
+      gpt4oResult: gpt4oEval,
+      geminiResult: geminiEval,
+      consensusType: 'default'
+    };
+
+    // Both models evaluated
+    if (gpt4oEval && geminiEval) {
+      const gpt4oFails = !gpt4oEval.passes && (gpt4oEval.confidence || 0) >= 70;
+      const geminiFails = !geminiEval.passes && (geminiEval.confidence || 0) >= 70;
+
+      if (gpt4oFails && geminiFails) {
+        // BOTH models agree to remove with high confidence - REMOVE
+        consensusEval.passes = false;
+        consensusEval.confidence = Math.min(gpt4oEval.confidence, geminiEval.confidence);
+        consensusEval.reasoning = `[Dual-model consensus] GPT-4o: ${gpt4oEval.reasoning} | Gemini: ${geminiEval.reasoning}`;
+        consensusEval.business = gpt4oEval.business || geminiEval.business;
+        consensusEval.consensusType = 'both_remove';
+        agreementCount++;
+      } else if (gpt4oFails !== geminiFails) {
+        // Models DISAGREE - keep the company (conservative approach)
+        consensusEval.passes = true;
+        consensusEval.reasoning = `[Models disagree - kept for review] GPT-4o: ${gpt4oEval.passes ? 'keep' : 'remove'}(${gpt4oEval.confidence}%), Gemini: ${geminiEval.passes ? 'keep' : 'remove'}(${geminiEval.confidence}%)`;
+        consensusEval.consensusType = 'disagreement';
+        disagreementCount++;
+      } else {
+        // Both agree to keep
+        consensusEval.passes = true;
+        consensusEval.consensusType = 'both_keep';
+        agreementCount++;
+      }
+    } else if (gpt4oEval) {
+      // Only GPT-4o available - require higher confidence (80%)
+      if (!gpt4oEval.passes && (gpt4oEval.confidence || 0) >= 80) {
+        consensusEval.passes = false;
+        consensusEval.confidence = gpt4oEval.confidence;
+        consensusEval.reasoning = `[GPT-4o only, high confidence] ${gpt4oEval.reasoning}`;
+        consensusEval.business = gpt4oEval.business;
+      }
+      consensusEval.consensusType = 'gpt4o_only';
+    } else if (geminiEval) {
+      // Only Gemini available - require higher confidence (80%)
+      if (!geminiEval.passes && (geminiEval.confidence || 0) >= 80) {
+        consensusEval.passes = false;
+        consensusEval.confidence = geminiEval.confidence;
+        consensusEval.reasoning = `[Gemini only, high confidence] ${geminiEval.reasoning}`;
+        consensusEval.business = geminiEval.business;
+      }
+      consensusEval.consensusType = 'gemini_only';
+    }
+    // If neither model returned results, company is kept (default)
+
+    consensusEvals.push(consensusEval);
+  });
+
+  console.log(`  Dual-model results: ${agreementCount} agreements, ${disagreementCount} disagreements`);
+
+  return { evaluations: consensusEvals, agreementCount, disagreementCount };
+}
+
+/**
  * PHASE 2: Deliberate Filtering
  * Evaluate each company carefully against the strategy from Phase 1
  */
@@ -2630,68 +2771,72 @@ OUTPUT JSON:
 IMPORTANT: Only mark passes=false if you are >70% confident the company does NOT meet the criterion.
 When uncertain, keep the company (passes=true) for manual review.`;
 
-    let evalResult;
+    // Use dual-model evaluation for more confident filtering
+    let dualResult;
     try {
-      const response = await openai.chat.completions.create({
-        model: 'gpt-4o',
-        messages: [{ role: 'user', content: evaluationPrompt }],
-        temperature: 0.2,
-        response_format: { type: 'json_object' }
-      });
-      evalResult = response.choices[0].message.content;
+      dualResult = await dualModelEvaluateCompanies(evaluationPrompt, currentCompanies);
     } catch (error) {
-      console.error('Evaluation error:', error.message);
+      console.error('Dual-model evaluation error:', error.message);
       continue;
     }
 
-    // Parse and apply results
-    try {
-      const jsonMatch = evalResult.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        const evaluations = parsed.evaluations || [];
+    // Apply consensus-based results
+    const evaluations = dualResult.evaluations || [];
+    const removedCompanies = [];
+    const keptCompanies = [];
+    const disagreementCompanies = [];
 
-        const removedCompanies = [];
-        const keptCompanies = [];
-
-        currentCompanies.forEach((c, idx) => {
-          const eval_ = evaluations.find(e => e.index === idx);
-          if (eval_ && !eval_.passes && eval_.confidence >= 70) {
-            c.filterReason = `${eval_.business} - ${eval_.reasoning}`;
-            c.confidence = eval_.confidence;
-            removedCompanies.push(c);
-          } else {
-            if (eval_) {
-              c.businessDescription = eval_.business;
-            }
-            keptCompanies.push(c);
+    currentCompanies.forEach((c, idx) => {
+      const eval_ = evaluations.find(e => e.index === idx);
+      if (eval_ && !eval_.passes) {
+        c.filterReason = `${eval_.business} - ${eval_.reasoning}`;
+        c.confidence = eval_.confidence;
+        c.consensusType = eval_.consensusType;
+        removedCompanies.push(c);
+      } else {
+        if (eval_) {
+          c.businessDescription = eval_.business;
+          // Track disagreements for logging
+          if (eval_.consensusType === 'disagreement') {
+            c.disagreementNote = eval_.reasoning;
+            disagreementCompanies.push(c);
           }
-        });
-
-        // Only apply if we keep enough companies
-        if (keptCompanies.length >= 5 && removedCompanies.length > 0) {
-          currentCompanies = keptCompanies;
-          const logEntry = `Step ${stepIdx + 1} (${step.criteria}): Removed ${removedCompanies.length} companies`;
-          filterLog.push(logEntry);
-          console.log(`  ${logEntry}`);
-
-          // Create sheet
-          const sheetData = createSheetData(currentCompanies, sheetHeaders,
-            `Step ${stepIdx + 1}: ${step.criteria} - ${currentCompanies.length} remaining`);
-
-          sheetData.push([], [], [`REMOVED - Did not meet: "${step.criteria}"`], ['Company', 'Business', 'Reason', 'Confidence']);
-          removedCompanies.forEach(c => sheetData.push([c.name, '', c.filterReason, `${c.confidence}%`]));
-
-          const sheet = XLSX.utils.aoa_to_sheet(sheetData);
-          const sheetName = `${sheetNumber}. Step ${stepIdx + 1}`;
-          XLSX.utils.book_append_sheet(outputWorkbook, sheet, sheetName.substring(0, 31));
-          sheetNumber++;
-        } else {
-          console.log(`  Skipping - would remove too many (${removedCompanies.length}) or keep too few (${keptCompanies.length})`);
         }
+        keptCompanies.push(c);
       }
-    } catch (error) {
-      console.error('Failed to parse evaluation:', error.message);
+    });
+
+    // Log disagreements
+    if (disagreementCompanies.length > 0) {
+      console.log(`  Models disagreed on ${disagreementCompanies.length} companies (kept for review)`);
+    }
+
+    // Only apply if we keep enough companies
+    if (keptCompanies.length >= 5 && removedCompanies.length > 0) {
+      currentCompanies = keptCompanies;
+      const logEntry = `Step ${stepIdx + 1} (${step.criteria}): Removed ${removedCompanies.length} companies [Dual-model consensus]`;
+      filterLog.push(logEntry);
+      console.log(`  ${logEntry}`);
+
+      // Create sheet
+      const sheetData = createSheetData(currentCompanies, sheetHeaders,
+        `Step ${stepIdx + 1}: ${step.criteria} - ${currentCompanies.length} remaining`);
+
+      sheetData.push([], [], [`REMOVED - Did not meet: "${step.criteria}" [Dual-Model Consensus]`], ['Company', 'Business', 'Reason', 'Confidence', 'Consensus']);
+      removedCompanies.forEach(c => sheetData.push([c.name, '', c.filterReason, `${c.confidence}%`, c.consensusType || '']));
+
+      // Add section for disagreements (companies kept due to model disagreement)
+      if (disagreementCompanies.length > 0) {
+        sheetData.push([], [], ['KEPT - Models Disagreed (Needs Manual Review)'], ['Company', 'Note']);
+        disagreementCompanies.forEach(c => sheetData.push([c.name, c.disagreementNote || '']));
+      }
+
+      const sheet = XLSX.utils.aoa_to_sheet(sheetData);
+      const sheetName = `${sheetNumber}. Step ${stepIdx + 1}`;
+      XLSX.utils.book_append_sheet(outputWorkbook, sheet, sheetName.substring(0, 31));
+      sheetNumber++;
+    } else {
+      console.log(`  Skipping - would remove too many (${removedCompanies.length}) or keep too few (${keptCompanies.length})`);
     }
   }
 
