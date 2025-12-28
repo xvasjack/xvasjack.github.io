@@ -45,9 +45,17 @@
       Find Target
     </a>
     <nav>
-      <a href="find-target.html">v3</a>
-      <a href="find-target-v5.html">v5 Search</a>
-      <a href="find-target-v6.html">v6 Search</a>
+      <div class="nav-dropdown">
+        <button class="nav-dropdown-toggle">
+          Search
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+        </button>
+        <div class="nav-dropdown-menu">
+          <a href="find-target.html">v3 Search</a>
+          <a href="find-target-v5.html">v5 Search</a>
+          <a href="find-target-v6.html">v6 Search</a>
+        </div>
+      </div>
       <a href="validation.html" class="active">Validation</a>
       <a href="trading-comparable.html">Trading Comp</a>
       <a href="profile-slides.html">Slides</a>
@@ -78,7 +86,7 @@
         <form id="validationForm">
           <!-- Inline tabs -->
           <div style="display: flex; gap: 4px; margin-bottom: 10px;">
-            <button type="button" class="tab-btn active" data-tab="file" style="flex:1; padding: 8px; font-size: 13px;">Upload Excel</button>
+            <button type="button" class="tab-btn active" data-tab="file" style="flex:1; padding: 8px; font-size: 13px;">Upload Speeda List</button>
             <button type="button" class="tab-btn" data-tab="manual" style="flex:1; padding: 8px; font-size: 13px;">Manual Entry</button>
           </div>
 
@@ -86,7 +94,7 @@
           <div class="tab-content active" id="fileTab">
             <div class="compact-upload" id="uploadZone">
               <input type="file" id="excelFile" accept=".xlsx,.xls">
-              <p><span class="highlight">Click to upload</span> or drag Excel file</p>
+              <p><span class="highlight">Upload</span></p>
             </div>
             <div class="file-status" id="fileStatus">
               <div class="file-status-header">
@@ -120,7 +128,7 @@
           <!-- Common fields -->
           <div class="form-grid" style="margin-top: 10px;">
             <div class="form-group full-width">
-              <label for="targetBusiness">Target Business</label>
+              <label for="targetBusiness">Target Should Be</label>
               <input type="text" id="targetBusiness" name="TargetBusiness" required placeholder="e.g. Semiconductor distributor">
             </div>
             <div class="form-group full-width">
