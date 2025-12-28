@@ -4316,6 +4316,172 @@ app.post('/api/profile-slides', async (req, res) => {
 });
 
 
+// ============ GENERATE PPT ENDPOINT (returns content, no email) ============
+// Used by v6 search to generate PPT and attach to its own email
+app.post('/api/generate-ppt', async (req, res) => {
+  const { websites, targetDescription } = req.body;
+
+  if (!websites || !Array.isArray(websites) || websites.length === 0) {
+    return res.status(400).json({ error: 'Please provide an array of website URLs' });
+  }
+
+  if (!targetDescription) {
+    return res.status(400).json({ error: 'Please provide a target description' });
+  }
+
+  console.log(`\n${'='.repeat(50)}`);
+  console.log(`GENERATE PPT REQUEST: ${new Date().toISOString()}`);
+  console.log(`Target: ${targetDescription}`);
+  console.log(`Processing ${websites.length} website(s)`);
+  console.log('='.repeat(50));
+
+  try {
+    const results = [];
+
+    for (let i = 0; i < websites.length; i++) {
+      const website = websites[i].trim();
+      if (!website) continue;
+
+      console.log(`\n[${i + 1}/${websites.length}] Processing: ${website}`);
+      logMemoryUsage(`start company ${i + 1}`);
+
+      try {
+        // Step 1: Scrape website
+        console.log('  Step 1: Scraping website...');
+        const scraped = await scrapeWebsite(website);
+
+        if (!scraped.success) {
+          console.log(`  Failed to scrape: ${scraped.error}`);
+          results.push({
+            website,
+            error: `Failed to scrape: ${scraped.error}`,
+            step: 1
+          });
+          continue;
+        }
+        console.log(`  Scraped ${scraped.content.length} characters`);
+
+        // Step 2: Extract basic info
+        console.log('  Step 2: Extracting company name, year, location...');
+        const basicInfo = await extractBasicInfo(scraped.content, website);
+        console.log(`  Company: ${basicInfo.company_name || 'Not found'}`);
+
+        // Step 3: Extract business details
+        console.log('  Step 3: Extracting business, message, footnote, title...');
+        const businessInfo = await extractBusinessInfo(scraped.content, basicInfo);
+
+        // Step 4: Extract key metrics
+        console.log('  Step 4: Extracting key metrics...');
+        const metricsInfo = await extractKeyMetrics(scraped.content, {
+          company_name: basicInfo.company_name,
+          business: businessInfo.business
+        });
+
+        // Step 4b: Extract products/applications breakdown
+        console.log('  Step 4b: Extracting products/applications breakdown...');
+        const productsBreakdown = await extractProductsBreakdown(scraped.content, {
+          company_name: basicInfo.company_name,
+          business: businessInfo.business
+        });
+
+        // Step 5: Search online for missing mandatory info
+        const missingFields = [];
+        if (!basicInfo.established_year) missingFields.push('established_year');
+        if (!basicInfo.location) missingFields.push('location');
+
+        let searchedInfo = {};
+        if (missingFields.length > 0 && basicInfo.company_name) {
+          console.log(`  Step 5: Searching online for missing info: ${missingFields.join(', ')}...`);
+          searchedInfo = await searchMissingInfo(basicInfo.company_name, website, missingFields);
+        }
+
+        const allKeyMetrics = metricsInfo.key_metrics || [];
+
+        let companyData = {
+          website: scraped.url,
+          company_name: ensureString(basicInfo.company_name),
+          established_year: ensureString(basicInfo.established_year || searchedInfo.established_year),
+          location: ensureString(basicInfo.location || searchedInfo.location),
+          business: ensureString(businessInfo.business),
+          message: ensureString(businessInfo.message),
+          footnote: ensureString(businessInfo.footnote),
+          title: ensureString(businessInfo.title),
+          key_metrics: allKeyMetrics,
+          breakdown_title: ensureString(productsBreakdown.breakdown_title) || 'Products and Applications',
+          breakdown_items: productsBreakdown.breakdown_items || [],
+          metrics: ensureString(metricsInfo.metrics)
+        };
+
+        // Step 6: Review and clean data
+        companyData = await reviewAndCleanData(companyData);
+
+        // Step 7: Filter empty metrics
+        const metricsBefore = companyData.key_metrics?.length || 0;
+        companyData.key_metrics = filterEmptyMetrics(companyData.key_metrics);
+        const metricsAfter = companyData.key_metrics?.length || 0;
+        if (metricsBefore !== metricsAfter) {
+          console.log(`  Step 7: Filtered ${metricsBefore - metricsAfter} empty metrics`);
+        }
+
+        console.log(`  ✓ Completed: ${companyData.title || companyData.company_name}`);
+        results.push(companyData);
+
+        if (scraped) scraped.content = null;
+
+      } catch (error) {
+        console.error(`  Error processing ${website}:`, error.message);
+        results.push({
+          website,
+          error: error.message,
+          step: 0
+        });
+      }
+
+      if (global.gc) global.gc();
+    }
+
+    const companies = results.filter(r => !r.error);
+    const errors = results.filter(r => r.error);
+
+    console.log(`\n${'='.repeat(50)}`);
+    console.log(`EXTRACTION COMPLETE: ${companies.length}/${websites.length} successful`);
+    console.log('='.repeat(50));
+
+    results.length = 0;
+    if (global.gc) global.gc();
+
+    // Generate PPTX
+    let pptxResult = null;
+    if (companies.length > 0) {
+      pptxResult = await generatePPTX(companies, targetDescription);
+    }
+
+    if (pptxResult?.success) {
+      console.log('PPT generated successfully');
+      return res.json({
+        success: true,
+        content: pptxResult.content,
+        filename: `Profile_Slides_${new Date().toISOString().split('T')[0]}.pptx`,
+        companiesProcessed: companies.length,
+        errors: errors.length
+      });
+    } else {
+      return res.json({
+        success: false,
+        error: 'Failed to generate PPT',
+        companiesProcessed: companies.length,
+        errors: errors.length
+      });
+    }
+
+  } catch (error) {
+    console.error('Generate PPT error:', error);
+    return res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
 
 // ============ HEALTHCHECK ============
 app.get('/', (req, res) => {

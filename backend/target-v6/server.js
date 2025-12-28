@@ -3763,50 +3763,65 @@ app.post('/api/find-target-v6', async (req, res) => {
     console.log(`  ChatGPT: ${chatgptCount} searches`);
     console.log(`  Total: ${perplexityCount + geminiCount + chatgptCount} searches`);
 
-    // Send email with results
-    const finalResults = { validated, flagged, rejected };
-    const htmlContent = buildV6EmailHTML(finalResults, Business, expandedCountry, Exclusion);
-
-    sendEmail(
-      Email,
-      `[V6] ${Business} in ${Country} (${validated.length} validated + ${flagged.length} flagged)`,
-      htmlContent
-    ).catch(e => console.error('Failed to send email:', e));
-
-    const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
-    console.log('\n' + '='.repeat(70));
-    console.log(`V6 ITERATIVE SEARCH COMPLETE!`);
-    console.log(`Email sent to: ${Email}`);
-    console.log(`Validated: ${validated.length} | Flagged: ${flagged.length} | Rejected: ${rejected.length}`);
-    console.log(`Total time: ${totalTime} minutes`);
-    console.log('='.repeat(70));
-
-    // ========== STEP 5: Auto-generate PPT for all companies ==========
+    // ========== STEP 5: Generate PPT for all companies ==========
     const allWebsites = [
       ...validated.map(c => c.website),
       ...flagged.map(c => c.website)
     ].filter(w => w);
 
+    let pptAttachment = null;
+
     if (allWebsites.length > 0) {
       console.log('\n' + '='.repeat(50));
       console.log('STEP 5: GENERATING PPT');
-      console.log(`Sending ${allWebsites.length} websites to profile-slides...`);
+      console.log(`Processing ${allWebsites.length} websites...`);
       console.log('='.repeat(50));
 
-      // Call profile-slides API to generate PPT
-      fetch('https://xvasjackgithubio-production-fb38.up.railway.app/api/profile-slides', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          websites: allWebsites,
-          email: Email,
-          targetDescription: `${Business} in ${expandedCountry}`
-        })
-      })
-        .then(r => r.json())
-        .then(r => console.log(`PPT request submitted: ${r.message || 'success'}`))
-        .catch(e => console.error('Failed to submit PPT request:', e.message));
+      try {
+        // Call profile-slides API to generate PPT content
+        const pptResponse = await fetch('https://xvasjackgithubio-production-fb38.up.railway.app/api/generate-ppt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            websites: allWebsites,
+            targetDescription: `${Business} in ${expandedCountry}`
+          })
+        });
+
+        const pptResult = await pptResponse.json();
+
+        if (pptResult.success && pptResult.content) {
+          console.log(`PPT generated: ${pptResult.companiesProcessed} companies processed`);
+          pptAttachment = {
+            content: pptResult.content,
+            name: pptResult.filename || `Profile_Slides_${new Date().toISOString().split('T')[0]}.pptx`
+          };
+        } else {
+          console.log(`PPT generation failed: ${pptResult.error || 'Unknown error'}`);
+        }
+      } catch (pptError) {
+        console.error('Failed to generate PPT:', pptError.message);
+      }
     }
+
+    // ========== STEP 6: Send email with results and PPT ==========
+    const finalResults = { validated, flagged, rejected };
+    const htmlContent = buildV6EmailHTML(finalResults, Business, expandedCountry, Exclusion);
+
+    await sendEmail(
+      Email,
+      `[V6] ${Business} in ${Country} (${validated.length} validated + ${flagged.length} flagged)`,
+      htmlContent,
+      pptAttachment
+    );
+
+    const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
+    console.log('\n' + '='.repeat(70));
+    console.log(`V6 ITERATIVE SEARCH COMPLETE!`);
+    console.log(`Email sent to: ${Email}${pptAttachment ? ' with PPT attachment' : ''}`);
+    console.log(`Validated: ${validated.length} | Flagged: ${flagged.length} | Rejected: ${rejected.length}`);
+    console.log(`Total time: ${totalTime} minutes`);
+    console.log('='.repeat(70));
 
   } catch (error) {
     console.error('V6 Processing error:', error);
