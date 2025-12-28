@@ -63,6 +63,23 @@ function ensureString(value, defaultValue = '') {
   return String(value);
 }
 
+// Extract a company name from URL for inaccessible websites
+function extractCompanyNameFromUrl(url) {
+  try {
+    const urlObj = new URL(url);
+    let domain = urlObj.hostname.replace(/^www\./, '');
+    // Remove common TLDs and country codes
+    domain = domain.replace(/\.(com|co|org|net|io|ai|jp|cn|kr|sg|my|th|vn|id|ph|tw|hk|in|de|uk|fr|it|es|au|nz|ca|us|br|mx|ru|nl|be|ch|at|se|no|dk|fi|pl|cz|hu|ro|bg|gr|tr|ae|sa|il|za|ng|eg|ke)(\.[a-z]{2,3})?$/i, '');
+    // Convert to title case
+    const name = domain.split(/[-_.]/)
+      .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+      .join(' ');
+    return name || domain;
+  } catch (e) {
+    return url;
+  }
+}
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
@@ -2466,9 +2483,13 @@ async function fetchImageAsBase64(url) {
 }
 
 // Generate PPTX using PptxGenJS - matching YCP template
-async function generatePPTX(companies, targetDescription = '') {
+// inaccessibleWebsites: websites that couldn't be scraped (appear on summary slide only, no individual profiles)
+async function generatePPTX(companies, targetDescription = '', inaccessibleWebsites = []) {
   try {
     console.log('Generating PPTX with PptxGenJS...');
+    if (inaccessibleWebsites.length > 0) {
+      console.log(`  Including ${inaccessibleWebsites.length} inaccessible website(s) on summary slide only`);
+    }
 
     const pptx = new pptxgen();
     pptx.author = 'YCP';
@@ -2506,9 +2527,11 @@ async function generatePPTX(companies, targetDescription = '') {
     });
 
     // ===== TARGET LIST SLIDE (FIRST SLIDE) =====
-    if (targetDescription && companies.length > 0) {
+    // Include both accessible companies and inaccessible websites on the summary slide
+    const allCompaniesForSummary = [...companies, ...inaccessibleWebsites];
+    if (targetDescription && allCompaniesForSummary.length > 0) {
       console.log('Generating Target List slide...');
-      const meceData = await generateMECESegments(targetDescription, companies);
+      const meceData = await generateMECESegments(targetDescription, allCompaniesForSummary);
 
       // Use master slide - lines are fixed in background
       const targetSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
@@ -4165,11 +4188,17 @@ app.post('/api/profile-slides', async (req, res) => {
 
         if (!scraped.success) {
           console.log(`  Failed to scrape: ${scraped.error}`);
+          // Mark as inaccessible - will appear on summary slide but not individual profile
+          const companyName = extractCompanyNameFromUrl(website);
           results.push({
             website,
-            error: `Failed to scrape: ${scraped.error}`,
-            step: 1
+            company_name: companyName,
+            title: companyName,
+            location: '',
+            _inaccessible: true,
+            _error: `Failed to scrape: ${scraped.error}`
           });
+          console.log(`  Marked as inaccessible: ${companyName}`);
           continue;
         }
         console.log(`  Scraped ${scraped.content.length} characters`);
@@ -4264,12 +4293,17 @@ app.post('/api/profile-slides', async (req, res) => {
       }
     }
 
-    const companies = results.filter(r => !r.error);
-    const errors = results.filter(r => r.error);
+    // Separate successful companies, inaccessible websites, and errors
+    const companies = results.filter(r => !r.error && !r._inaccessible);
+    const inaccessibleWebsites = results.filter(r => r._inaccessible);
+    const errors = results.filter(r => r.error && !r._inaccessible);
 
     console.log(`\n${'='.repeat(50)}`);
     console.log(`PROFILE SLIDES EXTRACTION COMPLETE`);
     console.log(`Extracted: ${companies.length}/${websites.length} successful`);
+    if (inaccessibleWebsites.length > 0) {
+      console.log(`Inaccessible (will appear on summary only): ${inaccessibleWebsites.length}`);
+    }
     console.log('='.repeat(50));
 
     // Memory cleanup before PPTX generation (which is memory-intensive)
@@ -4279,9 +4313,10 @@ app.post('/api/profile-slides', async (req, res) => {
     logMemoryUsage('before PPTX generation');
 
     // Generate PPTX using PptxGenJS (with target list slide)
+    // Pass inaccessible websites to include on summary slide
     let pptxResult = null;
-    if (companies.length > 0) {
-      pptxResult = await generatePPTX(companies, targetDescription);
+    if (companies.length > 0 || inaccessibleWebsites.length > 0) {
+      pptxResult = await generatePPTX(companies, targetDescription, inaccessibleWebsites);
       logMemoryUsage('after PPTX generation');
     }
 
@@ -4352,11 +4387,17 @@ app.post('/api/generate-ppt', async (req, res) => {
 
         if (!scraped.success) {
           console.log(`  Failed to scrape: ${scraped.error}`);
+          // Mark as inaccessible - will appear on summary slide but not individual profile
+          const companyName = extractCompanyNameFromUrl(website);
           results.push({
             website,
-            error: `Failed to scrape: ${scraped.error}`,
-            step: 1
+            company_name: companyName,
+            title: companyName,
+            location: '',
+            _inaccessible: true,
+            _error: `Failed to scrape: ${scraped.error}`
           });
+          console.log(`  Marked as inaccessible: ${companyName}`);
           continue;
         }
         console.log(`  Scraped ${scraped.content.length} characters`);
@@ -4440,20 +4481,25 @@ app.post('/api/generate-ppt', async (req, res) => {
       if (global.gc) global.gc();
     }
 
-    const companies = results.filter(r => !r.error);
-    const errors = results.filter(r => r.error);
+    // Separate successful companies, inaccessible websites, and errors
+    const companies = results.filter(r => !r.error && !r._inaccessible);
+    const inaccessibleWebsites = results.filter(r => r._inaccessible);
+    const errors = results.filter(r => r.error && !r._inaccessible);
 
     console.log(`\n${'='.repeat(50)}`);
     console.log(`EXTRACTION COMPLETE: ${companies.length}/${websites.length} successful`);
+    if (inaccessibleWebsites.length > 0) {
+      console.log(`Inaccessible (will appear on summary only): ${inaccessibleWebsites.length}`);
+    }
     console.log('='.repeat(50));
 
     results.length = 0;
     if (global.gc) global.gc();
 
-    // Generate PPTX
+    // Generate PPTX - pass inaccessible websites to include on summary slide
     let pptxResult = null;
-    if (companies.length > 0) {
-      pptxResult = await generatePPTX(companies, targetDescription);
+    if (companies.length > 0 || inaccessibleWebsites.length > 0) {
+      pptxResult = await generatePPTX(companies, targetDescription, inaccessibleWebsites);
     }
 
     if (pptxResult?.success) {

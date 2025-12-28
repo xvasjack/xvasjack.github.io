@@ -50,7 +50,7 @@
             <div class="form-group">
               <label for="websites">Company Websites</label>
               <textarea id="websites" name="websites" rows="6" placeholder="https://www.company1.com&#10;https://www.company2.com&#10;https://www.company3.com" required></textarea>
-              <p class="hint-text">Enter one website URL per line. Up to 10 websites per request.</p>
+              <p class="hint-text">Enter one website URL per line. Up to 50 websites per request.</p>
             </div>
 
             <div class="form-group">
@@ -105,8 +105,8 @@
         return;
       }
 
-      if (websites.length > 10) {
-        alert('Maximum 10 websites per request. Please reduce the number of URLs.');
+      if (websites.length > 50) {
+        alert('Maximum 50 websites per request. Please reduce the number of URLs.');
         return;
       }
 
