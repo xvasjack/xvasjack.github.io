@@ -58,15 +58,14 @@
         <form id="slidesForm">
           <div class="form-body">
             <div class="form-group">
-              <label for="targetDescription">Target Description</label>
+              <label for="targetDescription">Title</label>
               <input type="text" id="targetDescription" name="targetDescription" placeholder="e.g., Semiconductor manufacturers in Southeast Asia" required>
-              <p class="hint-text">Describe what these companies are (industry + region). Used for target list slide segmentation.</p>
             </div>
 
             <div class="form-group">
               <label for="websites">Company Websites</label>
               <textarea id="websites" name="websites" rows="6" placeholder="https://www.company1.com&#10;https://www.company2.com&#10;https://www.company3.com" required></textarea>
-              <p class="hint-text">Enter one website URL per line. Up to 10 websites per request.</p>
+              <p class="hint-text">One URL per line. Up to 50 websites.</p>
             </div>
 
             <div class="form-group">
@@ -121,8 +120,8 @@
         return;
       }
 
-      if (websites.length > 10) {
-        alert('Maximum 10 websites per request. Please reduce the number of URLs.');
+      if (websites.length > 50) {
+        alert('Maximum 50 websites per request. Please reduce the number of URLs.');
         return;
       }
 
