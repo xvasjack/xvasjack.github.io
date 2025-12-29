@@ -2390,10 +2390,16 @@ function filterEmptyMetrics(keyMetrics) {
     /^\s*-?\s*$/,  // Empty or just dashes
     // Placeholder text patterns
     /client\s*\d+/i,          // "Client 1", "Client 2", etc.
+    /client\s*[a-e]/i,        // "Client A", "Client B", etc.
     /customer\s*\d+/i,        // "Customer 1", "Customer 2", etc.
+    /customer\s*[a-e]/i,      // "Customer A", "Customer B", etc.
     /supplier\s*\d+/i,        // "Supplier 1", "Supplier 2", etc.
     /partner\s*\d+/i,         // "Partner 1", "Partner 2", etc.
     /company\s*\d+/i,         // "Company 1", "Company 2", etc.
+    // Generic industry descriptions without specifics
+    /various\s+(printers|companies|manufacturers|customers|suppliers|partners)/i,
+    /multiple\s+(printers|companies|manufacturers|customers|suppliers|partners)/i,
+    /local\s+printers\s+and\s+multinational/i,  // Too vague
     // Values without actual data (just descriptions)
     /^-?\s*production capacity of(?!\s*\d)/i,  // "Production capacity of" without numbers
     /^-?\s*factory area of(?!\s*\d)/i,         // "Factory area of" without numbers
@@ -2405,6 +2411,9 @@ function filterEmptyMetrics(keyMetrics) {
     /world of color/i,        // Corporate slogans
     /value creation/i,        // Generic value statements
     /environmental impact/i,  // Generic sustainability
+    // Factory locations masquerading as factory size
+    /facilities?\s+located\s+in/i,
+    /located\s+in\s+.*city/i,
   ];
 
   // Labels that should be filtered out entirely (inappropriate for M&A slides)
@@ -2445,6 +2454,19 @@ function filterEmptyMetrics(keyMetrics) {
         return false;
       }
     }
+
+    // Clean up the value for certain labels
+    const lowerLabel = label.toLowerCase();
+    if (lowerLabel.includes('factory size') || lowerLabel.includes('factory area')) {
+      // Remove "Factory occupies", "+/-", "approximately" etc.
+      metric.value = value
+        .replace(/factory\s+occupies\s*/i, '')
+        .replace(/approximately\s*/i, '')
+        .replace(/\+\/-\s*/g, '')
+        .replace(/~\s*/g, '')
+        .trim();
+    }
+
     return true;
   });
 }
@@ -3081,10 +3103,13 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         return false;
       };
 
-      // Helper function to remove company suffixes
+      // Helper function to remove company suffixes and prefixes
       const removeCompanySuffix = (name) => {
         if (!name) return name;
         return name
+          // Remove PT., CV. prefix from Indonesian companies
+          .replace(/^(PT\.?|CV\.?)\s+/gi, '')
+          // Remove suffixes
           .replace(/\s*(Company\s+Limited|Co\.,?\s*Ltd\.?|Ltd\.?|Limited|Sdn\.?\s*Bhd\.?|Pte\.?\s*Ltd\.?|Inc\.?|Corp\.?|Corporation|LLC|GmbH|JSC|PT\.?|Tbk\.?|S\.?A\.?|PLC|Company)\s*$/gi, '')
           .trim();
       };
@@ -3724,8 +3749,10 @@ RULES:
 - DO NOT include: corporate vision, mission statement, company values, slogans, taglines
 - DO NOT include metrics with NO MEANINGFUL VALUES - if you don't have specific data, don't include the metric at all
 - NEVER write placeholder values like "Client 1, Client 2", "Customer A, Customer B", "Not specified", "Various"
+- NEVER use generic industry descriptions like "Printing Industry: Various Printers" or "Packaging Industry: Various Companies" - either provide ACTUAL company names or don't include the metric
 - NEVER include metrics without actual numbers. BAD: "Production capacity of solvent-based inks". GOOD: "Production capacity: 500 tons/month"
 - NEVER include generic R&D statements like "Intensive R&D for product improvement"
+- For Factory Size: ONLY include actual measurements (e.g., "7,500 m²"). Do NOT include factory locations - those go in the HQ/Location field.
 - If you cannot find actual customer/supplier names, DO NOT include those metrics at all
 - NEVER make up data - only include what's explicitly stated
 - Return ONLY valid JSON`
