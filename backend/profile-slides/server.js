@@ -2390,10 +2390,16 @@ function filterEmptyMetrics(keyMetrics) {
     /^\s*-?\s*$/,  // Empty or just dashes
     // Placeholder text patterns
     /client\s*\d+/i,          // "Client 1", "Client 2", etc.
+    /client\s*[a-e]/i,        // "Client A", "Client B", etc.
     /customer\s*\d+/i,        // "Customer 1", "Customer 2", etc.
+    /customer\s*[a-e]/i,      // "Customer A", "Customer B", etc.
     /supplier\s*\d+/i,        // "Supplier 1", "Supplier 2", etc.
     /partner\s*\d+/i,         // "Partner 1", "Partner 2", etc.
     /company\s*\d+/i,         // "Company 1", "Company 2", etc.
+    // Generic industry descriptions without specifics
+    /various\s+(printers|companies|manufacturers|customers|suppliers|partners)/i,
+    /multiple\s+(printers|companies|manufacturers|customers|suppliers|partners)/i,
+    /local\s+printers\s+and\s+multinational/i,  // Too vague
     // Values without actual data (just descriptions)
     /^-?\s*production capacity of(?!\s*\d)/i,  // "Production capacity of" without numbers
     /^-?\s*factory area of(?!\s*\d)/i,         // "Factory area of" without numbers
@@ -2405,6 +2411,9 @@ function filterEmptyMetrics(keyMetrics) {
     /world of color/i,        // Corporate slogans
     /value creation/i,        // Generic value statements
     /environmental impact/i,  // Generic sustainability
+    // Factory locations masquerading as factory size
+    /facilities?\s+located\s+in/i,
+    /located\s+in\s+.*city/i,
   ];
 
   // Labels that should be filtered out entirely (inappropriate for M&A slides)
@@ -2445,6 +2454,19 @@ function filterEmptyMetrics(keyMetrics) {
         return false;
       }
     }
+
+    // Clean up the value for certain labels
+    const lowerLabel = label.toLowerCase();
+    if (lowerLabel.includes('factory size') || lowerLabel.includes('factory area')) {
+      // Remove "Factory occupies", "+/-", "approximately" etc.
+      metric.value = value
+        .replace(/factory\s+occupies\s*/i, '')
+        .replace(/approximately\s*/i, '')
+        .replace(/\+\/-\s*/g, '')
+        .replace(/~\s*/g, '')
+        .trim();
+    }
+
     return true;
   });
 }
@@ -3081,11 +3103,14 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         return false;
       };
 
-      // Helper function to remove company suffixes
+      // Helper function to remove company suffixes and prefixes
       const removeCompanySuffix = (name) => {
         if (!name) return name;
         return name
-          .replace(/\s*(Co\.,?\s*Ltd\.?|Ltd\.?|Sdn\.?\s*Bhd\.?|Pte\.?\s*Ltd\.?|Inc\.?|Corp\.?|LLC|GmbH|JSC|PT\.?|Tbk\.?|S\.?A\.?|PLC)\s*$/gi, '')
+          // Remove PT., CV. prefix from Indonesian companies
+          .replace(/^(PT\.?|CV\.?)\s+/gi, '')
+          // Remove suffixes
+          .replace(/\s*(Company\s+Limited|Co\.,?\s*Ltd\.?|Ltd\.?|Limited|Sdn\.?\s*Bhd\.?|Pte\.?\s*Ltd\.?|Inc\.?|Corp\.?|Corporation|LLC|GmbH|JSC|PT\.?|Tbk\.?|S\.?A\.?|PLC|Company)\s*$/gi, '')
           .trim();
       };
 
@@ -3468,36 +3493,51 @@ async function extractBasicInfo(scrapedContent, websiteUrl) {
           content: `You extract company information from website content.
 
 OUTPUT JSON with these fields:
-- company_name: Company name with first letter of each word capitalized
+- company_name: Company name with first letter of each word capitalized. Remove suffixes like Limited, Ltd, Sdn Bhd, Pte Ltd, PT, Inc, Corp, Company.
 - established_year: Clean numbers only (e.g., "1995"), leave empty if not found
 - location: MANDATORY 3 LEVELS for all countries except Singapore:
 
-  NON-SINGAPORE RULE: ALWAYS provide 3 levels: "District/Area, City/Province, Country"
-  - WRONG: "Jakarta, Indonesia" (only 2 levels!)
+  CRITICAL RULE: Each level MUST be DIFFERENT. NEVER repeat the same name!
+  - WRONG: "Bangkok, Bangkok, Thailand" (Bangkok repeated!)
+  - WRONG: "Jakarta, Jakarta, Indonesia" (Jakarta repeated!)
+  - CORRECT: "Sukhumvit, Bangkok, Thailand"
+  - CORRECT: "Chatuchak, Bangkok, Thailand"
   - CORRECT: "Tangerang, Banten, Indonesia"
-  - CORRECT: "Bojongkamal, Tangerang, Indonesia"
-  - WRONG: "Shah Alam, Malaysia" (only 2 levels!)
-  - CORRECT: "Shah Alam, Selangor, Malaysia"
-  - CORRECT: "Section 15, Shah Alam, Malaysia"
 
-  More examples:
-  - "Puchong, Selangor, Malaysia"
-  - "Bangna, Bangkok, Thailand"
-  - "Batam, Riau Islands, Indonesia"
+  NON-SINGAPORE RULE: ALWAYS provide 3 DIFFERENT levels: "District/Area, City/Province, Country"
+  - WRONG: "Jakarta, Indonesia" (only 2 levels!)
+  - WRONG: "Bangkok, Thailand" (only 2 levels!)
+  - CORRECT: "Kebayoran, Jakarta, Indonesia"
+  - CORRECT: "Bang Phli, Samut Prakan, Thailand"
+  - CORRECT: "Sukhumvit, Bangkok, Thailand"
+
+  Thailand examples (find district from address):
+  - "Bangna, Samut Prakan, Thailand"
+  - "Bang Phli, Samut Prakan, Thailand"
+  - "Sukhumvit, Bangkok, Thailand"
+  - "Chatuchak, Bangkok, Thailand"
+  - "Rangsit, Pathum Thani, Thailand"
+  - "Nakhon Pathom, Nakhon Pathom Province, Thailand"
+
+  Indonesia examples:
   - "Tangerang, Banten, Indonesia"
   - "Bekasi, West Java, Indonesia"
+  - "Cikarang, West Java, Indonesia"
 
-  SINGAPORE RULE: Always use 2 levels: "District/Area, Singapore". Extract the specific neighborhood/district/area from the street address. NEVER use just "Singapore" - find the area name.
-  Singapore district examples:
-  - "Jurong West, Singapore" (Jurong area roads)
-  - "Woodlands, Singapore" (Woodlands area)
-  - "Ubi, Singapore" (Ubi industrial area)
-  - "Tuas, Singapore" (Tuas industrial area)
-  - "Kaki Bukit, Singapore" (Kaki Bukit area)
-  - "Paya Lebar, Singapore" (Paya Lebar area)
-  - "Raffles Place, Singapore" (Financial district)
-  - "Tampines, Singapore" (Tampines area)
-  If address has a specific road name like "Ubi Road", "Kaki Bukit Ave", "Paya Lebar Road", etc., use that area name.
+  Malaysia examples:
+  - "Puchong, Selangor, Malaysia"
+  - "Shah Alam, Selangor, Malaysia"
+  - "Penang, Penang State, Malaysia"
+
+  Philippines examples:
+  - "Caloocan City, Metro Manila, Philippines"
+  - "Makati, Metro Manila, Philippines"
+
+  SINGAPORE RULE: Always use 2 levels: "District/Area, Singapore". Extract the specific neighborhood/district/area from the street address.
+  - "Jurong West, Singapore"
+  - "Ubi, Singapore"
+  - "Tuas, Singapore"
+  - "Kaki Bukit, Singapore"
   NEVER use "Singapore, Singapore" - always find the specific area from the address.
 
   For multiple locations, group by type with sub-bullet points:
@@ -3562,13 +3602,15 @@ INPUT:
 OUTPUT JSON:
 1. business: Description of what company does. Use 1-3 bullet points - ONLY as many as needed, NOT always 3. Format each line starting with "- ".
 
-   FORMAT REQUIREMENT: Use this structure:
-   - "Manufacture [category] such as [top 3 products]"
-   - "Distribute [category] such as [top 3 products]"
-   - "Provide [service type] such as [top 3 services]"
+   FORMAT REQUIREMENT: Use this structure (vary the connector words naturally):
+   - "Manufacture [category] including [top 3 products]"
+   - "Distribute [category] for [applications]"
+   - "Provide [service type] for [use cases]"
+
+   Connector options: "such as", "including", "for", "like", "covering" - vary them naturally, don't always use "such as".
 
    Examples:
-   "- Manufacture industrial chemicals such as adhesives, solvents, coatings\\n- Distribute automotive products such as lubricants, filters, batteries"
+   "- Manufacture printing inks including gravure inks, flexographic inks, and UV inks\\n- Provide technical services for printing process optimization"
 
    RULES FOR BUSINESS POINTS:
    - Use ONLY 1-3 points depending on what the company actually does
@@ -3707,8 +3749,10 @@ RULES:
 - DO NOT include: corporate vision, mission statement, company values, slogans, taglines
 - DO NOT include metrics with NO MEANINGFUL VALUES - if you don't have specific data, don't include the metric at all
 - NEVER write placeholder values like "Client 1, Client 2", "Customer A, Customer B", "Not specified", "Various"
+- NEVER use generic industry descriptions like "Printing Industry: Various Printers" or "Packaging Industry: Various Companies" - either provide ACTUAL company names or don't include the metric
 - NEVER include metrics without actual numbers. BAD: "Production capacity of solvent-based inks". GOOD: "Production capacity: 500 tons/month"
 - NEVER include generic R&D statements like "Intensive R&D for product improvement"
+- For Factory Size: ONLY include actual measurements (e.g., "7,500 m²"). Do NOT include factory locations - those go in the HQ/Location field.
 - If you cannot find actual customer/supplier names, DO NOT include those metrics at all
 - NEVER make up data - only include what's explicitly stated
 - Return ONLY valid JSON`
