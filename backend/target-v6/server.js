@@ -3779,7 +3779,9 @@ app.post('/api/find-target-v6', async (req, res) => {
 
       try {
         // Call profile-slides API to generate PPT content
-        const pptResponse = await fetch('https://xvasjackgithubio-production-fb38.up.railway.app/api/generate-ppt', {
+        // Use environment variable for URL to avoid SSL issues with external HTTPS requests
+        const profileSlidesUrl = process.env.PROFILE_SLIDES_URL || 'http://localhost:3000';
+        const pptResponse = await fetch(`${profileSlidesUrl}/api/generate-ppt`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
