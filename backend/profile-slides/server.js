@@ -2724,11 +2724,14 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         }
       });
 
-      // Empty cell for HQ column header
+      // HQ column header with rowspan: 2 (spans both header rows)
       productHeaderRow.push({
-        text: '',
+        text: 'HQ',
         options: {
-          fill: TL_COLORS.white,
+          rowspan: 2,
+          fill: TL_COLORS.headerBg,
+          color: TL_COLORS.white,
+          bold: false,
           valign: 'middle',
           align: 'center',
           border: { pt: 3, color: TL_COLORS.white }
@@ -2780,18 +2783,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         }
       });
 
-      // HQ column header (dark blue background, white text)
-      headerRow.push({
-        text: 'HQ',
-        options: {
-          fill: TL_COLORS.headerBg,
-          color: TL_COLORS.white,
-          bold: false,
-          align: 'center',
-          valign: 'middle',
-          border: { pt: 3, color: TL_COLORS.white }
-        }
-      });
+      // HQ column is merged from row above (rowspan: 2), so no cell here
 
       // Segment headers (bright blue background like company names, white text)
       segments.forEach(seg => {
@@ -2930,13 +2922,14 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
       // Add target list table (position from template: x=0.3663", y=1.467")
       // Cell margins: 0.04 inch (0.1cm) left/right, 0 inch top/bottom
+      // Font size 12 to fit more items
       targetSlide.addTable(tableRows, {
         x: 0.37, y: 1.47, w: tableWidth,
         colW: colWidths,
         fontFace: 'Segoe UI',
-        fontSize: 14,
+        fontSize: 12,
         valign: 'middle',
-        rowH: 0.32,
+        rowH: 0.28,
         margin: [0, 0.04, 0, 0.04]  // [top, right, bottom, left] in inches
       });
 
