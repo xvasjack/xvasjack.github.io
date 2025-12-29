@@ -3777,32 +3777,44 @@ app.post('/api/find-target-v6', async (req, res) => {
       console.log(`Processing ${allWebsites.length} websites...`);
       console.log('='.repeat(50));
 
-      try {
-        // Call profile-slides API to generate PPT content
-        // Use environment variable for URL to avoid SSL issues with external HTTPS requests
-        const profileSlidesUrl = process.env.PROFILE_SLIDES_URL || 'http://localhost:3000';
-        const pptResponse = await fetch(`${profileSlidesUrl}/api/generate-ppt`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            websites: allWebsites,
-            targetDescription: `${Business} in ${expandedCountry}`
-          })
-        });
+      // Call profile-slides API with retry logic for intermittent SSL errors
+      const profileSlidesUrl = process.env.PROFILE_SLIDES_URL || 'https://xvasjackgithubio-production-fb38.up.railway.app';
+      const maxRetries = 3;
 
-        const pptResult = await pptResponse.json();
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        try {
+          console.log(`PPT generation attempt ${attempt}/${maxRetries}...`);
+          const pptResponse = await fetch(`${profileSlidesUrl}/api/generate-ppt`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              websites: allWebsites,
+              targetDescription: `${Business} in ${expandedCountry}`
+            })
+          });
 
-        if (pptResult.success && pptResult.content) {
-          console.log(`PPT generated: ${pptResult.companiesProcessed} companies processed`);
-          pptAttachment = {
-            content: pptResult.content,
-            name: pptResult.filename || `Profile_Slides_${new Date().toISOString().split('T')[0]}.pptx`
-          };
-        } else {
-          console.log(`PPT generation failed: ${pptResult.error || 'Unknown error'}`);
+          const pptResult = await pptResponse.json();
+
+          if (pptResult.success && pptResult.content) {
+            console.log(`PPT generated: ${pptResult.companiesProcessed} companies processed`);
+            pptAttachment = {
+              content: pptResult.content,
+              name: pptResult.filename || `Profile_Slides_${new Date().toISOString().split('T')[0]}.pptx`
+            };
+          } else {
+            console.log(`PPT generation failed: ${pptResult.error || 'Unknown error'}`);
+          }
+          break; // Success, exit retry loop
+        } catch (pptError) {
+          console.error(`PPT attempt ${attempt} failed:`, pptError.message);
+          if (attempt < maxRetries) {
+            const waitTime = attempt * 2000; // 2s, 4s
+            console.log(`Retrying in ${waitTime/1000}s...`);
+            await new Promise(resolve => setTimeout(resolve, waitTime));
+          } else {
+            console.error('Failed to generate PPT after all retries');
+          }
         }
-      } catch (pptError) {
-        console.error('Failed to generate PPT:', pptError.message);
       }
     }
 
