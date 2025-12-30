@@ -628,7 +628,20 @@ Return as JSON with these sections as keys. Each insight must follow the Data→
 
 // ============ PPT GENERATION ============
 
-// Single country deep-dive PPT
+// Helper: truncate text to fit slides
+function truncate(text, maxLen = 100) {
+  if (!text) return '';
+  const str = String(text);
+  return str.length > maxLen ? str.substring(0, maxLen - 3) + '...' : str;
+}
+
+// Helper: safely get array items
+function safeArray(arr, max = 5) {
+  if (!Array.isArray(arr)) return [];
+  return arr.slice(0, max);
+}
+
+// Single country deep-dive PPT - RESTRUCTURED for actual analysis
 async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   console.log(`Generating single-country PPT for ${synthesis.country}...`);
 
@@ -656,240 +669,359 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
     if (subtitle) {
       slide.addText(subtitle, {
-        x: 0.5, y: 0.8, w: 9, h: 0.3,
-        fontSize: 12, color: COLORS.secondary
+        x: 0.5, y: 0.75, w: 9, h: 0.25,
+        fontSize: 11, color: COLORS.secondary
       });
     }
-    slide.addShape(pptx.shapes.RECTANGLE, {
-      x: 0.5, y: 7.2, w: 9, h: 0.02,
-      fill: { color: COLORS.primary }
-    });
     return slide;
   }
 
   // SLIDE 1: Title
   const titleSlide = pptx.addSlide();
   titleSlide.addText(synthesis.country.toUpperCase(), {
-    x: 0.5, y: 1.8, w: 9, h: 0.8,
+    x: 0.5, y: 2.2, w: 9, h: 0.8,
     fontSize: 42, bold: true, color: COLORS.primary
   });
-  titleSlide.addText(`${scope.industry} Market Entry Analysis`, {
-    x: 0.5, y: 2.7, w: 9, h: 0.5,
+  titleSlide.addText(`${scope.industry} Market Analysis`, {
+    x: 0.5, y: 3.0, w: 9, h: 0.5,
     fontSize: 24, color: COLORS.secondary
-  });
-  titleSlide.addText('Deep Dive Assessment', {
-    x: 0.5, y: 3.3, w: 9, h: 0.4,
-    fontSize: 16, color: COLORS.text
   });
   titleSlide.addText(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' }), {
     x: 0.5, y: 6.5, w: 9, h: 0.3,
     fontSize: 12, color: COLORS.text
   });
 
-  // SLIDE 2: Executive Summary
-  const execSlide = addSlide('Executive Summary');
-  const execBullets = synthesis.executiveSummary || ['Analysis complete'];
-  execSlide.addText(execBullets.map(b => ({ text: b, options: { bullet: true } })), {
-    x: 0.5, y: 1.3, w: 9, h: 5.5,
-    fontSize: 14, color: COLORS.text, valign: 'top'
-  });
-
-  // SLIDE 3: Market Opportunity
-  const marketSlide = addSlide('Market Opportunity Assessment', synthesis.country);
-  const marketOpp = synthesis.marketOpportunityAssessment || synthesis.marketOpportunity || {};
-  const marketText = [
-    `Total Addressable Market: ${marketOpp.totalAddressableMarket || marketOpp.tam || 'See analysis'}`,
-    `Serviceable Market: ${marketOpp.serviceableMarket || marketOpp.sam || 'See analysis'}`,
-    `Growth: ${marketOpp.growthTrajectory || marketOpp.growth || 'See analysis'}`,
-    `Timing: ${marketOpp.timingConsiderations || marketOpp.timing || 'See analysis'}`
-  ];
-  marketSlide.addText(marketText.map(t => ({ text: t, options: { bullet: true } })), {
-    x: 0.5, y: 1.3, w: 9, h: 5.5,
-    fontSize: 13, color: COLORS.text, valign: 'top', lineSpacing: 24
-  });
-
-  // SLIDE 4: Competitive Landscape
-  const compSlide = addSlide('Competitive Positioning', synthesis.country);
-  const compPos = synthesis.competitivePositioning || synthesis.competitiveLandscape || {};
-
-  compSlide.addText('Key Players', {
-    x: 0.5, y: 1.3, w: 4, h: 0.3,
-    fontSize: 14, bold: true, color: COLORS.secondary
-  });
-  const players = compPos.keyPlayers || compPos.players || [];
-  compSlide.addText((Array.isArray(players) ? players.slice(0, 5) : []).map(p => ({
-    text: typeof p === 'string' ? p : `${p.name}: ${p.strengths || p.description || ''}`,
+  // SLIDE 2: Summary (1 slide, key points only)
+  const execSlide = addSlide('Summary');
+  const execBullets = safeArray(synthesis.executiveSummary, 5);
+  execSlide.addText(execBullets.map(b => ({
+    text: truncate(b, 150),
     options: { bullet: true }
   })), {
-    x: 0.5, y: 1.7, w: 4.2, h: 2.5,
+    x: 0.5, y: 1.1, w: 9, h: 5.5,
+    fontSize: 13, color: COLORS.text, valign: 'top', lineSpacing: 22
+  });
+
+  // SLIDE 3: Market Size Data (ACTUAL NUMBERS)
+  const marketSlide = addSlide('Market Data', 'What the numbers show');
+  const ca = countryAnalysis || {};
+  const macro = ca.macroContext || {};
+  const market = ca.marketDynamics || {};
+
+  // Create data table
+  const marketRows = [
+    [
+      { text: 'Metric', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Value', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+    ],
+    [{ text: 'GDP' }, { text: truncate(macro.gdp || 'N/A', 50) }],
+    [{ text: 'Population' }, { text: truncate(macro.population || 'N/A', 50) }],
+    [{ text: 'Industry Share of GDP' }, { text: truncate(macro.industrialGdpShare || 'N/A', 50) }],
+    [{ text: 'Market Size' }, { text: truncate(market.marketSize || 'N/A', 50) }],
+    [{ text: 'Energy Prices' }, { text: truncate(market.pricing || 'N/A', 50) }],
+    [{ text: 'Demand Drivers' }, { text: truncate(market.demand || 'N/A', 50) }]
+  ];
+
+  marketSlide.addTable(marketRows, {
+    x: 0.5, y: 1.1, w: 9, h: 4.5,
+    fontSize: 11,
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [3, 6]
+  });
+
+  // SLIDE 4: Competitor Data (TABLE FORMAT)
+  const compSlide = addSlide('Competitors', 'Who is already in this market');
+  const comp = ca.competitiveLandscape || {};
+
+  const compRows = [
+    [
+      { text: 'Company', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Type', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Notes', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+    ]
+  ];
+
+  // Add local players
+  safeArray(comp.localPlayers, 3).forEach(p => {
+    const name = typeof p === 'string' ? p : (p.name || 'Unknown');
+    const desc = typeof p === 'string' ? '' : (p.description || '');
+    compRows.push([
+      { text: truncate(name, 25) },
+      { text: 'Local' },
+      { text: truncate(desc, 40) }
+    ]);
+  });
+
+  // Add foreign players
+  safeArray(comp.foreignPlayers, 3).forEach(p => {
+    const name = typeof p === 'string' ? p : (p.name || 'Unknown');
+    const desc = typeof p === 'string' ? '' : (p.description || '');
+    compRows.push([
+      { text: truncate(name, 25) },
+      { text: 'Foreign' },
+      { text: truncate(desc, 40) }
+    ]);
+  });
+
+  compSlide.addTable(compRows, {
+    x: 0.5, y: 1.1, w: 9, h: 3.5,
+    fontSize: 10,
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [2.5, 1.5, 5]
+  });
+
+  // Entry barriers below
+  compSlide.addText('Barriers to Entry:', {
+    x: 0.5, y: 4.8, w: 9, h: 0.3,
+    fontSize: 12, bold: true, color: COLORS.secondary
+  });
+  const barriers = safeArray(comp.entryBarriers, 4);
+  compSlide.addText(barriers.map(b => ({ text: truncate(b, 80), options: { bullet: true } })), {
+    x: 0.5, y: 5.2, w: 9, h: 1.8,
     fontSize: 10, color: COLORS.text, valign: 'top'
   });
 
-  compSlide.addText('White Spaces & Opportunities', {
-    x: 5, y: 1.3, w: 4.5, h: 0.3,
+  // SLIDE 5: Regulatory Data
+  const regSlide = addSlide('Regulations', 'Rules you need to follow');
+  const reg = ca.policyRegulatory || {};
+
+  const regRows = [
+    [
+      { text: 'Area', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Details', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+    ],
+    [{ text: 'Government Stance' }, { text: truncate(reg.governmentStance || 'N/A', 60) }],
+    [{ text: 'Foreign Ownership Rules' }, { text: truncate(reg.foreignOwnershipRules || 'N/A', 60) }],
+    [{ text: 'Risk Level' }, { text: truncate(reg.regulatoryRisk || 'N/A', 60) }]
+  ];
+
+  regSlide.addTable(regRows, {
+    x: 0.5, y: 1.1, w: 9, h: 2,
+    fontSize: 11,
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [3, 6]
+  });
+
+  // Key laws
+  regSlide.addText('Key Laws & Policies:', {
+    x: 0.5, y: 3.3, w: 9, h: 0.3,
+    fontSize: 12, bold: true, color: COLORS.secondary
+  });
+  const laws = safeArray(reg.keyLegislation, 4);
+  regSlide.addText(laws.map(l => ({ text: truncate(l, 80), options: { bullet: true } })), {
+    x: 0.5, y: 3.7, w: 9, h: 1.5,
+    fontSize: 10, color: COLORS.text, valign: 'top'
+  });
+
+  // Incentives
+  regSlide.addText('Available Incentives:', {
+    x: 0.5, y: 5.3, w: 9, h: 0.3,
+    fontSize: 12, bold: true, color: COLORS.green
+  });
+  const incentives = safeArray(reg.incentives, 3);
+  regSlide.addText(incentives.map(i => ({ text: truncate(i, 80), options: { bullet: true } })), {
+    x: 0.5, y: 5.7, w: 9, h: 1.2,
+    fontSize: 10, color: COLORS.text, valign: 'top'
+  });
+
+  // SLIDE 6: What We Found (Analysis based on data)
+  const analysisSlide = addSlide('What We Found', 'Patterns from the research');
+  const summary = ca.summaryAssessment || {};
+
+  // Opportunities
+  analysisSlide.addText('Opportunities', {
+    x: 0.5, y: 1.1, w: 4.2, h: 0.3,
     fontSize: 14, bold: true, color: COLORS.green
   });
-  const whiteSpaces = compPos.whiteSpaces || compPos.opportunities || [];
-  compSlide.addText((Array.isArray(whiteSpaces) ? whiteSpaces.slice(0, 4) : []).map(w => ({
-    text: typeof w === 'string' ? w : w.description || w.opportunity,
-    options: { bullet: true }
-  })), {
-    x: 5, y: 1.7, w: 4.5, h: 2.5,
+  const opps = safeArray(summary.opportunities, 4);
+  analysisSlide.addText(opps.map(o => ({ text: truncate(o, 70), options: { bullet: true } })), {
+    x: 0.5, y: 1.5, w: 4.2, h: 2.5,
     fontSize: 10, color: COLORS.text, valign: 'top'
   });
 
-  compSlide.addText('Potential Partners', {
-    x: 0.5, y: 4.5, w: 9, h: 0.3,
+  // Obstacles
+  analysisSlide.addText('Obstacles', {
+    x: 5, y: 1.1, w: 4.5, h: 0.3,
+    fontSize: 14, bold: true, color: COLORS.red
+  });
+  const obs = safeArray(summary.obstacles, 4);
+  analysisSlide.addText(obs.map(o => ({ text: truncate(o, 70), options: { bullet: true } })), {
+    x: 5, y: 1.5, w: 4.5, h: 2.5,
+    fontSize: 10, color: COLORS.text, valign: 'top'
+  });
+
+  // Key insight
+  analysisSlide.addText('Key Insight:', {
+    x: 0.5, y: 4.2, w: 9, h: 0.3,
     fontSize: 14, bold: true, color: COLORS.accent
   });
-  const partners = compPos.potentialPartners || compPos.partners || [];
-  compSlide.addText((Array.isArray(partners) ? partners.slice(0, 3) : []).map(p => ({
-    text: typeof p === 'string' ? p : `${p.name}: ${p.rationale || p.description || ''}`,
-    options: { bullet: true }
-  })), {
-    x: 0.5, y: 4.9, w: 9, h: 2,
-    fontSize: 10, color: COLORS.text, valign: 'top'
+  analysisSlide.addText(truncate(summary.keyInsight || 'See detailed analysis', 300), {
+    x: 0.5, y: 4.6, w: 9, h: 1.8,
+    fontSize: 11, color: COLORS.text, valign: 'top'
   });
 
-  // SLIDE 5: Regulatory Pathway
-  const regSlide = addSlide('Regulatory Pathway', synthesis.country);
-  const regulatory = synthesis.regulatoryPathway || synthesis.regulatory || {};
+  // Ratings
+  analysisSlide.addText(
+    `Market Attractiveness: ${summary.attractivenessRating || 'N/A'}/10    Feasibility: ${summary.feasibilityRating || 'N/A'}/10`,
+    {
+      x: 0.5, y: 6.6, w: 9, h: 0.3,
+      fontSize: 11, bold: true, color: COLORS.primary
+    }
+  );
 
-  const regText = [
-    `Key Regulations: ${regulatory.keyRegulations || 'See analysis'}`,
-    `Licensing: ${regulatory.licensingRequirements || regulatory.licensing || 'See analysis'}`,
-    `Timeline: ${regulatory.timeline || regulatory.timelineEstimate || 'See analysis'}`,
-    `Risks: ${regulatory.risks || 'See analysis'}`
-  ];
-  regSlide.addText(regText.map(t => ({ text: t, options: { bullet: true } })), {
-    x: 0.5, y: 1.3, w: 9, h: 5.5,
-    fontSize: 12, color: COLORS.text, valign: 'top', lineSpacing: 28
-  });
-
-  // SLIDE 6: Entry Strategy Options
-  const stratSlide = addSlide('Entry Strategy Options', synthesis.country);
+  // SLIDE 7: Entry Options (COMPARISON TABLE)
+  const stratSlide = addSlide('Entry Options', 'Three ways to enter this market');
   const entryOpts = synthesis.entryStrategyOptions || synthesis.entryOptions || {};
 
-  let yPos = 1.3;
-  ['optionA', 'optionB', 'optionC', 'A', 'B', 'C'].forEach(key => {
-    const opt = entryOpts[key] || entryOpts[`option${key}`];
-    if (opt && yPos < 5.5) {
-      const optText = typeof opt === 'string' ? opt :
-        `${opt.name || opt.title || key}: ${opt.description || ''}\nPros: ${opt.pros || 'N/A'} | Cons: ${opt.cons || 'N/A'}`;
-      stratSlide.addText(optText, {
-        x: 0.5, y: yPos, w: 9, h: 1.3,
-        fontSize: 11, color: COLORS.text, valign: 'top'
-      });
-      yPos += 1.5;
-    }
+  const optRows = [
+    [
+      { text: '', options: { fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Option A', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Option B', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Option C', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+    ]
+  ];
+
+  const optA = entryOpts.optionA || entryOpts.A || {};
+  const optB = entryOpts.optionB || entryOpts.B || {};
+  const optC = entryOpts.optionC || entryOpts.C || {};
+
+  const getOptField = (opt, field) => {
+    if (typeof opt === 'string') return truncate(opt, 35);
+    return truncate(opt[field] || opt.description || 'N/A', 35);
+  };
+
+  optRows.push([
+    { text: 'Approach', options: { bold: true } },
+    { text: getOptField(optA, 'name') },
+    { text: getOptField(optB, 'name') },
+    { text: getOptField(optC, 'name') }
+  ]);
+
+  optRows.push([
+    { text: 'Pros', options: { bold: true } },
+    { text: getOptField(optA, 'pros') },
+    { text: getOptField(optB, 'pros') },
+    { text: getOptField(optC, 'pros') }
+  ]);
+
+  optRows.push([
+    { text: 'Cons', options: { bold: true } },
+    { text: getOptField(optA, 'cons') },
+    { text: getOptField(optB, 'cons') },
+    { text: getOptField(optC, 'cons') }
+  ]);
+
+  stratSlide.addTable(optRows, {
+    x: 0.5, y: 1.1, w: 9, h: 3.5,
+    fontSize: 9,
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [1.5, 2.5, 2.5, 2.5]
   });
 
+  // Recommendation
   const recommended = entryOpts.recommendedOption || entryOpts.recommendation;
   if (recommended) {
-    stratSlide.addText(`Recommended: ${typeof recommended === 'string' ? recommended : recommended.option || JSON.stringify(recommended)}`, {
-      x: 0.5, y: 6, w: 9, h: 0.8,
-      fontSize: 12, bold: true, color: COLORS.accent, valign: 'top'
+    stratSlide.addText('Recommended:', {
+      x: 0.5, y: 4.8, w: 9, h: 0.3,
+      fontSize: 12, bold: true, color: COLORS.accent
+    });
+    const recText = typeof recommended === 'string' ? recommended : (recommended.option || recommended.rationale || JSON.stringify(recommended));
+    stratSlide.addText(truncate(recText, 250), {
+      x: 0.5, y: 5.2, w: 9, h: 1.5,
+      fontSize: 11, color: COLORS.text, valign: 'top'
     });
   }
 
-  // SLIDE 7: Key Insights
-  const insightSlide = addSlide('Key Strategic Insights');
-  const insights = synthesis.keyInsights || [];
-  let insightY = 1.3;
-  (Array.isArray(insights) ? insights.slice(0, 3) : []).forEach((insight, idx) => {
-    const text = typeof insight === 'string' ? insight :
-      `${insight.pattern || insight.title || 'Insight ' + (idx + 1)}\n→ ${insight.implication || insight.description || ''}`;
-    insightSlide.addText(`${idx + 1}. ${text}`, {
-      x: 0.5, y: insightY, w: 9, h: 1.8,
-      fontSize: 11, color: COLORS.text, valign: 'top'
-    });
-    insightY += 1.9;
+  // SLIDE 8: Risks (PROPERLY FORMATTED)
+  const riskSlide = addSlide('Risks', 'What could go wrong and how to handle it');
+  const riskAssess = synthesis.riskAssessment || synthesis.risks || {};
+  const criticalRisks = safeArray(riskAssess.criticalRisks || riskAssess.risks, 4);
+
+  // Risk table
+  const riskRows = [
+    [
+      { text: 'Risk', options: { bold: true, fill: { color: COLORS.red }, color: COLORS.white } },
+      { text: 'How to Handle', options: { bold: true, fill: { color: COLORS.red }, color: COLORS.white } }
+    ]
+  ];
+
+  criticalRisks.forEach(r => {
+    const riskName = typeof r === 'string' ? r : (r.risk || r.name || 'Risk');
+    const mitigation = typeof r === 'string' ? '' : (r.mitigation || '');
+    riskRows.push([
+      { text: truncate(riskName, 40) },
+      { text: truncate(mitigation, 50) }
+    ]);
   });
 
-  // SLIDE 8: Implementation Roadmap
-  const roadmapSlide = addSlide('Implementation Roadmap', synthesis.country);
+  riskSlide.addTable(riskRows, {
+    x: 0.5, y: 1.1, w: 9, h: 2.8,
+    fontSize: 10,
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [4, 5]
+  });
+
+  // Go/No-Go criteria
+  const goNoGo = safeArray(riskAssess.goNoGoCriteria || riskAssess.goNoGo, 4);
+  if (goNoGo.length > 0) {
+    riskSlide.addText('Go/No-Go Checklist:', {
+      x: 0.5, y: 4.1, w: 9, h: 0.3,
+      fontSize: 12, bold: true, color: COLORS.secondary
+    });
+    riskSlide.addText(goNoGo.map(g => ({
+      text: truncate(typeof g === 'string' ? g : (g.criteria || g.description), 80),
+      options: { bullet: true }
+    })), {
+      x: 0.5, y: 4.5, w: 9, h: 2,
+      fontSize: 10, color: COLORS.text, valign: 'top'
+    });
+  }
+
+  // SLIDE 9: Roadmap (Based on analysis)
+  const roadmapSlide = addSlide('Roadmap', 'Steps based on what we found');
   const roadmap = synthesis.implementationRoadmap || synthesis.roadmap || {};
 
   const phases = [
-    { key: 'phase1', label: 'Phase 1 (0-6 months)', color: COLORS.secondary },
-    { key: 'phase2', label: 'Phase 2 (6-12 months)', color: COLORS.accent },
-    { key: 'phase3', label: 'Phase 3 (12-24 months)', color: COLORS.green }
+    { key: 'phase1', label: 'Months 0-6', color: COLORS.secondary },
+    { key: 'phase2', label: 'Months 6-12', color: COLORS.accent },
+    { key: 'phase3', label: 'Months 12-24', color: COLORS.green }
   ];
 
-  let phaseY = 1.3;
+  let phaseY = 1.1;
   phases.forEach(phase => {
     const actions = roadmap[phase.key] || roadmap[phase.label] || [];
     roadmapSlide.addText(phase.label, {
-      x: 0.5, y: phaseY, w: 9, h: 0.3,
+      x: 0.5, y: phaseY, w: 9, h: 0.35,
       fontSize: 13, bold: true, color: phase.color
     });
-    const actionText = Array.isArray(actions) ? actions.join(', ') : String(actions);
-    roadmapSlide.addText(actionText, {
-      x: 0.5, y: phaseY + 0.35, w: 9, h: 1.2,
+
+    const actionList = Array.isArray(actions) ? actions : [actions];
+    roadmapSlide.addText(safeArray(actionList, 3).map(a => ({
+      text: truncate(a, 90),
+      options: { bullet: true }
+    })), {
+      x: 0.5, y: phaseY + 0.4, w: 9, h: 1.3,
       fontSize: 10, color: COLORS.text, valign: 'top'
     });
-    phaseY += 1.7;
-  });
-
-  // SLIDE 9: Risks
-  const riskSlide = addSlide('Risk Assessment', synthesis.country);
-  const riskAssess = synthesis.riskAssessment || synthesis.risks || {};
-  const criticalRisks = riskAssess.criticalRisks || riskAssess.risks || [];
-  const goNoGo = riskAssess.goNoGoCriteria || riskAssess.goNoGo || [];
-
-  riskSlide.addText('Critical Risks', {
-    x: 0.5, y: 1.3, w: 9, h: 0.3,
-    fontSize: 14, bold: true, color: COLORS.red
-  });
-  riskSlide.addText((Array.isArray(criticalRisks) ? criticalRisks.slice(0, 5) : []).map(r => ({
-    text: typeof r === 'string' ? r : `${r.risk || r.name}: ${r.mitigation || ''}`,
-    options: { bullet: true }
-  })), {
-    x: 0.5, y: 1.7, w: 9, h: 2.5,
-    fontSize: 11, color: COLORS.text, valign: 'top'
-  });
-
-  riskSlide.addText('Go/No-Go Criteria', {
-    x: 0.5, y: 4.5, w: 9, h: 0.3,
-    fontSize: 14, bold: true, color: COLORS.secondary
-  });
-  riskSlide.addText((Array.isArray(goNoGo) ? goNoGo.slice(0, 4) : []).map(g => ({
-    text: typeof g === 'string' ? g : g.criteria || g.description,
-    options: { bullet: true }
-  })), {
-    x: 0.5, y: 4.9, w: 9, h: 2,
-    fontSize: 11, color: COLORS.text, valign: 'top'
+    phaseY += 1.9;
   });
 
   // SLIDE 10: Next Steps
-  const nextSlide = addSlide('Next Steps');
-  const nextSteps = synthesis.nextSteps || [
-    'Validate findings with in-country experts',
-    'Conduct detailed partner identification',
-    'Develop financial model',
-    'Schedule market visit'
-  ];
-  nextSlide.addText((Array.isArray(nextSteps) ? nextSteps : [nextSteps]).map((step, idx) => ({
-    text: `${idx + 1}. ${typeof step === 'string' ? step : step.action || step.description}`,
+  const nextSlide = addSlide('Next Steps', 'What to do now');
+  const nextSteps = safeArray(synthesis.nextSteps || [
+    'Talk to local experts to validate findings',
+    'Identify potential partners',
+    'Build financial model',
+    'Visit the market'
+  ], 5);
+
+  nextSlide.addText(nextSteps.map((step, idx) => ({
+    text: `${idx + 1}. ${truncate(typeof step === 'string' ? step : (step.action || step.description), 100)}`,
     options: { bullet: false }
   })), {
-    x: 0.5, y: 1.3, w: 9, h: 5,
-    fontSize: 14, color: COLORS.text, valign: 'top', lineSpacing: 28
-  });
-
-  // SLIDE 11: Methodology
-  const methodSlide = addSlide('Research Methodology & Cost');
-  methodSlide.addText([
-    { text: 'Methodology', options: { bold: true, fontSize: 14 } },
-    { text: '\n\nThis deep-dive analysis was generated using AI-powered research:', options: { fontSize: 11 } },
-    { text: '\n• 15+ targeted web searches using Perplexity AI', options: { bullet: false, fontSize: 11 } },
-    { text: '\n• Deep analysis using DeepSeek thinking model', options: { bullet: false, fontSize: 11 } },
-    { text: '\n• Strategy consulting frameworks for insight generation', options: { bullet: false, fontSize: 11 } },
-    { text: `\n\nTotal research cost: $${costTracker.totalCost.toFixed(2)}`, options: { fontSize: 11, bold: true } },
-    { text: `\nGenerated: ${new Date().toISOString()}`, options: { fontSize: 11 } }
-  ], {
-    x: 0.5, y: 1.3, w: 9, h: 5,
-    color: COLORS.text, valign: 'top'
+    x: 0.5, y: 1.1, w: 9, h: 5,
+    fontSize: 13, color: COLORS.text, valign: 'top', lineSpacing: 26
   });
 
   const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
@@ -897,7 +1029,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   return pptxBuffer;
 }
 
-// Multi-country comparison PPT
+// Multi-country comparison PPT - RESTRUCTURED with actual data
 async function generatePPT(synthesis, countryAnalyses, scope) {
   console.log('\n=== STAGE 4: PPT GENERATION ===');
 
@@ -907,278 +1039,325 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   }
 
   const pptx = new pptxgen();
-
-  // Set presentation properties
   pptx.author = 'Market Research AI';
   pptx.title = `${scope.industry} Market Analysis - ${scope.targetMarkets.join(', ')}`;
   pptx.subject = scope.projectType;
 
-  // Define colors
   const COLORS = {
-    primary: '1a365d',      // Dark blue
-    secondary: '2c5282',    // Medium blue
-    accent: 'ed8936',       // Orange
-    text: '2d3748',         // Dark gray
-    lightBg: 'f7fafc',      // Light gray
-    white: 'ffffff'
+    primary: '1a365d',
+    secondary: '2c5282',
+    accent: 'ed8936',
+    text: '2d3748',
+    lightBg: 'f7fafc',
+    white: 'ffffff',
+    green: '38a169',
+    red: 'c53030'
   };
 
-  // Helper function to add slide with consistent styling
   function addSlide(title, subtitle = '') {
     const slide = pptx.addSlide();
-
-    // Title
     slide.addText(title, {
       x: 0.5, y: 0.3, w: 9, h: 0.5,
       fontSize: 24, bold: true, color: COLORS.primary
     });
-
-    // Subtitle
     if (subtitle) {
       slide.addText(subtitle, {
-        x: 0.5, y: 0.8, w: 9, h: 0.3,
-        fontSize: 12, color: COLORS.secondary
+        x: 0.5, y: 0.75, w: 9, h: 0.25,
+        fontSize: 11, color: COLORS.secondary
       });
     }
-
-    // Footer line
-    slide.addShape(pptx.shapes.RECTANGLE, {
-      x: 0.5, y: 7.2, w: 9, h: 0.02,
-      fill: { color: COLORS.primary }
-    });
-
     return slide;
   }
 
-  // SLIDE 1: Title Slide
+  // SLIDE 1: Title
   const titleSlide = pptx.addSlide();
   titleSlide.addText(scope.industry.toUpperCase(), {
-    x: 0.5, y: 2, w: 9, h: 0.8,
+    x: 0.5, y: 2.2, w: 9, h: 0.8,
     fontSize: 36, bold: true, color: COLORS.primary
   });
-  titleSlide.addText('Market Entry Analysis', {
-    x: 0.5, y: 2.8, w: 9, h: 0.5,
+  titleSlide.addText('Market Comparison', {
+    x: 0.5, y: 3.0, w: 9, h: 0.5,
     fontSize: 24, color: COLORS.secondary
   });
   titleSlide.addText(scope.targetMarkets.join(' | '), {
-    x: 0.5, y: 3.5, w: 9, h: 0.4,
-    fontSize: 16, color: COLORS.text
+    x: 0.5, y: 3.6, w: 9, h: 0.4,
+    fontSize: 14, color: COLORS.text
   });
   titleSlide.addText(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' }), {
     x: 0.5, y: 6.5, w: 9, h: 0.3,
     fontSize: 12, color: COLORS.text
   });
 
-  // SLIDE 2: Executive Summary
-  const execSlide = addSlide('Executive Summary');
-  const execBullets = synthesis.executiveSummary || ['Analysis complete'];
-  execSlide.addText(execBullets.map(b => ({ text: b, options: { bullet: true } })), {
-    x: 0.5, y: 1.3, w: 9, h: 5,
-    fontSize: 14, color: COLORS.text, valign: 'top'
+  // SLIDE 2: Summary
+  const execSlide = addSlide('Summary');
+  const execBullets = safeArray(synthesis.executiveSummary, 5);
+  execSlide.addText(execBullets.map(b => ({
+    text: truncate(b, 150),
+    options: { bullet: true }
+  })), {
+    x: 0.5, y: 1.1, w: 9, h: 5.5,
+    fontSize: 13, color: COLORS.text, valign: 'top', lineSpacing: 22
   });
 
-  // SLIDE 3: Country Ranking
-  const rankSlide = addSlide('Country Ranking', 'Overall market attractiveness assessment');
+  // SLIDE 3: Market Size Comparison (DATA TABLE)
+  const marketCompSlide = addSlide('Market Data Comparison', 'Numbers across countries');
 
-  // Create ranking table
-  const rankingData = synthesis.countryRanking || countryAnalyses.map(c => ({
-    country: c.country,
-    attractiveness: c.summaryAssessment?.attractivenessRating || 'N/A',
-    feasibility: c.summaryAssessment?.feasibilityRating || 'N/A'
-  }));
+  const marketCompRows = [
+    [
+      { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'GDP', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Market Size', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Growth', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+    ]
+  ];
+
+  countryAnalyses.forEach(c => {
+    if (c.error) return;
+    marketCompRows.push([
+      { text: c.country },
+      { text: truncate(c.macroContext?.gdp || 'N/A', 25) },
+      { text: truncate(c.marketDynamics?.marketSize || 'N/A', 25) },
+      { text: truncate(c.marketDynamics?.demand || 'N/A', 25) }
+    ]);
+  });
+
+  marketCompSlide.addTable(marketCompRows, {
+    x: 0.5, y: 1.1, w: 9, h: 4,
+    fontSize: 10,
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [2, 2.3, 2.3, 2.4]
+  });
+
+  // SLIDE 4: Regulatory Comparison
+  const regCompSlide = addSlide('Regulatory Comparison', 'Rules in each country');
+
+  const regCompRows = [
+    [
+      { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Foreign Ownership', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Risk Level', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Key Incentive', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+    ]
+  ];
+
+  countryAnalyses.forEach(c => {
+    if (c.error) return;
+    const incentives = c.policyRegulatory?.incentives || [];
+    regCompRows.push([
+      { text: c.country },
+      { text: truncate(c.policyRegulatory?.foreignOwnershipRules || 'N/A', 25) },
+      { text: truncate(c.policyRegulatory?.regulatoryRisk || 'N/A', 20) },
+      { text: truncate(incentives[0] || 'N/A', 25) }
+    ]);
+  });
+
+  regCompSlide.addTable(regCompRows, {
+    x: 0.5, y: 1.1, w: 9, h: 4,
+    fontSize: 10,
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [2, 2.5, 2, 2.5]
+  });
+
+  // SLIDE 5: Country Rankings (COMPARISON MATRIX)
+  const rankSlide = addSlide('Country Rankings', 'Which market looks best');
 
   const rankRows = [
     [
       { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
       { text: 'Attractiveness', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
       { text: 'Feasibility', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
-      { text: 'Rationale', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+      { text: 'Competition', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
     ]
   ];
 
-  (Array.isArray(rankingData) ? rankingData : []).forEach(r => {
+  countryAnalyses.forEach(c => {
+    if (c.error) return;
     rankRows.push([
-      { text: r.country || 'Unknown' },
-      { text: String(r.attractiveness || r.score || 'N/A') },
-      { text: String(r.feasibility || 'N/A') },
-      { text: (r.rationale || '').substring(0, 60) + '...' }
+      { text: c.country },
+      { text: `${c.summaryAssessment?.attractivenessRating || 'N/A'}/10` },
+      { text: `${c.summaryAssessment?.feasibilityRating || 'N/A'}/10` },
+      { text: truncate(c.competitiveLandscape?.competitiveIntensity || 'N/A', 20) }
     ]);
   });
 
   rankSlide.addTable(rankRows, {
-    x: 0.5, y: 1.5, w: 9,
+    x: 0.5, y: 1.1, w: 9, h: 3.5,
     fontSize: 11,
-    border: { pt: 0.5, color: COLORS.text },
-    colW: [1.5, 1.5, 1.5, 4.5]
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [2.5, 2, 2, 2.5]
   });
 
-  // SLIDES 4+: Individual Country Analysis
+  // Best/worst summary below
+  const sortedByAttract = [...countryAnalyses].filter(c => !c.error).sort((a, b) =>
+    (b.summaryAssessment?.attractivenessRating || 0) - (a.summaryAssessment?.attractivenessRating || 0)
+  );
+  if (sortedByAttract.length > 0) {
+    rankSlide.addText(`Most attractive: ${sortedByAttract[0]?.country || 'N/A'}`, {
+      x: 0.5, y: 5, w: 9, h: 0.4,
+      fontSize: 12, bold: true, color: COLORS.green
+    });
+    if (sortedByAttract.length > 1) {
+      rankSlide.addText(`Least attractive: ${sortedByAttract[sortedByAttract.length - 1]?.country || 'N/A'}`, {
+        x: 0.5, y: 5.5, w: 9, h: 0.4,
+        fontSize: 12, color: COLORS.red
+      });
+    }
+  }
+
+  // SLIDES: Individual Country Details (1 slide each)
   for (const country of countryAnalyses) {
     if (country.error) continue;
 
-    const countrySlide = addSlide(country.country, 'Market Assessment');
+    const cSlide = addSlide(country.country, 'Key findings');
 
-    // Left column: Key metrics
-    const metrics = [
-      `GDP: ${country.macroContext?.gdp || 'N/A'}`,
-      `Population: ${country.macroContext?.population || 'N/A'}`,
-      `Market Size: ${country.marketDynamics?.marketSize || 'N/A'}`,
-      `Regulatory Risk: ${country.policyRegulatory?.regulatoryRisk || 'N/A'}`,
-      `Competitive Intensity: ${country.competitiveLandscape?.competitiveIntensity || 'N/A'}`
+    // Left: Metrics table
+    const metricsRows = [
+      [{ text: 'Metric', options: { bold: true } }, { text: 'Value', options: { bold: true } }],
+      [{ text: 'GDP' }, { text: truncate(country.macroContext?.gdp || 'N/A', 35) }],
+      [{ text: 'Market Size' }, { text: truncate(country.marketDynamics?.marketSize || 'N/A', 35) }],
+      [{ text: 'Reg Risk' }, { text: truncate(country.policyRegulatory?.regulatoryRisk || 'N/A', 35) }]
     ];
 
-    countrySlide.addText('Key Metrics', {
-      x: 0.5, y: 1.3, w: 4, h: 0.3,
-      fontSize: 14, bold: true, color: COLORS.secondary
+    cSlide.addTable(metricsRows, {
+      x: 0.5, y: 1.1, w: 4.2, h: 2,
+      fontSize: 9,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [1.5, 2.7]
     });
 
-    countrySlide.addText(metrics.map(m => ({ text: m, options: { bullet: true } })), {
-      x: 0.5, y: 1.7, w: 4, h: 2.5,
-      fontSize: 11, color: COLORS.text, valign: 'top'
+    // Right: Opportunities & Obstacles
+    cSlide.addText('Opportunities', {
+      x: 5, y: 1.1, w: 4.5, h: 0.25,
+      fontSize: 11, bold: true, color: COLORS.green
+    });
+    const opps = safeArray(country.summaryAssessment?.opportunities, 3);
+    cSlide.addText(opps.map(o => ({ text: truncate(o, 50), options: { bullet: true } })), {
+      x: 5, y: 1.4, w: 4.5, h: 1.3,
+      fontSize: 9, color: COLORS.text, valign: 'top'
     });
 
-    // Right column: Opportunities and Obstacles
-    countrySlide.addText('Opportunities', {
-      x: 5, y: 1.3, w: 4.5, h: 0.3,
-      fontSize: 14, bold: true, color: '38a169'
+    cSlide.addText('Obstacles', {
+      x: 5, y: 2.8, w: 4.5, h: 0.25,
+      fontSize: 11, bold: true, color: COLORS.red
+    });
+    const obs = safeArray(country.summaryAssessment?.obstacles, 3);
+    cSlide.addText(obs.map(o => ({ text: truncate(o, 50), options: { bullet: true } })), {
+      x: 5, y: 3.1, w: 4.5, h: 1.3,
+      fontSize: 9, color: COLORS.text, valign: 'top'
     });
 
-    const opps = country.summaryAssessment?.opportunities || [];
-    countrySlide.addText(opps.slice(0, 3).map(o => ({ text: o, options: { bullet: true } })), {
-      x: 5, y: 1.7, w: 4.5, h: 1.5,
-      fontSize: 10, color: COLORS.text, valign: 'top'
+    // Bottom: Key competitors
+    cSlide.addText('Key Competitors:', {
+      x: 0.5, y: 4.6, w: 9, h: 0.25,
+      fontSize: 11, bold: true, color: COLORS.secondary
     });
-
-    countrySlide.addText('Obstacles', {
-      x: 5, y: 3.3, w: 4.5, h: 0.3,
-      fontSize: 14, bold: true, color: 'c53030'
-    });
-
-    const obs = country.summaryAssessment?.obstacles || [];
-    countrySlide.addText(obs.slice(0, 3).map(o => ({ text: o, options: { bullet: true } })), {
-      x: 5, y: 3.7, w: 4.5, h: 1.5,
-      fontSize: 10, color: COLORS.text, valign: 'top'
+    const localPlayers = safeArray(country.competitiveLandscape?.localPlayers, 3);
+    const competitorText = localPlayers.map(p => typeof p === 'string' ? p : p.name).join(', ') || 'See detailed analysis';
+    cSlide.addText(truncate(competitorText, 120), {
+      x: 0.5, y: 4.9, w: 9, h: 0.5,
+      fontSize: 10, color: COLORS.text
     });
 
     // Key Insight
-    countrySlide.addText('Key Insight', {
-      x: 0.5, y: 5.3, w: 9, h: 0.3,
-      fontSize: 14, bold: true, color: COLORS.accent
+    cSlide.addText('Key Insight:', {
+      x: 0.5, y: 5.5, w: 9, h: 0.25,
+      fontSize: 11, bold: true, color: COLORS.accent
     });
-
-    countrySlide.addText(country.summaryAssessment?.keyInsight || 'Analysis pending', {
-      x: 0.5, y: 5.7, w: 9, h: 1.3,
-      fontSize: 11, color: COLORS.text, valign: 'top'
+    cSlide.addText(truncate(country.summaryAssessment?.keyInsight || 'See analysis', 180), {
+      x: 0.5, y: 5.8, w: 9, h: 0.9,
+      fontSize: 10, color: COLORS.text, valign: 'top'
     });
 
     // Ratings
-    countrySlide.addText(
-      `Attractiveness: ${country.summaryAssessment?.attractivenessRating || 'N/A'}/10  |  Feasibility: ${country.summaryAssessment?.feasibilityRating || 'N/A'}/10`,
+    cSlide.addText(
+      `Attractiveness: ${country.summaryAssessment?.attractivenessRating || 'N/A'}/10    Feasibility: ${country.summaryAssessment?.feasibilityRating || 'N/A'}/10`,
       {
-        x: 0.5, y: 7, w: 9, h: 0.2,
+        x: 0.5, y: 6.8, w: 9, h: 0.25,
         fontSize: 10, bold: true, color: COLORS.primary
       }
     );
   }
 
-  // SLIDE: Key Insights
-  const insightSlide = addSlide('Key Strategic Insights');
-  const insights = synthesis.keyInsights || synthesis.strategicRecommendations?.keyInsights || [];
-
-  let yPos = 1.3;
-  (Array.isArray(insights) ? insights.slice(0, 3) : []).forEach((insight, idx) => {
-    const insightText = typeof insight === 'string' ? insight :
-      `${insight.pattern || insight.title || 'Insight ' + (idx + 1)}\n${insight.implication || insight.description || ''}`;
-
-    insightSlide.addText(`${idx + 1}. ${insightText}`, {
-      x: 0.5, y: yPos, w: 9, h: 1.5,
-      fontSize: 11, color: COLORS.text, valign: 'top'
-    });
-    yPos += 1.8;
-  });
-
   // SLIDE: Recommendations
-  const recoSlide = addSlide('Strategic Recommendations');
+  const recoSlide = addSlide('Recommendations', 'What we suggest');
   const recommendations = synthesis.strategicRecommendations || synthesis.recommendations || {};
 
   // Entry sequence
-  recoSlide.addText('Recommended Entry Sequence', {
-    x: 0.5, y: 1.3, w: 9, h: 0.3,
-    fontSize: 14, bold: true, color: COLORS.secondary
+  recoSlide.addText('Recommended entry order:', {
+    x: 0.5, y: 1.1, w: 9, h: 0.3,
+    fontSize: 12, bold: true, color: COLORS.secondary
   });
-
   const entrySeq = recommendations.entrySequence || recommendations.recommendedEntrySequence ||
-    countryAnalyses.map(c => c.country).join(' → ');
-  recoSlide.addText(typeof entrySeq === 'string' ? entrySeq : entrySeq.join(' → '), {
-    x: 0.5, y: 1.7, w: 9, h: 0.4,
-    fontSize: 12, color: COLORS.text
+    countryAnalyses.filter(c => !c.error).map(c => c.country).join(' → ');
+  recoSlide.addText(truncate(typeof entrySeq === 'string' ? entrySeq : entrySeq.join(' → '), 100), {
+    x: 0.5, y: 1.5, w: 9, h: 0.4,
+    fontSize: 11, color: COLORS.text
   });
 
-  // Entry mode recommendations
-  recoSlide.addText('Entry Mode by Country', {
-    x: 0.5, y: 2.3, w: 9, h: 0.3,
-    fontSize: 14, bold: true, color: COLORS.secondary
-  });
-
+  // Entry modes table
   const entryModes = recommendations.entryModeRecommendations || recommendations.entryModes || [];
-  const modeText = Array.isArray(entryModes) ?
-    entryModes.map(m => typeof m === 'string' ? m : `${m.country}: ${m.mode || m.recommendation}`).join('\n') :
-    JSON.stringify(entryModes);
+  if (Array.isArray(entryModes) && entryModes.length > 0) {
+    recoSlide.addText('How to enter each market:', {
+      x: 0.5, y: 2.1, w: 9, h: 0.3,
+      fontSize: 12, bold: true, color: COLORS.secondary
+    });
 
-  recoSlide.addText(modeText, {
-    x: 0.5, y: 2.7, w: 9, h: 2,
-    fontSize: 11, color: COLORS.text, valign: 'top'
-  });
+    const modeRows = [
+      [
+        { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+        { text: 'Entry Mode', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+      ]
+    ];
+    entryModes.slice(0, 5).forEach(m => {
+      const country = typeof m === 'string' ? m.split(':')[0] : m.country;
+      const mode = typeof m === 'string' ? m.split(':')[1] : (m.mode || m.recommendation);
+      modeRows.push([
+        { text: truncate(country, 20) },
+        { text: truncate(mode, 50) }
+      ]);
+    });
+
+    recoSlide.addTable(modeRows, {
+      x: 0.5, y: 2.5, w: 9, h: 2.5,
+      fontSize: 10,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [2.5, 6.5]
+    });
+  }
 
   // Risk mitigation
-  recoSlide.addText('Risk Mitigation', {
-    x: 0.5, y: 5, w: 9, h: 0.3,
-    fontSize: 14, bold: true, color: COLORS.secondary
-  });
-
-  const risks = recommendations.riskMitigation || recommendations.riskMitigationStrategies || [];
-  recoSlide.addText((Array.isArray(risks) ? risks.slice(0, 4) : []).map(r => ({
-    text: typeof r === 'string' ? r : r.strategy || r.description,
-    options: { bullet: true }
-  })), {
-    x: 0.5, y: 5.4, w: 9, h: 1.5,
-    fontSize: 10, color: COLORS.text, valign: 'top'
-  });
+  const risks = safeArray(recommendations.riskMitigation || recommendations.riskMitigationStrategies, 3);
+  if (risks.length > 0) {
+    recoSlide.addText('Key risks to watch:', {
+      x: 0.5, y: 5.3, w: 9, h: 0.3,
+      fontSize: 12, bold: true, color: COLORS.red
+    });
+    recoSlide.addText(risks.map(r => ({
+      text: truncate(typeof r === 'string' ? r : (r.strategy || r.description), 80),
+      options: { bullet: true }
+    })), {
+      x: 0.5, y: 5.7, w: 9, h: 1.2,
+      fontSize: 10, color: COLORS.text, valign: 'top'
+    });
+  }
 
   // SLIDE: Next Steps
-  const nextSlide = addSlide('Next Steps');
-  const nextSteps = synthesis.nextSteps || synthesis.recommendations?.nextSteps || [
-    'Validate findings with in-country experts',
-    'Conduct detailed partner identification',
-    'Develop financial model for priority market',
-    'Schedule market visit'
-  ];
+  const nextSlide = addSlide('Next Steps', 'What to do now');
+  const nextSteps = safeArray(synthesis.nextSteps || [
+    'Talk to local experts to validate findings',
+    'Identify potential partners in top market',
+    'Build financial model',
+    'Visit priority market'
+  ], 5);
 
-  nextSlide.addText((Array.isArray(nextSteps) ? nextSteps : [nextSteps]).map((step, idx) => ({
-    text: `${idx + 1}. ${typeof step === 'string' ? step : step.action || step.description}`,
+  nextSlide.addText(nextSteps.map((step, idx) => ({
+    text: `${idx + 1}. ${truncate(typeof step === 'string' ? step : (step.action || step.description), 100)}`,
     options: { bullet: false }
   })), {
-    x: 0.5, y: 1.3, w: 9, h: 5,
-    fontSize: 14, color: COLORS.text, valign: 'top', lineSpacing: 28
+    x: 0.5, y: 1.1, w: 9, h: 5,
+    fontSize: 13, color: COLORS.text, valign: 'top', lineSpacing: 26
   });
 
-  // SLIDE: Cost Summary
-  const costSlide = addSlide('Research Methodology & Cost');
-  costSlide.addText([
-    { text: 'Methodology', options: { bold: true, fontSize: 14 } },
-    { text: '\n\nThis analysis was generated using AI-powered research agents that:', options: { fontSize: 11 } },
-    { text: '\n• Searched 50+ web sources per country using Perplexity AI', options: { bullet: false, fontSize: 11 } },
-    { text: '\n• Synthesized findings using DeepSeek deep-thinking model', options: { bullet: false, fontSize: 11 } },
-    { text: '\n• Applied strategy consulting frameworks for insight generation', options: { bullet: false, fontSize: 11 } },
-    { text: `\n\nTotal research cost: $${costTracker.totalCost.toFixed(2)}`, options: { fontSize: 11, bold: true } },
-    { text: `\nCountries analyzed: ${countryAnalyses.length}`, options: { fontSize: 11 } },
-    { text: `\nGenerated: ${new Date().toISOString()}`, options: { fontSize: 11 } }
-  ], {
-    x: 0.5, y: 1.3, w: 9, h: 5,
-    color: COLORS.text, valign: 'top'
-  });
-
-  // Generate file
   const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
   console.log(`PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB`);
 
@@ -1265,20 +1444,8 @@ async function runMarketResearch(userPrompt, email) {
     const filename = `Market_Research_${scope.industry.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pptx`;
 
     const emailHtml = `
-      <h2>Market Research Complete</h2>
-      <p>Your market research analysis is attached.</p>
-      <h3>Summary</h3>
-      <ul>
-        <li><strong>Industry:</strong> ${scope.industry}</li>
-        <li><strong>Markets Analyzed:</strong> ${scope.targetMarkets.join(', ')}</li>
-        <li><strong>Research Cost:</strong> $${costTracker.totalCost.toFixed(2)}</li>
-        <li><strong>Processing Time:</strong> ${((Date.now() - startTime) / 1000 / 60).toFixed(1)} minutes</li>
-      </ul>
-      <h3>Executive Summary</h3>
-      <ul>
-        ${(synthesis.executiveSummary || []).map(s => `<li>${s}</li>`).join('')}
-      </ul>
-      <p style="color: #666; font-size: 12px;">Generated by Market Research AI</p>
+      <p>Your market research report is attached.</p>
+      <p style="color: #666; font-size: 12px;">${scope.industry} - ${scope.targetMarkets.join(', ')}</p>
     `;
 
     await sendEmail(email, `Market Research: ${scope.industry} - ${scope.targetMarkets.join(', ')}`, emailHtml, {
