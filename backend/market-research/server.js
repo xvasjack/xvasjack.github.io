@@ -339,9 +339,104 @@ Return ONLY valid JSON, no markdown or explanation.`;
   }
 }
 
+// ============ SINGLE COUNTRY DEEP DIVE ============
+
+async function synthesizeSingleCountry(countryAnalysis, scope) {
+  console.log('\n=== STAGE 3: SINGLE COUNTRY DEEP DIVE ===');
+  console.log(`Generating deep analysis for ${countryAnalysis.country}...`);
+
+  const systemPrompt = `You are a senior strategy consultant at a top consulting firm. Your task is to generate a comprehensive market entry strategy for a single country.
+
+Your analysis must follow the "Data → Pattern → Mechanism → Implication" framework for all insights:
+- DATA: Specific observations from the research
+- PATTERN: What emerges when you look across the data points
+- MECHANISM: Why this pattern exists (causal explanation)
+- IMPLICATION: What this means for the client's decision
+
+Be specific. Avoid generic statements. Every insight should be actionable.`;
+
+  const prompt = `Client context: ${scope.clientContext}
+Industry: ${scope.industry}
+Project type: ${scope.projectType}
+Target market: ${countryAnalysis.country}
+
+COUNTRY ANALYSIS:
+${JSON.stringify(countryAnalysis, null, 2)}
+
+Generate a comprehensive deep-dive analysis with:
+
+1. EXECUTIVE SUMMARY (3-5 bullets highlighting the most critical findings)
+
+2. MARKET OPPORTUNITY ASSESSMENT:
+   - Total addressable market
+   - Serviceable market
+   - Growth trajectory and drivers
+   - Timing considerations
+
+3. COMPETITIVE POSITIONING:
+   - Key players and their strengths/weaknesses
+   - White spaces and opportunities
+   - Potential partners vs competitors
+
+4. REGULATORY PATHWAY:
+   - Key regulations to navigate
+   - Licensing requirements
+   - Timeline and cost estimates
+   - Risks and mitigation
+
+5. ENTRY STRATEGY OPTIONS:
+   - Option A: [Description with pros/cons]
+   - Option B: [Description with pros/cons]
+   - Option C: [Description with pros/cons]
+   - Recommended option with rationale
+
+6. KEY INSIGHTS (3-5 major insights using Data→Pattern→Mechanism→Implication)
+
+7. IMPLEMENTATION ROADMAP:
+   - Phase 1 (0-6 months): [actions]
+   - Phase 2 (6-12 months): [actions]
+   - Phase 3 (12-24 months): [actions]
+
+8. RISK ASSESSMENT:
+   - Critical risks with mitigation strategies
+   - Go/No-Go criteria
+
+9. NEXT STEPS (specific immediate actions)
+
+Return as JSON with these sections as keys. Each insight must follow the Data→Pattern→Mechanism→Implication structure explicitly.`;
+
+  const result = await callDeepSeek(prompt, systemPrompt, 12000);
+
+  try {
+    let jsonStr = result.content.trim();
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+    }
+    const synthesis = JSON.parse(jsonStr);
+    synthesis.isSingleCountry = true;
+    synthesis.country = countryAnalysis.country;
+    return synthesis;
+  } catch (error) {
+    console.error('Failed to parse single country synthesis:', error.message);
+    return {
+      isSingleCountry: true,
+      country: countryAnalysis.country,
+      executiveSummary: ['Deep analysis parsing failed - raw content available'],
+      rawContent: result.content
+    };
+  }
+}
+
 // ============ CROSS-COUNTRY SYNTHESIS ============
 
 async function synthesizeFindings(countryAnalyses, scope) {
+  // Handle single country differently - do deep dive instead of comparison
+  const isSingleCountry = countryAnalyses.length === 1;
+
+  if (isSingleCountry) {
+    return synthesizeSingleCountry(countryAnalyses[0], scope);
+  }
+
   console.log('\n=== STAGE 3: CROSS-COUNTRY SYNTHESIS ===');
 
   const systemPrompt = `You are a senior strategy consultant at a top consulting firm. Your task is to synthesize market research across multiple countries and generate strategic insights.
@@ -398,8 +493,283 @@ Return as JSON with these sections as keys. Each insight must follow the Data→
 
 // ============ PPT GENERATION ============
 
+// Single country deep-dive PPT
+async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
+  console.log(`Generating single-country PPT for ${synthesis.country}...`);
+
+  const pptx = new pptxgen();
+  pptx.author = 'Market Research AI';
+  pptx.title = `${scope.industry} Market Entry - ${synthesis.country}`;
+  pptx.subject = scope.projectType;
+
+  const COLORS = {
+    primary: '1a365d',
+    secondary: '2c5282',
+    accent: 'ed8936',
+    text: '2d3748',
+    lightBg: 'f7fafc',
+    white: 'ffffff',
+    green: '38a169',
+    red: 'c53030'
+  };
+
+  function addSlide(title, subtitle = '') {
+    const slide = pptx.addSlide();
+    slide.addText(title, {
+      x: 0.5, y: 0.3, w: 9, h: 0.5,
+      fontSize: 24, bold: true, color: COLORS.primary
+    });
+    if (subtitle) {
+      slide.addText(subtitle, {
+        x: 0.5, y: 0.8, w: 9, h: 0.3,
+        fontSize: 12, color: COLORS.secondary
+      });
+    }
+    slide.addShape(pptx.shapes.RECTANGLE, {
+      x: 0.5, y: 7.2, w: 9, h: 0.02,
+      fill: { color: COLORS.primary }
+    });
+    return slide;
+  }
+
+  // SLIDE 1: Title
+  const titleSlide = pptx.addSlide();
+  titleSlide.addText(synthesis.country.toUpperCase(), {
+    x: 0.5, y: 1.8, w: 9, h: 0.8,
+    fontSize: 42, bold: true, color: COLORS.primary
+  });
+  titleSlide.addText(`${scope.industry} Market Entry Analysis`, {
+    x: 0.5, y: 2.7, w: 9, h: 0.5,
+    fontSize: 24, color: COLORS.secondary
+  });
+  titleSlide.addText('Deep Dive Assessment', {
+    x: 0.5, y: 3.3, w: 9, h: 0.4,
+    fontSize: 16, color: COLORS.text
+  });
+  titleSlide.addText(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' }), {
+    x: 0.5, y: 6.5, w: 9, h: 0.3,
+    fontSize: 12, color: COLORS.text
+  });
+
+  // SLIDE 2: Executive Summary
+  const execSlide = addSlide('Executive Summary');
+  const execBullets = synthesis.executiveSummary || ['Analysis complete'];
+  execSlide.addText(execBullets.map(b => ({ text: b, options: { bullet: true } })), {
+    x: 0.5, y: 1.3, w: 9, h: 5.5,
+    fontSize: 14, color: COLORS.text, valign: 'top'
+  });
+
+  // SLIDE 3: Market Opportunity
+  const marketSlide = addSlide('Market Opportunity Assessment', synthesis.country);
+  const marketOpp = synthesis.marketOpportunityAssessment || synthesis.marketOpportunity || {};
+  const marketText = [
+    `Total Addressable Market: ${marketOpp.totalAddressableMarket || marketOpp.tam || 'See analysis'}`,
+    `Serviceable Market: ${marketOpp.serviceableMarket || marketOpp.sam || 'See analysis'}`,
+    `Growth: ${marketOpp.growthTrajectory || marketOpp.growth || 'See analysis'}`,
+    `Timing: ${marketOpp.timingConsiderations || marketOpp.timing || 'See analysis'}`
+  ];
+  marketSlide.addText(marketText.map(t => ({ text: t, options: { bullet: true } })), {
+    x: 0.5, y: 1.3, w: 9, h: 5.5,
+    fontSize: 13, color: COLORS.text, valign: 'top', lineSpacing: 24
+  });
+
+  // SLIDE 4: Competitive Landscape
+  const compSlide = addSlide('Competitive Positioning', synthesis.country);
+  const compPos = synthesis.competitivePositioning || synthesis.competitiveLandscape || {};
+
+  compSlide.addText('Key Players', {
+    x: 0.5, y: 1.3, w: 4, h: 0.3,
+    fontSize: 14, bold: true, color: COLORS.secondary
+  });
+  const players = compPos.keyPlayers || compPos.players || [];
+  compSlide.addText((Array.isArray(players) ? players.slice(0, 5) : []).map(p => ({
+    text: typeof p === 'string' ? p : `${p.name}: ${p.strengths || p.description || ''}`,
+    options: { bullet: true }
+  })), {
+    x: 0.5, y: 1.7, w: 4.2, h: 2.5,
+    fontSize: 10, color: COLORS.text, valign: 'top'
+  });
+
+  compSlide.addText('White Spaces & Opportunities', {
+    x: 5, y: 1.3, w: 4.5, h: 0.3,
+    fontSize: 14, bold: true, color: COLORS.green
+  });
+  const whiteSpaces = compPos.whiteSpaces || compPos.opportunities || [];
+  compSlide.addText((Array.isArray(whiteSpaces) ? whiteSpaces.slice(0, 4) : []).map(w => ({
+    text: typeof w === 'string' ? w : w.description || w.opportunity,
+    options: { bullet: true }
+  })), {
+    x: 5, y: 1.7, w: 4.5, h: 2.5,
+    fontSize: 10, color: COLORS.text, valign: 'top'
+  });
+
+  compSlide.addText('Potential Partners', {
+    x: 0.5, y: 4.5, w: 9, h: 0.3,
+    fontSize: 14, bold: true, color: COLORS.accent
+  });
+  const partners = compPos.potentialPartners || compPos.partners || [];
+  compSlide.addText((Array.isArray(partners) ? partners.slice(0, 3) : []).map(p => ({
+    text: typeof p === 'string' ? p : `${p.name}: ${p.rationale || p.description || ''}`,
+    options: { bullet: true }
+  })), {
+    x: 0.5, y: 4.9, w: 9, h: 2,
+    fontSize: 10, color: COLORS.text, valign: 'top'
+  });
+
+  // SLIDE 5: Regulatory Pathway
+  const regSlide = addSlide('Regulatory Pathway', synthesis.country);
+  const regulatory = synthesis.regulatoryPathway || synthesis.regulatory || {};
+
+  const regText = [
+    `Key Regulations: ${regulatory.keyRegulations || 'See analysis'}`,
+    `Licensing: ${regulatory.licensingRequirements || regulatory.licensing || 'See analysis'}`,
+    `Timeline: ${regulatory.timeline || regulatory.timelineEstimate || 'See analysis'}`,
+    `Risks: ${regulatory.risks || 'See analysis'}`
+  ];
+  regSlide.addText(regText.map(t => ({ text: t, options: { bullet: true } })), {
+    x: 0.5, y: 1.3, w: 9, h: 5.5,
+    fontSize: 12, color: COLORS.text, valign: 'top', lineSpacing: 28
+  });
+
+  // SLIDE 6: Entry Strategy Options
+  const stratSlide = addSlide('Entry Strategy Options', synthesis.country);
+  const entryOpts = synthesis.entryStrategyOptions || synthesis.entryOptions || {};
+
+  let yPos = 1.3;
+  ['optionA', 'optionB', 'optionC', 'A', 'B', 'C'].forEach(key => {
+    const opt = entryOpts[key] || entryOpts[`option${key}`];
+    if (opt && yPos < 5.5) {
+      const optText = typeof opt === 'string' ? opt :
+        `${opt.name || opt.title || key}: ${opt.description || ''}\nPros: ${opt.pros || 'N/A'} | Cons: ${opt.cons || 'N/A'}`;
+      stratSlide.addText(optText, {
+        x: 0.5, y: yPos, w: 9, h: 1.3,
+        fontSize: 11, color: COLORS.text, valign: 'top'
+      });
+      yPos += 1.5;
+    }
+  });
+
+  const recommended = entryOpts.recommendedOption || entryOpts.recommendation;
+  if (recommended) {
+    stratSlide.addText(`Recommended: ${typeof recommended === 'string' ? recommended : recommended.option || JSON.stringify(recommended)}`, {
+      x: 0.5, y: 6, w: 9, h: 0.8,
+      fontSize: 12, bold: true, color: COLORS.accent, valign: 'top'
+    });
+  }
+
+  // SLIDE 7: Key Insights
+  const insightSlide = addSlide('Key Strategic Insights');
+  const insights = synthesis.keyInsights || [];
+  let insightY = 1.3;
+  (Array.isArray(insights) ? insights.slice(0, 3) : []).forEach((insight, idx) => {
+    const text = typeof insight === 'string' ? insight :
+      `${insight.pattern || insight.title || 'Insight ' + (idx + 1)}\n→ ${insight.implication || insight.description || ''}`;
+    insightSlide.addText(`${idx + 1}. ${text}`, {
+      x: 0.5, y: insightY, w: 9, h: 1.8,
+      fontSize: 11, color: COLORS.text, valign: 'top'
+    });
+    insightY += 1.9;
+  });
+
+  // SLIDE 8: Implementation Roadmap
+  const roadmapSlide = addSlide('Implementation Roadmap', synthesis.country);
+  const roadmap = synthesis.implementationRoadmap || synthesis.roadmap || {};
+
+  const phases = [
+    { key: 'phase1', label: 'Phase 1 (0-6 months)', color: COLORS.secondary },
+    { key: 'phase2', label: 'Phase 2 (6-12 months)', color: COLORS.accent },
+    { key: 'phase3', label: 'Phase 3 (12-24 months)', color: COLORS.green }
+  ];
+
+  let phaseY = 1.3;
+  phases.forEach(phase => {
+    const actions = roadmap[phase.key] || roadmap[phase.label] || [];
+    roadmapSlide.addText(phase.label, {
+      x: 0.5, y: phaseY, w: 9, h: 0.3,
+      fontSize: 13, bold: true, color: phase.color
+    });
+    const actionText = Array.isArray(actions) ? actions.join(', ') : String(actions);
+    roadmapSlide.addText(actionText, {
+      x: 0.5, y: phaseY + 0.35, w: 9, h: 1.2,
+      fontSize: 10, color: COLORS.text, valign: 'top'
+    });
+    phaseY += 1.7;
+  });
+
+  // SLIDE 9: Risks
+  const riskSlide = addSlide('Risk Assessment', synthesis.country);
+  const riskAssess = synthesis.riskAssessment || synthesis.risks || {};
+  const criticalRisks = riskAssess.criticalRisks || riskAssess.risks || [];
+  const goNoGo = riskAssess.goNoGoCriteria || riskAssess.goNoGo || [];
+
+  riskSlide.addText('Critical Risks', {
+    x: 0.5, y: 1.3, w: 9, h: 0.3,
+    fontSize: 14, bold: true, color: COLORS.red
+  });
+  riskSlide.addText((Array.isArray(criticalRisks) ? criticalRisks.slice(0, 5) : []).map(r => ({
+    text: typeof r === 'string' ? r : `${r.risk || r.name}: ${r.mitigation || ''}`,
+    options: { bullet: true }
+  })), {
+    x: 0.5, y: 1.7, w: 9, h: 2.5,
+    fontSize: 11, color: COLORS.text, valign: 'top'
+  });
+
+  riskSlide.addText('Go/No-Go Criteria', {
+    x: 0.5, y: 4.5, w: 9, h: 0.3,
+    fontSize: 14, bold: true, color: COLORS.secondary
+  });
+  riskSlide.addText((Array.isArray(goNoGo) ? goNoGo.slice(0, 4) : []).map(g => ({
+    text: typeof g === 'string' ? g : g.criteria || g.description,
+    options: { bullet: true }
+  })), {
+    x: 0.5, y: 4.9, w: 9, h: 2,
+    fontSize: 11, color: COLORS.text, valign: 'top'
+  });
+
+  // SLIDE 10: Next Steps
+  const nextSlide = addSlide('Next Steps');
+  const nextSteps = synthesis.nextSteps || [
+    'Validate findings with in-country experts',
+    'Conduct detailed partner identification',
+    'Develop financial model',
+    'Schedule market visit'
+  ];
+  nextSlide.addText((Array.isArray(nextSteps) ? nextSteps : [nextSteps]).map((step, idx) => ({
+    text: `${idx + 1}. ${typeof step === 'string' ? step : step.action || step.description}`,
+    options: { bullet: false }
+  })), {
+    x: 0.5, y: 1.3, w: 9, h: 5,
+    fontSize: 14, color: COLORS.text, valign: 'top', lineSpacing: 28
+  });
+
+  // SLIDE 11: Methodology
+  const methodSlide = addSlide('Research Methodology & Cost');
+  methodSlide.addText([
+    { text: 'Methodology', options: { bold: true, fontSize: 14 } },
+    { text: '\n\nThis deep-dive analysis was generated using AI-powered research:', options: { fontSize: 11 } },
+    { text: '\n• 15+ targeted web searches using Perplexity AI', options: { bullet: false, fontSize: 11 } },
+    { text: '\n• Deep analysis using DeepSeek thinking model', options: { bullet: false, fontSize: 11 } },
+    { text: '\n• Strategy consulting frameworks for insight generation', options: { bullet: false, fontSize: 11 } },
+    { text: `\n\nTotal research cost: $${costTracker.totalCost.toFixed(2)}`, options: { fontSize: 11, bold: true } },
+    { text: `\nGenerated: ${new Date().toISOString()}`, options: { fontSize: 11 } }
+  ], {
+    x: 0.5, y: 1.3, w: 9, h: 5,
+    color: COLORS.text, valign: 'top'
+  });
+
+  const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
+  console.log(`Single-country PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB`);
+  return pptxBuffer;
+}
+
+// Multi-country comparison PPT
 async function generatePPT(synthesis, countryAnalyses, scope) {
   console.log('\n=== STAGE 4: PPT GENERATION ===');
+
+  // Route to single-country PPT if applicable
+  if (synthesis.isSingleCountry) {
+    return generateSingleCountryPPT(synthesis, countryAnalyses[0], scope);
+  }
 
   const pptx = new pptxgen();
 
