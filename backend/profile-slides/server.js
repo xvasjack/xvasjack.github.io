@@ -3640,30 +3640,60 @@ function validateAndFixHQFormat(location, websiteUrl) {
   if (isSingapore) {
     // Singapore: must be exactly 2 levels
     if (parts.length === 1 || loc.toLowerCase() === 'singapore') {
-      // Only "Singapore" - try to extract area from website URL
+      // Only "Singapore" - extract area from website URL or use default
       const domain = websiteUrl?.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0] || '';
-      // Default to a generic area since we can't determine from just "Singapore"
-      console.log(`  [HQ Fix] Singapore missing area, keeping as-is: ${loc}`);
-      return loc; // Keep as-is, we'll fix in slide generation
+
+      // Try to guess area from common Singapore industrial areas in domain
+      const areaHints = {
+        'jurong': 'Jurong',
+        'tuas': 'Tuas',
+        'woodlands': 'Woodlands',
+        'ubi': 'Ubi',
+        'changi': 'Changi',
+        'bedok': 'Bedok',
+        'tampines': 'Tampines',
+        'ang mo kio': 'Ang Mo Kio',
+        'amk': 'Ang Mo Kio',
+        'paya lebar': 'Paya Lebar',
+        'kallang': 'Kallang',
+        'geylang': 'Geylang'
+      };
+
+      let area = null;
+      for (const [hint, areaName] of Object.entries(areaHints)) {
+        if (domain.toLowerCase().includes(hint)) {
+          area = areaName;
+          break;
+        }
+      }
+
+      // If no area found, don't just use "Singapore" alone - better to leave it for manual fix
+      // But log it so we know
+      if (!area) {
+        console.log(`  [HQ Fix] Singapore missing area, couldn't determine from URL: ${websiteUrl}`);
+        // Return just Singapore for now - better than making up an area
+        return 'Singapore';
+      }
+
+      console.log(`  [HQ Fix] Fixed Singapore HQ: "${loc}" → "${area}, Singapore"`);
+      return `${area}, Singapore`;
     }
     if (parts.length > 2) {
       // Too many levels, keep first and last
-      return `${parts[0]}, Singapore`;
+      const fixed = `${parts[0]}, Singapore`;
+      console.log(`  [HQ Fix] Fixed Singapore HQ (too many levels): "${loc}" → "${fixed}"`);
+      return fixed;
     }
     return loc; // Already 2 levels
   } else {
     // Non-Singapore: must be exactly 3 levels
-    if (parts.length === 2) {
-      // Only 2 levels like "Bangkok, Thailand" - this is WRONG
-      console.log(`  [HQ Fix] Non-Singapore has only 2 levels: ${loc}`);
-      // We can't fix this without more info, but log it
-      return loc;
-    }
     if (parts.length > 3) {
       // Too many levels, keep last 3
-      return parts.slice(-3).join(', ');
+      const fixed = parts.slice(-3).join(', ');
+      console.log(`  [HQ Fix] Fixed non-Singapore HQ (too many levels): "${loc}" → "${fixed}"`);
+      return fixed;
     }
-    return loc; // Already 3 levels or less
+    return loc; // Already 3 levels or less (can't add missing levels without more info)
   }
 }
 
@@ -3766,11 +3796,13 @@ CUSTOMERS & MARKET (CRITICAL - LOOK EVERYWHERE FOR CLIENTS):
 - Number of customers (total active customers)
 - Customer segments served
 
-SUPPLIERS & PARTNERSHIPS:
-- Number of suppliers
+SUPPLIERS & PARTNERSHIPS (CRITICAL FOR DISTRIBUTORS):
+- Principal brands/suppliers (for distributors: look for "Our Brands", "Principals", "Partners" with LOGOS)
+- IMPORTANT: If website shows SUPPLIER/BRAND LOGOS, extract those company names!
 - Key supplier/partner names
 - Notable partnerships, JVs, technology transfers
 - Exclusive distribution agreements
+- For distributors: the brands they distribute are CRITICAL info - capture ALL of them!
 
 OPERATIONS & SCALE:
 - Production capacity (units/month, tons/month)
@@ -3891,32 +3923,32 @@ async function extractProductsBreakdown(scrapedContent, previousData) {
 
 THE RIGHT SIDE HAS MORE SPACE - use it for the content with THE MOST DATA.
 
-CRITICAL - CUSTOMERS/CLIENTS DETECTION:
-Look for customers/clients in ALL these places:
-- "Clients" or "Customers" section
-- "Our Clients", "Our Customers", "Trusted by" sections
-- Logo sections (company logos = customer names)
-- "Partners" that are actually customers (buying companies)
-- Testimonials (extract company names)
-- Case studies (extract client names)
+CRITICAL - LOOK FOR LOGOS (BOTH CUSTOMERS AND SUPPLIERS):
 
-IF YOU SEE CLIENT/CUSTOMER LOGOS ON THE WEBSITE, EXTRACT ALL THE COMPANY NAMES FROM THOSE LOGOS.
-Example: If you see logos for Sinarmas, Dole, SCG → those are customers, extract them!
+FOR CUSTOMERS/CLIENTS:
+- Look for: "Clients", "Customers", "Our Clients", "Trusted by" sections
+- Logo sections showing customer company logos
+- Testimonials, case studies (extract company names)
+- IF YOU SEE CLIENT LOGOS, EXTRACT ALL COMPANY NAMES!
+
+FOR SUPPLIERS/PRINCIPALS (IMPORTANT FOR DISTRIBUTORS):
+- Look for: "Our Brands", "Principals", "Partners", "We Represent" sections
+- Logo sections showing brand/supplier logos
+- IF COMPANY IS A DISTRIBUTOR, their principals/brands are CRITICAL!
+- Example: If you see logos for 3M, Fluke, Schneider → these are principals, extract them!
 
 DECISION PROCESS:
-1. Count how many items each category has:
-   - How many CUSTOMERS/CLIENTS are listed or shown as logos?
-   - How many PRODUCTS are shown?
-   - How many SERVICES are offered?
-   - How many SUPPLIERS are mentioned?
-2. Pick the category with THE HIGHEST COUNT to display on the right side
+1. Determine if company is a MANUFACTURER or DISTRIBUTOR
+2. For DISTRIBUTORS: prioritize showing "Principal Brands" or "Key Suppliers"
+3. For MANUFACTURERS: prioritize "Customers" or "Products"
+4. Pick the category with THE MOST LOGOS/ITEMS
 
 CATEGORY OPTIONS:
 1. "Customers" - When clients listed OR client logos visible (segment by industry)
-2. "Products and Applications" - When many products shown (segment by type)
-3. "Services" - When many services offered (segment by type)
-4. "Key Suppliers" - When many suppliers mentioned
-5. "Key Partnerships" - When strategic partnerships listed
+2. "Principal Brands" - For DISTRIBUTORS: the brands they represent (segment by category)
+3. "Products and Applications" - When many products shown (segment by type)
+4. "Key Suppliers" - When supplier logos visible
+5. "Services" - When many services offered
 
 OUTPUT JSON:
 {
@@ -4501,7 +4533,7 @@ app.post('/api/profile-slides', async (req, res) => {
           website: scraped.url,
           company_name: ensureString(basicInfo.company_name),
           established_year: ensureString(basicInfo.established_year || searchedInfo.established_year),
-          location: ensureString(basicInfo.location || searchedInfo.location),
+          location: validateAndFixHQFormat(ensureString(basicInfo.location || searchedInfo.location), website),
           business: ensureString(businessInfo.business),
           message: ensureString(businessInfo.message),
           footnote: ensureString(businessInfo.footnote),
@@ -4696,7 +4728,7 @@ app.post('/api/generate-ppt', async (req, res) => {
           website: scraped.url,
           company_name: ensureString(basicInfo.company_name),
           established_year: ensureString(basicInfo.established_year || searchedInfo.established_year),
-          location: ensureString(basicInfo.location || searchedInfo.location),
+          location: validateAndFixHQFormat(ensureString(basicInfo.location || searchedInfo.location), website),
           business: ensureString(businessInfo.business),
           message: ensureString(businessInfo.message),
           footnote: ensureString(businessInfo.footnote),
