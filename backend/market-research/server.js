@@ -765,23 +765,33 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     navy: '001C44'        // YCP navy
   };
 
-  // Set default font to Yu Gothic
-  pptx.theme = { headFontFace: 'Yu Gothic', bodyFontFace: 'Yu Gothic' };
+  // Set default font to Segoe UI (YCP standard)
+  pptx.theme = { headFontFace: 'Segoe UI', bodyFontFace: 'Segoe UI' };
+
+  // Standard font for all text
+  const FONT = 'Segoe UI';
 
   function addSlide(title, subtitle = '') {
     const slide = pptx.addSlide();
-    // Title - allow wrapping for longer insight-driven titles
+    // Title - 24pt bold navy (YCP standard)
     slide.addText(title, {
-      x: 0.5, y: 0.2, w: 9, h: 0.7,
-      fontSize: 20, bold: true, color: COLORS.primary, fontFace: 'Yu Gothic',
+      x: 0.35, y: 0.1, w: 9.3, h: 0.65,
+      fontSize: 24, bold: true, color: COLORS.primary, fontFace: FONT,
       valign: 'top', wrap: true
     });
+    // Message/subtitle - 16pt blue (YCP standard)
     if (subtitle) {
       slide.addText(subtitle, {
-        x: 0.5, y: 0.9, w: 9, h: 0.25,
-        fontSize: 10, color: '666666', fontFace: 'Yu Gothic'
+        x: 0.35, y: 0.75, w: 9.3, h: 0.3,
+        fontSize: 16, color: COLORS.secondary, fontFace: FONT
       });
     }
+    // Navy divider line under header (YCP standard)
+    slide.addShape('line', {
+      x: 0.35, y: subtitle ? 1.1 : 0.85,
+      w: 9.3, h: 0,
+      line: { color: COLORS.primary, width: 2.5 }
+    });
     return slide;
   }
 
@@ -789,15 +799,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const titleSlide = pptx.addSlide();
   titleSlide.addText(synthesis.country.toUpperCase(), {
     x: 0.5, y: 2.2, w: 9, h: 0.8,
-    fontSize: 42, bold: true, color: COLORS.primary, fontFace: 'Yu Gothic'
+    fontSize: 42, bold: true, color: COLORS.primary, fontFace: FONT
   });
   titleSlide.addText(`${scope.industry} Market Analysis`, {
     x: 0.5, y: 3.0, w: 9, h: 0.5,
-    fontSize: 24, color: COLORS.secondary, fontFace: 'Yu Gothic'
+    fontSize: 24, color: COLORS.secondary, fontFace: FONT
   });
   titleSlide.addText(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' }), {
     x: 0.5, y: 6.5, w: 9, h: 0.3,
-    fontSize: 10, color: '666666', fontFace: 'Yu Gothic'
+    fontSize: 10, color: '666666', fontFace: FONT
   });
 
   // Get insight-driven headlines if available
@@ -806,13 +816,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // SLIDE 2: Summary (1 slide, key points only)
   const summaryTitle = headlines.summary || 'Executive Summary';
   const execSlide = addSlide(summaryTitle, 'Key Findings');
-  const execBullets = safeArray(synthesis.executiveSummary, 5);
+  const execBullets = safeArray(synthesis.executiveSummary, 4);
   execSlide.addText(execBullets.map(b => ({
-    text: truncate(b, 350),
+    text: truncate(b, 180),
     options: { bullet: true }
   })), {
-    x: 0.5, y: 1.2, w: 9, h: 5.4,
-    fontSize: 11, color: COLORS.text, fontFace: 'Yu Gothic', valign: 'top', lineSpacing: 22
+    x: 0.35, y: 1.3, w: 9.3, h: 5.2,
+    fontSize: 14, color: COLORS.text, fontFace: FONT, valign: 'top', lineSpacing: 26
   });
 
   // SLIDE 3: Market Size Data (ACTUAL NUMBERS)
@@ -822,26 +832,27 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const macro = ca.macroContext || {};
   const market = ca.marketDynamics || {};
 
-  // Create data table
+  // Create data table with dark blue header (accent3 = #011AB7)
+  const TABLE_HEADER_COLOR = '011AB7';
   const marketRows = [
     [
-      { text: 'Metric', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
-      { text: 'Value', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+      { text: 'Metric', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Value', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } }
     ],
-    [{ text: 'GDP' }, { text: truncate(macro.gdp || 'N/A', 250) }],
-    [{ text: 'Population' }, { text: truncate(macro.population || 'N/A', 250) }],
-    [{ text: 'Industry Share of GDP' }, { text: truncate(macro.industrialGdpShare || 'N/A', 250) }],
-    [{ text: 'Market Size' }, { text: truncate(market.marketSize || 'N/A', 250) }],
-    [{ text: 'Energy Prices' }, { text: truncate(market.pricing || 'N/A', 250) }],
-    [{ text: 'Demand Drivers' }, { text: truncate(market.demand || 'N/A', 250) }]
+    [{ text: 'GDP' }, { text: truncate(macro.gdp || 'N/A', 120) }],
+    [{ text: 'Population' }, { text: truncate(macro.population || 'N/A', 120) }],
+    [{ text: 'Industry Share of GDP' }, { text: truncate(macro.industrialGdpShare || 'N/A', 120) }],
+    [{ text: 'Market Size' }, { text: truncate(market.marketSize || 'N/A', 120) }],
+    [{ text: 'Energy Prices' }, { text: truncate(market.pricing || 'N/A', 120) }],
+    [{ text: 'Demand Drivers' }, { text: truncate(market.demand || 'N/A', 120) }]
   ];
 
   marketSlide.addTable(marketRows, {
-    x: 0.5, y: 1.0, w: 9, h: 5,
-    fontSize: 10,
-    fontFace: 'Yu Gothic',
+    x: 0.35, y: 1.2, w: 9.3, h: 5,
+    fontSize: 14,
+    fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
-    colW: [2.5, 6.5]
+    colW: [2.3, 7]
   });
 
   // SLIDE 4: Competitor Data (TABLE FORMAT)
@@ -851,9 +862,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   const compRows = [
     [
-      { text: 'Company', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
-      { text: 'Type', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
-      { text: 'Notes', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+      { text: 'Company', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Type', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Notes', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } }
     ]
   ];
 
@@ -862,9 +873,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const name = typeof p === 'string' ? p : (p.name || 'Unknown');
     const desc = typeof p === 'string' ? '' : (p.description || '');
     compRows.push([
-      { text: truncate(name, 50) },
+      { text: truncate(name, 40) },
       { text: 'Local' },
-      { text: truncate(desc, 150) }
+      { text: truncate(desc, 100) }
     ]);
   });
 
@@ -873,29 +884,33 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const name = typeof p === 'string' ? p : (p.name || 'Unknown');
     const desc = typeof p === 'string' ? '' : (p.description || '');
     compRows.push([
-      { text: truncate(name, 50) },
+      { text: truncate(name, 40) },
       { text: 'Foreign' },
-      { text: truncate(desc, 150) }
+      { text: truncate(desc, 100) }
     ]);
   });
 
   compSlide.addTable(compRows, {
-    x: 0.5, y: 1.0, w: 9, h: 3.5,
-    fontSize: 9,
-    fontFace: 'Yu Gothic',
+    x: 0.35, y: 1.2, w: 9.3, h: 3.2,
+    fontSize: 14,
+    fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
-    colW: [2.5, 1, 5.5]
+    colW: [2.8, 0.8, 5.7]
   });
 
-  // Entry barriers below
-  compSlide.addText('Barriers to Entry:', {
-    x: 0.5, y: 4.7, w: 9, h: 0.3,
-    fontSize: 11, bold: true, color: COLORS.secondary, fontFace: 'Yu Gothic'
+  // Entry barriers below - with divider line
+  compSlide.addShape('line', {
+    x: 0.35, y: 4.5, w: 9.3, h: 0,
+    line: { color: COLORS.primary, width: 2.5 }
   });
-  const barriers = safeArray(comp.entryBarriers, 4);
-  compSlide.addText(barriers.map(b => ({ text: truncate(b, 200), options: { bullet: true } })), {
-    x: 0.5, y: 5.1, w: 9, h: 1.8,
-    fontSize: 9, fontFace: 'Yu Gothic', color: COLORS.text, valign: 'top'
+  compSlide.addText('Barriers to Entry:', {
+    x: 0.35, y: 4.6, w: 9.3, h: 0.35,
+    fontSize: 14, bold: true, color: COLORS.secondary, fontFace: FONT
+  });
+  const barriers = safeArray(comp.entryBarriers, 3);
+  compSlide.addText(barriers.map(b => ({ text: truncate(b, 120), options: { bullet: true } })), {
+    x: 0.35, y: 5.0, w: 9.3, h: 1.5,
+    fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
   });
 
   // SLIDE 5: Regulatory Data
@@ -905,85 +920,105 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   const regRows = [
     [
-      { text: 'Area', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
-      { text: 'Details', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+      { text: 'Area', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Details', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } }
     ],
-    [{ text: 'Government Stance' }, { text: truncate(reg.governmentStance || 'N/A', 200) }],
-    [{ text: 'Foreign Ownership Rules' }, { text: truncate(reg.foreignOwnershipRules || 'N/A', 200) }],
-    [{ text: 'Risk Level' }, { text: truncate(reg.regulatoryRisk || 'N/A', 200) }]
+    [{ text: 'Government Stance' }, { text: truncate(reg.governmentStance || 'N/A', 100) }],
+    [{ text: 'Foreign Ownership Rules' }, { text: truncate(reg.foreignOwnershipRules || 'N/A', 100) }],
+    [{ text: 'Risk Level' }, { text: truncate(reg.regulatoryRisk || 'N/A', 100) }]
   ];
 
   regSlide.addTable(regRows, {
-    x: 0.5, y: 1.0, w: 9, h: 2,
-    fontSize: 10, fontFace: 'Yu Gothic',
+    x: 0.35, y: 1.2, w: 9.3, h: 2,
+    fontSize: 14, fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
-    colW: [2.5, 6.5]
+    colW: [2.3, 7]
   });
 
-  // Key laws
+  // Key laws - with divider line
+  regSlide.addShape('line', {
+    x: 0.35, y: 3.3, w: 9.3, h: 0,
+    line: { color: COLORS.primary, width: 2.5 }
+  });
   regSlide.addText('Key Laws & Policies:', {
-    x: 0.5, y: 3.2, w: 9, h: 0.3,
-    fontSize: 11, bold: true, color: COLORS.secondary, fontFace: 'Yu Gothic'
+    x: 0.35, y: 3.4, w: 9.3, h: 0.35,
+    fontSize: 14, bold: true, color: COLORS.secondary, fontFace: FONT
   });
   const laws = safeArray(reg.keyLegislation, 4);
-  regSlide.addText(laws.map(l => ({ text: truncate(l, 250), options: { bullet: true } })), {
-    x: 0.5, y: 3.6, w: 9, h: 1.5,
-    fontSize: 9, fontFace: 'Yu Gothic', color: COLORS.text, valign: 'top'
+  regSlide.addText(laws.map(l => ({ text: truncate(l, 100), options: { bullet: true } })), {
+    x: 0.35, y: 3.8, w: 9.3, h: 1.4,
+    fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
   });
 
-  // Incentives
-  regSlide.addText('Available Incentives:', {
-    x: 0.5, y: 5.2, w: 9, h: 0.3,
-    fontSize: 11, bold: true, color: COLORS.green, fontFace: 'Yu Gothic'
+  // Incentives - with divider line
+  regSlide.addShape('line', {
+    x: 0.35, y: 5.3, w: 9.3, h: 0,
+    line: { color: COLORS.primary, width: 2.5 }
   });
-  const incentives = safeArray(reg.incentives, 3);
-  regSlide.addText(incentives.map(i => ({ text: truncate(i, 250), options: { bullet: true } })), {
-    x: 0.5, y: 5.6, w: 9, h: 1.2,
-    fontSize: 9, fontFace: 'Yu Gothic', color: COLORS.text, valign: 'top'
+  regSlide.addText('Available Incentives:', {
+    x: 0.35, y: 5.4, w: 9.3, h: 0.35,
+    fontSize: 14, bold: true, color: COLORS.green, fontFace: FONT
+  });
+  const incentives = safeArray(reg.incentives, 2);
+  regSlide.addText(incentives.map(i => ({ text: truncate(i, 100), options: { bullet: true } })), {
+    x: 0.35, y: 5.8, w: 9.3, h: 0.9,
+    fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
   });
 
   // SLIDE 6: What We Found (Analysis based on data)
   const analysisSlide = addSlide('What We Found', '');
   const summary = ca.summaryAssessment || {};
 
-  // Opportunities
+  // Opportunities - left column with divider
+  analysisSlide.addShape('line', {
+    x: 0.35, y: 1.2, w: 4.3, h: 0,
+    line: { color: COLORS.green, width: 2.5 }
+  });
   analysisSlide.addText('Opportunities', {
-    x: 0.5, y: 1.0, w: 4.2, h: 0.3,
-    fontSize: 12, bold: true, color: COLORS.green, fontFace: 'Yu Gothic'
+    x: 0.35, y: 1.3, w: 4.3, h: 0.35,
+    fontSize: 14, bold: true, color: COLORS.green, fontFace: FONT
   });
   const opps = safeArray(summary.opportunities, 4);
-  analysisSlide.addText(opps.map(o => ({ text: truncate(o, 150), options: { bullet: true } })), {
-    x: 0.5, y: 1.4, w: 4.2, h: 2.5,
-    fontSize: 9, fontFace: 'Yu Gothic', color: COLORS.text, valign: 'top'
+  analysisSlide.addText(opps.map(o => ({ text: truncate(o, 80), options: { bullet: true } })), {
+    x: 0.35, y: 1.7, w: 4.3, h: 2.5,
+    fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
   });
 
-  // Obstacles
+  // Obstacles - right column with divider
+  analysisSlide.addShape('line', {
+    x: 5, y: 1.2, w: 4.65, h: 0,
+    line: { color: COLORS.accent, width: 2.5 }
+  });
   analysisSlide.addText('Obstacles', {
-    x: 5, y: 1.0, w: 4.5, h: 0.3,
-    fontSize: 12, bold: true, color: COLORS.accent, fontFace: 'Yu Gothic'
+    x: 5, y: 1.3, w: 4.65, h: 0.35,
+    fontSize: 14, bold: true, color: COLORS.accent, fontFace: FONT
   });
   const obs = safeArray(summary.obstacles, 4);
-  analysisSlide.addText(obs.map(o => ({ text: truncate(o, 150), options: { bullet: true } })), {
-    x: 5, y: 1.4, w: 4.5, h: 2.5,
-    fontSize: 9, fontFace: 'Yu Gothic', color: COLORS.text, valign: 'top'
+  analysisSlide.addText(obs.map(o => ({ text: truncate(o, 80), options: { bullet: true } })), {
+    x: 5, y: 1.7, w: 4.65, h: 2.5,
+    fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
   });
 
-  // Key insight
-  analysisSlide.addText('Key Insight:', {
-    x: 0.5, y: 4.0, w: 9, h: 0.3,
-    fontSize: 12, bold: true, color: COLORS.accent, fontFace: 'Yu Gothic'
+  // Key insight - with divider
+  analysisSlide.addShape('line', {
+    x: 0.35, y: 4.3, w: 9.3, h: 0,
+    line: { color: COLORS.accent, width: 2.5 }
   });
-  analysisSlide.addText(truncate(summary.keyInsight || 'See detailed analysis', 400), {
-    x: 0.5, y: 4.4, w: 9, h: 1.8,
-    fontSize: 10, fontFace: 'Yu Gothic', color: COLORS.text, valign: 'top'
+  analysisSlide.addText('Key Insight:', {
+    x: 0.35, y: 4.4, w: 9.3, h: 0.35,
+    fontSize: 14, bold: true, color: COLORS.accent, fontFace: FONT
+  });
+  analysisSlide.addText(truncate(summary.keyInsight || 'See detailed analysis', 200), {
+    x: 0.35, y: 4.8, w: 9.3, h: 1.5,
+    fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
   });
 
   // Ratings
   analysisSlide.addText(
     `Market Attractiveness: ${summary.attractivenessRating || 'N/A'}/10    Feasibility: ${summary.feasibilityRating || 'N/A'}/10`,
     {
-      x: 0.5, y: 6.4, w: 9, h: 0.3,
-      fontSize: 10, bold: true, color: COLORS.primary, fontFace: 'Yu Gothic'
+      x: 0.35, y: 6.4, w: 9.3, h: 0.3,
+      fontSize: 14, bold: true, color: COLORS.primary, fontFace: FONT
     }
   );
 
@@ -991,24 +1026,30 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const keyInsights = safeArray(synthesis.keyInsights, 3);
   if (keyInsights.length > 0) {
     const insightSlide = addSlide('Key Insights', '');
-    let insightY = 1.0;
+    let insightY = 1.2;
 
     keyInsights.forEach((insight, idx) => {
       const title = typeof insight === 'string' ? `Insight ${idx + 1}` : (insight.title || `Insight ${idx + 1}`);
       const body = typeof insight === 'string' ? insight :
         `${insight.data || ''} → ${insight.pattern || ''} → ${insight.implication || ''}`;
 
+      // Divider line for each insight
+      insightSlide.addShape('line', {
+        x: 0.35, y: insightY - 0.1, w: 9.3, h: 0,
+        line: { color: COLORS.accent, width: 2.5 }
+      });
+
       insightSlide.addText(`${idx + 1}. ${title}`, {
-        x: 0.5, y: insightY, w: 9, h: 0.4,
-        fontSize: 11, bold: true, color: COLORS.accent, fontFace: 'Yu Gothic', wrap: true
+        x: 0.35, y: insightY, w: 9.3, h: 0.4,
+        fontSize: 14, bold: true, color: COLORS.accent, fontFace: FONT, wrap: true
       });
 
-      insightSlide.addText(truncate(body, 500), {
-        x: 0.5, y: insightY + 0.45, w: 9, h: 1.4,
-        fontSize: 9, fontFace: 'Yu Gothic', color: COLORS.text, valign: 'top'
+      insightSlide.addText(truncate(body, 180), {
+        x: 0.35, y: insightY + 0.45, w: 9.3, h: 1.3,
+        fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
       });
 
-      insightY += 1.95;
+      insightY += 1.85;
     });
   }
 
@@ -1018,10 +1059,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   const optRows = [
     [
-      { text: '', options: { fill: { color: COLORS.primary }, color: COLORS.white } },
-      { text: 'Option A', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
-      { text: 'Option B', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
-      { text: 'Option C', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+      { text: '', options: { fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Option A', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Option B', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Option C', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } }
     ]
   ];
 
@@ -1030,8 +1071,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const optC = entryOpts.optionC || entryOpts.C || {};
 
   const getOptField = (opt, field) => {
-    if (typeof opt === 'string') return truncate(opt, 100);
-    return truncate(opt[field] || opt.description || 'N/A', 100);
+    if (typeof opt === 'string') return truncate(opt, 60);
+    return truncate(opt[field] || opt.description || 'N/A', 60);
   };
 
   optRows.push([
@@ -1056,23 +1097,27 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   ]);
 
   stratSlide.addTable(optRows, {
-    x: 0.5, y: 1.0, w: 9, h: 3.5,
-    fontSize: 9, fontFace: 'Yu Gothic',
+    x: 0.35, y: 1.2, w: 9.3, h: 3.2,
+    fontSize: 14, fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
-    colW: [1.2, 2.6, 2.6, 2.6]
+    colW: [1.2, 2.7, 2.7, 2.7]
   });
 
-  // Recommendation
+  // Recommendation - with divider
   const recommended = entryOpts.recommendedOption || entryOpts.recommendation;
   if (recommended) {
+    stratSlide.addShape('line', {
+      x: 0.35, y: 4.5, w: 9.3, h: 0,
+      line: { color: COLORS.accent, width: 2.5 }
+    });
     stratSlide.addText('Recommended:', {
-      x: 0.5, y: 4.7, w: 9, h: 0.3,
-      fontSize: 11, bold: true, color: COLORS.accent, fontFace: 'Yu Gothic'
+      x: 0.35, y: 4.6, w: 9.3, h: 0.35,
+      fontSize: 14, bold: true, color: COLORS.accent, fontFace: FONT
     });
     const recText = typeof recommended === 'string' ? recommended : (recommended.option || recommended.rationale || JSON.stringify(recommended));
-    stratSlide.addText(truncate(recText, 350), {
-      x: 0.5, y: 5.1, w: 9, h: 1.5,
-      fontSize: 10, fontFace: 'Yu Gothic', color: COLORS.text, valign: 'top'
+    stratSlide.addText(truncate(recText, 180), {
+      x: 0.35, y: 5.0, w: 9.3, h: 1.5,
+      fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
     });
   }
 
@@ -1080,13 +1125,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const riskTitle = headlines.risks || 'Risk Assessment';
   const riskSlide = addSlide(riskTitle, '');
   const riskAssess = synthesis.riskAssessment || synthesis.risks || {};
-  const criticalRisks = safeArray(riskAssess.criticalRisks || riskAssess.risks, 4);
+  const criticalRisks = safeArray(riskAssess.criticalRisks || riskAssess.risks, 3);
 
-  // Risk table - use accent color (orange) for header instead of red
+  // Risk table - use accent color (orange) for header
   const riskRows = [
     [
-      { text: 'Risk', options: { bold: true, fill: { color: COLORS.accent }, color: COLORS.white } },
-      { text: 'How to Handle', options: { bold: true, fill: { color: COLORS.accent }, color: COLORS.white } }
+      { text: 'Risk', options: { bold: true, fill: { color: COLORS.accent }, color: COLORS.white, fontFace: FONT } },
+      { text: 'How to Handle', options: { bold: true, fill: { color: COLORS.accent }, color: COLORS.white, fontFace: FONT } }
     ]
   ];
 
@@ -1094,31 +1139,35 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const riskName = typeof r === 'string' ? r : (r.risk || r.name || 'Risk');
     const mitigation = typeof r === 'string' ? '' : (r.mitigation || '');
     riskRows.push([
-      { text: truncate(riskName, 150) },
-      { text: truncate(mitigation, 200) }
+      { text: truncate(riskName, 80) },
+      { text: truncate(mitigation, 100) }
     ]);
   });
 
   riskSlide.addTable(riskRows, {
-    x: 0.5, y: 1.0, w: 9, h: 3,
-    fontSize: 9, fontFace: 'Yu Gothic',
+    x: 0.35, y: 1.2, w: 9.3, h: 2.8,
+    fontSize: 14, fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
-    colW: [4, 5]
+    colW: [4.3, 5]
   });
 
-  // Go/No-Go criteria
+  // Go/No-Go criteria - with divider
   const goNoGo = safeArray(riskAssess.goNoGoCriteria || riskAssess.goNoGo, 4);
   if (goNoGo.length > 0) {
+    riskSlide.addShape('line', {
+      x: 0.35, y: 4.1, w: 9.3, h: 0,
+      line: { color: COLORS.secondary, width: 2.5 }
+    });
     riskSlide.addText('Go/No-Go Checklist:', {
-      x: 0.5, y: 4.2, w: 9, h: 0.3,
-      fontSize: 11, bold: true, color: COLORS.secondary, fontFace: 'Yu Gothic'
+      x: 0.35, y: 4.2, w: 9.3, h: 0.35,
+      fontSize: 14, bold: true, color: COLORS.secondary, fontFace: FONT
     });
     riskSlide.addText(goNoGo.map(g => ({
-      text: truncate(typeof g === 'string' ? g : (g.criteria || g.description), 200),
+      text: truncate(typeof g === 'string' ? g : (g.criteria || g.description), 80),
       options: { bullet: true }
     })), {
-      x: 0.5, y: 4.6, w: 9, h: 2,
-      fontSize: 9, fontFace: 'Yu Gothic', color: COLORS.text, valign: 'top'
+      x: 0.35, y: 4.6, w: 9.3, h: 2,
+      fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
     });
   }
 
@@ -1138,23 +1187,30 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     return String(text).replace(/^(months?\s*\d+[-–]\d+\s*:?\s*)/i, '').trim();
   };
 
-  let phaseY = 1.0;
+  let phaseY = 1.2;
   phases.forEach(phase => {
     const actions = roadmap[phase.key] || roadmap[phase.label] || [];
+
+    // Divider line for each phase
+    roadmapSlide.addShape('line', {
+      x: 0.35, y: phaseY - 0.1, w: 9.3, h: 0,
+      line: { color: phase.color, width: 2.5 }
+    });
+
     roadmapSlide.addText(phase.label, {
-      x: 0.5, y: phaseY, w: 9, h: 0.35,
-      fontSize: 12, bold: true, color: phase.color, fontFace: 'Yu Gothic'
+      x: 0.35, y: phaseY, w: 9.3, h: 0.35,
+      fontSize: 14, bold: true, color: phase.color, fontFace: FONT
     });
 
     const actionList = Array.isArray(actions) ? actions : [actions];
     roadmapSlide.addText(safeArray(actionList, 4).map(a => ({
-      text: truncate(stripMonthPrefix(a), 250),
+      text: truncate(stripMonthPrefix(a), 100),
       options: { bullet: true }
     })), {
-      x: 0.5, y: phaseY + 0.35, w: 9, h: 1.5,
-      fontSize: 9, fontFace: 'Yu Gothic', color: COLORS.text, valign: 'top'
+      x: 0.35, y: phaseY + 0.35, w: 9.3, h: 1.4,
+      fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
     });
-    phaseY += 2.0;
+    phaseY += 1.85;
   });
 
   // Next Steps slide removed per user request
@@ -1191,22 +1247,34 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     navy: '001C44'        // YCP navy
   };
 
-  // Set default font to Yu Gothic
-  pptx.theme = { headFontFace: 'Yu Gothic', bodyFontFace: 'Yu Gothic' };
+  // Set default font to Segoe UI (YCP standard)
+  pptx.theme = { headFontFace: 'Segoe UI', bodyFontFace: 'Segoe UI' };
+
+  // Standard font for all text
+  const FONT = 'Segoe UI';
+  const TABLE_HEADER_COLOR = '011AB7';
 
   function addSlide(title, subtitle = '') {
     const slide = pptx.addSlide();
+    // Title - 24pt bold navy (YCP standard)
     slide.addText(title, {
-      x: 0.5, y: 0.2, w: 9, h: 0.7,
-      fontSize: 20, bold: true, color: COLORS.primary, fontFace: 'Yu Gothic',
+      x: 0.35, y: 0.1, w: 9.3, h: 0.65,
+      fontSize: 24, bold: true, color: COLORS.primary, fontFace: FONT,
       valign: 'top', wrap: true
     });
+    // Message/subtitle - 16pt blue (YCP standard)
     if (subtitle) {
       slide.addText(subtitle, {
-        x: 0.5, y: 0.9, w: 9, h: 0.25,
-        fontSize: 10, color: '666666', fontFace: 'Yu Gothic'
+        x: 0.35, y: 0.75, w: 9.3, h: 0.3,
+        fontSize: 16, color: COLORS.secondary, fontFace: FONT
       });
     }
+    // Navy divider line under header (YCP standard)
+    slide.addShape('line', {
+      x: 0.35, y: subtitle ? 1.1 : 0.85,
+      w: 9.3, h: 0,
+      line: { color: COLORS.primary, width: 2.5 }
+    });
     return slide;
   }
 
@@ -1214,19 +1282,19 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   const titleSlide = pptx.addSlide();
   titleSlide.addText(scope.industry.toUpperCase(), {
     x: 0.5, y: 2.2, w: 9, h: 0.8,
-    fontSize: 36, bold: true, color: COLORS.primary, fontFace: 'Yu Gothic'
+    fontSize: 36, bold: true, color: COLORS.primary, fontFace: FONT
   });
   titleSlide.addText('Market Comparison', {
     x: 0.5, y: 3.0, w: 9, h: 0.5,
-    fontSize: 24, color: COLORS.secondary, fontFace: 'Yu Gothic'
+    fontSize: 24, color: COLORS.secondary, fontFace: FONT
   });
   titleSlide.addText(scope.targetMarkets.join(' | '), {
     x: 0.5, y: 3.6, w: 9, h: 0.4,
-    fontSize: 14, color: COLORS.text, fontFace: 'Yu Gothic'
+    fontSize: 14, color: COLORS.text, fontFace: FONT
   });
   titleSlide.addText(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' }), {
     x: 0.5, y: 6.5, w: 9, h: 0.3,
-    fontSize: 10, color: '666666', fontFace: 'Yu Gothic'
+    fontSize: 10, color: '666666', fontFace: FONT
   });
 
   // Get insight-driven headlines if available
@@ -1241,7 +1309,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     options: { bullet: true }
   })), {
     x: 0.5, y: 1.2, w: 9, h: 5.4,
-    fontSize: 11, fontFace: 'Yu Gothic', color: COLORS.text, valign: 'top', lineSpacing: 22
+    fontSize: 11, fontFace: FONT, color: COLORS.text, valign: 'top', lineSpacing: 22
   });
 
   // SLIDE 3: Market Size Comparison (DATA TABLE)
@@ -1250,27 +1318,27 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
 
   const marketCompRows = [
     [
-      { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: 'Yu Gothic' } },
-      { text: 'GDP', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: 'Yu Gothic' } },
-      { text: 'Market Size', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: 'Yu Gothic' } },
-      { text: 'Growth', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: 'Yu Gothic' } }
+      { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
+      { text: 'GDP', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Market Size', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Growth', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } }
     ]
   ];
 
   countryAnalyses.forEach(c => {
     if (c.error) return;
     marketCompRows.push([
-      { text: c.country, options: { fontFace: 'Yu Gothic' } },
-      { text: truncate(c.macroContext?.gdp || 'N/A', 50), options: { fontFace: 'Yu Gothic' } },
-      { text: truncate(c.marketDynamics?.marketSize || 'N/A', 50), options: { fontFace: 'Yu Gothic' } },
-      { text: truncate(c.marketDynamics?.demand || 'N/A', 50), options: { fontFace: 'Yu Gothic' } }
+      { text: c.country, options: { fontFace: FONT } },
+      { text: truncate(c.macroContext?.gdp || 'N/A', 50), options: { fontFace: FONT } },
+      { text: truncate(c.marketDynamics?.marketSize || 'N/A', 50), options: { fontFace: FONT } },
+      { text: truncate(c.marketDynamics?.demand || 'N/A', 50), options: { fontFace: FONT } }
     ]);
   });
 
   marketCompSlide.addTable(marketCompRows, {
     x: 0.5, y: 1.1, w: 9, h: 4,
     fontSize: 10,
-    fontFace: 'Yu Gothic',
+    fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
     colW: [2, 2.3, 2.3, 2.4]
   });
@@ -1280,10 +1348,10 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
 
   const regCompRows = [
     [
-      { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: 'Yu Gothic' } },
-      { text: 'Foreign Ownership', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: 'Yu Gothic' } },
-      { text: 'Risk Level', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: 'Yu Gothic' } },
-      { text: 'Key Incentive', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: 'Yu Gothic' } }
+      { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Foreign Ownership', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Risk Level', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Key Incentive', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } }
     ]
   ];
 
@@ -1291,17 +1359,17 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     if (c.error) return;
     const incentives = c.policyRegulatory?.incentives || [];
     regCompRows.push([
-      { text: c.country, options: { fontFace: 'Yu Gothic' } },
-      { text: truncate(c.policyRegulatory?.foreignOwnershipRules || 'N/A', 50), options: { fontFace: 'Yu Gothic' } },
-      { text: truncate(c.policyRegulatory?.regulatoryRisk || 'N/A', 40), options: { fontFace: 'Yu Gothic' } },
-      { text: truncate(incentives[0] || 'N/A', 50), options: { fontFace: 'Yu Gothic' } }
+      { text: c.country, options: { fontFace: FONT } },
+      { text: truncate(c.policyRegulatory?.foreignOwnershipRules || 'N/A', 50), options: { fontFace: FONT } },
+      { text: truncate(c.policyRegulatory?.regulatoryRisk || 'N/A', 40), options: { fontFace: FONT } },
+      { text: truncate(incentives[0] || 'N/A', 50), options: { fontFace: FONT } }
     ]);
   });
 
   regCompSlide.addTable(regCompRows, {
     x: 0.5, y: 1.1, w: 9, h: 4,
     fontSize: 10,
-    fontFace: 'Yu Gothic',
+    fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
     colW: [2, 2.5, 2, 2.5]
   });
@@ -1312,27 +1380,27 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
 
   const rankRows = [
     [
-      { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: 'Yu Gothic' } },
-      { text: 'Attractiveness', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: 'Yu Gothic' } },
-      { text: 'Feasibility', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: 'Yu Gothic' } },
-      { text: 'Competition', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: 'Yu Gothic' } }
+      { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Attractiveness', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Feasibility', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Competition', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } }
     ]
   ];
 
   countryAnalyses.forEach(c => {
     if (c.error) return;
     rankRows.push([
-      { text: c.country, options: { fontFace: 'Yu Gothic' } },
-      { text: `${c.summaryAssessment?.attractivenessRating || 'N/A'}/10`, options: { fontFace: 'Yu Gothic' } },
-      { text: `${c.summaryAssessment?.feasibilityRating || 'N/A'}/10`, options: { fontFace: 'Yu Gothic' } },
-      { text: truncate(c.competitiveLandscape?.competitiveIntensity || 'N/A', 50), options: { fontFace: 'Yu Gothic' } }
+      { text: c.country, options: { fontFace: FONT } },
+      { text: `${c.summaryAssessment?.attractivenessRating || 'N/A'}/10`, options: { fontFace: FONT } },
+      { text: `${c.summaryAssessment?.feasibilityRating || 'N/A'}/10`, options: { fontFace: FONT } },
+      { text: truncate(c.competitiveLandscape?.competitiveIntensity || 'N/A', 50), options: { fontFace: FONT } }
     ]);
   });
 
   rankSlide.addTable(rankRows, {
     x: 0.5, y: 1.1, w: 9, h: 3.5,
     fontSize: 11,
-    fontFace: 'Yu Gothic',
+    fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
     colW: [2.5, 2, 2, 2.5]
   });
@@ -1344,12 +1412,12 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   if (sortedByAttract.length > 0) {
     rankSlide.addText(`Most attractive: ${sortedByAttract[0]?.country || 'N/A'}`, {
       x: 0.5, y: 5, w: 9, h: 0.4,
-      fontSize: 12, bold: true, color: COLORS.green, fontFace: 'Yu Gothic'
+      fontSize: 12, bold: true, color: COLORS.green, fontFace: FONT
     });
     if (sortedByAttract.length > 1) {
       rankSlide.addText(`Least attractive: ${sortedByAttract[sortedByAttract.length - 1]?.country || 'N/A'}`, {
         x: 0.5, y: 5.5, w: 9, h: 0.4,
-        fontSize: 12, color: COLORS.red, fontFace: 'Yu Gothic'
+        fontSize: 12, color: COLORS.red, fontFace: FONT
       });
     }
   }
@@ -1362,16 +1430,16 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
 
     // Left: Metrics table
     const metricsRows = [
-      [{ text: 'Metric', options: { bold: true, fontFace: 'Yu Gothic' } }, { text: 'Value', options: { bold: true, fontFace: 'Yu Gothic' } }],
-      [{ text: 'GDP', options: { fontFace: 'Yu Gothic' } }, { text: truncate(country.macroContext?.gdp || 'N/A', 80), options: { fontFace: 'Yu Gothic' } }],
-      [{ text: 'Market Size', options: { fontFace: 'Yu Gothic' } }, { text: truncate(country.marketDynamics?.marketSize || 'N/A', 80), options: { fontFace: 'Yu Gothic' } }],
-      [{ text: 'Reg Risk', options: { fontFace: 'Yu Gothic' } }, { text: truncate(country.policyRegulatory?.regulatoryRisk || 'N/A', 80), options: { fontFace: 'Yu Gothic' } }]
+      [{ text: 'Metric', options: { bold: true, fontFace: FONT } }, { text: 'Value', options: { bold: true, fontFace: FONT } }],
+      [{ text: 'GDP', options: { fontFace: FONT } }, { text: truncate(country.macroContext?.gdp || 'N/A', 80), options: { fontFace: FONT } }],
+      [{ text: 'Market Size', options: { fontFace: FONT } }, { text: truncate(country.marketDynamics?.marketSize || 'N/A', 80), options: { fontFace: FONT } }],
+      [{ text: 'Reg Risk', options: { fontFace: FONT } }, { text: truncate(country.policyRegulatory?.regulatoryRisk || 'N/A', 80), options: { fontFace: FONT } }]
     ];
 
     cSlide.addTable(metricsRows, {
       x: 0.5, y: 1.1, w: 4.2, h: 2,
       fontSize: 9,
-      fontFace: 'Yu Gothic',
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [1.5, 2.7]
     });
@@ -1379,44 +1447,44 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     // Right: Opportunities & Obstacles
     cSlide.addText('Opportunities', {
       x: 5, y: 1.1, w: 4.5, h: 0.25,
-      fontSize: 11, bold: true, color: COLORS.green, fontFace: 'Yu Gothic'
+      fontSize: 11, bold: true, color: COLORS.green, fontFace: FONT
     });
     const opps = safeArray(country.summaryAssessment?.opportunities, 3);
     cSlide.addText(opps.map(o => ({ text: truncate(o, 100), options: { bullet: true } })), {
       x: 5, y: 1.4, w: 4.5, h: 1.3,
-      fontSize: 9, color: COLORS.text, fontFace: 'Yu Gothic', valign: 'top'
+      fontSize: 9, color: COLORS.text, fontFace: FONT, valign: 'top'
     });
 
     cSlide.addText('Obstacles', {
       x: 5, y: 2.8, w: 4.5, h: 0.25,
-      fontSize: 11, bold: true, color: COLORS.red, fontFace: 'Yu Gothic'
+      fontSize: 11, bold: true, color: COLORS.red, fontFace: FONT
     });
     const obs = safeArray(country.summaryAssessment?.obstacles, 3);
     cSlide.addText(obs.map(o => ({ text: truncate(o, 100), options: { bullet: true } })), {
       x: 5, y: 3.1, w: 4.5, h: 1.3,
-      fontSize: 9, color: COLORS.text, fontFace: 'Yu Gothic', valign: 'top'
+      fontSize: 9, color: COLORS.text, fontFace: FONT, valign: 'top'
     });
 
     // Bottom: Key competitors
     cSlide.addText('Key Competitors:', {
       x: 0.5, y: 4.6, w: 9, h: 0.25,
-      fontSize: 11, bold: true, color: COLORS.secondary, fontFace: 'Yu Gothic'
+      fontSize: 11, bold: true, color: COLORS.secondary, fontFace: FONT
     });
     const localPlayers = safeArray(country.competitiveLandscape?.localPlayers, 3);
     const competitorText = localPlayers.map(p => typeof p === 'string' ? p : p.name).join(', ') || 'See detailed analysis';
     cSlide.addText(truncate(competitorText, 200), {
       x: 0.5, y: 4.9, w: 9, h: 0.5,
-      fontSize: 10, color: COLORS.text, fontFace: 'Yu Gothic'
+      fontSize: 10, color: COLORS.text, fontFace: FONT
     });
 
     // Key Insight
     cSlide.addText('Key Insight:', {
       x: 0.5, y: 5.5, w: 9, h: 0.25,
-      fontSize: 11, bold: true, color: COLORS.accent, fontFace: 'Yu Gothic'
+      fontSize: 11, bold: true, color: COLORS.accent, fontFace: FONT
     });
     cSlide.addText(truncate(country.summaryAssessment?.keyInsight || 'See analysis', 250), {
       x: 0.5, y: 5.8, w: 9, h: 0.9,
-      fontSize: 10, color: COLORS.text, fontFace: 'Yu Gothic', valign: 'top'
+      fontSize: 10, color: COLORS.text, fontFace: FONT, valign: 'top'
     });
 
     // Ratings
@@ -1424,7 +1492,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       `Attractiveness: ${country.summaryAssessment?.attractivenessRating || 'N/A'}/10    Feasibility: ${country.summaryAssessment?.feasibilityRating || 'N/A'}/10`,
       {
         x: 0.5, y: 6.8, w: 9, h: 0.25,
-        fontSize: 10, bold: true, color: COLORS.primary, fontFace: 'Yu Gothic'
+        fontSize: 10, bold: true, color: COLORS.primary, fontFace: FONT
       }
     );
   }
@@ -1436,13 +1504,13 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   // Entry sequence
   recoSlide.addText('Recommended entry order:', {
     x: 0.5, y: 1.1, w: 9, h: 0.3,
-    fontSize: 12, bold: true, color: COLORS.secondary, fontFace: 'Yu Gothic'
+    fontSize: 12, bold: true, color: COLORS.secondary, fontFace: FONT
   });
   const entrySeq = recommendations.entrySequence || recommendations.recommendedEntrySequence ||
     countryAnalyses.filter(c => !c.error).map(c => c.country).join(' → ');
   recoSlide.addText(truncate(typeof entrySeq === 'string' ? entrySeq : entrySeq.join(' → '), 150), {
     x: 0.5, y: 1.5, w: 9, h: 0.4,
-    fontSize: 11, color: COLORS.text, fontFace: 'Yu Gothic'
+    fontSize: 11, color: COLORS.text, fontFace: FONT
   });
 
   // Entry modes table
@@ -1450,28 +1518,28 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   if (Array.isArray(entryModes) && entryModes.length > 0) {
     recoSlide.addText('How to enter each market:', {
       x: 0.5, y: 2.1, w: 9, h: 0.3,
-      fontSize: 12, bold: true, color: COLORS.secondary, fontFace: 'Yu Gothic'
+      fontSize: 12, bold: true, color: COLORS.secondary, fontFace: FONT
     });
 
     const modeRows = [
       [
-        { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: 'Yu Gothic' } },
-        { text: 'Entry Mode', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: 'Yu Gothic' } }
+        { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
+        { text: 'Entry Mode', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } }
       ]
     ];
     entryModes.slice(0, 5).forEach(m => {
       const country = typeof m === 'string' ? m.split(':')[0] : m.country;
       const mode = typeof m === 'string' ? m.split(':')[1] : (m.mode || m.recommendation);
       modeRows.push([
-        { text: truncate(country, 30), options: { fontFace: 'Yu Gothic' } },
-        { text: truncate(mode, 100), options: { fontFace: 'Yu Gothic' } }
+        { text: truncate(country, 30), options: { fontFace: FONT } },
+        { text: truncate(mode, 100), options: { fontFace: FONT } }
       ]);
     });
 
     recoSlide.addTable(modeRows, {
       x: 0.5, y: 2.5, w: 9, h: 2.5,
       fontSize: 10,
-      fontFace: 'Yu Gothic',
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.5, 6.5]
     });
@@ -1482,14 +1550,14 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   if (risks.length > 0) {
     recoSlide.addText('Key risks to watch:', {
       x: 0.5, y: 5.3, w: 9, h: 0.3,
-      fontSize: 12, bold: true, color: COLORS.accent, fontFace: 'Yu Gothic'
+      fontSize: 12, bold: true, color: COLORS.accent, fontFace: FONT
     });
     recoSlide.addText(risks.map(r => ({
       text: truncate(typeof r === 'string' ? r : (r.strategy || r.description), 150),
       options: { bullet: true }
     })), {
       x: 0.5, y: 5.7, w: 9, h: 1.2,
-      fontSize: 10, color: COLORS.text, fontFace: 'Yu Gothic', valign: 'top'
+      fontSize: 10, color: COLORS.text, fontFace: FONT, valign: 'top'
     });
   }
 
