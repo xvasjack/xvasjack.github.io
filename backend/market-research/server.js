@@ -488,24 +488,56 @@ async function synthesizeSingleCountry(countryAnalysis, scope) {
   console.log('\n=== STAGE 3: SINGLE COUNTRY DEEP DIVE ===');
   console.log(`Generating deep analysis for ${countryAnalysis.country}...`);
 
-  const systemPrompt = `You are explaining a business opportunity to someone who knows NOTHING about this industry.
+  const systemPrompt = `You are a smart friend explaining a business opportunity over coffee. The person you're talking to is intelligent but knows NOTHING about this industry.
 
-WRITING RULES - VERY IMPORTANT:
-1. PLAIN ENGLISH ONLY. No jargon. No acronyms without explanation.
-   - BAD: "BOI Category 7.1.7 provides 8-year CIT exemptions for ESCOs"
-   - GOOD: "The government gives 8 years of tax breaks to energy efficiency companies"
-2. SHORT SENTENCES. One idea per sentence. Max 15 words per sentence.
-3. CONCRETE NUMBERS. Not "significant growth" but "growing 8% per year"
-4. EXPLAIN WHY IT MATTERS. Not just facts, but "so what" for the reader.
+=== BANNED WORDS (never use these) ===
+leverage, synergy, ecosystem, stakeholder, facilitate, optimize, streamline, scalable, robust, holistic, paradigm, incentivize, utilize, implement, methodology, framework, bandwidth, actionable, alignment, best-in-class, value-add, deep-dive, move the needle, circle back, low-hanging fruit, boil the ocean, touch base
 
-SLIDE HEADLINE RULES:
-- Max 10 words
-- No acronyms
-- State the "so what" not the topic
-- BAD: "Market data overview" or "ESCO market analysis with BOI incentives"
-- GOOD: "Thailand offers $160M market with tax breaks until 2028"
+=== WRITING RULES ===
+1. USE SIMPLE WORDS
+   - BAD: "leverage existing infrastructure" → GOOD: "use what's already there"
+   - BAD: "facilitate market entry" → GOOD: "help you get in"
+   - BAD: "optimize energy consumption" → GOOD: "cut electricity bills"
 
-The reader should think: "I understand this. I know what to do."`;
+2. EXPLAIN ACRONYMS ONCE, THEN DROP THEM
+   - First use: "The Board of Investment (BOI) gives tax breaks"
+   - After that: just say "the government" or "tax agency"
+
+3. ONE IDEA PER SENTENCE. If you use "and" or "while" or "which", split it.
+
+4. ALWAYS ANSWER "SO WHAT?"
+   - BAD: "Thailand has 71 million people"
+   - GOOD: "Thailand has 71 million people, so there's a large customer base"
+
+=== STORY FLOW (THIS IS CRITICAL) ===
+The slides must flow like a conversation:
+
+Slide 1 (Summary): "Here's the opportunity and what you should do"
+  ↓ Reader thinks: "Interesting, tell me more about the market"
+Slide 2 (Market): "Here's how big it is and who's buying"
+  ↓ Reader thinks: "Who else is trying to sell to them?"
+Slide 3 (Competition): "Here's who you're up against"
+  ↓ Reader thinks: "What rules do I need to follow?"
+Slide 4 (Regulation): "Here's what the government requires"
+  ↓ Reader thinks: "What are my options?"
+Slide 5 (Opportunities vs Obstacles): "Here's what helps and hurts you"
+  ↓ Reader thinks: "What's the real insight here?"
+Slide 6 (Insights): "Here's what most people miss"
+  ↓ Reader thinks: "So what should I actually do?"
+Slide 7 (Options): "Here are 3 ways to enter"
+  ↓ Reader thinks: "What could go wrong?"
+Slide 8 (Risks): "Here's what to watch out for"
+  ↓ Reader thinks: "Give me a timeline"
+Slide 9 (Roadmap): "Here's the step-by-step plan"
+
+Each slide must END with something that makes the reader WANT to see the next slide.
+
+=== DEPTH REQUIREMENTS ===
+1. DON'T state the obvious. "Thailand is in Southeast Asia" = useless.
+2. CONNECT DOTS. "Thailand's aging population + mandatory efficiency laws = guaranteed demand for energy services for the next 10 years"
+3. EXPLAIN THE WHY. Not just "electricity is expensive" but "electricity is expensive BECAUSE the government subsidizes gas for cars but not for factories"
+4. BE SPECIFIC. Names, numbers, dates. "PTT controls 60% of gas supply" not "a major company dominates"
+5. GIVE REAL INSIGHT. Something the reader couldn't find in 5 minutes of Googling.`;
 
   const prompt = `Client: ${scope.clientContext}
 Industry: ${scope.industry}
@@ -520,12 +552,12 @@ Return JSON with:
 
 {
   "executiveSummary": [
-    "5 SHORT bullets (max 20 words each). Plain English. No acronyms.",
-    "Bullet 1: The opportunity (market size, who buys)",
-    "Bullet 2: Why now (timing, incentives ending, regulation)",
-    "Bullet 3: The challenge (what makes this hard)",
-    "Bullet 4: The solution (partnership, strategy)",
-    "Bullet 5: First step (what to do this month)"
+    "5 bullets that tell a STORY. Each bullet flows to the next. Max 25 words each. Simple words only.",
+    "Bullet 1: THE HOOK - Why should I care? What's the prize? (e.g., '$160M market where no foreigner has won yet')",
+    "Bullet 2: THE TIMING - Why now, not later? (e.g., 'Tax breaks expire in 2028, so first movers get 3 years advantage')",
+    "Bullet 3: THE CATCH - What makes this hard? (e.g., 'Foreigners can only own 49%, so you need a Thai partner')",
+    "Bullet 4: THE ANSWER - How do you solve the catch? (e.g., 'Partner with PTT who needs your technology')",
+    "Bullet 5: THE FIRST STEP - What do you do Monday morning? (e.g., 'Call PTT's strategy head and propose a pilot')"
   ],
 
   "marketOpportunityAssessment": {
@@ -580,12 +612,14 @@ Return JSON with:
 
   "keyInsights": [
     {
-      "title": "short punchy headline",
-      "data": "specific observation from research",
-      "pattern": "what this reveals when combined with other data",
-      "mechanism": "WHY this pattern exists (causal explanation)",
-      "implication": "what this means for the entry decision - specific and actionable"
-    }
+      "title": "Max 8 words. The 'aha!' moment. Example: 'Aging workforce forces factories to cut costs'",
+      "data": "The specific fact. Example: 'Average factory worker age is 45, up from 38 ten years ago'",
+      "pattern": "What this means when you connect the dots. Example: 'Older workers = higher wages + lower productivity = factories MUST find other ways to cut costs'",
+      "implication": "What YOU should do about it. Example: 'Pitch energy savings as a way to offset rising labor costs - they'll listen'"
+    },
+    "Give 3 insights. Each must be something surprising - not obvious from the data alone.",
+    "Bad insight: 'The market is large' - this is obvious",
+    "Good insight: 'Grid congestion in the south means solar projects are stuck, so factories there will pay MORE for energy efficiency since they can't go solar'"
   ],
 
   "implementationRoadmap": {
@@ -604,15 +638,20 @@ Return JSON with:
   "nextSteps": ["5 specific actions to take THIS WEEK with owner and deliverable"],
 
   "slideHeadlines": {
-    "summary": "MAX 10 WORDS. Plain English. Example: 'Thailand offers $160M market needing local partner'",
-    "marketData": "MAX 10 WORDS. Example: 'Electricity costs 20% above average, driving demand'",
-    "competition": "MAX 10 WORDS. Example: 'No foreign player dominates, creating opening'",
-    "regulation": "MAX 10 WORDS. Example: 'Government offers tax breaks through 2028'",
-    "risks": "MAX 10 WORDS. Example: 'Currency risk manageable, partner selection critical'"
+    "summary": "THE HOOK. Max 8 words. What's the opportunity? Example: '$160M market, no foreign winner yet'",
+    "marketData": "THE SIZE. Max 8 words. How big? Example: '1,200 factories spending $500K each on electricity'",
+    "competition": "THE GAP. Max 8 words. Where's the opening? Example: 'Local giants need foreign technology partners'",
+    "regulation": "THE RULES. Max 8 words. What's required? Example: 'Need Thai partner, but tax breaks available'",
+    "risks": "THE WATCH-OUTS. Max 8 words. What could kill this? Example: 'Wrong partner choice is the biggest risk'"
   }
 }
 
-Make it DEEP. Make it SPECIFIC. Make it tell a STORY.`;
+REMEMBER:
+1. NO JARGON. If your grandmother wouldn't understand a word, don't use it.
+2. FLOW. Each section should make the reader want to read the next.
+3. DEPTH. Don't state the obvious. Connect dots. Explain WHY things happen.
+4. SPECIFIC. Names, numbers, dates. Not "a major company" but "PTT (revenue $88B)".
+5. ACTIONABLE. End with something the reader can DO, not just know.`;
 
   const result = await callDeepSeek(prompt, systemPrompt, 12000);
 
