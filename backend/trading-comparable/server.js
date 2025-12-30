@@ -3462,18 +3462,18 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
 
     const cols = {
       company: findCol(['company name', 'company', 'name']),
-      country: findCol(['country', 'region', 'location']),
+      country: findCol(['country', 'region', 'location', 'hq']),
       sales: findSalesCol(),
-      marketCap: findCol(['market cap', 'mcap', 'market capitalization']),
-      ev: findCol(['enterprise value', ' ev ', 'ev/']),
-      ebitda: findCol(['ebitda']),
-      netMargin: findCol(['net margin', 'net income margin', 'profit margin', 'net profit margin']),
-      opMargin: findCol(['operating margin', 'op margin', 'oper margin', 'opm']),
-      ebitdaMargin: findCol(['ebitda margin', 'ebitda %', 'ebitda/sales']),
-      evEbitda: findCol(['ev/ebitda', 'ev / ebitda']),
+      marketCap: findCol(['market cap', 'mcap', 'market capitalization', 'mkt cap', 'marketcap', 'market value']),
+      ev: findCol(['enterprise value', 'total ev', 'ev ', ' ev', 'ev(', 'ev/']),
+      ebitda: findCol(['ebitda', 'operating income']),
+      netMargin: findCol(['net margin', 'net income margin', 'profit margin', 'net profit margin', 'npm', 'net mgn']),
+      opMargin: findCol(['operating margin', 'op margin', 'oper margin', 'opm', 'op mgn', 'oper mgn']),
+      ebitdaMargin: findCol(['ebitda margin', 'ebitda %', 'ebitda/sales', 'ebitda mgn']),
+      evEbitda: findCol(['ev/ebitda', 'ev / ebitda', 'ev-ebitda', 'ev to ebitda']),
       peTTM: peTTMCol,
       peFY: peFYCol,
-      pb: findCol(['p/b', 'pb ', 'p/bv', 'pbv', 'price/book'])
+      pb: findCol(['p/b', 'pb ', 'p/bv', 'pbv', 'price/book', 'price to book', 'p-b'])
     };
 
     if (cols.company === -1) cols.company = 0;
