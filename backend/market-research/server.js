@@ -695,6 +695,141 @@ Return ONLY valid JSON, no markdown or explanation.`;
   return countryAnalysis;
 }
 
+// ============ REVIEWER AI SYSTEM ============
+
+// Reviewer AI: Critiques the analysis like a demanding McKinsey partner
+async function reviewAnalysis(synthesis, countryAnalysis, scope) {
+  console.log(`  [REVIEWER] Evaluating analysis quality...`);
+
+  const reviewPrompt = `You are a DEMANDING McKinsey Senior Partner reviewing a market entry analysis before it goes to a Fortune 500 CEO. You've seen hundreds of these. You know what separates good from great.
+
+CLIENT CONTEXT: ${scope.clientContext}
+INDUSTRY: ${scope.industry}
+COUNTRY: ${countryAnalysis.country}
+
+ANALYSIS TO REVIEW:
+${JSON.stringify(synthesis, null, 2)}
+
+RAW DATA AVAILABLE (for fact-checking):
+${JSON.stringify(countryAnalysis, null, 2)}
+
+REVIEW THIS ANALYSIS RUTHLESSLY. Check for:
+
+1. VAGUE CLAIMS: Anything without specific numbers, dates, or names
+   - "The market is growing" = FAIL
+   - "The market grew 14% in 2024 to $320M" = PASS
+
+2. SURFACE-LEVEL INSIGHTS: Things anyone could Google in 5 minutes
+   - "Thailand has a large manufacturing sector" = FAIL
+   - "Thailand's 4,200 factories >2MW face mandatory audits but only 23 DEDE auditors exist" = PASS
+
+3. MISSING CAUSAL CHAINS: Facts without explanation of WHY
+   - "Energy prices are high" = FAIL
+   - "Energy prices are high because Erawan field output dropped 30%" = PASS
+
+4. WEAK COMPETITIVE INTEL: Generic descriptions instead of actionable intelligence
+   - "Several foreign companies operate here" = FAIL
+   - "ENGIE entered via B.Grimm JV in 2018, won 12 contracts, struggles outside Bangkok" = PASS
+
+5. HOLLOW RECOMMENDATIONS: Advice without specific next steps
+   - "Consider partnerships" = FAIL
+   - "Approach Absolute Energy (revenue $45M, 180 clients) before Mitsubishi's rumored bid" = PASS
+
+6. STORY FLOW: Does each section logically lead to the next?
+
+7. EXECUTIVE SUMMARY: Does it tell a compelling story in 5 bullets?
+
+Return JSON:
+{
+  "overallScore": 1-10,
+  "confidence": "low/medium/high",
+  "verdict": "APPROVE" or "REVISE",
+  "criticalIssues": [
+    {
+      "section": "which section has the problem",
+      "issue": "what's wrong specifically",
+      "currentText": "quote the problematic text",
+      "suggestion": "how to fix it with SPECIFIC content"
+    }
+  ],
+  "strengths": ["what's working well - be specific"],
+  "missingElements": ["critical things not covered that should be"],
+  "summaryFeedback": "2-3 sentences of direct feedback to the analyst"
+}
+
+BE HARSH. A 7/10 means it's good. 8+ means it's exceptional. Most first drafts are 4-6.
+Only "APPROVE" if score is 7+ and no critical issues remain.
+Return ONLY valid JSON.`;
+
+  const result = await callDeepSeekChat(reviewPrompt, '', 4096);
+
+  try {
+    let jsonStr = result.content.trim();
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+    }
+    const review = JSON.parse(jsonStr);
+    console.log(`    Score: ${review.overallScore}/10 | Confidence: ${review.confidence} | Verdict: ${review.verdict}`);
+    console.log(`    Issues: ${review.criticalIssues?.length || 0} critical | Strengths: ${review.strengths?.length || 0}`);
+    return review;
+  } catch (error) {
+    console.error('  Reviewer failed to parse:', error.message);
+    return { overallScore: 5, confidence: 'low', verdict: 'APPROVE', criticalIssues: [] }; // Default to approve on error
+  }
+}
+
+// Revise analysis based on reviewer feedback
+async function reviseAnalysis(synthesis, review, countryAnalysis, scope, systemPrompt) {
+  console.log(`  [REVISING] Addressing ${review.criticalIssues?.length || 0} issues...`);
+
+  const revisePrompt = `You are revising a market analysis based on SPECIFIC FEEDBACK from a senior reviewer.
+
+ORIGINAL ANALYSIS:
+${JSON.stringify(synthesis, null, 2)}
+
+REVIEWER FEEDBACK:
+Score: ${review.overallScore}/10
+Summary: ${review.summaryFeedback}
+
+CRITICAL ISSUES TO FIX:
+${JSON.stringify(review.criticalIssues, null, 2)}
+
+MISSING ELEMENTS TO ADD:
+${JSON.stringify(review.missingElements, null, 2)}
+
+RAW DATA (use this to add specifics):
+${JSON.stringify(countryAnalysis, null, 2)}
+
+YOUR TASK:
+1. FIX every critical issue listed above
+2. ADD the missing elements
+3. KEEP what the reviewer said was working well
+4. Make every claim SPECIFIC with numbers, names, dates
+
+Return the COMPLETE revised analysis in the same JSON structure.
+DO NOT just acknowledge the feedback - actually REWRITE the weak sections.
+
+For example, if reviewer says "executive summary is vague", rewrite ALL 5 bullets with specific data.
+
+Return ONLY valid JSON with the full analysis structure.`;
+
+  const result = await callDeepSeek(revisePrompt, systemPrompt, 12000);
+
+  try {
+    let jsonStr = result.content.trim();
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+    }
+    const revised = JSON.parse(jsonStr);
+    revised.isSingleCountry = true;
+    revised.country = countryAnalysis.country;
+    return revised;
+  } catch (error) {
+    console.error('  Revision failed:', error.message);
+    return synthesis; // Return original if revision fails
+  }
+}
+
 // ============ SINGLE COUNTRY DEEP DIVE ============
 
 async function synthesizeSingleCountry(countryAnalysis, scope) {
@@ -877,15 +1012,15 @@ CRITICAL QUALITY STANDARDS:
 
   const result = await callDeepSeek(prompt, systemPrompt, 12000);
 
+  let synthesis;
   try {
     let jsonStr = result.content.trim();
     if (jsonStr.startsWith('```')) {
       jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
     }
-    const synthesis = JSON.parse(jsonStr);
+    synthesis = JSON.parse(jsonStr);
     synthesis.isSingleCountry = true;
     synthesis.country = countryAnalysis.country;
-    return synthesis;
   } catch (error) {
     console.error('Failed to parse single country synthesis:', error.message);
     return {
@@ -895,6 +1030,44 @@ CRITICAL QUALITY STANDARDS:
       rawContent: result.content
     };
   }
+
+  // ============ REVIEWER LOOP ============
+  // Reviewer AI critiques → Working AI revises → Repeat until approved
+
+  const MAX_REVISIONS = 3;
+  let revisionCount = 0;
+  let approved = false;
+
+  console.log(`\n  [REVIEW CYCLE] Starting quality review...`);
+
+  while (!approved && revisionCount < MAX_REVISIONS) {
+    // Reviewer evaluates current analysis
+    const review = await reviewAnalysis(synthesis, countryAnalysis, scope);
+
+    if (review.verdict === 'APPROVE' || review.overallScore >= 7) {
+      console.log(`  ✓ APPROVED after ${revisionCount} revision(s) | Final score: ${review.overallScore}/10`);
+      approved = true;
+      synthesis.qualityScore = review.overallScore;
+      synthesis.reviewIterations = revisionCount;
+      break;
+    }
+
+    revisionCount++;
+    console.log(`\n  [REVISION ${revisionCount}/${MAX_REVISIONS}] Score: ${review.overallScore}/10 - Revising...`);
+
+    // Working AI revises based on feedback
+    synthesis = await reviseAnalysis(synthesis, review, countryAnalysis, scope, systemPrompt);
+  }
+
+  // Final review if we hit max revisions
+  if (!approved) {
+    const finalReview = await reviewAnalysis(synthesis, countryAnalysis, scope);
+    synthesis.qualityScore = finalReview.overallScore;
+    synthesis.reviewIterations = revisionCount;
+    console.log(`  → Max revisions reached | Final score: ${finalReview.overallScore}/10`);
+  }
+
+  return synthesis;
 }
 
 // ============ CROSS-COUNTRY SYNTHESIS ============
