@@ -127,18 +127,21 @@ ACTION: [What to do about it]
 
 ### 5.2 Example Transformation
 
-**BAD (current):**
-> "Thailand's energy service demand is structurally driven by an aging population (median age 40.55) and slowing GDP growth (2.0-2.2% in 2025), forcing industrial productivity gains through mandated efficiency—creating a non-cyclical $300M+ market for upgrades and ESCO contracts."
+**BAD (jargon-heavy):**
+> "Thailand's energy service demand is structurally driven by demographic headwinds and macroeconomic deceleration, necessitating productivity optimization through mandated efficiency paradigms—creating a robust, non-cyclical $300M+ market for strategic upgrades and ESCO contract frameworks."
 
-**GOOD (fixed):**
-> **Title**: Aging workforce creates $300M+ efficiency mandate
+**BAD (too simplistic):**
+> "Thailand is getting older so factories need to save money. The government makes them do energy checks. This means there's a $300M market."
+
+**GOOD (Economist-style):**
+> **Title**: Labor pressure unlocks $300M efficiency market
 >
 > **Key Points**:
-> - Median age 40.55 + shrinking workforce = productivity pressure
-> - Government response: mandatory energy audits for large factories
-> - Result: Non-cyclical demand for ESCO contracts
+> - Manufacturing wages rose 8% annually 2021-2024 while productivity gained only 2%. The median factory worker is now 45.
+> - The 2022 Energy Conservation Act mandates audits for facilities >2MW. DEDE has 23 auditors for 4,200 qualifying factories - enforcement is selective.
+> - Result: Structural demand for ESCO contracts, concentrated in the EEC corridor where 60% of target factories operate.
 >
-> **Action**: Target industrial ESCO contracts in EEC zone
+> **Action**: Target the 180 factories in Rayong province (highest energy intensity, most audit pressure) before Japanese competitors consolidate.
 
 ---
 
@@ -305,5 +308,5 @@ When numbers exist, consider if a chart would communicate better than text.
 
 ---
 
-*Last updated: 2024-12-30*
+*Last updated: 2025-12-30*
 *Reference: YCP profile slide template v3.pptx*

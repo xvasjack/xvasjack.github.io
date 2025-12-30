@@ -488,16 +488,64 @@ async function synthesizeSingleCountry(countryAnalysis, scope) {
   console.log('\n=== STAGE 3: SINGLE COUNTRY DEEP DIVE ===');
   console.log(`Generating deep analysis for ${countryAnalysis.country}...`);
 
-  const systemPrompt = `You are a senior partner at McKinsey presenting to a CEO. Your analysis must tell a STORY that builds to a clear recommendation.
+  const systemPrompt = `You are a senior analyst at The Economist writing a market entry briefing. Your reader is a CEO - intelligent, time-poor, and needs to make a $10M+ decision based on your analysis.
 
-CRITICAL RULES:
-1. NO GENERIC STATEMENTS. Everything must be specific to this country and industry.
-2. EVERY CLAIM needs a number, name, or specific evidence behind it.
-3. BUILD A NARRATIVE: Start with what makes this market interesting → what challenges exist → how to overcome them → why this path wins.
-4. INSIGHTS must be NON-OBVIOUS. Not "the market is large" but "the gap between industrial electricity prices ($0.12/kWh) and ESCO contract rates (15% savings) creates a $340M addressable market among manufacturers spending >$1M/year on energy."
-5. ENTRY OPTIONS must be genuinely different strategies, not variations of the same thing.
+=== WRITING STYLE ===
+Write like The Economist: professional, direct, analytical. No consultant jargon, but also not dumbed down.
 
-The CEO should finish reading and think: "I understand exactly why we should/shouldn't enter, and exactly what to do first."`;
+GOOD: "The 49% foreign ownership cap forces joint ventures, but BOI-promoted projects can sidestep this entirely."
+BAD (too simple): "You can only own 49% so you need a partner."
+BAD (too jargon): "Foreign ownership limitations necessitate strategic partnership architectures to optimize market penetration."
+
+- Be precise and specific. Use technical terms where appropriate, but always explain their significance.
+- Write in complete, well-constructed sentences. Short is fine, but not choppy.
+- Every sentence should either present a fact, explain why it matters, or recommend an action.
+
+=== DEPTH REQUIREMENTS (THIS IS CRITICAL) ===
+Surface-level analysis is WORTHLESS. The CEO can Google basic facts. You must provide:
+
+1. DATA TRIANGULATION: Cross-reference multiple sources. If one source says market size is $500M and another says $300M, explain the discrepancy and which is more reliable.
+
+2. CAUSAL CHAINS: Don't just state facts - explain the mechanism.
+   - SHALLOW: "Energy prices are rising"
+   - DEEP: "Energy prices rose 18% in 2024 because domestic gas fields are depleting (PTTEP's Erawan output fell 30%), forcing more expensive LNG imports. This creates predictable, structural demand for efficiency services."
+
+3. NON-OBVIOUS CONNECTIONS: The value is in connecting dots others miss.
+   - OBVIOUS: "Aging population is a challenge"
+   - INSIGHT: "Aging population (median age 40.5, rising 0.4/year) means factories face 3-5% annual wage inflation, making energy cost reduction an HR problem, not just an engineering one. Pitch to CFOs, not plant managers."
+
+4. COMPETITIVE INTELLIGENCE THAT MATTERS: Not just "who competes" but "how they win and where they fail."
+   - WEAK: "ENGIE is a foreign competitor"
+   - STRONG: "ENGIE entered in 2018 via JV with B.Grimm, focused on industrial parks. They've won 12 contracts averaging $2M but struggle outside Bangkok due to B.Grimm's limited regional presence - an opening for partners with provincial networks."
+
+5. REGULATORY NUANCE: Not just "what's required" but "what's enforced vs. ignored."
+   - SURFACE: "Energy audits are mandatory for large factories"
+   - DEPTH: "The 2022 Energy Conservation Act mandates audits for factories >2MW, but DEDE has only 23 auditors for 4,200 qualifying facilities - enforcement is complaint-driven. Smart players build relationships with DEDE to get early warning of crackdown sectors."
+
+6. TIMING INTELLIGENCE: Why NOW, not 2 years ago or 2 years from now?
+   - WEAK: "The market is growing"
+   - STRONG: "Three factors converge in 2025: (1) BOI's new incentives expire Dec 2027, (2) three large ESCOs are seeking acquisition, (3) Thailand's carbon tax starts 2026. First movers get 3 years of tax-free operation before competitors react."
+
+=== STORY FLOW ===
+Each slide must answer the reader's mental question and create the next one:
+
+Summary → "Is this worth my time?" → Market Data → "How big is this really?"
+Market Data → "Who else is chasing this?" → Competition → "Can I win?"
+Competition → "What rules constrain me?" → Regulation → "What's my opening?"
+Regulation → "What works for/against me?" → Opportunities vs Obstacles → "What's the insight?"
+Opportunities → "What do others miss?" → Key Insights → "What are my options?"
+Insights → "How should I enter?" → Entry Options → "What could kill this?"
+Entry Options → "What are the risks?" → Risk Assessment → "What's the plan?"
+Risk Assessment → "How do I execute?" → Roadmap
+
+=== SPECIFICITY REQUIREMENTS ===
+Every claim needs evidence:
+- NUMBERS: Market sizes in dollars with year, growth rates with timeframe, percentages with base
+- NAMES: Actual company names, specific laws/regulations, named government agencies
+- DATES: When laws took effect, when incentives expire, when competitors entered
+- SOURCES: If claiming a specific number, it should be traceable
+
+If you don't have specific data, say "estimated" or "industry sources suggest" - don't invent precision.`;
 
   const prompt = `Client: ${scope.clientContext}
 Industry: ${scope.industry}
@@ -506,15 +554,18 @@ Target: ${countryAnalysis.country}
 DATA GATHERED:
 ${JSON.stringify(countryAnalysis, null, 2)}
 
-Create a DEEP strategic analysis. Tell a story. Build to a recommendation.
+Synthesize this research into a CEO-ready briefing. Professional tone, specific data, actionable insights.
 
 Return JSON with:
 
 {
   "executiveSummary": [
-    "5 bullets that tell the STORY: what's the opportunity, why now, what's hard, what's the path, what's the first move",
-    "Each bullet should have a SPECIFIC number or fact",
-    "These should make someone want to read the rest"
+    "5 bullets that form a logical argument. Each leads to the next. Max 30 words, Economist-style prose.",
+    "Bullet 1: THE OPPORTUNITY - Quantify the prize with specifics (e.g., 'Thailand's $320M ESCO market grew 14% in 2024, yet foreign players hold only 8% share - a gap driven by regulatory complexity, not demand.')",
+    "Bullet 2: THE TIMING - Why this window matters (e.g., 'BOI incentives offering 8-year tax holidays expire December 2027. The carbon tax effective 2026 will accelerate demand 20-30%.')",
+    "Bullet 3: THE BARRIER - The real constraint, explained (e.g., 'The 49% foreign ownership cap applies to non-promoted activities. BOI-promoted energy efficiency projects qualify for majority foreign ownership.')",
+    "Bullet 4: THE PATH - Specific strategy based on evidence (e.g., 'Three Thai ESCOs are seeking technology partners: Absolute Energy, TPSC, and Banpu Power. Absolute has the widest industrial client base.')",
+    "Bullet 5: THE FIRST MOVE - Concrete next step with rationale (e.g., 'Initiate discussions with Absolute Energy (revenue $45M, 180+ industrial clients) before Mitsubishi's rumored approach concludes.')"
   ],
 
   "marketOpportunityAssessment": {
@@ -569,12 +620,14 @@ Return JSON with:
 
   "keyInsights": [
     {
-      "title": "short punchy headline",
-      "data": "specific observation from research",
-      "pattern": "what this reveals when combined with other data",
-      "mechanism": "WHY this pattern exists (causal explanation)",
-      "implication": "what this means for the entry decision - specific and actionable"
-    }
+      "title": "Max 10 words. The non-obvious conclusion. Example: 'Labor cost pressure makes energy savings an HR priority'",
+      "data": "The specific evidence. Example: 'Manufacturing wages rose 8% annually 2021-2024 while productivity gained only 2%. Average factory worker age is 45, up from 38 in 2014.'",
+      "pattern": "The causal mechanism. Example: 'Aging workforce drives wage inflation without productivity gains. Factories facing 5-6% annual cost increases have exhausted labor optimization - energy is the next lever.'",
+      "implication": "The strategic response. Example: 'Position energy efficiency as cost management, not sustainability. Target CFOs with ROI messaging. The urgency is financial, not environmental.'"
+    },
+    "Provide 3 insights. Each must reveal something that requires connecting multiple data points.",
+    "TEST: If someone could find this insight on the first page of Google results, it's too obvious.",
+    "GOOD: 'Southern Thailand's grid congestion (transmission capacity 85% utilized) blocks new solar projects, creating captive demand for on-site efficiency solutions in the $2.1B EEC industrial corridor.'"
   ],
 
   "implementationRoadmap": {
@@ -593,15 +646,21 @@ Return JSON with:
   "nextSteps": ["5 specific actions to take THIS WEEK with owner and deliverable"],
 
   "slideHeadlines": {
-    "summary": "one sentence that captures THE key message (e.g., 'Thailand offers $90M opportunity but requires local partner')",
-    "marketData": "one sentence insight about the market numbers (e.g., 'Industrial electricity prices 40% above regional average create savings urgency')",
-    "competition": "one sentence about competitive landscape (e.g., 'No foreign player has cracked industrial segment - first mover advantage available')",
-    "regulation": "one sentence about regulatory situation (e.g., 'BOI incentives make 2025 ideal entry window before policy review')",
-    "risks": "one sentence about risk posture (e.g., 'Currency volatility is real but hedgeable - execution risk is the bigger concern')"
+    "summary": "THE HOOK. Max 8 words. What's the opportunity? Example: '$160M market, no foreign winner yet'",
+    "marketData": "THE SIZE. Max 8 words. How big? Example: '1,200 factories spending $500K each on electricity'",
+    "competition": "THE GAP. Max 8 words. Where's the opening? Example: 'Local giants need foreign technology partners'",
+    "regulation": "THE RULES. Max 8 words. What's required? Example: 'Need Thai partner, but tax breaks available'",
+    "risks": "THE WATCH-OUTS. Max 8 words. What could kill this? Example: 'Wrong partner choice is the biggest risk'"
   }
 }
 
-Make it DEEP. Make it SPECIFIC. Make it tell a STORY.`;
+CRITICAL QUALITY STANDARDS:
+1. DEPTH OVER BREADTH. One well-supported insight beats five superficial observations. Every claim needs evidence.
+2. CAUSAL REASONING. Don't just describe - explain WHY. "X happened because Y, which means Z for the client."
+3. SPECIFICITY. Every number needs a year. Every company needs context. Every regulation needs an enforcement reality check.
+4. COMPETITIVE EDGE. The reader should learn something they couldn't find in an hour of desk research.
+5. ACTIONABLE CONCLUSIONS. End each section with what the reader should DO with this information.
+6. PROFESSIONAL PROSE. Write like The Economist - clear, precise, analytical. Use technical terms where they add precision, but always explain significance.`;
 
   const result = await callDeepSeek(prompt, systemPrompt, 12000);
 
@@ -730,11 +789,42 @@ Focus on COMPARISONS and TRADE-OFFS, not just summaries.`;
 
 // ============ PPT GENERATION ============
 
-// Helper: truncate text to fit slides - INCREASED LIMITS
-function truncate(text, maxLen = 200) {
+// Helper: truncate text to fit slides - end at sentence or phrase boundary
+function truncate(text, maxLen = 150) {
   if (!text) return '';
-  const str = String(text);
-  return str.length > maxLen ? str.substring(0, maxLen - 3) + '...' : str;
+  const str = String(text).trim();
+  if (str.length <= maxLen) return str;
+
+  // Find the last sentence boundary before maxLen
+  const truncated = str.substring(0, maxLen);
+
+  // Try to end at sentence boundary (. ! ?)
+  const lastSentence = Math.max(
+    truncated.lastIndexOf('. '),
+    truncated.lastIndexOf('! '),
+    truncated.lastIndexOf('? ')
+  );
+  if (lastSentence > maxLen * 0.5) {
+    return truncated.substring(0, lastSentence + 1).trim();
+  }
+
+  // Try to end at phrase boundary (; , -)
+  const lastPhrase = Math.max(
+    truncated.lastIndexOf('; '),
+    truncated.lastIndexOf(', '),
+    truncated.lastIndexOf(' - ')
+  );
+  if (lastPhrase > maxLen * 0.5) {
+    return truncated.substring(0, lastPhrase).trim();
+  }
+
+  // Last resort: end at word boundary
+  const lastSpace = truncated.lastIndexOf(' ');
+  if (lastSpace > maxLen * 0.6) {
+    return truncated.substring(0, lastSpace).trim();
+  }
+
+  return truncated.trim();
 }
 
 // Helper: safely get array items
@@ -771,27 +861,37 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // Standard font for all text
   const FONT = 'Segoe UI';
 
+  // Truncate title to max 70 chars (about 10 words)
+  function truncateTitle(text) {
+    if (!text) return '';
+    const str = String(text).trim();
+    if (str.length <= 70) return str;
+    const cut = str.substring(0, 70);
+    const lastSpace = cut.lastIndexOf(' ');
+    return lastSpace > 40 ? cut.substring(0, lastSpace) : cut;
+  }
+
   function addSlide(title, subtitle = '') {
     const slide = pptx.addSlide();
-    // Title - 24pt bold navy (YCP standard)
-    slide.addText(title, {
-      x: 0.35, y: 0.1, w: 9.3, h: 0.65,
+    // Title - 24pt bold navy, max 2 lines (truncated)
+    slide.addText(truncateTitle(title), {
+      x: 0.35, y: 0.15, w: 9.3, h: 0.7,
       fontSize: 24, bold: true, color: COLORS.primary, fontFace: FONT,
       valign: 'top', wrap: true
     });
-    // Message/subtitle - 16pt blue (YCP standard)
-    if (subtitle) {
-      slide.addText(subtitle, {
-        x: 0.35, y: 0.75, w: 9.3, h: 0.3,
-        fontSize: 16, color: COLORS.secondary, fontFace: FONT
-      });
-    }
-    // Navy divider line under header (YCP standard)
+    // Navy divider line under title
     slide.addShape('line', {
-      x: 0.35, y: subtitle ? 1.1 : 0.85,
+      x: 0.35, y: 0.9,
       w: 9.3, h: 0,
       line: { color: COLORS.primary, width: 2.5 }
     });
+    // Message/subtitle - 16pt blue (below divider)
+    if (subtitle) {
+      slide.addText(subtitle, {
+        x: 0.35, y: 0.95, w: 9.3, h: 0.25,
+        fontSize: 14, color: COLORS.secondary, fontFace: FONT
+      });
+    }
     return slide;
   }
 
@@ -1254,27 +1354,37 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   const FONT = 'Segoe UI';
   const TABLE_HEADER_COLOR = '011AB7';
 
+  // Truncate title to max 70 chars (about 10 words)
+  function truncateTitle(text) {
+    if (!text) return '';
+    const str = String(text).trim();
+    if (str.length <= 70) return str;
+    const cut = str.substring(0, 70);
+    const lastSpace = cut.lastIndexOf(' ');
+    return lastSpace > 40 ? cut.substring(0, lastSpace) : cut;
+  }
+
   function addSlide(title, subtitle = '') {
     const slide = pptx.addSlide();
-    // Title - 24pt bold navy (YCP standard)
-    slide.addText(title, {
-      x: 0.35, y: 0.1, w: 9.3, h: 0.65,
+    // Title - 24pt bold navy, max 2 lines (truncated)
+    slide.addText(truncateTitle(title), {
+      x: 0.35, y: 0.15, w: 9.3, h: 0.7,
       fontSize: 24, bold: true, color: COLORS.primary, fontFace: FONT,
       valign: 'top', wrap: true
     });
-    // Message/subtitle - 16pt blue (YCP standard)
-    if (subtitle) {
-      slide.addText(subtitle, {
-        x: 0.35, y: 0.75, w: 9.3, h: 0.3,
-        fontSize: 16, color: COLORS.secondary, fontFace: FONT
-      });
-    }
-    // Navy divider line under header (YCP standard)
+    // Navy divider line under title
     slide.addShape('line', {
-      x: 0.35, y: subtitle ? 1.1 : 0.85,
+      x: 0.35, y: 0.9,
       w: 9.3, h: 0,
       line: { color: COLORS.primary, width: 2.5 }
     });
+    // Message/subtitle - 14pt blue (below divider)
+    if (subtitle) {
+      slide.addText(subtitle, {
+        x: 0.35, y: 0.95, w: 9.3, h: 0.25,
+        fontSize: 14, color: COLORS.secondary, fontFace: FONT
+      });
+    }
     return slide;
   }
 
