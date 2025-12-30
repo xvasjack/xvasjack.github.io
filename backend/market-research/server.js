@@ -488,16 +488,24 @@ async function synthesizeSingleCountry(countryAnalysis, scope) {
   console.log('\n=== STAGE 3: SINGLE COUNTRY DEEP DIVE ===');
   console.log(`Generating deep analysis for ${countryAnalysis.country}...`);
 
-  const systemPrompt = `You are a senior partner at McKinsey presenting to a CEO. Your analysis must tell a STORY that builds to a clear recommendation.
+  const systemPrompt = `You are explaining a business opportunity to someone who knows NOTHING about this industry.
 
-CRITICAL RULES:
-1. NO GENERIC STATEMENTS. Everything must be specific to this country and industry.
-2. EVERY CLAIM needs a number, name, or specific evidence behind it.
-3. BUILD A NARRATIVE: Start with what makes this market interesting → what challenges exist → how to overcome them → why this path wins.
-4. INSIGHTS must be NON-OBVIOUS. Not "the market is large" but "the gap between industrial electricity prices ($0.12/kWh) and ESCO contract rates (15% savings) creates a $340M addressable market among manufacturers spending >$1M/year on energy."
-5. ENTRY OPTIONS must be genuinely different strategies, not variations of the same thing.
+WRITING RULES - VERY IMPORTANT:
+1. PLAIN ENGLISH ONLY. No jargon. No acronyms without explanation.
+   - BAD: "BOI Category 7.1.7 provides 8-year CIT exemptions for ESCOs"
+   - GOOD: "The government gives 8 years of tax breaks to energy efficiency companies"
+2. SHORT SENTENCES. One idea per sentence. Max 15 words per sentence.
+3. CONCRETE NUMBERS. Not "significant growth" but "growing 8% per year"
+4. EXPLAIN WHY IT MATTERS. Not just facts, but "so what" for the reader.
 
-The CEO should finish reading and think: "I understand exactly why we should/shouldn't enter, and exactly what to do first."`;
+SLIDE HEADLINE RULES:
+- Max 10 words
+- No acronyms
+- State the "so what" not the topic
+- BAD: "Market data overview" or "ESCO market analysis with BOI incentives"
+- GOOD: "Thailand offers $160M market with tax breaks until 2028"
+
+The reader should think: "I understand this. I know what to do."`;
 
   const prompt = `Client: ${scope.clientContext}
 Industry: ${scope.industry}
@@ -506,15 +514,18 @@ Target: ${countryAnalysis.country}
 DATA GATHERED:
 ${JSON.stringify(countryAnalysis, null, 2)}
 
-Create a DEEP strategic analysis. Tell a story. Build to a recommendation.
+Create analysis in PLAIN ENGLISH. No jargon. Short sentences.
 
 Return JSON with:
 
 {
   "executiveSummary": [
-    "5 bullets that tell the STORY: what's the opportunity, why now, what's hard, what's the path, what's the first move",
-    "Each bullet should have a SPECIFIC number or fact",
-    "These should make someone want to read the rest"
+    "5 SHORT bullets (max 20 words each). Plain English. No acronyms.",
+    "Bullet 1: The opportunity (market size, who buys)",
+    "Bullet 2: Why now (timing, incentives ending, regulation)",
+    "Bullet 3: The challenge (what makes this hard)",
+    "Bullet 4: The solution (partnership, strategy)",
+    "Bullet 5: First step (what to do this month)"
   ],
 
   "marketOpportunityAssessment": {
@@ -593,11 +604,11 @@ Return JSON with:
   "nextSteps": ["5 specific actions to take THIS WEEK with owner and deliverable"],
 
   "slideHeadlines": {
-    "summary": "one sentence that captures THE key message (e.g., 'Thailand offers $90M opportunity but requires local partner')",
-    "marketData": "one sentence insight about the market numbers (e.g., 'Industrial electricity prices 40% above regional average create savings urgency')",
-    "competition": "one sentence about competitive landscape (e.g., 'No foreign player has cracked industrial segment - first mover advantage available')",
-    "regulation": "one sentence about regulatory situation (e.g., 'BOI incentives make 2025 ideal entry window before policy review')",
-    "risks": "one sentence about risk posture (e.g., 'Currency volatility is real but hedgeable - execution risk is the bigger concern')"
+    "summary": "MAX 10 WORDS. Plain English. Example: 'Thailand offers $160M market needing local partner'",
+    "marketData": "MAX 10 WORDS. Example: 'Electricity costs 20% above average, driving demand'",
+    "competition": "MAX 10 WORDS. Example: 'No foreign player dominates, creating opening'",
+    "regulation": "MAX 10 WORDS. Example: 'Government offers tax breaks through 2028'",
+    "risks": "MAX 10 WORDS. Example: 'Currency risk manageable, partner selection critical'"
   }
 }
 
@@ -730,11 +741,42 @@ Focus on COMPARISONS and TRADE-OFFS, not just summaries.`;
 
 // ============ PPT GENERATION ============
 
-// Helper: truncate text to fit slides - INCREASED LIMITS
-function truncate(text, maxLen = 200) {
+// Helper: truncate text to fit slides - end at sentence or phrase boundary
+function truncate(text, maxLen = 150) {
   if (!text) return '';
-  const str = String(text);
-  return str.length > maxLen ? str.substring(0, maxLen - 3) + '...' : str;
+  const str = String(text).trim();
+  if (str.length <= maxLen) return str;
+
+  // Find the last sentence boundary before maxLen
+  const truncated = str.substring(0, maxLen);
+
+  // Try to end at sentence boundary (. ! ?)
+  const lastSentence = Math.max(
+    truncated.lastIndexOf('. '),
+    truncated.lastIndexOf('! '),
+    truncated.lastIndexOf('? ')
+  );
+  if (lastSentence > maxLen * 0.5) {
+    return truncated.substring(0, lastSentence + 1).trim();
+  }
+
+  // Try to end at phrase boundary (; , -)
+  const lastPhrase = Math.max(
+    truncated.lastIndexOf('; '),
+    truncated.lastIndexOf(', '),
+    truncated.lastIndexOf(' - ')
+  );
+  if (lastPhrase > maxLen * 0.5) {
+    return truncated.substring(0, lastPhrase).trim();
+  }
+
+  // Last resort: end at word boundary
+  const lastSpace = truncated.lastIndexOf(' ');
+  if (lastSpace > maxLen * 0.6) {
+    return truncated.substring(0, lastSpace).trim();
+  }
+
+  return truncated.trim();
 }
 
 // Helper: safely get array items
@@ -771,27 +813,37 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // Standard font for all text
   const FONT = 'Segoe UI';
 
+  // Truncate title to max 70 chars (about 10 words)
+  function truncateTitle(text) {
+    if (!text) return '';
+    const str = String(text).trim();
+    if (str.length <= 70) return str;
+    const cut = str.substring(0, 70);
+    const lastSpace = cut.lastIndexOf(' ');
+    return lastSpace > 40 ? cut.substring(0, lastSpace) : cut;
+  }
+
   function addSlide(title, subtitle = '') {
     const slide = pptx.addSlide();
-    // Title - 24pt bold navy (YCP standard)
-    slide.addText(title, {
-      x: 0.35, y: 0.1, w: 9.3, h: 0.65,
+    // Title - 24pt bold navy, max 2 lines (truncated)
+    slide.addText(truncateTitle(title), {
+      x: 0.35, y: 0.15, w: 9.3, h: 0.7,
       fontSize: 24, bold: true, color: COLORS.primary, fontFace: FONT,
       valign: 'top', wrap: true
     });
-    // Message/subtitle - 16pt blue (YCP standard)
-    if (subtitle) {
-      slide.addText(subtitle, {
-        x: 0.35, y: 0.75, w: 9.3, h: 0.3,
-        fontSize: 16, color: COLORS.secondary, fontFace: FONT
-      });
-    }
-    // Navy divider line under header (YCP standard)
+    // Navy divider line under title
     slide.addShape('line', {
-      x: 0.35, y: subtitle ? 1.1 : 0.85,
+      x: 0.35, y: 0.9,
       w: 9.3, h: 0,
       line: { color: COLORS.primary, width: 2.5 }
     });
+    // Message/subtitle - 16pt blue (below divider)
+    if (subtitle) {
+      slide.addText(subtitle, {
+        x: 0.35, y: 0.95, w: 9.3, h: 0.25,
+        fontSize: 14, color: COLORS.secondary, fontFace: FONT
+      });
+    }
     return slide;
   }
 
@@ -1254,27 +1306,37 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   const FONT = 'Segoe UI';
   const TABLE_HEADER_COLOR = '011AB7';
 
+  // Truncate title to max 70 chars (about 10 words)
+  function truncateTitle(text) {
+    if (!text) return '';
+    const str = String(text).trim();
+    if (str.length <= 70) return str;
+    const cut = str.substring(0, 70);
+    const lastSpace = cut.lastIndexOf(' ');
+    return lastSpace > 40 ? cut.substring(0, lastSpace) : cut;
+  }
+
   function addSlide(title, subtitle = '') {
     const slide = pptx.addSlide();
-    // Title - 24pt bold navy (YCP standard)
-    slide.addText(title, {
-      x: 0.35, y: 0.1, w: 9.3, h: 0.65,
+    // Title - 24pt bold navy, max 2 lines (truncated)
+    slide.addText(truncateTitle(title), {
+      x: 0.35, y: 0.15, w: 9.3, h: 0.7,
       fontSize: 24, bold: true, color: COLORS.primary, fontFace: FONT,
       valign: 'top', wrap: true
     });
-    // Message/subtitle - 16pt blue (YCP standard)
-    if (subtitle) {
-      slide.addText(subtitle, {
-        x: 0.35, y: 0.75, w: 9.3, h: 0.3,
-        fontSize: 16, color: COLORS.secondary, fontFace: FONT
-      });
-    }
-    // Navy divider line under header (YCP standard)
+    // Navy divider line under title
     slide.addShape('line', {
-      x: 0.35, y: subtitle ? 1.1 : 0.85,
+      x: 0.35, y: 0.9,
       w: 9.3, h: 0,
       line: { color: COLORS.primary, width: 2.5 }
     });
+    // Message/subtitle - 14pt blue (below divider)
+    if (subtitle) {
+      slide.addText(subtitle, {
+        x: 0.35, y: 0.95, w: 9.3, h: 0.25,
+        fontSize: 14, color: COLORS.secondary, fontFace: FONT
+      });
+    }
     return slide;
   }
 
