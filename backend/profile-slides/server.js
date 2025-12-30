@@ -2638,7 +2638,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       const simplifiedDesc = simplifyRegion(targetDescription);
       const formattedTitle = `Target List – ${toTitleCase(simplifiedDesc)}`;
       targetSlide.addText(formattedTitle, {
-        x: 0.38, y: 0.07, w: 9.5, h: 0.9,
+        x: 0.38, y: 0.07, w: 12.5, h: 0.9,
         fontSize: 24, fontFace: 'Segoe UI',
         color: '000000', valign: 'bottom'
       });
@@ -2965,6 +2965,18 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
     // ===== INDIVIDUAL COMPANY PROFILE SLIDES =====
     for (const company of companies) {
+      // Skip companies with no meaningful info (only has website, no business/location/metrics)
+      const hasBusinessInfo = company.business && company.business.trim().length > 0;
+      const hasLocation = company.location && company.location.trim().length > 0;
+      const hasMetrics = company.key_metrics && company.key_metrics.length > 0;
+      const hasBreakdown = company.breakdown_items && company.breakdown_items.length > 0;
+
+      // If company has NO business info AND NO location AND NO metrics AND NO breakdown, skip it
+      if (!hasBusinessInfo && !hasLocation && !hasMetrics && !hasBreakdown) {
+        console.log(`  Skipping slide for ${company.company_name || company.website} - no meaningful info extracted`);
+        continue;
+      }
+
       // Use master slide - lines are fixed in background and cannot be moved
       const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
@@ -3242,7 +3254,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       const formatCellText = (text) => {
         if (!text || typeof text !== 'string') return text;
 
-        // Check if text has multiple lines - if so, format as bullet points
+        // Check if text has multiple lines or bullet markers
         const hasMultipleLines = text.includes('\n');
         const hasBulletMarkers = text.includes('■') || text.includes('•') || text.includes('\n-') || text.startsWith('-');
 
@@ -3250,15 +3262,12 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           // Split by newline and filter out empty lines
           const lines = text.split('\n').filter(line => line.trim());
 
-          // Only format as bullets if we have 2+ lines
-          if (lines.length >= 2) {
-            // Clean each line and prepend bullet character directly
-            const formattedLines = lines.map(line => {
-              const cleanLine = line.replace(/^[■\-•]\s*/, '').trim();
-              return '• ' + cleanLine;
-            });
-            return formattedLines.join('\n');
-          }
+          // Format ALL lines with bullets (even single line if it starts with -)
+          const formattedLines = lines.map(line => {
+            const cleanLine = line.replace(/^[■\-•]\s*/, '').trim();
+            return '• ' + cleanLine;
+          });
+          return formattedLines.join('\n');
         }
         return text;
       };
@@ -3505,69 +3514,60 @@ async function extractBasicInfo(scrapedContent, websiteUrl) {
 OUTPUT JSON with these fields:
 - company_name: Company name with first letter of each word capitalized. Remove suffixes like Limited, Ltd, Sdn Bhd, Pte Ltd, PT, Inc, Corp, Company.
 - established_year: Clean numbers only (e.g., "1995"), leave empty if not found
-- location: MANDATORY 3 LEVELS for all countries except Singapore:
+- location: HEADQUARTERS ONLY - extract ONLY the main HQ location, NEVER include branches/factories/warehouses/offices.
 
-  CRITICAL RULE: Each level MUST be DIFFERENT. NEVER repeat the same name!
-  - WRONG: "Bangkok, Bangkok, Thailand" (Bangkok repeated!)
-  - WRONG: "Jakarta, Jakarta, Indonesia" (Jakarta repeated!)
-  - CORRECT: "Sukhumvit, Bangkok, Thailand"
-  - CORRECT: "Chatuchak, Bangkok, Thailand"
-  - CORRECT: "Tangerang, Banten, Indonesia"
+  CRITICAL: EXACTLY 3 LEVELS for non-Singapore countries: "City/District, State/Province, Country"
+  CRITICAL: EXACTLY 2 LEVELS for Singapore: "Area, Singapore"
 
-  NON-SINGAPORE RULE: ALWAYS provide 3 DIFFERENT levels: "District/Area, City/Province, Country"
-  - WRONG: "Jakarta, Indonesia" (only 2 levels!)
-  - WRONG: "Bangkok, Thailand" (only 2 levels!)
-  - CORRECT: "Kebayoran, Jakarta, Indonesia"
-  - CORRECT: "Bang Phli, Samut Prakan, Thailand"
-  - CORRECT: "Sukhumvit, Bangkok, Thailand"
+  WRONG (too few levels):
+  - "Selangor, Malaysia" ← WRONG! Missing city
+  - "Bangkok, Thailand" ← WRONG! Missing district
+  - "Jakarta, Indonesia" ← WRONG! Missing area
 
-  Thailand examples (find district from address):
-  - "Bangna, Samut Prakan, Thailand"
-  - "Bang Phli, Samut Prakan, Thailand"
-  - "Sukhumvit, Bangkok, Thailand"
-  - "Chatuchak, Bangkok, Thailand"
-  - "Rangsit, Pathum Thani, Thailand"
-  - "Nakhon Pathom, Nakhon Pathom Province, Thailand"
+  WRONG (too many levels):
+  - "Seksyen 27, Shah Alam, Selangor, Malaysia" ← WRONG! 4 levels, use only 3
+  - "Jalan ABC, Puchong, Selangor, Malaysia" ← WRONG! No street names
 
-  Indonesia examples:
-  - "Tangerang, Banten, Indonesia"
-  - "Bekasi, West Java, Indonesia"
-  - "Cikarang, West Java, Indonesia"
+  WRONG (includes non-HQ):
+  - "HQ: Singapore; Branches: Shenzhen" ← WRONG! Only HQ, no branches
+  - "Headquarters: Bangkok; Factory: Rayong" ← WRONG! Only HQ
 
-  Malaysia examples:
-  - "Puchong, Selangor, Malaysia"
+  CORRECT examples by country:
+
+  Malaysia (City, State, Country):
   - "Shah Alam, Selangor, Malaysia"
-  - "Penang, Penang State, Malaysia"
+  - "Puchong, Selangor, Malaysia"
+  - "Penang, Penang, Malaysia"
+  - "Johor Bahru, Johor, Malaysia"
 
-  Philippines examples:
-  - "Caloocan City, Metro Manila, Philippines"
+  Thailand (District, Province, Country):
+  - "Bangna, Bangkok, Thailand"
+  - "Bang Phli, Samut Prakan, Thailand"
+  - "Chatuchak, Bangkok, Thailand"
+
+  Indonesia (City/Area, Province, Country):
+  - "Tangerang, Banten, Indonesia"
+  - "Cikarang, West Java, Indonesia"
+  - "Bekasi, West Java, Indonesia"
+
+  Vietnam (District, City, Country):
+  - "Thu Duc, Ho Chi Minh City, Vietnam"
+  - "Binh Duong, Binh Duong Province, Vietnam"
+
+  Philippines (City, Region, Country):
   - "Makati, Metro Manila, Philippines"
+  - "Caloocan, Metro Manila, Philippines"
 
-  SINGAPORE RULE: Always use 2 levels: "District/Area, Singapore". Extract the specific neighborhood/district/area from the street address.
+  Singapore (Area, Singapore) - ONLY 2 LEVELS:
   - "Jurong West, Singapore"
-  - "Ubi, Singapore"
   - "Tuas, Singapore"
-  - "Kaki Bukit, Singapore"
-  NEVER use "Singapore, Singapore" - always find the specific area from the address.
-
-  For multiple locations, group by type with sub-bullet points:
-  Example format:
-  "- HQ: Puchong, Selangor, Malaysia
-  - Factories:
-    - Batam, Riau Islands, Indonesia
-    - Rayong, Thailand
-  - Branches:
-    - Ho Chi Minh City, Vietnam
-    - Jakarta, Indonesia
-    - Manila, Philippines"
-
-  IMPORTANT: When multiple locations of same type (e.g., 3 branches), group under one header with sub-bullets. Don't repeat "Branch 1:", "Branch 2:" etc.
-  Types: HQ, Warehouses, Factories, Branches, Offices. No postcodes or full addresses.
+  - "Ubi, Singapore"
 
 RULES:
+- ONLY extract HQ location - ignore all branches, factories, warehouses, offices
 - Write ALL text using regular English alphabet only (A-Z, no diacritics/accents)
-- Convert ALL Vietnamese: "Phú" → "Phu", "Đông" → "Dong", "Nguyễn" → "Nguyen", "Bình" → "Binh", "Thạnh" → "Thanh", "Cương" → "Cuong"
-- Convert ALL foreign characters: "São" → "Sao", "北京" → "Beijing", "東京" → "Tokyo"
+- Convert ALL Vietnamese: "Phú" → "Phu", "Đông" → "Dong", "Nguyễn" → "Nguyen"
+- Convert ALL foreign characters: "São" → "Sao", "北京" → "Beijing"
 - Leave fields empty if information not found
 - Return ONLY valid JSON`
         },
@@ -3681,11 +3681,11 @@ async function extractKeyMetrics(scrapedContent, previousData) {
 
 EXTRACT AS MANY OF THESE METRICS AS POSSIBLE (aim for 8-15 metrics):
 
-CUSTOMERS & MARKET:
+CUSTOMERS & MARKET (CRITICAL - LOOK EVERYWHERE FOR CLIENTS):
+- Key customer names (look for: "Clients", "Customers", "Our Clients", logo sections, testimonials)
+- IMPORTANT: If website shows CLIENT LOGOS, extract those company names (e.g., Sinarmas, Dole, SCG logos = customer names)
 - Number of customers (total active customers)
-- Key customer names (notable clients)
 - Customer segments served
-- Market share or market position
 
 SUPPLIERS & PARTNERSHIPS:
 - Number of suppliers
@@ -3805,54 +3805,55 @@ async function extractProductsBreakdown(scrapedContent, previousData) {
 
 THE RIGHT SIDE HAS MORE SPACE - use it for the content with THE MOST DATA.
 
+CRITICAL - CUSTOMERS/CLIENTS DETECTION:
+Look for customers/clients in ALL these places:
+- "Clients" or "Customers" section
+- "Our Clients", "Our Customers", "Trusted by" sections
+- Logo sections (company logos = customer names)
+- "Partners" that are actually customers (buying companies)
+- Testimonials (extract company names)
+- Case studies (extract client names)
+
+IF YOU SEE CLIENT/CUSTOMER LOGOS ON THE WEBSITE, EXTRACT ALL THE COMPANY NAMES FROM THOSE LOGOS.
+Example: If you see logos for Sinarmas, Dole, SCG → those are customers, extract them!
+
 DECISION PROCESS:
 1. Count how many items each category has:
-   - How many CUSTOMERS are listed?
+   - How many CUSTOMERS/CLIENTS are listed or shown as logos?
    - How many PRODUCTS are shown?
    - How many SERVICES are offered?
-   - How many SUPPLIERS/PARTNERS are mentioned?
+   - How many SUPPLIERS are mentioned?
 2. Pick the category with THE HIGHEST COUNT to display on the right side
-3. The right table can show more detail, so put the richest content there
-
-EXAMPLE:
-- If website lists 20 customers but only 5 services → use "Customers"
-- If website shows 15 products but only 3 customers → use "Products and Applications"
-- If website has 10 suppliers but only 2 products → use "Key Suppliers"
 
 CATEGORY OPTIONS:
-1. "Customers" - When many clients listed (segment by industry: Educational, Government, Healthcare, etc.)
-2. "Products and Applications" - When many products shown (segment by type/application)
-3. "Services" - When many services offered (segment by service type)
-4. "Key Suppliers" - When many suppliers/partners mentioned
-5. "Product Categories" - When product catalog is extensive
-6. "Business Segments" - When multiple distinct business units
+1. "Customers" - When clients listed OR client logos visible (segment by industry)
+2. "Products and Applications" - When many products shown (segment by type)
+3. "Services" - When many services offered (segment by type)
+4. "Key Suppliers" - When many suppliers mentioned
+5. "Key Partnerships" - When strategic partnerships listed
 
 OUTPUT JSON:
 {
   "breakdown_title": "Customers",
   "breakdown_items": [
-    {"label": "Educational", "value": "University A, Polytechnic B, School C"},
-    {"label": "Government", "value": "Agency X, Ministry Y"},
-    {"label": "Healthcare", "value": "Hospital A, Clinic B"}
+    {"label": "Packaging", "value": "Sinarmas, PT SatyamitraKemasLestari"},
+    {"label": "Food & Beverage", "value": "Dole, Bosung"},
+    {"label": "Industrial", "value": "SCG, Indocement"}
   ]
 }
 
 RULES:
-- HARD RULE - TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH:
-  - ALL product names, company names, and any other text in ANY non-English language MUST be translated to English
-  - This applies to ALL languages: Vietnamese, Chinese, Thai, Malay, Indonesian, Hindi, Korean, Japanese, Arabic, Spanish, etc.
-  - The user CANNOT translate - you MUST translate everything to English
-- Write ALL text using regular English alphabet only (A-Z, no diacritics, no foreign characters)
-- Remove company suffixes from ALL names: Co., Ltd, JSC, Sdn Bhd, Pte Ltd, Inc, Corp, LLC, GmbH
-- PRIORITIZE the category with MOST available content from the website
+- HARD RULE - EXTRACT CUSTOMER NAMES FROM LOGOS: If the website shows client/customer logos, extract the company names from those logos
+- TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH
+- Write ALL text using regular English alphabet only (A-Z, no diacritics)
+- Remove company suffixes: Co., Ltd, JSC, Sdn Bhd, Pte Ltd, Inc, Corp, LLC, GmbH, PT
 - Use 3-6 items maximum
 - Labels should be segment/category names (1-3 words)
 - VALUE FORMATTING:
-  - If 2-3 items: comma-separated on one line (e.g., "Product A, Product B, Product C")
-  - If 4+ items: use point form with newlines (e.g., "- Item 1\\n- Item 2\\n- Item 3\\n- Item 4")
-  - Equipment/machinery lists should ALWAYS use point form regardless of count
-- For customers, segment by industry/type (e.g., "Residential", "Commercial", "Industrial")
-- For products, segment by application/industry/type
+  - If 2-3 items: comma-separated (e.g., "Product A, Product B")
+  - If 4+ items: use point form (e.g., "- Item 1\\n- Item 2\\n- Item 3")
+- For customers, segment by industry/type
+- For products, segment by application/type
 - Return ONLY valid JSON`
         },
         {
