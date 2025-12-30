@@ -402,7 +402,15 @@ async function researchCountry(country, industry, clientContext) {
 
   const synthesisPrompt = `You are a strategy consultant analyzing ${country} for a ${clientContext} considering entering the ${industry} market.
 
-Based on the following research data, create a structured analysis. Be specific with numbers and cite sources.
+CRITICAL: Your analysis must have DEPTH and SPECIFICITY. Not surface-level observations.
+
+For every claim, include:
+- SPECIFIC NUMBERS (dollar amounts, percentages, growth rates, years)
+- SPECIFIC NAMES (companies, laws, programs, people)
+- SPECIFIC CONTEXT (why this number matters, how it compares)
+
+BAD example: "The market is growing"
+GOOD example: "The ESCO market reached $2.3B in 2024, growing 12% YoY, driven by mandatory energy audits for factories >2MW under the 2023 Energy Conservation Act"
 
 RESEARCH DATA:
 ${JSON.stringify(researchData, null, 2)}
@@ -411,42 +419,42 @@ Return a JSON object with this structure:
 {
   "country": "${country}",
   "macroContext": {
-    "gdp": "value with year",
-    "population": "value",
-    "industrialGdpShare": "percentage",
-    "energyIntensity": "description",
-    "keyObservation": "one sentence"
+    "gdp": "exact value with year and growth rate (e.g., '$574B in 2024, +2.8% YoY')",
+    "population": "exact number with urban/rural split if available",
+    "industrialGdpShare": "percentage with trend",
+    "energyIntensity": "specific metric with comparison to region",
+    "keyObservation": "ONE non-obvious insight connecting these data points"
   },
   "policyRegulatory": {
-    "governmentStance": "supportive/neutral/restrictive with detail",
-    "keyLegislation": ["list of relevant laws/policies"],
-    "foreignOwnershipRules": "specific restrictions",
-    "incentives": ["list of available incentives"],
-    "regulatoryRisk": "low/medium/high with explanation"
+    "governmentStance": "specific stance with EVIDENCE (cite actual policy, speech, budget allocation)",
+    "keyLegislation": ["list SPECIFIC laws with year, what they mandate, and penalties"],
+    "foreignOwnershipRules": "EXACT percentage limits, exceptions, which sectors, recent changes",
+    "incentives": ["SPECIFIC incentive name, value (% tax cut, years), eligibility criteria"],
+    "regulatoryRisk": "low/medium/high with SPECIFIC justification (recent policy reversals? enforcement gaps?)"
   },
   "marketDynamics": {
-    "marketSize": "value with year and growth rate",
-    "demand": "description of demand drivers",
-    "pricing": "electricity/gas prices with context",
-    "supplyChain": "description of supply infrastructure"
+    "marketSize": "EXACT value, year, CAGR, and what's driving growth",
+    "demand": "WHO is buying (which industries), WHY now (triggers), HOW MUCH (volume/value)",
+    "pricing": "EXACT electricity/gas prices with unit, comparison to neighbors, trend",
+    "supplyChain": "specific gaps or advantages in supply infrastructure"
   },
   "competitiveLandscape": {
-    "localPlayers": [{"name": "...", "description": "..."}],
-    "foreignPlayers": [{"name": "...", "description": "..."}],
-    "entryBarriers": ["list of barriers"],
-    "competitiveIntensity": "low/medium/high with explanation"
+    "localPlayers": [{"name": "actual company name", "description": "revenue/size, core business, market share if known, strengths, weaknesses"}],
+    "foreignPlayers": [{"name": "actual company name", "description": "when entered, what they do, how successful, partnerships"}],
+    "entryBarriers": ["SPECIFIC barriers with evidence - not generic like 'relationships matter'"],
+    "competitiveIntensity": "low/medium/high with REASONING (market concentration, price wars, M&A activity)"
   },
   "infrastructure": {
-    "energyInfrastructure": "description",
-    "industrialZones": ["list of key zones"],
-    "logisticsQuality": "description"
+    "energyInfrastructure": "specific capacity numbers, utilization rates, planned expansions",
+    "industrialZones": ["name of zone, location, key tenants, incentives offered"],
+    "logisticsQuality": "specific metrics or rankings, bottlenecks"
   },
   "summaryAssessment": {
-    "opportunities": ["list of 3-5 key opportunities"],
-    "obstacles": ["list of 3-5 key obstacles"],
-    "attractivenessRating": "1-10 with justification",
-    "feasibilityRating": "1-10 with justification",
-    "keyInsight": "one paragraph with Data->Pattern->Mechanism->Implication structure"
+    "opportunities": ["5 SPECIFIC opportunities with WHY NOW and estimated size/value"],
+    "obstacles": ["5 SPECIFIC obstacles with severity and whether they're solvable"],
+    "attractivenessRating": "1-10 with MULTI-FACTOR justification",
+    "feasibilityRating": "1-10 with MULTI-FACTOR justification",
+    "keyInsight": "2-3 sentences: DATA observed → PATTERN that emerges → WHY this pattern exists → WHAT IT MEANS for client"
   }
 }
 
@@ -480,65 +488,112 @@ async function synthesizeSingleCountry(countryAnalysis, scope) {
   console.log('\n=== STAGE 3: SINGLE COUNTRY DEEP DIVE ===');
   console.log(`Generating deep analysis for ${countryAnalysis.country}...`);
 
-  const systemPrompt = `You are a senior strategy consultant at a top consulting firm. Your task is to generate a comprehensive market entry strategy for a single country.
+  const systemPrompt = `You are a senior partner at McKinsey presenting to a CEO. Your analysis must tell a STORY that builds to a clear recommendation.
 
-Your analysis must follow the "Data → Pattern → Mechanism → Implication" framework for all insights:
-- DATA: Specific observations from the research
-- PATTERN: What emerges when you look across the data points
-- MECHANISM: Why this pattern exists (causal explanation)
-- IMPLICATION: What this means for the client's decision
+CRITICAL RULES:
+1. NO GENERIC STATEMENTS. Everything must be specific to this country and industry.
+2. EVERY CLAIM needs a number, name, or specific evidence behind it.
+3. BUILD A NARRATIVE: Start with what makes this market interesting → what challenges exist → how to overcome them → why this path wins.
+4. INSIGHTS must be NON-OBVIOUS. Not "the market is large" but "the gap between industrial electricity prices ($0.12/kWh) and ESCO contract rates (15% savings) creates a $340M addressable market among manufacturers spending >$1M/year on energy."
+5. ENTRY OPTIONS must be genuinely different strategies, not variations of the same thing.
 
-Be specific. Avoid generic statements. Every insight should be actionable.`;
+The CEO should finish reading and think: "I understand exactly why we should/shouldn't enter, and exactly what to do first."`;
 
-  const prompt = `Client context: ${scope.clientContext}
+  const prompt = `Client: ${scope.clientContext}
 Industry: ${scope.industry}
-Project type: ${scope.projectType}
-Target market: ${countryAnalysis.country}
+Target: ${countryAnalysis.country}
 
-COUNTRY ANALYSIS:
+DATA GATHERED:
 ${JSON.stringify(countryAnalysis, null, 2)}
 
-Generate a comprehensive deep-dive analysis with:
+Create a DEEP strategic analysis. Tell a story. Build to a recommendation.
 
-1. EXECUTIVE SUMMARY (3-5 bullets highlighting the most critical findings)
+Return JSON with:
 
-2. MARKET OPPORTUNITY ASSESSMENT:
-   - Total addressable market
-   - Serviceable market
-   - Growth trajectory and drivers
-   - Timing considerations
+{
+  "executiveSummary": [
+    "5 bullets that tell the STORY: what's the opportunity, why now, what's hard, what's the path, what's the first move",
+    "Each bullet should have a SPECIFIC number or fact",
+    "These should make someone want to read the rest"
+  ],
 
-3. COMPETITIVE POSITIONING:
-   - Key players and their strengths/weaknesses
-   - White spaces and opportunities
-   - Potential partners vs competitors
+  "marketOpportunityAssessment": {
+    "totalAddressableMarket": "$ value with calculation logic (e.g., '1,200 factories × avg $500K energy spend × 15% savings potential = $90M TAM')",
+    "serviceableMarket": "$ value with realistic penetration assumptions and WHY those assumptions",
+    "growthTrajectory": "CAGR with SPECIFIC drivers - not 'growing demand' but 'mandatory ISO 50001 compliance by 2026 for exporters (40% of manufacturing)'",
+    "timingConsiderations": "Why NOW is the right time - regulatory triggers, competitive gaps, market readiness signals"
+  },
 
-4. REGULATORY PATHWAY:
-   - Key regulations to navigate
-   - Licensing requirements
-   - Timeline and cost estimates
-   - Risks and mitigation
+  "competitivePositioning": {
+    "keyPlayers": [
+      {"name": "actual company", "strengths": "specific", "weaknesses": "specific", "threat": "how they could block you"}
+    ],
+    "whiteSpaces": ["specific gaps with EVIDENCE of demand and SIZE of opportunity"],
+    "potentialPartners": [{"name": "actual company", "rationale": "why they'd partner, what they bring, what you bring"}]
+  },
 
-5. ENTRY STRATEGY OPTIONS:
-   - Option A: [Description with pros/cons]
-   - Option B: [Description with pros/cons]
-   - Option C: [Description with pros/cons]
-   - Recommended option with rationale
+  "regulatoryPathway": {
+    "keyRegulations": "the 2-3 regulations that ACTUALLY MATTER for market entry, with specific requirements",
+    "licensingRequirements": "what licenses, which agency, typical timeline, typical cost",
+    "timeline": "realistic month-by-month timeline with dependencies",
+    "risks": "specific regulatory risks with likelihood and mitigation"
+  },
 
-6. KEY INSIGHTS (3-5 major insights using Data→Pattern→Mechanism→Implication)
+  "entryStrategyOptions": {
+    "optionA": {
+      "name": "short descriptive name",
+      "description": "2-3 sentences on the approach",
+      "pros": "3 specific advantages with evidence",
+      "cons": "3 specific disadvantages with severity",
+      "investmentRequired": "$ estimate with breakdown",
+      "timeToRevenue": "months with assumptions"
+    },
+    "optionB": {
+      "name": "genuinely different approach",
+      "description": "...",
+      "pros": "...",
+      "cons": "...",
+      "investmentRequired": "...",
+      "timeToRevenue": "..."
+    },
+    "optionC": {
+      "name": "third distinct approach",
+      "description": "...",
+      "pros": "...",
+      "cons": "...",
+      "investmentRequired": "...",
+      "timeToRevenue": "..."
+    },
+    "recommendedOption": "which option and WHY - tie back to client's specific situation, risk tolerance, timeline, capabilities"
+  },
 
-7. IMPLEMENTATION ROADMAP:
-   - Phase 1 (0-6 months): [actions]
-   - Phase 2 (6-12 months): [actions]
-   - Phase 3 (12-24 months): [actions]
+  "keyInsights": [
+    {
+      "title": "short punchy headline",
+      "data": "specific observation from research",
+      "pattern": "what this reveals when combined with other data",
+      "mechanism": "WHY this pattern exists (causal explanation)",
+      "implication": "what this means for the entry decision - specific and actionable"
+    }
+  ],
 
-8. RISK ASSESSMENT:
-   - Critical risks with mitigation strategies
-   - Go/No-Go criteria
+  "implementationRoadmap": {
+    "phase1": ["months 0-6: specific actions with deliverables and success criteria"],
+    "phase2": ["months 6-12: specific actions that BUILD on phase 1"],
+    "phase3": ["months 12-24: scaling actions with revenue milestones"]
+  },
 
-9. NEXT STEPS (specific immediate actions)
+  "riskAssessment": {
+    "criticalRisks": [
+      {"risk": "specific risk", "likelihood": "high/medium/low", "impact": "description", "mitigation": "specific countermeasure"}
+    ],
+    "goNoGoCriteria": ["specific, measurable criteria that must be true to proceed - not vague conditions"]
+  },
 
-Return as JSON with these sections as keys. Each insight must follow the Data→Pattern→Mechanism→Implication structure explicitly.`;
+  "nextSteps": ["5 specific actions to take THIS WEEK with owner and deliverable"]
+}
+
+Make it DEEP. Make it SPECIFIC. Make it tell a STORY.`;
 
   const result = await callDeepSeek(prompt, systemPrompt, 12000);
 
@@ -574,40 +629,73 @@ async function synthesizeFindings(countryAnalyses, scope) {
 
   console.log('\n=== STAGE 3: CROSS-COUNTRY SYNTHESIS ===');
 
-  const systemPrompt = `You are a senior strategy consultant at a top consulting firm. Your task is to synthesize market research across multiple countries and generate strategic insights.
+  const systemPrompt = `You are a senior partner at McKinsey presenting a multi-country market entry strategy to a CEO.
 
-Your analysis must follow the "Data → Pattern → Mechanism → Implication" framework for all insights:
-- DATA: Specific observations from the research
-- PATTERN: What emerges when you look across countries/data points
-- MECHANISM: Why this pattern exists (causal explanation)
-- IMPLICATION: What this means for the client's decision
+Your job is to help them decide: WHERE to enter first, HOW to enter, and WHY that sequence wins.
 
-Be specific. Avoid generic statements. Every insight should be actionable.`;
+CRITICAL RULES:
+1. DON'T just list facts about each country. COMPARE them. Show trade-offs.
+2. INSIGHTS must be CROSS-COUNTRY patterns. "Thailand has 49% foreign ownership cap while Vietnam allows 100%" → "This means Vietnam for wholly-owned, Thailand only with a JV partner"
+3. The RANKING must be JUSTIFIED with specific factors, not just vibes.
+4. RECOMMENDATIONS must account for SEQUENCING - which market teaches you what for the next one?
 
-  const prompt = `Client context: ${scope.clientContext}
+The CEO should finish reading knowing: "Enter X first because Y, then Z, using this approach."`;
+
+  const prompt = `Client: ${scope.clientContext}
 Industry: ${scope.industry}
-Project type: ${scope.projectType}
 
-COUNTRY ANALYSES:
+DATA FROM EACH COUNTRY:
 ${JSON.stringify(countryAnalyses, null, 2)}
 
-Generate a comprehensive synthesis with:
+Create a COMPARATIVE synthesis. Not summaries of each - actual COMPARISONS and TRADE-OFFS.
 
-1. EXECUTIVE SUMMARY (3-5 bullets)
-2. COUNTRY RANKING (with scores and rationale)
-3. COMPARATIVE ANALYSIS:
-   - Market size comparison
-   - Regulatory environment comparison
-   - Competitive intensity comparison
-   - Infrastructure comparison
-4. KEY INSIGHTS (3-5 major insights using Data→Pattern→Mechanism→Implication)
-5. STRATEGIC RECOMMENDATIONS:
-   - Recommended entry sequence
-   - Entry mode recommendations by country
-   - Risk mitigation strategies
-6. NEXT STEPS (specific actions)
+Return JSON with:
 
-Return as JSON with these sections as keys. Each insight must follow the Data→Pattern→Mechanism→Implication structure explicitly.`;
+{
+  "executiveSummary": [
+    "5 bullets telling the STORY: which markets win and why, what sequence, first move",
+    "Each bullet compares across countries, not just lists",
+    "Should make the recommendation clear immediately"
+  ],
+
+  "countryRanking": [
+    {
+      "rank": 1,
+      "country": "name",
+      "score": "X/10",
+      "rationale": "2-3 sentences on WHY this ranks here - specific factors that differentiate from others"
+    }
+  ],
+
+  "comparativeAnalysis": {
+    "marketSize": "not just list sizes - which is biggest NOW vs fastest GROWTH vs easiest to CAPTURE? table format with specific numbers",
+    "regulatoryEnvironment": "compare SPECIFIC rules - ownership caps, licenses needed, incentives available. which is easiest for foreign entry?",
+    "competitiveIntensity": "where are the gaps? which market has weaker local players? where can you win faster?",
+    "infrastructure": "which has better supply chain for your needs? where are the bottlenecks?"
+  },
+
+  "keyInsights": [
+    {
+      "title": "punchy headline about a cross-country pattern",
+      "data": "specific comparison across countries",
+      "pattern": "what this reveals about regional market dynamics",
+      "mechanism": "WHY this pattern exists",
+      "implication": "what this means for WHERE and HOW to enter"
+    }
+  ],
+
+  "strategicRecommendations": {
+    "entrySequence": "Country A → Country B → Country C with SPECIFIC reasoning for the sequence (what you learn, what you build)",
+    "entryModeRecommendations": [
+      {"country": "name", "mode": "JV/subsidiary/partnership/etc", "rationale": "why this mode for THIS country specifically"}
+    ],
+    "riskMitigation": ["specific cross-country risk strategies - diversification, staging, etc"]
+  },
+
+  "nextSteps": ["5 specific actions this week to start the entry process"]
+}
+
+Focus on COMPARISONS and TRADE-OFFS, not just summaries.`;
 
   const result = await callDeepSeek(prompt, systemPrompt, 12000);
 
@@ -628,7 +716,20 @@ Return as JSON with these sections as keys. Each insight must follow the Data→
 
 // ============ PPT GENERATION ============
 
-// Single country deep-dive PPT
+// Helper: truncate text to fit slides
+function truncate(text, maxLen = 100) {
+  if (!text) return '';
+  const str = String(text);
+  return str.length > maxLen ? str.substring(0, maxLen - 3) + '...' : str;
+}
+
+// Helper: safely get array items
+function safeArray(arr, max = 5) {
+  if (!Array.isArray(arr)) return [];
+  return arr.slice(0, max);
+}
+
+// Single country deep-dive PPT - RESTRUCTURED for actual analysis
 async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   console.log(`Generating single-country PPT for ${synthesis.country}...`);
 
@@ -656,240 +757,384 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
     if (subtitle) {
       slide.addText(subtitle, {
-        x: 0.5, y: 0.8, w: 9, h: 0.3,
-        fontSize: 12, color: COLORS.secondary
+        x: 0.5, y: 0.75, w: 9, h: 0.25,
+        fontSize: 11, color: COLORS.secondary
       });
     }
-    slide.addShape(pptx.shapes.RECTANGLE, {
-      x: 0.5, y: 7.2, w: 9, h: 0.02,
-      fill: { color: COLORS.primary }
-    });
     return slide;
   }
 
   // SLIDE 1: Title
   const titleSlide = pptx.addSlide();
   titleSlide.addText(synthesis.country.toUpperCase(), {
-    x: 0.5, y: 1.8, w: 9, h: 0.8,
+    x: 0.5, y: 2.2, w: 9, h: 0.8,
     fontSize: 42, bold: true, color: COLORS.primary
   });
-  titleSlide.addText(`${scope.industry} Market Entry Analysis`, {
-    x: 0.5, y: 2.7, w: 9, h: 0.5,
+  titleSlide.addText(`${scope.industry} Market Analysis`, {
+    x: 0.5, y: 3.0, w: 9, h: 0.5,
     fontSize: 24, color: COLORS.secondary
-  });
-  titleSlide.addText('Deep Dive Assessment', {
-    x: 0.5, y: 3.3, w: 9, h: 0.4,
-    fontSize: 16, color: COLORS.text
   });
   titleSlide.addText(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' }), {
     x: 0.5, y: 6.5, w: 9, h: 0.3,
     fontSize: 12, color: COLORS.text
   });
 
-  // SLIDE 2: Executive Summary
-  const execSlide = addSlide('Executive Summary');
-  const execBullets = synthesis.executiveSummary || ['Analysis complete'];
-  execSlide.addText(execBullets.map(b => ({ text: b, options: { bullet: true } })), {
-    x: 0.5, y: 1.3, w: 9, h: 5.5,
-    fontSize: 14, color: COLORS.text, valign: 'top'
-  });
-
-  // SLIDE 3: Market Opportunity
-  const marketSlide = addSlide('Market Opportunity Assessment', synthesis.country);
-  const marketOpp = synthesis.marketOpportunityAssessment || synthesis.marketOpportunity || {};
-  const marketText = [
-    `Total Addressable Market: ${marketOpp.totalAddressableMarket || marketOpp.tam || 'See analysis'}`,
-    `Serviceable Market: ${marketOpp.serviceableMarket || marketOpp.sam || 'See analysis'}`,
-    `Growth: ${marketOpp.growthTrajectory || marketOpp.growth || 'See analysis'}`,
-    `Timing: ${marketOpp.timingConsiderations || marketOpp.timing || 'See analysis'}`
-  ];
-  marketSlide.addText(marketText.map(t => ({ text: t, options: { bullet: true } })), {
-    x: 0.5, y: 1.3, w: 9, h: 5.5,
-    fontSize: 13, color: COLORS.text, valign: 'top', lineSpacing: 24
-  });
-
-  // SLIDE 4: Competitive Landscape
-  const compSlide = addSlide('Competitive Positioning', synthesis.country);
-  const compPos = synthesis.competitivePositioning || synthesis.competitiveLandscape || {};
-
-  compSlide.addText('Key Players', {
-    x: 0.5, y: 1.3, w: 4, h: 0.3,
-    fontSize: 14, bold: true, color: COLORS.secondary
-  });
-  const players = compPos.keyPlayers || compPos.players || [];
-  compSlide.addText((Array.isArray(players) ? players.slice(0, 5) : []).map(p => ({
-    text: typeof p === 'string' ? p : `${p.name}: ${p.strengths || p.description || ''}`,
+  // SLIDE 2: Summary (1 slide, key points only)
+  const execSlide = addSlide('Summary');
+  const execBullets = safeArray(synthesis.executiveSummary, 5);
+  execSlide.addText(execBullets.map(b => ({
+    text: truncate(b, 150),
     options: { bullet: true }
   })), {
-    x: 0.5, y: 1.7, w: 4.2, h: 2.5,
+    x: 0.5, y: 1.1, w: 9, h: 5.5,
+    fontSize: 13, color: COLORS.text, valign: 'top', lineSpacing: 22
+  });
+
+  // SLIDE 3: Market Size Data (ACTUAL NUMBERS)
+  const marketSlide = addSlide('Market Data', 'What the numbers show');
+  const ca = countryAnalysis || {};
+  const macro = ca.macroContext || {};
+  const market = ca.marketDynamics || {};
+
+  // Create data table
+  const marketRows = [
+    [
+      { text: 'Metric', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Value', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+    ],
+    [{ text: 'GDP' }, { text: truncate(macro.gdp || 'N/A', 50) }],
+    [{ text: 'Population' }, { text: truncate(macro.population || 'N/A', 50) }],
+    [{ text: 'Industry Share of GDP' }, { text: truncate(macro.industrialGdpShare || 'N/A', 50) }],
+    [{ text: 'Market Size' }, { text: truncate(market.marketSize || 'N/A', 50) }],
+    [{ text: 'Energy Prices' }, { text: truncate(market.pricing || 'N/A', 50) }],
+    [{ text: 'Demand Drivers' }, { text: truncate(market.demand || 'N/A', 50) }]
+  ];
+
+  marketSlide.addTable(marketRows, {
+    x: 0.5, y: 1.1, w: 9, h: 4.5,
+    fontSize: 11,
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [3, 6]
+  });
+
+  // SLIDE 4: Competitor Data (TABLE FORMAT)
+  const compSlide = addSlide('Competitors', 'Who is already in this market');
+  const comp = ca.competitiveLandscape || {};
+
+  const compRows = [
+    [
+      { text: 'Company', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Type', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Notes', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+    ]
+  ];
+
+  // Add local players
+  safeArray(comp.localPlayers, 3).forEach(p => {
+    const name = typeof p === 'string' ? p : (p.name || 'Unknown');
+    const desc = typeof p === 'string' ? '' : (p.description || '');
+    compRows.push([
+      { text: truncate(name, 25) },
+      { text: 'Local' },
+      { text: truncate(desc, 40) }
+    ]);
+  });
+
+  // Add foreign players
+  safeArray(comp.foreignPlayers, 3).forEach(p => {
+    const name = typeof p === 'string' ? p : (p.name || 'Unknown');
+    const desc = typeof p === 'string' ? '' : (p.description || '');
+    compRows.push([
+      { text: truncate(name, 25) },
+      { text: 'Foreign' },
+      { text: truncate(desc, 40) }
+    ]);
+  });
+
+  compSlide.addTable(compRows, {
+    x: 0.5, y: 1.1, w: 9, h: 3.5,
+    fontSize: 10,
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [2.5, 1.5, 5]
+  });
+
+  // Entry barriers below
+  compSlide.addText('Barriers to Entry:', {
+    x: 0.5, y: 4.8, w: 9, h: 0.3,
+    fontSize: 12, bold: true, color: COLORS.secondary
+  });
+  const barriers = safeArray(comp.entryBarriers, 4);
+  compSlide.addText(barriers.map(b => ({ text: truncate(b, 80), options: { bullet: true } })), {
+    x: 0.5, y: 5.2, w: 9, h: 1.8,
     fontSize: 10, color: COLORS.text, valign: 'top'
   });
 
-  compSlide.addText('White Spaces & Opportunities', {
-    x: 5, y: 1.3, w: 4.5, h: 0.3,
+  // SLIDE 5: Regulatory Data
+  const regSlide = addSlide('Regulations', 'Rules you need to follow');
+  const reg = ca.policyRegulatory || {};
+
+  const regRows = [
+    [
+      { text: 'Area', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Details', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+    ],
+    [{ text: 'Government Stance' }, { text: truncate(reg.governmentStance || 'N/A', 60) }],
+    [{ text: 'Foreign Ownership Rules' }, { text: truncate(reg.foreignOwnershipRules || 'N/A', 60) }],
+    [{ text: 'Risk Level' }, { text: truncate(reg.regulatoryRisk || 'N/A', 60) }]
+  ];
+
+  regSlide.addTable(regRows, {
+    x: 0.5, y: 1.1, w: 9, h: 2,
+    fontSize: 11,
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [3, 6]
+  });
+
+  // Key laws
+  regSlide.addText('Key Laws & Policies:', {
+    x: 0.5, y: 3.3, w: 9, h: 0.3,
+    fontSize: 12, bold: true, color: COLORS.secondary
+  });
+  const laws = safeArray(reg.keyLegislation, 4);
+  regSlide.addText(laws.map(l => ({ text: truncate(l, 80), options: { bullet: true } })), {
+    x: 0.5, y: 3.7, w: 9, h: 1.5,
+    fontSize: 10, color: COLORS.text, valign: 'top'
+  });
+
+  // Incentives
+  regSlide.addText('Available Incentives:', {
+    x: 0.5, y: 5.3, w: 9, h: 0.3,
+    fontSize: 12, bold: true, color: COLORS.green
+  });
+  const incentives = safeArray(reg.incentives, 3);
+  regSlide.addText(incentives.map(i => ({ text: truncate(i, 80), options: { bullet: true } })), {
+    x: 0.5, y: 5.7, w: 9, h: 1.2,
+    fontSize: 10, color: COLORS.text, valign: 'top'
+  });
+
+  // SLIDE 6: What We Found (Analysis based on data)
+  const analysisSlide = addSlide('What We Found', 'Patterns from the research');
+  const summary = ca.summaryAssessment || {};
+
+  // Opportunities
+  analysisSlide.addText('Opportunities', {
+    x: 0.5, y: 1.1, w: 4.2, h: 0.3,
     fontSize: 14, bold: true, color: COLORS.green
   });
-  const whiteSpaces = compPos.whiteSpaces || compPos.opportunities || [];
-  compSlide.addText((Array.isArray(whiteSpaces) ? whiteSpaces.slice(0, 4) : []).map(w => ({
-    text: typeof w === 'string' ? w : w.description || w.opportunity,
-    options: { bullet: true }
-  })), {
-    x: 5, y: 1.7, w: 4.5, h: 2.5,
+  const opps = safeArray(summary.opportunities, 4);
+  analysisSlide.addText(opps.map(o => ({ text: truncate(o, 70), options: { bullet: true } })), {
+    x: 0.5, y: 1.5, w: 4.2, h: 2.5,
     fontSize: 10, color: COLORS.text, valign: 'top'
   });
 
-  compSlide.addText('Potential Partners', {
-    x: 0.5, y: 4.5, w: 9, h: 0.3,
+  // Obstacles
+  analysisSlide.addText('Obstacles', {
+    x: 5, y: 1.1, w: 4.5, h: 0.3,
+    fontSize: 14, bold: true, color: COLORS.red
+  });
+  const obs = safeArray(summary.obstacles, 4);
+  analysisSlide.addText(obs.map(o => ({ text: truncate(o, 70), options: { bullet: true } })), {
+    x: 5, y: 1.5, w: 4.5, h: 2.5,
+    fontSize: 10, color: COLORS.text, valign: 'top'
+  });
+
+  // Key insight
+  analysisSlide.addText('Key Insight:', {
+    x: 0.5, y: 4.2, w: 9, h: 0.3,
     fontSize: 14, bold: true, color: COLORS.accent
   });
-  const partners = compPos.potentialPartners || compPos.partners || [];
-  compSlide.addText((Array.isArray(partners) ? partners.slice(0, 3) : []).map(p => ({
-    text: typeof p === 'string' ? p : `${p.name}: ${p.rationale || p.description || ''}`,
-    options: { bullet: true }
-  })), {
-    x: 0.5, y: 4.9, w: 9, h: 2,
-    fontSize: 10, color: COLORS.text, valign: 'top'
+  analysisSlide.addText(truncate(summary.keyInsight || 'See detailed analysis', 300), {
+    x: 0.5, y: 4.6, w: 9, h: 1.8,
+    fontSize: 11, color: COLORS.text, valign: 'top'
   });
 
-  // SLIDE 5: Regulatory Pathway
-  const regSlide = addSlide('Regulatory Pathway', synthesis.country);
-  const regulatory = synthesis.regulatoryPathway || synthesis.regulatory || {};
-
-  const regText = [
-    `Key Regulations: ${regulatory.keyRegulations || 'See analysis'}`,
-    `Licensing: ${regulatory.licensingRequirements || regulatory.licensing || 'See analysis'}`,
-    `Timeline: ${regulatory.timeline || regulatory.timelineEstimate || 'See analysis'}`,
-    `Risks: ${regulatory.risks || 'See analysis'}`
-  ];
-  regSlide.addText(regText.map(t => ({ text: t, options: { bullet: true } })), {
-    x: 0.5, y: 1.3, w: 9, h: 5.5,
-    fontSize: 12, color: COLORS.text, valign: 'top', lineSpacing: 28
-  });
-
-  // SLIDE 6: Entry Strategy Options
-  const stratSlide = addSlide('Entry Strategy Options', synthesis.country);
-  const entryOpts = synthesis.entryStrategyOptions || synthesis.entryOptions || {};
-
-  let yPos = 1.3;
-  ['optionA', 'optionB', 'optionC', 'A', 'B', 'C'].forEach(key => {
-    const opt = entryOpts[key] || entryOpts[`option${key}`];
-    if (opt && yPos < 5.5) {
-      const optText = typeof opt === 'string' ? opt :
-        `${opt.name || opt.title || key}: ${opt.description || ''}\nPros: ${opt.pros || 'N/A'} | Cons: ${opt.cons || 'N/A'}`;
-      stratSlide.addText(optText, {
-        x: 0.5, y: yPos, w: 9, h: 1.3,
-        fontSize: 11, color: COLORS.text, valign: 'top'
-      });
-      yPos += 1.5;
+  // Ratings
+  analysisSlide.addText(
+    `Market Attractiveness: ${summary.attractivenessRating || 'N/A'}/10    Feasibility: ${summary.feasibilityRating || 'N/A'}/10`,
+    {
+      x: 0.5, y: 6.6, w: 9, h: 0.3,
+      fontSize: 11, bold: true, color: COLORS.primary
     }
-  });
+  );
 
-  const recommended = entryOpts.recommendedOption || entryOpts.recommendation;
-  if (recommended) {
-    stratSlide.addText(`Recommended: ${typeof recommended === 'string' ? recommended : recommended.option || JSON.stringify(recommended)}`, {
-      x: 0.5, y: 6, w: 9, h: 0.8,
-      fontSize: 12, bold: true, color: COLORS.accent, valign: 'top'
+  // SLIDE 7: Key Insights (THE STORY)
+  const keyInsights = safeArray(synthesis.keyInsights, 3);
+  if (keyInsights.length > 0) {
+    const insightSlide = addSlide('Key Insights', 'What the data tells us');
+    let insightY = 1.1;
+
+    keyInsights.forEach((insight, idx) => {
+      const title = typeof insight === 'string' ? `Insight ${idx + 1}` : (insight.title || `Insight ${idx + 1}`);
+      const body = typeof insight === 'string' ? insight :
+        `${insight.data || ''} → ${insight.pattern || ''} → ${insight.implication || ''}`;
+
+      insightSlide.addText(`${idx + 1}. ${truncate(title, 60)}`, {
+        x: 0.5, y: insightY, w: 9, h: 0.35,
+        fontSize: 12, bold: true, color: COLORS.accent
+      });
+
+      insightSlide.addText(truncate(body, 200), {
+        x: 0.5, y: insightY + 0.4, w: 9, h: 1.3,
+        fontSize: 10, color: COLORS.text, valign: 'top'
+      });
+
+      insightY += 1.85;
     });
   }
 
-  // SLIDE 7: Key Insights
-  const insightSlide = addSlide('Key Strategic Insights');
-  const insights = synthesis.keyInsights || [];
-  let insightY = 1.3;
-  (Array.isArray(insights) ? insights.slice(0, 3) : []).forEach((insight, idx) => {
-    const text = typeof insight === 'string' ? insight :
-      `${insight.pattern || insight.title || 'Insight ' + (idx + 1)}\n→ ${insight.implication || insight.description || ''}`;
-    insightSlide.addText(`${idx + 1}. ${text}`, {
-      x: 0.5, y: insightY, w: 9, h: 1.8,
-      fontSize: 11, color: COLORS.text, valign: 'top'
-    });
-    insightY += 1.9;
+  // SLIDE 8: Entry Options (COMPARISON TABLE)
+  const stratSlide = addSlide('Entry Options', 'Three ways to enter this market');
+  const entryOpts = synthesis.entryStrategyOptions || synthesis.entryOptions || {};
+
+  const optRows = [
+    [
+      { text: '', options: { fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Option A', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Option B', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Option C', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+    ]
+  ];
+
+  const optA = entryOpts.optionA || entryOpts.A || {};
+  const optB = entryOpts.optionB || entryOpts.B || {};
+  const optC = entryOpts.optionC || entryOpts.C || {};
+
+  const getOptField = (opt, field) => {
+    if (typeof opt === 'string') return truncate(opt, 35);
+    return truncate(opt[field] || opt.description || 'N/A', 35);
+  };
+
+  optRows.push([
+    { text: 'Approach', options: { bold: true } },
+    { text: getOptField(optA, 'name') },
+    { text: getOptField(optB, 'name') },
+    { text: getOptField(optC, 'name') }
+  ]);
+
+  optRows.push([
+    { text: 'Pros', options: { bold: true } },
+    { text: getOptField(optA, 'pros') },
+    { text: getOptField(optB, 'pros') },
+    { text: getOptField(optC, 'pros') }
+  ]);
+
+  optRows.push([
+    { text: 'Cons', options: { bold: true } },
+    { text: getOptField(optA, 'cons') },
+    { text: getOptField(optB, 'cons') },
+    { text: getOptField(optC, 'cons') }
+  ]);
+
+  stratSlide.addTable(optRows, {
+    x: 0.5, y: 1.1, w: 9, h: 3.5,
+    fontSize: 9,
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [1.5, 2.5, 2.5, 2.5]
   });
 
-  // SLIDE 8: Implementation Roadmap
-  const roadmapSlide = addSlide('Implementation Roadmap', synthesis.country);
+  // Recommendation
+  const recommended = entryOpts.recommendedOption || entryOpts.recommendation;
+  if (recommended) {
+    stratSlide.addText('Recommended:', {
+      x: 0.5, y: 4.8, w: 9, h: 0.3,
+      fontSize: 12, bold: true, color: COLORS.accent
+    });
+    const recText = typeof recommended === 'string' ? recommended : (recommended.option || recommended.rationale || JSON.stringify(recommended));
+    stratSlide.addText(truncate(recText, 250), {
+      x: 0.5, y: 5.2, w: 9, h: 1.5,
+      fontSize: 11, color: COLORS.text, valign: 'top'
+    });
+  }
+
+  // SLIDE 8: Risks (PROPERLY FORMATTED)
+  const riskSlide = addSlide('Risks', 'What could go wrong and how to handle it');
+  const riskAssess = synthesis.riskAssessment || synthesis.risks || {};
+  const criticalRisks = safeArray(riskAssess.criticalRisks || riskAssess.risks, 4);
+
+  // Risk table
+  const riskRows = [
+    [
+      { text: 'Risk', options: { bold: true, fill: { color: COLORS.red }, color: COLORS.white } },
+      { text: 'How to Handle', options: { bold: true, fill: { color: COLORS.red }, color: COLORS.white } }
+    ]
+  ];
+
+  criticalRisks.forEach(r => {
+    const riskName = typeof r === 'string' ? r : (r.risk || r.name || 'Risk');
+    const mitigation = typeof r === 'string' ? '' : (r.mitigation || '');
+    riskRows.push([
+      { text: truncate(riskName, 40) },
+      { text: truncate(mitigation, 50) }
+    ]);
+  });
+
+  riskSlide.addTable(riskRows, {
+    x: 0.5, y: 1.1, w: 9, h: 2.8,
+    fontSize: 10,
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [4, 5]
+  });
+
+  // Go/No-Go criteria
+  const goNoGo = safeArray(riskAssess.goNoGoCriteria || riskAssess.goNoGo, 4);
+  if (goNoGo.length > 0) {
+    riskSlide.addText('Go/No-Go Checklist:', {
+      x: 0.5, y: 4.1, w: 9, h: 0.3,
+      fontSize: 12, bold: true, color: COLORS.secondary
+    });
+    riskSlide.addText(goNoGo.map(g => ({
+      text: truncate(typeof g === 'string' ? g : (g.criteria || g.description), 80),
+      options: { bullet: true }
+    })), {
+      x: 0.5, y: 4.5, w: 9, h: 2,
+      fontSize: 10, color: COLORS.text, valign: 'top'
+    });
+  }
+
+  // SLIDE 9: Roadmap (Based on analysis)
+  const roadmapSlide = addSlide('Roadmap', 'Steps based on what we found');
   const roadmap = synthesis.implementationRoadmap || synthesis.roadmap || {};
 
   const phases = [
-    { key: 'phase1', label: 'Phase 1 (0-6 months)', color: COLORS.secondary },
-    { key: 'phase2', label: 'Phase 2 (6-12 months)', color: COLORS.accent },
-    { key: 'phase3', label: 'Phase 3 (12-24 months)', color: COLORS.green }
+    { key: 'phase1', label: 'Months 0-6', color: COLORS.secondary },
+    { key: 'phase2', label: 'Months 6-12', color: COLORS.accent },
+    { key: 'phase3', label: 'Months 12-24', color: COLORS.green }
   ];
 
-  let phaseY = 1.3;
+  let phaseY = 1.1;
   phases.forEach(phase => {
     const actions = roadmap[phase.key] || roadmap[phase.label] || [];
     roadmapSlide.addText(phase.label, {
-      x: 0.5, y: phaseY, w: 9, h: 0.3,
+      x: 0.5, y: phaseY, w: 9, h: 0.35,
       fontSize: 13, bold: true, color: phase.color
     });
-    const actionText = Array.isArray(actions) ? actions.join(', ') : String(actions);
-    roadmapSlide.addText(actionText, {
-      x: 0.5, y: phaseY + 0.35, w: 9, h: 1.2,
+
+    const actionList = Array.isArray(actions) ? actions : [actions];
+    roadmapSlide.addText(safeArray(actionList, 3).map(a => ({
+      text: truncate(a, 90),
+      options: { bullet: true }
+    })), {
+      x: 0.5, y: phaseY + 0.4, w: 9, h: 1.3,
       fontSize: 10, color: COLORS.text, valign: 'top'
     });
-    phaseY += 1.7;
-  });
-
-  // SLIDE 9: Risks
-  const riskSlide = addSlide('Risk Assessment', synthesis.country);
-  const riskAssess = synthesis.riskAssessment || synthesis.risks || {};
-  const criticalRisks = riskAssess.criticalRisks || riskAssess.risks || [];
-  const goNoGo = riskAssess.goNoGoCriteria || riskAssess.goNoGo || [];
-
-  riskSlide.addText('Critical Risks', {
-    x: 0.5, y: 1.3, w: 9, h: 0.3,
-    fontSize: 14, bold: true, color: COLORS.red
-  });
-  riskSlide.addText((Array.isArray(criticalRisks) ? criticalRisks.slice(0, 5) : []).map(r => ({
-    text: typeof r === 'string' ? r : `${r.risk || r.name}: ${r.mitigation || ''}`,
-    options: { bullet: true }
-  })), {
-    x: 0.5, y: 1.7, w: 9, h: 2.5,
-    fontSize: 11, color: COLORS.text, valign: 'top'
-  });
-
-  riskSlide.addText('Go/No-Go Criteria', {
-    x: 0.5, y: 4.5, w: 9, h: 0.3,
-    fontSize: 14, bold: true, color: COLORS.secondary
-  });
-  riskSlide.addText((Array.isArray(goNoGo) ? goNoGo.slice(0, 4) : []).map(g => ({
-    text: typeof g === 'string' ? g : g.criteria || g.description,
-    options: { bullet: true }
-  })), {
-    x: 0.5, y: 4.9, w: 9, h: 2,
-    fontSize: 11, color: COLORS.text, valign: 'top'
+    phaseY += 1.9;
   });
 
   // SLIDE 10: Next Steps
-  const nextSlide = addSlide('Next Steps');
-  const nextSteps = synthesis.nextSteps || [
-    'Validate findings with in-country experts',
-    'Conduct detailed partner identification',
-    'Develop financial model',
-    'Schedule market visit'
-  ];
-  nextSlide.addText((Array.isArray(nextSteps) ? nextSteps : [nextSteps]).map((step, idx) => ({
-    text: `${idx + 1}. ${typeof step === 'string' ? step : step.action || step.description}`,
+  const nextSlide = addSlide('Next Steps', 'What to do now');
+  const nextSteps = safeArray(synthesis.nextSteps || [
+    'Talk to local experts to validate findings',
+    'Identify potential partners',
+    'Build financial model',
+    'Visit the market'
+  ], 5);
+
+  nextSlide.addText(nextSteps.map((step, idx) => ({
+    text: `${idx + 1}. ${truncate(typeof step === 'string' ? step : (step.action || step.description), 100)}`,
     options: { bullet: false }
   })), {
-    x: 0.5, y: 1.3, w: 9, h: 5,
-    fontSize: 14, color: COLORS.text, valign: 'top', lineSpacing: 28
-  });
-
-  // SLIDE 11: Methodology
-  const methodSlide = addSlide('Research Methodology & Cost');
-  methodSlide.addText([
-    { text: 'Methodology', options: { bold: true, fontSize: 14 } },
-    { text: '\n\nThis deep-dive analysis was generated using AI-powered research:', options: { fontSize: 11 } },
-    { text: '\n• 15+ targeted web searches using Perplexity AI', options: { bullet: false, fontSize: 11 } },
-    { text: '\n• Deep analysis using DeepSeek thinking model', options: { bullet: false, fontSize: 11 } },
-    { text: '\n• Strategy consulting frameworks for insight generation', options: { bullet: false, fontSize: 11 } },
-    { text: `\n\nTotal research cost: $${costTracker.totalCost.toFixed(2)}`, options: { fontSize: 11, bold: true } },
-    { text: `\nGenerated: ${new Date().toISOString()}`, options: { fontSize: 11 } }
-  ], {
-    x: 0.5, y: 1.3, w: 9, h: 5,
-    color: COLORS.text, valign: 'top'
+    x: 0.5, y: 1.1, w: 9, h: 5,
+    fontSize: 13, color: COLORS.text, valign: 'top', lineSpacing: 26
   });
 
   const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
@@ -897,7 +1142,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   return pptxBuffer;
 }
 
-// Multi-country comparison PPT
+// Multi-country comparison PPT - RESTRUCTURED with actual data
 async function generatePPT(synthesis, countryAnalyses, scope) {
   console.log('\n=== STAGE 4: PPT GENERATION ===');
 
@@ -907,278 +1152,325 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   }
 
   const pptx = new pptxgen();
-
-  // Set presentation properties
   pptx.author = 'Market Research AI';
   pptx.title = `${scope.industry} Market Analysis - ${scope.targetMarkets.join(', ')}`;
   pptx.subject = scope.projectType;
 
-  // Define colors
   const COLORS = {
-    primary: '1a365d',      // Dark blue
-    secondary: '2c5282',    // Medium blue
-    accent: 'ed8936',       // Orange
-    text: '2d3748',         // Dark gray
-    lightBg: 'f7fafc',      // Light gray
-    white: 'ffffff'
+    primary: '1a365d',
+    secondary: '2c5282',
+    accent: 'ed8936',
+    text: '2d3748',
+    lightBg: 'f7fafc',
+    white: 'ffffff',
+    green: '38a169',
+    red: 'c53030'
   };
 
-  // Helper function to add slide with consistent styling
   function addSlide(title, subtitle = '') {
     const slide = pptx.addSlide();
-
-    // Title
     slide.addText(title, {
       x: 0.5, y: 0.3, w: 9, h: 0.5,
       fontSize: 24, bold: true, color: COLORS.primary
     });
-
-    // Subtitle
     if (subtitle) {
       slide.addText(subtitle, {
-        x: 0.5, y: 0.8, w: 9, h: 0.3,
-        fontSize: 12, color: COLORS.secondary
+        x: 0.5, y: 0.75, w: 9, h: 0.25,
+        fontSize: 11, color: COLORS.secondary
       });
     }
-
-    // Footer line
-    slide.addShape(pptx.shapes.RECTANGLE, {
-      x: 0.5, y: 7.2, w: 9, h: 0.02,
-      fill: { color: COLORS.primary }
-    });
-
     return slide;
   }
 
-  // SLIDE 1: Title Slide
+  // SLIDE 1: Title
   const titleSlide = pptx.addSlide();
   titleSlide.addText(scope.industry.toUpperCase(), {
-    x: 0.5, y: 2, w: 9, h: 0.8,
+    x: 0.5, y: 2.2, w: 9, h: 0.8,
     fontSize: 36, bold: true, color: COLORS.primary
   });
-  titleSlide.addText('Market Entry Analysis', {
-    x: 0.5, y: 2.8, w: 9, h: 0.5,
+  titleSlide.addText('Market Comparison', {
+    x: 0.5, y: 3.0, w: 9, h: 0.5,
     fontSize: 24, color: COLORS.secondary
   });
   titleSlide.addText(scope.targetMarkets.join(' | '), {
-    x: 0.5, y: 3.5, w: 9, h: 0.4,
-    fontSize: 16, color: COLORS.text
+    x: 0.5, y: 3.6, w: 9, h: 0.4,
+    fontSize: 14, color: COLORS.text
   });
   titleSlide.addText(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' }), {
     x: 0.5, y: 6.5, w: 9, h: 0.3,
     fontSize: 12, color: COLORS.text
   });
 
-  // SLIDE 2: Executive Summary
-  const execSlide = addSlide('Executive Summary');
-  const execBullets = synthesis.executiveSummary || ['Analysis complete'];
-  execSlide.addText(execBullets.map(b => ({ text: b, options: { bullet: true } })), {
-    x: 0.5, y: 1.3, w: 9, h: 5,
-    fontSize: 14, color: COLORS.text, valign: 'top'
+  // SLIDE 2: Summary
+  const execSlide = addSlide('Summary');
+  const execBullets = safeArray(synthesis.executiveSummary, 5);
+  execSlide.addText(execBullets.map(b => ({
+    text: truncate(b, 150),
+    options: { bullet: true }
+  })), {
+    x: 0.5, y: 1.1, w: 9, h: 5.5,
+    fontSize: 13, color: COLORS.text, valign: 'top', lineSpacing: 22
   });
 
-  // SLIDE 3: Country Ranking
-  const rankSlide = addSlide('Country Ranking', 'Overall market attractiveness assessment');
+  // SLIDE 3: Market Size Comparison (DATA TABLE)
+  const marketCompSlide = addSlide('Market Data Comparison', 'Numbers across countries');
 
-  // Create ranking table
-  const rankingData = synthesis.countryRanking || countryAnalyses.map(c => ({
-    country: c.country,
-    attractiveness: c.summaryAssessment?.attractivenessRating || 'N/A',
-    feasibility: c.summaryAssessment?.feasibilityRating || 'N/A'
-  }));
+  const marketCompRows = [
+    [
+      { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'GDP', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Market Size', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Growth', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+    ]
+  ];
+
+  countryAnalyses.forEach(c => {
+    if (c.error) return;
+    marketCompRows.push([
+      { text: c.country },
+      { text: truncate(c.macroContext?.gdp || 'N/A', 25) },
+      { text: truncate(c.marketDynamics?.marketSize || 'N/A', 25) },
+      { text: truncate(c.marketDynamics?.demand || 'N/A', 25) }
+    ]);
+  });
+
+  marketCompSlide.addTable(marketCompRows, {
+    x: 0.5, y: 1.1, w: 9, h: 4,
+    fontSize: 10,
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [2, 2.3, 2.3, 2.4]
+  });
+
+  // SLIDE 4: Regulatory Comparison
+  const regCompSlide = addSlide('Regulatory Comparison', 'Rules in each country');
+
+  const regCompRows = [
+    [
+      { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Foreign Ownership', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Risk Level', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+      { text: 'Key Incentive', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+    ]
+  ];
+
+  countryAnalyses.forEach(c => {
+    if (c.error) return;
+    const incentives = c.policyRegulatory?.incentives || [];
+    regCompRows.push([
+      { text: c.country },
+      { text: truncate(c.policyRegulatory?.foreignOwnershipRules || 'N/A', 25) },
+      { text: truncate(c.policyRegulatory?.regulatoryRisk || 'N/A', 20) },
+      { text: truncate(incentives[0] || 'N/A', 25) }
+    ]);
+  });
+
+  regCompSlide.addTable(regCompRows, {
+    x: 0.5, y: 1.1, w: 9, h: 4,
+    fontSize: 10,
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [2, 2.5, 2, 2.5]
+  });
+
+  // SLIDE 5: Country Rankings (COMPARISON MATRIX)
+  const rankSlide = addSlide('Country Rankings', 'Which market looks best');
 
   const rankRows = [
     [
       { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
       { text: 'Attractiveness', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
       { text: 'Feasibility', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
-      { text: 'Rationale', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+      { text: 'Competition', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
     ]
   ];
 
-  (Array.isArray(rankingData) ? rankingData : []).forEach(r => {
+  countryAnalyses.forEach(c => {
+    if (c.error) return;
     rankRows.push([
-      { text: r.country || 'Unknown' },
-      { text: String(r.attractiveness || r.score || 'N/A') },
-      { text: String(r.feasibility || 'N/A') },
-      { text: (r.rationale || '').substring(0, 60) + '...' }
+      { text: c.country },
+      { text: `${c.summaryAssessment?.attractivenessRating || 'N/A'}/10` },
+      { text: `${c.summaryAssessment?.feasibilityRating || 'N/A'}/10` },
+      { text: truncate(c.competitiveLandscape?.competitiveIntensity || 'N/A', 20) }
     ]);
   });
 
   rankSlide.addTable(rankRows, {
-    x: 0.5, y: 1.5, w: 9,
+    x: 0.5, y: 1.1, w: 9, h: 3.5,
     fontSize: 11,
-    border: { pt: 0.5, color: COLORS.text },
-    colW: [1.5, 1.5, 1.5, 4.5]
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [2.5, 2, 2, 2.5]
   });
 
-  // SLIDES 4+: Individual Country Analysis
+  // Best/worst summary below
+  const sortedByAttract = [...countryAnalyses].filter(c => !c.error).sort((a, b) =>
+    (b.summaryAssessment?.attractivenessRating || 0) - (a.summaryAssessment?.attractivenessRating || 0)
+  );
+  if (sortedByAttract.length > 0) {
+    rankSlide.addText(`Most attractive: ${sortedByAttract[0]?.country || 'N/A'}`, {
+      x: 0.5, y: 5, w: 9, h: 0.4,
+      fontSize: 12, bold: true, color: COLORS.green
+    });
+    if (sortedByAttract.length > 1) {
+      rankSlide.addText(`Least attractive: ${sortedByAttract[sortedByAttract.length - 1]?.country || 'N/A'}`, {
+        x: 0.5, y: 5.5, w: 9, h: 0.4,
+        fontSize: 12, color: COLORS.red
+      });
+    }
+  }
+
+  // SLIDES: Individual Country Details (1 slide each)
   for (const country of countryAnalyses) {
     if (country.error) continue;
 
-    const countrySlide = addSlide(country.country, 'Market Assessment');
+    const cSlide = addSlide(country.country, 'Key findings');
 
-    // Left column: Key metrics
-    const metrics = [
-      `GDP: ${country.macroContext?.gdp || 'N/A'}`,
-      `Population: ${country.macroContext?.population || 'N/A'}`,
-      `Market Size: ${country.marketDynamics?.marketSize || 'N/A'}`,
-      `Regulatory Risk: ${country.policyRegulatory?.regulatoryRisk || 'N/A'}`,
-      `Competitive Intensity: ${country.competitiveLandscape?.competitiveIntensity || 'N/A'}`
+    // Left: Metrics table
+    const metricsRows = [
+      [{ text: 'Metric', options: { bold: true } }, { text: 'Value', options: { bold: true } }],
+      [{ text: 'GDP' }, { text: truncate(country.macroContext?.gdp || 'N/A', 35) }],
+      [{ text: 'Market Size' }, { text: truncate(country.marketDynamics?.marketSize || 'N/A', 35) }],
+      [{ text: 'Reg Risk' }, { text: truncate(country.policyRegulatory?.regulatoryRisk || 'N/A', 35) }]
     ];
 
-    countrySlide.addText('Key Metrics', {
-      x: 0.5, y: 1.3, w: 4, h: 0.3,
-      fontSize: 14, bold: true, color: COLORS.secondary
+    cSlide.addTable(metricsRows, {
+      x: 0.5, y: 1.1, w: 4.2, h: 2,
+      fontSize: 9,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [1.5, 2.7]
     });
 
-    countrySlide.addText(metrics.map(m => ({ text: m, options: { bullet: true } })), {
-      x: 0.5, y: 1.7, w: 4, h: 2.5,
-      fontSize: 11, color: COLORS.text, valign: 'top'
+    // Right: Opportunities & Obstacles
+    cSlide.addText('Opportunities', {
+      x: 5, y: 1.1, w: 4.5, h: 0.25,
+      fontSize: 11, bold: true, color: COLORS.green
+    });
+    const opps = safeArray(country.summaryAssessment?.opportunities, 3);
+    cSlide.addText(opps.map(o => ({ text: truncate(o, 50), options: { bullet: true } })), {
+      x: 5, y: 1.4, w: 4.5, h: 1.3,
+      fontSize: 9, color: COLORS.text, valign: 'top'
     });
 
-    // Right column: Opportunities and Obstacles
-    countrySlide.addText('Opportunities', {
-      x: 5, y: 1.3, w: 4.5, h: 0.3,
-      fontSize: 14, bold: true, color: '38a169'
+    cSlide.addText('Obstacles', {
+      x: 5, y: 2.8, w: 4.5, h: 0.25,
+      fontSize: 11, bold: true, color: COLORS.red
+    });
+    const obs = safeArray(country.summaryAssessment?.obstacles, 3);
+    cSlide.addText(obs.map(o => ({ text: truncate(o, 50), options: { bullet: true } })), {
+      x: 5, y: 3.1, w: 4.5, h: 1.3,
+      fontSize: 9, color: COLORS.text, valign: 'top'
     });
 
-    const opps = country.summaryAssessment?.opportunities || [];
-    countrySlide.addText(opps.slice(0, 3).map(o => ({ text: o, options: { bullet: true } })), {
-      x: 5, y: 1.7, w: 4.5, h: 1.5,
-      fontSize: 10, color: COLORS.text, valign: 'top'
+    // Bottom: Key competitors
+    cSlide.addText('Key Competitors:', {
+      x: 0.5, y: 4.6, w: 9, h: 0.25,
+      fontSize: 11, bold: true, color: COLORS.secondary
     });
-
-    countrySlide.addText('Obstacles', {
-      x: 5, y: 3.3, w: 4.5, h: 0.3,
-      fontSize: 14, bold: true, color: 'c53030'
-    });
-
-    const obs = country.summaryAssessment?.obstacles || [];
-    countrySlide.addText(obs.slice(0, 3).map(o => ({ text: o, options: { bullet: true } })), {
-      x: 5, y: 3.7, w: 4.5, h: 1.5,
-      fontSize: 10, color: COLORS.text, valign: 'top'
+    const localPlayers = safeArray(country.competitiveLandscape?.localPlayers, 3);
+    const competitorText = localPlayers.map(p => typeof p === 'string' ? p : p.name).join(', ') || 'See detailed analysis';
+    cSlide.addText(truncate(competitorText, 120), {
+      x: 0.5, y: 4.9, w: 9, h: 0.5,
+      fontSize: 10, color: COLORS.text
     });
 
     // Key Insight
-    countrySlide.addText('Key Insight', {
-      x: 0.5, y: 5.3, w: 9, h: 0.3,
-      fontSize: 14, bold: true, color: COLORS.accent
+    cSlide.addText('Key Insight:', {
+      x: 0.5, y: 5.5, w: 9, h: 0.25,
+      fontSize: 11, bold: true, color: COLORS.accent
     });
-
-    countrySlide.addText(country.summaryAssessment?.keyInsight || 'Analysis pending', {
-      x: 0.5, y: 5.7, w: 9, h: 1.3,
-      fontSize: 11, color: COLORS.text, valign: 'top'
+    cSlide.addText(truncate(country.summaryAssessment?.keyInsight || 'See analysis', 180), {
+      x: 0.5, y: 5.8, w: 9, h: 0.9,
+      fontSize: 10, color: COLORS.text, valign: 'top'
     });
 
     // Ratings
-    countrySlide.addText(
-      `Attractiveness: ${country.summaryAssessment?.attractivenessRating || 'N/A'}/10  |  Feasibility: ${country.summaryAssessment?.feasibilityRating || 'N/A'}/10`,
+    cSlide.addText(
+      `Attractiveness: ${country.summaryAssessment?.attractivenessRating || 'N/A'}/10    Feasibility: ${country.summaryAssessment?.feasibilityRating || 'N/A'}/10`,
       {
-        x: 0.5, y: 7, w: 9, h: 0.2,
+        x: 0.5, y: 6.8, w: 9, h: 0.25,
         fontSize: 10, bold: true, color: COLORS.primary
       }
     );
   }
 
-  // SLIDE: Key Insights
-  const insightSlide = addSlide('Key Strategic Insights');
-  const insights = synthesis.keyInsights || synthesis.strategicRecommendations?.keyInsights || [];
-
-  let yPos = 1.3;
-  (Array.isArray(insights) ? insights.slice(0, 3) : []).forEach((insight, idx) => {
-    const insightText = typeof insight === 'string' ? insight :
-      `${insight.pattern || insight.title || 'Insight ' + (idx + 1)}\n${insight.implication || insight.description || ''}`;
-
-    insightSlide.addText(`${idx + 1}. ${insightText}`, {
-      x: 0.5, y: yPos, w: 9, h: 1.5,
-      fontSize: 11, color: COLORS.text, valign: 'top'
-    });
-    yPos += 1.8;
-  });
-
   // SLIDE: Recommendations
-  const recoSlide = addSlide('Strategic Recommendations');
+  const recoSlide = addSlide('Recommendations', 'What we suggest');
   const recommendations = synthesis.strategicRecommendations || synthesis.recommendations || {};
 
   // Entry sequence
-  recoSlide.addText('Recommended Entry Sequence', {
-    x: 0.5, y: 1.3, w: 9, h: 0.3,
-    fontSize: 14, bold: true, color: COLORS.secondary
+  recoSlide.addText('Recommended entry order:', {
+    x: 0.5, y: 1.1, w: 9, h: 0.3,
+    fontSize: 12, bold: true, color: COLORS.secondary
   });
-
   const entrySeq = recommendations.entrySequence || recommendations.recommendedEntrySequence ||
-    countryAnalyses.map(c => c.country).join(' → ');
-  recoSlide.addText(typeof entrySeq === 'string' ? entrySeq : entrySeq.join(' → '), {
-    x: 0.5, y: 1.7, w: 9, h: 0.4,
-    fontSize: 12, color: COLORS.text
+    countryAnalyses.filter(c => !c.error).map(c => c.country).join(' → ');
+  recoSlide.addText(truncate(typeof entrySeq === 'string' ? entrySeq : entrySeq.join(' → '), 100), {
+    x: 0.5, y: 1.5, w: 9, h: 0.4,
+    fontSize: 11, color: COLORS.text
   });
 
-  // Entry mode recommendations
-  recoSlide.addText('Entry Mode by Country', {
-    x: 0.5, y: 2.3, w: 9, h: 0.3,
-    fontSize: 14, bold: true, color: COLORS.secondary
-  });
-
+  // Entry modes table
   const entryModes = recommendations.entryModeRecommendations || recommendations.entryModes || [];
-  const modeText = Array.isArray(entryModes) ?
-    entryModes.map(m => typeof m === 'string' ? m : `${m.country}: ${m.mode || m.recommendation}`).join('\n') :
-    JSON.stringify(entryModes);
+  if (Array.isArray(entryModes) && entryModes.length > 0) {
+    recoSlide.addText('How to enter each market:', {
+      x: 0.5, y: 2.1, w: 9, h: 0.3,
+      fontSize: 12, bold: true, color: COLORS.secondary
+    });
 
-  recoSlide.addText(modeText, {
-    x: 0.5, y: 2.7, w: 9, h: 2,
-    fontSize: 11, color: COLORS.text, valign: 'top'
-  });
+    const modeRows = [
+      [
+        { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
+        { text: 'Entry Mode', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
+      ]
+    ];
+    entryModes.slice(0, 5).forEach(m => {
+      const country = typeof m === 'string' ? m.split(':')[0] : m.country;
+      const mode = typeof m === 'string' ? m.split(':')[1] : (m.mode || m.recommendation);
+      modeRows.push([
+        { text: truncate(country, 20) },
+        { text: truncate(mode, 50) }
+      ]);
+    });
+
+    recoSlide.addTable(modeRows, {
+      x: 0.5, y: 2.5, w: 9, h: 2.5,
+      fontSize: 10,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [2.5, 6.5]
+    });
+  }
 
   // Risk mitigation
-  recoSlide.addText('Risk Mitigation', {
-    x: 0.5, y: 5, w: 9, h: 0.3,
-    fontSize: 14, bold: true, color: COLORS.secondary
-  });
-
-  const risks = recommendations.riskMitigation || recommendations.riskMitigationStrategies || [];
-  recoSlide.addText((Array.isArray(risks) ? risks.slice(0, 4) : []).map(r => ({
-    text: typeof r === 'string' ? r : r.strategy || r.description,
-    options: { bullet: true }
-  })), {
-    x: 0.5, y: 5.4, w: 9, h: 1.5,
-    fontSize: 10, color: COLORS.text, valign: 'top'
-  });
+  const risks = safeArray(recommendations.riskMitigation || recommendations.riskMitigationStrategies, 3);
+  if (risks.length > 0) {
+    recoSlide.addText('Key risks to watch:', {
+      x: 0.5, y: 5.3, w: 9, h: 0.3,
+      fontSize: 12, bold: true, color: COLORS.red
+    });
+    recoSlide.addText(risks.map(r => ({
+      text: truncate(typeof r === 'string' ? r : (r.strategy || r.description), 80),
+      options: { bullet: true }
+    })), {
+      x: 0.5, y: 5.7, w: 9, h: 1.2,
+      fontSize: 10, color: COLORS.text, valign: 'top'
+    });
+  }
 
   // SLIDE: Next Steps
-  const nextSlide = addSlide('Next Steps');
-  const nextSteps = synthesis.nextSteps || synthesis.recommendations?.nextSteps || [
-    'Validate findings with in-country experts',
-    'Conduct detailed partner identification',
-    'Develop financial model for priority market',
-    'Schedule market visit'
-  ];
+  const nextSlide = addSlide('Next Steps', 'What to do now');
+  const nextSteps = safeArray(synthesis.nextSteps || [
+    'Talk to local experts to validate findings',
+    'Identify potential partners in top market',
+    'Build financial model',
+    'Visit priority market'
+  ], 5);
 
-  nextSlide.addText((Array.isArray(nextSteps) ? nextSteps : [nextSteps]).map((step, idx) => ({
-    text: `${idx + 1}. ${typeof step === 'string' ? step : step.action || step.description}`,
+  nextSlide.addText(nextSteps.map((step, idx) => ({
+    text: `${idx + 1}. ${truncate(typeof step === 'string' ? step : (step.action || step.description), 100)}`,
     options: { bullet: false }
   })), {
-    x: 0.5, y: 1.3, w: 9, h: 5,
-    fontSize: 14, color: COLORS.text, valign: 'top', lineSpacing: 28
+    x: 0.5, y: 1.1, w: 9, h: 5,
+    fontSize: 13, color: COLORS.text, valign: 'top', lineSpacing: 26
   });
 
-  // SLIDE: Cost Summary
-  const costSlide = addSlide('Research Methodology & Cost');
-  costSlide.addText([
-    { text: 'Methodology', options: { bold: true, fontSize: 14 } },
-    { text: '\n\nThis analysis was generated using AI-powered research agents that:', options: { fontSize: 11 } },
-    { text: '\n• Searched 50+ web sources per country using Perplexity AI', options: { bullet: false, fontSize: 11 } },
-    { text: '\n• Synthesized findings using DeepSeek deep-thinking model', options: { bullet: false, fontSize: 11 } },
-    { text: '\n• Applied strategy consulting frameworks for insight generation', options: { bullet: false, fontSize: 11 } },
-    { text: `\n\nTotal research cost: $${costTracker.totalCost.toFixed(2)}`, options: { fontSize: 11, bold: true } },
-    { text: `\nCountries analyzed: ${countryAnalyses.length}`, options: { fontSize: 11 } },
-    { text: `\nGenerated: ${new Date().toISOString()}`, options: { fontSize: 11 } }
-  ], {
-    x: 0.5, y: 1.3, w: 9, h: 5,
-    color: COLORS.text, valign: 'top'
-  });
-
-  // Generate file
   const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
   console.log(`PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB`);
 
@@ -1265,20 +1557,8 @@ async function runMarketResearch(userPrompt, email) {
     const filename = `Market_Research_${scope.industry.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pptx`;
 
     const emailHtml = `
-      <h2>Market Research Complete</h2>
-      <p>Your market research analysis is attached.</p>
-      <h3>Summary</h3>
-      <ul>
-        <li><strong>Industry:</strong> ${scope.industry}</li>
-        <li><strong>Markets Analyzed:</strong> ${scope.targetMarkets.join(', ')}</li>
-        <li><strong>Research Cost:</strong> $${costTracker.totalCost.toFixed(2)}</li>
-        <li><strong>Processing Time:</strong> ${((Date.now() - startTime) / 1000 / 60).toFixed(1)} minutes</li>
-      </ul>
-      <h3>Executive Summary</h3>
-      <ul>
-        ${(synthesis.executiveSummary || []).map(s => `<li>${s}</li>`).join('')}
-      </ul>
-      <p style="color: #666; font-size: 12px;">Generated by Market Research AI</p>
+      <p>Your market research report is attached.</p>
+      <p style="color: #666; font-size: 12px;">${scope.industry} - ${scope.targetMarkets.join(', ')}</p>
     `;
 
     await sendEmail(email, `Market Research: ${scope.industry} - ${scope.targetMarkets.join(', ')}`, emailHtml, {
