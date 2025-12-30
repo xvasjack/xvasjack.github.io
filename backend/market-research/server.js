@@ -488,56 +488,64 @@ async function synthesizeSingleCountry(countryAnalysis, scope) {
   console.log('\n=== STAGE 3: SINGLE COUNTRY DEEP DIVE ===');
   console.log(`Generating deep analysis for ${countryAnalysis.country}...`);
 
-  const systemPrompt = `You are a smart friend explaining a business opportunity over coffee. The person you're talking to is intelligent but knows NOTHING about this industry.
+  const systemPrompt = `You are a senior analyst at The Economist writing a market entry briefing. Your reader is a CEO - intelligent, time-poor, and needs to make a $10M+ decision based on your analysis.
 
-=== BANNED WORDS (never use these) ===
-leverage, synergy, ecosystem, stakeholder, facilitate, optimize, streamline, scalable, robust, holistic, paradigm, incentivize, utilize, implement, methodology, framework, bandwidth, actionable, alignment, best-in-class, value-add, deep-dive, move the needle, circle back, low-hanging fruit, boil the ocean, touch base
+=== WRITING STYLE ===
+Write like The Economist: professional, direct, analytical. No consultant jargon, but also not dumbed down.
 
-=== WRITING RULES ===
-1. USE SIMPLE WORDS
-   - BAD: "leverage existing infrastructure" → GOOD: "use what's already there"
-   - BAD: "facilitate market entry" → GOOD: "help you get in"
-   - BAD: "optimize energy consumption" → GOOD: "cut electricity bills"
+GOOD: "The 49% foreign ownership cap forces joint ventures, but BOI-promoted projects can sidestep this entirely."
+BAD (too simple): "You can only own 49% so you need a partner."
+BAD (too jargon): "Foreign ownership limitations necessitate strategic partnership architectures to optimize market penetration."
 
-2. EXPLAIN ACRONYMS ONCE, THEN DROP THEM
-   - First use: "The Board of Investment (BOI) gives tax breaks"
-   - After that: just say "the government" or "tax agency"
+- Be precise and specific. Use technical terms where appropriate, but always explain their significance.
+- Write in complete, well-constructed sentences. Short is fine, but not choppy.
+- Every sentence should either present a fact, explain why it matters, or recommend an action.
 
-3. ONE IDEA PER SENTENCE. If you use "and" or "while" or "which", split it.
+=== DEPTH REQUIREMENTS (THIS IS CRITICAL) ===
+Surface-level analysis is WORTHLESS. The CEO can Google basic facts. You must provide:
 
-4. ALWAYS ANSWER "SO WHAT?"
-   - BAD: "Thailand has 71 million people"
-   - GOOD: "Thailand has 71 million people, so there's a large customer base"
+1. DATA TRIANGULATION: Cross-reference multiple sources. If one source says market size is $500M and another says $300M, explain the discrepancy and which is more reliable.
 
-=== STORY FLOW (THIS IS CRITICAL) ===
-The slides must flow like a conversation:
+2. CAUSAL CHAINS: Don't just state facts - explain the mechanism.
+   - SHALLOW: "Energy prices are rising"
+   - DEEP: "Energy prices rose 18% in 2024 because domestic gas fields are depleting (PTTEP's Erawan output fell 30%), forcing more expensive LNG imports. This creates predictable, structural demand for efficiency services."
 
-Slide 1 (Summary): "Here's the opportunity and what you should do"
-  ↓ Reader thinks: "Interesting, tell me more about the market"
-Slide 2 (Market): "Here's how big it is and who's buying"
-  ↓ Reader thinks: "Who else is trying to sell to them?"
-Slide 3 (Competition): "Here's who you're up against"
-  ↓ Reader thinks: "What rules do I need to follow?"
-Slide 4 (Regulation): "Here's what the government requires"
-  ↓ Reader thinks: "What are my options?"
-Slide 5 (Opportunities vs Obstacles): "Here's what helps and hurts you"
-  ↓ Reader thinks: "What's the real insight here?"
-Slide 6 (Insights): "Here's what most people miss"
-  ↓ Reader thinks: "So what should I actually do?"
-Slide 7 (Options): "Here are 3 ways to enter"
-  ↓ Reader thinks: "What could go wrong?"
-Slide 8 (Risks): "Here's what to watch out for"
-  ↓ Reader thinks: "Give me a timeline"
-Slide 9 (Roadmap): "Here's the step-by-step plan"
+3. NON-OBVIOUS CONNECTIONS: The value is in connecting dots others miss.
+   - OBVIOUS: "Aging population is a challenge"
+   - INSIGHT: "Aging population (median age 40.5, rising 0.4/year) means factories face 3-5% annual wage inflation, making energy cost reduction an HR problem, not just an engineering one. Pitch to CFOs, not plant managers."
 
-Each slide must END with something that makes the reader WANT to see the next slide.
+4. COMPETITIVE INTELLIGENCE THAT MATTERS: Not just "who competes" but "how they win and where they fail."
+   - WEAK: "ENGIE is a foreign competitor"
+   - STRONG: "ENGIE entered in 2018 via JV with B.Grimm, focused on industrial parks. They've won 12 contracts averaging $2M but struggle outside Bangkok due to B.Grimm's limited regional presence - an opening for partners with provincial networks."
 
-=== DEPTH REQUIREMENTS ===
-1. DON'T state the obvious. "Thailand is in Southeast Asia" = useless.
-2. CONNECT DOTS. "Thailand's aging population + mandatory efficiency laws = guaranteed demand for energy services for the next 10 years"
-3. EXPLAIN THE WHY. Not just "electricity is expensive" but "electricity is expensive BECAUSE the government subsidizes gas for cars but not for factories"
-4. BE SPECIFIC. Names, numbers, dates. "PTT controls 60% of gas supply" not "a major company dominates"
-5. GIVE REAL INSIGHT. Something the reader couldn't find in 5 minutes of Googling.`;
+5. REGULATORY NUANCE: Not just "what's required" but "what's enforced vs. ignored."
+   - SURFACE: "Energy audits are mandatory for large factories"
+   - DEPTH: "The 2022 Energy Conservation Act mandates audits for factories >2MW, but DEDE has only 23 auditors for 4,200 qualifying facilities - enforcement is complaint-driven. Smart players build relationships with DEDE to get early warning of crackdown sectors."
+
+6. TIMING INTELLIGENCE: Why NOW, not 2 years ago or 2 years from now?
+   - WEAK: "The market is growing"
+   - STRONG: "Three factors converge in 2025: (1) BOI's new incentives expire Dec 2027, (2) three large ESCOs are seeking acquisition, (3) Thailand's carbon tax starts 2026. First movers get 3 years of tax-free operation before competitors react."
+
+=== STORY FLOW ===
+Each slide must answer the reader's mental question and create the next one:
+
+Summary → "Is this worth my time?" → Market Data → "How big is this really?"
+Market Data → "Who else is chasing this?" → Competition → "Can I win?"
+Competition → "What rules constrain me?" → Regulation → "What's my opening?"
+Regulation → "What works for/against me?" → Opportunities vs Obstacles → "What's the insight?"
+Opportunities → "What do others miss?" → Key Insights → "What are my options?"
+Insights → "How should I enter?" → Entry Options → "What could kill this?"
+Entry Options → "What are the risks?" → Risk Assessment → "What's the plan?"
+Risk Assessment → "How do I execute?" → Roadmap
+
+=== SPECIFICITY REQUIREMENTS ===
+Every claim needs evidence:
+- NUMBERS: Market sizes in dollars with year, growth rates with timeframe, percentages with base
+- NAMES: Actual company names, specific laws/regulations, named government agencies
+- DATES: When laws took effect, when incentives expire, when competitors entered
+- SOURCES: If claiming a specific number, it should be traceable
+
+If you don't have specific data, say "estimated" or "industry sources suggest" - don't invent precision.`;
 
   const prompt = `Client: ${scope.clientContext}
 Industry: ${scope.industry}
@@ -546,18 +554,18 @@ Target: ${countryAnalysis.country}
 DATA GATHERED:
 ${JSON.stringify(countryAnalysis, null, 2)}
 
-Create analysis in PLAIN ENGLISH. No jargon. Short sentences.
+Synthesize this research into a CEO-ready briefing. Professional tone, specific data, actionable insights.
 
 Return JSON with:
 
 {
   "executiveSummary": [
-    "5 bullets that tell a STORY. Each bullet flows to the next. Max 25 words each. Simple words only.",
-    "Bullet 1: THE HOOK - Why should I care? What's the prize? (e.g., '$160M market where no foreigner has won yet')",
-    "Bullet 2: THE TIMING - Why now, not later? (e.g., 'Tax breaks expire in 2028, so first movers get 3 years advantage')",
-    "Bullet 3: THE CATCH - What makes this hard? (e.g., 'Foreigners can only own 49%, so you need a Thai partner')",
-    "Bullet 4: THE ANSWER - How do you solve the catch? (e.g., 'Partner with PTT who needs your technology')",
-    "Bullet 5: THE FIRST STEP - What do you do Monday morning? (e.g., 'Call PTT's strategy head and propose a pilot')"
+    "5 bullets that form a logical argument. Each leads to the next. Max 30 words, Economist-style prose.",
+    "Bullet 1: THE OPPORTUNITY - Quantify the prize with specifics (e.g., 'Thailand's $320M ESCO market grew 14% in 2024, yet foreign players hold only 8% share - a gap driven by regulatory complexity, not demand.')",
+    "Bullet 2: THE TIMING - Why this window matters (e.g., 'BOI incentives offering 8-year tax holidays expire December 2027. The carbon tax effective 2026 will accelerate demand 20-30%.')",
+    "Bullet 3: THE BARRIER - The real constraint, explained (e.g., 'The 49% foreign ownership cap applies to non-promoted activities. BOI-promoted energy efficiency projects qualify for majority foreign ownership.')",
+    "Bullet 4: THE PATH - Specific strategy based on evidence (e.g., 'Three Thai ESCOs are seeking technology partners: Absolute Energy, TPSC, and Banpu Power. Absolute has the widest industrial client base.')",
+    "Bullet 5: THE FIRST MOVE - Concrete next step with rationale (e.g., 'Initiate discussions with Absolute Energy (revenue $45M, 180+ industrial clients) before Mitsubishi's rumored approach concludes.')"
   ],
 
   "marketOpportunityAssessment": {
@@ -612,14 +620,14 @@ Return JSON with:
 
   "keyInsights": [
     {
-      "title": "Max 8 words. The 'aha!' moment. Example: 'Aging workforce forces factories to cut costs'",
-      "data": "The specific fact. Example: 'Average factory worker age is 45, up from 38 ten years ago'",
-      "pattern": "What this means when you connect the dots. Example: 'Older workers = higher wages + lower productivity = factories MUST find other ways to cut costs'",
-      "implication": "What YOU should do about it. Example: 'Pitch energy savings as a way to offset rising labor costs - they'll listen'"
+      "title": "Max 10 words. The non-obvious conclusion. Example: 'Labor cost pressure makes energy savings an HR priority'",
+      "data": "The specific evidence. Example: 'Manufacturing wages rose 8% annually 2021-2024 while productivity gained only 2%. Average factory worker age is 45, up from 38 in 2014.'",
+      "pattern": "The causal mechanism. Example: 'Aging workforce drives wage inflation without productivity gains. Factories facing 5-6% annual cost increases have exhausted labor optimization - energy is the next lever.'",
+      "implication": "The strategic response. Example: 'Position energy efficiency as cost management, not sustainability. Target CFOs with ROI messaging. The urgency is financial, not environmental.'"
     },
-    "Give 3 insights. Each must be something surprising - not obvious from the data alone.",
-    "Bad insight: 'The market is large' - this is obvious",
-    "Good insight: 'Grid congestion in the south means solar projects are stuck, so factories there will pay MORE for energy efficiency since they can't go solar'"
+    "Provide 3 insights. Each must reveal something that requires connecting multiple data points.",
+    "TEST: If someone could find this insight on the first page of Google results, it's too obvious.",
+    "GOOD: 'Southern Thailand's grid congestion (transmission capacity 85% utilized) blocks new solar projects, creating captive demand for on-site efficiency solutions in the $2.1B EEC industrial corridor.'"
   ],
 
   "implementationRoadmap": {
@@ -646,12 +654,13 @@ Return JSON with:
   }
 }
 
-REMEMBER:
-1. NO JARGON. If your grandmother wouldn't understand a word, don't use it.
-2. FLOW. Each section should make the reader want to read the next.
-3. DEPTH. Don't state the obvious. Connect dots. Explain WHY things happen.
-4. SPECIFIC. Names, numbers, dates. Not "a major company" but "PTT (revenue $88B)".
-5. ACTIONABLE. End with something the reader can DO, not just know.`;
+CRITICAL QUALITY STANDARDS:
+1. DEPTH OVER BREADTH. One well-supported insight beats five superficial observations. Every claim needs evidence.
+2. CAUSAL REASONING. Don't just describe - explain WHY. "X happened because Y, which means Z for the client."
+3. SPECIFICITY. Every number needs a year. Every company needs context. Every regulation needs an enforcement reality check.
+4. COMPETITIVE EDGE. The reader should learn something they couldn't find in an hour of desk research.
+5. ACTIONABLE CONCLUSIONS. End each section with what the reader should DO with this information.
+6. PROFESSIONAL PROSE. Write like The Economist - clear, precise, analytical. Use technical terms where they add precision, but always explain significance.`;
 
   const result = await callDeepSeek(prompt, systemPrompt, 12000);
 
