@@ -36,18 +36,26 @@ const costTracker = {
   calls: []
 };
 
-// DeepSeek pricing per 1M tokens (cache miss)
-const DEEPSEEK_PRICING = { input: 0.28, output: 0.42 };
-// Perplexity pricing per 1K searches
-const PERPLEXITY_PRICING = { base: 1.00, perSearch: 0.005 };
+// Pricing per 1M tokens
+const PRICING = {
+  'deepseek-chat': { input: 0.27, output: 1.10 },      // DeepSeek V3
+  'deepseek-reasoner': { input: 0.55, output: 2.19 }, // DeepSeek R1
+  'perplexity': { perSearch: 0.005 },                  // Sonar basic
+  'perplexity-pro': { perSearch: 0.015 }               // Sonar Pro (3x basic)
+};
 
 function trackCost(model, inputTokens, outputTokens, searchCount = 0) {
   let cost = 0;
-  if (model === 'deepseek') {
-    cost = (inputTokens / 1000000) * DEEPSEEK_PRICING.input + (outputTokens / 1000000) * DEEPSEEK_PRICING.output;
-  } else if (model === 'perplexity') {
-    cost = searchCount * PERPLEXITY_PRICING.perSearch;
+  const pricing = PRICING[model];
+
+  if (pricing) {
+    if (pricing.perSearch) {
+      cost = searchCount * pricing.perSearch;
+    } else {
+      cost = (inputTokens / 1000000) * pricing.input + (outputTokens / 1000000) * pricing.output;
+    }
   }
+
   costTracker.totalCost += cost;
   costTracker.calls.push({ model, inputTokens, outputTokens, searchCount, cost, time: new Date().toISOString() });
   console.log(`  [Cost] ${model}: $${cost.toFixed(4)} (Total: $${costTracker.totalCost.toFixed(4)})`);
@@ -56,8 +64,8 @@ function trackCost(model, inputTokens, outputTokens, searchCount = 0) {
 
 // ============ AI TOOLS ============
 
-// DeepSeek Chat API (deep thinking model)
-async function callDeepSeek(prompt, systemPrompt = '', maxTokens = 8192) {
+// DeepSeek Chat - for lighter tasks (scope parsing)
+async function callDeepSeekChat(prompt, systemPrompt = '', maxTokens = 4096) {
   try {
     const messages = [];
     if (systemPrompt) {
@@ -75,34 +83,87 @@ async function callDeepSeek(prompt, systemPrompt = '', maxTokens = 8192) {
         model: 'deepseek-chat',
         messages,
         max_tokens: maxTokens,
-        temperature: 0.7
+        temperature: 0.3
       })
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`DeepSeek HTTP error ${response.status}:`, errorText.substring(0, 200));
+      console.error(`DeepSeek Chat HTTP error ${response.status}:`, errorText.substring(0, 200));
       return { content: '', usage: { input: 0, output: 0 } };
     }
 
     const data = await response.json();
     const inputTokens = data.usage?.prompt_tokens || 0;
     const outputTokens = data.usage?.completion_tokens || 0;
-    trackCost('deepseek', inputTokens, outputTokens);
+    trackCost('deepseek-chat', inputTokens, outputTokens);
 
     return {
       content: data.choices?.[0]?.message?.content || '',
       usage: { input: inputTokens, output: outputTokens }
     };
   } catch (error) {
-    console.error('DeepSeek API error:', error.message);
+    console.error('DeepSeek Chat API error:', error.message);
     return { content: '', usage: { input: 0, output: 0 } };
   }
 }
 
-// Perplexity API for web search
-async function callPerplexity(query, searchDepth = 'basic') {
+// DeepSeek Reasoner (R1) - for deep thinking analysis
+async function callDeepSeek(prompt, systemPrompt = '', maxTokens = 16384) {
   try {
+    const messages = [];
+    if (systemPrompt) {
+      messages.push({ role: 'system', content: systemPrompt });
+    }
+    messages.push({ role: 'user', content: prompt });
+
+    const response = await fetch('https://api.deepseek.com/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'deepseek-reasoner',
+        messages,
+        max_tokens: maxTokens
+      })
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`DeepSeek Reasoner HTTP error ${response.status}:`, errorText.substring(0, 200));
+      // Fallback to chat model
+      console.log('Falling back to deepseek-chat...');
+      return callDeepSeekChat(prompt, systemPrompt, maxTokens);
+    }
+
+    const data = await response.json();
+    const inputTokens = data.usage?.prompt_tokens || 0;
+    const outputTokens = data.usage?.completion_tokens || 0;
+    trackCost('deepseek-reasoner', inputTokens, outputTokens);
+
+    // R1 returns reasoning_content + content
+    const content = data.choices?.[0]?.message?.content || '';
+    const reasoning = data.choices?.[0]?.message?.reasoning_content || '';
+
+    console.log(`  [DeepSeek R1] Reasoning: ${reasoning.length} chars, Output: ${content.length} chars`);
+
+    return {
+      content,
+      reasoning,
+      usage: { input: inputTokens, output: outputTokens }
+    };
+  } catch (error) {
+    console.error('DeepSeek Reasoner API error:', error.message);
+    return { content: '', usage: { input: 0, output: 0 } };
+  }
+}
+
+// Perplexity API for web search - using sonar-pro for deeper research
+async function callPerplexity(query) {
+  try {
+    // Use sonar-pro for more thorough search results
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
       headers: {
@@ -110,22 +171,30 @@ async function callPerplexity(query, searchDepth = 'basic') {
         'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`
       },
       body: JSON.stringify({
-        model: 'sonar',
-        messages: [{ role: 'user', content: query }],
+        model: 'sonar-pro',
+        messages: [{
+          role: 'system',
+          content: 'You are a market research analyst. Provide detailed, factual information with specific numbers, dates, and sources. Focus on recent data (2023-2025).'
+        }, {
+          role: 'user',
+          content: query
+        }],
         max_tokens: 4096,
-        temperature: 0.2,
-        search_recency_filter: 'month'
+        temperature: 0.1,
+        search_recency_filter: 'year',
+        return_citations: true
       })
     });
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`Perplexity HTTP error ${response.status}:`, errorText.substring(0, 200));
-      return { content: '', citations: [] };
+      // Fallback to basic sonar model
+      return callPerplexityBasic(query);
     }
 
     const data = await response.json();
-    trackCost('perplexity', 0, 0, 1);
+    trackCost('perplexity-pro', 0, 0, 1);
 
     return {
       content: data.choices?.[0]?.message?.content || '',
@@ -137,50 +206,112 @@ async function callPerplexity(query, searchDepth = 'basic') {
   }
 }
 
+// Fallback to basic sonar model
+async function callPerplexityBasic(query) {
+  try {
+    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: 'sonar',
+        messages: [{ role: 'user', content: query }],
+        max_tokens: 2048,
+        temperature: 0.2
+      })
+    });
+
+    if (!response.ok) {
+      return { content: '', citations: [] };
+    }
+
+    const data = await response.json();
+    trackCost('perplexity', 0, 0, 1);
+
+    return {
+      content: data.choices?.[0]?.message?.content || '',
+      citations: data.citations || []
+    };
+  } catch (error) {
+    return { content: '', citations: [] };
+  }
+}
+
 // ============ RESEARCH FRAMEWORK ============
+// Expanded queries for thorough research (~30-40 searches per country)
 
 const RESEARCH_FRAMEWORK = {
   macroContext: {
     name: 'Macro Context',
     queries: [
-      '{country} GDP population 2024 economic overview',
-      '{country} industrial sector manufacturing energy consumption 2024',
-      '{country} energy intensity per capita electricity demand'
+      '{country} GDP 2024 2025 economic growth forecast',
+      '{country} population demographics urban rural industrial workforce',
+      '{country} industrial sector manufacturing contribution GDP 2024',
+      '{country} energy consumption by sector industrial commercial residential',
+      '{country} energy intensity trends comparison regional',
+      '{country} economic development plan industrial policy 2024 2030'
     ]
   },
   policyRegulatory: {
     name: 'Policy & Regulatory Environment',
     queries: [
-      '{country} energy policy 2024 2025 renewable targets carbon neutrality',
-      '{country} foreign investment rules energy sector ownership restrictions',
-      '{country} ESCO energy service companies regulations incentives',
-      '{country} BOI investment promotion energy clean technology'
+      '{country} national energy policy 2024 2025 targets',
+      '{country} renewable energy targets carbon neutrality net zero timeline',
+      '{country} foreign direct investment rules energy sector restrictions',
+      '{country} foreign ownership limits power energy companies percentage',
+      '{country} ESCO energy service companies government support incentives',
+      '{country} energy efficiency regulations mandatory standards industrial',
+      '{country} investment promotion board energy incentives tax breaks',
+      '{country} power purchase agreement PPA regulations private sector'
     ]
   },
   marketDynamics: {
     name: 'Market Dynamics',
     queries: [
-      '{country} energy services market size ESCO 2024 2025',
-      '{country} electricity price industrial tariff 2024',
-      '{country} natural gas LNG market demand industrial 2024',
-      '{country} energy efficiency market opportunity industrial sector'
+      '{country} energy services market size value 2024 2025 forecast',
+      '{country} ESCO market size energy performance contracting',
+      '{country} electricity tariff industrial commercial rates 2024',
+      '{country} natural gas price industrial LNG spot 2024',
+      '{country} energy demand growth industrial sector manufacturing',
+      '{country} power generation capacity mix coal gas renewable',
+      '{country} district cooling heating market size',
+      '{country} industrial energy audit market demand'
     ]
   },
   competitiveLandscape: {
     name: 'Competitive Landscape',
     queries: [
-      '{country} energy service companies ESCO list local players',
-      'Japanese energy companies {country} investment Tokyo Gas Osaka Gas',
-      '{country} energy market foreign companies entry barriers',
-      '{country} state owned energy company market share PTT EGAT Petronas'
+      '{country} energy service companies ESCO major players list',
+      '{country} ESCO association members registered companies',
+      'Japanese companies {country} energy investment Tokyo Gas Osaka Gas JERA',
+      '{country} foreign energy companies European American presence',
+      '{country} state owned energy utility company market dominance',
+      '{country} energy market entry barriers foreign companies challenges',
+      '{country} energy sector M&A acquisitions partnerships 2023 2024',
+      '{country} energy consulting engineering firms major players'
     ]
   },
   infrastructure: {
     name: 'Infrastructure & Ecosystem',
     queries: [
-      '{country} LNG terminal regasification capacity infrastructure',
-      '{country} industrial zones economic corridors manufacturing hubs',
-      '{country} smart grid energy storage pilot programs'
+      '{country} LNG import terminal regasification capacity utilization',
+      '{country} natural gas pipeline network infrastructure coverage',
+      '{country} industrial zones estates economic corridors list',
+      '{country} smart grid pilot projects energy management systems',
+      '{country} power grid reliability transmission distribution quality',
+      '{country} renewable energy infrastructure solar wind capacity'
+    ]
+  },
+  partnershipOpportunities: {
+    name: 'Partnership & Entry Opportunities',
+    queries: [
+      '{country} energy sector joint venture opportunities local partners',
+      '{country} industrial companies seeking energy efficiency solutions',
+      '{country} conglomerates energy subsidiary diversification',
+      '{country} energy sector privatization opportunities upcoming',
+      '{country} government energy projects tender bidding opportunities'
     ]
   }
 };
@@ -205,7 +336,8 @@ If countries are vague like "ASEAN", expand to: ["Thailand", "Vietnam", "Indones
 
 Return ONLY valid JSON, no markdown or explanation.`;
 
-  const result = await callDeepSeek(userPrompt, systemPrompt, 1024);
+  // Use lighter chat model for simple parsing task
+  const result = await callDeepSeekChat(userPrompt, systemPrompt, 1024);
 
   try {
     // Clean up response - remove markdown code blocks if present
