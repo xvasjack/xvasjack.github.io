@@ -111,7 +111,7 @@ async function callDeepSeekChat(prompt, systemPrompt = '', maxTokens = 4096) {
   }
 }
 
-// DeepSeek Reasoner (R1) - for deep thinking analysis
+// DeepSeek V3.2 Thinking Mode - for deep analysis with chain-of-thought
 async function callDeepSeek(prompt, systemPrompt = '', maxTokens = 16384) {
   try {
     const messages = [];
@@ -150,7 +150,7 @@ async function callDeepSeek(prompt, systemPrompt = '', maxTokens = 16384) {
     const content = data.choices?.[0]?.message?.content || '';
     const reasoning = data.choices?.[0]?.message?.reasoning_content || '';
 
-    console.log(`  [DeepSeek R1] Reasoning: ${reasoning.length} chars, Output: ${content.length} chars`);
+    console.log(`  [DeepSeek V3.2 Thinking] Reasoning: ${reasoning.length} chars, Output: ${content.length} chars`);
 
     return {
       content,
