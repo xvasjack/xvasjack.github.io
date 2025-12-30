@@ -2815,10 +2815,8 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           const isLastCountry = countryKeys.indexOf(country) === countryKeys.length - 1;
           const isVeryLastRow = isLastCountry && isLastInCountry;
 
-          // Border style: dotted gray between rows, solid white on edges
-          const rowBottomBorder = isVeryLastRow
-            ? { pt: 3, color: TL_COLORS.white }
-            : { pt: 1, color: TL_COLORS.gray, type: 'dash' };
+          // Border style: dotted gray between ALL rows including last row
+          const rowBottomBorder = { pt: 1, color: TL_COLORS.gray, type: 'dash' };
 
           if (isMultiCountry) {
             // Country column (only show text for first company in group, use rowspan)
@@ -3077,6 +3075,18 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
                                   'no information', 'no data', 'n/a', 'unknown'];
         for (const phrase of containsPhrases) {
           if (lower.includes(phrase)) return true;
+        }
+        // CRITICAL: Detect alphabetical/numbered placeholder patterns like "Distributor A, B, C" or "Partner X, Y, Z"
+        // Pattern: word followed by single letter (A, B, C...) or number (1, 2, 3...)
+        const placeholderPatterns = [
+          /\b(distributor|partner|supplier|customer|client|vendor)\s+[a-c]\b/gi,
+          /\b(distributor|partner|supplier|customer|client|vendor)\s+[x-z]\b/gi,
+          /\b(distributor|partner|supplier|customer|client|vendor)\s+[1-3]\b/gi,
+          /\b[a-z]+\s+[a-c],\s*[a-z]+\s+[a-c]/gi,  // "Something A, Something B"
+          /\b[a-z]+\s+[x-z],\s*[a-z]+\s+[x-z]/gi,  // "Something X, Something Y"
+        ];
+        for (const pattern of placeholderPatterns) {
+          if (pattern.test(strVal)) return true;
         }
         return false;
       };
@@ -3706,11 +3716,16 @@ RULES:
 - DO NOT include: years of experience, awards, recognitions, market position, operating hours, number of branches/locations (not useful for M&A)
 - DO NOT include: corporate vision, mission statement, company values, slogans, taglines
 - DO NOT include metrics with NO MEANINGFUL VALUES - if you don't have specific data, don't include the metric at all
-- NEVER write placeholder values like "Client 1, Client 2", "Customer A, Customer B", "Not specified", "Various"
+- CRITICAL - NEVER GENERATE FAKE/PLACEHOLDER DATA:
+  - NEVER write alphabetical placeholders like "Distributor A, Distributor B", "Partner X, Partner Y", "Customer 1, Customer 2"
+  - NEVER write "Client 1, Client 2", "Customer A, Customer B", "Supplier A, Supplier B"
+  - NEVER write "Not specified", "Various", "Multiple", "Several"
+  - If you don't have REAL names, DO NOT include the metric at all
 - NEVER include metrics without actual numbers. BAD: "Production capacity of solvent-based inks". GOOD: "Production capacity: 500 tons/month"
 - NEVER include generic R&D statements like "Intensive R&D for product improvement"
 - If you cannot find actual customer/supplier names, DO NOT include those metrics at all
-- NEVER make up data - only include what's explicitly stated
+- NEVER make up data - only include what's explicitly stated on the website
+- SHORT LIST FORMATTING: If only 2-3 items, write comma-separated inline (e.g., "Singapore, Sri Lanka"), NOT point form
 - Return ONLY valid JSON`
         },
         {
@@ -3788,7 +3803,10 @@ RULES:
 - PRIORITIZE the category with MOST available content from the website
 - Use 3-6 items maximum
 - Labels should be segment/category names (1-3 words)
-- Values should be comma-separated examples (3-5 items each)
+- VALUE FORMATTING:
+  - If 2-3 items: comma-separated on one line (e.g., "Product A, Product B, Product C")
+  - If 4+ items: use point form with newlines (e.g., "- Item 1\\n- Item 2\\n- Item 3\\n- Item 4")
+  - Equipment/machinery lists should ALWAYS use point form regardless of count
 - For customers, segment by industry/type (e.g., "Residential", "Commercial", "Industrial")
 - For products, segment by application/industry/type
 - Return ONLY valid JSON`
@@ -4107,26 +4125,42 @@ async function reviewAndCleanData(companyData) {
    - If a metric has NO meaningful data, DELETE IT ENTIRELY. Do not include metrics with placeholder text.
    - Example: {"label": "Key Metrics", "value": "- No specific production capacity stated\\n- No specific factory area stated"} → DELETE THIS ENTIRE METRIC
 
-3. REMOVE UNNECESSARY/WORTHLESS ROWS:
+3. CRITICAL - REMOVE FAKE/PLACEHOLDER DATA:
+   - REMOVE any metric containing alphabetical placeholders like "Distributor A", "Partner X", "Supplier B", "Customer 1"
+   - Pattern to detect: "[Word] A, [Word] B, [Word] C" or "[Word] X, [Word] Y, [Word] Z" or "[Word] 1, [Word] 2"
+   - These are AI hallucinations - DELETE THE ENTIRE ROW if it contains such patterns
+   - Example: "Local Distributors: Distributor A, Distributor B, Distributor C" → DELETE ENTIRE ROW
+   - Example: "OEM Partners: Partner X, Partner Y, Partner Z" → DELETE ENTIRE ROW
+
+4. REMOVE UNNECESSARY/WORTHLESS ROWS:
    - Remove rows with vague values like "Various", "Multiple", "Several" without specifics
    - Remove rows about awards, achievements, recognitions (not useful for M&A)
    - Remove rows about years of experience (not useful for M&A)
    - Remove rows about operating hours, office hours
+   - Remove rows labeled: "Start of Operations", "Market Growth", "Market Outlook", "Future Plans", "Vision", "Mission"
 
-4. HARD RULE - TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH:
+5. HARD RULE - TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH:
    - ALL product names, company names, and any text in ANY non-English language MUST be translated to English
    - This applies to ALL languages: Vietnamese, Chinese, Thai, Malay, Indonesian, Hindi, Korean, Japanese, Arabic, Spanish, etc.
    - The user CANNOT translate - you MUST translate everything to English
    - Write ALL text using regular English alphabet only (A-Z, no diacritics, no foreign characters)
 
-5. MERGE SIMILAR INFORMATION:
+6. MERGE SIMILAR INFORMATION:
    - "Customers" and "Customer Segments" → merge into one "Key Customers" row
    - "Products" and "Product Categories" → keep only the more detailed one
    - If breakdown_items and key_metrics have overlapping info, keep in key_metrics only
 
-6. CLEAN UP HQ/LOCATION:
+7. CLEAN UP HQ/LOCATION:
    - If location looks like JSON ({"HQ":"..."}), extract the actual location value
    - Format should be: "City, State/Province, Country" or "District, Singapore" for Singapore
+   - Remove duplicate city names like "Kuala Lumpur, Kuala Lumpur, Malaysia" → "Kuala Lumpur, Malaysia"
+   - Remove duplicate state names like "Bangkok, Bangkok, Thailand" → "Bangkok, Thailand"
+
+8. FORMAT SHORT LISTS INLINE (NO POINT FORM):
+   - If a metric has only 2-3 items, write them inline separated by commas, NOT as bullet points
+   - Example: Export Countries with 2 items → "Singapore, Sri Lanka" (NOT "- Singapore\\n- Sri Lanka")
+   - Example: Geographic Reach with 3 items → "Malaysia, Singapore, Sri Lanka" (NOT bullet points)
+   - Only use bullet points (\\n- item) for lists with 4+ items or when items need categorization
 
 Review and clean this company data:
 
