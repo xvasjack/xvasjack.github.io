@@ -402,7 +402,15 @@ async function researchCountry(country, industry, clientContext) {
 
   const synthesisPrompt = `You are a strategy consultant analyzing ${country} for a ${clientContext} considering entering the ${industry} market.
 
-Based on the following research data, create a structured analysis. Be specific with numbers and cite sources.
+CRITICAL: Your analysis must have DEPTH and SPECIFICITY. Not surface-level observations.
+
+For every claim, include:
+- SPECIFIC NUMBERS (dollar amounts, percentages, growth rates, years)
+- SPECIFIC NAMES (companies, laws, programs, people)
+- SPECIFIC CONTEXT (why this number matters, how it compares)
+
+BAD example: "The market is growing"
+GOOD example: "The ESCO market reached $2.3B in 2024, growing 12% YoY, driven by mandatory energy audits for factories >2MW under the 2023 Energy Conservation Act"
 
 RESEARCH DATA:
 ${JSON.stringify(researchData, null, 2)}
@@ -411,42 +419,42 @@ Return a JSON object with this structure:
 {
   "country": "${country}",
   "macroContext": {
-    "gdp": "value with year",
-    "population": "value",
-    "industrialGdpShare": "percentage",
-    "energyIntensity": "description",
-    "keyObservation": "one sentence"
+    "gdp": "exact value with year and growth rate (e.g., '$574B in 2024, +2.8% YoY')",
+    "population": "exact number with urban/rural split if available",
+    "industrialGdpShare": "percentage with trend",
+    "energyIntensity": "specific metric with comparison to region",
+    "keyObservation": "ONE non-obvious insight connecting these data points"
   },
   "policyRegulatory": {
-    "governmentStance": "supportive/neutral/restrictive with detail",
-    "keyLegislation": ["list of relevant laws/policies"],
-    "foreignOwnershipRules": "specific restrictions",
-    "incentives": ["list of available incentives"],
-    "regulatoryRisk": "low/medium/high with explanation"
+    "governmentStance": "specific stance with EVIDENCE (cite actual policy, speech, budget allocation)",
+    "keyLegislation": ["list SPECIFIC laws with year, what they mandate, and penalties"],
+    "foreignOwnershipRules": "EXACT percentage limits, exceptions, which sectors, recent changes",
+    "incentives": ["SPECIFIC incentive name, value (% tax cut, years), eligibility criteria"],
+    "regulatoryRisk": "low/medium/high with SPECIFIC justification (recent policy reversals? enforcement gaps?)"
   },
   "marketDynamics": {
-    "marketSize": "value with year and growth rate",
-    "demand": "description of demand drivers",
-    "pricing": "electricity/gas prices with context",
-    "supplyChain": "description of supply infrastructure"
+    "marketSize": "EXACT value, year, CAGR, and what's driving growth",
+    "demand": "WHO is buying (which industries), WHY now (triggers), HOW MUCH (volume/value)",
+    "pricing": "EXACT electricity/gas prices with unit, comparison to neighbors, trend",
+    "supplyChain": "specific gaps or advantages in supply infrastructure"
   },
   "competitiveLandscape": {
-    "localPlayers": [{"name": "...", "description": "..."}],
-    "foreignPlayers": [{"name": "...", "description": "..."}],
-    "entryBarriers": ["list of barriers"],
-    "competitiveIntensity": "low/medium/high with explanation"
+    "localPlayers": [{"name": "actual company name", "description": "revenue/size, core business, market share if known, strengths, weaknesses"}],
+    "foreignPlayers": [{"name": "actual company name", "description": "when entered, what they do, how successful, partnerships"}],
+    "entryBarriers": ["SPECIFIC barriers with evidence - not generic like 'relationships matter'"],
+    "competitiveIntensity": "low/medium/high with REASONING (market concentration, price wars, M&A activity)"
   },
   "infrastructure": {
-    "energyInfrastructure": "description",
-    "industrialZones": ["list of key zones"],
-    "logisticsQuality": "description"
+    "energyInfrastructure": "specific capacity numbers, utilization rates, planned expansions",
+    "industrialZones": ["name of zone, location, key tenants, incentives offered"],
+    "logisticsQuality": "specific metrics or rankings, bottlenecks"
   },
   "summaryAssessment": {
-    "opportunities": ["list of 3-5 key opportunities"],
-    "obstacles": ["list of 3-5 key obstacles"],
-    "attractivenessRating": "1-10 with justification",
-    "feasibilityRating": "1-10 with justification",
-    "keyInsight": "one paragraph with Data->Pattern->Mechanism->Implication structure"
+    "opportunities": ["5 SPECIFIC opportunities with WHY NOW and estimated size/value"],
+    "obstacles": ["5 SPECIFIC obstacles with severity and whether they're solvable"],
+    "attractivenessRating": "1-10 with MULTI-FACTOR justification",
+    "feasibilityRating": "1-10 with MULTI-FACTOR justification",
+    "keyInsight": "2-3 sentences: DATA observed → PATTERN that emerges → WHY this pattern exists → WHAT IT MEANS for client"
   }
 }
 
@@ -480,65 +488,112 @@ async function synthesizeSingleCountry(countryAnalysis, scope) {
   console.log('\n=== STAGE 3: SINGLE COUNTRY DEEP DIVE ===');
   console.log(`Generating deep analysis for ${countryAnalysis.country}...`);
 
-  const systemPrompt = `You are a senior strategy consultant at a top consulting firm. Your task is to generate a comprehensive market entry strategy for a single country.
+  const systemPrompt = `You are a senior partner at McKinsey presenting to a CEO. Your analysis must tell a STORY that builds to a clear recommendation.
 
-Your analysis must follow the "Data → Pattern → Mechanism → Implication" framework for all insights:
-- DATA: Specific observations from the research
-- PATTERN: What emerges when you look across the data points
-- MECHANISM: Why this pattern exists (causal explanation)
-- IMPLICATION: What this means for the client's decision
+CRITICAL RULES:
+1. NO GENERIC STATEMENTS. Everything must be specific to this country and industry.
+2. EVERY CLAIM needs a number, name, or specific evidence behind it.
+3. BUILD A NARRATIVE: Start with what makes this market interesting → what challenges exist → how to overcome them → why this path wins.
+4. INSIGHTS must be NON-OBVIOUS. Not "the market is large" but "the gap between industrial electricity prices ($0.12/kWh) and ESCO contract rates (15% savings) creates a $340M addressable market among manufacturers spending >$1M/year on energy."
+5. ENTRY OPTIONS must be genuinely different strategies, not variations of the same thing.
 
-Be specific. Avoid generic statements. Every insight should be actionable.`;
+The CEO should finish reading and think: "I understand exactly why we should/shouldn't enter, and exactly what to do first."`;
 
-  const prompt = `Client context: ${scope.clientContext}
+  const prompt = `Client: ${scope.clientContext}
 Industry: ${scope.industry}
-Project type: ${scope.projectType}
-Target market: ${countryAnalysis.country}
+Target: ${countryAnalysis.country}
 
-COUNTRY ANALYSIS:
+DATA GATHERED:
 ${JSON.stringify(countryAnalysis, null, 2)}
 
-Generate a comprehensive deep-dive analysis with:
+Create a DEEP strategic analysis. Tell a story. Build to a recommendation.
 
-1. EXECUTIVE SUMMARY (3-5 bullets highlighting the most critical findings)
+Return JSON with:
 
-2. MARKET OPPORTUNITY ASSESSMENT:
-   - Total addressable market
-   - Serviceable market
-   - Growth trajectory and drivers
-   - Timing considerations
+{
+  "executiveSummary": [
+    "5 bullets that tell the STORY: what's the opportunity, why now, what's hard, what's the path, what's the first move",
+    "Each bullet should have a SPECIFIC number or fact",
+    "These should make someone want to read the rest"
+  ],
 
-3. COMPETITIVE POSITIONING:
-   - Key players and their strengths/weaknesses
-   - White spaces and opportunities
-   - Potential partners vs competitors
+  "marketOpportunityAssessment": {
+    "totalAddressableMarket": "$ value with calculation logic (e.g., '1,200 factories × avg $500K energy spend × 15% savings potential = $90M TAM')",
+    "serviceableMarket": "$ value with realistic penetration assumptions and WHY those assumptions",
+    "growthTrajectory": "CAGR with SPECIFIC drivers - not 'growing demand' but 'mandatory ISO 50001 compliance by 2026 for exporters (40% of manufacturing)'",
+    "timingConsiderations": "Why NOW is the right time - regulatory triggers, competitive gaps, market readiness signals"
+  },
 
-4. REGULATORY PATHWAY:
-   - Key regulations to navigate
-   - Licensing requirements
-   - Timeline and cost estimates
-   - Risks and mitigation
+  "competitivePositioning": {
+    "keyPlayers": [
+      {"name": "actual company", "strengths": "specific", "weaknesses": "specific", "threat": "how they could block you"}
+    ],
+    "whiteSpaces": ["specific gaps with EVIDENCE of demand and SIZE of opportunity"],
+    "potentialPartners": [{"name": "actual company", "rationale": "why they'd partner, what they bring, what you bring"}]
+  },
 
-5. ENTRY STRATEGY OPTIONS:
-   - Option A: [Description with pros/cons]
-   - Option B: [Description with pros/cons]
-   - Option C: [Description with pros/cons]
-   - Recommended option with rationale
+  "regulatoryPathway": {
+    "keyRegulations": "the 2-3 regulations that ACTUALLY MATTER for market entry, with specific requirements",
+    "licensingRequirements": "what licenses, which agency, typical timeline, typical cost",
+    "timeline": "realistic month-by-month timeline with dependencies",
+    "risks": "specific regulatory risks with likelihood and mitigation"
+  },
 
-6. KEY INSIGHTS (3-5 major insights using Data→Pattern→Mechanism→Implication)
+  "entryStrategyOptions": {
+    "optionA": {
+      "name": "short descriptive name",
+      "description": "2-3 sentences on the approach",
+      "pros": "3 specific advantages with evidence",
+      "cons": "3 specific disadvantages with severity",
+      "investmentRequired": "$ estimate with breakdown",
+      "timeToRevenue": "months with assumptions"
+    },
+    "optionB": {
+      "name": "genuinely different approach",
+      "description": "...",
+      "pros": "...",
+      "cons": "...",
+      "investmentRequired": "...",
+      "timeToRevenue": "..."
+    },
+    "optionC": {
+      "name": "third distinct approach",
+      "description": "...",
+      "pros": "...",
+      "cons": "...",
+      "investmentRequired": "...",
+      "timeToRevenue": "..."
+    },
+    "recommendedOption": "which option and WHY - tie back to client's specific situation, risk tolerance, timeline, capabilities"
+  },
 
-7. IMPLEMENTATION ROADMAP:
-   - Phase 1 (0-6 months): [actions]
-   - Phase 2 (6-12 months): [actions]
-   - Phase 3 (12-24 months): [actions]
+  "keyInsights": [
+    {
+      "title": "short punchy headline",
+      "data": "specific observation from research",
+      "pattern": "what this reveals when combined with other data",
+      "mechanism": "WHY this pattern exists (causal explanation)",
+      "implication": "what this means for the entry decision - specific and actionable"
+    }
+  ],
 
-8. RISK ASSESSMENT:
-   - Critical risks with mitigation strategies
-   - Go/No-Go criteria
+  "implementationRoadmap": {
+    "phase1": ["months 0-6: specific actions with deliverables and success criteria"],
+    "phase2": ["months 6-12: specific actions that BUILD on phase 1"],
+    "phase3": ["months 12-24: scaling actions with revenue milestones"]
+  },
 
-9. NEXT STEPS (specific immediate actions)
+  "riskAssessment": {
+    "criticalRisks": [
+      {"risk": "specific risk", "likelihood": "high/medium/low", "impact": "description", "mitigation": "specific countermeasure"}
+    ],
+    "goNoGoCriteria": ["specific, measurable criteria that must be true to proceed - not vague conditions"]
+  },
 
-Return as JSON with these sections as keys. Each insight must follow the Data→Pattern→Mechanism→Implication structure explicitly.`;
+  "nextSteps": ["5 specific actions to take THIS WEEK with owner and deliverable"]
+}
+
+Make it DEEP. Make it SPECIFIC. Make it tell a STORY.`;
 
   const result = await callDeepSeek(prompt, systemPrompt, 12000);
 
@@ -574,40 +629,73 @@ async function synthesizeFindings(countryAnalyses, scope) {
 
   console.log('\n=== STAGE 3: CROSS-COUNTRY SYNTHESIS ===');
 
-  const systemPrompt = `You are a senior strategy consultant at a top consulting firm. Your task is to synthesize market research across multiple countries and generate strategic insights.
+  const systemPrompt = `You are a senior partner at McKinsey presenting a multi-country market entry strategy to a CEO.
 
-Your analysis must follow the "Data → Pattern → Mechanism → Implication" framework for all insights:
-- DATA: Specific observations from the research
-- PATTERN: What emerges when you look across countries/data points
-- MECHANISM: Why this pattern exists (causal explanation)
-- IMPLICATION: What this means for the client's decision
+Your job is to help them decide: WHERE to enter first, HOW to enter, and WHY that sequence wins.
 
-Be specific. Avoid generic statements. Every insight should be actionable.`;
+CRITICAL RULES:
+1. DON'T just list facts about each country. COMPARE them. Show trade-offs.
+2. INSIGHTS must be CROSS-COUNTRY patterns. "Thailand has 49% foreign ownership cap while Vietnam allows 100%" → "This means Vietnam for wholly-owned, Thailand only with a JV partner"
+3. The RANKING must be JUSTIFIED with specific factors, not just vibes.
+4. RECOMMENDATIONS must account for SEQUENCING - which market teaches you what for the next one?
 
-  const prompt = `Client context: ${scope.clientContext}
+The CEO should finish reading knowing: "Enter X first because Y, then Z, using this approach."`;
+
+  const prompt = `Client: ${scope.clientContext}
 Industry: ${scope.industry}
-Project type: ${scope.projectType}
 
-COUNTRY ANALYSES:
+DATA FROM EACH COUNTRY:
 ${JSON.stringify(countryAnalyses, null, 2)}
 
-Generate a comprehensive synthesis with:
+Create a COMPARATIVE synthesis. Not summaries of each - actual COMPARISONS and TRADE-OFFS.
 
-1. EXECUTIVE SUMMARY (3-5 bullets)
-2. COUNTRY RANKING (with scores and rationale)
-3. COMPARATIVE ANALYSIS:
-   - Market size comparison
-   - Regulatory environment comparison
-   - Competitive intensity comparison
-   - Infrastructure comparison
-4. KEY INSIGHTS (3-5 major insights using Data→Pattern→Mechanism→Implication)
-5. STRATEGIC RECOMMENDATIONS:
-   - Recommended entry sequence
-   - Entry mode recommendations by country
-   - Risk mitigation strategies
-6. NEXT STEPS (specific actions)
+Return JSON with:
 
-Return as JSON with these sections as keys. Each insight must follow the Data→Pattern→Mechanism→Implication structure explicitly.`;
+{
+  "executiveSummary": [
+    "5 bullets telling the STORY: which markets win and why, what sequence, first move",
+    "Each bullet compares across countries, not just lists",
+    "Should make the recommendation clear immediately"
+  ],
+
+  "countryRanking": [
+    {
+      "rank": 1,
+      "country": "name",
+      "score": "X/10",
+      "rationale": "2-3 sentences on WHY this ranks here - specific factors that differentiate from others"
+    }
+  ],
+
+  "comparativeAnalysis": {
+    "marketSize": "not just list sizes - which is biggest NOW vs fastest GROWTH vs easiest to CAPTURE? table format with specific numbers",
+    "regulatoryEnvironment": "compare SPECIFIC rules - ownership caps, licenses needed, incentives available. which is easiest for foreign entry?",
+    "competitiveIntensity": "where are the gaps? which market has weaker local players? where can you win faster?",
+    "infrastructure": "which has better supply chain for your needs? where are the bottlenecks?"
+  },
+
+  "keyInsights": [
+    {
+      "title": "punchy headline about a cross-country pattern",
+      "data": "specific comparison across countries",
+      "pattern": "what this reveals about regional market dynamics",
+      "mechanism": "WHY this pattern exists",
+      "implication": "what this means for WHERE and HOW to enter"
+    }
+  ],
+
+  "strategicRecommendations": {
+    "entrySequence": "Country A → Country B → Country C with SPECIFIC reasoning for the sequence (what you learn, what you build)",
+    "entryModeRecommendations": [
+      {"country": "name", "mode": "JV/subsidiary/partnership/etc", "rationale": "why this mode for THIS country specifically"}
+    ],
+    "riskMitigation": ["specific cross-country risk strategies - diversification, staging, etc"]
+  },
+
+  "nextSteps": ["5 specific actions this week to start the entry process"]
+}
+
+Focus on COMPARISONS and TRADE-OFFS, not just summaries.`;
 
   const result = await callDeepSeek(prompt, systemPrompt, 12000);
 
@@ -869,7 +957,32 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
   );
 
-  // SLIDE 7: Entry Options (COMPARISON TABLE)
+  // SLIDE 7: Key Insights (THE STORY)
+  const keyInsights = safeArray(synthesis.keyInsights, 3);
+  if (keyInsights.length > 0) {
+    const insightSlide = addSlide('Key Insights', 'What the data tells us');
+    let insightY = 1.1;
+
+    keyInsights.forEach((insight, idx) => {
+      const title = typeof insight === 'string' ? `Insight ${idx + 1}` : (insight.title || `Insight ${idx + 1}`);
+      const body = typeof insight === 'string' ? insight :
+        `${insight.data || ''} → ${insight.pattern || ''} → ${insight.implication || ''}`;
+
+      insightSlide.addText(`${idx + 1}. ${truncate(title, 60)}`, {
+        x: 0.5, y: insightY, w: 9, h: 0.35,
+        fontSize: 12, bold: true, color: COLORS.accent
+      });
+
+      insightSlide.addText(truncate(body, 200), {
+        x: 0.5, y: insightY + 0.4, w: 9, h: 1.3,
+        fontSize: 10, color: COLORS.text, valign: 'top'
+      });
+
+      insightY += 1.85;
+    });
+  }
+
+  // SLIDE 8: Entry Options (COMPARISON TABLE)
   const stratSlide = addSlide('Entry Options', 'Three ways to enter this market');
   const entryOpts = synthesis.entryStrategyOptions || synthesis.entryOptions || {};
 
