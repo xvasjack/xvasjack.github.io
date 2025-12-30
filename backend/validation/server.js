@@ -2436,6 +2436,7 @@ async function findWebsiteViaGemini(companyName, countries) {
 }
 
 // Combined website finder - tries multiple methods for accuracy
+// GUARDRAIL: Requires either 2+ sources to agree OR single-source verification
 async function findCompanyWebsiteMulti(companyName, countries) {
   console.log(`  Finding website for: ${companyName}`);
 
@@ -2458,14 +2459,18 @@ async function findCompanyWebsiteMulti(companyName, countries) {
     return null;
   }
 
+  // Count how many sources agree on each domain
   const domainCounts = {};
+  const domainToUrl = {};
   for (const url of candidates) {
     try {
       const domain = new URL(url).hostname.replace(/^www\./, '');
       domainCounts[domain] = (domainCounts[domain] || 0) + 1;
+      if (!domainToUrl[domain]) domainToUrl[domain] = url;
     } catch (e) {}
   }
 
+  // Find the domain with most votes
   let bestDomain = null;
   let bestCount = 0;
   for (const [domain, count] of Object.entries(domainCounts)) {
@@ -2475,21 +2480,31 @@ async function findCompanyWebsiteMulti(companyName, countries) {
     }
   }
 
-  if (bestDomain) {
-    for (const url of candidates) {
-      try {
-        const domain = new URL(url).hostname.replace(/^www\./, '');
-        if (domain === bestDomain) {
-          console.log(`    Selected: ${url} (${bestCount} sources agree)`);
-          return url;
-        }
-      } catch (e) {}
+  // GUARDRAIL: If 2+ sources agree, accept the website (high confidence)
+  if (bestCount >= 2 && bestDomain) {
+    const url = domainToUrl[bestDomain];
+    console.log(`    Selected: ${url} (${bestCount} sources agree - high confidence)`);
+    return url;
+  }
+
+  // GUARDRAIL: If only 1 source found a website, verify it actually exists
+  // This prevents hallucinated URLs from AI models
+  if (bestCount === 1 && bestDomain) {
+    const url = domainToUrl[bestDomain];
+    console.log(`    Only 1 source found ${url} - verifying website exists...`);
+
+    const verification = await verifyWebsite(url);
+    if (verification.valid) {
+      console.log(`    Verified: ${url} exists and has real content`);
+      return url;
+    } else {
+      console.log(`    Rejected: ${url} - ${verification.reason} (possible hallucination)`);
+      return null;
     }
   }
 
-  const finalResult = serpResult || perpResult || openaiResult || geminiResult;
-  console.log(`    Selected: ${finalResult}`);
-  return finalResult;
+  console.log(`    No website found for ${companyName} (no consensus, no verified result)`);
+  return null;
 }
 
 // Validate if company matches target business - STRICTLY based on website content
