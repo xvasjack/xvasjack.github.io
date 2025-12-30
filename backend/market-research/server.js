@@ -578,9 +578,9 @@ Return JSON with:
   ],
 
   "implementationRoadmap": {
-    "phase1": ["months 0-6: specific actions with deliverables and success criteria"],
-    "phase2": ["months 6-12: specific actions that BUILD on phase 1"],
-    "phase3": ["months 12-24: scaling actions with revenue milestones"]
+    "phase1": ["3-5 specific actions for months 0-6 - just the action, no month prefix"],
+    "phase2": ["3-5 specific actions for months 6-12 that BUILD on phase 1"],
+    "phase3": ["3-5 specific actions for months 12-24 with revenue milestones"]
   },
 
   "riskAssessment": {
@@ -590,7 +590,15 @@ Return JSON with:
     "goNoGoCriteria": ["specific, measurable criteria that must be true to proceed - not vague conditions"]
   },
 
-  "nextSteps": ["5 specific actions to take THIS WEEK with owner and deliverable"]
+  "nextSteps": ["5 specific actions to take THIS WEEK with owner and deliverable"],
+
+  "slideHeadlines": {
+    "summary": "one sentence that captures THE key message (e.g., 'Thailand offers $90M opportunity but requires local partner')",
+    "marketData": "one sentence insight about the market numbers (e.g., 'Industrial electricity prices 40% above regional average create savings urgency')",
+    "competition": "one sentence about competitive landscape (e.g., 'No foreign player has cracked industrial segment - first mover advantage available')",
+    "regulation": "one sentence about regulatory situation (e.g., 'BOI incentives make 2025 ideal entry window before policy review')",
+    "risks": "one sentence about risk posture (e.g., 'Currency volatility is real but hedgeable - execution risk is the bigger concern')"
+  }
 }
 
 Make it DEEP. Make it SPECIFIC. Make it tell a STORY.`;
@@ -692,7 +700,13 @@ Return JSON with:
     "riskMitigation": ["specific cross-country risk strategies - diversification, staging, etc"]
   },
 
-  "nextSteps": ["5 specific actions this week to start the entry process"]
+  "nextSteps": ["5 specific actions this week to start the entry process"],
+
+  "slideHeadlines": {
+    "summary": "one sentence that captures THE key recommendation (e.g., 'Vietnam first, Thailand second - lower barriers outweigh smaller market')",
+    "marketComparison": "one sentence comparing markets (e.g., 'Thailand is 3x larger but Vietnam is growing 2x faster')",
+    "rankings": "one sentence about the ranking conclusion (e.g., 'Vietnam wins on ease of entry, Thailand on market size - sequence matters')"
+  }
 }
 
 Focus on COMPARISONS and TRADE-OFFS, not just summaries.`;
@@ -716,8 +730,8 @@ Focus on COMPARISONS and TRADE-OFFS, not just summaries.`;
 
 // ============ PPT GENERATION ============
 
-// Helper: truncate text to fit slides
-function truncate(text, maxLen = 100) {
+// Helper: truncate text to fit slides - INCREASED LIMITS
+function truncate(text, maxLen = 200) {
   if (!text) return '';
   const str = String(text);
   return str.length > maxLen ? str.substring(0, maxLen - 3) + '...' : str;
@@ -779,19 +793,24 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     fontSize: 12, color: COLORS.text
   });
 
+  // Get insight-driven headlines if available
+  const headlines = synthesis.slideHeadlines || {};
+
   // SLIDE 2: Summary (1 slide, key points only)
-  const execSlide = addSlide('Summary');
+  const summaryTitle = headlines.summary || 'Executive Summary';
+  const execSlide = addSlide(truncate(summaryTitle, 80), 'Key Findings');
   const execBullets = safeArray(synthesis.executiveSummary, 5);
   execSlide.addText(execBullets.map(b => ({
-    text: truncate(b, 150),
+    text: truncate(b, 300),
     options: { bullet: true }
   })), {
     x: 0.5, y: 1.1, w: 9, h: 5.5,
-    fontSize: 13, color: COLORS.text, valign: 'top', lineSpacing: 22
+    fontSize: 12, color: COLORS.text, valign: 'top', lineSpacing: 20
   });
 
   // SLIDE 3: Market Size Data (ACTUAL NUMBERS)
-  const marketSlide = addSlide('Market Data', 'What the numbers show');
+  const marketTitle = headlines.marketData || 'Market Data';
+  const marketSlide = addSlide(truncate(marketTitle, 80), 'What the numbers show');
   const ca = countryAnalysis || {};
   const macro = ca.macroContext || {};
   const market = ca.marketDynamics || {};
@@ -802,12 +821,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       { text: 'Metric', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
       { text: 'Value', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
     ],
-    [{ text: 'GDP' }, { text: truncate(macro.gdp || 'N/A', 50) }],
-    [{ text: 'Population' }, { text: truncate(macro.population || 'N/A', 50) }],
-    [{ text: 'Industry Share of GDP' }, { text: truncate(macro.industrialGdpShare || 'N/A', 50) }],
-    [{ text: 'Market Size' }, { text: truncate(market.marketSize || 'N/A', 50) }],
-    [{ text: 'Energy Prices' }, { text: truncate(market.pricing || 'N/A', 50) }],
-    [{ text: 'Demand Drivers' }, { text: truncate(market.demand || 'N/A', 50) }]
+    [{ text: 'GDP' }, { text: truncate(macro.gdp || 'N/A', 150) }],
+    [{ text: 'Population' }, { text: truncate(macro.population || 'N/A', 150) }],
+    [{ text: 'Industry Share of GDP' }, { text: truncate(macro.industrialGdpShare || 'N/A', 150) }],
+    [{ text: 'Market Size' }, { text: truncate(market.marketSize || 'N/A', 150) }],
+    [{ text: 'Energy Prices' }, { text: truncate(market.pricing || 'N/A', 150) }],
+    [{ text: 'Demand Drivers' }, { text: truncate(market.demand || 'N/A', 150) }]
   ];
 
   marketSlide.addTable(marketRows, {
@@ -818,7 +837,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   });
 
   // SLIDE 4: Competitor Data (TABLE FORMAT)
-  const compSlide = addSlide('Competitors', 'Who is already in this market');
+  const compTitle = headlines.competition || 'Competitive Landscape';
+  const compSlide = addSlide(truncate(compTitle, 80), 'Who is already in this market');
   const comp = ca.competitiveLandscape || {};
 
   const compRows = [
@@ -834,9 +854,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const name = typeof p === 'string' ? p : (p.name || 'Unknown');
     const desc = typeof p === 'string' ? '' : (p.description || '');
     compRows.push([
-      { text: truncate(name, 25) },
+      { text: truncate(name, 40) },
       { text: 'Local' },
-      { text: truncate(desc, 40) }
+      { text: truncate(desc, 100) }
     ]);
   });
 
@@ -845,9 +865,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const name = typeof p === 'string' ? p : (p.name || 'Unknown');
     const desc = typeof p === 'string' ? '' : (p.description || '');
     compRows.push([
-      { text: truncate(name, 25) },
+      { text: truncate(name, 40) },
       { text: 'Foreign' },
-      { text: truncate(desc, 40) }
+      { text: truncate(desc, 100) }
     ]);
   });
 
@@ -864,13 +884,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     fontSize: 12, bold: true, color: COLORS.secondary
   });
   const barriers = safeArray(comp.entryBarriers, 4);
-  compSlide.addText(barriers.map(b => ({ text: truncate(b, 80), options: { bullet: true } })), {
+  compSlide.addText(barriers.map(b => ({ text: truncate(b, 150), options: { bullet: true } })), {
     x: 0.5, y: 5.2, w: 9, h: 1.8,
     fontSize: 10, color: COLORS.text, valign: 'top'
   });
 
   // SLIDE 5: Regulatory Data
-  const regSlide = addSlide('Regulations', 'Rules you need to follow');
+  const regTitle = headlines.regulation || 'Regulatory Environment';
+  const regSlide = addSlide(truncate(regTitle, 80), 'Rules you need to follow');
   const reg = ca.policyRegulatory || {};
 
   const regRows = [
@@ -878,9 +899,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       { text: 'Area', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } },
       { text: 'Details', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white } }
     ],
-    [{ text: 'Government Stance' }, { text: truncate(reg.governmentStance || 'N/A', 60) }],
-    [{ text: 'Foreign Ownership Rules' }, { text: truncate(reg.foreignOwnershipRules || 'N/A', 60) }],
-    [{ text: 'Risk Level' }, { text: truncate(reg.regulatoryRisk || 'N/A', 60) }]
+    [{ text: 'Government Stance' }, { text: truncate(reg.governmentStance || 'N/A', 150) }],
+    [{ text: 'Foreign Ownership Rules' }, { text: truncate(reg.foreignOwnershipRules || 'N/A', 150) }],
+    [{ text: 'Risk Level' }, { text: truncate(reg.regulatoryRisk || 'N/A', 150) }]
   ];
 
   regSlide.addTable(regRows, {
@@ -896,7 +917,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     fontSize: 12, bold: true, color: COLORS.secondary
   });
   const laws = safeArray(reg.keyLegislation, 4);
-  regSlide.addText(laws.map(l => ({ text: truncate(l, 80), options: { bullet: true } })), {
+  regSlide.addText(laws.map(l => ({ text: truncate(l, 180), options: { bullet: true } })), {
     x: 0.5, y: 3.7, w: 9, h: 1.5,
     fontSize: 10, color: COLORS.text, valign: 'top'
   });
@@ -907,7 +928,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     fontSize: 12, bold: true, color: COLORS.green
   });
   const incentives = safeArray(reg.incentives, 3);
-  regSlide.addText(incentives.map(i => ({ text: truncate(i, 80), options: { bullet: true } })), {
+  regSlide.addText(incentives.map(i => ({ text: truncate(i, 180), options: { bullet: true } })), {
     x: 0.5, y: 5.7, w: 9, h: 1.2,
     fontSize: 10, color: COLORS.text, valign: 'top'
   });
@@ -922,7 +943,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     fontSize: 14, bold: true, color: COLORS.green
   });
   const opps = safeArray(summary.opportunities, 4);
-  analysisSlide.addText(opps.map(o => ({ text: truncate(o, 70), options: { bullet: true } })), {
+  analysisSlide.addText(opps.map(o => ({ text: truncate(o, 120), options: { bullet: true } })), {
     x: 0.5, y: 1.5, w: 4.2, h: 2.5,
     fontSize: 10, color: COLORS.text, valign: 'top'
   });
@@ -933,7 +954,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     fontSize: 14, bold: true, color: COLORS.red
   });
   const obs = safeArray(summary.obstacles, 4);
-  analysisSlide.addText(obs.map(o => ({ text: truncate(o, 70), options: { bullet: true } })), {
+  analysisSlide.addText(obs.map(o => ({ text: truncate(o, 120), options: { bullet: true } })), {
     x: 5, y: 1.5, w: 4.5, h: 2.5,
     fontSize: 10, color: COLORS.text, valign: 'top'
   });
@@ -968,12 +989,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       const body = typeof insight === 'string' ? insight :
         `${insight.data || ''} → ${insight.pattern || ''} → ${insight.implication || ''}`;
 
-      insightSlide.addText(`${idx + 1}. ${truncate(title, 60)}`, {
+      insightSlide.addText(`${idx + 1}. ${truncate(title, 100)}`, {
         x: 0.5, y: insightY, w: 9, h: 0.35,
         fontSize: 12, bold: true, color: COLORS.accent
       });
 
-      insightSlide.addText(truncate(body, 200), {
+      insightSlide.addText(truncate(body, 400), {
         x: 0.5, y: insightY + 0.4, w: 9, h: 1.3,
         fontSize: 10, color: COLORS.text, valign: 'top'
       });
@@ -1000,8 +1021,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const optC = entryOpts.optionC || entryOpts.C || {};
 
   const getOptField = (opt, field) => {
-    if (typeof opt === 'string') return truncate(opt, 35);
-    return truncate(opt[field] || opt.description || 'N/A', 35);
+    if (typeof opt === 'string') return truncate(opt, 80);
+    return truncate(opt[field] || opt.description || 'N/A', 80);
   };
 
   optRows.push([
@@ -1047,7 +1068,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
 
   // SLIDE 8: Risks (PROPERLY FORMATTED)
-  const riskSlide = addSlide('Risks', 'What could go wrong and how to handle it');
+  const riskTitle = headlines.risks || 'Risk Assessment';
+  const riskSlide = addSlide(truncate(riskTitle, 80), 'What could go wrong and how to handle it');
   const riskAssess = synthesis.riskAssessment || synthesis.risks || {};
   const criticalRisks = safeArray(riskAssess.criticalRisks || riskAssess.risks, 4);
 
@@ -1063,8 +1085,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const riskName = typeof r === 'string' ? r : (r.risk || r.name || 'Risk');
     const mitigation = typeof r === 'string' ? '' : (r.mitigation || '');
     riskRows.push([
-      { text: truncate(riskName, 40) },
-      { text: truncate(mitigation, 50) }
+      { text: truncate(riskName, 100) },
+      { text: truncate(mitigation, 150) }
     ]);
   });
 
@@ -1083,7 +1105,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       fontSize: 12, bold: true, color: COLORS.secondary
     });
     riskSlide.addText(goNoGo.map(g => ({
-      text: truncate(typeof g === 'string' ? g : (g.criteria || g.description), 80),
+      text: truncate(typeof g === 'string' ? g : (g.criteria || g.description), 150),
       options: { bullet: true }
     })), {
       x: 0.5, y: 4.5, w: 9, h: 2,
@@ -1101,6 +1123,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     { key: 'phase3', label: 'Months 12-24', color: COLORS.green }
   ];
 
+  // Helper to strip month prefixes like "Months 0-6:" from content
+  const stripMonthPrefix = (text) => {
+    if (!text) return '';
+    return String(text).replace(/^(months?\s*\d+[-–]\d+\s*:?\s*)/i, '').trim();
+  };
+
   let phaseY = 1.1;
   phases.forEach(phase => {
     const actions = roadmap[phase.key] || roadmap[phase.label] || [];
@@ -1111,7 +1139,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
     const actionList = Array.isArray(actions) ? actions : [actions];
     roadmapSlide.addText(safeArray(actionList, 3).map(a => ({
-      text: truncate(a, 90),
+      text: truncate(stripMonthPrefix(a), 180),
       options: { bullet: true }
     })), {
       x: 0.5, y: phaseY + 0.4, w: 9, h: 1.3,
@@ -1130,11 +1158,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   ], 5);
 
   nextSlide.addText(nextSteps.map((step, idx) => ({
-    text: `${idx + 1}. ${truncate(typeof step === 'string' ? step : (step.action || step.description), 100)}`,
-    options: { bullet: false }
+    text: `${idx + 1}. ${truncate(typeof step === 'string' ? step : (step.action || step.description), 200)}`,
+    options: { bullet: false, breakLine: true }
   })), {
     x: 0.5, y: 1.1, w: 9, h: 5,
-    fontSize: 13, color: COLORS.text, valign: 'top', lineSpacing: 26
+    fontSize: 13, color: COLORS.text, valign: 'top', lineSpacing: 28
   });
 
   const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
@@ -1201,8 +1229,12 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     fontSize: 12, color: COLORS.text
   });
 
+  // Get insight-driven headlines if available
+  const headlines = synthesis.slideHeadlines || {};
+
   // SLIDE 2: Summary
-  const execSlide = addSlide('Summary');
+  const summaryTitle = headlines.summary || 'Executive Summary';
+  const execSlide = addSlide(truncate(summaryTitle, 80), 'Key Recommendations');
   const execBullets = safeArray(synthesis.executiveSummary, 5);
   execSlide.addText(execBullets.map(b => ({
     text: truncate(b, 150),
@@ -1213,7 +1245,8 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   });
 
   // SLIDE 3: Market Size Comparison (DATA TABLE)
-  const marketCompSlide = addSlide('Market Data Comparison', 'Numbers across countries');
+  const marketCompTitle = headlines.marketComparison || 'Market Data Comparison';
+  const marketCompSlide = addSlide(truncate(marketCompTitle, 80), 'Numbers across countries');
 
   const marketCompRows = [
     [
@@ -1272,7 +1305,8 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   });
 
   // SLIDE 5: Country Rankings (COMPARISON MATRIX)
-  const rankSlide = addSlide('Country Rankings', 'Which market looks best');
+  const rankingsTitle = headlines.rankings || 'Country Rankings';
+  const rankSlide = addSlide(truncate(rankingsTitle, 80), 'Which market looks best');
 
   const rankRows = [
     [
@@ -1464,11 +1498,11 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   ], 5);
 
   nextSlide.addText(nextSteps.map((step, idx) => ({
-    text: `${idx + 1}. ${truncate(typeof step === 'string' ? step : (step.action || step.description), 100)}`,
-    options: { bullet: false }
+    text: `${idx + 1}. ${truncate(typeof step === 'string' ? step : (step.action || step.description), 200)}`,
+    options: { bullet: false, breakLine: true }
   })), {
     x: 0.5, y: 1.1, w: 9, h: 5,
-    fontSize: 13, color: COLORS.text, valign: 'top', lineSpacing: 26
+    fontSize: 13, color: COLORS.text, valign: 'top', lineSpacing: 28
   });
 
   const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
