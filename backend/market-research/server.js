@@ -364,7 +364,173 @@ Return ONLY valid JSON, no markdown or explanation.`;
   }
 }
 
-// ============ COUNTRY RESEARCH AGENT ============
+// ============ ITERATIVE RESEARCH SYSTEM ============
+
+// Step 1: Identify gaps in research after first synthesis
+async function identifyResearchGaps(synthesis, country, industry) {
+  console.log(`  [Identifying research gaps for ${country}...]`);
+
+  const gapPrompt = `You are a research director reviewing a first-pass market analysis. Your job is to identify CRITICAL GAPS that would make a CEO distrust this analysis.
+
+CURRENT ANALYSIS:
+${JSON.stringify(synthesis, null, 2)}
+
+Review this analysis and identify what's MISSING or WEAK. Focus on:
+
+1. UNVERIFIED CLAIMS: Numbers without sources, vague statements like "growing market"
+2. MISSING COMPARISONS: No regional benchmarks, no competitor specifics
+3. SHALLOW SECTIONS: Areas with generic content instead of specifics
+4. TIMING GAPS: Missing "why now" evidence, no regulatory deadlines mentioned
+5. COMPETITIVE BLIND SPOTS: Missing key players, no partnership intel
+6. DATA CONFLICTS: Contradictory numbers that need verification
+
+Return a JSON object with EXACTLY this structure:
+{
+  "criticalGaps": [
+    {
+      "area": "which section is weak (e.g., 'marketDynamics', 'competitiveLandscape')",
+      "gap": "what specific information is missing",
+      "searchQuery": "the EXACT search query to find this information for ${country}",
+      "priority": "high/medium (high = deal-breaker if missing)"
+    }
+  ],
+  "dataToVerify": [
+    {
+      "claim": "the specific claim that needs verification",
+      "searchQuery": "search query to verify this for ${country}"
+    }
+  ],
+  "confidenceAssessment": {
+    "overall": "low/medium/high",
+    "weakestSection": "which section needs most work",
+    "reasoning": "why this confidence level"
+  }
+}
+
+Be SPECIFIC with search queries. Include "${country}" and "${industry}" where relevant.
+Limit to 8 most critical gaps (prioritize high-impact ones).
+Return ONLY valid JSON.`;
+
+  const result = await callDeepSeekChat(gapPrompt, '', 4096);
+
+  try {
+    let jsonStr = result.content.trim();
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+    }
+    const gaps = JSON.parse(jsonStr);
+    console.log(`    Found ${gaps.criticalGaps?.length || 0} critical gaps, ${gaps.dataToVerify?.length || 0} claims to verify`);
+    console.log(`    Confidence: ${gaps.confidenceAssessment?.overall || 'unknown'} (weakest: ${gaps.confidenceAssessment?.weakestSection || 'unknown'})`);
+    return gaps;
+  } catch (error) {
+    console.error('  Failed to parse gaps:', error.message);
+    return { criticalGaps: [], dataToVerify: [], confidenceAssessment: { overall: 'low' } };
+  }
+}
+
+// Step 2: Execute targeted research to fill gaps
+async function fillResearchGaps(gaps, country) {
+  console.log(`  [Filling research gaps for ${country}...]`);
+  const additionalData = { gapResearch: [], verificationResearch: [] };
+
+  // Research critical gaps
+  const criticalGaps = gaps.criticalGaps || [];
+  for (const gap of criticalGaps.slice(0, 6)) { // Limit to 6 most critical
+    if (!gap.searchQuery) continue;
+    console.log(`    Gap search: ${gap.searchQuery.substring(0, 50)}...`);
+
+    const result = await callPerplexity(gap.searchQuery);
+    if (result.content) {
+      additionalData.gapResearch.push({
+        area: gap.area,
+        gap: gap.gap,
+        query: gap.searchQuery,
+        findings: result.content,
+        citations: result.citations
+      });
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  // Verify questionable claims
+  const toVerify = gaps.dataToVerify || [];
+  for (const item of toVerify.slice(0, 4)) { // Limit to 4 verifications
+    if (!item.searchQuery) continue;
+    console.log(`    Verify: ${item.searchQuery.substring(0, 50)}...`);
+
+    const result = await callPerplexity(item.searchQuery);
+    if (result.content) {
+      additionalData.verificationResearch.push({
+        claim: item.claim,
+        query: item.searchQuery,
+        findings: result.content,
+        citations: result.citations
+      });
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+
+  console.log(`    Collected ${additionalData.gapResearch.length} gap fills, ${additionalData.verificationResearch.length} verifications`);
+  return additionalData;
+}
+
+// Step 3: Re-synthesize with additional data
+async function reSynthesize(originalSynthesis, additionalData, country, industry, clientContext) {
+  console.log(`  [Re-synthesizing ${country} with additional data...]`);
+
+  const prompt = `You are improving a market analysis with NEW DATA that fills previous gaps.
+
+ORIGINAL ANALYSIS:
+${JSON.stringify(originalSynthesis, null, 2)}
+
+NEW DATA TO INCORPORATE:
+
+GAP RESEARCH (fills missing information):
+${JSON.stringify(additionalData.gapResearch, null, 2)}
+
+VERIFICATION RESEARCH (confirms or corrects claims):
+${JSON.stringify(additionalData.verificationResearch, null, 2)}
+
+YOUR TASK:
+1. UPDATE the original analysis with the new data
+2. CORRECT any claims that verification proved wrong
+3. ADD DEPTH where gaps have been filled
+4. FLAG remaining uncertainties with "estimated" or "unverified"
+
+Return the SAME JSON structure as before, but IMPROVED:
+{
+  "country": "${country}",
+  "macroContext": { ... },
+  "policyRegulatory": { ... },
+  "marketDynamics": { ... },
+  "competitiveLandscape": { ... },
+  "infrastructure": { ... },
+  "summaryAssessment": { ... }
+}
+
+CRITICAL:
+- Every number should now have context (year, source type, comparison)
+- Every company mentioned should have specifics (size, market position)
+- Every regulation should have enforcement reality
+- Mark anything still uncertain as "estimated" or "industry sources suggest"
+
+Return ONLY valid JSON.`;
+
+  const result = await callDeepSeek(prompt, '', 8192);
+
+  try {
+    let jsonStr = result.content.trim();
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+    }
+    return JSON.parse(jsonStr);
+  } catch (error) {
+    console.error('  Re-synthesis failed:', error.message);
+    return originalSynthesis; // Fall back to original
+  }
+}
+
+// ============ COUNTRY RESEARCH AGENT (ITERATIVE) ============
 
 async function researchCountry(country, industry, clientContext) {
   console.log(`\n=== RESEARCHING: ${country} ===`);
@@ -462,23 +628,205 @@ Return ONLY valid JSON, no markdown or explanation.`;
 
   const synthesis = await callDeepSeek(synthesisPrompt, '', 8192);
 
+  let countryAnalysis;
   try {
     let jsonStr = synthesis.content.trim();
     if (jsonStr.startsWith('```')) {
       jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
     }
-    const countryAnalysis = JSON.parse(jsonStr);
-    countryAnalysis.researchTimeMs = Date.now() - startTime;
-    console.log(`  Completed ${country} in ${countryAnalysis.researchTimeMs}ms`);
-    return countryAnalysis;
+    countryAnalysis = JSON.parse(jsonStr);
   } catch (error) {
-    console.error(`Failed to synthesize ${country}:`, error.message);
+    console.error(`Failed to parse first synthesis for ${country}:`, error.message);
     return {
       country,
       error: 'Synthesis failed',
       rawData: researchData,
       researchTimeMs: Date.now() - startTime
     };
+  }
+
+  // ============ ITERATIVE REFINEMENT LOOP ============
+  // Like Deep Research: identify gaps → research → re-synthesize → repeat if needed
+
+  const MAX_ITERATIONS = 2; // Up to 2 refinement passes
+  let iteration = 0;
+  let confidence = 'low';
+
+  while (iteration < MAX_ITERATIONS && confidence !== 'high') {
+    iteration++;
+    console.log(`\n  [ITERATION ${iteration}/${MAX_ITERATIONS}] Refining analysis...`);
+
+    // Step 1: Identify gaps in current analysis
+    const gaps = await identifyResearchGaps(countryAnalysis, country, industry);
+    confidence = gaps.confidenceAssessment?.overall || 'low';
+
+    // If confidence is high or no critical gaps, we're done
+    if (confidence === 'high') {
+      console.log(`    ✓ Analysis confidence HIGH - stopping refinement`);
+      break;
+    }
+
+    const criticalGapCount = (gaps.criticalGaps || []).filter(g => g.priority === 'high').length;
+    if (criticalGapCount === 0 && (gaps.dataToVerify || []).length === 0) {
+      console.log(`    ✓ No critical gaps found - stopping refinement`);
+      break;
+    }
+
+    console.log(`    → ${criticalGapCount} high-priority gaps, ${(gaps.dataToVerify || []).length} claims to verify`);
+
+    // Step 2: Execute targeted research to fill gaps
+    const additionalData = await fillResearchGaps(gaps, country);
+
+    // Step 3: Re-synthesize with the new data
+    if (additionalData.gapResearch.length > 0 || additionalData.verificationResearch.length > 0) {
+      countryAnalysis = await reSynthesize(countryAnalysis, additionalData, country, industry, clientContext);
+      countryAnalysis.country = country; // Ensure country is set
+      countryAnalysis.iterationsCompleted = iteration;
+    } else {
+      console.log(`    → No additional data collected, stopping refinement`);
+      break;
+    }
+  }
+
+  countryAnalysis.researchTimeMs = Date.now() - startTime;
+  countryAnalysis.totalIterations = iteration;
+  console.log(`\n  ✓ Completed ${country} in ${(countryAnalysis.researchTimeMs / 1000).toFixed(1)}s (${iteration} refinement iterations)`);
+
+  return countryAnalysis;
+}
+
+// ============ REVIEWER AI SYSTEM ============
+
+// Reviewer AI: Critiques the analysis like a demanding McKinsey partner
+async function reviewAnalysis(synthesis, countryAnalysis, scope) {
+  console.log(`  [REVIEWER] Evaluating analysis quality...`);
+
+  const reviewPrompt = `You are a DEMANDING McKinsey Senior Partner reviewing a market entry analysis before it goes to a Fortune 500 CEO. You've seen hundreds of these. You know what separates good from great.
+
+CLIENT CONTEXT: ${scope.clientContext}
+INDUSTRY: ${scope.industry}
+COUNTRY: ${countryAnalysis.country}
+
+ANALYSIS TO REVIEW:
+${JSON.stringify(synthesis, null, 2)}
+
+RAW DATA AVAILABLE (for fact-checking):
+${JSON.stringify(countryAnalysis, null, 2)}
+
+REVIEW THIS ANALYSIS RUTHLESSLY. Check for:
+
+1. VAGUE CLAIMS: Anything without specific numbers, dates, or names
+   - "The market is growing" = FAIL
+   - "The market grew 14% in 2024 to $320M" = PASS
+
+2. SURFACE-LEVEL INSIGHTS: Things anyone could Google in 5 minutes
+   - "Thailand has a large manufacturing sector" = FAIL
+   - "Thailand's 4,200 factories >2MW face mandatory audits but only 23 DEDE auditors exist" = PASS
+
+3. MISSING CAUSAL CHAINS: Facts without explanation of WHY
+   - "Energy prices are high" = FAIL
+   - "Energy prices are high because Erawan field output dropped 30%" = PASS
+
+4. WEAK COMPETITIVE INTEL: Generic descriptions instead of actionable intelligence
+   - "Several foreign companies operate here" = FAIL
+   - "ENGIE entered via B.Grimm JV in 2018, won 12 contracts, struggles outside Bangkok" = PASS
+
+5. HOLLOW RECOMMENDATIONS: Advice without specific next steps
+   - "Consider partnerships" = FAIL
+   - "Approach Absolute Energy (revenue $45M, 180 clients) before Mitsubishi's rumored bid" = PASS
+
+6. STORY FLOW: Does each section logically lead to the next?
+
+7. EXECUTIVE SUMMARY: Does it tell a compelling story in 5 bullets?
+
+Return JSON:
+{
+  "overallScore": 1-10,
+  "confidence": "low/medium/high",
+  "verdict": "APPROVE" or "REVISE",
+  "criticalIssues": [
+    {
+      "section": "which section has the problem",
+      "issue": "what's wrong specifically",
+      "currentText": "quote the problematic text",
+      "suggestion": "how to fix it with SPECIFIC content"
+    }
+  ],
+  "strengths": ["what's working well - be specific"],
+  "missingElements": ["critical things not covered that should be"],
+  "summaryFeedback": "2-3 sentences of direct feedback to the analyst"
+}
+
+BE HARSH. A 7/10 means it's good. 8+ means it's exceptional. Most first drafts are 4-6.
+Only "APPROVE" if score is 7+ and no critical issues remain.
+Return ONLY valid JSON.`;
+
+  const result = await callDeepSeekChat(reviewPrompt, '', 4096);
+
+  try {
+    let jsonStr = result.content.trim();
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+    }
+    const review = JSON.parse(jsonStr);
+    console.log(`    Score: ${review.overallScore}/10 | Confidence: ${review.confidence} | Verdict: ${review.verdict}`);
+    console.log(`    Issues: ${review.criticalIssues?.length || 0} critical | Strengths: ${review.strengths?.length || 0}`);
+    return review;
+  } catch (error) {
+    console.error('  Reviewer failed to parse:', error.message);
+    return { overallScore: 5, confidence: 'low', verdict: 'APPROVE', criticalIssues: [] }; // Default to approve on error
+  }
+}
+
+// Revise analysis based on reviewer feedback
+async function reviseAnalysis(synthesis, review, countryAnalysis, scope, systemPrompt) {
+  console.log(`  [REVISING] Addressing ${review.criticalIssues?.length || 0} issues...`);
+
+  const revisePrompt = `You are revising a market analysis based on SPECIFIC FEEDBACK from a senior reviewer.
+
+ORIGINAL ANALYSIS:
+${JSON.stringify(synthesis, null, 2)}
+
+REVIEWER FEEDBACK:
+Score: ${review.overallScore}/10
+Summary: ${review.summaryFeedback}
+
+CRITICAL ISSUES TO FIX:
+${JSON.stringify(review.criticalIssues, null, 2)}
+
+MISSING ELEMENTS TO ADD:
+${JSON.stringify(review.missingElements, null, 2)}
+
+RAW DATA (use this to add specifics):
+${JSON.stringify(countryAnalysis, null, 2)}
+
+YOUR TASK:
+1. FIX every critical issue listed above
+2. ADD the missing elements
+3. KEEP what the reviewer said was working well
+4. Make every claim SPECIFIC with numbers, names, dates
+
+Return the COMPLETE revised analysis in the same JSON structure.
+DO NOT just acknowledge the feedback - actually REWRITE the weak sections.
+
+For example, if reviewer says "executive summary is vague", rewrite ALL 5 bullets with specific data.
+
+Return ONLY valid JSON with the full analysis structure.`;
+
+  const result = await callDeepSeek(revisePrompt, systemPrompt, 12000);
+
+  try {
+    let jsonStr = result.content.trim();
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+    }
+    const revised = JSON.parse(jsonStr);
+    revised.isSingleCountry = true;
+    revised.country = countryAnalysis.country;
+    return revised;
+  } catch (error) {
+    console.error('  Revision failed:', error.message);
+    return synthesis; // Return original if revision fails
   }
 }
 
@@ -664,15 +1012,15 @@ CRITICAL QUALITY STANDARDS:
 
   const result = await callDeepSeek(prompt, systemPrompt, 12000);
 
+  let synthesis;
   try {
     let jsonStr = result.content.trim();
     if (jsonStr.startsWith('```')) {
       jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
     }
-    const synthesis = JSON.parse(jsonStr);
+    synthesis = JSON.parse(jsonStr);
     synthesis.isSingleCountry = true;
     synthesis.country = countryAnalysis.country;
-    return synthesis;
   } catch (error) {
     console.error('Failed to parse single country synthesis:', error.message);
     return {
@@ -682,6 +1030,44 @@ CRITICAL QUALITY STANDARDS:
       rawContent: result.content
     };
   }
+
+  // ============ REVIEWER LOOP ============
+  // Reviewer AI critiques → Working AI revises → Repeat until approved
+
+  const MAX_REVISIONS = 3;
+  let revisionCount = 0;
+  let approved = false;
+
+  console.log(`\n  [REVIEW CYCLE] Starting quality review...`);
+
+  while (!approved && revisionCount < MAX_REVISIONS) {
+    // Reviewer evaluates current analysis
+    const review = await reviewAnalysis(synthesis, countryAnalysis, scope);
+
+    if (review.verdict === 'APPROVE' || review.overallScore >= 7) {
+      console.log(`  ✓ APPROVED after ${revisionCount} revision(s) | Final score: ${review.overallScore}/10`);
+      approved = true;
+      synthesis.qualityScore = review.overallScore;
+      synthesis.reviewIterations = revisionCount;
+      break;
+    }
+
+    revisionCount++;
+    console.log(`\n  [REVISION ${revisionCount}/${MAX_REVISIONS}] Score: ${review.overallScore}/10 - Revising...`);
+
+    // Working AI revises based on feedback
+    synthesis = await reviseAnalysis(synthesis, review, countryAnalysis, scope, systemPrompt);
+  }
+
+  // Final review if we hit max revisions
+  if (!approved) {
+    const finalReview = await reviewAnalysis(synthesis, countryAnalysis, scope);
+    synthesis.qualityScore = finalReview.overallScore;
+    synthesis.reviewIterations = revisionCount;
+    console.log(`  → Max revisions reached | Final score: ${finalReview.overallScore}/10`);
+  }
+
+  return synthesis;
 }
 
 // ============ CROSS-COUNTRY SYNTHESIS ============
