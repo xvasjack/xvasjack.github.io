@@ -2411,6 +2411,11 @@ function filterEmptyMetrics(keyMetrics) {
     /world of color/i,        // Corporate slogans
     /value creation/i,        // Generic value statements
     /environmental impact/i,  // Generic sustainability
+    /high standards in/i,     // "High standards in customer service"
+    /constant.*innovation/i,  // "Constant technical innovation"
+    /continuous improvement/i,
+    /excellence in/i,         // "Excellence in service"
+    /dedicated to/i,          // "Dedicated to quality"
     // Factory locations masquerading as factory size
     /facilities?\s+located\s+in/i,
     /located\s+in\s+.*city/i,
@@ -2431,6 +2436,20 @@ function filterEmptyMetrics(keyMetrics) {
     /awards/i,
     /achievements/i,
     /recognitions/i,
+    // Garbage metrics - meaningless fluff
+    /quality standards/i,
+    /quality assurance/i,
+    /quality control/i,
+    /quality focus/i,
+    /innovation focus/i,
+    /r&d focus/i,
+    /research focus/i,
+    /customer service/i,
+    /service excellence/i,
+    /technical support/i,
+    /customer satisfaction/i,
+    /commitment/i,
+    /dedication/i,
   ];
 
   return keyMetrics.filter(metric => {
@@ -3202,7 +3221,12 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         'operating hours', 'business hours', 'office hours',
         'years of experience', 'experience', 'years in business',
         'awards', 'recognitions', 'achievements',
-        'certification', 'certifications', 'iso', 'accreditation', 'accreditations'
+        'certification', 'certifications', 'iso', 'accreditation', 'accreditations',
+        // Garbage metrics - meaningless fluff
+        'quality standards', 'quality assurance', 'quality control', 'quality focus',
+        'innovation focus', 'innovation', 'r&d focus', 'research focus',
+        'customer service', 'service excellence', 'technical support',
+        'customer satisfaction', 'commitment', 'dedication', 'focus on'
       ];
 
       // Get the right table category to exclude from left table (prevent duplication)
@@ -3560,8 +3584,16 @@ OUTPUT JSON with these fields:
 
   Singapore (Area, Singapore) - ONLY 2 LEVELS:
   - "Jurong West, Singapore"
+  - "Jurong East, Singapore"
   - "Tuas, Singapore"
   - "Ubi, Singapore"
+  - "Woodlands, Singapore"
+
+  CRITICAL SINGAPORE RULE: NEVER output just "Singapore" alone!
+  - WRONG: "Singapore" ← UNACCEPTABLE! Must have area!
+  - WRONG: "Singapore, Singapore" ← WRONG! Find the actual area!
+  - CORRECT: "Jurong West, Singapore" or "Tuas, Singapore"
+  - Look at the address on website to find the area/district name
 
 RULES:
 - ONLY extract HQ location - ignore all branches, factories, warehouses, offices
@@ -3585,6 +3617,53 @@ Content: ${scrapedContent.substring(0, 12000)}`
   } catch (e) {
     console.error('Agent 1 error:', e.message);
     return { company_name: '', established_year: '', location: '' };
+  }
+}
+
+// Post-process and validate HQ location format
+// Singapore: MUST be 2 levels (Area, Singapore) - NEVER just "Singapore"
+// Non-Singapore: MUST be 3 levels (City, State, Country) - NEVER just 2 levels
+function validateAndFixHQFormat(location, websiteUrl) {
+  if (!location || typeof location !== 'string') return location;
+
+  let loc = location.trim();
+
+  // Remove any "HQ:" prefix
+  loc = loc.replace(/^-?\s*HQ:\s*/i, '').trim();
+
+  const parts = loc.split(',').map(p => p.trim()).filter(p => p);
+  const lastPart = parts[parts.length - 1]?.toLowerCase() || '';
+
+  // Check if Singapore
+  const isSingapore = lastPart === 'singapore' || loc.toLowerCase() === 'singapore';
+
+  if (isSingapore) {
+    // Singapore: must be exactly 2 levels
+    if (parts.length === 1 || loc.toLowerCase() === 'singapore') {
+      // Only "Singapore" - try to extract area from website URL
+      const domain = websiteUrl?.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0] || '';
+      // Default to a generic area since we can't determine from just "Singapore"
+      console.log(`  [HQ Fix] Singapore missing area, keeping as-is: ${loc}`);
+      return loc; // Keep as-is, we'll fix in slide generation
+    }
+    if (parts.length > 2) {
+      // Too many levels, keep first and last
+      return `${parts[0]}, Singapore`;
+    }
+    return loc; // Already 2 levels
+  } else {
+    // Non-Singapore: must be exactly 3 levels
+    if (parts.length === 2) {
+      // Only 2 levels like "Bangkok, Thailand" - this is WRONG
+      console.log(`  [HQ Fix] Non-Singapore has only 2 levels: ${loc}`);
+      // We can't fix this without more info, but log it
+      return loc;
+    }
+    if (parts.length > 3) {
+      // Too many levels, keep last 3
+      return parts.slice(-3).join(', ');
+    }
+    return loc; // Already 3 levels or less
   }
 }
 
@@ -3700,10 +3779,15 @@ OPERATIONS & SCALE:
 - Number of employees/headcount
 - Number of SKUs/products
 
-GEOGRAPHIC REACH:
-- Export countries (only if exports to multiple countries, list regions)
-- Distribution network (number of distributors/partners)
+GEOGRAPHIC REACH (CRITICAL - CAPTURE ALL DISTRIBUTION INFO):
+- Export countries (list ALL countries mentioned: Thailand, Sri Lanka, Pakistan, Bangladesh, UAE, etc.)
+- Distribution network (distributors, agents, dealers - include country names)
 - Markets served (if domestic only, write "Nationwide" instead of listing regions)
+- IMPORTANT: If website mentions "distributors across Thailand, Sri Lanka, Pakistan..." - CAPTURE THIS!
+
+INDUSTRIES SERVED:
+- List the industries/applications the company serves (e.g., "Gravure Printing, Screen Printing, Footwear, Leather, Rubber")
+- Look for "Industries We Serve", "Applications", "Markets" sections
 
 QUALITY & COMPLIANCE:
 - Certifications (ISO, HACCP, GMP, FDA, CE, halal, etc.)
@@ -3757,6 +3841,8 @@ RULES:
 - For Shareholding: ONLY include if EXPLICITLY stated on website (e.g., "family-owned", "publicly traded", "PE-backed"). NEVER assume ownership structure.
 - DO NOT include: years of experience, awards, recognitions, market position, operating hours, number of branches/locations (not useful for M&A)
 - DO NOT include: corporate vision, mission statement, company values, slogans, taglines
+- DO NOT include garbage metrics like: "Quality Standards", "Innovation Focus", "Customer Service", "Technical Support", "R&D Focus", "Quality Assurance", "Service Excellence" - these are meaningless fluff
+- DO NOT include vague phrases like "High standards in customer service", "Constant innovation", "Focus on quality" - these have no concrete value
 - DO NOT include metrics with NO MEANINGFUL VALUES - if you don't have specific data, don't include the metric at all
 - CRITICAL - NEVER GENERATE FAKE/PLACEHOLDER DATA:
   - NEVER write alphabetical placeholders like "Distributor A, Distributor B", "Partner X, Partner Y", "Customer 1, Customer 2"
