@@ -36,12 +36,15 @@ const costTracker = {
   calls: []
 };
 
-// Pricing per 1M tokens
+// Pricing per 1M tokens (from DeepSeek docs - Dec 2024)
+// Both deepseek-chat and deepseek-reasoner use same pricing
+// deepseek-chat = V3.2 Non-thinking Mode (max 8K output)
+// deepseek-reasoner = V3.2 Thinking Mode (max 64K output)
 const PRICING = {
-  'deepseek-chat': { input: 0.27, output: 1.10 },      // DeepSeek V3
-  'deepseek-reasoner': { input: 0.55, output: 2.19 }, // DeepSeek R1
+  'deepseek-chat': { input: 0.28, output: 0.42 },      // Cache miss pricing
+  'deepseek-reasoner': { input: 0.28, output: 0.42 }, // Same pricing, but thinking mode
   'perplexity': { perSearch: 0.005 },                  // Sonar basic
-  'perplexity-pro': { perSearch: 0.015 }               // Sonar Pro (3x basic)
+  'perplexity-pro': { perSearch: 0.015 }               // Sonar Pro
 };
 
 function trackCost(model, inputTokens, outputTokens, searchCount = 0) {
