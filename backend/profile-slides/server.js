@@ -79,6 +79,69 @@ function extractCompanyNameFromUrl(url) {
   }
 }
 
+// Clean company name: remove suffixes, convert to English, reject descriptions
+function cleanCompanyName(name, fallbackUrl = '') {
+  if (!name || typeof name !== 'string') {
+    return fallbackUrl ? extractCompanyNameFromUrl(fallbackUrl) : '';
+  }
+
+  let cleaned = name.trim();
+
+  // Convert common non-ASCII characters to ASCII equivalents
+  const charMap = {
+    'บริษัท': '', 'จำกัด': '', '(มหาชน)': '', // Thai: Company, Limited, Public
+    '株式会社': '', '有限会社': '', '合同会社': '', // Japanese
+    '公司': '', '有限': '', '集团': '', // Chinese
+    'Công ty': '', 'TNHH': '', // Vietnamese
+    // Diacritics
+    'á': 'a', 'à': 'a', 'ả': 'a', 'ã': 'a', 'ạ': 'a', 'ă': 'a', 'ắ': 'a', 'ằ': 'a', 'ẳ': 'a', 'ẵ': 'a', 'ặ': 'a',
+    'â': 'a', 'ấ': 'a', 'ầ': 'a', 'ẩ': 'a', 'ẫ': 'a', 'ậ': 'a',
+    'é': 'e', 'è': 'e', 'ẻ': 'e', 'ẽ': 'e', 'ẹ': 'e', 'ê': 'e', 'ế': 'e', 'ề': 'e', 'ể': 'e', 'ễ': 'e', 'ệ': 'e',
+    'í': 'i', 'ì': 'i', 'ỉ': 'i', 'ĩ': 'i', 'ị': 'i',
+    'ó': 'o', 'ò': 'o', 'ỏ': 'o', 'õ': 'o', 'ọ': 'o', 'ô': 'o', 'ố': 'o', 'ồ': 'o', 'ổ': 'o', 'ỗ': 'o', 'ộ': 'o',
+    'ơ': 'o', 'ớ': 'o', 'ờ': 'o', 'ở': 'o', 'ỡ': 'o', 'ợ': 'o',
+    'ú': 'u', 'ù': 'u', 'ủ': 'u', 'ũ': 'u', 'ụ': 'u', 'ư': 'u', 'ứ': 'u', 'ừ': 'u', 'ử': 'u', 'ữ': 'u', 'ự': 'u',
+    'ý': 'y', 'ỳ': 'y', 'ỷ': 'y', 'ỹ': 'y', 'ỵ': 'y',
+    'đ': 'd', 'Đ': 'D',
+    'ñ': 'n', 'ü': 'u', 'ö': 'o', 'ä': 'a', 'ß': 'ss',
+    'ç': 'c', 'ø': 'o', 'å': 'a', 'æ': 'ae', 'œ': 'oe'
+  };
+
+  for (const [from, to] of Object.entries(charMap)) {
+    cleaned = cleaned.split(from).join(to);
+  }
+
+  // Remove company suffixes (expanded list)
+  cleaned = cleaned
+    .replace(/\s*(Sdn\.?\s*Bhd\.?|Bhd\.?|Berhad|Pte\.?\s*Ltd\.?|Ltd\.?|Limited|Inc\.?|Incorporated|Corp\.?|Corporation|Co\.?,?\s*Ltd\.?|LLC|LLP|GmbH|S\.?A\.?|PT\.?|CV\.?|Tbk\.?|JSC|PLC|Public\s*Limited|Private\s*Limited|Joint\s*Stock|Company|\(.*?\))$/gi, '')
+    .replace(/^(PT\.?|CV\.?)\s+/gi, '')  // Remove PT/CV prefix
+    .trim();
+
+  // Check if name looks like a description (too many generic/marketing words)
+  const descriptionWords = [
+    'leading', 'provider', 'solutions', 'services', 'industrial', 'manufacturing',
+    'global', 'world', 'class', 'premier', 'best', 'top', 'quality', 'excellence',
+    'innovative', 'advanced', 'professional', 'trusted', 'reliable', 'expert'
+  ];
+  const words = cleaned.toLowerCase().split(/\s+/);
+  const descWordCount = words.filter(w => descriptionWords.includes(w)).length;
+
+  // If more than 40% of words are generic description words, reject it
+  if (words.length >= 3 && descWordCount / words.length > 0.4) {
+    console.log(`  Rejecting descriptive company name: "${cleaned}"`);
+    return fallbackUrl ? extractCompanyNameFromUrl(fallbackUrl) : '';
+  }
+
+  // Check if name contains non-ASCII characters (likely non-English)
+  // eslint-disable-next-line no-control-regex
+  if (/[^\x00-\x7F]/.test(cleaned)) {
+    console.log(`  Rejecting non-English company name: "${cleaned}"`);
+    return fallbackUrl ? extractCompanyNameFromUrl(fallbackUrl) : '';
+  }
+
+  return cleaned || (fallbackUrl ? extractCompanyNameFromUrl(fallbackUrl) : '');
+}
+
 const app = express();
 app.use(securityHeaders);
 app.use(rateLimiter);
@@ -2298,7 +2361,8 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         const parts = loc.split(',').map(p => p.trim());
         const country = parts[parts.length - 1] || 'Other';
         // HQ city is first part only (just the district/area)
-        const hqCity = parts[0] || '';
+        // If only 1 part (country only), hqCity should be empty, not the country name
+        const hqCity = parts.length > 1 ? (parts[0] || '') : '';
         return { country, hqCity };
       };
 
@@ -2481,7 +2545,9 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
           // Company name with numbering (bright blue background, WHITE text, left-aligned)
           // Keep 3pt white borders on ALL sides for company name cells
-          const companyName = comp.title || comp.company_name || 'Unknown';
+          // Apply cleanCompanyName to ensure no suffixes (PT, Ltd) and English only
+          const rawName = comp.title || comp.company_name || '';
+          const companyName = cleanCompanyName(rawName, comp.website) || 'Unknown';
           row.push({
             text: `${comp.index}. ${companyName}`,
             options: {
@@ -2589,163 +2655,8 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       }
     }
 
-    // ===== HYPOTHETICAL M&A STRATEGIES SLIDE =====
-    if (targetDescription && allCompaniesForSummary.length > 0) {
-      try {
-        console.log('Generating M&A Strategy slide...');
-        const maData = await generateMAStrategies(targetDescription, allCompaniesForSummary);
-        const strategies = maData.strategies || [];
-
-        if (strategies.length > 0) {
-          const maSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-
-          // Title: "Hypothetical M&A Strategies" - font size 24
-          maSlide.addText('Hypothetical M&A Strategies', {
-            x: 0.38, y: 0.38, w: 12.5, h: 0.5,
-            fontSize: 24, fontFace: 'Segoe UI',
-            color: COLORS.black, valign: 'bottom'
-          });
-
-          // Double horizontal divider (thick dark-blue above, thin lighter-blue below)
-          maSlide.addShape(pptx.shapes.LINE, {
-            x: 0.38, y: 1.02, w: 12.5, h: 0,
-            line: { color: COLORS.headerLine, width: 3 }
-          });
-          maSlide.addShape(pptx.shapes.LINE, {
-            x: 0.38, y: 1.10, w: 12.5, h: 0,
-            line: { color: COLORS.dk2, width: 1.5 }
-          });
-
-          // Build M&A Strategy table
-          const maTableRows = [];
-
-          // Header row - NOT bold per design requirements
-          maTableRows.push([
-            {
-              text: 'Region',
-              options: {
-                fill: { color: COLORS.accent3 },
-                color: COLORS.white,
-                align: 'center',
-                valign: 'middle',
-                bold: false
-              }
-            },
-            {
-              text: 'Strategy',
-              options: {
-                fill: { color: COLORS.accent3 },
-                color: COLORS.white,
-                align: 'center',
-                valign: 'middle',
-                bold: false
-              }
-            },
-            {
-              text: 'Rationale',
-              options: {
-                fill: { color: COLORS.accent3 },
-                color: COLORS.white,
-                align: 'center',
-                valign: 'middle',
-                bold: false
-              }
-            }
-          ]);
-
-          // Data rows - NOT bold per design requirements
-          strategies.forEach(strat => {
-            // Format strategy with bullet points
-            const strategyPoints = strat.strategy.split('. ')
-              .filter(s => s.trim())
-              .map(s => `■ ${s.trim().replace(/\.+$/, '')}`)
-              .join('\n');
-
-            // Format rationale with bullet points
-            const rationalePoints = strat.rationale.split('. ')
-              .filter(r => r.trim())
-              .map(r => `■ ${r.trim().replace(/\.+$/, '')}`)
-              .join('\n');
-
-            maTableRows.push([
-              // Region column - blue background, white text, NOT bold
-              {
-                text: strat.region || '',
-                options: {
-                  fill: { color: COLORS.accent3 },
-                  color: COLORS.white,
-                  align: 'center',
-                  valign: 'middle',
-                  bold: false
-                }
-              },
-              // Strategy column - white background, black text, NOT bold
-              {
-                text: strategyPoints,
-                options: {
-                  fill: { color: COLORS.white },
-                  color: COLORS.black,
-                  align: 'left',
-                  valign: 'top',
-                  bold: false,
-                  border: [
-                    { pt: 1, color: COLORS.gray, type: 'dash' },
-                    { pt: 0 },
-                    { pt: 1, color: COLORS.gray, type: 'dash' },
-                    { pt: 0 }
-                  ]
-                }
-              },
-              // Rationale column - white background, black text, NOT bold
-              {
-                text: rationalePoints,
-                options: {
-                  fill: { color: COLORS.white },
-                  color: COLORS.black,
-                  align: 'left',
-                  valign: 'top',
-                  bold: false,
-                  border: [
-                    { pt: 1, color: COLORS.gray, type: 'dash' },
-                    { pt: 0 },
-                    { pt: 1, color: COLORS.gray, type: 'dash' },
-                    { pt: 0 }
-                  ]
-                }
-              }
-            ]);
-          });
-
-          // Add M&A Strategy table - font size 14 per design requirements
-          maSlide.addTable(maTableRows, {
-            x: 0.38, y: 1.25,
-            w: 12.5,
-            colW: [2.0, 5.0, 5.5],
-            rowH: 0.8,
-            fontFace: 'Segoe UI',
-            fontSize: 14,
-            valign: 'middle',
-            border: { pt: 2.5, color: COLORS.white },
-            margin: [0.04, 0.08, 0.04, 0.08]
-          });
-
-          // Source line: black font, font size 10
-          maSlide.addText('Source: Company disclosures, public filings', {
-            x: 0.38, y: 6.85, w: 12.5, h: 0.3,
-            fontSize: 10, fontFace: 'Segoe UI',
-            color: COLORS.black, valign: 'top'
-          });
-
-          console.log('M&A Strategy slide generated');
-        }
-      } catch (maError) {
-        console.error('ERROR generating M&A Strategy slide:', maError.message);
-        console.error('M&A Strategy error stack:', maError.stack);
-        // Continue without M&A Strategy slide
-      }
-    }
-
     // ===== INDIVIDUAL COMPANY PROFILE SLIDES =====
+    // NOTE: M&A Strategies slide removed - belongs in UTB service only
     for (const company of companies) {
       try {
       // Skip companies with no meaningful info (only has website, no business/location/metrics)
@@ -2771,128 +2682,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
       console.log(`  Generating slide for: ${company.company_name || company.website}`);
 
-      // ===== BUSINESS OVERVIEW SLIDE (before detailed profile) =====
-      if (hasBreakdown) {
-        const overviewSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-
-        // Title: "Business Overview" - font size 24, black
-        overviewSlide.addText('Business Overview', {
-          x: 0.38, y: 0.38, w: 12.5, h: 0.5,
-          fontSize: 24, fontFace: 'Segoe UI',
-          color: COLORS.black, valign: 'bottom'
-        });
-
-        // Subtitle: Company description - font size 16, black
-        const companyDescription = company.message || `${company.title || company.company_name || 'Company'} provides products and services.`;
-        overviewSlide.addText(companyDescription, {
-          x: 0.38, y: 0.92, w: 12.5, h: 0.4,
-          fontSize: 16, fontFace: 'Segoe UI',
-          color: COLORS.black, valign: 'top'
-        });
-
-        // Double horizontal divider (thick dark-blue above, thin lighter-blue below)
-        overviewSlide.addShape(pptx.shapes.LINE, {
-          x: 0.38, y: 1.40, w: 12.5, h: 0,
-          line: { color: COLORS.headerLine, width: 3 }
-        });
-        overviewSlide.addShape(pptx.shapes.LINE, {
-          x: 0.38, y: 1.48, w: 12.5, h: 0,
-          line: { color: COLORS.dk2, width: 1.5 }
-        });
-
-        // Column headers: "Business Segment" and "Description" - centered, font size 14
-        overviewSlide.addText('Business Segment', {
-          x: 0.38, y: 1.60, w: 2.5, h: 0.35,
-          fontSize: 14, fontFace: 'Segoe UI',
-          color: COLORS.black, align: 'center', valign: 'middle'
-        });
-        // Underline for Business Segment header
-        overviewSlide.addShape(pptx.shapes.LINE, {
-          x: 0.38, y: 1.95, w: 2.5, h: 0,
-          line: { color: COLORS.dk2, width: 1 }
-        });
-
-        overviewSlide.addText('Description', {
-          x: 3.0, y: 1.60, w: 9.88, h: 0.35,
-          fontSize: 14, fontFace: 'Segoe UI',
-          color: COLORS.black, align: 'center', valign: 'middle'
-        });
-        // Underline for Description header
-        overviewSlide.addShape(pptx.shapes.LINE, {
-          x: 3.0, y: 1.95, w: 9.88, h: 0,
-          line: { color: COLORS.dk2, width: 1 }
-        });
-
-        // Build Business Overview table rows from breakdown_items
-        const overviewTableRows = [];
-        const breakdownItems = company.breakdown_items || [];
-        const validItems = breakdownItems
-          .filter(item => item && item.label && item.value)
-          .slice(0, 8); // Max 8 segments
-
-        validItems.forEach((item, idx) => {
-          const isLast = idx === validItems.length - 1;
-          overviewTableRows.push([
-            // Left column: Blue segment block with white centered text
-            {
-              text: String(item.label || ''),
-              options: {
-                fill: { color: COLORS.accent3 },
-                color: COLORS.white,
-                align: 'center',
-                valign: 'middle',
-                bold: false
-              }
-            },
-            // Right column: Black square bullet with description
-            {
-              text: `■ ${String(item.value || '')}`,
-              options: {
-                fill: { color: COLORS.white },
-                color: COLORS.black,
-                align: 'left',
-                valign: 'top',
-                bold: false,
-                border: isLast ? [
-                  { pt: 1, color: COLORS.gray, type: 'dash' },
-                  { pt: 0 },
-                  { pt: 1, color: COLORS.gray, type: 'dash' },
-                  { pt: 0 }
-                ] : [
-                  { pt: 1, color: COLORS.gray, type: 'dash' },
-                  { pt: 0 },
-                  { pt: 1, color: COLORS.gray, type: 'dash' },
-                  { pt: 0 }
-                ]
-              }
-            }
-          ]);
-        });
-
-        // Add the Business Overview table
-        if (overviewTableRows.length > 0) {
-          overviewSlide.addTable(overviewTableRows, {
-            x: 0.38, y: 2.05,
-            w: 12.5,
-            colW: [2.5, 9.88],
-            rowH: 0.55,
-            fontFace: 'Segoe UI',
-            fontSize: 14,
-            valign: 'middle',
-            border: { pt: 2.5, color: COLORS.white },
-            margin: [0.04, 0.08, 0.04, 0.08]
-          });
-        }
-
-        // Source line: black font, font size 10
-        overviewSlide.addText('Source: Company disclosures, public filings', {
-          x: 0.38, y: 6.85, w: 12.5, h: 0.3,
-          fontSize: 10, fontFace: 'Segoe UI',
-          color: COLORS.black, valign: 'top'
-        });
-
-        console.log('    Business Overview slide generated');
-      }
+      // NOTE: Business Overview slide removed - user requested single profile slide only
 
       // Use master slide - lines are fixed in background and cannot be moved
       const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
@@ -3714,7 +3504,19 @@ function validateAndFixHQFormat(location, websiteUrl) {
       console.log(`  [HQ Fix] Fixed non-Singapore HQ (too many levels): "${loc}" → "${fixed}"`);
       return fixed;
     }
-    return loc; // Already 3 levels or less (can't add missing levels without more info)
+    if (parts.length === 1) {
+      // Only country name (e.g., "Thailand") - this is incomplete
+      // Log warning so we know this location is missing city info
+      console.log(`  [HQ Warning] Location missing city/province: "${loc}" - needs manual fix`);
+      return ''; // Return empty so it doesn't show incorrect data in target list
+    }
+    if (parts.length === 2) {
+      // Only 2 levels - this is also incomplete for non-Singapore
+      // Log warning
+      console.log(`  [HQ Warning] Location only has 2 levels: "${loc}" - may be missing city`);
+      return loc; // Return as-is, but flagged
+    }
+    return loc; // Already 3 levels
   }
 }
 
@@ -4665,14 +4467,21 @@ Return ONLY valid JSON.`;
     }
 
     // Merge validated data with original (preserve fields not in output)
+    // Apply cleanCompanyName to ensure English names without suffixes or descriptions
+    const rawCompanyName = validated.company_name || companyData.company_name;
+    const rawTitle = validated.title || companyData.title;
+    const websiteUrl = companyData.website || '';
+    const cleanedCompanyName = cleanCompanyName(rawCompanyName, websiteUrl);
+    const cleanedTitle = cleanCompanyName(rawTitle, websiteUrl);
+
     const mergedData = {
       ...companyData,
-      company_name: validated.company_name || companyData.company_name,
+      company_name: cleanedCompanyName,
       established_year: validated.established_year || companyData.established_year,
       location: validated.location || companyData.location,
       business: validated.business || companyData.business,
       message: validated.message || companyData.message,
-      title: validated.title || companyData.title,
+      title: cleanedTitle || cleanedCompanyName,
       key_metrics: validated.key_metrics || companyData.key_metrics,
       breakdown_title: validated.breakdown_title || companyData.breakdown_title,
       breakdown_items: validated.breakdown_items || companyData.breakdown_items
