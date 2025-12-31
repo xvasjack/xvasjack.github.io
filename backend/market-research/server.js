@@ -4,6 +4,7 @@ const cors = require('cors');
 const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
 const { securityHeaders, rateLimiter } = require('../shared/security');
+const { requestLogger, healthCheck } = require('../shared/middleware');
 
 // ============ GLOBAL ERROR HANDLERS ============
 process.on('unhandledRejection', (reason, _promise) => {
@@ -23,6 +24,7 @@ const app = express();
 app.use(securityHeaders);
 app.use(rateLimiter);
 app.use(cors());
+app.use(requestLogger);
 app.use(express.json({ limit: '10mb' }));
 
 // Check required environment variables
@@ -4309,6 +4311,9 @@ app.get('/health', (req, res) => {
     costToday: costTracker.totalCost
   });
 });
+
+// ============ HEALTH CHECK ============
+app.get('/health', healthCheck('market-research'));
 
 // Main research endpoint
 app.post('/api/market-research', async (req, res) => {

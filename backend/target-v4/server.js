@@ -4,6 +4,7 @@ const cors = require('cors');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
 const { securityHeaders, rateLimiter, escapeHtml } = require('../shared/security');
+const { requestLogger, healthCheck } = require('../shared/middleware');
 
 // ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
 // Memory logging helper for debugging Railway OOM issues
@@ -38,6 +39,7 @@ const app = express();
 app.use(securityHeaders);
 app.use(rateLimiter);
 app.use(cors());
+app.use(requestLogger);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
@@ -1865,6 +1867,8 @@ Find as many as possible - be exhaustive. Search using ALL the terminology varia
   }
 });
 
+// ============ HEALTH CHECK ============
+app.get('/health', healthCheck('target-v4'));
 
 // ============ HEALTHCHECK ============
 app.get('/', (req, res) => {

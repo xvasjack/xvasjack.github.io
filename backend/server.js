@@ -15,6 +15,7 @@ const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = re
 const Anthropic = require('@anthropic-ai/sdk');
 const JSZip = require('jszip');
 const { securityHeaders, rateLimiter, sanitizePath, escapeHtml } = require('./shared/security');
+const { requestLogger, healthCheck } = require('./shared/middleware');
 
 // ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
 // Memory logging helper for debugging Railway OOM issues
@@ -68,6 +69,7 @@ const app = express();
 app.use(securityHeaders);
 app.use(rateLimiter);
 app.use(cors());
+app.use(requestLogger);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
@@ -2219,6 +2221,9 @@ function buildEmailHTML(companies, business, country, exclusion) {
   html += '</tbody></table>';
   return html;
 }
+
+// ============ HEALTH CHECK ============
+app.get('/health', healthCheck('main-backend'));
 
 // ============ COST TRACKING ENDPOINT ============
 app.get('/api/openai-costs', (req, res) => {
