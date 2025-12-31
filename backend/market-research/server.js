@@ -2893,12 +2893,18 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   pptx.theme = { headFontFace: 'Segoe UI', bodyFontFace: 'Segoe UI' };
   const FONT = 'Segoe UI';
 
-  // Get data from new structure or fall back to legacy structure
-  const policy = synthesis.policy || {};
-  const market = synthesis.market || {};
-  const competitors = synthesis.competitors || {};
-  const summary = synthesis.summary || synthesis.summaryAssessment || {};
-  const country = synthesis.country;
+  // Use countryAnalysis for detailed data (policy, market, competitors, etc.)
+  // synthesis contains metadata like isSingleCountry, confidenceScore, etc.
+  const policy = countryAnalysis.policy || {};
+  const market = countryAnalysis.market || {};
+  const competitors = countryAnalysis.competitors || {};
+  const summary = countryAnalysis.summary || countryAnalysis.summaryAssessment || {};
+  const country = countryAnalysis.country || synthesis.country;
+
+  // Debug: confirm data source
+  console.log(`  [PPT] Using countryAnalysis data for ${country}`);
+  console.log(`  [PPT] policy keys: ${Object.keys(policy).join(', ') || 'EMPTY'}`);
+  console.log(`  [PPT] market keys: ${Object.keys(market).join(', ') || 'EMPTY'}`);
 
   // Truncate title to max 70 chars
   function truncateTitle(text) {
@@ -3371,8 +3377,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // ============ SECTION 4: DEPTH ANALYSIS (5 slides) ============
 
-  // Get depth data
-  const depth = synthesis.depth || {};
+  // Get depth data from countryAnalysis
+  const depth = countryAnalysis.depth || {};
 
   // SLIDE 16: ESCO Deal Economics
   const escoEcon = depth.escoEconomics || {};
@@ -3590,7 +3596,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // ============ SECTION 5: TIMING & LESSONS (2 slides) ============
 
   // SLIDE 21: Why Now? - Timing Intelligence
-  const timing = synthesis.summary?.timingIntelligence || {};
+  const timing = summary.timingIntelligence || {};
   const timingSlide = addSlideWithTitle(
     timing.slideTitle || `${country} - Why Now?`,
     truncateSubtitle(timing.windowOfOpportunity || 'Time-sensitive factors driving urgency', 95)
@@ -3621,7 +3627,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
 
   // SLIDE 22: Lessons from Market
-  const lessonsData = synthesis.summary?.lessonsLearned || {};
+  const lessonsData = summary.lessonsLearned || {};
   const lessonsSlide = addSlideWithTitle(
     lessonsData.slideTitle || `${country} - Lessons from Market`,
     truncateSubtitle(lessonsData.subtitle || 'What previous entrants learned', 95)
@@ -3676,7 +3682,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // ============ SECTION 6: SUMMARY (5 slides) ============
 
   // SLIDE 23: Go/No-Go Decision
-  const goNoGo = synthesis.summary?.goNoGo || {};
+  const goNoGo = summary.goNoGo || {};
   const goNoGoSlide = addSlideWithTitle(
     `${country} - Go/No-Go Assessment`,
     truncateSubtitle(goNoGo.overallVerdict || 'Investment Decision Framework', 95)
@@ -3829,7 +3835,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     valign: 'top'
   });
   // Go/No-Go verdict callout
-  const finalGoNoGo = synthesis.summary?.goNoGo || {};
+  const finalGoNoGo = summary.goNoGo || {};
   const finalVerdictType = finalGoNoGo.overallVerdict?.includes('GO') && !finalGoNoGo.overallVerdict?.includes('NO')
     ? 'positive' : (finalGoNoGo.overallVerdict?.includes('NO') ? 'negative' : 'warning');
   addCalloutBox(finalSlide, `VERDICT: ${finalGoNoGo.overallVerdict || 'CONDITIONAL'}`,
