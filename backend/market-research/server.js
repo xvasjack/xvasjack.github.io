@@ -3785,6 +3785,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   );
   // Key metrics recap
   const metricsRows = [tableHeader(['Metric', 'Value', 'Confidence'])];
+  const marketDynamics = market.marketDynamics || {};
   if (marketDynamics.marketSize) {
     metricsRows.push([{ text: 'Market Size' }, { text: truncate(marketDynamics.marketSize, 40) }, { text: `${synthesis.confidenceScore || '--'}/100` }]);
   }
@@ -4446,6 +4447,7 @@ app.listen(PORT, () => {
   console.log(`Market Research server running on port ${PORT}`);
   console.log('Environment check:');
   console.log('  - DEEPSEEK_API_KEY:', process.env.DEEPSEEK_API_KEY ? 'Set' : 'MISSING');
+  console.log('  - KIMI_API_KEY:', process.env.KIMI_API_KEY ? 'Set' : 'MISSING');
   console.log('  - PERPLEXITY_API_KEY:', process.env.PERPLEXITY_API_KEY ? 'Set' : 'MISSING');
   console.log('  - SENDGRID_API_KEY:', process.env.SENDGRID_API_KEY ? 'Set' : 'MISSING');
   console.log('  - SENDER_EMAIL:', process.env.SENDER_EMAIL || 'MISSING');
