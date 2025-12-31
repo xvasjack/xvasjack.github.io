@@ -21,6 +21,7 @@ process.on('uncaughtException', (error) => {
 
 // ============ EXPRESS SETUP ============
 const app = express();
+app.set('trust proxy', 1); // Trust Railway's reverse proxy for rate limiting
 app.use(securityHeaders);
 app.use(rateLimiter);
 app.use(cors());
