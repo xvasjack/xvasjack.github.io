@@ -3371,16 +3371,26 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       const businessType = company.business_type || 'industrial';
 
       if (businessType === 'project' && company.projects && company.projects.length > 0) {
-        // PROJECT-BASED: Show project images with names and metrics
+        // PROJECT-BASED: Show project images in 2x2 grid like LCP example
         const projects = company.projects.slice(0, 4);
-        const projectHeight = 1.2; // Height per project block
-        const projectStartY = 1.91;
+
+        // 2x2 grid layout
+        const gridStartX = 6.86;
+        const gridStartY = 1.91;
+        const colWidth = 3.0;  // Each column width
+        const rowHeight = 2.4; // Each row height
+        const imageW = 1.4;    // Image width
+        const imageH = 1.1;    // Image height
+        const textOffsetX = 1.5; // Text starts after image
+        const textWidth = 1.4;   // Text width
 
         for (let i = 0; i < projects.length; i++) {
           const project = projects[i];
-          const yPos = projectStartY + (i * projectHeight);
-          const imageX = 6.86;
-          const textX = 8.5;
+          const col = i % 2;  // 0 or 1
+          const row = Math.floor(i / 2);  // 0 or 1
+
+          const cellX = gridStartX + (col * colWidth);
+          const cellY = gridStartY + (row * rowHeight);
 
           // Try to fetch and add project image
           if (project.image_url) {
@@ -3389,8 +3399,8 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
               if (imgBase64) {
                 slide.addImage({
                   data: `data:image/jpeg;base64,${imgBase64}`,
-                  x: imageX, y: yPos, w: 1.5, h: 1.0,
-                  sizing: { type: 'cover', w: 1.5, h: 1.0 }
+                  x: cellX, y: cellY, w: imageW, h: imageH,
+                  sizing: { type: 'cover', w: imageW, h: imageH }
                 });
               }
             } catch (imgErr) {
@@ -3398,19 +3408,19 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
             }
           }
 
-          // Project name (bold)
+          // Project name (bold) - positioned to right of image
           slide.addText(project.name || '', {
-            x: textX, y: yPos, w: 4.4, h: 0.35,
-            fontSize: 12, fontFace: 'Segoe UI', bold: true,
+            x: cellX + textOffsetX, y: cellY, w: textWidth, h: 0.5,
+            fontSize: 11, fontFace: 'Segoe UI', bold: true,
             color: COLORS.black, valign: 'top'
           });
 
-          // Project metrics
+          // Project metrics - below name
           const metricsText = (project.metrics || []).join('\n');
           if (metricsText) {
             slide.addText(metricsText, {
-              x: textX, y: yPos + 0.35, w: 4.4, h: 0.65,
-              fontSize: 10, fontFace: 'Segoe UI',
+              x: cellX + textOffsetX, y: cellY + 0.5, w: textWidth, h: 0.8,
+              fontSize: 9, fontFace: 'Segoe UI',
               color: COLORS.black, valign: 'top'
             });
           }
@@ -3458,9 +3468,9 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           }))
           .filter(item => item.label && item.value && !isEmptyValue(item.label) && !isEmptyValue(item.value));
 
-        // Limit to 6 rows maximum
-        if (validBreakdownItems.length > 6) {
-          validBreakdownItems = validBreakdownItems.slice(0, 6);
+        // Limit to 8 rows maximum (to fit like Premink example with 9 product lines)
+        if (validBreakdownItems.length > 8) {
+          validBreakdownItems = validBreakdownItems.slice(0, 8);
         }
 
         // Truncate values to max 3 lines
@@ -4093,7 +4103,7 @@ CRITICAL RULES FOR INDUSTRIAL B2B TABLE:
 - Labels should be PRODUCT LINES or APPLICATION CATEGORIES (like "Flexographic Inks", "Screen Printing", "Paper & Board")
 - NOT generic labels like "Products", "Applications", "Industries Served", "Services"
 - Look at company's actual product naming/categorization
-- 4-6 rows required
+- 6-8 rows required (more rows = better coverage of product lines)
 - Each value describes what the product is FOR (applications)
 
 CRITICAL: For projects/products, extract ACTUAL image URLs from the website content!
