@@ -11,13 +11,17 @@
 function ensureString(value, defaultValue = '') {
   if (typeof value === 'string') return value;
   if (value === null || value === undefined) return defaultValue;
-  if (Array.isArray(value)) return value.map(v => ensureString(v)).join(', ');
+  if (Array.isArray(value)) return value.map((v) => ensureString(v)).join(', ');
   if (typeof value === 'object') {
     if (value.city && value.country) return `${value.city}, ${value.country}`;
     if (value.text) return ensureString(value.text);
     if (value.value) return ensureString(value.value);
     if (value.name) return ensureString(value.name);
-    try { return JSON.stringify(value); } catch { return defaultValue; }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return defaultValue;
+    }
   }
   return String(value);
 }
@@ -26,8 +30,12 @@ function ensureString(value, defaultValue = '') {
 
 function normalizeCompanyName(name) {
   if (!name) return '';
-  return name.toLowerCase()
-    .replace(/\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi, '')
+  return name
+    .toLowerCase()
+    .replace(
+      /\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi,
+      ''
+    )
     .replace(/^(pt\.?|cv\.?)\s+/gi, '')
     .replace(/[^\w\s]/g, '')
     .replace(/\s+/g, ' ')
@@ -36,46 +44,21 @@ function normalizeCompanyName(name) {
 
 function normalizeWebsite(url) {
   if (!url) return '';
-  return url.toLowerCase()
+  return url
+    .toLowerCase()
     .replace(/^https?:\/\//, '')
     .replace(/^www\./, '')
     .replace(/\/+$/, '')
-    .replace(/\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i, '')
+    .replace(
+      /\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i,
+      ''
+    )
     .replace(/\.(html?|php|aspx?|jsp)$/i, '');
 }
 
 function extractDomainRoot(url) {
   const normalized = normalizeWebsite(url);
   return normalized.split('/')[0];
-}
-
-// ============ DEDUPLICATION ============
-
-function dedupeCompanies(allCompanies) {
-  const seenWebsites = new Map();
-  const seenDomains = new Map();
-  const seenNames = new Map();
-  const results = [];
-
-  for (const c of allCompanies) {
-    if (!c || !c.website || !c.company_name) continue;
-    if (!c.website.startsWith('http')) continue;
-
-    const websiteKey = normalizeWebsite(c.website);
-    const domainKey = extractDomainRoot(c.website);
-    const nameKey = normalizeCompanyName(c.company_name);
-
-    if (seenWebsites.has(websiteKey)) continue;
-    if (seenDomains.has(domainKey)) continue;
-    if (nameKey && seenNames.has(nameKey)) continue;
-
-    seenWebsites.set(websiteKey, true);
-    seenDomains.set(domainKey, true);
-    if (nameKey) seenNames.set(nameKey, true);
-    results.push(c);
-  }
-
-  return results;
 }
 
 // ============ URL VALIDATION ============
@@ -89,7 +72,7 @@ function isSpamOrDirectoryURL(url) {
     'facebook.com',
     'twitter.com',
     'instagram.com',
-    'youtube.com'
+    'youtube.com',
   ];
 
   for (const pattern of obviousSpam) {
@@ -100,7 +83,7 @@ function isSpamOrDirectoryURL(url) {
 }
 
 function preFilterCompanies(companies) {
-  return companies.filter(c => {
+  return companies.filter((c) => {
     if (!c || !c.website) return false;
     if (isSpamOrDirectoryURL(c.website)) {
       return false;
@@ -116,13 +99,18 @@ function buildOutputFormat() {
 Be thorough - include all companies you find. We will verify them later.`;
 }
 
-function buildExclusionRules(exclusion, business) {
+function buildExclusionRules(exclusion, _business) {
   const exclusionLower = exclusion.toLowerCase();
   let rules = '';
 
-  if (exclusionLower.includes('large') || exclusionLower.includes('big') ||
-      exclusionLower.includes('mnc') || exclusionLower.includes('multinational') ||
-      exclusionLower.includes('major') || exclusionLower.includes('giant')) {
+  if (
+    exclusionLower.includes('large') ||
+    exclusionLower.includes('big') ||
+    exclusionLower.includes('mnc') ||
+    exclusionLower.includes('multinational') ||
+    exclusionLower.includes('major') ||
+    exclusionLower.includes('giant')
+  ) {
     rules += `
 LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
 - "global presence", "worldwide operations", "global leader", "world's largest"
@@ -197,10 +185,13 @@ function buildEmailHTML(companies, business, country, exclusion) {
 // ============ SEARCH STRATEGIES ============
 
 function strategy1_BroadSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
-  const terms = business.split(/\s+or\s+|\s+and\s+|,/).map(t => t.trim()).filter(t => t);
+  const terms = business
+    .split(/\s+or\s+|\s+and\s+|,/)
+    .map((t) => t.trim())
+    .filter((t) => t);
 
   for (const c of countries) {
     queries.push(
@@ -220,7 +211,7 @@ function strategy1_BroadSerpAPI(business, country, exclusion) {
 
 function strategy2_BroadPerplexity(business, country, exclusion) {
   const outputFormat = buildOutputFormat();
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   queries.push(
@@ -244,7 +235,7 @@ function strategy2_BroadPerplexity(business, country, exclusion) {
 }
 
 function strategy3_ListsSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   for (const c of countries) {
@@ -264,12 +255,35 @@ function strategy3_ListsSerpAPI(business, country, exclusion) {
 
 function strategy4_CitiesPerplexity(business, country, exclusion) {
   const CITY_MAP = {
-    'malaysia': ['Kuala Lumpur', 'Penang', 'Johor Bahru', 'Shah Alam', 'Petaling Jaya', 'Selangor', 'Ipoh', 'Klang', 'Subang', 'Melaka', 'Kuching', 'Kota Kinabalu'],
-    'singapore': ['Singapore', 'Jurong', 'Tuas', 'Woodlands'],
-    'thailand': ['Bangkok', 'Chonburi', 'Rayong', 'Samut Prakan', 'Ayutthaya', 'Chiang Mai', 'Pathum Thani', 'Nonthaburi', 'Samut Sakhon']
+    malaysia: [
+      'Kuala Lumpur',
+      'Penang',
+      'Johor Bahru',
+      'Shah Alam',
+      'Petaling Jaya',
+      'Selangor',
+      'Ipoh',
+      'Klang',
+      'Subang',
+      'Melaka',
+      'Kuching',
+      'Kota Kinabalu',
+    ],
+    singapore: ['Singapore', 'Jurong', 'Tuas', 'Woodlands'],
+    thailand: [
+      'Bangkok',
+      'Chonburi',
+      'Rayong',
+      'Samut Prakan',
+      'Ayutthaya',
+      'Chiang Mai',
+      'Pathum Thani',
+      'Nonthaburi',
+      'Samut Sakhon',
+    ],
   };
 
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const outputFormat = buildOutputFormat();
   const queries = [];
 
@@ -288,12 +302,12 @@ function strategy4_CitiesPerplexity(business, country, exclusion) {
 
 function strategy5_IndustrialSerpAPI(business, country, exclusion) {
   const LOCAL_SUFFIXES = {
-    'malaysia': ['Sdn Bhd', 'Berhad'],
-    'singapore': ['Pte Ltd', 'Private Limited'],
-    'thailand': ['Co Ltd', 'Co., Ltd.']
+    malaysia: ['Sdn Bhd', 'Berhad'],
+    singapore: ['Pte Ltd', 'Private Limited'],
+    thailand: ['Co Ltd', 'Co., Ltd.'],
   };
 
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   for (const c of countries) {
@@ -321,7 +335,7 @@ function strategy6_DirectoriesPerplexity(business, country, exclusion) {
     `Chamber of commerce ${business} members in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${country} ${business} industry association member list. No ${exclusion}. ${outputFormat}`,
     `${business} companies on Yellow Pages ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} business directory ${country}. Exclude ${exclusion}. ${outputFormat}`
+    `${business} business directory ${country}. Exclude ${exclusion}. ${outputFormat}`,
   ];
 }
 
@@ -331,7 +345,7 @@ function strategy7_ExhibitionsPerplexity(business, country, exclusion) {
     `${business} exhibitors at trade shows in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${business} companies at industry exhibitions in ${country} region. Not ${exclusion}. ${outputFormat}`,
     `${business} participants at expos and conferences in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} exhibitors at international fairs from ${country}. Not ${exclusion}. ${outputFormat}`
+    `${business} exhibitors at international fairs from ${country}. Not ${exclusion}. ${outputFormat}`,
   ];
 }
 
@@ -343,18 +357,18 @@ function strategy8_TradePerplexity(business, country, exclusion) {
     `${country} ${business} companies on Global Sources. Exclude ${exclusion}. ${outputFormat}`,
     `${business} OEM suppliers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${business} contract manufacturers in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} approved vendors in ${country}. Exclude ${exclusion}. ${outputFormat}`
+    `${business} approved vendors in ${country}. Exclude ${exclusion}. ${outputFormat}`,
   ];
 }
 
 function strategy9_DomainsPerplexity(business, country, exclusion) {
   const DOMAIN_MAP = {
-    'malaysia': '.my',
-    'singapore': '.sg',
-    'thailand': '.th'
+    malaysia: '.my',
+    singapore: '.sg',
+    thailand: '.th',
   };
 
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const outputFormat = buildOutputFormat();
   const queries = [];
 
@@ -376,7 +390,7 @@ function strategy9_DomainsPerplexity(business, country, exclusion) {
 }
 
 function strategy10_RegistriesSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   for (const c of countries) {
@@ -392,12 +406,12 @@ function strategy10_RegistriesSerpAPI(business, country, exclusion) {
 
 function strategy11_CityIndustrialSerpAPI(business, country, exclusion) {
   const CITY_MAP = {
-    'malaysia': ['Kuala Lumpur', 'Penang', 'Johor Bahru'],
-    'singapore': ['Singapore', 'Jurong'],
-    'thailand': ['Bangkok', 'Chonburi']
+    malaysia: ['Kuala Lumpur', 'Penang', 'Johor Bahru'],
+    singapore: ['Singapore', 'Jurong'],
+    thailand: ['Bangkok', 'Chonburi'],
   };
 
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   for (const c of countries) {
@@ -417,7 +431,7 @@ function strategy11_CityIndustrialSerpAPI(business, country, exclusion) {
 
 function strategy12_DeepOpenAISearch(business, country, exclusion) {
   const outputFormat = buildOutputFormat();
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   queries.push(
@@ -445,18 +459,18 @@ function strategy13_PublicationsPerplexity(business, country, exclusion) {
     `${business} companies mentioned in industry magazines and trade publications for ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${business} market report ${country} - list all companies mentioned. Not ${exclusion}. ${outputFormat}`,
     `${business} industry analysis ${country} - companies covered. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} ${country} magazine articles listing companies. Not ${exclusion}. ${outputFormat}`
+    `${business} ${country} magazine articles listing companies. Not ${exclusion}. ${outputFormat}`,
   ];
 }
 
 function strategy14_LocalLanguageOpenAISearch(business, country, exclusion) {
   const LOCAL_LANGUAGE_MAP = {
-    'thailand': { lang: 'Thai', examples: ['หมึก', 'สี', 'เคมี'] },
-    'vietnam': { lang: 'Vietnamese', examples: ['mực in', 'sơn', 'hóa chất'] },
-    'malaysia': { lang: 'Bahasa Malaysia', examples: ['dakwat', 'cat'] }
+    thailand: { lang: 'Thai', examples: ['หมึก', 'สี', 'เคมี'] },
+    vietnam: { lang: 'Vietnamese', examples: ['mực in', 'sơn', 'hóa chất'] },
+    malaysia: { lang: 'Bahasa Malaysia', examples: ['dakwat', 'cat'] },
   };
 
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const outputFormat = buildOutputFormat();
   const queries = [];
 
@@ -538,7 +552,12 @@ describe('ensureString', () => {
   });
 
   test('handles nested arrays', () => {
-    expect(ensureString([['a', 'b'], ['c', 'd']])).toBe('a, b, c, d');
+    expect(
+      ensureString([
+        ['a', 'b'],
+        ['c', 'd'],
+      ])
+    ).toBe('a, b, c, d');
   });
 });
 
@@ -547,7 +566,7 @@ describe('preFilterCompanies', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://company.com', hq: 'City, Country' },
       { company_name: 'XYZ', website: 'https://wikipedia.org/wiki/Company', hq: 'City, Country' },
-      { company_name: 'DEF', website: 'https://facebook.com/company', hq: 'City, Country' }
+      { company_name: 'DEF', website: 'https://facebook.com/company', hq: 'City, Country' },
     ];
     const result = preFilterCompanies(companies);
     expect(result).toHaveLength(1);
@@ -558,7 +577,7 @@ describe('preFilterCompanies', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://company.com', hq: 'City, Country' },
       { company_name: 'XYZ', website: null, hq: 'City, Country' },
-      { company_name: 'DEF', hq: 'City, Country' }
+      { company_name: 'DEF', hq: 'City, Country' },
     ];
     const result = preFilterCompanies(companies);
     expect(result).toHaveLength(1);
@@ -570,7 +589,7 @@ describe('preFilterCompanies', () => {
       { company_name: 'ABC', website: 'https://company.com', hq: 'City, Country' },
       null,
       undefined,
-      { company_name: 'XYZ', website: 'https://xyz.com', hq: 'City, Country' }
+      { company_name: 'XYZ', website: 'https://xyz.com', hq: 'City, Country' },
     ];
     const result = preFilterCompanies(companies);
     expect(result).toHaveLength(2);
@@ -580,7 +599,7 @@ describe('preFilterCompanies', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://abc.com', hq: 'KL, Malaysia' },
       { company_name: 'XYZ', website: 'https://xyz.co.th', hq: 'Bangkok, Thailand' },
-      { company_name: 'DEF', website: 'http://def.sg', hq: 'Singapore, Singapore' }
+      { company_name: 'DEF', website: 'http://def.sg', hq: 'Singapore, Singapore' },
     ];
     const result = preFilterCompanies(companies);
     expect(result).toHaveLength(3);
@@ -690,9 +709,7 @@ describe('buildExclusionRules', () => {
 
 describe('buildEmailHTML', () => {
   test('builds valid HTML structure', () => {
-    const companies = [
-      { company_name: 'ABC Co', website: 'https://abc.com', hq: 'KL, Malaysia' }
-    ];
+    const companies = [{ company_name: 'ABC Co', website: 'https://abc.com', hq: 'KL, Malaysia' }];
     const html = buildEmailHTML(companies, 'ink', 'Malaysia', 'large');
 
     expect(html).toContain('<h2>Find Target Results</h2>');
@@ -714,7 +731,7 @@ describe('buildEmailHTML', () => {
     const companies = [
       { company_name: 'A', website: 'https://a.com', hq: 'City, Country' },
       { company_name: 'B', website: 'https://b.com', hq: 'City, Country' },
-      { company_name: 'C', website: 'https://c.com', hq: 'City, Country' }
+      { company_name: 'C', website: 'https://c.com', hq: 'City, Country' },
     ];
     const html = buildEmailHTML(companies, 'ink', 'Malaysia', 'large');
 
@@ -734,7 +751,7 @@ describe('buildEmailHTML', () => {
   test('renders company data in table rows', () => {
     const companies = [
       { company_name: 'ABC Ink', website: 'https://abc-ink.com', hq: 'Bangkok, Thailand' },
-      { company_name: 'XYZ Paint', website: 'https://xyz.com', hq: 'Singapore, Singapore' }
+      { company_name: 'XYZ Paint', website: 'https://xyz.com', hq: 'Singapore, Singapore' },
     ];
     const html = buildEmailHTML(companies, 'ink', 'Thailand', 'large');
 
@@ -749,7 +766,7 @@ describe('buildEmailHTML', () => {
   test('numbers rows correctly', () => {
     const companies = [
       { company_name: 'A', website: 'https://a.com', hq: 'City, Country' },
-      { company_name: 'B', website: 'https://b.com', hq: 'City, Country' }
+      { company_name: 'B', website: 'https://b.com', hq: 'City, Country' },
     ];
     const html = buildEmailHTML(companies, 'ink', 'Malaysia', 'large');
 
@@ -759,7 +776,7 @@ describe('buildEmailHTML', () => {
 
   test('escapes HTML in company data', () => {
     const companies = [
-      { company_name: 'A&B <Script>', website: 'https://test.com', hq: 'City, Country' }
+      { company_name: 'A&B <Script>', website: 'https://test.com', hq: 'City, Country' },
     ];
     const html = buildEmailHTML(companies, 'ink', 'Malaysia', 'large');
 
@@ -770,9 +787,7 @@ describe('buildEmailHTML', () => {
   });
 
   test('creates clickable website links', () => {
-    const companies = [
-      { company_name: 'ABC', website: 'https://abc.com', hq: 'City, Country' }
-    ];
+    const companies = [{ company_name: 'ABC', website: 'https://abc.com', hq: 'City, Country' }];
     const html = buildEmailHTML(companies, 'ink', 'Malaysia', 'large');
 
     expect(html).toContain('<a href="https://abc.com">https://abc.com</a>');
@@ -800,30 +815,30 @@ describe('strategy1_BroadSerpAPI', () => {
   test('generates queries for multiple countries', () => {
     const queries = strategy1_BroadSerpAPI('ink', 'Malaysia, Thailand', 'large');
 
-    expect(queries.some(q => q.includes('Malaysia'))).toBe(true);
-    expect(queries.some(q => q.includes('Thailand'))).toBe(true);
+    expect(queries.some((q) => q.includes('Malaysia'))).toBe(true);
+    expect(queries.some((q) => q.includes('Thailand'))).toBe(true);
   });
 
   test('splits business terms with "or"', () => {
     const queries = strategy1_BroadSerpAPI('ink or paint', 'Malaysia', 'large');
 
-    expect(queries.some(q => q === 'ink Malaysia')).toBe(true);
-    expect(queries.some(q => q === 'paint Malaysia')).toBe(true);
+    expect(queries.some((q) => q === 'ink Malaysia')).toBe(true);
+    expect(queries.some((q) => q === 'paint Malaysia')).toBe(true);
   });
 
   test('splits business terms with "and"', () => {
     const queries = strategy1_BroadSerpAPI('ink and chemicals', 'Malaysia', 'large');
 
-    expect(queries.some(q => q === 'ink Malaysia')).toBe(true);
-    expect(queries.some(q => q === 'chemicals Malaysia')).toBe(true);
+    expect(queries.some((q) => q === 'ink Malaysia')).toBe(true);
+    expect(queries.some((q) => q === 'chemicals Malaysia')).toBe(true);
   });
 
   test('handles comma-separated business terms', () => {
     const queries = strategy1_BroadSerpAPI('ink, paint, coatings', 'Malaysia', 'large');
 
-    expect(queries.some(q => q === 'ink Malaysia')).toBe(true);
-    expect(queries.some(q => q === 'paint Malaysia')).toBe(true);
-    expect(queries.some(q => q === 'coatings Malaysia')).toBe(true);
+    expect(queries.some((q) => q === 'ink Malaysia')).toBe(true);
+    expect(queries.some((q) => q === 'paint Malaysia')).toBe(true);
+    expect(queries.some((q) => q === 'coatings Malaysia')).toBe(true);
   });
 
   test('returns non-empty array', () => {
@@ -836,15 +851,15 @@ describe('strategy2_BroadPerplexity', () => {
   test('generates comprehensive search queries', () => {
     const queries = strategy2_BroadPerplexity('ink', 'Malaysia', 'large');
 
-    expect(queries.some(q => q.includes('Find ALL'))).toBe(true);
-    expect(queries.some(q => q.includes('Complete list'))).toBe(true);
-    expect(queries.some(q => q.includes('SME and family-owned'))).toBe(true);
+    expect(queries.some((q) => q.includes('Find ALL'))).toBe(true);
+    expect(queries.some((q) => q.includes('Complete list'))).toBe(true);
+    expect(queries.some((q) => q.includes('SME and family-owned'))).toBe(true);
   });
 
   test('includes output format in queries', () => {
     const queries = strategy2_BroadPerplexity('ink', 'Malaysia', 'large');
 
-    queries.forEach(q => {
+    queries.forEach((q) => {
       expect(q).toContain('company_name');
     });
   });
@@ -852,14 +867,14 @@ describe('strategy2_BroadPerplexity', () => {
   test('includes exclusion in queries', () => {
     const queries = strategy2_BroadPerplexity('ink', 'Malaysia', 'large companies');
 
-    expect(queries.some(q => q.includes('Exclude large companies'))).toBe(true);
+    expect(queries.some((q) => q.includes('Exclude large companies'))).toBe(true);
   });
 
   test('generates per-country queries', () => {
     const queries = strategy2_BroadPerplexity('ink', 'Malaysia, Thailand', 'large');
 
-    expect(queries.some(q => q.includes('List all ink companies based in Malaysia'))).toBe(true);
-    expect(queries.some(q => q.includes('List all ink companies based in Thailand'))).toBe(true);
+    expect(queries.some((q) => q.includes('List all ink companies based in Malaysia'))).toBe(true);
+    expect(queries.some((q) => q.includes('List all ink companies based in Thailand'))).toBe(true);
   });
 });
 
@@ -883,8 +898,8 @@ describe('strategy3_ListsSerpAPI', () => {
   test('handles multiple countries', () => {
     const queries = strategy3_ListsSerpAPI('ink', 'Malaysia, Singapore', 'large');
 
-    expect(queries.some(q => q.includes('Malaysia'))).toBe(true);
-    expect(queries.some(q => q.includes('Singapore'))).toBe(true);
+    expect(queries.some((q) => q.includes('Malaysia'))).toBe(true);
+    expect(queries.some((q) => q.includes('Singapore'))).toBe(true);
   });
 });
 
@@ -892,21 +907,21 @@ describe('strategy4_CitiesPerplexity', () => {
   test('generates city-specific queries', () => {
     const queries = strategy4_CitiesPerplexity('ink', 'Malaysia', 'large');
 
-    expect(queries.some(q => q.includes('Kuala Lumpur'))).toBe(true);
-    expect(queries.some(q => q.includes('Penang'))).toBe(true);
-    expect(queries.some(q => q.includes('Johor Bahru'))).toBe(true);
+    expect(queries.some((q) => q.includes('Kuala Lumpur'))).toBe(true);
+    expect(queries.some((q) => q.includes('Penang'))).toBe(true);
+    expect(queries.some((q) => q.includes('Johor Bahru'))).toBe(true);
   });
 
   test('includes manufacturers near city queries', () => {
     const queries = strategy4_CitiesPerplexity('ink', 'Thailand', 'large');
 
-    expect(queries.some(q => q.includes('manufacturers near'))).toBe(true);
+    expect(queries.some((q) => q.includes('manufacturers near'))).toBe(true);
   });
 
   test('includes output format', () => {
     const queries = strategy4_CitiesPerplexity('ink', 'Malaysia', 'large');
 
-    queries.forEach(q => {
+    queries.forEach((q) => {
       expect(q).toContain('company_name');
     });
   });
@@ -916,23 +931,23 @@ describe('strategy5_IndustrialSerpAPI', () => {
   test('generates queries with local suffixes', () => {
     const queries = strategy5_IndustrialSerpAPI('ink', 'Malaysia', 'large');
 
-    expect(queries.some(q => q.includes('Sdn Bhd'))).toBe(true);
-    expect(queries.some(q => q.includes('Berhad'))).toBe(true);
+    expect(queries.some((q) => q.includes('Sdn Bhd'))).toBe(true);
+    expect(queries.some((q) => q.includes('Berhad'))).toBe(true);
   });
 
   test('generates industrial zone queries', () => {
     const queries = strategy5_IndustrialSerpAPI('ink', 'Thailand', 'large');
 
-    expect(queries.some(q => q.includes('industrial estate'))).toBe(true);
-    expect(queries.some(q => q.includes('manufacturing zone'))).toBe(true);
-    expect(queries.some(q => q.includes('factory'))).toBe(true);
+    expect(queries.some((q) => q.includes('industrial estate'))).toBe(true);
+    expect(queries.some((q) => q.includes('manufacturing zone'))).toBe(true);
+    expect(queries.some((q) => q.includes('factory'))).toBe(true);
   });
 
   test('uses correct suffixes for Singapore', () => {
     const queries = strategy5_IndustrialSerpAPI('ink', 'Singapore', 'large');
 
-    expect(queries.some(q => q.includes('Pte Ltd'))).toBe(true);
-    expect(queries.some(q => q.includes('Private Limited'))).toBe(true);
+    expect(queries.some((q) => q.includes('Pte Ltd'))).toBe(true);
+    expect(queries.some((q) => q.includes('Private Limited'))).toBe(true);
   });
 });
 
@@ -940,10 +955,10 @@ describe('strategy6_DirectoriesPerplexity', () => {
   test('generates directory and association queries', () => {
     const queries = strategy6_DirectoriesPerplexity('ink', 'Malaysia', 'large');
 
-    expect(queries.some(q => q.includes('trade associations'))).toBe(true);
-    expect(queries.some(q => q.includes('Kompass directory'))).toBe(true);
-    expect(queries.some(q => q.includes('Chamber of commerce'))).toBe(true);
-    expect(queries.some(q => q.includes('Yellow Pages'))).toBe(true);
+    expect(queries.some((q) => q.includes('trade associations'))).toBe(true);
+    expect(queries.some((q) => q.includes('Kompass directory'))).toBe(true);
+    expect(queries.some((q) => q.includes('Chamber of commerce'))).toBe(true);
+    expect(queries.some((q) => q.includes('Yellow Pages'))).toBe(true);
   });
 
   test('returns fixed number of queries', () => {
@@ -956,10 +971,10 @@ describe('strategy7_ExhibitionsPerplexity', () => {
   test('generates trade show and exhibition queries', () => {
     const queries = strategy7_ExhibitionsPerplexity('ink', 'Malaysia', 'large');
 
-    expect(queries.some(q => q.includes('exhibitors at trade shows'))).toBe(true);
-    expect(queries.some(q => q.includes('industry exhibitions'))).toBe(true);
-    expect(queries.some(q => q.includes('expos and conferences'))).toBe(true);
-    expect(queries.some(q => q.includes('international fairs'))).toBe(true);
+    expect(queries.some((q) => q.includes('exhibitors at trade shows'))).toBe(true);
+    expect(queries.some((q) => q.includes('industry exhibitions'))).toBe(true);
+    expect(queries.some((q) => q.includes('expos and conferences'))).toBe(true);
+    expect(queries.some((q) => q.includes('international fairs'))).toBe(true);
   });
 
   test('returns fixed number of queries', () => {
@@ -972,11 +987,11 @@ describe('strategy8_TradePerplexity', () => {
   test('generates import/export and supplier queries', () => {
     const queries = strategy8_TradePerplexity('ink', 'Malaysia', 'large');
 
-    expect(queries.some(q => q.includes('importers and exporters'))).toBe(true);
-    expect(queries.some(q => q.includes('Alibaba'))).toBe(true);
-    expect(queries.some(q => q.includes('Global Sources'))).toBe(true);
-    expect(queries.some(q => q.includes('OEM suppliers'))).toBe(true);
-    expect(queries.some(q => q.includes('contract manufacturers'))).toBe(true);
+    expect(queries.some((q) => q.includes('importers and exporters'))).toBe(true);
+    expect(queries.some((q) => q.includes('Alibaba'))).toBe(true);
+    expect(queries.some((q) => q.includes('Global Sources'))).toBe(true);
+    expect(queries.some((q) => q.includes('OEM suppliers'))).toBe(true);
+    expect(queries.some((q) => q.includes('contract manufacturers'))).toBe(true);
   });
 
   test('returns fixed number of queries', () => {
@@ -989,20 +1004,26 @@ describe('strategy9_DomainsPerplexity', () => {
   test('generates domain-specific queries', () => {
     const queries = strategy9_DomainsPerplexity('ink', 'Malaysia', 'large');
 
-    expect(queries.some(q => q.includes('.my websites'))).toBe(true);
+    expect(queries.some((q) => q.includes('.my websites'))).toBe(true);
   });
 
   test('generates news and press release queries', () => {
     const queries = strategy9_DomainsPerplexity('ink', 'Thailand', 'large');
 
-    expect(queries.some(q => q.includes('Recent news'))).toBe(true);
-    expect(queries.some(q => q.includes('announcements and press releases'))).toBe(true);
+    expect(queries.some((q) => q.includes('Recent news'))).toBe(true);
+    expect(queries.some((q) => q.includes('announcements and press releases'))).toBe(true);
   });
 
   test('uses correct domain for each country', () => {
-    expect(strategy9_DomainsPerplexity('ink', 'Malaysia', 'large').some(q => q.includes('.my'))).toBe(true);
-    expect(strategy9_DomainsPerplexity('ink', 'Singapore', 'large').some(q => q.includes('.sg'))).toBe(true);
-    expect(strategy9_DomainsPerplexity('ink', 'Thailand', 'large').some(q => q.includes('.th'))).toBe(true);
+    expect(
+      strategy9_DomainsPerplexity('ink', 'Malaysia', 'large').some((q) => q.includes('.my'))
+    ).toBe(true);
+    expect(
+      strategy9_DomainsPerplexity('ink', 'Singapore', 'large').some((q) => q.includes('.sg'))
+    ).toBe(true);
+    expect(
+      strategy9_DomainsPerplexity('ink', 'Thailand', 'large').some((q) => q.includes('.th'))
+    ).toBe(true);
   });
 });
 
@@ -1010,16 +1031,16 @@ describe('strategy10_RegistriesSerpAPI', () => {
   test('generates government registry queries', () => {
     const queries = strategy10_RegistriesSerpAPI('ink', 'Malaysia', 'large');
 
-    expect(queries.some(q => q.includes('company registration'))).toBe(true);
-    expect(queries.some(q => q.includes('registered companies'))).toBe(true);
-    expect(queries.some(q => q.includes('business registry'))).toBe(true);
+    expect(queries.some((q) => q.includes('company registration'))).toBe(true);
+    expect(queries.some((q) => q.includes('registered companies'))).toBe(true);
+    expect(queries.some((q) => q.includes('business registry'))).toBe(true);
   });
 
   test('handles multiple countries', () => {
     const queries = strategy10_RegistriesSerpAPI('ink', 'Malaysia, Thailand', 'large');
 
-    expect(queries.some(q => q.includes('Malaysia'))).toBe(true);
-    expect(queries.some(q => q.includes('Thailand'))).toBe(true);
+    expect(queries.some((q) => q.includes('Malaysia'))).toBe(true);
+    expect(queries.some((q) => q.includes('Thailand'))).toBe(true);
   });
 });
 
@@ -1027,17 +1048,17 @@ describe('strategy11_CityIndustrialSerpAPI', () => {
   test('generates city-based industrial queries', () => {
     const queries = strategy11_CityIndustrialSerpAPI('ink', 'Malaysia', 'large');
 
-    expect(queries.some(q => q.includes('Kuala Lumpur'))).toBe(true);
-    expect(queries.some(q => q.includes('companies'))).toBe(true);
-    expect(queries.some(q => q.includes('factory'))).toBe(true);
-    expect(queries.some(q => q.includes('manufacturer'))).toBe(true);
+    expect(queries.some((q) => q.includes('Kuala Lumpur'))).toBe(true);
+    expect(queries.some((q) => q.includes('companies'))).toBe(true);
+    expect(queries.some((q) => q.includes('factory'))).toBe(true);
+    expect(queries.some((q) => q.includes('manufacturer'))).toBe(true);
   });
 
   test('covers multiple cities', () => {
     const queries = strategy11_CityIndustrialSerpAPI('ink', 'Thailand', 'large');
 
-    expect(queries.some(q => q.includes('Bangkok'))).toBe(true);
-    expect(queries.some(q => q.includes('Chonburi'))).toBe(true);
+    expect(queries.some((q) => q.includes('Bangkok'))).toBe(true);
+    expect(queries.some((q) => q.includes('Chonburi'))).toBe(true);
   });
 });
 
@@ -1045,24 +1066,24 @@ describe('strategy12_DeepOpenAISearch', () => {
   test('generates deep web search queries', () => {
     const queries = strategy12_DeepOpenAISearch('ink', 'Malaysia', 'large');
 
-    expect(queries.some(q => q.includes('Search the web'))).toBe(true);
-    expect(queries.some(q => q.includes('lesser-known'))).toBe(true);
-    expect(queries.some(q => q.includes('SMEs'))).toBe(true);
-    expect(queries.some(q => q.includes('independent local'))).toBe(true);
+    expect(queries.some((q) => q.includes('Search the web'))).toBe(true);
+    expect(queries.some((q) => q.includes('lesser-known'))).toBe(true);
+    expect(queries.some((q) => q.includes('SMEs'))).toBe(true);
+    expect(queries.some((q) => q.includes('independent local'))).toBe(true);
   });
 
   test('includes startups and news queries', () => {
     const queries = strategy12_DeepOpenAISearch('ink', 'Thailand', 'large');
 
-    expect(queries.some(q => q.includes('startups'))).toBe(true);
-    expect(queries.some(q => q.includes('industry news'))).toBe(true);
+    expect(queries.some((q) => q.includes('startups'))).toBe(true);
+    expect(queries.some((q) => q.includes('industry news'))).toBe(true);
   });
 
   test('generates per-country detailed queries', () => {
     const queries = strategy12_DeepOpenAISearch('ink', 'Malaysia, Thailand', 'large');
 
-    expect(queries.some(q => q.includes('manufacturers in Malaysia'))).toBe(true);
-    expect(queries.some(q => q.includes('manufacturers in Thailand'))).toBe(true);
+    expect(queries.some((q) => q.includes('manufacturers in Malaysia'))).toBe(true);
+    expect(queries.some((q) => q.includes('manufacturers in Thailand'))).toBe(true);
   });
 });
 
@@ -1070,10 +1091,10 @@ describe('strategy13_PublicationsPerplexity', () => {
   test('generates industry publication queries', () => {
     const queries = strategy13_PublicationsPerplexity('ink', 'Malaysia', 'large');
 
-    expect(queries.some(q => q.includes('industry magazines'))).toBe(true);
-    expect(queries.some(q => q.includes('market report'))).toBe(true);
-    expect(queries.some(q => q.includes('industry analysis'))).toBe(true);
-    expect(queries.some(q => q.includes('magazine articles'))).toBe(true);
+    expect(queries.some((q) => q.includes('industry magazines'))).toBe(true);
+    expect(queries.some((q) => q.includes('market report'))).toBe(true);
+    expect(queries.some((q) => q.includes('industry analysis'))).toBe(true);
+    expect(queries.some((q) => q.includes('magazine articles'))).toBe(true);
   });
 
   test('returns fixed number of queries', () => {
@@ -1086,30 +1107,30 @@ describe('strategy14_LocalLanguageOpenAISearch', () => {
   test('generates local language search queries', () => {
     const queries = strategy14_LocalLanguageOpenAISearch('ink', 'Thailand', 'large');
 
-    expect(queries.some(q => q.includes('local language terms'))).toBe(true);
-    expect(queries.some(q => q.includes('Thai'))).toBe(true);
+    expect(queries.some((q) => q.includes('local language terms'))).toBe(true);
+    expect(queries.some((q) => q.includes('Thai'))).toBe(true);
   });
 
   test('generates supply chain queries', () => {
     const queries = strategy14_LocalLanguageOpenAISearch('ink', 'Malaysia', 'large');
 
-    expect(queries.some(q => q.includes('supply chain'))).toBe(true);
-    expect(queries.some(q => q.includes('formulators, blenders'))).toBe(true);
-    expect(queries.some(q => q.includes('niche and specialty'))).toBe(true);
+    expect(queries.some((q) => q.includes('supply chain'))).toBe(true);
+    expect(queries.some((q) => q.includes('formulators, blenders'))).toBe(true);
+    expect(queries.some((q) => q.includes('niche and specialty'))).toBe(true);
   });
 
   test('includes comprehensive final sweep', () => {
     const queries = strategy14_LocalLanguageOpenAISearch('ink', 'Malaysia', 'large');
 
-    expect(queries.some(q => q.includes('Comprehensive search'))).toBe(true);
-    expect(queries.some(q => q.includes('obscure directories'))).toBe(true);
+    expect(queries.some((q) => q.includes('Comprehensive search'))).toBe(true);
+    expect(queries.some((q) => q.includes('obscure directories'))).toBe(true);
   });
 
   test('uses language info for specific countries', () => {
     const thailandQueries = strategy14_LocalLanguageOpenAISearch('ink', 'Thailand', 'large');
-    expect(thailandQueries.some(q => q.includes('Thai'))).toBe(true);
+    expect(thailandQueries.some((q) => q.includes('Thai'))).toBe(true);
 
     const vietnamQueries = strategy14_LocalLanguageOpenAISearch('ink', 'Vietnam', 'large');
-    expect(vietnamQueries.some(q => q.includes('Vietnamese'))).toBe(true);
+    expect(vietnamQueries.some((q) => q.includes('Vietnamese'))).toBe(true);
   });
 });
