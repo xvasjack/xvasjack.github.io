@@ -3367,74 +3367,154 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         margin: [0, 0.04, 0, 0.04]
       });
 
-      // ===== RIGHT SECTION (ALWAYS use table format, max 6 rows) =====
-      // Filter valid breakdown items (non-empty) and ensure string types
-      let validBreakdownItems = (company.breakdown_items || [])
-        .map(item => ({
-          label: ensureString(item?.label),
-          value: ensureString(item?.value)
-        }))
-        .filter(item => item.label && item.value && !isEmptyValue(item.label) && !isEmptyValue(item.value));
+      // ===== RIGHT SECTION (varies by business type) =====
+      const businessType = company.business_type || 'industrial';
 
-      // Limit to 6 rows maximum
-      if (validBreakdownItems.length > 6) {
-        validBreakdownItems = validBreakdownItems.slice(0, 6);
-      }
+      if (businessType === 'project' && company.projects && company.projects.length > 0) {
+        // PROJECT-BASED: Show project images with names and metrics
+        const projects = company.projects.slice(0, 4);
+        const projectHeight = 1.2; // Height per project block
+        const projectStartY = 1.91;
 
-      // Truncate values to max 3 lines
-      validBreakdownItems = validBreakdownItems.map(item => {
-        let value = item.value;
-        const lines = value.split('\n');
-        if (lines.length > 3) {
-          value = lines.slice(0, 3).join('\n');
-        }
-        return { label: item.label, value };
-      });
+        for (let i = 0; i < projects.length; i++) {
+          const project = projects[i];
+          const yPos = projectStartY + (i * projectHeight);
+          const imageX = 6.86;
+          const textX = 8.5;
 
-      // ALWAYS use table format (minimum 1 item)
-      if (validBreakdownItems.length >= 1) {
-        const rightTableData = validBreakdownItems.map(item => [String(item.label || ''), String(item.value || '')]);
-
-        const rightRows = rightTableData.map((row) => [
-          {
-            text: String(row[0] || ''),
-            options: {
-              fill: { color: COLORS.accent3 },
-              color: COLORS.white,
-              align: 'center',
-              bold: false
-            }
-          },
-          {
-            text: String(row[1] || ''),
-            options: {
-              fill: { color: COLORS.white },
-              color: COLORS.black,
-              align: 'left',
-              border: [
-                { pt: 1, color: COLORS.gray, type: 'dash' },
-                { pt: 0 },
-                { pt: 1, color: COLORS.gray, type: 'dash' },
-                { pt: 0 }
-              ]
+          // Try to fetch and add project image
+          if (project.image_url) {
+            try {
+              const imgBase64 = await fetchImageAsBase64(project.image_url);
+              if (imgBase64) {
+                slide.addImage({
+                  data: `data:image/jpeg;base64,${imgBase64}`,
+                  x: imageX, y: yPos, w: 1.5, h: 1.0,
+                  sizing: { type: 'cover', w: 1.5, h: 1.0 }
+                });
+              }
+            } catch (imgErr) {
+              console.log(`  Failed to fetch project image: ${project.image_url}`);
             }
           }
-        ]);
 
-        // Position at 6.86" horizontally and 1.91" vertically
-        slide.addTable(rightRows, {
-          x: 6.86, y: 1.91,
-          w: 6.1,
-          colW: [1.4, 4.7],
-          rowH: rowHeight,
-          fontFace: 'Segoe UI',
-          fontSize: 14,
-          valign: 'middle',
-          border: { pt: 2.5, color: COLORS.white },
-          margin: [0, 0.04, 0, 0.04]
+          // Project name (bold)
+          slide.addText(project.name || '', {
+            x: textX, y: yPos, w: 4.4, h: 0.35,
+            fontSize: 12, fontFace: 'Segoe UI', bold: true,
+            color: COLORS.black, valign: 'top'
+          });
+
+          // Project metrics
+          const metricsText = (project.metrics || []).join('\n');
+          if (metricsText) {
+            slide.addText(metricsText, {
+              x: textX, y: yPos + 0.35, w: 4.4, h: 0.65,
+              fontSize: 10, fontFace: 'Segoe UI',
+              color: COLORS.black, valign: 'top'
+            });
+          }
+        }
+      } else if (businessType === 'consumer' && company.products && company.products.length > 0) {
+        // CONSUMER-FACING: Show product images with labels
+        const products = company.products.slice(0, 4);
+        const productWidth = 1.4;
+        const productStartX = 6.86;
+        const productY = 1.91;
+
+        for (let i = 0; i < products.length; i++) {
+          const product = products[i];
+          const xPos = productStartX + (i * (productWidth + 0.15));
+
+          // Try to fetch and add product image
+          if (product.image_url) {
+            try {
+              const imgBase64 = await fetchImageAsBase64(product.image_url);
+              if (imgBase64) {
+                slide.addImage({
+                  data: `data:image/jpeg;base64,${imgBase64}`,
+                  x: xPos, y: productY, w: productWidth, h: 1.2,
+                  sizing: { type: 'contain', w: productWidth, h: 1.2 }
+                });
+              }
+            } catch (imgErr) {
+              console.log(`  Failed to fetch product image: ${product.image_url}`);
+            }
+          }
+
+          // Product name
+          slide.addText(product.name || '', {
+            x: xPos, y: productY + 1.25, w: productWidth, h: 0.35,
+            fontSize: 10, fontFace: 'Segoe UI', bold: true,
+            color: COLORS.black, align: 'center', valign: 'top'
+          });
+        }
+      } else {
+        // INDUSTRIAL B2B: Show table format
+        let validBreakdownItems = (company.breakdown_items || [])
+          .map(item => ({
+            label: ensureString(item?.label),
+            value: ensureString(item?.value)
+          }))
+          .filter(item => item.label && item.value && !isEmptyValue(item.label) && !isEmptyValue(item.value));
+
+        // Limit to 6 rows maximum
+        if (validBreakdownItems.length > 6) {
+          validBreakdownItems = validBreakdownItems.slice(0, 6);
+        }
+
+        // Truncate values to max 3 lines
+        validBreakdownItems = validBreakdownItems.map(item => {
+          let value = item.value;
+          const lines = value.split('\n');
+          if (lines.length > 3) {
+            value = lines.slice(0, 3).join('\n');
+          }
+          return { label: item.label, value };
         });
+
+        if (validBreakdownItems.length >= 1) {
+          const rightTableData = validBreakdownItems.map(item => [String(item.label || ''), String(item.value || '')]);
+
+          const rightRows = rightTableData.map((row) => [
+            {
+              text: String(row[0] || ''),
+              options: {
+                fill: { color: COLORS.accent3 },
+                color: COLORS.white,
+                align: 'center',
+                bold: false
+              }
+            },
+            {
+              text: String(row[1] || ''),
+              options: {
+                fill: { color: COLORS.white },
+                color: COLORS.black,
+                align: 'left',
+                border: [
+                  { pt: 1, color: COLORS.gray, type: 'dash' },
+                  { pt: 0 },
+                  { pt: 1, color: COLORS.gray, type: 'dash' },
+                  { pt: 0 }
+                ]
+              }
+            }
+          ]);
+
+          slide.addTable(rightRows, {
+            x: 6.86, y: 1.91,
+            w: 6.1,
+            colW: [1.4, 4.7],
+            rowH: rowHeight,
+            fontFace: 'Segoe UI',
+            fontSize: 14,
+            valign: 'middle',
+            border: { pt: 2.5, color: COLORS.white },
+            margin: [0, 0.04, 0, 0.04]
+          });
+        }
       }
-      // If no valid items, right section will be empty (header still shows)
 
       // ===== FOOTNOTE (single text box with stacked content) =====
       const footnoteLines = [];
@@ -3949,65 +4029,77 @@ async function extractProductsBreakdown(scrapedContent, previousData) {
       messages: [
         {
           role: 'system',
-          content: `You are an M&A analyst creating a RICH, COMPREHENSIVE right-side table for a company profile slide.
+          content: `You are an M&A analyst creating the RIGHT-SIDE content for a company profile slide.
 
-YOUR GOAL: Create a FULL table with 4-6 rows of KEY BUSINESS INFORMATION. The table should look complete, not sparse.
+FIRST: Determine the BUSINESS TYPE:
+1. PROJECT-BASED: Construction, building materials, engineering, architecture, contractors
+   - These companies showcase PROJECTS with photos on their website
+   - Look for: "Projects", "Portfolio", "Case Studies", "Our Work", project galleries
 
-EXTRACT ALL OF THESE (pick the most relevant 4-6 for this company):
+2. CONSUMER-FACING: Consumer products, retail, F&B, cosmetics, fashion
+   - These companies showcase PRODUCTS with photos
+   - Look for: Product catalogs, product images, consumer goods
 
-1. PRODUCTS/SERVICES (segment by type/application):
-   - Product categories with specific examples
-   - Service types offered
+3. INDUSTRIAL B2B: Manufacturing, chemicals, inks, coatings, industrial supplies
+   - These companies have product lines for different applications/industries
+   - Focus on: Product categories by APPLICATION or INDUSTRY
 
-2. CUSTOMERS/CLIENTS (CRITICAL - look for logos!):
-   - Look for: "Clients", "Customers", "Our Clients", "Trusted by", logo sections
-   - Extract company names from LOGOS if visible
-   - Segment by industry: Packaging, F&B, Industrial, Automotive, etc.
+OUTPUT FORMAT based on business type:
 
-3. PRINCIPAL BRANDS/SUPPLIERS (CRITICAL for distributors):
-   - Look for: "Our Brands", "Principals", "Partners", "We Represent"
-   - For each principal, include their HQ country in brackets: "3M (USA), Fluke (USA)"
-   - This is CRITICAL for distributor companies
-
-4. INDUSTRIES SERVED:
-   - List industries: Printing, Packaging, Footwear, Automotive, Electronics, etc.
-
-5. APPLICATIONS:
-   - What applications/uses for their products
-
-6. PROJECT TYPES (for service companies):
-   - Types of projects they handle
-
-CHOOSE THE RIGHT TITLE based on content:
-- "Products and Applications" - for manufacturers with products
-- "Customers" - when many clients/client logos found
-- "Principal Brands" - for distributors with brand logos
-- "Services" - for service companies
-- "Industries Served" - when industry focus is key
-
-OUTPUT JSON (MUST have 4-6 items):
+FOR PROJECT-BASED (construction, building, engineering):
 {
-  "breakdown_title": "Principal Brands",
-  "breakdown_items": [
-    {"label": "Printing Inks", "value": "Sun Chemical (USA), Flint Group (Luxembourg)"},
-    {"label": "Coatings", "value": "PPG (USA), AkzoNobel (Netherlands)"},
-    {"label": "Adhesives", "value": "Henkel (Germany), 3M (USA)"},
-    {"label": "Packaging", "value": "Sealed Air (USA), Berry Global (USA)"},
-    {"label": "Equipment", "value": "Heidelberg (Germany), Komori (Japan)"},
-    {"label": "Testing", "value": "X-Rite (USA), Techkon (Germany)"}
+  "business_type": "project",
+  "breakdown_title": "Past Projects",
+  "projects": [
+    {
+      "name": "Metrojet Hangar at Clark Philippines",
+      "image_url": "https://example.com/project1.jpg",
+      "metrics": ["Area: 7,400m²", "Material: Pre-painted Steel"]
+    },
+    {
+      "name": "Al Rayyan Stadium Qatar",
+      "image_url": "https://example.com/project2.jpg",
+      "metrics": ["Area: 26,400m²", "Material: Aluminium PVDF"]
+    }
   ]
 }
 
-RULES:
-- MUST produce 4-6 rows (not less!)
-- Each value should be 1-3 lines MAX (don't overflow)
-- For principals/suppliers: ALWAYS include HQ country in brackets
-- Extract company names from LOGOS - this is critical
-- Labels should be short (1-3 words)
-- Values: comma-separated for 2-3 items, bullet points for 4+ items
-- TRANSLATE all non-English to English
-- Remove company suffixes (Ltd, Pte Ltd, etc.)
-- Return ONLY valid JSON`
+FOR CONSUMER-FACING (consumer products):
+{
+  "business_type": "consumer",
+  "breakdown_title": "Product Range",
+  "products": [
+    {
+      "name": "Premium Ink Series",
+      "image_url": "https://example.com/product1.jpg",
+      "description": "High-quality printing inks"
+    }
+  ]
+}
+
+FOR INDUSTRIAL B2B (manufacturing, chemicals):
+{
+  "business_type": "industrial",
+  "breakdown_title": "Products and Applications",
+  "breakdown_items": [
+    {"label": "Flexographic Inks", "value": "Water-based inks for paper packaging, corrugated boxes"},
+    {"label": "Screen Printing", "value": "Inks for plastics, glass, metal substrates"},
+    {"label": "Paper & Board", "value": "High gloss, matt inks for paper and cardboard"},
+    {"label": "Specialty Coatings", "value": "Overprint varnishes, protective coatings"}
+  ]
+}
+
+CRITICAL RULES FOR INDUSTRIAL B2B TABLE:
+- Labels should be PRODUCT LINES or APPLICATION CATEGORIES (like "Flexographic Inks", "Screen Printing", "Paper & Board")
+- NOT generic labels like "Products", "Applications", "Industries Served", "Services"
+- Look at company's actual product naming/categorization
+- 4-6 rows required
+- Each value describes what the product is FOR (applications)
+
+CRITICAL: For projects/products, extract ACTUAL image URLs from the website content!
+Look for: <img src="...">, background-image: url(...), data-src="...", srcset="..."
+
+Return ONLY valid JSON.`
         },
         {
           role: 'user',
@@ -4024,23 +4116,45 @@ ${scrapedContent.substring(0, 18000)}`
 
     const result = JSON.parse(response.choices[0].message.content);
 
-    // Validate and sanitize breakdown_items
-    if (result.breakdown_items && Array.isArray(result.breakdown_items)) {
-      result.breakdown_items = result.breakdown_items
-        .filter(item => item && typeof item === 'object')
-        .map(item => ({
-          label: String(item.label || ''),
-          value: String(item.value || '')
+    // Validate based on business type
+    if (result.business_type === 'project' && result.projects) {
+      result.projects = result.projects
+        .filter(p => p && typeof p === 'object' && p.name)
+        .map(p => ({
+          name: String(p.name || ''),
+          image_url: String(p.image_url || ''),
+          metrics: Array.isArray(p.metrics) ? p.metrics.map(m => String(m)) : []
         }))
-        .filter(item => item.label && item.value);
+        .slice(0, 4); // Max 4 projects
+    } else if (result.business_type === 'consumer' && result.products) {
+      result.products = result.products
+        .filter(p => p && typeof p === 'object' && p.name)
+        .map(p => ({
+          name: String(p.name || ''),
+          image_url: String(p.image_url || ''),
+          description: String(p.description || '')
+        }))
+        .slice(0, 4); // Max 4 products
     } else {
-      result.breakdown_items = [];
+      // Default to industrial/table format
+      result.business_type = 'industrial';
+      if (result.breakdown_items && Array.isArray(result.breakdown_items)) {
+        result.breakdown_items = result.breakdown_items
+          .filter(item => item && typeof item === 'object')
+          .map(item => ({
+            label: String(item.label || ''),
+            value: String(item.value || '')
+          }))
+          .filter(item => item.label && item.value);
+      } else {
+        result.breakdown_items = [];
+      }
     }
 
     return result;
   } catch (e) {
     console.error('Agent 3b (products) error:', e.message);
-    return { breakdown_title: 'Products and Applications', breakdown_items: [] };
+    return { business_type: 'industrial', breakdown_title: 'Products and Applications', breakdown_items: [] };
   }
 }
 
@@ -4589,8 +4703,12 @@ app.post('/api/profile-slides', async (req, res) => {
           footnote: ensureString(businessInfo.footnote),
           title: ensureString(businessInfo.title),
           key_metrics: allKeyMetrics,  // Only from scraped website
+          // Right-side content (varies by business type)
+          business_type: productsBreakdown.business_type || 'industrial',
           breakdown_title: ensureString(productsBreakdown.breakdown_title) || 'Products and Applications',
           breakdown_items: productsBreakdown.breakdown_items || [],
+          projects: productsBreakdown.projects || [],  // For project-based businesses
+          products: productsBreakdown.products || [],  // For consumer-facing businesses
           metrics: ensureString(metricsInfo.metrics)  // Fallback for old format
         };
 
@@ -4784,8 +4902,12 @@ app.post('/api/generate-ppt', async (req, res) => {
           footnote: ensureString(businessInfo.footnote),
           title: ensureString(businessInfo.title),
           key_metrics: allKeyMetrics,
+          // Right-side content (varies by business type)
+          business_type: productsBreakdown.business_type || 'industrial',
           breakdown_title: ensureString(productsBreakdown.breakdown_title) || 'Products and Applications',
           breakdown_items: productsBreakdown.breakdown_items || [],
+          projects: productsBreakdown.projects || [],  // For project-based businesses
+          products: productsBreakdown.products || [],  // For consumer-facing businesses
           metrics: ensureString(metricsInfo.metrics)
         };
 
