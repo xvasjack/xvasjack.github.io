@@ -257,80 +257,219 @@ Be specific. Cite sources. No fluff.`;
 }
 
 // ============ RESEARCH FRAMEWORK ============
-// Expanded queries for thorough research (~30-40 searches per country)
+// Deep Research: 50+ queries per country organized by Escort template sections
+// Produces ~15-17 slides per country with charts and detailed analysis
 
 const RESEARCH_FRAMEWORK = {
-  macroContext: {
-    name: 'Macro Context',
+  // === SECTION 1: POLICY & REGULATIONS (3 slides) ===
+  policy_foundationalActs: {
+    name: 'Foundational Energy Acts',
+    slideTitle: '{country} - Energy Foundational Acts',
     queries: [
-      '{country} GDP 2024 2025 economic growth forecast',
-      '{country} population demographics urban rural industrial workforce',
-      '{country} industrial sector manufacturing contribution GDP 2024',
-      '{country} energy consumption by sector industrial commercial residential',
-      '{country} energy intensity trends comparison regional',
-      '{country} economic development plan industrial policy 2024 2030'
+      '{country} energy conservation act law text requirements penalties',
+      '{country} energy efficiency act mandatory audits industrial factories',
+      '{country} ESCO law energy service company regulations licensing',
+      '{country} power development plan PDP official targets capacity',
+      '{country} renewable energy act feed-in tariff regulations'
     ]
   },
-  policyRegulatory: {
-    name: 'Policy & Regulatory Environment',
+  policy_nationalPolicy: {
+    name: 'National Energy Policy',
+    slideTitle: '{country} - National Energy Policy',
     queries: [
-      '{country} national energy policy 2024 2025 targets',
-      '{country} renewable energy targets carbon neutrality net zero timeline',
-      '{country} foreign direct investment rules energy sector restrictions',
-      '{country} foreign ownership limits power energy companies percentage',
-      '{country} ESCO energy service companies government support incentives',
-      '{country} energy efficiency regulations mandatory standards industrial',
-      '{country} investment promotion board energy incentives tax breaks',
-      '{country} power purchase agreement PPA regulations private sector'
+      '{country} national energy plan 2024 2030 targets official',
+      '{country} carbon neutrality net zero 2050 roadmap government',
+      '{country} energy efficiency improvement target percentage annual',
+      '{country} alternative energy development plan AEDP targets',
+      '{country} energy ministry policy direction minister statements 2024'
     ]
   },
-  marketDynamics: {
-    name: 'Market Dynamics',
+  policy_investmentRestrictions: {
+    name: 'Investment Restrictions',
+    slideTitle: '{country} - Foreign Investment Restrictions',
     queries: [
-      '{country} energy services market size value 2024 2025 forecast',
-      '{country} ESCO market size energy performance contracting',
-      '{country} electricity tariff industrial commercial rates 2024',
-      '{country} natural gas price industrial LNG spot 2024',
-      '{country} energy demand growth industrial sector manufacturing',
-      '{country} power generation capacity mix coal gas renewable',
-      '{country} district cooling heating market size',
-      '{country} industrial energy audit market demand'
+      '{country} foreign business act restricted industries energy sector',
+      '{country} foreign ownership limit percentage energy power utilities',
+      '{country} BOI investment promotion energy projects incentives',
+      '{country} joint venture requirements foreign energy companies',
+      '{country} special economic zones energy investment privileges'
     ]
   },
-  competitiveLandscape: {
-    name: 'Competitive Landscape',
+
+  // === SECTION 2: MARKET (6 slides with charts) ===
+  market_tpes: {
+    name: 'Total Primary Energy Supply',
+    slideTitle: '{country} - Total Primary Energy Supply (TPES)',
+    chartType: 'stackedBar',
     queries: [
-      '{country} energy service companies ESCO major players list',
-      '{country} ESCO association members registered companies',
-      'Japanese companies {country} energy investment Tokyo Gas Osaka Gas JERA',
-      '{country} foreign energy companies European American presence',
-      '{country} state owned energy utility company market dominance',
-      '{country} energy market entry barriers foreign companies challenges',
-      '{country} energy sector M&A acquisitions partnerships 2023 2024',
-      '{country} energy consulting engineering firms major players'
+      '{country} total primary energy supply TPES 2020 2021 2022 2023 2024 ktoe',
+      '{country} energy supply by source oil gas coal nuclear renewable percentage',
+      '{country} energy imports dependency ratio petroleum natural gas',
+      '{country} domestic energy production oil gas coal statistics',
+      '{country} IEA energy statistics TPES breakdown'
     ]
   },
-  infrastructure: {
-    name: 'Infrastructure & Ecosystem',
+  market_finalDemand: {
+    name: 'Final Energy Demand by Sector',
+    slideTitle: '{country} - Final Energy Demand',
+    chartType: 'stackedBar',
     queries: [
-      '{country} LNG import terminal regasification capacity utilization',
-      '{country} natural gas pipeline network infrastructure coverage',
-      '{country} industrial zones estates economic corridors list',
-      '{country} smart grid pilot projects energy management systems',
-      '{country} power grid reliability transmission distribution quality',
-      '{country} renewable energy infrastructure solar wind capacity'
+      '{country} final energy consumption by sector industrial transport residential commercial',
+      '{country} industrial energy demand manufacturing factories statistics',
+      '{country} energy consumption growth rate by sector 2020-2024',
+      '{country} energy demand forecast 2025 2030 projections',
+      '{country} sectoral energy intensity trends'
     ]
   },
-  partnershipOpportunities: {
-    name: 'Partnership & Entry Opportunities',
+  market_electricity: {
+    name: 'Electricity & Power Generation',
+    slideTitle: '{country} - Electricity & Power Generation',
+    chartType: 'stackedBar',
     queries: [
-      '{country} energy sector joint venture opportunities local partners',
-      '{country} industrial companies seeking energy efficiency solutions',
-      '{country} conglomerates energy subsidiary diversification',
-      '{country} energy sector privatization opportunities upcoming',
-      '{country} government energy projects tender bidding opportunities'
+      '{country} electricity generation capacity MW installed 2024',
+      '{country} power generation mix coal gas renewable nuclear hydro percentage',
+      '{country} electricity consumption industrial commercial residential TWh',
+      '{country} power demand peak load forecast 2025 2030',
+      '{country} independent power producer IPP capacity licensed'
+    ]
+  },
+  market_gasLng: {
+    name: 'Gas & LNG Market',
+    slideTitle: '{country} - Gas & LNG Market',
+    chartType: 'line',
+    queries: [
+      '{country} natural gas consumption demand statistics 2020-2024',
+      '{country} LNG imports volume million tons price trends',
+      '{country} natural gas pipeline network coverage industrial zones',
+      '{country} gas distribution companies market players share',
+      '{country} LNG regasification terminal capacity utilization'
+    ]
+  },
+  market_pricing: {
+    name: 'Energy Pricing Analysis',
+    slideTitle: '{country} - Energy Pricing Trends',
+    chartType: 'line',
+    queries: [
+      '{country} industrial electricity tariff rate per kWh 2020-2024',
+      '{country} commercial electricity price comparison regional',
+      '{country} natural gas price industrial users USD per mmbtu',
+      '{country} energy price subsidy policy government support',
+      '{country} electricity tariff forecast 2025 reform plans'
+    ]
+  },
+  market_escoServices: {
+    name: 'ESCO & Energy Services Market',
+    slideTitle: '{country} - ESCO Market Overview',
+    chartType: 'bar',
+    queries: [
+      '{country} ESCO market size value USD 2024 growth rate',
+      '{country} energy service company list registered members',
+      '{country} energy performance contracting EPC market projects',
+      '{country} energy audit market demand factories industrial',
+      '{country} energy management system EMS adoption rate'
+    ]
+  },
+
+  // === SECTION 3: COMPETITOR OVERVIEW (5 slides) ===
+  competitors_japanese: {
+    name: 'Japanese Players in Market',
+    slideTitle: '{country} - Japanese Energy Companies',
+    queries: [
+      'Tokyo Gas {country} investment projects subsidiary partnership',
+      'Osaka Gas {country} energy business market entry presence',
+      'JERA {country} power generation investment projects',
+      'Mitsubishi Corporation {country} energy infrastructure projects',
+      'Mitsui {country} LNG gas energy investments',
+      'Japanese trading companies {country} energy sector presence'
+    ]
+  },
+  competitors_localMajor: {
+    name: 'Major Local Players',
+    slideTitle: '{country} - Major Local Energy Companies',
+    queries: [
+      '{country} largest energy companies revenue market share ranking',
+      '{country} state owned energy utility company overview',
+      '{country} major industrial conglomerates energy subsidiaries',
+      '{country} top 10 ESCO companies market leaders',
+      '{country} energy engineering EPC contractors leading firms'
+    ]
+  },
+  competitors_foreignPlayers: {
+    name: 'Other Foreign Competitors',
+    slideTitle: '{country} - Foreign Energy Companies',
+    queries: [
+      'ENGIE {country} energy services presence projects',
+      'Schneider Electric {country} energy management business',
+      'Siemens {country} energy infrastructure smart grid',
+      'European energy companies {country} market presence',
+      'American energy service providers {country} operations'
+    ]
+  },
+  competitors_caseStudy: {
+    name: 'Successful Entry Case Studies',
+    slideTitle: '{country} - Market Entry Case Studies',
+    queries: [
+      'successful foreign energy company entry {country} case study',
+      '{country} ESCO joint venture success stories',
+      '{country} energy sector acquisition deals 2020-2024',
+      'lessons learned energy market entry {country}',
+      '{country} BOI promoted energy projects foreign investors'
+    ]
+  },
+  competitors_maActivity: {
+    name: 'M&A and Partnership Activity',
+    slideTitle: '{country} - Recent M&A Activity',
+    queries: [
+      '{country} energy sector mergers acquisitions 2023 2024',
+      '{country} ESCO companies for sale acquisition targets',
+      '{country} energy joint venture announcements partnerships',
+      '{country} strategic energy investments 2024',
+      '{country} energy company valuation multiples deal terms'
+    ]
+  },
+
+  // === ADDITIONAL CONTEXT ===
+  macro_economicContext: {
+    name: 'Economic Context',
+    slideTitle: '{country} - Economic Overview',
+    queries: [
+      '{country} GDP 2024 2025 economic growth forecast IMF',
+      '{country} manufacturing sector contribution GDP industrial output',
+      '{country} foreign direct investment inflows energy sector',
+      '{country} economic development plan industrial corridor',
+      '{country} labor cost wage trends manufacturing sector'
+    ]
+  },
+  opportunities_whitespace: {
+    name: 'Market Entry Opportunities',
+    slideTitle: '{country} - Entry Opportunities',
+    queries: [
+      '{country} ESCO market gap underserved segments opportunity',
+      '{country} energy efficiency potential industrial factories',
+      '{country} government energy tender upcoming projects',
+      '{country} industrial parks seeking energy solutions',
+      '{country} conglomerates seeking energy partners technology'
+    ]
+  },
+  risks_assessment: {
+    name: 'Risk Assessment',
+    slideTitle: '{country} - Risk Assessment',
+    queries: [
+      '{country} energy sector regulatory risk policy uncertainty',
+      '{country} foreign investment risks political stability',
+      '{country} currency exchange rate risk energy contracts',
+      '{country} energy policy reversal examples precedents',
+      '{country} local content requirements energy sector'
     ]
   }
+};
+
+// Research topic groups for efficient parallel processing
+const RESEARCH_TOPIC_GROUPS = {
+  policy: ['policy_foundationalActs', 'policy_nationalPolicy', 'policy_investmentRestrictions'],
+  market: ['market_tpes', 'market_finalDemand', 'market_electricity', 'market_gasLng', 'market_pricing', 'market_escoServices'],
+  competitors: ['competitors_japanese', 'competitors_localMajor', 'competitors_foreignPlayers', 'competitors_caseStudy', 'competitors_maActivity'],
+  context: ['macro_economicContext', 'opportunities_whitespace', 'risks_assessment']
 };
 
 // ============ SCOPE PARSER ============
@@ -378,51 +517,66 @@ Return ONLY valid JSON, no markdown or explanation.`;
   }
 }
 
-// ============ ITERATIVE RESEARCH SYSTEM ============
+// ============ ITERATIVE RESEARCH SYSTEM WITH CONFIDENCE SCORING ============
 
-// Step 1: Identify gaps in research after first synthesis
+// Step 1: Identify gaps in research after first synthesis with detailed scoring
 async function identifyResearchGaps(synthesis, country, industry) {
-  console.log(`  [Identifying research gaps for ${country}...]`);
+  console.log(`  [Analyzing research quality for ${country}...]`);
 
-  const gapPrompt = `You are a research director reviewing a first-pass market analysis. Your job is to identify CRITICAL GAPS that would make a CEO distrust this analysis.
+  const gapPrompt = `You are a research quality auditor reviewing a market analysis. Score each section and identify critical gaps.
 
 CURRENT ANALYSIS:
 ${JSON.stringify(synthesis, null, 2)}
 
-Review this analysis and identify what's MISSING or WEAK. Focus on:
+SCORING CRITERIA (0-100 for each section):
+- 90-100: Excellent - Specific numbers, named sources, actionable insights
+- 70-89: Good - Most data points covered, some specifics missing
+- 50-69: Adequate - General information, lacks depth or verification
+- 30-49: Weak - Vague statements, missing key data
+- 0-29: Poor - Generic or placeholder content
 
-1. UNVERIFIED CLAIMS: Numbers without sources, vague statements like "growing market"
-2. MISSING COMPARISONS: No regional benchmarks, no competitor specifics
-3. SHALLOW SECTIONS: Areas with generic content instead of specifics
-4. TIMING GAPS: Missing "why now" evidence, no regulatory deadlines mentioned
-5. COMPETITIVE BLIND SPOTS: Missing key players, no partnership intel
-6. DATA CONFLICTS: Contradictory numbers that need verification
-
-Return a JSON object with EXACTLY this structure:
+Return a JSON object with this structure:
 {
+  "sectionScores": {
+    "policy": {"score": 0-100, "reasoning": "why this score", "missingData": ["list of missing items"]},
+    "market": {"score": 0-100, "reasoning": "why this score", "missingData": ["list"]},
+    "competitors": {"score": 0-100, "reasoning": "why this score", "missingData": ["list"]},
+    "summary": {"score": 0-100, "reasoning": "why this score", "missingData": ["list"]}
+  },
+  "overallScore": 0-100,
   "criticalGaps": [
     {
-      "area": "which section is weak (e.g., 'marketDynamics', 'competitiveLandscape')",
+      "area": "which section (policy/market/competitors)",
       "gap": "what specific information is missing",
-      "searchQuery": "the EXACT search query to find this information for ${country}",
-      "priority": "high/medium (high = deal-breaker if missing)"
+      "searchQuery": "the EXACT search query to find this for ${country}",
+      "priority": "high/medium",
+      "impactOnScore": "how many points this would add if filled"
     }
   ],
   "dataToVerify": [
     {
       "claim": "the specific claim that needs verification",
-      "searchQuery": "search query to verify this for ${country}"
+      "searchQuery": "search query to verify this for ${country}",
+      "currentConfidence": "low/medium/high"
     }
   ],
   "confidenceAssessment": {
     "overall": "low/medium/high",
+    "numericConfidence": 0-100,
     "weakestSection": "which section needs most work",
-    "reasoning": "why this confidence level"
+    "strongestSection": "which section is best",
+    "reasoning": "why this confidence level",
+    "readyForClient": true/false
   }
 }
 
-Be SPECIFIC with search queries. Include "${country}" and "${industry}" where relevant.
-Limit to 8 most critical gaps (prioritize high-impact ones).
+RULES:
+- Score >= 75 overall = "high" confidence, ready for client
+- Score 50-74 = "medium" confidence, needs refinement
+- Score < 50 = "low" confidence, significant gaps
+- Limit criticalGaps to 6 most impactful items
+- Only flag dataToVerify for claims that seem suspicious or unsourced
+
 Return ONLY valid JSON.`;
 
   const result = await callDeepSeekChat(gapPrompt, '', 4096);
@@ -433,12 +587,24 @@ Return ONLY valid JSON.`;
       jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
     }
     const gaps = JSON.parse(jsonStr);
-    console.log(`    Found ${gaps.criticalGaps?.length || 0} critical gaps, ${gaps.dataToVerify?.length || 0} claims to verify`);
-    console.log(`    Confidence: ${gaps.confidenceAssessment?.overall || 'unknown'} (weakest: ${gaps.confidenceAssessment?.weakestSection || 'unknown'})`);
+
+    // Log detailed scoring
+    const scores = gaps.sectionScores || {};
+    console.log(`    Section Scores: Policy=${scores.policy?.score || '?'}, Market=${scores.market?.score || '?'}, Competitors=${scores.competitors?.score || '?'}`);
+    console.log(`    Overall: ${gaps.overallScore || '?'}/100 | Confidence: ${gaps.confidenceAssessment?.overall || 'unknown'}`);
+    console.log(`    Gaps: ${gaps.criticalGaps?.length || 0} critical | Verify: ${gaps.dataToVerify?.length || 0} claims`);
+    console.log(`    Ready for client: ${gaps.confidenceAssessment?.readyForClient ? 'YES' : 'NO'}`);
+
     return gaps;
   } catch (error) {
     console.error('  Failed to parse gaps:', error.message);
-    return { criticalGaps: [], dataToVerify: [], confidenceAssessment: { overall: 'low' } };
+    return {
+      sectionScores: {},
+      overallScore: 40,
+      criticalGaps: [],
+      dataToVerify: [],
+      confidenceAssessment: { overall: 'low', numericConfidence: 40, readyForClient: false }
+    };
   }
 }
 
@@ -544,151 +710,460 @@ Return ONLY valid JSON.`;
   }
 }
 
-// ============ COUNTRY RESEARCH AGENT (KIMI + DEEPSEEK) ============
+// ============ MULTI-AGENT RESEARCH SYSTEM ============
+// Specialized agents for each research domain running in parallel
+
+// Policy Research Agent - handles regulatory and policy topics
+async function policyResearchAgent(country, industry, clientContext) {
+  console.log(`    [POLICY AGENT] Starting research for ${country}...`);
+  const agentStart = Date.now();
+  const topics = RESEARCH_TOPIC_GROUPS.policy;
+  const results = {};
+
+  // Run all policy topics in parallel
+  const policyResults = await Promise.all(
+    topics.map(async (topicKey) => {
+      const framework = RESEARCH_FRAMEWORK[topicKey];
+      if (!framework) return null;
+
+      const queryContext = `As a regulatory affairs specialist, research ${framework.name} for ${country}'s ${industry} market:
+
+SPECIFIC QUESTIONS:
+${framework.queries.map(q => '- ' + q.replace('{country}', country)).join('\n')}
+
+FOCUS ON:
+- Exact law names, years enacted, enforcement status
+- Foreign ownership percentages and exceptions
+- Tax incentives with specific values and durations
+- Recent policy changes (2023-2025)
+- Regulatory risks and enforcement gaps`;
+
+      const result = await callKimiDeepResearch(queryContext, country, industry);
+      return {
+        key: topicKey,
+        content: result.content,
+        citations: result.citations || [],
+        slideTitle: framework.slideTitle?.replace('{country}', country) || ''
+      };
+    })
+  );
+
+  for (const r of policyResults) {
+    if (r && r.content) results[r.key] = r;
+  }
+
+  console.log(`    [POLICY AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  return results;
+}
+
+// Market Research Agent - handles market data and pricing topics
+async function marketResearchAgent(country, industry, clientContext) {
+  console.log(`    [MARKET AGENT] Starting research for ${country}...`);
+  const agentStart = Date.now();
+  const topics = RESEARCH_TOPIC_GROUPS.market;
+  const results = {};
+
+  // Run market topics in batches of 3 (more topics)
+  for (let i = 0; i < topics.length; i += 3) {
+    const batch = topics.slice(i, i + 3);
+
+    const batchResults = await Promise.all(
+      batch.map(async (topicKey) => {
+        const framework = RESEARCH_FRAMEWORK[topicKey];
+        if (!framework) return null;
+
+        const queryContext = `As a market research analyst, research ${framework.name} for ${country}'s ${industry} market:
+
+SPECIFIC QUESTIONS:
+${framework.queries.map(q => '- ' + q.replace('{country}', country)).join('\n')}
+
+CRITICAL - PROVIDE CHART DATA:
+- For time series: provide data for years 2020, 2021, 2022, 2023, 2024
+- For breakdowns: provide percentage splits by category
+- Format numbers clearly (e.g., "2020: 45, 2021: 48, 2022: 52")
+- Include units (Mtoe, TWh, USD/kWh, bcm, etc.)
+
+FOCUS ON:
+- Market size in USD with growth rates
+- Energy consumption/production statistics
+- Pricing data with trends
+- Sector breakdowns with percentages`;
+
+        const result = await callKimiDeepResearch(queryContext, country, industry);
+        return {
+          key: topicKey,
+          content: result.content,
+          citations: result.citations || [],
+          chartType: framework.chartType || null,
+          slideTitle: framework.slideTitle?.replace('{country}', country) || ''
+        };
+      })
+    );
+
+    for (const r of batchResults) {
+      if (r && r.content) results[r.key] = r;
+    }
+
+    // Brief pause between batches
+    if (i + 3 < topics.length) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+
+  console.log(`    [MARKET AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  return results;
+}
+
+// Competitor Research Agent - handles competitive intelligence
+async function competitorResearchAgent(country, industry, clientContext) {
+  console.log(`    [COMPETITOR AGENT] Starting research for ${country}...`);
+  const agentStart = Date.now();
+  const topics = RESEARCH_TOPIC_GROUPS.competitors;
+  const results = {};
+
+  // Run competitor topics in parallel
+  const compResults = await Promise.all(
+    topics.map(async (topicKey) => {
+      const framework = RESEARCH_FRAMEWORK[topicKey];
+      if (!framework) return null;
+
+      const isJapanese = topicKey === 'competitors_japanese';
+      const queryContext = `As a competitive intelligence analyst, research ${framework.name} for ${country}'s ${industry} market:
+
+SPECIFIC QUESTIONS:
+${framework.queries.map(q => '- ' + q.replace('{country}', country)).join('\n')}
+
+${isJapanese ? `SPECIAL FOCUS - JAPANESE COMPANIES:
+- Tokyo Gas, Osaka Gas, JERA, Mitsubishi, Mitsui presence
+- Entry mode (JV, subsidiary, partnership)
+- Specific projects and contract values
+- Success/failure assessment with reasons` : ''}
+
+PROVIDE FOR EACH COMPANY:
+- Company name (exact)
+- Revenue or market share if available
+- Entry year and mode
+- Key projects or clients
+- Strengths and weaknesses
+- Partnership interest indicators`;
+
+      const result = await callKimiDeepResearch(queryContext, country, industry);
+      return {
+        key: topicKey,
+        content: result.content,
+        citations: result.citations || [],
+        slideTitle: framework.slideTitle?.replace('{country}', country) || ''
+      };
+    })
+  );
+
+  for (const r of compResults) {
+    if (r && r.content) results[r.key] = r;
+  }
+
+  console.log(`    [COMPETITOR AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  return results;
+}
+
+// Context Research Agent - handles economic context and opportunities
+async function contextResearchAgent(country, industry, clientContext) {
+  console.log(`    [CONTEXT AGENT] Starting research for ${country}...`);
+  const agentStart = Date.now();
+  const topics = RESEARCH_TOPIC_GROUPS.context;
+  const results = {};
+
+  // Run context topics in parallel
+  const contextResults = await Promise.all(
+    topics.map(async (topicKey) => {
+      const framework = RESEARCH_FRAMEWORK[topicKey];
+      if (!framework) return null;
+
+      const queryContext = `As a strategy consultant advising a ${clientContext}, research ${framework.name} for ${country}'s ${industry} market:
+
+SPECIFIC QUESTIONS:
+${framework.queries.map(q => '- ' + q.replace('{country}', country)).join('\n')}
+
+FOCUS ON:
+- Actionable opportunities with sizing
+- Specific risks with mitigation strategies
+- Timing factors (why now vs later)
+- Economic drivers affecting energy demand
+- Industrial development corridors and zones`;
+
+      const result = await callKimiDeepResearch(queryContext, country, industry);
+      return {
+        key: topicKey,
+        content: result.content,
+        citations: result.citations || [],
+        slideTitle: framework.slideTitle?.replace('{country}', country) || ''
+      };
+    })
+  );
+
+  for (const r of contextResults) {
+    if (r && r.content) results[r.key] = r;
+  }
+
+  console.log(`    [CONTEXT AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  return results;
+}
+
+// ============ COUNTRY RESEARCH ORCHESTRATOR ============
 
 async function researchCountry(country, industry, clientContext) {
   console.log(`\n=== RESEARCHING: ${country} ===`);
   const startTime = Date.now();
 
-  // Use Kimi for deep research on each major topic area
-  // Kimi browses the web and provides comprehensive analysis per topic
-  const researchTopics = [
-    {
-      key: 'macroContext',
-      topic: `Economic context and energy landscape:
-- GDP, population, industrial sector contribution
-- Energy consumption by sector
-- Energy intensity trends vs regional peers
-- Key economic development plans affecting energy`
-    },
-    {
-      key: 'policyRegulatory',
-      topic: `Policy and regulatory environment for ${industry}:
-- Government stance on energy efficiency/ESCOs
-- Key legislation (names, years, requirements, penalties)
-- Foreign ownership limits and exceptions
-- Tax incentives and BOI promotion categories
-- Regulatory enforcement reality (not just what's written)`
-    },
-    {
-      key: 'marketDynamics',
-      topic: `${industry} market dynamics:
-- Market size in USD with year and growth rate
-- Who is buying and why (demand drivers)
-- Electricity and gas tariffs for industrial users
-- Supply chain infrastructure
-- Recent market developments (2024-2025)`
-    },
-    {
-      key: 'competitiveLandscape',
-      topic: `Competitive landscape for ${industry}:
-- Major local players (name, revenue, market position)
-- Foreign companies present (entry mode, success level)
-- Recent M&A, partnerships, or market entries
-- Market concentration and barriers to entry
-- Companies seeking partners or up for acquisition`
-    },
-    {
-      key: 'infrastructure',
-      topic: `Infrastructure and ecosystem:
-- Energy infrastructure (LNG terminals, pipelines, grid quality)
-- Key industrial zones and economic corridors
-- Smart grid and energy management pilot projects
-- Logistics and supply chain bottlenecks`
-    },
-    {
-      key: 'opportunities',
-      topic: `Market entry opportunities for a ${clientContext}:
-- White spaces in the market
-- Potential local partners (who, why they'd partner)
-- Upcoming government projects or tenders
-- Timing factors (why enter now vs wait)`
-    }
-  ];
+  // Multi-Agent Deep Research: Run 4 specialized agents in parallel
+  console.log(`  [MULTI-AGENT SYSTEM] Launching 4 specialized research agents...`);
 
-  console.log(`  [Kimi Deep Research - 6 comprehensive searches]`);
-  const researchData = {};
+  const [policyData, marketData, competitorData, contextData] = await Promise.all([
+    policyResearchAgent(country, industry, clientContext),
+    marketResearchAgent(country, industry, clientContext),
+    competitorResearchAgent(country, industry, clientContext),
+    contextResearchAgent(country, industry, clientContext)
+  ]);
 
-  for (const { key, topic } of researchTopics) {
-    console.log(`  [${key}] Researching...`);
-    const result = await callKimiDeepResearch(topic, country, industry);
+  // Merge all agent results
+  const researchData = {
+    ...policyData,
+    ...marketData,
+    ...competitorData,
+    ...contextData
+  };
 
-    if (result.content) {
-      researchData[key] = [{
-        topic,
-        content: result.content,
-        citations: result.citations || []
-      }];
-    }
-
-    // Small delay between research calls
-    await new Promise(resolve => setTimeout(resolve, 1000));
-  }
+  const totalTopics = Object.keys(researchData).length;
+  const researchTime = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`\n  [AGENTS COMPLETE] ${totalTopics} topics researched in ${researchTime}s (parallel execution)`)
 
   // Synthesize research into structured output using DeepSeek
-  console.log(`  [Synthesizing ${country} data...]`);
+  // Expanded structure for 15+ slides matching Escort template
+  console.log(`  [Synthesizing ${country} data for deep-dive report...]`);
 
-  const synthesisPrompt = `You are a strategy consultant analyzing ${country} for a ${clientContext} considering entering the ${industry} market.
+  const synthesisPrompt = `You are a senior strategy consultant at YCP creating a comprehensive market analysis for ${country}'s ${industry} market. Your client is a ${clientContext}.
 
-CRITICAL: Your analysis must have DEPTH and SPECIFICITY. Not surface-level observations.
-
-For every claim, include:
-- SPECIFIC NUMBERS (dollar amounts, percentages, growth rates, years)
-- SPECIFIC NAMES (companies, laws, programs, people)
-- SPECIFIC CONTEXT (why this number matters, how it compares)
-
-BAD example: "The market is growing"
-GOOD example: "The ESCO market reached $2.3B in 2024, growing 12% YoY, driven by mandatory energy audits for factories >2MW under the 2023 Energy Conservation Act"
+CRITICAL REQUIREMENTS:
+1. DEPTH over breadth - specific numbers, names, dates for every claim
+2. CHART DATA - provide structured data for charts where indicated
+3. SLIDE-READY - each section maps to a specific slide
 
 RESEARCH DATA:
 ${JSON.stringify(researchData, null, 2)}
 
-Return a JSON object with this structure:
+Return a JSON object with this EXPANDED structure for 15+ slides:
+
 {
   "country": "${country}",
-  "macroContext": {
-    "gdp": "exact value with year and growth rate (e.g., '$574B in 2024, +2.8% YoY')",
-    "population": "exact number with urban/rural split if available",
-    "industrialGdpShare": "percentage with trend",
-    "energyIntensity": "specific metric with comparison to region",
-    "keyObservation": "ONE non-obvious insight connecting these data points"
+
+  // === SECTION 1: POLICY & REGULATIONS (3 slides) ===
+  "policy": {
+    "foundationalActs": {
+      "slideTitle": "${country} - Energy Foundational Acts",
+      "subtitle": "Key legislation governing energy sector",
+      "acts": [
+        {"name": "Energy Conservation Act", "year": "2022", "requirements": "Mandatory audits for >2MW facilities", "penalties": "Fine up to $50K", "enforcement": "23 auditors for 4,200 facilities"}
+      ],
+      "keyMessage": "One sentence insight"
+    },
+    "nationalPolicy": {
+      "slideTitle": "${country} - National Energy Policy",
+      "subtitle": "Government targets and roadmap",
+      "targets": [
+        {"metric": "Carbon Neutrality", "target": "2050", "status": "Legislated"},
+        {"metric": "Renewable Share", "target": "30%", "deadline": "2030"}
+      ],
+      "keyInitiatives": ["Initiative 1 with budget/timeline", "Initiative 2"],
+      "policyDirection": "Current government stance with evidence"
+    },
+    "investmentRestrictions": {
+      "slideTitle": "${country} - Foreign Investment Rules",
+      "subtitle": "Ownership limits and incentives",
+      "ownershipLimits": {"general": "49%", "promoted": "100% allowed", "exceptions": "BOI promoted projects"},
+      "incentives": [
+        {"name": "BOI Scheme", "benefit": "8-year tax holiday", "eligibility": "Energy efficiency projects >$1M"}
+      ],
+      "riskLevel": "low/medium/high",
+      "riskJustification": "Specific reasoning"
+    }
   },
-  "policyRegulatory": {
-    "governmentStance": "specific stance with EVIDENCE (cite actual policy, speech, budget allocation)",
-    "keyLegislation": ["list SPECIFIC laws with year, what they mandate, and penalties"],
-    "foreignOwnershipRules": "EXACT percentage limits, exceptions, which sectors, recent changes",
-    "incentives": ["SPECIFIC incentive name, value (% tax cut, years), eligibility criteria"],
-    "regulatoryRisk": "low/medium/high with SPECIFIC justification (recent policy reversals? enforcement gaps?)"
+
+  // === SECTION 2: MARKET DATA (6 slides with charts) ===
+  "market": {
+    "tpes": {
+      "slideTitle": "${country} - Total Primary Energy Supply",
+      "subtitle": "Energy supply mix by source",
+      "chartData": {
+        "categories": ["2020", "2021", "2022", "2023", "2024"],
+        "series": [
+          {"name": "Oil", "values": [45, 44, 43, 42, 41]},
+          {"name": "Natural Gas", "values": [25, 26, 27, 28, 30]},
+          {"name": "Coal", "values": [20, 19, 18, 17, 15]},
+          {"name": "Renewables", "values": [10, 11, 12, 13, 14]}
+        ],
+        "unit": "Mtoe"
+      },
+      "keyInsight": "One insight about TPES trend"
+    },
+    "finalDemand": {
+      "slideTitle": "${country} - Final Energy Demand",
+      "subtitle": "Consumption by sector",
+      "chartData": {
+        "categories": ["Industrial", "Transport", "Residential", "Commercial"],
+        "series": [
+          {"name": "2020", "values": [40, 30, 20, 10]},
+          {"name": "2024", "values": [42, 32, 18, 8]}
+        ],
+        "unit": "%"
+      },
+      "growthRate": "X% CAGR 2020-2024",
+      "keyDrivers": ["Driver 1", "Driver 2"]
+    },
+    "electricity": {
+      "slideTitle": "${country} - Electricity & Power",
+      "subtitle": "Generation capacity and mix",
+      "totalCapacity": "XX GW installed",
+      "chartData": {
+        "categories": ["Coal", "Gas", "Hydro", "Solar", "Wind", "Nuclear"],
+        "values": [40, 30, 15, 10, 3, 2],
+        "unit": "%"
+      },
+      "demandGrowth": "X% annually",
+      "keyTrend": "Insight about power sector"
+    },
+    "gasLng": {
+      "slideTitle": "${country} - Gas & LNG Market",
+      "subtitle": "Natural gas supply and infrastructure",
+      "chartData": {
+        "categories": ["2020", "2021", "2022", "2023", "2024"],
+        "series": [
+          {"name": "Domestic Production", "values": [30, 28, 26, 24, 22]},
+          {"name": "LNG Imports", "values": [20, 22, 24, 26, 28]}
+        ],
+        "unit": "bcm"
+      },
+      "lngTerminals": [{"name": "Terminal 1", "capacity": "X mtpa", "utilization": "Y%"}],
+      "pipelineNetwork": "Description of coverage"
+    },
+    "pricing": {
+      "slideTitle": "${country} - Energy Pricing",
+      "subtitle": "Tariff trends and outlook",
+      "chartData": {
+        "categories": ["2020", "2021", "2022", "2023", "2024"],
+        "series": [
+          {"name": "Industrial Electricity", "values": [0.08, 0.09, 0.10, 0.11, 0.12]},
+          {"name": "Natural Gas", "values": [8, 9, 10, 11, 12]}
+        ],
+        "units": ["USD/kWh", "USD/mmbtu"]
+      },
+      "comparison": "vs regional peers",
+      "outlook": "Expected trend"
+    },
+    "escoMarket": {
+      "slideTitle": "${country} - ESCO Market",
+      "subtitle": "Energy services market overview",
+      "marketSize": "$XXX million in 2024",
+      "growthRate": "X% CAGR",
+      "segments": [
+        {"name": "Industrial", "size": "$XXM", "share": "X%"},
+        {"name": "Commercial", "size": "$XXM", "share": "X%"}
+      ],
+      "keyDrivers": ["Driver 1", "Driver 2"],
+      "chartData": {
+        "categories": ["Industrial", "Commercial", "Government"],
+        "values": [60, 30, 10],
+        "unit": "% of market"
+      }
+    }
   },
-  "marketDynamics": {
-    "marketSize": "EXACT value, year, CAGR, and what's driving growth",
-    "demand": "WHO is buying (which industries), WHY now (triggers), HOW MUCH (volume/value)",
-    "pricing": "EXACT electricity/gas prices with unit, comparison to neighbors, trend",
-    "supplyChain": "specific gaps or advantages in supply infrastructure"
+
+  // === SECTION 3: COMPETITOR OVERVIEW (5 slides) ===
+  "competitors": {
+    "japanesePlayers": {
+      "slideTitle": "${country} - Japanese Energy Companies",
+      "subtitle": "Current presence and activities",
+      "players": [
+        {"name": "Tokyo Gas", "presence": "JV with Local Partner", "projects": "3 ESCO contracts", "revenue": "$X million", "assessment": "Strong/Weak"},
+        {"name": "Osaka Gas", "presence": "Direct investment", "projects": "LNG terminal stake", "revenue": "$X million", "assessment": "Strong/Weak"}
+      ],
+      "marketInsight": "Overall assessment of Japanese presence"
+    },
+    "localMajor": {
+      "slideTitle": "${country} - Major Local Players",
+      "subtitle": "Domestic energy companies",
+      "players": [
+        {"name": "Company A", "type": "State-owned/Private", "revenue": "$X million", "marketShare": "X%", "strengths": "...", "weaknesses": "..."},
+        {"name": "Company B", "type": "State-owned/Private", "revenue": "$X million", "marketShare": "X%", "strengths": "...", "weaknesses": "..."}
+      ],
+      "concentration": "Market concentration assessment"
+    },
+    "foreignPlayers": {
+      "slideTitle": "${country} - Foreign Energy Companies",
+      "subtitle": "International competitors",
+      "players": [
+        {"name": "ENGIE", "origin": "France", "entryYear": "2018", "mode": "JV", "projects": "X contracts", "success": "High/Medium/Low"},
+        {"name": "Siemens", "origin": "Germany", "entryYear": "2015", "mode": "Direct", "projects": "Smart grid", "success": "High/Medium/Low"}
+      ],
+      "competitiveInsight": "How foreign players compete"
+    },
+    "caseStudy": {
+      "slideTitle": "${country} - Market Entry Case Study",
+      "subtitle": "Lessons from successful entries",
+      "company": "Company Name",
+      "entryYear": "2018",
+      "entryMode": "JV with Local Partner",
+      "investment": "$X million",
+      "outcome": "Current status and results",
+      "keyLessons": ["Lesson 1", "Lesson 2", "Lesson 3"],
+      "applicability": "How this applies to client"
+    },
+    "maActivity": {
+      "slideTitle": "${country} - M&A Activity",
+      "subtitle": "Recent deals and targets",
+      "recentDeals": [
+        {"year": "2024", "buyer": "Company A", "target": "Company B", "value": "$X million", "rationale": "..."}
+      ],
+      "potentialTargets": [
+        {"name": "Company X", "estimatedValue": "$X million", "rationale": "Why attractive", "timing": "Available now/Soon"}
+      ],
+      "valuationMultiples": "Typical deal terms in market"
+    }
   },
-  "competitiveLandscape": {
-    "localPlayers": [{"name": "actual company name", "description": "revenue/size, core business, market share if known, strengths, weaknesses"}],
-    "foreignPlayers": [{"name": "actual company name", "description": "when entered, what they do, how successful, partnerships"}],
-    "entryBarriers": ["SPECIFIC barriers with evidence - not generic like 'relationships matter'"],
-    "competitiveIntensity": "low/medium/high with REASONING (market concentration, price wars, M&A activity)"
-  },
-  "infrastructure": {
-    "energyInfrastructure": "specific capacity numbers, utilization rates, planned expansions",
-    "industrialZones": ["name of zone, location, key tenants, incentives offered"],
-    "logisticsQuality": "specific metrics or rankings, bottlenecks"
-  },
-  "summaryAssessment": {
-    "opportunities": ["5 SPECIFIC opportunities with WHY NOW and estimated size/value"],
-    "obstacles": ["5 SPECIFIC obstacles with severity and whether they're solvable"],
-    "attractivenessRating": "1-10 with MULTI-FACTOR justification",
-    "feasibilityRating": "1-10 with MULTI-FACTOR justification",
-    "keyInsight": "2-3 sentences: DATA observed → PATTERN that emerges → WHY this pattern exists → WHAT IT MEANS for client"
+
+  // === SECTION 4: SUMMARY & RECOMMENDATIONS ===
+  "summary": {
+    "opportunities": [
+      {"opportunity": "Specific opportunity", "size": "$X million", "timing": "Why now", "action": "What to do"}
+    ],
+    "obstacles": [
+      {"obstacle": "Specific barrier", "severity": "High/Medium/Low", "mitigation": "How to address"}
+    ],
+    "ratings": {
+      "attractiveness": 7,
+      "attractivenessRationale": "Multi-factor justification",
+      "feasibility": 6,
+      "feasibilityRationale": "Multi-factor justification"
+    },
+    "keyInsights": [
+      {
+        "title": "Max 10 word headline",
+        "data": "The specific evidence",
+        "pattern": "What it means",
+        "implication": "What to do"
+      }
+    ],
+    "recommendation": "Clear recommendation for entry or not"
   }
 }
 
-Return ONLY valid JSON, no markdown or explanation.`;
+CRITICAL:
+- Every number needs year, source context
+- Chart data must have numeric arrays (not placeholders)
+- If data unavailable, use reasonable estimates and mark as "estimated"
+- Aim for actionable specificity, not generic descriptions
 
-  const synthesis = await callDeepSeek(synthesisPrompt, '', 8192);
+Return ONLY valid JSON.`;
+
+  const synthesis = await callDeepSeek(synthesisPrompt, '', 16384);
 
   let countryAnalysis;
   try {
@@ -707,34 +1182,41 @@ Return ONLY valid JSON, no markdown or explanation.`;
     };
   }
 
-  // ============ ITERATIVE REFINEMENT LOOP ============
-  // Like Deep Research: identify gaps → research → re-synthesize → repeat if needed
+  // ============ ITERATIVE REFINEMENT LOOP WITH CONFIDENCE SCORING ============
+  // Like Deep Research: score → identify gaps → research → re-synthesize → repeat until ready
 
-  const MAX_ITERATIONS = 2; // Up to 2 refinement passes
+  const MAX_ITERATIONS = 3; // Up to 3 refinement passes for higher quality
+  const MIN_CONFIDENCE_SCORE = 70; // Minimum score to stop refinement
   let iteration = 0;
-  let confidence = 'low';
+  let confidenceScore = 0;
+  let readyForClient = false;
 
-  while (iteration < MAX_ITERATIONS && confidence !== 'high') {
+  while (iteration < MAX_ITERATIONS && !readyForClient) {
     iteration++;
-    console.log(`\n  [ITERATION ${iteration}/${MAX_ITERATIONS}] Refining analysis...`);
+    console.log(`\n  [REFINEMENT ${iteration}/${MAX_ITERATIONS}] Analyzing quality...`);
 
-    // Step 1: Identify gaps in current analysis
+    // Step 1: Score and identify gaps in current analysis
     const gaps = await identifyResearchGaps(countryAnalysis, country, industry);
-    confidence = gaps.confidenceAssessment?.overall || 'low';
+    confidenceScore = gaps.overallScore || gaps.confidenceAssessment?.numericConfidence || 50;
+    readyForClient = gaps.confidenceAssessment?.readyForClient || false;
 
-    // If confidence is high or no critical gaps, we're done
-    if (confidence === 'high') {
-      console.log(`    ✓ Analysis confidence HIGH - stopping refinement`);
+    // Store scores in analysis for tracking
+    countryAnalysis.qualityScores = gaps.sectionScores;
+    countryAnalysis.confidenceScore = confidenceScore;
+
+    // If ready for client or high confidence score, we're done
+    if (readyForClient || confidenceScore >= MIN_CONFIDENCE_SCORE) {
+      console.log(`    ✓ Quality threshold met (${confidenceScore}/100) - analysis ready`);
       break;
     }
 
     const criticalGapCount = (gaps.criticalGaps || []).filter(g => g.priority === 'high').length;
     if (criticalGapCount === 0 && (gaps.dataToVerify || []).length === 0) {
-      console.log(`    ✓ No critical gaps found - stopping refinement`);
+      console.log(`    ✓ No actionable gaps found (score: ${confidenceScore}/100) - stopping`);
       break;
     }
 
-    console.log(`    → ${criticalGapCount} high-priority gaps, ${(gaps.dataToVerify || []).length} claims to verify`);
+    console.log(`    → Score: ${confidenceScore}/100 | ${criticalGapCount} high-priority gaps | Targeting ${MIN_CONFIDENCE_SCORE}+ for completion`);
 
     // Step 2: Execute targeted research to fill gaps
     const additionalData = await fillResearchGaps(gaps, country, industry);
@@ -752,7 +1234,12 @@ Return ONLY valid JSON, no markdown or explanation.`;
 
   countryAnalysis.researchTimeMs = Date.now() - startTime;
   countryAnalysis.totalIterations = iteration;
-  console.log(`\n  ✓ Completed ${country} in ${(countryAnalysis.researchTimeMs / 1000).toFixed(1)}s (${iteration} refinement iterations)`);
+  countryAnalysis.finalConfidenceScore = confidenceScore;
+  countryAnalysis.readyForClient = readyForClient || confidenceScore >= MIN_CONFIDENCE_SCORE;
+
+  console.log(`\n  ✓ Completed ${country}:`);
+  console.log(`    Time: ${(countryAnalysis.researchTimeMs / 1000).toFixed(1)}s | Iterations: ${iteration}`);
+  console.log(`    Confidence: ${confidenceScore}/100 | Ready: ${countryAnalysis.readyForClient ? 'YES' : 'NEEDS REVIEW'}`);
 
   return countryAnalysis;
 }
@@ -1333,10 +1820,275 @@ function safeArray(arr, max = 5) {
   return arr.slice(0, max);
 }
 
+// ============ CHART GENERATION ============
+// YCP Color Palette for charts
+const CHART_COLORS = [
+  '007FFF',  // Blue (primary)
+  '011AB7',  // Dark blue
+  'E46C0A',  // Orange
+  '2E7D32',  // Green
+  '1F497D',  // Navy
+  'C62828',  // Red
+  '9C27B0',  // Purple
+  'FF9800'   // Amber
+];
+
+// Add a stacked bar chart to a slide
+// data format: { categories: ['2020', '2021', '2022'], series: [{ name: 'Coal', values: [40, 38, 35] }, { name: 'Gas', values: [30, 32, 35] }] }
+function addStackedBarChart(slide, title, data, options = {}) {
+  if (!data || !data.categories || !data.series || data.series.length === 0) {
+    return; // Skip if no valid data
+  }
+
+  const chartData = data.series.map((s, idx) => ({
+    name: s.name,
+    labels: data.categories,
+    values: s.values,
+    color: CHART_COLORS[idx % CHART_COLORS.length]
+  }));
+
+  slide.addChart('bar', chartData, {
+    x: options.x || 0.5,
+    y: options.y || 1.5,
+    w: options.w || 9,
+    h: options.h || 4.5,
+    barDir: 'bar',
+    barGrouping: 'stacked',
+    showLegend: true,
+    legendPos: 'b',
+    showTitle: !!title,
+    title: title,
+    titleFontFace: 'Segoe UI',
+    titleFontSize: 14,
+    catAxisLabelFontFace: 'Segoe UI',
+    catAxisLabelFontSize: 10,
+    valAxisLabelFontFace: 'Segoe UI',
+    valAxisLabelFontSize: 10,
+    dataLabelFontFace: 'Segoe UI',
+    showValue: options.showValues || false
+  });
+}
+
+// Add a line chart to a slide
+// data format: { categories: ['2020', '2021', '2022'], series: [{ name: 'Price', values: [10, 12, 14] }] }
+function addLineChart(slide, title, data, options = {}) {
+  if (!data || !data.categories || !data.series || data.series.length === 0) {
+    return; // Skip if no valid data
+  }
+
+  const chartData = data.series.map((s, idx) => ({
+    name: s.name,
+    labels: data.categories,
+    values: s.values,
+    color: CHART_COLORS[idx % CHART_COLORS.length]
+  }));
+
+  slide.addChart('line', chartData, {
+    x: options.x || 0.5,
+    y: options.y || 1.5,
+    w: options.w || 9,
+    h: options.h || 4.5,
+    showLegend: data.series.length > 1,
+    legendPos: 'b',
+    showTitle: !!title,
+    title: title,
+    titleFontFace: 'Segoe UI',
+    titleFontSize: 14,
+    catAxisLabelFontFace: 'Segoe UI',
+    catAxisLabelFontSize: 10,
+    valAxisLabelFontFace: 'Segoe UI',
+    valAxisLabelFontSize: 10,
+    lineDataSymbol: 'circle',
+    lineDataSymbolSize: 6
+  });
+}
+
+// Add a bar chart (horizontal or vertical) to a slide
+function addBarChart(slide, title, data, options = {}) {
+  if (!data || !data.categories || !data.values || data.values.length === 0) {
+    return; // Skip if no valid data
+  }
+
+  const chartData = [{
+    name: data.name || 'Value',
+    labels: data.categories,
+    values: data.values,
+    color: CHART_COLORS[0]
+  }];
+
+  slide.addChart('bar', chartData, {
+    x: options.x || 0.5,
+    y: options.y || 1.5,
+    w: options.w || 9,
+    h: options.h || 4.5,
+    barDir: options.horizontal ? 'bar' : 'col',
+    showLegend: false,
+    showTitle: !!title,
+    title: title,
+    titleFontFace: 'Segoe UI',
+    titleFontSize: 14,
+    catAxisLabelFontFace: 'Segoe UI',
+    catAxisLabelFontSize: 10,
+    valAxisLabelFontFace: 'Segoe UI',
+    valAxisLabelFontSize: 10,
+    showValue: true,
+    dataLabelFontFace: 'Segoe UI',
+    dataLabelFontSize: 9
+  });
+}
+
+// Add a pie/doughnut chart to a slide
+function addPieChart(slide, title, data, options = {}) {
+  if (!data || !data.categories || !data.values || data.values.length === 0) {
+    return; // Skip if no valid data
+  }
+
+  const chartData = [{
+    name: data.name || 'Share',
+    labels: data.categories,
+    values: data.values
+  }];
+
+  slide.addChart(options.doughnut ? 'doughnut' : 'pie', chartData, {
+    x: options.x || 2,
+    y: options.y || 1.5,
+    w: options.w || 6,
+    h: options.h || 4.5,
+    showLegend: true,
+    legendPos: 'r',
+    showTitle: !!title,
+    title: title,
+    titleFontFace: 'Segoe UI',
+    titleFontSize: 14,
+    showPercent: true,
+    chartColors: CHART_COLORS.slice(0, data.categories.length)
+  });
+}
+
+// Parse numeric data from research text for charting
+function extractChartData(researchText, chartType) {
+  // This function attempts to extract structured data from research text
+  // In practice, the AI synthesis should provide structured data
+  // This is a fallback pattern matcher
+
+  const data = {
+    categories: [],
+    series: [],
+    values: []
+  };
+
+  // Try to find year-based data patterns like "2020: 45, 2021: 48, 2022: 52"
+  const yearPattern = /(\d{4})[:\s]+(\d+(?:\.\d+)?)/g;
+  const yearMatches = [...(researchText || '').matchAll(yearPattern)];
+
+  if (yearMatches.length >= 2) {
+    data.categories = yearMatches.map(m => m[1]);
+    data.values = yearMatches.map(m => parseFloat(m[2]));
+    data.series = [{ name: 'Value', values: data.values }];
+  }
+
+  return data;
+}
+
+// Advanced chart data extraction using AI
+async function extractChartDataWithAI(researchContent, chartType, dataDescription) {
+  const prompt = `Extract structured chart data from this research content for a ${chartType} chart.
+
+RESEARCH CONTENT:
+${researchContent}
+
+CHART PURPOSE: ${dataDescription}
+
+Return ONLY a JSON object in this exact format:
+{
+  "hasData": true/false,
+  "chartData": {
+    "categories": ["2020", "2021", "2022", "2023", "2024"],
+    "series": [
+      {"name": "Series Name", "values": [10, 12, 14, 16, 18]}
+    ],
+    "values": [10, 12, 14, 16, 18],
+    "unit": "Mtoe or % or USD or bcm"
+  },
+  "dataQuality": "high/medium/low",
+  "source": "where this data came from"
+}
+
+RULES:
+- If no clear numeric data exists, set hasData=false
+- Values must be actual numbers (not strings)
+- For time series, use years as categories
+- For breakdowns, use segment names as categories
+- Include the unit of measurement`;
+
+  try {
+    const result = await callDeepSeekChat(prompt, '', 1024);
+    let jsonStr = result.content.trim();
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+    }
+    const parsed = JSON.parse(jsonStr);
+    if (parsed.hasData && parsed.chartData) {
+      return parsed.chartData;
+    }
+  } catch (error) {
+    console.error('  Chart data extraction failed:', error.message);
+  }
+
+  // Fall back to basic extraction
+  return extractChartData(researchContent, chartType);
+}
+
+// Validate and sanitize chart data before rendering
+function validateChartData(data, chartType) {
+  if (!data) return null;
+
+  const validated = {
+    categories: [],
+    series: [],
+    values: [],
+    unit: data.unit || ''
+  };
+
+  // Validate categories
+  if (Array.isArray(data.categories)) {
+    validated.categories = data.categories.map(c => String(c)).slice(0, 10);
+  }
+
+  // Validate values (for simple bar/pie charts)
+  if (Array.isArray(data.values)) {
+    validated.values = data.values
+      .map(v => typeof v === 'number' ? v : parseFloat(v))
+      .filter(v => !isNaN(v))
+      .slice(0, 10);
+  }
+
+  // Validate series (for stacked/line charts)
+  if (Array.isArray(data.series)) {
+    validated.series = data.series
+      .filter(s => s && s.name && Array.isArray(s.values))
+      .map(s => ({
+        name: String(s.name).substring(0, 30),
+        values: s.values
+          .map(v => typeof v === 'number' ? v : parseFloat(v))
+          .filter(v => !isNaN(v))
+          .slice(0, 10)
+      }))
+      .slice(0, 6); // Max 6 series for readability
+  }
+
+  // Check if we have enough data to render
+  const hasEnoughData =
+    (validated.categories.length >= 2 && validated.values.length >= 2) ||
+    (validated.categories.length >= 2 && validated.series.length >= 1 && validated.series[0].values.length >= 2);
+
+  return hasEnoughData ? validated : null;
+}
+
 // Single country deep-dive PPT - Matches YCP Escort/Shizuoka Gas format
-// Structure: Title → Policy & Regulations → Market → Competitor Overview
+// Structure: Title → Policy (3) → Market (6 with charts) → Competitors (5) → Summary (2) = 17 slides
 async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
-  console.log(`Generating single-country PPT for ${synthesis.country}...`);
+  console.log(`Generating expanded single-country PPT for ${synthesis.country}...`);
 
   const pptx = new pptxgen();
   pptx.author = 'YCP Market Research';
@@ -1352,12 +2104,22 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     white: 'FFFFFF',
     black: '000000',
     gray: 'BFBFBF',          // Border color
-    footerText: '808080'     // Gray footer text
+    footerText: '808080',    // Gray footer text
+    green: '2E7D32',         // Positive/Opportunity
+    orange: 'E46C0A',        // Warning/Obstacle
+    red: 'C62828'            // Negative/Risk
   };
 
   // Set default font to Segoe UI (YCP standard)
   pptx.theme = { headFontFace: 'Segoe UI', bodyFontFace: 'Segoe UI' };
   const FONT = 'Segoe UI';
+
+  // Get data from new structure or fall back to legacy structure
+  const policy = synthesis.policy || {};
+  const market = synthesis.market || {};
+  const competitors = synthesis.competitors || {};
+  const summary = synthesis.summary || synthesis.summaryAssessment || {};
+  const country = synthesis.country;
 
   // Truncate title to max 70 chars
   function truncateTitle(text) {
@@ -1370,7 +2132,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
 
   // Standard slide layout with title, subtitle, and navy divider line
-  function addSlide(title, subtitle = '') {
+  function addSlideWithTitle(title, subtitle = '') {
     const slide = pptx.addSlide();
     // Title - 24pt bold navy
     slide.addText(truncateTitle(title), {
@@ -1393,9 +2155,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     return slide;
   }
 
-  const ca = countryAnalysis || {};
-  const headlines = synthesis.slideHeadlines || {};
-  const country = synthesis.country;
+  // Helper for table header row
+  function tableHeader(cols) {
+    return cols.map(text => ({
+      text,
+      options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT }
+    }));
+  }
 
   // ============ SLIDE 1: TITLE ============
   const titleSlide = pptx.addSlide();
@@ -1407,190 +2173,496 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     x: 0.5, y: 3.0, w: 9, h: 0.5,
     fontSize: 24, color: COLORS.accent1, fontFace: FONT
   });
+  titleSlide.addText(`Deep Research Report`, {
+    x: 0.5, y: 3.6, w: 9, h: 0.4,
+    fontSize: 14, color: COLORS.black, fontFace: FONT
+  });
   titleSlide.addText(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' }), {
     x: 0.5, y: 6.5, w: 9, h: 0.3,
     fontSize: 10, color: '666666', fontFace: FONT
   });
 
-  // ============ SLIDE 2: POLICY & REGULATIONS ============
-  const reg = ca.policyRegulatory || {};
-  const regTitle = headlines.regulation || `${country} - Policy & Regulations`;
-  const regSubtitle = reg.governmentStance ? truncateSubtitle(reg.governmentStance, 95) : '';
-  const regSlide = addSlide(regTitle, regSubtitle);
+  // ============ SECTION 1: POLICY & REGULATIONS (3 slides) ============
 
-  // Policy table - Area | Details format (matching Escort)
-  const regRows = [
-    [
-      { text: 'Area', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Details', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } }
-    ]
-  ];
-
-  // Add key legislation as separate rows
-  const laws = safeArray(reg.keyLegislation, 3);
-  laws.forEach((law, idx) => {
-    regRows.push([
-      { text: `Key Law ${idx + 1}` },
-      { text: truncate(law, 100) }
-    ]);
-  });
-
-  // Add ownership rules
-  if (reg.foreignOwnershipRules) {
-    regRows.push([
-      { text: 'Foreign Ownership' },
-      { text: truncate(reg.foreignOwnershipRules, 100) }
-    ]);
-  }
-
-  // Add incentives
-  const incentives = safeArray(reg.incentives, 2);
-  incentives.forEach((inc, idx) => {
-    regRows.push([
-      { text: idx === 0 ? 'Incentives' : '' },
-      { text: truncate(inc, 100) }
-    ]);
-  });
-
-  // Add risk level
-  if (reg.regulatoryRisk) {
-    regRows.push([
-      { text: 'Risk Level' },
-      { text: truncate(reg.regulatoryRisk, 100) }
-    ]);
-  }
-
-  regSlide.addTable(regRows, {
-    x: 0.35, y: 1.3, w: 9.3, h: 5.2,
-    fontSize: 14, fontFace: FONT,
-    border: { pt: 0.5, color: 'cccccc' },
-    colW: [2.0, 7.3],
-    valign: 'top'
-  });
-
-  // ============ SLIDE 3: MARKET ============
-  const market = ca.marketDynamics || {};
-  const macro = ca.macroContext || {};
-  const marketTitle = headlines.marketData || `${country} - Market`;
-  // Use market size as subtitle - extract just the key figure, not the full detail
-  const marketSubtitle = market.marketSize ? truncateSubtitle(market.marketSize, 95) : '';
-  const marketSlide = addSlide(marketTitle, marketSubtitle);
-
-  // Market data table - matching Escort format
-  const marketRows = [
-    [
-      { text: 'Metric', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Value', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } }
-    ]
-  ];
-
-  // Focus on ESCO/industry-specific metrics, not generic macro data
-  if (market.marketSize) {
-    marketRows.push([{ text: 'Market Size' }, { text: truncate(market.marketSize, 100) }]);
-  }
-  if (market.demand) {
-    marketRows.push([{ text: 'Demand Drivers' }, { text: truncate(market.demand, 100) }]);
-  }
-  if (market.pricing) {
-    marketRows.push([{ text: 'Pricing/Tariffs' }, { text: truncate(market.pricing, 100) }]);
-  }
-  if (market.supplyChain) {
-    marketRows.push([{ text: 'Supply Chain' }, { text: truncate(market.supplyChain, 100) }]);
-  }
-  // Add macro context only if relevant
-  if (macro.energyIntensity) {
-    marketRows.push([{ text: 'Energy Intensity' }, { text: truncate(macro.energyIntensity, 100) }]);
-  }
-  if (macro.keyObservation) {
-    marketRows.push([{ text: 'Key Observation' }, { text: truncate(macro.keyObservation, 100) }]);
-  }
-
-  marketSlide.addTable(marketRows, {
-    x: 0.35, y: 1.3, w: 9.3, h: 5.2,
-    fontSize: 14, fontFace: FONT,
-    border: { pt: 0.5, color: 'cccccc' },
-    colW: [2.0, 7.3],
-    valign: 'top'
-  });
-
-  // ============ SLIDE 4: COMPETITOR OVERVIEW ============
-  const comp = ca.competitiveLandscape || {};
-  const compTitle = headlines.competition || `${country} - Competitor Overview`;
-  // Extract just the intensity level (Low/Medium/High), not the full reasoning
-  let compIntensityLevel = '';
-  if (comp.competitiveIntensity) {
-    const intensityStr = String(comp.competitiveIntensity);
-    // Check if it starts with a level indicator
-    const levelMatch = intensityStr.match(/^(low|medium|high|medium-high|medium-low)/i);
-    if (levelMatch) {
-      compIntensityLevel = `Competitive intensity: ${levelMatch[1]}`;
-    } else {
-      // Truncate to just the first part before any reasoning
-      compIntensityLevel = truncateSubtitle(`Competitive intensity: ${intensityStr}`, 60);
-    }
-  }
-  const compSlide = addSlide(compTitle, compIntensityLevel);
-
-  // Competitor table - Company | Type | Description
-  const compRows = [
-    [
-      { text: 'Company', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Type', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Notes', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } }
-    ]
-  ];
-
-  // Add local players
-  safeArray(comp.localPlayers, 3).forEach(p => {
-    const name = typeof p === 'string' ? p : (p.name || 'Unknown');
-    const desc = typeof p === 'string' ? '' : (p.description || '');
-    compRows.push([
-      { text: truncate(name, 30) },
-      { text: 'Local' },
-      { text: truncate(desc, 70) }
-    ]);
-  });
-
-  // Add foreign players
-  safeArray(comp.foreignPlayers, 3).forEach(p => {
-    const name = typeof p === 'string' ? p : (p.name || 'Unknown');
-    const desc = typeof p === 'string' ? '' : (p.description || '');
-    compRows.push([
-      { text: truncate(name, 30) },
-      { text: 'Foreign' },
-      { text: truncate(desc, 70) }
-    ]);
-  });
-
-  compSlide.addTable(compRows, {
-    x: 0.35, y: 1.3, w: 9.3, h: 3.5,
-    fontSize: 14, fontFace: FONT,
-    border: { pt: 0.5, color: 'cccccc' },
-    colW: [2.5, 1.0, 5.8],
-    valign: 'top'
-  });
-
-  // Entry barriers section below table
-  const barriers = safeArray(comp.entryBarriers, 4);
-  if (barriers.length > 0) {
-    compSlide.addShape('line', {
-      x: 0.35, y: 4.9, w: 9.3, h: 0,
-      line: { color: COLORS.dk2, width: 2.5 }
+  // SLIDE 2: Foundational Acts
+  const foundationalActs = policy.foundationalActs || {};
+  const actsSlide = addSlideWithTitle(
+    foundationalActs.slideTitle || `${country} - Energy Foundational Acts`,
+    truncateSubtitle(foundationalActs.subtitle || foundationalActs.keyMessage || '', 95)
+  );
+  const acts = safeArray(foundationalActs.acts, 5);
+  if (acts.length > 0) {
+    const actsRows = [tableHeader(['Act Name', 'Year', 'Requirements', 'Enforcement'])];
+    acts.forEach(act => {
+      actsRows.push([
+        { text: truncate(act.name || '', 25) },
+        { text: act.year || '' },
+        { text: truncate(act.requirements || '', 50) },
+        { text: truncate(act.enforcement || '', 40) }
+      ]);
     });
-    compSlide.addText('Barriers to Entry', {
-      x: 0.35, y: 5.0, w: 9.3, h: 0.35,
+    actsSlide.addTable(actsRows, {
+      x: 0.35, y: 1.3, w: 9.3, h: 5.2,
+      fontSize: 12, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [2.2, 0.8, 3.3, 3.0],
+      valign: 'top'
+    });
+  }
+
+  // SLIDE 3: National Policy
+  const nationalPolicy = policy.nationalPolicy || {};
+  const policySlide = addSlideWithTitle(
+    nationalPolicy.slideTitle || `${country} - National Energy Policy`,
+    truncateSubtitle(nationalPolicy.policyDirection || '', 95)
+  );
+  const targets = safeArray(nationalPolicy.targets, 4);
+  if (targets.length > 0) {
+    const targetRows = [tableHeader(['Metric', 'Target', 'Deadline', 'Status'])];
+    targets.forEach(t => {
+      targetRows.push([
+        { text: t.metric || '' },
+        { text: t.target || '' },
+        { text: t.deadline || '' },
+        { text: t.status || '' }
+      ]);
+    });
+    policySlide.addTable(targetRows, {
+      x: 0.35, y: 1.3, w: 9.3, h: 2.5,
+      fontSize: 12, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [3.0, 2.3, 2.0, 2.0],
+      valign: 'top'
+    });
+  }
+  // Key initiatives as bullets
+  const initiatives = safeArray(nationalPolicy.keyInitiatives, 4);
+  if (initiatives.length > 0) {
+    policySlide.addText('Key Initiatives', {
+      x: 0.35, y: 4.0, w: 9.3, h: 0.3,
       fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
     });
-    compSlide.addText(barriers.map(b => ({ text: truncate(b, 90), options: { bullet: true } })), {
-      x: 0.35, y: 5.4, w: 9.3, h: 1.3,
-      fontSize: 14, fontFace: FONT, color: COLORS.black, valign: 'top'
+    policySlide.addText(initiatives.map(i => ({ text: truncate(i, 100), options: { bullet: true } })), {
+      x: 0.35, y: 4.4, w: 9.3, h: 2.0,
+      fontSize: 12, fontFace: FONT, color: COLORS.black, valign: 'top'
     });
   }
 
-  // Next Steps slide removed per user request
+  // SLIDE 4: Investment Restrictions
+  const investRestrict = policy.investmentRestrictions || {};
+  const investSlide = addSlideWithTitle(
+    investRestrict.slideTitle || `${country} - Foreign Investment Rules`,
+    truncateSubtitle(investRestrict.riskJustification || '', 95)
+  );
+  // Ownership limits
+  const ownership = investRestrict.ownershipLimits || {};
+  const ownershipRows = [tableHeader(['Category', 'Limit', 'Details'])];
+  if (ownership.general) ownershipRows.push([{ text: 'General Sectors' }, { text: ownership.general }, { text: truncate(ownership.exceptions || '', 60) }]);
+  if (ownership.promoted) ownershipRows.push([{ text: 'BOI Promoted' }, { text: ownership.promoted }, { text: 'Tax incentives apply' }]);
+  if (ownershipRows.length > 1) {
+    investSlide.addTable(ownershipRows, {
+      x: 0.35, y: 1.3, w: 9.3, h: 1.5,
+      fontSize: 12, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [2.5, 1.5, 5.3],
+      valign: 'top'
+    });
+  }
+  // Incentives
+  const incentivesList = safeArray(investRestrict.incentives, 3);
+  if (incentivesList.length > 0) {
+    const incRows = [tableHeader(['Incentive', 'Benefit', 'Eligibility'])];
+    incentivesList.forEach(inc => {
+      incRows.push([
+        { text: inc.name || '' },
+        { text: inc.benefit || '' },
+        { text: truncate(inc.eligibility || '', 50) }
+      ]);
+    });
+    investSlide.addTable(incRows, {
+      x: 0.35, y: 3.0, w: 9.3, h: 2.0,
+      fontSize: 12, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [2.5, 2.5, 4.3],
+      valign: 'top'
+    });
+  }
+  // Risk level indicator
+  if (investRestrict.riskLevel) {
+    const riskColor = investRestrict.riskLevel.toLowerCase().includes('high') ? COLORS.red :
+                      investRestrict.riskLevel.toLowerCase().includes('low') ? COLORS.green : COLORS.orange;
+    investSlide.addText(`Regulatory Risk: ${investRestrict.riskLevel.toUpperCase()}`, {
+      x: 0.35, y: 5.5, w: 9.3, h: 0.4,
+      fontSize: 14, bold: true, color: riskColor, fontFace: FONT
+    });
+  }
+
+  // ============ SECTION 2: MARKET DATA (6 slides with charts) ============
+
+  // SLIDE 5: TPES
+  const tpes = market.tpes || {};
+  const tpesSlide = addSlideWithTitle(
+    tpes.slideTitle || `${country} - Total Primary Energy Supply`,
+    truncateSubtitle(tpes.keyInsight || tpes.subtitle || '', 95)
+  );
+  if (tpes.chartData && tpes.chartData.series) {
+    addStackedBarChart(tpesSlide, `TPES by Source (${tpes.chartData.unit || 'Mtoe'})`, tpes.chartData, { y: 1.3, h: 5.0 });
+  } else {
+    tpesSlide.addText('Chart data not available - refer to synthesis data', {
+      x: 0.5, y: 3, w: 9, h: 1, fontSize: 14, fontFace: FONT, color: COLORS.footerText
+    });
+  }
+
+  // SLIDE 6: Final Energy Demand
+  const finalDemand = market.finalDemand || {};
+  const demandSlide = addSlideWithTitle(
+    finalDemand.slideTitle || `${country} - Final Energy Demand`,
+    truncateSubtitle(finalDemand.growthRate || finalDemand.subtitle || '', 95)
+  );
+  if (finalDemand.chartData && finalDemand.chartData.series) {
+    addStackedBarChart(demandSlide, `Demand by Sector (${finalDemand.chartData.unit || '%'})`, finalDemand.chartData, { y: 1.3, h: 4.0 });
+  }
+  // Key drivers as bullets
+  const drivers = safeArray(finalDemand.keyDrivers, 3);
+  if (drivers.length > 0) {
+    demandSlide.addText(drivers.map(d => ({ text: truncate(d, 100), options: { bullet: true } })), {
+      x: 0.35, y: 5.5, w: 9.3, h: 1.2,
+      fontSize: 12, fontFace: FONT, color: COLORS.black, valign: 'top'
+    });
+  }
+
+  // SLIDE 7: Electricity & Power
+  const electricity = market.electricity || {};
+  const elecSlide = addSlideWithTitle(
+    electricity.slideTitle || `${country} - Electricity & Power`,
+    truncateSubtitle(electricity.totalCapacity || electricity.subtitle || '', 95)
+  );
+  if (electricity.chartData && electricity.chartData.values) {
+    addPieChart(elecSlide, `Power Generation Mix (${electricity.chartData.unit || '%'})`, electricity.chartData, { x: 0.5, y: 1.3, w: 5, h: 4 });
+  }
+  // Add key stats on the right
+  elecSlide.addText([
+    { text: `Demand Growth: ${electricity.demandGrowth || 'N/A'}`, options: { bullet: true } },
+    { text: `Key Trend: ${truncate(electricity.keyTrend || 'N/A', 80)}`, options: { bullet: true } }
+  ], {
+    x: 5.5, y: 2, w: 4.3, h: 3,
+    fontSize: 12, fontFace: FONT, color: COLORS.black, valign: 'top'
+  });
+
+  // SLIDE 8: Gas & LNG
+  const gasLng = market.gasLng || {};
+  const gasSlide = addSlideWithTitle(
+    gasLng.slideTitle || `${country} - Gas & LNG Market`,
+    truncateSubtitle(gasLng.pipelineNetwork || gasLng.subtitle || '', 95)
+  );
+  if (gasLng.chartData && gasLng.chartData.series) {
+    addLineChart(gasSlide, `Gas Supply Trend (${gasLng.chartData.unit || 'bcm'})`, gasLng.chartData, { y: 1.3, h: 3.5 });
+  }
+  // LNG terminals
+  const terminals = safeArray(gasLng.lngTerminals, 3);
+  if (terminals.length > 0) {
+    const termRows = [tableHeader(['Terminal', 'Capacity', 'Utilization'])];
+    terminals.forEach(t => {
+      termRows.push([
+        { text: t.name || '' },
+        { text: t.capacity || '' },
+        { text: t.utilization || '' }
+      ]);
+    });
+    gasSlide.addTable(termRows, {
+      x: 0.35, y: 5.0, w: 9.3, h: 1.5,
+      fontSize: 11, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [4.0, 2.65, 2.65],
+      valign: 'top'
+    });
+  }
+
+  // SLIDE 9: Energy Pricing
+  const pricing = market.pricing || {};
+  const priceSlide = addSlideWithTitle(
+    pricing.slideTitle || `${country} - Energy Pricing`,
+    truncateSubtitle(pricing.outlook || pricing.subtitle || '', 95)
+  );
+  if (pricing.chartData && pricing.chartData.series) {
+    addLineChart(priceSlide, 'Energy Price Trends', pricing.chartData, { y: 1.3, h: 4.0 });
+  }
+  if (pricing.comparison) {
+    priceSlide.addText(`Regional Comparison: ${truncate(pricing.comparison, 100)}`, {
+      x: 0.35, y: 5.5, w: 9.3, h: 0.5,
+      fontSize: 12, fontFace: FONT, color: COLORS.black
+    });
+  }
+
+  // SLIDE 10: ESCO Market
+  const escoMarket = market.escoMarket || {};
+  const escoSlide = addSlideWithTitle(
+    escoMarket.slideTitle || `${country} - ESCO Market`,
+    truncateSubtitle(`${escoMarket.marketSize || ''} | ${escoMarket.growthRate || ''}`, 95)
+  );
+  if (escoMarket.chartData && escoMarket.chartData.values) {
+    addBarChart(escoSlide, `Market Segments (${escoMarket.chartData.unit || '%'})`, escoMarket.chartData, { y: 1.3, h: 3.5 });
+  }
+  // Segments table
+  const segments = safeArray(escoMarket.segments, 4);
+  if (segments.length > 0) {
+    const segRows = [tableHeader(['Segment', 'Size', 'Share'])];
+    segments.forEach(s => {
+      segRows.push([
+        { text: s.name || '' },
+        { text: s.size || '' },
+        { text: s.share || '' }
+      ]);
+    });
+    escoSlide.addTable(segRows, {
+      x: 0.35, y: 5.0, w: 9.3, h: 1.5,
+      fontSize: 11, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [4.0, 2.65, 2.65],
+      valign: 'top'
+    });
+  }
+
+  // ============ SECTION 3: COMPETITOR OVERVIEW (5 slides) ============
+
+  // SLIDE 11: Japanese Players
+  const japanesePlayers = competitors.japanesePlayers || {};
+  const jpSlide = addSlideWithTitle(
+    japanesePlayers.slideTitle || `${country} - Japanese Energy Companies`,
+    truncateSubtitle(japanesePlayers.marketInsight || japanesePlayers.subtitle || '', 95)
+  );
+  const jpPlayers = safeArray(japanesePlayers.players, 5);
+  if (jpPlayers.length > 0) {
+    const jpRows = [tableHeader(['Company', 'Presence', 'Projects', 'Assessment'])];
+    jpPlayers.forEach(p => {
+      jpRows.push([
+        { text: p.name || '' },
+        { text: truncate(p.presence || '', 30) },
+        { text: truncate(p.projects || '', 35) },
+        { text: p.assessment || '' }
+      ]);
+    });
+    jpSlide.addTable(jpRows, {
+      x: 0.35, y: 1.3, w: 9.3, h: 5.2,
+      fontSize: 11, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [2.0, 2.5, 3.0, 1.8],
+      valign: 'top'
+    });
+  }
+
+  // SLIDE 12: Local Major Players
+  const localMajor = competitors.localMajor || {};
+  const localSlide = addSlideWithTitle(
+    localMajor.slideTitle || `${country} - Major Local Players`,
+    truncateSubtitle(localMajor.concentration || localMajor.subtitle || '', 95)
+  );
+  const localPlayers = safeArray(localMajor.players, 5);
+  if (localPlayers.length > 0) {
+    const localRows = [tableHeader(['Company', 'Type', 'Revenue', 'Market Share', 'Strengths'])];
+    localPlayers.forEach(p => {
+      localRows.push([
+        { text: p.name || '' },
+        { text: p.type || '' },
+        { text: p.revenue || '' },
+        { text: p.marketShare || '' },
+        { text: truncate(p.strengths || '', 35) }
+      ]);
+    });
+    localSlide.addTable(localRows, {
+      x: 0.35, y: 1.3, w: 9.3, h: 5.2,
+      fontSize: 10, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [2.0, 1.3, 1.5, 1.3, 3.2],
+      valign: 'top'
+    });
+  }
+
+  // SLIDE 13: Foreign Players
+  const foreignPlayers = competitors.foreignPlayers || {};
+  const foreignSlide = addSlideWithTitle(
+    foreignPlayers.slideTitle || `${country} - Foreign Energy Companies`,
+    truncateSubtitle(foreignPlayers.competitiveInsight || foreignPlayers.subtitle || '', 95)
+  );
+  const foreignList = safeArray(foreignPlayers.players, 5);
+  if (foreignList.length > 0) {
+    const foreignRows = [tableHeader(['Company', 'Origin', 'Entry Year', 'Mode', 'Success'])];
+    foreignList.forEach(p => {
+      foreignRows.push([
+        { text: p.name || '' },
+        { text: p.origin || '' },
+        { text: p.entryYear || '' },
+        { text: p.mode || '' },
+        { text: p.success || '' }
+      ]);
+    });
+    foreignSlide.addTable(foreignRows, {
+      x: 0.35, y: 1.3, w: 9.3, h: 5.2,
+      fontSize: 11, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [2.5, 1.5, 1.3, 2.0, 2.0],
+      valign: 'top'
+    });
+  }
+
+  // SLIDE 14: Case Study
+  const caseStudy = competitors.caseStudy || {};
+  const caseSlide = addSlideWithTitle(
+    caseStudy.slideTitle || `${country} - Market Entry Case Study`,
+    truncateSubtitle(caseStudy.applicability || caseStudy.subtitle || '', 95)
+  );
+  // Case study details
+  const caseDetails = [
+    `Company: ${caseStudy.company || 'N/A'}`,
+    `Entry Year: ${caseStudy.entryYear || 'N/A'}`,
+    `Entry Mode: ${caseStudy.entryMode || 'N/A'}`,
+    `Investment: ${caseStudy.investment || 'N/A'}`,
+    `Outcome: ${truncate(caseStudy.outcome || 'N/A', 80)}`
+  ];
+  caseSlide.addText(caseDetails.map(d => ({ text: d, options: { bullet: true } })), {
+    x: 0.35, y: 1.3, w: 9.3, h: 2.5,
+    fontSize: 12, fontFace: FONT, color: COLORS.black, valign: 'top'
+  });
+  // Key lessons
+  const lessons = safeArray(caseStudy.keyLessons, 4);
+  if (lessons.length > 0) {
+    caseSlide.addText('Key Lessons', {
+      x: 0.35, y: 4.0, w: 9.3, h: 0.3,
+      fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
+    });
+    caseSlide.addText(lessons.map(l => ({ text: truncate(l, 100), options: { bullet: true } })), {
+      x: 0.35, y: 4.4, w: 9.3, h: 2.0,
+      fontSize: 12, fontFace: FONT, color: COLORS.black, valign: 'top'
+    });
+  }
+
+  // SLIDE 15: M&A Activity
+  const maActivity = competitors.maActivity || {};
+  const maSlide = addSlideWithTitle(
+    maActivity.slideTitle || `${country} - M&A Activity`,
+    truncateSubtitle(maActivity.valuationMultiples || maActivity.subtitle || '', 95)
+  );
+  // Recent deals
+  const deals = safeArray(maActivity.recentDeals, 3);
+  if (deals.length > 0) {
+    const dealRows = [tableHeader(['Year', 'Buyer', 'Target', 'Value', 'Rationale'])];
+    deals.forEach(d => {
+      dealRows.push([
+        { text: d.year || '' },
+        { text: d.buyer || '' },
+        { text: d.target || '' },
+        { text: d.value || '' },
+        { text: truncate(d.rationale || '', 30) }
+      ]);
+    });
+    maSlide.addTable(dealRows, {
+      x: 0.35, y: 1.3, w: 9.3, h: 2.0,
+      fontSize: 10, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [0.8, 1.8, 1.8, 1.5, 3.4],
+      valign: 'top'
+    });
+  }
+  // Potential targets
+  const potentialTargets = safeArray(maActivity.potentialTargets, 3);
+  if (potentialTargets.length > 0) {
+    maSlide.addText('Potential Acquisition Targets', {
+      x: 0.35, y: 3.5, w: 9.3, h: 0.3,
+      fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
+    });
+    const targetRows = [tableHeader(['Company', 'Est. Value', 'Rationale', 'Timing'])];
+    potentialTargets.forEach(t => {
+      targetRows.push([
+        { text: t.name || '' },
+        { text: t.estimatedValue || '' },
+        { text: truncate(t.rationale || '', 40) },
+        { text: t.timing || '' }
+      ]);
+    });
+    maSlide.addTable(targetRows, {
+      x: 0.35, y: 3.9, w: 9.3, h: 2.0,
+      fontSize: 10, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [2.0, 1.5, 4.0, 1.8],
+      valign: 'top'
+    });
+  }
+
+  // ============ SECTION 4: SUMMARY (2 slides) ============
+
+  // SLIDE 16: Opportunities & Obstacles
+  const ooSlide = addSlideWithTitle(
+    `${country} - Opportunities & Obstacles`,
+    truncateSubtitle(summary.recommendation || '', 95)
+  );
+  // Two-column layout
+  const opportunities = safeArray(summary.opportunities, 4);
+  const obstacles = safeArray(summary.obstacles, 4);
+
+  // Opportunities column (left)
+  ooSlide.addText('OPPORTUNITIES', {
+    x: 0.35, y: 1.3, w: 4.5, h: 0.3,
+    fontSize: 14, bold: true, color: COLORS.green, fontFace: FONT
+  });
+  if (opportunities.length > 0) {
+    ooSlide.addText(opportunities.map(o => ({
+      text: typeof o === 'string' ? truncate(o, 70) : truncate(`${o.opportunity || ''} (${o.size || ''})`, 70),
+      options: { bullet: true }
+    })), {
+      x: 0.35, y: 1.7, w: 4.5, h: 4.5,
+      fontSize: 11, fontFace: FONT, color: COLORS.black, valign: 'top'
+    });
+  }
+
+  // Obstacles column (right)
+  ooSlide.addText('OBSTACLES', {
+    x: 5.0, y: 1.3, w: 4.5, h: 0.3,
+    fontSize: 14, bold: true, color: COLORS.orange, fontFace: FONT
+  });
+  if (obstacles.length > 0) {
+    ooSlide.addText(obstacles.map(o => ({
+      text: typeof o === 'string' ? truncate(o, 70) : truncate(`${o.obstacle || ''} [${o.severity || ''}]`, 70),
+      options: { bullet: true }
+    })), {
+      x: 5.0, y: 1.7, w: 4.5, h: 4.5,
+      fontSize: 11, fontFace: FONT, color: COLORS.black, valign: 'top'
+    });
+  }
+
+  // Ratings at bottom
+  const ratings = summary.ratings || {};
+  if (ratings.attractiveness || ratings.feasibility) {
+    ooSlide.addText(`Attractiveness: ${ratings.attractiveness || 'N/A'}/10 | Feasibility: ${ratings.feasibility || 'N/A'}/10`, {
+      x: 0.35, y: 6.2, w: 9.3, h: 0.3,
+      fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT
+    });
+  }
+
+  // SLIDE 17: Key Insights
+  const insightsSlide = addSlideWithTitle(
+    `${country} - Key Insights`,
+    'Strategic implications for market entry'
+  );
+  const insights = safeArray(summary.keyInsights, 3);
+  let insightY = 1.3;
+  insights.forEach((insight, idx) => {
+    const title = typeof insight === 'string' ? `Insight ${idx + 1}` : (insight.title || `Insight ${idx + 1}`);
+    const content = typeof insight === 'string' ? insight :
+      `${insight.data || ''} ${insight.pattern || ''} ${insight.implication || ''}`;
+
+    insightsSlide.addText(title, {
+      x: 0.35, y: insightY, w: 9.3, h: 0.35,
+      fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
+    });
+    insightsSlide.addText(truncate(content, 200), {
+      x: 0.35, y: insightY + 0.35, w: 9.3, h: 1.2,
+      fontSize: 11, fontFace: FONT, color: COLORS.black, valign: 'top'
+    });
+    insightY += 1.7;
+  });
 
   const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
-  console.log(`Single-country PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB`);
+  console.log(`Deep-dive PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB, 17 slides`);
   return pptxBuffer;
 }
 
