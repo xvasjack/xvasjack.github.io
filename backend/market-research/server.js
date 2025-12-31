@@ -3,6 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
+const { securityHeaders, rateLimiter } = require('../shared/security');
+const { requestLogger, healthCheck } = require('../shared/middleware');
 
 // ============ GLOBAL ERROR HANDLERS ============
 process.on('unhandledRejection', (reason, promise) => {
