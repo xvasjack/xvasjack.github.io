@@ -2614,6 +2614,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
     // Include both accessible companies and inaccessible websites on the summary slide
     const allCompaniesForSummary = [...companies, ...inaccessibleWebsites];
     if (targetDescription && allCompaniesForSummary.length > 0) {
+      try {
       console.log('Generating Target List slide...');
       const meceData = await generateMECESegments(targetDescription, allCompaniesForSummary);
 
@@ -2980,10 +2981,16 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       });
 
       console.log('Target List slide generated');
+      } catch (targetListError) {
+        console.error('ERROR generating Target List slide:', targetListError.message);
+        console.error('Target List error stack:', targetListError.stack);
+        // Continue without target list slide
+      }
     }
 
     // ===== INDIVIDUAL COMPANY PROFILE SLIDES =====
     for (const company of companies) {
+      try {
       // Skip companies with no meaningful info (only has website, no business/location/metrics)
       const hasBusinessInfo = company.business && company.business.trim().length > 0;
       const hasLocation = company.location && company.location.trim().length > 0;
@@ -2996,6 +3003,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         continue;
       }
 
+      console.log(`  Generating slide for: ${company.company_name || company.website}`);
       // Use master slide - lines are fixed in background and cannot be moved
       const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
@@ -3385,11 +3393,11 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
       // ALWAYS use table format (minimum 1 item)
       if (validBreakdownItems.length >= 1) {
-        const rightTableData = validBreakdownItems.map(item => [item.label, item.value]);
+        const rightTableData = validBreakdownItems.map(item => [String(item.label || ''), String(item.value || '')]);
 
         const rightRows = rightTableData.map((row) => [
           {
-            text: row[0],
+            text: String(row[0] || ''),
             options: {
               fill: { color: COLORS.accent3 },
               color: COLORS.white,
@@ -3398,7 +3406,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
             }
           },
           {
-            text: row[1],
+            text: String(row[1] || ''),
             options: {
               fill: { color: COLORS.white },
               color: COLORS.black,
@@ -3456,6 +3464,11 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         color: COLORS.black, valign: 'top',
         margin: [0, 0, 0, 0]  // No left/right margin
       });
+      } catch (slideError) {
+        console.error(`  ERROR generating slide for ${company.company_name || company.website}:`, slideError.message);
+        console.error('  Slide error stack:', slideError.stack);
+        // Continue with next company instead of failing entire PPTX
+      }
     }
 
     // Generate base64
@@ -3469,6 +3482,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
     };
   } catch (error) {
     console.error('PptxGenJS error:', error);
+    console.error('PptxGenJS error stack:', error.stack);
     return {
       success: false,
       error: error.message
