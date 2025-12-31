@@ -992,24 +992,31 @@ YOUR TASK:
 3. ADD DEPTH where gaps have been filled
 4. FLAG remaining uncertainties with "estimated" or "unverified"
 
-Return the SAME JSON structure as before, but IMPROVED:
+CRITICAL - STRUCTURE PRESERVATION:
+You MUST return the EXACT SAME JSON structure/schema as the ORIGINAL ANALYSIS above.
+- Keep all the same top-level keys (policy, market, competitors, depth, summary, etc.)
+- Keep all the same nested keys within each section
+- Only UPDATE the VALUES with improved/corrected information
+- Do NOT change the structure, do NOT rename keys, do NOT reorganize
+
+For example, if the original has:
 {
-  "country": "${country}",
-  "macroContext": { ... },
-  "policyRegulatory": { ... },
-  "marketDynamics": { ... },
-  "competitiveLandscape": { ... },
-  "infrastructure": { ... },
-  "summaryAssessment": { ... }
+  "policy": {
+    "foundationalActs": { "acts": [...] },
+    "nationalPolicy": { ... }
+  },
+  "market": { ... }
 }
 
-CRITICAL:
+Your output MUST have the same structure with policy.foundationalActs.acts, etc.
+
+Additional requirements:
 - Every number should now have context (year, source type, comparison)
 - Every company mentioned should have specifics (size, market position)
 - Every regulation should have enforcement reality
 - Mark anything still uncertain as "estimated" or "industry sources suggest"
 
-Return ONLY valid JSON.`;
+Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
 
   const result = await callDeepSeek(prompt, '', 8192);
 
@@ -1018,7 +1025,24 @@ Return ONLY valid JSON.`;
     if (jsonStr.startsWith('```')) {
       jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
     }
-    return JSON.parse(jsonStr);
+    const newSynthesis = JSON.parse(jsonStr);
+
+    // Validate structure preservation - check for key fields
+    const hasPolicy = newSynthesis.policy && typeof newSynthesis.policy === 'object';
+    const hasMarket = newSynthesis.market && typeof newSynthesis.market === 'object';
+    const hasCompetitors = newSynthesis.competitors && typeof newSynthesis.competitors === 'object';
+
+    if (!hasPolicy || !hasMarket || !hasCompetitors) {
+      console.warn('  [reSynthesize] Structure mismatch detected - falling back to original');
+      console.warn(`    Missing: ${!hasPolicy ? 'policy ' : ''}${!hasMarket ? 'market ' : ''}${!hasCompetitors ? 'competitors' : ''}`);
+      // Preserve country field from original
+      originalSynthesis.country = country;
+      return originalSynthesis;
+    }
+
+    // Preserve country field
+    newSynthesis.country = country;
+    return newSynthesis;
   } catch (error) {
     console.error('  Re-synthesis failed:', error.message);
     return originalSynthesis; // Fall back to original
