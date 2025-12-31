@@ -10,8 +10,12 @@
 
 function normalizeCompanyName(name) {
   if (!name) return '';
-  return name.toLowerCase()
-    .replace(/\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi, '')
+  return name
+    .toLowerCase()
+    .replace(
+      /\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi,
+      ''
+    )
     .replace(/^(pt\.?|cv\.?)\s+/gi, '')
     .replace(/[^\w\s]/g, '')
     .replace(/\s+/g, ' ')
@@ -20,11 +24,15 @@ function normalizeCompanyName(name) {
 
 function normalizeWebsite(url) {
   if (!url) return '';
-  return url.toLowerCase()
+  return url
+    .toLowerCase()
     .replace(/^https?:\/\//, '')
     .replace(/^www\./, '')
     .replace(/\/+$/, '')
-    .replace(/\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i, '')
+    .replace(
+      /\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i,
+      ''
+    )
     .replace(/\.(html?|php|aspx?|jsp)$/i, '');
 }
 
@@ -73,7 +81,7 @@ function isSpamOrDirectoryURL(url) {
     'facebook.com',
     'twitter.com',
     'instagram.com',
-    'youtube.com'
+    'youtube.com',
   ];
 
   for (const pattern of obviousSpam) {
@@ -87,8 +95,15 @@ function isValidCompanyWebsite(url) {
   if (!url) return false;
   const urlLower = url.toLowerCase();
 
-  if (urlLower.endsWith('.pdf') || urlLower.includes('.pdf?') || urlLower.includes('.pdf#')) return false;
-  if (urlLower.endsWith('.doc') || urlLower.endsWith('.docx') || urlLower.endsWith('.xls') || urlLower.endsWith('.xlsx')) return false;
+  if (urlLower.endsWith('.pdf') || urlLower.includes('.pdf?') || urlLower.includes('.pdf#'))
+    return false;
+  if (
+    urlLower.endsWith('.doc') ||
+    urlLower.endsWith('.docx') ||
+    urlLower.endsWith('.xls') ||
+    urlLower.endsWith('.xlsx')
+  )
+    return false;
 
   const invalidPatterns = [
     'google.com/maps',
@@ -128,7 +143,7 @@ function isValidCompanyWebsite(url) {
     'kpmg.com',
     'marketwatch.com',
     'yahoo.com/finance',
-    'finance.yahoo'
+    'finance.yahoo',
   ];
 
   for (const pattern of invalidPatterns) {
@@ -162,27 +177,31 @@ function parseCompanyList(text) {
   if (!text) return [];
   return text
     .split(/[\n\r]+/)
-    .map(line => line.trim())
-    .filter(line => line.length > 0 && line.length < 200);
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && line.length < 200);
 }
 
 function parseCountries(text) {
   if (!text) return [];
   return text
     .split(/[\n\r]+/)
-    .map(line => line.trim())
-    .filter(line => line.length > 0);
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
 }
 
 // ============ DOMAIN DETECTION ============
 
 function detectMeetingDomain(text) {
   const domains = {
-    financial: /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
-    legal: /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
-    medical: /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
-    technical: /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
-    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i
+    financial:
+      /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
+    legal:
+      /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
+    medical:
+      /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
+    technical:
+      /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
+    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i,
   };
 
   for (const [domain, pattern] of Object.entries(domains)) {
@@ -195,12 +214,17 @@ function detectMeetingDomain(text) {
 
 function getDomainInstructions(domain) {
   const instructions = {
-    financial: 'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
-    legal: 'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
-    medical: 'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
-    technical: 'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
+    financial:
+      'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
+    legal:
+      'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
+    medical:
+      'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
+    technical:
+      'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
     hr: 'This is an HR/talent due diligence meeting. Preserve HR terminology and employment-related terms accurately.',
-    general: 'This is a business due diligence meeting. Preserve business terminology and professional tone.'
+    general:
+      'This is a business due diligence meeting. Preserve business terminology and professional tone.',
   };
   return instructions[domain] || instructions.general;
 }
@@ -212,13 +236,18 @@ function buildOutputFormat() {
 Be thorough - include all companies you find. We will verify them later.`;
 }
 
-function buildExclusionRules(exclusion, business) {
+function buildExclusionRules(exclusion, _business) {
   const exclusionLower = exclusion.toLowerCase();
   let rules = '';
 
-  if (exclusionLower.includes('large') || exclusionLower.includes('big') ||
-      exclusionLower.includes('mnc') || exclusionLower.includes('multinational') ||
-      exclusionLower.includes('major') || exclusionLower.includes('giant')) {
+  if (
+    exclusionLower.includes('large') ||
+    exclusionLower.includes('big') ||
+    exclusionLower.includes('mnc') ||
+    exclusionLower.includes('multinational') ||
+    exclusionLower.includes('major') ||
+    exclusionLower.includes('giant')
+  ) {
     rules += `
 LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
 - "global presence", "worldwide operations", "global leader", "world's largest"
@@ -257,11 +286,14 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
 }
 
 // Strategy function example
-function strategy1_BroadSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+function strategy1_BroadSerpAPI(business, country, _exclusion) {
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
-  const terms = business.split(/\s+or\s+|\s+and\s+|,/).map(t => t.trim()).filter(t => t);
+  const terms = business
+    .split(/\s+or\s+|\s+and\s+|,/)
+    .map((t) => t.trim())
+    .filter((t) => t);
 
   for (const c of countries) {
     queries.push(
@@ -388,7 +420,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicate websites', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://example.com', hq: 'City, Country' },
-      { company_name: 'XYZ', website: 'https://example.com', hq: 'City, Country' }
+      { company_name: 'XYZ', website: 'https://example.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -398,7 +430,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicate domains', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://example.com/page1', hq: 'City, Country' },
-      { company_name: 'XYZ', website: 'https://example.com/page2', hq: 'City, Country' }
+      { company_name: 'XYZ', website: 'https://example.com/page2', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -407,7 +439,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicate normalized names', () => {
     const companies = [
       { company_name: 'ABC Sdn Bhd', website: 'https://abc.com', hq: 'City, Country' },
-      { company_name: 'ABC Company', website: 'https://abc-company.com', hq: 'City, Country' }
+      { company_name: 'ABC Company', website: 'https://abc-company.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -416,7 +448,7 @@ describe('dedupeCompanies', () => {
   test('keeps different companies', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://abc.com', hq: 'City, Country' },
-      { company_name: 'XYZ', website: 'https://xyz.com', hq: 'City, Country' }
+      { company_name: 'XYZ', website: 'https://xyz.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(2);
@@ -428,7 +460,7 @@ describe('dedupeCompanies', () => {
       { company_name: '', website: 'https://xyz.com', hq: 'City, Country' },
       { company_name: 'XYZ', website: '', hq: 'City, Country' },
       null,
-      { company_name: 'Valid', website: 'not-a-url', hq: 'City, Country' }
+      { company_name: 'Valid', website: 'not-a-url', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -770,31 +802,30 @@ describe('strategy1_BroadSerpAPI', () => {
 
   test('generates queries for multiple countries', () => {
     const queries = strategy1_BroadSerpAPI('ink', 'Malaysia, Thailand', 'large');
-    expect(queries.some(q => q.includes('Malaysia'))).toBe(true);
-    expect(queries.some(q => q.includes('Thailand'))).toBe(true);
+    expect(queries.some((q) => q.includes('Malaysia'))).toBe(true);
+    expect(queries.some((q) => q.includes('Thailand'))).toBe(true);
   });
 
   test('splits business terms with "or"', () => {
     const queries = strategy1_BroadSerpAPI('ink or paint', 'Malaysia', 'large');
-    expect(queries.some(q => q.includes('ink'))).toBe(true);
-    expect(queries.some(q => q.includes('paint'))).toBe(true);
+    expect(queries.some((q) => q.includes('ink'))).toBe(true);
+    expect(queries.some((q) => q.includes('paint'))).toBe(true);
   });
 
   test('splits business terms with "and"', () => {
     const queries = strategy1_BroadSerpAPI('ink and chemicals', 'Malaysia', 'large');
-    expect(queries.some(q => q.includes('ink'))).toBe(true);
-    expect(queries.some(q => q.includes('chemicals'))).toBe(true);
+    expect(queries.some((q) => q.includes('ink'))).toBe(true);
+    expect(queries.some((q) => q.includes('chemicals'))).toBe(true);
   });
 
   test('includes industry variations', () => {
     const queries = strategy1_BroadSerpAPI('ink', 'Malaysia', 'large');
-    expect(queries.some(q => q.includes('list of'))).toBe(true);
-    expect(queries.some(q => q.includes('industry'))).toBe(true);
+    expect(queries.some((q) => q.includes('list of'))).toBe(true);
+    expect(queries.some((q) => q.includes('industry'))).toBe(true);
   });
 
   test('generates unique queries', () => {
     const queries = strategy1_BroadSerpAPI('ink', 'Malaysia', 'large');
-    const uniqueQueries = new Set(queries);
     expect(queries.length).toBeGreaterThan(5);
   });
 });

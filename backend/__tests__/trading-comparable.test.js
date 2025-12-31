@@ -11,7 +11,7 @@ function ensureString(value, defaultValue = '') {
   if (typeof value === 'string') return value;
   if (value === null || value === undefined) return defaultValue;
   // Handle arrays - join with comma
-  if (Array.isArray(value)) return value.map(v => ensureString(v)).join(', ');
+  if (Array.isArray(value)) return value.map((v) => ensureString(v)).join(', ');
   // Handle objects - try to extract meaningful string
   if (typeof value === 'object') {
     // Common patterns from AI responses
@@ -20,7 +20,11 @@ function ensureString(value, defaultValue = '') {
     if (value.value) return ensureString(value.value);
     if (value.name) return ensureString(value.name);
     // Fallback: stringify
-    try { return JSON.stringify(value); } catch { return defaultValue; }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return defaultValue;
+    }
   }
   // Convert other types to string
   return String(value);
@@ -29,25 +33,37 @@ function ensureString(value, defaultValue = '') {
 // ============ DEDUPLICATION ============
 function normalizeCompanyName(name) {
   if (!name) return '';
-  return name.toLowerCase()
-    // Remove ALL common legal suffixes globally (expanded list)
-    .replace(/\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi, '')
-    // Also remove these if they appear anywhere (for cases like "PT Company Name")
-    .replace(/^(pt\.?|cv\.?)\s+/gi, '')
-    .replace(/[^\w\s]/g, '')  // Remove special characters
-    .replace(/\s+/g, ' ')      // Normalize spaces
-    .trim();
+  return (
+    name
+      .toLowerCase()
+      // Remove ALL common legal suffixes globally (expanded list)
+      .replace(
+        /\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi,
+        ''
+      )
+      // Also remove these if they appear anywhere (for cases like "PT Company Name")
+      .replace(/^(pt\.?|cv\.?)\s+/gi, '')
+      .replace(/[^\w\s]/g, '') // Remove special characters
+      .replace(/\s+/g, ' ') // Normalize spaces
+      .trim()
+  );
 }
 
 function normalizeWebsite(url) {
   if (!url) return '';
-  return url.toLowerCase()
-    .replace(/^https?:\/\//, '')           // Remove protocol
-    .replace(/^www\./, '')                  // Remove www
-    .replace(/\/+$/, '')                    // Remove trailing slashes
-    // Remove common path suffixes that don't differentiate companies
-    .replace(/\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i, '')
-    .replace(/\.(html?|php|aspx?|jsp)$/i, ''); // Remove file extensions
+  return (
+    url
+      .toLowerCase()
+      .replace(/^https?:\/\//, '') // Remove protocol
+      .replace(/^www\./, '') // Remove www
+      .replace(/\/+$/, '') // Remove trailing slashes
+      // Remove common path suffixes that don't differentiate companies
+      .replace(
+        /\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i,
+        ''
+      )
+      .replace(/\.(html?|php|aspx?|jsp)$/i, '')
+  ); // Remove file extensions
 }
 
 // Extract domain root for additional deduplication
@@ -96,7 +112,7 @@ function isSpamOrDirectoryURL(url) {
     'facebook.com',
     'twitter.com',
     'instagram.com',
-    'youtube.com'
+    'youtube.com',
   ];
 
   for (const pattern of obviousSpam) {
@@ -107,14 +123,19 @@ function isSpamOrDirectoryURL(url) {
 }
 
 // ============ EXCLUSION RULES ============
-function buildExclusionRules(exclusion, business) {
+function buildExclusionRules(exclusion, _business) {
   const exclusionLower = exclusion.toLowerCase();
   let rules = '';
 
   // Detect if user wants to exclude LARGE companies - use PAGE SIGNALS like n8n
-  if (exclusionLower.includes('large') || exclusionLower.includes('big') ||
-      exclusionLower.includes('mnc') || exclusionLower.includes('multinational') ||
-      exclusionLower.includes('major') || exclusionLower.includes('giant')) {
+  if (
+    exclusionLower.includes('large') ||
+    exclusionLower.includes('big') ||
+    exclusionLower.includes('mnc') ||
+    exclusionLower.includes('multinational') ||
+    exclusionLower.includes('major') ||
+    exclusionLower.includes('giant')
+  ) {
     rules += `
 LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
 - "global presence", "worldwide operations", "global leader", "world's largest"
@@ -156,13 +177,13 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
 
 // ============ TRADING COMPARABLE UTILITIES ============
 function calculateMedian(values) {
-  const nums = values.filter(v => typeof v === 'number' && !isNaN(v) && isFinite(v) && v !== null);
+  const nums = values.filter(
+    (v) => typeof v === 'number' && !isNaN(v) && isFinite(v) && v !== null
+  );
   if (nums.length === 0) return null;
   const sorted = [...nums].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[mid - 1] + sorted[mid]) / 2
-    : sorted[mid];
+  return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
 }
 
 function formatMultiple(val) {
@@ -209,7 +230,7 @@ function createSheetData(companies, headers, title) {
       c.peFY,
       c.pb,
       c.filterReason || '',
-      (c.dataWarnings && c.dataWarnings.length > 0) ? c.dataWarnings.join('; ') : ''
+      c.dataWarnings && c.dataWarnings.length > 0 ? c.dataWarnings.join('; ') : '',
     ];
     data.push(row);
   }
@@ -219,19 +240,19 @@ function createSheetData(companies, headers, title) {
     const medianRow = [
       'MEDIAN',
       '',
-      calculateMedian(companies.map(c => c.sales)),
-      calculateMedian(companies.map(c => c.marketCap)),
-      calculateMedian(companies.map(c => c.ev)),
-      calculateMedian(companies.map(c => c.ebitda)),
-      calculateMedian(companies.map(c => c.netMargin)),
-      calculateMedian(companies.map(c => c.opMargin)),
-      calculateMedian(companies.map(c => c.ebitdaMargin)),
-      calculateMedian(companies.map(c => c.evEbitda)),
-      calculateMedian(companies.map(c => c.peTTM)),
-      calculateMedian(companies.map(c => c.peFY)),
-      calculateMedian(companies.map(c => c.pb)),
+      calculateMedian(companies.map((c) => c.sales)),
+      calculateMedian(companies.map((c) => c.marketCap)),
+      calculateMedian(companies.map((c) => c.ev)),
+      calculateMedian(companies.map((c) => c.ebitda)),
+      calculateMedian(companies.map((c) => c.netMargin)),
+      calculateMedian(companies.map((c) => c.opMargin)),
+      calculateMedian(companies.map((c) => c.ebitdaMargin)),
+      calculateMedian(companies.map((c) => c.evEbitda)),
+      calculateMedian(companies.map((c) => c.peTTM)),
+      calculateMedian(companies.map((c) => c.peFY)),
+      calculateMedian(companies.map((c) => c.pb)),
       '',
-      ''
+      '',
     ];
     data.push([]);
     data.push(medianRow);
@@ -243,11 +264,15 @@ function createSheetData(companies, headers, title) {
 // ============ DOMAIN DETECTION ============
 function detectMeetingDomain(text) {
   const domains = {
-    financial: /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
-    legal: /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
-    medical: /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
-    technical: /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
-    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i
+    financial:
+      /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
+    legal:
+      /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
+    medical:
+      /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
+    technical:
+      /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
+    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i,
   };
 
   for (const [domain, pattern] of Object.entries(domains)) {
@@ -260,12 +285,17 @@ function detectMeetingDomain(text) {
 
 function getDomainInstructions(domain) {
   const instructions = {
-    financial: 'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
-    legal: 'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
-    medical: 'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
-    technical: 'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
+    financial:
+      'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
+    legal:
+      'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
+    medical:
+      'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
+    technical:
+      'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
     hr: 'This is an HR/talent due diligence meeting. Preserve HR terminology and employment-related terms accurately.',
-    general: 'This is a business due diligence meeting. Preserve business terminology and professional tone.'
+    general:
+      'This is a business due diligence meeting. Preserve business terminology and professional tone.',
   };
   return instructions[domain] || instructions.general;
 }
@@ -329,7 +359,12 @@ describe('ensureString', () => {
   });
 
   test('handles nested arrays', () => {
-    expect(ensureString([['a', 'b'], ['c', 'd']])).toBe('a, b, c, d');
+    expect(
+      ensureString([
+        ['a', 'b'],
+        ['c', 'd'],
+      ])
+    ).toBe('a, b, c, d');
   });
 });
 
@@ -466,8 +501,7 @@ describe('normalizeWebsite', () => {
 
   test('handles complex URLs', () => {
     // The regex removes /home path, so only /en remains gets removed too
-    expect(normalizeWebsite('https://www.example.com/en/home/index.html'))
-      .toBe('example.com');
+    expect(normalizeWebsite('https://www.example.com/en/home/index.html')).toBe('example.com');
   });
 
   test('preserves paths not in common list', () => {
@@ -495,7 +529,7 @@ describe('dedupeCompanies', () => {
   test('removes exact duplicate websites', () => {
     const companies = [
       { company_name: 'ABC', website: 'http://example.com' },
-      { company_name: 'ABC Corp', website: 'http://example.com' }
+      { company_name: 'ABC Corp', website: 'http://example.com' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -505,7 +539,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicates with different protocols', () => {
     const companies = [
       { company_name: 'ABC', website: 'http://example.com' },
-      { company_name: 'ABC', website: 'https://example.com' }
+      { company_name: 'ABC', website: 'https://example.com' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -514,7 +548,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicates with www variance', () => {
     const companies = [
       { company_name: 'ABC', website: 'http://example.com' },
-      { company_name: 'ABC', website: 'http://www.example.com' }
+      { company_name: 'ABC', website: 'http://www.example.com' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -523,7 +557,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicates with trailing slashes', () => {
     const companies = [
       { company_name: 'ABC', website: 'http://example.com' },
-      { company_name: 'ABC', website: 'http://example.com/' }
+      { company_name: 'ABC', website: 'http://example.com/' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -533,7 +567,7 @@ describe('dedupeCompanies', () => {
     const companies = [
       { company_name: 'ABC Ltd', website: 'http://abc.com' },
       { company_name: 'ABC Limited', website: 'http://abc-co.com' },
-      { company_name: 'ABC Inc', website: 'http://abc-inc.com' }
+      { company_name: 'ABC Inc', website: 'http://abc-inc.com' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -542,7 +576,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicates by domain root', () => {
     const companies = [
       { company_name: 'ABC', website: 'http://example.com/home' },
-      { company_name: 'ABC', website: 'http://example.com/about' }
+      { company_name: 'ABC', website: 'http://example.com/about' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -552,7 +586,7 @@ describe('dedupeCompanies', () => {
     const companies = [
       { company_name: 'ABC', website: 'http://abc.com' },
       { company_name: 'XYZ', website: 'http://xyz.com' },
-      { company_name: 'DEF', website: 'http://def.com' }
+      { company_name: 'DEF', website: 'http://def.com' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(3);
@@ -565,7 +599,7 @@ describe('dedupeCompanies', () => {
       { company_name: 'XYZ', website: '' },
       { website: 'http://missing.com' },
       null,
-      undefined
+      undefined,
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -576,7 +610,7 @@ describe('dedupeCompanies', () => {
     const companies = [
       { company_name: 'ABC', website: 'http://abc.com' },
       { company_name: 'XYZ', website: 'www.xyz.com' },
-      { company_name: 'DEF', website: 'def.com' }
+      { company_name: 'DEF', website: 'def.com' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -865,8 +899,8 @@ describe('createSheetData', () => {
         evEbitda: 12,
         peTTM: 15,
         peFY: 14,
-        pb: 2.5
-      }
+        pb: 2.5,
+      },
     ];
     const headers = ['Name', 'Country'];
     const data = createSheetData(companies, headers, 'Title');
@@ -888,8 +922,8 @@ describe('createSheetData', () => {
       {
         name: 'Company A',
         filterReason: 'Excluded due to size',
-        sales: 100
-      }
+        sales: 100,
+      },
     ];
     const data = createSheetData(companies, [], 'Title');
 
@@ -901,8 +935,8 @@ describe('createSheetData', () => {
       {
         name: 'Company A',
         dataWarnings: ['Warning 1', 'Warning 2', 'Warning 3'],
-        sales: 100
-      }
+        sales: 100,
+      },
     ];
     const data = createSheetData(companies, [], 'Title');
 
@@ -914,8 +948,8 @@ describe('createSheetData', () => {
       {
         name: 'Company A',
         dataWarnings: [],
-        sales: 100
-      }
+        sales: 100,
+      },
     ];
     const data = createSheetData(companies, [], 'Title');
 
@@ -926,7 +960,7 @@ describe('createSheetData', () => {
     const companies = [
       { name: 'A', sales: 100, marketCap: 500, ev: 600 },
       { name: 'B', sales: 200, marketCap: 800, ev: 900 },
-      { name: 'C', sales: 150, marketCap: 600, ev: 700 }
+      { name: 'C', sales: 150, marketCap: 600, ev: 700 },
     ];
     const data = createSheetData(companies, [], 'Title');
 
@@ -941,7 +975,7 @@ describe('createSheetData', () => {
   test('median row has empty strings for non-numeric columns', () => {
     const companies = [
       { name: 'A', sales: 100 },
-      { name: 'B', sales: 200 }
+      { name: 'B', sales: 200 },
     ];
     const data = createSheetData(companies, [], 'Title');
 

@@ -4,7 +4,6 @@ const cors = require('cors');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
 const XLSX = require('xlsx');
-const { S3Client } = require('@aws-sdk/client-s3');
 const { securityHeaders, rateLimiter } = require('../shared/security');
 const { requestLogger, healthCheck } = require('../shared/middleware');
 
@@ -247,133 +246,6 @@ async function callOpenAISearch(prompt) {
   }
 }
 
-// Detect domain/context from text for domain-aware translation
-function detectMeetingDomain(text) {
-  const domains = {
-    financial:
-      /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
-    legal:
-      /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
-    medical:
-      /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
-    technical:
-      /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
-    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i,
-  };
-
-  for (const [domain, pattern] of Object.entries(domains)) {
-    if (pattern.test(text)) {
-      return domain;
-    }
-  }
-  return 'general';
-}
-
-// Get domain-specific translation instructions
-function getDomainInstructions(domain) {
-  const instructions = {
-    financial:
-      'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
-    legal:
-      'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
-    medical:
-      'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
-    technical:
-      'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
-    hr: 'This is an HR/talent due diligence meeting. Preserve HR terminology and employment-related terms accurately.',
-    general:
-      'This is a business due diligence meeting. Preserve business terminology and professional tone.',
-  };
-  return instructions[domain] || instructions.general;
-}
-
-// ============ SEARCH CONFIGURATION ============
-
-const CITY_MAP = {
-  malaysia: [
-    'Kuala Lumpur',
-    'Penang',
-    'Johor Bahru',
-    'Shah Alam',
-    'Petaling Jaya',
-    'Selangor',
-    'Ipoh',
-    'Klang',
-    'Subang',
-    'Melaka',
-    'Kuching',
-    'Kota Kinabalu',
-  ],
-  singapore: ['Singapore', 'Jurong', 'Tuas', 'Woodlands'],
-  thailand: [
-    'Bangkok',
-    'Chonburi',
-    'Rayong',
-    'Samut Prakan',
-    'Ayutthaya',
-    'Chiang Mai',
-    'Pathum Thani',
-    'Nonthaburi',
-    'Samut Sakhon',
-  ],
-  indonesia: [
-    'Jakarta',
-    'Surabaya',
-    'Bandung',
-    'Medan',
-    'Bekasi',
-    'Tangerang',
-    'Semarang',
-    'Sidoarjo',
-    'Cikarang',
-    'Karawang',
-    'Bogor',
-  ],
-  vietnam: [
-    'Ho Chi Minh City',
-    'Hanoi',
-    'Da Nang',
-    'Hai Phong',
-    'Binh Duong',
-    'Dong Nai',
-    'Long An',
-    'Ba Ria',
-    'Can Tho',
-  ],
-  philippines: [
-    'Manila',
-    'Cebu',
-    'Davao',
-    'Quezon City',
-    'Makati',
-    'Laguna',
-    'Cavite',
-    'Batangas',
-    'Bulacan',
-  ],
-  'southeast asia': [
-    'Kuala Lumpur',
-    'Singapore',
-    'Bangkok',
-    'Jakarta',
-    'Ho Chi Minh City',
-    'Manila',
-    'Penang',
-    'Johor Bahru',
-    'Surabaya',
-    'Hanoi',
-  ],
-};
-
-const LOCAL_SUFFIXES = {
-  malaysia: ['Sdn Bhd', 'Berhad'],
-  singapore: ['Pte Ltd', 'Private Limited'],
-  thailand: ['Co Ltd', 'Co., Ltd.'],
-  indonesia: ['PT', 'CV'],
-  vietnam: ['Co Ltd', 'JSC', 'Công ty'],
-  philippines: ['Inc', 'Corporation'],
-};
-
 // ============ WEBSITE VERIFICATION ============
 
 async function verifyWebsite(url) {
@@ -539,7 +411,6 @@ async function fetchWebsite(url) {
   }
 
   const urlVariations = getUrlVariations(url);
-  let lastError = null;
 
   // Try each URL variation with retry logic
   for (const targetUrl of urlVariations) {
@@ -565,7 +436,6 @@ async function fetchWebsite(url) {
           console.log(`  [fetchWebsite] ${targetUrl} - HTTP ${response.status}`);
         }
       } catch (e) {
-        lastError = e;
         console.log(`  [fetchWebsite] ${targetUrl} - ERROR: ${e.message}`);
         // Wait before retry
         if (attempt < 2) {
@@ -894,7 +764,7 @@ async function validateCompanyBusinessStrict(company, targetBusiness, pageText) 
   }
 
   const systemPrompt = (
-    model
+    _model
   ) => `You are a company validator. Determine if the company matches the target business criteria STRICTLY based on the website content provided.
 
 TARGET BUSINESS: "${targetBusiness}"
@@ -975,7 +845,7 @@ ${typeof pageText === 'string' && pageText ? pageText.substring(0, 10000) : 'Cou
 }
 
 // Build validation results as Excel file (returns base64 string)
-function buildValidationExcel(companies, targetBusiness, countries, outputOption) {
+function buildValidationExcel(companies, _targetBusiness, _countries, _outputOption) {
   const inScopeCompanies = companies.filter((c) => c.in_scope);
 
   // Create workbook
