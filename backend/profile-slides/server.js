@@ -3059,28 +3059,18 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       }
 
       // ===== LOGO (top right of slide) =====
+      // Only use Clearbit for real logos - skip fallback services that return letter placeholders
       if (company.website && typeof company.website === 'string') {
         try {
           const domain = company.website.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
 
-          // Try multiple logo sources
-          const logoSources = [
-            `https://logo.clearbit.com/${domain}`,
-            `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
-            `https://icon.horse/icon/${domain}`
-          ];
-
-          let logoBase64 = null;
-          for (const logoUrl of logoSources) {
-            console.log(`  Trying logo from: ${logoUrl}`);
-            logoBase64 = await fetchImageAsBase64(logoUrl);
-            if (logoBase64) {
-              console.log(`  Logo fetched successfully from ${logoUrl}`);
-              break;
-            }
-          }
+          // Only try Clearbit - it returns real logos or fails, never letter placeholders
+          const logoUrl = `https://logo.clearbit.com/${domain}`;
+          console.log(`  Trying logo from: ${logoUrl}`);
+          const logoBase64 = await fetchImageAsBase64(logoUrl);
 
           if (logoBase64) {
+            console.log(`  Logo fetched successfully from ${logoUrl}`);
             // Use square container to prevent stretching (logos are typically square)
             slide.addImage({
               data: `data:image/png;base64,${logoBase64}`,
@@ -3088,7 +3078,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
               sizing: { type: 'contain', w: 0.7, h: 0.7 }
             });
           } else {
-            console.log(`  Logo not available for ${domain} from any source`);
+            console.log(`  No logo available for ${domain} - skipping (no placeholder)`);
           }
         } catch (e) {
           console.log('Logo fetch failed for', company.website, e.message);
@@ -3698,10 +3688,14 @@ OUTPUT JSON with these fields:
   - "Penang, Penang, Malaysia"
   - "Johor Bahru, Johor, Malaysia"
 
-  Thailand (District, Province, Country):
-  - "Bangna, Bangkok, Thailand"
-  - "Bang Phli, Samut Prakan, Thailand"
-  - "Chatuchak, Bangkok, Thailand"
+  Thailand (District, Province, Country) - NOT always Bangkok!:
+  - "Bangna, Bangkok, Thailand" (in Bangkok)
+  - "Chatuchak, Bangkok, Thailand" (in Bangkok)
+  - "Bang Phli, Samut Prakan, Thailand" (NOT Bangkok - different province!)
+  - "Mueang Samut Sakhon, Samut Sakhon, Thailand" (NOT Bangkok!)
+  - "Mueang Rayong, Rayong, Thailand" (NOT Bangkok!)
+  - "Mueang Chonburi, Chonburi, Thailand" (NOT Bangkok!)
+  CRITICAL: Most Thai industrial companies are NOT in Bangkok - check the actual address!
 
   Indonesia (City/Area, Province, Country):
   - "Tangerang, Banten, Indonesia"
@@ -3728,6 +3722,8 @@ OUTPUT JSON with these fields:
   - WRONG: "Singapore, Singapore" ← WRONG! Find the actual area!
   - CORRECT: "Jurong West, Singapore" or "Tuas, Singapore"
   - Look at the address on website to find the area/district name
+  - Common Singapore industrial areas: Jurong, Tuas, Woodlands, Ang Mo Kio, Ubi, Bedok, Paya Lebar
+  - If no area found, leave location EMPTY rather than outputting just "Singapore"
 
 CRITICAL - EXTRACT FROM ACTUAL ADDRESS:
 - Find the ACTUAL address text on the website (e.g., "123 Moo 5, Mueang Samut Sakhon District, Samut Sakhon 74000")
@@ -3879,7 +3875,15 @@ OUTPUT JSON:
    - NEVER include vague services like "customized solutions", "quality assurance" unless those are their PRIMARY business
    - Only include points with SPECIFIC, CONCRETE content
 
-2. message: One-liner introductory message about the company. Example: "Malaysia-based distributor specializing in electronic components and industrial automation products across Southeast Asia."
+   CRITICAL - NO MARKETING/BOASTING LANGUAGE:
+   - NEVER use: "high-quality", "premium", "world-class", "leading", "best-in-class", "superior", "excellent", "top-tier"
+   - NEVER use: "state-of-the-art", "cutting-edge", "innovative", "advanced", "modern"
+   - These are unverified claims from the company - we haven't contacted them to verify quality
+   - Use neutral language: "Manufacture printing inks" NOT "Manufacture high-quality printing inks"
+
+2. message: One-liner introductory message about the company. NO marketing words (high-quality, premium, leading, etc.)
+   Example: "Malaysia-based distributor specializing in electronic components and industrial automation products across Southeast Asia."
+   NOT: "Malaysia-based leading distributor of high-quality electronic components..."
 
 3. footnote: Two parts:
    - Notes (optional): If unusual shortforms used, write full-form like "SKU (Stock Keeping Unit)". Separate multiple with comma.
@@ -3964,7 +3968,9 @@ GEOGRAPHIC REACH (CRITICAL - CAPTURE ALL DISTRIBUTION INFO):
 - Export countries (list ALL countries mentioned: Thailand, Sri Lanka, Pakistan, Bangladesh, UAE, etc.)
 - Distribution network (distributors, agents, dealers - include country names)
 - Markets served (if domestic only, write "Nationwide" instead of listing regions)
-- IMPORTANT: If website mentions "distributors across Thailand, Sri Lanka, Pakistan..." - CAPTURE THIS!
+- CRITICAL: If website mentions "agents and distributors across [countries]" or "network in [countries]" - LIST ALL COUNTRIES!
+- Example: "agents and distributors across Thailand, Sri Lanka, Pakistan, Bangladesh, UAE, Papua New Guinea, Vietnam, Poland, East Malaysia" → capture ALL 9 countries
+- This is CRITICAL M&A info showing international expansion - never skip it!
 
 INDUSTRIES SERVED:
 - List the industries/applications the company serves (e.g., "Gravure Printing, Screen Printing, Footwear, Leather, Rubber")
