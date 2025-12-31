@@ -3,8 +3,8 @@ const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
-const { securityHeaders, rateLimiter } = require('../shared/security');
-const { requestLogger, healthCheck } = require('../shared/middleware');
+const { securityHeaders, rateLimiter } = require('./shared/security');
+const { requestLogger, healthCheck } = require('./shared/middleware');
 
 // ============ GLOBAL ERROR HANDLERS ============
 process.on('unhandledRejection', (reason, _promise) => {
@@ -21,6 +21,7 @@ process.on('uncaughtException', (error) => {
 
 // ============ EXPRESS SETUP ============
 const app = express();
+app.set('trust proxy', 1); // Trust Railway's reverse proxy for rate limiting
 app.use(securityHeaders);
 app.use(rateLimiter);
 app.use(cors());
