@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
+const { securityHeaders, rateLimiter, escapeHtml } = require('../shared/security');
 
 // ============ GLOBAL ERROR HANDLERS ============
 process.on('unhandledRejection', (reason, promise) => {
@@ -19,6 +20,8 @@ process.on('uncaughtException', (error) => {
 
 // ============ EXPRESS SETUP ============
 const app = express();
+app.use(securityHeaders);
+app.use(rateLimiter);
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
 
@@ -2742,126 +2745,6 @@ function addPieChart(slide, title, data, options = {}) {
     showPercent: true,
     chartColors: CHART_COLORS.slice(0, data.categories.length)
   });
-}
-
-// Parse numeric data from research text for charting
-function extractChartData(researchText, chartType) {
-  // This function attempts to extract structured data from research text
-  // In practice, the AI synthesis should provide structured data
-  // This is a fallback pattern matcher
-
-  const data = {
-    categories: [],
-    series: [],
-    values: []
-  };
-
-  // Try to find year-based data patterns like "2020: 45, 2021: 48, 2022: 52"
-  const yearPattern = /(\d{4})[:\s]+(\d+(?:\.\d+)?)/g;
-  const yearMatches = [...(researchText || '').matchAll(yearPattern)];
-
-  if (yearMatches.length >= 2) {
-    data.categories = yearMatches.map(m => m[1]);
-    data.values = yearMatches.map(m => parseFloat(m[2]));
-    data.series = [{ name: 'Value', values: data.values }];
-  }
-
-  return data;
-}
-
-// Advanced chart data extraction using AI
-async function extractChartDataWithAI(researchContent, chartType, dataDescription) {
-  const prompt = `Extract structured chart data from this research content for a ${chartType} chart.
-
-RESEARCH CONTENT:
-${researchContent}
-
-CHART PURPOSE: ${dataDescription}
-
-Return ONLY a JSON object in this exact format:
-{
-  "hasData": true/false,
-  "chartData": {
-    "categories": ["2020", "2021", "2022", "2023", "2024"],
-    "series": [
-      {"name": "Series Name", "values": [10, 12, 14, 16, 18]}
-    ],
-    "values": [10, 12, 14, 16, 18],
-    "unit": "Mtoe or % or USD or bcm"
-  },
-  "dataQuality": "high/medium/low",
-  "source": "where this data came from"
-}
-
-RULES:
-- If no clear numeric data exists, set hasData=false
-- Values must be actual numbers (not strings)
-- For time series, use years as categories
-- For breakdowns, use segment names as categories
-- Include the unit of measurement`;
-
-  try {
-    const result = await callDeepSeekChat(prompt, '', 1024);
-    let jsonStr = result.content.trim();
-    if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
-    }
-    const parsed = JSON.parse(jsonStr);
-    if (parsed.hasData && parsed.chartData) {
-      return parsed.chartData;
-    }
-  } catch (error) {
-    console.error('  Chart data extraction failed:', error.message);
-  }
-
-  // Fall back to basic extraction
-  return extractChartData(researchContent, chartType);
-}
-
-// Validate and sanitize chart data before rendering
-function validateChartData(data, chartType) {
-  if (!data) return null;
-
-  const validated = {
-    categories: [],
-    series: [],
-    values: [],
-    unit: data.unit || ''
-  };
-
-  // Validate categories
-  if (Array.isArray(data.categories)) {
-    validated.categories = data.categories.map(c => String(c)).slice(0, 10);
-  }
-
-  // Validate values (for simple bar/pie charts)
-  if (Array.isArray(data.values)) {
-    validated.values = data.values
-      .map(v => typeof v === 'number' ? v : parseFloat(v))
-      .filter(v => !isNaN(v))
-      .slice(0, 10);
-  }
-
-  // Validate series (for stacked/line charts)
-  if (Array.isArray(data.series)) {
-    validated.series = data.series
-      .filter(s => s && s.name && Array.isArray(s.values))
-      .map(s => ({
-        name: String(s.name).substring(0, 30),
-        values: s.values
-          .map(v => typeof v === 'number' ? v : parseFloat(v))
-          .filter(v => !isNaN(v))
-          .slice(0, 10)
-      }))
-      .slice(0, 6); // Max 6 series for readability
-  }
-
-  // Check if we have enough data to render
-  const hasEnoughData =
-    (validated.categories.length >= 2 && validated.values.length >= 2) ||
-    (validated.categories.length >= 2 && validated.series.length >= 1 && validated.series[0].values.length >= 2);
-
-  return hasEnoughData ? validated : null;
 }
 
 // Single country deep-dive PPT - Matches YCP Escort/Shizuoka Gas format

@@ -14,6 +14,7 @@ const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, Tab
 const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const Anthropic = require('@anthropic-ai/sdk');
 const JSZip = require('jszip');
+const { securityHeaders, rateLimiter, escapeHtml } = require('../shared/security');
 
 // ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
 // Memory logging helper for debugging Railway OOM issues
@@ -64,6 +65,8 @@ function ensureString(value, defaultValue = '') {
 }
 
 const app = express();
+app.use(securityHeaders);
+app.use(rateLimiter);
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
@@ -124,84 +127,6 @@ if (!r2Client) {
   console.warn('R2 not configured - recordings will only be stored in memory. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME');
 }
 
-// R2 Upload function
-async function uploadToR2(key, data, contentType = 'audio/webm') {
-  if (!r2Client) {
-    console.warn('[R2] R2 not configured, skipping upload');
-    return null;
-  }
-
-  try {
-    const command = new PutObjectCommand({
-      Bucket: R2_BUCKET,
-      Key: key,
-      Body: data,
-      ContentType: contentType
-    });
-    await r2Client.send(command);
-    console.log(`[R2] Uploaded ${key} (${data.length} bytes)`);
-    return key;
-  } catch (error) {
-    console.error('[R2] Upload error:', error.message);
-    return null;
-  }
-}
-
-// R2 Download function
-async function downloadFromR2(key) {
-  if (!r2Client) {
-    return null;
-  }
-
-  try {
-    const command = new GetObjectCommand({
-      Bucket: R2_BUCKET,
-      Key: key
-    });
-    const response = await r2Client.send(command);
-    const chunks = [];
-    for await (const chunk of response.Body) {
-      chunks.push(chunk);
-    }
-    return Buffer.concat(chunks);
-  } catch (error) {
-    console.error('[R2] Download error:', error.message);
-    return null;
-  }
-}
-
-// Convert PCM to WAV format (adds header for playability)
-function pcmToWav(pcmBuffer, sampleRate = 16000, numChannels = 1, bitsPerSample = 16) {
-  const byteRate = sampleRate * numChannels * bitsPerSample / 8;
-  const blockAlign = numChannels * bitsPerSample / 8;
-  const dataSize = pcmBuffer.length;
-  const headerSize = 44;
-  const fileSize = headerSize + dataSize;
-
-  const wavBuffer = Buffer.alloc(fileSize);
-
-  // RIFF header
-  wavBuffer.write('RIFF', 0);
-  wavBuffer.writeUInt32LE(fileSize - 8, 4);
-  wavBuffer.write('WAVE', 8);
-
-  // fmt chunk
-  wavBuffer.write('fmt ', 12);
-  wavBuffer.writeUInt32LE(16, 16); // fmt chunk size
-  wavBuffer.writeUInt16LE(1, 20);  // audio format (1 = PCM)
-  wavBuffer.writeUInt16LE(numChannels, 22);
-  wavBuffer.writeUInt32LE(sampleRate, 24);
-  wavBuffer.writeUInt32LE(byteRate, 28);
-  wavBuffer.writeUInt16LE(blockAlign, 32);
-  wavBuffer.writeUInt16LE(bitsPerSample, 34);
-
-  // data chunk
-  wavBuffer.write('data', 36);
-  wavBuffer.writeUInt32LE(dataSize, 40);
-  pcmBuffer.copy(wavBuffer, 44);
-
-  return wavBuffer;
-}
 
 // Extract text from .docx files (Word documents)
 async function extractDocxText(base64Content) {
@@ -300,25 +225,6 @@ async function extractXlsxText(base64Content) {
   }
 }
 
-// R2 Delete function (cleanup old recordings)
-async function deleteFromR2(key) {
-  if (!r2Client) {
-    return false;
-  }
-
-  try {
-    const command = new DeleteObjectCommand({
-      Bucket: R2_BUCKET,
-      Key: key
-    });
-    await r2Client.send(command);
-    console.log(`[R2] Deleted ${key}`);
-    return true;
-  } catch (error) {
-    console.error('[R2] Delete error:', error.message);
-    return false;
-  }
-}
 
 // Send email using SendGrid API
 async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) {
@@ -420,86 +326,6 @@ async function callGemini(prompt) {
   }
 }
 
-// Gemini 2.5 Flash - stable model for validation tasks (upgraded from gemini-3-flash-preview which was unstable)
-// With GPT-4o fallback when Gemini fails or times out
-async function callGemini3Flash(prompt, jsonMode = false) {
-  try {
-    const requestBody = {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.1  // Low temperature for consistent validation
-      }
-    };
-
-    // Add JSON mode if requested
-    if (jsonMode) {
-      requestBody.generationConfig.responseMimeType = 'application/json';
-    }
-
-    // Using stable gemini-2.5-flash (gemini-3-flash-preview was unreliable)
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-      timeout: 30000  // Reduced from 120s to 30s - fail fast and use GPT-4o fallback
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Gemini 3 Flash HTTP error ${response.status}:`, errorText.substring(0, 200));
-      // Fallback to GPT-4o on HTTP errors
-      return await callGPT4oFallback(prompt, jsonMode, `Gemini HTTP ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (data.error) {
-      console.error('Gemini 3 Flash API error:', data.error.message);
-      // Fallback to GPT-4o
-      return await callGPT4oFallback(prompt, jsonMode, 'Gemini 3 Flash API error');
-    }
-
-    const result = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    if (!result) {
-      // Empty response, try fallback
-      return await callGPT4oFallback(prompt, jsonMode, 'Gemini 3 Flash empty response');
-    }
-    return result;
-  } catch (error) {
-    console.error('Gemini 3 Flash error:', error.message);
-    // Fallback to GPT-4o on network timeout or other errors
-    return await callGPT4oFallback(prompt, jsonMode, `Gemini error: ${error.message}`);
-  }
-}
-
-// GPT-4o fallback function for when Gemini fails
-async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
-  try {
-    console.log(`  Falling back to GPT-4o (reason: ${reason})...`);
-
-    const requestOptions = {
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.1
-    };
-
-    // Add JSON mode if requested
-    if (jsonMode) {
-      requestOptions.response_format = { type: 'json_object' };
-    }
-
-    const response = await openai.chat.completions.create(requestOptions);
-    const result = response.choices?.[0]?.message?.content || '';
-
-    if (result) {
-      console.log('  GPT-4o fallback successful');
-    }
-    return result;
-  } catch (fallbackError) {
-    console.error('GPT-4o fallback error:', fallbackError.message);
-    return ''; // Return empty if both fail
-  }
-}
 
 // Gemini 2.5 Pro - Most capable model for critical validation tasks
 // Use this for final data accuracy verification where errors are unacceptable
@@ -565,29 +391,6 @@ async function callClaude(prompt, systemPrompt = null, jsonMode = false) {
   }
 }
 
-// Claude with web search via Perplexity - Claude reasons, Perplexity searches
-async function callClaudeWithSearch(searchPrompt, reasoningTask) {
-  // Step 1: Use Perplexity to search the web
-  const searchResults = await callPerplexity(searchPrompt);
-
-  if (!searchResults) {
-    return { searchResults: '', analysis: '' };
-  }
-
-  // Step 2: Use Claude to analyze and reason about the results
-  const analysis = await callClaude(
-    `Here are search results about: ${searchPrompt}
-
-SEARCH RESULTS:
-${searchResults}
-
-YOUR TASK:
-${reasoningTask}`,
-    'You are an expert M&A research analyst. Analyze the search results thoroughly and extract all relevant information.'
-  );
-
-  return { searchResults, analysis };
-}
 
 async function callPerplexity(prompt) {
   try {
@@ -667,59 +470,6 @@ async function callOpenAISearch(prompt) {
   }
 }
 
-// DeepSeek Reasoner - for deep thinking/analysis tasks
-async function callDeepSeekReasoner(prompt, maxTokens = 8000) {
-  try {
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'deepseek-reasoner',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: maxTokens
-      }),
-      timeout: 120000
-    });
-    const data = await response.json();
-
-    // DeepSeek reasoner returns reasoning_content and content
-    const reasoning = data.choices?.[0]?.message?.reasoning_content || '';
-    const content = data.choices?.[0]?.message?.content || '';
-
-    return { reasoning, content, raw: data };
-  } catch (error) {
-    console.error('DeepSeek Reasoner error:', error.message);
-    return { reasoning: '', content: '', error: error.message };
-  }
-}
-
-// DeepSeek Chat - for faster, simpler tasks
-async function callDeepSeekChat(prompt, maxTokens = 4000) {
-  try {
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: maxTokens,
-        temperature: 0.3
-      }),
-      timeout: 60000
-    });
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || '';
-  } catch (error) {
-    console.error('DeepSeek Chat error:', error.message);
-    return '';
-  }
-}
 
 // SerpAPI - Google Search integration
 async function callSerpAPI(query) {
@@ -789,64 +539,6 @@ async function callDeepSeek(prompt, maxTokens = 4000) {
   }
 }
 
-// Transcribe audio using OpenAI Whisper
-async function transcribeAudio(audioBase64, mimeType, language = 'auto') {
-  try {
-    // Convert base64 to buffer
-    const audioBuffer = Buffer.from(audioBase64, 'base64');
-
-    // Create form data for OpenAI API
-    const FormData = require('form-data');
-    const formData = new FormData();
-
-    // Determine file extension from mime type
-    const extMap = {
-      'audio/webm': 'webm',
-      'audio/mp3': 'mp3',
-      'audio/mpeg': 'mp3',
-      'audio/wav': 'wav',
-      'audio/m4a': 'm4a',
-      'audio/mp4': 'm4a',
-      'audio/ogg': 'ogg',
-      'audio/flac': 'flac'
-    };
-    const ext = extMap[mimeType] || 'webm';
-
-    formData.append('file', audioBuffer, { filename: `audio.${ext}`, contentType: mimeType });
-    formData.append('model', 'whisper-1');
-    formData.append('response_format', 'verbose_json');
-
-    // If specific language is provided (not auto), use it
-    if (language && language !== 'auto') {
-      formData.append('language', language);
-    }
-
-    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        ...formData.getHeaders()
-      },
-      body: formData
-    });
-
-    const data = await response.json();
-    if (data.error) {
-      console.error('Whisper API error:', data.error);
-      return { text: '', language: 'unknown', error: data.error.message };
-    }
-
-    return {
-      text: data.text || '',
-      language: data.language || 'unknown',
-      duration: data.duration || 0,
-      segments: data.segments || []
-    };
-  } catch (error) {
-    console.error('Whisper transcription error:', error.message);
-    return { text: '', language: 'unknown', error: error.message };
-  }
-}
 
 // Detect domain/context from text for domain-aware translation
 function detectMeetingDomain(text) {
@@ -879,219 +571,8 @@ function getDomainInstructions(domain) {
   return instructions[domain] || instructions.general;
 }
 
-// Translate text using GPT-4o with context awareness
-async function translateText(text, targetLang = 'en', options = {}) {
-  const { previousSegments = [], domain = null } = options;
 
-  // Minimum length check - 3 chars for CJK languages, 10 for others
-  const minLength = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(text) ? 3 : 10;
-  if (!text || text.length < minLength) return text;
 
-  try {
-    // Auto-detect domain if not provided
-    const effectiveDomain = domain || detectMeetingDomain(text + ' ' + previousSegments.join(' '));
-    const domainInstructions = getDomainInstructions(effectiveDomain);
-
-    // Build context from previous segments
-    let contextSection = '';
-    if (previousSegments.length > 0) {
-      contextSection = `\n\nPrevious context (for reference only, do not translate these):
-${previousSegments.slice(-3).map((seg, i) => `[${i + 1}] ${seg}`).join('\n')}
-
-Now translate the following new segment, maintaining consistency with the context above:`;
-    }
-
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',  // Use GPT-4o for better translation quality
-      messages: [
-        {
-          role: 'system',
-          content: `You are a professional translator specializing in business meeting transcriptions.
-${domainInstructions}
-
-Translate accurately while:
-- Preserving the original meaning and tone
-- Using natural, fluent ${targetLang === 'en' ? 'English' : targetLang}
-- Keeping business/technical terms accurate
-- Maintaining consistency with any provided context
-- Not adding or omitting information
-Output only the translation, nothing else.`
-        },
-        {
-          role: 'user',
-          content: contextSection ? `${contextSection}\n\n${text}` : text
-        }
-      ],
-      temperature: 0.3  // Balanced temperature for fluency while maintaining consistency
-    });
-    return response.choices[0].message.content || text;
-  } catch (error) {
-    console.error('Translation error:', error.message);
-    return text;
-  }
-}
-
-// Generate meeting minutes from transcript
-async function generateMeetingMinutes(transcript, instructions = '') {
-  const prompt = `You are an expert meeting summarizer. Create structured meeting minutes from the following transcript.
-
-TRANSCRIPT:
-${transcript}
-
-${instructions ? `SPECIAL INSTRUCTIONS: ${instructions}\n` : ''}
-
-Generate professional meeting minutes in HTML format with the following structure:
-1. <h2>Meeting Summary</h2> - Brief overview (2-3 sentences)
-2. <h2>Key Discussion Points</h2> - Main topics discussed
-3. <h2>Decisions Made</h2> - Any decisions or conclusions reached
-4. <h2>Action Items</h2> - Tasks assigned with responsible parties if mentioned
-5. <h2>Next Steps</h2> - Follow-up items or future meetings
-
-Use proper HTML formatting with bullet points (<ul><li>) where appropriate.
-Be concise but capture all important information.`;
-
-  const result = await callDeepSeek(prompt, 3000);
-  if (result) return result;
-
-  // Fallback to GPT-4o
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      max_tokens: 3000
-    });
-    return response.choices[0].message.content || '';
-  } catch (error) {
-    console.error('Meeting minutes error:', error.message);
-    return `<h2>Transcript</h2><p>${transcript}</p>`;
-  }
-}
-
-// Generate Word document from HTML content
-async function generateWordDocument(title, htmlContent, metadata = {}) {
-  // Parse HTML content into sections
-  const sections = [];
-
-  // Add title with Calibri font
-  sections.push(new Paragraph({
-    children: [new TextRun({ text: title, font: 'Calibri', size: 48, bold: true })],
-    spacing: { after: 400 }
-  }));
-
-  // Simple HTML to docx conversion
-  const cleanHtml = htmlContent
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<\/li>/gi, '\n')
-    .replace(/<\/h[1-6]>/gi, '\n');
-
-  // Extract headings and content
-  const h1Regex = /<h1[^>]*>(.*?)<\/h1>/gi;
-  const h2Regex = /<h2[^>]*>(.*?)<\/h2>/gi;
-  const h3Regex = /<h3[^>]*>(.*?)<\/h3>/gi;
-
-  // Split content by headings and process
-  let processedContent = htmlContent;
-
-  // Replace headings with markers
-  processedContent = processedContent.replace(h1Regex, '|||H1|||$1|||/H1|||');
-  processedContent = processedContent.replace(h2Regex, '|||H2|||$1|||/H2|||');
-  processedContent = processedContent.replace(h3Regex, '|||H3|||$1|||/H3|||');
-
-  // Remove other HTML tags
-  processedContent = processedContent
-    .replace(/<ul>/gi, '')
-    .replace(/<\/ul>/gi, '')
-    .replace(/<ol>/gi, '')
-    .replace(/<\/ol>/gi, '')
-    .replace(/<li>/gi, '• ')
-    .replace(/<\/li>/gi, '\n')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<p>/gi, '')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<strong>/gi, '**')
-    .replace(/<\/strong>/gi, '**')
-    .replace(/<b>/gi, '**')
-    .replace(/<\/b>/gi, '**')
-    .replace(/<em>/gi, '_')
-    .replace(/<\/em>/gi, '_')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"');
-
-  // Process the content with markers
-  const parts = processedContent.split('|||');
-
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i].trim();
-    if (!part) continue;
-
-    if (part === 'H1' && parts[i + 1]) {
-      sections.push(new Paragraph({
-        children: [new TextRun({ text: parts[i + 1].replace('/H1', '').trim(), font: 'Calibri', size: 36, bold: true })],
-        spacing: { before: 400, after: 200 }
-      }));
-      i++;
-    } else if (part === 'H2' && parts[i + 1]) {
-      sections.push(new Paragraph({
-        children: [new TextRun({ text: parts[i + 1].replace('/H2', '').trim(), font: 'Calibri', size: 28, bold: true })],
-        spacing: { before: 300, after: 150 }
-      }));
-      i++;
-    } else if (part === 'H3' && parts[i + 1]) {
-      sections.push(new Paragraph({
-        children: [new TextRun({ text: parts[i + 1].replace('/H3', '').trim(), font: 'Calibri', size: 24, bold: true })],
-        spacing: { before: 200, after: 100 }
-      }));
-      i++;
-    } else if (!part.startsWith('/H')) {
-      // Regular text
-      const lines = part.split('\n').filter(l => l.trim());
-      for (const line of lines) {
-        const trimmedLine = line.trim();
-        if (!trimmedLine) continue;
-
-        // Check if this line contains [Online Source] - highlight it yellow
-        const isOnlineSource = trimmedLine.includes('[Online Source]');
-
-        // Handle bold text markers
-        const children = [];
-        const boldParts = trimmedLine.split('**');
-        for (let j = 0; j < boldParts.length; j++) {
-          if (boldParts[j]) {
-            children.push(new TextRun({
-              text: boldParts[j],
-              font: 'Calibri',
-              size: 22,
-              bold: j % 2 === 1,
-              highlight: isOnlineSource ? 'yellow' : undefined
-            }));
-          }
-        }
-
-        if (children.length > 0) {
-          sections.push(new Paragraph({
-            children,
-            spacing: { after: 100 }
-          }));
-        }
-      }
-    }
-  }
-
-  const doc = new Document({
-    sections: [{
-      properties: {},
-      children: sections
-    }]
-  });
-
-  return await Packer.toBuffer(doc);
-}
 
 // ============ SEARCH CONFIGURATION ============
 
@@ -1539,16 +1020,6 @@ function isSpamOrDirectoryURL(url) {
   return false;
 }
 
-function preFilterCompanies(companies) {
-  return companies.filter(c => {
-    if (!c || !c.website) return false;
-    if (isSpamOrDirectoryURL(c.website)) {
-      console.log(`    Pre-filtered: ${c.company_name} - Social media/wiki`);
-      return false;
-    }
-    return true;
-  });
-}
 
 // ============ EXHAUSTIVE PARALLEL SEARCH WITH 14 STRATEGIES ============
 
@@ -1571,100 +1042,6 @@ ${outputFormat}`;
   return extractCompanies(response, country);
 }
 
-async function exhaustiveSearch(business, country, exclusion) {
-  console.log('Starting EXHAUSTIVE 14-STRATEGY PARALLEL search...');
-  const startTime = Date.now();
-
-  // Generate all queries for each strategy
-  const serpQueries1 = strategy1_BroadSerpAPI(business, country, exclusion);
-  const perpQueries2 = strategy2_BroadPerplexity(business, country, exclusion);
-  const serpQueries3 = strategy3_ListsSerpAPI(business, country, exclusion);
-  const perpQueries4 = strategy4_CitiesPerplexity(business, country, exclusion);
-  const serpQueries5 = strategy5_IndustrialSerpAPI(business, country, exclusion);
-  const perpQueries6 = strategy6_DirectoriesPerplexity(business, country, exclusion);
-  const perpQueries7 = strategy7_ExhibitionsPerplexity(business, country, exclusion);
-  const perpQueries8 = strategy8_TradePerplexity(business, country, exclusion);
-  const perpQueries9 = strategy9_DomainsPerplexity(business, country, exclusion);
-  const serpQueries10 = strategy10_RegistriesSerpAPI(business, country, exclusion);
-  const serpQueries11 = strategy11_CityIndustrialSerpAPI(business, country, exclusion);
-  const openaiQueries12 = strategy12_DeepOpenAISearch(business, country, exclusion);
-  const perpQueries13 = strategy13_PublicationsPerplexity(business, country, exclusion);
-  const openaiQueries14 = strategy14_LocalLanguageOpenAISearch(business, country, exclusion);
-
-  const allSerpQueries = [...serpQueries1, ...serpQueries3, ...serpQueries5, ...serpQueries10, ...serpQueries11];
-  const allPerpQueries = [...perpQueries2, ...perpQueries4, ...perpQueries6, ...perpQueries7, ...perpQueries8, ...perpQueries9, ...perpQueries13];
-  const allOpenAISearchQueries = [...openaiQueries12, ...openaiQueries14];
-
-  console.log(`  Strategy breakdown:`);
-  console.log(`    SerpAPI (Google): ${allSerpQueries.length} queries`);
-  console.log(`    Perplexity: ${allPerpQueries.length} queries`);
-  console.log(`    OpenAI Search: ${allOpenAISearchQueries.length} queries`);
-  console.log(`    Total: ${allSerpQueries.length + allPerpQueries.length + allOpenAISearchQueries.length}`);
-
-  // Run all strategies in parallel (with error handling to prevent one failure from crashing all)
-  const [serpResults, perpResults, openaiSearchResults, geminiResults] = await Promise.all([
-    // SerpAPI queries
-    process.env.SERPAPI_API_KEY
-      ? Promise.all(allSerpQueries.map(q => callSerpAPI(q).catch(e => { console.error(`SerpAPI error: ${e.message}`); return null; })))
-      : Promise.resolve([]),
-
-    // Perplexity queries
-    Promise.all(allPerpQueries.map(q => callPerplexity(q).catch(e => { console.error(`Perplexity error: ${e.message}`); return null; }))),
-
-    // OpenAI Search queries
-    Promise.all(allOpenAISearchQueries.map(q => callOpenAISearch(q).catch(e => { console.error(`OpenAI Search error: ${e.message}`); return null; }))),
-
-    // Also run some Gemini queries for diversity
-    Promise.all([
-      callGemini(`Find ALL ${business} companies in ${country}. Exclude ${exclusion}. ${buildOutputFormat()}`),
-      callGemini(`List ${business} factories and manufacturing plants in ${country}. Not ${exclusion}. ${buildOutputFormat()}`),
-      callGemini(`${business} SME and family businesses in ${country}. Exclude ${exclusion}. ${buildOutputFormat()}`)
-    ].map(p => p.catch(e => { console.error(`Gemini error: ${e.message}`); return null; })))
-  ]);
-
-  console.log(`  All API calls done in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
-
-  // Process SerpAPI results through GPT for extraction
-  let serpCompanies = [];
-  if (serpResults.length > 0) {
-    console.log(`  Processing ${serpResults.filter(r => r).length} SerpAPI results...`);
-    serpCompanies = await processSerpResults(serpResults.filter(r => r), business, country, exclusion);
-    console.log(`    Extracted ${serpCompanies.length} companies from SerpAPI`);
-  }
-
-  // Extract from Perplexity results
-  console.log(`  Extracting from ${perpResults.length} Perplexity results...`);
-  const perpExtractions = await Promise.all(
-    perpResults.filter(r => r).map(text => extractCompanies(text, country).catch(e => { console.error(`Extraction error: ${e.message}`); return []; }))
-  );
-  const perpCompanies = perpExtractions.flat();
-  console.log(`    Extracted ${perpCompanies.length} companies from Perplexity`);
-
-  // Extract from OpenAI Search results
-  console.log(`  Extracting from ${openaiSearchResults.length} OpenAI Search results...`);
-  const openaiExtractions = await Promise.all(
-    openaiSearchResults.filter(r => r).map(text => extractCompanies(text, country).catch(e => { console.error(`Extraction error: ${e.message}`); return []; }))
-  );
-  const openaiCompanies = openaiExtractions.flat();
-  console.log(`    Extracted ${openaiCompanies.length} companies from OpenAI Search`);
-
-  // Extract from Gemini results
-  console.log(`  Extracting from ${geminiResults.length} Gemini results...`);
-  const geminiExtractions = await Promise.all(
-    geminiResults.filter(r => r).map(text => extractCompanies(text, country).catch(e => { console.error(`Extraction error: ${e.message}`); return []; }))
-  );
-  const geminiCompanies = geminiExtractions.flat();
-  console.log(`    Extracted ${geminiCompanies.length} companies from Gemini`);
-
-  // Combine and dedupe all
-  const allCompanies = [...serpCompanies, ...perpCompanies, ...openaiCompanies, ...geminiCompanies];
-  const uniqueCompanies = dedupeCompanies(allCompanies);
-
-  console.log(`  Raw total: ${allCompanies.length}, Unique: ${uniqueCompanies.length}`);
-  console.log(`Search completed in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
-
-  return uniqueCompanies;
-}
 
 // ============ WEBSITE VERIFICATION ============
 
@@ -1731,33 +1108,6 @@ async function verifyWebsite(url) {
   }
 }
 
-async function filterVerifiedWebsites(companies) {
-  console.log(`\nVerifying ${companies.length} websites...`);
-  const startTime = Date.now();
-  const batchSize = 15; // Increased for better parallelization
-  const verified = [];
-
-  for (let i = 0; i < companies.length; i += batchSize) {
-    const batch = companies.slice(i, i + batchSize);
-    const results = await Promise.all(batch.map(c => verifyWebsite(c.website)));
-
-    batch.forEach((company, idx) => {
-      if (results[idx].valid) {
-        verified.push({
-          ...company,
-          _pageContent: results[idx].content // Cache the content for validation
-        });
-      } else {
-        console.log(`    Removed: ${company.company_name} - ${results[idx].reason}`);
-      }
-    });
-
-    console.log(`  Verified ${Math.min(i + batchSize, companies.length)}/${companies.length}. Working: ${verified.length}`);
-  }
-
-  console.log(`Website verification done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Working: ${verified.length}/${companies.length}`);
-  return verified;
-}
 
 // ============ FETCH WEBSITE FOR VALIDATION ============
 
@@ -2176,9 +1526,9 @@ async function parallelValidation(companies, business, country, exclusion) {
 function buildEmailHTML(companies, business, country, exclusion) {
   let html = `
     <h2>Find Target Results</h2>
-    <p><strong>Business:</strong> ${business}</p>
-    <p><strong>Country:</strong> ${country}</p>
-    <p><strong>Exclusion:</strong> ${exclusion}</p>
+    <p><strong>Business:</strong> ${escapeHtml(business)}</p>
+    <p><strong>Country:</strong> ${escapeHtml(country)}</p>
+    <p><strong>Exclusion:</strong> ${escapeHtml(exclusion)}</p>
     <p><strong>Companies Found:</strong> ${companies.length}</p>
     <br>
     <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
@@ -2188,7 +1538,7 @@ function buildEmailHTML(companies, business, country, exclusion) {
       <tbody>
   `;
   companies.forEach((c, i) => {
-    html += `<tr><td>${i + 1}</td><td>${c.company_name}</td><td><a href="${c.website}">${c.website}</a></td><td>${c.hq}</td></tr>`;
+    html += `<tr><td>${i + 1}</td><td>${escapeHtml(c.company_name)}</td><td><a href="${escapeHtml(c.website)}">${escapeHtml(c.website)}</a></td><td>${escapeHtml(c.hq)}</td></tr>`;
   });
   html += '</tbody></table>';
   return html;
@@ -2209,22 +1559,10 @@ function calculateMedian(values) {
     : sorted[mid];
 }
 
-// Format number for display
-function formatNum(val, decimals = 1) {
-  if (val === null || val === undefined || isNaN(val)) return '-';
-  return Number(val).toFixed(decimals);
-}
-
 // Format as multiple (with x suffix)
 function formatMultiple(val) {
   if (val === null || val === undefined || isNaN(val)) return '-';
   return Number(val).toFixed(1) + 'x';
-}
-
-// Format as percentage
-function formatPercent(val) {
-  if (val === null || val === undefined || isNaN(val)) return '-';
-  return Number(val).toFixed(1) + '%';
 }
 
 // Build reasoning prompt for AI relevance check - no hardcoded examples
@@ -2988,102 +2326,6 @@ Make each step progressively more selective. First step should be broad, last st
   }
 }
 
-// Helper: Apply iterative qualitative filtering with multiple AI checks
-async function applyIterativeQualitativeFilter(companies, targetDescription, outputWorkbook, sheetHeaders, startSheetNumber) {
-  let currentCompanies = [...companies];
-  let sheetNumber = startSheetNumber;
-  const filterLog = [];
-
-  // Generate filtering steps
-  console.log('Generating filtering steps...');
-  const filteringSteps = await generateFilteringSteps(targetDescription, currentCompanies.length);
-  console.log(`Generated ${filteringSteps.length} filtering steps:`, filteringSteps);
-
-  // Apply each filtering step
-  for (let stepIdx = 0; stepIdx < filteringSteps.length; stepIdx++) {
-    const filterCriteria = filteringSteps[stepIdx];
-    console.log(`\nApplying filter step ${stepIdx + 1}: "${filterCriteria}"`);
-
-    if (currentCompanies.length <= 3) {
-      console.log('  Skipping - already at minimum company count');
-      break;
-    }
-
-    // Run multi-AI relevance check
-    const relevanceResults = await checkBusinessRelevanceMultiAI(currentCompanies, filterCriteria);
-
-    const removedCompanies = [];
-    const keptCompanies = [];
-
-    for (let i = 0; i < currentCompanies.length; i++) {
-      const result = relevanceResults[i];
-      const company = { ...currentCompanies[i] };
-
-      if (result && !result.relevant) {
-        company.filterReason = result.business;
-        removedCompanies.push(company);
-      } else {
-        keptCompanies.push(company);
-      }
-    }
-
-    // Only apply filter if it doesn't remove too many companies
-    if (keptCompanies.length >= 3) {
-      currentCompanies = keptCompanies;
-      const logEntry = `Filter ${sheetNumber - 1} (${filterCriteria}): Removed ${removedCompanies.length} companies`;
-      filterLog.push(logEntry);
-      console.log(`  ${logEntry}`);
-
-      // Create sheet for this filter step
-      const sheetData = createSheetData(currentCompanies, sheetHeaders,
-        `Step ${stepIdx + 1}: ${filterCriteria} - ${currentCompanies.length} companies (removed ${removedCompanies.length})`);
-
-      // Add removed companies section (5 rows gap, clear header)
-      if (removedCompanies.length > 0) {
-        // Add 5 empty rows for visual separation
-        for (let i = 0; i < 5; i++) {
-          sheetData.push([]);
-        }
-        // Header row for out-of-scope section
-        sheetData.push(['OUT OF SCOPE - Not matching: "' + filterCriteria + '"', 'Business Description (Reason for Exclusion)']);
-        sheetData.push(['Company Name', 'What They Actually Do']);
-        // List removed companies
-        for (const c of removedCompanies) {
-          sheetData.push([c.name, c.filterReason || 'Does not match filter criteria']);
-        }
-      }
-
-      const sheet = XLSX.utils.aoa_to_sheet(sheetData);
-
-      // Apply styling to the out-of-scope header row
-      if (removedCompanies.length > 0) {
-        const headerRowIdx = sheetData.length - removedCompanies.length - 2; // Row index of "OUT OF SCOPE" header
-        const subHeaderRowIdx = headerRowIdx + 1;
-
-        // Style header cells (dark background)
-        const headerStyle = { fill: { fgColor: { rgb: '1E3A5F' } }, font: { bold: true, color: { rgb: 'FFFFFF' } } };
-        const subHeaderStyle = { fill: { fgColor: { rgb: '374151' } }, font: { bold: true, color: { rgb: 'FFFFFF' } } };
-
-        // Apply styles if xlsx supports it (basic xlsx doesn't, but we set the data clearly)
-        // The header text itself makes it clear
-      }
-
-      const sheetName = `${sheetNumber}. Q${stepIdx + 1} ${filterCriteria.substring(0, 20)}`;
-      XLSX.utils.book_append_sheet(outputWorkbook, sheet, sheetName.substring(0, 31));
-      sheetNumber++;
-    } else {
-      console.log(`  Skipping filter - would leave only ${keptCompanies.length} companies`);
-    }
-
-    // Stop if we're in the target range
-    if (currentCompanies.length >= 3 && currentCompanies.length <= 30) {
-      console.log(`  Reached target range: ${currentCompanies.length} companies`);
-      break;
-    }
-  }
-
-  return { companies: currentCompanies, filterLog, sheetNumber };
-}
 
 // Helper: Create sheet data from companies
 function createSheetData(companies, headers, title) {
