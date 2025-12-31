@@ -180,8 +180,9 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true) {
       temperature: 0.3
     };
 
-    // Enable web search tool if requested
-    if (useWebSearch) {
+    // Enable web search tool if requested (can be disabled via env var for testing)
+    const webSearchEnabled = process.env.KIMI_WEB_SEARCH !== 'false';
+    if (useWebSearch && webSearchEnabled) {
       requestBody.tools = [{
         type: 'builtin_function',
         function: { name: '$web_search' }
