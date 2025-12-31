@@ -2930,6 +2930,7 @@ function safeArray(arr, max = 5) {
 }
 
 // Helper: add source footnote to slide
+// Uses widescreen dimensions (13.333" x 7.5" = 16:9)
 function addSourceFootnote(slide, sources, COLORS, FONT) {
   if (!sources || (Array.isArray(sources) && sources.length === 0)) return;
 
@@ -2943,7 +2944,7 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
 
   if (sourceText) {
     slide.addText(truncate(sourceText, 120), {
-      x: LEFT_MARGIN, y: 6.85, w: CONTENT_WIDTH, h: 0.2,
+      x: 0.4, y: 6.85, w: 12.5, h: 0.2,
       fontSize: 8, fontFace: FONT, color: COLORS?.footerText || '666666', valign: 'top'
     });
   }
