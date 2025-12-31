@@ -2061,7 +2061,14 @@ Return ONLY valid JSON.`;
     return review;
   } catch (error) {
     console.error('  Reviewer failed to parse:', error.message);
-    return { overallScore: 5, confidence: 'low', verdict: 'APPROVE', criticalIssues: [] }; // Default to approve on error
+    // Don't auto-approve on error - return low score requiring revision
+    return {
+      overallScore: 4,
+      confidence: 'low',
+      verdict: 'REVISE',  // Force revision instead of approving low-quality output
+      criticalIssues: ['Reviewer parsing failed - manual review recommended'],
+      reviewerError: true
+    };
   }
 }
 
@@ -2572,17 +2579,18 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
 
   if (sourceText) {
     slide.addText(truncate(sourceText, 120), {
-      x: 0.35, y: 6.85, w: 9.3, h: 0.2,
+      x: LEFT_MARGIN, y: 6.85, w: CONTENT_WIDTH, h: 0.2,
       fontSize: 8, fontFace: FONT, color: COLORS?.footerText || '666666', valign: 'top'
     });
   }
 }
 
 // Helper: add callout/insight box to slide
+// Uses widescreen dimensions (13.333" x 7.5" = 16:9)
 function addCalloutBox(slide, title, content, options = {}) {
-  const boxX = options.x || 0.35;
+  const boxX = options.x || 0.4;     // LEFT_MARGIN for widescreen
   const boxY = options.y || 5.3;
-  const boxW = options.w || 9.3;
+  const boxW = options.w || 12.5;    // CONTENT_WIDTH for widescreen
   const boxH = options.h || 1.2;
   const boxType = options.type || 'insight'; // insight, warning, recommendation
   const FONT = 'Segoe UI';
@@ -2777,6 +2785,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   console.log(`Generating expanded single-country PPT for ${synthesis.country}...`);
 
   const pptx = new pptxgen();
+
+  // Set exact slide size to match YCP template (13.333" x 7.5" = 16:9 widescreen)
+  pptx.defineLayout({ name: 'YCP', width: 13.333, height: 7.5 });
+  pptx.layout = 'YCP';
+
   pptx.author = 'YCP Market Research';
   pptx.title = `${synthesis.country} - ${scope.industry} Market Analysis`;
   pptx.subject = scope.projectType;
@@ -2805,13 +2818,27 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const policy = countryAnalysis.policy || {};
   const market = countryAnalysis.market || {};
   const competitors = countryAnalysis.competitors || {};
-  const summary = countryAnalysis.summary || countryAnalysis.summaryAssessment || {};
+  const depth = countryAnalysis.depth || {};
+  // Provide safe defaults for summary to prevent empty slides
+  const rawSummary = countryAnalysis.summary || countryAnalysis.summaryAssessment || {};
+  const summary = {
+    timingIntelligence: rawSummary.timingIntelligence || {},
+    lessonsLearned: rawSummary.lessonsLearned || {},
+    opportunities: rawSummary.opportunities || [],
+    obstacles: rawSummary.obstacles || [],
+    ratings: rawSummary.ratings || { attractiveness: 0, feasibility: 0 },
+    keyInsights: rawSummary.keyInsights || [],
+    goNoGo: rawSummary.goNoGo || {},
+    recommendation: rawSummary.recommendation || ''
+  };
   const country = countryAnalysis.country || synthesis.country;
 
   // Debug: confirm data source
   console.log(`  [PPT] Using countryAnalysis data for ${country}`);
   console.log(`  [PPT] policy keys: ${Object.keys(policy).join(', ') || 'EMPTY'}`);
   console.log(`  [PPT] market keys: ${Object.keys(market).join(', ') || 'EMPTY'}`);
+  console.log(`  [PPT] depth keys: ${Object.keys(depth).join(', ') || 'EMPTY'}`);
+  console.log(`  [PPT] summary.goNoGo: ${summary.goNoGo ? 'present' : 'EMPTY'}`);
 
   // Truncate title to max 70 chars
   function truncateTitle(text) {
@@ -2824,23 +2851,27 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
 
   // Standard slide layout with title, subtitle, and navy divider line
+  // Uses widescreen dimensions (13.333" x 7.5" = 16:9)
+  const CONTENT_WIDTH = 12.5;  // Full content width for 16:9 widescreen
+  const LEFT_MARGIN = 0.4;     // Left margin matching YCP template
+
   function addSlideWithTitle(title, subtitle = '') {
     const slide = pptx.addSlide();
     // Title - 24pt bold navy
     slide.addText(truncateTitle(title), {
-      x: 0.35, y: 0.15, w: 9.3, h: 0.7,
+      x: LEFT_MARGIN, y: 0.15, w: CONTENT_WIDTH, h: 0.7,
       fontSize: 24, bold: true, color: COLORS.dk2, fontFace: FONT,
       valign: 'top', wrap: true
     });
     // Navy divider line under title
     slide.addShape('line', {
-      x: 0.35, y: 0.9, w: 9.3, h: 0,
+      x: LEFT_MARGIN, y: 0.9, w: CONTENT_WIDTH, h: 0,
       line: { color: COLORS.dk2, width: 2.5 }
     });
     // Message/subtitle - 14pt blue (the "so what")
     if (subtitle) {
       slide.addText(subtitle, {
-        x: 0.35, y: 0.95, w: 9.3, h: 0.3,
+        x: LEFT_MARGIN, y: 0.95, w: CONTENT_WIDTH, h: 0.3,
         fontSize: 14, color: COLORS.accent1, fontFace: FONT
       });
     }
@@ -2853,6 +2884,23 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       text,
       options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT }
     }));
+  }
+
+  // Helper to show "Data unavailable" message on slides with missing data
+  function addDataUnavailableMessage(slide, message = 'Data not available for this section') {
+    slide.addShape('rect', {
+      x: LEFT_MARGIN, y: 2.5, w: CONTENT_WIDTH, h: 1.5,
+      fill: { color: 'FFF8E1' },  // Light yellow warning background
+      line: { color: 'E46C0A', pt: 1 }
+    });
+    slide.addText('⚠ ' + message, {
+      x: LEFT_MARGIN + 0.2, y: 2.7, w: CONTENT_WIDTH - 0.4, h: 0.4,
+      fontSize: 14, bold: true, color: 'E46C0A', fontFace: FONT
+    });
+    slide.addText('This data could not be verified through research. Please validate independently before making decisions.', {
+      x: LEFT_MARGIN + 0.2, y: 3.2, w: CONTENT_WIDTH - 0.4, h: 0.6,
+      fontSize: 11, color: '666666', fontFace: FONT
+    });
   }
 
   // ============ SLIDE 1: TITLE ============
@@ -2896,12 +2944,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     actsSlide.addTable(actsRows, {
-      x: 0.35, y: 1.3, w: 9.3, h: 5.2,
+      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 5.2,
       fontSize: 12, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.2, 0.8, 3.3, 3.0],
       valign: 'top'
     });
+  } else {
+    addDataUnavailableMessage(actsSlide, 'Energy legislation data not available');
   }
 
   // SLIDE 3: National Policy
@@ -2922,7 +2972,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     policySlide.addTable(targetRows, {
-      x: 0.35, y: 1.3, w: 9.3, h: 2.5,
+      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 2.5,
       fontSize: 12, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [3.0, 2.3, 2.0, 2.0],
@@ -2933,11 +2983,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const initiatives = safeArray(nationalPolicy.keyInitiatives, 4);
   if (initiatives.length > 0) {
     policySlide.addText('Key Initiatives', {
-      x: 0.35, y: 4.0, w: 9.3, h: 0.3,
+      x: LEFT_MARGIN, y: 4.0, w: CONTENT_WIDTH, h: 0.3,
       fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
     });
     policySlide.addText(initiatives.map(i => ({ text: truncate(i, 100), options: { bullet: true } })), {
-      x: 0.35, y: 4.4, w: 9.3, h: 2.0,
+      x: LEFT_MARGIN, y: 4.4, w: CONTENT_WIDTH, h: 2.0,
       fontSize: 12, fontFace: FONT, color: COLORS.black, valign: 'top'
     });
   }
@@ -2955,7 +3005,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   if (ownership.promoted) ownershipRows.push([{ text: 'BOI Promoted' }, { text: ownership.promoted }, { text: 'Tax incentives apply' }]);
   if (ownershipRows.length > 1) {
     investSlide.addTable(ownershipRows, {
-      x: 0.35, y: 1.3, w: 9.3, h: 1.5,
+      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 1.5,
       fontSize: 12, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.5, 1.5, 5.3],
@@ -2974,7 +3024,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     investSlide.addTable(incRows, {
-      x: 0.35, y: 3.0, w: 9.3, h: 2.0,
+      x: LEFT_MARGIN, y: 3.0, w: CONTENT_WIDTH, h: 2.0,
       fontSize: 12, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.5, 2.5, 4.3],
@@ -2986,7 +3036,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const riskColor = investRestrict.riskLevel.toLowerCase().includes('high') ? COLORS.red :
                       investRestrict.riskLevel.toLowerCase().includes('low') ? COLORS.green : COLORS.orange;
     investSlide.addText(`Regulatory Risk: ${investRestrict.riskLevel.toUpperCase()}`, {
-      x: 0.35, y: 5.5, w: 9.3, h: 0.4,
+      x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 0.4,
       fontSize: 14, bold: true, color: riskColor, fontFace: FONT
     });
   }
@@ -3020,7 +3070,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const drivers = safeArray(finalDemand.keyDrivers, 3);
   if (drivers.length > 0) {
     demandSlide.addText(drivers.map(d => ({ text: truncate(d, 100), options: { bullet: true } })), {
-      x: 0.35, y: 5.5, w: 9.3, h: 1.2,
+      x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 1.2,
       fontSize: 12, fontFace: FONT, color: COLORS.black, valign: 'top'
     });
   }
@@ -3064,7 +3114,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     gasSlide.addTable(termRows, {
-      x: 0.35, y: 5.0, w: 9.3, h: 1.5,
+      x: LEFT_MARGIN, y: 5.0, w: CONTENT_WIDTH, h: 1.5,
       fontSize: 11, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [4.0, 2.65, 2.65],
@@ -3083,7 +3133,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
   if (pricing.comparison) {
     priceSlide.addText(`Regional Comparison: ${truncate(pricing.comparison, 100)}`, {
-      x: 0.35, y: 5.5, w: 9.3, h: 0.5,
+      x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 0.5,
       fontSize: 12, fontFace: FONT, color: COLORS.black
     });
   }
@@ -3109,7 +3159,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     escoSlide.addTable(segRows, {
-      x: 0.35, y: 5.0, w: 9.3, h: 1.5,
+      x: LEFT_MARGIN, y: 5.0, w: CONTENT_WIDTH, h: 1.5,
       fontSize: 11, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [4.0, 2.65, 2.65],
@@ -3137,7 +3187,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     jpSlide.addTable(jpRows, {
-      x: 0.35, y: 1.3, w: 9.3, h: 5.2,
+      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 5.2,
       fontSize: 11, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.0, 2.5, 3.0, 1.8],
@@ -3164,7 +3214,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     localSlide.addTable(localRows, {
-      x: 0.35, y: 1.3, w: 9.3, h: 5.2,
+      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 5.2,
       fontSize: 10, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.0, 1.3, 1.5, 1.3, 3.2],
@@ -3191,7 +3241,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     foreignSlide.addTable(foreignRows, {
-      x: 0.35, y: 1.3, w: 9.3, h: 5.2,
+      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 5.2,
       fontSize: 11, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.5, 1.5, 1.3, 2.0, 2.0],
@@ -3214,18 +3264,18 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     `Outcome: ${truncate(caseStudy.outcome || 'N/A', 80)}`
   ];
   caseSlide.addText(caseDetails.map(d => ({ text: d, options: { bullet: true } })), {
-    x: 0.35, y: 1.3, w: 9.3, h: 2.5,
+    x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 2.5,
     fontSize: 12, fontFace: FONT, color: COLORS.black, valign: 'top'
   });
   // Key lessons
   const lessons = safeArray(caseStudy.keyLessons, 4);
   if (lessons.length > 0) {
     caseSlide.addText('Key Lessons', {
-      x: 0.35, y: 4.0, w: 9.3, h: 0.3,
+      x: LEFT_MARGIN, y: 4.0, w: CONTENT_WIDTH, h: 0.3,
       fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
     });
     caseSlide.addText(lessons.map(l => ({ text: truncate(l, 100), options: { bullet: true } })), {
-      x: 0.35, y: 4.4, w: 9.3, h: 2.0,
+      x: LEFT_MARGIN, y: 4.4, w: CONTENT_WIDTH, h: 2.0,
       fontSize: 12, fontFace: FONT, color: COLORS.black, valign: 'top'
     });
   }
@@ -3250,7 +3300,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     maSlide.addTable(dealRows, {
-      x: 0.35, y: 1.3, w: 9.3, h: 2.0,
+      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 2.0,
       fontSize: 10, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [0.8, 1.8, 1.8, 1.5, 3.4],
@@ -3261,7 +3311,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const potentialTargets = safeArray(maActivity.potentialTargets, 3);
   if (potentialTargets.length > 0) {
     maSlide.addText('Potential Acquisition Targets', {
-      x: 0.35, y: 3.5, w: 9.3, h: 0.3,
+      x: LEFT_MARGIN, y: 3.5, w: CONTENT_WIDTH, h: 0.3,
       fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
     });
     const targetRows = [tableHeader(['Company', 'Est. Value', 'Rationale', 'Timing'])];
@@ -3274,7 +3324,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     maSlide.addTable(targetRows, {
-      x: 0.35, y: 3.9, w: 9.3, h: 2.0,
+      x: LEFT_MARGIN, y: 3.9, w: CONTENT_WIDTH, h: 2.0,
       fontSize: 10, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.0, 1.5, 4.0, 1.8],
@@ -3283,9 +3333,6 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
 
   // ============ SECTION 4: DEPTH ANALYSIS (5 slides) ============
-
-  // Get depth data from countryAnalysis
-  const depth = countryAnalysis.depth || {};
 
   // SLIDE 16: ESCO Deal Economics
   const escoEcon = depth.escoEconomics || {};
@@ -3306,7 +3353,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   if (financials.marginProfile) econRows.push([{ text: 'Gross Margin' }, { text: financials.marginProfile }, { text: '' }]);
   if (econRows.length > 1) {
     econSlide.addTable(econRows, {
-      x: 0.35, y: 1.3, w: 9.3, h: 4.0,
+      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 4.0,
       fontSize: 12, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.5, 3.0, 3.8],
@@ -3317,11 +3364,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const financing = safeArray(escoEcon.financingOptions, 3);
   if (financing.length > 0) {
     econSlide.addText('Financing Options', {
-      x: 0.35, y: 5.5, w: 9.3, h: 0.3,
+      x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 0.3,
       fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT
     });
     econSlide.addText(financing.map(f => ({ text: truncate(f, 80), options: { bullet: true } })), {
-      x: 0.35, y: 5.9, w: 9.3, h: 0.8,
+      x: LEFT_MARGIN, y: 5.9, w: CONTENT_WIDTH, h: 0.8,
       fontSize: 11, fontFace: FONT, color: COLORS.black, valign: 'top'
     });
   }
@@ -3346,7 +3393,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     partnerSlide.addTable(partnerRows, {
-      x: 0.35, y: 1.3, w: 9.3, h: 5.2,
+      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 5.2,
       fontSize: 10, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [1.8, 1.5, 1.3, 1.3, 1.3, 2.1],
@@ -3374,7 +3421,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     entrySlide.addTable(optRows, {
-      x: 0.35, y: 1.3, w: 9.3, h: 2.5,
+      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 2.5,
       fontSize: 10, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [1.3, 1.2, 1.3, 1.3, 1.0, 3.2],
@@ -3383,22 +3430,28 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
   // Harvey Balls comparison (if available)
   const harvey = entryStrat.harveyBalls || {};
-  if (harvey.criteria && harvey.criteria.length > 0) {
+  if (harvey.criteria && Array.isArray(harvey.criteria) && harvey.criteria.length > 0) {
     entrySlide.addText('Comparison Matrix (1-5 scale)', {
-      x: 0.35, y: 4.0, w: 9.3, h: 0.3,
+      x: LEFT_MARGIN, y: 4.0, w: CONTENT_WIDTH, h: 0.3,
       fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT
     });
+    // Safe Harvey Ball renderer - handles missing/invalid values
+    const renderHarvey = (arr, idx) => {
+      if (!Array.isArray(arr) || idx >= arr.length) return '';
+      const val = Math.max(0, Math.min(5, parseInt(arr[idx]) || 0));
+      return '●'.repeat(val) + '○'.repeat(5 - val);
+    };
     const harveyRows = [tableHeader(['Criteria', 'Joint Venture', 'Acquisition', 'Greenfield'])];
-    (harvey.criteria || []).forEach((crit, idx) => {
+    harvey.criteria.forEach((crit, idx) => {
       harveyRows.push([
-        { text: crit },
-        { text: harvey.jv?.[idx] ? '●'.repeat(harvey.jv[idx]) + '○'.repeat(5 - harvey.jv[idx]) : '' },
-        { text: harvey.acquisition?.[idx] ? '●'.repeat(harvey.acquisition[idx]) + '○'.repeat(5 - harvey.acquisition[idx]) : '' },
-        { text: harvey.greenfield?.[idx] ? '●'.repeat(harvey.greenfield[idx]) + '○'.repeat(5 - harvey.greenfield[idx]) : '' }
+        { text: String(crit || '') },
+        { text: renderHarvey(harvey.jv, idx) },
+        { text: renderHarvey(harvey.acquisition, idx) },
+        { text: renderHarvey(harvey.greenfield, idx) }
       ]);
     });
     entrySlide.addTable(harveyRows, {
-      x: 0.35, y: 4.4, w: 9.3, h: 2.0,
+      x: LEFT_MARGIN, y: 4.4, w: CONTENT_WIDTH, h: 2.0,
       fontSize: 10, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.5, 2.3, 2.25, 2.25],
@@ -3468,7 +3521,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     targetSlide.addTable(segmentRows, {
-      x: 0.35, y: 1.3, w: 9.3, h: 2.5,
+      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 2.5,
       fontSize: 10, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.0, 2.3, 1.5, 2.0, 1.5],
@@ -3479,7 +3532,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const topTargets = safeArray(targetSeg.topTargets, 4);
   if (topTargets.length > 0) {
     targetSlide.addText('Priority Target Companies', {
-      x: 0.35, y: 4.0, w: 9.3, h: 0.3,
+      x: LEFT_MARGIN, y: 4.0, w: CONTENT_WIDTH, h: 0.3,
       fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT
     });
     const targetCompRows = [tableHeader(['Company', 'Industry', 'Energy Spend', 'Location'])];
@@ -3492,7 +3545,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     targetSlide.addTable(targetCompRows, {
-      x: 0.35, y: 4.4, w: 9.3, h: 2.0,
+      x: LEFT_MARGIN, y: 4.4, w: CONTENT_WIDTH, h: 2.0,
       fontSize: 10, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.5, 2.3, 2.25, 2.25],
@@ -3519,7 +3572,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     timingSlide.addTable(triggerRows, {
-      x: 0.35, y: 1.3, w: 9.3, h: 3.0,
+      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 3.0,
       fontSize: 11, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [3.5, 2.9, 2.9],
@@ -3542,7 +3595,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const failures = safeArray(lessonsData.failures, 3);
   if (failures.length > 0) {
     lessonsSlide.addText('FAILURES TO AVOID', {
-      x: 0.35, y: 1.3, w: 4.5, h: 0.3,
+      x: LEFT_MARGIN, y: 1.3, w: 4.5, h: 0.3,
       fontSize: 12, bold: true, color: COLORS.red, fontFace: FONT
     });
     const failureRows = [tableHeader(['Company', 'Reason', 'Lesson'])];
@@ -3554,7 +3607,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     lessonsSlide.addTable(failureRows, {
-      x: 0.35, y: 1.7, w: 9.3, h: 2.0,
+      x: LEFT_MARGIN, y: 1.7, w: CONTENT_WIDTH, h: 2.0,
       fontSize: 10, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.2, 3.5, 3.6],
@@ -3565,11 +3618,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const successFactors = safeArray(lessonsData.successFactors, 3);
   if (successFactors.length > 0) {
     lessonsSlide.addText('SUCCESS FACTORS', {
-      x: 0.35, y: 4.0, w: 4.5, h: 0.3,
+      x: LEFT_MARGIN, y: 4.0, w: 4.5, h: 0.3,
       fontSize: 12, bold: true, color: COLORS.green, fontFace: FONT
     });
     lessonsSlide.addText(successFactors.map(s => ({ text: truncate(s, 60), options: { bullet: true } })), {
-      x: 0.35, y: 4.4, w: 4.5, h: 1.5,
+      x: LEFT_MARGIN, y: 4.4, w: 4.5, h: 1.5,
       fontSize: 10, fontFace: FONT, color: COLORS.black, valign: 'top'
     });
   }
@@ -3607,7 +3660,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     goNoGoSlide.addTable(goNoGoRows, {
-      x: 0.35, y: 1.3, w: 9.3, h: 3.5,
+      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 3.5,
       fontSize: 11, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [3.0, 0.8, 5.5],
@@ -3618,7 +3671,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const verdictColor = goNoGo.overallVerdict?.includes('GO') && !goNoGo.overallVerdict?.includes('NO')
     ? COLORS.green : (goNoGo.overallVerdict?.includes('NO') ? COLORS.red : COLORS.orange);
   goNoGoSlide.addText(`VERDICT: ${goNoGo.overallVerdict || 'CONDITIONAL'}`, {
-    x: 0.35, y: 5.0, w: 4.0, h: 0.5,
+    x: LEFT_MARGIN, y: 5.0, w: 4.0, h: 0.5,
     fontSize: 16, bold: true, color: COLORS.white, fill: { color: verdictColor }, fontFace: FONT,
     align: 'center', valign: 'middle'
   });
@@ -3646,7 +3699,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // Opportunities column (left)
   ooSlide.addText('OPPORTUNITIES', {
-    x: 0.35, y: 1.3, w: 4.5, h: 0.3,
+    x: LEFT_MARGIN, y: 1.3, w: 4.5, h: 0.3,
     fontSize: 14, bold: true, color: COLORS.green, fontFace: FONT
   });
   if (opportunities.length > 0) {
@@ -3654,7 +3707,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       text: typeof o === 'string' ? truncate(o, 70) : truncate(`${o.opportunity || ''} (${o.size || ''})`, 70),
       options: { bullet: true }
     })), {
-      x: 0.35, y: 1.7, w: 4.5, h: 4.5,
+      x: LEFT_MARGIN, y: 1.7, w: 4.5, h: 4.5,
       fontSize: 11, fontFace: FONT, color: COLORS.black, valign: 'top'
     });
   }
@@ -3678,7 +3731,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const ratings = summary.ratings || {};
   if (ratings.attractiveness || ratings.feasibility) {
     ooSlide.addText(`Attractiveness: ${ratings.attractiveness || 'N/A'}/10 | Feasibility: ${ratings.feasibility || 'N/A'}/10`, {
-      x: 0.35, y: 6.2, w: 9.3, h: 0.3,
+      x: LEFT_MARGIN, y: 6.2, w: CONTENT_WIDTH, h: 0.3,
       fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT
     });
   }
@@ -3696,11 +3749,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       `${insight.data || ''} ${insight.pattern || ''} ${insight.implication || ''}`;
 
     insightsSlide.addText(title, {
-      x: 0.35, y: insightY, w: 9.3, h: 0.35,
+      x: LEFT_MARGIN, y: insightY, w: CONTENT_WIDTH, h: 0.35,
       fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
     });
     insightsSlide.addText(truncate(content, 200), {
-      x: 0.35, y: insightY + 0.35, w: 9.3, h: 1.2,
+      x: LEFT_MARGIN, y: insightY + 0.35, w: CONTENT_WIDTH, h: 1.2,
       fontSize: 11, fontFace: FONT, color: COLORS.black, valign: 'top'
     });
     insightY += 1.7;
@@ -3735,7 +3788,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     metricsRows.push([{ text: 'Feasibility' }, { text: `${finalRatings.feasibility}/10` }, { text: finalRatings.feasibilityRationale ? truncate(finalRatings.feasibilityRationale, 30) : '' }]);
   }
   finalSlide.addTable(metricsRows, {
-    x: 0.35, y: 1.3, w: 9.3, h: 2.5,
+    x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 2.5,
     fontSize: 11, fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
     colW: [2.5, 3.5, 3.3],
@@ -3772,6 +3825,11 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   }
 
   const pptx = new pptxgen();
+
+  // Set exact slide size to match YCP template (13.333" x 7.5" = 16:9 widescreen)
+  pptx.defineLayout({ name: 'YCP', width: 13.333, height: 7.5 });
+  pptx.layout = 'YCP';
+
   pptx.author = 'YCP Market Research';
   pptx.title = `${scope.industry} Market Analysis - ${scope.targetMarkets.join(', ')}`;
   pptx.subject = scope.projectType;
@@ -3795,6 +3853,10 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   pptx.theme = { headFontFace: 'Segoe UI', bodyFontFace: 'Segoe UI' };
   const FONT = 'Segoe UI';
 
+  // Widescreen dimensions (13.333" x 7.5" = 16:9)
+  const CONTENT_WIDTH = 12.5;  // Full content width for 16:9 widescreen
+  const LEFT_MARGIN = 0.4;     // Left margin matching YCP template
+
   // Truncate title to max 70 chars
   function truncateTitle(text) {
     if (!text) return '';
@@ -3810,19 +3872,19 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     const slide = pptx.addSlide();
     // Title - 24pt bold navy
     slide.addText(truncateTitle(title), {
-      x: 0.35, y: 0.15, w: 9.3, h: 0.7,
+      x: LEFT_MARGIN, y: 0.15, w: CONTENT_WIDTH, h: 0.7,
       fontSize: 24, bold: true, color: COLORS.dk2, fontFace: FONT,
       valign: 'top', wrap: true
     });
     // Navy divider line under title
     slide.addShape('line', {
-      x: 0.35, y: 0.9, w: 9.3, h: 0,
+      x: LEFT_MARGIN, y: 0.9, w: CONTENT_WIDTH, h: 0,
       line: { color: COLORS.dk2, width: 2.5 }
     });
     // Message/subtitle - 14pt blue (the "so what")
     if (subtitle) {
       slide.addText(subtitle, {
-        x: 0.35, y: 0.95, w: 9.3, h: 0.3,
+        x: LEFT_MARGIN, y: 0.95, w: CONTENT_WIDTH, h: 0.3,
         fontSize: 14, color: COLORS.accent1, fontFace: FONT
       });
     }
@@ -3871,7 +3933,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   });
 
   overviewSlide.addTable(overviewRows, {
-    x: 0.35, y: 1.3, w: 9.3, h: 5.2,
+    x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 5.2,
     fontSize: 12,
     fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
@@ -3887,18 +3949,18 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       text: `${idx + 1}. ${truncate(typeof f === 'string' ? f : f.finding || f.text || '', 120)}`,
       options: { bullet: false, paraSpaceBefore: idx > 0 ? 8 : 0 }
     })), {
-      x: 0.35, y: 1.3, w: 9.3, h: 4.5,
+      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 4.5,
       fontSize: 13, fontFace: FONT, color: COLORS.black, valign: 'top'
     });
   }
   // Recommendation box
   if (synthesis.recommendation) {
     execSlide.addText('RECOMMENDATION', {
-      x: 0.35, y: 5.5, w: 9.3, h: 0.3,
+      x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 0.3,
       fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT
     });
     execSlide.addText(truncate(synthesis.recommendation, 200), {
-      x: 0.35, y: 5.85, w: 9.3, h: 0.7,
+      x: LEFT_MARGIN, y: 5.85, w: CONTENT_WIDTH, h: 0.7,
       fontSize: 11, fontFace: FONT, color: COLORS.black, valign: 'top',
       fill: { color: 'EDFDFF' }, line: { color: COLORS.accent1, pt: 1 }
     });
@@ -3929,7 +3991,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       labels: chartLabels,
       values: chartValues
     }], {
-      x: 0.5, y: 1.4, w: 9.0, h: 4.5,
+      x: LEFT_MARGIN, y: 1.4, w: CONTENT_WIDTH, h: 4.5,
       barDir: 'bar',
       showValue: true,
       dataLabelPosition: 'outEnd',
@@ -4026,7 +4088,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     ]);
   });
   recSlide.addTable(recRows, {
-    x: 0.35, y: 1.3, w: 9.3, h: 4.0,
+    x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 4.0,
     fontSize: 11, fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
     colW: [1.8, 1.3, 2.5, 3.7],
@@ -4034,7 +4096,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   });
   // Next steps
   recSlide.addText('Recommended Next Steps:', {
-    x: 0.35, y: 5.5, w: 9.3, h: 0.3,
+    x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 0.3,
     fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT
   });
   const nextSteps = synthesis.nextSteps || synthesis.executiveSummary?.nextSteps || [
@@ -4046,7 +4108,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     text: truncate(typeof s === 'string' ? s : s.step || '', 80),
     options: { bullet: true }
   })), {
-    x: 0.35, y: 5.85, w: 9.3, h: 0.8,
+    x: LEFT_MARGIN, y: 5.85, w: CONTENT_WIDTH, h: 0.8,
     fontSize: 10, fontFace: FONT, color: COLORS.black, valign: 'top'
   });
 
@@ -4091,7 +4153,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     }
 
     regSlide.addTable(regRows, {
-      x: 0.35, y: 1.3, w: 9.3, h: 5.2,
+      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 5.2,
       fontSize: 14, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.0, 7.3],
@@ -4131,7 +4193,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     }
 
     marketSlide.addTable(marketRows, {
-      x: 0.35, y: 1.3, w: 9.3, h: 5.2,
+      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 5.2,
       fontSize: 14, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.0, 7.3],
@@ -4182,7 +4244,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     });
 
     compSlide.addTable(compRows, {
-      x: 0.35, y: 1.3, w: 9.3, h: 3.5,
+      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 3.5,
       fontSize: 14, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.5, 1.0, 5.8],
@@ -4193,15 +4255,15 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     const barriers = safeArray(comp.entryBarriers, 4);
     if (barriers.length > 0) {
       compSlide.addShape('line', {
-        x: 0.35, y: 4.9, w: 9.3, h: 0,
+        x: LEFT_MARGIN, y: 4.9, w: CONTENT_WIDTH, h: 0,
         line: { color: COLORS.dk2, width: 2.5 }
       });
       compSlide.addText('Barriers to Entry', {
-        x: 0.35, y: 5.0, w: 9.3, h: 0.35,
+        x: LEFT_MARGIN, y: 5.0, w: CONTENT_WIDTH, h: 0.35,
         fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
       });
       compSlide.addText(barriers.map(b => ({ text: truncate(b, 90), options: { bullet: true } })), {
-        x: 0.35, y: 5.4, w: 9.3, h: 1.3,
+        x: LEFT_MARGIN, y: 5.4, w: CONTENT_WIDTH, h: 1.3,
         fontSize: 14, fontFace: FONT, color: COLORS.black, valign: 'top'
       });
     }
