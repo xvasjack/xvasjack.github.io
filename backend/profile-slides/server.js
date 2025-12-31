@@ -3156,6 +3156,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       };
 
       // Helper function to clean location value (remove JSON format and "HQ:" prefix)
+      // ALSO enforces Singapore 2-level rule at display time
       const cleanLocationValue = (location, label) => {
         if (!location) return location;
         let cleaned = location;
@@ -3179,6 +3180,17 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         // If label is HQ, remove "- HQ:" or "HQ:" prefix from value
         if (label === 'HQ') {
           cleaned = cleaned.replace(/^-?\s*HQ:\s*/i, '').trim();
+        }
+
+        // FINAL SINGAPORE FIX: If location is just "Singapore", try to extract area from address
+        // or leave as-is (can't make up areas)
+        const parts = cleaned.split(',').map(p => p.trim()).filter(p => p);
+        const isSingapore = parts[parts.length - 1]?.toLowerCase() === 'singapore' ||
+                           cleaned.toLowerCase() === 'singapore';
+
+        if (isSingapore && parts.length > 2) {
+          // Too many levels for Singapore - keep only first part + Singapore
+          cleaned = `${parts[0]}, Singapore`;
         }
 
         return cleaned;
@@ -3347,18 +3359,32 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         margin: [0, 0.04, 0, 0.04]
       });
 
-      // ===== RIGHT SECTION (Products/Applications breakdown) =====
+      // ===== RIGHT SECTION (ALWAYS use table format, max 6 rows) =====
       // Filter valid breakdown items (non-empty) and ensure string types
-      const validBreakdownItems = (company.breakdown_items || [])
+      let validBreakdownItems = (company.breakdown_items || [])
         .map(item => ({
           label: ensureString(item?.label),
           value: ensureString(item?.value)
         }))
         .filter(item => item.label && item.value && !isEmptyValue(item.label) && !isEmptyValue(item.value));
 
-      // If at least 2 valid items, use table format; otherwise use text box
-      if (validBreakdownItems.length >= 2) {
-        // Use table format
+      // Limit to 6 rows maximum
+      if (validBreakdownItems.length > 6) {
+        validBreakdownItems = validBreakdownItems.slice(0, 6);
+      }
+
+      // Truncate values to max 3 lines
+      validBreakdownItems = validBreakdownItems.map(item => {
+        let value = item.value;
+        const lines = value.split('\n');
+        if (lines.length > 3) {
+          value = lines.slice(0, 3).join('\n');
+        }
+        return { label: item.label, value };
+      });
+
+      // ALWAYS use table format (minimum 1 item)
+      if (validBreakdownItems.length >= 1) {
         const rightTableData = validBreakdownItems.map(item => [item.label, item.value]);
 
         const rightRows = rightTableData.map((row) => [
@@ -3387,7 +3413,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           }
         ]);
 
-        // Position at 6.86" horizontally and 1.91" vertically as requested
+        // Position at 6.86" horizontally and 1.91" vertically
         slide.addTable(rightRows, {
           x: 6.86, y: 1.91,
           w: 6.1,
@@ -3399,18 +3425,8 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           border: { pt: 2.5, color: COLORS.white },
           margin: [0, 0.04, 0, 0.04]
         });
-      } else if (validBreakdownItems.length > 0) {
-        // Use text box with point form format: "Segment: A, B, C"
-        const textContent = validBreakdownItems.map(item => `${item.label}: ${item.value}`).join('\n');
-
-        slide.addText(textContent, {
-          x: 6.86, y: 1.91, w: 6.1, h: 2.0,
-          fontSize: 14, fontFace: 'Segoe UI',
-          color: COLORS.black, valign: 'top',
-          margin: [0, 0, 0, 0]
-        });
       }
-      // If no valid items, don't add anything to the right section
+      // If no valid items, right section will be empty (header still shows)
 
       // ===== FOOTNOTE (single text box with stacked content) =====
       const footnoteLines = [];
@@ -3910,8 +3926,8 @@ ${scrapedContent.substring(0, 18000)}`
   }
 }
 
-// AI Agent 3b: Extract products/applications breakdown for right table
-// Using GPT-4o-mini (60% cost savings for category segmentation)
+// AI Agent 3b: Extract rich content for right-side table
+// This should produce a FULL, rich table with key business information
 async function extractProductsBreakdown(scrapedContent, previousData) {
   try {
     const response = await openai.chat.completions.create({
@@ -3919,59 +3935,64 @@ async function extractProductsBreakdown(scrapedContent, previousData) {
       messages: [
         {
           role: 'system',
-          content: `You are an M&A analyst deciding what to put in the RIGHT-SIDE TABLE of a company profile slide.
+          content: `You are an M&A analyst creating a RICH, COMPREHENSIVE right-side table for a company profile slide.
 
-THE RIGHT SIDE HAS MORE SPACE - use it for the content with THE MOST DATA.
+YOUR GOAL: Create a FULL table with 4-6 rows of KEY BUSINESS INFORMATION. The table should look complete, not sparse.
 
-CRITICAL - LOOK FOR LOGOS (BOTH CUSTOMERS AND SUPPLIERS):
+EXTRACT ALL OF THESE (pick the most relevant 4-6 for this company):
 
-FOR CUSTOMERS/CLIENTS:
-- Look for: "Clients", "Customers", "Our Clients", "Trusted by" sections
-- Logo sections showing customer company logos
-- Testimonials, case studies (extract company names)
-- IF YOU SEE CLIENT LOGOS, EXTRACT ALL COMPANY NAMES!
+1. PRODUCTS/SERVICES (segment by type/application):
+   - Product categories with specific examples
+   - Service types offered
 
-FOR SUPPLIERS/PRINCIPALS (IMPORTANT FOR DISTRIBUTORS):
-- Look for: "Our Brands", "Principals", "Partners", "We Represent" sections
-- Logo sections showing brand/supplier logos
-- IF COMPANY IS A DISTRIBUTOR, their principals/brands are CRITICAL!
-- Example: If you see logos for 3M, Fluke, Schneider → these are principals, extract them!
+2. CUSTOMERS/CLIENTS (CRITICAL - look for logos!):
+   - Look for: "Clients", "Customers", "Our Clients", "Trusted by", logo sections
+   - Extract company names from LOGOS if visible
+   - Segment by industry: Packaging, F&B, Industrial, Automotive, etc.
 
-DECISION PROCESS:
-1. Determine if company is a MANUFACTURER or DISTRIBUTOR
-2. For DISTRIBUTORS: prioritize showing "Principal Brands" or "Key Suppliers"
-3. For MANUFACTURERS: prioritize "Customers" or "Products"
-4. Pick the category with THE MOST LOGOS/ITEMS
+3. PRINCIPAL BRANDS/SUPPLIERS (CRITICAL for distributors):
+   - Look for: "Our Brands", "Principals", "Partners", "We Represent"
+   - For each principal, include their HQ country in brackets: "3M (USA), Fluke (USA)"
+   - This is CRITICAL for distributor companies
 
-CATEGORY OPTIONS:
-1. "Customers" - When clients listed OR client logos visible (segment by industry)
-2. "Principal Brands" - For DISTRIBUTORS: the brands they represent (segment by category)
-3. "Products and Applications" - When many products shown (segment by type)
-4. "Key Suppliers" - When supplier logos visible
-5. "Services" - When many services offered
+4. INDUSTRIES SERVED:
+   - List industries: Printing, Packaging, Footwear, Automotive, Electronics, etc.
 
-OUTPUT JSON:
+5. APPLICATIONS:
+   - What applications/uses for their products
+
+6. PROJECT TYPES (for service companies):
+   - Types of projects they handle
+
+CHOOSE THE RIGHT TITLE based on content:
+- "Products and Applications" - for manufacturers with products
+- "Customers" - when many clients/client logos found
+- "Principal Brands" - for distributors with brand logos
+- "Services" - for service companies
+- "Industries Served" - when industry focus is key
+
+OUTPUT JSON (MUST have 4-6 items):
 {
-  "breakdown_title": "Customers",
+  "breakdown_title": "Principal Brands",
   "breakdown_items": [
-    {"label": "Packaging", "value": "Sinarmas, PT SatyamitraKemasLestari"},
-    {"label": "Food & Beverage", "value": "Dole, Bosung"},
-    {"label": "Industrial", "value": "SCG, Indocement"}
+    {"label": "Printing Inks", "value": "Sun Chemical (USA), Flint Group (Luxembourg)"},
+    {"label": "Coatings", "value": "PPG (USA), AkzoNobel (Netherlands)"},
+    {"label": "Adhesives", "value": "Henkel (Germany), 3M (USA)"},
+    {"label": "Packaging", "value": "Sealed Air (USA), Berry Global (USA)"},
+    {"label": "Equipment", "value": "Heidelberg (Germany), Komori (Japan)"},
+    {"label": "Testing", "value": "X-Rite (USA), Techkon (Germany)"}
   ]
 }
 
 RULES:
-- HARD RULE - EXTRACT CUSTOMER NAMES FROM LOGOS: If the website shows client/customer logos, extract the company names from those logos
-- TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH
-- Write ALL text using regular English alphabet only (A-Z, no diacritics)
-- Remove company suffixes: Co., Ltd, JSC, Sdn Bhd, Pte Ltd, Inc, Corp, LLC, GmbH, PT
-- Use 3-6 items maximum
-- Labels should be segment/category names (1-3 words)
-- VALUE FORMATTING:
-  - If 2-3 items: comma-separated (e.g., "Product A, Product B")
-  - If 4+ items: use point form (e.g., "- Item 1\\n- Item 2\\n- Item 3")
-- For customers, segment by industry/type
-- For products, segment by application/type
+- MUST produce 4-6 rows (not less!)
+- Each value should be 1-3 lines MAX (don't overflow)
+- For principals/suppliers: ALWAYS include HQ country in brackets
+- Extract company names from LOGOS - this is critical
+- Labels should be short (1-3 words)
+- Values: comma-separated for 2-3 items, bullet points for 4+ items
+- TRANSLATE all non-English to English
+- Remove company suffixes (Ltd, Pte Ltd, etc.)
 - Return ONLY valid JSON`
         },
         {
@@ -3980,7 +4001,7 @@ RULES:
 Industry/Business: ${previousData.business}
 
 Website Content:
-${scrapedContent.substring(0, 15000)}`
+${scrapedContent.substring(0, 18000)}`
         }
       ],
       response_format: { type: 'json_object' },
