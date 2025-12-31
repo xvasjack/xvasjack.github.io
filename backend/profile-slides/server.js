@@ -3659,11 +3659,11 @@ async function scrapeWebsite(url) {
 }
 
 // AI Agent 1: Extract company name, established year, location
-// Using GPT-4o-mini (60% cost savings for simple extraction task)
+// Using GPT-4o for accurate extraction esp. non-English content
 async function extractBasicInfo(scrapedContent, websiteUrl) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4o',
       messages: [
         {
           role: 'system',
@@ -3729,6 +3729,13 @@ OUTPUT JSON with these fields:
   - CORRECT: "Jurong West, Singapore" or "Tuas, Singapore"
   - Look at the address on website to find the area/district name
 
+CRITICAL - EXTRACT FROM ACTUAL ADDRESS:
+- Find the ACTUAL address text on the website (e.g., "123 Moo 5, Mueang Samut Sakhon District, Samut Sakhon 74000")
+- Extract the district/city and province FROM THE ADDRESS - do NOT guess or assume
+- If address says "Samut Sakhon", output "Mueang Samut Sakhon, Samut Sakhon, Thailand" NOT "Bangkok, Thailand"
+- NEVER default to capital city (Bangkok, Jakarta, etc.) unless address explicitly mentions it
+- If you cannot find an address, leave location empty rather than guessing
+
 RULES:
 - ONLY extract HQ location - ignore all branches, factories, warehouses, offices
 - Write ALL text using regular English alphabet only (A-Z, no diacritics/accents)
@@ -3740,7 +3747,7 @@ RULES:
         {
           role: 'user',
           content: `Website: ${websiteUrl}
-Content: ${scrapedContent.substring(0, 12000)}`
+Content: ${scrapedContent.substring(0, 25000)}`
         }
       ],
       response_format: { type: 'json_object' },
@@ -3832,7 +3839,7 @@ function validateAndFixHQFormat(location, websiteUrl) {
 }
 
 // AI Agent 2: Extract business, message, footnote, title
-// Using GPT-4o-mini (60% cost savings for structured output task)
+// Using GPT-4o for accurate extraction esp. non-English content
 async function extractBusinessInfo(scrapedContent, basicInfo) {
   // Ensure locationText is always a string (AI might return object/array)
   const locationText = typeof basicInfo.location === 'string' ? basicInfo.location : '';
@@ -3842,7 +3849,7 @@ async function extractBusinessInfo(scrapedContent, basicInfo) {
 
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4o',
       messages: [
         {
           role: 'system',
@@ -3897,7 +3904,7 @@ Established: ${basicInfo.established_year}
 Location: ${basicInfo.location}
 
 Website Content:
-${scrapedContent.substring(0, 12000)}`
+${scrapedContent.substring(0, 25000)}`
         }
       ],
       response_format: { type: 'json_object' },
@@ -3912,15 +3919,23 @@ ${scrapedContent.substring(0, 12000)}`
 }
 
 // AI Agent 3: Extract key metrics for M&A evaluation
-// Using GPT-4o-mini (60% cost savings for pattern-based extraction)
+// Using GPT-4o for accurate extraction esp. non-English content and visible statistics
 async function extractKeyMetrics(scrapedContent, previousData) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4o',
       messages: [
         {
           role: 'system',
           content: `You are an M&A analyst extracting COMPREHENSIVE key business metrics for potential buyers evaluating this company.
+
+CRITICAL - VISIBLE STATISTICS FIRST:
+Before anything else, scan the ENTIRE page for ANY prominently displayed numbers/statistics:
+- Look for large numbers displayed on the homepage (e.g., "880", "300+", "60", "12")
+- These are often shown in counter/stat sections with labels below them
+- Common patterns: "60 Customers", "880 Colour Matching", "300+ Employees", "12 New Projects"
+- TRANSLATE any non-English labels to English (e.g., "Kota Distribusi" = "Distribution Cities", "Project Baru" = "New Projects")
+- Include ALL visible statistics with their labels in the "Key Metrics" field
 
 EXTRACT AS MANY OF THESE METRICS AS POSSIBLE (aim for 8-15 metrics):
 
@@ -4030,7 +4045,7 @@ RULES:
 Industry/Business: ${previousData.business}
 
 Website Content (extract ALL M&A-relevant metrics):
-${scrapedContent.substring(0, 18000)}`
+${scrapedContent.substring(0, 35000)}`
         }
       ],
       response_format: { type: 'json_object' },
@@ -4045,11 +4060,11 @@ ${scrapedContent.substring(0, 18000)}`
 }
 
 // AI Agent 3b: Extract rich content for right-side table
-// This should produce a FULL, rich table with key business information
+// Using GPT-4o for accurate extraction esp. non-English content
 async function extractProductsBreakdown(scrapedContent, previousData) {
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4o',
       messages: [
         {
           role: 'system',
@@ -4131,7 +4146,7 @@ Return ONLY valid JSON.`
 Industry/Business: ${previousData.business}
 
 Website Content:
-${scrapedContent.substring(0, 18000)}`
+${scrapedContent.substring(0, 35000)}`
         }
       ],
       response_format: { type: 'json_object' },
@@ -4676,11 +4691,14 @@ app.post('/api/profile-slides', async (req, res) => {
           continue;
         }
         console.log(`  Scraped ${scraped.content.length} characters`);
+        // Log content preview for debugging (first 500 chars, useful for seeing what was scraped)
+        console.log(`  Content preview: ${scraped.content.substring(0, 500).replace(/\n/g, ' ').replace(/\s+/g, ' ')}...`);
 
         // Step 2: Extract basic info (company name, year, location)
         console.log('  Step 2: Extracting company name, year, location...');
         const basicInfo = await extractBasicInfo(scraped.content, website);
         console.log(`  Company: ${basicInfo.company_name || 'Not found'}`);
+        if (basicInfo.location) console.log(`  Location extracted: ${basicInfo.location}`);
 
         // Step 3: Extract business details
         console.log('  Step 3: Extracting business, message, footnote, title...');
@@ -4735,6 +4753,12 @@ app.post('/api/profile-slides', async (req, res) => {
           products: productsBreakdown.products || [],  // For consumer-facing businesses
           metrics: ensureString(metricsInfo.metrics)  // Fallback for old format
         };
+
+        // Log metrics count before review
+        console.log(`  Metrics extracted before review: ${companyData.key_metrics?.length || 0}`);
+        if (companyData.key_metrics?.length > 0) {
+          console.log(`  Raw metrics: ${companyData.key_metrics.map(m => m.label).join(', ')}`);
+        }
 
         // Step 6: Run AI review agent to clean up duplicative/unnecessary data
         companyData = await reviewAndCleanData(companyData);
@@ -4879,11 +4903,14 @@ app.post('/api/generate-ppt', async (req, res) => {
           continue;
         }
         console.log(`  Scraped ${scraped.content.length} characters`);
+        // Log content preview for debugging (first 500 chars, useful for seeing what was scraped)
+        console.log(`  Content preview: ${scraped.content.substring(0, 500).replace(/\n/g, ' ').replace(/\s+/g, ' ')}...`);
 
         // Step 2: Extract basic info
         console.log('  Step 2: Extracting company name, year, location...');
         const basicInfo = await extractBasicInfo(scraped.content, website);
         console.log(`  Company: ${basicInfo.company_name || 'Not found'}`);
+        if (basicInfo.location) console.log(`  Location extracted: ${basicInfo.location}`);
 
         // Step 3: Extract business details
         console.log('  Step 3: Extracting business, message, footnote, title...');
