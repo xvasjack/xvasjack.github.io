@@ -1096,11 +1096,18 @@ FOCUS ON:
     })
   );
 
+  let droppedCount = 0;
   for (const r of policyResults) {
-    if (r && r.content) results[r.key] = r;
+    if (r && r.content) {
+      results[r.key] = r;
+    } else if (r) {
+      droppedCount++;
+      console.log(`      [POLICY] Dropped empty result: ${r.key}`);
+    }
   }
 
-  console.log(`    [POLICY AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  const successCount = Object.keys(results).length;
+  console.log(`    [POLICY AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${successCount} topics${droppedCount > 0 ? ` (${droppedCount} dropped)` : ''}`);
   return results;
 }
 
@@ -1198,7 +1205,11 @@ REQUIREMENTS:
     );
 
     for (const r of batchResults) {
-      if (r && r.content) results[r.key] = r;
+      if (r && r.content) {
+        results[r.key] = r;
+      } else if (r) {
+        console.log(`      [MARKET] Dropped empty result: ${r.key}`);
+      }
     }
 
     // Brief pause between batches
@@ -1207,7 +1218,10 @@ REQUIREMENTS:
     }
   }
 
-  console.log(`    [MARKET AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  const successCount = Object.keys(results).length;
+  const attemptedCount = topics.length;
+  const droppedCount = attemptedCount - successCount;
+  console.log(`    [MARKET AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${successCount}/${attemptedCount} topics${droppedCount > 0 ? ` (${droppedCount} dropped)` : ''}`);
   return results;
 }
 
@@ -1547,6 +1561,19 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     const totalTopics = Object.keys(researchData).length;
     const researchTime = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`\n  [AGENTS COMPLETE] ${totalTopics} topics researched in ${researchTime}s (parallel execution)`);
+
+    // Validate minimum research data before synthesis
+    const MIN_TOPICS_REQUIRED = 5;
+    if (totalTopics < MIN_TOPICS_REQUIRED) {
+      console.error(`  [ERROR] Insufficient research data: ${totalTopics} topics (minimum ${MIN_TOPICS_REQUIRED} required)`);
+      return {
+        country,
+        error: 'Insufficient research data',
+        message: `Only ${totalTopics} topics returned data. Research may have failed due to API issues.`,
+        topicsFound: totalTopics,
+        researchTimeMs: Date.now() - startTime
+      };
+    }
   }
 
   // Synthesize research into structured output using DeepSeek
@@ -1954,6 +1981,18 @@ Return ONLY valid JSON.`;
 
   let countryAnalysis;
   try {
+    // Validate synthesis response before parsing
+    if (!synthesis.content || synthesis.content.length < 100) {
+      console.error(`  [ERROR] Synthesis returned empty or insufficient content (${synthesis.content?.length || 0} chars)`);
+      return {
+        country,
+        error: 'Synthesis returned empty response',
+        message: 'DeepSeek API may be experiencing issues. Please retry.',
+        rawData: researchData,
+        researchTimeMs: Date.now() - startTime
+      };
+    }
+
     let jsonStr = synthesis.content.trim();
     if (jsonStr.startsWith('```')) {
       jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
