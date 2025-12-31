@@ -1145,7 +1145,7 @@ async function generateUTBSlides(companyName, website, research, additionalConte
       h: 0.3,
       fontSize: 10,
       fontFace: 'Segoe UI',
-      color: COLORS.footerText,
+      color: COLORS.black,
       valign: 'top',
     });
   };
@@ -1223,9 +1223,9 @@ async function generateUTBSlides(companyName, website, research, additionalConte
       y: 0.72,
       w: 12.54,
       h: 0.25,
-      fontSize: 11,
+      fontSize: 16,
       fontFace: 'Segoe UI',
-      color: COLORS.footerText,
+      color: COLORS.black,
       align: 'left',
     });
 
@@ -1240,48 +1240,48 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     const availableHeight = 6.75 - tableStartY - headerHeight - 0.1;
     const rowHeight = Math.min(0.68, availableHeight / lines.length);
 
-    // Column header: Business Segment
+    // Column header: Business Segment (centered, not bold)
     slide.addText('Business Segment', {
       x: tableStartX,
       y: tableStartY,
       w: segmentColW,
       h: headerHeight,
-      fontSize: 11,
+      fontSize: 14,
       fontFace: 'Segoe UI',
-      bold: true,
+      bold: false,
       color: COLORS.black,
-      align: 'left',
+      align: 'center',
       valign: 'bottom',
     });
-    // Header underline for segment column
+    // Header underline for segment column (thin blue)
     slide.addShape(pptx.shapes.LINE, {
       x: tableStartX,
       y: tableStartY + headerHeight,
       w: segmentColW - 0.1,
       h: 0,
-      line: { color: COLORS.gray, width: 1 },
+      line: { color: COLORS.headerLine, width: 1 },
     });
 
-    // Column header: Description
+    // Column header: Description (centered, not bold)
     slide.addText('Description', {
       x: tableStartX + segmentColW + 0.12,
       y: tableStartY,
       w: descColW,
       h: headerHeight,
-      fontSize: 11,
+      fontSize: 14,
       fontFace: 'Segoe UI',
-      bold: true,
+      bold: false,
       color: COLORS.black,
-      align: 'left',
+      align: 'center',
       valign: 'bottom',
     });
-    // Header underline for description column
+    // Header underline for description column (thin blue)
     slide.addShape(pptx.shapes.LINE, {
       x: tableStartX + segmentColW + 0.12,
       y: tableStartY + headerHeight,
       w: descColW,
       h: 0,
-      line: { color: COLORS.gray, width: 1 },
+      line: { color: COLORS.headerLine, width: 1 },
     });
 
     // Data rows
@@ -1301,15 +1301,15 @@ async function generateUTBSlides(companyName, website, research, additionalConte
         line: { type: 'none' },
       });
 
-      // Segment name (white text, centered both ways)
+      // Segment name (white text, centered both ways, not bold)
       slide.addText(line.name || '', {
         x: tableStartX + 0.08,
         y: y,
         w: segmentColW - 0.16,
         h: rowHeight - 0.06,
-        fontSize: 10,
+        fontSize: 14,
         fontFace: 'Segoe UI',
-        bold: true,
+        bold: false,
         color: COLORS.white,
         align: 'center',
         valign: 'middle',
@@ -1329,12 +1329,12 @@ async function generateUTBSlides(companyName, website, research, additionalConte
         y: y + 0.05,
         w: descColW,
         h: rowHeight - 0.1,
-        fontSize: 10,
+        fontSize: 14,
         fontFace: 'Segoe UI',
         color: COLORS.black,
         align: 'left',
         valign: 'middle',
-        lineSpacing: 14,
+        lineSpacing: 16,
       });
 
       // Dotted horizontal divider spanning full width (not on last row)
@@ -1533,11 +1533,11 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     const segmentColW = (12.54 - fixedColsW) / numSegments;
     const colWidths = [2.6, 0.9, 1.0, ...Array(numSegments).fill(segmentColW)];
 
-    // Build header row with tall uniform blocks
+    // Build header row with tall uniform blocks (not bold per design requirements)
     const headerOpts = {
       fill: { color: COLORS.headerBg },
       color: COLORS.white,
-      bold: true,
+      bold: false,
       align: 'center',
       valign: 'middle',
       border: { pt: 2, color: COLORS.white },
@@ -1563,18 +1563,23 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     targets.forEach((t, i) => {
       const isLastRow = i === targets.length - 1;
 
-      // Company column: lighter blue, plain text (no hyperlinks)
+      // Company column: lighter blue, with hyperlink to company website
+      const companyOpts = {
+        fill: { color: COLORS.companyBg },
+        color: COLORS.white,
+        bold: false,
+        align: 'left',
+        valign: 'middle',
+        border: { pt: 2, color: COLORS.white },
+      };
+      // Add hyperlink if website is available
+      if (t.website) {
+        companyOpts.hyperlink = { url: t.website };
+      }
       const row = [
         {
           text: `${i + 1}. ${t.company_name || ''}`,
-          options: {
-            fill: { color: COLORS.companyBg },
-            color: COLORS.white,
-            bold: false,
-            align: 'left',
-            valign: 'middle',
-            border: { pt: 2, color: COLORS.white },
-          },
+          options: companyOpts,
         },
         {
           text: t.hq_country || '',
@@ -1641,7 +1646,7 @@ async function generateUTBSlides(companyName, website, research, additionalConte
       colW: colWidths,
       rowH: [0.55, ...Array(targets.length).fill(0.5)], // Taller header row
       fontFace: 'Segoe UI',
-      fontSize: 10,
+      fontSize: 14,
       valign: 'middle',
     });
 
@@ -1661,7 +1666,7 @@ async function generateUTBSlides(companyName, website, research, additionalConte
   // ========== SLIDE 5: M&A STRATEGY (Row-Based Geographic Framework) ==========
   if (targetList.length >= 2) {
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, 'M&A Strategy');
+    addSlideTitle(slide, 'Hypothetical M&A Strategies');
 
     // Define geographic strategy themes based on target locations
     const geoStrategies = [];
@@ -1694,39 +1699,35 @@ async function generateUTBSlides(companyName, website, research, additionalConte
         !neaCountries.some((c) => (t.hq_country || '').includes(c))
     );
 
-    // Build strategy rows based on available targets
+    // Build strategy rows based on available targets (without company names per design requirements)
     if (seaTargets.length > 0) {
-      const topTarget = seaTargets[0];
       geoStrategies.push({
         region: 'Southeast Asia',
-        strategy: `■  Acquire ${topTarget.company_name} (${topTarget.hq_country}) to establish regional footprint\n■  Leverage local distribution networks and customer relationships`,
+        strategy: `■  Acquire regional player to establish footprint\n■  Leverage local distribution networks and customer relationships`,
         rationale: `■  Access to high-growth ASEAN markets with favorable demographics\n■  Cost-effective manufacturing base and supply chain diversification`,
       });
     }
 
     if (gcTargets.length > 0) {
-      const topTarget = gcTargets[0];
       geoStrategies.push({
         region: 'Greater China',
-        strategy: `■  Target ${topTarget.company_name} for technology and scale expansion\n■  Build presence in world's largest manufacturing ecosystem`,
+        strategy: `■  Target local manufacturer for technology and scale expansion\n■  Build presence in world's largest manufacturing ecosystem`,
         rationale: `■  Access to advanced manufacturing capabilities and R&D talent\n■  Strategic positioning in key supply chain hub`,
       });
     }
 
     if (neaTargets.length > 0) {
-      const topTarget = neaTargets[0];
       geoStrategies.push({
         region: 'Northeast Asia',
-        strategy: `■  Partner with or acquire ${topTarget.company_name} for premium segment\n■  Strengthen technical capabilities through talent acquisition`,
+        strategy: `■  Partner with or acquire regional company for premium segment\n■  Strengthen technical capabilities through talent acquisition`,
         rationale: `■  Access to high-value customer segments and premium pricing\n■  Technology transfer and quality improvement opportunities`,
       });
     }
 
     if (otherTargets.length > 0 && geoStrategies.length < 3) {
-      const topTarget = otherTargets[0];
       geoStrategies.push({
         region: 'Other Asia',
-        strategy: `■  Evaluate ${topTarget.company_name} for niche market entry\n■  Diversify geographic exposure beyond core markets`,
+        strategy: `■  Evaluate regional targets for niche market entry\n■  Diversify geographic exposure beyond core markets`,
         rationale: `■  Risk diversification across multiple markets\n■  Access to unique capabilities or customer segments`,
       });
     }
@@ -1752,11 +1753,11 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     const headerHeight = 0.5;
     const rowHeight = 1.2;
 
-    // Header row
+    // Header row (not bold per design requirements)
     const headerOpts = {
       fill: { color: COLORS.headerBg },
       color: COLORS.white,
-      bold: true,
+      bold: false,
       align: 'center',
       valign: 'middle',
       border: { pt: 2, color: COLORS.white },
@@ -1770,7 +1771,7 @@ async function generateUTBSlides(companyName, website, research, additionalConte
       ],
     ];
 
-    // Data rows
+    // Data rows (not bold per design requirements)
     geoStrategies.slice(0, 4).forEach((gs, i) => {
       const isLastRow = i === Math.min(geoStrategies.length, 4) - 1;
 
@@ -1780,8 +1781,8 @@ async function generateUTBSlides(companyName, website, research, additionalConte
           options: {
             fill: { color: COLORS.labelBg },
             color: COLORS.white,
-            bold: true,
-            fontSize: 12,
+            bold: false,
+            fontSize: 14,
             align: 'center',
             valign: 'middle',
             border: { pt: 2, color: COLORS.white },
@@ -1792,7 +1793,7 @@ async function generateUTBSlides(companyName, website, research, additionalConte
           options: {
             fill: { color: COLORS.white },
             color: COLORS.black,
-            fontSize: 10,
+            fontSize: 14,
             align: 'left',
             valign: 'top',
             border: [
@@ -1808,7 +1809,7 @@ async function generateUTBSlides(companyName, website, research, additionalConte
           options: {
             fill: { color: COLORS.white },
             color: COLORS.black,
-            fontSize: 10,
+            fontSize: 14,
             align: 'left',
             valign: 'top',
             border: [
