@@ -517,51 +517,66 @@ Return ONLY valid JSON, no markdown or explanation.`;
   }
 }
 
-// ============ ITERATIVE RESEARCH SYSTEM ============
+// ============ ITERATIVE RESEARCH SYSTEM WITH CONFIDENCE SCORING ============
 
-// Step 1: Identify gaps in research after first synthesis
+// Step 1: Identify gaps in research after first synthesis with detailed scoring
 async function identifyResearchGaps(synthesis, country, industry) {
-  console.log(`  [Identifying research gaps for ${country}...]`);
+  console.log(`  [Analyzing research quality for ${country}...]`);
 
-  const gapPrompt = `You are a research director reviewing a first-pass market analysis. Your job is to identify CRITICAL GAPS that would make a CEO distrust this analysis.
+  const gapPrompt = `You are a research quality auditor reviewing a market analysis. Score each section and identify critical gaps.
 
 CURRENT ANALYSIS:
 ${JSON.stringify(synthesis, null, 2)}
 
-Review this analysis and identify what's MISSING or WEAK. Focus on:
+SCORING CRITERIA (0-100 for each section):
+- 90-100: Excellent - Specific numbers, named sources, actionable insights
+- 70-89: Good - Most data points covered, some specifics missing
+- 50-69: Adequate - General information, lacks depth or verification
+- 30-49: Weak - Vague statements, missing key data
+- 0-29: Poor - Generic or placeholder content
 
-1. UNVERIFIED CLAIMS: Numbers without sources, vague statements like "growing market"
-2. MISSING COMPARISONS: No regional benchmarks, no competitor specifics
-3. SHALLOW SECTIONS: Areas with generic content instead of specifics
-4. TIMING GAPS: Missing "why now" evidence, no regulatory deadlines mentioned
-5. COMPETITIVE BLIND SPOTS: Missing key players, no partnership intel
-6. DATA CONFLICTS: Contradictory numbers that need verification
-
-Return a JSON object with EXACTLY this structure:
+Return a JSON object with this structure:
 {
+  "sectionScores": {
+    "policy": {"score": 0-100, "reasoning": "why this score", "missingData": ["list of missing items"]},
+    "market": {"score": 0-100, "reasoning": "why this score", "missingData": ["list"]},
+    "competitors": {"score": 0-100, "reasoning": "why this score", "missingData": ["list"]},
+    "summary": {"score": 0-100, "reasoning": "why this score", "missingData": ["list"]}
+  },
+  "overallScore": 0-100,
   "criticalGaps": [
     {
-      "area": "which section is weak (e.g., 'marketDynamics', 'competitiveLandscape')",
+      "area": "which section (policy/market/competitors)",
       "gap": "what specific information is missing",
-      "searchQuery": "the EXACT search query to find this information for ${country}",
-      "priority": "high/medium (high = deal-breaker if missing)"
+      "searchQuery": "the EXACT search query to find this for ${country}",
+      "priority": "high/medium",
+      "impactOnScore": "how many points this would add if filled"
     }
   ],
   "dataToVerify": [
     {
       "claim": "the specific claim that needs verification",
-      "searchQuery": "search query to verify this for ${country}"
+      "searchQuery": "search query to verify this for ${country}",
+      "currentConfidence": "low/medium/high"
     }
   ],
   "confidenceAssessment": {
     "overall": "low/medium/high",
+    "numericConfidence": 0-100,
     "weakestSection": "which section needs most work",
-    "reasoning": "why this confidence level"
+    "strongestSection": "which section is best",
+    "reasoning": "why this confidence level",
+    "readyForClient": true/false
   }
 }
 
-Be SPECIFIC with search queries. Include "${country}" and "${industry}" where relevant.
-Limit to 8 most critical gaps (prioritize high-impact ones).
+RULES:
+- Score >= 75 overall = "high" confidence, ready for client
+- Score 50-74 = "medium" confidence, needs refinement
+- Score < 50 = "low" confidence, significant gaps
+- Limit criticalGaps to 6 most impactful items
+- Only flag dataToVerify for claims that seem suspicious or unsourced
+
 Return ONLY valid JSON.`;
 
   const result = await callDeepSeekChat(gapPrompt, '', 4096);
@@ -572,12 +587,24 @@ Return ONLY valid JSON.`;
       jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
     }
     const gaps = JSON.parse(jsonStr);
-    console.log(`    Found ${gaps.criticalGaps?.length || 0} critical gaps, ${gaps.dataToVerify?.length || 0} claims to verify`);
-    console.log(`    Confidence: ${gaps.confidenceAssessment?.overall || 'unknown'} (weakest: ${gaps.confidenceAssessment?.weakestSection || 'unknown'})`);
+
+    // Log detailed scoring
+    const scores = gaps.sectionScores || {};
+    console.log(`    Section Scores: Policy=${scores.policy?.score || '?'}, Market=${scores.market?.score || '?'}, Competitors=${scores.competitors?.score || '?'}`);
+    console.log(`    Overall: ${gaps.overallScore || '?'}/100 | Confidence: ${gaps.confidenceAssessment?.overall || 'unknown'}`);
+    console.log(`    Gaps: ${gaps.criticalGaps?.length || 0} critical | Verify: ${gaps.dataToVerify?.length || 0} claims`);
+    console.log(`    Ready for client: ${gaps.confidenceAssessment?.readyForClient ? 'YES' : 'NO'}`);
+
     return gaps;
   } catch (error) {
     console.error('  Failed to parse gaps:', error.message);
-    return { criticalGaps: [], dataToVerify: [], confidenceAssessment: { overall: 'low' } };
+    return {
+      sectionScores: {},
+      overallScore: 40,
+      criticalGaps: [],
+      dataToVerify: [],
+      confidenceAssessment: { overall: 'low', numericConfidence: 40, readyForClient: false }
+    };
   }
 }
 
@@ -683,74 +710,231 @@ Return ONLY valid JSON.`;
   }
 }
 
-// ============ COUNTRY RESEARCH AGENT (KIMI + DEEPSEEK) ============
+// ============ MULTI-AGENT RESEARCH SYSTEM ============
+// Specialized agents for each research domain running in parallel
+
+// Policy Research Agent - handles regulatory and policy topics
+async function policyResearchAgent(country, industry, clientContext) {
+  console.log(`    [POLICY AGENT] Starting research for ${country}...`);
+  const agentStart = Date.now();
+  const topics = RESEARCH_TOPIC_GROUPS.policy;
+  const results = {};
+
+  // Run all policy topics in parallel
+  const policyResults = await Promise.all(
+    topics.map(async (topicKey) => {
+      const framework = RESEARCH_FRAMEWORK[topicKey];
+      if (!framework) return null;
+
+      const queryContext = `As a regulatory affairs specialist, research ${framework.name} for ${country}'s ${industry} market:
+
+SPECIFIC QUESTIONS:
+${framework.queries.map(q => '- ' + q.replace('{country}', country)).join('\n')}
+
+FOCUS ON:
+- Exact law names, years enacted, enforcement status
+- Foreign ownership percentages and exceptions
+- Tax incentives with specific values and durations
+- Recent policy changes (2023-2025)
+- Regulatory risks and enforcement gaps`;
+
+      const result = await callKimiDeepResearch(queryContext, country, industry);
+      return {
+        key: topicKey,
+        content: result.content,
+        citations: result.citations || [],
+        slideTitle: framework.slideTitle?.replace('{country}', country) || ''
+      };
+    })
+  );
+
+  for (const r of policyResults) {
+    if (r && r.content) results[r.key] = r;
+  }
+
+  console.log(`    [POLICY AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  return results;
+}
+
+// Market Research Agent - handles market data and pricing topics
+async function marketResearchAgent(country, industry, clientContext) {
+  console.log(`    [MARKET AGENT] Starting research for ${country}...`);
+  const agentStart = Date.now();
+  const topics = RESEARCH_TOPIC_GROUPS.market;
+  const results = {};
+
+  // Run market topics in batches of 3 (more topics)
+  for (let i = 0; i < topics.length; i += 3) {
+    const batch = topics.slice(i, i + 3);
+
+    const batchResults = await Promise.all(
+      batch.map(async (topicKey) => {
+        const framework = RESEARCH_FRAMEWORK[topicKey];
+        if (!framework) return null;
+
+        const queryContext = `As a market research analyst, research ${framework.name} for ${country}'s ${industry} market:
+
+SPECIFIC QUESTIONS:
+${framework.queries.map(q => '- ' + q.replace('{country}', country)).join('\n')}
+
+CRITICAL - PROVIDE CHART DATA:
+- For time series: provide data for years 2020, 2021, 2022, 2023, 2024
+- For breakdowns: provide percentage splits by category
+- Format numbers clearly (e.g., "2020: 45, 2021: 48, 2022: 52")
+- Include units (Mtoe, TWh, USD/kWh, bcm, etc.)
+
+FOCUS ON:
+- Market size in USD with growth rates
+- Energy consumption/production statistics
+- Pricing data with trends
+- Sector breakdowns with percentages`;
+
+        const result = await callKimiDeepResearch(queryContext, country, industry);
+        return {
+          key: topicKey,
+          content: result.content,
+          citations: result.citations || [],
+          chartType: framework.chartType || null,
+          slideTitle: framework.slideTitle?.replace('{country}', country) || ''
+        };
+      })
+    );
+
+    for (const r of batchResults) {
+      if (r && r.content) results[r.key] = r;
+    }
+
+    // Brief pause between batches
+    if (i + 3 < topics.length) {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+  }
+
+  console.log(`    [MARKET AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  return results;
+}
+
+// Competitor Research Agent - handles competitive intelligence
+async function competitorResearchAgent(country, industry, clientContext) {
+  console.log(`    [COMPETITOR AGENT] Starting research for ${country}...`);
+  const agentStart = Date.now();
+  const topics = RESEARCH_TOPIC_GROUPS.competitors;
+  const results = {};
+
+  // Run competitor topics in parallel
+  const compResults = await Promise.all(
+    topics.map(async (topicKey) => {
+      const framework = RESEARCH_FRAMEWORK[topicKey];
+      if (!framework) return null;
+
+      const isJapanese = topicKey === 'competitors_japanese';
+      const queryContext = `As a competitive intelligence analyst, research ${framework.name} for ${country}'s ${industry} market:
+
+SPECIFIC QUESTIONS:
+${framework.queries.map(q => '- ' + q.replace('{country}', country)).join('\n')}
+
+${isJapanese ? `SPECIAL FOCUS - JAPANESE COMPANIES:
+- Tokyo Gas, Osaka Gas, JERA, Mitsubishi, Mitsui presence
+- Entry mode (JV, subsidiary, partnership)
+- Specific projects and contract values
+- Success/failure assessment with reasons` : ''}
+
+PROVIDE FOR EACH COMPANY:
+- Company name (exact)
+- Revenue or market share if available
+- Entry year and mode
+- Key projects or clients
+- Strengths and weaknesses
+- Partnership interest indicators`;
+
+      const result = await callKimiDeepResearch(queryContext, country, industry);
+      return {
+        key: topicKey,
+        content: result.content,
+        citations: result.citations || [],
+        slideTitle: framework.slideTitle?.replace('{country}', country) || ''
+      };
+    })
+  );
+
+  for (const r of compResults) {
+    if (r && r.content) results[r.key] = r;
+  }
+
+  console.log(`    [COMPETITOR AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  return results;
+}
+
+// Context Research Agent - handles economic context and opportunities
+async function contextResearchAgent(country, industry, clientContext) {
+  console.log(`    [CONTEXT AGENT] Starting research for ${country}...`);
+  const agentStart = Date.now();
+  const topics = RESEARCH_TOPIC_GROUPS.context;
+  const results = {};
+
+  // Run context topics in parallel
+  const contextResults = await Promise.all(
+    topics.map(async (topicKey) => {
+      const framework = RESEARCH_FRAMEWORK[topicKey];
+      if (!framework) return null;
+
+      const queryContext = `As a strategy consultant advising a ${clientContext}, research ${framework.name} for ${country}'s ${industry} market:
+
+SPECIFIC QUESTIONS:
+${framework.queries.map(q => '- ' + q.replace('{country}', country)).join('\n')}
+
+FOCUS ON:
+- Actionable opportunities with sizing
+- Specific risks with mitigation strategies
+- Timing factors (why now vs later)
+- Economic drivers affecting energy demand
+- Industrial development corridors and zones`;
+
+      const result = await callKimiDeepResearch(queryContext, country, industry);
+      return {
+        key: topicKey,
+        content: result.content,
+        citations: result.citations || [],
+        slideTitle: framework.slideTitle?.replace('{country}', country) || ''
+      };
+    })
+  );
+
+  for (const r of contextResults) {
+    if (r && r.content) results[r.key] = r;
+  }
+
+  console.log(`    [CONTEXT AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  return results;
+}
+
+// ============ COUNTRY RESEARCH ORCHESTRATOR ============
 
 async function researchCountry(country, industry, clientContext) {
   console.log(`\n=== RESEARCHING: ${country} ===`);
   const startTime = Date.now();
 
-  // Deep Research: Use expanded RESEARCH_FRAMEWORK for comprehensive coverage
-  // 17 topic areas organized into sections matching Escort template
-  const researchData = {};
-  const topicKeys = Object.keys(RESEARCH_FRAMEWORK);
-  console.log(`  [Deep Research - ${topicKeys.length} topic areas across 4 sections]`);
+  // Multi-Agent Deep Research: Run 4 specialized agents in parallel
+  console.log(`  [MULTI-AGENT SYSTEM] Launching 4 specialized research agents...`);
 
-  // Process research topics by group for efficiency (2-3 parallel per group)
-  for (const [groupName, topicList] of Object.entries(RESEARCH_TOPIC_GROUPS)) {
-    console.log(`\n  [${groupName.toUpperCase()}] Researching ${topicList.length} topics...`);
+  const [policyData, marketData, competitorData, contextData] = await Promise.all([
+    policyResearchAgent(country, industry, clientContext),
+    marketResearchAgent(country, industry, clientContext),
+    competitorResearchAgent(country, industry, clientContext),
+    contextResearchAgent(country, industry, clientContext)
+  ]);
 
-    // Process 2 topics in parallel within each group
-    for (let i = 0; i < topicList.length; i += 2) {
-      const batch = topicList.slice(i, i + 2);
+  // Merge all agent results
+  const researchData = {
+    ...policyData,
+    ...marketData,
+    ...competitorData,
+    ...contextData
+  };
 
-      const batchResults = await Promise.all(
-        batch.map(async (topicKey) => {
-          const framework = RESEARCH_FRAMEWORK[topicKey];
-          if (!framework) return null;
-
-          // Build comprehensive research query from framework
-          const queryContext = `Research ${framework.name} for ${country}'s ${industry} market:
-
-SPECIFIC QUESTIONS TO ANSWER:
-${framework.queries.map(q => '- ' + q.replace('{country}', country)).join('\n')}
-
-Requirements:
-- Find 2024-2025 data where possible
-- Include specific numbers, percentages, company names
-- Note sources (government, company filings, industry reports)
-- Focus on actionable intelligence, not generic descriptions`;
-
-          console.log(`    [${topicKey}] Researching...`);
-          const result = await callKimiDeepResearch(queryContext, country, industry);
-
-          return {
-            key: topicKey,
-            content: result.content,
-            citations: result.citations || [],
-            chartType: framework.chartType || null,
-            slideTitle: framework.slideTitle?.replace('{country}', country) || ''
-          };
-        })
-      );
-
-      // Store results
-      for (const result of batchResults) {
-        if (result && result.content) {
-          researchData[result.key] = {
-            content: result.content,
-            citations: result.citations,
-            chartType: result.chartType,
-            slideTitle: result.slideTitle
-          };
-        }
-      }
-
-      // Rate limit between batches
-      await new Promise(resolve => setTimeout(resolve, 1500));
-    }
-  }
-
-  console.log(`\n  [Research Complete] Collected data for ${Object.keys(researchData).length} topics`)
+  const totalTopics = Object.keys(researchData).length;
+  const researchTime = ((Date.now() - startTime) / 1000).toFixed(1);
+  console.log(`\n  [AGENTS COMPLETE] ${totalTopics} topics researched in ${researchTime}s (parallel execution)`)
 
   // Synthesize research into structured output using DeepSeek
   // Expanded structure for 15+ slides matching Escort template
@@ -979,7 +1163,7 @@ CRITICAL:
 
 Return ONLY valid JSON.`;
 
-  const synthesis = await callDeepSeek(synthesisPrompt, '', 8192);
+  const synthesis = await callDeepSeek(synthesisPrompt, '', 16384);
 
   let countryAnalysis;
   try {
@@ -998,34 +1182,41 @@ Return ONLY valid JSON.`;
     };
   }
 
-  // ============ ITERATIVE REFINEMENT LOOP ============
-  // Like Deep Research: identify gaps → research → re-synthesize → repeat if needed
+  // ============ ITERATIVE REFINEMENT LOOP WITH CONFIDENCE SCORING ============
+  // Like Deep Research: score → identify gaps → research → re-synthesize → repeat until ready
 
-  const MAX_ITERATIONS = 2; // Up to 2 refinement passes
+  const MAX_ITERATIONS = 3; // Up to 3 refinement passes for higher quality
+  const MIN_CONFIDENCE_SCORE = 70; // Minimum score to stop refinement
   let iteration = 0;
-  let confidence = 'low';
+  let confidenceScore = 0;
+  let readyForClient = false;
 
-  while (iteration < MAX_ITERATIONS && confidence !== 'high') {
+  while (iteration < MAX_ITERATIONS && !readyForClient) {
     iteration++;
-    console.log(`\n  [ITERATION ${iteration}/${MAX_ITERATIONS}] Refining analysis...`);
+    console.log(`\n  [REFINEMENT ${iteration}/${MAX_ITERATIONS}] Analyzing quality...`);
 
-    // Step 1: Identify gaps in current analysis
+    // Step 1: Score and identify gaps in current analysis
     const gaps = await identifyResearchGaps(countryAnalysis, country, industry);
-    confidence = gaps.confidenceAssessment?.overall || 'low';
+    confidenceScore = gaps.overallScore || gaps.confidenceAssessment?.numericConfidence || 50;
+    readyForClient = gaps.confidenceAssessment?.readyForClient || false;
 
-    // If confidence is high or no critical gaps, we're done
-    if (confidence === 'high') {
-      console.log(`    ✓ Analysis confidence HIGH - stopping refinement`);
+    // Store scores in analysis for tracking
+    countryAnalysis.qualityScores = gaps.sectionScores;
+    countryAnalysis.confidenceScore = confidenceScore;
+
+    // If ready for client or high confidence score, we're done
+    if (readyForClient || confidenceScore >= MIN_CONFIDENCE_SCORE) {
+      console.log(`    ✓ Quality threshold met (${confidenceScore}/100) - analysis ready`);
       break;
     }
 
     const criticalGapCount = (gaps.criticalGaps || []).filter(g => g.priority === 'high').length;
     if (criticalGapCount === 0 && (gaps.dataToVerify || []).length === 0) {
-      console.log(`    ✓ No critical gaps found - stopping refinement`);
+      console.log(`    ✓ No actionable gaps found (score: ${confidenceScore}/100) - stopping`);
       break;
     }
 
-    console.log(`    → ${criticalGapCount} high-priority gaps, ${(gaps.dataToVerify || []).length} claims to verify`);
+    console.log(`    → Score: ${confidenceScore}/100 | ${criticalGapCount} high-priority gaps | Targeting ${MIN_CONFIDENCE_SCORE}+ for completion`);
 
     // Step 2: Execute targeted research to fill gaps
     const additionalData = await fillResearchGaps(gaps, country, industry);
@@ -1043,7 +1234,12 @@ Return ONLY valid JSON.`;
 
   countryAnalysis.researchTimeMs = Date.now() - startTime;
   countryAnalysis.totalIterations = iteration;
-  console.log(`\n  ✓ Completed ${country} in ${(countryAnalysis.researchTimeMs / 1000).toFixed(1)}s (${iteration} refinement iterations)`);
+  countryAnalysis.finalConfidenceScore = confidenceScore;
+  countryAnalysis.readyForClient = readyForClient || confidenceScore >= MIN_CONFIDENCE_SCORE;
+
+  console.log(`\n  ✓ Completed ${country}:`);
+  console.log(`    Time: ${(countryAnalysis.researchTimeMs / 1000).toFixed(1)}s | Iterations: ${iteration}`);
+  console.log(`    Confidence: ${confidenceScore}/100 | Ready: ${countryAnalysis.readyForClient ? 'YES' : 'NEEDS REVIEW'}`);
 
   return countryAnalysis;
 }
@@ -1792,6 +1988,101 @@ function extractChartData(researchText, chartType) {
   }
 
   return data;
+}
+
+// Advanced chart data extraction using AI
+async function extractChartDataWithAI(researchContent, chartType, dataDescription) {
+  const prompt = `Extract structured chart data from this research content for a ${chartType} chart.
+
+RESEARCH CONTENT:
+${researchContent}
+
+CHART PURPOSE: ${dataDescription}
+
+Return ONLY a JSON object in this exact format:
+{
+  "hasData": true/false,
+  "chartData": {
+    "categories": ["2020", "2021", "2022", "2023", "2024"],
+    "series": [
+      {"name": "Series Name", "values": [10, 12, 14, 16, 18]}
+    ],
+    "values": [10, 12, 14, 16, 18],
+    "unit": "Mtoe or % or USD or bcm"
+  },
+  "dataQuality": "high/medium/low",
+  "source": "where this data came from"
+}
+
+RULES:
+- If no clear numeric data exists, set hasData=false
+- Values must be actual numbers (not strings)
+- For time series, use years as categories
+- For breakdowns, use segment names as categories
+- Include the unit of measurement`;
+
+  try {
+    const result = await callDeepSeekChat(prompt, '', 1024);
+    let jsonStr = result.content.trim();
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+    }
+    const parsed = JSON.parse(jsonStr);
+    if (parsed.hasData && parsed.chartData) {
+      return parsed.chartData;
+    }
+  } catch (error) {
+    console.error('  Chart data extraction failed:', error.message);
+  }
+
+  // Fall back to basic extraction
+  return extractChartData(researchContent, chartType);
+}
+
+// Validate and sanitize chart data before rendering
+function validateChartData(data, chartType) {
+  if (!data) return null;
+
+  const validated = {
+    categories: [],
+    series: [],
+    values: [],
+    unit: data.unit || ''
+  };
+
+  // Validate categories
+  if (Array.isArray(data.categories)) {
+    validated.categories = data.categories.map(c => String(c)).slice(0, 10);
+  }
+
+  // Validate values (for simple bar/pie charts)
+  if (Array.isArray(data.values)) {
+    validated.values = data.values
+      .map(v => typeof v === 'number' ? v : parseFloat(v))
+      .filter(v => !isNaN(v))
+      .slice(0, 10);
+  }
+
+  // Validate series (for stacked/line charts)
+  if (Array.isArray(data.series)) {
+    validated.series = data.series
+      .filter(s => s && s.name && Array.isArray(s.values))
+      .map(s => ({
+        name: String(s.name).substring(0, 30),
+        values: s.values
+          .map(v => typeof v === 'number' ? v : parseFloat(v))
+          .filter(v => !isNaN(v))
+          .slice(0, 10)
+      }))
+      .slice(0, 6); // Max 6 series for readability
+  }
+
+  // Check if we have enough data to render
+  const hasEnoughData =
+    (validated.categories.length >= 2 && validated.values.length >= 2) ||
+    (validated.categories.length >= 2 && validated.series.length >= 1 && validated.series[0].values.length >= 2);
+
+  return hasEnoughData ? validated : null;
 }
 
 // Single country deep-dive PPT - Matches YCP Escort/Shizuoka Gas format
