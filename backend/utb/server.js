@@ -3286,12 +3286,18 @@ async function generateUTBSlides(companyName, website, research, additionalConte
   // ========== SLIDE 2: BUSINESS OVERVIEW ==========
   if (prod.product_lines && prod.product_lines.length > 0) {
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, 'Business Overview');
 
-    // Subtitle: one-line business descriptor
+    // Title with smaller height for subtitle space
+    slide.addText('Business Overview', {
+      x: 0.38, y: 0.15, w: 9.5, h: 0.55,
+      fontSize: 24, fontFace: 'Segoe UI',
+      color: COLORS.black, valign: 'bottom'
+    });
+
+    // Subtitle: one-line business descriptor (between title and double lines)
     const overview = prod.overview || `${companyName} business segments and operations`;
     slide.addText(overview, {
-      x: 0.38, y: 0.85, w: 12.54, h: 0.25,
+      x: 0.38, y: 0.72, w: 12.54, h: 0.25,
       fontSize: 11, fontFace: 'Segoe UI',
       color: COLORS.footerText, align: 'left'
     });
@@ -3300,17 +3306,14 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     const segmentColW = 2.5;
     const descColW = 9.92;
     const tableStartX = 0.38;
-    const tableStartY = 1.25;
-    const rowHeight = 0.7;
-    const headerHeight = 0.35;
-    const lines = prod.product_lines.slice(0, 7); // Max 7 rows
+    const tableStartY = 1.18; // After master slide double lines
+    const headerHeight = 0.32;
+    const lines = prod.product_lines.slice(0, 8); // Max 8 rows
+    // Dynamic row height to fill available space (footer at 6.85)
+    const availableHeight = 6.75 - tableStartY - headerHeight - 0.1;
+    const rowHeight = Math.min(0.68, availableHeight / lines.length);
 
     // Column header: Business Segment
-    slide.addShape(pptx.shapes.RECTANGLE, {
-      x: tableStartX, y: tableStartY, w: segmentColW, h: headerHeight,
-      fill: { type: 'none' },
-      line: { type: 'none' }
-    });
     slide.addText('Business Segment', {
       x: tableStartX, y: tableStartY, w: segmentColW, h: headerHeight,
       fontSize: 11, fontFace: 'Segoe UI', bold: true,
@@ -3335,7 +3338,7 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     });
 
     // Data rows
-    const dataStartY = tableStartY + headerHeight + 0.1;
+    const dataStartY = tableStartY + headerHeight + 0.08;
 
     lines.forEach((line, i) => {
       const y = dataStartY + i * rowHeight;
@@ -3343,15 +3346,15 @@ async function generateUTBSlides(companyName, website, research, additionalConte
 
       // Blue segment block (fixed width, uniform height)
       slide.addShape(pptx.shapes.RECTANGLE, {
-        x: tableStartX, y: y, w: segmentColW, h: rowHeight - 0.08,
+        x: tableStartX, y: y, w: segmentColW, h: rowHeight - 0.06,
         fill: { color: COLORS.labelBg },
         line: { type: 'none' }
       });
 
       // Segment name (white text, centered both ways)
       slide.addText(line.name || '', {
-        x: tableStartX + 0.1, y: y, w: segmentColW - 0.2, h: rowHeight - 0.08,
-        fontSize: 11, fontFace: 'Segoe UI', bold: true,
+        x: tableStartX + 0.08, y: y, w: segmentColW - 0.16, h: rowHeight - 0.06,
+        fontSize: 10, fontFace: 'Segoe UI', bold: true,
         color: COLORS.white, align: 'center', valign: 'middle'
       });
 
@@ -3361,16 +3364,16 @@ async function generateUTBSlides(companyName, website, research, additionalConte
       const bulletText = sentences.map(s => '■  ' + s.trim()).join('\n');
 
       slide.addText(bulletText, {
-        x: tableStartX + segmentColW + 0.12, y: y + 0.08, w: descColW, h: rowHeight - 0.16,
+        x: tableStartX + segmentColW + 0.12, y: y + 0.05, w: descColW, h: rowHeight - 0.1,
         fontSize: 10, fontFace: 'Segoe UI',
         color: COLORS.black, align: 'left', valign: 'middle',
-        lineSpacing: 16
+        lineSpacing: 14
       });
 
       // Dotted horizontal divider spanning full width (not on last row)
       if (!isLastRow) {
         slide.addShape(pptx.shapes.LINE, {
-          x: tableStartX, y: y + rowHeight - 0.04, w: segmentColW + 0.12 + descColW, h: 0,
+          x: tableStartX, y: y + rowHeight - 0.03, w: segmentColW + 0.12 + descColW, h: 0,
           line: { color: COLORS.gray, width: 0.5, dashType: 'dash' }
         });
       }
