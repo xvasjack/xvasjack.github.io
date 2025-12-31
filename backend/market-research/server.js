@@ -220,20 +220,29 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true) {
     // Debug: log if response has tool calls or empty content
     const content = data.choices?.[0]?.message?.content || '';
     const toolCalls = data.choices?.[0]?.message?.tool_calls;
+
+    // Validate research quality
+    let researchQuality = 'good';
     if (!content && toolCalls) {
       console.log('  [Kimi] Response contains tool_calls instead of content - web search may need handling');
+      researchQuality = 'failed';
     } else if (!content) {
       console.log('  [Kimi] Empty response - finish_reason:', data.choices?.[0]?.finish_reason);
+      researchQuality = 'failed';
+    } else if (content.length < 100) {
+      console.log(`  [Kimi] Thin response (${content.length} chars) - may be incomplete`);
+      researchQuality = 'thin';
     }
 
     return {
       content,
       citations: [],
-      usage: { input: inputTokens, output: outputTokens }
+      usage: { input: inputTokens, output: outputTokens },
+      researchQuality
     };
   } catch (error) {
     console.error('Kimi API error:', error.message);
-    return { content: '', citations: [] };
+    return { content: '', citations: [], researchQuality: 'failed' };
   }
 }
 
@@ -1092,11 +1101,18 @@ FOCUS ON:
     })
   );
 
+  let droppedCount = 0;
   for (const r of policyResults) {
-    if (r && r.content) results[r.key] = r;
+    if (r && r.content) {
+      results[r.key] = r;
+    } else if (r) {
+      droppedCount++;
+      console.log(`      [POLICY] Dropped empty result: ${r.key}`);
+    }
   }
 
-  console.log(`    [POLICY AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  const successCount = Object.keys(results).length;
+  console.log(`    [POLICY AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${successCount} topics${droppedCount > 0 ? ` (${droppedCount} dropped)` : ''}`);
   return results;
 }
 
@@ -1116,36 +1132,89 @@ async function marketResearchAgent(country, industry, _clientContext) {
         const framework = RESEARCH_FRAMEWORK[topicKey];
         if (!framework) return null;
 
+        // Determine chart structure based on chartType
+        const chartStructure = framework.chartType === 'stackedBar'
+          ? `"chartData": {
+              "categories": ["2020", "2021", "2022", "2023", "2024"],
+              "series": [
+                {"name": "Category1", "values": [number, number, number, number, number]},
+                {"name": "Category2", "values": [number, number, number, number, number]}
+              ],
+              "unit": "Mtoe or TWh or bcm"
+            }`
+          : framework.chartType === 'pie'
+          ? `"chartData": {
+              "categories": ["Segment1", "Segment2", "Segment3"],
+              "values": [percentage, percentage, percentage],
+              "unit": "%"
+            }`
+          : framework.chartType === 'line'
+          ? `"chartData": {
+              "categories": ["2020", "2021", "2022", "2023", "2024"],
+              "series": [
+                {"name": "Metric1", "values": [number, number, number, number, number]}
+              ],
+              "unit": "USD/kWh or USD/mmbtu"
+            }`
+          : '';
+
         const queryContext = `As a market research analyst, research ${framework.name} for ${country}'s ${industry} market:
 
 SPECIFIC QUESTIONS:
 ${framework.queries.map(q => '- ' + q.replace('{country}', country)).join('\n')}
 
-CRITICAL - PROVIDE CHART DATA:
-- For time series: provide data for years 2020, 2021, 2022, 2023, 2024
-- For breakdowns: provide percentage splits by category
-- Format numbers clearly (e.g., "2020: 45, 2021: 48, 2022: 52")
-- Include units (Mtoe, TWh, USD/kWh, bcm, etc.)
+CRITICAL - RETURN STRUCTURED DATA:
+Your response MUST include a JSON block with chart data. Use this EXACT format:
 
-FOCUS ON:
-- Market size in USD with growth rates
-- Energy consumption/production statistics
-- Pricing data with trends
-- Sector breakdowns with percentages`;
+\`\`\`json
+{
+  "narrative": "Your detailed research findings here (2-3 paragraphs with specific numbers, sources, and insights)",
+  ${chartStructure ? chartStructure + ',' : ''}
+  "keyInsight": "One sentence insight about the trend or implication",
+  "dataQuality": "high/medium/low - indicate if data is from official sources or estimated",
+  "sources": ["Source 1", "Source 2"]
+}
+\`\`\`
+
+REQUIREMENTS:
+- Use REAL numbers from your research - do NOT fabricate data
+- If exact data unavailable, use "estimated" in dataQuality and provide reasonable estimates
+- Include units (Mtoe, TWh, USD/kWh, bcm, %, etc.)
+- Market sizes should be in USD millions or billions`;
 
         const result = await callKimiDeepResearch(queryContext, country, industry);
+
+        // Try to extract structured JSON from the response
+        let structuredData = null;
+        if (result.content) {
+          const jsonMatch = result.content.match(/```json\s*([\s\S]*?)\s*```/);
+          if (jsonMatch) {
+            try {
+              structuredData = JSON.parse(jsonMatch[1]);
+            } catch (e) {
+              console.log(`      [Market] Failed to parse JSON for ${topicKey}`);
+            }
+          }
+        }
+
         return {
           key: topicKey,
           content: result.content,
+          structuredData: structuredData,
           citations: result.citations || [],
           chartType: framework.chartType || null,
-          slideTitle: framework.slideTitle?.replace('{country}', country) || ''
+          slideTitle: framework.slideTitle?.replace('{country}', country) || '',
+          dataQuality: structuredData?.dataQuality || 'unknown'
         };
       })
     );
 
     for (const r of batchResults) {
-      if (r && r.content) results[r.key] = r;
+      if (r && r.content) {
+        results[r.key] = r;
+      } else if (r) {
+        console.log(`      [MARKET] Dropped empty result: ${r.key}`);
+      }
     }
 
     // Brief pause between batches
@@ -1154,7 +1223,10 @@ FOCUS ON:
     }
   }
 
-  console.log(`    [MARKET AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  const successCount = Object.keys(results).length;
+  const attemptedCount = topics.length;
+  const droppedCount = attemptedCount - successCount;
+  console.log(`    [MARKET AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${successCount}/${attemptedCount} topics${droppedCount > 0 ? ` (${droppedCount} dropped)` : ''}`);
   return results;
 }
 
@@ -1494,6 +1566,19 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     const totalTopics = Object.keys(researchData).length;
     const researchTime = ((Date.now() - startTime) / 1000).toFixed(1);
     console.log(`\n  [AGENTS COMPLETE] ${totalTopics} topics researched in ${researchTime}s (parallel execution)`);
+
+    // Validate minimum research data before synthesis
+    const MIN_TOPICS_REQUIRED = 5;
+    if (totalTopics < MIN_TOPICS_REQUIRED) {
+      console.error(`  [ERROR] Insufficient research data: ${totalTopics} topics (minimum ${MIN_TOPICS_REQUIRED} required)`);
+      return {
+        country,
+        error: 'Insufficient research data',
+        message: `Only ${totalTopics} topics returned data. Research may have failed due to API issues.`,
+        topicsFound: totalTopics,
+        researchTimeMs: Date.now() - startTime
+      };
+    }
   }
 
   // Synthesize research into structured output using DeepSeek
@@ -1504,9 +1589,10 @@ async function researchCountry(country, industry, clientContext, scope = null) {
 
 CRITICAL REQUIREMENTS:
 1. DEPTH over breadth - specific numbers, names, dates for every claim
-2. CHART DATA - provide structured data for charts where indicated
+2. CHART DATA - USE the structuredData.chartData from research when available. Do NOT fabricate chart numbers.
 3. SLIDE-READY - each section maps to a specific slide
 4. STORY FLOW - each slide must answer the reader's question and set up the next
+5. DATA QUALITY - if research has dataQuality:"estimated", note this in the insight. Never present estimates as verified facts.
 
 === NARRATIVE STRUCTURE ===
 Your presentation tells a story. Each section answers a question and raises the next:
@@ -1900,6 +1986,18 @@ Return ONLY valid JSON.`;
 
   let countryAnalysis;
   try {
+    // Validate synthesis response before parsing
+    if (!synthesis.content || synthesis.content.length < 100) {
+      console.error(`  [ERROR] Synthesis returned empty or insufficient content (${synthesis.content?.length || 0} chars)`);
+      return {
+        country,
+        error: 'Synthesis returned empty response',
+        message: 'DeepSeek API may be experiencing issues. Please retry.',
+        rawData: researchData,
+        researchTimeMs: Date.now() - startTime
+      };
+    }
+
     let jsonStr = synthesis.content.trim();
     if (jsonStr.startsWith('```')) {
       jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
