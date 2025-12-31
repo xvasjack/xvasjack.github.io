@@ -7,12 +7,12 @@ const pptxgen = require('pptxgenjs');
 const XLSX = require('xlsx');
 const multer = require('multer');
 const { createClient } = require('@deepgram/sdk');
-// const { Document, Packer, Paragraph, TextRun } = require('docx'); // Unused imports removed
+const { Document, Packer, Paragraph, TextRun } = require('docx');
 const { S3Client } = require('@aws-sdk/client-s3');
 const Anthropic = require('@anthropic-ai/sdk');
 const JSZip = require('jszip');
-const { securityHeaders, rateLimiter, escapeHtml } = require('../shared/security');
-const { requestLogger, healthCheck } = require('../shared/middleware');
+const { securityHeaders, rateLimiter, escapeHtml } = require('./security');
+const { requestLogger, healthCheck } = require('./middleware');
 
 // ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
 // Memory logging helper for debugging Railway OOM issues
@@ -99,7 +99,6 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Multer configuration for file uploads (memory storage)
 // Add 50MB limit to prevent OOM on Railway containers
-// eslint-disable-next-line no-unused-vars
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
@@ -113,6 +112,12 @@ const requiredEnvVars = [
   'SENDGRID_API_KEY',
   'SENDER_EMAIL',
 ];
+const optionalEnvVars = [
+  'SERPAPI_API_KEY',
+  'DEEPSEEK_API_KEY',
+  'DEEPGRAM_API_KEY',
+  'ANTHROPIC_API_KEY',
+]; // Optional but recommended
 const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
@@ -355,7 +360,6 @@ const anthropic = process.env.ANTHROPIC_API_KEY
   : null;
 
 // Initialize Deepgram
-// eslint-disable-next-line no-unused-vars
 const deepgram = process.env.DEEPGRAM_API_KEY ? createClient(process.env.DEEPGRAM_API_KEY) : null;
 
 // Initialize Cloudflare R2 (S3-compatible)
@@ -371,7 +375,6 @@ const r2Client =
       })
     : null;
 
-// eslint-disable-next-line no-unused-vars
 const R2_BUCKET = process.env.R2_BUCKET_NAME || 'dd-recordings';
 
 if (!r2Client) {
@@ -381,7 +384,6 @@ if (!r2Client) {
 }
 
 // Extract text from .docx files (Word documents)
-// eslint-disable-next-line no-unused-vars
 async function extractDocxText(base64Content) {
   try {
     const buffer = Buffer.from(base64Content, 'base64');
@@ -413,7 +415,6 @@ async function extractDocxText(base64Content) {
 }
 
 // Extract text from .pptx files (PowerPoint)
-// eslint-disable-next-line no-unused-vars
 async function extractPptxText(base64Content) {
   try {
     const buffer = Buffer.from(base64Content, 'base64');
@@ -456,7 +457,6 @@ async function extractPptxText(base64Content) {
 }
 
 // Extract text from .xlsx files (Excel)
-// eslint-disable-next-line no-unused-vars
 async function extractXlsxText(base64Content) {
   try {
     const buffer = Buffer.from(base64Content, 'base64');
@@ -547,7 +547,6 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
 // ============ AI TOOLS ============
 
 // Gemini 2.5 Flash-Lite - cost-effective for general tasks ($0.10/$0.40 per 1M tokens)
-// eslint-disable-next-line no-unused-vars
 async function callGemini(prompt) {
   try {
     const response = await fetch(
@@ -589,7 +588,6 @@ async function callGemini(prompt) {
 
 // Gemini 2.5 Flash - stable model for validation tasks (upgraded from gemini-3-flash-preview which was unstable)
 // With GPT-4o fallback when Gemini fails or times out
-// eslint-disable-next-line no-unused-vars
 async function callGemini3Flash(prompt, jsonMode = false) {
   try {
     const requestBody = {
@@ -674,7 +672,6 @@ async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
 
 // Gemini 2.5 Pro - Most capable model for critical validation tasks
 // Use this for final data accuracy verification where errors are unacceptable
-// eslint-disable-next-line no-unused-vars
 async function callGemini2Pro(prompt, jsonMode = false) {
   try {
     const requestBody = {
@@ -713,7 +710,6 @@ async function callGemini2Pro(prompt, jsonMode = false) {
 }
 
 // Claude (Anthropic) - excellent reasoning and analysis
-// eslint-disable-next-line no-unused-vars
 async function callClaude(prompt, systemPrompt = null, jsonMode = false) {
   if (!anthropic) {
     console.warn('Claude not available - ANTHROPIC_API_KEY not set');
@@ -2798,28 +2794,28 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
         // Add target list table (position from template: x=0.3663", y=1.467")
         // Cell margins: 0.04 inch (0.1cm) left/right, 0 inch top/bottom
-        // Font size 12 to fit more items
+        // Font size 14 per design requirements
         targetSlide.addTable(tableRows, {
           x: 0.37,
           y: 1.47,
           w: tableWidth,
           colW: colWidths,
           fontFace: 'Segoe UI',
-          fontSize: 12,
+          fontSize: 14,
           valign: 'middle',
-          rowH: 0.28,
+          rowH: 0.3,
           margin: [0, 0.04, 0, 0.04], // [top, right, bottom, left] in inches
         });
 
         // Footnote (from template: x=0.3754", y=6.6723", font 10pt)
-        targetSlide.addText('出典: Company websites', {
+        targetSlide.addText('Source: Company disclosures, industry databases', {
           x: 0.38,
           y: 6.67,
           w: 12.54,
           h: 0.42,
           fontSize: 10,
           fontFace: 'Segoe UI',
-          color: '000000',
+          color: COLORS.black,
           valign: 'top',
         });
 
@@ -2828,6 +2824,181 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         console.error('ERROR generating Target List slide:', targetListError.message);
         console.error('Target List error stack:', targetListError.stack);
         // Continue without target list slide
+      }
+    }
+
+    // ===== HYPOTHETICAL M&A STRATEGIES SLIDE =====
+    if (targetDescription && allCompaniesForSummary.length > 0) {
+      try {
+        console.log('Generating M&A Strategy slide...');
+        const maData = await generateMAStrategies(targetDescription, allCompaniesForSummary);
+        const strategies = maData.strategies || [];
+
+        if (strategies.length > 0) {
+          const maSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+
+          // Title: "Hypothetical M&A Strategies" - font size 24
+          maSlide.addText('Hypothetical M&A Strategies', {
+            x: 0.38,
+            y: 0.38,
+            w: 12.5,
+            h: 0.5,
+            fontSize: 24,
+            fontFace: 'Segoe UI',
+            color: COLORS.black,
+            valign: 'bottom',
+          });
+
+          // Double horizontal divider (thick dark-blue above, thin lighter-blue below)
+          maSlide.addShape(pptx.shapes.LINE, {
+            x: 0.38,
+            y: 1.02,
+            w: 12.5,
+            h: 0,
+            line: { color: COLORS.headerLine, width: 3 },
+          });
+          maSlide.addShape(pptx.shapes.LINE, {
+            x: 0.38,
+            y: 1.1,
+            w: 12.5,
+            h: 0,
+            line: { color: COLORS.dk2, width: 1.5 },
+          });
+
+          // Build M&A Strategy table
+          const maTableRows = [];
+
+          // Header row - NOT bold per design requirements
+          maTableRows.push([
+            {
+              text: 'Region',
+              options: {
+                fill: { color: COLORS.accent3 },
+                color: COLORS.white,
+                align: 'center',
+                valign: 'middle',
+                bold: false,
+              },
+            },
+            {
+              text: 'Strategy',
+              options: {
+                fill: { color: COLORS.accent3 },
+                color: COLORS.white,
+                align: 'center',
+                valign: 'middle',
+                bold: false,
+              },
+            },
+            {
+              text: 'Rationale',
+              options: {
+                fill: { color: COLORS.accent3 },
+                color: COLORS.white,
+                align: 'center',
+                valign: 'middle',
+                bold: false,
+              },
+            },
+          ]);
+
+          // Data rows - NOT bold per design requirements
+          strategies.forEach((strat) => {
+            // Format strategy with bullet points
+            const strategyPoints = strat.strategy
+              .split('. ')
+              .filter((s) => s.trim())
+              .map((s) => `■ ${s.trim().replace(/\.+$/, '')}`)
+              .join('\n');
+
+            // Format rationale with bullet points
+            const rationalePoints = strat.rationale
+              .split('. ')
+              .filter((r) => r.trim())
+              .map((r) => `■ ${r.trim().replace(/\.+$/, '')}`)
+              .join('\n');
+
+            maTableRows.push([
+              // Region column - blue background, white text, NOT bold
+              {
+                text: strat.region || '',
+                options: {
+                  fill: { color: COLORS.accent3 },
+                  color: COLORS.white,
+                  align: 'center',
+                  valign: 'middle',
+                  bold: false,
+                },
+              },
+              // Strategy column - white background, black text, NOT bold
+              {
+                text: strategyPoints,
+                options: {
+                  fill: { color: COLORS.white },
+                  color: COLORS.black,
+                  align: 'left',
+                  valign: 'top',
+                  bold: false,
+                  border: [
+                    { pt: 1, color: COLORS.gray, type: 'dash' },
+                    { pt: 0 },
+                    { pt: 1, color: COLORS.gray, type: 'dash' },
+                    { pt: 0 },
+                  ],
+                },
+              },
+              // Rationale column - white background, black text, NOT bold
+              {
+                text: rationalePoints,
+                options: {
+                  fill: { color: COLORS.white },
+                  color: COLORS.black,
+                  align: 'left',
+                  valign: 'top',
+                  bold: false,
+                  border: [
+                    { pt: 1, color: COLORS.gray, type: 'dash' },
+                    { pt: 0 },
+                    { pt: 1, color: COLORS.gray, type: 'dash' },
+                    { pt: 0 },
+                  ],
+                },
+              },
+            ]);
+          });
+
+          // Add M&A Strategy table - font size 14 per design requirements
+          maSlide.addTable(maTableRows, {
+            x: 0.38,
+            y: 1.25,
+            w: 12.5,
+            colW: [2.0, 5.0, 5.5],
+            rowH: 0.8,
+            fontFace: 'Segoe UI',
+            fontSize: 14,
+            valign: 'middle',
+            border: { pt: 2.5, color: COLORS.white },
+            margin: [0.04, 0.08, 0.04, 0.08],
+          });
+
+          // Source line: black font, font size 10
+          maSlide.addText('Source: Company disclosures, public filings', {
+            x: 0.38,
+            y: 6.85,
+            w: 12.5,
+            h: 0.3,
+            fontSize: 10,
+            fontFace: 'Segoe UI',
+            color: COLORS.black,
+            valign: 'top',
+          });
+
+          console.log('M&A Strategy slide generated');
+        }
+      } catch (maError) {
+        console.error('ERROR generating M&A Strategy slide:', maError.message);
+        console.error('M&A Strategy error stack:', maError.stack);
+        // Continue without M&A Strategy slide
       }
     }
 
@@ -2867,6 +3038,174 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         }
 
         console.log(`  Generating slide for: ${company.company_name || company.website}`);
+
+        // ===== BUSINESS OVERVIEW SLIDE (before detailed profile) =====
+        if (hasBreakdown) {
+          const overviewSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+
+          // Title: "Business Overview" - font size 24, black
+          overviewSlide.addText('Business Overview', {
+            x: 0.38,
+            y: 0.38,
+            w: 12.5,
+            h: 0.5,
+            fontSize: 24,
+            fontFace: 'Segoe UI',
+            color: COLORS.black,
+            valign: 'bottom',
+          });
+
+          // Subtitle: Company description - font size 16, black
+          const companyDescription =
+            company.message ||
+            `${company.title || company.company_name || 'Company'} provides products and services.`;
+          overviewSlide.addText(companyDescription, {
+            x: 0.38,
+            y: 0.92,
+            w: 12.5,
+            h: 0.4,
+            fontSize: 16,
+            fontFace: 'Segoe UI',
+            color: COLORS.black,
+            valign: 'top',
+          });
+
+          // Double horizontal divider (thick dark-blue above, thin lighter-blue below)
+          overviewSlide.addShape(pptx.shapes.LINE, {
+            x: 0.38,
+            y: 1.4,
+            w: 12.5,
+            h: 0,
+            line: { color: COLORS.headerLine, width: 3 },
+          });
+          overviewSlide.addShape(pptx.shapes.LINE, {
+            x: 0.38,
+            y: 1.48,
+            w: 12.5,
+            h: 0,
+            line: { color: COLORS.dk2, width: 1.5 },
+          });
+
+          // Column headers: "Business Segment" and "Description" - centered, font size 14
+          overviewSlide.addText('Business Segment', {
+            x: 0.38,
+            y: 1.6,
+            w: 2.5,
+            h: 0.35,
+            fontSize: 14,
+            fontFace: 'Segoe UI',
+            color: COLORS.black,
+            align: 'center',
+            valign: 'middle',
+          });
+          // Underline for Business Segment header
+          overviewSlide.addShape(pptx.shapes.LINE, {
+            x: 0.38,
+            y: 1.95,
+            w: 2.5,
+            h: 0,
+            line: { color: COLORS.dk2, width: 1 },
+          });
+
+          overviewSlide.addText('Description', {
+            x: 3.0,
+            y: 1.6,
+            w: 9.88,
+            h: 0.35,
+            fontSize: 14,
+            fontFace: 'Segoe UI',
+            color: COLORS.black,
+            align: 'center',
+            valign: 'middle',
+          });
+          // Underline for Description header
+          overviewSlide.addShape(pptx.shapes.LINE, {
+            x: 3.0,
+            y: 1.95,
+            w: 9.88,
+            h: 0,
+            line: { color: COLORS.dk2, width: 1 },
+          });
+
+          // Build Business Overview table rows from breakdown_items
+          const overviewTableRows = [];
+          const breakdownItems = company.breakdown_items || [];
+          const validItems = breakdownItems
+            .filter((item) => item && item.label && item.value)
+            .slice(0, 8); // Max 8 segments
+
+          validItems.forEach((item, idx) => {
+            const isLast = idx === validItems.length - 1;
+            overviewTableRows.push([
+              // Left column: Blue segment block with white centered text
+              {
+                text: String(item.label || ''),
+                options: {
+                  fill: { color: COLORS.accent3 },
+                  color: COLORS.white,
+                  align: 'center',
+                  valign: 'middle',
+                  bold: false,
+                },
+              },
+              // Right column: Black square bullet with description
+              {
+                text: `■ ${String(item.value || '')}`,
+                options: {
+                  fill: { color: COLORS.white },
+                  color: COLORS.black,
+                  align: 'left',
+                  valign: 'top',
+                  bold: false,
+                  border: isLast
+                    ? [
+                        { pt: 1, color: COLORS.gray, type: 'dash' },
+                        { pt: 0 },
+                        { pt: 1, color: COLORS.gray, type: 'dash' },
+                        { pt: 0 },
+                      ]
+                    : [
+                        { pt: 1, color: COLORS.gray, type: 'dash' },
+                        { pt: 0 },
+                        { pt: 1, color: COLORS.gray, type: 'dash' },
+                        { pt: 0 },
+                      ],
+                },
+              },
+            ]);
+          });
+
+          // Add the Business Overview table
+          if (overviewTableRows.length > 0) {
+            overviewSlide.addTable(overviewTableRows, {
+              x: 0.38,
+              y: 2.05,
+              w: 12.5,
+              colW: [2.5, 9.88],
+              rowH: 0.55,
+              fontFace: 'Segoe UI',
+              fontSize: 14,
+              valign: 'middle',
+              border: { pt: 2.5, color: COLORS.white },
+              margin: [0.04, 0.08, 0.04, 0.08],
+            });
+          }
+
+          // Source line: black font, font size 10
+          overviewSlide.addText('Source: Company disclosures, public filings', {
+            x: 0.38,
+            y: 6.85,
+            w: 12.5,
+            h: 0.3,
+            fontSize: 10,
+            fontFace: 'Segoe UI',
+            color: COLORS.black,
+            valign: 'top',
+          });
+
+          console.log('    Business Overview slide generated');
+        }
+
         // Use master slide - lines are fixed in background and cannot be moved
         const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
@@ -4580,6 +4919,130 @@ Create MECE segments for these ${targetDescription} companies and mark which seg
   } catch (e) {
     console.error('MECE segmentation error:', e.message);
     return { segments: [], companySegments: {} };
+  }
+}
+
+// AI Agent 7: Generate Hypothetical M&A Strategies by region
+// Creates regional M&A strategy recommendations based on target description and company profiles
+async function generateMAStrategies(targetDescription, companies) {
+  if (!targetDescription || companies.length === 0) {
+    return { strategies: [] };
+  }
+
+  try {
+    console.log('Generating M&A strategies for regions...');
+
+    // Group companies by region
+    const regionMap = {};
+    companies.forEach((c) => {
+      const location = ensureString(c.location).toLowerCase();
+      let region = 'Other';
+
+      // Southeast Asia
+      if (
+        location.includes('singapore') ||
+        location.includes('malaysia') ||
+        location.includes('thailand') ||
+        location.includes('vietnam') ||
+        location.includes('indonesia') ||
+        location.includes('philippines')
+      ) {
+        region = 'Southeast Asia';
+      }
+      // Greater China
+      else if (
+        location.includes('china') ||
+        location.includes('hong kong') ||
+        location.includes('taiwan')
+      ) {
+        region = 'Greater China';
+      }
+      // Northeast Asia (Japan, Korea)
+      else if (location.includes('japan') || location.includes('korea')) {
+        region = 'Northeast Asia';
+      }
+      // South Asia
+      else if (
+        location.includes('india') ||
+        location.includes('bangladesh') ||
+        location.includes('pakistan') ||
+        location.includes('sri lanka')
+      ) {
+        region = 'South Asia';
+      }
+
+      if (!regionMap[region]) regionMap[region] = [];
+      regionMap[region].push(c);
+    });
+
+    // Prepare region summaries
+    const regionSummaries = Object.entries(regionMap).map(([region, comps]) => ({
+      region,
+      companies: comps.map((c) => ({
+        name: c.title || c.company_name || 'Unknown',
+        business: c.business || '',
+      })),
+    }));
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an M&A strategist creating hypothetical regional expansion strategies.
+
+Given a target industry and companies grouped by region, create M&A strategy recommendations.
+
+CRITICAL RULES:
+1. Do NOT mention specific company names in strategies
+2. Use generic terms like "target companies", "regional players", "local distributors", etc.
+3. Focus on strategic rationale, not specific targets
+4. Strategies should be actionable and region-specific
+
+OUTPUT JSON:
+{
+  "strategies": [
+    {
+      "region": "Southeast Asia",
+      "strategy": "Acquire a regional distributor to establish footprint and leverage local distribution networks",
+      "rationale": "Access to high-growth ASEAN markets with favorable demographics and cost-effective manufacturing base"
+    },
+    {
+      "region": "Greater China",
+      "strategy": "Target local manufacturers for technology and scale expansion",
+      "rationale": "Access to advanced manufacturing capabilities and strategic positioning in key supply chain hub"
+    }
+  ]
+}
+
+IMPORTANT:
+- Keep strategies generic (no company names)
+- Each strategy should be 1-2 sentences
+- Each rationale should explain the business value
+- Only include regions that have companies in the input
+
+Return ONLY valid JSON.`,
+        },
+        {
+          role: 'user',
+          content: `Target Industry: ${targetDescription}
+
+Regions and Companies:
+${regionSummaries.map((r) => `${r.region}:\n${r.companies.map((c) => `  - ${c.name}: ${c.business}`).join('\n')}`).join('\n\n')}
+
+Generate M&A strategies for each region WITHOUT mentioning specific company names.`,
+        },
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.4,
+    });
+
+    const result = JSON.parse(response.choices[0].message.content);
+    console.log(`Generated ${result.strategies?.length || 0} regional M&A strategies`);
+    return result;
+  } catch (e) {
+    console.error('M&A strategy generation error:', e.message);
+    return { strategies: [] };
   }
 }
 

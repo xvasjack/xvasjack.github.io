@@ -21,6 +21,7 @@ process.on('uncaughtException', (error) => {
 
 // ============ EXPRESS SETUP ============
 const app = express();
+app.set('trust proxy', 1); // Trust Railway's reverse proxy for rate limiting
 app.use(securityHeaders);
 app.use(rateLimiter);
 app.use(cors());
@@ -3132,11 +3133,9 @@ function safeArray(arr, max = 5) {
 }
 
 // Helper: add source footnote to slide
+// Uses widescreen dimensions (13.333" x 7.5" = 16:9)
 function addSourceFootnote(slide, sources, COLORS, FONT) {
   if (!sources || (Array.isArray(sources) && sources.length === 0)) return;
-
-  const LEFT_MARGIN = 0.4; // Left margin matching YCP template
-  const CONTENT_WIDTH = 12.5; // Full content width for 16:9 widescreen
 
   let sourceText = '';
   if (typeof sources === 'string') {
@@ -3151,9 +3150,9 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
 
   if (sourceText) {
     slide.addText(truncate(sourceText, 120), {
-      x: LEFT_MARGIN,
+      x: 0.4,
       y: 6.85,
-      w: CONTENT_WIDTH,
+      w: 12.5,
       h: 0.2,
       fontSize: 8,
       fontFace: FONT,
