@@ -23,7 +23,7 @@ const app = express();
 app.use(securityHeaders);
 app.use(rateLimiter);
 app.use(cors());
-app.use(express.json({ limit: '100mb' }));
+app.use(express.json({ limit: '10mb' }));
 
 // Check required environment variables
 const requiredEnvVars = ['DEEPSEEK_API_KEY', 'KIMI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
