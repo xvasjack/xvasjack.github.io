@@ -300,26 +300,6 @@ async function extractXlsxText(base64Content) {
   }
 }
 
-// R2 Delete function (cleanup old recordings)
-async function deleteFromR2(key) {
-  if (!r2Client) {
-    return false;
-  }
-
-  try {
-    const command = new DeleteObjectCommand({
-      Bucket: R2_BUCKET,
-      Key: key
-    });
-    await r2Client.send(command);
-    console.log(`[R2] Deleted ${key}`);
-    return true;
-  } catch (error) {
-    console.error('[R2] Delete error:', error.message);
-    return false;
-  }
-}
-
 // Send email using SendGrid API
 async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) {
   const senderEmail = process.env.SENDER_EMAIL;
@@ -422,56 +402,6 @@ async function callGemini(prompt) {
 
 // Gemini 2.5 Flash - stable model for validation tasks (upgraded from gemini-3-flash-preview which was unstable)
 // With GPT-4o fallback when Gemini fails or times out
-async function callGemini3Flash(prompt, jsonMode = false) {
-  try {
-    const requestBody = {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.1  // Low temperature for consistent validation
-      }
-    };
-
-    // Add JSON mode if requested
-    if (jsonMode) {
-      requestBody.generationConfig.responseMimeType = 'application/json';
-    }
-
-    // Using stable gemini-2.5-flash (gemini-3-flash-preview was unreliable)
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-      timeout: 30000  // Reduced from 120s to 30s - fail fast and use GPT-4o fallback
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Gemini 3 Flash HTTP error ${response.status}:`, errorText.substring(0, 200));
-      // Fallback to GPT-4o on HTTP errors
-      return await callGPT4oFallback(prompt, jsonMode, `Gemini HTTP ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    if (data.error) {
-      console.error('Gemini 3 Flash API error:', data.error.message);
-      // Fallback to GPT-4o
-      return await callGPT4oFallback(prompt, jsonMode, 'Gemini 3 Flash API error');
-    }
-
-    const result = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    if (!result) {
-      // Empty response, try fallback
-      return await callGPT4oFallback(prompt, jsonMode, 'Gemini 3 Flash empty response');
-    }
-    return result;
-  } catch (error) {
-    console.error('Gemini 3 Flash error:', error.message);
-    // Fallback to GPT-4o on network timeout or other errors
-    return await callGPT4oFallback(prompt, jsonMode, `Gemini error: ${error.message}`);
-  }
-}
-
 // GPT-4o fallback function for when Gemini fails
 async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
   try {
@@ -565,30 +495,6 @@ async function callClaude(prompt, systemPrompt = null, jsonMode = false) {
   }
 }
 
-// Claude with web search via Perplexity - Claude reasons, Perplexity searches
-async function callClaudeWithSearch(searchPrompt, reasoningTask) {
-  // Step 1: Use Perplexity to search the web
-  const searchResults = await callPerplexity(searchPrompt);
-
-  if (!searchResults) {
-    return { searchResults: '', analysis: '' };
-  }
-
-  // Step 2: Use Claude to analyze and reason about the results
-  const analysis = await callClaude(
-    `Here are search results about: ${searchPrompt}
-
-SEARCH RESULTS:
-${searchResults}
-
-YOUR TASK:
-${reasoningTask}`,
-    'You are an expert M&A research analyst. Analyze the search results thoroughly and extract all relevant information.'
-  );
-
-  return { searchResults, analysis };
-}
-
 async function callPerplexity(prompt) {
   try {
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
@@ -664,60 +570,6 @@ async function callOpenAISearch(prompt) {
     console.error('OpenAI Search error:', error.message, '- falling back to ChatGPT');
     // Fallback to regular gpt-4o if search model not available
     return callChatGPT(prompt);
-  }
-}
-
-// DeepSeek Reasoner - for deep thinking/analysis tasks
-async function callDeepSeekReasoner(prompt, maxTokens = 8000) {
-  try {
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'deepseek-reasoner',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: maxTokens
-      }),
-      timeout: 120000
-    });
-    const data = await response.json();
-
-    // DeepSeek reasoner returns reasoning_content and content
-    const reasoning = data.choices?.[0]?.message?.reasoning_content || '';
-    const content = data.choices?.[0]?.message?.content || '';
-
-    return { reasoning, content, raw: data };
-  } catch (error) {
-    console.error('DeepSeek Reasoner error:', error.message);
-    return { reasoning: '', content: '', error: error.message };
-  }
-}
-
-// DeepSeek Chat - for faster, simpler tasks
-async function callDeepSeekChat(prompt, maxTokens = 4000) {
-  try {
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: maxTokens,
-        temperature: 0.3
-      }),
-      timeout: 60000
-    });
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || '';
-  } catch (error) {
-    console.error('DeepSeek Chat error:', error.message);
-    return '';
   }
 }
 
@@ -1539,17 +1391,6 @@ function isSpamOrDirectoryURL(url) {
   return false;
 }
 
-function preFilterCompanies(companies) {
-  return companies.filter(c => {
-    if (!c || !c.website) return false;
-    if (isSpamOrDirectoryURL(c.website)) {
-      console.log(`    Pre-filtered: ${c.company_name} - Social media/wiki`);
-      return false;
-    }
-    return true;
-  });
-}
-
 // ============ EXHAUSTIVE PARALLEL SEARCH WITH 14 STRATEGIES ============
 
 // Process SerpAPI results and extract companies using GPT
@@ -1569,101 +1410,6 @@ ${outputFormat}`;
 
   const response = await callChatGPT(prompt);
   return extractCompanies(response, country);
-}
-
-async function exhaustiveSearch(business, country, exclusion) {
-  console.log('Starting EXHAUSTIVE 14-STRATEGY PARALLEL search...');
-  const startTime = Date.now();
-
-  // Generate all queries for each strategy
-  const serpQueries1 = strategy1_BroadSerpAPI(business, country, exclusion);
-  const perpQueries2 = strategy2_BroadPerplexity(business, country, exclusion);
-  const serpQueries3 = strategy3_ListsSerpAPI(business, country, exclusion);
-  const perpQueries4 = strategy4_CitiesPerplexity(business, country, exclusion);
-  const serpQueries5 = strategy5_IndustrialSerpAPI(business, country, exclusion);
-  const perpQueries6 = strategy6_DirectoriesPerplexity(business, country, exclusion);
-  const perpQueries7 = strategy7_ExhibitionsPerplexity(business, country, exclusion);
-  const perpQueries8 = strategy8_TradePerplexity(business, country, exclusion);
-  const perpQueries9 = strategy9_DomainsPerplexity(business, country, exclusion);
-  const serpQueries10 = strategy10_RegistriesSerpAPI(business, country, exclusion);
-  const serpQueries11 = strategy11_CityIndustrialSerpAPI(business, country, exclusion);
-  const openaiQueries12 = strategy12_DeepOpenAISearch(business, country, exclusion);
-  const perpQueries13 = strategy13_PublicationsPerplexity(business, country, exclusion);
-  const openaiQueries14 = strategy14_LocalLanguageOpenAISearch(business, country, exclusion);
-
-  const allSerpQueries = [...serpQueries1, ...serpQueries3, ...serpQueries5, ...serpQueries10, ...serpQueries11];
-  const allPerpQueries = [...perpQueries2, ...perpQueries4, ...perpQueries6, ...perpQueries7, ...perpQueries8, ...perpQueries9, ...perpQueries13];
-  const allOpenAISearchQueries = [...openaiQueries12, ...openaiQueries14];
-
-  console.log(`  Strategy breakdown:`);
-  console.log(`    SerpAPI (Google): ${allSerpQueries.length} queries`);
-  console.log(`    Perplexity: ${allPerpQueries.length} queries`);
-  console.log(`    OpenAI Search: ${allOpenAISearchQueries.length} queries`);
-  console.log(`    Total: ${allSerpQueries.length + allPerpQueries.length + allOpenAISearchQueries.length}`);
-
-  // Run all strategies in parallel (with error handling to prevent one failure from crashing all)
-  const [serpResults, perpResults, openaiSearchResults, geminiResults] = await Promise.all([
-    // SerpAPI queries
-    process.env.SERPAPI_API_KEY
-      ? Promise.all(allSerpQueries.map(q => callSerpAPI(q).catch(e => { console.error(`SerpAPI error: ${e.message}`); return null; })))
-      : Promise.resolve([]),
-
-    // Perplexity queries
-    Promise.all(allPerpQueries.map(q => callPerplexity(q).catch(e => { console.error(`Perplexity error: ${e.message}`); return null; }))),
-
-    // OpenAI Search queries
-    Promise.all(allOpenAISearchQueries.map(q => callOpenAISearch(q).catch(e => { console.error(`OpenAI Search error: ${e.message}`); return null; }))),
-
-    // Also run some Gemini queries for diversity
-    Promise.all([
-      callGemini(`Find ALL ${business} companies in ${country}. Exclude ${exclusion}. ${buildOutputFormat()}`),
-      callGemini(`List ${business} factories and manufacturing plants in ${country}. Not ${exclusion}. ${buildOutputFormat()}`),
-      callGemini(`${business} SME and family businesses in ${country}. Exclude ${exclusion}. ${buildOutputFormat()}`)
-    ].map(p => p.catch(e => { console.error(`Gemini error: ${e.message}`); return null; })))
-  ]);
-
-  console.log(`  All API calls done in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
-
-  // Process SerpAPI results through GPT for extraction
-  let serpCompanies = [];
-  if (serpResults.length > 0) {
-    console.log(`  Processing ${serpResults.filter(r => r).length} SerpAPI results...`);
-    serpCompanies = await processSerpResults(serpResults.filter(r => r), business, country, exclusion);
-    console.log(`    Extracted ${serpCompanies.length} companies from SerpAPI`);
-  }
-
-  // Extract from Perplexity results
-  console.log(`  Extracting from ${perpResults.length} Perplexity results...`);
-  const perpExtractions = await Promise.all(
-    perpResults.filter(r => r).map(text => extractCompanies(text, country).catch(e => { console.error(`Extraction error: ${e.message}`); return []; }))
-  );
-  const perpCompanies = perpExtractions.flat();
-  console.log(`    Extracted ${perpCompanies.length} companies from Perplexity`);
-
-  // Extract from OpenAI Search results
-  console.log(`  Extracting from ${openaiSearchResults.length} OpenAI Search results...`);
-  const openaiExtractions = await Promise.all(
-    openaiSearchResults.filter(r => r).map(text => extractCompanies(text, country).catch(e => { console.error(`Extraction error: ${e.message}`); return []; }))
-  );
-  const openaiCompanies = openaiExtractions.flat();
-  console.log(`    Extracted ${openaiCompanies.length} companies from OpenAI Search`);
-
-  // Extract from Gemini results
-  console.log(`  Extracting from ${geminiResults.length} Gemini results...`);
-  const geminiExtractions = await Promise.all(
-    geminiResults.filter(r => r).map(text => extractCompanies(text, country).catch(e => { console.error(`Extraction error: ${e.message}`); return []; }))
-  );
-  const geminiCompanies = geminiExtractions.flat();
-  console.log(`    Extracted ${geminiCompanies.length} companies from Gemini`);
-
-  // Combine and dedupe all
-  const allCompanies = [...serpCompanies, ...perpCompanies, ...openaiCompanies, ...geminiCompanies];
-  const uniqueCompanies = dedupeCompanies(allCompanies);
-
-  console.log(`  Raw total: ${allCompanies.length}, Unique: ${uniqueCompanies.length}`);
-  console.log(`Search completed in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
-
-  return uniqueCompanies;
 }
 
 // ============ WEBSITE VERIFICATION ============
@@ -1729,34 +1475,6 @@ async function verifyWebsite(url) {
   } catch (e) {
     return { valid: false, reason: e.message || 'Connection failed' };
   }
-}
-
-async function filterVerifiedWebsites(companies) {
-  console.log(`\nVerifying ${companies.length} websites...`);
-  const startTime = Date.now();
-  const batchSize = 15; // Increased for better parallelization
-  const verified = [];
-
-  for (let i = 0; i < companies.length; i += batchSize) {
-    const batch = companies.slice(i, i + batchSize);
-    const results = await Promise.all(batch.map(c => verifyWebsite(c.website)));
-
-    batch.forEach((company, idx) => {
-      if (results[idx].valid) {
-        verified.push({
-          ...company,
-          _pageContent: results[idx].content // Cache the content for validation
-        });
-      } else {
-        console.log(`    Removed: ${company.company_name} - ${results[idx].reason}`);
-      }
-    });
-
-    console.log(`  Verified ${Math.min(i + batchSize, companies.length)}/${companies.length}. Working: ${verified.length}`);
-  }
-
-  console.log(`Website verification done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Working: ${verified.length}/${companies.length}`);
-  return verified;
 }
 
 // ============ FETCH WEBSITE FOR VALIDATION ============
