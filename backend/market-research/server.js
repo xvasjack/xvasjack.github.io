@@ -1876,6 +1876,13 @@ Return ONLY valid JSON.`;
       jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
     }
     countryAnalysis = JSON.parse(jsonStr);
+    // Debug: log synthesis structure
+    const policyKeys = countryAnalysis.policy ? Object.keys(countryAnalysis.policy) : [];
+    const marketKeys = countryAnalysis.market ? Object.keys(countryAnalysis.market) : [];
+    const compKeys = countryAnalysis.competitors ? Object.keys(countryAnalysis.competitors) : [];
+    console.log(`  [Synthesis] Policy sections: ${policyKeys.length} (${policyKeys.join(', ')})`);
+    console.log(`  [Synthesis] Market sections: ${marketKeys.length} (${marketKeys.join(', ')})`);
+    console.log(`  [Synthesis] Competitor sections: ${compKeys.length} (${compKeys.join(', ')})`);
   } catch (error) {
     console.error(`Failed to parse first synthesis for ${country}:`, error.message);
     return {
@@ -2958,11 +2965,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // SLIDE 2: Foundational Acts
   const foundationalActs = policy.foundationalActs || {};
+  console.log(`  [PPT Debug] foundationalActs keys: ${Object.keys(foundationalActs).join(', ') || 'EMPTY'}`);
   const actsSlide = addSlideWithTitle(
     foundationalActs.slideTitle || `${country} - Energy Foundational Acts`,
     truncateSubtitle(foundationalActs.subtitle || foundationalActs.keyMessage || '', 95)
   );
   const acts = safeArray(foundationalActs.acts, 5);
+  console.log(`  [PPT Debug] acts array length: ${acts.length}`);
   if (acts.length > 0) {
     const actsRows = [tableHeader(['Act Name', 'Year', 'Requirements', 'Enforcement'])];
     acts.forEach(act => {
