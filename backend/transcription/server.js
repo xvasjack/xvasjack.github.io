@@ -2414,11 +2414,9 @@ wss.on('connection', (ws, req) => {
                 // Check if this segment is non-English (using per-segment language detection)
                 const isNonEnglishLang =
                   thisSegmentLang && thisSegmentLang !== 'en' && !thisSegmentLang.startsWith('en');
+                // prettier-ignore
                 // eslint-disable-next-line no-misleading-character-class
-                const hasNonEnglishChars =
-                  /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af\u0900-\u097f\u0e00-\u0e7f\u0600-\u06ff]/.test(
-                    transcript
-                  );
+                const hasNonEnglishChars = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af\u0900-\u097f\u0e00-\u0e7f\u0600-\u06ff]/.test(transcript);
                 const needsTranslation = isNonEnglishLang || hasNonEnglishChars;
 
                 // Translate non-English segments with buffering for better context
