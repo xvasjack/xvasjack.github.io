@@ -72,6 +72,25 @@ function trackCost(model, inputTokens, outputTokens, searchCount = 0) {
 
 // ============ AI TOOLS ============
 
+// Retry utility with exponential backoff
+async function withRetry(fn, maxRetries = 3, baseDelayMs = 1000, operationName = 'API call') {
+  let lastError;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      if (attempt < maxRetries) {
+        const delay = baseDelayMs * Math.pow(2, attempt - 1); // 1s, 2s, 4s
+        console.log(`  [Retry] ${operationName} failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  console.error(`  [Retry] ${operationName} failed after ${maxRetries} attempts`);
+  throw lastError;
+}
+
 // DeepSeek Chat - for lighter tasks (scope parsing)
 async function callDeepSeekChat(prompt, systemPrompt = '', maxTokens = 4096) {
   try {
@@ -169,50 +188,61 @@ async function callDeepSeek(prompt, systemPrompt = '', maxTokens = 16384) {
 }
 
 // Kimi (Moonshot) API - for deep research with web browsing
-// Uses 128k context for thorough analysis
+// Uses 128k context for thorough analysis with retry logic
 async function callKimi(query, systemPrompt = '', useWebSearch = true) {
+  const messages = [];
+  if (systemPrompt) {
+    messages.push({ role: 'system', content: systemPrompt });
+  }
+  messages.push({ role: 'user', content: query });
+
+  const requestBody = {
+    model: 'moonshot-v1-128k',
+    messages,
+    max_tokens: 8192,
+    temperature: 0.3
+  };
+
+  // Enable web search tool if requested (can be disabled via env var for testing)
+  const webSearchEnabled = process.env.KIMI_WEB_SEARCH !== 'false';
+  if (useWebSearch && webSearchEnabled) {
+    requestBody.tools = [{
+      type: 'builtin_function',
+      function: { name: '$web_search' }
+    }];
+  }
+
+  const kimiBaseUrl = process.env.KIMI_API_BASE || 'https://api.moonshot.ai/v1';
+
   try {
-    const messages = [];
-    if (systemPrompt) {
-      messages.push({ role: 'system', content: systemPrompt });
-    }
-    messages.push({ role: 'user', content: query });
+    // Use retry logic for network resilience
+    const data = await withRetry(async () => {
+      const response = await fetch(`${kimiBaseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.KIMI_API_KEY}`
+        },
+        body: JSON.stringify(requestBody)
+      });
 
-    const requestBody = {
-      model: 'moonshot-v1-128k',
-      messages,
-      max_tokens: 8192,
-      temperature: 0.3
-    };
+      if (!response.ok) {
+        const errorText = await response.text();
+        // Throw to trigger retry for server errors
+        if (response.status >= 500 || response.status === 429) {
+          throw new Error(`Kimi HTTP ${response.status}: ${errorText.substring(0, 100)}`);
+        }
+        console.error(`Kimi HTTP error ${response.status}:`, errorText.substring(0, 200));
+        return null; // Don't retry client errors
+      }
 
-    // Enable web search tool if requested (can be disabled via env var for testing)
-    const webSearchEnabled = process.env.KIMI_WEB_SEARCH !== 'false';
-    if (useWebSearch && webSearchEnabled) {
-      requestBody.tools = [{
-        type: 'builtin_function',
-        function: { name: '$web_search' }
-      }];
-    }
+      return await response.json();
+    }, 3, 2000, 'Kimi research');
 
-    // Use KIMI_API_BASE env var or default to global endpoint (api.moonshot.ai)
-    // China users should set KIMI_API_BASE=https://api.moonshot.cn/v1
-    const kimiBaseUrl = process.env.KIMI_API_BASE || 'https://api.moonshot.ai/v1';
-    const response = await fetch(`${kimiBaseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.KIMI_API_KEY}`
-      },
-      body: JSON.stringify(requestBody)
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Kimi HTTP error ${response.status}:`, errorText.substring(0, 200));
-      return { content: '', citations: [] };
+    if (!data) {
+      return { content: '', citations: [], researchQuality: 'failed' };
     }
 
-    const data = await response.json();
     const inputTokens = data.usage?.prompt_tokens || 0;
     const outputTokens = data.usage?.completion_tokens || 0;
     trackCost('kimi-128k', inputTokens, outputTokens);
@@ -1255,20 +1285,56 @@ ${isJapanese ? `SPECIAL FOCUS - JAPANESE COMPANIES:
 - Specific projects and contract values
 - Success/failure assessment with reasons` : ''}
 
-PROVIDE FOR EACH COMPANY:
-- Company name (exact)
-- Revenue or market share if available
-- Entry year and mode
-- Key projects or clients
-- Strengths and weaknesses
-- Partnership interest indicators`;
+CRITICAL - RETURN STRUCTURED DATA:
+Your response MUST include a JSON block. Use this format:
+
+\`\`\`json
+{
+  "narrative": "Your detailed research findings (2-3 paragraphs)",
+  "players": [
+    {
+      "name": "Company Name",
+      "origin": "Country",
+      "entryYear": "2020",
+      "entryMode": "JV/Subsidiary/Direct",
+      "revenue": "$X million",
+      "marketShare": "X%",
+      "projects": "Key projects description",
+      "strengths": "Specific strengths",
+      "weaknesses": "Specific weaknesses",
+      "partnershipInterest": "high/medium/low"
+    }
+  ],
+  "marketInsight": "Key competitive insight",
+  "dataQuality": "high/medium/low",
+  "sources": ["Source 1", "Source 2"]
+}
+\`\`\`
+
+Use REAL data from research. Mark dataQuality as "low" if information is estimated.`;
 
       const result = await callKimiDeepResearch(queryContext, country, industry);
+
+      // Extract structured JSON
+      let structuredData = null;
+      if (result.content) {
+        const jsonMatch = result.content.match(/```json\s*([\s\S]*?)\s*```/);
+        if (jsonMatch) {
+          try {
+            structuredData = JSON.parse(jsonMatch[1]);
+          } catch (e) {
+            console.log(`      [Competitor] Failed to parse JSON for ${topicKey}`);
+          }
+        }
+      }
+
       return {
         key: topicKey,
         content: result.content,
+        structuredData: structuredData,
         citations: result.citations || [],
-        slideTitle: framework.slideTitle?.replace('{country}', country) || ''
+        slideTitle: framework.slideTitle?.replace('{country}', country) || '',
+        dataQuality: structuredData?.dataQuality || 'unknown'
       };
     })
   );
@@ -1341,6 +1407,74 @@ async function depthResearchAgent(country, industry, clientContext) {
       const isPartner = topicKey === 'depth_partnerAssessment';
       const isEntry = topicKey === 'depth_entryStrategy';
 
+      // Determine JSON structure based on topic type
+      let jsonStructure = '';
+      if (isEconomics) {
+        jsonStructure = `
+
+AFTER your analysis, provide a JSON block with structured data:
+\`\`\`json
+{
+  "contractModels": [
+    { "type": "shared_savings|guaranteed_savings|hybrid", "typicalSplit": "60/40", "prevalence": "high|medium|low" }
+  ],
+  "dealMetrics": {
+    "typicalSizeUsd": { "min": 0, "max": 0, "unit": "USD" },
+    "durationYears": { "min": 0, "max": 0 },
+    "paybackYears": { "min": 0, "max": 0 },
+    "irrPercent": { "min": 0, "max": 0 }
+  },
+  "financingOptions": ["bank loan", "lease", "internal funding"],
+  "dataQuality": "high|medium|low|estimated"
+}
+\`\`\``;
+      } else if (isPartner) {
+        jsonStructure = `
+
+AFTER your analysis, provide a JSON block with structured data:
+\`\`\`json
+{
+  "partners": [
+    {
+      "name": "Company Name",
+      "ownership": "public|private|state-owned",
+      "revenueUsd": 0,
+      "employees": 0,
+      "capabilities": ["capability1", "capability2"],
+      "existingPartnerships": ["partner1"],
+      "acquisitionLikelihood": 1-5,
+      "valuationRangeUsd": { "min": 0, "max": 0 },
+      "strengths": ["strength1"],
+      "concerns": ["concern1"]
+    }
+  ],
+  "dataQuality": "high|medium|low|estimated"
+}
+\`\`\``;
+      } else if (isEntry) {
+        jsonStructure = `
+
+AFTER your analysis, provide a JSON block with structured data:
+\`\`\`json
+{
+  "entryOptions": [
+    {
+      "mode": "joint_venture|acquisition|greenfield|partnership",
+      "timelineMonths": { "min": 0, "max": 0 },
+      "investmentUsd": { "min": 0, "max": 0 },
+      "controlLevel": "high|medium|low",
+      "pros": ["pro1", "pro2"],
+      "cons": ["con1", "con2"],
+      "risks": ["risk1"]
+    }
+  ],
+  "recommendedOption": "joint_venture|acquisition|greenfield|partnership",
+  "recommendationRationale": "Why this option is best",
+  "dataQuality": "high|medium|low|estimated"
+}
+\`\`\``;
+      }
+
       const queryContext = `As a senior M&A advisor helping a ${clientContext} enter ${country}'s ${industry} market, research ${framework.name}:
 
 SPECIFIC QUESTIONS:
@@ -1369,14 +1503,34 @@ ${isEntry ? `CRITICAL - COMPARE OPTIONS:
 - Greenfield: timeline, costs, risks
 - Recommend best option with reasoning` : ''}
 
-DEPTH IS CRITICAL - We need specifics for executive decision-making, not general observations.`;
+DEPTH IS CRITICAL - We need specifics for executive decision-making, not general observations.${jsonStructure}`;
 
       const result = await callKimiDeepResearch(queryContext, country, industry);
+
+      // Extract structured JSON from response
+      let structuredData = null;
+      let dataQuality = 'unknown';
+      if (result.content) {
+        const jsonMatch = result.content.match(/```json\s*([\s\S]*?)\s*```/);
+        if (jsonMatch) {
+          try {
+            structuredData = JSON.parse(jsonMatch[1]);
+            dataQuality = structuredData.dataQuality || 'unknown';
+            console.log(`      [${topicKey}] Extracted structured JSON (quality: ${dataQuality})`);
+          } catch (e) {
+            console.log(`      [${topicKey}] JSON parse failed: ${e.message}`);
+          }
+        }
+      }
+
       return {
         key: topicKey,
         content: result.content,
         citations: result.citations || [],
-        slideTitle: framework.slideTitle?.replace('{country}', country) || ''
+        slideTitle: framework.slideTitle?.replace('{country}', country) || '',
+        structuredData,
+        dataQuality,
+        researchQuality: result.researchQuality || 'unknown'
       };
     })
   );
@@ -1407,6 +1561,93 @@ async function insightsResearchAgent(country, industry, clientContext) {
       const isCompetitive = topicKey === 'insight_competitive';
       const isRegulatory = topicKey === 'insight_regulatory';
 
+      // Determine JSON structure based on insight type
+      let jsonStructure = '';
+      if (isFailures) {
+        jsonStructure = `
+
+AFTER your analysis, provide a JSON block with structured data:
+\`\`\`json
+{
+  "failureCases": [
+    {
+      "company": "Company Name",
+      "year": 2020,
+      "outcome": "exited|failed|withdrew",
+      "reasons": ["reason1", "reason2"],
+      "lessonsLearned": ["lesson1", "lesson2"]
+    }
+  ],
+  "warningSignsToWatch": ["sign1", "sign2"],
+  "riskFactors": ["risk1", "risk2"],
+  "dataQuality": "high|medium|low|estimated"
+}
+\`\`\``;
+      } else if (isTiming) {
+        jsonStructure = `
+
+AFTER your analysis, provide a JSON block with structured data:
+\`\`\`json
+{
+  "deadlines": [
+    {
+      "event": "Event description",
+      "date": "YYYY-MM or YYYY",
+      "type": "incentive_expiry|compliance_deadline|policy_change|opportunity_window",
+      "impact": "high|medium|low",
+      "actionRequired": "What to do before deadline"
+    }
+  ],
+  "optimalEntryWindow": {
+    "start": "YYYY-MM",
+    "end": "YYYY-MM",
+    "rationale": "Why this window"
+  },
+  "dataQuality": "high|medium|low|estimated"
+}
+\`\`\``;
+      } else if (isCompetitive) {
+        jsonStructure = `
+
+AFTER your analysis, provide a JSON block with structured data:
+\`\`\`json
+{
+  "acquisitionTargets": [
+    { "company": "Name", "reason": "Why seeking buyer/partner", "estimatedValue": "USD range" }
+  ],
+  "competitorWeaknesses": [
+    { "competitor": "Name", "weakness": "Description", "exploitability": "high|medium|low" }
+  ],
+  "underservedSegments": [
+    { "segment": "Description", "size": "USD or units", "opportunity": "How to capture" }
+  ],
+  "pricingPressures": ["pressure1", "pressure2"],
+  "dataQuality": "high|medium|low|estimated"
+}
+\`\`\``;
+      } else if (isRegulatory) {
+        jsonStructure = `
+
+AFTER your analysis, provide a JSON block with structured data:
+\`\`\`json
+{
+  "enforcementReality": {
+    "officialPolicy": "What regulations say",
+    "actualEnforcement": "What really happens",
+    "enforcementRate": "percentage if known"
+  },
+  "agencyCapacity": {
+    "agency": "Name",
+    "staffLevel": "adequate|understaffed|severely_understaffed",
+    "constraints": ["constraint1", "constraint2"]
+  },
+  "navigationTips": ["tip1", "tip2"],
+  "redFlags": ["flag1", "flag2"],
+  "dataQuality": "high|medium|low|estimated"
+}
+\`\`\``;
+      }
+
       const queryContext = `As a competitive intelligence analyst helping a ${clientContext} evaluate ${country}'s ${industry} market, research ${framework.name}:
 
 QUESTIONS TO ANSWER:
@@ -1436,14 +1677,34 @@ ${isRegulatory ? `CRITICAL - DISTINGUISH RHETORIC FROM REALITY:
 - Which regulations are enforced vs ignored
 - How companies navigate the system` : ''}
 
-This intelligence is for CEO-level decision making. We need SPECIFIC names, dates, numbers - not generic observations.`;
+This intelligence is for CEO-level decision making. We need SPECIFIC names, dates, numbers - not generic observations.${jsonStructure}`;
 
       const result = await callKimiDeepResearch(queryContext, country, industry);
+
+      // Extract structured JSON from response
+      let structuredData = null;
+      let dataQuality = 'unknown';
+      if (result.content) {
+        const jsonMatch = result.content.match(/```json\s*([\s\S]*?)\s*```/);
+        if (jsonMatch) {
+          try {
+            structuredData = JSON.parse(jsonMatch[1]);
+            dataQuality = structuredData.dataQuality || 'unknown';
+            console.log(`      [${topicKey}] Extracted structured JSON (quality: ${dataQuality})`);
+          } catch (e) {
+            console.log(`      [${topicKey}] JSON parse failed: ${e.message}`);
+          }
+        }
+      }
+
       return {
         key: topicKey,
         content: result.content,
         citations: result.citations || [],
-        slideTitle: framework.slideTitle?.replace('{country}', country) || ''
+        slideTitle: framework.slideTitle?.replace('{country}', country) || '',
+        structuredData,
+        dataQuality,
+        researchQuality: result.researchQuality || 'unknown'
       };
     })
   );
@@ -2003,6 +2264,8 @@ Return ONLY valid JSON.`;
       jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
     }
     countryAnalysis = JSON.parse(jsonStr);
+    // Preserve raw research data with citations for PPT footer
+    countryAnalysis.rawData = researchData;
     // Debug: log synthesis structure
     const policyKeys = countryAnalysis.policy ? Object.keys(countryAnalysis.policy) : [];
     const marketKeys = countryAnalysis.market ? Object.keys(countryAnalysis.market) : [];
@@ -2955,7 +3218,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const CONTENT_WIDTH = 12.5;  // Full content width for 16:9 widescreen
   const LEFT_MARGIN = 0.4;     // Left margin matching YCP template
 
-  function addSlideWithTitle(title, subtitle = '') {
+  // Options: { citations: string[], dataQuality: 'high'|'medium'|'low'|'estimated' }
+  function addSlideWithTitle(title, subtitle = '', options = {}) {
     const slide = pptx.addSlide();
     // Title - 24pt bold navy
     slide.addText(truncateTitle(title), {
@@ -2970,9 +3234,38 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
     // Message/subtitle - 14pt blue (the "so what")
     if (subtitle) {
-      slide.addText(subtitle, {
+      // Add asterisk for estimated data
+      const dataQualityIndicator = options.dataQuality === 'estimated' ? ' *' :
+                                   options.dataQuality === 'low' ? ' †' : '';
+      slide.addText(subtitle + dataQualityIndicator, {
         x: LEFT_MARGIN, y: 0.95, w: CONTENT_WIDTH, h: 0.3,
         fontSize: 14, color: COLORS.accent1, fontFace: FONT
+      });
+    }
+    // Add data quality indicator legend if applicable
+    if (options.dataQuality === 'estimated' || options.dataQuality === 'low') {
+      const legend = options.dataQuality === 'estimated'
+        ? '* Estimated data - verify independently'
+        : '† Limited data availability';
+      slide.addText(legend, {
+        x: LEFT_MARGIN, y: 6.9, w: 4, h: 0.2,
+        fontSize: 8, italic: true, color: 'E46C0A', fontFace: FONT
+      });
+    }
+    // Add source citations in footer if provided
+    if (options.citations && options.citations.length > 0) {
+      const citationText = 'Sources: ' + options.citations.slice(0, 3).map(c => {
+        // Extract domain from URL for brevity
+        try {
+          const url = new URL(c);
+          return url.hostname.replace('www.', '');
+        } catch {
+          return truncate(c, 30);
+        }
+      }).join(', ');
+      slide.addText(citationText, {
+        x: LEFT_MARGIN + 4.5, y: 6.9, w: CONTENT_WIDTH - 4.5, h: 0.2,
+        fontSize: 7, color: '888888', fontFace: FONT, align: 'right'
       });
     }
     return slide;
@@ -3003,6 +3296,36 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
   }
 
+  // Helper to extract citations from raw research data for a specific topic category
+  function getCitationsForCategory(category) {
+    if (!countryAnalysis.rawData) return [];
+    const citations = [];
+    for (const [key, data] of Object.entries(countryAnalysis.rawData)) {
+      if (key.startsWith(category) && data.citations && Array.isArray(data.citations)) {
+        citations.push(...data.citations);
+      }
+    }
+    // Deduplicate and limit to 5
+    return [...new Set(citations)].slice(0, 5);
+  }
+
+  // Helper to get data quality for a category (returns lowest quality among topics)
+  function getDataQualityForCategory(category) {
+    if (!countryAnalysis.rawData) return 'unknown';
+    const qualities = [];
+    for (const [key, data] of Object.entries(countryAnalysis.rawData)) {
+      if (key.startsWith(category) && data.dataQuality) {
+        qualities.push(data.dataQuality);
+      }
+    }
+    // Return worst quality level
+    if (qualities.includes('estimated')) return 'estimated';
+    if (qualities.includes('low')) return 'low';
+    if (qualities.includes('medium')) return 'medium';
+    if (qualities.includes('high')) return 'high';
+    return 'unknown';
+  }
+
   // ============ SLIDE 1: TITLE ============
   const titleSlide = pptx.addSlide();
   titleSlide.addText(country.toUpperCase(), {
@@ -3029,7 +3352,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   console.log(`  [PPT Debug] foundationalActs keys: ${Object.keys(foundationalActs).join(', ') || 'EMPTY'}`);
   const actsSlide = addSlideWithTitle(
     foundationalActs.slideTitle || `${country} - Energy Foundational Acts`,
-    truncateSubtitle(foundationalActs.subtitle || foundationalActs.keyMessage || '', 95)
+    truncateSubtitle(foundationalActs.subtitle || foundationalActs.keyMessage || '', 95),
+    { citations: getCitationsForCategory('policy_'), dataQuality: getDataQualityForCategory('policy_') }
   );
   const acts = safeArray(foundationalActs.acts, 5);
   console.log(`  [PPT Debug] acts array length: ${acts.length}`);
@@ -3058,9 +3382,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const nationalPolicy = policy.nationalPolicy || {};
   const policySlide = addSlideWithTitle(
     nationalPolicy.slideTitle || `${country} - National Energy Policy`,
-    truncateSubtitle(nationalPolicy.policyDirection || '', 95)
+    truncateSubtitle(nationalPolicy.policyDirection || '', 95),
+    { citations: getCitationsForCategory('policy_'), dataQuality: getDataQualityForCategory('policy_') }
   );
   const targets = safeArray(nationalPolicy.targets, 4);
+  if (targets.length === 0 && safeArray(nationalPolicy.keyInitiatives, 4).length === 0) {
+    addDataUnavailableMessage(policySlide, 'National policy data not available');
+  }
   if (targets.length > 0) {
     const targetRows = [tableHeader(['Metric', 'Target', 'Deadline', 'Status'])];
     targets.forEach(t => {
@@ -3096,7 +3424,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const investRestrict = policy.investmentRestrictions || {};
   const investSlide = addSlideWithTitle(
     investRestrict.slideTitle || `${country} - Foreign Investment Rules`,
-    truncateSubtitle(investRestrict.riskJustification || '', 95)
+    truncateSubtitle(investRestrict.riskJustification || '', 95),
+    { citations: getCitationsForCategory('policy_'), dataQuality: getDataQualityForCategory('policy_') }
   );
   // Ownership limits
   const ownership = investRestrict.ownershipLimits || {};
@@ -3142,29 +3471,33 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
 
   // ============ SECTION 2: MARKET DATA (6 slides with charts) ============
+  const marketCitations = getCitationsForCategory('market_');
+  const marketDataQuality = getDataQualityForCategory('market_');
 
   // SLIDE 5: TPES
   const tpes = market.tpes || {};
   const tpesSlide = addSlideWithTitle(
     tpes.slideTitle || `${country} - Total Primary Energy Supply`,
-    truncateSubtitle(tpes.keyInsight || tpes.subtitle || '', 95)
+    truncateSubtitle(tpes.keyInsight || tpes.subtitle || '', 95),
+    { citations: marketCitations, dataQuality: marketDataQuality }
   );
   if (tpes.chartData && tpes.chartData.series) {
     addStackedBarChart(tpesSlide, `TPES by Source (${tpes.chartData.unit || 'Mtoe'})`, tpes.chartData, { y: 1.3, h: 5.0 });
   } else {
-    tpesSlide.addText('Chart data not available - refer to synthesis data', {
-      x: 0.5, y: 3, w: 9, h: 1, fontSize: 14, fontFace: FONT, color: COLORS.footerText
-    });
+    addDataUnavailableMessage(tpesSlide, 'Energy supply data not available');
   }
 
   // SLIDE 6: Final Energy Demand
   const finalDemand = market.finalDemand || {};
   const demandSlide = addSlideWithTitle(
     finalDemand.slideTitle || `${country} - Final Energy Demand`,
-    truncateSubtitle(finalDemand.growthRate || finalDemand.subtitle || '', 95)
+    truncateSubtitle(finalDemand.growthRate || finalDemand.subtitle || '', 95),
+    { citations: marketCitations, dataQuality: marketDataQuality }
   );
   if (finalDemand.chartData && finalDemand.chartData.series) {
     addStackedBarChart(demandSlide, `Demand by Sector (${finalDemand.chartData.unit || '%'})`, finalDemand.chartData, { y: 1.3, h: 4.0 });
+  } else if (safeArray(finalDemand.keyDrivers, 3).length === 0) {
+    addDataUnavailableMessage(demandSlide, 'Energy demand data not available');
   }
   // Key drivers as bullets
   const drivers = safeArray(finalDemand.keyDrivers, 3);
@@ -3179,10 +3512,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const electricity = market.electricity || {};
   const elecSlide = addSlideWithTitle(
     electricity.slideTitle || `${country} - Electricity & Power`,
-    truncateSubtitle(electricity.totalCapacity || electricity.subtitle || '', 95)
+    truncateSubtitle(electricity.totalCapacity || electricity.subtitle || '', 95),
+    { citations: marketCitations, dataQuality: marketDataQuality }
   );
   if (electricity.chartData && electricity.chartData.values) {
     addPieChart(elecSlide, `Power Generation Mix (${electricity.chartData.unit || '%'})`, electricity.chartData, { x: 0.5, y: 1.3, w: 5, h: 4 });
+  } else if (!electricity.demandGrowth && !electricity.keyTrend) {
+    addDataUnavailableMessage(elecSlide, 'Electricity market data not available');
   }
   // Add key stats on the right
   elecSlide.addText([
@@ -3197,10 +3533,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const gasLng = market.gasLng || {};
   const gasSlide = addSlideWithTitle(
     gasLng.slideTitle || `${country} - Gas & LNG Market`,
-    truncateSubtitle(gasLng.pipelineNetwork || gasLng.subtitle || '', 95)
+    truncateSubtitle(gasLng.pipelineNetwork || gasLng.subtitle || '', 95),
+    { citations: marketCitations, dataQuality: marketDataQuality }
   );
   if (gasLng.chartData && gasLng.chartData.series) {
     addLineChart(gasSlide, `Gas Supply Trend (${gasLng.chartData.unit || 'bcm'})`, gasLng.chartData, { y: 1.3, h: 3.5 });
+  } else if (safeArray(gasLng.lngTerminals, 3).length === 0) {
+    addDataUnavailableMessage(gasSlide, 'Gas/LNG market data not available');
   }
   // LNG terminals
   const terminals = safeArray(gasLng.lngTerminals, 3);
@@ -3226,10 +3565,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const pricing = market.pricing || {};
   const priceSlide = addSlideWithTitle(
     pricing.slideTitle || `${country} - Energy Pricing`,
-    truncateSubtitle(pricing.outlook || pricing.subtitle || '', 95)
+    truncateSubtitle(pricing.outlook || pricing.subtitle || '', 95),
+    { citations: marketCitations, dataQuality: marketDataQuality }
   );
   if (pricing.chartData && pricing.chartData.series) {
     addLineChart(priceSlide, 'Energy Price Trends', pricing.chartData, { y: 1.3, h: 4.0 });
+  } else if (!pricing.comparison) {
+    addDataUnavailableMessage(priceSlide, 'Energy pricing data not available');
   }
   if (pricing.comparison) {
     priceSlide.addText(`Regional Comparison: ${truncate(pricing.comparison, 100)}`, {
@@ -3242,10 +3584,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const escoMarket = market.escoMarket || {};
   const escoSlide = addSlideWithTitle(
     escoMarket.slideTitle || `${country} - ESCO Market`,
-    truncateSubtitle(`${escoMarket.marketSize || ''} | ${escoMarket.growthRate || ''}`, 95)
+    truncateSubtitle(`${escoMarket.marketSize || ''} | ${escoMarket.growthRate || ''}`, 95),
+    { citations: marketCitations, dataQuality: marketDataQuality }
   );
   if (escoMarket.chartData && escoMarket.chartData.values) {
     addBarChart(escoSlide, `Market Segments (${escoMarket.chartData.unit || '%'})`, escoMarket.chartData, { y: 1.3, h: 3.5 });
+  } else if (safeArray(escoMarket.segments, 4).length === 0) {
+    addDataUnavailableMessage(escoSlide, 'ESCO market data not available');
   }
   // Segments table
   const segments = safeArray(escoMarket.segments, 4);
@@ -3268,14 +3613,20 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
 
   // ============ SECTION 3: COMPETITOR OVERVIEW (5 slides) ============
+  const competitorCitations = getCitationsForCategory('competitors_');
+  const competitorDataQuality = getDataQualityForCategory('competitors_');
 
   // SLIDE 11: Japanese Players
   const japanesePlayers = competitors.japanesePlayers || {};
   const jpSlide = addSlideWithTitle(
     japanesePlayers.slideTitle || `${country} - Japanese Energy Companies`,
-    truncateSubtitle(japanesePlayers.marketInsight || japanesePlayers.subtitle || '', 95)
+    truncateSubtitle(japanesePlayers.marketInsight || japanesePlayers.subtitle || '', 95),
+    { citations: competitorCitations, dataQuality: competitorDataQuality }
   );
   const jpPlayers = safeArray(japanesePlayers.players, 5);
+  if (jpPlayers.length === 0) {
+    addDataUnavailableMessage(jpSlide, 'Japanese competitor data not available');
+  }
   if (jpPlayers.length > 0) {
     const jpRows = [tableHeader(['Company', 'Presence', 'Projects', 'Assessment'])];
     jpPlayers.forEach(p => {
@@ -3299,9 +3650,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const localMajor = competitors.localMajor || {};
   const localSlide = addSlideWithTitle(
     localMajor.slideTitle || `${country} - Major Local Players`,
-    truncateSubtitle(localMajor.concentration || localMajor.subtitle || '', 95)
+    truncateSubtitle(localMajor.concentration || localMajor.subtitle || '', 95),
+    { citations: competitorCitations, dataQuality: competitorDataQuality }
   );
   const localPlayers = safeArray(localMajor.players, 5);
+  if (localPlayers.length === 0) {
+    addDataUnavailableMessage(localSlide, 'Local competitor data not available');
+  }
   if (localPlayers.length > 0) {
     const localRows = [tableHeader(['Company', 'Type', 'Revenue', 'Market Share', 'Strengths'])];
     localPlayers.forEach(p => {
@@ -3326,9 +3681,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const foreignPlayers = competitors.foreignPlayers || {};
   const foreignSlide = addSlideWithTitle(
     foreignPlayers.slideTitle || `${country} - Foreign Energy Companies`,
-    truncateSubtitle(foreignPlayers.competitiveInsight || foreignPlayers.subtitle || '', 95)
+    truncateSubtitle(foreignPlayers.competitiveInsight || foreignPlayers.subtitle || '', 95),
+    { citations: competitorCitations, dataQuality: competitorDataQuality }
   );
   const foreignList = safeArray(foreignPlayers.players, 5);
+  if (foreignList.length === 0) {
+    addDataUnavailableMessage(foreignSlide, 'Foreign competitor data not available');
+  }
   if (foreignList.length > 0) {
     const foreignRows = [tableHeader(['Company', 'Origin', 'Entry Year', 'Mode', 'Success'])];
     foreignList.forEach(p => {
@@ -3353,8 +3712,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const caseStudy = competitors.caseStudy || {};
   const caseSlide = addSlideWithTitle(
     caseStudy.slideTitle || `${country} - Market Entry Case Study`,
-    truncateSubtitle(caseStudy.applicability || caseStudy.subtitle || '', 95)
+    truncateSubtitle(caseStudy.applicability || caseStudy.subtitle || '', 95),
+    { citations: competitorCitations, dataQuality: competitorDataQuality }
   );
+  if (!caseStudy.company && safeArray(caseStudy.keyLessons, 4).length === 0) {
+    addDataUnavailableMessage(caseSlide, 'Case study data not available');
+  }
   // Case study details
   const caseDetails = [
     `Company: ${caseStudy.company || 'N/A'}`,
@@ -3433,12 +3796,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
 
   // ============ SECTION 4: DEPTH ANALYSIS (5 slides) ============
+  const depthCitations = getCitationsForCategory('depth_');
+  const depthDataQuality = getDataQualityForCategory('depth_');
 
   // SLIDE 16: ESCO Deal Economics
   const escoEcon = depth.escoEconomics || {};
   const econSlide = addSlideWithTitle(
     escoEcon.slideTitle || `${country} - ESCO Deal Economics`,
-    truncateSubtitle(escoEcon.keyInsight || escoEcon.subtitle || '', 95)
+    truncateSubtitle(escoEcon.keyInsight || escoEcon.subtitle || '', 95),
+    { citations: depthCitations, dataQuality: depthDataQuality }
   );
   // Deal size and contract terms
   const dealSize = escoEcon.typicalDealSize || {};
@@ -3451,6 +3817,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   if (financials.paybackPeriod) econRows.push([{ text: 'Payback Period' }, { text: financials.paybackPeriod }, { text: '' }]);
   if (financials.irr) econRows.push([{ text: 'Expected IRR' }, { text: financials.irr }, { text: '' }]);
   if (financials.marginProfile) econRows.push([{ text: 'Gross Margin' }, { text: financials.marginProfile }, { text: '' }]);
+  if (econRows.length === 1 && safeArray(escoEcon.financingOptions, 3).length === 0) {
+    addDataUnavailableMessage(econSlide, 'ESCO economics data not available');
+  }
   if (econRows.length > 1) {
     econSlide.addTable(econRows, {
       x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 4.0,
@@ -3477,9 +3846,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const partnerAssess = depth.partnerAssessment || {};
   const partnerSlide = addSlideWithTitle(
     partnerAssess.slideTitle || `${country} - Partner Assessment`,
-    truncateSubtitle(partnerAssess.recommendedPartner || partnerAssess.subtitle || '', 95)
+    truncateSubtitle(partnerAssess.recommendedPartner || partnerAssess.subtitle || '', 95),
+    { citations: depthCitations, dataQuality: depthDataQuality }
   );
   const partners = safeArray(partnerAssess.partners, 5);
+  if (partners.length === 0) {
+    addDataUnavailableMessage(partnerSlide, 'Partner assessment data not available');
+  }
   if (partners.length > 0) {
     const partnerRows = [tableHeader(['Company', 'Type', 'Revenue', 'Partnership Fit', 'Acquisition Fit', 'Est. Value'])];
     partners.forEach(p => {
@@ -3505,9 +3878,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const entryStrat = depth.entryStrategy || {};
   const entrySlide = addSlideWithTitle(
     entryStrat.slideTitle || `${country} - Entry Strategy Options`,
-    truncateSubtitle(entryStrat.recommendation || entryStrat.subtitle || '', 95)
+    truncateSubtitle(entryStrat.recommendation || entryStrat.subtitle || '', 95),
+    { citations: depthCitations, dataQuality: depthDataQuality }
   );
   const options = safeArray(entryStrat.options, 3);
+  if (options.length === 0) {
+    addDataUnavailableMessage(entrySlide, 'Entry strategy analysis not available');
+  }
   if (options.length > 0) {
     const optRows = [tableHeader(['Option', 'Timeline', 'Investment', 'Control', 'Risk', 'Key Pros'])];
     options.forEach(opt => {
