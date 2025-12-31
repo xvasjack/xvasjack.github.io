@@ -3164,7 +3164,7 @@ async function validateCompaniesV5(companies, business, country, exclusion) {
   const flagged = [];     // Only one model agrees = Flagged for review
   const rejected = [];    // Neither model agrees = Rejected
 
-  const batchSize = 5; // Smaller batches since we're calling 2 models per company
+  const batchSize = 3; // Reduced from 5 to prevent OOM with 2 AI models per company
 
   for (let i = 0; i < companies.length; i += batchSize) {
     const batch = companies.slice(i, i + batchSize);
@@ -3271,6 +3271,11 @@ async function validateCompaniesV5(companies, business, country, exclusion) {
     }
 
     console.log(`  Progress: ${Math.min(i + batchSize, companies.length)}/${companies.length} | Valid: ${validated.length} | Flagged: ${flagged.length} | Rejected: ${rejected.length}`);
+
+    // Force garbage collection between batches to prevent OOM on Railway (450MB limit)
+    if (global.gc) {
+      global.gc();
+    }
   }
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);
