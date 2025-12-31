@@ -180,8 +180,9 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true) {
       temperature: 0.3
     };
 
-    // Enable web search tool if requested
-    if (useWebSearch) {
+    // Enable web search tool if requested (can be disabled via env var for testing)
+    const webSearchEnabled = process.env.KIMI_WEB_SEARCH !== 'false';
+    if (useWebSearch && webSearchEnabled) {
       requestBody.tools = [{
         type: 'builtin_function',
         function: { name: '$web_search' }
@@ -211,8 +212,17 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true) {
     const outputTokens = data.usage?.completion_tokens || 0;
     trackCost('kimi-128k', inputTokens, outputTokens);
 
+    // Debug: log if response has tool calls or empty content
+    const content = data.choices?.[0]?.message?.content || '';
+    const toolCalls = data.choices?.[0]?.message?.tool_calls;
+    if (!content && toolCalls) {
+      console.log('  [Kimi] Response contains tool_calls instead of content - web search may need handling');
+    } else if (!content) {
+      console.log('  [Kimi] Empty response - finish_reason:', data.choices?.[0]?.finish_reason);
+    }
+
     return {
-      content: data.choices?.[0]?.message?.content || '',
+      content,
       citations: [],
       usage: { input: inputTokens, output: outputTokens }
     };
