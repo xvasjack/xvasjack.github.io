@@ -4479,113 +4479,128 @@ Create MECE segments for these ${targetDescription} companies and mark which seg
   }
 }
 
-// AI Review Agent: Clean up and remove duplicative/unnecessary information
-// Uses Gemini 3 Flash for frontier reasoning - with GPT-4o fallback if Gemini fails
-async function reviewAndCleanData(companyData) {
+// AI Review Agent: Validate extraction against source content and fix issues
+// Uses GPT-4o for accurate validation - compares extracted data against source
+async function reviewAndCleanData(companyData, scrapedContent) {
   try {
-    console.log('  Step 6: Running AI review agent (Gemini 3 Flash with GPT-4o fallback)...');
+    console.log('  Step 6: Running AI validator (GPT-4o) - comparing extraction vs source...');
 
-    const prompt = `You are a data quality reviewer for M&A company profiles. Review the extracted data and clean it up by:
+    const prompt = `You are a data validation agent. Your job is to COMPARE the extracted data against the SOURCE WEBSITE CONTENT and FIX any issues.
 
-1. REMOVE DUPLICATIVE ROWS:
-   - If "Number of X" appears alongside "Key X names", merge them into one row
-   - Example: "Number of Suppliers: 6" + "Key Suppliers: A, B, C" → "Key Suppliers: 6 suppliers including A, B, C"
-   - Example: "Number of Customers" + "Key Customers" → merge into "Key Customers"
+## SOURCE WEBSITE CONTENT (this is the truth):
+${scrapedContent ? scrapedContent.substring(0, 30000) : 'No source content available'}
 
-2. HARD RULE - REMOVE EMPTY/MEANINGLESS METRICS:
-   - Remove ANY metric with values like: "No specific X stated", "Not specified", "Not available", "Unknown", "N/A", "None listed"
-   - If a metric has NO meaningful data, DELETE IT ENTIRELY. Do not include metrics with placeholder text.
-   - Example: {"label": "Key Metrics", "value": "- No specific production capacity stated\\n- No specific factory area stated"} → DELETE THIS ENTIRE METRIC
-
-3. CRITICAL - REMOVE FAKE/PLACEHOLDER DATA:
-   - REMOVE any metric containing alphabetical placeholders like "Distributor A", "Partner X", "Supplier B", "Customer 1"
-   - Pattern to detect: "[Word] A, [Word] B, [Word] C" or "[Word] X, [Word] Y, [Word] Z" or "[Word] 1, [Word] 2"
-   - These are AI hallucinations - DELETE THE ENTIRE ROW if it contains such patterns
-   - Example: "Local Distributors: Distributor A, Distributor B, Distributor C" → DELETE ENTIRE ROW
-   - Example: "OEM Partners: Partner X, Partner Y, Partner Z" → DELETE ENTIRE ROW
-
-4. REMOVE UNNECESSARY/WORTHLESS ROWS:
-   - Remove rows with vague values like "Various", "Multiple", "Several" without specifics
-   - Remove rows about awards, achievements, recognitions (not useful for M&A)
-   - Remove rows about years of experience (not useful for M&A)
-   - Remove rows about operating hours, office hours
-   - Remove rows labeled: "Start of Operations", "Market Growth", "Market Outlook", "Future Plans", "Vision", "Mission"
-
-5. HARD RULE - TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH:
-   - ALL product names, company names, and any text in ANY non-English language MUST be translated to English
-   - This applies to ALL languages: Vietnamese, Chinese, Thai, Malay, Indonesian, Hindi, Korean, Japanese, Arabic, Spanish, etc.
-   - The user CANNOT translate - you MUST translate everything to English
-   - Write ALL text using regular English alphabet only (A-Z, no diacritics, no foreign characters)
-
-6. MERGE SIMILAR INFORMATION:
-   - "Customers" and "Customer Segments" → merge into one "Key Customers" row
-   - "Products" and "Product Categories" → keep only the more detailed one
-   - If breakdown_items and key_metrics have overlapping info, keep in key_metrics only
-
-7. CLEAN UP HQ/LOCATION:
-   - If location looks like JSON ({"HQ":"..."}), extract the actual location value
-   - Format should be: "City, State/Province, Country" or "District, Singapore" for Singapore
-   - Remove duplicate city names like "Kuala Lumpur, Kuala Lumpur, Malaysia" → "Kuala Lumpur, Malaysia"
-   - Remove duplicate state names like "Bangkok, Bangkok, Thailand" → "Bangkok, Thailand"
-
-8. FORMAT SHORT LISTS INLINE (NO POINT FORM):
-   - If a metric has only 2-3 items, write them inline separated by commas, NOT as bullet points
-   - Example: Export Countries with 2 items → "Singapore, Sri Lanka" (NOT "- Singapore\\n- Sri Lanka")
-   - Example: Geographic Reach with 3 items → "Malaysia, Singapore, Sri Lanka" (NOT bullet points)
-   - Only use bullet points (\\n- item) for lists with 4+ items or when items need categorization
-
-Review and clean this company data:
-
+## EXTRACTED DATA (may have errors or missing info):
 ${JSON.stringify(companyData, null, 2)}
 
-OUTPUT JSON with the same structure but cleaned up:
+## YOUR TASKS:
+
+### 1. VALIDATE HQ/LOCATION (CRITICAL)
+- Search the SOURCE for actual address/location (look for postal codes, province names, district names)
+- If extracted location does NOT match what's in the source, FIX IT
+- Thailand: Look for province names like "Samut Sakhon", "Samut Prakan", "Chonburi", "Rayong" - NOT always Bangkok!
+- Singapore: Look for area names like "Jurong", "Tuas", "Woodlands" in the address
+- Format: "District, Province, Country" (3 levels) or "Area, Singapore" (2 levels)
+- If source says "Samut Sakhon" but extracted says "Bangkok" → FIX to Samut Sakhon
+
+### 2. FIND MISSED STATISTICS (CRITICAL)
+- Scan SOURCE for visible numbers/statistics that were NOT extracted:
+  - Employee counts (e.g., "300 employees", "300+ staff")
+  - Production capacity (e.g., "800 tons/month", "500 units/day")
+  - Customer counts (e.g., "60 customers", "700 partners")
+  - Machine counts (e.g., "250 machines")
+  - Any other numerical metrics
+- ADD any found statistics to key_metrics that are missing
+
+### 3. FIND MISSED DISTRIBUTION/EXPORT INFO (CRITICAL)
+- Scan SOURCE for country names mentioned with "distributor", "agent", "export", "market"
+- Example: "agents across Thailand, Sri Lanka, Pakistan, Bangladesh, UAE" → capture ALL countries
+- ADD to key_metrics if missing
+
+### 4. FIND MISSED PARTNERSHIPS
+- Scan SOURCE for partnership/JV mentions (e.g., "partnership with Dainichiseika", "technology transfer")
+- ADD to key_metrics if missing
+
+### 5. CLEAN UP (secondary)
+- Remove fake placeholders like "Distributor A, Distributor B"
+- Remove empty metrics with "Not specified", "N/A"
+- Translate non-English to English
+- Remove marketing fluff words like "high-quality", "premium", "leading"
+
+## OUTPUT FORMAT
+Return JSON with:
+- Fixed/validated data
+- "validation_notes": list what you fixed/added
+
 {
   "company_name": "...",
   "established_year": "...",
-  "location": "cleaned location",
+  "location": "CORRECTED location based on source",
   "business": "...",
   "message": "...",
   "title": "...",
-  "key_metrics": [cleaned array],
+  "key_metrics": [array with ADDED missing metrics],
   "breakdown_title": "...",
-  "breakdown_items": [cleaned array]
+  "breakdown_items": [...],
+  "validation_notes": ["Fixed HQ from Bangkok to Samut Sakhon", "Added 800 tons/month production capacity", "Added 9 export countries"]
 }
 
 Return ONLY valid JSON.`;
 
-    // Use Gemini 3 Flash with JSON mode for frontier reasoning
-    const result = await callGemini3Flash(prompt, true);
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: 'You are a data validation agent. Compare extracted data against source content and fix any discrepancies. Add any missing information found in the source.' },
+        { role: 'user', content: prompt }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.2
+    });
+
+    const result = response.choices[0].message.content;
 
     if (!result) {
-      console.log('  AI review agent (both Gemini 3 Flash and GPT-4o) returned empty, keeping original data');
+      console.log('  AI validator returned empty, keeping original data');
       return companyData;
     }
 
     // Parse JSON from response
-    let cleaned;
+    let validated;
     try {
-      cleaned = JSON.parse(result);
+      validated = JSON.parse(result);
     } catch (parseError) {
-      // Try to extract JSON from response if not pure JSON
       const jsonMatch = result.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        cleaned = JSON.parse(jsonMatch[0]);
+        validated = JSON.parse(jsonMatch[0]);
       } else {
-        console.log('  Failed to parse Gemini response, keeping original data');
+        console.log('  Failed to parse validator response, keeping original data');
         return companyData;
       }
     }
 
-    // Merge cleaned data with original (preserve fields not in prompt)
+    // Log what was fixed/added
+    if (validated.validation_notes && validated.validation_notes.length > 0) {
+      validated.validation_notes.forEach(note => {
+        console.log(`    [Validator] ${note}`);
+      });
+    }
+
+    // Merge validated data with original (preserve fields not in output)
     return {
       ...companyData,
-      location: cleaned.location || companyData.location,
-      key_metrics: cleaned.key_metrics || companyData.key_metrics,
-      breakdown_items: cleaned.breakdown_items || companyData.breakdown_items
+      company_name: validated.company_name || companyData.company_name,
+      established_year: validated.established_year || companyData.established_year,
+      location: validated.location || companyData.location,
+      business: validated.business || companyData.business,
+      message: validated.message || companyData.message,
+      title: validated.title || companyData.title,
+      key_metrics: validated.key_metrics || companyData.key_metrics,
+      breakdown_title: validated.breakdown_title || companyData.breakdown_title,
+      breakdown_items: validated.breakdown_items || companyData.breakdown_items
     };
   } catch (e) {
-    console.error('Review agent error:', e.message);
-    return companyData; // Return original data if review fails
+    console.error('Validator error:', e.message);
+    return companyData; // Return original data if validation fails
   }
 }
 
@@ -4633,6 +4648,171 @@ function buildProfileSlidesEmailHTML(companies, errors, hasPPTX) {
   return html;
 }
 
+// Helper function to process a single website (used for parallel processing)
+async function processSingleWebsite(website, index, total) {
+  const trimmedWebsite = website.trim();
+  if (!trimmedWebsite) return null;
+
+  console.log(`\n[${index + 1}/${total}] Processing: ${trimmedWebsite}`);
+  logMemoryUsage(`start company ${index + 1}`);
+
+  try {
+    // Step 1: Scrape website
+    console.log(`  [${index + 1}] Step 1: Scraping website...`);
+    const scraped = await scrapeWebsite(trimmedWebsite);
+
+    if (!scraped.success) {
+      console.log(`  [${index + 1}] Failed to scrape: ${scraped.error}`);
+      // Mark as inaccessible - will appear on summary slide but not individual profile
+      const companyName = extractCompanyNameFromUrl(trimmedWebsite);
+      return {
+        website: trimmedWebsite,
+        company_name: companyName,
+        title: companyName,
+        location: '',
+        _inaccessible: true,
+        _error: `Failed to scrape: ${scraped.error}`
+      };
+    }
+    console.log(`  [${index + 1}] Scraped ${scraped.content.length} characters`);
+    // Log content preview for debugging (first 500 chars, useful for seeing what was scraped)
+    console.log(`  [${index + 1}] Content preview: ${scraped.content.substring(0, 500).replace(/\n/g, ' ').replace(/\s+/g, ' ')}...`);
+
+    // Step 2: Extract basic info (company name, year, location)
+    console.log(`  [${index + 1}] Step 2: Extracting company name, year, location...`);
+    const basicInfo = await extractBasicInfo(scraped.content, trimmedWebsite);
+    console.log(`  [${index + 1}] Company: ${basicInfo.company_name || 'Not found'}`);
+    if (basicInfo.location) console.log(`  [${index + 1}] Location extracted: ${basicInfo.location}`);
+
+    // Step 3: Extract business details
+    console.log(`  [${index + 1}] Step 3: Extracting business, message, footnote, title...`);
+    const businessInfo = await extractBusinessInfo(scraped.content, basicInfo);
+
+    // Step 4: Extract key metrics
+    console.log(`  [${index + 1}] Step 4: Extracting key metrics...`);
+    const metricsInfo = await extractKeyMetrics(scraped.content, {
+      company_name: basicInfo.company_name,
+      business: businessInfo.business
+    });
+
+    // Step 4b: Extract products/applications breakdown for right table
+    console.log(`  [${index + 1}] Step 4b: Extracting products/applications breakdown...`);
+    const productsBreakdown = await extractProductsBreakdown(scraped.content, {
+      company_name: basicInfo.company_name,
+      business: businessInfo.business
+    });
+
+    // Step 5: Search online for missing mandatory info (established_year, location)
+    // These are mandatory fields - search online if not found on website
+    const missingFields = [];
+    if (!basicInfo.established_year) missingFields.push('established_year');
+    if (!basicInfo.location) missingFields.push('location');
+
+    let searchedInfo = {};
+    if (missingFields.length > 0 && basicInfo.company_name) {
+      console.log(`  [${index + 1}] Step 5: Searching online for missing mandatory info: ${missingFields.join(', ')}...`);
+      searchedInfo = await searchMissingInfo(basicInfo.company_name, trimmedWebsite, missingFields);
+    }
+
+    // Use only key metrics from scraped website (no web search for metrics to prevent hallucination)
+    const allKeyMetrics = metricsInfo.key_metrics || [];
+
+    // Combine all extracted data (mandatory fields supplemented by web search)
+    // Use ensureString() for all AI-generated fields to prevent [object Object] issues
+    let companyData = {
+      website: scraped.url,
+      company_name: ensureString(basicInfo.company_name),
+      established_year: ensureString(basicInfo.established_year || searchedInfo.established_year),
+      location: validateAndFixHQFormat(ensureString(basicInfo.location || searchedInfo.location), trimmedWebsite),
+      business: ensureString(businessInfo.business),
+      message: ensureString(businessInfo.message),
+      footnote: ensureString(businessInfo.footnote),
+      title: ensureString(businessInfo.title),
+      key_metrics: allKeyMetrics,  // Only from scraped website
+      // Right-side content (varies by business type)
+      business_type: productsBreakdown.business_type || 'industrial',
+      breakdown_title: ensureString(productsBreakdown.breakdown_title) || 'Products and Applications',
+      breakdown_items: productsBreakdown.breakdown_items || [],
+      projects: productsBreakdown.projects || [],  // For project-based businesses
+      products: productsBreakdown.products || [],  // For consumer-facing businesses
+      metrics: ensureString(metricsInfo.metrics)  // Fallback for old format
+    };
+
+    // Log metrics count before review
+    console.log(`  [${index + 1}] Metrics extracted before review: ${companyData.key_metrics?.length || 0}`);
+    if (companyData.key_metrics?.length > 0) {
+      console.log(`  [${index + 1}] Raw metrics: ${companyData.key_metrics.map(m => m.label).join(', ')}`);
+    }
+
+    // Step 6: Run AI validator to compare extraction vs source and fix issues
+    companyData = await reviewAndCleanData(companyData, scraped.content);
+
+    // Step 7: HARD RULE - Filter out empty/meaningless Key Metrics
+    // Remove metrics that say "No specific X stated", "Not specified", etc.
+    const metricsBefore = companyData.key_metrics?.length || 0;
+    companyData.key_metrics = filterEmptyMetrics(companyData.key_metrics);
+    const metricsAfter = companyData.key_metrics?.length || 0;
+    if (metricsBefore !== metricsAfter) {
+      console.log(`  [${index + 1}] Step 7: Filtered ${metricsBefore - metricsAfter} empty metrics (${metricsBefore} → ${metricsAfter})`);
+    }
+
+    console.log(`  [${index + 1}] ✓ Completed: ${companyData.title || companyData.company_name} (${companyData.key_metrics?.length || 0} metrics after review)`);
+
+    // Memory cleanup: Release large objects to prevent OOM on Railway
+    // scraped.content can be 1-5MB per website, must release before next iteration
+    if (scraped) scraped.content = null;
+
+    return companyData;
+
+  } catch (error) {
+    console.error(`  [${index + 1}] Error processing ${trimmedWebsite}:`, error.message);
+    return {
+      website: trimmedWebsite,
+      error: error.message,
+      step: 0
+    };
+  }
+}
+
+// Process websites in parallel batches
+const PARALLEL_BATCH_SIZE = 4;
+
+async function processWebsitesInParallel(websites) {
+  const results = [];
+  const total = websites.length;
+
+  // Process in batches of PARALLEL_BATCH_SIZE
+  for (let batchStart = 0; batchStart < websites.length; batchStart += PARALLEL_BATCH_SIZE) {
+    const batchEnd = Math.min(batchStart + PARALLEL_BATCH_SIZE, websites.length);
+    const batch = websites.slice(batchStart, batchEnd);
+
+    console.log(`\n${'─'.repeat(40)}`);
+    console.log(`BATCH ${Math.floor(batchStart / PARALLEL_BATCH_SIZE) + 1}: Processing ${batch.length} websites in parallel (${batchStart + 1}-${batchEnd} of ${total})`);
+    console.log('─'.repeat(40));
+
+    // Process batch in parallel
+    const batchPromises = batch.map((website, i) =>
+      processSingleWebsite(website, batchStart + i, total)
+    );
+
+    const batchResults = await Promise.all(batchPromises);
+
+    // Add non-null results
+    for (const result of batchResults) {
+      if (result) results.push(result);
+    }
+
+    // Force garbage collection hint between batches (if available)
+    // This helps Railway containers stay under memory limits
+    if (global.gc) {
+      global.gc();
+    }
+    logMemoryUsage(`after batch ${Math.floor(batchStart / PARALLEL_BATCH_SIZE) + 1}`);
+  }
+
+  return results;
+}
+
 // Main profile slides endpoint
 app.post('/api/profile-slides', async (req, res) => {
   const { websites, email, targetDescription } = req.body;
@@ -4665,141 +4845,10 @@ app.post('/api/profile-slides', async (req, res) => {
     total: websites.length
   });
 
-  // Process in background
+  // Process in background using parallel batch processing
   try {
-    const results = [];
-
-    for (let i = 0; i < websites.length; i++) {
-      const website = websites[i].trim();
-      if (!website) continue;
-
-      console.log(`\n[${i + 1}/${websites.length}] Processing: ${website}`);
-      logMemoryUsage(`start company ${i + 1}`);
-
-      try {
-        // Step 1: Scrape website
-        console.log('  Step 1: Scraping website...');
-        const scraped = await scrapeWebsite(website);
-
-        if (!scraped.success) {
-          console.log(`  Failed to scrape: ${scraped.error}`);
-          // Mark as inaccessible - will appear on summary slide but not individual profile
-          const companyName = extractCompanyNameFromUrl(website);
-          results.push({
-            website,
-            company_name: companyName,
-            title: companyName,
-            location: '',
-            _inaccessible: true,
-            _error: `Failed to scrape: ${scraped.error}`
-          });
-          console.log(`  Marked as inaccessible: ${companyName}`);
-          continue;
-        }
-        console.log(`  Scraped ${scraped.content.length} characters`);
-        // Log content preview for debugging (first 500 chars, useful for seeing what was scraped)
-        console.log(`  Content preview: ${scraped.content.substring(0, 500).replace(/\n/g, ' ').replace(/\s+/g, ' ')}...`);
-
-        // Step 2: Extract basic info (company name, year, location)
-        console.log('  Step 2: Extracting company name, year, location...');
-        const basicInfo = await extractBasicInfo(scraped.content, website);
-        console.log(`  Company: ${basicInfo.company_name || 'Not found'}`);
-        if (basicInfo.location) console.log(`  Location extracted: ${basicInfo.location}`);
-
-        // Step 3: Extract business details
-        console.log('  Step 3: Extracting business, message, footnote, title...');
-        const businessInfo = await extractBusinessInfo(scraped.content, basicInfo);
-
-        // Step 4: Extract key metrics
-        console.log('  Step 4: Extracting key metrics...');
-        const metricsInfo = await extractKeyMetrics(scraped.content, {
-          company_name: basicInfo.company_name,
-          business: businessInfo.business
-        });
-
-        // Step 4b: Extract products/applications breakdown for right table
-        console.log('  Step 4b: Extracting products/applications breakdown...');
-        const productsBreakdown = await extractProductsBreakdown(scraped.content, {
-          company_name: basicInfo.company_name,
-          business: businessInfo.business
-        });
-
-        // Step 5: Search online for missing mandatory info (established_year, location)
-        // These are mandatory fields - search online if not found on website
-        const missingFields = [];
-        if (!basicInfo.established_year) missingFields.push('established_year');
-        if (!basicInfo.location) missingFields.push('location');
-
-        let searchedInfo = {};
-        if (missingFields.length > 0 && basicInfo.company_name) {
-          console.log(`  Step 5: Searching online for missing mandatory info: ${missingFields.join(', ')}...`);
-          searchedInfo = await searchMissingInfo(basicInfo.company_name, website, missingFields);
-        }
-
-        // Use only key metrics from scraped website (no web search for metrics to prevent hallucination)
-        const allKeyMetrics = metricsInfo.key_metrics || [];
-
-        // Combine all extracted data (mandatory fields supplemented by web search)
-        // Use ensureString() for all AI-generated fields to prevent [object Object] issues
-        let companyData = {
-          website: scraped.url,
-          company_name: ensureString(basicInfo.company_name),
-          established_year: ensureString(basicInfo.established_year || searchedInfo.established_year),
-          location: validateAndFixHQFormat(ensureString(basicInfo.location || searchedInfo.location), website),
-          business: ensureString(businessInfo.business),
-          message: ensureString(businessInfo.message),
-          footnote: ensureString(businessInfo.footnote),
-          title: ensureString(businessInfo.title),
-          key_metrics: allKeyMetrics,  // Only from scraped website
-          // Right-side content (varies by business type)
-          business_type: productsBreakdown.business_type || 'industrial',
-          breakdown_title: ensureString(productsBreakdown.breakdown_title) || 'Products and Applications',
-          breakdown_items: productsBreakdown.breakdown_items || [],
-          projects: productsBreakdown.projects || [],  // For project-based businesses
-          products: productsBreakdown.products || [],  // For consumer-facing businesses
-          metrics: ensureString(metricsInfo.metrics)  // Fallback for old format
-        };
-
-        // Log metrics count before review
-        console.log(`  Metrics extracted before review: ${companyData.key_metrics?.length || 0}`);
-        if (companyData.key_metrics?.length > 0) {
-          console.log(`  Raw metrics: ${companyData.key_metrics.map(m => m.label).join(', ')}`);
-        }
-
-        // Step 6: Run AI review agent to clean up duplicative/unnecessary data
-        companyData = await reviewAndCleanData(companyData);
-
-        // Step 7: HARD RULE - Filter out empty/meaningless Key Metrics
-        // Remove metrics that say "No specific X stated", "Not specified", etc.
-        const metricsBefore = companyData.key_metrics?.length || 0;
-        companyData.key_metrics = filterEmptyMetrics(companyData.key_metrics);
-        const metricsAfter = companyData.key_metrics?.length || 0;
-        if (metricsBefore !== metricsAfter) {
-          console.log(`  Step 7: Filtered ${metricsBefore - metricsAfter} empty metrics (${metricsBefore} → ${metricsAfter})`);
-        }
-
-        console.log(`  ✓ Completed: ${companyData.title || companyData.company_name} (${companyData.key_metrics?.length || 0} metrics after review)`);
-        results.push(companyData);
-
-        // Memory cleanup: Release large objects to prevent OOM on Railway
-        // scraped.content can be 1-5MB per website, must release before next iteration
-        if (scraped) scraped.content = null;
-
-      } catch (error) {
-        console.error(`  Error processing ${website}:`, error.message);
-        results.push({
-          website,
-          error: error.message,
-          step: 0
-        });
-      }
-
-      // Force garbage collection hint between companies (if available)
-      // This helps Railway containers stay under memory limits
-      if (global.gc) {
-        global.gc();
-      }
-    }
+    // Process websites in parallel batches of 4 for ~3x faster processing
+    const results = await processWebsitesInParallel(websites);
 
     // Separate successful companies, inaccessible websites, and errors
     const companies = results.filter(r => !r.error && !r._inaccessible);
@@ -4968,8 +5017,8 @@ app.post('/api/generate-ppt', async (req, res) => {
           metrics: ensureString(metricsInfo.metrics)
         };
 
-        // Step 6: Review and clean data
-        companyData = await reviewAndCleanData(companyData);
+        // Step 6: Run AI validator to compare extraction vs source and fix issues
+        companyData = await reviewAndCleanData(companyData, scraped.content);
 
         // Step 7: Filter empty metrics
         const metricsBefore = companyData.key_metrics?.length || 0;
