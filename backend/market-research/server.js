@@ -258,7 +258,7 @@ Be specific. Cite sources. No fluff.`;
 
 // ============ RESEARCH FRAMEWORK ============
 // Deep Research: 50+ queries per country organized by Escort template sections
-// Produces ~15-17 slides per country with charts and detailed analysis
+// Produces ~25 slides per country with charts, depth analysis, and Go/No-Go decision
 
 const RESEARCH_FRAMEWORK = {
   // === SECTION 1: POLICY & REGULATIONS (3 slides) ===
@@ -461,6 +461,63 @@ const RESEARCH_FRAMEWORK = {
       '{country} energy policy reversal examples precedents',
       '{country} local content requirements energy sector'
     ]
+  },
+
+  // === DEPTH TOPICS: ESCO ECONOMICS & DEAL STRUCTURE ===
+  depth_escoEconomics: {
+    name: 'ESCO Contract Economics',
+    slideTitle: '{country} - ESCO Deal Economics',
+    queries: [
+      '{country} ESCO contract structure shared savings guaranteed savings',
+      '{country} energy performance contracting typical deal size value',
+      '{country} ESCO project payback period ROI internal rate return',
+      '{country} energy efficiency project financing options banks',
+      '{country} ESCO contract duration terms typical 5 10 years'
+    ]
+  },
+  depth_partnerAssessment: {
+    name: 'Potential Partners Deep Dive',
+    slideTitle: '{country} - Partner Assessment',
+    queries: [
+      '{country} top engineering companies energy EPC contractors revenue',
+      '{country} industrial conglomerates seeking foreign technology partners',
+      '{country} local ESCO companies acquisition targets valuation',
+      '{country} energy consulting firms technical capabilities staff',
+      '{country} companies with Japanese partnership experience energy'
+    ]
+  },
+  depth_entryStrategy: {
+    name: 'Entry Strategy Analysis',
+    slideTitle: '{country} - Entry Strategy Options',
+    queries: [
+      '{country} foreign energy company market entry modes JV acquisition',
+      '{country} joint venture requirements foreign companies energy',
+      '{country} successful greenfield energy services company examples',
+      '{country} acquisition targets ESCO energy services companies',
+      '{country} BOI promotion benefits foreign energy investment timeline'
+    ]
+  },
+  depth_implementation: {
+    name: 'Implementation Considerations',
+    slideTitle: '{country} - Implementation Roadmap',
+    queries: [
+      '{country} company registration process foreign energy business timeline',
+      '{country} BOI application approval process duration requirements',
+      '{country} hiring energy engineers technical staff availability salary',
+      '{country} office industrial facility costs Bangkok provinces',
+      '{country} business license permits energy services company requirements'
+    ]
+  },
+  depth_targetSegments: {
+    name: 'Target Customer Segments',
+    slideTitle: '{country} - Target Segments',
+    queries: [
+      '{country} largest energy consuming factories industrial facilities list',
+      '{country} industrial estates zones highest energy intensity',
+      '{country} manufacturing sectors highest electricity gas consumption',
+      '{country} factories required energy audits compliance status',
+      '{country} Japanese manufacturing companies presence factories list'
+    ]
   }
 };
 
@@ -469,7 +526,8 @@ const RESEARCH_TOPIC_GROUPS = {
   policy: ['policy_foundationalActs', 'policy_nationalPolicy', 'policy_investmentRestrictions'],
   market: ['market_tpes', 'market_finalDemand', 'market_electricity', 'market_gasLng', 'market_pricing', 'market_escoServices'],
   competitors: ['competitors_japanese', 'competitors_localMajor', 'competitors_foreignPlayers', 'competitors_caseStudy', 'competitors_maActivity'],
-  context: ['macro_economicContext', 'opportunities_whitespace', 'risks_assessment']
+  context: ['macro_economicContext', 'opportunities_whitespace', 'risks_assessment'],
+  depth: ['depth_escoEconomics', 'depth_partnerAssessment', 'depth_entryStrategy', 'depth_implementation', 'depth_targetSegments']
 };
 
 // ============ SCOPE PARSER ============
@@ -908,20 +966,91 @@ FOCUS ON:
   return results;
 }
 
+// Depth Research Agent - handles ESCO economics, partner assessment, entry strategy, implementation
+async function depthResearchAgent(country, industry, clientContext) {
+  console.log(`    [DEPTH AGENT] Starting deep-dive research for ${country}...`);
+  const agentStart = Date.now();
+  const topics = RESEARCH_TOPIC_GROUPS.depth;
+  const results = {};
+
+  // Run depth topics in parallel - these are critical for actionable recommendations
+  const depthResults = await Promise.all(
+    topics.map(async (topicKey) => {
+      const framework = RESEARCH_FRAMEWORK[topicKey];
+      if (!framework) return null;
+
+      const isEconomics = topicKey === 'depth_escoEconomics';
+      const isPartner = topicKey === 'depth_partnerAssessment';
+      const isEntry = topicKey === 'depth_entryStrategy';
+
+      const queryContext = `As a senior M&A advisor helping a ${clientContext} enter ${country}'s ${industry} market, research ${framework.name}:
+
+SPECIFIC QUESTIONS:
+${framework.queries.map(q => '- ' + q.replace('{country}', country)).join('\n')}
+
+${isEconomics ? `CRITICAL - PROVIDE SPECIFIC NUMBERS:
+- Typical ESCO contract size (USD range)
+- Contract duration (years)
+- Shared savings split (% client vs ESCO)
+- Payback period (years)
+- IRR expectations (%)
+- Common financing structures` : ''}
+
+${isPartner ? `CRITICAL - FOR EACH POTENTIAL PARTNER:
+- Company name and ownership
+- Annual revenue (USD)
+- Number of employees
+- Technical capabilities
+- Current partnerships
+- Acquisition likelihood (1-5 scale)
+- Estimated valuation range` : ''}
+
+${isEntry ? `CRITICAL - COMPARE OPTIONS:
+- Joint Venture: requirements, timeline, control level
+- Acquisition: targets, valuations, integration challenges
+- Greenfield: timeline, costs, risks
+- Recommend best option with reasoning` : ''}
+
+DEPTH IS CRITICAL - We need specifics for executive decision-making, not general observations.`;
+
+      const result = await callKimiDeepResearch(queryContext, country, industry);
+      return {
+        key: topicKey,
+        content: result.content,
+        citations: result.citations || [],
+        slideTitle: framework.slideTitle?.replace('{country}', country) || ''
+      };
+    })
+  );
+
+  for (const r of depthResults) {
+    if (r && r.content) results[r.key] = r;
+  }
+
+  console.log(`    [DEPTH AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  return results;
+}
+
 // ============ COUNTRY RESEARCH ORCHESTRATOR ============
 
 async function researchCountry(country, industry, clientContext) {
   console.log(`\n=== RESEARCHING: ${country} ===`);
   const startTime = Date.now();
 
-  // Multi-Agent Deep Research: Run 4 specialized agents in parallel
-  console.log(`  [MULTI-AGENT SYSTEM] Launching 4 specialized research agents...`);
+  // Multi-Agent Deep Research: Run 5 specialized agents in parallel
+  console.log(`  [MULTI-AGENT SYSTEM] Launching 5 specialized research agents...`);
+  console.log(`    - Policy Agent (3 topics)`);
+  console.log(`    - Market Agent (6 topics)`);
+  console.log(`    - Competitor Agent (5 topics)`);
+  console.log(`    - Context Agent (3 topics)`);
+  console.log(`    - Depth Agent (5 topics) - ESCO economics, partners, entry strategy`);
 
-  const [policyData, marketData, competitorData, contextData] = await Promise.all([
+  const [policyData, marketData, competitorData, contextData, depthData] = await Promise.all([
     policyResearchAgent(country, industry, clientContext),
     marketResearchAgent(country, industry, clientContext),
     competitorResearchAgent(country, industry, clientContext),
-    contextResearchAgent(country, industry, clientContext)
+    contextResearchAgent(country, industry, clientContext),
+    depthResearchAgent(country, industry, clientContext)
   ]);
 
   // Merge all agent results
@@ -929,7 +1058,8 @@ async function researchCountry(country, industry, clientContext) {
     ...policyData,
     ...marketData,
     ...competitorData,
-    ...contextData
+    ...contextData,
+    ...depthData
   };
 
   const totalTopics = Object.keys(researchData).length;
@@ -1129,7 +1259,130 @@ Return a JSON object with this EXPANDED structure for 15+ slides:
     }
   },
 
-  // === SECTION 4: SUMMARY & RECOMMENDATIONS ===
+  // === SECTION 4: DEPTH ANALYSIS (5 slides) ===
+  "depth": {
+    "escoEconomics": {
+      "slideTitle": "${country} - ESCO Deal Economics",
+      "subtitle": "Contract structures and returns",
+      "typicalDealSize": {"min": "$X million", "max": "$Y million", "average": "$Z million"},
+      "contractTerms": {
+        "duration": "5-10 years typical",
+        "savingsSplit": "Client 70% / ESCO 30% typical",
+        "guaranteeStructure": "Shared savings or guaranteed savings"
+      },
+      "financials": {
+        "paybackPeriod": "X years",
+        "irr": "X-Y%",
+        "marginProfile": "X% gross margin typical"
+      },
+      "financingOptions": ["Option 1", "Option 2"],
+      "keyInsight": "Investment thesis for ESCO business"
+    },
+    "partnerAssessment": {
+      "slideTitle": "${country} - Partner Assessment",
+      "subtitle": "Potential partners ranked by fit",
+      "partners": [
+        {
+          "name": "Company Name",
+          "type": "Local ESCO / Engineering / Conglomerate",
+          "revenue": "$X million",
+          "employees": "X",
+          "capabilities": ["Capability 1", "Capability 2"],
+          "partnershipFit": "1-5 score",
+          "acquisitionFit": "1-5 score",
+          "estimatedValuation": "$X-Y million",
+          "keyContact": "How to approach"
+        }
+      ],
+      "recommendedPartner": "Top recommendation with reasoning"
+    },
+    "entryStrategy": {
+      "slideTitle": "${country} - Entry Strategy Options",
+      "subtitle": "Comparison of market entry modes",
+      "options": [
+        {
+          "mode": "Joint Venture",
+          "timeline": "X months",
+          "investment": "$X million",
+          "controlLevel": "Minority/50-50/Majority",
+          "pros": ["Pro 1", "Pro 2"],
+          "cons": ["Con 1", "Con 2"],
+          "riskLevel": "Low/Medium/High"
+        },
+        {
+          "mode": "Acquisition",
+          "timeline": "X months",
+          "investment": "$X million",
+          "controlLevel": "Full",
+          "pros": ["Pro 1", "Pro 2"],
+          "cons": ["Con 1", "Con 2"],
+          "riskLevel": "Low/Medium/High"
+        },
+        {
+          "mode": "Greenfield",
+          "timeline": "X months",
+          "investment": "$X million",
+          "controlLevel": "Full",
+          "pros": ["Pro 1", "Pro 2"],
+          "cons": ["Con 1", "Con 2"],
+          "riskLevel": "Low/Medium/High"
+        }
+      ],
+      "recommendation": "Recommended option with detailed reasoning",
+      "harveyBalls": {
+        "criteria": ["Speed to Market", "Investment Required", "Risk Level", "Control", "Local Knowledge"],
+        "jv": [3, 4, 3, 2, 5],
+        "acquisition": [4, 2, 3, 5, 4],
+        "greenfield": [1, 3, 4, 5, 1]
+      }
+    },
+    "implementation": {
+      "slideTitle": "${country} - Implementation Roadmap",
+      "subtitle": "Phased approach to market entry",
+      "phases": [
+        {
+          "name": "Phase 1: Setup (Months 0-6)",
+          "activities": ["Activity 1", "Activity 2", "Activity 3"],
+          "milestones": ["Milestone 1", "Milestone 2"],
+          "investment": "$X"
+        },
+        {
+          "name": "Phase 2: Launch (Months 6-12)",
+          "activities": ["Activity 1", "Activity 2"],
+          "milestones": ["Milestone 1", "Milestone 2"],
+          "investment": "$X"
+        },
+        {
+          "name": "Phase 3: Scale (Months 12-24)",
+          "activities": ["Activity 1", "Activity 2"],
+          "milestones": ["Milestone 1", "Milestone 2"],
+          "investment": "$X"
+        }
+      ],
+      "totalInvestment": "$X million over 24 months",
+      "breakeven": "Expected in month X"
+    },
+    "targetSegments": {
+      "slideTitle": "${country} - Target Customer Segments",
+      "subtitle": "Priority segments for initial focus",
+      "segments": [
+        {
+          "name": "Segment name",
+          "size": "X factories / $X million potential",
+          "energyIntensity": "High/Medium/Low",
+          "decisionMaker": "Who to target",
+          "salesCycle": "X months typical",
+          "priority": "1-5"
+        }
+      ],
+      "topTargets": [
+        {"company": "Company Name", "industry": "Sector", "energySpend": "$X million/year", "location": "Zone/Province"}
+      ],
+      "goToMarketApproach": "How to reach these customers"
+    }
+  },
+
+  // === SECTION 5: SUMMARY & RECOMMENDATIONS ===
   "summary": {
     "opportunities": [
       {"opportunity": "Specific opportunity", "size": "$X million", "timing": "Why now", "action": "What to do"}
@@ -1151,7 +1404,17 @@ Return a JSON object with this EXPANDED structure for 15+ slides:
         "implication": "What to do"
       }
     ],
-    "recommendation": "Clear recommendation for entry or not"
+    "recommendation": "Clear recommendation for entry or not",
+    "goNoGo": {
+      "criteria": [
+        {"criterion": "Market size >$100M", "met": true, "evidence": "Market is $X million"},
+        {"criterion": "Regulatory clarity", "met": true, "evidence": "Clear ESCO framework exists"},
+        {"criterion": "Viable partners available", "met": true, "evidence": "3 partners identified"},
+        {"criterion": "Acceptable risk level", "met": true, "evidence": "Risk score X/10"}
+      ],
+      "overallVerdict": "GO / NO-GO / CONDITIONAL GO",
+      "conditions": ["Condition 1 if conditional"]
+    }
   }
 }
 
@@ -1160,6 +1423,7 @@ CRITICAL:
 - Chart data must have numeric arrays (not placeholders)
 - If data unavailable, use reasonable estimates and mark as "estimated"
 - Aim for actionable specificity, not generic descriptions
+- DEPTH IS KEY: Executive-level decision-making requires specific numbers, names, timelines
 
 Return ONLY valid JSON.`;
 
@@ -1820,6 +2084,74 @@ function safeArray(arr, max = 5) {
   return arr.slice(0, max);
 }
 
+// Helper: add source footnote to slide
+function addSourceFootnote(slide, sources, COLORS, FONT) {
+  if (!sources || (Array.isArray(sources) && sources.length === 0)) return;
+
+  let sourceText = '';
+  if (typeof sources === 'string') {
+    sourceText = `Source: ${sources}`;
+  } else if (Array.isArray(sources)) {
+    const sourceList = sources.slice(0, 3).map(s => typeof s === 'string' ? s : s.name || s.source || '').filter(Boolean);
+    sourceText = sourceList.length > 0 ? `Sources: ${sourceList.join('; ')}` : '';
+  }
+
+  if (sourceText) {
+    slide.addText(truncate(sourceText, 120), {
+      x: 0.35, y: 6.85, w: 9.3, h: 0.2,
+      fontSize: 8, fontFace: FONT, color: COLORS?.footerText || '666666', valign: 'top'
+    });
+  }
+}
+
+// Helper: add callout/insight box to slide
+function addCalloutBox(slide, title, content, options = {}) {
+  const boxX = options.x || 0.35;
+  const boxY = options.y || 5.3;
+  const boxW = options.w || 9.3;
+  const boxH = options.h || 1.2;
+  const boxType = options.type || 'insight'; // insight, warning, recommendation
+  const FONT = 'Segoe UI';
+
+  // Box colors based on type
+  const typeColors = {
+    insight: { fill: 'F5F5F5', border: '1F497D', titleColor: '1F497D' },
+    warning: { fill: 'FFF8E1', border: 'E46C0A', titleColor: 'E46C0A' },
+    recommendation: { fill: 'EDFDFF', border: '007FFF', titleColor: '007FFF' },
+    positive: { fill: 'F0FFF0', border: '2E7D32', titleColor: '2E7D32' },
+    negative: { fill: 'FFF0F0', border: 'C62828', titleColor: 'C62828' }
+  };
+  const colors = typeColors[boxType] || typeColors.insight;
+
+  // Box background with border
+  slide.addShape('rect', {
+    x: boxX, y: boxY, w: boxW, h: boxH,
+    fill: { color: colors.fill },
+    line: { color: colors.border, pt: 1.5 }
+  });
+
+  // Title (if provided)
+  if (title) {
+    slide.addText(title, {
+      x: boxX + 0.1, y: boxY + 0.05, w: boxW - 0.2, h: 0.25,
+      fontSize: 10, bold: true, color: colors.titleColor, fontFace: FONT
+    });
+    // Content below title
+    if (content) {
+      slide.addText(truncate(content, 200), {
+        x: boxX + 0.1, y: boxY + 0.35, w: boxW - 0.2, h: boxH - 0.45,
+        fontSize: 10, color: '000000', fontFace: FONT, valign: 'top'
+      });
+    }
+  } else if (content) {
+    // Just content, no title
+    slide.addText(truncate(content, 200), {
+      x: boxX + 0.1, y: boxY + 0.1, w: boxW - 0.2, h: boxH - 0.2,
+      fontSize: 10, color: '000000', fontFace: FONT, valign: 'top'
+    });
+  }
+}
+
 // ============ CHART GENERATION ============
 // YCP Color Palette for charts
 const CHART_COLORS = [
@@ -2086,7 +2418,7 @@ function validateChartData(data, chartType) {
 }
 
 // Single country deep-dive PPT - Matches YCP Escort/Shizuoka Gas format
-// Structure: Title → Policy (3) → Market (6 with charts) → Competitors (5) → Summary (2) = 17 slides
+// Structure: Title → Policy (3) → Market (6 with charts) → Competitors (5) → Depth (5) → Summary (5) = 25 slides
 async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   console.log(`Generating expanded single-country PPT for ${synthesis.country}...`);
 
@@ -2588,9 +2920,274 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
   }
 
-  // ============ SECTION 4: SUMMARY (2 slides) ============
+  // ============ SECTION 4: DEPTH ANALYSIS (5 slides) ============
 
-  // SLIDE 16: Opportunities & Obstacles
+  // Get depth data
+  const depth = synthesis.depth || {};
+
+  // SLIDE 16: ESCO Deal Economics
+  const escoEcon = depth.escoEconomics || {};
+  const econSlide = addSlideWithTitle(
+    escoEcon.slideTitle || `${country} - ESCO Deal Economics`,
+    truncateSubtitle(escoEcon.keyInsight || escoEcon.subtitle || '', 95)
+  );
+  // Deal size and contract terms
+  const dealSize = escoEcon.typicalDealSize || {};
+  const terms = escoEcon.contractTerms || {};
+  const financials = escoEcon.financials || {};
+  const econRows = [tableHeader(['Metric', 'Value', 'Notes'])];
+  if (dealSize.average) econRows.push([{ text: 'Typical Deal Size' }, { text: `${dealSize.min || ''} - ${dealSize.max || ''}` }, { text: `Avg: ${dealSize.average}` }]);
+  if (terms.duration) econRows.push([{ text: 'Contract Duration' }, { text: terms.duration }, { text: '' }]);
+  if (terms.savingsSplit) econRows.push([{ text: 'Savings Split' }, { text: terms.savingsSplit }, { text: terms.guaranteeStructure || '' }]);
+  if (financials.paybackPeriod) econRows.push([{ text: 'Payback Period' }, { text: financials.paybackPeriod }, { text: '' }]);
+  if (financials.irr) econRows.push([{ text: 'Expected IRR' }, { text: financials.irr }, { text: '' }]);
+  if (financials.marginProfile) econRows.push([{ text: 'Gross Margin' }, { text: financials.marginProfile }, { text: '' }]);
+  if (econRows.length > 1) {
+    econSlide.addTable(econRows, {
+      x: 0.35, y: 1.3, w: 9.3, h: 4.0,
+      fontSize: 12, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [2.5, 3.0, 3.8],
+      valign: 'top'
+    });
+  }
+  // Financing options
+  const financing = safeArray(escoEcon.financingOptions, 3);
+  if (financing.length > 0) {
+    econSlide.addText('Financing Options', {
+      x: 0.35, y: 5.5, w: 9.3, h: 0.3,
+      fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT
+    });
+    econSlide.addText(financing.map(f => ({ text: truncate(f, 80), options: { bullet: true } })), {
+      x: 0.35, y: 5.9, w: 9.3, h: 0.8,
+      fontSize: 11, fontFace: FONT, color: COLORS.black, valign: 'top'
+    });
+  }
+
+  // SLIDE 17: Partner Assessment
+  const partnerAssess = depth.partnerAssessment || {};
+  const partnerSlide = addSlideWithTitle(
+    partnerAssess.slideTitle || `${country} - Partner Assessment`,
+    truncateSubtitle(partnerAssess.recommendedPartner || partnerAssess.subtitle || '', 95)
+  );
+  const partners = safeArray(partnerAssess.partners, 5);
+  if (partners.length > 0) {
+    const partnerRows = [tableHeader(['Company', 'Type', 'Revenue', 'Partnership Fit', 'Acquisition Fit', 'Est. Value'])];
+    partners.forEach(p => {
+      partnerRows.push([
+        { text: truncate(p.name || '', 20) },
+        { text: truncate(p.type || '', 15) },
+        { text: p.revenue || '' },
+        { text: p.partnershipFit ? `${p.partnershipFit}/5` : '' },
+        { text: p.acquisitionFit ? `${p.acquisitionFit}/5` : '' },
+        { text: p.estimatedValuation || '' }
+      ]);
+    });
+    partnerSlide.addTable(partnerRows, {
+      x: 0.35, y: 1.3, w: 9.3, h: 5.2,
+      fontSize: 10, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [1.8, 1.5, 1.3, 1.3, 1.3, 2.1],
+      valign: 'top'
+    });
+  }
+
+  // SLIDE 18: Entry Strategy Options with Harvey Balls
+  const entryStrat = depth.entryStrategy || {};
+  const entrySlide = addSlideWithTitle(
+    entryStrat.slideTitle || `${country} - Entry Strategy Options`,
+    truncateSubtitle(entryStrat.recommendation || entryStrat.subtitle || '', 95)
+  );
+  const options = safeArray(entryStrat.options, 3);
+  if (options.length > 0) {
+    const optRows = [tableHeader(['Option', 'Timeline', 'Investment', 'Control', 'Risk', 'Key Pros'])];
+    options.forEach(opt => {
+      optRows.push([
+        { text: opt.mode || '' },
+        { text: opt.timeline || '' },
+        { text: opt.investment || '' },
+        { text: opt.controlLevel || '' },
+        { text: opt.riskLevel || '' },
+        { text: truncate((opt.pros || []).join('; '), 40) }
+      ]);
+    });
+    entrySlide.addTable(optRows, {
+      x: 0.35, y: 1.3, w: 9.3, h: 2.5,
+      fontSize: 10, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [1.3, 1.2, 1.3, 1.3, 1.0, 3.2],
+      valign: 'top'
+    });
+  }
+  // Harvey Balls comparison (if available)
+  const harvey = entryStrat.harveyBalls || {};
+  if (harvey.criteria && harvey.criteria.length > 0) {
+    entrySlide.addText('Comparison Matrix (1-5 scale)', {
+      x: 0.35, y: 4.0, w: 9.3, h: 0.3,
+      fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT
+    });
+    const harveyRows = [tableHeader(['Criteria', 'Joint Venture', 'Acquisition', 'Greenfield'])];
+    (harvey.criteria || []).forEach((crit, idx) => {
+      harveyRows.push([
+        { text: crit },
+        { text: harvey.jv?.[idx] ? '●'.repeat(harvey.jv[idx]) + '○'.repeat(5 - harvey.jv[idx]) : '' },
+        { text: harvey.acquisition?.[idx] ? '●'.repeat(harvey.acquisition[idx]) + '○'.repeat(5 - harvey.acquisition[idx]) : '' },
+        { text: harvey.greenfield?.[idx] ? '●'.repeat(harvey.greenfield[idx]) + '○'.repeat(5 - harvey.greenfield[idx]) : '' }
+      ]);
+    });
+    entrySlide.addTable(harveyRows, {
+      x: 0.35, y: 4.4, w: 9.3, h: 2.0,
+      fontSize: 10, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [2.5, 2.3, 2.25, 2.25],
+      valign: 'middle'
+    });
+  }
+
+  // SLIDE 19: Implementation Roadmap
+  const impl = depth.implementation || {};
+  const implSlide = addSlideWithTitle(
+    impl.slideTitle || `${country} - Implementation Roadmap`,
+    truncateSubtitle(`Total: ${impl.totalInvestment || 'TBD'} | Breakeven: ${impl.breakeven || 'TBD'}`, 95)
+  );
+  const phases = safeArray(impl.phases, 3);
+  let phaseX = 0.35;
+  const phaseWidth = 3.0;
+  phases.forEach((phase, idx) => {
+    // Phase header box
+    const phaseColor = idx === 0 ? COLORS.accent1 : (idx === 1 ? COLORS.green : COLORS.orange);
+    implSlide.addText(phase.name || `Phase ${idx + 1}`, {
+      x: phaseX, y: 1.3, w: phaseWidth, h: 0.4,
+      fontSize: 11, bold: true, color: COLORS.white, fill: { color: phaseColor }, fontFace: FONT,
+      align: 'center', valign: 'middle'
+    });
+    // Activities
+    const activities = safeArray(phase.activities, 4);
+    if (activities.length > 0) {
+      implSlide.addText(activities.map(a => ({ text: truncate(a, 35), options: { bullet: true } })), {
+        x: phaseX, y: 1.8, w: phaseWidth, h: 2.5,
+        fontSize: 9, fontFace: FONT, color: COLORS.black, valign: 'top'
+      });
+    }
+    // Milestones
+    const milestones = safeArray(phase.milestones, 2);
+    if (milestones.length > 0) {
+      implSlide.addText(`Milestones: ${milestones.map(m => truncate(m, 25)).join(', ')}`, {
+        x: phaseX, y: 4.4, w: phaseWidth, h: 0.5,
+        fontSize: 8, fontFace: FONT, color: COLORS.footerText, valign: 'top'
+      });
+    }
+    // Investment
+    if (phase.investment) {
+      implSlide.addText(`Investment: ${phase.investment}`, {
+        x: phaseX, y: 4.9, w: phaseWidth, h: 0.3,
+        fontSize: 9, bold: true, fontFace: FONT, color: COLORS.dk2, valign: 'top'
+      });
+    }
+    phaseX += phaseWidth + 0.15;
+  });
+
+  // SLIDE 20: Target Customer Segments
+  const targetSeg = depth.targetSegments || {};
+  const targetSlide = addSlideWithTitle(
+    targetSeg.slideTitle || `${country} - Target Customer Segments`,
+    truncateSubtitle(targetSeg.goToMarketApproach || targetSeg.subtitle || '', 95)
+  );
+  const segmentsList = safeArray(targetSeg.segments, 4);
+  if (segmentsList.length > 0) {
+    const segmentRows = [tableHeader(['Segment', 'Size', 'Energy Intensity', 'Decision Maker', 'Priority'])];
+    segmentsList.forEach(s => {
+      segmentRows.push([
+        { text: s.name || '' },
+        { text: truncate(s.size || '', 25) },
+        { text: s.energyIntensity || '' },
+        { text: truncate(s.decisionMaker || '', 20) },
+        { text: s.priority ? `${s.priority}/5` : '' }
+      ]);
+    });
+    targetSlide.addTable(segmentRows, {
+      x: 0.35, y: 1.3, w: 9.3, h: 2.5,
+      fontSize: 10, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [2.0, 2.3, 1.5, 2.0, 1.5],
+      valign: 'top'
+    });
+  }
+  // Top targets
+  const topTargets = safeArray(targetSeg.topTargets, 4);
+  if (topTargets.length > 0) {
+    targetSlide.addText('Priority Target Companies', {
+      x: 0.35, y: 4.0, w: 9.3, h: 0.3,
+      fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT
+    });
+    const targetCompRows = [tableHeader(['Company', 'Industry', 'Energy Spend', 'Location'])];
+    topTargets.forEach(t => {
+      targetCompRows.push([
+        { text: t.company || '' },
+        { text: t.industry || '' },
+        { text: t.energySpend || '' },
+        { text: t.location || '' }
+      ]);
+    });
+    targetSlide.addTable(targetCompRows, {
+      x: 0.35, y: 4.4, w: 9.3, h: 2.0,
+      fontSize: 10, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [2.5, 2.3, 2.25, 2.25],
+      valign: 'top'
+    });
+  }
+
+  // ============ SECTION 5: SUMMARY (4 slides) ============
+
+  // SLIDE 21: Go/No-Go Decision
+  const goNoGo = synthesis.summary?.goNoGo || {};
+  const goNoGoSlide = addSlideWithTitle(
+    `${country} - Go/No-Go Assessment`,
+    truncateSubtitle(goNoGo.overallVerdict || 'Investment Decision Framework', 95)
+  );
+  const goNoGoCriteria = safeArray(goNoGo.criteria, 6);
+  if (goNoGoCriteria.length > 0) {
+    const goNoGoRows = [tableHeader(['Criterion', 'Status', 'Evidence'])];
+    goNoGoCriteria.forEach(c => {
+      const statusIcon = c.met === true ? '✓' : (c.met === false ? '✗' : '?');
+      const statusColor = c.met === true ? COLORS.green : (c.met === false ? COLORS.red : COLORS.orange);
+      goNoGoRows.push([
+        { text: truncate(c.criterion || '', 40) },
+        { text: statusIcon, options: { color: statusColor, bold: true, align: 'center' } },
+        { text: truncate(c.evidence || '', 50) }
+      ]);
+    });
+    goNoGoSlide.addTable(goNoGoRows, {
+      x: 0.35, y: 1.3, w: 9.3, h: 3.5,
+      fontSize: 11, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [3.0, 0.8, 5.5],
+      valign: 'top'
+    });
+  }
+  // Verdict box
+  const verdictColor = goNoGo.overallVerdict?.includes('GO') && !goNoGo.overallVerdict?.includes('NO')
+    ? COLORS.green : (goNoGo.overallVerdict?.includes('NO') ? COLORS.red : COLORS.orange);
+  goNoGoSlide.addText(`VERDICT: ${goNoGo.overallVerdict || 'CONDITIONAL'}`, {
+    x: 0.35, y: 5.0, w: 4.0, h: 0.5,
+    fontSize: 16, bold: true, color: COLORS.white, fill: { color: verdictColor }, fontFace: FONT,
+    align: 'center', valign: 'middle'
+  });
+  // Conditions (if any)
+  const conditions = safeArray(goNoGo.conditions, 3);
+  if (conditions.length > 0) {
+    goNoGoSlide.addText('Conditions to proceed:', {
+      x: 4.5, y: 5.0, w: 5.15, h: 0.3,
+      fontSize: 11, bold: true, color: COLORS.dk2, fontFace: FONT
+    });
+    goNoGoSlide.addText(conditions.map(c => ({ text: truncate(c, 60), options: { bullet: true } })), {
+      x: 4.5, y: 5.35, w: 5.15, h: 1.2,
+      fontSize: 10, fontFace: FONT, color: COLORS.black, valign: 'top'
+    });
+  }
+
+  // SLIDE 22: Opportunities & Obstacles
   const ooSlide = addSlideWithTitle(
     `${country} - Opportunities & Obstacles`,
     truncateSubtitle(summary.recommendation || '', 95)
@@ -2638,7 +3235,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
   }
 
-  // SLIDE 17: Key Insights
+  // SLIDE 23: Key Insights
   const insightsSlide = addSlideWithTitle(
     `${country} - Key Insights`,
     'Strategic implications for market entry'
@@ -2661,8 +3258,57 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     insightY += 1.7;
   });
 
+  // Add recommendation callout box at bottom
+  if (summary.recommendation) {
+    addCalloutBox(insightsSlide, 'RECOMMENDATION', summary.recommendation, {
+      y: 5.6, h: 1.0, type: 'recommendation'
+    });
+  }
+
+  // SLIDE 24: Final Summary with Source Attribution
+  const finalSlide = addSlideWithTitle(
+    `${country} - Research Summary`,
+    `Analysis completed ${new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
+  );
+  // Key metrics recap
+  const metricsRows = [tableHeader(['Metric', 'Value', 'Confidence'])];
+  if (marketDynamics.marketSize) {
+    metricsRows.push([{ text: 'Market Size' }, { text: truncate(marketDynamics.marketSize, 40) }, { text: `${synthesis.confidenceScore || '--'}/100` }]);
+  }
+  if (depth.escoEconomics?.typicalDealSize?.average) {
+    metricsRows.push([{ text: 'Typical Deal Size' }, { text: depth.escoEconomics.typicalDealSize.average }, { text: '' }]);
+  }
+  const finalRatings = summary.ratings || {};
+  if (finalRatings.attractiveness) {
+    metricsRows.push([{ text: 'Attractiveness' }, { text: `${finalRatings.attractiveness}/10` }, { text: finalRatings.attractivenessRationale ? truncate(finalRatings.attractivenessRationale, 30) : '' }]);
+  }
+  if (finalRatings.feasibility) {
+    metricsRows.push([{ text: 'Feasibility' }, { text: `${finalRatings.feasibility}/10` }, { text: finalRatings.feasibilityRationale ? truncate(finalRatings.feasibilityRationale, 30) : '' }]);
+  }
+  finalSlide.addTable(metricsRows, {
+    x: 0.35, y: 1.3, w: 9.3, h: 2.5,
+    fontSize: 11, fontFace: FONT,
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [2.5, 3.5, 3.3],
+    valign: 'top'
+  });
+  // Go/No-Go verdict callout
+  const finalGoNoGo = synthesis.summary?.goNoGo || {};
+  const finalVerdictType = finalGoNoGo.overallVerdict?.includes('GO') && !finalGoNoGo.overallVerdict?.includes('NO')
+    ? 'positive' : (finalGoNoGo.overallVerdict?.includes('NO') ? 'negative' : 'warning');
+  addCalloutBox(finalSlide, `VERDICT: ${finalGoNoGo.overallVerdict || 'CONDITIONAL'}`,
+    (finalGoNoGo.conditions || []).slice(0, 2).join('; ') || 'Proceed with recommended entry strategy',
+    { y: 4.0, h: 0.9, type: finalVerdictType }
+  );
+  // Source attribution footnote
+  addSourceFootnote(finalSlide, [
+    'Government statistical agencies',
+    'Industry associations',
+    'Company filings and annual reports'
+  ], COLORS, FONT);
+
   const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
-  console.log(`Deep-dive PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB, 17 slides`);
+  console.log(`Deep-dive PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB, 25 slides`);
   return pptxBuffer;
 }
 
@@ -2690,7 +3336,10 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     white: 'FFFFFF',
     black: '000000',
     gray: 'BFBFBF',          // Border color
-    footerText: '808080'     // Gray footer text
+    footerText: '808080',    // Gray footer text
+    green: '2E7D32',         // Positive/Opportunity
+    orange: 'E46C0A',        // Warning/Obstacle
+    red: 'C62828'            // Negative/Risk
   };
 
   // Set default font to Segoe UI (YCP standard)
@@ -2779,6 +3428,177 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     border: { pt: 0.5, color: 'cccccc' },
     colW: [2.0, 2.5, 2.5, 2.3],
     valign: 'top'
+  });
+
+  // ============ SLIDE 3: EXECUTIVE SUMMARY ============
+  const execSlide = addSlide('Executive Summary', synthesis.executiveSummary?.subtitle || 'Key findings across markets');
+  const keyFindings = safeArray(synthesis.executiveSummary?.keyFindings || synthesis.keyFindings, 4);
+  if (keyFindings.length > 0) {
+    execSlide.addText(keyFindings.map((f, idx) => ({
+      text: `${idx + 1}. ${truncate(typeof f === 'string' ? f : f.finding || f.text || '', 120)}`,
+      options: { bullet: false, paraSpaceBefore: idx > 0 ? 8 : 0 }
+    })), {
+      x: 0.35, y: 1.3, w: 9.3, h: 4.5,
+      fontSize: 13, fontFace: FONT, color: COLORS.black, valign: 'top'
+    });
+  }
+  // Recommendation box
+  if (synthesis.recommendation) {
+    execSlide.addText('RECOMMENDATION', {
+      x: 0.35, y: 5.5, w: 9.3, h: 0.3,
+      fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT
+    });
+    execSlide.addText(truncate(synthesis.recommendation, 200), {
+      x: 0.35, y: 5.85, w: 9.3, h: 0.7,
+      fontSize: 11, fontFace: FONT, color: COLORS.black, valign: 'top',
+      fill: { color: 'EDFDFF' }, line: { color: COLORS.accent1, pt: 1 }
+    });
+  }
+
+  // ============ SLIDE 4: MARKET SIZE COMPARISON (Bar Chart) ============
+  const sizeSlide = addSlide('Market Size Comparison', 'Relative market opportunity by country');
+  // Extract market sizes for chart
+  const chartLabels = [];
+  const chartValues = [];
+  countryAnalyses.forEach(c => {
+    if (c.error) return;
+    chartLabels.push(c.country);
+    // Try to extract numeric value from market size string
+    const sizeStr = c.marketDynamics?.marketSize || '';
+    const numMatch = sizeStr.match(/[\$€]?\s*([\d,.]+)\s*(billion|million|B|M)?/i);
+    let value = 0;
+    if (numMatch) {
+      value = parseFloat(numMatch[1].replace(/,/g, ''));
+      if (/billion|B/i.test(numMatch[2] || '')) value *= 1000; // Convert to millions
+    }
+    chartValues.push(value || 100); // Default to 100 if can't parse
+  });
+
+  if (chartLabels.length > 0 && chartValues.some(v => v > 0)) {
+    sizeSlide.addChart('bar', [{
+      name: 'Market Size ($M)',
+      labels: chartLabels,
+      values: chartValues
+    }], {
+      x: 0.5, y: 1.4, w: 9.0, h: 4.5,
+      barDir: 'bar',
+      showValue: true,
+      dataLabelPosition: 'outEnd',
+      dataLabelFontFace: FONT,
+      dataLabelFontSize: 10,
+      chartColors: [COLORS.accent1],
+      valAxisMaxVal: Math.max(...chartValues) * 1.2,
+      catAxisLabelFontFace: FONT,
+      catAxisLabelFontSize: 11,
+      valAxisLabelFontFace: FONT,
+      valAxisLabelFontSize: 10
+    });
+  }
+
+  // ============ SLIDE 5: ATTRACTIVENESS vs FEASIBILITY MATRIX ============
+  const matrixSlide = addSlide('Market Positioning Matrix', 'Attractiveness vs Feasibility across markets');
+  // Draw quadrant background
+  matrixSlide.addShape('rect', {
+    x: 0.5, y: 1.3, w: 4.25, h: 2.5, fill: { color: 'FFF0F0' } // Bottom-left (low-low) - light red
+  });
+  matrixSlide.addShape('rect', {
+    x: 4.75, y: 1.3, w: 4.25, h: 2.5, fill: { color: 'FFFAED' } // Bottom-right (high attract, low feas) - light orange
+  });
+  matrixSlide.addShape('rect', {
+    x: 0.5, y: 3.8, w: 4.25, h: 2.5, fill: { color: 'FFFAED' } // Top-left (low attract, high feas) - light orange
+  });
+  matrixSlide.addShape('rect', {
+    x: 4.75, y: 3.8, w: 4.25, h: 2.5, fill: { color: 'F0FFF0' } // Top-right (high-high) - light green
+  });
+  // Axis labels
+  matrixSlide.addText('← Low Attractiveness | High Attractiveness →', {
+    x: 0.5, y: 6.4, w: 8.5, h: 0.25, fontSize: 9, color: COLORS.footerText, fontFace: FONT, align: 'center'
+  });
+  matrixSlide.addText('High\nFeasibility\n\n\n\n\n\nLow\nFeasibility', {
+    x: 9.1, y: 1.3, w: 0.6, h: 5.0, fontSize: 8, color: COLORS.footerText, fontFace: FONT, align: 'center', valign: 'middle'
+  });
+  // Plot countries as circles
+  countryAnalyses.forEach((c, idx) => {
+    if (c.error) return;
+    const attract = c.summary?.ratings?.attractiveness || 5;
+    const feas = c.summary?.ratings?.feasibility || 5;
+    // Map 0-10 to x: 0.5-8.5 and y: 1.3-5.8 (inverted for y)
+    const x = 0.5 + ((attract / 10) * 8.0);
+    const y = 5.8 - ((feas / 10) * 4.5) + 0.3;
+    // Country bubble
+    const colors = [COLORS.accent1, COLORS.accent3, '2E7D32', 'E46C0A', 'C62828'];
+    matrixSlide.addShape('ellipse', {
+      x: x - 0.4, y: y - 0.3, w: 0.8, h: 0.6,
+      fill: { color: colors[idx % colors.length] }
+    });
+    matrixSlide.addText(c.country.substring(0, 3).toUpperCase(), {
+      x: x - 0.4, y: y - 0.15, w: 0.8, h: 0.3,
+      fontSize: 8, bold: true, color: COLORS.white, fontFace: FONT, align: 'center', valign: 'middle'
+    });
+  });
+  // Legend
+  matrixSlide.addText('Score Legend:', {
+    x: 0.5, y: 6.7, w: 1.5, h: 0.2, fontSize: 8, bold: true, color: COLORS.dk2, fontFace: FONT
+  });
+  countryAnalyses.forEach((c, idx) => {
+    if (c.error) return;
+    matrixSlide.addText(`${c.country}: A=${c.summary?.ratings?.attractiveness || '?'}/F=${c.summary?.ratings?.feasibility || '?'}`, {
+      x: 2.0 + (idx * 2.2), y: 6.7, w: 2.2, h: 0.2, fontSize: 8, color: COLORS.black, fontFace: FONT
+    });
+  });
+
+  // ============ SLIDE 6: RECOMMENDATION SUMMARY ============
+  const recSlide = addSlide('Recommendation Summary', 'Prioritized market entry approach');
+  // Build recommendation table
+  const recRows = [
+    [
+      { text: 'Country', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Priority', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Entry Mode', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Key Action', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } }
+    ]
+  ];
+  // Sort by attractiveness score
+  const sortedCountries = [...countryAnalyses].filter(c => !c.error).sort((a, b) => {
+    const aScore = (a.summary?.ratings?.attractiveness || 0) + (a.summary?.ratings?.feasibility || 0);
+    const bScore = (b.summary?.ratings?.attractiveness || 0) + (b.summary?.ratings?.feasibility || 0);
+    return bScore - aScore;
+  });
+  sortedCountries.forEach((c, idx) => {
+    const priority = idx === 0 ? 'PRIMARY' : (idx === 1 ? 'SECONDARY' : 'MONITOR');
+    const priorityColor = idx === 0 ? COLORS.green : (idx === 1 ? COLORS.accent1 : COLORS.footerText);
+    const entryMode = c.depth?.entryStrategy?.recommendation || c.summary?.recommendation || 'TBD';
+    const keyAction = c.summary?.opportunities?.[0] || c.summary?.keyInsights?.[0]?.implication || '';
+    recRows.push([
+      { text: c.country },
+      { text: priority, options: { color: priorityColor, bold: true } },
+      { text: truncate(entryMode, 30) },
+      { text: truncate(typeof keyAction === 'string' ? keyAction : keyAction.opportunity || '', 50) }
+    ]);
+  });
+  recSlide.addTable(recRows, {
+    x: 0.35, y: 1.3, w: 9.3, h: 4.0,
+    fontSize: 11, fontFace: FONT,
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [1.8, 1.3, 2.5, 3.7],
+    valign: 'top'
+  });
+  // Next steps
+  recSlide.addText('Recommended Next Steps:', {
+    x: 0.35, y: 5.5, w: 9.3, h: 0.3,
+    fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT
+  });
+  const nextSteps = synthesis.nextSteps || synthesis.executiveSummary?.nextSteps || [
+    'Conduct detailed due diligence on primary market',
+    'Identify and approach potential partners',
+    'Develop market entry business case'
+  ];
+  recSlide.addText(safeArray(nextSteps, 3).map(s => ({
+    text: truncate(typeof s === 'string' ? s : s.step || '', 80),
+    options: { bullet: true }
+  })), {
+    x: 0.35, y: 5.85, w: 9.3, h: 0.8,
+    fontSize: 10, fontFace: FONT, color: COLORS.black, valign: 'top'
   });
 
   // ============ COUNTRY SECTIONS ============
