@@ -9,7 +9,7 @@ function ensureString(value, defaultValue = '') {
   if (typeof value === 'string') return value;
   if (value === null || value === undefined) return defaultValue;
   // Handle arrays - join with comma
-  if (Array.isArray(value)) return value.map(v => ensureString(v)).join(', ');
+  if (Array.isArray(value)) return value.map((v) => ensureString(v)).join(', ');
   // Handle objects - try to extract meaningful string
   if (typeof value === 'object') {
     // Common patterns from AI responses
@@ -18,15 +18,19 @@ function ensureString(value, defaultValue = '') {
     if (value.value) return ensureString(value.value);
     if (value.name) return ensureString(value.name);
     // Fallback: stringify
-    try { return JSON.stringify(value); } catch { return defaultValue; }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return defaultValue;
+    }
   }
   // Convert other types to string
   return String(value);
 }
 
 function pcmToWav(pcmBuffer, sampleRate = 16000, numChannels = 1, bitsPerSample = 16) {
-  const byteRate = sampleRate * numChannels * bitsPerSample / 8;
-  const blockAlign = numChannels * bitsPerSample / 8;
+  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+  const blockAlign = (numChannels * bitsPerSample) / 8;
   const dataSize = pcmBuffer.length;
   const headerSize = 44;
   const fileSize = headerSize + dataSize;
@@ -41,7 +45,7 @@ function pcmToWav(pcmBuffer, sampleRate = 16000, numChannels = 1, bitsPerSample 
   // fmt chunk
   wavBuffer.write('fmt ', 12);
   wavBuffer.writeUInt32LE(16, 16); // fmt chunk size
-  wavBuffer.writeUInt16LE(1, 20);  // audio format (1 = PCM)
+  wavBuffer.writeUInt16LE(1, 20); // audio format (1 = PCM)
   wavBuffer.writeUInt16LE(numChannels, 22);
   wavBuffer.writeUInt32LE(sampleRate, 24);
   wavBuffer.writeUInt32LE(byteRate, 28);
@@ -58,11 +62,15 @@ function pcmToWav(pcmBuffer, sampleRate = 16000, numChannels = 1, bitsPerSample 
 
 function detectMeetingDomain(text) {
   const domains = {
-    financial: /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
-    legal: /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
-    medical: /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
-    technical: /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
-    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i
+    financial:
+      /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
+    legal:
+      /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
+    medical:
+      /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
+    technical:
+      /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
+    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i,
   };
 
   for (const [domain, pattern] of Object.entries(domains)) {
@@ -75,20 +83,29 @@ function detectMeetingDomain(text) {
 
 function getDomainInstructions(domain) {
   const instructions = {
-    financial: 'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
-    legal: 'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
-    medical: 'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
-    technical: 'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
+    financial:
+      'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
+    legal:
+      'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
+    medical:
+      'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
+    technical:
+      'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
     hr: 'This is an HR/talent due diligence meeting. Preserve HR terminology and employment-related terms accurately.',
-    general: 'This is a business due diligence meeting. Preserve business terminology and professional tone.'
+    general:
+      'This is a business due diligence meeting. Preserve business terminology and professional tone.',
   };
   return instructions[domain] || instructions.general;
 }
 
 function normalizeCompanyName(name) {
   if (!name) return '';
-  return name.toLowerCase()
-    .replace(/\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi, '')
+  return name
+    .toLowerCase()
+    .replace(
+      /\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi,
+      ''
+    )
     .replace(/^(pt\.?|cv\.?)\s+/gi, '')
     .replace(/[^\w\s]/g, '')
     .replace(/\s+/g, ' ')
@@ -97,11 +114,15 @@ function normalizeCompanyName(name) {
 
 function normalizeWebsite(url) {
   if (!url) return '';
-  return url.toLowerCase()
+  return url
+    .toLowerCase()
     .replace(/^https?:\/\//, '')
     .replace(/^www\./, '')
     .replace(/\/+$/, '')
-    .replace(/\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i, '')
+    .replace(
+      /\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i,
+      ''
+    )
     .replace(/\.(html?|php|aspx?|jsp)$/i, '');
 }
 
@@ -146,7 +167,7 @@ function isSpamOrDirectoryURL(url) {
     'facebook.com',
     'twitter.com',
     'instagram.com',
-    'youtube.com'
+    'youtube.com',
   ];
 
   for (const pattern of obviousSpam) {
@@ -161,13 +182,18 @@ function buildOutputFormat() {
 Be thorough - include all companies you find. We will verify them later.`;
 }
 
-function buildExclusionRules(exclusion, business) {
+function buildExclusionRules(exclusion, _business) {
   const exclusionLower = exclusion.toLowerCase();
   let rules = '';
 
-  if (exclusionLower.includes('large') || exclusionLower.includes('big') ||
-      exclusionLower.includes('mnc') || exclusionLower.includes('multinational') ||
-      exclusionLower.includes('major') || exclusionLower.includes('giant')) {
+  if (
+    exclusionLower.includes('large') ||
+    exclusionLower.includes('big') ||
+    exclusionLower.includes('mnc') ||
+    exclusionLower.includes('multinational') ||
+    exclusionLower.includes('major') ||
+    exclusionLower.includes('giant')
+  ) {
     rules += `
 LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
 - "global presence", "worldwide operations", "global leader", "world's largest"
@@ -279,7 +305,7 @@ describe('pcmToWav', () => {
     // Check fmt chunk
     expect(wavBuffer.toString('ascii', 12, 16)).toBe('fmt ');
     expect(wavBuffer.readUInt32LE(16)).toBe(16); // fmt chunk size
-    expect(wavBuffer.readUInt16LE(20)).toBe(1);  // PCM format
+    expect(wavBuffer.readUInt16LE(20)).toBe(1); // PCM format
 
     // Check data chunk
     expect(wavBuffer.toString('ascii', 36, 40)).toBe('data');
@@ -325,7 +351,7 @@ describe('pcmToWav', () => {
     const bitsPerSample = 16;
     const wavBuffer = pcmToWav(pcmData, sampleRate, numChannels, bitsPerSample);
 
-    const expectedByteRate = sampleRate * numChannels * bitsPerSample / 8;
+    const expectedByteRate = (sampleRate * numChannels * bitsPerSample) / 8;
     expect(wavBuffer.readUInt32LE(28)).toBe(expectedByteRate);
   });
 
@@ -335,7 +361,7 @@ describe('pcmToWav', () => {
     const bitsPerSample = 16;
     const wavBuffer = pcmToWav(pcmData, 16000, numChannels, bitsPerSample);
 
-    const expectedBlockAlign = numChannels * bitsPerSample / 8;
+    const expectedBlockAlign = (numChannels * bitsPerSample) / 8;
     expect(wavBuffer.readUInt16LE(32)).toBe(expectedBlockAlign);
   });
 
@@ -598,7 +624,9 @@ describe('normalizeWebsite', () => {
 
   test('preserves significant paths', () => {
     expect(normalizeWebsite('https://example.com/special-page')).toBe('example.com/special-page');
-    expect(normalizeWebsite('https://example.com/solutions/enterprise')).toBe('example.com/solutions/enterprise');
+    expect(normalizeWebsite('https://example.com/solutions/enterprise')).toBe(
+      'example.com/solutions/enterprise'
+    );
   });
 
   test('handles empty/null input', () => {
@@ -640,7 +668,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicate websites (exact match)', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://example.com', hq: 'City, Country' },
-      { company_name: 'XYZ', website: 'https://example.com', hq: 'City, Country' }
+      { company_name: 'XYZ', website: 'https://example.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -650,7 +678,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicate websites (with different paths)', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://example.com/home', hq: 'City, Country' },
-      { company_name: 'XYZ', website: 'https://example.com/about', hq: 'City, Country' }
+      { company_name: 'XYZ', website: 'https://example.com/about', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -659,7 +687,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicate domains', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://example.com/path1', hq: 'City, Country' },
-      { company_name: 'XYZ', website: 'https://example.com/path2', hq: 'City, Country' }
+      { company_name: 'XYZ', website: 'https://example.com/path2', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -668,7 +696,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicate company names (normalized)', () => {
     const companies = [
       { company_name: 'ABC Ltd', website: 'https://abc1.com', hq: 'City, Country' },
-      { company_name: 'ABC Limited', website: 'https://abc2.com', hq: 'City, Country' }
+      { company_name: 'ABC Limited', website: 'https://abc2.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -677,7 +705,7 @@ describe('dedupeCompanies', () => {
   test('filters out companies without website', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://example.com', hq: 'City, Country' },
-      { company_name: 'XYZ', website: null, hq: 'City, Country' }
+      { company_name: 'XYZ', website: null, hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -687,7 +715,7 @@ describe('dedupeCompanies', () => {
   test('filters out companies without company_name', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://example.com', hq: 'City, Country' },
-      { company_name: null, website: 'https://test.com', hq: 'City, Country' }
+      { company_name: null, website: 'https://test.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -698,7 +726,7 @@ describe('dedupeCompanies', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://example.com', hq: 'City, Country' },
       { company_name: 'XYZ', website: 'ftp://test.com', hq: 'City, Country' },
-      { company_name: 'DEF', website: 'example.com', hq: 'City, Country' }
+      { company_name: 'DEF', website: 'example.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -709,7 +737,7 @@ describe('dedupeCompanies', () => {
     const companies = [
       null,
       { company_name: 'ABC', website: 'https://example.com', hq: 'City, Country' },
-      undefined
+      undefined,
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -719,7 +747,7 @@ describe('dedupeCompanies', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://abc.com', hq: 'City, Country' },
       { company_name: 'XYZ', website: 'https://xyz.com', hq: 'City, Country' },
-      { company_name: 'DEF', website: 'https://def.com', hq: 'City, Country' }
+      { company_name: 'DEF', website: 'https://def.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(3);
@@ -733,7 +761,7 @@ describe('dedupeCompanies', () => {
   test('preserves first occurrence', () => {
     const companies = [
       { company_name: 'First', website: 'https://example.com', hq: 'City1, Country1' },
-      { company_name: 'Second', website: 'https://example.com', hq: 'City2, Country2' }
+      { company_name: 'Second', website: 'https://example.com', hq: 'City2, Country2' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -864,7 +892,10 @@ describe('buildExclusionRules', () => {
   });
 
   test('combines multiple exclusion types', () => {
-    const rules = buildExclusionRules('large multinational listed companies and distributors', 'ink');
+    const rules = buildExclusionRules(
+      'large multinational listed companies and distributors',
+      'ink'
+    );
     expect(rules).toContain('LARGE COMPANY DETECTION');
     expect(rules).toContain('LISTED COMPANY DETECTION');
     expect(rules).toContain('DISTRIBUTOR DETECTION');

@@ -15,12 +15,12 @@ const {
   Packer,
   Paragraph,
   TextRun,
-  HeadingLevel,
-  Table,
-  TableRow,
-  TableCell,
-  WidthType,
-  BorderStyle,
+  HeadingLevel: _HeadingLevel,
+  Table: _Table,
+  TableRow: _TableRow,
+  TableCell: _TableCell,
+  WidthType: _WidthType,
+  BorderStyle: _BorderStyle,
 } = require('docx');
 const {
   S3Client,
@@ -110,7 +110,7 @@ const requiredEnvVars = [
   'SENDGRID_API_KEY',
   'SENDER_EMAIL',
 ];
-const optionalEnvVars = [
+const _optionalEnvVars = [
   'SERPAPI_API_KEY',
   'DEEPSEEK_API_KEY',
   'DEEPGRAM_API_KEY',
@@ -453,7 +453,7 @@ async function extractXlsxText(base64Content) {
 }
 
 // R2 Delete function (cleanup old recordings)
-async function deleteFromR2(key) {
+async function _deleteFromR2(key) {
   if (!r2Client) {
     return false;
   }
@@ -730,7 +730,7 @@ async function callClaude(prompt, systemPrompt = null, _jsonMode = false) {
 }
 
 // Claude with web search via Perplexity - Claude reasons, Perplexity searches
-async function callClaudeWithSearch(searchPrompt, reasoningTask) {
+async function _callClaudeWithSearch(searchPrompt, reasoningTask) {
   // Step 1: Use Perplexity to search the web
   const searchResults = await callPerplexity(searchPrompt);
 
@@ -838,7 +838,7 @@ async function callOpenAISearch(prompt, feature = 'search') {
 }
 
 // DeepSeek Reasoner - for deep thinking/analysis tasks
-async function callDeepSeekReasoner(prompt, maxTokens = 8000) {
+async function _callDeepSeekReasoner(prompt, maxTokens = 8000) {
   try {
     const response = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
@@ -867,7 +867,7 @@ async function callDeepSeekReasoner(prompt, maxTokens = 8000) {
 }
 
 // DeepSeek Chat - for faster, simpler tasks
-async function callDeepSeekChat(prompt, maxTokens = 4000) {
+async function _callDeepSeekChat(prompt, maxTokens = 4000) {
   try {
     const response = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
@@ -1151,7 +1151,7 @@ Be concise but capture all important information.`;
 }
 
 // Generate Word document from HTML content
-async function generateWordDocument(title, htmlContent, metadata = {}) {
+async function generateWordDocument(title, htmlContent, _metadata = {}) {
   // Parse HTML content into sections
   const sections = [];
 
@@ -1164,7 +1164,7 @@ async function generateWordDocument(title, htmlContent, metadata = {}) {
   );
 
   // Simple HTML to docx conversion
-  const cleanHtml = htmlContent
+  const _cleanHtml = htmlContent
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/p>/gi, '\n\n')
     .replace(/<\/li>/gi, '\n')
@@ -2853,7 +2853,7 @@ Be EXHAUSTIVE. The goal is to ensure we don't miss any company due to terminolog
 function levenshteinSimilarity(s1, s2) {
   if (!s1 || !s2) return 0;
   const longer = s1.length > s2.length ? s1 : s2;
-  const shorter = s1.length > s2.length ? s2 : s1;
+  const _shorter = s1.length > s2.length ? s2 : s1;
   if (longer.length === 0) return 1.0;
 
   const costs = [];
@@ -2887,7 +2887,7 @@ function getCitiesForCountry(country) {
 }
 
 // Get company suffixes for a country (dynamic)
-function getSuffixesForCountry(country) {
+function _getSuffixesForCountry(country) {
   const countryLower = country.toLowerCase();
   for (const [key, suffixes] of Object.entries(LOCAL_SUFFIXES)) {
     if (countryLower.includes(key)) return suffixes;
@@ -3914,7 +3914,7 @@ Exclude: ${exclusion}`);
 
   // Task 7: Search using term variations (if provided)
   if (businessVariations && businessVariations.length > 0) {
-    const variationsList = businessVariations.slice(0, 5).join('", "');
+    const _variationsList = businessVariations.slice(0, 5).join('", "');
     tasks.push(`Find companies in ${countryList} using ALTERNATIVE INDUSTRY TERMINOLOGY.
 
 The user is looking for: "${business}"
@@ -4111,7 +4111,7 @@ async function validateCompaniesV5(companies, business, country, exclusion) {
 
 // Build email with search log summary and three-tier validation results
 function buildV5EmailHTML(validationResults, business, country, exclusion, searchLog) {
-  const { validated, flagged, rejected } = validationResults;
+  const { validated, flagged, rejected: _rejected } = validationResults;
 
   // Note: Companies with inaccessible websites are removed entirely during validation (not shown)
   // Flagged = companies where one model agrees but the other doesn't
@@ -5087,7 +5087,7 @@ function calculateMedian(values) {
 }
 
 // Format number for display
-function formatNum(val, decimals = 1) {
+function _formatNum(val, decimals = 1) {
   if (val === null || val === undefined || isNaN(val)) return '-';
   return Number(val).toFixed(decimals);
 }
@@ -5099,7 +5099,7 @@ function formatMultiple(val) {
 }
 
 // Format as percentage
-function formatPercent(val) {
+function _formatPercent(val) {
   if (val === null || val === undefined || isNaN(val)) return '-';
   return Number(val).toFixed(1) + '%';
 }
@@ -5916,7 +5916,7 @@ Make each step progressively more selective. First step should be broad, last st
 }
 
 // Helper: Apply iterative qualitative filtering with multiple AI checks
-async function applyIterativeQualitativeFilter(
+async function _applyIterativeQualitativeFilter(
   companies,
   targetDescription,
   outputWorkbook,
@@ -5997,14 +5997,14 @@ async function applyIterativeQualitativeFilter(
       // Apply styling to the out-of-scope header row
       if (removedCompanies.length > 0) {
         const headerRowIdx = sheetData.length - removedCompanies.length - 2; // Row index of "OUT OF SCOPE" header
-        const subHeaderRowIdx = headerRowIdx + 1;
+        const _subHeaderRowIdx = headerRowIdx + 1;
 
         // Style header cells (dark background)
-        const headerStyle = {
+        const _headerStyle = {
           fill: { fgColor: { rgb: '1E3A5F' } },
           font: { bold: true, color: { rgb: 'FFFFFF' } },
         };
-        const subHeaderStyle = {
+        const _subHeaderStyle = {
           fill: { fgColor: { rgb: '374151' } },
           font: { bold: true, color: { rgb: 'FFFFFF' } },
         };
@@ -6814,7 +6814,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     sheetNumber = qualResult.sheetNumber;
 
     // Store analysis and validation results for potential use in email/output
-    const analysisResult = qualResult.analysis;
+    const _analysisResult = qualResult.analysis;
     const validationResult = qualResult.validation;
 
     // FINAL SHEET: Summary with medians
@@ -9194,7 +9194,7 @@ ${scrapedContent.substring(0, 15000)}`,
 
 // AI Agent 3c: Extract financial metrics for 財務実績 section
 // Using GPT-4o-mini (60% cost savings for number extraction)
-async function extractFinancialMetrics(scrapedContent, previousData) {
+async function _extractFinancialMetrics(scrapedContent, previousData) {
   try {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
@@ -9262,7 +9262,7 @@ async function searchMissingInfo(companyName, website, missingFields) {
     console.log(`  Searching for missing info: ${missingFields.join(', ')}`);
 
     // Use OpenAI Search model which has web search capability
-    const searchQuery =
+    const _searchQuery =
       `${companyName} company ${missingFields.includes('established_year') ? 'founded year established' : ''} ${missingFields.includes('location') ? 'headquarters location country' : ''}`.trim();
 
     const response = await openai.chat.completions.create({
@@ -9322,7 +9322,7 @@ Return ONLY valid JSON, no explanations.`,
 }
 
 // AI Agent 5: Search web for additional company metrics
-async function searchAdditionalMetrics(companyName, website, existingMetrics) {
+async function _searchAdditionalMetrics(companyName, website, existingMetrics) {
   if (!companyName) {
     return { additional_metrics: [] };
   }
@@ -9808,7 +9808,7 @@ app.post('/api/profile-slides', async (req, res) => {
 // ============ FINANCIAL CHART MAKER ============
 
 // Country to currency mapping for LC/local currency detection
-const COUNTRY_CURRENCY_MAP = {
+const _COUNTRY_CURRENCY_MAP = {
   japan: { code: 'JPY', symbol: '¥', name: 'Japanese Yen' },
   'united states': { code: 'USD', symbol: '$', name: 'US Dollar' },
   usa: { code: 'USD', symbol: '$', name: 'US Dollar' },
@@ -9884,7 +9884,7 @@ const XLSXChart = require('xlsx-chart');
 
 // Generate financial chart Excel workbook with COMBO chart (column + line)
 // Uses xlsx-chart library which properly supports combo charts
-async function generateFinancialChartExcel(financialDataArray) {
+async function _generateFinancialChartExcel(financialDataArray) {
   return new Promise((resolve) => {
     try {
       const dataArray = Array.isArray(financialDataArray)
@@ -10344,7 +10344,7 @@ app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res
     `;
 
     // Send email with PPTX attachment
-    const firstCompany = allFinancialData[0]?.company_name || 'Financial_Charts';
+    const _firstCompany = allFinancialData[0]?.company_name || 'Financial_Charts';
     await sendEmail(
       email,
       `Financial Charts: ${allFinancialData.length} companies${allFinancialData.length <= 3 ? ' (' + companyNames + ')' : ''}`,
@@ -11108,7 +11108,7 @@ async function generateUTBExcel(companyName, website, research, _additionalConte
     throw new Error('ExcelJS not available');
   }
 
-  const { synthesis, metadata } = research;
+  const { synthesis, metadata: _metadata } = research;
   const workbook = new ExcelJS.Workbook();
   workbook.creator = 'UTB - M&A Buyer Intelligence';
   workbook.created = new Date();
@@ -11581,7 +11581,7 @@ ${instructions}
 `;
   }
 
-  const onlineSourceNote =
+  const _onlineSourceNote =
     onlineSourcesUsed.length > 0
       ? `\nONLINE SOURCES RESEARCHED:\n${onlineSourcesUsed.map((u) => `- ${u}`).join('\n')}\n\nIMPORTANT: Any information from online sources MUST be clearly marked with [Online Source] at the start of that bullet point or paragraph.`
       : '';
@@ -11879,7 +11879,7 @@ app.post('/api/due-diligence', async (req, res) => {
     const allFileNames = [...files.map((f) => f.name), ...audioFiles.map((f) => f.name)];
     const fileList = allFileNames.map((n) => `<li>${n}</li>`).join('');
 
-    const headerColors = {
+    const _headerColors = {
       dd_report: 'linear-gradient(135deg, #1e40af 0%, #3b82f6 100%)',
       meeting_minutes: 'linear-gradient(135deg, #059669 0%, #10b981 100%)',
       transcript: 'linear-gradient(135deg, #7c3aed 0%, #a855f7 100%)',

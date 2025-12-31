@@ -3,7 +3,6 @@ const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
-const Anthropic = require('@anthropic-ai/sdk');
 const { securityHeaders, rateLimiter, escapeHtml } = require('../shared/security');
 const { requestLogger, healthCheck } = require('../shared/middleware');
 
@@ -14,7 +13,9 @@ function logMemoryUsage(label = '') {
   const heapUsedMB = Math.round(mem.heapUsed / 1024 / 1024);
   const heapTotalMB = Math.round(mem.heapTotal / 1024 / 1024);
   const rssMB = Math.round(mem.rss / 1024 / 1024);
-  console.log(`  [Memory${label ? ': ' + label : ''}] Heap: ${heapUsedMB}/${heapTotalMB}MB, RSS: ${rssMB}MB`);
+  console.log(
+    `  [Memory${label ? ': ' + label : ''}] Heap: ${heapUsedMB}/${heapTotalMB}MB, RSS: ${rssMB}MB`
+  );
 }
 
 process.on('unhandledRejection', (reason, promise) => {
@@ -34,27 +35,6 @@ process.on('uncaughtException', (error) => {
   // Don't exit - keep the server running
 });
 
-// ============ TYPE SAFETY HELPERS ============
-// Ensure a value is a string (AI models may return objects/arrays instead of strings)
-function ensureString(value, defaultValue = '') {
-  if (typeof value === 'string') return value;
-  if (value === null || value === undefined) return defaultValue;
-  // Handle arrays - join with comma
-  if (Array.isArray(value)) return value.map(v => ensureString(v)).join(', ');
-  // Handle objects - try to extract meaningful string
-  if (typeof value === 'object') {
-    // Common patterns from AI responses
-    if (value.city && value.country) return `${value.city}, ${value.country}`;
-    if (value.text) return ensureString(value.text);
-    if (value.value) return ensureString(value.value);
-    if (value.name) return ensureString(value.name);
-    // Fallback: stringify
-    try { return JSON.stringify(value); } catch { return defaultValue; }
-  }
-  // Convert other types to string
-  return String(value);
-}
-
 const app = express();
 app.use(securityHeaders);
 app.use(rateLimiter);
@@ -64,8 +44,14 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Check required environment variables
-const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
-const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+const requiredEnvVars = [
+  'OPENAI_API_KEY',
+  'PERPLEXITY_API_KEY',
+  'GEMINI_API_KEY',
+  'SENDGRID_API_KEY',
+  'SENDER_EMAIL',
+];
+const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
 }
@@ -82,13 +68,8 @@ if (!process.env.DEEPGRAM_API_KEY) {
 
 // Initialize OpenAI
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'missing'
+  apiKey: process.env.OPENAI_API_KEY || 'missing',
 });
-
-// Initialize Anthropic (Claude)
-const anthropic = process.env.ANTHROPIC_API_KEY
-  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  : null;
 
 // Send email using SendGrid API
 async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) {
@@ -97,16 +78,16 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
     personalizations: [{ to: [{ email: to }] }],
     from: { email: senderEmail, name: 'Find Target' },
     subject: subject,
-    content: [{ type: 'text/html', value: html }]
+    content: [{ type: 'text/html', value: html }],
   };
 
   if (attachments) {
     const attachmentList = Array.isArray(attachments) ? attachments : [attachments];
-    emailData.attachments = attachmentList.map(a => ({
-      filename: a.filename || a.name,  // Support both 'filename' and 'name' properties
+    emailData.attachments = attachmentList.map((a) => ({
+      filename: a.filename || a.name, // Support both 'filename' and 'name' properties
       content: a.content,
       type: 'application/octet-stream',
-      disposition: 'attachment'
+      disposition: 'attachment',
     }));
   }
 
@@ -117,10 +98,10 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
       const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
-          'Content-Type': 'application/json'
+          Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(emailData)
+        body: JSON.stringify(emailData),
       });
 
       if (response.ok) {
@@ -147,7 +128,7 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
     if (attempt < maxRetries) {
       const delay = Math.pow(2, attempt) * 1000;
       console.log(`  Retrying email in ${delay / 1000}s...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 
@@ -156,40 +137,6 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
 
 // ============ AI TOOLS ============
 
-// Gemini 2.5 Flash-Lite - cost-effective for general tasks ($0.10/$0.40 per 1M tokens)
-async function callGemini(prompt) {
-  try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      timeout: 90000
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Gemini 2.5 Flash-Lite HTTP error ${response.status}:`, errorText.substring(0, 200));
-      return '';
-    }
-
-    const data = await response.json();
-
-    if (data.error) {
-      console.error('Gemini 2.5 Flash-Lite API error:', data.error.message);
-      return '';
-    }
-
-    const result = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    if (!result) {
-      console.warn('Gemini 2.5 Flash-Lite returned empty response');
-    }
-    return result;
-  } catch (error) {
-    console.error('Gemini 2.5 Flash-Lite error:', error.message);
-    return '';
-  }
-}
-
 // Gemini 2.5 Flash - stable model for validation tasks (upgraded from gemini-3-flash-preview which was unstable)
 // With GPT-4o fallback when Gemini fails or times out
 async function callGemini3Flash(prompt, jsonMode = false) {
@@ -197,8 +144,8 @@ async function callGemini3Flash(prompt, jsonMode = false) {
     const requestBody = {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.1  // Low temperature for consistent validation
-      }
+        temperature: 0.1, // Low temperature for consistent validation
+      },
     };
 
     // Add JSON mode if requested
@@ -207,12 +154,15 @@ async function callGemini3Flash(prompt, jsonMode = false) {
     }
 
     // Using stable gemini-2.5-flash (gemini-3-flash-preview was unreliable)
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-      timeout: 30000  // Reduced from 120s to 30s - fail fast and use GPT-4o fallback
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+        timeout: 30000, // Reduced from 120s to 30s - fail fast and use GPT-4o fallback
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -250,7 +200,7 @@ async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
     const requestOptions = {
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.1
+      temperature: 0.1,
     };
 
     // Add JSON mode if requested
@@ -271,83 +221,19 @@ async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
   }
 }
 
-// Gemini 2.5 Pro - Most capable model for critical validation tasks
-// Use this for final data accuracy verification where errors are unacceptable
-async function callGemini2Pro(prompt, jsonMode = false) {
-  try {
-    const requestBody = {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.0  // Zero temperature for deterministic validation
-      }
-    };
-
-    if (jsonMode) {
-      requestBody.generationConfig.responseMimeType = 'application/json';
-    }
-
-    // Using stable gemini-2.5-pro (upgraded from deprecated gemini-2.5-pro-preview-06-05)
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-      timeout: 180000  // Longer timeout for Pro model
-    });
-    const data = await response.json();
-
-    if (data.error) {
-      console.error('Gemini 2.5 Pro API error:', data.error.message);
-      return '';
-    }
-
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  } catch (error) {
-    console.error('Gemini 2.5 Pro error:', error.message);
-    return '';
-  }
-}
-
-// Claude (Anthropic) - excellent reasoning and analysis
-async function callClaude(prompt, systemPrompt = null, jsonMode = false) {
-  if (!anthropic) {
-    console.warn('Claude not available - ANTHROPIC_API_KEY not set');
-    return '';
-  }
-  try {
-    const messages = [{ role: 'user', content: prompt }];
-    const requestParams = {
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 8192,
-      messages
-    };
-
-    if (systemPrompt) {
-      requestParams.system = systemPrompt;
-    }
-
-    const response = await anthropic.messages.create(requestParams);
-    const text = response.content?.[0]?.text || '';
-
-    return text;
-  } catch (error) {
-    console.error('Claude error:', error.message);
-    return '';
-  }
-}
-
 async function callPerplexity(prompt) {
   try {
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'sonar-pro',  // Upgraded from 'sonar' for better search results
-        messages: [{ role: 'user', content: prompt }]
+        model: 'sonar-pro', // Upgraded from 'sonar' for better search results
+        messages: [{ role: 'user', content: prompt }],
       }),
-      timeout: 90000
+      timeout: 90000,
     });
 
     if (!response.ok) {
@@ -379,7 +265,7 @@ async function callChatGPT(prompt) {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.2
+      temperature: 0.2,
     });
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -398,7 +284,7 @@ async function callOpenAISearch(prompt) {
   try {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-search-preview',
-      messages: [{ role: 'user', content: prompt }]
+      messages: [{ role: 'user', content: prompt }],
     });
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -413,141 +299,108 @@ async function callOpenAISearch(prompt) {
   }
 }
 
-// SerpAPI - Google Search integration
-async function callSerpAPI(query) {
-  if (!process.env.SERPAPI_API_KEY) {
-    return '';
-  }
-  try {
-    const params = new URLSearchParams({
-      q: query,
-      api_key: process.env.SERPAPI_API_KEY,
-      engine: 'google',
-      num: 100 // Get more results
-    });
-    const response = await fetch(`https://serpapi.com/search?${params}`, {
-      timeout: 30000
-    });
-    const data = await response.json();
-
-    // Extract organic results
-    const results = [];
-    if (data.organic_results) {
-      for (const result of data.organic_results) {
-        results.push({
-          title: result.title || '',
-          link: result.link || '',
-          snippet: result.snippet || ''
-        });
-      }
-    }
-    return JSON.stringify(results);
-  } catch (error) {
-    console.error('SerpAPI error:', error.message);
-    return '';
-  }
-}
-
-// DeepSeek V3.2 - Cost-effective alternative to GPT-4o
-async function callDeepSeek(prompt, maxTokens = 4000) {
-  if (!process.env.DEEPSEEK_API_KEY) {
-    console.warn('DeepSeek API key not set, falling back to GPT-4o');
-    return null; // Caller should handle fallback
-  }
-  try {
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: maxTokens,
-        temperature: 0.3
-      }),
-      timeout: 120000
-    });
-    const data = await response.json();
-    if (data.error) {
-      console.error('DeepSeek API error:', data.error);
-      return null;
-    }
-    return data.choices?.[0]?.message?.content || '';
-  } catch (error) {
-    console.error('DeepSeek error:', error.message);
-    return null;
-  }
-}
-
-// Detect domain/context from text for domain-aware translation
-function detectMeetingDomain(text) {
-  const domains = {
-    financial: /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
-    legal: /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
-    medical: /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
-    technical: /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
-    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i
-  };
-
-  for (const [domain, pattern] of Object.entries(domains)) {
-    if (pattern.test(text)) {
-      return domain;
-    }
-  }
-  return 'general';
-}
-
-// Get domain-specific translation instructions
-function getDomainInstructions(domain) {
-  const instructions = {
-    financial: 'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
-    legal: 'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
-    medical: 'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
-    technical: 'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
-    hr: 'This is an HR/talent due diligence meeting. Preserve HR terminology and employment-related terms accurately.',
-    general: 'This is a business due diligence meeting. Preserve business terminology and professional tone.'
-  };
-  return instructions[domain] || instructions.general;
-}
-
 // ============ SEARCH CONFIGURATION ============
 
-const CITY_MAP = {
-  'malaysia': ['Kuala Lumpur', 'Penang', 'Johor Bahru', 'Shah Alam', 'Petaling Jaya', 'Selangor', 'Ipoh', 'Klang', 'Subang', 'Melaka', 'Kuching', 'Kota Kinabalu'],
-  'singapore': ['Singapore', 'Jurong', 'Tuas', 'Woodlands'],
-  'thailand': ['Bangkok', 'Chonburi', 'Rayong', 'Samut Prakan', 'Ayutthaya', 'Chiang Mai', 'Pathum Thani', 'Nonthaburi', 'Samut Sakhon'],
-  'indonesia': ['Jakarta', 'Surabaya', 'Bandung', 'Medan', 'Bekasi', 'Tangerang', 'Semarang', 'Sidoarjo', 'Cikarang', 'Karawang', 'Bogor'],
-  'vietnam': ['Ho Chi Minh City', 'Hanoi', 'Da Nang', 'Hai Phong', 'Binh Duong', 'Dong Nai', 'Long An', 'Ba Ria', 'Can Tho'],
-  'philippines': ['Manila', 'Cebu', 'Davao', 'Quezon City', 'Makati', 'Laguna', 'Cavite', 'Batangas', 'Bulacan'],
-  'southeast asia': ['Kuala Lumpur', 'Singapore', 'Bangkok', 'Jakarta', 'Ho Chi Minh City', 'Manila', 'Penang', 'Johor Bahru', 'Surabaya', 'Hanoi']
+const _CITY_MAP = {
+  malaysia: [
+    'Kuala Lumpur',
+    'Penang',
+    'Johor Bahru',
+    'Shah Alam',
+    'Petaling Jaya',
+    'Selangor',
+    'Ipoh',
+    'Klang',
+    'Subang',
+    'Melaka',
+    'Kuching',
+    'Kota Kinabalu',
+  ],
+  singapore: ['Singapore', 'Jurong', 'Tuas', 'Woodlands'],
+  thailand: [
+    'Bangkok',
+    'Chonburi',
+    'Rayong',
+    'Samut Prakan',
+    'Ayutthaya',
+    'Chiang Mai',
+    'Pathum Thani',
+    'Nonthaburi',
+    'Samut Sakhon',
+  ],
+  indonesia: [
+    'Jakarta',
+    'Surabaya',
+    'Bandung',
+    'Medan',
+    'Bekasi',
+    'Tangerang',
+    'Semarang',
+    'Sidoarjo',
+    'Cikarang',
+    'Karawang',
+    'Bogor',
+  ],
+  vietnam: [
+    'Ho Chi Minh City',
+    'Hanoi',
+    'Da Nang',
+    'Hai Phong',
+    'Binh Duong',
+    'Dong Nai',
+    'Long An',
+    'Ba Ria',
+    'Can Tho',
+  ],
+  philippines: [
+    'Manila',
+    'Cebu',
+    'Davao',
+    'Quezon City',
+    'Makati',
+    'Laguna',
+    'Cavite',
+    'Batangas',
+    'Bulacan',
+  ],
+  'southeast asia': [
+    'Kuala Lumpur',
+    'Singapore',
+    'Bangkok',
+    'Jakarta',
+    'Ho Chi Minh City',
+    'Manila',
+    'Penang',
+    'Johor Bahru',
+    'Surabaya',
+    'Hanoi',
+  ],
 };
 
-const LOCAL_SUFFIXES = {
-  'malaysia': ['Sdn Bhd', 'Berhad'],
-  'singapore': ['Pte Ltd', 'Private Limited'],
-  'thailand': ['Co Ltd', 'Co., Ltd.'],
-  'indonesia': ['PT', 'CV'],
-  'vietnam': ['Co Ltd', 'JSC', 'Công ty'],
-  'philippines': ['Inc', 'Corporation']
+const _LOCAL_SUFFIXES = {
+  malaysia: ['Sdn Bhd', 'Berhad'],
+  singapore: ['Pte Ltd', 'Private Limited'],
+  thailand: ['Co Ltd', 'Co., Ltd.'],
+  indonesia: ['PT', 'CV'],
+  vietnam: ['Co Ltd', 'JSC', 'Công ty'],
+  philippines: ['Inc', 'Corporation'],
 };
 
-const DOMAIN_MAP = {
-  'malaysia': '.my',
-  'singapore': '.sg',
-  'thailand': '.th',
-  'indonesia': '.co.id',
-  'vietnam': '.vn',
-  'philippines': '.ph'
+const _DOMAIN_MAP = {
+  malaysia: '.my',
+  singapore: '.sg',
+  thailand: '.th',
+  indonesia: '.co.id',
+  vietnam: '.vn',
+  philippines: '.ph',
 };
 
-const LOCAL_LANGUAGE_MAP = {
-  'thailand': { lang: 'Thai', examples: ['หมึก', 'สี', 'เคมี'] },
-  'vietnam': { lang: 'Vietnamese', examples: ['mực in', 'sơn', 'hóa chất'] },
-  'indonesia': { lang: 'Bahasa Indonesia', examples: ['tinta', 'cat', 'kimia'] },
-  'philippines': { lang: 'Tagalog', examples: ['tinta', 'pintura'] },
-  'malaysia': { lang: 'Bahasa Malaysia', examples: ['dakwat', 'cat'] }
+const _LOCAL_LANGUAGE_MAP = {
+  thailand: { lang: 'Thai', examples: ['หมึก', 'สี', 'เคมี'] },
+  vietnam: { lang: 'Vietnamese', examples: ['mực in', 'sơn', 'hóa chất'] },
+  indonesia: { lang: 'Bahasa Indonesia', examples: ['tinta', 'cat', 'kimia'] },
+  philippines: { lang: 'Tagalog', examples: ['tinta', 'pintura'] },
+  malaysia: { lang: 'Bahasa Malaysia', examples: ['dakwat', 'cat'] },
 };
 
 // ============ 14 SPECIALIZED SEARCH STRATEGIES (inspired by n8n workflow) ============
@@ -555,293 +408,6 @@ const LOCAL_LANGUAGE_MAP = {
 function buildOutputFormat() {
   return `For each company provide: company_name, website (URL starting with http), hq (format: "City, Country" only).
 Be thorough - include all companies you find. We will verify them later.`;
-}
-
-// Strategy 1: Broad Google Search (SerpAPI)
-function strategy1_BroadSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
-  const queries = [];
-
-  // Generate synonyms and variations
-  const terms = business.split(/\s+or\s+|\s+and\s+|,/).map(t => t.trim()).filter(t => t);
-
-  for (const c of countries) {
-    queries.push(
-      `${business} companies ${c}`,
-      `${business} manufacturers ${c}`,
-      `${business} suppliers ${c}`,
-      `list of ${business} companies in ${c}`,
-      `${business} industry ${c}`
-    );
-    for (const term of terms) {
-      queries.push(`${term} ${c}`);
-    }
-  }
-
-  return queries;
-}
-
-// Strategy 2: Broad Perplexity Search (EXPANDED)
-function strategy2_BroadPerplexity(business, country, exclusion) {
-  const outputFormat = buildOutputFormat();
-  const countries = country.split(',').map(c => c.trim());
-  const queries = [];
-
-  // General queries
-  queries.push(
-    `Find ALL ${business} companies headquartered in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Complete list of ${business} manufacturers in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} producers and makers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `All local ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `SME and family-owned ${business} businesses in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Independent ${business} companies in ${country} not owned by multinationals. ${outputFormat}`
-  );
-
-  // Per-country queries for more specificity
-  for (const c of countries) {
-    queries.push(
-      `List all ${business} companies based in ${c}. ${outputFormat}`,
-      `${business} factories and plants in ${c}. ${outputFormat}`,
-      `Local ${business} manufacturers in ${c}. ${outputFormat}`
-    );
-  }
-
-  return queries;
-}
-
-// Strategy 3: Lists, Rankings, Top Companies (SerpAPI)
-function strategy3_ListsSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
-  const queries = [];
-
-  for (const c of countries) {
-    queries.push(
-      `top ${business} companies ${c}`,
-      `biggest ${business} ${c}`,
-      `leading ${business} manufacturers ${c}`,
-      `list of ${business} ${c}`,
-      `best ${business} suppliers ${c}`,
-      `${business} industry ${c} overview`,
-      `major ${business} players ${c}`
-    );
-  }
-
-  return queries;
-}
-
-// Strategy 4: City-Specific Search (Perplexity) - EXPANDED to ALL cities
-function strategy4_CitiesPerplexity(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
-  const outputFormat = buildOutputFormat();
-  const queries = [];
-
-  for (const c of countries) {
-    const cities = CITY_MAP[c.toLowerCase()] || [c];
-    // Use ALL cities, not just top 5
-    for (const city of cities) {
-      queries.push(
-        `${business} companies in ${city}, ${c}. Exclude ${exclusion}. ${outputFormat}`,
-        `${business} manufacturers near ${city}. ${outputFormat}`
-      );
-    }
-  }
-
-  return queries;
-}
-
-// Strategy 5: Industrial Zones + Local Naming (SerpAPI)
-function strategy5_IndustrialSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
-  const queries = [];
-
-  for (const c of countries) {
-    const suffixes = LOCAL_SUFFIXES[c.toLowerCase()] || [];
-
-    // Local naming conventions
-    for (const suffix of suffixes) {
-      queries.push(`${business} ${suffix} ${c}`);
-    }
-
-    // Industrial zones
-    queries.push(
-      `${business} industrial estate ${c}`,
-      `${business} manufacturing zone ${c}`,
-      `${business} factory ${c}`
-    );
-  }
-
-  return queries;
-}
-
-// Strategy 6: Associations & Directories (Perplexity)
-function strategy6_DirectoriesPerplexity(business, country, exclusion) {
-  const outputFormat = buildOutputFormat();
-  return [
-    `${business} companies in trade associations in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} firms in Kompass directory for ${country}. Not ${exclusion}. ${outputFormat}`,
-    `Chamber of commerce ${business} members in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${country} ${business} industry association member list. No ${exclusion}. ${outputFormat}`,
-    `${business} companies on Yellow Pages ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} business directory ${country}. Exclude ${exclusion}. ${outputFormat}`
-  ];
-}
-
-// Strategy 7: Trade Shows & Exhibitions (Perplexity)
-function strategy7_ExhibitionsPerplexity(business, country, exclusion) {
-  const outputFormat = buildOutputFormat();
-  return [
-    `${business} exhibitors at trade shows in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} companies at industry exhibitions in ${country} region. Not ${exclusion}. ${outputFormat}`,
-    `${business} participants at expos and conferences in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} exhibitors at international fairs from ${country}. Not ${exclusion}. ${outputFormat}`
-  ];
-}
-
-// Strategy 8: Import/Export & Supplier Databases (Perplexity)
-function strategy8_TradePerplexity(business, country, exclusion) {
-  const outputFormat = buildOutputFormat();
-  return [
-    `${business} importers and exporters in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} suppliers on Alibaba from ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${country} ${business} companies on Global Sources. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} OEM suppliers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} contract manufacturers in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} approved vendors in ${country}. Exclude ${exclusion}. ${outputFormat}`
-  ];
-}
-
-// Strategy 9: Local Domains + News (Perplexity)
-function strategy9_DomainsPerplexity(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
-  const outputFormat = buildOutputFormat();
-  const queries = [];
-
-  for (const c of countries) {
-    const domain = DOMAIN_MAP[c.toLowerCase()];
-    if (domain) {
-      queries.push(
-        `${business} companies with ${domain} websites. Exclude ${exclusion}. ${outputFormat}`
-      );
-    }
-  }
-
-  queries.push(
-    `Recent news about ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} company announcements and press releases ${country}. Exclude ${exclusion}. ${outputFormat}`
-  );
-
-  return queries;
-}
-
-// Strategy 10: Government Registries (SerpAPI)
-function strategy10_RegistriesSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
-  const queries = [];
-
-  for (const c of countries) {
-    queries.push(
-      `${business} company registration ${c}`,
-      `${business} registered companies ${c}`,
-      `${business} business registry ${c}`
-    );
-  }
-
-  return queries;
-}
-
-// Strategy 11: City + Industrial Areas (SerpAPI) - EXPANDED
-function strategy11_CityIndustrialSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
-  const queries = [];
-
-  for (const c of countries) {
-    const cities = CITY_MAP[c.toLowerCase()] || [c];
-    // Use ALL cities
-    for (const city of cities) {
-      queries.push(
-        `${business} ${city}`,
-        `${business} companies ${city}`,
-        `${business} factory ${city}`,
-        `${business} manufacturer ${city}`
-      );
-    }
-  }
-
-  return queries;
-}
-
-// Strategy 12: Deep Web Search (OpenAI Search) - EXPANDED with real-time search
-function strategy12_DeepOpenAISearch(business, country, exclusion) {
-  const outputFormat = buildOutputFormat();
-  const countries = country.split(',').map(c => c.trim());
-  const queries = [];
-
-  // General deep searches
-  queries.push(
-    `Search the web for ${business} companies in ${country}. Find company websites, LinkedIn profiles, industry directories. Exclude ${exclusion}. ${outputFormat}`,
-    `Find lesser-known ${business} companies in ${country} that may not appear in top search results. ${outputFormat}`,
-    `Search for small and medium ${business} enterprises (SMEs) in ${country}. ${outputFormat}`,
-    `Find independent local ${business} companies in ${country}, not subsidiaries of multinationals. ${outputFormat}`,
-    `Search industry news and press releases for ${business} companies in ${country}. ${outputFormat}`,
-    `Find ${business} startups and new companies in ${country}. ${outputFormat}`
-  );
-
-  // Per-country deep searches
-  for (const c of countries) {
-    queries.push(
-      `Search for all ${business} manufacturers in ${c}. Include company name, website, and location. ${outputFormat}`,
-      `Find ${business} producers in ${c} with their official websites. ${outputFormat}`
-    );
-  }
-
-  return queries;
-}
-
-// Strategy 13: Industry Publications (Perplexity)
-function strategy13_PublicationsPerplexity(business, country, exclusion) {
-  const outputFormat = buildOutputFormat();
-  return [
-    `${business} companies mentioned in industry magazines and trade publications for ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} market report ${country} - list all companies mentioned. Not ${exclusion}. ${outputFormat}`,
-    `${business} industry analysis ${country} - companies covered. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} ${country} magazine articles listing companies. Not ${exclusion}. ${outputFormat}`
-  ];
-}
-
-// Strategy 14: Final Sweep - Local Language + Comprehensive (OpenAI Search)
-function strategy14_LocalLanguageOpenAISearch(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
-  const outputFormat = buildOutputFormat();
-  const queries = [];
-
-  // Local language searches
-  queries.push(
-    `Search for ${business} companies in ${country} using local language terms. Translate "${business}" to Thai, Vietnamese, Bahasa Indonesia, Tagalog, Malay as appropriate. ${outputFormat}`
-  );
-
-  for (const c of countries) {
-    const langInfo = LOCAL_LANGUAGE_MAP[c.toLowerCase()];
-    if (langInfo) {
-      queries.push(
-        `Search in ${langInfo.lang} for ${business} companies in ${c}. ${outputFormat}`,
-        `Find ${business} manufacturers in ${c} using local language search terms. ${outputFormat}`
-      );
-    }
-  }
-
-  // Supply chain and related industry searches
-  queries.push(
-    `Find companies in the ${business} supply chain in ${country}. Include raw material suppliers and equipment makers. ${outputFormat}`,
-    `Search for ${business} related companies in ${country}: formulators, blenders, repackagers. ${outputFormat}`,
-    `Find niche and specialty ${business} companies in ${country}. ${outputFormat}`
-  );
-
-  // Final comprehensive sweep
-  queries.push(
-    `Comprehensive search: Find ALL ${business} companies in ${country} that have not been mentioned yet. Search obscure directories, local business listings, industry forums. ${outputFormat}`
-  );
-
-  return queries;
 }
 
 // ============ EXTRACTION WITH GPT-4o-mini ============
@@ -862,11 +428,11 @@ RULES:
 - If website not in text, you may look it up if you know it's a real company
 - hq must be "City, Country" format ONLY
 - Include companies even if some info is incomplete - we'll verify later
-- Be thorough - extract every company that might match`
+- Be thorough - extract every company that might match`,
         },
-        { role: 'user', content: text.substring(0, 15000) }
+        { role: 'user', content: text.substring(0, 15000) },
       ],
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
     });
     const parsed = JSON.parse(extraction.choices[0].message.content);
     return Array.isArray(parsed.companies) ? parsed.companies : [];
@@ -880,25 +446,37 @@ RULES:
 
 function normalizeCompanyName(name) {
   if (!name) return '';
-  return name.toLowerCase()
-    // Remove ALL common legal suffixes globally (expanded list)
-    .replace(/\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi, '')
-    // Also remove these if they appear anywhere (for cases like "PT Company Name")
-    .replace(/^(pt\.?|cv\.?)\s+/gi, '')
-    .replace(/[^\w\s]/g, '')  // Remove special characters
-    .replace(/\s+/g, ' ')      // Normalize spaces
-    .trim();
+  return (
+    name
+      .toLowerCase()
+      // Remove ALL common legal suffixes globally (expanded list)
+      .replace(
+        /\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi,
+        ''
+      )
+      // Also remove these if they appear anywhere (for cases like "PT Company Name")
+      .replace(/^(pt\.?|cv\.?)\s+/gi, '')
+      .replace(/[^\w\s]/g, '') // Remove special characters
+      .replace(/\s+/g, ' ') // Normalize spaces
+      .trim()
+  );
 }
 
 function normalizeWebsite(url) {
   if (!url) return '';
-  return url.toLowerCase()
-    .replace(/^https?:\/\//, '')           // Remove protocol
-    .replace(/^www\./, '')                  // Remove www
-    .replace(/\/+$/, '')                    // Remove trailing slashes
-    // Remove common path suffixes that don't differentiate companies
-    .replace(/\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i, '')
-    .replace(/\.(html?|php|aspx?|jsp)$/i, ''); // Remove file extensions
+  return (
+    url
+      .toLowerCase()
+      .replace(/^https?:\/\//, '') // Remove protocol
+      .replace(/^www\./, '') // Remove www
+      .replace(/\/+$/, '') // Remove trailing slashes
+      // Remove common path suffixes that don't differentiate companies
+      .replace(
+        /\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i,
+        ''
+      )
+      .replace(/\.(html?|php|aspx?|jsp)$/i, '')
+  ); // Remove file extensions
 }
 
 // Extract domain root for additional deduplication
@@ -948,7 +526,7 @@ function isSpamOrDirectoryURL(url) {
     'facebook.com',
     'twitter.com',
     'instagram.com',
-    'youtube.com'
+    'youtube.com',
   ];
 
   for (const pattern of obviousSpam) {
@@ -959,7 +537,7 @@ function isSpamOrDirectoryURL(url) {
 }
 
 function preFilterCompanies(companies) {
-  return companies.filter(c => {
+  return companies.filter((c) => {
     if (!c || !c.website) return false;
     if (isSpamOrDirectoryURL(c.website)) {
       console.log(`    Pre-filtered: ${c.company_name} - Social media/wiki`);
@@ -972,7 +550,7 @@ function preFilterCompanies(companies) {
 // ============ EXHAUSTIVE PARALLEL SEARCH WITH 14 STRATEGIES ============
 
 // Process SerpAPI results and extract companies using GPT
-async function processSerpResults(serpResults, business, country, exclusion) {
+async function _processSerpResults(serpResults, business, country, exclusion) {
   if (!serpResults || serpResults.length === 0) return [];
 
   const outputFormat = buildOutputFormat();
@@ -992,14 +570,14 @@ ${outputFormat}`;
 
 // ============ WEBSITE VERIFICATION ============
 
-async function verifyWebsite(url) {
+async function _verifyWebsite(url) {
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
     const response = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
       signal: controller.signal,
-      redirect: 'follow'
+      redirect: 'follow',
     });
     clearTimeout(timeout);
 
@@ -1025,10 +603,10 @@ async function verifyWebsite(url) {
       'hugedomains',
       'afternic',
       'domain expired',
-      'this site can\'t be reached',
+      "this site can't be reached",
       'page not found',
       '404 not found',
-      'website not found'
+      'website not found',
     ];
 
     for (const sign of parkedSigns) {
@@ -1075,7 +653,7 @@ async function fetchWebsite(url) {
     'verify you are human',
     'bot detection',
     'please enable javascript',
-    'enable cookies'
+    'enable cookies',
   ];
 
   const tryFetch = async (targetUrl) => {
@@ -1084,21 +662,25 @@ async function fetchWebsite(url) {
       const timeout = setTimeout(() => controller.abort(), 20000); // Increased to 20 seconds
       const response = await fetch(targetUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.5',
           'Accept-Encoding': 'gzip, deflate',
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1'
+          Connection: 'keep-alive',
+          'Upgrade-Insecure-Requests': '1',
         },
         signal: controller.signal,
-        redirect: 'follow'
+        redirect: 'follow',
       });
       clearTimeout(timeout);
 
       // Check for HTTP-level blocks
       if (response.status === 403 || response.status === 406) {
-        return { status: 'security_blocked', reason: `HTTP ${response.status} - WAF/Security block` };
+        return {
+          status: 'security_blocked',
+          reason: `HTTP ${response.status} - WAF/Security block`,
+        };
       }
       if (!response.ok) return { status: 'error', reason: `HTTP ${response.status}` };
 
@@ -1109,7 +691,10 @@ async function fetchWebsite(url) {
       for (const pattern of securityBlockPatterns) {
         if (lowerHtml.includes(pattern) && html.length < 5000) {
           // Only flag as security block if page is small (likely a challenge page)
-          return { status: 'security_blocked', reason: `Security protection detected: "${pattern}"` };
+          return {
+            status: 'security_blocked',
+            reason: `Security protection detected: "${pattern}"`,
+          };
         }
       }
 
@@ -1176,14 +761,19 @@ async function fetchWebsite(url) {
 
 // ============ DYNAMIC EXCLUSION RULES BUILDER (n8n-style PAGE SIGNAL detection) ============
 
-function buildExclusionRules(exclusion, business) {
+function buildExclusionRules(exclusion, _business) {
   const exclusionLower = exclusion.toLowerCase();
   let rules = '';
 
   // Detect if user wants to exclude LARGE companies - use PAGE SIGNALS like n8n
-  if (exclusionLower.includes('large') || exclusionLower.includes('big') ||
-      exclusionLower.includes('mnc') || exclusionLower.includes('multinational') ||
-      exclusionLower.includes('major') || exclusionLower.includes('giant')) {
+  if (
+    exclusionLower.includes('large') ||
+    exclusionLower.includes('big') ||
+    exclusionLower.includes('mnc') ||
+    exclusionLower.includes('multinational') ||
+    exclusionLower.includes('major') ||
+    exclusionLower.includes('giant')
+  ) {
     rules += `
 LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
 - "global presence", "worldwide operations", "global leader", "world's largest"
@@ -1227,13 +817,16 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
 
 async function validateCompanyStrict(company, business, country, exclusion, pageText) {
   // If we couldn't fetch the website, validate by name only (give benefit of doubt)
-  const contentToValidate = (typeof pageText === 'string' && pageText) ? pageText : `Company name: ${company.company_name}. Validate based on name only.`;
+  const contentToValidate =
+    typeof pageText === 'string' && pageText
+      ? pageText
+      : `Company name: ${company.company_name}. Validate based on name only.`;
 
   const exclusionRules = buildExclusionRules(exclusion, business);
 
   try {
     const validation = await openai.chat.completions.create({
-      model: 'gpt-4o',  // Use smarter model for better validation
+      model: 'gpt-4o', // Use smarter model for better validation
       messages: [
         {
           role: 'system',
@@ -1265,7 +858,7 @@ ${exclusionRules}
 4. SPAM CHECK:
 - Only reject obvious directories, marketplaces, domain-for-sale sites
 
-OUTPUT: Return JSON only: {"valid": true/false, "reason": "one sentence"}`
+OUTPUT: Return JSON only: {"valid": true/false, "reason": "one sentence"}`,
         },
         {
           role: 'user',
@@ -1274,10 +867,10 @@ WEBSITE: ${company.website}
 HQ: ${company.hq}
 
 PAGE CONTENT:
-${contentToValidate.substring(0, 10000)}`
-        }
+${contentToValidate.substring(0, 10000)}`,
+        },
       ],
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
     });
 
     const result = JSON.parse(validation.choices[0].message.content);
@@ -1293,7 +886,7 @@ ${contentToValidate.substring(0, 10000)}`
   }
 }
 
-async function parallelValidationStrict(companies, business, country, exclusion) {
+async function _parallelValidationStrict(companies, business, country, exclusion) {
   console.log(`\nSTRICT Validating ${companies.length} verified companies...`);
   const startTime = Date.now();
   const batchSize = 10; // Increased for better parallelization
@@ -1307,9 +900,11 @@ async function parallelValidationStrict(companies, business, country, exclusion)
       // Use cached _pageContent from verification step, or fetch if not available
       // Add .catch() to prevent any single failure from crashing the batch
       const pageTexts = await Promise.all(
-        batch.map(c => {
+        batch.map((c) => {
           try {
-            return c?._pageContent ? Promise.resolve(c._pageContent) : fetchWebsite(c?.website).catch(() => null);
+            return c?._pageContent
+              ? Promise.resolve(c._pageContent)
+              : fetchWebsite(c?.website).catch(() => null);
           } catch (e) {
             return Promise.resolve(null);
           }
@@ -1320,11 +915,16 @@ async function parallelValidationStrict(companies, business, country, exclusion)
       const validations = await Promise.all(
         batch.map((company, idx) => {
           try {
-            return validateCompanyStrict(company, business, country, exclusion, pageTexts[idx])
-              .catch(e => {
-                console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
-                return { valid: true, corrected_hq: company?.hq }; // Accept on error
-              });
+            return validateCompanyStrict(
+              company,
+              business,
+              country,
+              exclusion,
+              pageTexts[idx]
+            ).catch((e) => {
+              console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
+              return { valid: true, corrected_hq: company?.hq }; // Accept on error
+            });
           } catch (e) {
             return Promise.resolve({ valid: true, corrected_hq: company?.hq });
           }
@@ -1338,7 +938,7 @@ async function parallelValidationStrict(companies, business, country, exclusion)
             const { _pageContent, ...cleanCompany } = company;
             validated.push({
               ...cleanCompany,
-              hq: validations[idx].corrected_hq || company.hq
+              hq: validations[idx].corrected_hq || company.hq,
             });
           }
         } catch (e) {
@@ -1346,14 +946,18 @@ async function parallelValidationStrict(companies, business, country, exclusion)
         }
       });
 
-      console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
+      console.log(
+        `  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`
+      );
     } catch (batchError) {
       console.error(`  Batch error at ${i}-${i + batchSize}: ${batchError.message}`);
       // Continue to next batch instead of crashing
     }
   }
 
-  console.log(`STRICT Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
+  console.log(
+    `STRICT Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`
+  );
   return validated;
 }
 
@@ -1392,7 +996,7 @@ ${exclusionRules}
 4. SPAM CHECK:
 - Is this a directory, marketplace, domain-for-sale, or aggregator site? → REJECT
 
-OUTPUT: Return JSON: {"valid": true/false, "reason": "brief", "corrected_hq": "City, Country or null"}`
+OUTPUT: Return JSON: {"valid": true/false, "reason": "brief", "corrected_hq": "City, Country or null"}`,
         },
         {
           role: 'user',
@@ -1401,10 +1005,10 @@ WEBSITE: ${company.website}
 HQ: ${company.hq}
 
 PAGE CONTENT:
-${(typeof pageText === 'string' && pageText) ? pageText.substring(0, 8000) : 'Could not fetch - validate by name only'}`
-        }
+${typeof pageText === 'string' && pageText ? pageText.substring(0, 8000) : 'Could not fetch - validate by name only'}`,
+        },
       ],
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
     });
 
     const result = JSON.parse(validation.choices[0].message.content);
@@ -1420,7 +1024,7 @@ ${(typeof pageText === 'string' && pageText) ? pageText.substring(0, 8000) : 'Co
   }
 }
 
-async function parallelValidation(companies, business, country, exclusion) {
+async function _parallelValidation(companies, business, country, exclusion) {
   console.log(`\nValidating ${companies.length} companies (strict large company filter)...`);
   const startTime = Date.now();
   const batchSize = 8; // Smaller batch for more thorough validation
@@ -1432,15 +1036,14 @@ async function parallelValidation(companies, business, country, exclusion) {
       if (!batch || batch.length === 0) continue;
 
       const pageTexts = await Promise.all(
-        batch.map(c => fetchWebsite(c?.website).catch(() => null))
+        batch.map((c) => fetchWebsite(c?.website).catch(() => null))
       );
       const validations = await Promise.all(
         batch.map((company, idx) =>
-          validateCompany(company, business, country, exclusion, pageTexts[idx])
-            .catch(e => {
-              console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
-              return { valid: true, corrected_hq: company?.hq };
-            })
+          validateCompany(company, business, country, exclusion, pageTexts[idx]).catch((e) => {
+            console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
+            return { valid: true, corrected_hq: company?.hq };
+          })
         )
       );
 
@@ -1449,7 +1052,7 @@ async function parallelValidation(companies, business, country, exclusion) {
           if (validations[idx]?.valid && company) {
             validated.push({
               ...company,
-              hq: validations[idx].corrected_hq || company.hq
+              hq: validations[idx].corrected_hq || company.hq,
             });
           }
         } catch (e) {
@@ -1457,19 +1060,23 @@ async function parallelValidation(companies, business, country, exclusion) {
         }
       });
 
-      console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
+      console.log(
+        `  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`
+      );
     } catch (batchError) {
       console.error(`  Batch error at ${i}-${i + batchSize}: ${batchError.message}`);
     }
   }
 
-  console.log(`Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
+  console.log(
+    `Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`
+  );
   return validated;
 }
 
 // ============ EMAIL ============
 
-function buildEmailHTML(companies, business, country, exclusion) {
+function _buildEmailHTML(companies, business, country, exclusion) {
   let html = `
     <h2>Find Target Results</h2>
     <p><strong>Business:</strong> ${escapeHtml(business)}</p>
@@ -1500,34 +1107,43 @@ async function callGemini2FlashWithSearch(prompt, maxRetries = 2) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       // Use gemini-2.5-flash which supports Google Search grounding (gemini-3-flash-preview doesn't support search grounding yet)
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          tools: [{ google_search: {} }],
-          generationConfig: {
-            temperature: 0.2,
-            maxOutputTokens: 8192
-          }
-        }),
-        timeout: 180000  // 3 minutes for deep search
-      });
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            tools: [{ google_search: {} }],
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: 8192,
+            },
+          }),
+          timeout: 180000, // 3 minutes for deep search
+        }
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
-        console.error(`Gemini 2.5 Flash Search HTTP error ${response.status} (attempt ${attempt + 1}):`, errorText.substring(0, 200));
+        console.error(
+          `Gemini 2.5 Flash Search HTTP error ${response.status} (attempt ${attempt + 1}):`,
+          errorText.substring(0, 200)
+        );
         if (attempt === maxRetries) return { text: '', groundingMetadata: null };
-        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+        await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
         continue;
       }
 
       const data = await response.json();
 
       if (data.error) {
-        console.error(`Gemini 2.5 Flash Search API error (attempt ${attempt + 1}):`, data.error.message);
+        console.error(
+          `Gemini 2.5 Flash Search API error (attempt ${attempt + 1}):`,
+          data.error.message
+        );
         if (attempt === maxRetries) return { text: '', groundingMetadata: null };
-        await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+        await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
         continue;
       }
 
@@ -1536,7 +1152,9 @@ async function callGemini2FlashWithSearch(prompt, maxRetries = 2) {
 
       // Log grounding info for debugging
       if (groundingMetadata) {
-        console.log(`    Grounding: ${groundingMetadata.webSearchQueries?.length || 0} queries, ${groundingMetadata.groundingChunks?.length || 0} chunks`);
+        console.log(
+          `    Grounding: ${groundingMetadata.webSearchQueries?.length || 0} queries, ${groundingMetadata.groundingChunks?.length || 0} chunks`
+        );
       } else {
         console.warn('    No grounding metadata returned - search may not have executed');
       }
@@ -1549,7 +1167,7 @@ async function callGemini2FlashWithSearch(prompt, maxRetries = 2) {
     } catch (error) {
       console.error(`Gemini 2.5 Flash Search error (attempt ${attempt + 1}):`, error.message);
       if (attempt === maxRetries) return { text: '', groundingMetadata: null };
-      await new Promise(r => setTimeout(r, 2000 * (attempt + 1)));
+      await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
     }
   }
   return { text: '', groundingMetadata: null };
@@ -1559,7 +1177,8 @@ async function callGemini2FlashWithSearch(prompt, maxRetries = 2) {
 async function extractCompaniesV5(text, country) {
   if (!text || text.length < 50) return [];
   try {
-    const extraction = await callGemini3Flash(`Extract company information from the text. Return JSON: {"companies": [{"company_name": "...", "website": "...", "hq": "..."}]}
+    const extraction = await callGemini3Flash(
+      `Extract company information from the text. Return JSON: {"companies": [{"company_name": "...", "website": "...", "hq": "..."}]}
 
 RULES:
 - Extract ALL companies mentioned that could be in: ${country}
@@ -1570,7 +1189,9 @@ RULES:
 - Be THOROUGH - extract EVERY company mentioned, even briefly
 
 TEXT:
-${text.substring(0, 40000)}`, true);
+${text.substring(0, 40000)}`,
+      true
+    );
 
     // Parse JSON from response
     try {
@@ -1601,9 +1222,12 @@ async function runAgenticSearchTask(taskPrompt, country, searchLog) {
 
   // Extract grounding info for logging
   const searchQueries = result.groundingMetadata?.webSearchQueries || [];
-  const sources = result.groundingMetadata?.groundingChunks?.map(c => c.web?.uri).filter(Boolean) || [];
+  const sources =
+    result.groundingMetadata?.groundingChunks?.map((c) => c.web?.uri).filter(Boolean) || [];
 
-  console.log(`    Completed in ${duration}s. Searches: ${searchQueries.length}. Sources: ${sources.length}`);
+  console.log(
+    `    Completed in ${duration}s. Searches: ${searchQueries.length}. Sources: ${sources.length}`
+  );
 
   // Log this search
   searchLog.push({
@@ -1611,7 +1235,7 @@ async function runAgenticSearchTask(taskPrompt, country, searchLog) {
     duration: parseFloat(duration),
     searchQueries,
     sourceCount: sources.length,
-    responseLength: result.text.length
+    responseLength: result.text.length,
   });
 
   // Extract companies from result
@@ -1651,11 +1275,11 @@ Be thorough - find EVERY company you can. Return as a structured list.`;
     console.log(`    ChatGPT returned no results`);
     searchLog.push({
       task: `[ChatGPT] ${searchQuery.substring(0, 80)}...`,
-      duration: ((Date.now() - startTime) / 1000),
+      duration: (Date.now() - startTime) / 1000,
       searchQueries: [searchQuery],
       sourceCount: 0,
       responseLength: 0,
-      model: 'chatgpt-search'
+      model: 'chatgpt-search',
     });
     return [];
   }
@@ -1669,7 +1293,7 @@ Be thorough - find EVERY company you can. Return as a structured list.`;
     searchQueries: [searchQuery],
     sourceCount: 1,
     responseLength: searchResult.length,
-    model: 'chatgpt-search'
+    model: 'chatgpt-search',
   });
 
   // Extract companies from ChatGPT's response
@@ -1685,7 +1309,7 @@ async function expandRegionToCountries(regionInput) {
 
   // If comma-separated, user already specified countries - return as array
   if (inputLower.includes(',')) {
-    return regionInput.split(',').map(c => c.trim());
+    return regionInput.split(',').map((c) => c.trim());
   }
 
   // Hardcoded region mappings (main business markets only)
@@ -1693,22 +1317,48 @@ async function expandRegionToCountries(regionInput) {
     // Southeast Asia - 6 main markets (exclude Cambodia, Laos, Myanmar unless explicit)
     'southeast asia': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'],
     'south east asia': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'],
-    'sea': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'],
-    'asean': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'],
+    sea: ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'],
+    asean: ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'],
 
     // Other common regions
     'east asia': ['Japan', 'South Korea', 'Taiwan', 'China', 'Hong Kong'],
     'north asia': ['Japan', 'South Korea', 'Taiwan', 'China'],
     'south asia': ['India', 'Pakistan', 'Bangladesh', 'Sri Lanka'],
     'middle east': ['UAE', 'Saudi Arabia', 'Qatar', 'Kuwait', 'Bahrain', 'Oman'],
-    'gcc': ['UAE', 'Saudi Arabia', 'Qatar', 'Kuwait', 'Bahrain', 'Oman'],
-    'europe': ['Germany', 'France', 'UK', 'Italy', 'Spain', 'Netherlands', 'Poland'],
+    gcc: ['UAE', 'Saudi Arabia', 'Qatar', 'Kuwait', 'Bahrain', 'Oman'],
+    europe: ['Germany', 'France', 'UK', 'Italy', 'Spain', 'Netherlands', 'Poland'],
     'western europe': ['Germany', 'France', 'UK', 'Italy', 'Spain', 'Netherlands', 'Belgium'],
     'eastern europe': ['Poland', 'Czech Republic', 'Romania', 'Hungary', 'Slovakia'],
-    'apac': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines', 'Japan', 'South Korea', 'Taiwan', 'China', 'India', 'Australia'],
-    'asia pacific': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines', 'Japan', 'South Korea', 'Taiwan', 'China', 'India', 'Australia'],
-    'latam': ['Brazil', 'Mexico', 'Argentina', 'Chile', 'Colombia', 'Peru'],
-    'latin america': ['Brazil', 'Mexico', 'Argentina', 'Chile', 'Colombia', 'Peru']
+    apac: [
+      'Malaysia',
+      'Indonesia',
+      'Singapore',
+      'Thailand',
+      'Vietnam',
+      'Philippines',
+      'Japan',
+      'South Korea',
+      'Taiwan',
+      'China',
+      'India',
+      'Australia',
+    ],
+    'asia pacific': [
+      'Malaysia',
+      'Indonesia',
+      'Singapore',
+      'Thailand',
+      'Vietnam',
+      'Philippines',
+      'Japan',
+      'South Korea',
+      'Taiwan',
+      'China',
+      'India',
+      'Australia',
+    ],
+    latam: ['Brazil', 'Mexico', 'Argentina', 'Chile', 'Colombia', 'Peru'],
+    'latin america': ['Brazil', 'Mexico', 'Argentina', 'Chile', 'Colombia', 'Peru'],
   };
 
   // Check for matching region
@@ -1731,7 +1381,7 @@ async function expandRegionToCountries(regionInput) {
 }
 
 // Generate business term variations using AI (synonyms, industry terminology)
-async function generateBusinessTermVariations(business) {
+async function _generateBusinessTermVariations(business) {
   console.log(`  Generating search term variations for "${business}"...`);
 
   const prompt = `For M&A target search, generate alternative search terms for: "${business}"
@@ -1809,7 +1459,7 @@ Return ONLY valid JSON, no explanation:
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
       response_format: { type: 'json_object' },
-      temperature: 0.3
+      temperature: 0.3,
     });
 
     const result = response.choices[0].message.content;
@@ -1817,7 +1467,9 @@ Return ONLY valid JSON, no explanation:
 
     console.log(`  English variations: ${plan.english_variations?.join(', ') || 'none'}`);
     console.log(`  Local terms: ${Object.keys(plan.local_language_terms || {}).length} countries`);
-    console.log(`  Industrial areas: ${Object.keys(plan.key_industrial_areas || {}).length} countries`);
+    console.log(
+      `  Industrial areas: ${Object.keys(plan.key_industrial_areas || {}).length} countries`
+    );
     console.log(`  Search angles: ${plan.search_angles?.length || 0}`);
 
     return plan;
@@ -1827,7 +1479,7 @@ Return ONLY valid JSON, no explanation:
       english_variations: [],
       local_language_terms: {},
       key_industrial_areas: {},
-      search_angles: []
+      search_angles: [],
     };
   }
 }
@@ -1851,7 +1503,7 @@ async function runPerplexitySearchTask(searchPrompt, country, searchLog) {
     searchQueries: [searchPrompt.substring(0, 100)],
     sourceCount: 1,
     responseLength: result.length,
-    model: 'perplexity-sonar-pro'
+    model: 'perplexity-sonar-pro',
   });
 
   // Extract companies from result
@@ -1866,50 +1518,53 @@ async function validateCompaniesV6(companies, business, country, exclusion) {
   console.log(`\nV6 GPT-4o Validation: ${companies.length} companies...`);
   const startTime = Date.now();
 
-  const validated = [];   // GPT-4o says valid
-  const flagged = [];     // Security blocked - needs human review
-  const rejected = [];    // GPT-4o says invalid
+  const validated = []; // GPT-4o says valid
+  const flagged = []; // Security blocked - needs human review
+  const rejected = []; // GPT-4o says invalid
 
   const batchSize = 10; // Parallel validation
 
   for (let i = 0; i < companies.length; i += batchSize) {
     const batch = companies.slice(i, i + batchSize);
 
-    const validations = await Promise.all(batch.map(async (company) => {
-      try {
-        // Fetch website content for validation
-        let pageContent = '';
-        let fetchResult = { status: 'error', reason: 'No website' };
+    const validations = await Promise.all(
+      batch.map(async (company) => {
+        try {
+          // Fetch website content for validation
+          let pageContent = '';
+          let fetchResult = { status: 'error', reason: 'No website' };
 
-        if (company.website && company.website.startsWith('http')) {
-          try {
-            fetchResult = await fetchWebsite(company.website);
-          } catch (e) {
-            fetchResult = { status: 'error', reason: e.message };
+          if (company.website && company.website.startsWith('http')) {
+            try {
+              fetchResult = await fetchWebsite(company.website);
+            } catch (e) {
+              fetchResult = { status: 'error', reason: e.message };
+            }
           }
-        }
 
-        // Handle different fetch results
-        if (fetchResult.status === 'security_blocked') {
-          console.log(`    ? SECURITY: ${company.company_name} (${fetchResult.reason}) - flagging for human review`);
-          return {
-            company,
-            status: 'flagged',
-            valid: false,
-            reason: `Security blocked: ${fetchResult.reason}`,
-            securityBlocked: true
-          };
-        }
+          // Handle different fetch results
+          if (fetchResult.status === 'security_blocked') {
+            console.log(
+              `    ? SECURITY: ${company.company_name} (${fetchResult.reason}) - flagging for human review`
+            );
+            return {
+              company,
+              status: 'flagged',
+              valid: false,
+              reason: `Security blocked: ${fetchResult.reason}`,
+              securityBlocked: true,
+            };
+          }
 
-        if (fetchResult.status !== 'ok') {
-          console.log(`    ✗ REMOVED: ${company.company_name} (${fetchResult.reason})`);
-          return { company, status: 'skipped' };
-        }
+          if (fetchResult.status !== 'ok') {
+            console.log(`    ✗ REMOVED: ${company.company_name} (${fetchResult.reason})`);
+            return { company, status: 'skipped' };
+          }
 
-        pageContent = fetchResult.content;
+          pageContent = fetchResult.content;
 
-        // GPT-4o validation
-        const validationPrompt = `Validate if this company matches the search criteria.
+          // GPT-4o validation
+          const validationPrompt = `Validate if this company matches the search criteria.
 
 COMPANY: ${company.company_name}
 WEBSITE: ${company.website}
@@ -1931,26 +1586,27 @@ VALIDATION RULES:
 
 Return JSON only: {"valid": true/false, "reason": "one sentence explanation", "corrected_hq": "City, Country or null if unknown"}`;
 
-        const response = await openai.chat.completions.create({
-          model: 'gpt-4o',
-          messages: [{ role: 'user', content: validationPrompt }],
-          response_format: { type: 'json_object' },
-          temperature: 0.1
-        });
+          const response = await openai.chat.completions.create({
+            model: 'gpt-4o',
+            messages: [{ role: 'user', content: validationPrompt }],
+            response_format: { type: 'json_object' },
+            temperature: 0.1,
+          });
 
-        const result = JSON.parse(response.choices[0].message.content);
-        return {
-          company,
-          status: result.valid === true ? 'valid' : 'rejected',
-          valid: result.valid === true,
-          reason: result.reason || '',
-          corrected_hq: result.corrected_hq
-        };
-      } catch (e) {
-        console.error(`  Validation error for ${company.company_name}: ${e.message}`);
-        return { company, status: 'rejected', valid: false, reason: 'Error' };
-      }
-    }));
+          const result = JSON.parse(response.choices[0].message.content);
+          return {
+            company,
+            status: result.valid === true ? 'valid' : 'rejected',
+            valid: result.valid === true,
+            reason: result.reason || '',
+            corrected_hq: result.corrected_hq,
+          };
+        } catch (e) {
+          console.error(`  Validation error for ${company.company_name}: ${e.message}`);
+          return { company, status: 'rejected', valid: false, reason: 'Error' };
+        }
+      })
+    );
 
     for (const v of validations) {
       if (v.status === 'skipped') continue;
@@ -1960,7 +1616,7 @@ Return JSON only: {"valid": true/false, "reason": "one sentence explanation", "c
         website: v.company.website,
         hq: v.corrected_hq || v.company.hq,
         reason: v.reason,
-        securityBlocked: v.securityBlocked || false
+        securityBlocked: v.securityBlocked || false,
       };
 
       if (v.status === 'valid') {
@@ -1975,7 +1631,9 @@ Return JSON only: {"valid": true/false, "reason": "one sentence explanation", "c
       }
     }
 
-    console.log(`  Progress: ${Math.min(i + batchSize, companies.length)}/${companies.length} | Valid: ${validated.length} | Flagged: ${flagged.length} | Rejected: ${rejected.length}`);
+    console.log(
+      `  Progress: ${Math.min(i + batchSize, companies.length)}/${companies.length} | Valid: ${validated.length} | Flagged: ${flagged.length} | Rejected: ${rejected.length}`
+    );
   }
 
   const duration = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -1988,24 +1646,27 @@ Return JSON only: {"valid": true/false, "reason": "one sentence explanation", "c
 }
 
 // Build email with search log summary and three-tier validation results
-function buildV5EmailHTML(validationResults, business, country, exclusion, searchLog) {
-  const { validated, flagged, rejected } = validationResults;
+function _buildV5EmailHTML(validationResults, business, country, exclusion, searchLog) {
+  const { validated, flagged, rejected: _rejected } = validationResults;
 
   // Note: Companies with inaccessible websites are removed entirely during validation (not shown)
   // Flagged = companies where one model agrees but the other doesn't
   const allFlagged = [...flagged];
 
   // Separate Gemini and ChatGPT tasks
-  const geminiTasks = searchLog.filter(s => !s.model || (s.model !== 'chatgpt-search'));
-  const chatgptTasks = searchLog.filter(s => s.model === 'chatgpt-search');
+  const geminiTasks = searchLog.filter((s) => !s.model || s.model !== 'chatgpt-search');
+  const chatgptTasks = searchLog.filter((s) => s.model === 'chatgpt-search');
 
-  const geminiSummary = geminiTasks.map((s, i) =>
-    `<li><strong>[Gemini]</strong> Task ${i + 1}: ${s.searchQueries.length} searches, ${s.sourceCount} sources, ${s.duration}s</li>`
-  ).join('');
+  const geminiSummary = geminiTasks
+    .map(
+      (s, i) =>
+        `<li><strong>[Gemini]</strong> Task ${i + 1}: ${s.searchQueries.length} searches, ${s.sourceCount} sources, ${s.duration}s</li>`
+    )
+    .join('');
 
-  const chatgptSummary = chatgptTasks.map((s, i) =>
-    `<li><strong>[ChatGPT]</strong> Task ${i + 1}: ${s.duration}s</li>`
-  ).join('');
+  const chatgptSummary = chatgptTasks
+    .map((s, i) => `<li><strong>[ChatGPT]</strong> Task ${i + 1}: ${s.duration}s</li>`)
+    .join('');
 
   const totalSearches = searchLog.reduce((sum, s) => sum + s.searchQueries.length, 0);
   const totalSources = searchLog.reduce((sum, s) => sum + s.sourceCount, 0);
@@ -2213,7 +1874,7 @@ app.post('/api/find-target-v6', async (req, res) => {
   // Return immediately - process in background
   res.json({
     success: true,
-    message: 'Request received. Results will be emailed in ~12-15 minutes.'
+    message: 'Request received. Results will be emailed in ~12-15 minutes.',
   });
 
   try {
@@ -2234,7 +1895,7 @@ app.post('/api/find-target-v6', async (req, res) => {
     const smartPlan = await generateSmartSearchPlanV6(Business, countries, Exclusion);
 
     // Build comprehensive search terms from the plan
-    const allSearchTerms = [Business, ...smartPlan.english_variations];
+    const _allSearchTerms = [Business, ...smartPlan.english_variations];
     const localTermsFlat = Object.values(smartPlan.local_language_terms || {}).flat();
     const industrialAreasFlat = Object.values(smartPlan.key_industrial_areas || {}).flat();
 
@@ -2261,25 +1922,22 @@ app.post('/api/find-target-v6', async (req, res) => {
         : '';
 
       // Build terminology hint from plan
-      const termHint = plan.english_variations?.length > 0
-        ? `\nALTERNATIVE TERMS TO SEARCH: ${plan.english_variations.join(', ')}`
-        : '';
+      const termHint =
+        plan.english_variations?.length > 0
+          ? `\nALTERNATIVE TERMS TO SEARCH: ${plan.english_variations.join(', ')}`
+          : '';
 
       // Build local language hint
       const localTerms = Object.entries(plan.local_language_terms || {})
         .map(([c, terms]) => `${c}: ${terms.join(', ')}`)
         .join('; ');
-      const localHint = localTerms
-        ? `\nLOCAL LANGUAGE TERMS: ${localTerms}`
-        : '';
+      const localHint = localTerms ? `\nLOCAL LANGUAGE TERMS: ${localTerms}` : '';
 
       // Build industrial areas hint
       const areasHint = Object.entries(plan.key_industrial_areas || {})
         .map(([c, areas]) => `${c}: ${areas.join(', ')}`)
         .join('; ');
-      const citiesHint = areasHint
-        ? `\nKEY INDUSTRIAL AREAS: ${areasHint}`
-        : '';
+      const citiesHint = areasHint ? `\nKEY INDUSTRIAL AREAS: ${areasHint}` : '';
 
       const prompts = [
         // Round 1: Comprehensive with all variations
@@ -2310,47 +1968,78 @@ app.post('/api/find-target-v6', async (req, res) => {
         `Find specialized and niche ${business} companies in ${country}. Look for companies with specific focus areas within the industry.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
 
         // Round 10: Final exhaustive sweep
-        `Find any remaining ${business} companies in ${country} not yet found. Use ALL search variations.${termHint}${localHint}${citiesHint}${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`
+        `Find any remaining ${business} companies in ${country} not yet found. Use ALL search variations.${termHint}${localHint}${citiesHint}${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
       ];
 
       return prompts[round % prompts.length];
     };
 
     const roundDescriptions = [
-      'comprehensive', 'local language', 'industrial areas', 'SME/private',
-      'associations', 'alt terminology', 'regional/city', 'emerging', 'specialized', 'final sweep'
+      'comprehensive',
+      'local language',
+      'industrial areas',
+      'SME/private',
+      'associations',
+      'alt terminology',
+      'regional/city',
+      'emerging',
+      'specialized',
+      'final sweep',
     ];
 
     for (let round = 0; round < NUM_ROUNDS; round++) {
       const roundStart = Date.now();
 
       // Build "already found" list (company names only to save tokens)
-      const alreadyFound = allCompanies.slice(0, 100).map(c => c.company_name).join(', ');
+      const alreadyFound = allCompanies
+        .slice(0, 100)
+        .map((c) => c.company_name)
+        .join(', ');
 
       console.log(`\n  --- ROUND ${round + 1}/${NUM_ROUNDS} (${roundDescriptions[round]}) ---`);
 
       // Generate prompt for this round (using GPT-4o smart plan)
-      const prompt = getSearchPrompt(round, Business, expandedCountry, Exclusion, alreadyFound, smartPlan);
+      const prompt = getSearchPrompt(
+        round,
+        Business,
+        expandedCountry,
+        Exclusion,
+        alreadyFound,
+        smartPlan
+      );
 
       // Run all 3 models in parallel
       const [perplexityResults, geminiResults, chatgptResults] = await Promise.all([
-        runPerplexitySearchTask(prompt, expandedCountry, searchLog)
-          .catch(e => { console.error(`    Perplexity failed: ${e.message}`); return []; }),
-        runAgenticSearchTask(prompt, expandedCountry, searchLog)
-          .catch(e => { console.error(`    Gemini failed: ${e.message}`); return []; }),
-        runChatGPTSearchTask(`${Business} companies ${expandedCountry}`, prompt, expandedCountry, searchLog)
-          .catch(e => { console.error(`    ChatGPT failed: ${e.message}`); return []; })
+        runPerplexitySearchTask(prompt, expandedCountry, searchLog).catch((e) => {
+          console.error(`    Perplexity failed: ${e.message}`);
+          return [];
+        }),
+        runAgenticSearchTask(prompt, expandedCountry, searchLog).catch((e) => {
+          console.error(`    Gemini failed: ${e.message}`);
+          return [];
+        }),
+        runChatGPTSearchTask(
+          `${Business} companies ${expandedCountry}`,
+          prompt,
+          expandedCountry,
+          searchLog
+        ).catch((e) => {
+          console.error(`    ChatGPT failed: ${e.message}`);
+          return [];
+        }),
       ]);
 
       // Combine results from this round
       const roundCompanies = [...perplexityResults, ...geminiResults, ...chatgptResults];
-      console.log(`    Found: Perplexity ${perplexityResults.length}, Gemini ${geminiResults.length}, ChatGPT ${chatgptResults.length}`);
+      console.log(
+        `    Found: Perplexity ${perplexityResults.length}, Gemini ${geminiResults.length}, ChatGPT ${chatgptResults.length}`
+      );
 
       // Dedupe within round
       const uniqueRound = dedupeCompanies(roundCompanies);
 
       // Filter out already-seen companies
-      const newCompanies = uniqueRound.filter(c => {
+      const newCompanies = uniqueRound.filter((c) => {
         const website = c.website?.toLowerCase();
         if (!website || seenWebsites.has(website)) return false;
         seenWebsites.add(website);
@@ -2364,7 +2053,9 @@ app.post('/api/find-target-v6', async (req, res) => {
       allCompanies.push(...preFiltered);
 
       const roundDuration = ((Date.now() - roundStart) / 1000).toFixed(1);
-      console.log(`    New companies: ${preFiltered.length} | Total: ${allCompanies.length} | Time: ${roundDuration}s`);
+      console.log(
+        `    New companies: ${preFiltered.length} | Total: ${allCompanies.length} | Time: ${roundDuration}s`
+      );
     }
 
     console.log(`\n  Search complete. Total unique companies: ${allCompanies.length}`);
@@ -2374,7 +2065,12 @@ app.post('/api/find-target-v6', async (req, res) => {
     console.log('STEP 3: GPT-4o VALIDATION');
     console.log('='.repeat(50));
 
-    const validationResults = await validateCompaniesV6(allCompanies, Business, expandedCountry, Exclusion);
+    const validationResults = await validateCompaniesV6(
+      allCompanies,
+      Business,
+      expandedCountry,
+      Exclusion
+    );
     const { validated, flagged, rejected } = validationResults;
 
     // ========== STEP 4: Results ==========
@@ -2388,9 +2084,9 @@ app.post('/api/find-target-v6', async (req, res) => {
     console.log(`  ✗ REJECTED: ${rejected.length}`);
 
     // Stats
-    const perplexityCount = searchLog.filter(s => s.model === 'perplexity-sonar-pro').length;
-    const geminiCount = searchLog.filter(s => !s.model || s.model === 'gemini').length;
-    const chatgptCount = searchLog.filter(s => s.model === 'chatgpt-search').length;
+    const perplexityCount = searchLog.filter((s) => s.model === 'perplexity-sonar-pro').length;
+    const geminiCount = searchLog.filter((s) => !s.model || s.model === 'gemini').length;
+    const chatgptCount = searchLog.filter((s) => s.model === 'chatgpt-search').length;
 
     console.log(`\nSearch Statistics:`);
     console.log(`  Rounds: ${NUM_ROUNDS}`);
@@ -2401,9 +2097,9 @@ app.post('/api/find-target-v6', async (req, res) => {
 
     // ========== STEP 5: Generate PPT for all companies ==========
     const allWebsites = [
-      ...validated.map(c => c.website),
-      ...flagged.map(c => c.website)
-    ].filter(w => w);
+      ...validated.map((c) => c.website),
+      ...flagged.map((c) => c.website),
+    ].filter((w) => w);
 
     let pptAttachment = null;
 
@@ -2414,7 +2110,8 @@ app.post('/api/find-target-v6', async (req, res) => {
       console.log('='.repeat(50));
 
       // Call profile-slides API with retry logic for intermittent SSL errors
-      const profileSlidesUrl = process.env.PROFILE_SLIDES_URL || 'https://xvasjackgithubio-production-fb38.up.railway.app';
+      const profileSlidesUrl =
+        process.env.PROFILE_SLIDES_URL || 'https://xvasjackgithubio-production-fb38.up.railway.app';
       const maxRetries = 3;
 
       for (let attempt = 1; attempt <= maxRetries; attempt++) {
@@ -2425,8 +2122,8 @@ app.post('/api/find-target-v6', async (req, res) => {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               websites: allWebsites,
-              targetDescription: `${Business} in ${expandedCountry}`
-            })
+              targetDescription: `${Business} in ${expandedCountry}`,
+            }),
           });
 
           const pptResult = await pptResponse.json();
@@ -2435,7 +2132,9 @@ app.post('/api/find-target-v6', async (req, res) => {
             console.log(`PPT generated: ${pptResult.companiesProcessed} companies processed`);
             pptAttachment = {
               content: pptResult.content,
-              name: pptResult.filename || `Profile_Slides_${new Date().toISOString().split('T')[0]}.pptx`
+              name:
+                pptResult.filename ||
+                `Profile_Slides_${new Date().toISOString().split('T')[0]}.pptx`,
             };
           } else {
             console.log(`PPT generation failed: ${pptResult.error || 'Unknown error'}`);
@@ -2445,8 +2144,8 @@ app.post('/api/find-target-v6', async (req, res) => {
           console.error(`PPT attempt ${attempt} failed:`, pptError.message);
           if (attempt < maxRetries) {
             const waitTime = attempt * 2000; // 2s, 4s
-            console.log(`Retrying in ${waitTime/1000}s...`);
-            await new Promise(resolve => setTimeout(resolve, waitTime));
+            console.log(`Retrying in ${waitTime / 1000}s...`);
+            await new Promise((resolve) => setTimeout(resolve, waitTime));
           } else {
             console.error('Failed to generate PPT after all retries');
           }
@@ -2469,15 +2168,17 @@ app.post('/api/find-target-v6', async (req, res) => {
     console.log('\n' + '='.repeat(70));
     console.log(`V6 ITERATIVE SEARCH COMPLETE!`);
     console.log(`Email sent to: ${Email}${pptAttachment ? ' with PPT attachment' : ''}`);
-    console.log(`Validated: ${validated.length} | Flagged: ${flagged.length} | Rejected: ${rejected.length}`);
+    console.log(
+      `Validated: ${validated.length} | Flagged: ${flagged.length} | Rejected: ${rejected.length}`
+    );
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(70));
-
   } catch (error) {
     console.error('V6 Processing error:', error);
     // Try to send error email
-    sendEmail(Email, `Find Target V6 - Error`, `<p>Error: ${error.message}</p>`)
-      .catch(e => console.error('Failed to send error email:', e));
+    sendEmail(Email, `Find Target V6 - Error`, `<p>Error: ${error.message}</p>`).catch((e) =>
+      console.error('Failed to send error email:', e)
+    );
   }
 });
 

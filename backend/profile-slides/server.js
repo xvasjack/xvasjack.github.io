@@ -11,8 +11,8 @@ const { Document, Packer, Paragraph, TextRun } = require('docx');
 const { S3Client } = require('@aws-sdk/client-s3');
 const Anthropic = require('@anthropic-ai/sdk');
 const JSZip = require('jszip');
-const { securityHeaders, rateLimiter, escapeHtml } = require('../shared/security');
-const { requestLogger, healthCheck } = require('../shared/middleware');
+const { securityHeaders, rateLimiter, escapeHtml } = require('./security');
+const { requestLogger, healthCheck } = require('./middleware');
 
 // ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
 // Memory logging helper for debugging Railway OOM issues
@@ -77,6 +77,69 @@ function extractCompanyNameFromUrl(url) {
   } catch (e) {
     return url;
   }
+}
+
+// Clean company name: remove suffixes, convert to English, reject descriptions
+function cleanCompanyName(name, fallbackUrl = '') {
+  if (!name || typeof name !== 'string') {
+    return fallbackUrl ? extractCompanyNameFromUrl(fallbackUrl) : '';
+  }
+
+  let cleaned = name.trim();
+
+  // Convert common non-ASCII characters to ASCII equivalents
+  const charMap = {
+    'บริษัท': '', 'จำกัด': '', '(มหาชน)': '', // Thai: Company, Limited, Public
+    '株式会社': '', '有限会社': '', '合同会社': '', // Japanese
+    '公司': '', '有限': '', '集团': '', // Chinese
+    'Công ty': '', 'TNHH': '', // Vietnamese
+    // Diacritics
+    'á': 'a', 'à': 'a', 'ả': 'a', 'ã': 'a', 'ạ': 'a', 'ă': 'a', 'ắ': 'a', 'ằ': 'a', 'ẳ': 'a', 'ẵ': 'a', 'ặ': 'a',
+    'â': 'a', 'ấ': 'a', 'ầ': 'a', 'ẩ': 'a', 'ẫ': 'a', 'ậ': 'a',
+    'é': 'e', 'è': 'e', 'ẻ': 'e', 'ẽ': 'e', 'ẹ': 'e', 'ê': 'e', 'ế': 'e', 'ề': 'e', 'ể': 'e', 'ễ': 'e', 'ệ': 'e',
+    'í': 'i', 'ì': 'i', 'ỉ': 'i', 'ĩ': 'i', 'ị': 'i',
+    'ó': 'o', 'ò': 'o', 'ỏ': 'o', 'õ': 'o', 'ọ': 'o', 'ô': 'o', 'ố': 'o', 'ồ': 'o', 'ổ': 'o', 'ỗ': 'o', 'ộ': 'o',
+    'ơ': 'o', 'ớ': 'o', 'ờ': 'o', 'ở': 'o', 'ỡ': 'o', 'ợ': 'o',
+    'ú': 'u', 'ù': 'u', 'ủ': 'u', 'ũ': 'u', 'ụ': 'u', 'ư': 'u', 'ứ': 'u', 'ừ': 'u', 'ử': 'u', 'ữ': 'u', 'ự': 'u',
+    'ý': 'y', 'ỳ': 'y', 'ỷ': 'y', 'ỹ': 'y', 'ỵ': 'y',
+    'đ': 'd', 'Đ': 'D',
+    'ñ': 'n', 'ü': 'u', 'ö': 'o', 'ä': 'a', 'ß': 'ss',
+    'ç': 'c', 'ø': 'o', 'å': 'a', 'æ': 'ae', 'œ': 'oe'
+  };
+
+  for (const [from, to] of Object.entries(charMap)) {
+    cleaned = cleaned.split(from).join(to);
+  }
+
+  // Remove company suffixes (expanded list)
+  cleaned = cleaned
+    .replace(/\s*(Sdn\.?\s*Bhd\.?|Bhd\.?|Berhad|Pte\.?\s*Ltd\.?|Ltd\.?|Limited|Inc\.?|Incorporated|Corp\.?|Corporation|Co\.?,?\s*Ltd\.?|LLC|LLP|GmbH|S\.?A\.?|PT\.?|CV\.?|Tbk\.?|JSC|PLC|Public\s*Limited|Private\s*Limited|Joint\s*Stock|Company|\(.*?\))$/gi, '')
+    .replace(/^(PT\.?|CV\.?)\s+/gi, '')  // Remove PT/CV prefix
+    .trim();
+
+  // Check if name looks like a description (too many generic/marketing words)
+  const descriptionWords = [
+    'leading', 'provider', 'solutions', 'services', 'industrial', 'manufacturing',
+    'global', 'world', 'class', 'premier', 'best', 'top', 'quality', 'excellence',
+    'innovative', 'advanced', 'professional', 'trusted', 'reliable', 'expert'
+  ];
+  const words = cleaned.toLowerCase().split(/\s+/);
+  const descWordCount = words.filter(w => descriptionWords.includes(w)).length;
+
+  // If more than 40% of words are generic description words, reject it
+  if (words.length >= 3 && descWordCount / words.length > 0.4) {
+    console.log(`  Rejecting descriptive company name: "${cleaned}"`);
+    return fallbackUrl ? extractCompanyNameFromUrl(fallbackUrl) : '';
+  }
+
+  // Check if name contains non-ASCII characters (likely non-English)
+  // eslint-disable-next-line no-control-regex
+  if (/[^\x00-\x7F]/.test(cleaned)) {
+    console.log(`  Rejecting non-English company name: "${cleaned}"`);
+    return fallbackUrl ? extractCompanyNameFromUrl(fallbackUrl) : '';
+  }
+
+  return cleaned || (fallbackUrl ? extractCompanyNameFromUrl(fallbackUrl) : '');
 }
 
 const app = express();
@@ -2298,7 +2361,8 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         const parts = loc.split(',').map(p => p.trim());
         const country = parts[parts.length - 1] || 'Other';
         // HQ city is first part only (just the district/area)
-        const hqCity = parts[0] || '';
+        // If only 1 part (country only), hqCity should be empty, not the country name
+        const hqCity = parts.length > 1 ? (parts[0] || '') : '';
         return { country, hqCity };
       };
 
@@ -2481,7 +2545,9 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
           // Company name with numbering (bright blue background, WHITE text, left-aligned)
           // Keep 3pt white borders on ALL sides for company name cells
-          const companyName = comp.title || comp.company_name || 'Unknown';
+          // Apply cleanCompanyName to ensure no suffixes (PT, Ltd) and English only
+          const rawName = comp.title || comp.company_name || '';
+          const companyName = cleanCompanyName(rawName, comp.website) || 'Unknown';
           row.push({
             text: `${comp.index}. ${companyName}`,
             options: {
@@ -2563,22 +2629,22 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
       // Add target list table (position from template: x=0.3663", y=1.467")
       // Cell margins: 0.04 inch (0.1cm) left/right, 0 inch top/bottom
-      // Font size 12 to fit more items
+      // Font size 14 per design requirements
       targetSlide.addTable(tableRows, {
         x: 0.37, y: 1.47, w: tableWidth,
         colW: colWidths,
         fontFace: 'Segoe UI',
-        fontSize: 12,
+        fontSize: 14,
         valign: 'middle',
-        rowH: 0.28,
+        rowH: 0.30,
         margin: [0, 0.04, 0, 0.04]  // [top, right, bottom, left] in inches
       });
 
       // Footnote (from template: x=0.3754", y=6.6723", font 10pt)
-      targetSlide.addText('出典: Company websites', {
+      targetSlide.addText('Source: Company disclosures, industry databases', {
         x: 0.38, y: 6.67, w: 12.54, h: 0.42,
         fontSize: 10, fontFace: 'Segoe UI',
-        color: '000000', valign: 'top'
+        color: COLORS.black, valign: 'top'
       });
 
       console.log('Target List slide generated');
@@ -2590,6 +2656,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
     }
 
     // ===== INDIVIDUAL COMPANY PROFILE SLIDES =====
+    // NOTE: M&A Strategies slide removed - belongs in UTB service only
     for (const company of companies) {
       try {
       // Skip companies with no meaningful info (only has website, no business/location/metrics)
@@ -2614,6 +2681,9 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       }
 
       console.log(`  Generating slide for: ${company.company_name || company.website}`);
+
+      // NOTE: Business Overview slide removed - user requested single profile slide only
+
       // Use master slide - lines are fixed in background and cannot be moved
       const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
@@ -3434,7 +3504,19 @@ function validateAndFixHQFormat(location, websiteUrl) {
       console.log(`  [HQ Fix] Fixed non-Singapore HQ (too many levels): "${loc}" → "${fixed}"`);
       return fixed;
     }
-    return loc; // Already 3 levels or less (can't add missing levels without more info)
+    if (parts.length === 1) {
+      // Only country name (e.g., "Thailand") - this is incomplete
+      // Log warning so we know this location is missing city info
+      console.log(`  [HQ Warning] Location missing city/province: "${loc}" - needs manual fix`);
+      return ''; // Return empty so it doesn't show incorrect data in target list
+    }
+    if (parts.length === 2) {
+      // Only 2 levels - this is also incomplete for non-Singapore
+      // Log warning
+      console.log(`  [HQ Warning] Location only has 2 levels: "${loc}" - may be missing city`);
+      return loc; // Return as-is, but flagged
+    }
+    return loc; // Already 3 levels
   }
 }
 
@@ -4140,6 +4222,118 @@ Create MECE segments for these ${targetDescription} companies and mark which seg
   }
 }
 
+// AI Agent 7: Generate Hypothetical M&A Strategies by region
+// Creates regional M&A strategy recommendations based on target description and company profiles
+async function generateMAStrategies(targetDescription, companies) {
+  if (!targetDescription || companies.length === 0) {
+    return { strategies: [] };
+  }
+
+  try {
+    console.log('Generating M&A strategies for regions...');
+
+    // Group companies by region
+    const regionMap = {};
+    companies.forEach(c => {
+      const location = ensureString(c.location).toLowerCase();
+      let region = 'Other';
+
+      // Southeast Asia
+      if (location.includes('singapore') || location.includes('malaysia') ||
+          location.includes('thailand') || location.includes('vietnam') ||
+          location.includes('indonesia') || location.includes('philippines')) {
+        region = 'Southeast Asia';
+      }
+      // Greater China
+      else if (location.includes('china') || location.includes('hong kong') ||
+               location.includes('taiwan')) {
+        region = 'Greater China';
+      }
+      // Northeast Asia (Japan, Korea)
+      else if (location.includes('japan') || location.includes('korea')) {
+        region = 'Northeast Asia';
+      }
+      // South Asia
+      else if (location.includes('india') || location.includes('bangladesh') ||
+               location.includes('pakistan') || location.includes('sri lanka')) {
+        region = 'South Asia';
+      }
+
+      if (!regionMap[region]) regionMap[region] = [];
+      regionMap[region].push(c);
+    });
+
+    // Prepare region summaries
+    const regionSummaries = Object.entries(regionMap).map(([region, comps]) => ({
+      region,
+      companies: comps.map(c => ({
+        name: c.title || c.company_name || 'Unknown',
+        business: c.business || ''
+      }))
+    }));
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an M&A strategist creating hypothetical regional expansion strategies.
+
+Given a target industry and companies grouped by region, create M&A strategy recommendations.
+
+CRITICAL RULES:
+1. Do NOT mention specific company names in strategies
+2. Use generic terms like "target companies", "regional players", "local distributors", etc.
+3. Focus on strategic rationale, not specific targets
+4. Strategies should be actionable and region-specific
+
+OUTPUT JSON:
+{
+  "strategies": [
+    {
+      "region": "Southeast Asia",
+      "strategy": "Acquire a regional distributor to establish footprint and leverage local distribution networks",
+      "rationale": "Access to high-growth ASEAN markets with favorable demographics and cost-effective manufacturing base"
+    },
+    {
+      "region": "Greater China",
+      "strategy": "Target local manufacturers for technology and scale expansion",
+      "rationale": "Access to advanced manufacturing capabilities and strategic positioning in key supply chain hub"
+    }
+  ]
+}
+
+IMPORTANT:
+- Keep strategies generic (no company names)
+- Each strategy should be 1-2 sentences
+- Each rationale should explain the business value
+- Only include regions that have companies in the input
+
+Return ONLY valid JSON.`
+        },
+        {
+          role: 'user',
+          content: `Target Industry: ${targetDescription}
+
+Regions and Companies:
+${regionSummaries.map(r => `${r.region}:\n${r.companies.map(c => `  - ${c.name}: ${c.business}`).join('\n')}`).join('\n\n')}
+
+Generate M&A strategies for each region WITHOUT mentioning specific company names.`
+        }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.4
+    });
+
+    const result = JSON.parse(response.choices[0].message.content);
+    console.log(`Generated ${result.strategies?.length || 0} regional M&A strategies`);
+    return result;
+  } catch (e) {
+    console.error('M&A strategy generation error:', e.message);
+    return { strategies: [] };
+  }
+}
+
 // AI Review Agent: Validate extraction against source content and fix issues
 // Uses GPT-4o for accurate validation - compares extracted data against source
 // Returns { data, issuesFound, missedItems } for iterative extraction
@@ -4273,14 +4467,21 @@ Return ONLY valid JSON.`;
     }
 
     // Merge validated data with original (preserve fields not in output)
+    // Apply cleanCompanyName to ensure English names without suffixes or descriptions
+    const rawCompanyName = validated.company_name || companyData.company_name;
+    const rawTitle = validated.title || companyData.title;
+    const websiteUrl = companyData.website || '';
+    const cleanedCompanyName = cleanCompanyName(rawCompanyName, websiteUrl);
+    const cleanedTitle = cleanCompanyName(rawTitle, websiteUrl);
+
     const mergedData = {
       ...companyData,
-      company_name: validated.company_name || companyData.company_name,
+      company_name: cleanedCompanyName,
       established_year: validated.established_year || companyData.established_year,
       location: validated.location || companyData.location,
       business: validated.business || companyData.business,
       message: validated.message || companyData.message,
-      title: validated.title || companyData.title,
+      title: cleanedTitle || cleanedCompanyName,
       key_metrics: validated.key_metrics || companyData.key_metrics,
       breakdown_title: validated.breakdown_title || companyData.breakdown_title,
       breakdown_items: validated.breakdown_items || companyData.breakdown_items
