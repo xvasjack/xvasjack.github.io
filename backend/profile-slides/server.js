@@ -276,6 +276,17 @@ ${contentToScan}`;
 
     const markers = JSON.parse(text);
 
+    // Warn if critical snippets are empty - these might indicate Marker missed important content
+    if (!markers.statistics_snippets?.length) {
+      console.log(`    ⚠ WARNING: Marker found no statistics - validator will need to catch these`);
+    }
+    if (!markers.location_hints?.length) {
+      console.log(`    ⚠ WARNING: Marker found no location hints - relying on extractBasicInfo with raw content`);
+    }
+    if (!markers.identity_snippets?.length) {
+      console.log(`    ⚠ WARNING: Marker found no company identity info`);
+    }
+
     // Combine all snippets into a focused content block for extractors
     const markedContent = [
       '=== COMPANY IDENTITY ===',
@@ -4519,6 +4530,7 @@ ${scrapedContent.substring(0, 15000)}`
 }
 
 // AI Agent 4: Search for missing company information (est year, location, HQ)
+// Wrapped with retry for reliability
 async function searchMissingInfo(companyName, website, missingFields) {
   if (!companyName || missingFields.length === 0) {
     return {};
@@ -4528,9 +4540,8 @@ async function searchMissingInfo(companyName, website, missingFields) {
     console.log(`  Searching for missing info: ${missingFields.join(', ')}`);
 
     // Use OpenAI Search model which has web search capability
-    const searchQuery = `${companyName} company ${missingFields.includes('established_year') ? 'founded year established' : ''} ${missingFields.includes('location') ? 'headquarters location country' : ''}`.trim();
-
-    const response = await openai.chat.completions.create({
+    // Wrapped with retry for rate limits
+    const response = await withRetry(() => openai.chat.completions.create({
       model: 'gpt-4o-search-preview',
       messages: [
         {
@@ -4551,7 +4562,7 @@ If you cannot find reliable information for a field, omit it from the response.
 Return ONLY valid JSON, no explanations.`
         }
       ]
-    });
+    }));
 
     const content = response.choices[0].message.content || '';
 
@@ -4980,8 +4991,10 @@ async function processSingleWebsite(website, index, total) {
     }
 
     // Step 2: Extract basic info (company name, year, location)
+    // CRITICAL: Use RAW content for location extraction - this is the most important field
+    // Marker might miss the actual address, so give extractBasicInfo the full picture
     console.log(`  [${index + 1}] Step 2: Extracting company name, year, location...`);
-    const basicInfo = await extractBasicInfo(contentForExtraction, trimmedWebsite);
+    const basicInfo = await extractBasicInfo(scraped.content, trimmedWebsite);
     console.log(`  [${index + 1}] Company: ${basicInfo.company_name || 'Not found'}`);
     if (basicInfo.location) console.log(`  [${index + 1}] Location extracted: ${basicInfo.location}`);
 
