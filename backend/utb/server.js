@@ -2594,13 +2594,22 @@ Respond in this EXACT JSON format:
     ],
     "revenue_by_geography": [
       {"region": "Region name", "percentage": "Exact % (e.g., '32%')", "source": "Document name", "source_url": "Direct URL to source"}
-    ]
+    ],
+    "revenue_history": [
+      {"year": "FY2020", "revenue": 123.4},
+      {"year": "FY2021", "revenue": 145.2},
+      {"year": "FY2022", "revenue": 167.8},
+      {"year": "FY2023", "revenue": 189.5}
+    ],
+    "revenue_unit": "JPY 100M"
   }
 }
 
 IMPORTANT:
 - If you cannot find EXACT percentages with sources, return empty arrays. No approximations allowed.
-- Always include source_url when available. Use the most direct link to the source document.`).catch(e => ({ section: 'profile', error: e.message })),
+- Always include source_url when available. Use the most direct link to the source document.
+- For revenue_history: Extract 3-5 years of annual revenue. Convert to 100M JPY units (億円). If company reports in USD/EUR, convert using approximate rates.
+- For revenue_unit: Use "JPY 100M" for Japanese companies, "USD M" for US companies, etc.`).catch(e => ({ section: 'profile', error: e.message })),
 
     // Synthesis 2: Products, Services & Operations
     callChatGPT(`You are writing for M&A ADVISORS who need to understand a company's business quickly. NOT engineers.
@@ -2755,8 +2764,8 @@ Respond in this EXACT JSON format:
 
 Keep all fields brief. Include source_url for verifiable claims.`).catch(e => ({ section: 'ma_analysis', error: e.message })),
 
-    // Synthesis 5: Ideal Target Profile - Concrete Target List
-    callChatGPT(`Identify 10 REAL acquisition targets for ${companyName}. BE CONCISE.
+    // Synthesis 5: Ideal Target Profile - SEA/Asia Target List with Products
+    callChatGPT(`Identify 10 REAL acquisition targets for ${companyName} in SOUTHEAST ASIA or ASIA. BE CONCISE.
 
 RESEARCH:
 ${research.products}
@@ -2768,25 +2777,34 @@ ${context ? `CLIENT CONTEXT: ${context}` : ''}
 
 ---
 
+GEOGRAPHIC FOCUS: Prioritize targets in:
+1. Southeast Asia (Singapore, Thailand, Vietnam, Indonesia, Malaysia, Philippines)
+2. If not enough in SEA, expand to broader Asia (Japan, Korea, China, Taiwan, India)
+Do NOT include targets from Americas, Europe, or other regions.
+
 Respond in this EXACT JSON format:
 {
   "ideal_target": {
+    "segments": ["Segment 1", "Segment 2", "Segment 3", "Segment 4"],
     "target_list": [
       {
         "company_name": "Actual company name",
         "hq_country": "Country",
+        "hq_city": "City",
         "revenue": "$XM",
         "ownership": "Public|Private|PE-backed",
-        "fit_type": "Technology|Geography|Capacity|Vertical",
-        "strategic_fit": "One sentence - what gap it fills",
-        "website": "company URL",
-        "source_url": "URL to company info source"
+        "products_offered": [true, false, true, false],
+        "website": "company URL"
       }
     ]
   }
 }
 
-IMPORTANT: Real companies only. Keep strategic_fit to one sentence.`).catch(e => ({ section: 'ideal_target', error: e.message }))
+IMPORTANT:
+- "segments" should list the 4-6 main product/service categories based on the buyer's business
+- "products_offered" is a boolean array matching the segments array (true = company offers this product/service)
+- Real SEA/Asia companies only
+- Include company website URL`).catch(e => ({ section: 'ideal_target', error: e.message }))
   ];
 
   // Add local insights synthesis if available
@@ -3270,46 +3288,60 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
     addSlideTitle(slide, 'Business Overview');
 
-    const rows = [
-      [
-        { text: 'Segment', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'left', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
-        { text: 'Description', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'left', valign: 'middle', border: { pt: 3, color: COLORS.white } } }
-      ]
-    ];
-
-    prod.product_lines.forEach((line, i) => {
-      const isLastRow = i === prod.product_lines.length - 1;
-      rows.push([
-        { text: line.name || '', options: {
-          fill: { color: COLORS.labelBg },
-          color: COLORS.white,
-          bold: false,
-          align: 'left',
-          valign: 'middle',
-          border: { pt: 3, color: COLORS.white }
-        }},
-        { text: line.what_it_does || line.description || '', options: {
-          fill: { color: COLORS.white },
-          color: COLORS.black,
-          align: 'left',
-          valign: 'middle',
-          border: [
-            { pt: 3, color: COLORS.white },
-            { pt: 3, color: COLORS.white },
-            getRowBorder(isLastRow),
-            { pt: 3, color: COLORS.white }
-          ]
-        }}
-      ]);
+    // Column titles (above columns, not spanning header)
+    slide.addText('Business Segment', {
+      x: 0.38, y: 1.15, w: 2.5, h: 0.3,
+      fontSize: 11, fontFace: 'Segoe UI', bold: true,
+      color: COLORS.black, align: 'left'
+    });
+    slide.addText('Description', {
+      x: 3.0, y: 1.15, w: 9.9, h: 0.3,
+      fontSize: 11, fontFace: 'Segoe UI', bold: true,
+      color: COLORS.black, align: 'left'
     });
 
-    slide.addTable(rows, {
-      x: 0.38, y: 1.2, w: 12.54,
-      colW: [3.5, 9.04],
-      rowH: 0.55,
-      fontFace: 'Segoe UI',
-      fontSize: 11,
-      valign: 'middle'
+    // Calculate row height based on content
+    const rowHeight = Math.min(0.85, 5.2 / prod.product_lines.length);
+    const startY = 1.5;
+
+    prod.product_lines.forEach((line, i) => {
+      const y = startY + i * rowHeight;
+      const isLastRow = i === prod.product_lines.length - 1;
+
+      // Blue segment block (full height)
+      slide.addShape(pptx.shapes.RECTANGLE, {
+        x: 0.38, y: y, w: 2.5, h: rowHeight - 0.05,
+        fill: { color: COLORS.labelBg },
+        line: { color: COLORS.white, width: 2 }
+      });
+
+      // Segment name (white text, bold, centered vertically)
+      slide.addText(line.name || '', {
+        x: 0.38, y: y, w: 2.5, h: rowHeight - 0.05,
+        fontSize: 11, fontFace: 'Segoe UI', bold: true,
+        color: COLORS.white, align: 'center', valign: 'middle'
+      });
+
+      // Description with square bullets
+      const desc = line.what_it_does || line.description || '';
+      // Convert to bullet points if not already
+      const bullets = desc.includes('•') || desc.includes('-')
+        ? desc
+        : '■ ' + desc.split('. ').filter(s => s.trim()).slice(0, 2).join('\n■ ');
+
+      slide.addText(bullets, {
+        x: 3.0, y: y + 0.05, w: 9.9, h: rowHeight - 0.1,
+        fontSize: 10, fontFace: 'Segoe UI',
+        color: '4A5568', align: 'left', valign: 'top'
+      });
+
+      // Dotted divider line between rows (not on last row)
+      if (!isLastRow) {
+        slide.addShape(pptx.shapes.LINE, {
+          x: 3.0, y: y + rowHeight - 0.05, w: 9.9, h: 0,
+          line: { color: COLORS.gray, width: 0.75, dashType: 'dash' }
+        });
+      }
     });
 
     addFootnote(slide);
@@ -3386,27 +3418,41 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     addFootnote(slide);
   }
 
-  // ========== SLIDE 4: TARGET LIST ==========
+  // ========== SLIDE 4: TARGET LIST with Products/Services Tick Marks ==========
   const idealTarget = synthesis.ideal_target || {};
   const targetList = idealTarget.target_list || [];
+  const segments = idealTarget.segments || ['Product 1', 'Product 2', 'Product 3', 'Product 4'];
+
   if (targetList.length > 0) {
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
-    // Title: "Target List – [context or company name]"
+    // Title: "Target List – SEA/Asia"
     const targetTitle = additionalContext
-      ? `Target List – ${additionalContext.substring(0, 50)}`
-      : `Target List – ${companyName}`;
+      ? `Target List – ${additionalContext.substring(0, 40)}`
+      : 'Target List – SEA/Asia';
     addSlideTitle(slide, targetTitle);
 
-    const rows = [
-      [
-        { text: 'Company', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'left', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
-        { text: 'HQ', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'center', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
-        { text: 'Revenue', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'center', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
-        { text: 'Fit Type', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'center', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
-        { text: 'Strategic Fit', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'left', valign: 'middle', border: { pt: 3, color: COLORS.white } } }
-      ]
+    // Build header row: Company | HQ | Revenue | [Segment columns...]
+    const headerRow = [
+      { text: 'Company', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'left', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
+      { text: 'HQ', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'center', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
+      { text: 'Revenue', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'center', valign: 'middle', border: { pt: 3, color: COLORS.white } } }
     ];
+
+    // Add segment columns to header (truncate long names)
+    segments.slice(0, 4).forEach(seg => {
+      headerRow.push({
+        text: seg.length > 15 ? seg.substring(0, 14) + '…' : seg,
+        options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'center', valign: 'middle', border: { pt: 3, color: COLORS.white }, fontSize: 9 }
+      });
+    });
+
+    const rows = [headerRow];
+
+    // Calculate column widths: Company(2.8) + HQ(1.0) + Revenue(1.2) + segments(remaining)
+    const numSegments = Math.min(4, segments.length);
+    const segmentColW = (12.54 - 2.8 - 1.0 - 1.2) / numSegments;
+    const colWidths = [2.8, 1.0, 1.2, ...Array(numSegments).fill(segmentColW)];
 
     const targets = targetList.slice(0, 10);
     targets.forEach((t, i) => {
@@ -3421,7 +3467,7 @@ async function generateUTBSlides(companyName, website, research, additionalConte
       };
       if (t.website) companyOpts.hyperlink = { url: t.website };
 
-      rows.push([
+      const row = [
         { text: `${i + 1}. ${t.company_name || ''}`, options: companyOpts },
         { text: t.hq_country || '', options: {
           fill: { color: COLORS.white },
@@ -3436,109 +3482,180 @@ async function generateUTBSlides(companyName, website, research, additionalConte
           align: 'center',
           valign: 'middle',
           border: [{ pt: 3, color: COLORS.white }, { pt: 3, color: COLORS.white }, getRowBorder(isLastRow), { pt: 3, color: COLORS.white }]
-        }},
-        { text: t.fit_type || '', options: {
-          fill: { color: COLORS.labelBg },
-          color: COLORS.white,
-          align: 'center',
-          valign: 'middle',
-          border: { pt: 3, color: COLORS.white }
-        }},
-        { text: t.strategic_fit || '', options: {
-          fill: { color: COLORS.white },
-          color: COLORS.black,
-          align: 'left',
-          valign: 'middle',
-          border: [{ pt: 3, color: COLORS.white }, { pt: 3, color: COLORS.white }, getRowBorder(isLastRow), { pt: 3, color: COLORS.white }]
         }}
-      ]);
+      ];
+
+      // Add tick marks for each segment
+      const productsOffered = t.products_offered || [];
+      segments.slice(0, 4).forEach((seg, si) => {
+        const hasProduct = productsOffered[si] === true;
+        row.push({
+          text: hasProduct ? '✓' : '',
+          options: {
+            fill: { color: COLORS.white },
+            color: hasProduct ? '00A651' : COLORS.black, // Green tick
+            fontSize: 14,
+            bold: true,
+            align: 'center',
+            valign: 'middle',
+            border: [{ pt: 3, color: COLORS.white }, { pt: 3, color: COLORS.white }, getRowBorder(isLastRow), { pt: 3, color: COLORS.white }]
+          }
+        });
+      });
+
+      rows.push(row);
     });
 
     slide.addTable(rows, {
       x: 0.38, y: 1.2, w: 12.54,
-      colW: [3.0, 1.2, 1.3, 1.5, 5.54],
+      colW: colWidths,
       rowH: 0.48,
       fontFace: 'Segoe UI',
       fontSize: 10,
       valign: 'middle'
     });
 
-    addFootnote(slide);
+    addFootnote(slide, 'Source: Company disclosures, industry databases');
   }
 
-  // ========== SLIDE 5: HYPOTHETICAL M&A ==========
+  // ========== SLIDE 5: HYPOTHETICAL M&A (Top-Down Table Format) ==========
   if (targetList.length >= 3) {
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
     addSlideTitle(slide, 'Hypothetical M&A Options');
 
     // Select top 3-4 targets for hypothetical options
     const topTargets = targetList.slice(0, Math.min(4, targetList.length));
-    const boxWidth = 2.8;
-    const boxHeight = 4.5;
-    const startX = 0.5;
-    const startY = 1.3;
-    const gap = 0.3;
+    const numOptions = topTargets.length;
 
+    // Table header row
+    const headerRow = [
+      { text: '', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, border: { pt: 3, color: COLORS.white } } }
+    ];
     topTargets.forEach((t, i) => {
-      const x = startX + i * (boxWidth + gap);
-
-      // Dotted border box
-      slide.addShape(pptx.shapes.RECTANGLE, {
-        x: x, y: startY, w: boxWidth, h: boxHeight,
-        fill: { color: COLORS.white },
-        line: { color: COLORS.gray, width: 1.5, dashType: 'dash' }
-      });
-
-      // Option number header
-      slide.addText(`Option ${i + 1}`, {
-        x: x, y: startY + 0.1, w: boxWidth, h: 0.35,
-        fontSize: 12, fontFace: 'Segoe UI', bold: true,
-        color: COLORS.headerBg, align: 'center'
-      });
-
-      // Company name
-      slide.addText(t.company_name || '', {
-        x: x + 0.1, y: startY + 0.5, w: boxWidth - 0.2, h: 0.4,
-        fontSize: 11, fontFace: 'Segoe UI', bold: true,
-        color: COLORS.companyBg, align: 'center'
-      });
-
-      // Details
-      const details = [
-        `HQ: ${t.hq_country || 'N/A'}`,
-        `Revenue: ${t.revenue || t.estimated_revenue || 'N/A'}`,
-        `Ownership: ${t.ownership || 'N/A'}`,
-        `Fit: ${t.fit_type || 'N/A'}`
-      ];
-
-      slide.addText(details.join('\n'), {
-        x: x + 0.15, y: startY + 1.0, w: boxWidth - 0.3, h: 1.5,
-        fontSize: 9, fontFace: 'Segoe UI',
-        color: COLORS.black, align: 'left', valign: 'top'
-      });
-
-      // Strategic fit
-      slide.addText('Strategic Fit:', {
-        x: x + 0.15, y: startY + 2.5, w: boxWidth - 0.3, h: 0.25,
-        fontSize: 9, fontFace: 'Segoe UI', bold: true,
-        color: COLORS.labelBg, align: 'left'
-      });
-
-      slide.addText(t.strategic_fit || '', {
-        x: x + 0.15, y: startY + 2.75, w: boxWidth - 0.3, h: 1.5,
-        fontSize: 8, fontFace: 'Segoe UI',
-        color: COLORS.black, align: 'left', valign: 'top'
+      headerRow.push({
+        text: `Option ${i + 1}`,
+        options: {
+          fill: { color: COLORS.headerBg },
+          color: COLORS.white,
+          bold: true,
+          align: 'center',
+          valign: 'middle',
+          border: { pt: 3, color: COLORS.white }
+        }
       });
     });
 
-    // Instruction text at bottom
-    slide.addText('Select your preferred option for detailed analysis', {
-      x: 0.38, y: 6.0, w: 12.54, h: 0.3,
-      fontSize: 11, fontFace: 'Segoe UI', italic: true,
-      color: COLORS.footerText, align: 'center'
+    // Data rows: Company, HQ, Revenue, Ownership
+    const dataLabels = ['Company', 'HQ', 'Revenue', 'Ownership'];
+    const rows = [headerRow];
+
+    dataLabels.forEach((label, labelIdx) => {
+      const isLastRow = labelIdx === dataLabels.length - 1;
+      const row = [
+        { text: label, options: {
+          fill: { color: COLORS.labelBg },
+          color: COLORS.white,
+          bold: false,
+          align: 'left',
+          valign: 'middle',
+          border: { pt: 3, color: COLORS.white }
+        }}
+      ];
+
+      topTargets.forEach((t, i) => {
+        let value = '';
+        if (label === 'Company') value = t.company_name || '';
+        else if (label === 'HQ') value = t.hq_country || '';
+        else if (label === 'Revenue') value = t.revenue || t.estimated_revenue || '';
+        else if (label === 'Ownership') value = t.ownership || '';
+
+        row.push({
+          text: value,
+          options: {
+            fill: { color: COLORS.white },
+            color: COLORS.black,
+            align: 'center',
+            valign: 'middle',
+            border: [{ pt: 3, color: COLORS.white }, { pt: 3, color: COLORS.white }, getRowBorder(isLastRow), { pt: 3, color: COLORS.white }]
+          }
+        });
+      });
+
+      rows.push(row);
+    });
+
+    // Calculate column widths: Label(2.0) + options(equal split of remaining)
+    const optionColW = (12.54 - 2.0) / numOptions;
+    const colWidths = [2.0, ...Array(numOptions).fill(optionColW)];
+
+    slide.addTable(rows, {
+      x: 0.38, y: 1.2, w: 12.54,
+      colW: colWidths,
+      rowH: 0.55,
+      fontFace: 'Segoe UI',
+      fontSize: 10,
+      valign: 'middle'
+    });
+
+    // Draw dotted selection box around Option 1 column only (the recommended choice)
+    const option1X = 0.38 + 2.0; // After label column
+    const tableHeight = 0.55 * (rows.length);
+    slide.addShape(pptx.shapes.RECTANGLE, {
+      x: option1X, y: 1.2, w: optionColW, h: tableHeight,
+      fill: { type: 'none' },
+      line: { color: COLORS.labelBg, width: 2, dashType: 'dash' }
+    });
+
+    // Add "Recommended" label below Option 1
+    slide.addText('▲ Recommended', {
+      x: option1X, y: 1.2 + tableHeight + 0.05, w: optionColW, h: 0.3,
+      fontSize: 10, fontFace: 'Segoe UI', bold: true,
+      color: COLORS.labelBg, align: 'center'
     });
 
     addFootnote(slide);
+  }
+
+  // ========== SLIDE 6: FINANCIAL BAR CHART (if revenue history available) ==========
+  const fin = synthesis.financials || {};
+  const revenueHistory = fin.revenue_history || [];
+
+  if (revenueHistory.length >= 2) {
+    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+    addSlideTitle(slide, 'Revenue Trend');
+
+    // Chart data
+    const chartData = [{
+      name: 'Revenue',
+      labels: revenueHistory.map(r => r.year),
+      values: revenueHistory.map(r => r.revenue)
+    }];
+
+    // Add bar chart
+    slide.addChart(pptx.charts.BAR, chartData, {
+      x: 0.5, y: 1.3, w: 12, h: 5.0,
+      barDir: 'col', // Vertical bars
+      barGapWidthPct: 50,
+      chartColors: [COLORS.companyBg], // Bright blue bars
+      showValue: true,
+      dataLabelPosition: 'outEnd',
+      dataLabelFontSize: 10,
+      dataLabelFontFace: 'Segoe UI',
+      dataLabelColor: COLORS.black,
+      catAxisTitle: 'Fiscal Year',
+      catAxisTitleFontSize: 10,
+      catAxisLabelFontSize: 10,
+      catAxisLabelFontFace: 'Segoe UI',
+      valAxisTitle: fin.revenue_unit || 'JPY 100M',
+      valAxisTitleFontSize: 10,
+      valAxisLabelFontSize: 9,
+      valAxisLabelFontFace: 'Segoe UI',
+      valAxisMinVal: 0,
+      showLegend: false,
+      showTitle: false
+    });
+
+    addFootnote(slide, 'Source: Company disclosures, annual reports');
   }
 
   // Generate base64
