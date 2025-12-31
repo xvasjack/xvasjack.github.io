@@ -2058,7 +2058,14 @@ Return ONLY valid JSON.`;
     return review;
   } catch (error) {
     console.error('  Reviewer failed to parse:', error.message);
-    return { overallScore: 5, confidence: 'low', verdict: 'APPROVE', criticalIssues: [] }; // Default to approve on error
+    // Don't auto-approve on error - return low score requiring revision
+    return {
+      overallScore: 4,
+      confidence: 'low',
+      verdict: 'REVISE',  // Force revision instead of approving low-quality output
+      criticalIssues: ['Reviewer parsing failed - manual review recommended'],
+      reviewerError: true
+    };
   }
 }
 
@@ -2996,6 +3003,23 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }));
   }
 
+  // Helper to show "Data unavailable" message on slides with missing data
+  function addDataUnavailableMessage(slide, message = 'Data not available for this section') {
+    slide.addShape('rect', {
+      x: LEFT_MARGIN, y: 2.5, w: CONTENT_WIDTH, h: 1.5,
+      fill: { color: 'FFF8E1' },  // Light yellow warning background
+      line: { color: 'E46C0A', pt: 1 }
+    });
+    slide.addText('⚠ ' + message, {
+      x: LEFT_MARGIN + 0.2, y: 2.7, w: CONTENT_WIDTH - 0.4, h: 0.4,
+      fontSize: 14, bold: true, color: 'E46C0A', fontFace: FONT
+    });
+    slide.addText('This data could not be verified through research. Please validate independently before making decisions.', {
+      x: LEFT_MARGIN + 0.2, y: 3.2, w: CONTENT_WIDTH - 0.4, h: 0.6,
+      fontSize: 11, color: '666666', fontFace: FONT
+    });
+  }
+
   // ============ SLIDE 1: TITLE ============
   const titleSlide = pptx.addSlide();
   titleSlide.addText(country.toUpperCase(), {
@@ -3043,6 +3067,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       colW: [2.2, 0.8, 3.3, 3.0],
       valign: 'top'
     });
+  } else {
+    addDataUnavailableMessage(actsSlide, 'Energy legislation data not available');
   }
 
   // SLIDE 3: National Policy
