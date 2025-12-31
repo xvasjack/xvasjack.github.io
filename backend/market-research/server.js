@@ -215,20 +215,29 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true) {
     // Debug: log if response has tool calls or empty content
     const content = data.choices?.[0]?.message?.content || '';
     const toolCalls = data.choices?.[0]?.message?.tool_calls;
+
+    // Validate research quality
+    let researchQuality = 'good';
     if (!content && toolCalls) {
       console.log('  [Kimi] Response contains tool_calls instead of content - web search may need handling');
+      researchQuality = 'failed';
     } else if (!content) {
       console.log('  [Kimi] Empty response - finish_reason:', data.choices?.[0]?.finish_reason);
+      researchQuality = 'failed';
+    } else if (content.length < 100) {
+      console.log(`  [Kimi] Thin response (${content.length} chars) - may be incomplete`);
+      researchQuality = 'thin';
     }
 
     return {
       content,
       citations: [],
-      usage: { input: inputTokens, output: outputTokens }
+      usage: { input: inputTokens, output: outputTokens },
+      researchQuality
     };
   } catch (error) {
     console.error('Kimi API error:', error.message);
-    return { content: '', citations: [] };
+    return { content: '', citations: [], researchQuality: 'failed' };
   }
 }
 
@@ -1111,30 +1120,79 @@ async function marketResearchAgent(country, industry, clientContext) {
         const framework = RESEARCH_FRAMEWORK[topicKey];
         if (!framework) return null;
 
+        // Determine chart structure based on chartType
+        const chartStructure = framework.chartType === 'stackedBar'
+          ? `"chartData": {
+              "categories": ["2020", "2021", "2022", "2023", "2024"],
+              "series": [
+                {"name": "Category1", "values": [number, number, number, number, number]},
+                {"name": "Category2", "values": [number, number, number, number, number]}
+              ],
+              "unit": "Mtoe or TWh or bcm"
+            }`
+          : framework.chartType === 'pie'
+          ? `"chartData": {
+              "categories": ["Segment1", "Segment2", "Segment3"],
+              "values": [percentage, percentage, percentage],
+              "unit": "%"
+            }`
+          : framework.chartType === 'line'
+          ? `"chartData": {
+              "categories": ["2020", "2021", "2022", "2023", "2024"],
+              "series": [
+                {"name": "Metric1", "values": [number, number, number, number, number]}
+              ],
+              "unit": "USD/kWh or USD/mmbtu"
+            }`
+          : '';
+
         const queryContext = `As a market research analyst, research ${framework.name} for ${country}'s ${industry} market:
 
 SPECIFIC QUESTIONS:
 ${framework.queries.map(q => '- ' + q.replace('{country}', country)).join('\n')}
 
-CRITICAL - PROVIDE CHART DATA:
-- For time series: provide data for years 2020, 2021, 2022, 2023, 2024
-- For breakdowns: provide percentage splits by category
-- Format numbers clearly (e.g., "2020: 45, 2021: 48, 2022: 52")
-- Include units (Mtoe, TWh, USD/kWh, bcm, etc.)
+CRITICAL - RETURN STRUCTURED DATA:
+Your response MUST include a JSON block with chart data. Use this EXACT format:
 
-FOCUS ON:
-- Market size in USD with growth rates
-- Energy consumption/production statistics
-- Pricing data with trends
-- Sector breakdowns with percentages`;
+\`\`\`json
+{
+  "narrative": "Your detailed research findings here (2-3 paragraphs with specific numbers, sources, and insights)",
+  ${chartStructure ? chartStructure + ',' : ''}
+  "keyInsight": "One sentence insight about the trend or implication",
+  "dataQuality": "high/medium/low - indicate if data is from official sources or estimated",
+  "sources": ["Source 1", "Source 2"]
+}
+\`\`\`
+
+REQUIREMENTS:
+- Use REAL numbers from your research - do NOT fabricate data
+- If exact data unavailable, use "estimated" in dataQuality and provide reasonable estimates
+- Include units (Mtoe, TWh, USD/kWh, bcm, %, etc.)
+- Market sizes should be in USD millions or billions`;
 
         const result = await callKimiDeepResearch(queryContext, country, industry);
+
+        // Try to extract structured JSON from the response
+        let structuredData = null;
+        if (result.content) {
+          const jsonMatch = result.content.match(/```json\s*([\s\S]*?)\s*```/);
+          if (jsonMatch) {
+            try {
+              structuredData = JSON.parse(jsonMatch[1]);
+            } catch (e) {
+              console.log(`      [Market] Failed to parse JSON for ${topicKey}`);
+            }
+          }
+        }
+
         return {
           key: topicKey,
           content: result.content,
+          structuredData: structuredData,
           citations: result.citations || [],
           chartType: framework.chartType || null,
-          slideTitle: framework.slideTitle?.replace('{country}', country) || ''
+          slideTitle: framework.slideTitle?.replace('{country}', country) || '',
+          dataQuality: structuredData?.dataQuality || 'unknown'
         };
       })
     );
@@ -1499,9 +1557,10 @@ async function researchCountry(country, industry, clientContext, scope = null) {
 
 CRITICAL REQUIREMENTS:
 1. DEPTH over breadth - specific numbers, names, dates for every claim
-2. CHART DATA - provide structured data for charts where indicated
+2. CHART DATA - USE the structuredData.chartData from research when available. Do NOT fabricate chart numbers.
 3. SLIDE-READY - each section maps to a specific slide
 4. STORY FLOW - each slide must answer the reader's question and set up the next
+5. DATA QUALITY - if research has dataQuality:"estimated", note this in the insight. Never present estimates as verified facts.
 
 === NARRATIVE STRUCTURE ===
 Your presentation tells a story. Each section answers a question and raises the next:
