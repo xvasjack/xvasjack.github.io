@@ -3177,31 +3177,27 @@ async function generateUTBSlides(companyName, website, research, additionalConte
   console.log('[UTB] Generating slides...');
 
   const pptx = new pptxgen();
-  pptx.author = 'UTB - M&A Buyer Intelligence';
+  pptx.author = 'YCP Solidiance';
   pptx.title = `UTB: ${companyName}`;
   pptx.subject = 'M&A Buyer Intelligence Report';
 
-  // Set exact slide size to match template (13.333" x 7.5" = 16:9 widescreen)
+  // Set exact slide size to match YCP template (13.333" x 7.5" = 16:9 widescreen)
   pptx.defineLayout({ name: 'YCP', width: 13.333, height: 7.5 });
   pptx.layout = 'YCP';
 
-  // YCP Theme Colors (from profile-slides template)
+  // YCP Theme Colors (matching profile-slides template exactly)
   const COLORS = {
     headerLine: '293F55',    // Dark navy for header/footer lines
-    accent: '011AB7',        // Dark blue - label column background
-    blue: '2563EB',          // Blue for section headers
-    navy: '1A365D',          // Navy for titles
+    headerBg: '1524A9',      // Dark blue for table header row
+    labelBg: '011AB7',       // Dark blue for label column (accent3)
+    companyBg: '007FFF',     // Bright blue for company column
     white: 'FFFFFF',
     black: '000000',
-    gray: 'BFBFBF',          // Dashed border color
-    dk2: '1F497D',           // Section underline color
-    lightBlue: 'DBEAFE',     // Light blue for title background
-    lightGray: 'F8FAFC',     // Light gray for alternating rows
-    green: '16A34A',         // Green for positive points
-    red: 'DC2626'            // Red for vulnerabilities
+    gray: 'BFBFBF',          // Gray for dotted borders between rows
+    footerText: '808080'     // Gray footer text
   };
 
-  // Define master slide with fixed lines (matching profile-slides)
+  // Define master slide with fixed lines (matching YCP template)
   pptx.defineSlideMaster({
     title: 'YCP_MASTER',
     background: { color: 'FFFFFF' },
@@ -3215,585 +3211,331 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     ]
   });
 
-  // Helper: Add slide title
-  const addSlideTitle = (slide, title, subtitle = '') => {
-    const titleContent = subtitle ? [
-      { text: title, options: { fontSize: 24, fontFace: 'Segoe UI', color: COLORS.navy, breakLine: true } },
-      { text: subtitle, options: { fontSize: 14, fontFace: 'Segoe UI', color: '64748B' } }
-    ] : title;
-
-    slide.addText(titleContent, {
-      x: 0.38, y: 0.07, w: 12.5, h: 0.9,
-      fontSize: 24, fontFace: 'Segoe UI',
-      color: COLORS.navy, valign: 'bottom'
-    });
-  };
-
-  // Helper: Add section header with underline
-  const addSectionHeader = (slide, title, x = 0.38) => {
+  // Helper: Add slide title (YCP format - black text, left-aligned, valign bottom)
+  const addSlideTitle = (slide, title) => {
     slide.addText(title, {
-      x: x, y: 1.18, w: 12.54, h: 0.35,
-      fontSize: 16, fontFace: 'Segoe UI', bold: true,
-      color: COLORS.navy, align: 'left'
-    });
-    slide.addShape(pptx.shapes.LINE, {
-      x: x, y: 1.55, w: 12.54, h: 0,
-      line: { color: COLORS.dk2, width: 1.75 }
+      x: 0.38, y: 0.07, w: 9.5, h: 0.9,
+      fontSize: 24, fontFace: 'Segoe UI',
+      color: COLORS.black, valign: 'bottom'
     });
   };
 
   // Helper: Add footnote
-  const addFootnote = (slide, text = 'Source: Company disclosures, public filings, industry reports') => {
+  const addFootnote = (slide, text = 'Source: Company disclosures, public filings') => {
     slide.addText(text, {
       x: 0.38, y: 6.85, w: 12.5, h: 0.3,
       fontSize: 10, fontFace: 'Segoe UI',
-      color: '808080', valign: 'top'
+      color: COLORS.footerText, valign: 'top'
     });
   };
 
-  // Helper: Create standard table row styling
-  const createTableRow = (label, value, isAlternate = false, options = {}) => {
-    return [
-      {
-        text: label,
-        options: {
-          fill: { color: COLORS.accent },
-          color: COLORS.white,
-          align: 'left',
-          bold: false,
-          ...options.labelOptions
-        }
-      },
-      {
-        text: value,
-        options: {
-          fill: { color: isAlternate ? COLORS.lightGray : COLORS.white },
-          color: COLORS.black,
-          align: 'left',
-          border: [
-            { pt: 1, color: COLORS.gray, type: 'dash' },
-            { pt: 0 },
-            { pt: 1, color: COLORS.gray, type: 'dash' },
-            { pt: 0 }
-          ],
-          ...options.valueOptions
-        }
-      }
-    ];
+  // Helper: Get row border (dotted between rows, solid white on edges)
+  const getRowBorder = (isLastRow) => {
+    return isLastRow
+      ? { pt: 3, color: COLORS.white }
+      : { pt: 1, color: COLORS.gray, type: 'dash' };
   };
 
-  const fin = synthesis.financials || {};
   const prod = synthesis.products_and_services || {};
-  const ops = synthesis.operations || {};
-  const comp = synthesis.competitive_landscape || {};
   const maDeepDive = synthesis.ma_deep_dive || {};
 
   // ========== SLIDE 1: TITLE SLIDE ==========
   const titleSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+
+  // Company name - centered, black, large
   titleSlide.addText(companyName, {
-    x: 0.38, y: 2.0, w: 12.54, h: 1.0,
+    x: 0.38, y: 2.5, w: 12.54, h: 1.0,
     fontSize: 36, fontFace: 'Segoe UI', bold: true,
-    color: COLORS.navy, align: 'center'
+    color: COLORS.black, align: 'center'
   });
-  titleSlide.addText('UTB: M&A Buyer Intelligence Report', {
-    x: 0.38, y: 3.0, w: 12.54, h: 0.5,
-    fontSize: 18, fontFace: 'Segoe UI',
-    color: '64748B', align: 'center'
-  });
-  titleSlide.addText(website, {
-    x: 0.38, y: 3.5, w: 12.54, h: 0.4,
-    fontSize: 14, fontFace: 'Segoe UI',
-    color: COLORS.blue, align: 'center'
-  });
+
+  // Client intention (from additionalContext)
+  if (additionalContext) {
+    titleSlide.addText(additionalContext, {
+      x: 0.38, y: 3.6, w: 12.54, h: 0.8,
+      fontSize: 16, fontFace: 'Segoe UI',
+      color: COLORS.footerText, align: 'center'
+    });
+  }
+
+  // Generated date at bottom
   titleSlide.addText(`Generated: ${new Date().toLocaleDateString()}`, {
     x: 0.38, y: 6.5, w: 12.54, h: 0.3,
     fontSize: 10, fontFace: 'Segoe UI',
-    color: '808080', align: 'center'
+    color: COLORS.footerText, align: 'center'
   });
 
-  // ========== SLIDE 2: REVENUE BY SEGMENT ==========
-  if (fin.revenue_by_segment && fin.revenue_by_segment.length > 0) {
-    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, companyName, 'Revenue by Segment');
-    addSectionHeader(slide, 'Revenue Breakdown by Business Segment');
-
-    const rows = [
-      [
-        { text: 'Segment', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
-        { text: 'Share', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
-        { text: 'Source', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } }
-      ]
-    ];
-
-    fin.revenue_by_segment.forEach((seg, i) => {
-      const sourceOpts = { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.blue, align: 'left' };
-      if (seg.source_url) sourceOpts.hyperlink = { url: seg.source_url };
-      rows.push([
-        { text: seg.segment || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, bold: true, align: 'left' } },
-        { text: seg.percentage || seg.revenue || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
-        { text: seg.source || '', options: sourceOpts }
-      ]);
-    });
-
-    slide.addTable(rows, {
-      x: 0.38, y: 1.7, w: 12.54,
-      colW: [5.0, 2.5, 5.04],
-      rowH: 0.4,
-      fontFace: 'Segoe UI',
-      fontSize: 12,
-      valign: 'middle',
-      border: { pt: 1.5, color: COLORS.white }
-    });
-
-    addFootnote(slide);
-  }
-
-  // ========== SLIDE 3: REVENUE BY GEOGRAPHY ==========
-  if (fin.revenue_by_geography && fin.revenue_by_geography.length > 0) {
-    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, companyName, 'Revenue by Geography');
-    addSectionHeader(slide, 'Geographic Revenue Distribution');
-
-    const rows = [
-      [
-        { text: 'Region', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
-        { text: 'Share', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
-        { text: 'Source', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } }
-      ]
-    ];
-
-    fin.revenue_by_geography.forEach((geo, i) => {
-      const sourceOpts = { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.blue, align: 'left' };
-      if (geo.source_url) sourceOpts.hyperlink = { url: geo.source_url };
-      rows.push([
-        { text: geo.region || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, bold: true, align: 'left' } },
-        { text: geo.percentage || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
-        { text: geo.source || '', options: sourceOpts }
-      ]);
-    });
-
-    slide.addTable(rows, {
-      x: 0.38, y: 1.7, w: 12.54,
-      colW: [5.0, 2.5, 5.04],
-      rowH: 0.4,
-      fontFace: 'Segoe UI',
-      fontSize: 12,
-      valign: 'middle',
-      border: { pt: 1.5, color: COLORS.white }
-    });
-
-    addFootnote(slide);
-  }
-
-  // ========== SLIDE 4: BUSINESS SEGMENTS ==========
+  // ========== SLIDE 2: BUSINESS OVERVIEW ==========
   if (prod.product_lines && prod.product_lines.length > 0) {
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, companyName, 'Business Segments');
-    addSectionHeader(slide, 'Core Business Lines & Offerings');
+    addSlideTitle(slide, 'Business Overview');
 
     const rows = [
       [
-        { text: 'Segment', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
-        { text: 'What It Does', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
-        { text: 'Revenue Significance', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } }
+        { text: 'Segment', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'left', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
+        { text: 'Description', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'left', valign: 'middle', border: { pt: 3, color: COLORS.white } } }
       ]
     ];
 
     prod.product_lines.forEach((line, i) => {
+      const isLastRow = i === prod.product_lines.length - 1;
       rows.push([
-        { text: line.name || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, bold: true, align: 'left' } },
-        { text: line.what_it_does || line.description || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'left' } },
-        { text: line.revenue_significance || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'left' } }
+        { text: line.name || '', options: {
+          fill: { color: COLORS.labelBg },
+          color: COLORS.white,
+          bold: false,
+          align: 'left',
+          valign: 'middle',
+          border: { pt: 3, color: COLORS.white }
+        }},
+        { text: line.what_it_does || line.description || '', options: {
+          fill: { color: COLORS.white },
+          color: COLORS.black,
+          align: 'left',
+          valign: 'middle',
+          border: [
+            { pt: 3, color: COLORS.white },
+            { pt: 3, color: COLORS.white },
+            getRowBorder(isLastRow),
+            { pt: 3, color: COLORS.white }
+          ]
+        }}
       ]);
     });
 
     slide.addTable(rows, {
-      x: 0.38, y: 1.7, w: 12.54,
-      colW: [3.0, 6.0, 3.54],
-      rowH: 0.5,
+      x: 0.38, y: 1.2, w: 12.54,
+      colW: [3.5, 9.04],
+      rowH: 0.55,
       fontFace: 'Segoe UI',
       fontSize: 11,
-      valign: 'middle',
-      border: { pt: 1.5, color: COLORS.white }
+      valign: 'middle'
     });
 
     addFootnote(slide);
   }
 
-  // ========== SLIDE 5: STRATEGIC CAPABILITIES ==========
-  if (prod.strategic_capabilities && prod.strategic_capabilities.length > 0) {
-    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, companyName, 'Strategic Capabilities');
-    addSectionHeader(slide, 'Key Competitive Advantages');
-
-    const rows = [
-      [
-        { text: 'Category', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center', valign: 'middle' } },
-        { text: 'Capability', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
-        { text: 'Source', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } }
-      ]
-    ];
-
-    prod.strategic_capabilities.forEach((cap, i) => {
-      const sourceOpts = { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.blue, align: 'left' };
-      if (cap.source_url) sourceOpts.hyperlink = { url: cap.source_url };
-      rows.push([
-        { text: cap.category || '', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'center', valign: 'middle' } },
-        { text: cap.capability || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'left' } },
-        { text: cap.source || 'Source', options: sourceOpts }
-      ]);
-    });
-
-    slide.addTable(rows, {
-      x: 0.38, y: 1.7, w: 12.54,
-      colW: [2.0, 7.5, 3.04],
-      rowH: 0.45,
-      fontFace: 'Segoe UI',
-      fontSize: 11,
-      valign: 'middle',
-      border: { pt: 1.5, color: COLORS.white }
-    });
-
-    addFootnote(slide);
-  }
-
-  // ========== SLIDE 6: OPERATIONS FOOTPRINT ==========
-  if (ops.manufacturing_footprint && ops.manufacturing_footprint.length > 0) {
-    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, companyName, 'Operations Footprint');
-    addSectionHeader(slide, 'Facilities by Type & Location');
-
-    const rows = [
-      [
-        { text: 'Type', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
-        { text: 'Location', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
-        { text: 'Details', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
-        { text: 'Source', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } }
-      ]
-    ];
-
-    ops.manufacturing_footprint.forEach((mfg, i) => {
-      const sourceOpts = { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.blue, align: 'left' };
-      if (mfg.source_url) sourceOpts.hyperlink = { url: mfg.source_url };
-      rows.push([
-        { text: mfg.type || 'Manufacturing', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'center' } },
-        { text: mfg.location || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, bold: true, align: 'left' } },
-        { text: mfg.details || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'left' } },
-        { text: 'Source', options: sourceOpts }
-      ]);
-    });
-
-    slide.addTable(rows, {
-      x: 0.38, y: 1.7, w: 12.54,
-      colW: [2.0, 3.0, 5.5, 2.04],
-      rowH: 0.45,
-      fontFace: 'Segoe UI',
-      fontSize: 10,
-      valign: 'middle',
-      border: { pt: 1.5, color: COLORS.white }
-    });
-
-    addFootnote(slide);
-  }
-
-  // ========== SLIDE 7: COMPETITIVE POSITION ==========
-  const pos = comp.company_position || {};
-  if (pos.market_rank || pos.why_they_win || pos.key_vulnerability) {
-    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, companyName, 'Competitive Position');
-    addSectionHeader(slide, 'Market Position & Advantages');
-
-    // Market Position header row
-    const positionOpts = { fill: { color: COLORS.lightGray }, color: COLORS.black, align: 'left' };
-    if (pos.source_url) positionOpts.hyperlink = { url: pos.source_url };
-
-    const headerRows = [
-      [
-        { text: 'Market Rank', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
-        { text: pos.market_rank || 'N/A', options: { fill: { color: COLORS.lightGray }, color: COLORS.black, align: 'left' } },
-        { text: 'Market Share', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
-        { text: pos.market_share || 'N/A', options: positionOpts }
-      ]
-    ];
-
-    slide.addTable(headerRows, {
-      x: 0.38, y: 1.7, w: 12.54,
-      colW: [2.0, 4.27, 2.0, 4.27],
-      rowH: 0.4,
-      fontFace: 'Segoe UI',
-      fontSize: 11,
-      valign: 'middle',
-      border: { pt: 1.5, color: COLORS.white }
-    });
-
-    // Competitive Advantages table
-    if (pos.why_they_win && Array.isArray(pos.why_they_win)) {
-      const advRows = [
-        [
-          { text: 'Advantage Type', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
-          { text: 'Description', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
-          { text: 'Source', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } }
-        ]
-      ];
-
-      pos.why_they_win.forEach((item, i) => {
-        const sourceOpts = { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.blue, align: 'left' };
-        if (item.source_url) sourceOpts.hyperlink = { url: item.source_url };
-        advRows.push([
-          { text: item.advantage_type || item.point || '', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'center' } },
-          { text: item.description || item.reasoning || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'left' } },
-          { text: 'Source', options: sourceOpts }
-        ]);
-      });
-
-      slide.addTable(advRows, {
-        x: 0.38, y: 2.25, w: 12.54,
-        colW: [2.0, 8.5, 2.04],
-        rowH: 0.45,
-        fontFace: 'Segoe UI',
-        fontSize: 10,
-        valign: 'middle',
-        border: { pt: 1.5, color: COLORS.white }
-      });
-    }
-
-    // Vulnerability
-    const vulnY = pos.why_they_win ? 2.25 + (pos.why_they_win.length + 1) * 0.45 + 0.2 : 2.3;
-    if (pos.key_vulnerability || pos.vulnerability) {
-      const vulnOpts = { color: COLORS.black };
-      if (pos.vulnerability_source_url) vulnOpts.hyperlink = { url: pos.vulnerability_source_url };
-      slide.addText([
-        { text: 'Key Vulnerability: ', options: { bold: true, color: COLORS.red } },
-        { text: pos.key_vulnerability || pos.vulnerability, options: vulnOpts }
-      ], {
-        x: 0.38, y: Math.min(vulnY, 5.8), w: 12.54, h: 0.5,
-        fontSize: 11, fontFace: 'Segoe UI', valign: 'top'
-      });
-    }
-
-    addFootnote(slide);
-  }
-
-  // ========== SLIDE 8: COMPETITIVE LANDSCAPE ==========
-  const competitors = comp.key_competitors || [];
-  if (competitors.length > 0) {
-    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, companyName, 'Competitive Landscape');
-    addSectionHeader(slide, 'Top 10 Competitors');
-
-    const rows = [
-      [
-        { text: 'Company', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
-        { text: 'HQ', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
-        { text: 'Revenue', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
-        { text: 'Share', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
-        { text: 'Positioning', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
-        { text: 'Threat', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } }
-      ]
-    ];
-
-    // Color coding for threat levels
-    const threatColors = { 'High': COLORS.red, 'Medium': 'F59E0B', 'Low': COLORS.green };
-
-    competitors.slice(0, 10).forEach((c, i) => {
-      const nameOpts = { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.blue, bold: true, align: 'left' };
-      if (c.source_url) nameOpts.hyperlink = { url: c.source_url };
-      const threatColor = threatColors[c.threat_level] || COLORS.black;
-      rows.push([
-        { text: c.name || '', options: nameOpts },
-        { text: c.hq_country || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
-        { text: c.revenue || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
-        { text: c.market_share || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
-        { text: c.positioning || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
-        { text: c.threat_level || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: threatColor, bold: true, align: 'center' } }
-      ]);
-    });
-
-    slide.addTable(rows, {
-      x: 0.38, y: 1.7, w: 12.54,
-      colW: [3.0, 1.2, 1.8, 1.5, 2.0, 1.5],
-      rowH: 0.42,
-      fontFace: 'Segoe UI',
-      fontSize: 9,
-      valign: 'middle',
-      border: { pt: 1.5, color: COLORS.white }
-    });
-
-    addFootnote(slide);
-  }
-
-  // ========== SLIDE 9: M&A HISTORY ==========
+  // ========== SLIDE 3: PAST M&A ==========
   const dealHistory = maDeepDive.deal_history || maDeepDive.deal_stories || [];
   if (dealHistory.length > 0) {
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, companyName, 'M&A History');
-    addSectionHeader(slide, 'Deal Track Record');
+    addSlideTitle(slide, 'Past M&A');
 
     const rows = [
       [
-        { text: 'Target', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
-        { text: 'Year', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
-        { text: 'Value', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
-        { text: 'Type', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
-        { text: 'Rationale', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
-        { text: 'Source', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } }
+        { text: 'Target', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'left', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
+        { text: 'Year', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'center', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
+        { text: 'Value', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'center', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
+        { text: 'Type', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'center', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
+        { text: 'Rationale', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'left', valign: 'middle', border: { pt: 3, color: COLORS.white } } }
       ]
     ];
 
-    dealHistory.slice(0, 8).forEach((deal, i) => {
-      const sourceOpts = { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.blue, align: 'center' };
-      if (deal.source_url) sourceOpts.hyperlink = { url: deal.source_url };
+    const deals = dealHistory.slice(0, 8);
+    deals.forEach((deal, i) => {
+      const isLastRow = i === deals.length - 1;
       rows.push([
-        { text: deal.target || deal.deal || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, bold: true, align: 'left' } },
-        { text: deal.year || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
-        { text: deal.deal_value || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
-        { text: deal.deal_type || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
-        { text: deal.strategic_rationale || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
-        { text: 'Link', options: sourceOpts }
+        { text: deal.target || deal.deal || '', options: {
+          fill: { color: COLORS.companyBg },
+          color: COLORS.white,
+          bold: false,
+          align: 'left',
+          valign: 'middle',
+          border: { pt: 3, color: COLORS.white }
+        }},
+        { text: deal.year || '', options: {
+          fill: { color: COLORS.white },
+          color: COLORS.black,
+          align: 'center',
+          valign: 'middle',
+          border: [{ pt: 3, color: COLORS.white }, { pt: 3, color: COLORS.white }, getRowBorder(isLastRow), { pt: 3, color: COLORS.white }]
+        }},
+        { text: deal.deal_value || '', options: {
+          fill: { color: COLORS.white },
+          color: COLORS.black,
+          align: 'center',
+          valign: 'middle',
+          border: [{ pt: 3, color: COLORS.white }, { pt: 3, color: COLORS.white }, getRowBorder(isLastRow), { pt: 3, color: COLORS.white }]
+        }},
+        { text: deal.deal_type || '', options: {
+          fill: { color: COLORS.white },
+          color: COLORS.black,
+          align: 'center',
+          valign: 'middle',
+          border: [{ pt: 3, color: COLORS.white }, { pt: 3, color: COLORS.white }, getRowBorder(isLastRow), { pt: 3, color: COLORS.white }]
+        }},
+        { text: deal.strategic_rationale || '', options: {
+          fill: { color: COLORS.white },
+          color: COLORS.black,
+          align: 'left',
+          valign: 'middle',
+          border: [{ pt: 3, color: COLORS.white }, { pt: 3, color: COLORS.white }, getRowBorder(isLastRow), { pt: 3, color: COLORS.white }]
+        }}
       ]);
     });
 
     slide.addTable(rows, {
-      x: 0.38, y: 1.7, w: 12.54,
-      colW: [3.0, 1.0, 1.5, 1.8, 2.5, 1.2],
-      rowH: 0.42,
-      fontFace: 'Segoe UI',
-      fontSize: 9,
-      valign: 'middle',
-      border: { pt: 1.5, color: COLORS.white }
-    });
-
-    addFootnote(slide);
-  }
-
-  // ========== SLIDE 10: M&A PROFILE ==========
-  const maProfile = maDeepDive.ma_profile || {};
-  if (maProfile.acquirer_type || maProfile.primary_focus || maDeepDive.ma_philosophy) {
-    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, companyName, 'M&A Profile');
-    addSectionHeader(slide, 'Acquisition Strategy Matrix');
-
-    const profileRows = [
-      [
-        { text: 'Dimension', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
-        { text: 'Profile', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } }
-      ],
-      [
-        { text: 'Acquirer Type', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
-        { text: maProfile.acquirer_type || 'N/A', options: { fill: { color: COLORS.lightGray }, color: COLORS.black, align: 'left' } }
-      ],
-      [
-        { text: 'Primary Focus', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
-        { text: maProfile.primary_focus || 'N/A', options: { fill: { color: COLORS.white }, color: COLORS.black, align: 'left' } }
-      ],
-      [
-        { text: 'Typical Deal Size', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
-        { text: maProfile.typical_deal_size || 'N/A', options: { fill: { color: COLORS.lightGray }, color: COLORS.black, align: 'left' } }
-      ],
-      [
-        { text: 'Integration Style', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
-        { text: maProfile.integration_style || 'N/A', options: { fill: { color: COLORS.white }, color: COLORS.black, align: 'left' } }
-      ],
-      [
-        { text: 'Valuation Discipline', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
-        { text: maProfile.valuation_discipline || 'N/A', options: { fill: { color: COLORS.lightGray }, color: COLORS.black, align: 'left' } }
-      ]
-    ];
-
-    slide.addTable(profileRows, {
-      x: 0.38, y: 1.7, w: 12.54,
-      colW: [3.5, 9.04],
+      x: 0.38, y: 1.2, w: 12.54,
+      colW: [3.0, 1.0, 1.5, 1.8, 5.24],
       rowH: 0.5,
       fontFace: 'Segoe UI',
-      fontSize: 12,
-      valign: 'middle',
-      border: { pt: 1.5, color: COLORS.white }
+      fontSize: 10,
+      valign: 'middle'
     });
 
     addFootnote(slide);
   }
 
-  // ========== SLIDE 11: DEAL CAPACITY ==========
-  const capacity = maDeepDive.deal_capacity || {};
-  if (capacity.dry_powder || capacity.financial_firepower || capacity.appetite_level || capacity.decision_speed || capacity.decision_process) {
-    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, companyName, 'Deal Capacity');
-    addSectionHeader(slide, 'Financial Firepower & Acquisition Appetite');
-
-    const capSourceOpts = { fill: { color: COLORS.white }, color: COLORS.blue, align: 'left' };
-    if (capacity.source_url) capSourceOpts.hyperlink = { url: capacity.source_url };
-
-    const rows = [
-      [
-        { text: 'Dry Powder', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
-        { text: capacity.dry_powder || capacity.financial_firepower || 'N/A', options: capSourceOpts }
-      ],
-      [
-        { text: 'Appetite Level', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
-        { text: capacity.appetite_level || 'N/A', options: { fill: { color: COLORS.lightGray }, color: COLORS.black, align: 'left' } }
-      ],
-      [
-        { text: 'Decision Speed', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'left' } },
-        { text: capacity.decision_speed || capacity.decision_process || 'N/A', options: { fill: { color: COLORS.white }, color: COLORS.black, align: 'left' } }
-      ]
-    ];
-
-    if (rows.length > 0) {
-      slide.addTable(rows, {
-        x: 0.38, y: 1.7, w: 12.54,
-        colW: [3.5, 9.04],
-        rowH: 0.6,
-        fontFace: 'Segoe UI',
-        fontSize: 12,
-        valign: 'middle',
-        border: { pt: 1.5, color: COLORS.white }
-      });
-    }
-
-    addFootnote(slide);
-  }
-
-  // ========== SLIDE 12: IDEAL ACQUISITION TARGETS ==========
+  // ========== SLIDE 4: TARGET LIST ==========
   const idealTarget = synthesis.ideal_target || {};
   const targetList = idealTarget.target_list || [];
   if (targetList.length > 0) {
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, companyName, 'Ideal Acquisition Targets');
-    addSectionHeader(slide, '10 Strategic Fit Targets');
+
+    // Title: "Target List – [context or company name]"
+    const targetTitle = additionalContext
+      ? `Target List – ${additionalContext.substring(0, 50)}`
+      : `Target List – ${companyName}`;
+    addSlideTitle(slide, targetTitle);
 
     const rows = [
       [
-        { text: 'Company', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } },
-        { text: 'HQ', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
-        { text: 'Revenue', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
-        { text: 'Ownership', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
-        { text: 'Fit Type', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'center' } },
-        { text: 'Strategic Fit', options: { fill: { color: COLORS.navy }, color: COLORS.white, bold: true, align: 'left' } }
+        { text: 'Company', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'left', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
+        { text: 'HQ', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'center', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
+        { text: 'Revenue', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'center', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
+        { text: 'Fit Type', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'center', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
+        { text: 'Strategic Fit', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'left', valign: 'middle', border: { pt: 3, color: COLORS.white } } }
       ]
     ];
 
-    targetList.slice(0, 10).forEach((t, i) => {
-      const nameOpts = { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.blue, bold: true, align: 'left' };
-      if (t.website) nameOpts.hyperlink = { url: t.website };
-      else if (t.source_url) nameOpts.hyperlink = { url: t.source_url };
+    const targets = targetList.slice(0, 10);
+    targets.forEach((t, i) => {
+      const isLastRow = i === targets.length - 1;
+      const companyOpts = {
+        fill: { color: COLORS.companyBg },
+        color: COLORS.white,
+        bold: false,
+        align: 'left',
+        valign: 'middle',
+        border: { pt: 3, color: COLORS.white }
+      };
+      if (t.website) companyOpts.hyperlink = { url: t.website };
+
       rows.push([
-        { text: t.company_name || '', options: nameOpts },
-        { text: t.hq_country || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
-        { text: t.revenue || t.estimated_revenue || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
-        { text: t.ownership || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'center' } },
-        { text: t.fit_type || '', options: { fill: { color: COLORS.accent }, color: COLORS.white, align: 'center' } },
-        { text: t.strategic_fit || '', options: { fill: { color: i % 2 === 0 ? COLORS.lightGray : COLORS.white }, color: COLORS.black, align: 'left' } }
+        { text: `${i + 1}. ${t.company_name || ''}`, options: companyOpts },
+        { text: t.hq_country || '', options: {
+          fill: { color: COLORS.white },
+          color: COLORS.black,
+          align: 'center',
+          valign: 'middle',
+          border: [{ pt: 3, color: COLORS.white }, { pt: 3, color: COLORS.white }, getRowBorder(isLastRow), { pt: 3, color: COLORS.white }]
+        }},
+        { text: t.revenue || t.estimated_revenue || '', options: {
+          fill: { color: COLORS.white },
+          color: COLORS.black,
+          align: 'center',
+          valign: 'middle',
+          border: [{ pt: 3, color: COLORS.white }, { pt: 3, color: COLORS.white }, getRowBorder(isLastRow), { pt: 3, color: COLORS.white }]
+        }},
+        { text: t.fit_type || '', options: {
+          fill: { color: COLORS.labelBg },
+          color: COLORS.white,
+          align: 'center',
+          valign: 'middle',
+          border: { pt: 3, color: COLORS.white }
+        }},
+        { text: t.strategic_fit || '', options: {
+          fill: { color: COLORS.white },
+          color: COLORS.black,
+          align: 'left',
+          valign: 'middle',
+          border: [{ pt: 3, color: COLORS.white }, { pt: 3, color: COLORS.white }, getRowBorder(isLastRow), { pt: 3, color: COLORS.white }]
+        }}
       ]);
     });
 
     slide.addTable(rows, {
-      x: 0.38, y: 1.7, w: 12.54,
-      colW: [2.5, 1.0, 1.2, 1.3, 1.5, 5.04],
-      rowH: 0.42,
+      x: 0.38, y: 1.2, w: 12.54,
+      colW: [3.0, 1.2, 1.3, 1.5, 5.54],
+      rowH: 0.48,
       fontFace: 'Segoe UI',
-      fontSize: 9,
-      valign: 'middle',
-      border: { pt: 1.5, color: COLORS.white }
+      fontSize: 10,
+      valign: 'middle'
+    });
+
+    addFootnote(slide);
+  }
+
+  // ========== SLIDE 5: HYPOTHETICAL M&A ==========
+  if (targetList.length >= 3) {
+    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+    addSlideTitle(slide, 'Hypothetical M&A Options');
+
+    // Select top 3-4 targets for hypothetical options
+    const topTargets = targetList.slice(0, Math.min(4, targetList.length));
+    const boxWidth = 2.8;
+    const boxHeight = 4.5;
+    const startX = 0.5;
+    const startY = 1.3;
+    const gap = 0.3;
+
+    topTargets.forEach((t, i) => {
+      const x = startX + i * (boxWidth + gap);
+
+      // Dotted border box
+      slide.addShape(pptx.shapes.RECTANGLE, {
+        x: x, y: startY, w: boxWidth, h: boxHeight,
+        fill: { color: COLORS.white },
+        line: { color: COLORS.gray, width: 1.5, dashType: 'dash' }
+      });
+
+      // Option number header
+      slide.addText(`Option ${i + 1}`, {
+        x: x, y: startY + 0.1, w: boxWidth, h: 0.35,
+        fontSize: 12, fontFace: 'Segoe UI', bold: true,
+        color: COLORS.headerBg, align: 'center'
+      });
+
+      // Company name
+      slide.addText(t.company_name || '', {
+        x: x + 0.1, y: startY + 0.5, w: boxWidth - 0.2, h: 0.4,
+        fontSize: 11, fontFace: 'Segoe UI', bold: true,
+        color: COLORS.companyBg, align: 'center'
+      });
+
+      // Details
+      const details = [
+        `HQ: ${t.hq_country || 'N/A'}`,
+        `Revenue: ${t.revenue || t.estimated_revenue || 'N/A'}`,
+        `Ownership: ${t.ownership || 'N/A'}`,
+        `Fit: ${t.fit_type || 'N/A'}`
+      ];
+
+      slide.addText(details.join('\n'), {
+        x: x + 0.15, y: startY + 1.0, w: boxWidth - 0.3, h: 1.5,
+        fontSize: 9, fontFace: 'Segoe UI',
+        color: COLORS.black, align: 'left', valign: 'top'
+      });
+
+      // Strategic fit
+      slide.addText('Strategic Fit:', {
+        x: x + 0.15, y: startY + 2.5, w: boxWidth - 0.3, h: 0.25,
+        fontSize: 9, fontFace: 'Segoe UI', bold: true,
+        color: COLORS.labelBg, align: 'left'
+      });
+
+      slide.addText(t.strategic_fit || '', {
+        x: x + 0.15, y: startY + 2.75, w: boxWidth - 0.3, h: 1.5,
+        fontSize: 8, fontFace: 'Segoe UI',
+        color: COLORS.black, align: 'left', valign: 'top'
+      });
+    });
+
+    // Instruction text at bottom
+    slide.addText('Select your preferred option for detailed analysis', {
+      x: 0.38, y: 6.0, w: 12.54, h: 0.3,
+      fontSize: 11, fontFace: 'Segoe UI', italic: true,
+      color: COLORS.footerText, align: 'center'
     });
 
     addFootnote(slide);
