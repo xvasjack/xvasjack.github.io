@@ -3374,7 +3374,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         try {
           const url = new URL(c);
           return url.hostname.replace('www.', '');
-        } catch {
+        } catch (e) {
           return truncate(c, 30);
         }
       }).join(', ');
