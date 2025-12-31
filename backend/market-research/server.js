@@ -1219,35 +1219,33 @@ function safeArray(arr, max = 5) {
   return arr.slice(0, max);
 }
 
-// Single country deep-dive PPT - RESTRUCTURED for actual analysis
+// Single country deep-dive PPT - Matches YCP Escort/Shizuoka Gas format
+// Structure: Title → Policy & Regulations → Market → Competitor Overview
 async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   console.log(`Generating single-country PPT for ${synthesis.country}...`);
 
   const pptx = new pptxgen();
-  pptx.author = 'Market Research AI';
-  pptx.title = `${scope.industry} Market Entry - ${synthesis.country}`;
+  pptx.author = 'YCP Market Research';
+  pptx.title = `${synthesis.country} - ${scope.industry} Market Analysis`;
   pptx.subject = scope.projectType;
 
-  // YCP Template Colors
+  // YCP Theme Colors (from profile-slides template)
   const COLORS = {
-    primary: '1F497D',    // YCP dark blue
-    secondary: '007FFF',  // YCP bright blue
-    accent: 'E46C0A',     // YCP orange
-    text: '000000',       // Black
-    lightBg: 'EDFDFF',    // YCP light cyan
+    headerLine: '293F55',    // Dark navy for header/footer lines
+    accent3: '011AB7',       // Dark blue - table header background
+    accent1: '007FFF',       // Bright blue - secondary/subtitle
+    dk2: '1F497D',           // Section underline/title color
     white: 'FFFFFF',
-    green: '38a169',
-    red: 'C00000',        // YCP red
-    navy: '001C44'        // YCP navy
+    black: '000000',
+    gray: 'BFBFBF',          // Border color
+    footerText: '808080'     // Gray footer text
   };
 
   // Set default font to Segoe UI (YCP standard)
   pptx.theme = { headFontFace: 'Segoe UI', bodyFontFace: 'Segoe UI' };
-
-  // Standard font for all text
   const FONT = 'Segoe UI';
 
-  // Truncate title to max 70 chars (about 10 words)
+  // Truncate title to max 70 chars
   function truncateTitle(text) {
     if (!text) return '';
     const str = String(text).trim();
@@ -1257,100 +1255,162 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     return lastSpace > 40 ? cut.substring(0, lastSpace) : cut;
   }
 
+  // Standard slide layout with title, subtitle, and navy divider line
   function addSlide(title, subtitle = '') {
     const slide = pptx.addSlide();
-    // Title - 24pt bold navy, max 2 lines (truncated)
+    // Title - 24pt bold navy
     slide.addText(truncateTitle(title), {
       x: 0.35, y: 0.15, w: 9.3, h: 0.7,
-      fontSize: 24, bold: true, color: COLORS.primary, fontFace: FONT,
+      fontSize: 24, bold: true, color: COLORS.dk2, fontFace: FONT,
       valign: 'top', wrap: true
     });
     // Navy divider line under title
     slide.addShape('line', {
-      x: 0.35, y: 0.9,
-      w: 9.3, h: 0,
-      line: { color: COLORS.primary, width: 2.5 }
+      x: 0.35, y: 0.9, w: 9.3, h: 0,
+      line: { color: COLORS.dk2, width: 2.5 }
     });
-    // Message/subtitle - 16pt blue (below divider)
+    // Message/subtitle - 14pt blue (the "so what")
     if (subtitle) {
       slide.addText(subtitle, {
-        x: 0.35, y: 0.95, w: 9.3, h: 0.25,
-        fontSize: 14, color: COLORS.secondary, fontFace: FONT
+        x: 0.35, y: 0.95, w: 9.3, h: 0.3,
+        fontSize: 14, color: COLORS.accent1, fontFace: FONT
       });
     }
     return slide;
   }
 
-  // SLIDE 1: Title
+  const ca = countryAnalysis || {};
+  const headlines = synthesis.slideHeadlines || {};
+  const country = synthesis.country;
+
+  // ============ SLIDE 1: TITLE ============
   const titleSlide = pptx.addSlide();
-  titleSlide.addText(synthesis.country.toUpperCase(), {
+  titleSlide.addText(country.toUpperCase(), {
     x: 0.5, y: 2.2, w: 9, h: 0.8,
-    fontSize: 42, bold: true, color: COLORS.primary, fontFace: FONT
+    fontSize: 42, bold: true, color: COLORS.dk2, fontFace: FONT
   });
   titleSlide.addText(`${scope.industry} Market Analysis`, {
     x: 0.5, y: 3.0, w: 9, h: 0.5,
-    fontSize: 24, color: COLORS.secondary, fontFace: FONT
+    fontSize: 24, color: COLORS.accent1, fontFace: FONT
   });
   titleSlide.addText(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' }), {
     x: 0.5, y: 6.5, w: 9, h: 0.3,
     fontSize: 10, color: '666666', fontFace: FONT
   });
 
-  // Get insight-driven headlines if available
-  const headlines = synthesis.slideHeadlines || {};
+  // ============ SLIDE 2: POLICY & REGULATIONS ============
+  const reg = ca.policyRegulatory || {};
+  const regTitle = headlines.regulation || `${country} - Policy & Regulations`;
+  const regSubtitle = reg.governmentStance ? truncate(reg.governmentStance, 100) : '';
+  const regSlide = addSlide(regTitle, regSubtitle);
 
-  // SLIDE 2: Summary (1 slide, key points only)
-  const summaryTitle = headlines.summary || 'Executive Summary';
-  const execSlide = addSlide(summaryTitle, 'Key Findings');
-  const execBullets = safeArray(synthesis.executiveSummary, 4);
-  execSlide.addText(execBullets.map(b => ({
-    text: truncate(b, 180),
-    options: { bullet: true }
-  })), {
-    x: 0.35, y: 1.3, w: 9.3, h: 5.2,
-    fontSize: 14, color: COLORS.text, fontFace: FONT, valign: 'top', lineSpacing: 26
-  });
-
-  // SLIDE 3: Market Size Data (ACTUAL NUMBERS)
-  const marketTitle = headlines.marketData || 'Market Data';
-  const marketSlide = addSlide(marketTitle, '');
-  const ca = countryAnalysis || {};
-  const macro = ca.macroContext || {};
-  const market = ca.marketDynamics || {};
-
-  // Create data table with dark blue header (accent3 = #011AB7)
-  const TABLE_HEADER_COLOR = '011AB7';
-  const marketRows = [
+  // Policy table - Area | Details format (matching Escort)
+  const regRows = [
     [
-      { text: 'Metric', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Value', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } }
-    ],
-    [{ text: 'GDP' }, { text: truncate(macro.gdp || 'N/A', 120) }],
-    [{ text: 'Population' }, { text: truncate(macro.population || 'N/A', 120) }],
-    [{ text: 'Industry Share of GDP' }, { text: truncate(macro.industrialGdpShare || 'N/A', 120) }],
-    [{ text: 'Market Size' }, { text: truncate(market.marketSize || 'N/A', 120) }],
-    [{ text: 'Energy Prices' }, { text: truncate(market.pricing || 'N/A', 120) }],
-    [{ text: 'Demand Drivers' }, { text: truncate(market.demand || 'N/A', 120) }]
+      { text: 'Area', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Details', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } }
+    ]
   ];
 
-  marketSlide.addTable(marketRows, {
-    x: 0.35, y: 1.2, w: 9.3, h: 5,
-    fontSize: 14,
-    fontFace: FONT,
-    border: { pt: 0.5, color: 'cccccc' },
-    colW: [2.3, 7]
+  // Add key legislation as separate rows
+  const laws = safeArray(reg.keyLegislation, 3);
+  laws.forEach((law, idx) => {
+    regRows.push([
+      { text: `Key Law ${idx + 1}` },
+      { text: truncate(law, 120) }
+    ]);
   });
 
-  // SLIDE 4: Competitor Data (TABLE FORMAT)
-  const compTitle = headlines.competition || 'Competitive Landscape';
-  const compSlide = addSlide(compTitle, '');
-  const comp = ca.competitiveLandscape || {};
+  // Add ownership rules
+  if (reg.foreignOwnershipRules) {
+    regRows.push([
+      { text: 'Foreign Ownership' },
+      { text: truncate(reg.foreignOwnershipRules, 120) }
+    ]);
+  }
 
+  // Add incentives
+  const incentives = safeArray(reg.incentives, 2);
+  incentives.forEach((inc, idx) => {
+    regRows.push([
+      { text: idx === 0 ? 'Incentives' : '' },
+      { text: truncate(inc, 120) }
+    ]);
+  });
+
+  // Add risk level
+  if (reg.regulatoryRisk) {
+    regRows.push([
+      { text: 'Risk Level' },
+      { text: truncate(reg.regulatoryRisk, 120) }
+    ]);
+  }
+
+  regSlide.addTable(regRows, {
+    x: 0.35, y: 1.3, w: 9.3, h: 5.2,
+    fontSize: 14, fontFace: FONT,
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [2.0, 7.3],
+    valign: 'top'
+  });
+
+  // ============ SLIDE 3: MARKET ============
+  const market = ca.marketDynamics || {};
+  const macro = ca.macroContext || {};
+  const marketTitle = headlines.marketData || `${country} - Market`;
+  // Use market size as subtitle if available
+  const marketSubtitle = market.marketSize ? truncate(market.marketSize, 100) : '';
+  const marketSlide = addSlide(marketTitle, marketSubtitle);
+
+  // Market data table - matching Escort format
+  const marketRows = [
+    [
+      { text: 'Metric', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Value', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } }
+    ]
+  ];
+
+  // Focus on ESCO/industry-specific metrics, not generic macro data
+  if (market.marketSize) {
+    marketRows.push([{ text: 'Market Size' }, { text: truncate(market.marketSize, 120) }]);
+  }
+  if (market.demand) {
+    marketRows.push([{ text: 'Demand Drivers' }, { text: truncate(market.demand, 120) }]);
+  }
+  if (market.pricing) {
+    marketRows.push([{ text: 'Pricing/Tariffs' }, { text: truncate(market.pricing, 120) }]);
+  }
+  if (market.supplyChain) {
+    marketRows.push([{ text: 'Supply Chain' }, { text: truncate(market.supplyChain, 120) }]);
+  }
+  // Add macro context only if relevant
+  if (macro.energyIntensity) {
+    marketRows.push([{ text: 'Energy Intensity' }, { text: truncate(macro.energyIntensity, 120) }]);
+  }
+  if (macro.keyObservation) {
+    marketRows.push([{ text: 'Key Observation' }, { text: truncate(macro.keyObservation, 120) }]);
+  }
+
+  marketSlide.addTable(marketRows, {
+    x: 0.35, y: 1.3, w: 9.3, h: 5.2,
+    fontSize: 14, fontFace: FONT,
+    border: { pt: 0.5, color: 'cccccc' },
+    colW: [2.0, 7.3],
+    valign: 'top'
+  });
+
+  // ============ SLIDE 4: COMPETITOR OVERVIEW ============
+  const comp = ca.competitiveLandscape || {};
+  const compTitle = headlines.competition || `${country} - Competitor Overview`;
+  const compSubtitle = comp.competitiveIntensity ? `Competitive intensity: ${comp.competitiveIntensity}` : '';
+  const compSlide = addSlide(compTitle, compSubtitle);
+
+  // Competitor table - Company | Type | Description
   const compRows = [
     [
-      { text: 'Company', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Type', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Notes', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } }
+      { text: 'Company', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Type', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Notes', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } }
     ]
   ];
 
@@ -1359,9 +1419,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const name = typeof p === 'string' ? p : (p.name || 'Unknown');
     const desc = typeof p === 'string' ? '' : (p.description || '');
     compRows.push([
-      { text: truncate(name, 40) },
+      { text: truncate(name, 35) },
       { text: 'Local' },
-      { text: truncate(desc, 100) }
+      { text: truncate(desc, 80) }
     ]);
   });
 
@@ -1370,334 +1430,36 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const name = typeof p === 'string' ? p : (p.name || 'Unknown');
     const desc = typeof p === 'string' ? '' : (p.description || '');
     compRows.push([
-      { text: truncate(name, 40) },
+      { text: truncate(name, 35) },
       { text: 'Foreign' },
-      { text: truncate(desc, 100) }
+      { text: truncate(desc, 80) }
     ]);
   });
 
   compSlide.addTable(compRows, {
-    x: 0.35, y: 1.2, w: 9.3, h: 3.2,
-    fontSize: 14,
-    fontFace: FONT,
-    border: { pt: 0.5, color: 'cccccc' },
-    colW: [2.8, 0.8, 5.7]
-  });
-
-  // Entry barriers below - with divider line
-  compSlide.addShape('line', {
-    x: 0.35, y: 4.5, w: 9.3, h: 0,
-    line: { color: COLORS.primary, width: 2.5 }
-  });
-  compSlide.addText('Barriers to Entry:', {
-    x: 0.35, y: 4.6, w: 9.3, h: 0.35,
-    fontSize: 14, bold: true, color: COLORS.secondary, fontFace: FONT
-  });
-  const barriers = safeArray(comp.entryBarriers, 3);
-  compSlide.addText(barriers.map(b => ({ text: truncate(b, 120), options: { bullet: true } })), {
-    x: 0.35, y: 5.0, w: 9.3, h: 1.5,
-    fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
-  });
-
-  // SLIDE 5: Regulatory Data
-  const regTitle = headlines.regulation || 'Regulatory Environment';
-  const regSlide = addSlide(regTitle, '');
-  const reg = ca.policyRegulatory || {};
-
-  const regRows = [
-    [
-      { text: 'Area', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Details', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } }
-    ],
-    [{ text: 'Government Stance' }, { text: truncate(reg.governmentStance || 'N/A', 100) }],
-    [{ text: 'Foreign Ownership Rules' }, { text: truncate(reg.foreignOwnershipRules || 'N/A', 100) }],
-    [{ text: 'Risk Level' }, { text: truncate(reg.regulatoryRisk || 'N/A', 100) }]
-  ];
-
-  regSlide.addTable(regRows, {
-    x: 0.35, y: 1.2, w: 9.3, h: 2,
+    x: 0.35, y: 1.3, w: 9.3, h: 3.5,
     fontSize: 14, fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
-    colW: [2.3, 7]
+    colW: [2.5, 1.0, 5.8],
+    valign: 'top'
   });
 
-  // Key laws - with divider line
-  regSlide.addShape('line', {
-    x: 0.35, y: 3.3, w: 9.3, h: 0,
-    line: { color: COLORS.primary, width: 2.5 }
-  });
-  regSlide.addText('Key Laws & Policies:', {
-    x: 0.35, y: 3.4, w: 9.3, h: 0.35,
-    fontSize: 14, bold: true, color: COLORS.secondary, fontFace: FONT
-  });
-  const laws = safeArray(reg.keyLegislation, 4);
-  regSlide.addText(laws.map(l => ({ text: truncate(l, 100), options: { bullet: true } })), {
-    x: 0.35, y: 3.8, w: 9.3, h: 1.4,
-    fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
-  });
-
-  // Incentives - with divider line
-  regSlide.addShape('line', {
-    x: 0.35, y: 5.3, w: 9.3, h: 0,
-    line: { color: COLORS.primary, width: 2.5 }
-  });
-  regSlide.addText('Available Incentives:', {
-    x: 0.35, y: 5.4, w: 9.3, h: 0.35,
-    fontSize: 14, bold: true, color: COLORS.green, fontFace: FONT
-  });
-  const incentives = safeArray(reg.incentives, 2);
-  regSlide.addText(incentives.map(i => ({ text: truncate(i, 100), options: { bullet: true } })), {
-    x: 0.35, y: 5.8, w: 9.3, h: 0.9,
-    fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
-  });
-
-  // SLIDE 6: What We Found (Analysis based on data)
-  const analysisSlide = addSlide('What We Found', '');
-  const summary = ca.summaryAssessment || {};
-
-  // Opportunities - left column with divider
-  analysisSlide.addShape('line', {
-    x: 0.35, y: 1.2, w: 4.3, h: 0,
-    line: { color: COLORS.green, width: 2.5 }
-  });
-  analysisSlide.addText('Opportunities', {
-    x: 0.35, y: 1.3, w: 4.3, h: 0.35,
-    fontSize: 14, bold: true, color: COLORS.green, fontFace: FONT
-  });
-  const opps = safeArray(summary.opportunities, 4);
-  analysisSlide.addText(opps.map(o => ({ text: truncate(o, 80), options: { bullet: true } })), {
-    x: 0.35, y: 1.7, w: 4.3, h: 2.5,
-    fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
-  });
-
-  // Obstacles - right column with divider
-  analysisSlide.addShape('line', {
-    x: 5, y: 1.2, w: 4.65, h: 0,
-    line: { color: COLORS.accent, width: 2.5 }
-  });
-  analysisSlide.addText('Obstacles', {
-    x: 5, y: 1.3, w: 4.65, h: 0.35,
-    fontSize: 14, bold: true, color: COLORS.accent, fontFace: FONT
-  });
-  const obs = safeArray(summary.obstacles, 4);
-  analysisSlide.addText(obs.map(o => ({ text: truncate(o, 80), options: { bullet: true } })), {
-    x: 5, y: 1.7, w: 4.65, h: 2.5,
-    fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
-  });
-
-  // Key insight - with divider
-  analysisSlide.addShape('line', {
-    x: 0.35, y: 4.3, w: 9.3, h: 0,
-    line: { color: COLORS.accent, width: 2.5 }
-  });
-  analysisSlide.addText('Key Insight:', {
-    x: 0.35, y: 4.4, w: 9.3, h: 0.35,
-    fontSize: 14, bold: true, color: COLORS.accent, fontFace: FONT
-  });
-  analysisSlide.addText(truncate(summary.keyInsight || 'See detailed analysis', 200), {
-    x: 0.35, y: 4.8, w: 9.3, h: 1.5,
-    fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
-  });
-
-  // Ratings
-  analysisSlide.addText(
-    `Market Attractiveness: ${summary.attractivenessRating || 'N/A'}/10    Feasibility: ${summary.feasibilityRating || 'N/A'}/10`,
-    {
-      x: 0.35, y: 6.4, w: 9.3, h: 0.3,
-      fontSize: 14, bold: true, color: COLORS.primary, fontFace: FONT
-    }
-  );
-
-  // SLIDE 7: Key Insights (THE STORY)
-  const keyInsights = safeArray(synthesis.keyInsights, 3);
-  if (keyInsights.length > 0) {
-    const insightSlide = addSlide('Key Insights', '');
-    let insightY = 1.2;
-
-    keyInsights.forEach((insight, idx) => {
-      const title = typeof insight === 'string' ? `Insight ${idx + 1}` : (insight.title || `Insight ${idx + 1}`);
-      const body = typeof insight === 'string' ? insight :
-        `${insight.data || ''} → ${insight.pattern || ''} → ${insight.implication || ''}`;
-
-      // Divider line for each insight
-      insightSlide.addShape('line', {
-        x: 0.35, y: insightY - 0.1, w: 9.3, h: 0,
-        line: { color: COLORS.accent, width: 2.5 }
-      });
-
-      insightSlide.addText(`${idx + 1}. ${title}`, {
-        x: 0.35, y: insightY, w: 9.3, h: 0.4,
-        fontSize: 14, bold: true, color: COLORS.accent, fontFace: FONT, wrap: true
-      });
-
-      insightSlide.addText(truncate(body, 180), {
-        x: 0.35, y: insightY + 0.45, w: 9.3, h: 1.3,
-        fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
-      });
-
-      insightY += 1.85;
+  // Entry barriers section below table
+  const barriers = safeArray(comp.entryBarriers, 4);
+  if (barriers.length > 0) {
+    compSlide.addShape('line', {
+      x: 0.35, y: 4.9, w: 9.3, h: 0,
+      line: { color: COLORS.dk2, width: 2.5 }
+    });
+    compSlide.addText('Barriers to Entry', {
+      x: 0.35, y: 5.0, w: 9.3, h: 0.35,
+      fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
+    });
+    compSlide.addText(barriers.map(b => ({ text: truncate(b, 100), options: { bullet: true } })), {
+      x: 0.35, y: 5.4, w: 9.3, h: 1.3,
+      fontSize: 14, fontFace: FONT, color: COLORS.black, valign: 'top'
     });
   }
-
-  // SLIDE 8: Entry Options (COMPARISON TABLE)
-  const stratSlide = addSlide('Entry Options', '');
-  const entryOpts = synthesis.entryStrategyOptions || synthesis.entryOptions || {};
-
-  const optRows = [
-    [
-      { text: '', options: { fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Option A', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Option B', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Option C', options: { bold: true, fill: { color: TABLE_HEADER_COLOR }, color: COLORS.white, fontFace: FONT } }
-    ]
-  ];
-
-  const optA = entryOpts.optionA || entryOpts.A || {};
-  const optB = entryOpts.optionB || entryOpts.B || {};
-  const optC = entryOpts.optionC || entryOpts.C || {};
-
-  const getOptField = (opt, field) => {
-    if (typeof opt === 'string') return truncate(opt, 60);
-    return truncate(opt[field] || opt.description || 'N/A', 60);
-  };
-
-  optRows.push([
-    { text: 'Approach', options: { bold: true } },
-    { text: getOptField(optA, 'name') },
-    { text: getOptField(optB, 'name') },
-    { text: getOptField(optC, 'name') }
-  ]);
-
-  optRows.push([
-    { text: 'Pros', options: { bold: true } },
-    { text: getOptField(optA, 'pros') },
-    { text: getOptField(optB, 'pros') },
-    { text: getOptField(optC, 'pros') }
-  ]);
-
-  optRows.push([
-    { text: 'Cons', options: { bold: true } },
-    { text: getOptField(optA, 'cons') },
-    { text: getOptField(optB, 'cons') },
-    { text: getOptField(optC, 'cons') }
-  ]);
-
-  stratSlide.addTable(optRows, {
-    x: 0.35, y: 1.2, w: 9.3, h: 3.2,
-    fontSize: 14, fontFace: FONT,
-    border: { pt: 0.5, color: 'cccccc' },
-    colW: [1.2, 2.7, 2.7, 2.7]
-  });
-
-  // Recommendation - with divider
-  const recommended = entryOpts.recommendedOption || entryOpts.recommendation;
-  if (recommended) {
-    stratSlide.addShape('line', {
-      x: 0.35, y: 4.5, w: 9.3, h: 0,
-      line: { color: COLORS.accent, width: 2.5 }
-    });
-    stratSlide.addText('Recommended:', {
-      x: 0.35, y: 4.6, w: 9.3, h: 0.35,
-      fontSize: 14, bold: true, color: COLORS.accent, fontFace: FONT
-    });
-    const recText = typeof recommended === 'string' ? recommended : (recommended.option || recommended.rationale || JSON.stringify(recommended));
-    stratSlide.addText(truncate(recText, 180), {
-      x: 0.35, y: 5.0, w: 9.3, h: 1.5,
-      fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
-    });
-  }
-
-  // SLIDE 9: Risks (PROPERLY FORMATTED)
-  const riskTitle = headlines.risks || 'Risk Assessment';
-  const riskSlide = addSlide(riskTitle, '');
-  const riskAssess = synthesis.riskAssessment || synthesis.risks || {};
-  const criticalRisks = safeArray(riskAssess.criticalRisks || riskAssess.risks, 3);
-
-  // Risk table - use accent color (orange) for header
-  const riskRows = [
-    [
-      { text: 'Risk', options: { bold: true, fill: { color: COLORS.accent }, color: COLORS.white, fontFace: FONT } },
-      { text: 'How to Handle', options: { bold: true, fill: { color: COLORS.accent }, color: COLORS.white, fontFace: FONT } }
-    ]
-  ];
-
-  criticalRisks.forEach(r => {
-    const riskName = typeof r === 'string' ? r : (r.risk || r.name || 'Risk');
-    const mitigation = typeof r === 'string' ? '' : (r.mitigation || '');
-    riskRows.push([
-      { text: truncate(riskName, 80) },
-      { text: truncate(mitigation, 100) }
-    ]);
-  });
-
-  riskSlide.addTable(riskRows, {
-    x: 0.35, y: 1.2, w: 9.3, h: 2.8,
-    fontSize: 14, fontFace: FONT,
-    border: { pt: 0.5, color: 'cccccc' },
-    colW: [4.3, 5]
-  });
-
-  // Go/No-Go criteria - with divider
-  const goNoGo = safeArray(riskAssess.goNoGoCriteria || riskAssess.goNoGo, 4);
-  if (goNoGo.length > 0) {
-    riskSlide.addShape('line', {
-      x: 0.35, y: 4.1, w: 9.3, h: 0,
-      line: { color: COLORS.secondary, width: 2.5 }
-    });
-    riskSlide.addText('Go/No-Go Checklist:', {
-      x: 0.35, y: 4.2, w: 9.3, h: 0.35,
-      fontSize: 14, bold: true, color: COLORS.secondary, fontFace: FONT
-    });
-    riskSlide.addText(goNoGo.map(g => ({
-      text: truncate(typeof g === 'string' ? g : (g.criteria || g.description), 80),
-      options: { bullet: true }
-    })), {
-      x: 0.35, y: 4.6, w: 9.3, h: 2,
-      fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
-    });
-  }
-
-  // SLIDE 10: Roadmap (Based on analysis)
-  const roadmapSlide = addSlide('Roadmap', '');
-  const roadmap = synthesis.implementationRoadmap || synthesis.roadmap || {};
-
-  const phases = [
-    { key: 'phase1', label: 'Months 0-6', color: COLORS.secondary },
-    { key: 'phase2', label: 'Months 6-12', color: COLORS.accent },
-    { key: 'phase3', label: 'Months 12-24', color: COLORS.green }
-  ];
-
-  // Helper to strip month prefixes like "Months 0-6:" from content
-  const stripMonthPrefix = (text) => {
-    if (!text) return '';
-    return String(text).replace(/^(months?\s*\d+[-–]\d+\s*:?\s*)/i, '').trim();
-  };
-
-  let phaseY = 1.2;
-  phases.forEach(phase => {
-    const actions = roadmap[phase.key] || roadmap[phase.label] || [];
-
-    // Divider line for each phase
-    roadmapSlide.addShape('line', {
-      x: 0.35, y: phaseY - 0.1, w: 9.3, h: 0,
-      line: { color: phase.color, width: 2.5 }
-    });
-
-    roadmapSlide.addText(phase.label, {
-      x: 0.35, y: phaseY, w: 9.3, h: 0.35,
-      fontSize: 14, bold: true, color: phase.color, fontFace: FONT
-    });
-
-    const actionList = Array.isArray(actions) ? actions : [actions];
-    roadmapSlide.addText(safeArray(actionList, 4).map(a => ({
-      text: truncate(stripMonthPrefix(a), 100),
-      options: { bullet: true }
-    })), {
-      x: 0.35, y: phaseY + 0.35, w: 9.3, h: 1.4,
-      fontSize: 14, fontFace: FONT, color: COLORS.text, valign: 'top'
-    });
-    phaseY += 1.85;
-  });
 
   // Next Steps slide removed per user request
 
@@ -1706,7 +1468,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   return pptxBuffer;
 }
 
-// Multi-country comparison PPT - RESTRUCTURED with actual data
+// Multi-country comparison PPT - Matches YCP Escort format
+// Structure: Title → Overview → For each country: Policy & Regulations → Market → Competitor Overview
 async function generatePPT(synthesis, countryAnalyses, scope) {
   console.log('\n=== STAGE 4: PPT GENERATION ===');
 
@@ -1716,31 +1479,27 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   }
 
   const pptx = new pptxgen();
-  pptx.author = 'Market Research AI';
+  pptx.author = 'YCP Market Research';
   pptx.title = `${scope.industry} Market Analysis - ${scope.targetMarkets.join(', ')}`;
   pptx.subject = scope.projectType;
 
-  // YCP Template Colors
+  // YCP Theme Colors (from profile-slides template)
   const COLORS = {
-    primary: '1F497D',    // YCP dark blue
-    secondary: '007FFF',  // YCP bright blue
-    accent: 'E46C0A',     // YCP orange
-    text: '000000',       // Black
-    lightBg: 'EDFDFF',    // YCP light cyan
+    headerLine: '293F55',    // Dark navy for header/footer lines
+    accent3: '011AB7',       // Dark blue - table header background
+    accent1: '007FFF',       // Bright blue - secondary/subtitle
+    dk2: '1F497D',           // Section underline/title color
     white: 'FFFFFF',
-    green: '38a169',
-    red: 'C00000',        // YCP red
-    navy: '001C44'        // YCP navy
+    black: '000000',
+    gray: 'BFBFBF',          // Border color
+    footerText: '808080'     // Gray footer text
   };
 
   // Set default font to Segoe UI (YCP standard)
   pptx.theme = { headFontFace: 'Segoe UI', bodyFontFace: 'Segoe UI' };
-
-  // Standard font for all text
   const FONT = 'Segoe UI';
-  const TABLE_HEADER_COLOR = '011AB7';
 
-  // Truncate title to max 70 chars (about 10 words)
+  // Truncate title to max 70 chars
   function truncateTitle(text) {
     if (!text) return '';
     const str = String(text).trim();
@@ -1750,314 +1509,226 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     return lastSpace > 40 ? cut.substring(0, lastSpace) : cut;
   }
 
+  // Standard slide layout with title, subtitle, and navy divider line
   function addSlide(title, subtitle = '') {
     const slide = pptx.addSlide();
-    // Title - 24pt bold navy, max 2 lines (truncated)
+    // Title - 24pt bold navy
     slide.addText(truncateTitle(title), {
       x: 0.35, y: 0.15, w: 9.3, h: 0.7,
-      fontSize: 24, bold: true, color: COLORS.primary, fontFace: FONT,
+      fontSize: 24, bold: true, color: COLORS.dk2, fontFace: FONT,
       valign: 'top', wrap: true
     });
     // Navy divider line under title
     slide.addShape('line', {
-      x: 0.35, y: 0.9,
-      w: 9.3, h: 0,
-      line: { color: COLORS.primary, width: 2.5 }
+      x: 0.35, y: 0.9, w: 9.3, h: 0,
+      line: { color: COLORS.dk2, width: 2.5 }
     });
-    // Message/subtitle - 14pt blue (below divider)
+    // Message/subtitle - 14pt blue (the "so what")
     if (subtitle) {
       slide.addText(subtitle, {
-        x: 0.35, y: 0.95, w: 9.3, h: 0.25,
-        fontSize: 14, color: COLORS.secondary, fontFace: FONT
+        x: 0.35, y: 0.95, w: 9.3, h: 0.3,
+        fontSize: 14, color: COLORS.accent1, fontFace: FONT
       });
     }
     return slide;
   }
 
-  // SLIDE 1: Title
+  // ============ SLIDE 1: TITLE ============
   const titleSlide = pptx.addSlide();
   titleSlide.addText(scope.industry.toUpperCase(), {
     x: 0.5, y: 2.2, w: 9, h: 0.8,
-    fontSize: 36, bold: true, color: COLORS.primary, fontFace: FONT
+    fontSize: 36, bold: true, color: COLORS.dk2, fontFace: FONT
   });
   titleSlide.addText('Market Comparison', {
     x: 0.5, y: 3.0, w: 9, h: 0.5,
-    fontSize: 24, color: COLORS.secondary, fontFace: FONT
+    fontSize: 24, color: COLORS.accent1, fontFace: FONT
   });
   titleSlide.addText(scope.targetMarkets.join(' | '), {
     x: 0.5, y: 3.6, w: 9, h: 0.4,
-    fontSize: 14, color: COLORS.text, fontFace: FONT
+    fontSize: 14, color: COLORS.black, fontFace: FONT
   });
   titleSlide.addText(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' }), {
     x: 0.5, y: 6.5, w: 9, h: 0.3,
     fontSize: 10, color: '666666', fontFace: FONT
   });
 
-  // Get insight-driven headlines if available
-  const headlines = synthesis.slideHeadlines || {};
+  // ============ SLIDE 2: OVERVIEW (Comparison Table) ============
+  const overviewSlide = addSlide('Overview', 'Market comparison across countries');
 
-  // SLIDE 2: Summary
-  const summaryTitle = headlines.summary || 'Executive Summary';
-  const execSlide = addSlide(summaryTitle, 'Key Recommendations');
-  const execBullets = safeArray(synthesis.executiveSummary, 5);
-  execSlide.addText(execBullets.map(b => ({
-    text: truncate(b, 350),
-    options: { bullet: true }
-  })), {
-    x: 0.5, y: 1.2, w: 9, h: 5.4,
-    fontSize: 11, fontFace: FONT, color: COLORS.text, valign: 'top', lineSpacing: 22
-  });
-
-  // SLIDE 3: Market Size Comparison (DATA TABLE)
-  const marketCompTitle = headlines.marketComparison || 'Market Data Comparison';
-  const marketCompSlide = addSlide(marketCompTitle, '');
-
-  const marketCompRows = [
+  const overviewRows = [
     [
-      { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
-      { text: 'GDP', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Market Size', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Growth', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } }
+      { text: 'Country', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Market Size', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Foreign Ownership', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
+      { text: 'Risk Level', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } }
     ]
   ];
 
   countryAnalyses.forEach(c => {
     if (c.error) return;
-    marketCompRows.push([
+    overviewRows.push([
       { text: c.country, options: { fontFace: FONT } },
-      { text: truncate(c.macroContext?.gdp || 'N/A', 50), options: { fontFace: FONT } },
-      { text: truncate(c.marketDynamics?.marketSize || 'N/A', 50), options: { fontFace: FONT } },
-      { text: truncate(c.marketDynamics?.demand || 'N/A', 50), options: { fontFace: FONT } }
+      { text: truncate(c.marketDynamics?.marketSize || 'N/A', 60), options: { fontFace: FONT } },
+      { text: truncate(c.policyRegulatory?.foreignOwnershipRules || 'N/A', 60), options: { fontFace: FONT } },
+      { text: truncate(c.policyRegulatory?.regulatoryRisk || 'N/A', 40), options: { fontFace: FONT } }
     ]);
   });
 
-  marketCompSlide.addTable(marketCompRows, {
-    x: 0.5, y: 1.1, w: 9, h: 4,
-    fontSize: 10,
+  overviewSlide.addTable(overviewRows, {
+    x: 0.35, y: 1.3, w: 9.3, h: 5.2,
+    fontSize: 12,
     fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
-    colW: [2, 2.3, 2.3, 2.4]
+    colW: [2.0, 2.5, 2.5, 2.3],
+    valign: 'top'
   });
 
-  // SLIDE 4: Regulatory Comparison
-  const regCompSlide = addSlide('Regulatory Comparison', 'Rules in each country');
+  // ============ COUNTRY SECTIONS ============
+  // For each country: Policy & Regulations → Market → Competitor Overview
+  for (const ca of countryAnalyses) {
+    if (ca.error) continue;
+    const countryName = ca.country;
 
-  const regCompRows = [
-    [
-      { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Foreign Ownership', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Risk Level', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Key Incentive', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } }
-    ]
-  ];
+    // ---------- SLIDE: {Country} - Policy & Regulations ----------
+    const reg = ca.policyRegulatory || {};
+    const regSubtitle = reg.governmentStance ? truncate(reg.governmentStance, 100) : '';
+    const regSlide = addSlide(`${countryName} - Policy & Regulations`, regSubtitle);
 
-  countryAnalyses.forEach(c => {
-    if (c.error) return;
-    const incentives = c.policyRegulatory?.incentives || [];
-    regCompRows.push([
-      { text: c.country, options: { fontFace: FONT } },
-      { text: truncate(c.policyRegulatory?.foreignOwnershipRules || 'N/A', 50), options: { fontFace: FONT } },
-      { text: truncate(c.policyRegulatory?.regulatoryRisk || 'N/A', 40), options: { fontFace: FONT } },
-      { text: truncate(incentives[0] || 'N/A', 50), options: { fontFace: FONT } }
-    ]);
-  });
-
-  regCompSlide.addTable(regCompRows, {
-    x: 0.5, y: 1.1, w: 9, h: 4,
-    fontSize: 10,
-    fontFace: FONT,
-    border: { pt: 0.5, color: 'cccccc' },
-    colW: [2, 2.5, 2, 2.5]
-  });
-
-  // SLIDE 5: Country Rankings (COMPARISON MATRIX)
-  const rankingsTitle = headlines.rankings || 'Country Rankings';
-  const rankSlide = addSlide(rankingsTitle, 'Which market looks best');
-
-  const rankRows = [
-    [
-      { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Attractiveness', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Feasibility', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Competition', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } }
-    ]
-  ];
-
-  countryAnalyses.forEach(c => {
-    if (c.error) return;
-    rankRows.push([
-      { text: c.country, options: { fontFace: FONT } },
-      { text: `${c.summaryAssessment?.attractivenessRating || 'N/A'}/10`, options: { fontFace: FONT } },
-      { text: `${c.summaryAssessment?.feasibilityRating || 'N/A'}/10`, options: { fontFace: FONT } },
-      { text: truncate(c.competitiveLandscape?.competitiveIntensity || 'N/A', 50), options: { fontFace: FONT } }
-    ]);
-  });
-
-  rankSlide.addTable(rankRows, {
-    x: 0.5, y: 1.1, w: 9, h: 3.5,
-    fontSize: 11,
-    fontFace: FONT,
-    border: { pt: 0.5, color: 'cccccc' },
-    colW: [2.5, 2, 2, 2.5]
-  });
-
-  // Best/worst summary below
-  const sortedByAttract = [...countryAnalyses].filter(c => !c.error).sort((a, b) =>
-    (b.summaryAssessment?.attractivenessRating || 0) - (a.summaryAssessment?.attractivenessRating || 0)
-  );
-  if (sortedByAttract.length > 0) {
-    rankSlide.addText(`Most attractive: ${sortedByAttract[0]?.country || 'N/A'}`, {
-      x: 0.5, y: 5, w: 9, h: 0.4,
-      fontSize: 12, bold: true, color: COLORS.green, fontFace: FONT
-    });
-    if (sortedByAttract.length > 1) {
-      rankSlide.addText(`Least attractive: ${sortedByAttract[sortedByAttract.length - 1]?.country || 'N/A'}`, {
-        x: 0.5, y: 5.5, w: 9, h: 0.4,
-        fontSize: 12, color: COLORS.red, fontFace: FONT
-      });
-    }
-  }
-
-  // SLIDES: Individual Country Details (1 slide each)
-  for (const country of countryAnalyses) {
-    if (country.error) continue;
-
-    const cSlide = addSlide(country.country, 'Key findings');
-
-    // Left: Metrics table
-    const metricsRows = [
-      [{ text: 'Metric', options: { bold: true, fontFace: FONT } }, { text: 'Value', options: { bold: true, fontFace: FONT } }],
-      [{ text: 'GDP', options: { fontFace: FONT } }, { text: truncate(country.macroContext?.gdp || 'N/A', 80), options: { fontFace: FONT } }],
-      [{ text: 'Market Size', options: { fontFace: FONT } }, { text: truncate(country.marketDynamics?.marketSize || 'N/A', 80), options: { fontFace: FONT } }],
-      [{ text: 'Reg Risk', options: { fontFace: FONT } }, { text: truncate(country.policyRegulatory?.regulatoryRisk || 'N/A', 80), options: { fontFace: FONT } }]
-    ];
-
-    cSlide.addTable(metricsRows, {
-      x: 0.5, y: 1.1, w: 4.2, h: 2,
-      fontSize: 9,
-      fontFace: FONT,
-      border: { pt: 0.5, color: 'cccccc' },
-      colW: [1.5, 2.7]
-    });
-
-    // Right: Opportunities & Obstacles
-    cSlide.addText('Opportunities', {
-      x: 5, y: 1.1, w: 4.5, h: 0.25,
-      fontSize: 11, bold: true, color: COLORS.green, fontFace: FONT
-    });
-    const opps = safeArray(country.summaryAssessment?.opportunities, 3);
-    cSlide.addText(opps.map(o => ({ text: truncate(o, 100), options: { bullet: true } })), {
-      x: 5, y: 1.4, w: 4.5, h: 1.3,
-      fontSize: 9, color: COLORS.text, fontFace: FONT, valign: 'top'
-    });
-
-    cSlide.addText('Obstacles', {
-      x: 5, y: 2.8, w: 4.5, h: 0.25,
-      fontSize: 11, bold: true, color: COLORS.red, fontFace: FONT
-    });
-    const obs = safeArray(country.summaryAssessment?.obstacles, 3);
-    cSlide.addText(obs.map(o => ({ text: truncate(o, 100), options: { bullet: true } })), {
-      x: 5, y: 3.1, w: 4.5, h: 1.3,
-      fontSize: 9, color: COLORS.text, fontFace: FONT, valign: 'top'
-    });
-
-    // Bottom: Key competitors
-    cSlide.addText('Key Competitors:', {
-      x: 0.5, y: 4.6, w: 9, h: 0.25,
-      fontSize: 11, bold: true, color: COLORS.secondary, fontFace: FONT
-    });
-    const localPlayers = safeArray(country.competitiveLandscape?.localPlayers, 3);
-    const competitorText = localPlayers.map(p => typeof p === 'string' ? p : p.name).join(', ') || 'See detailed analysis';
-    cSlide.addText(truncate(competitorText, 200), {
-      x: 0.5, y: 4.9, w: 9, h: 0.5,
-      fontSize: 10, color: COLORS.text, fontFace: FONT
-    });
-
-    // Key Insight
-    cSlide.addText('Key Insight:', {
-      x: 0.5, y: 5.5, w: 9, h: 0.25,
-      fontSize: 11, bold: true, color: COLORS.accent, fontFace: FONT
-    });
-    cSlide.addText(truncate(country.summaryAssessment?.keyInsight || 'See analysis', 250), {
-      x: 0.5, y: 5.8, w: 9, h: 0.9,
-      fontSize: 10, color: COLORS.text, fontFace: FONT, valign: 'top'
-    });
-
-    // Ratings
-    cSlide.addText(
-      `Attractiveness: ${country.summaryAssessment?.attractivenessRating || 'N/A'}/10    Feasibility: ${country.summaryAssessment?.feasibilityRating || 'N/A'}/10`,
-      {
-        x: 0.5, y: 6.8, w: 9, h: 0.25,
-        fontSize: 10, bold: true, color: COLORS.primary, fontFace: FONT
-      }
-    );
-  }
-
-  // SLIDE: Recommendations
-  const recoSlide = addSlide('Recommendations', 'What we suggest');
-  const recommendations = synthesis.strategicRecommendations || synthesis.recommendations || {};
-
-  // Entry sequence
-  recoSlide.addText('Recommended entry order:', {
-    x: 0.5, y: 1.1, w: 9, h: 0.3,
-    fontSize: 12, bold: true, color: COLORS.secondary, fontFace: FONT
-  });
-  const entrySeq = recommendations.entrySequence || recommendations.recommendedEntrySequence ||
-    countryAnalyses.filter(c => !c.error).map(c => c.country).join(' → ');
-  recoSlide.addText(truncate(typeof entrySeq === 'string' ? entrySeq : entrySeq.join(' → '), 150), {
-    x: 0.5, y: 1.5, w: 9, h: 0.4,
-    fontSize: 11, color: COLORS.text, fontFace: FONT
-  });
-
-  // Entry modes table
-  const entryModes = recommendations.entryModeRecommendations || recommendations.entryModes || [];
-  if (Array.isArray(entryModes) && entryModes.length > 0) {
-    recoSlide.addText('How to enter each market:', {
-      x: 0.5, y: 2.1, w: 9, h: 0.3,
-      fontSize: 12, bold: true, color: COLORS.secondary, fontFace: FONT
-    });
-
-    const modeRows = [
+    const regRows = [
       [
-        { text: 'Country', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } },
-        { text: 'Entry Mode', options: { bold: true, fill: { color: COLORS.primary }, color: COLORS.white, fontFace: FONT } }
+        { text: 'Area', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
+        { text: 'Details', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } }
       ]
     ];
-    entryModes.slice(0, 5).forEach(m => {
-      const country = typeof m === 'string' ? m.split(':')[0] : m.country;
-      const mode = typeof m === 'string' ? m.split(':')[1] : (m.mode || m.recommendation);
-      modeRows.push([
-        { text: truncate(country, 30), options: { fontFace: FONT } },
-        { text: truncate(mode, 100), options: { fontFace: FONT } }
+
+    // Add key legislation
+    const laws = safeArray(reg.keyLegislation, 3);
+    laws.forEach((law, idx) => {
+      regRows.push([
+        { text: `Key Law ${idx + 1}` },
+        { text: truncate(law, 120) }
       ]);
     });
 
-    recoSlide.addTable(modeRows, {
-      x: 0.5, y: 2.5, w: 9, h: 2.5,
-      fontSize: 10,
-      fontFace: FONT,
+    if (reg.foreignOwnershipRules) {
+      regRows.push([{ text: 'Foreign Ownership' }, { text: truncate(reg.foreignOwnershipRules, 120) }]);
+    }
+
+    const incentives = safeArray(reg.incentives, 2);
+    incentives.forEach((inc, idx) => {
+      regRows.push([{ text: idx === 0 ? 'Incentives' : '' }, { text: truncate(inc, 120) }]);
+    });
+
+    if (reg.regulatoryRisk) {
+      regRows.push([{ text: 'Risk Level' }, { text: truncate(reg.regulatoryRisk, 120) }]);
+    }
+
+    regSlide.addTable(regRows, {
+      x: 0.35, y: 1.3, w: 9.3, h: 5.2,
+      fontSize: 14, fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
-      colW: [2.5, 6.5]
+      colW: [2.0, 7.3],
+      valign: 'top'
     });
-  }
 
-  // Risk mitigation
-  const risks = safeArray(recommendations.riskMitigation || recommendations.riskMitigationStrategies, 3);
-  if (risks.length > 0) {
-    recoSlide.addText('Key risks to watch:', {
-      x: 0.5, y: 5.3, w: 9, h: 0.3,
-      fontSize: 12, bold: true, color: COLORS.accent, fontFace: FONT
-    });
-    recoSlide.addText(risks.map(r => ({
-      text: truncate(typeof r === 'string' ? r : (r.strategy || r.description), 150),
-      options: { bullet: true }
-    })), {
-      x: 0.5, y: 5.7, w: 9, h: 1.2,
-      fontSize: 10, color: COLORS.text, fontFace: FONT, valign: 'top'
-    });
-  }
+    // ---------- SLIDE: {Country} - Market ----------
+    const market = ca.marketDynamics || {};
+    const macro = ca.macroContext || {};
+    const marketSubtitle = market.marketSize ? truncate(market.marketSize, 100) : '';
+    const marketSlide = addSlide(`${countryName} - Market`, marketSubtitle);
 
-  // Next Steps slide removed per user request
+    const marketRows = [
+      [
+        { text: 'Metric', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
+        { text: 'Value', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } }
+      ]
+    ];
+
+    if (market.marketSize) {
+      marketRows.push([{ text: 'Market Size' }, { text: truncate(market.marketSize, 120) }]);
+    }
+    if (market.demand) {
+      marketRows.push([{ text: 'Demand Drivers' }, { text: truncate(market.demand, 120) }]);
+    }
+    if (market.pricing) {
+      marketRows.push([{ text: 'Pricing/Tariffs' }, { text: truncate(market.pricing, 120) }]);
+    }
+    if (market.supplyChain) {
+      marketRows.push([{ text: 'Supply Chain' }, { text: truncate(market.supplyChain, 120) }]);
+    }
+    if (macro.energyIntensity) {
+      marketRows.push([{ text: 'Energy Intensity' }, { text: truncate(macro.energyIntensity, 120) }]);
+    }
+    if (macro.keyObservation) {
+      marketRows.push([{ text: 'Key Observation' }, { text: truncate(macro.keyObservation, 120) }]);
+    }
+
+    marketSlide.addTable(marketRows, {
+      x: 0.35, y: 1.3, w: 9.3, h: 5.2,
+      fontSize: 14, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [2.0, 7.3],
+      valign: 'top'
+    });
+
+    // ---------- SLIDE: {Country} - Competitor Overview ----------
+    const comp = ca.competitiveLandscape || {};
+    const compSubtitle = comp.competitiveIntensity ? `Competitive intensity: ${comp.competitiveIntensity}` : '';
+    const compSlide = addSlide(`${countryName} - Competitor Overview`, compSubtitle);
+
+    const compRows = [
+      [
+        { text: 'Company', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
+        { text: 'Type', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
+        { text: 'Notes', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } }
+      ]
+    ];
+
+    safeArray(comp.localPlayers, 3).forEach(p => {
+      const name = typeof p === 'string' ? p : (p.name || 'Unknown');
+      const desc = typeof p === 'string' ? '' : (p.description || '');
+      compRows.push([
+        { text: truncate(name, 35) },
+        { text: 'Local' },
+        { text: truncate(desc, 80) }
+      ]);
+    });
+
+    safeArray(comp.foreignPlayers, 3).forEach(p => {
+      const name = typeof p === 'string' ? p : (p.name || 'Unknown');
+      const desc = typeof p === 'string' ? '' : (p.description || '');
+      compRows.push([
+        { text: truncate(name, 35) },
+        { text: 'Foreign' },
+        { text: truncate(desc, 80) }
+      ]);
+    });
+
+    compSlide.addTable(compRows, {
+      x: 0.35, y: 1.3, w: 9.3, h: 3.5,
+      fontSize: 14, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [2.5, 1.0, 5.8],
+      valign: 'top'
+    });
+
+    // Entry barriers section
+    const barriers = safeArray(comp.entryBarriers, 4);
+    if (barriers.length > 0) {
+      compSlide.addShape('line', {
+        x: 0.35, y: 4.9, w: 9.3, h: 0,
+        line: { color: COLORS.dk2, width: 2.5 }
+      });
+      compSlide.addText('Barriers to Entry', {
+        x: 0.35, y: 5.0, w: 9.3, h: 0.35,
+        fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
+      });
+      compSlide.addText(barriers.map(b => ({ text: truncate(b, 100), options: { bullet: true } })), {
+        x: 0.35, y: 5.4, w: 9.3, h: 1.3,
+        fontSize: 14, fontFace: FONT, color: COLORS.black, valign: 'top'
+      });
+    }
+  }
 
   const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
   console.log(`PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB`);
