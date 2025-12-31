@@ -26,41 +26,6 @@ function ensureString(value, defaultValue = '') {
   return String(value);
 }
 
-// ============ STRING NORMALIZATION ============
-
-function normalizeCompanyName(name) {
-  if (!name) return '';
-  return name
-    .toLowerCase()
-    .replace(
-      /\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi,
-      ''
-    )
-    .replace(/^(pt\.?|cv\.?)\s+/gi, '')
-    .replace(/[^\w\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function normalizeWebsite(url) {
-  if (!url) return '';
-  return url
-    .toLowerCase()
-    .replace(/^https?:\/\//, '')
-    .replace(/^www\./, '')
-    .replace(/\/+$/, '')
-    .replace(
-      /\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i,
-      ''
-    )
-    .replace(/\.(html?|php|aspx?|jsp)$/i, '');
-}
-
-function extractDomainRoot(url) {
-  const normalized = normalizeWebsite(url);
-  return normalized.split('/')[0];
-}
-
 // ============ URL VALIDATION ============
 
 function isSpamOrDirectoryURL(url) {
@@ -184,7 +149,7 @@ function buildEmailHTML(companies, business, country, exclusion) {
 
 // ============ SEARCH STRATEGIES ============
 
-function strategy1_BroadSerpAPI(business, country, exclusion) {
+function strategy1_BroadSerpAPI(business, country, _exclusion) {
   const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
@@ -234,7 +199,7 @@ function strategy2_BroadPerplexity(business, country, exclusion) {
   return queries;
 }
 
-function strategy3_ListsSerpAPI(business, country, exclusion) {
+function strategy3_ListsSerpAPI(business, country, _exclusion) {
   const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
@@ -300,7 +265,7 @@ function strategy4_CitiesPerplexity(business, country, exclusion) {
   return queries;
 }
 
-function strategy5_IndustrialSerpAPI(business, country, exclusion) {
+function strategy5_IndustrialSerpAPI(business, country, _exclusion) {
   const LOCAL_SUFFIXES = {
     malaysia: ['Sdn Bhd', 'Berhad'],
     singapore: ['Pte Ltd', 'Private Limited'],
@@ -389,7 +354,7 @@ function strategy9_DomainsPerplexity(business, country, exclusion) {
   return queries;
 }
 
-function strategy10_RegistriesSerpAPI(business, country, exclusion) {
+function strategy10_RegistriesSerpAPI(business, country, _exclusion) {
   const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
@@ -404,7 +369,7 @@ function strategy10_RegistriesSerpAPI(business, country, exclusion) {
   return queries;
 }
 
-function strategy11_CityIndustrialSerpAPI(business, country, exclusion) {
+function strategy11_CityIndustrialSerpAPI(business, country, _exclusion) {
   const CITY_MAP = {
     malaysia: ['Kuala Lumpur', 'Penang', 'Johor Bahru'],
     singapore: ['Singapore', 'Jurong'],
@@ -463,7 +428,7 @@ function strategy13_PublicationsPerplexity(business, country, exclusion) {
   ];
 }
 
-function strategy14_LocalLanguageOpenAISearch(business, country, exclusion) {
+function strategy14_LocalLanguageOpenAISearch(business, country, _exclusion) {
   const LOCAL_LANGUAGE_MAP = {
     thailand: { lang: 'Thai', examples: ['หมึก', 'สี', 'เคมี'] },
     vietnam: { lang: 'Vietnamese', examples: ['mực in', 'sơn', 'hóa chất'] },

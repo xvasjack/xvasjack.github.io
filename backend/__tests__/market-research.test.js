@@ -11,7 +11,7 @@ const PRICING = {
   'deepseek-chat': { input: 0.28, output: 0.42 },
   'deepseek-reasoner': { input: 0.28, output: 0.42 },
   'kimi-128k': { input: 0.84, output: 0.84 },
-  'kimi-32k': { input: 0.35, output: 0.35 }
+  'kimi-32k': { input: 0.35, output: 0.35 },
 };
 
 function trackCost(model, inputTokens, outputTokens, searchCount = 0) {
@@ -55,10 +55,7 @@ function truncate(text, maxLen = 150) {
   }
 
   // Try to end at strong phrase boundary (; or :)
-  const strongPhrase = Math.max(
-    truncated.lastIndexOf('; '),
-    truncated.lastIndexOf(': ')
-  );
+  const strongPhrase = Math.max(truncated.lastIndexOf('; '), truncated.lastIndexOf(': '));
   if (strongPhrase > maxLen * 0.4) {
     return truncated.substring(0, strongPhrase + 1).trim();
   }
@@ -81,7 +78,35 @@ function truncate(text, maxLen = 150) {
     // Check if ending on a preposition/article - if so, cut earlier
     const words = truncated.substring(0, lastSpace).split(' ');
     const lastWord = words[words.length - 1].toLowerCase();
-    const badEndings = ['for', 'to', 'the', 'a', 'an', 'of', 'in', 'on', 'at', 'by', 'with', 'and', 'or', 'but', 'are', 'is', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'largely', 'mostly', 'mainly'];
+    const badEndings = [
+      'for',
+      'to',
+      'the',
+      'a',
+      'an',
+      'of',
+      'in',
+      'on',
+      'at',
+      'by',
+      'with',
+      'and',
+      'or',
+      'but',
+      'are',
+      'is',
+      'was',
+      'were',
+      'be',
+      'been',
+      'being',
+      'have',
+      'has',
+      'had',
+      'largely',
+      'mostly',
+      'mainly',
+    ];
     if (badEndings.includes(lastWord) && words.length > 1) {
       // Remove the dangling preposition/article
       words.pop();
@@ -135,10 +160,10 @@ function generateFallbackFramework(scope) {
             `{country} ${industry} licensing permits foreign companies`,
             `{country} foreign investment restrictions ${industry} sector`,
             `{country} ${industry} compliance requirements standards`,
-            `{country} government policy ${industry} development`
-          ]
-        }
-      ]
+            `{country} government policy ${industry} development`,
+          ],
+        },
+      ],
     },
     market: {
       topics: [
@@ -149,10 +174,10 @@ function generateFallbackFramework(scope) {
             `{country} ${industry} market growth rate CAGR forecast`,
             `{country} ${industry} market segments breakdown`,
             `{country} ${industry} demand drivers trends`,
-            `{country} ${industry} market outlook 2025 2030`
-          ]
-        }
-      ]
+            `{country} ${industry} market outlook 2025 2030`,
+          ],
+        },
+      ],
     },
     competitors: {
       topics: [
@@ -163,10 +188,10 @@ function generateFallbackFramework(scope) {
             `{country} ${industry} foreign companies presence`,
             `{country} ${industry} local major players`,
             `{country} ${industry} competitive landscape analysis`,
-            `{country} ${industry} M&A acquisitions recent`
-          ]
-        }
-      ]
+            `{country} ${industry} M&A acquisitions recent`,
+          ],
+        },
+      ],
     },
     depth: {
       topics: [
@@ -177,10 +202,10 @@ function generateFallbackFramework(scope) {
             `{country} ${industry} typical deal size contract value`,
             `{country} ${industry} partnership joint venture examples`,
             `{country} ${industry} investment requirements costs`,
-            `{country} ${industry} success factors best practices`
-          ]
-        }
-      ]
+            `{country} ${industry} success factors best practices`,
+          ],
+        },
+      ],
     },
     insights: {
       topics: [
@@ -191,20 +216,20 @@ function generateFallbackFramework(scope) {
             `{country} ${industry} regulatory changes upcoming 2025`,
             `{country} ${industry} incentives expiration deadline`,
             `{country} ${industry} underserved segments gaps`,
-            `{country} ${industry} barriers challenges foreign companies`
-          ]
-        }
-      ]
-    }
+            `{country} ${industry} barriers challenges foreign companies`,
+          ],
+        },
+      ],
+    },
   };
 }
 
 // ============ CHART DATA UTILITIES ============
-function extractChartData(researchText, chartType) {
+function extractChartData(researchText, _chartType) {
   const data = {
     categories: [],
     series: [],
-    values: []
+    values: [],
   };
 
   // Try to find year-based data patterns like "2020: 45, 2021: 48, 2022: 52"
@@ -212,47 +237,47 @@ function extractChartData(researchText, chartType) {
   const yearMatches = [...(researchText || '').matchAll(yearPattern)];
 
   if (yearMatches.length >= 2) {
-    data.categories = yearMatches.map(m => m[1]);
-    data.values = yearMatches.map(m => parseFloat(m[2]));
+    data.categories = yearMatches.map((m) => m[1]);
+    data.values = yearMatches.map((m) => parseFloat(m[2]));
     data.series = [{ name: 'Value', values: data.values }];
   }
 
   return data;
 }
 
-function validateChartData(data, chartType) {
+function validateChartData(data, _chartType) {
   if (!data) return null;
 
   const validated = {
     categories: [],
     series: [],
     values: [],
-    unit: data.unit || ''
+    unit: data.unit || '',
   };
 
   // Validate categories
   if (Array.isArray(data.categories)) {
-    validated.categories = data.categories.map(c => String(c)).slice(0, 10);
+    validated.categories = data.categories.map((c) => String(c)).slice(0, 10);
   }
 
   // Validate values (for simple bar/pie charts)
   if (Array.isArray(data.values)) {
     validated.values = data.values
-      .map(v => typeof v === 'number' ? v : parseFloat(v))
-      .filter(v => !isNaN(v))
+      .map((v) => (typeof v === 'number' ? v : parseFloat(v)))
+      .filter((v) => !isNaN(v))
       .slice(0, 10);
   }
 
   // Validate series (for stacked/line charts)
   if (Array.isArray(data.series)) {
     validated.series = data.series
-      .filter(s => s && s.name && Array.isArray(s.values))
-      .map(s => ({
+      .filter((s) => s && s.name && Array.isArray(s.values))
+      .map((s) => ({
         name: String(s.name).substring(0, 30),
         values: s.values
-          .map(v => typeof v === 'number' ? v : parseFloat(v))
-          .filter(v => !isNaN(v))
-          .slice(0, 10)
+          .map((v) => (typeof v === 'number' ? v : parseFloat(v)))
+          .filter((v) => !isNaN(v))
+          .slice(0, 10),
       }))
       .slice(0, 6); // Max 6 series for readability
   }
@@ -260,7 +285,9 @@ function validateChartData(data, chartType) {
   // Check if we have enough data to render
   const hasEnoughData =
     (validated.categories.length >= 2 && validated.values.length >= 2) ||
-    (validated.categories.length >= 2 && validated.series.length >= 1 && validated.series[0].values.length >= 2);
+    (validated.categories.length >= 2 &&
+      validated.series.length >= 1 &&
+      validated.series[0].values.length >= 2);
 
   return hasEnoughData ? validated : null;
 }
@@ -559,10 +586,10 @@ describe('generateFallbackFramework', () => {
       ...framework.market.topics[0].queries,
       ...framework.competitors.topics[0].queries,
       ...framework.depth.topics[0].queries,
-      ...framework.insights.topics[0].queries
+      ...framework.insights.topics[0].queries,
     ];
 
-    allQueries.forEach(query => {
+    allQueries.forEach((query) => {
       expect(query).toContain('{country}');
     });
   });
@@ -617,7 +644,8 @@ describe('extractChartData', () => {
   });
 
   test('extracts from longer text', () => {
-    const text = 'The market grew significantly: 2018: 100, 2019: 120, 2020: 150, showing strong trends.';
+    const text =
+      'The market grew significantly: 2018: 100, 2019: 120, 2020: 150, showing strong trends.';
     const data = extractChartData(text);
 
     expect(data.categories).toEqual(['2018', '2019', '2020']);
@@ -648,7 +676,7 @@ describe('validateChartData', () => {
   test('limits categories to 10', () => {
     const data = {
       categories: Array.from({ length: 20 }, (_, i) => `Cat${i}`),
-      values: Array.from({ length: 20 }, (_, i) => i * 10)
+      values: Array.from({ length: 20 }, (_, i) => i * 10),
     };
     const validated = validateChartData(data);
 
@@ -679,7 +707,7 @@ describe('validateChartData', () => {
   test('limits values to 10', () => {
     const data = {
       categories: Array.from({ length: 20 }, (_, i) => `Cat${i}`),
-      values: Array.from({ length: 20 }, (_, i) => i * 10)
+      values: Array.from({ length: 20 }, (_, i) => i * 10),
     };
     const validated = validateChartData(data);
 
@@ -691,8 +719,8 @@ describe('validateChartData', () => {
       categories: ['2020', '2021', '2022'],
       series: [
         { name: 'Series1', values: [10, 20, 30] },
-        { name: 'Series2', values: [15, 25, 35] }
-      ]
+        { name: 'Series2', values: [15, 25, 35] },
+      ],
     };
     const validated = validateChartData(data);
 
@@ -709,8 +737,8 @@ describe('validateChartData', () => {
         { values: [15, 25] }, // Missing name
         { name: 'NoValues' }, // Missing values
         null,
-        { name: 'AlsoValid', values: [5, 15] }
-      ]
+        { name: 'AlsoValid', values: [5, 15] },
+      ],
     };
     const validated = validateChartData(data);
 
@@ -723,7 +751,7 @@ describe('validateChartData', () => {
     const longName = 'A'.repeat(50);
     const data = {
       categories: ['2020', '2021'],
-      series: [{ name: longName, values: [10, 20] }]
+      series: [{ name: longName, values: [10, 20] }],
     };
     const validated = validateChartData(data);
 
@@ -735,8 +763,8 @@ describe('validateChartData', () => {
       categories: ['2020', '2021'],
       series: Array.from({ length: 10 }, (_, i) => ({
         name: `Series${i}`,
-        values: [i * 10, i * 20]
-      }))
+        values: [i * 10, i * 20],
+      })),
     };
     const validated = validateChartData(data);
 
@@ -767,7 +795,7 @@ describe('validateChartData', () => {
   test('returns null if not enough data (categories + series)', () => {
     const data = {
       categories: ['A'],
-      series: [{ name: 'S1', values: [10] }]
+      series: [{ name: 'S1', values: [10] }],
     };
     const validated = validateChartData(data);
 
@@ -784,7 +812,7 @@ describe('validateChartData', () => {
   test('accepts valid data with categories + series', () => {
     const data = {
       categories: ['A', 'B'],
-      series: [{ name: 'S1', values: [10, 20] }]
+      series: [{ name: 'S1', values: [10, 20] }],
     };
     const validated = validateChartData(data);
 
@@ -794,7 +822,7 @@ describe('validateChartData', () => {
   test('handles mixed valid and invalid series values', () => {
     const data = {
       categories: ['A', 'B', 'C'],
-      series: [{ name: 'S1', values: [10, 'bad', 30] }]
+      series: [{ name: 'S1', values: [10, 'bad', 30] }],
     };
     const validated = validateChartData(data);
 

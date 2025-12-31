@@ -7,7 +7,7 @@ const pptxgen = require('pptxgenjs');
 const XLSX = require('xlsx');
 const multer = require('multer');
 const { createClient } = require('@deepgram/sdk');
-const { Document, Packer, Paragraph, TextRun } = require('docx');
+// const { Document, Packer, Paragraph, TextRun } = require('docx'); // Unused imports removed
 const { S3Client } = require('@aws-sdk/client-s3');
 const Anthropic = require('@anthropic-ai/sdk');
 const JSZip = require('jszip');
@@ -21,7 +21,9 @@ function logMemoryUsage(label = '') {
   const heapUsedMB = Math.round(mem.heapUsed / 1024 / 1024);
   const heapTotalMB = Math.round(mem.heapTotal / 1024 / 1024);
   const rssMB = Math.round(mem.rss / 1024 / 1024);
-  console.log(`  [Memory${label ? ': ' + label : ''}] Heap: ${heapUsedMB}/${heapTotalMB}MB, RSS: ${rssMB}MB`);
+  console.log(
+    `  [Memory${label ? ': ' + label : ''}] Heap: ${heapUsedMB}/${heapTotalMB}MB, RSS: ${rssMB}MB`
+  );
 }
 
 process.on('unhandledRejection', (reason, promise) => {
@@ -47,7 +49,7 @@ function ensureString(value, defaultValue = '') {
   if (typeof value === 'string') return value;
   if (value === null || value === undefined) return defaultValue;
   // Handle arrays - join with comma
-  if (Array.isArray(value)) return value.map(v => ensureString(v)).join(', ');
+  if (Array.isArray(value)) return value.map((v) => ensureString(v)).join(', ');
   // Handle objects - try to extract meaningful string
   if (typeof value === 'object') {
     // Common patterns from AI responses
@@ -56,7 +58,11 @@ function ensureString(value, defaultValue = '') {
     if (value.value) return ensureString(value.value);
     if (value.name) return ensureString(value.name);
     // Fallback: stringify
-    try { return JSON.stringify(value); } catch { return defaultValue; }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return defaultValue;
+    }
   }
   // Convert other types to string
   return String(value);
@@ -68,10 +74,14 @@ function extractCompanyNameFromUrl(url) {
     const urlObj = new URL(url);
     let domain = urlObj.hostname.replace(/^www\./, '');
     // Remove common TLDs and country codes
-    domain = domain.replace(/\.(com|co|org|net|io|ai|jp|cn|kr|sg|my|th|vn|id|ph|tw|hk|in|de|uk|fr|it|es|au|nz|ca|us|br|mx|ru|nl|be|ch|at|se|no|dk|fi|pl|cz|hu|ro|bg|gr|tr|ae|sa|il|za|ng|eg|ke)(\.[a-z]{2,3})?$/i, '');
+    domain = domain.replace(
+      /\.(com|co|org|net|io|ai|jp|cn|kr|sg|my|th|vn|id|ph|tw|hk|in|de|uk|fr|it|es|au|nz|ca|us|br|mx|ru|nl|be|ch|at|se|no|dk|fi|pl|cz|hu|ro|bg|gr|tr|ae|sa|il|za|ng|eg|ke)(\.[a-z]{2,3})?$/i,
+      ''
+    );
     // Convert to title case
-    const name = domain.split(/[-_.]/)
-      .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    const name = domain
+      .split(/[-_.]/)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
       .join(' ');
     return name || domain;
   } catch (e) {
@@ -89,15 +99,21 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Multer configuration for file uploads (memory storage)
 // Add 50MB limit to prevent OOM on Railway containers
+// eslint-disable-next-line no-unused-vars
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }  // 50MB max
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
 });
 
 // Check required environment variables
-const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
-const optionalEnvVars = ['SERPAPI_API_KEY', 'DEEPSEEK_API_KEY', 'DEEPGRAM_API_KEY', 'ANTHROPIC_API_KEY']; // Optional but recommended
-const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+const requiredEnvVars = [
+  'OPENAI_API_KEY',
+  'PERPLEXITY_API_KEY',
+  'GEMINI_API_KEY',
+  'SENDGRID_API_KEY',
+  'SENDER_EMAIL',
+];
+const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
 }
@@ -114,7 +130,7 @@ if (!process.env.DEEPGRAM_API_KEY) {
 
 // Initialize OpenAI
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'missing'
+  apiKey: process.env.OPENAI_API_KEY || 'missing',
 });
 
 // ============ RATE LIMIT RETRY WRAPPER ============
@@ -126,13 +142,18 @@ async function withRetry(apiCall, maxRetries = 3, baseDelay = 2000) {
       return await apiCall();
     } catch (error) {
       lastError = error;
-      const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('rate limit');
+      const isRateLimit =
+        error?.status === 429 ||
+        error?.message?.includes('429') ||
+        error?.message?.includes('rate limit');
       const isServerError = error?.status >= 500;
 
       if ((isRateLimit || isServerError) && attempt < maxRetries) {
         const delay = baseDelay * Math.pow(2, attempt); // 2s, 4s, 8s
-        console.log(`    ⚠ Rate limit/server error, retrying in ${delay/1000}s (attempt ${attempt + 1}/${maxRetries})...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        console.log(
+          `    ⚠ Rate limit/server error, retrying in ${delay / 1000}s (attempt ${attempt + 1}/${maxRetries})...`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
       throw error;
@@ -154,7 +175,7 @@ async function fetchWithTimeoutAndRetry(url, options, timeoutMs = 30000, maxRetr
 
       const response = await fetch(url, {
         ...options,
-        signal: controller.signal
+        signal: controller.signal,
       });
 
       clearTimeout(timeoutId);
@@ -163,8 +184,8 @@ async function fetchWithTimeoutAndRetry(url, options, timeoutMs = 30000, maxRetr
         const isRetryable = response.status === 429 || response.status >= 500;
         if (isRetryable && attempt < maxRetries) {
           const delay = 2000 * Math.pow(2, attempt); // 2s, 4s
-          console.log(`    ⚠ Gemini API error ${response.status}, retrying in ${delay/1000}s...`);
-          await new Promise(resolve => setTimeout(resolve, delay));
+          console.log(`    ⚠ Gemini API error ${response.status}, retrying in ${delay / 1000}s...`);
+          await new Promise((resolve) => setTimeout(resolve, delay));
           continue;
         }
         throw new Error(`Gemini API error: ${response.status}`);
@@ -179,8 +200,10 @@ async function fetchWithTimeoutAndRetry(url, options, timeoutMs = 30000, maxRetr
 
       if ((isTimeout || isNetworkError) && attempt < maxRetries) {
         const delay = 2000 * Math.pow(2, attempt);
-        console.log(`    ⚠ Gemini ${isTimeout ? 'timeout' : 'network error'}, retrying in ${delay/1000}s...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        console.log(
+          `    ⚠ Gemini ${isTimeout ? 'timeout' : 'network error'}, retrying in ${delay / 1000}s...`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
         continue;
       }
       throw error;
@@ -260,12 +283,12 @@ ${contentToScan}`;
           generationConfig: {
             temperature: 0.1,
             maxOutputTokens: 8000,
-            responseMimeType: 'application/json'
-          }
-        })
+            responseMimeType: 'application/json',
+          },
+        }),
       },
-      30000,  // 30 second timeout
-      2       // 2 retries
+      30000, // 30 second timeout
+      2 // 2 retries
     );
 
     const data = await response.json();
@@ -283,7 +306,9 @@ ${contentToScan}`;
       console.log(`    ⚠ WARNING: Marker found no statistics - validator will need to catch these`);
     }
     if (!markers.location_hints?.length) {
-      console.log(`    ⚠ WARNING: Marker found no location hints - relying on extractBasicInfo with raw content`);
+      console.log(
+        `    ⚠ WARNING: Marker found no location hints - relying on extractBasicInfo with raw content`
+      );
     }
     if (!markers.identity_snippets?.length) {
       console.log(`    ⚠ WARNING: Marker found no company identity info`);
@@ -304,19 +329,20 @@ ${contentToScan}`;
       ...(markers.products_snippets || []),
       '',
       '=== LOCATION HINTS ===',
-      ...(markers.location_hints || [])
+      ...(markers.location_hints || []),
     ].join('\n');
 
     console.log(`    Marker AI: condensed ${fullContent.length} → ${markedContent.length} chars`);
-    console.log(`    Found: ${markers.statistics_snippets?.length || 0} stats, ${markers.location_hints?.length || 0} locations`);
+    console.log(
+      `    Found: ${markers.statistics_snippets?.length || 0} stats, ${markers.location_hints?.length || 0} locations`
+    );
 
     return {
       markedContent,
       markers,
       originalLength: fullContent.length,
-      markedLength: markedContent.length
+      markedLength: markedContent.length,
     };
-
   } catch (error) {
     console.error(`    Marker AI error: ${error.message}`);
     return null;
@@ -329,28 +355,33 @@ const anthropic = process.env.ANTHROPIC_API_KEY
   : null;
 
 // Initialize Deepgram
+// eslint-disable-next-line no-unused-vars
 const deepgram = process.env.DEEPGRAM_API_KEY ? createClient(process.env.DEEPGRAM_API_KEY) : null;
 
 // Initialize Cloudflare R2 (S3-compatible)
-const r2Client = (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY)
-  ? new S3Client({
-      region: 'auto',
-      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-      credentials: {
-        accessKeyId: process.env.R2_ACCESS_KEY_ID,
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-      }
-    })
-  : null;
+const r2Client =
+  process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY
+    ? new S3Client({
+        region: 'auto',
+        endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+        credentials: {
+          accessKeyId: process.env.R2_ACCESS_KEY_ID,
+          secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+        },
+      })
+    : null;
 
+// eslint-disable-next-line no-unused-vars
 const R2_BUCKET = process.env.R2_BUCKET_NAME || 'dd-recordings';
 
 if (!r2Client) {
-  console.warn('R2 not configured - recordings will only be stored in memory. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME');
+  console.warn(
+    'R2 not configured - recordings will only be stored in memory. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME'
+  );
 }
 
-
 // Extract text from .docx files (Word documents)
+// eslint-disable-next-line no-unused-vars
 async function extractDocxText(base64Content) {
   try {
     const buffer = Buffer.from(base64Content, 'base64');
@@ -363,14 +394,14 @@ async function extractDocxText(base64Content) {
 
     // Extract text from XML, removing tags
     const text = documentXml
-      .replace(/<w:t[^>]*>([^<]*)<\/w:t>/g, '$1')  // Extract text content
-      .replace(/<w:p[^>]*>/g, '\n')  // Paragraph breaks
-      .replace(/<[^>]+>/g, '')  // Remove remaining tags
+      .replace(/<w:t[^>]*>([^<]*)<\/w:t>/g, '$1') // Extract text content
+      .replace(/<w:p[^>]*>/g, '\n') // Paragraph breaks
+      .replace(/<[^>]+>/g, '') // Remove remaining tags
       .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"')
-      .replace(/\n\s*\n/g, '\n\n')  // Clean up multiple newlines
+      .replace(/\n\s*\n/g, '\n\n') // Clean up multiple newlines
       .trim();
 
     console.log(`[DD] Extracted ${text.length} chars from DOCX`);
@@ -382,6 +413,7 @@ async function extractDocxText(base64Content) {
 }
 
 // Extract text from .pptx files (PowerPoint)
+// eslint-disable-next-line no-unused-vars
 async function extractPptxText(base64Content) {
   try {
     const buffer = Buffer.from(base64Content, 'base64');
@@ -397,9 +429,9 @@ async function extractPptxText(base64Content) {
         if (slideXml) {
           // Extract text from slide
           const slideText = slideXml
-            .replace(/<a:t>([^<]*)<\/a:t>/g, '$1 ')  // Extract text
-            .replace(/<a:p[^>]*>/g, '\n')  // Paragraph breaks
-            .replace(/<[^>]+>/g, '')  // Remove tags
+            .replace(/<a:t>([^<]*)<\/a:t>/g, '$1 ') // Extract text
+            .replace(/<a:p[^>]*>/g, '\n') // Paragraph breaks
+            .replace(/<[^>]+>/g, '') // Remove tags
             .replace(/&amp;/g, '&')
             .replace(/&lt;/g, '<')
             .replace(/&gt;/g, '>')
@@ -424,6 +456,7 @@ async function extractPptxText(base64Content) {
 }
 
 // Extract text from .xlsx files (Excel)
+// eslint-disable-next-line no-unused-vars
 async function extractXlsxText(base64Content) {
   try {
     const buffer = Buffer.from(base64Content, 'base64');
@@ -447,7 +480,6 @@ async function extractXlsxText(base64Content) {
   }
 }
 
-
 // Send email using SendGrid API
 async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) {
   const senderEmail = process.env.SENDER_EMAIL;
@@ -455,16 +487,16 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
     personalizations: [{ to: [{ email: to }] }],
     from: { email: senderEmail, name: 'Find Target' },
     subject: subject,
-    content: [{ type: 'text/html', value: html }]
+    content: [{ type: 'text/html', value: html }],
   };
 
   if (attachments) {
     const attachmentList = Array.isArray(attachments) ? attachments : [attachments];
-    emailData.attachments = attachmentList.map(a => ({
-      filename: a.filename || a.name,  // Support both 'filename' and 'name' properties
+    emailData.attachments = attachmentList.map((a) => ({
+      filename: a.filename || a.name, // Support both 'filename' and 'name' properties
       content: a.content,
       type: 'application/octet-stream',
-      disposition: 'attachment'
+      disposition: 'attachment',
     }));
   }
 
@@ -475,10 +507,10 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
       const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
-          'Content-Type': 'application/json'
+          Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(emailData)
+        body: JSON.stringify(emailData),
       });
 
       if (response.ok) {
@@ -505,7 +537,7 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
     if (attempt < maxRetries) {
       const delay = Math.pow(2, attempt) * 1000;
       console.log(`  Retrying email in ${delay / 1000}s...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 
@@ -515,18 +547,25 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
 // ============ AI TOOLS ============
 
 // Gemini 2.5 Flash-Lite - cost-effective for general tasks ($0.10/$0.40 per 1M tokens)
+// eslint-disable-next-line no-unused-vars
 async function callGemini(prompt) {
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      timeout: 90000
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        timeout: 90000,
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Gemini 2.5 Flash-Lite HTTP error ${response.status}:`, errorText.substring(0, 200));
+      console.error(
+        `Gemini 2.5 Flash-Lite HTTP error ${response.status}:`,
+        errorText.substring(0, 200)
+      );
       return '';
     }
 
@@ -550,13 +589,14 @@ async function callGemini(prompt) {
 
 // Gemini 2.5 Flash - stable model for validation tasks (upgraded from gemini-3-flash-preview which was unstable)
 // With GPT-4o fallback when Gemini fails or times out
+// eslint-disable-next-line no-unused-vars
 async function callGemini3Flash(prompt, jsonMode = false) {
   try {
     const requestBody = {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.1  // Low temperature for consistent validation
-      }
+        temperature: 0.1, // Low temperature for consistent validation
+      },
     };
 
     // Add JSON mode if requested
@@ -565,12 +605,15 @@ async function callGemini3Flash(prompt, jsonMode = false) {
     }
 
     // Using stable gemini-2.5-flash (gemini-3-flash-preview was unreliable)
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-      timeout: 30000  // Reduced from 120s to 30s - fail fast and use GPT-4o fallback
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+        timeout: 30000, // Reduced from 120s to 30s - fail fast and use GPT-4o fallback
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -608,7 +651,7 @@ async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
     const requestOptions = {
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.1
+      temperature: 0.1,
     };
 
     // Add JSON mode if requested
@@ -631,13 +674,14 @@ async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
 
 // Gemini 2.5 Pro - Most capable model for critical validation tasks
 // Use this for final data accuracy verification where errors are unacceptable
+// eslint-disable-next-line no-unused-vars
 async function callGemini2Pro(prompt, jsonMode = false) {
   try {
     const requestBody = {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.0  // Zero temperature for deterministic validation
-      }
+        temperature: 0.0, // Zero temperature for deterministic validation
+      },
     };
 
     if (jsonMode) {
@@ -645,12 +689,15 @@ async function callGemini2Pro(prompt, jsonMode = false) {
     }
 
     // Using stable gemini-2.5-pro (upgraded from deprecated gemini-2.5-pro-preview-06-05)
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-      timeout: 180000  // Longer timeout for Pro model
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+        timeout: 180000, // Longer timeout for Pro model
+      }
+    );
     const data = await response.json();
 
     if (data.error) {
@@ -666,6 +713,7 @@ async function callGemini2Pro(prompt, jsonMode = false) {
 }
 
 // Claude (Anthropic) - excellent reasoning and analysis
+// eslint-disable-next-line no-unused-vars
 async function callClaude(prompt, systemPrompt = null, jsonMode = false) {
   if (!anthropic) {
     console.warn('Claude not available - ANTHROPIC_API_KEY not set');
@@ -676,7 +724,7 @@ async function callClaude(prompt, systemPrompt = null, jsonMode = false) {
     const requestParams = {
       model: 'claude-sonnet-4-20250514',
       max_tokens: 8192,
-      messages
+      messages,
     };
 
     if (systemPrompt) {
@@ -693,20 +741,19 @@ async function callClaude(prompt, systemPrompt = null, jsonMode = false) {
   }
 }
 
-
 async function callPerplexity(prompt) {
   try {
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'sonar-pro',  // Upgraded from 'sonar' for better search results
-        messages: [{ role: 'user', content: prompt }]
+        model: 'sonar-pro', // Upgraded from 'sonar' for better search results
+        messages: [{ role: 'user', content: prompt }],
       }),
-      timeout: 90000
+      timeout: 90000,
     });
 
     if (!response.ok) {
@@ -738,7 +785,7 @@ async function callChatGPT(prompt) {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.2
+      temperature: 0.2,
     });
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -757,7 +804,7 @@ async function callOpenAISearch(prompt) {
   try {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-search-preview',
-      messages: [{ role: 'user', content: prompt }]
+      messages: [{ role: 'user', content: prompt }],
     });
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -772,7 +819,6 @@ async function callOpenAISearch(prompt) {
   }
 }
 
-
 // SerpAPI - Google Search integration
 async function callSerpAPI(query) {
   if (!process.env.SERPAPI_API_KEY) {
@@ -783,10 +829,10 @@ async function callSerpAPI(query) {
       q: query,
       api_key: process.env.SERPAPI_API_KEY,
       engine: 'google',
-      num: 100 // Get more results
+      num: 100, // Get more results
     });
     const response = await fetch(`https://serpapi.com/search?${params}`, {
-      timeout: 30000
+      timeout: 30000,
     });
     const data = await response.json();
 
@@ -797,7 +843,7 @@ async function callSerpAPI(query) {
         results.push({
           title: result.title || '',
           link: result.link || '',
-          snippet: result.snippet || ''
+          snippet: result.snippet || '',
         });
       }
     }
@@ -818,16 +864,16 @@ async function callDeepSeek(prompt, maxTokens = 4000) {
     const response = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         model: 'deepseek-chat',
         messages: [{ role: 'user', content: prompt }],
         max_tokens: maxTokens,
-        temperature: 0.3
+        temperature: 0.3,
       }),
-      timeout: 120000
+      timeout: 120000,
     });
     const data = await response.json();
     if (data.error) {
@@ -841,43 +887,108 @@ async function callDeepSeek(prompt, maxTokens = 4000) {
   }
 }
 
-
 // ============ SEARCH CONFIGURATION ============
 
 const CITY_MAP = {
-  'malaysia': ['Kuala Lumpur', 'Penang', 'Johor Bahru', 'Shah Alam', 'Petaling Jaya', 'Selangor', 'Ipoh', 'Klang', 'Subang', 'Melaka', 'Kuching', 'Kota Kinabalu'],
-  'singapore': ['Singapore', 'Jurong', 'Tuas', 'Woodlands'],
-  'thailand': ['Bangkok', 'Chonburi', 'Rayong', 'Samut Prakan', 'Ayutthaya', 'Chiang Mai', 'Pathum Thani', 'Nonthaburi', 'Samut Sakhon'],
-  'indonesia': ['Jakarta', 'Surabaya', 'Bandung', 'Medan', 'Bekasi', 'Tangerang', 'Semarang', 'Sidoarjo', 'Cikarang', 'Karawang', 'Bogor'],
-  'vietnam': ['Ho Chi Minh City', 'Hanoi', 'Da Nang', 'Hai Phong', 'Binh Duong', 'Dong Nai', 'Long An', 'Ba Ria', 'Can Tho'],
-  'philippines': ['Manila', 'Cebu', 'Davao', 'Quezon City', 'Makati', 'Laguna', 'Cavite', 'Batangas', 'Bulacan'],
-  'southeast asia': ['Kuala Lumpur', 'Singapore', 'Bangkok', 'Jakarta', 'Ho Chi Minh City', 'Manila', 'Penang', 'Johor Bahru', 'Surabaya', 'Hanoi']
+  malaysia: [
+    'Kuala Lumpur',
+    'Penang',
+    'Johor Bahru',
+    'Shah Alam',
+    'Petaling Jaya',
+    'Selangor',
+    'Ipoh',
+    'Klang',
+    'Subang',
+    'Melaka',
+    'Kuching',
+    'Kota Kinabalu',
+  ],
+  singapore: ['Singapore', 'Jurong', 'Tuas', 'Woodlands'],
+  thailand: [
+    'Bangkok',
+    'Chonburi',
+    'Rayong',
+    'Samut Prakan',
+    'Ayutthaya',
+    'Chiang Mai',
+    'Pathum Thani',
+    'Nonthaburi',
+    'Samut Sakhon',
+  ],
+  indonesia: [
+    'Jakarta',
+    'Surabaya',
+    'Bandung',
+    'Medan',
+    'Bekasi',
+    'Tangerang',
+    'Semarang',
+    'Sidoarjo',
+    'Cikarang',
+    'Karawang',
+    'Bogor',
+  ],
+  vietnam: [
+    'Ho Chi Minh City',
+    'Hanoi',
+    'Da Nang',
+    'Hai Phong',
+    'Binh Duong',
+    'Dong Nai',
+    'Long An',
+    'Ba Ria',
+    'Can Tho',
+  ],
+  philippines: [
+    'Manila',
+    'Cebu',
+    'Davao',
+    'Quezon City',
+    'Makati',
+    'Laguna',
+    'Cavite',
+    'Batangas',
+    'Bulacan',
+  ],
+  'southeast asia': [
+    'Kuala Lumpur',
+    'Singapore',
+    'Bangkok',
+    'Jakarta',
+    'Ho Chi Minh City',
+    'Manila',
+    'Penang',
+    'Johor Bahru',
+    'Surabaya',
+    'Hanoi',
+  ],
 };
 
 const LOCAL_SUFFIXES = {
-  'malaysia': ['Sdn Bhd', 'Berhad'],
-  'singapore': ['Pte Ltd', 'Private Limited'],
-  'thailand': ['Co Ltd', 'Co., Ltd.'],
-  'indonesia': ['PT', 'CV'],
-  'vietnam': ['Co Ltd', 'JSC', 'Công ty'],
-  'philippines': ['Inc', 'Corporation']
+  malaysia: ['Sdn Bhd', 'Berhad'],
+  singapore: ['Pte Ltd', 'Private Limited'],
+  thailand: ['Co Ltd', 'Co., Ltd.'],
+  indonesia: ['PT', 'CV'],
+  vietnam: ['Co Ltd', 'JSC', 'Công ty'],
+  philippines: ['Inc', 'Corporation'],
 };
 
 const DOMAIN_MAP = {
-  'malaysia': '.my',
-  'singapore': '.sg',
-  'thailand': '.th',
-  'indonesia': '.co.id',
-  'vietnam': '.vn',
-  'philippines': '.ph'
+  malaysia: '.my',
+  singapore: '.sg',
+  thailand: '.th',
+  indonesia: '.co.id',
+  vietnam: '.vn',
+  philippines: '.ph',
 };
 
 const LOCAL_LANGUAGE_MAP = {
-  'thailand': { lang: 'Thai', examples: ['หมึก', 'สี', 'เคมี'] },
-  'vietnam': { lang: 'Vietnamese', examples: ['mực in', 'sơn', 'hóa chất'] },
-  'indonesia': { lang: 'Bahasa Indonesia', examples: ['tinta', 'cat', 'kimia'] },
-  'philippines': { lang: 'Tagalog', examples: ['tinta', 'pintura'] },
-  'malaysia': { lang: 'Bahasa Malaysia', examples: ['dakwat', 'cat'] }
+  thailand: { lang: 'Thai', examples: ['หมึก', 'สี', 'เคมี'] },
+  vietnam: { lang: 'Vietnamese', examples: ['mực in', 'sơn', 'hóa chất'] },
+  indonesia: { lang: 'Bahasa Indonesia', examples: ['tinta', 'cat', 'kimia'] },
+  philippines: { lang: 'Tagalog', examples: ['tinta', 'pintura'] },
+  malaysia: { lang: 'Bahasa Malaysia', examples: ['dakwat', 'cat'] },
 };
 
 // ============ 14 SPECIALIZED SEARCH STRATEGIES (inspired by n8n workflow) ============
@@ -889,11 +1000,14 @@ Be thorough - include all companies you find. We will verify them later.`;
 
 // Strategy 1: Broad Google Search (SerpAPI)
 function strategy1_BroadSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   // Generate synonyms and variations
-  const terms = business.split(/\s+or\s+|\s+and\s+|,/).map(t => t.trim()).filter(t => t);
+  const terms = business
+    .split(/\s+or\s+|\s+and\s+|,/)
+    .map((t) => t.trim())
+    .filter((t) => t);
 
   for (const c of countries) {
     queries.push(
@@ -914,7 +1028,7 @@ function strategy1_BroadSerpAPI(business, country, exclusion) {
 // Strategy 2: Broad Perplexity Search (EXPANDED)
 function strategy2_BroadPerplexity(business, country, exclusion) {
   const outputFormat = buildOutputFormat();
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   // General queries
@@ -941,7 +1055,7 @@ function strategy2_BroadPerplexity(business, country, exclusion) {
 
 // Strategy 3: Lists, Rankings, Top Companies (SerpAPI)
 function strategy3_ListsSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   for (const c of countries) {
@@ -961,7 +1075,7 @@ function strategy3_ListsSerpAPI(business, country, exclusion) {
 
 // Strategy 4: City-Specific Search (Perplexity) - EXPANDED to ALL cities
 function strategy4_CitiesPerplexity(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const outputFormat = buildOutputFormat();
   const queries = [];
 
@@ -981,7 +1095,7 @@ function strategy4_CitiesPerplexity(business, country, exclusion) {
 
 // Strategy 5: Industrial Zones + Local Naming (SerpAPI)
 function strategy5_IndustrialSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   for (const c of countries) {
@@ -1012,7 +1126,7 @@ function strategy6_DirectoriesPerplexity(business, country, exclusion) {
     `Chamber of commerce ${business} members in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${country} ${business} industry association member list. No ${exclusion}. ${outputFormat}`,
     `${business} companies on Yellow Pages ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} business directory ${country}. Exclude ${exclusion}. ${outputFormat}`
+    `${business} business directory ${country}. Exclude ${exclusion}. ${outputFormat}`,
   ];
 }
 
@@ -1023,7 +1137,7 @@ function strategy7_ExhibitionsPerplexity(business, country, exclusion) {
     `${business} exhibitors at trade shows in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${business} companies at industry exhibitions in ${country} region. Not ${exclusion}. ${outputFormat}`,
     `${business} participants at expos and conferences in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} exhibitors at international fairs from ${country}. Not ${exclusion}. ${outputFormat}`
+    `${business} exhibitors at international fairs from ${country}. Not ${exclusion}. ${outputFormat}`,
   ];
 }
 
@@ -1036,13 +1150,13 @@ function strategy8_TradePerplexity(business, country, exclusion) {
     `${country} ${business} companies on Global Sources. Exclude ${exclusion}. ${outputFormat}`,
     `${business} OEM suppliers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${business} contract manufacturers in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} approved vendors in ${country}. Exclude ${exclusion}. ${outputFormat}`
+    `${business} approved vendors in ${country}. Exclude ${exclusion}. ${outputFormat}`,
   ];
 }
 
 // Strategy 9: Local Domains + News (Perplexity)
 function strategy9_DomainsPerplexity(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const outputFormat = buildOutputFormat();
   const queries = [];
 
@@ -1065,7 +1179,7 @@ function strategy9_DomainsPerplexity(business, country, exclusion) {
 
 // Strategy 10: Government Registries (SerpAPI)
 function strategy10_RegistriesSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   for (const c of countries) {
@@ -1081,7 +1195,7 @@ function strategy10_RegistriesSerpAPI(business, country, exclusion) {
 
 // Strategy 11: City + Industrial Areas (SerpAPI) - EXPANDED
 function strategy11_CityIndustrialSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   for (const c of countries) {
@@ -1103,7 +1217,7 @@ function strategy11_CityIndustrialSerpAPI(business, country, exclusion) {
 // Strategy 12: Deep Web Search (OpenAI Search) - EXPANDED with real-time search
 function strategy12_DeepOpenAISearch(business, country, exclusion) {
   const outputFormat = buildOutputFormat();
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   // General deep searches
@@ -1134,13 +1248,13 @@ function strategy13_PublicationsPerplexity(business, country, exclusion) {
     `${business} companies mentioned in industry magazines and trade publications for ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${business} market report ${country} - list all companies mentioned. Not ${exclusion}. ${outputFormat}`,
     `${business} industry analysis ${country} - companies covered. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} ${country} magazine articles listing companies. Not ${exclusion}. ${outputFormat}`
+    `${business} ${country} magazine articles listing companies. Not ${exclusion}. ${outputFormat}`,
   ];
 }
 
 // Strategy 14: Final Sweep - Local Language + Comprehensive (OpenAI Search)
 function strategy14_LocalLanguageOpenAISearch(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const outputFormat = buildOutputFormat();
   const queries = [];
 
@@ -1192,11 +1306,11 @@ RULES:
 - If website not in text, you may look it up if you know it's a real company
 - hq must be "City, Country" format ONLY
 - Include companies even if some info is incomplete - we'll verify later
-- Be thorough - extract every company that might match`
+- Be thorough - extract every company that might match`,
         },
-        { role: 'user', content: text.substring(0, 15000) }
+        { role: 'user', content: text.substring(0, 15000) },
       ],
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
     });
     const parsed = JSON.parse(extraction.choices[0].message.content);
     return Array.isArray(parsed.companies) ? parsed.companies : [];
@@ -1210,25 +1324,37 @@ RULES:
 
 function normalizeCompanyName(name) {
   if (!name) return '';
-  return name.toLowerCase()
-    // Remove ALL common legal suffixes globally (expanded list)
-    .replace(/\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi, '')
-    // Also remove these if they appear anywhere (for cases like "PT Company Name")
-    .replace(/^(pt\.?|cv\.?)\s+/gi, '')
-    .replace(/[^\w\s]/g, '')  // Remove special characters
-    .replace(/\s+/g, ' ')      // Normalize spaces
-    .trim();
+  return (
+    name
+      .toLowerCase()
+      // Remove ALL common legal suffixes globally (expanded list)
+      .replace(
+        /\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi,
+        ''
+      )
+      // Also remove these if they appear anywhere (for cases like "PT Company Name")
+      .replace(/^(pt\.?|cv\.?)\s+/gi, '')
+      .replace(/[^\w\s]/g, '') // Remove special characters
+      .replace(/\s+/g, ' ') // Normalize spaces
+      .trim()
+  );
 }
 
 function normalizeWebsite(url) {
   if (!url) return '';
-  return url.toLowerCase()
-    .replace(/^https?:\/\//, '')           // Remove protocol
-    .replace(/^www\./, '')                  // Remove www
-    .replace(/\/+$/, '')                    // Remove trailing slashes
-    // Remove common path suffixes that don't differentiate companies
-    .replace(/\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i, '')
-    .replace(/\.(html?|php|aspx?|jsp)$/i, ''); // Remove file extensions
+  return (
+    url
+      .toLowerCase()
+      .replace(/^https?:\/\//, '') // Remove protocol
+      .replace(/^www\./, '') // Remove www
+      .replace(/\/+$/, '') // Remove trailing slashes
+      // Remove common path suffixes that don't differentiate companies
+      .replace(
+        /\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i,
+        ''
+      )
+      .replace(/\.(html?|php|aspx?|jsp)$/i, '')
+  ); // Remove file extensions
 }
 
 // Extract domain root for additional deduplication
@@ -1278,7 +1404,7 @@ function isSpamOrDirectoryURL(url) {
     'facebook.com',
     'twitter.com',
     'instagram.com',
-    'youtube.com'
+    'youtube.com',
   ];
 
   for (const pattern of obviousSpam) {
@@ -1287,7 +1413,6 @@ function isSpamOrDirectoryURL(url) {
 
   return false;
 }
-
 
 // ============ EXHAUSTIVE PARALLEL SEARCH WITH 14 STRATEGIES ============
 
@@ -1310,7 +1435,6 @@ ${outputFormat}`;
   return extractCompanies(response, country);
 }
 
-
 // ============ WEBSITE VERIFICATION ============
 
 async function verifyWebsite(url) {
@@ -1320,7 +1444,7 @@ async function verifyWebsite(url) {
     const response = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
       signal: controller.signal,
-      redirect: 'follow'
+      redirect: 'follow',
     });
     clearTimeout(timeout);
 
@@ -1346,10 +1470,10 @@ async function verifyWebsite(url) {
       'hugedomains',
       'afternic',
       'domain expired',
-      'this site can\'t be reached',
+      "this site can't be reached",
       'page not found',
       '404 not found',
-      'website not found'
+      'website not found',
     ];
 
     for (const sign of parkedSigns) {
@@ -1376,7 +1500,6 @@ async function verifyWebsite(url) {
   }
 }
 
-
 // ============ FETCH WEBSITE FOR VALIDATION ============
 
 async function fetchWebsite(url) {
@@ -1397,7 +1520,7 @@ async function fetchWebsite(url) {
     'verify you are human',
     'bot detection',
     'please enable javascript',
-    'enable cookies'
+    'enable cookies',
   ];
 
   const tryFetch = async (targetUrl) => {
@@ -1406,21 +1529,25 @@ async function fetchWebsite(url) {
       const timeout = setTimeout(() => controller.abort(), 20000); // Increased to 20 seconds
       const response = await fetch(targetUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.5',
           'Accept-Encoding': 'gzip, deflate',
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1'
+          Connection: 'keep-alive',
+          'Upgrade-Insecure-Requests': '1',
         },
         signal: controller.signal,
-        redirect: 'follow'
+        redirect: 'follow',
       });
       clearTimeout(timeout);
 
       // Check for HTTP-level blocks
       if (response.status === 403 || response.status === 406) {
-        return { status: 'security_blocked', reason: `HTTP ${response.status} - WAF/Security block` };
+        return {
+          status: 'security_blocked',
+          reason: `HTTP ${response.status} - WAF/Security block`,
+        };
       }
       if (!response.ok) return { status: 'error', reason: `HTTP ${response.status}` };
 
@@ -1431,7 +1558,10 @@ async function fetchWebsite(url) {
       for (const pattern of securityBlockPatterns) {
         if (lowerHtml.includes(pattern) && html.length < 5000) {
           // Only flag as security block if page is small (likely a challenge page)
-          return { status: 'security_blocked', reason: `Security protection detected: "${pattern}"` };
+          return {
+            status: 'security_blocked',
+            reason: `Security protection detected: "${pattern}"`,
+          };
         }
       }
 
@@ -1503,9 +1633,14 @@ function buildExclusionRules(exclusion, business) {
   let rules = '';
 
   // Detect if user wants to exclude LARGE companies - use PAGE SIGNALS like n8n
-  if (exclusionLower.includes('large') || exclusionLower.includes('big') ||
-      exclusionLower.includes('mnc') || exclusionLower.includes('multinational') ||
-      exclusionLower.includes('major') || exclusionLower.includes('giant')) {
+  if (
+    exclusionLower.includes('large') ||
+    exclusionLower.includes('big') ||
+    exclusionLower.includes('mnc') ||
+    exclusionLower.includes('multinational') ||
+    exclusionLower.includes('major') ||
+    exclusionLower.includes('giant')
+  ) {
     rules += `
 LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
 - "global presence", "worldwide operations", "global leader", "world's largest"
@@ -1549,13 +1684,16 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
 
 async function validateCompanyStrict(company, business, country, exclusion, pageText) {
   // If we couldn't fetch the website, validate by name only (give benefit of doubt)
-  const contentToValidate = (typeof pageText === 'string' && pageText) ? pageText : `Company name: ${company.company_name}. Validate based on name only.`;
+  const contentToValidate =
+    typeof pageText === 'string' && pageText
+      ? pageText
+      : `Company name: ${company.company_name}. Validate based on name only.`;
 
   const exclusionRules = buildExclusionRules(exclusion, business);
 
   try {
     const validation = await openai.chat.completions.create({
-      model: 'gpt-4o',  // Use smarter model for better validation
+      model: 'gpt-4o', // Use smarter model for better validation
       messages: [
         {
           role: 'system',
@@ -1587,7 +1725,7 @@ ${exclusionRules}
 4. SPAM CHECK:
 - Only reject obvious directories, marketplaces, domain-for-sale sites
 
-OUTPUT: Return JSON only: {"valid": true/false, "reason": "one sentence"}`
+OUTPUT: Return JSON only: {"valid": true/false, "reason": "one sentence"}`,
         },
         {
           role: 'user',
@@ -1596,10 +1734,10 @@ WEBSITE: ${company.website}
 HQ: ${company.hq}
 
 PAGE CONTENT:
-${contentToValidate.substring(0, 10000)}`
-        }
+${contentToValidate.substring(0, 10000)}`,
+        },
       ],
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
     });
 
     const result = JSON.parse(validation.choices[0].message.content);
@@ -1629,9 +1767,11 @@ async function parallelValidationStrict(companies, business, country, exclusion)
       // Use cached _pageContent from verification step, or fetch if not available
       // Add .catch() to prevent any single failure from crashing the batch
       const pageTexts = await Promise.all(
-        batch.map(c => {
+        batch.map((c) => {
           try {
-            return c?._pageContent ? Promise.resolve(c._pageContent) : fetchWebsite(c?.website).catch(() => null);
+            return c?._pageContent
+              ? Promise.resolve(c._pageContent)
+              : fetchWebsite(c?.website).catch(() => null);
           } catch (e) {
             return Promise.resolve(null);
           }
@@ -1642,11 +1782,16 @@ async function parallelValidationStrict(companies, business, country, exclusion)
       const validations = await Promise.all(
         batch.map((company, idx) => {
           try {
-            return validateCompanyStrict(company, business, country, exclusion, pageTexts[idx])
-              .catch(e => {
-                console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
-                return { valid: true, corrected_hq: company?.hq }; // Accept on error
-              });
+            return validateCompanyStrict(
+              company,
+              business,
+              country,
+              exclusion,
+              pageTexts[idx]
+            ).catch((e) => {
+              console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
+              return { valid: true, corrected_hq: company?.hq }; // Accept on error
+            });
           } catch (e) {
             return Promise.resolve({ valid: true, corrected_hq: company?.hq });
           }
@@ -1660,7 +1805,7 @@ async function parallelValidationStrict(companies, business, country, exclusion)
             const { _pageContent, ...cleanCompany } = company;
             validated.push({
               ...cleanCompany,
-              hq: validations[idx].corrected_hq || company.hq
+              hq: validations[idx].corrected_hq || company.hq,
             });
           }
         } catch (e) {
@@ -1668,14 +1813,18 @@ async function parallelValidationStrict(companies, business, country, exclusion)
         }
       });
 
-      console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
+      console.log(
+        `  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`
+      );
     } catch (batchError) {
       console.error(`  Batch error at ${i}-${i + batchSize}: ${batchError.message}`);
       // Continue to next batch instead of crashing
     }
   }
 
-  console.log(`STRICT Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
+  console.log(
+    `STRICT Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`
+  );
   return validated;
 }
 
@@ -1714,7 +1863,7 @@ ${exclusionRules}
 4. SPAM CHECK:
 - Is this a directory, marketplace, domain-for-sale, or aggregator site? → REJECT
 
-OUTPUT: Return JSON: {"valid": true/false, "reason": "brief", "corrected_hq": "City, Country or null"}`
+OUTPUT: Return JSON: {"valid": true/false, "reason": "brief", "corrected_hq": "City, Country or null"}`,
         },
         {
           role: 'user',
@@ -1723,10 +1872,10 @@ WEBSITE: ${company.website}
 HQ: ${company.hq}
 
 PAGE CONTENT:
-${(typeof pageText === 'string' && pageText) ? pageText.substring(0, 8000) : 'Could not fetch - validate by name only'}`
-        }
+${typeof pageText === 'string' && pageText ? pageText.substring(0, 8000) : 'Could not fetch - validate by name only'}`,
+        },
       ],
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
     });
 
     const result = JSON.parse(validation.choices[0].message.content);
@@ -1754,15 +1903,14 @@ async function parallelValidation(companies, business, country, exclusion) {
       if (!batch || batch.length === 0) continue;
 
       const pageTexts = await Promise.all(
-        batch.map(c => fetchWebsite(c?.website).catch(() => null))
+        batch.map((c) => fetchWebsite(c?.website).catch(() => null))
       );
       const validations = await Promise.all(
         batch.map((company, idx) =>
-          validateCompany(company, business, country, exclusion, pageTexts[idx])
-            .catch(e => {
-              console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
-              return { valid: true, corrected_hq: company?.hq };
-            })
+          validateCompany(company, business, country, exclusion, pageTexts[idx]).catch((e) => {
+            console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
+            return { valid: true, corrected_hq: company?.hq };
+          })
         )
       );
 
@@ -1771,7 +1919,7 @@ async function parallelValidation(companies, business, country, exclusion) {
           if (validations[idx]?.valid && company) {
             validated.push({
               ...company,
-              hq: validations[idx].corrected_hq || company.hq
+              hq: validations[idx].corrected_hq || company.hq,
             });
           }
         } catch (e) {
@@ -1779,13 +1927,17 @@ async function parallelValidation(companies, business, country, exclusion) {
         }
       });
 
-      console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
+      console.log(
+        `  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`
+      );
     } catch (batchError) {
       console.error(`  Batch error at ${i}-${i + batchSize}: ${batchError.message}`);
     }
   }
 
-  console.log(`Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
+  console.log(
+    `Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`
+  );
   return validated;
 }
 
@@ -1818,117 +1970,150 @@ function buildEmailHTML(companies, business, country, exclusion) {
 
 // Country to flag code mapping
 const COUNTRY_FLAG_MAP = {
-  'philippines': 'PH', 'ph': 'PH', 'manila': 'PH',
-  'thailand': 'TH', 'th': 'TH', 'bangkok': 'TH',
-  'malaysia': 'MY', 'my': 'MY', 'kuala lumpur': 'MY',
-  'indonesia': 'ID', 'id': 'ID', 'jakarta': 'ID',
-  'singapore': 'SG', 'sg': 'SG',
-  'vietnam': 'VN', 'vn': 'VN', 'ho chi minh': 'VN', 'hanoi': 'VN',
-  'japan': 'JP', 'jp': 'JP', 'tokyo': 'JP',
-  'china': 'CN', 'cn': 'CN', 'beijing': 'CN', 'shanghai': 'CN',
-  'korea': 'KR', 'kr': 'KR', 'seoul': 'KR',
-  'taiwan': 'TW', 'tw': 'TW', 'taipei': 'TW',
-  'usa': 'US', 'us': 'US', 'united states': 'US', 'america': 'US',
-  'uk': 'GB', 'united kingdom': 'GB', 'england': 'GB', 'london': 'GB',
-  'australia': 'AU', 'au': 'AU', 'sydney': 'AU',
-  'india': 'IN', 'in': 'IN', 'mumbai': 'IN', 'delhi': 'IN',
-  'hong kong': 'HK', 'hk': 'HK'
+  philippines: 'PH',
+  ph: 'PH',
+  manila: 'PH',
+  thailand: 'TH',
+  th: 'TH',
+  bangkok: 'TH',
+  malaysia: 'MY',
+  my: 'MY',
+  'kuala lumpur': 'MY',
+  indonesia: 'ID',
+  id: 'ID',
+  jakarta: 'ID',
+  singapore: 'SG',
+  sg: 'SG',
+  vietnam: 'VN',
+  vn: 'VN',
+  'ho chi minh': 'VN',
+  hanoi: 'VN',
+  japan: 'JP',
+  jp: 'JP',
+  tokyo: 'JP',
+  china: 'CN',
+  cn: 'CN',
+  beijing: 'CN',
+  shanghai: 'CN',
+  korea: 'KR',
+  kr: 'KR',
+  seoul: 'KR',
+  taiwan: 'TW',
+  tw: 'TW',
+  taipei: 'TW',
+  usa: 'US',
+  us: 'US',
+  'united states': 'US',
+  america: 'US',
+  uk: 'GB',
+  'united kingdom': 'GB',
+  england: 'GB',
+  london: 'GB',
+  australia: 'AU',
+  au: 'AU',
+  sydney: 'AU',
+  india: 'IN',
+  in: 'IN',
+  mumbai: 'IN',
+  delhi: 'IN',
+  'hong kong': 'HK',
+  hk: 'HK',
 };
 
 // Common shortform definitions
 const SHORTFORM_DEFINITIONS = {
-  'HQ': 'Headquarters',
-  'SEA': 'Southeast Asia',
-  'THB': 'Thai Baht',
-  'PHP': 'Philippine Peso',
-  'MYR': 'Malaysian Ringgit',
-  'IDR': 'Indonesian Rupiah',
-  'SGD': 'Singapore Dollar',
-  'VND': 'Vietnamese Dong',
-  'USD': 'US Dollar',
-  'JPY': 'Japanese Yen',
-  'CNY': 'Chinese Yuan',
-  'KRW': 'Korean Won',
-  'TWD': 'Taiwan Dollar',
-  'INR': 'Indian Rupee',
-  'HKD': 'Hong Kong Dollar',
-  'AUD': 'Australian Dollar',
-  'GBP': 'British Pound',
-  'EUR': 'Euro',
-  'ISO': 'International Organization for Standardization',
-  'B2B': 'Business to Business',
-  'B2C': 'Business to Consumer',
+  HQ: 'Headquarters',
+  SEA: 'Southeast Asia',
+  THB: 'Thai Baht',
+  PHP: 'Philippine Peso',
+  MYR: 'Malaysian Ringgit',
+  IDR: 'Indonesian Rupiah',
+  SGD: 'Singapore Dollar',
+  VND: 'Vietnamese Dong',
+  USD: 'US Dollar',
+  JPY: 'Japanese Yen',
+  CNY: 'Chinese Yuan',
+  KRW: 'Korean Won',
+  TWD: 'Taiwan Dollar',
+  INR: 'Indian Rupee',
+  HKD: 'Hong Kong Dollar',
+  AUD: 'Australian Dollar',
+  GBP: 'British Pound',
+  EUR: 'Euro',
+  ISO: 'International Organization for Standardization',
+  B2B: 'Business to Business',
+  B2C: 'Business to Consumer',
   'R&D': 'Research and Development',
-  'OEM': 'Original Equipment Manufacturer',
-  'ODM': 'Original Design Manufacturer',
-  'SME': 'Small and Medium Enterprise',
-  'CAGR': 'Compound Annual Growth Rate',
-  'YoY': 'Year over Year',
-  'QoQ': 'Quarter over Quarter',
-  'FY': 'Fiscal Year',
-  'M': 'Million',
-  'B': 'Billion',
-  'K': 'Thousand',
-  'DBD': 'Department of Business Development',
-  'EBITDA': 'Earnings Before Interest, Taxes, Depreciation and Amortization',
-  'ROE': 'Return on Equity',
-  'ROI': 'Return on Investment',
-  'GM': 'Gross Margin',
-  'NM': 'Net Margin',
-  'JV': 'Joint Venture',
+  OEM: 'Original Equipment Manufacturer',
+  ODM: 'Original Design Manufacturer',
+  SME: 'Small and Medium Enterprise',
+  CAGR: 'Compound Annual Growth Rate',
+  YoY: 'Year over Year',
+  QoQ: 'Quarter over Quarter',
+  FY: 'Fiscal Year',
+  M: 'Million',
+  B: 'Billion',
+  K: 'Thousand',
+  DBD: 'Department of Business Development',
+  EBITDA: 'Earnings Before Interest, Taxes, Depreciation and Amortization',
+  ROE: 'Return on Equity',
+  ROI: 'Return on Investment',
+  GM: 'Gross Margin',
+  NM: 'Net Margin',
+  JV: 'Joint Venture',
   'M&A': 'Mergers and Acquisitions',
-  'IPO': 'Initial Public Offering',
-  'CEO': 'Chief Executive Officer',
-  'CFO': 'Chief Financial Officer',
-  'COO': 'Chief Operating Officer',
-  'HoHo': 'Ho Chi Minh City',
-  'KL': 'Kuala Lumpur',
-  'BKK': 'Bangkok',
-  'JKT': 'Jakarta',
-  'MNL': 'Manila',
-  'SG': 'Singapore',
-  'ISP': 'Internet Service Provider',
-  'IBC': 'International Broadcasting',
-  'IT': 'Information Technology',
-  'AI': 'Artificial Intelligence',
-  'IoT': 'Internet of Things',
-  'ERP': 'Enterprise Resource Planning',
-  'CRM': 'Customer Relationship Management',
-  'SaaS': 'Software as a Service',
-  'API': 'Application Programming Interface',
+  IPO: 'Initial Public Offering',
+  CEO: 'Chief Executive Officer',
+  CFO: 'Chief Financial Officer',
+  COO: 'Chief Operating Officer',
+  HoHo: 'Ho Chi Minh City',
+  KL: 'Kuala Lumpur',
+  BKK: 'Bangkok',
+  JKT: 'Jakarta',
+  MNL: 'Manila',
+  SG: 'Singapore',
+  ISP: 'Internet Service Provider',
+  IBC: 'International Broadcasting',
+  IT: 'Information Technology',
+  AI: 'Artificial Intelligence',
+  IoT: 'Internet of Things',
+  ERP: 'Enterprise Resource Planning',
+  CRM: 'Customer Relationship Management',
+  SaaS: 'Software as a Service',
+  API: 'Application Programming Interface',
   'IP-KVM': 'Internet Protocol Keyboard Video Mouse',
-  'KVM': 'Keyboard Video Mouse',
-  'CCTV': 'Closed-Circuit Television',
-  'UPS': 'Uninterruptible Power Supply',
-  'NEC': 'Nippon Electric Company',
-  'HACCP': 'Hazard Analysis Critical Control Point',
-  'GMP': 'Good Manufacturing Practice',
-  'CE': 'Conformité Européenne',
-  'FDA': 'Food and Drug Administration',
-  'SKU': 'Stock Keeping Unit',
-  'POE': 'Power over Ethernet',
-  'LAN': 'Local Area Network',
-  'WAN': 'Wide Area Network',
-  'VPN': 'Virtual Private Network'
+  KVM: 'Keyboard Video Mouse',
+  CCTV: 'Closed-Circuit Television',
+  UPS: 'Uninterruptible Power Supply',
+  NEC: 'Nippon Electric Company',
+  HACCP: 'Hazard Analysis Critical Control Point',
+  GMP: 'Good Manufacturing Practice',
+  CE: 'Conformité Européenne',
+  FDA: 'Food and Drug Administration',
+  SKU: 'Stock Keeping Unit',
+  POE: 'Power over Ethernet',
+  LAN: 'Local Area Network',
+  WAN: 'Wide Area Network',
+  VPN: 'Virtual Private Network',
 };
 
 // Exchange rate mapping by country (for footnote)
 const EXCHANGE_RATE_MAP = {
-  'PH': '為替レート: PHP 100M = 3億円',
-  'TH': '為替レート: THB 100M = 4億円',
-  'MY': '為替レート: MYR 10M = 3億円',
-  'ID': '為替レート: IDR 100B = 10億円',
-  'SG': '為替レート: SGD 1M = 1億円',
-  'VN': '為替レート: VND 100B = 6億円',
-  'JP': '',
-  'CN': '為替レート: CNY 10M = 2億円',
-  'KR': '為替レート: KRW 1B = 1億円',
-  'TW': '為替レート: TWD 10M = 0.5億円',
-  'US': '為替レート: USD 1M = 1.5億円',
-  'GB': '為替レート: GBP 1M = 2億円',
-  'AU': '為替レート: AUD 1M = 1億円',
-  'IN': '為替レート: INR 100M = 2億円',
-  'HK': '為替レート: HKD 10M = 2億円'
+  PH: '為替レート: PHP 100M = 3億円',
+  TH: '為替レート: THB 100M = 4億円',
+  MY: '為替レート: MYR 10M = 3億円',
+  ID: '為替レート: IDR 100B = 10億円',
+  SG: '為替レート: SGD 1M = 1億円',
+  VN: '為替レート: VND 100B = 6億円',
+  JP: '',
+  CN: '為替レート: CNY 10M = 2億円',
+  KR: '為替レート: KRW 1B = 1億円',
+  TW: '為替レート: TWD 10M = 0.5億円',
+  US: '為替レート: USD 1M = 1.5億円',
+  GB: '為替レート: GBP 1M = 2億円',
+  AU: '為替レート: AUD 1M = 1億円',
+  IN: '為替レート: INR 100M = 2億円',
+  HK: '為替レート: HKD 10M = 2億円',
 };
 
 // Get country code from location string - MUST match HQ country only
@@ -1942,7 +2127,7 @@ function getCountryCode(location) {
   if (hqMatch) {
     const hqLocation = hqMatch[1].trim();
     // Get country from the end of HQ line (last comma-separated part)
-    const parts = hqLocation.split(',').map(p => p.trim());
+    const parts = hqLocation.split(',').map((p) => p.trim());
     const country = parts[parts.length - 1];
     for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
       if (country.includes(key)) return code;
@@ -1951,7 +2136,7 @@ function getCountryCode(location) {
 
   // If no HQ prefix, check if it's a simple location (City, Country format)
   // Use the LAST part which should be the country
-  const parts = loc.split(',').map(p => p.trim());
+  const parts = loc.split(',').map((p) => p.trim());
   if (parts.length >= 1) {
     const lastPart = parts[parts.length - 1];
     for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
@@ -1988,35 +2173,35 @@ function filterEmptyMetrics(keyMetrics) {
     /none stated/i,
     /no information/i,
     /no data/i,
-    /^\s*-?\s*$/,  // Empty or just dashes
+    /^\s*-?\s*$/, // Empty or just dashes
     // Placeholder text patterns
-    /client\s*\d+/i,          // "Client 1", "Client 2", etc.
-    /client\s*[a-e]/i,        // "Client A", "Client B", etc.
-    /customer\s*\d+/i,        // "Customer 1", "Customer 2", etc.
-    /customer\s*[a-e]/i,      // "Customer A", "Customer B", etc.
-    /supplier\s*\d+/i,        // "Supplier 1", "Supplier 2", etc.
-    /partner\s*\d+/i,         // "Partner 1", "Partner 2", etc.
-    /company\s*\d+/i,         // "Company 1", "Company 2", etc.
+    /client\s*\d+/i, // "Client 1", "Client 2", etc.
+    /client\s*[a-e]/i, // "Client A", "Client B", etc.
+    /customer\s*\d+/i, // "Customer 1", "Customer 2", etc.
+    /customer\s*[a-e]/i, // "Customer A", "Customer B", etc.
+    /supplier\s*\d+/i, // "Supplier 1", "Supplier 2", etc.
+    /partner\s*\d+/i, // "Partner 1", "Partner 2", etc.
+    /company\s*\d+/i, // "Company 1", "Company 2", etc.
     // Generic industry descriptions without specifics
     /various\s+(printers|companies|manufacturers|customers|suppliers|partners)/i,
     /multiple\s+(printers|companies|manufacturers|customers|suppliers|partners)/i,
-    /local\s+printers\s+and\s+multinational/i,  // Too vague
+    /local\s+printers\s+and\s+multinational/i, // Too vague
     // Values without actual data (just descriptions)
-    /^-?\s*production capacity of(?!\s*\d)/i,  // "Production capacity of" without numbers
-    /^-?\s*factory area of(?!\s*\d)/i,         // "Factory area of" without numbers
-    /^-?\s*number of(?!\s*\d)/i,               // "Number of" without numbers
-    /intensive r&d/i,         // Generic R&D statements
+    /^-?\s*production capacity of(?!\s*\d)/i, // "Production capacity of" without numbers
+    /^-?\s*factory area of(?!\s*\d)/i, // "Factory area of" without numbers
+    /^-?\s*number of(?!\s*\d)/i, // "Number of" without numbers
+    /intensive r&d/i, // Generic R&D statements
     /product improvement and innovation/i,
-    /focus(ing|ed)?\s+on\s+(quality|innovation|customer)/i,  // Generic focus statements
-    /commitment to/i,         // Generic commitment statements
-    /world of color/i,        // Corporate slogans
-    /value creation/i,        // Generic value statements
-    /environmental impact/i,  // Generic sustainability
-    /high standards in/i,     // "High standards in customer service"
-    /constant.*innovation/i,  // "Constant technical innovation"
+    /focus(ing|ed)?\s+on\s+(quality|innovation|customer)/i, // Generic focus statements
+    /commitment to/i, // Generic commitment statements
+    /world of color/i, // Corporate slogans
+    /value creation/i, // Generic value statements
+    /environmental impact/i, // Generic sustainability
+    /high standards in/i, // "High standards in customer service"
+    /constant.*innovation/i, // "Constant technical innovation"
     /continuous improvement/i,
-    /excellence in/i,         // "Excellence in service"
-    /dedicated to/i,          // "Dedicated to quality"
+    /excellence in/i, // "Excellence in service"
+    /dedicated to/i, // "Dedicated to quality"
     // Factory locations masquerading as factory size
     /facilities?\s+located\s+in/i,
     /located\s+in\s+.*city/i,
@@ -2053,7 +2238,7 @@ function filterEmptyMetrics(keyMetrics) {
     /dedication/i,
   ];
 
-  return keyMetrics.filter(metric => {
+  return keyMetrics.filter((metric) => {
     if (!metric || !metric.value) return false;
     const value = String(metric.value).trim();
     const label = String(metric.label || '').trim();
@@ -2093,17 +2278,39 @@ function filterEmptyMetrics(keyMetrics) {
 
 // Common shortforms that don't need explanation
 const COMMON_SHORTFORMS = [
-  'M', 'B', 'K',           // Million, Billion, Thousand
-  'HQ',                    // Headquarters
-  'CEO', 'CFO', 'COO',     // C-suite titles
+  'M',
+  'B',
+  'K', // Million, Billion, Thousand
+  'HQ', // Headquarters
+  'CEO',
+  'CFO',
+  'COO', // C-suite titles
   // All currency codes - well known
-  'USD', 'EUR', 'GBP', 'JPY', 'CNY', 'KRW', 'TWD',
-  'IDR', 'SGD', 'MYR', 'THB', 'PHP', 'VND', 'INR', 'HKD', 'AUD',
-  'ISO',                   // Well-known standard
-  'FY',                    // Fiscal Year
-  'YoY', 'QoQ',            // Year over Year, Quarter over Quarter
-  'B2B', 'B2C',            // Business models
-  'AI', 'IT', 'IoT'        // Tech terms - widely known
+  'USD',
+  'EUR',
+  'GBP',
+  'JPY',
+  'CNY',
+  'KRW',
+  'TWD',
+  'IDR',
+  'SGD',
+  'MYR',
+  'THB',
+  'PHP',
+  'VND',
+  'INR',
+  'HKD',
+  'AUD',
+  'ISO', // Well-known standard
+  'FY', // Fiscal Year
+  'YoY',
+  'QoQ', // Year over Year, Quarter over Quarter
+  'B2B',
+  'B2C', // Business models
+  'AI',
+  'IT',
+  'IoT', // Tech terms - widely known
 ];
 
 // Detect shortforms in text and return formatted note (only uncommon ones)
@@ -2114,12 +2321,12 @@ function detectShortforms(companyData) {
     companyData.location,
     companyData.business,
     companyData.metrics,
-    companyData.footnote
+    companyData.footnote,
   ];
 
   // Also include key_metrics array values
   if (companyData.key_metrics && Array.isArray(companyData.key_metrics)) {
-    companyData.key_metrics.forEach(metric => {
+    companyData.key_metrics.forEach((metric) => {
       if (metric?.label) textParts.push(ensureString(metric.label));
       if (metric?.value) textParts.push(ensureString(metric.value));
     });
@@ -2127,7 +2334,7 @@ function detectShortforms(companyData) {
 
   // Also include breakdown_items
   if (companyData.breakdown_items && Array.isArray(companyData.breakdown_items)) {
-    companyData.breakdown_items.forEach(item => {
+    companyData.breakdown_items.forEach((item) => {
       if (item?.label) textParts.push(ensureString(item.label));
       if (item?.value) textParts.push(ensureString(item.value));
     });
@@ -2173,7 +2380,9 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
   try {
     console.log('Generating PPTX with PptxGenJS...');
     if (inaccessibleWebsites.length > 0) {
-      console.log(`  Including ${inaccessibleWebsites.length} inaccessible website(s) on summary slide only`);
+      console.log(
+        `  Including ${inaccessibleWebsites.length} inaccessible website(s) on summary slide only`
+      );
     }
 
     const pptx = new pptxgen();
@@ -2187,13 +2396,13 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
     // YCP Theme Colors (from template)
     const COLORS = {
-      headerLine: '293F55',    // Dark navy for header/footer lines
-      accent3: '011AB7',       // Dark blue - label column background
+      headerLine: '293F55', // Dark navy for header/footer lines
+      accent3: '011AB7', // Dark blue - label column background
       white: 'FFFFFF',
       black: '000000',
-      gray: 'BFBFBF',          // Dashed border color
-      dk2: '1F497D',           // Section underline color
-      footerText: '808080'     // Gray footer text
+      gray: 'BFBFBF', // Dashed border color
+      dk2: '1F497D', // Section underline color
+      footerText: '808080', // Gray footer text
     };
 
     // ===== DEFINE MASTER SLIDE WITH FIXED LINES (CANNOT BE MOVED) =====
@@ -2203,12 +2412,18 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       background: { color: 'FFFFFF' },
       objects: [
         // Thick header line (y: 1.02")
-        { line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } } },
+        {
+          line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } },
+        },
         // Thin header line (y: 1.10")
-        { line: { x: 0, y: 1.10, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
+        {
+          line: { x: 0, y: 1.1, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } },
+        },
         // Footer line (y: 7.24")
-        { line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } }
-      ]
+        {
+          line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } },
+        },
+      ],
     });
 
     // ===== TARGET LIST SLIDE (FIRST SLIDE) =====
@@ -2216,372 +2431,399 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
     const allCompaniesForSummary = [...companies, ...inaccessibleWebsites];
     if (targetDescription && allCompaniesForSummary.length > 0) {
       try {
-      console.log('Generating Target List slide...');
-      const meceData = await generateMECESegments(targetDescription, allCompaniesForSummary);
+        console.log('Generating Target List slide...');
+        const meceData = await generateMECESegments(targetDescription, allCompaniesForSummary);
 
-      // Use master slide - lines are fixed in background
-      const targetSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+        // Use master slide - lines are fixed in background
+        const targetSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
-      // Title Case helper function
-      const toTitleCase = (str) => {
-        return str.replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
-      };
-
-      // Simplify country lists to regions
-      const simplifyRegion = (desc) => {
-        const seaCountries = ['malaysia', 'indonesia', 'singapore', 'thailand', 'vietnam', 'philippines', 'myanmar', 'cambodia', 'laos', 'brunei'];
-        const lowerDesc = desc.toLowerCase();
-
-        // Count how many SE Asian countries are mentioned
-        const mentionedSEA = seaCountries.filter(c => lowerDesc.includes(c));
-
-        // If 3+ SE Asian countries are listed, replace with "Southeast Asia"
-        if (mentionedSEA.length >= 3) {
-          // Build regex to match the country list (including "and", commas)
-          const countryListPattern = new RegExp(
-            `\\b(in|from)?\\s*(${seaCountries.join('|')})(\\s*,\\s*(${seaCountries.join('|')}))*\\s*(,?\\s*(and)?\\s*(${seaCountries.join('|')}))?`,
-            'gi'
+        // Title Case helper function
+        const toTitleCase = (str) => {
+          return str.replace(
+            /\w\S*/g,
+            (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase()
           );
-          return desc.replace(countryListPattern, (match) => {
-            // Check if it started with "in" or "from"
-            const startsWithIn = /^\s*in\s/i.test(match);
-            const startsWithFrom = /^\s*from\s/i.test(match);
-            if (startsWithIn) return 'in Southeast Asia';
-            if (startsWithFrom) return 'from Southeast Asia';
-            return 'Southeast Asia';
+        };
+
+        // Simplify country lists to regions
+        const simplifyRegion = (desc) => {
+          const seaCountries = [
+            'malaysia',
+            'indonesia',
+            'singapore',
+            'thailand',
+            'vietnam',
+            'philippines',
+            'myanmar',
+            'cambodia',
+            'laos',
+            'brunei',
+          ];
+          const lowerDesc = desc.toLowerCase();
+
+          // Count how many SE Asian countries are mentioned
+          const mentionedSEA = seaCountries.filter((c) => lowerDesc.includes(c));
+
+          // If 3+ SE Asian countries are listed, replace with "Southeast Asia"
+          if (mentionedSEA.length >= 3) {
+            // Build regex to match the country list (including "and", commas)
+            const countryListPattern = new RegExp(
+              `\\b(in|from)?\\s*(${seaCountries.join('|')})(\\s*,\\s*(${seaCountries.join('|')}))*\\s*(,?\\s*(and)?\\s*(${seaCountries.join('|')}))?`,
+              'gi'
+            );
+            return desc.replace(countryListPattern, (match) => {
+              // Check if it started with "in" or "from"
+              const startsWithIn = /^\s*in\s/i.test(match);
+              const startsWithFrom = /^\s*from\s/i.test(match);
+              if (startsWithIn) return 'in Southeast Asia';
+              if (startsWithFrom) return 'from Southeast Asia';
+              return 'Southeast Asia';
+            });
+          }
+          return desc;
+        };
+
+        // Title: "Target List – {Target Description}" in Title Case
+        // Simplify multi-country lists to region names
+        const simplifiedDesc = simplifyRegion(targetDescription);
+        const formattedTitle = `Target List – ${toTitleCase(simplifiedDesc)}`;
+        targetSlide.addText(formattedTitle, {
+          x: 0.38,
+          y: 0.07,
+          w: 12.5,
+          h: 0.9,
+          fontSize: 24,
+          fontFace: 'Segoe UI',
+          color: '000000',
+          valign: 'bottom',
+        });
+
+        // Helper function to parse location (handles JSON format like {"HQ":"Singapore"})
+        // Also cleans up "HQ:", "- HQ:" prefixes from location values
+        const parseLocation = (location) => {
+          if (!location) return { country: 'Other', hqCity: '' };
+          let loc = ensureString(location);
+
+          // Clean up "- HQ:" or "HQ:" prefix from the start
+          loc = loc.replace(/^-?\s*HQ:\s*/i, '').trim();
+
+          // Check if location is JSON format (e.g., {"HQ":"Chatuchak, Bangkok, Thailand"})
+          if (loc.includes('{') && loc.includes('}')) {
+            try {
+              // Try to extract the value from JSON-like string
+              const match =
+                loc.match(/"HQ"\s*:\s*"([^"]+)"/i) || loc.match(/"([^"]+)"\s*:\s*"([^"]+)"/);
+              if (match) {
+                let hqValue = match[1] || match[2] || '';
+                // Clean up any remaining "HQ:" prefix
+                hqValue = hqValue.replace(/^-?\s*HQ:\s*/i, '').trim();
+                const parts = hqValue.split(',').map((p) => p.trim());
+                // Country is always last part
+                const country = parts[parts.length - 1] || 'Other';
+                // HQ city is first part only (just the district/area, not including state)
+                const hqCity = parts[0] || '';
+                return { country, hqCity };
+              }
+            } catch (e) {
+              // Fall through to normal parsing
+            }
+          }
+
+          // Normal parsing - extract country from location (last part after comma)
+          const parts = loc.split(',').map((p) => p.trim());
+          const country = parts[parts.length - 1] || 'Other';
+          // HQ city is first part only (just the district/area)
+          const hqCity = parts[0] || '';
+          return { country, hqCity };
+        };
+
+        // Group companies by country
+        const companyByCountry = {};
+        companies.forEach((c) => {
+          const { country, hqCity } = parseLocation(c.location);
+          if (!companyByCountry[country]) companyByCountry[country] = [];
+          companyByCountry[country].push({ ...c, hqCity });
+        });
+
+        // Assign sequential numbers AFTER grouping (so numbers are in order by country)
+        let sequentialIndex = 1;
+        Object.keys(companyByCountry).forEach((country) => {
+          companyByCountry[country].forEach((comp) => {
+            comp.index = sequentialIndex++;
+          });
+        });
+
+        // Determine if single country or multi-country
+        const countries = Object.keys(companyByCountry);
+        const isMultiCountry = countries.length > 1;
+
+        // Build table data
+        const segments = meceData.segments || [];
+        const companySegments = meceData.companySegments || {};
+
+        // Template colors (from analysis of YCP Target List Slide Template)
+        const TL_COLORS = {
+          headerBg: '1524A9', // Dark blue for header row
+          countryBg: '011AB7', // Dark blue for country column (accent3)
+          companyBg: '007FFF', // Bright blue for company column (accent1)
+          white: 'FFFFFF',
+          black: '000000',
+          gray: 'BFBFBF', // Gray for dotted borders between rows
+          checkMark: '00B050', // Green for check marks
+        };
+
+        // Build table rows
+        const tableRows = [];
+
+        // Row 1: Merged header for products (spans all segment columns)
+        const productHeaderRow = [];
+
+        if (isMultiCountry) {
+          // Empty cell for country column header (white background)
+          productHeaderRow.push({
+            text: '',
+            options: {
+              fill: TL_COLORS.white,
+              valign: 'middle',
+              align: 'center',
+              border: { pt: 3, color: TL_COLORS.white },
+            },
           });
         }
-        return desc;
-      };
 
-      // Title: "Target List – {Target Description}" in Title Case
-      // Simplify multi-country lists to region names
-      const simplifiedDesc = simplifyRegion(targetDescription);
-      const formattedTitle = `Target List – ${toTitleCase(simplifiedDesc)}`;
-      targetSlide.addText(formattedTitle, {
-        x: 0.38, y: 0.07, w: 12.5, h: 0.9,
-        fontSize: 24, fontFace: 'Segoe UI',
-        color: '000000', valign: 'bottom'
-      });
-
-      // Helper function to parse location (handles JSON format like {"HQ":"Singapore"})
-      // Also cleans up "HQ:", "- HQ:" prefixes from location values
-      const parseLocation = (location) => {
-        if (!location) return { country: 'Other', hqCity: '' };
-        let loc = ensureString(location);
-
-        // Clean up "- HQ:" or "HQ:" prefix from the start
-        loc = loc.replace(/^-?\s*HQ:\s*/i, '').trim();
-
-        // Check if location is JSON format (e.g., {"HQ":"Chatuchak, Bangkok, Thailand"})
-        if (loc.includes('{') && loc.includes('}')) {
-          try {
-            // Try to extract the value from JSON-like string
-            const match = loc.match(/"HQ"\s*:\s*"([^"]+)"/i) || loc.match(/"([^"]+)"\s*:\s*"([^"]+)"/);
-            if (match) {
-              let hqValue = match[1] || match[2] || '';
-              // Clean up any remaining "HQ:" prefix
-              hqValue = hqValue.replace(/^-?\s*HQ:\s*/i, '').trim();
-              const parts = hqValue.split(',').map(p => p.trim());
-              // Country is always last part
-              const country = parts[parts.length - 1] || 'Other';
-              // HQ city is first part only (just the district/area, not including state)
-              const hqCity = parts[0] || '';
-              return { country, hqCity };
-            }
-          } catch (e) {
-            // Fall through to normal parsing
-          }
-        }
-
-        // Normal parsing - extract country from location (last part after comma)
-        const parts = loc.split(',').map(p => p.trim());
-        const country = parts[parts.length - 1] || 'Other';
-        // HQ city is first part only (just the district/area)
-        const hqCity = parts[0] || '';
-        return { country, hqCity };
-      };
-
-      // Group companies by country
-      const companyByCountry = {};
-      companies.forEach((c) => {
-        const { country, hqCity } = parseLocation(c.location);
-        if (!companyByCountry[country]) companyByCountry[country] = [];
-        companyByCountry[country].push({ ...c, hqCity });
-      });
-
-      // Assign sequential numbers AFTER grouping (so numbers are in order by country)
-      let sequentialIndex = 1;
-      Object.keys(companyByCountry).forEach(country => {
-        companyByCountry[country].forEach(comp => {
-          comp.index = sequentialIndex++;
-        });
-      });
-
-      // Determine if single country or multi-country
-      const countries = Object.keys(companyByCountry);
-      const isMultiCountry = countries.length > 1;
-
-      // Build table data
-      const segments = meceData.segments || [];
-      const companySegments = meceData.companySegments || {};
-
-      // Template colors (from analysis of YCP Target List Slide Template)
-      const TL_COLORS = {
-        headerBg: '1524A9',      // Dark blue for header row
-        countryBg: '011AB7',     // Dark blue for country column (accent3)
-        companyBg: '007FFF',     // Bright blue for company column (accent1)
-        white: 'FFFFFF',
-        black: '000000',
-        gray: 'BFBFBF',          // Gray for dotted borders between rows
-        checkMark: '00B050'      // Green for check marks
-      };
-
-      // Build table rows
-      const tableRows = [];
-
-      // Row 1: Merged header for products (spans all segment columns)
-      const productHeaderRow = [];
-
-      if (isMultiCountry) {
-        // Empty cell for country column header (white background)
+        // Empty cell for company column header
         productHeaderRow.push({
           text: '',
           options: {
             fill: TL_COLORS.white,
             valign: 'middle',
             align: 'center',
-            border: { pt: 3, color: TL_COLORS.white }
-          }
+            border: { pt: 3, color: TL_COLORS.white },
+          },
         });
-      }
 
-      // Empty cell for company column header
-      productHeaderRow.push({
-        text: '',
-        options: {
-          fill: TL_COLORS.white,
-          valign: 'middle',
-          align: 'center',
-          border: { pt: 3, color: TL_COLORS.white }
-        }
-      });
-
-      // HQ column header with rowspan: 2 (spans both header rows)
-      productHeaderRow.push({
-        text: 'HQ',
-        options: {
-          rowspan: 2,
-          fill: TL_COLORS.headerBg,
-          color: TL_COLORS.white,
-          bold: false,
-          valign: 'middle',
-          align: 'center',
-          border: { pt: 3, color: TL_COLORS.white }
-        }
-      });
-
-      // Merged header for all product columns (spans all segment columns)
-      if (segments.length > 0) {
+        // HQ column header with rowspan: 2 (spans both header rows)
         productHeaderRow.push({
-          text: 'Products / Services',
+          text: 'HQ',
           options: {
-            colspan: segments.length,
+            rowspan: 2,
             fill: TL_COLORS.headerBg,
             color: TL_COLORS.white,
             bold: false,
-            align: 'center',
             valign: 'middle',
-            border: { pt: 3, color: TL_COLORS.white }
-          }
+            align: 'center',
+            border: { pt: 3, color: TL_COLORS.white },
+          },
         });
-      }
 
-      tableRows.push(productHeaderRow);
+        // Merged header for all product columns (spans all segment columns)
+        if (segments.length > 0) {
+          productHeaderRow.push({
+            text: 'Products / Services',
+            options: {
+              colspan: segments.length,
+              fill: TL_COLORS.headerBg,
+              color: TL_COLORS.white,
+              bold: false,
+              align: 'center',
+              valign: 'middle',
+              border: { pt: 3, color: TL_COLORS.white },
+            },
+          });
+        }
 
-      // Row 2: Segment names (sub-headers for products)
-      const headerRow = [];
+        tableRows.push(productHeaderRow);
 
-      if (isMultiCountry) {
-        // Empty cell for country column header (white background)
+        // Row 2: Segment names (sub-headers for products)
+        const headerRow = [];
+
+        if (isMultiCountry) {
+          // Empty cell for country column header (white background)
+          headerRow.push({
+            text: '',
+            options: {
+              fill: TL_COLORS.white,
+              valign: 'middle',
+              align: 'center',
+              border: { pt: 3, color: TL_COLORS.white },
+            },
+          });
+        }
+
+        // Empty cell for company column header
         headerRow.push({
           text: '',
           options: {
             fill: TL_COLORS.white,
             valign: 'middle',
             align: 'center',
-            border: { pt: 3, color: TL_COLORS.white }
-          }
+            border: { pt: 3, color: TL_COLORS.white },
+          },
         });
-      }
 
-      // Empty cell for company column header
-      headerRow.push({
-        text: '',
-        options: {
-          fill: TL_COLORS.white,
-          valign: 'middle',
-          align: 'center',
-          border: { pt: 3, color: TL_COLORS.white }
-        }
-      });
+        // HQ column is merged from row above (rowspan: 2), so no cell here
 
-      // HQ column is merged from row above (rowspan: 2), so no cell here
-
-      // Segment headers (bright blue background like company names, white text)
-      segments.forEach(seg => {
-        headerRow.push({
-          text: seg,
-          options: {
-            fill: TL_COLORS.companyBg,
-            color: TL_COLORS.white,
-            bold: false,
-            align: 'center',
-            valign: 'middle',
-            border: { pt: 3, color: TL_COLORS.white }
-          }
-        });
-      });
-
-      tableRows.push(headerRow);
-
-      // Data rows grouped by country
-      const countryKeys = Object.keys(companyByCountry);
-      countryKeys.forEach((country) => {
-        const countryCompanies = companyByCountry[country];
-        countryCompanies.forEach((comp, idx) => {
-          const row = [];
-          const isFirstInCountry = idx === 0;
-          const isLastInCountry = idx === countryCompanies.length - 1;
-
-          // Determine if this is the last company in the last country (for bottom border)
-          const isLastCountry = countryKeys.indexOf(country) === countryKeys.length - 1;
-          const isVeryLastRow = isLastCountry && isLastInCountry;
-
-          // Border style: dotted gray between ALL rows including last row
-          const rowBottomBorder = { pt: 1, color: TL_COLORS.gray, type: 'dash' };
-
-          if (isMultiCountry) {
-            // Country column (only show text for first company in group, use rowspan)
-            if (isFirstInCountry) {
-              row.push({
-                text: country,
-                options: {
-                  rowspan: countryCompanies.length,
-                  fill: TL_COLORS.countryBg,
-                  color: TL_COLORS.white,
-                  bold: false,
-                  align: 'center',
-                  valign: 'middle',
-                  border: { pt: 3, color: TL_COLORS.white }
-                }
-              });
-            }
-          }
-
-          // Company name with numbering (bright blue background, WHITE text, left-aligned)
-          // Keep 3pt white borders on ALL sides for company name cells
-          const companyName = comp.title || comp.company_name || 'Unknown';
-          row.push({
-            text: `${comp.index}. ${companyName}`,
+        // Segment headers (bright blue background like company names, white text)
+        segments.forEach((seg) => {
+          headerRow.push({
+            text: seg,
             options: {
               fill: TL_COLORS.companyBg,
               color: TL_COLORS.white,
               bold: false,
-              align: 'left',
+              align: 'center',
               valign: 'middle',
               border: { pt: 3, color: TL_COLORS.white },
-              hyperlink: { url: comp.website || '' }
-            }
+            },
           });
+        });
 
-          // HQ column (white background, black text)
-          const hqCity = comp.hqCity || '';
-          row.push({
-            text: hqCity,
-            options: {
-              fill: TL_COLORS.white,
-              color: TL_COLORS.black,
-              bold: false,
-              align: 'left',
-              valign: 'middle',
-              border: [
-                { pt: 3, color: TL_COLORS.white },    // top
-                { pt: 3, color: TL_COLORS.white },    // right
-                rowBottomBorder,                       // bottom (dotted between rows)
-                { pt: 3, color: TL_COLORS.white }     // left
-              ]
+        tableRows.push(headerRow);
+
+        // Data rows grouped by country
+        const countryKeys = Object.keys(companyByCountry);
+        countryKeys.forEach((country) => {
+          const countryCompanies = companyByCountry[country];
+          countryCompanies.forEach((comp, idx) => {
+            const row = [];
+            const isFirstInCountry = idx === 0;
+            const isLastInCountry = idx === countryCompanies.length - 1;
+
+            // Determine if this is the last company in the last country (for bottom border)
+            const isLastCountry = countryKeys.indexOf(country) === countryKeys.length - 1;
+            const isVeryLastRow = isLastCountry && isLastInCountry;
+
+            // Border style: dotted gray between ALL rows including last row
+            const rowBottomBorder = { pt: 1, color: TL_COLORS.gray, type: 'dash' };
+
+            if (isMultiCountry) {
+              // Country column (only show text for first company in group, use rowspan)
+              if (isFirstInCountry) {
+                row.push({
+                  text: country,
+                  options: {
+                    rowspan: countryCompanies.length,
+                    fill: TL_COLORS.countryBg,
+                    color: TL_COLORS.white,
+                    bold: false,
+                    align: 'center',
+                    valign: 'middle',
+                    border: { pt: 3, color: TL_COLORS.white },
+                  },
+                });
+              }
             }
-          });
 
-          // Segment tick marks (white background, green check marks)
-          const compSegments = companySegments[String(comp.index)] || [];
-          segments.forEach((seg, segIdx) => {
-            const hasTick = compSegments[segIdx] === true;
+            // Company name with numbering (bright blue background, WHITE text, left-aligned)
+            // Keep 3pt white borders on ALL sides for company name cells
+            const companyName = comp.title || comp.company_name || 'Unknown';
             row.push({
-              text: hasTick ? '✓' : '',
+              text: `${comp.index}. ${companyName}`,
+              options: {
+                fill: TL_COLORS.companyBg,
+                color: TL_COLORS.white,
+                bold: false,
+                align: 'left',
+                valign: 'middle',
+                border: { pt: 3, color: TL_COLORS.white },
+                hyperlink: { url: comp.website || '' },
+              },
+            });
+
+            // HQ column (white background, black text)
+            const hqCity = comp.hqCity || '';
+            row.push({
+              text: hqCity,
               options: {
                 fill: TL_COLORS.white,
-                color: TL_COLORS.checkMark,
-                align: 'center',
+                color: TL_COLORS.black,
+                bold: false,
+                align: 'left',
                 valign: 'middle',
                 border: [
-                  { pt: 3, color: TL_COLORS.white },    // top
-                  { pt: 3, color: TL_COLORS.white },    // right
-                  rowBottomBorder,                       // bottom (dotted between rows)
-                  { pt: 3, color: TL_COLORS.white }     // left
-                ]
-              }
+                  { pt: 3, color: TL_COLORS.white }, // top
+                  { pt: 3, color: TL_COLORS.white }, // right
+                  rowBottomBorder, // bottom (dotted between rows)
+                  { pt: 3, color: TL_COLORS.white }, // left
+                ],
+              },
             });
+
+            // Segment tick marks (white background, green check marks)
+            const compSegments = companySegments[String(comp.index)] || [];
+            segments.forEach((seg, segIdx) => {
+              const hasTick = compSegments[segIdx] === true;
+              row.push({
+                text: hasTick ? '✓' : '',
+                options: {
+                  fill: TL_COLORS.white,
+                  color: TL_COLORS.checkMark,
+                  align: 'center',
+                  valign: 'middle',
+                  border: [
+                    { pt: 3, color: TL_COLORS.white }, // top
+                    { pt: 3, color: TL_COLORS.white }, // right
+                    rowBottomBorder, // bottom (dotted between rows)
+                    { pt: 3, color: TL_COLORS.white }, // left
+                  ],
+                },
+              });
+            });
+
+            tableRows.push(row);
           });
-
-          tableRows.push(row);
         });
-      });
 
-      // Calculate column widths (from template: Country=1.12", Company=2.14", HQ=1.5", Segments=~1.17" each)
-      const tableWidth = 12.6;
-      let colWidths = [];
+        // Calculate column widths (from template: Country=1.12", Company=2.14", HQ=1.5", Segments=~1.17" each)
+        const tableWidth = 12.6;
+        let colWidths = [];
 
-      if (isMultiCountry) {
-        const countryColWidth = 1.12;
-        const companyColWidth = 2.14;
-        const hqColWidth = 1.5;
-        const remainingWidth = tableWidth - countryColWidth - companyColWidth - hqColWidth;
-        const segmentColWidth = segments.length > 0 ? remainingWidth / segments.length : 1.17;
-        colWidths = [countryColWidth, companyColWidth, hqColWidth];
-        segments.forEach(() => colWidths.push(segmentColWidth));
-      } else {
-        // Single country - no country column, company column takes more space
-        const companyColWidth = 2.5;
-        const hqColWidth = 1.5;
-        const remainingWidth = tableWidth - companyColWidth - hqColWidth;
-        const segmentColWidth = segments.length > 0 ? remainingWidth / segments.length : 1.17;
-        colWidths = [companyColWidth, hqColWidth];
-        segments.forEach(() => colWidths.push(segmentColWidth));
-      }
+        if (isMultiCountry) {
+          const countryColWidth = 1.12;
+          const companyColWidth = 2.14;
+          const hqColWidth = 1.5;
+          const remainingWidth = tableWidth - countryColWidth - companyColWidth - hqColWidth;
+          const segmentColWidth = segments.length > 0 ? remainingWidth / segments.length : 1.17;
+          colWidths = [countryColWidth, companyColWidth, hqColWidth];
+          segments.forEach(() => colWidths.push(segmentColWidth));
+        } else {
+          // Single country - no country column, company column takes more space
+          const companyColWidth = 2.5;
+          const hqColWidth = 1.5;
+          const remainingWidth = tableWidth - companyColWidth - hqColWidth;
+          const segmentColWidth = segments.length > 0 ? remainingWidth / segments.length : 1.17;
+          colWidths = [companyColWidth, hqColWidth];
+          segments.forEach(() => colWidths.push(segmentColWidth));
+        }
 
-      // Add target list table (position from template: x=0.3663", y=1.467")
-      // Cell margins: 0.04 inch (0.1cm) left/right, 0 inch top/bottom
-      // Font size 12 to fit more items
-      targetSlide.addTable(tableRows, {
-        x: 0.37, y: 1.47, w: tableWidth,
-        colW: colWidths,
-        fontFace: 'Segoe UI',
-        fontSize: 12,
-        valign: 'middle',
-        rowH: 0.28,
-        margin: [0, 0.04, 0, 0.04]  // [top, right, bottom, left] in inches
-      });
+        // Add target list table (position from template: x=0.3663", y=1.467")
+        // Cell margins: 0.04 inch (0.1cm) left/right, 0 inch top/bottom
+        // Font size 12 to fit more items
+        targetSlide.addTable(tableRows, {
+          x: 0.37,
+          y: 1.47,
+          w: tableWidth,
+          colW: colWidths,
+          fontFace: 'Segoe UI',
+          fontSize: 12,
+          valign: 'middle',
+          rowH: 0.28,
+          margin: [0, 0.04, 0, 0.04], // [top, right, bottom, left] in inches
+        });
 
-      // Footnote (from template: x=0.3754", y=6.6723", font 10pt)
-      targetSlide.addText('出典: Company websites', {
-        x: 0.38, y: 6.67, w: 12.54, h: 0.42,
-        fontSize: 10, fontFace: 'Segoe UI',
-        color: '000000', valign: 'top'
-      });
+        // Footnote (from template: x=0.3754", y=6.6723", font 10pt)
+        targetSlide.addText('出典: Company websites', {
+          x: 0.38,
+          y: 6.67,
+          w: 12.54,
+          h: 0.42,
+          fontSize: 10,
+          fontFace: 'Segoe UI',
+          color: '000000',
+          valign: 'top',
+        });
 
-      console.log('Target List slide generated');
+        console.log('Target List slide generated');
       } catch (targetListError) {
         console.error('ERROR generating Target List slide:', targetListError.message);
         console.error('Target List error stack:', targetListError.stack);
@@ -2592,533 +2834,507 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
     // ===== INDIVIDUAL COMPANY PROFILE SLIDES =====
     for (const company of companies) {
       try {
-      // Skip companies with no meaningful info (only has website, no business/location/metrics)
-      // Helper to check if value is a placeholder (e.g., "Not found", "N/A", etc.)
-      const isPlaceholder = (val) => {
-        if (!val) return true;
-        const lower = String(val).toLowerCase().trim();
-        const placeholders = ['not found', 'not specified', 'n/a', 'unknown', 'not available', 'none', 'not provided', 'not disclosed'];
-        return placeholders.includes(lower) || lower.length === 0;
-      };
+        // Skip companies with no meaningful info (only has website, no business/location/metrics)
+        // Helper to check if value is a placeholder (e.g., "Not found", "N/A", etc.)
+        const isPlaceholder = (val) => {
+          if (!val) return true;
+          const lower = String(val).toLowerCase().trim();
+          const placeholders = [
+            'not found',
+            'not specified',
+            'n/a',
+            'unknown',
+            'not available',
+            'none',
+            'not provided',
+            'not disclosed',
+          ];
+          return placeholders.includes(lower) || lower.length === 0;
+        };
 
-      const hasBusinessInfo = company.business && !isPlaceholder(company.business);
-      const hasLocation = company.location && !isPlaceholder(company.location);
-      const hasCompanyName = company.company_name && !isPlaceholder(company.company_name);
-      const hasMetrics = company.key_metrics && company.key_metrics.length > 0;
-      const hasBreakdown = company.breakdown_items && company.breakdown_items.length > 0;
+        const hasBusinessInfo = company.business && !isPlaceholder(company.business);
+        const hasLocation = company.location && !isPlaceholder(company.location);
+        const hasCompanyName = company.company_name && !isPlaceholder(company.company_name);
+        const hasMetrics = company.key_metrics && company.key_metrics.length > 0;
+        const hasBreakdown = company.breakdown_items && company.breakdown_items.length > 0;
 
-      // If company has NO meaningful data at all, skip it entirely
-      if (!hasCompanyName && !hasBusinessInfo && !hasLocation && !hasMetrics && !hasBreakdown) {
-        console.log(`  Skipping slide for ${company.website} - no meaningful info extracted (all fields are empty/placeholder)`);
-        continue;
-      }
-
-      console.log(`  Generating slide for: ${company.company_name || company.website}`);
-      // Use master slide - lines are fixed in background and cannot be moved
-      const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-
-      // ===== TITLE + MESSAGE (combined in one text box) =====
-      const titleText = company.title || company.company_name || 'Company Profile';
-      const messageText = company.message || '';
-
-      // Create combined text with title (font 24) and message (font 16)
-      const titleContent = messageText ? [
-        { text: titleText, options: { fontSize: 24, fontFace: 'Segoe UI', color: COLORS.black, breakLine: true } },
-        { text: messageText, options: { fontSize: 16, fontFace: 'Segoe UI', color: COLORS.black } }
-      ] : titleText;
-
-      slide.addText(titleContent, {
-        x: 0.38, y: 0.07, w: 9.5, h: 0.9,
-        fontSize: 24, fontFace: 'Segoe UI',
-        color: COLORS.black, valign: 'bottom',
-        margin: [0, 0, 0, 0]  // No left/right margin
-      });
-
-      // ===== FLAG (top right) =====
-      const countryCode = getCountryCode(company.location);
-      if (countryCode) {
-        try {
-          const flagUrl = `https://flagcdn.com/w80/${countryCode.toLowerCase()}.png`;
-          const flagBase64 = await fetchImageAsBase64(flagUrl);
-          if (flagBase64) {
-            const flagX = 10.64, flagY = 0.22, flagW = 0.83, flagH = 0.55;
-            // Add flag image
-            slide.addImage({
-              data: `data:image/png;base64,${flagBase64}`,
-              x: flagX, y: flagY, w: flagW, h: flagH
-            });
-            // Add 1pt black outline around flag
-            slide.addShape(pptx.shapes.RECTANGLE, {
-              x: flagX, y: flagY, w: flagW, h: flagH,
-              fill: { type: 'none' },
-              line: { color: '000000', width: 1 }
-            });
-          }
-        } catch (e) {
-          console.log('Flag fetch failed for', countryCode);
+        // If company has NO meaningful data at all, skip it entirely
+        if (!hasCompanyName && !hasBusinessInfo && !hasLocation && !hasMetrics && !hasBreakdown) {
+          console.log(
+            `  Skipping slide for ${company.website} - no meaningful info extracted (all fields are empty/placeholder)`
+          );
+          continue;
         }
-      }
 
-      // ===== LOGO (top right of slide) =====
-      // Only use Clearbit for real logos - skip fallback services that return letter placeholders
-      if (company.website && typeof company.website === 'string') {
-        try {
-          const domain = company.website.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+        console.log(`  Generating slide for: ${company.company_name || company.website}`);
+        // Use master slide - lines are fixed in background and cannot be moved
+        const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
-          // Only try Clearbit - it returns real logos or fails, never letter placeholders
-          const logoUrl = `https://logo.clearbit.com/${domain}`;
-          console.log(`  Trying logo from: ${logoUrl}`);
-          const logoBase64 = await fetchImageAsBase64(logoUrl);
+        // ===== TITLE + MESSAGE (combined in one text box) =====
+        const titleText = company.title || company.company_name || 'Company Profile';
+        const messageText = company.message || '';
 
-          if (logoBase64) {
-            console.log(`  Logo fetched successfully from ${logoUrl}`);
-            // Use square container to prevent stretching (logos are typically square)
-            slide.addImage({
-              data: `data:image/png;base64,${logoBase64}`,
-              x: 12.1, y: 0.12, w: 0.7, h: 0.7,
-              sizing: { type: 'contain', w: 0.7, h: 0.7 }
-            });
-          } else {
-            console.log(`  No logo available for ${domain} - skipping (no placeholder)`);
-          }
-        } catch (e) {
-          console.log('Logo fetch failed for', company.website, e.message);
-        }
-      }
+        // Create combined text with title (font 24) and message (font 16)
+        const titleContent = messageText
+          ? [
+              {
+                text: titleText,
+                options: {
+                  fontSize: 24,
+                  fontFace: 'Segoe UI',
+                  color: COLORS.black,
+                  breakLine: true,
+                },
+              },
+              {
+                text: messageText,
+                options: { fontSize: 16, fontFace: 'Segoe UI', color: COLORS.black },
+              },
+            ]
+          : titleText;
 
-      // ===== SECTION HEADERS =====
-      // Left: "会社概要資料" - positioned per ref v4
-      slide.addText('会社概要資料', {
-        x: 0.37, y: 1.37, w: 6.1, h: 0.35,
-        fontSize: 14, fontFace: 'Segoe UI',
-        color: COLORS.black, align: 'center'
-      });
-      slide.addShape(pptx.shapes.LINE, {
-        x: 0.37, y: 1.79, w: 6.1, h: 0,
-        line: { color: COLORS.dk2, width: 1.75 }
-      });
+        slide.addText(titleContent, {
+          x: 0.38,
+          y: 0.07,
+          w: 9.5,
+          h: 0.9,
+          fontSize: 24,
+          fontFace: 'Segoe UI',
+          color: COLORS.black,
+          valign: 'bottom',
+          margin: [0, 0, 0, 0], // No left/right margin
+        });
 
-      // Right: Dynamic title based on breakdown_title - positioned at 6.86" x 1.37"
-      const rightSectionTitle = company.breakdown_title || 'Products and Applications';
-      slide.addText(rightSectionTitle, {
-        x: 6.86, y: 1.37, w: 6.1, h: 0.35,
-        fontSize: 14, fontFace: 'Segoe UI',
-        color: COLORS.black, align: 'center'
-      });
-      slide.addShape(pptx.shapes.LINE, {
-        x: 6.86, y: 1.79, w: 6.1, h: 0,
-        line: { color: COLORS.dk2, width: 1.75 }
-      });
-
-      // ===== LEFT TABLE (会社概要資料) =====
-      // Determine if single location (for HQ label)
-      const locationText = ensureString(company.location);
-      const locationLines = locationText.split('\n').filter(line => line.trim());
-      const isSingleLocation = locationLines.length <= 1 && !locationText.toLowerCase().includes('branch') && !locationText.toLowerCase().includes('factory') && !locationText.toLowerCase().includes('warehouse');
-      const locationLabel = isSingleLocation ? 'HQ' : 'Location';
-
-      // Helper function to check if value is empty or placeholder text
-      const isEmptyValue = (val) => {
-        if (!val) return true;
-        const strVal = ensureString(val);
-        const lower = strVal.toLowerCase().trim();
-        const emptyPhrases = [
-          '', 'not specified', 'n/a', 'unknown', 'not available', 'not found',
-          'not explicitly mentioned', 'not mentioned', 'none', 'none specified',
-          'not disclosed', 'not provided', 'no information', 'no data',
-          'none explicitly mentioned'
-        ];
-        // Check exact match or if value contains placeholder phrases
-        if (emptyPhrases.includes(lower)) return true;
-        // Check if value contains placeholder phrases (e.g., "Number of Employees: Not specified")
-        const containsPhrases = ['not specified', 'not available', 'not found', 'not disclosed',
-                                  'not provided', 'not mentioned', 'not explicitly', 'none explicitly',
-                                  'no information', 'no data', 'n/a', 'unknown'];
-        for (const phrase of containsPhrases) {
-          if (lower.includes(phrase)) return true;
-        }
-        // CRITICAL: Detect alphabetical/numbered placeholder patterns like "Distributor A, B, C" or "Partner X, Y, Z"
-        // Pattern: word followed by single letter (A, B, C...) or number (1, 2, 3...)
-        const placeholderPatterns = [
-          /\b(distributor|partner|supplier|customer|client|vendor)\s+[a-c]\b/gi,
-          /\b(distributor|partner|supplier|customer|client|vendor)\s+[x-z]\b/gi,
-          /\b(distributor|partner|supplier|customer|client|vendor)\s+[1-3]\b/gi,
-          /\b[a-z]+\s+[a-c],\s*[a-z]+\s+[a-c]/gi,  // "Something A, Something B"
-          /\b[a-z]+\s+[x-z],\s*[a-z]+\s+[x-z]/gi,  // "Something X, Something Y"
-        ];
-        for (const pattern of placeholderPatterns) {
-          if (pattern.test(strVal)) return true;
-        }
-        return false;
-      };
-
-      // Helper function to remove company suffixes and prefixes
-      const removeCompanySuffix = (name) => {
-        if (!name) return name;
-        return name
-          // Remove PT., CV. prefix from Indonesian companies
-          .replace(/^(PT\.?|CV\.?)\s+/gi, '')
-          // Remove suffixes
-          .replace(/\s*(Company\s+Limited|Co\.,?\s*Ltd\.?|Ltd\.?|Limited|Sdn\.?\s*Bhd\.?|Pte\.?\s*Ltd\.?|Inc\.?|Corp\.?|Corporation|LLC|GmbH|JSC|PT\.?|Tbk\.?|S\.?A\.?|PLC|Company)\s*$/gi, '')
-          .trim();
-      };
-
-      // Helper function to clean location value (remove JSON format and "HQ:" prefix)
-      // ALSO enforces Singapore 2-level rule at display time
-      const cleanLocationValue = (location, label) => {
-        if (!location) return location;
-        let cleaned = location;
-
-        // Handle JSON format like {"HQ":"Chatuchak, Bangkok, Thailand"} or {"HQ":"CBD, Singapore"}
-        if (cleaned.includes('{') && cleaned.includes('}')) {
+        // ===== FLAG (top right) =====
+        const countryCode = getCountryCode(company.location);
+        if (countryCode) {
           try {
-            // Try to extract the value from JSON-like string
-            // First regex: /"HQ":"value"/ - match[1] is the value
-            // Second regex: /"key":"value"/ - match[1] is key, match[2] is value
-            const match = cleaned.match(/"HQ"\s*:\s*"([^"]+)"/i) || cleaned.match(/"([^"]+)"\s*:\s*"([^"]+)"/);
-            if (match) {
-              // Prefer match[2] (value from second regex) over match[1] (could be key from second regex)
-              cleaned = match[2] || match[1] || cleaned;
+            const flagUrl = `https://flagcdn.com/w80/${countryCode.toLowerCase()}.png`;
+            const flagBase64 = await fetchImageAsBase64(flagUrl);
+            if (flagBase64) {
+              const flagX = 10.64,
+                flagY = 0.22,
+                flagW = 0.83,
+                flagH = 0.55;
+              // Add flag image
+              slide.addImage({
+                data: `data:image/png;base64,${flagBase64}`,
+                x: flagX,
+                y: flagY,
+                w: flagW,
+                h: flagH,
+              });
+              // Add 1pt black outline around flag
+              slide.addShape(pptx.shapes.RECTANGLE, {
+                x: flagX,
+                y: flagY,
+                w: flagW,
+                h: flagH,
+                fill: { type: 'none' },
+                line: { color: '000000', width: 1 },
+              });
             }
           } catch (e) {
-            // Fall through to normal cleaning
+            console.log('Flag fetch failed for', countryCode);
           }
         }
 
-        // If label is HQ, remove "- HQ:" or "HQ:" prefix from value
-        if (label === 'HQ') {
-          cleaned = cleaned.replace(/^-?\s*HQ:\s*/i, '').trim();
+        // ===== LOGO (top right of slide) =====
+        // Only use Clearbit for real logos - skip fallback services that return letter placeholders
+        if (company.website && typeof company.website === 'string') {
+          try {
+            const domain = company.website
+              .replace(/^https?:\/\//, '')
+              .replace(/^www\./, '')
+              .split('/')[0];
+
+            // Only try Clearbit - it returns real logos or fails, never letter placeholders
+            const logoUrl = `https://logo.clearbit.com/${domain}`;
+            console.log(`  Trying logo from: ${logoUrl}`);
+            const logoBase64 = await fetchImageAsBase64(logoUrl);
+
+            if (logoBase64) {
+              console.log(`  Logo fetched successfully from ${logoUrl}`);
+              // Use square container to prevent stretching (logos are typically square)
+              slide.addImage({
+                data: `data:image/png;base64,${logoBase64}`,
+                x: 12.1,
+                y: 0.12,
+                w: 0.7,
+                h: 0.7,
+                sizing: { type: 'contain', w: 0.7, h: 0.7 },
+              });
+            } else {
+              console.log(`  No logo available for ${domain} - skipping (no placeholder)`);
+            }
+          } catch (e) {
+            console.log('Logo fetch failed for', company.website, e.message);
+          }
         }
 
-        // FINAL SINGAPORE FIX: If location is just "Singapore", try to extract area from address
-        // or leave as-is (can't make up areas)
-        const parts = cleaned.split(',').map(p => p.trim()).filter(p => p);
-        const isSingapore = parts[parts.length - 1]?.toLowerCase() === 'singapore' ||
-                           cleaned.toLowerCase() === 'singapore';
+        // ===== SECTION HEADERS =====
+        // Left: "会社概要資料" - positioned per ref v4
+        slide.addText('会社概要資料', {
+          x: 0.37,
+          y: 1.37,
+          w: 6.1,
+          h: 0.35,
+          fontSize: 14,
+          fontFace: 'Segoe UI',
+          color: COLORS.black,
+          align: 'center',
+        });
+        slide.addShape(pptx.shapes.LINE, {
+          x: 0.37,
+          y: 1.79,
+          w: 6.1,
+          h: 0,
+          line: { color: COLORS.dk2, width: 1.75 },
+        });
 
-        if (isSingapore && parts.length > 2) {
-          // Too many levels for Singapore - keep only first part + Singapore
-          cleaned = `${parts[0]}, Singapore`;
+        // Right: Dynamic title based on breakdown_title - positioned at 6.86" x 1.37"
+        const rightSectionTitle = company.breakdown_title || 'Products and Applications';
+        slide.addText(rightSectionTitle, {
+          x: 6.86,
+          y: 1.37,
+          w: 6.1,
+          h: 0.35,
+          fontSize: 14,
+          fontFace: 'Segoe UI',
+          color: COLORS.black,
+          align: 'center',
+        });
+        slide.addShape(pptx.shapes.LINE, {
+          x: 6.86,
+          y: 1.79,
+          w: 6.1,
+          h: 0,
+          line: { color: COLORS.dk2, width: 1.75 },
+        });
+
+        // ===== LEFT TABLE (会社概要資料) =====
+        // Determine if single location (for HQ label)
+        const locationText = ensureString(company.location);
+        const locationLines = locationText.split('\n').filter((line) => line.trim());
+        const isSingleLocation =
+          locationLines.length <= 1 &&
+          !locationText.toLowerCase().includes('branch') &&
+          !locationText.toLowerCase().includes('factory') &&
+          !locationText.toLowerCase().includes('warehouse');
+        const locationLabel = isSingleLocation ? 'HQ' : 'Location';
+
+        // Helper function to check if value is empty or placeholder text
+        const isEmptyValue = (val) => {
+          if (!val) return true;
+          const strVal = ensureString(val);
+          const lower = strVal.toLowerCase().trim();
+          const emptyPhrases = [
+            '',
+            'not specified',
+            'n/a',
+            'unknown',
+            'not available',
+            'not found',
+            'not explicitly mentioned',
+            'not mentioned',
+            'none',
+            'none specified',
+            'not disclosed',
+            'not provided',
+            'no information',
+            'no data',
+            'none explicitly mentioned',
+          ];
+          // Check exact match or if value contains placeholder phrases
+          if (emptyPhrases.includes(lower)) return true;
+          // Check if value contains placeholder phrases (e.g., "Number of Employees: Not specified")
+          const containsPhrases = [
+            'not specified',
+            'not available',
+            'not found',
+            'not disclosed',
+            'not provided',
+            'not mentioned',
+            'not explicitly',
+            'none explicitly',
+            'no information',
+            'no data',
+            'n/a',
+            'unknown',
+          ];
+          for (const phrase of containsPhrases) {
+            if (lower.includes(phrase)) return true;
+          }
+          // CRITICAL: Detect alphabetical/numbered placeholder patterns like "Distributor A, B, C" or "Partner X, Y, Z"
+          // Pattern: word followed by single letter (A, B, C...) or number (1, 2, 3...)
+          const placeholderPatterns = [
+            /\b(distributor|partner|supplier|customer|client|vendor)\s+[a-c]\b/gi,
+            /\b(distributor|partner|supplier|customer|client|vendor)\s+[x-z]\b/gi,
+            /\b(distributor|partner|supplier|customer|client|vendor)\s+[1-3]\b/gi,
+            /\b[a-z]+\s+[a-c],\s*[a-z]+\s+[a-c]/gi, // "Something A, Something B"
+            /\b[a-z]+\s+[x-z],\s*[a-z]+\s+[x-z]/gi, // "Something X, Something Y"
+          ];
+          for (const pattern of placeholderPatterns) {
+            if (pattern.test(strVal)) return true;
+          }
+          return false;
+        };
+
+        // Helper function to remove company suffixes and prefixes
+        const removeCompanySuffix = (name) => {
+          if (!name) return name;
+          return (
+            name
+              // Remove PT., CV. prefix from Indonesian companies
+              .replace(/^(PT\.?|CV\.?)\s+/gi, '')
+              // Remove suffixes
+              .replace(
+                /\s*(Company\s+Limited|Co\.,?\s*Ltd\.?|Ltd\.?|Limited|Sdn\.?\s*Bhd\.?|Pte\.?\s*Ltd\.?|Inc\.?|Corp\.?|Corporation|LLC|GmbH|JSC|PT\.?|Tbk\.?|S\.?A\.?|PLC|Company)\s*$/gi,
+                ''
+              )
+              .trim()
+          );
+        };
+
+        // Helper function to clean location value (remove JSON format and "HQ:" prefix)
+        // ALSO enforces Singapore 2-level rule at display time
+        const cleanLocationValue = (location, label) => {
+          if (!location) return location;
+          let cleaned = location;
+
+          // Handle JSON format like {"HQ":"Chatuchak, Bangkok, Thailand"} or {"HQ":"CBD, Singapore"}
+          if (cleaned.includes('{') && cleaned.includes('}')) {
+            try {
+              // Try to extract the value from JSON-like string
+              // First regex: /"HQ":"value"/ - match[1] is the value
+              // Second regex: /"key":"value"/ - match[1] is key, match[2] is value
+              const match =
+                cleaned.match(/"HQ"\s*:\s*"([^"]+)"/i) ||
+                cleaned.match(/"([^"]+)"\s*:\s*"([^"]+)"/);
+              if (match) {
+                // Prefer match[2] (value from second regex) over match[1] (could be key from second regex)
+                cleaned = match[2] || match[1] || cleaned;
+              }
+            } catch (e) {
+              // Fall through to normal cleaning
+            }
+          }
+
+          // If label is HQ, remove "- HQ:" or "HQ:" prefix from value
+          if (label === 'HQ') {
+            cleaned = cleaned.replace(/^-?\s*HQ:\s*/i, '').trim();
+          }
+
+          // FINAL SINGAPORE FIX: If location is just "Singapore", try to extract area from address
+          // or leave as-is (can't make up areas)
+          const parts = cleaned
+            .split(',')
+            .map((p) => p.trim())
+            .filter((p) => p);
+          const isSingapore =
+            parts[parts.length - 1]?.toLowerCase() === 'singapore' ||
+            cleaned.toLowerCase() === 'singapore';
+
+          if (isSingapore && parts.length > 2) {
+            // Too many levels for Singapore - keep only first part + Singapore
+            cleaned = `${parts[0]}, Singapore`;
+          }
+
+          return cleaned;
+        };
+
+        // Base company info rows - only add if value exists
+        const tableData = [];
+
+        // Always add Name with hyperlink (remove company suffix)
+        // Use title as fallback if company_name is empty
+        const companyName = company.company_name || company.title || '';
+        if (!isEmptyValue(companyName)) {
+          const cleanName = removeCompanySuffix(companyName);
+          tableData.push(['Name', cleanName, company.website || null]);
         }
 
-        return cleaned;
-      };
+        // Add Est. Year if available
+        if (!isEmptyValue(company.established_year)) {
+          tableData.push(['Est. Year', company.established_year, null]);
+        }
 
-      // Base company info rows - only add if value exists
-      const tableData = [];
+        // Add Location if available (clean up HQ: prefix if needed)
+        if (!isEmptyValue(company.location)) {
+          const cleanLocation = cleanLocationValue(company.location, locationLabel);
+          tableData.push([locationLabel, cleanLocation, null]);
+        }
 
-      // Always add Name with hyperlink (remove company suffix)
-      // Use title as fallback if company_name is empty
-      const companyName = company.company_name || company.title || '';
-      if (!isEmptyValue(companyName)) {
-        const cleanName = removeCompanySuffix(companyName);
-        tableData.push(['Name', cleanName, company.website || null]);
-      }
+        // Add Business if available
+        if (!isEmptyValue(company.business)) {
+          tableData.push(['Business', company.business, null]);
+        }
 
-      // Add Est. Year if available
-      if (!isEmptyValue(company.established_year)) {
-        tableData.push(['Est. Year', company.established_year, null]);
-      }
+        // Track existing labels to prevent duplicates
+        const existingLabels = new Set(tableData.map((row) => row[0].toLowerCase()));
 
-      // Add Location if available (clean up HQ: prefix if needed)
-      if (!isEmptyValue(company.location)) {
-        const cleanLocation = cleanLocationValue(company.location, locationLabel);
-        tableData.push([locationLabel, cleanLocation, null]);
-      }
+        // Metrics to exclude (worthless or duplicate)
+        const EXCLUDED_METRICS = [
+          'market position',
+          'market share',
+          'market leader',
+          'number of branches',
+          'branches',
+          'number of locations',
+          'locations',
+          'operating hours',
+          'business hours',
+          'office hours',
+          'years of experience',
+          'experience',
+          'years in business',
+          'awards',
+          'recognitions',
+          'achievements',
+          'certification',
+          'certifications',
+          'iso',
+          'accreditation',
+          'accreditations',
+          // Garbage metrics - meaningless fluff
+          'quality standards',
+          'quality assurance',
+          'quality control',
+          'quality focus',
+          'innovation focus',
+          'innovation',
+          'r&d focus',
+          'research focus',
+          'customer service',
+          'service excellence',
+          'technical support',
+          'customer satisfaction',
+          'commitment',
+          'dedication',
+          'focus on',
+        ];
 
-      // Add Business if available
-      if (!isEmptyValue(company.business)) {
-        tableData.push(['Business', company.business, null]);
-      }
+        // Get the right table category to exclude from left table (prevent duplication)
+        const rightTableCategory = ensureString(company.breakdown_title).toLowerCase();
+        // Map breakdown titles to keywords to exclude
+        const categoryKeywords = {
+          customers: ['customer', 'client', 'buyer'],
+          services: ['service'],
+          'products and applications': ['product', 'application'],
+          'key suppliers': ['supplier', 'vendor', 'partner'],
+          'key partnerships': ['partner', 'partnership'],
+        };
+        const excludeKeywords = categoryKeywords[rightTableCategory] || [];
 
-      // Track existing labels to prevent duplicates
-      const existingLabels = new Set(tableData.map(row => row[0].toLowerCase()));
+        // Add key metrics as separate rows if available (skip duplicates and empty values)
+        if (company.key_metrics && Array.isArray(company.key_metrics)) {
+          company.key_metrics.forEach((metric) => {
+            // Ensure label and value are strings (AI may return objects/arrays)
+            const metricLabel = ensureString(metric?.label);
+            const metricValue = ensureString(metric?.value);
 
-      // Metrics to exclude (worthless or duplicate)
-      const EXCLUDED_METRICS = [
-        'market position', 'market share', 'market leader',
-        'number of branches', 'branches', 'number of locations', 'locations',
-        'operating hours', 'business hours', 'office hours',
-        'years of experience', 'experience', 'years in business',
-        'awards', 'recognitions', 'achievements',
-        'certification', 'certifications', 'iso', 'accreditation', 'accreditations',
-        // Garbage metrics - meaningless fluff
-        'quality standards', 'quality assurance', 'quality control', 'quality focus',
-        'innovation focus', 'innovation', 'r&d focus', 'research focus',
-        'customer service', 'service excellence', 'technical support',
-        'customer satisfaction', 'commitment', 'dedication', 'focus on'
-      ];
+            if (metricLabel && metricValue && !isEmptyValue(metricValue)) {
+              const labelLower = metricLabel.toLowerCase();
 
-      // Get the right table category to exclude from left table (prevent duplication)
-      const rightTableCategory = ensureString(company.breakdown_title).toLowerCase();
-      // Map breakdown titles to keywords to exclude
-      const categoryKeywords = {
-        'customers': ['customer', 'client', 'buyer'],
-        'services': ['service'],
-        'products and applications': ['product', 'application'],
-        'key suppliers': ['supplier', 'vendor', 'partner'],
-        'key partnerships': ['partner', 'partnership']
-      };
-      const excludeKeywords = categoryKeywords[rightTableCategory] || [];
+              // Skip excluded metrics
+              const isExcluded = EXCLUDED_METRICS.some((ex) => labelLower.includes(ex));
 
-      // Add key metrics as separate rows if available (skip duplicates and empty values)
-      if (company.key_metrics && Array.isArray(company.key_metrics)) {
-        company.key_metrics.forEach(metric => {
-          // Ensure label and value are strings (AI may return objects/arrays)
-          const metricLabel = ensureString(metric?.label);
-          const metricValue = ensureString(metric?.value);
+              // Skip if this category is already shown on the right table
+              const isInRightTable = excludeKeywords.some((kw) => labelLower.includes(kw));
 
-          if (metricLabel && metricValue && !isEmptyValue(metricValue)) {
-            const labelLower = metricLabel.toLowerCase();
-
-            // Skip excluded metrics
-            const isExcluded = EXCLUDED_METRICS.some(ex => labelLower.includes(ex));
-
-            // Skip if this category is already shown on the right table
-            const isInRightTable = excludeKeywords.some(kw => labelLower.includes(kw));
-
-            // Skip if this label already exists or is duplicate of business/location
-            if (!isExcluded &&
+              // Skip if this label already exists or is duplicate of business/location
+              if (
+                !isExcluded &&
                 !isInRightTable &&
                 !existingLabels.has(labelLower) &&
                 !labelLower.includes('business') &&
-                !labelLower.includes('location')) {
-              tableData.push([metricLabel, metricValue, null]);
-              existingLabels.add(labelLower);
+                !labelLower.includes('location')
+              ) {
+                tableData.push([metricLabel, metricValue, null]);
+                existingLabels.add(labelLower);
+              }
             }
-          }
-        });
-      } else if (company.metrics && !isEmptyValue(company.metrics)) {
-        // Fallback for old format (single string)
-        tableData.push(['Key Metrics', company.metrics, null]);
-      }
-
-      // Helper function to format cell text with bullet points
-      // Uses regular bullet • (U+2022) directly in text
-      const formatCellText = (text) => {
-        if (!text || typeof text !== 'string') return text;
-
-        // Check if text has multiple lines or bullet markers
-        const hasMultipleLines = text.includes('\n');
-        const hasBulletMarkers = text.includes('■') || text.includes('•') || text.includes('\n-') || text.startsWith('-');
-
-        if (hasMultipleLines || hasBulletMarkers) {
-          // Split by newline and filter out empty lines
-          const lines = text.split('\n').filter(line => line.trim());
-
-          // Format ALL lines with bullets (even single line if it starts with -)
-          const formattedLines = lines.map(line => {
-            const cleanLine = line.replace(/^[■\-•]\s*/, '').trim();
-            return '• ' + cleanLine;
           });
-          return formattedLines.join('\n');
+        } else if (company.metrics && !isEmptyValue(company.metrics)) {
+          // Fallback for old format (single string)
+          tableData.push(['Key Metrics', company.metrics, null]);
         }
-        return text;
-      };
 
-      const rows = tableData.map((row) => {
-        const valueCell = {
-          text: formatCellText(row[1]),
-          options: {
-            fill: { color: COLORS.white },
-            color: COLORS.black,
-            align: 'left',
-            border: [
-              { pt: 1, color: COLORS.gray, type: 'dash' },
-              { pt: 0 },
-              { pt: 1, color: COLORS.gray, type: 'dash' },
-              { pt: 0 }
-            ]
+        // Helper function to format cell text with bullet points
+        // Uses regular bullet • (U+2022) directly in text
+        const formatCellText = (text) => {
+          if (!text || typeof text !== 'string') return text;
+
+          // Check if text has multiple lines or bullet markers
+          const hasMultipleLines = text.includes('\n');
+          const hasBulletMarkers =
+            text.includes('■') ||
+            text.includes('•') ||
+            text.includes('\n-') ||
+            text.startsWith('-');
+
+          if (hasMultipleLines || hasBulletMarkers) {
+            // Split by newline and filter out empty lines
+            const lines = text.split('\n').filter((line) => line.trim());
+
+            // Format ALL lines with bullets (even single line if it starts with -)
+            const formattedLines = lines.map((line) => {
+              const cleanLine = line.replace(/^[■\-•]\s*/, '').trim();
+              return '• ' + cleanLine;
+            });
+            return formattedLines.join('\n');
           }
+          return text;
         };
 
-        // Add hyperlink if URL is provided (third element in row array)
-        if (row[2]) {
-          valueCell.options.hyperlink = { url: row[2], tooltip: 'Visit company website' };
-          valueCell.options.color = '0563C1'; // Blue hyperlink color
-        }
-
-        return [
-          {
-            text: row[0],
+        const rows = tableData.map((row) => {
+          const valueCell = {
+            text: formatCellText(row[1]),
             options: {
-              fill: { color: COLORS.accent3 },
-              color: COLORS.white,
-              align: 'center',
-              bold: false
-            }
-          },
-          valueCell
-        ];
-      });
+              fill: { color: COLORS.white },
+              color: COLORS.black,
+              align: 'left',
+              border: [
+                { pt: 1, color: COLORS.gray, type: 'dash' },
+                { pt: 0 },
+                { pt: 1, color: COLORS.gray, type: 'dash' },
+                { pt: 0 },
+              ],
+            },
+          };
 
-      const tableStartY = 1.85;
-      const rowHeight = 0.35;
-
-      // Skip table if no data (prevents PptxGenJS error "Array expected")
-      if (rows.length === 0) {
-        console.log(`  Skipping table for ${company.company_name || company.website} - no table data`);
-      } else {
-        slide.addTable(rows, {
-        x: 0.37, y: tableStartY,
-        w: 6.1,
-        colW: [1.4, 4.7],
-        rowH: rowHeight,
-        fontFace: 'Segoe UI',
-        fontSize: 14,
-        valign: 'middle',
-        border: { pt: 2.5, color: COLORS.white },
-        margin: [0, 0.04, 0, 0.04]
-        });
-      }
-
-      // ===== RIGHT SECTION (varies by business type) =====
-      const businessType = company.business_type || 'industrial';
-
-      if (businessType === 'project' && company.projects && company.projects.length > 0) {
-        // PROJECT-BASED: Show project images in 2x2 grid like LCP example
-        const projects = company.projects.slice(0, 4);
-
-        // 2x2 grid layout
-        const gridStartX = 6.86;
-        const gridStartY = 1.91;
-        const colWidth = 3.0;  // Each column width
-        const rowHeight = 2.4; // Each row height
-        const imageW = 1.4;    // Image width
-        const imageH = 1.1;    // Image height
-        const textOffsetX = 1.5; // Text starts after image
-        const textWidth = 1.4;   // Text width
-
-        for (let i = 0; i < projects.length; i++) {
-          const project = projects[i];
-          const col = i % 2;  // 0 or 1
-          const row = Math.floor(i / 2);  // 0 or 1
-
-          const cellX = gridStartX + (col * colWidth);
-          const cellY = gridStartY + (row * rowHeight);
-
-          // Try to fetch and add project image
-          if (project.image_url) {
-            try {
-              const imgBase64 = await fetchImageAsBase64(project.image_url);
-              if (imgBase64) {
-                slide.addImage({
-                  data: `data:image/jpeg;base64,${imgBase64}`,
-                  x: cellX, y: cellY, w: imageW, h: imageH,
-                  sizing: { type: 'cover', w: imageW, h: imageH }
-                });
-              }
-            } catch (imgErr) {
-              console.log(`  Failed to fetch project image: ${project.image_url}`);
-            }
+          // Add hyperlink if URL is provided (third element in row array)
+          if (row[2]) {
+            valueCell.options.hyperlink = { url: row[2], tooltip: 'Visit company website' };
+            valueCell.options.color = '0563C1'; // Blue hyperlink color
           }
 
-          // Project name (bold) - positioned to right of image
-          slide.addText(project.name || '', {
-            x: cellX + textOffsetX, y: cellY, w: textWidth, h: 0.5,
-            fontSize: 11, fontFace: 'Segoe UI', bold: true,
-            color: COLORS.black, valign: 'top'
-          });
-
-          // Project metrics - below name
-          const metricsText = (project.metrics || []).join('\n');
-          if (metricsText) {
-            slide.addText(metricsText, {
-              x: cellX + textOffsetX, y: cellY + 0.5, w: textWidth, h: 0.8,
-              fontSize: 9, fontFace: 'Segoe UI',
-              color: COLORS.black, valign: 'top'
-            });
-          }
-        }
-      } else if (businessType === 'consumer' && company.products && company.products.length > 0) {
-        // CONSUMER-FACING: Show product images with labels
-        const products = company.products.slice(0, 4);
-        const productWidth = 1.4;
-        const productStartX = 6.86;
-        const productY = 1.91;
-
-        for (let i = 0; i < products.length; i++) {
-          const product = products[i];
-          const xPos = productStartX + (i * (productWidth + 0.15));
-
-          // Try to fetch and add product image
-          if (product.image_url) {
-            try {
-              const imgBase64 = await fetchImageAsBase64(product.image_url);
-              if (imgBase64) {
-                slide.addImage({
-                  data: `data:image/jpeg;base64,${imgBase64}`,
-                  x: xPos, y: productY, w: productWidth, h: 1.2,
-                  sizing: { type: 'contain', w: productWidth, h: 1.2 }
-                });
-              }
-            } catch (imgErr) {
-              console.log(`  Failed to fetch product image: ${product.image_url}`);
-            }
-          }
-
-          // Product name
-          slide.addText(product.name || '', {
-            x: xPos, y: productY + 1.25, w: productWidth, h: 0.35,
-            fontSize: 10, fontFace: 'Segoe UI', bold: true,
-            color: COLORS.black, align: 'center', valign: 'top'
-          });
-        }
-      } else {
-        // INDUSTRIAL B2B: Show table format
-        let validBreakdownItems = (company.breakdown_items || [])
-          .map(item => ({
-            label: ensureString(item?.label),
-            value: ensureString(item?.value)
-          }))
-          .filter(item => item.label && item.value && !isEmptyValue(item.label) && !isEmptyValue(item.value));
-
-        // Limit to 8 rows maximum (to fit like Premink example with 9 product lines)
-        if (validBreakdownItems.length > 8) {
-          validBreakdownItems = validBreakdownItems.slice(0, 8);
-        }
-
-        // Truncate values to max 3 lines
-        validBreakdownItems = validBreakdownItems.map(item => {
-          let value = item.value;
-          const lines = value.split('\n');
-          if (lines.length > 3) {
-            value = lines.slice(0, 3).join('\n');
-          }
-          return { label: item.label, value };
-        });
-
-        if (validBreakdownItems.length >= 1) {
-          const rightTableData = validBreakdownItems.map(item => [String(item.label || ''), String(item.value || '')]);
-
-          const rightRows = rightTableData.map((row) => [
+          return [
             {
-              text: String(row[0] || ''),
+              text: row[0],
               options: {
                 fill: { color: COLORS.accent3 },
                 color: COLORS.white,
                 align: 'center',
-                bold: false
-              }
+                bold: false,
+              },
             },
-            {
-              text: String(row[1] || ''),
-              options: {
-                fill: { color: COLORS.white },
-                color: COLORS.black,
-                align: 'left',
-                border: [
-                  { pt: 1, color: COLORS.gray, type: 'dash' },
-                  { pt: 0 },
-                  { pt: 1, color: COLORS.gray, type: 'dash' },
-                  { pt: 0 }
-                ]
-              }
-            }
-          ]);
+            valueCell,
+          ];
+        });
 
-          slide.addTable(rightRows, {
-            x: 6.86, y: 1.91,
+        const tableStartY = 1.85;
+        const rowHeight = 0.35;
+
+        // Skip table if no data (prevents PptxGenJS error "Array expected")
+        if (rows.length === 0) {
+          console.log(
+            `  Skipping table for ${company.company_name || company.website} - no table data`
+          );
+        } else {
+          slide.addTable(rows, {
+            x: 0.37,
+            y: tableStartY,
             w: 6.1,
             colW: [1.4, 4.7],
             rowH: rowHeight,
@@ -3126,41 +3342,238 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
             fontSize: 14,
             valign: 'middle',
             border: { pt: 2.5, color: COLORS.white },
-            margin: [0, 0.04, 0, 0.04]
+            margin: [0, 0.04, 0, 0.04],
           });
         }
-      }
 
-      // ===== FOOTNOTE (single text box with stacked content) =====
-      const footnoteLines = [];
+        // ===== RIGHT SECTION (varies by business type) =====
+        const businessType = company.business_type || 'industrial';
 
-      // Line 1: Note with shortform explanations (only uncommon ones)
-      const shortformNote = detectShortforms(company);
-      if (shortformNote) {
-        footnoteLines.push(shortformNote);
-      }
+        if (businessType === 'project' && company.projects && company.projects.length > 0) {
+          // PROJECT-BASED: Show project images in 2x2 grid like LCP example
+          const projects = company.projects.slice(0, 4);
 
-      // Line 2: Exchange rate - always add for countries with pre-set rates (especially SEA)
-      const exchangeRate = countryCode ? EXCHANGE_RATE_MAP[countryCode] : null;
-      if (exchangeRate) {
-        footnoteLines.push(exchangeRate);
-      }
+          // 2x2 grid layout
+          const gridStartX = 6.86;
+          const gridStartY = 1.91;
+          const colWidth = 3.0; // Each column width
+          const rowHeight = 2.4; // Each row height
+          const imageW = 1.4; // Image width
+          const imageH = 1.1; // Image height
+          const textOffsetX = 1.5; // Text starts after image
+          const textWidth = 1.4; // Text width
 
-      // Line 3: Source
-      footnoteLines.push('Source: Company website');
+          for (let i = 0; i < projects.length; i++) {
+            const project = projects[i];
+            const col = i % 2; // 0 or 1
+            const row = Math.floor(i / 2); // 0 or 1
 
-      // Create single text box with all footnote content stacked
-      const footnoteContent = footnoteLines.join('\n');
-      const footnoteHeight = 0.18 * footnoteLines.length;
+            const cellX = gridStartX + col * colWidth;
+            const cellY = gridStartY + row * rowHeight;
 
-      slide.addText(footnoteContent, {
-        x: 0.38, y: 6.85, w: 12.5, h: footnoteHeight,
-        fontSize: 10, fontFace: 'Segoe UI',
-        color: COLORS.black, valign: 'top',
-        margin: [0, 0, 0, 0]  // No left/right margin
-      });
+            // Try to fetch and add project image
+            if (project.image_url) {
+              try {
+                const imgBase64 = await fetchImageAsBase64(project.image_url);
+                if (imgBase64) {
+                  slide.addImage({
+                    data: `data:image/jpeg;base64,${imgBase64}`,
+                    x: cellX,
+                    y: cellY,
+                    w: imageW,
+                    h: imageH,
+                    sizing: { type: 'cover', w: imageW, h: imageH },
+                  });
+                }
+              } catch (imgErr) {
+                console.log(`  Failed to fetch project image: ${project.image_url}`);
+              }
+            }
+
+            // Project name (bold) - positioned to right of image
+            slide.addText(project.name || '', {
+              x: cellX + textOffsetX,
+              y: cellY,
+              w: textWidth,
+              h: 0.5,
+              fontSize: 11,
+              fontFace: 'Segoe UI',
+              bold: true,
+              color: COLORS.black,
+              valign: 'top',
+            });
+
+            // Project metrics - below name
+            const metricsText = (project.metrics || []).join('\n');
+            if (metricsText) {
+              slide.addText(metricsText, {
+                x: cellX + textOffsetX,
+                y: cellY + 0.5,
+                w: textWidth,
+                h: 0.8,
+                fontSize: 9,
+                fontFace: 'Segoe UI',
+                color: COLORS.black,
+                valign: 'top',
+              });
+            }
+          }
+        } else if (businessType === 'consumer' && company.products && company.products.length > 0) {
+          // CONSUMER-FACING: Show product images with labels
+          const products = company.products.slice(0, 4);
+          const productWidth = 1.4;
+          const productStartX = 6.86;
+          const productY = 1.91;
+
+          for (let i = 0; i < products.length; i++) {
+            const product = products[i];
+            const xPos = productStartX + i * (productWidth + 0.15);
+
+            // Try to fetch and add product image
+            if (product.image_url) {
+              try {
+                const imgBase64 = await fetchImageAsBase64(product.image_url);
+                if (imgBase64) {
+                  slide.addImage({
+                    data: `data:image/jpeg;base64,${imgBase64}`,
+                    x: xPos,
+                    y: productY,
+                    w: productWidth,
+                    h: 1.2,
+                    sizing: { type: 'contain', w: productWidth, h: 1.2 },
+                  });
+                }
+              } catch (imgErr) {
+                console.log(`  Failed to fetch product image: ${product.image_url}`);
+              }
+            }
+
+            // Product name
+            slide.addText(product.name || '', {
+              x: xPos,
+              y: productY + 1.25,
+              w: productWidth,
+              h: 0.35,
+              fontSize: 10,
+              fontFace: 'Segoe UI',
+              bold: true,
+              color: COLORS.black,
+              align: 'center',
+              valign: 'top',
+            });
+          }
+        } else {
+          // INDUSTRIAL B2B: Show table format
+          let validBreakdownItems = (company.breakdown_items || [])
+            .map((item) => ({
+              label: ensureString(item?.label),
+              value: ensureString(item?.value),
+            }))
+            .filter(
+              (item) =>
+                item.label && item.value && !isEmptyValue(item.label) && !isEmptyValue(item.value)
+            );
+
+          // Limit to 8 rows maximum (to fit like Premink example with 9 product lines)
+          if (validBreakdownItems.length > 8) {
+            validBreakdownItems = validBreakdownItems.slice(0, 8);
+          }
+
+          // Truncate values to max 3 lines
+          validBreakdownItems = validBreakdownItems.map((item) => {
+            let value = item.value;
+            const lines = value.split('\n');
+            if (lines.length > 3) {
+              value = lines.slice(0, 3).join('\n');
+            }
+            return { label: item.label, value };
+          });
+
+          if (validBreakdownItems.length >= 1) {
+            const rightTableData = validBreakdownItems.map((item) => [
+              String(item.label || ''),
+              String(item.value || ''),
+            ]);
+
+            const rightRows = rightTableData.map((row) => [
+              {
+                text: String(row[0] || ''),
+                options: {
+                  fill: { color: COLORS.accent3 },
+                  color: COLORS.white,
+                  align: 'center',
+                  bold: false,
+                },
+              },
+              {
+                text: String(row[1] || ''),
+                options: {
+                  fill: { color: COLORS.white },
+                  color: COLORS.black,
+                  align: 'left',
+                  border: [
+                    { pt: 1, color: COLORS.gray, type: 'dash' },
+                    { pt: 0 },
+                    { pt: 1, color: COLORS.gray, type: 'dash' },
+                    { pt: 0 },
+                  ],
+                },
+              },
+            ]);
+
+            slide.addTable(rightRows, {
+              x: 6.86,
+              y: 1.91,
+              w: 6.1,
+              colW: [1.4, 4.7],
+              rowH: rowHeight,
+              fontFace: 'Segoe UI',
+              fontSize: 14,
+              valign: 'middle',
+              border: { pt: 2.5, color: COLORS.white },
+              margin: [0, 0.04, 0, 0.04],
+            });
+          }
+        }
+
+        // ===== FOOTNOTE (single text box with stacked content) =====
+        const footnoteLines = [];
+
+        // Line 1: Note with shortform explanations (only uncommon ones)
+        const shortformNote = detectShortforms(company);
+        if (shortformNote) {
+          footnoteLines.push(shortformNote);
+        }
+
+        // Line 2: Exchange rate - always add for countries with pre-set rates (especially SEA)
+        const exchangeRate = countryCode ? EXCHANGE_RATE_MAP[countryCode] : null;
+        if (exchangeRate) {
+          footnoteLines.push(exchangeRate);
+        }
+
+        // Line 3: Source
+        footnoteLines.push('Source: Company website');
+
+        // Create single text box with all footnote content stacked
+        const footnoteContent = footnoteLines.join('\n');
+        const footnoteHeight = 0.18 * footnoteLines.length;
+
+        slide.addText(footnoteContent, {
+          x: 0.38,
+          y: 6.85,
+          w: 12.5,
+          h: footnoteHeight,
+          fontSize: 10,
+          fontFace: 'Segoe UI',
+          color: COLORS.black,
+          valign: 'top',
+          margin: [0, 0, 0, 0], // No left/right margin
+        });
       } catch (slideError) {
-        console.error(`  ERROR generating slide for ${company.company_name || company.website}:`, slideError.message);
+        console.error(
+          `  ERROR generating slide for ${company.company_name || company.website}:`,
+          slideError.message
+        );
         console.error('  Slide error stack:', slideError.stack);
         // Continue with next company instead of failing entire PPTX
       }
@@ -3173,26 +3586,26 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
     return {
       success: true,
-      content: base64Content
+      content: base64Content,
     };
   } catch (error) {
     console.error('PptxGenJS error:', error);
     console.error('PptxGenJS error stack:', error.stack);
     return {
       success: false,
-      error: error.message
+      error: error.message,
     };
   }
 }
 
 // Currency exchange mapping by country
 const CURRENCY_EXCHANGE = {
-  'philippines': '為替レート: PHP 100M = 3億円',
-  'thailand': '為替レート: THB 100M = 4億円',
-  'malaysia': '為替レート: MYR 10M = 3億円',
-  'indonesia': '為替レート: IDR 10B = 1億円',
-  'singapore': '為替レート: SGD 1M = 1億円',
-  'vietnam': '為替レート: VND 100B = 6億円'
+  philippines: '為替レート: PHP 100M = 3億円',
+  thailand: '為替レート: THB 100M = 4億円',
+  malaysia: '為替レート: MYR 10M = 3億円',
+  indonesia: '為替レート: IDR 10B = 1億円',
+  singapore: '為替レート: SGD 1M = 1億円',
+  vietnam: '為替レート: VND 100B = 6億円',
 };
 
 // Scrape website and convert to clean text (similar to fetchWebsite but returns more content)
@@ -3208,10 +3621,11 @@ async function scrapeWebsite(url) {
 
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       },
       signal: controller.signal,
-      redirect: 'follow'
+      redirect: 'follow',
     });
     clearTimeout(timeout);
 
@@ -3256,12 +3670,13 @@ async function scrapeWebsite(url) {
 // - This is the most important extraction - wrong HQ ruins the profile
 async function extractBasicInfo(scrapedContent, websiteUrl) {
   try {
-    const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        {
-          role: 'system',
-          content: `You extract company information from website content.
+    const response = await withRetry(() =>
+      openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content: `You extract company information from website content.
 
 OUTPUT JSON with these fields:
 - company_name: Company name with first letter of each word capitalized. Remove suffixes like Limited, Ltd, Sdn Bhd, Pte Ltd, PT, Inc, Corp, Company.
@@ -3342,17 +3757,18 @@ RULES:
 - Convert ALL Vietnamese: "Phú" → "Phu", "Đông" → "Dong", "Nguyễn" → "Nguyen"
 - Convert ALL foreign characters: "São" → "Sao", "北京" → "Beijing"
 - Leave fields empty if information not found
-- Return ONLY valid JSON`
-        },
-        {
-          role: 'user',
-          content: `Website: ${websiteUrl}
-Content: ${scrapedContent.substring(0, 25000)}`
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2
-    }));
+- Return ONLY valid JSON`,
+          },
+          {
+            role: 'user',
+            content: `Website: ${websiteUrl}
+Content: ${scrapedContent.substring(0, 25000)}`,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      })
+    );
 
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -3372,7 +3788,10 @@ function validateAndFixHQFormat(location, websiteUrl) {
   // Remove any "HQ:" prefix
   loc = loc.replace(/^-?\s*HQ:\s*/i, '').trim();
 
-  const parts = loc.split(',').map(p => p.trim()).filter(p => p);
+  const parts = loc
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => p);
   const lastPart = parts[parts.length - 1]?.toLowerCase() || '';
 
   // Check if Singapore
@@ -3382,22 +3801,26 @@ function validateAndFixHQFormat(location, websiteUrl) {
     // Singapore: must be exactly 2 levels
     if (parts.length === 1 || loc.toLowerCase() === 'singapore') {
       // Only "Singapore" - extract area from website URL or use default
-      const domain = websiteUrl?.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0] || '';
+      const domain =
+        websiteUrl
+          ?.replace(/^https?:\/\//, '')
+          .replace(/^www\./, '')
+          .split('/')[0] || '';
 
       // Try to guess area from common Singapore industrial areas in domain
       const areaHints = {
-        'jurong': 'Jurong',
-        'tuas': 'Tuas',
-        'woodlands': 'Woodlands',
-        'ubi': 'Ubi',
-        'changi': 'Changi',
-        'bedok': 'Bedok',
-        'tampines': 'Tampines',
+        jurong: 'Jurong',
+        tuas: 'Tuas',
+        woodlands: 'Woodlands',
+        ubi: 'Ubi',
+        changi: 'Changi',
+        bedok: 'Bedok',
+        tampines: 'Tampines',
         'ang mo kio': 'Ang Mo Kio',
-        'amk': 'Ang Mo Kio',
+        amk: 'Ang Mo Kio',
         'paya lebar': 'Paya Lebar',
-        'kallang': 'Kallang',
-        'geylang': 'Geylang'
+        kallang: 'Kallang',
+        geylang: 'Geylang',
       };
 
       let area = null;
@@ -3411,7 +3834,9 @@ function validateAndFixHQFormat(location, websiteUrl) {
       // If no area found, don't just use "Singapore" alone - better to leave it for manual fix
       // But log it so we know
       if (!area) {
-        console.log(`  [HQ Fix] Singapore missing area, couldn't determine from URL: ${websiteUrl}`);
+        console.log(
+          `  [HQ Fix] Singapore missing area, couldn't determine from URL: ${websiteUrl}`
+        );
         // Return just Singapore for now - better than making up an area
         return 'Singapore';
       }
@@ -3448,12 +3873,13 @@ async function extractBusinessInfo(scrapedContent, basicInfo) {
   const currencyExchange = CURRENCY_EXCHANGE[hqCountry] || '';
 
   try {
-    const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You extract business information from website content for M&A discussion slides.
+    const response = await withRetry(() =>
+      openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You extract business information from website content for M&A discussion slides.
 
 INPUT:
 - HTML content from company website
@@ -3503,21 +3929,22 @@ RULES:
 - All bullet points must use "- " (dash followed by space)
 - Each bullet point on new line using "\\n"
 - Keep it to the MOST KEY items only (3 bullet points max)
-- Return ONLY valid JSON`
-        },
-        {
-          role: 'user',
-          content: `Company: ${basicInfo.company_name}
+- Return ONLY valid JSON`,
+          },
+          {
+            role: 'user',
+            content: `Company: ${basicInfo.company_name}
 Established: ${basicInfo.established_year}
 Location: ${basicInfo.location}
 
 Website Content:
-${scrapedContent.substring(0, 25000)}`
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2
-    }));
+${scrapedContent.substring(0, 25000)}`,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      })
+    );
 
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -3530,12 +3957,13 @@ ${scrapedContent.substring(0, 25000)}`
 // Using gpt-4o-mini (cheaper) since Marker AI pre-identifies content and Validator catches misses
 async function extractKeyMetrics(scrapedContent, previousData) {
   try {
-    const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You are an M&A analyst extracting COMPREHENSIVE key business metrics for potential buyers evaluating this company.
+    const response = await withRetry(() =>
+      openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an M&A analyst extracting COMPREHENSIVE key business metrics for potential buyers evaluating this company.
 
 CRITICAL - VISIBLE STATISTICS FIRST:
 Before anything else, scan the ENTIRE page for ANY prominently displayed numbers/statistics:
@@ -3647,20 +4075,21 @@ RULES:
 - If you cannot find actual customer/supplier names, DO NOT include those metrics at all
 - NEVER make up data - only include what's explicitly stated on the website
 - SHORT LIST FORMATTING: If only 2-3 items, write comma-separated inline (e.g., "Singapore, Sri Lanka"), NOT point form
-- Return ONLY valid JSON`
-        },
-        {
-          role: 'user',
-          content: `Company: ${previousData.company_name}
+- Return ONLY valid JSON`,
+          },
+          {
+            role: 'user',
+            content: `Company: ${previousData.company_name}
 Industry/Business: ${previousData.business}
 
 Website Content (extract ALL M&A-relevant metrics):
-${scrapedContent.substring(0, 35000)}`
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.3
-    }));
+${scrapedContent.substring(0, 35000)}`,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.3,
+      })
+    );
 
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -3675,12 +4104,13 @@ async function extractKeyMetricsWithFocus(scrapedContent, context) {
   try {
     console.log('    Running focused re-extraction for missed items...');
 
-    const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4o',  // Use stronger model for focused extraction
-      messages: [
-        {
-          role: 'system',
-          content: `You are extracting SPECIFIC metrics that were missed in the first extraction pass.
+    const response = await withRetry(() =>
+      openai.chat.completions.create({
+        model: 'gpt-4o', // Use stronger model for focused extraction
+        messages: [
+          {
+            role: 'system',
+            content: `You are extracting SPECIFIC metrics that were missed in the first extraction pass.
 
 ## ALREADY EXTRACTED (do NOT duplicate):
 ${context.existingMetrics || 'None yet'}
@@ -3704,20 +4134,21 @@ RULES:
 - ONLY extract the missed items listed above
 - Do NOT include items already in "ALREADY EXTRACTED"
 - If you cannot find a missed item in the content, skip it
-- Return empty array if nothing new found`
-        },
-        {
-          role: 'user',
-          content: `Company: ${context.company_name}
+- Return empty array if nothing new found`,
+          },
+          {
+            role: 'user',
+            content: `Company: ${context.company_name}
 Business: ${context.business}
 
 Content to search:
-${scrapedContent.substring(0, 30000)}`
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2
-    }));
+${scrapedContent.substring(0, 30000)}`,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      })
+    );
 
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -3730,12 +4161,13 @@ ${scrapedContent.substring(0, 30000)}`
 // Using gpt-4o-mini (cheaper) since Marker AI pre-identifies content and Validator catches misses
 async function extractProductsBreakdown(scrapedContent, previousData) {
   try {
-    const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You are an M&A analyst creating the RIGHT-SIDE content for a company profile slide.
+    const response = await withRetry(() =>
+      openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an M&A analyst creating the RIGHT-SIDE content for a company profile slide.
 
 FIRST: Determine the BUSINESS TYPE:
 1. PROJECT-BASED: Construction, building materials, engineering, architecture, contractors
@@ -3805,40 +4237,41 @@ CRITICAL RULES FOR INDUSTRIAL B2B TABLE:
 CRITICAL: For projects/products, extract ACTUAL image URLs from the website content!
 Look for: <img src="...">, background-image: url(...), data-src="...", srcset="..."
 
-Return ONLY valid JSON.`
-        },
-        {
-          role: 'user',
-          content: `Company: ${previousData.company_name}
+Return ONLY valid JSON.`,
+          },
+          {
+            role: 'user',
+            content: `Company: ${previousData.company_name}
 Industry/Business: ${previousData.business}
 
 Website Content:
-${scrapedContent.substring(0, 35000)}`
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.3
-    }));
+${scrapedContent.substring(0, 35000)}`,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.3,
+      })
+    );
 
     const result = JSON.parse(response.choices[0].message.content);
 
     // Validate based on business type
     if (result.business_type === 'project' && result.projects) {
       result.projects = result.projects
-        .filter(p => p && typeof p === 'object' && p.name)
-        .map(p => ({
+        .filter((p) => p && typeof p === 'object' && p.name)
+        .map((p) => ({
           name: String(p.name || ''),
           image_url: String(p.image_url || ''),
-          metrics: Array.isArray(p.metrics) ? p.metrics.map(m => String(m)) : []
+          metrics: Array.isArray(p.metrics) ? p.metrics.map((m) => String(m)) : [],
         }))
         .slice(0, 4); // Max 4 projects
     } else if (result.business_type === 'consumer' && result.products) {
       result.products = result.products
-        .filter(p => p && typeof p === 'object' && p.name)
-        .map(p => ({
+        .filter((p) => p && typeof p === 'object' && p.name)
+        .map((p) => ({
           name: String(p.name || ''),
           image_url: String(p.image_url || ''),
-          description: String(p.description || '')
+          description: String(p.description || ''),
         }))
         .slice(0, 4); // Max 4 products
     } else {
@@ -3846,12 +4279,12 @@ ${scrapedContent.substring(0, 35000)}`
       result.business_type = 'industrial';
       if (result.breakdown_items && Array.isArray(result.breakdown_items)) {
         result.breakdown_items = result.breakdown_items
-          .filter(item => item && typeof item === 'object')
-          .map(item => ({
+          .filter((item) => item && typeof item === 'object')
+          .map((item) => ({
             label: String(item.label || ''),
-            value: String(item.value || '')
+            value: String(item.value || ''),
           }))
-          .filter(item => item.label && item.value);
+          .filter((item) => item.label && item.value);
       } else {
         result.breakdown_items = [];
       }
@@ -3860,7 +4293,11 @@ ${scrapedContent.substring(0, 35000)}`
     return result;
   } catch (e) {
     console.error('Agent 3b (products) error:', e.message);
-    return { business_type: 'industrial', breakdown_title: 'Products and Applications', breakdown_items: [] };
+    return {
+      business_type: 'industrial',
+      breakdown_title: 'Products and Applications',
+      breakdown_items: [],
+    };
   }
 }
 
@@ -3868,12 +4305,13 @@ ${scrapedContent.substring(0, 35000)}`
 // Using GPT-4o-mini with retry for rate limits
 async function extractFinancialMetrics(scrapedContent, previousData) {
   try {
-    const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You are an M&A analyst extracting financial performance metrics from website content.
+    const response = await withRetry(() =>
+      openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an M&A analyst extracting financial performance metrics from website content.
 
 Focus on financial metrics important for M&A evaluation:
 
@@ -3902,20 +4340,21 @@ IMPORTANT RULES:
 - Maximum 4 financial metrics
 - Do NOT make up financial figures
 
-Return ONLY valid JSON.`
-        },
-        {
-          role: 'user',
-          content: `Company: ${previousData.company_name}
+Return ONLY valid JSON.`,
+          },
+          {
+            role: 'user',
+            content: `Company: ${previousData.company_name}
 Industry/Business: ${previousData.business}
 
 Website Content (extract financial metrics):
-${scrapedContent.substring(0, 15000)}`
-        }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2
-    }));
+${scrapedContent.substring(0, 15000)}`,
+          },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      })
+    );
 
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -3936,12 +4375,13 @@ async function searchMissingInfo(companyName, website, missingFields) {
 
     // Use OpenAI Search model which has web search capability
     // Wrapped with retry for rate limits
-    const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4o-search-preview',
-      messages: [
-        {
-          role: 'user',
-          content: `Search for information about "${companyName}" (website: ${website}).
+    const response = await withRetry(() =>
+      openai.chat.completions.create({
+        model: 'gpt-4o-search-preview',
+        messages: [
+          {
+            role: 'user',
+            content: `Search for information about "${companyName}" (website: ${website}).
 
 I need to find:
 ${missingFields.includes('established_year') ? '- When was this company founded/established? (year only)' : ''}
@@ -3954,10 +4394,11 @@ Return ONLY a JSON object with these fields (include only fields you can find wi
 }
 
 If you cannot find reliable information for a field, omit it from the response.
-Return ONLY valid JSON, no explanations.`
-        }
-      ]
-    }));
+Return ONLY valid JSON, no explanations.`,
+          },
+        ],
+      })
+    );
 
     const content = response.choices[0].message.content || '';
 
@@ -4038,7 +4479,7 @@ I need M&A-relevant metrics for an acquisition discussion. Find:
    - Joint ventures
    - Major suppliers
 
-Already have: ${existingMetrics.map(m => m.label).join(', ')}
+Already have: ${existingMetrics.map((m) => m.label).join(', ')}
 
 Return ONLY a JSON object:
 {
@@ -4050,9 +4491,9 @@ Return ONLY a JSON object:
 }
 
 Only include metrics you can verify. Do not repeat metrics already provided.
-Return ONLY valid JSON.`
-        }
-      ]
+Return ONLY valid JSON.`,
+        },
+      ],
     });
 
     const content = response.choices[0].message.content || '';
@@ -4060,7 +4501,9 @@ Return ONLY valid JSON.`
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const result = JSON.parse(jsonMatch[0]);
-      console.log(`  Found ${result.additional_metrics?.length || 0} additional metrics via web search`);
+      console.log(
+        `  Found ${result.additional_metrics?.length || 0} additional metrics via web search`
+      );
       return result;
     }
 
@@ -4085,7 +4528,7 @@ async function generateMECESegments(targetDescription, companies) {
       id: i + 1,
       name: c.title || c.company_name || 'Unknown',
       business: c.business || '',
-      location: c.location || ''
+      location: c.location || '',
     }));
 
     const response = await openai.chat.completions.create({
@@ -4115,20 +4558,20 @@ Where:
 - "segments" is an array of 4-6 segment names (short, 2-3 words each)
 - "companySegments" maps company ID to an array of booleans indicating which segments apply
 
-Return ONLY valid JSON.`
+Return ONLY valid JSON.`,
         },
         {
           role: 'user',
           content: `Target Description: ${targetDescription}
 
 Companies:
-${companySummaries.map(c => `${c.id}. ${c.name}\n   Business: ${c.business}\n   Location: ${c.location}`).join('\n\n')}
+${companySummaries.map((c) => `${c.id}. ${c.name}\n   Business: ${c.business}\n   Location: ${c.location}`).join('\n\n')}
 
-Create MECE segments for these ${targetDescription} companies and mark which segments apply to each.`
-        }
+Create MECE segments for these ${targetDescription} companies and mark which segments apply to each.`,
+        },
       ],
       response_format: { type: 'json_object' },
-      temperature: 0.3
+      temperature: 0.3,
     });
 
     const result = JSON.parse(response.choices[0].message.content);
@@ -4234,15 +4677,21 @@ Return JSON with:
 Return ONLY valid JSON.`;
 
     // Wrap OpenAI call with retry for rate limits
-    const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [
-        { role: 'system', content: 'You are a data validation agent. Compare extracted data against source content and fix any discrepancies. Add any missing information found in the source.' },
-        { role: 'user', content: prompt }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.2
-    }));
+    const response = await withRetry(() =>
+      openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are a data validation agent. Compare extracted data against source content and fix any discrepancies. Add any missing information found in the source.',
+          },
+          { role: 'user', content: prompt },
+        ],
+        response_format: { type: 'json_object' },
+        temperature: 0.2,
+      })
+    );
 
     const result = response.choices[0].message.content;
 
@@ -4267,7 +4716,7 @@ Return ONLY valid JSON.`;
 
     // Log what was fixed/added
     if (validated.validation_notes && validated.validation_notes.length > 0) {
-      validated.validation_notes.forEach(note => {
+      validated.validation_notes.forEach((note) => {
         console.log(`    [Validator] ${note}`);
       });
     }
@@ -4283,13 +4732,13 @@ Return ONLY valid JSON.`;
       title: validated.title || companyData.title,
       key_metrics: validated.key_metrics || companyData.key_metrics,
       breakdown_title: validated.breakdown_title || companyData.breakdown_title,
-      breakdown_items: validated.breakdown_items || companyData.breakdown_items
+      breakdown_items: validated.breakdown_items || companyData.breakdown_items,
     };
 
     return {
       data: mergedData,
       issuesFound: validated.issues_found || false,
-      missedItems: validated.missed_items || []
+      missedItems: validated.missed_items || [],
     };
   } catch (e) {
     console.error('Validator error:', e.message);
@@ -4299,7 +4748,7 @@ Return ONLY valid JSON.`;
 
 // Build profile slides email HTML (simple version with PPTX attached)
 function buildProfileSlidesEmailHTML(companies, errors, hasPPTX) {
-  const companyNames = companies.map(c => c.title || c.company_name).join(', ');
+  const companyNames = companies.map((c) => c.title || c.company_name).join(', ');
 
   let html = `
     <h2>Profile Slides</h2>
@@ -4332,7 +4781,7 @@ function buildProfileSlidesEmailHTML(companies, errors, hasPPTX) {
   if (errors.length > 0) {
     html += `<br><h3 style="color: #dc2626;">Failed Extractions</h3>`;
     html += `<ul>`;
-    errors.forEach(e => {
+    errors.forEach((e) => {
       html += `<li><strong>${e.website}</strong>: ${e.error}</li>`;
     });
     html += `</ul>`;
@@ -4364,12 +4813,14 @@ async function processSingleWebsite(website, index, total) {
         title: companyName,
         location: '',
         _inaccessible: true,
-        _error: `Failed to scrape: ${scraped.error}`
+        _error: `Failed to scrape: ${scraped.error}`,
       };
     }
     console.log(`  [${index + 1}] Scraped ${scraped.content.length} characters`);
     // Log content preview for debugging (first 500 chars, useful for seeing what was scraped)
-    console.log(`  [${index + 1}] Content preview: ${scraped.content.substring(0, 500).replace(/\n/g, ' ').replace(/\s+/g, ' ')}...`);
+    console.log(
+      `  [${index + 1}] Content preview: ${scraped.content.substring(0, 500).replace(/\n/g, ' ').replace(/\s+/g, ' ')}...`
+    );
 
     // Step 1b: Run Marker AI to identify important content (avoids truncation blind spots)
     console.log(`  [${index + 1}] Step 1b: Running Marker AI to identify key content...`);
@@ -4380,7 +4831,9 @@ async function processSingleWebsite(website, index, total) {
     const contentForExtraction = markerResult?.markedContent || scraped.content;
     const usingMarkedContent = !!markerResult?.markedContent;
     if (usingMarkedContent) {
-      console.log(`  [${index + 1}] Using marked content (${markerResult.markedLength} chars from ${markerResult.originalLength})`);
+      console.log(
+        `  [${index + 1}] Using marked content (${markerResult.markedLength} chars from ${markerResult.originalLength})`
+      );
     } else {
       console.log(`  [${index + 1}] Marker failed, using truncated raw content`);
     }
@@ -4391,7 +4844,8 @@ async function processSingleWebsite(website, index, total) {
     console.log(`  [${index + 1}] Step 2: Extracting company name, year, location...`);
     const basicInfo = await extractBasicInfo(scraped.content, trimmedWebsite);
     console.log(`  [${index + 1}] Company: ${basicInfo.company_name || 'Not found'}`);
-    if (basicInfo.location) console.log(`  [${index + 1}] Location extracted: ${basicInfo.location}`);
+    if (basicInfo.location)
+      console.log(`  [${index + 1}] Location extracted: ${basicInfo.location}`);
 
     // Step 3: Extract business details
     console.log(`  [${index + 1}] Step 3: Extracting business, message, footnote, title...`);
@@ -4401,14 +4855,14 @@ async function processSingleWebsite(website, index, total) {
     console.log(`  [${index + 1}] Step 4: Extracting key metrics...`);
     const metricsInfo = await extractKeyMetrics(contentForExtraction, {
       company_name: basicInfo.company_name,
-      business: businessInfo.business
+      business: businessInfo.business,
     });
 
     // Step 4b: Extract products/applications breakdown for right table
     console.log(`  [${index + 1}] Step 4b: Extracting products/applications breakdown...`);
     const productsBreakdown = await extractProductsBreakdown(contentForExtraction, {
       company_name: basicInfo.company_name,
-      business: businessInfo.business
+      business: businessInfo.business,
     });
 
     // Step 5: Search online for missing mandatory info (established_year, location)
@@ -4419,7 +4873,9 @@ async function processSingleWebsite(website, index, total) {
 
     let searchedInfo = {};
     if (missingFields.length > 0 && basicInfo.company_name) {
-      console.log(`  [${index + 1}] Step 5: Searching online for missing mandatory info: ${missingFields.join(', ')}...`);
+      console.log(
+        `  [${index + 1}] Step 5: Searching online for missing mandatory info: ${missingFields.join(', ')}...`
+      );
       searchedInfo = await searchMissingInfo(basicInfo.company_name, trimmedWebsite, missingFields);
     }
 
@@ -4432,30 +4888,42 @@ async function processSingleWebsite(website, index, total) {
       website: scraped.url,
       company_name: ensureString(basicInfo.company_name),
       established_year: ensureString(basicInfo.established_year || searchedInfo.established_year),
-      location: validateAndFixHQFormat(ensureString(basicInfo.location || searchedInfo.location), trimmedWebsite),
+      location: validateAndFixHQFormat(
+        ensureString(basicInfo.location || searchedInfo.location),
+        trimmedWebsite
+      ),
       business: ensureString(businessInfo.business),
       message: ensureString(businessInfo.message),
       footnote: ensureString(businessInfo.footnote),
       title: ensureString(businessInfo.title),
-      key_metrics: allKeyMetrics,  // Only from scraped website
+      key_metrics: allKeyMetrics, // Only from scraped website
       // Right-side content (varies by business type)
       business_type: productsBreakdown.business_type || 'industrial',
-      breakdown_title: ensureString(productsBreakdown.breakdown_title) || 'Products and Applications',
+      breakdown_title:
+        ensureString(productsBreakdown.breakdown_title) || 'Products and Applications',
       breakdown_items: productsBreakdown.breakdown_items || [],
-      projects: productsBreakdown.projects || [],  // For project-based businesses
-      products: productsBreakdown.products || [],  // For consumer-facing businesses
-      metrics: ensureString(metricsInfo.metrics)  // Fallback for old format
+      projects: productsBreakdown.projects || [], // For project-based businesses
+      products: productsBreakdown.products || [], // For consumer-facing businesses
+      metrics: ensureString(metricsInfo.metrics), // Fallback for old format
     };
 
     // Log metrics count before review
-    console.log(`  [${index + 1}] Metrics extracted before review: ${companyData.key_metrics?.length || 0}`);
+    console.log(
+      `  [${index + 1}] Metrics extracted before review: ${companyData.key_metrics?.length || 0}`
+    );
     if (companyData.key_metrics?.length > 0) {
-      console.log(`  [${index + 1}] Raw metrics: ${companyData.key_metrics.map(m => m.label).join(', ')}`);
+      console.log(
+        `  [${index + 1}] Raw metrics: ${companyData.key_metrics.map((m) => m.label).join(', ')}`
+      );
     }
 
     // Step 6: Run AI validator to compare extraction vs source and fix issues
     // IMPORTANT: Pass RAW scraped content (not marked content) so validator can catch what Marker missed
-    const validatorResult = await reviewAndCleanData(companyData, scraped.content, markerResult?.markers);
+    const validatorResult = await reviewAndCleanData(
+      companyData,
+      scraped.content,
+      markerResult?.markers
+    );
     companyData = validatorResult.data;
 
     // Step 6b: ITERATIVE EXTRACTION - If validator found missed items, try to extract them
@@ -4464,13 +4932,15 @@ async function processSingleWebsite(website, index, total) {
     const needsReExtraction = validatorResult.issuesFound && hasMissedItems;
 
     if (needsReExtraction) {
-      console.log(`  [${index + 1}] Step 6b: Re-extracting ${validatorResult.missedItems.length} missed items...`);
-      validatorResult.missedItems.forEach(item => console.log(`    - ${item}`));
+      console.log(
+        `  [${index + 1}] Step 6b: Re-extracting ${validatorResult.missedItems.length} missed items...`
+      );
+      validatorResult.missedItems.forEach((item) => console.log(`    - ${item}`));
 
       // Build focused prompt with explicit missed items
       const missedItemsText = validatorResult.missedItems.join('\n- ');
       const existingMetricsText = (companyData.key_metrics || [])
-        .map(m => `${m.value} ${m.label}`)
+        .map((m) => `${m.value} ${m.label}`)
         .join(', ');
 
       // Re-run metrics extraction with explicit focus on missed items
@@ -4479,16 +4949,21 @@ async function processSingleWebsite(website, index, total) {
         company_name: companyData.company_name,
         business: companyData.business,
         existingMetrics: existingMetricsText,
-        missedItems: missedItemsText
+        missedItems: missedItemsText,
       });
 
       // Merge new metrics with existing (avoid duplicates by checking both label and value)
       if (reExtractedMetrics.key_metrics?.length > 0) {
-        const existingLabels = new Set((companyData.key_metrics || []).map(m => m.label?.toLowerCase()));
-        const existingValues = new Set((companyData.key_metrics || []).map(m => m.value?.toLowerCase()));
-        const newMetrics = reExtractedMetrics.key_metrics.filter(m =>
-          !existingLabels.has(m.label?.toLowerCase()) &&
-          !existingValues.has(m.value?.toLowerCase())
+        const existingLabels = new Set(
+          (companyData.key_metrics || []).map((m) => m.label?.toLowerCase())
+        );
+        const existingValues = new Set(
+          (companyData.key_metrics || []).map((m) => m.value?.toLowerCase())
+        );
+        const newMetrics = reExtractedMetrics.key_metrics.filter(
+          (m) =>
+            !existingLabels.has(m.label?.toLowerCase()) &&
+            !existingValues.has(m.value?.toLowerCase())
         );
         if (newMetrics.length > 0) {
           console.log(`  [${index + 1}] Added ${newMetrics.length} new metrics from re-extraction`);
@@ -4498,7 +4973,11 @@ async function processSingleWebsite(website, index, total) {
 
       // Re-run validator one more time to catch anything else
       // Use raw content so it can validate against full source
-      const finalValidation = await reviewAndCleanData(companyData, scraped.content, markerResult?.markers);
+      const finalValidation = await reviewAndCleanData(
+        companyData,
+        scraped.content,
+        markerResult?.markers
+      );
       companyData = finalValidation.data;
     }
 
@@ -4508,23 +4987,26 @@ async function processSingleWebsite(website, index, total) {
     companyData.key_metrics = filterEmptyMetrics(companyData.key_metrics);
     const metricsAfter = companyData.key_metrics?.length || 0;
     if (metricsBefore !== metricsAfter) {
-      console.log(`  [${index + 1}] Step 7: Filtered ${metricsBefore - metricsAfter} empty metrics (${metricsBefore} → ${metricsAfter})`);
+      console.log(
+        `  [${index + 1}] Step 7: Filtered ${metricsBefore - metricsAfter} empty metrics (${metricsBefore} → ${metricsAfter})`
+      );
     }
 
-    console.log(`  [${index + 1}] ✓ Completed: ${companyData.title || companyData.company_name} (${companyData.key_metrics?.length || 0} metrics after review)`);
+    console.log(
+      `  [${index + 1}] ✓ Completed: ${companyData.title || companyData.company_name} (${companyData.key_metrics?.length || 0} metrics after review)`
+    );
 
     // Memory cleanup: Release large objects to prevent OOM on Railway
     // scraped.content can be 1-5MB per website, must release before next iteration
     if (scraped) scraped.content = null;
 
     return companyData;
-
   } catch (error) {
     console.error(`  [${index + 1}] Error processing ${trimmedWebsite}:`, error.message);
     return {
       website: trimmedWebsite,
       error: error.message,
-      step: 0
+      step: 0,
     };
   }
 }
@@ -4543,7 +5025,9 @@ async function processWebsitesInParallel(websites) {
     const batch = websites.slice(batchStart, batchEnd);
 
     console.log(`\n${'─'.repeat(40)}`);
-    console.log(`BATCH ${Math.floor(batchStart / PARALLEL_BATCH_SIZE) + 1}: Processing ${batch.length} websites in parallel (${batchStart + 1}-${batchEnd} of ${total})`);
+    console.log(
+      `BATCH ${Math.floor(batchStart / PARALLEL_BATCH_SIZE) + 1}: Processing ${batch.length} websites in parallel (${batchStart + 1}-${batchEnd} of ${total})`
+    );
     console.log('─'.repeat(40));
 
     // Process batch in parallel
@@ -4598,7 +5082,7 @@ app.post('/api/profile-slides', async (req, res) => {
     message: 'Request received. Results will be emailed within 5-10 minutes.',
     companies: [],
     errors: [],
-    total: websites.length
+    total: websites.length,
   });
 
   // Process in background using parallel batch processing
@@ -4607,9 +5091,9 @@ app.post('/api/profile-slides', async (req, res) => {
     const results = await processWebsitesInParallel(websites);
 
     // Separate successful companies, inaccessible websites, and errors
-    const companies = results.filter(r => !r.error && !r._inaccessible);
-    const inaccessibleWebsites = results.filter(r => r._inaccessible);
-    const errors = results.filter(r => r.error && !r._inaccessible);
+    const companies = results.filter((r) => !r.error && !r._inaccessible);
+    const inaccessibleWebsites = results.filter((r) => r._inaccessible);
+    const errors = results.filter((r) => r.error && !r._inaccessible);
 
     console.log(`\n${'='.repeat(50)}`);
     console.log(`PROFILE SLIDES EXTRACTION COMPLETE`);
@@ -4634,15 +5118,20 @@ app.post('/api/profile-slides', async (req, res) => {
     }
 
     // Build email content
-    const companyNames = companies.slice(0, 3).map(c => c.title || c.company_name).join(', ');
+    const companyNames = companies
+      .slice(0, 3)
+      .map((c) => c.title || c.company_name)
+      .join(', ');
     const subject = `Profile Slides: ${companies.length} companies${companyNames ? ` (${companyNames}${companies.length > 3 ? '...' : ''})` : ''}`;
     const htmlContent = buildProfileSlidesEmailHTML(companies, errors, pptxResult?.success);
 
     // Send email with PPTX attachment
-    const attachment = pptxResult?.success ? {
-      content: pptxResult.content,
-      name: `Profile_Slides_${new Date().toISOString().split('T')[0]}.pptx`
-    } : null;
+    const attachment = pptxResult?.success
+      ? {
+          content: pptxResult.content,
+          name: `Profile_Slides_${new Date().toISOString().split('T')[0]}.pptx`,
+        }
+      : null;
 
     await sendEmail(email, subject, htmlContent, attachment);
 
@@ -4652,17 +5141,19 @@ app.post('/api/profile-slides', async (req, res) => {
     // Memory cleanup after email sent
     if (pptxResult) pptxResult.content = null;
     pptxResult = null;
-
   } catch (error) {
     console.error('Profile slides error:', error);
     try {
-      await sendEmail(email, 'Profile Slides - Error', `<p>Error processing your request: ${error.message}</p>`);
+      await sendEmail(
+        email,
+        'Profile Slides - Error',
+        `<p>Error processing your request: ${error.message}</p>`
+      );
     } catch (e) {
       console.error('Failed to send error email:', e);
     }
   }
 });
-
 
 // ============ GENERATE PPT ENDPOINT (returns content, no email) ============
 // Used by v6 search to generate PPT and attach to its own email
@@ -4708,14 +5199,16 @@ app.post('/api/generate-ppt', async (req, res) => {
             title: companyName,
             location: '',
             _inaccessible: true,
-            _error: `Failed to scrape: ${scraped.error}`
+            _error: `Failed to scrape: ${scraped.error}`,
           });
           console.log(`  Marked as inaccessible: ${companyName}`);
           continue;
         }
         console.log(`  Scraped ${scraped.content.length} characters`);
         // Log content preview for debugging (first 500 chars, useful for seeing what was scraped)
-        console.log(`  Content preview: ${scraped.content.substring(0, 500).replace(/\n/g, ' ').replace(/\s+/g, ' ')}...`);
+        console.log(
+          `  Content preview: ${scraped.content.substring(0, 500).replace(/\n/g, ' ').replace(/\s+/g, ' ')}...`
+        );
 
         // Step 2: Extract basic info
         console.log('  Step 2: Extracting company name, year, location...');
@@ -4731,14 +5224,14 @@ app.post('/api/generate-ppt', async (req, res) => {
         console.log('  Step 4: Extracting key metrics...');
         const metricsInfo = await extractKeyMetrics(scraped.content, {
           company_name: basicInfo.company_name,
-          business: businessInfo.business
+          business: businessInfo.business,
         });
 
         // Step 4b: Extract products/applications breakdown
         console.log('  Step 4b: Extracting products/applications breakdown...');
         const productsBreakdown = await extractProductsBreakdown(scraped.content, {
           company_name: basicInfo.company_name,
-          business: businessInfo.business
+          business: businessInfo.business,
         });
 
         // Step 5: Search online for missing mandatory info
@@ -4748,7 +5241,9 @@ app.post('/api/generate-ppt', async (req, res) => {
 
         let searchedInfo = {};
         if (missingFields.length > 0 && basicInfo.company_name) {
-          console.log(`  Step 5: Searching online for missing info: ${missingFields.join(', ')}...`);
+          console.log(
+            `  Step 5: Searching online for missing info: ${missingFields.join(', ')}...`
+          );
           searchedInfo = await searchMissingInfo(basicInfo.company_name, website, missingFields);
         }
 
@@ -4757,8 +5252,13 @@ app.post('/api/generate-ppt', async (req, res) => {
         let companyData = {
           website: scraped.url,
           company_name: ensureString(basicInfo.company_name),
-          established_year: ensureString(basicInfo.established_year || searchedInfo.established_year),
-          location: validateAndFixHQFormat(ensureString(basicInfo.location || searchedInfo.location), website),
+          established_year: ensureString(
+            basicInfo.established_year || searchedInfo.established_year
+          ),
+          location: validateAndFixHQFormat(
+            ensureString(basicInfo.location || searchedInfo.location),
+            website
+          ),
           business: ensureString(businessInfo.business),
           message: ensureString(businessInfo.message),
           footnote: ensureString(businessInfo.footnote),
@@ -4766,11 +5266,12 @@ app.post('/api/generate-ppt', async (req, res) => {
           key_metrics: allKeyMetrics,
           // Right-side content (varies by business type)
           business_type: productsBreakdown.business_type || 'industrial',
-          breakdown_title: ensureString(productsBreakdown.breakdown_title) || 'Products and Applications',
+          breakdown_title:
+            ensureString(productsBreakdown.breakdown_title) || 'Products and Applications',
           breakdown_items: productsBreakdown.breakdown_items || [],
-          projects: productsBreakdown.projects || [],  // For project-based businesses
-          products: productsBreakdown.products || [],  // For consumer-facing businesses
-          metrics: ensureString(metricsInfo.metrics)
+          projects: productsBreakdown.projects || [], // For project-based businesses
+          products: productsBreakdown.products || [], // For consumer-facing businesses
+          metrics: ensureString(metricsInfo.metrics),
         };
 
         // Step 6: Run AI validator to compare extraction vs source and fix issues
@@ -4788,13 +5289,12 @@ app.post('/api/generate-ppt', async (req, res) => {
         results.push(companyData);
 
         if (scraped) scraped.content = null;
-
       } catch (error) {
         console.error(`  Error processing ${website}:`, error.message);
         results.push({
           website,
           error: error.message,
-          step: 0
+          step: 0,
         });
       }
 
@@ -4802,9 +5302,9 @@ app.post('/api/generate-ppt', async (req, res) => {
     }
 
     // Separate successful companies, inaccessible websites, and errors
-    const companies = results.filter(r => !r.error && !r._inaccessible);
-    const inaccessibleWebsites = results.filter(r => r._inaccessible);
-    const errors = results.filter(r => r.error && !r._inaccessible);
+    const companies = results.filter((r) => !r.error && !r._inaccessible);
+    const inaccessibleWebsites = results.filter((r) => r._inaccessible);
+    const errors = results.filter((r) => r.error && !r._inaccessible);
 
     console.log(`\n${'='.repeat(50)}`);
     console.log(`EXTRACTION COMPLETE: ${companies.length}/${websites.length} successful`);
@@ -4829,22 +5329,21 @@ app.post('/api/generate-ppt', async (req, res) => {
         content: pptxResult.content,
         filename: `Profile_Slides_${new Date().toISOString().split('T')[0]}.pptx`,
         companiesProcessed: companies.length,
-        errors: errors.length
+        errors: errors.length,
       });
     } else {
       return res.json({
         success: false,
         error: 'Failed to generate PPT',
         companiesProcessed: companies.length,
-        errors: errors.length
+        errors: errors.length,
       });
     }
-
   } catch (error) {
     console.error('Generate PPT error:', error);
     return res.status(500).json({
       success: false,
-      error: error.message
+      error: error.message,
     });
   }
 });
