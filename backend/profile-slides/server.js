@@ -118,6 +118,152 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
 
+// ============ RATE LIMIT RETRY WRAPPER ============
+// Retries API calls with exponential backoff when hitting rate limits (429)
+async function withRetry(apiCall, maxRetries = 3, baseDelay = 2000) {
+  let lastError;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await apiCall();
+    } catch (error) {
+      lastError = error;
+      const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('rate limit');
+      const isServerError = error?.status >= 500;
+
+      if ((isRateLimit || isServerError) && attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(2, attempt); // 2s, 4s, 8s
+        console.log(`    ⚠ Rate limit/server error, retrying in ${delay/1000}s (attempt ${attempt + 1}/${maxRetries})...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError;
+}
+
+// ============ MARKER AI (Gemini Flash) ============
+// Scans FULL website content and extracts key snippets for extraction
+// This solves the truncation blind spot - marker sees everything, extractors get curated content
+async function markImportantContent(fullContent, website) {
+  try {
+    console.log(`    Running Marker AI (Gemini Flash) on ${fullContent.length} chars...`);
+
+    // Gemini Flash can handle large context cheaply
+    const contentToScan = fullContent.substring(0, 100000); // 100k chars max
+
+    const prompt = `You are a content marker for company profile extraction. Scan this website content and extract ALL important snippets that contain:
+
+## WHAT TO EXTRACT (copy exact text, preserve numbers):
+
+### 1. COMPANY IDENTITY
+- Company name, founding year, history
+- Addresses, locations, headquarters (EXACT addresses with postal codes, provinces, districts)
+- Contact information
+
+### 2. STATISTICS & METRICS (CRITICAL - extract ALL numbers)
+- Production capacity (tons, units, sqm per month/year)
+- Number of employees, machines, production lines
+- Number of customers, partners, distributors
+- Years of experience, projects completed
+- Export percentages, countries served
+- Any counter/statistic displays (e.g., "880 Colour Matching", "60 Customers")
+
+### 3. BUSINESS RELATIONSHIPS
+- Partner companies (especially Japanese, international)
+- Client/customer names
+- Distribution network (countries, agents, offices)
+- Certifications, affiliations
+
+### 4. PRODUCTS & SERVICES
+- Product categories and types
+- Industries served
+- Applications
+
+## OUTPUT FORMAT:
+Return a JSON object with these sections. For each section, include the RAW TEXT SNIPPETS from the website (not summaries):
+
+{
+  "identity_snippets": ["exact text about company name/history...", "exact address text..."],
+  "statistics_snippets": ["800 tons per month...", "300 employees...", "250 machines..."],
+  "relationships_snippets": ["partner with Dainichiseika...", "distributors in 9 countries..."],
+  "products_snippets": ["flexographic inks...", "packaging solutions..."],
+  "location_hints": ["Samut Sakhon", "123 Moo 4, Bangplee..."]
+}
+
+IMPORTANT:
+- Extract EXACT text, don't summarize
+- Include ALL numbers and statistics you find
+- Include ALL location/address mentions
+- If you find counter displays or infographics text, include those
+
+Website: ${website}
+
+CONTENT TO SCAN:
+${contentToScan}`;
+
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          temperature: 0.1,
+          maxOutputTokens: 8000,
+          responseMimeType: 'application/json'
+        }
+      })
+    });
+
+    if (!response.ok) {
+      console.log(`    Marker AI failed: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!text) {
+      console.log('    Marker AI returned empty response');
+      return null;
+    }
+
+    const markers = JSON.parse(text);
+
+    // Combine all snippets into a focused content block for extractors
+    const markedContent = [
+      '=== COMPANY IDENTITY ===',
+      ...(markers.identity_snippets || []),
+      '',
+      '=== STATISTICS & METRICS ===',
+      ...(markers.statistics_snippets || []),
+      '',
+      '=== BUSINESS RELATIONSHIPS ===',
+      ...(markers.relationships_snippets || []),
+      '',
+      '=== PRODUCTS & SERVICES ===',
+      ...(markers.products_snippets || []),
+      '',
+      '=== LOCATION HINTS ===',
+      ...(markers.location_hints || [])
+    ].join('\n');
+
+    console.log(`    Marker AI: condensed ${fullContent.length} → ${markedContent.length} chars`);
+    console.log(`    Found: ${markers.statistics_snippets?.length || 0} stats, ${markers.location_hints?.length || 0} locations`);
+
+    return {
+      markedContent,
+      markers,
+      originalLength: fullContent.length,
+      markedLength: markedContent.length
+    };
+
+  } catch (error) {
+    console.error(`    Marker AI error: ${error.message}`);
+    return null;
+  }
+}
+
 // Initialize Anthropic (Claude)
 const anthropic = process.env.ANTHROPIC_API_KEY
   ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -3045,11 +3191,11 @@ async function scrapeWebsite(url) {
 }
 
 // AI Agent 1: Extract company name, established year, location
-// Using GPT-4o for accurate extraction esp. non-English content
+// Using gpt-4o-mini (cheaper) since Marker AI pre-identifies content and Validator catches misses
 async function extractBasicInfo(scrapedContent, websiteUrl) {
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+    const response = await withRetry(() => openai.chat.completions.create({
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -3144,7 +3290,7 @@ Content: ${scrapedContent.substring(0, 25000)}`
       ],
       response_format: { type: 'json_object' },
       temperature: 0.2
-    });
+    }));
 
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -3231,7 +3377,7 @@ function validateAndFixHQFormat(location, websiteUrl) {
 }
 
 // AI Agent 2: Extract business, message, footnote, title
-// Using GPT-4o for accurate extraction esp. non-English content
+// Using gpt-4o-mini (cheaper) since Marker AI pre-identifies content and Validator catches misses
 async function extractBusinessInfo(scrapedContent, basicInfo) {
   // Ensure locationText is always a string (AI might return object/array)
   const locationText = typeof basicInfo.location === 'string' ? basicInfo.location : '';
@@ -3240,8 +3386,8 @@ async function extractBusinessInfo(scrapedContent, basicInfo) {
   const currencyExchange = CURRENCY_EXCHANGE[hqCountry] || '';
 
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+    const response = await withRetry(() => openai.chat.completions.create({
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -3309,7 +3455,7 @@ ${scrapedContent.substring(0, 25000)}`
       ],
       response_format: { type: 'json_object' },
       temperature: 0.2
-    });
+    }));
 
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -3319,11 +3465,11 @@ ${scrapedContent.substring(0, 25000)}`
 }
 
 // AI Agent 3: Extract key metrics for M&A evaluation
-// Using GPT-4o for accurate extraction esp. non-English content and visible statistics
+// Using gpt-4o-mini (cheaper) since Marker AI pre-identifies content and Validator catches misses
 async function extractKeyMetrics(scrapedContent, previousData) {
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+    const response = await withRetry(() => openai.chat.completions.create({
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -3452,7 +3598,7 @@ ${scrapedContent.substring(0, 35000)}`
       ],
       response_format: { type: 'json_object' },
       temperature: 0.3
-    });
+    }));
 
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -3462,11 +3608,11 @@ ${scrapedContent.substring(0, 35000)}`
 }
 
 // AI Agent 3b: Extract rich content for right-side table
-// Using GPT-4o for accurate extraction esp. non-English content
+// Using gpt-4o-mini (cheaper) since Marker AI pre-identifies content and Validator catches misses
 async function extractProductsBreakdown(scrapedContent, previousData) {
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+    const response = await withRetry(() => openai.chat.completions.create({
+      model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
@@ -3553,7 +3699,7 @@ ${scrapedContent.substring(0, 35000)}`
       ],
       response_format: { type: 'json_object' },
       temperature: 0.3
-    });
+    }));
 
     const result = JSON.parse(response.choices[0].message.content);
 
@@ -3600,10 +3746,10 @@ ${scrapedContent.substring(0, 35000)}`
 }
 
 // AI Agent 3c: Extract financial metrics for 財務実績 section
-// Using GPT-4o-mini (60% cost savings for number extraction)
+// Using GPT-4o-mini with retry for rate limits
 async function extractFinancialMetrics(scrapedContent, previousData) {
   try {
-    const response = await openai.chat.completions.create({
+    const response = await withRetry(() => openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
@@ -3650,7 +3796,7 @@ ${scrapedContent.substring(0, 15000)}`
       ],
       response_format: { type: 'json_object' },
       temperature: 0.2
-    });
+    }));
 
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -3877,14 +4023,35 @@ Create MECE segments for these ${targetDescription} companies and mark which seg
 
 // AI Review Agent: Validate extraction against source content and fix issues
 // Uses GPT-4o for accurate validation - compares extracted data against source
-async function reviewAndCleanData(companyData, scrapedContent) {
+// Returns { data, issuesFound, missedItems } for iterative extraction
+async function reviewAndCleanData(companyData, scrapedContent, markers = null) {
   try {
     console.log('  Step 6: Running AI validator (GPT-4o) - comparing extraction vs source...');
 
-    const prompt = `You are a data validation agent. Your job is to COMPARE the extracted data against the SOURCE WEBSITE CONTENT and FIX any issues.
+    // Use markers if available (structured snippets), otherwise use raw content
+    let sourceSection;
+    if (markers) {
+      sourceSection = `## MARKED IMPORTANT CONTENT (pre-identified by Marker AI):
 
-## SOURCE WEBSITE CONTENT (this is the truth):
-${scrapedContent ? scrapedContent.substring(0, 30000) : 'No source content available'}
+=== STATISTICS (look for these numbers!) ===
+${(markers.statistics_snippets || []).join('\n')}
+
+=== LOCATION HINTS ===
+${(markers.location_hints || []).join('\n')}
+
+=== BUSINESS RELATIONSHIPS ===
+${(markers.relationships_snippets || []).join('\n')}
+
+=== IDENTITY ===
+${(markers.identity_snippets || []).join('\n')}`;
+    } else {
+      sourceSection = `## SOURCE WEBSITE CONTENT (this is the truth):
+${scrapedContent ? scrapedContent.substring(0, 30000) : 'No source content available'}`;
+    }
+
+    const prompt = `You are a data validation agent. Your job is to COMPARE the extracted data against the SOURCE CONTENT and FIX any issues.
+
+${sourceSection}
 
 ## EXTRACTED DATA (may have errors or missing info):
 ${JSON.stringify(companyData, null, 2)}
@@ -3927,6 +4094,8 @@ ${JSON.stringify(companyData, null, 2)}
 Return JSON with:
 - Fixed/validated data
 - "validation_notes": list what you fixed/added
+- "issues_found": true if you found ANY issues or missing info, false if extraction was perfect
+- "missed_items": list of things in source that SHOULD be metrics but weren't extracted (for re-extraction)
 
 {
   "company_name": "...",
@@ -3938,12 +4107,15 @@ Return JSON with:
   "key_metrics": [array with ADDED missing metrics],
   "breakdown_title": "...",
   "breakdown_items": [...],
-  "validation_notes": ["Fixed HQ from Bangkok to Samut Sakhon", "Added 800 tons/month production capacity", "Added 9 export countries"]
+  "validation_notes": ["Fixed HQ from Bangkok to Samut Sakhon", "Added 800 tons/month production capacity"],
+  "issues_found": true,
+  "missed_items": ["300 employees mentioned but not extracted", "partnership with Dainichiseika not captured"]
 }
 
 Return ONLY valid JSON.`;
 
-    const response = await openai.chat.completions.create({
+    // Wrap OpenAI call with retry for rate limits
+    const response = await withRetry(() => openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [
         { role: 'system', content: 'You are a data validation agent. Compare extracted data against source content and fix any discrepancies. Add any missing information found in the source.' },
@@ -3951,13 +4123,13 @@ Return ONLY valid JSON.`;
       ],
       response_format: { type: 'json_object' },
       temperature: 0.2
-    });
+    }));
 
     const result = response.choices[0].message.content;
 
     if (!result) {
       console.log('  AI validator returned empty, keeping original data');
-      return companyData;
+      return { data: companyData, issuesFound: false, missedItems: [] };
     }
 
     // Parse JSON from response
@@ -3970,7 +4142,7 @@ Return ONLY valid JSON.`;
         validated = JSON.parse(jsonMatch[0]);
       } else {
         console.log('  Failed to parse validator response, keeping original data');
-        return companyData;
+        return { data: companyData, issuesFound: false, missedItems: [] };
       }
     }
 
@@ -3982,7 +4154,7 @@ Return ONLY valid JSON.`;
     }
 
     // Merge validated data with original (preserve fields not in output)
-    return {
+    const mergedData = {
       ...companyData,
       company_name: validated.company_name || companyData.company_name,
       established_year: validated.established_year || companyData.established_year,
@@ -3994,9 +4166,15 @@ Return ONLY valid JSON.`;
       breakdown_title: validated.breakdown_title || companyData.breakdown_title,
       breakdown_items: validated.breakdown_items || companyData.breakdown_items
     };
+
+    return {
+      data: mergedData,
+      issuesFound: validated.issues_found || false,
+      missedItems: validated.missed_items || []
+    };
   } catch (e) {
     console.error('Validator error:', e.message);
-    return companyData; // Return original data if validation fails
+    return { data: companyData, issuesFound: false, missedItems: [] }; // Return original data if validation fails
   }
 }
 
@@ -4074,26 +4252,40 @@ async function processSingleWebsite(website, index, total) {
     // Log content preview for debugging (first 500 chars, useful for seeing what was scraped)
     console.log(`  [${index + 1}] Content preview: ${scraped.content.substring(0, 500).replace(/\n/g, ' ').replace(/\s+/g, ' ')}...`);
 
+    // Step 1b: Run Marker AI to identify important content (avoids truncation blind spots)
+    console.log(`  [${index + 1}] Step 1b: Running Marker AI to identify key content...`);
+    const markerResult = await markImportantContent(scraped.content, trimmedWebsite);
+
+    // Use marked content if available, otherwise fall back to raw content
+    // Marked content is pre-curated snippets (smaller, focused), raw content is full text (needs truncation)
+    const contentForExtraction = markerResult?.markedContent || scraped.content;
+    const usingMarkedContent = !!markerResult?.markedContent;
+    if (usingMarkedContent) {
+      console.log(`  [${index + 1}] Using marked content (${markerResult.markedLength} chars from ${markerResult.originalLength})`);
+    } else {
+      console.log(`  [${index + 1}] Marker failed, using truncated raw content`);
+    }
+
     // Step 2: Extract basic info (company name, year, location)
     console.log(`  [${index + 1}] Step 2: Extracting company name, year, location...`);
-    const basicInfo = await extractBasicInfo(scraped.content, trimmedWebsite);
+    const basicInfo = await extractBasicInfo(contentForExtraction, trimmedWebsite);
     console.log(`  [${index + 1}] Company: ${basicInfo.company_name || 'Not found'}`);
     if (basicInfo.location) console.log(`  [${index + 1}] Location extracted: ${basicInfo.location}`);
 
     // Step 3: Extract business details
     console.log(`  [${index + 1}] Step 3: Extracting business, message, footnote, title...`);
-    const businessInfo = await extractBusinessInfo(scraped.content, basicInfo);
+    const businessInfo = await extractBusinessInfo(contentForExtraction, basicInfo);
 
     // Step 4: Extract key metrics
     console.log(`  [${index + 1}] Step 4: Extracting key metrics...`);
-    const metricsInfo = await extractKeyMetrics(scraped.content, {
+    const metricsInfo = await extractKeyMetrics(contentForExtraction, {
       company_name: basicInfo.company_name,
       business: businessInfo.business
     });
 
     // Step 4b: Extract products/applications breakdown for right table
     console.log(`  [${index + 1}] Step 4b: Extracting products/applications breakdown...`);
-    const productsBreakdown = await extractProductsBreakdown(scraped.content, {
+    const productsBreakdown = await extractProductsBreakdown(contentForExtraction, {
       company_name: basicInfo.company_name,
       business: businessInfo.business
     });
@@ -4141,7 +4333,43 @@ async function processSingleWebsite(website, index, total) {
     }
 
     // Step 6: Run AI validator to compare extraction vs source and fix issues
-    companyData = await reviewAndCleanData(companyData, scraped.content);
+    // Pass marked content if available (more focused), otherwise use raw content
+    const validatorResult = await reviewAndCleanData(companyData, contentForExtraction, markerResult?.markers);
+    companyData = validatorResult.data;
+
+    // Step 6b: ITERATIVE EXTRACTION - If validator found critical issues, re-extract once
+    // Check if we still have gaps after first pass
+    const metricsCount = companyData.key_metrics?.length || 0;
+    const hasLocation = companyData.location && companyData.location.trim().length > 0;
+    const needsReExtraction = validatorResult.issuesFound && (metricsCount < 2 || !hasLocation);
+
+    if (needsReExtraction) {
+      console.log(`  [${index + 1}] Step 6b: Re-extracting (found issues, metrics=${metricsCount}, hasLocation=${hasLocation})...`);
+
+      // Re-run metrics extraction with emphasis on what was missed
+      const reExtractedMetrics = await extractKeyMetrics(contentForExtraction, {
+        company_name: companyData.company_name,
+        business: companyData.business,
+        previousMetrics: companyData.key_metrics,  // Tell it what we already have
+        focusOn: validatorResult.missedItems || []  // Tell it what to look for
+      });
+
+      // Merge new metrics with existing (avoid duplicates)
+      if (reExtractedMetrics.key_metrics?.length > 0) {
+        const existingLabels = new Set((companyData.key_metrics || []).map(m => m.label?.toLowerCase()));
+        const newMetrics = reExtractedMetrics.key_metrics.filter(m =>
+          !existingLabels.has(m.label?.toLowerCase())
+        );
+        if (newMetrics.length > 0) {
+          console.log(`  [${index + 1}] Added ${newMetrics.length} new metrics from re-extraction`);
+          companyData.key_metrics = [...(companyData.key_metrics || []), ...newMetrics];
+        }
+      }
+
+      // Re-run validator one more time to catch anything else
+      const finalValidation = await reviewAndCleanData(companyData, contentForExtraction, markerResult?.markers);
+      companyData = finalValidation.data;
+    }
 
     // Step 7: HARD RULE - Filter out empty/meaningless Key Metrics
     // Remove metrics that say "No specific X stated", "Not specified", etc.
@@ -4171,7 +4399,8 @@ async function processSingleWebsite(website, index, total) {
 }
 
 // Process websites in parallel batches
-const PARALLEL_BATCH_SIZE = 4;
+// Reduced to 2 to avoid rate limits (each website now makes more API calls with Marker AI)
+const PARALLEL_BATCH_SIZE = 2;
 
 async function processWebsitesInParallel(websites) {
   const results = [];
