@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
+const { securityHeaders, rateLimiter, escapeHtml } = require('../shared/security');
 
 // ============ GLOBAL ERROR HANDLERS ============
 process.on('unhandledRejection', (reason, promise) => {
@@ -19,6 +20,8 @@ process.on('uncaughtException', (error) => {
 
 // ============ EXPRESS SETUP ============
 const app = express();
+app.use(securityHeaders);
+app.use(rateLimiter);
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
 

@@ -14,6 +14,7 @@ const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, Tab
 const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const Anthropic = require('@anthropic-ai/sdk');
 const JSZip = require('jszip');
+const { securityHeaders, rateLimiter, escapeHtml } = require('../shared/security');
 
 // ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
 // Memory logging helper for debugging Railway OOM issues
@@ -64,6 +65,8 @@ function ensureString(value, defaultValue = '') {
 }
 
 const app = express();
+app.use(securityHeaders);
+app.use(rateLimiter);
 app.use(cors());
 app.use(express.json({ limit: '100mb' }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
@@ -1556,9 +1559,9 @@ async function parallelValidation(companies, business, country, exclusion) {
 function buildEmailHTML(companies, business, country, exclusion) {
   let html = `
     <h2>Find Target Results</h2>
-    <p><strong>Business:</strong> ${business}</p>
-    <p><strong>Country:</strong> ${country}</p>
-    <p><strong>Exclusion:</strong> ${exclusion}</p>
+    <p><strong>Business:</strong> ${escapeHtml(business)}</p>
+    <p><strong>Country:</strong> ${escapeHtml(country)}</p>
+    <p><strong>Exclusion:</strong> ${escapeHtml(exclusion)}</p>
     <p><strong>Companies Found:</strong> ${companies.length}</p>
     <br>
     <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
@@ -1568,7 +1571,7 @@ function buildEmailHTML(companies, business, country, exclusion) {
       <tbody>
   `;
   companies.forEach((c, i) => {
-    html += `<tr><td>${i + 1}</td><td>${c.company_name}</td><td><a href="${c.website}">${c.website}</a></td><td>${c.hq}</td></tr>`;
+    html += `<tr><td>${i + 1}</td><td>${escapeHtml(c.company_name)}</td><td><a href="${escapeHtml(c.website)}">${escapeHtml(c.website)}</a></td><td>${escapeHtml(c.hq)}</td></tr>`;
   });
   html += '</tbody></table>';
   return html;
