@@ -1,20 +1,11 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
-const http = require('http');
-const WebSocket = require('ws');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
-const pptxgen = require('pptxgenjs');
 const XLSX = require('xlsx');
-const multer = require('multer');
-const { createClient } = require('@deepgram/sdk');
-const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } = require('docx');
-const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
-const Anthropic = require('@anthropic-ai/sdk');
-const JSZip = require('jszip');
-const { securityHeaders, rateLimiter, escapeHtml } = require('../shared/security');
+const { S3Client } = require('@aws-sdk/client-s3');
+const { securityHeaders, rateLimiter } = require('../shared/security');
 const { requestLogger, healthCheck } = require('../shared/middleware');
 
 // ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
@@ -24,7 +15,9 @@ function logMemoryUsage(label = '') {
   const heapUsedMB = Math.round(mem.heapUsed / 1024 / 1024);
   const heapTotalMB = Math.round(mem.heapTotal / 1024 / 1024);
   const rssMB = Math.round(mem.rss / 1024 / 1024);
-  console.log(`  [Memory${label ? ': ' + label : ''}] Heap: ${heapUsedMB}/${heapTotalMB}MB, RSS: ${rssMB}MB`);
+  console.log(
+    `  [Memory${label ? ': ' + label : ''}] Heap: ${heapUsedMB}/${heapTotalMB}MB, RSS: ${rssMB}MB`
+  );
 }
 
 process.on('unhandledRejection', (reason, promise) => {
@@ -44,27 +37,6 @@ process.on('uncaughtException', (error) => {
   // Don't exit - keep the server running
 });
 
-// ============ TYPE SAFETY HELPERS ============
-// Ensure a value is a string (AI models may return objects/arrays instead of strings)
-function ensureString(value, defaultValue = '') {
-  if (typeof value === 'string') return value;
-  if (value === null || value === undefined) return defaultValue;
-  // Handle arrays - join with comma
-  if (Array.isArray(value)) return value.map(v => ensureString(v)).join(', ');
-  // Handle objects - try to extract meaningful string
-  if (typeof value === 'object') {
-    // Common patterns from AI responses
-    if (value.city && value.country) return `${value.city}, ${value.country}`;
-    if (value.text) return ensureString(value.text);
-    if (value.value) return ensureString(value.value);
-    if (value.name) return ensureString(value.name);
-    // Fallback: stringify
-    try { return JSON.stringify(value); } catch { return defaultValue; }
-  }
-  // Convert other types to string
-  return String(value);
-}
-
 const app = express();
 app.use(securityHeaders);
 app.use(rateLimiter);
@@ -73,61 +45,23 @@ app.use(requestLogger);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// Multer configuration for file uploads (memory storage)
-// Add 50MB limit to prevent OOM on Railway containers
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }  // 50MB max
-});
-
 // Check required environment variables
-const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
-const optionalEnvVars = ['SERPAPI_API_KEY', 'DEEPSEEK_API_KEY', 'DEEPGRAM_API_KEY', 'ANTHROPIC_API_KEY']; // Optional but recommended
-const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+const requiredEnvVars = [
+  'OPENAI_API_KEY',
+  'PERPLEXITY_API_KEY',
+  'GEMINI_API_KEY',
+  'SENDGRID_API_KEY',
+  'SENDER_EMAIL',
+];
+const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
 }
-if (!process.env.SERPAPI_API_KEY) {
-  console.warn('SERPAPI_API_KEY not set - Google search will be skipped');
-}
-if (!process.env.DEEPSEEK_API_KEY) {
-  console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
-}
-if (!process.env.DEEPGRAM_API_KEY) {
-  console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
-}
-// Note: ANTHROPIC_API_KEY is optional - V5 uses Gemini + ChatGPT for search/validation
 
 // Initialize OpenAI
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'missing'
+  apiKey: process.env.OPENAI_API_KEY || 'missing',
 });
-
-// Initialize Anthropic (Claude)
-const anthropic = process.env.ANTHROPIC_API_KEY
-  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  : null;
-
-// Initialize Deepgram
-const deepgram = process.env.DEEPGRAM_API_KEY ? createClient(process.env.DEEPGRAM_API_KEY) : null;
-
-// Initialize Cloudflare R2 (S3-compatible)
-const r2Client = (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY)
-  ? new S3Client({
-      region: 'auto',
-      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-      credentials: {
-        accessKeyId: process.env.R2_ACCESS_KEY_ID,
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-      }
-    })
-  : null;
-
-const R2_BUCKET = process.env.R2_BUCKET_NAME || 'dd-recordings';
-
-if (!r2Client) {
-  console.warn('R2 not configured - recordings will only be stored in memory. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME');
-}
 
 // Send email using SendGrid API
 async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) {
@@ -136,16 +70,16 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
     personalizations: [{ to: [{ email: to }] }],
     from: { email: senderEmail, name: 'Find Target' },
     subject: subject,
-    content: [{ type: 'text/html', value: html }]
+    content: [{ type: 'text/html', value: html }],
   };
 
   if (attachments) {
     const attachmentList = Array.isArray(attachments) ? attachments : [attachments];
-    emailData.attachments = attachmentList.map(a => ({
-      filename: a.filename || a.name,  // Support both 'filename' and 'name' properties
+    emailData.attachments = attachmentList.map((a) => ({
+      filename: a.filename || a.name, // Support both 'filename' and 'name' properties
       content: a.content,
       type: 'application/octet-stream',
-      disposition: 'attachment'
+      disposition: 'attachment',
     }));
   }
 
@@ -156,10 +90,10 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
       const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
-          'Content-Type': 'application/json'
+          Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(emailData)
+        body: JSON.stringify(emailData),
       });
 
       if (response.ok) {
@@ -186,7 +120,7 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
     if (attempt < maxRetries) {
       const delay = Math.pow(2, attempt) * 1000;
       console.log(`  Retrying email in ${delay / 1000}s...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 
@@ -198,16 +132,22 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
 // Gemini 2.5 Flash-Lite - cost-effective for general tasks ($0.10/$0.40 per 1M tokens)
 async function callGemini(prompt) {
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      timeout: 90000
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        timeout: 90000,
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Gemini 2.5 Flash-Lite HTTP error ${response.status}:`, errorText.substring(0, 200));
+      console.error(
+        `Gemini 2.5 Flash-Lite HTTP error ${response.status}:`,
+        errorText.substring(0, 200)
+      );
       return '';
     }
 
@@ -234,14 +174,14 @@ async function callPerplexity(prompt) {
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'sonar-pro',  // Upgraded from 'sonar' for better search results
-        messages: [{ role: 'user', content: prompt }]
+        model: 'sonar-pro', // Upgraded from 'sonar' for better search results
+        messages: [{ role: 'user', content: prompt }],
       }),
-      timeout: 90000
+      timeout: 90000,
     });
 
     if (!response.ok) {
@@ -273,7 +213,7 @@ async function callChatGPT(prompt) {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.2
+      temperature: 0.2,
     });
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -292,7 +232,7 @@ async function callOpenAISearch(prompt) {
   try {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-search-preview',
-      messages: [{ role: 'user', content: prompt }]
+      messages: [{ role: 'user', content: prompt }],
     });
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -310,11 +250,15 @@ async function callOpenAISearch(prompt) {
 // Detect domain/context from text for domain-aware translation
 function detectMeetingDomain(text) {
   const domains = {
-    financial: /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
-    legal: /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
-    medical: /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
-    technical: /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
-    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i
+    financial:
+      /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
+    legal:
+      /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
+    medical:
+      /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
+    technical:
+      /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
+    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i,
   };
 
   for (const [domain, pattern] of Object.entries(domains)) {
@@ -328,12 +272,17 @@ function detectMeetingDomain(text) {
 // Get domain-specific translation instructions
 function getDomainInstructions(domain) {
   const instructions = {
-    financial: 'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
-    legal: 'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
-    medical: 'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
-    technical: 'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
+    financial:
+      'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
+    legal:
+      'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
+    medical:
+      'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
+    technical:
+      'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
     hr: 'This is an HR/talent due diligence meeting. Preserve HR terminology and employment-related terms accurately.',
-    general: 'This is a business due diligence meeting. Preserve business terminology and professional tone.'
+    general:
+      'This is a business due diligence meeting. Preserve business terminology and professional tone.',
   };
   return instructions[domain] || instructions.general;
 }
@@ -341,22 +290,88 @@ function getDomainInstructions(domain) {
 // ============ SEARCH CONFIGURATION ============
 
 const CITY_MAP = {
-  'malaysia': ['Kuala Lumpur', 'Penang', 'Johor Bahru', 'Shah Alam', 'Petaling Jaya', 'Selangor', 'Ipoh', 'Klang', 'Subang', 'Melaka', 'Kuching', 'Kota Kinabalu'],
-  'singapore': ['Singapore', 'Jurong', 'Tuas', 'Woodlands'],
-  'thailand': ['Bangkok', 'Chonburi', 'Rayong', 'Samut Prakan', 'Ayutthaya', 'Chiang Mai', 'Pathum Thani', 'Nonthaburi', 'Samut Sakhon'],
-  'indonesia': ['Jakarta', 'Surabaya', 'Bandung', 'Medan', 'Bekasi', 'Tangerang', 'Semarang', 'Sidoarjo', 'Cikarang', 'Karawang', 'Bogor'],
-  'vietnam': ['Ho Chi Minh City', 'Hanoi', 'Da Nang', 'Hai Phong', 'Binh Duong', 'Dong Nai', 'Long An', 'Ba Ria', 'Can Tho'],
-  'philippines': ['Manila', 'Cebu', 'Davao', 'Quezon City', 'Makati', 'Laguna', 'Cavite', 'Batangas', 'Bulacan'],
-  'southeast asia': ['Kuala Lumpur', 'Singapore', 'Bangkok', 'Jakarta', 'Ho Chi Minh City', 'Manila', 'Penang', 'Johor Bahru', 'Surabaya', 'Hanoi']
+  malaysia: [
+    'Kuala Lumpur',
+    'Penang',
+    'Johor Bahru',
+    'Shah Alam',
+    'Petaling Jaya',
+    'Selangor',
+    'Ipoh',
+    'Klang',
+    'Subang',
+    'Melaka',
+    'Kuching',
+    'Kota Kinabalu',
+  ],
+  singapore: ['Singapore', 'Jurong', 'Tuas', 'Woodlands'],
+  thailand: [
+    'Bangkok',
+    'Chonburi',
+    'Rayong',
+    'Samut Prakan',
+    'Ayutthaya',
+    'Chiang Mai',
+    'Pathum Thani',
+    'Nonthaburi',
+    'Samut Sakhon',
+  ],
+  indonesia: [
+    'Jakarta',
+    'Surabaya',
+    'Bandung',
+    'Medan',
+    'Bekasi',
+    'Tangerang',
+    'Semarang',
+    'Sidoarjo',
+    'Cikarang',
+    'Karawang',
+    'Bogor',
+  ],
+  vietnam: [
+    'Ho Chi Minh City',
+    'Hanoi',
+    'Da Nang',
+    'Hai Phong',
+    'Binh Duong',
+    'Dong Nai',
+    'Long An',
+    'Ba Ria',
+    'Can Tho',
+  ],
+  philippines: [
+    'Manila',
+    'Cebu',
+    'Davao',
+    'Quezon City',
+    'Makati',
+    'Laguna',
+    'Cavite',
+    'Batangas',
+    'Bulacan',
+  ],
+  'southeast asia': [
+    'Kuala Lumpur',
+    'Singapore',
+    'Bangkok',
+    'Jakarta',
+    'Ho Chi Minh City',
+    'Manila',
+    'Penang',
+    'Johor Bahru',
+    'Surabaya',
+    'Hanoi',
+  ],
 };
 
 const LOCAL_SUFFIXES = {
-  'malaysia': ['Sdn Bhd', 'Berhad'],
-  'singapore': ['Pte Ltd', 'Private Limited'],
-  'thailand': ['Co Ltd', 'Co., Ltd.'],
-  'indonesia': ['PT', 'CV'],
-  'vietnam': ['Co Ltd', 'JSC', 'Công ty'],
-  'philippines': ['Inc', 'Corporation']
+  malaysia: ['Sdn Bhd', 'Berhad'],
+  singapore: ['Pte Ltd', 'Private Limited'],
+  thailand: ['Co Ltd', 'Co., Ltd.'],
+  indonesia: ['PT', 'CV'],
+  vietnam: ['Co Ltd', 'JSC', 'Công ty'],
+  philippines: ['Inc', 'Corporation'],
 };
 
 // ============ WEBSITE VERIFICATION ============
@@ -368,7 +383,7 @@ async function verifyWebsite(url) {
     const response = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
       signal: controller.signal,
-      redirect: 'follow'
+      redirect: 'follow',
     });
     clearTimeout(timeout);
 
@@ -394,10 +409,10 @@ async function verifyWebsite(url) {
       'hugedomains',
       'afternic',
       'domain expired',
-      'this site can\'t be reached',
+      "this site can't be reached",
       'page not found',
       '404 not found',
-      'website not found'
+      'website not found',
     ];
 
     for (const sign of parkedSigns) {
@@ -435,15 +450,16 @@ async function fetchWebsite(url) {
     try {
       const response = await fetch(targetUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.9',
           'Accept-Encoding': 'gzip, deflate, br',
-          'Connection': 'keep-alive',
-          'Cache-Control': 'no-cache'
+          Connection: 'keep-alive',
+          'Cache-Control': 'no-cache',
         },
         signal: controller.signal,
-        redirect: 'follow'
+        redirect: 'follow',
       });
       clearTimeout(timeout);
       return response;
@@ -456,10 +472,14 @@ async function fetchWebsite(url) {
   // Helper to extract text from HTML
   function extractText(html) {
     // First extract meta description and title which often contain business info
-    const metaDesc = html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)?.[1] || '';
-    const metaKeywords = html.match(/<meta[^>]*name=["']keywords["'][^>]*content=["']([^"']+)["']/i)?.[1] || '';
+    const metaDesc =
+      html.match(/<meta[^>]*name=["']description["'][^>]*content=["']([^"']+)["']/i)?.[1] || '';
+    const metaKeywords =
+      html.match(/<meta[^>]*name=["']keywords["'][^>]*content=["']([^"']+)["']/i)?.[1] || '';
     const title = html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1] || '';
-    const ogDesc = html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i)?.[1] || '';
+    const ogDesc =
+      html.match(/<meta[^>]*property=["']og:description["'][^>]*content=["']([^"']+)["']/i)?.[1] ||
+      '';
 
     // Extract text from body
     const bodyText = html
@@ -549,7 +569,7 @@ async function fetchWebsite(url) {
         console.log(`  [fetchWebsite] ${targetUrl} - ERROR: ${e.message}`);
         // Wait before retry
         if (attempt < 2) {
-          await new Promise(r => setTimeout(r, 2000));
+          await new Promise((r) => setTimeout(r, 2000));
         }
       }
     }
@@ -566,8 +586,8 @@ function parseCompanyList(text) {
   if (!text) return [];
   return text
     .split(/[\n\r]+/)
-    .map(line => line.trim())
-    .filter(line => line.length > 0 && line.length < 200);
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0 && line.length < 200);
 }
 
 // Parse countries from text
@@ -575,8 +595,8 @@ function parseCountries(text) {
   if (!text) return [];
   return text
     .split(/[\n\r]+/)
-    .map(line => line.trim())
-    .filter(line => line.length > 0);
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
 }
 
 // Check if URL is a valid company website (not social media, maps, directories)
@@ -585,8 +605,15 @@ function isValidCompanyWebsite(url) {
   const urlLower = url.toLowerCase();
 
   // Block PDFs and document files
-  if (urlLower.endsWith('.pdf') || urlLower.includes('.pdf?') || urlLower.includes('.pdf#')) return false;
-  if (urlLower.endsWith('.doc') || urlLower.endsWith('.docx') || urlLower.endsWith('.xls') || urlLower.endsWith('.xlsx')) return false;
+  if (urlLower.endsWith('.pdf') || urlLower.includes('.pdf?') || urlLower.includes('.pdf#'))
+    return false;
+  if (
+    urlLower.endsWith('.doc') ||
+    urlLower.endsWith('.docx') ||
+    urlLower.endsWith('.xls') ||
+    urlLower.endsWith('.xlsx')
+  )
+    return false;
 
   const invalidPatterns = [
     'google.com/maps',
@@ -627,7 +654,7 @@ function isValidCompanyWebsite(url) {
     'kpmg.com',
     'marketwatch.com',
     'yahoo.com/finance',
-    'finance.yahoo'
+    'finance.yahoo',
   ];
 
   for (const pattern of invalidPatterns) {
@@ -670,7 +697,7 @@ async function findWebsiteViaSerpAPI(companyName, countries) {
       q: query,
       api_key: process.env.SERPAPI_API_KEY,
       engine: 'google',
-      num: 15
+      num: 15,
     });
 
     const response = await fetch(`https://serpapi.com/search?${params}`, { timeout: 15000 });
@@ -682,10 +709,10 @@ async function findWebsiteViaSerpAPI(companyName, countries) {
           const titleLower = (result.title || '').toLowerCase();
           const snippetLower = (result.snippet || '').toLowerCase();
           const companyLower = companyName.toLowerCase();
-          const companyWords = companyLower.split(/\s+/).filter(w => w.length > 2);
+          const companyWords = companyLower.split(/\s+/).filter((w) => w.length > 2);
 
-          const matchCount = companyWords.filter(w =>
-            titleLower.includes(w) || snippetLower.includes(w)
+          const matchCount = companyWords.filter(
+            (w) => titleLower.includes(w) || snippetLower.includes(w)
           ).length;
 
           if (matchCount >= Math.min(2, companyWords.length)) {
@@ -791,7 +818,7 @@ async function findCompanyWebsiteMulti(companyName, countries) {
     findWebsiteViaSerpAPI(companyName, countries),
     findWebsiteViaPerplexity(companyName, countries),
     findWebsiteViaOpenAISearch(companyName, countries),
-    findWebsiteViaGemini(companyName, countries)
+    findWebsiteViaGemini(companyName, countries),
   ]);
 
   console.log(`    SerpAPI: ${serpResult || 'not found'}`);
@@ -799,7 +826,7 @@ async function findCompanyWebsiteMulti(companyName, countries) {
   console.log(`    OpenAI Search: ${openaiResult || 'not found'}`);
   console.log(`    Gemini: ${geminiResult || 'not found'}`);
 
-  const candidates = [serpResult, perpResult, openaiResult, geminiResult].filter(url => url);
+  const candidates = [serpResult, perpResult, openaiResult, geminiResult].filter((url) => url);
 
   if (candidates.length === 0) {
     console.log(`    No website found for ${companyName}`);
@@ -862,11 +889,13 @@ async function validateCompanyBusinessStrict(company, targetBusiness, pageText) 
     return {
       in_scope: false,
       reason: 'Could not fetch sufficient website content',
-      business_description: 'Unable to determine - website inaccessible or insufficient content'
+      business_description: 'Unable to determine - website inaccessible or insufficient content',
     };
   }
 
-  const systemPrompt = (model) => `You are a company validator. Determine if the company matches the target business criteria STRICTLY based on the website content provided.
+  const systemPrompt = (
+    model
+  ) => `You are a company validator. Determine if the company matches the target business criteria STRICTLY based on the website content provided.
 
 TARGET BUSINESS: "${targetBusiness}"
 
@@ -883,7 +912,7 @@ OUTPUT: Return JSON: {"in_scope": true/false, "confidence": "high/medium/low", "
 WEBSITE: ${company.website}
 
 WEBSITE CONTENT:
-${(typeof pageText === 'string' && pageText) ? pageText.substring(0, 10000) : 'Could not fetch website - validate by company name only'}`;
+${typeof pageText === 'string' && pageText ? pageText.substring(0, 10000) : 'Could not fetch website - validate by company name only'}`;
 
   try {
     // First pass: gpt-4o-mini (fast and cheap)
@@ -891,9 +920,9 @@ ${(typeof pageText === 'string' && pageText) ? pageText.substring(0, 10000) : 'C
       model: 'gpt-4o-mini',
       messages: [
         { role: 'system', content: systemPrompt('gpt-4o-mini') },
-        { role: 'user', content: userPrompt }
+        { role: 'user', content: userPrompt },
       ],
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
     });
 
     const result = JSON.parse(firstPass.choices[0].message.content);
@@ -908,40 +937,46 @@ ${(typeof pageText === 'string' && pageText) ? pageText.substring(0, 10000) : 'C
       result.reason?.toLowerCase().includes('not clear');
 
     if (needsSecondPass) {
-      console.log(`  → Re-validating ${company.company_name} with gpt-4o (confidence: ${result.confidence})`);
+      console.log(
+        `  → Re-validating ${company.company_name} with gpt-4o (confidence: ${result.confidence})`
+      );
 
       // Second pass: gpt-4o (more accurate)
       const secondPass = await openai.chat.completions.create({
         model: 'gpt-4o',
         messages: [
           { role: 'system', content: systemPrompt('gpt-4o') },
-          { role: 'user', content: userPrompt }
+          { role: 'user', content: userPrompt },
         ],
-        response_format: { type: 'json_object' }
+        response_format: { type: 'json_object' },
       });
 
       const finalResult = JSON.parse(secondPass.choices[0].message.content);
       return {
         in_scope: finalResult.in_scope,
         reason: finalResult.reason,
-        business_description: finalResult.business_description
+        business_description: finalResult.business_description,
       };
     }
 
     return {
       in_scope: result.in_scope,
       reason: result.reason,
-      business_description: result.business_description
+      business_description: result.business_description,
     };
   } catch (e) {
     console.error(`Error validating ${company.company_name}:`, e.message);
-    return { in_scope: false, reason: 'Validation error', business_description: 'Error during validation' };
+    return {
+      in_scope: false,
+      reason: 'Validation error',
+      business_description: 'Error during validation',
+    };
   }
 }
 
 // Build validation results as Excel file (returns base64 string)
 function buildValidationExcel(companies, targetBusiness, countries, outputOption) {
-  const inScopeCompanies = companies.filter(c => c.in_scope);
+  const inScopeCompanies = companies.filter((c) => c.in_scope);
 
   // Create workbook
   const wb = XLSX.utils.book_new();
@@ -950,34 +985,34 @@ function buildValidationExcel(companies, targetBusiness, countries, outputOption
   // Sheet 1: In-Scope Only
   const inScopeData = inScopeCompanies.map((c, i) => ({
     '#': i + 1,
-    'Company': c.company_name,
-    'Website': c.website || 'Not found',
-    'Business Description': c.business_description || '-'
+    Company: c.company_name,
+    Website: c.website || 'Not found',
+    'Business Description': c.business_description || '-',
   }));
   const inScopeSheet = XLSX.utils.json_to_sheet(inScopeData);
   inScopeSheet['!cols'] = [
-    { wch: 5 },   // #
-    { wch: 40 },  // Company
-    { wch: 50 },  // Website
-    { wch: 60 }   // Business Description
+    { wch: 5 }, // #
+    { wch: 40 }, // Company
+    { wch: 50 }, // Website
+    { wch: 60 }, // Business Description
   ];
   XLSX.utils.book_append_sheet(wb, inScopeSheet, 'In-Scope Only');
 
   // Sheet 2: All Companies with status
   const allData = companies.map((c, i) => ({
     '#': i + 1,
-    'Company': c.company_name,
-    'Website': c.website || 'Not found',
-    'Status': c.in_scope ? 'IN SCOPE' : 'OUT OF SCOPE',
-    'Business Description': c.business_description || c.reason || '-'
+    Company: c.company_name,
+    Website: c.website || 'Not found',
+    Status: c.in_scope ? 'IN SCOPE' : 'OUT OF SCOPE',
+    'Business Description': c.business_description || c.reason || '-',
   }));
   const allSheet = XLSX.utils.json_to_sheet(allData);
   allSheet['!cols'] = [
-    { wch: 5 },   // #
-    { wch: 40 },  // Company
-    { wch: 50 },  // Website
-    { wch: 15 },  // Status
-    { wch: 60 }   // Business Description
+    { wch: 5 }, // #
+    { wch: 40 }, // Company
+    { wch: 50 }, // Website
+    { wch: 15 }, // Status
+    { wch: 60 }, // Business Description
   ];
   XLSX.utils.book_append_sheet(wb, allSheet, 'All Companies');
 
@@ -1003,7 +1038,7 @@ app.post('/api/validation', async (req, res) => {
 
   res.json({
     success: true,
-    message: 'Validation request received. Results will be emailed within 10 minutes.'
+    message: 'Validation request received. Results will be emailed within 10 minutes.',
   });
 
   try {
@@ -1016,7 +1051,11 @@ app.post('/api/validation', async (req, res) => {
     console.log(`Parsed ${companyList.length} companies and ${countryList.length} countries`);
 
     if (companyList.length === 0) {
-      await sendEmail(Email, 'Speeda List Validation - No Companies', '<p>No valid company names were found in your input.</p>');
+      await sendEmail(
+        Email,
+        'Speeda List Validation - No Companies',
+        '<p>No valid company names were found in your input.</p>'
+      );
       return;
     }
 
@@ -1026,55 +1065,61 @@ app.post('/api/validation', async (req, res) => {
 
     for (let i = 0; i < companyList.length; i += batchSize) {
       const batch = companyList.slice(i, i + batchSize);
-      console.log(`\nProcessing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(companyList.length / batchSize)} (${batch.length} companies)`);
+      console.log(
+        `\nProcessing batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(companyList.length / batchSize)} (${batch.length} companies)`
+      );
 
-      const batchResults = await Promise.all(batch.map(async (companyName) => {
-        const website = await findCompanyWebsiteMulti(companyName, countryList);
+      const batchResults = await Promise.all(
+        batch.map(async (companyName) => {
+          const website = await findCompanyWebsiteMulti(companyName, countryList);
 
-        if (!website) {
-          return {
-            company_name: companyName,
-            website: null,
-            in_scope: false,
-            reason: 'Official website not found',
-            business_description: 'Could not locate official company website'
-          };
-        }
+          if (!website) {
+            return {
+              company_name: companyName,
+              website: null,
+              in_scope: false,
+              reason: 'Official website not found',
+              business_description: 'Could not locate official company website',
+            };
+          }
 
-        const pageText = await fetchWebsite(website);
+          const pageText = await fetchWebsite(website);
 
-        console.log(`  Fetched pageText for ${companyName}: type=${typeof pageText}, length=${pageText?.length || 0}`);
+          console.log(
+            `  Fetched pageText for ${companyName}: type=${typeof pageText}, length=${pageText?.length || 0}`
+          );
 
-        if (!pageText || pageText.length < 100) {
+          if (!pageText || pageText.length < 100) {
+            return {
+              company_name: companyName,
+              website,
+              in_scope: false,
+              reason: 'Website inaccessible or no content',
+              business_description: 'Could not fetch website content for validation',
+            };
+          }
+
+          const validation = await validateCompanyBusinessStrict(
+            { company_name: companyName, website },
+            TargetBusiness,
+            pageText
+          );
+
           return {
             company_name: companyName,
             website,
-            in_scope: false,
-            reason: 'Website inaccessible or no content',
-            business_description: 'Could not fetch website content for validation'
+            in_scope: validation.in_scope,
+            reason: validation.reason,
+            business_description: validation.business_description,
           };
-        }
-
-        const validation = await validateCompanyBusinessStrict(
-          { company_name: companyName, website },
-          TargetBusiness,
-          pageText
-        );
-
-        return {
-          company_name: companyName,
-          website,
-          in_scope: validation.in_scope,
-          reason: validation.reason,
-          business_description: validation.business_description
-        };
-      }));
+        })
+      );
 
       results.push(...batchResults);
       console.log(`Completed: ${results.length}/${companyList.length}`);
     }
 
-    const inScopeCount = results.filter(r => r.in_scope).length;
+    const inScopeCount = results.filter((r) => r.in_scope).length;
 
     // Build Excel file
     const excelBase64 = buildValidationExcel(results, TargetBusiness, countryList, outputOption);
@@ -1095,7 +1140,7 @@ app.post('/api/validation', async (req, res) => {
       emailBody,
       {
         content: excelBase64,
-        name: `validation-results-${new Date().toISOString().split('T')[0]}.xlsx`
+        name: `validation-results-${new Date().toISOString().split('T')[0]}.xlsx`,
       }
     );
 
@@ -1105,7 +1150,6 @@ app.post('/api/validation', async (req, res) => {
     console.log(`Total companies: ${results.length}, In-scope: ${inScopeCount}`);
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(50));
-
   } catch (error) {
     console.error('Validation error:', error);
     try {
@@ -1115,7 +1159,6 @@ app.post('/api/validation', async (req, res) => {
     }
   }
 });
-
 
 // ============ HEALTH CHECK ============
 app.get('/health', healthCheck('validation'));

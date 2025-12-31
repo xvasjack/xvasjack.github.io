@@ -8,8 +8,24 @@ const fetch = require('node-fetch');
 const XLSX = require('xlsx');
 const multer = require('multer');
 const { createClient } = require('@deepgram/sdk');
-const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } = require('docx');
-const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const {
+  Document,
+  Packer,
+  Paragraph,
+  TextRun,
+  HeadingLevel,
+  Table,
+  TableRow,
+  TableCell,
+  WidthType,
+  BorderStyle,
+} = require('docx');
+const {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+} = require('@aws-sdk/client-s3');
 const Anthropic = require('@anthropic-ai/sdk');
 const JSZip = require('jszip');
 const { securityHeaders, rateLimiter, sanitizePath, escapeHtml } = require('../shared/security');
@@ -22,7 +38,9 @@ function logMemoryUsage(label = '') {
   const heapUsedMB = Math.round(mem.heapUsed / 1024 / 1024);
   const heapTotalMB = Math.round(mem.heapTotal / 1024 / 1024);
   const rssMB = Math.round(mem.rss / 1024 / 1024);
-  console.log(`  [Memory${label ? ': ' + label : ''}] Heap: ${heapUsedMB}/${heapTotalMB}MB, RSS: ${rssMB}MB`);
+  console.log(
+    `  [Memory${label ? ': ' + label : ''}] Heap: ${heapUsedMB}/${heapTotalMB}MB, RSS: ${rssMB}MB`
+  );
 }
 
 process.on('unhandledRejection', (reason, promise) => {
@@ -48,7 +66,7 @@ function ensureString(value, defaultValue = '') {
   if (typeof value === 'string') return value;
   if (value === null || value === undefined) return defaultValue;
   // Handle arrays - join with comma
-  if (Array.isArray(value)) return value.map(v => ensureString(v)).join(', ');
+  if (Array.isArray(value)) return value.map((v) => ensureString(v)).join(', ');
   // Handle objects - try to extract meaningful string
   if (typeof value === 'object') {
     // Common patterns from AI responses
@@ -57,7 +75,11 @@ function ensureString(value, defaultValue = '') {
     if (value.value) return ensureString(value.value);
     if (value.name) return ensureString(value.name);
     // Fallback: stringify
-    try { return JSON.stringify(value); } catch { return defaultValue; }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return defaultValue;
+    }
   }
   // Convert other types to string
   return String(value);
@@ -75,13 +97,24 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 // Add 50MB limit to prevent OOM on Railway containers
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }  // 50MB max
+  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
 });
 
 // Check required environment variables
-const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
-const optionalEnvVars = ['SERPAPI_API_KEY', 'DEEPSEEK_API_KEY', 'DEEPGRAM_API_KEY', 'ANTHROPIC_API_KEY']; // Optional but recommended
-const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+const requiredEnvVars = [
+  'OPENAI_API_KEY',
+  'PERPLEXITY_API_KEY',
+  'GEMINI_API_KEY',
+  'SENDGRID_API_KEY',
+  'SENDER_EMAIL',
+];
+const optionalEnvVars = [
+  'SERPAPI_API_KEY',
+  'DEEPSEEK_API_KEY',
+  'DEEPGRAM_API_KEY',
+  'ANTHROPIC_API_KEY',
+]; // Optional but recommended
+const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
 }
@@ -98,7 +131,7 @@ if (!process.env.DEEPGRAM_API_KEY) {
 
 // Initialize OpenAI
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'missing'
+  apiKey: process.env.OPENAI_API_KEY || 'missing',
 });
 
 // Initialize Anthropic (Claude)
@@ -110,21 +143,24 @@ const anthropic = process.env.ANTHROPIC_API_KEY
 const deepgram = process.env.DEEPGRAM_API_KEY ? createClient(process.env.DEEPGRAM_API_KEY) : null;
 
 // Initialize Cloudflare R2 (S3-compatible)
-const r2Client = (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY)
-  ? new S3Client({
-      region: 'auto',
-      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-      credentials: {
-        accessKeyId: process.env.R2_ACCESS_KEY_ID,
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-      }
-    })
-  : null;
+const r2Client =
+  process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY
+    ? new S3Client({
+        region: 'auto',
+        endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+        credentials: {
+          accessKeyId: process.env.R2_ACCESS_KEY_ID,
+          secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+        },
+      })
+    : null;
 
 const R2_BUCKET = process.env.R2_BUCKET_NAME || 'dd-recordings';
 
 if (!r2Client) {
-  console.warn('R2 not configured - recordings will only be stored in memory. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME');
+  console.warn(
+    'R2 not configured - recordings will only be stored in memory. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME'
+  );
 }
 
 // R2 Upload function
@@ -139,7 +175,7 @@ async function uploadToR2(key, data, contentType = 'audio/webm') {
       Bucket: R2_BUCKET,
       Key: key,
       Body: data,
-      ContentType: contentType
+      ContentType: contentType,
     });
     await r2Client.send(command);
     console.log(`[R2] Uploaded ${key} (${data.length} bytes)`);
@@ -159,7 +195,7 @@ async function downloadFromR2(key) {
   try {
     const command = new GetObjectCommand({
       Bucket: R2_BUCKET,
-      Key: key
+      Key: key,
     });
     const response = await r2Client.send(command);
     const chunks = [];
@@ -175,8 +211,8 @@ async function downloadFromR2(key) {
 
 // Convert PCM to WAV format (adds header for playability)
 function pcmToWav(pcmBuffer, sampleRate = 16000, numChannels = 1, bitsPerSample = 16) {
-  const byteRate = sampleRate * numChannels * bitsPerSample / 8;
-  const blockAlign = numChannels * bitsPerSample / 8;
+  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+  const blockAlign = (numChannels * bitsPerSample) / 8;
   const dataSize = pcmBuffer.length;
   const headerSize = 44;
   const fileSize = headerSize + dataSize;
@@ -191,7 +227,7 @@ function pcmToWav(pcmBuffer, sampleRate = 16000, numChannels = 1, bitsPerSample 
   // fmt chunk
   wavBuffer.write('fmt ', 12);
   wavBuffer.writeUInt32LE(16, 16); // fmt chunk size
-  wavBuffer.writeUInt16LE(1, 20);  // audio format (1 = PCM)
+  wavBuffer.writeUInt16LE(1, 20); // audio format (1 = PCM)
   wavBuffer.writeUInt16LE(numChannels, 22);
   wavBuffer.writeUInt32LE(sampleRate, 24);
   wavBuffer.writeUInt32LE(byteRate, 28);
@@ -219,14 +255,14 @@ async function extractDocxText(base64Content) {
 
     // Extract text from XML, removing tags
     const text = documentXml
-      .replace(/<w:t[^>]*>([^<]*)<\/w:t>/g, '$1')  // Extract text content
-      .replace(/<w:p[^>]*>/g, '\n')  // Paragraph breaks
-      .replace(/<[^>]+>/g, '')  // Remove remaining tags
+      .replace(/<w:t[^>]*>([^<]*)<\/w:t>/g, '$1') // Extract text content
+      .replace(/<w:p[^>]*>/g, '\n') // Paragraph breaks
+      .replace(/<[^>]+>/g, '') // Remove remaining tags
       .replace(/&amp;/g, '&')
       .replace(/&lt;/g, '<')
       .replace(/&gt;/g, '>')
       .replace(/&quot;/g, '"')
-      .replace(/\n\s*\n/g, '\n\n')  // Clean up multiple newlines
+      .replace(/\n\s*\n/g, '\n\n') // Clean up multiple newlines
       .trim();
 
     console.log(`[DD] Extracted ${text.length} chars from DOCX`);
@@ -253,9 +289,9 @@ async function extractPptxText(base64Content) {
         if (slideXml) {
           // Extract text from slide
           const slideText = slideXml
-            .replace(/<a:t>([^<]*)<\/a:t>/g, '$1 ')  // Extract text
-            .replace(/<a:p[^>]*>/g, '\n')  // Paragraph breaks
-            .replace(/<[^>]+>/g, '')  // Remove tags
+            .replace(/<a:t>([^<]*)<\/a:t>/g, '$1 ') // Extract text
+            .replace(/<a:p[^>]*>/g, '\n') // Paragraph breaks
+            .replace(/<[^>]+>/g, '') // Remove tags
             .replace(/&amp;/g, '&')
             .replace(/&lt;/g, '<')
             .replace(/&gt;/g, '>')
@@ -310,16 +346,16 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
     personalizations: [{ to: [{ email: to }] }],
     from: { email: senderEmail, name: 'Find Target' },
     subject: subject,
-    content: [{ type: 'text/html', value: html }]
+    content: [{ type: 'text/html', value: html }],
   };
 
   if (attachments) {
     const attachmentList = Array.isArray(attachments) ? attachments : [attachments];
-    emailData.attachments = attachmentList.map(a => ({
-      filename: a.filename || a.name,  // Support both 'filename' and 'name' properties
+    emailData.attachments = attachmentList.map((a) => ({
+      filename: a.filename || a.name, // Support both 'filename' and 'name' properties
       content: a.content,
       type: 'application/octet-stream',
-      disposition: 'attachment'
+      disposition: 'attachment',
     }));
   }
 
@@ -330,10 +366,10 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
       const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
-          'Content-Type': 'application/json'
+          Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
+          'Content-Type': 'application/json',
         },
-        body: JSON.stringify(emailData)
+        body: JSON.stringify(emailData),
       });
 
       if (response.ok) {
@@ -360,7 +396,7 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
     if (attempt < maxRetries) {
       const delay = Math.pow(2, attempt) * 1000;
       console.log(`  Retrying email in ${delay / 1000}s...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
 
@@ -372,16 +408,22 @@ async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) 
 // Gemini 2.5 Flash-Lite - cost-effective for general tasks ($0.10/$0.40 per 1M tokens)
 async function callGemini(prompt) {
   try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      timeout: 90000
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        timeout: 90000,
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Gemini 2.5 Flash-Lite HTTP error ${response.status}:`, errorText.substring(0, 200));
+      console.error(
+        `Gemini 2.5 Flash-Lite HTTP error ${response.status}:`,
+        errorText.substring(0, 200)
+      );
       return '';
     }
 
@@ -413,7 +455,7 @@ async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
     const requestOptions = {
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.1
+      temperature: 0.1,
     };
 
     // Add JSON mode if requested
@@ -441,8 +483,8 @@ async function callGemini2Pro(prompt, jsonMode = false) {
     const requestBody = {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
-        temperature: 0.0  // Zero temperature for deterministic validation
-      }
+        temperature: 0.0, // Zero temperature for deterministic validation
+      },
     };
 
     if (jsonMode) {
@@ -450,12 +492,15 @@ async function callGemini2Pro(prompt, jsonMode = false) {
     }
 
     // Using stable gemini-2.5-pro (upgraded from deprecated gemini-2.5-pro-preview-06-05)
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-      timeout: 180000  // Longer timeout for Pro model
-    });
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+        timeout: 180000, // Longer timeout for Pro model
+      }
+    );
     const data = await response.json();
 
     if (data.error) {
@@ -481,7 +526,7 @@ async function callClaude(prompt, systemPrompt = null, jsonMode = false) {
     const requestParams = {
       model: 'claude-sonnet-4-20250514',
       max_tokens: 8192,
-      messages
+      messages,
     };
 
     if (systemPrompt) {
@@ -503,14 +548,14 @@ async function callPerplexity(prompt) {
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'sonar-pro',  // Upgraded from 'sonar' for better search results
-        messages: [{ role: 'user', content: prompt }]
+        model: 'sonar-pro', // Upgraded from 'sonar' for better search results
+        messages: [{ role: 'user', content: prompt }],
       }),
-      timeout: 90000
+      timeout: 90000,
     });
 
     if (!response.ok) {
@@ -542,7 +587,7 @@ async function callChatGPT(prompt) {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.2
+      temperature: 0.2,
     });
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -561,7 +606,7 @@ async function callOpenAISearch(prompt) {
   try {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-search-preview',
-      messages: [{ role: 'user', content: prompt }]
+      messages: [{ role: 'user', content: prompt }],
     });
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -586,10 +631,10 @@ async function callSerpAPI(query) {
       q: query,
       api_key: process.env.SERPAPI_API_KEY,
       engine: 'google',
-      num: 100 // Get more results
+      num: 100, // Get more results
     });
     const response = await fetch(`https://serpapi.com/search?${params}`, {
-      timeout: 30000
+      timeout: 30000,
     });
     const data = await response.json();
 
@@ -600,7 +645,7 @@ async function callSerpAPI(query) {
         results.push({
           title: result.title || '',
           link: result.link || '',
-          snippet: result.snippet || ''
+          snippet: result.snippet || '',
         });
       }
     }
@@ -621,16 +666,16 @@ async function callDeepSeek(prompt, maxTokens = 4000) {
     const response = await fetch('https://api.deepseek.com/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
         model: 'deepseek-chat',
         messages: [{ role: 'user', content: prompt }],
         max_tokens: maxTokens,
-        temperature: 0.3
+        temperature: 0.3,
       }),
-      timeout: 120000
+      timeout: 120000,
     });
     const data = await response.json();
     if (data.error) {
@@ -663,7 +708,7 @@ async function transcribeAudio(audioBase64, mimeType, language = 'auto') {
       'audio/m4a': 'm4a',
       'audio/mp4': 'm4a',
       'audio/ogg': 'ogg',
-      'audio/flac': 'flac'
+      'audio/flac': 'flac',
     };
     const ext = extMap[mimeType] || 'webm';
 
@@ -679,10 +724,10 @@ async function transcribeAudio(audioBase64, mimeType, language = 'auto') {
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        ...formData.getHeaders()
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        ...formData.getHeaders(),
       },
-      body: formData
+      body: formData,
     });
 
     const data = await response.json();
@@ -695,7 +740,7 @@ async function transcribeAudio(audioBase64, mimeType, language = 'auto') {
       text: data.text || '',
       language: data.language || 'unknown',
       duration: data.duration || 0,
-      segments: data.segments || []
+      segments: data.segments || [],
     };
   } catch (error) {
     console.error('Whisper transcription error:', error.message);
@@ -706,11 +751,15 @@ async function transcribeAudio(audioBase64, mimeType, language = 'auto') {
 // Detect domain/context from text for domain-aware translation
 function detectMeetingDomain(text) {
   const domains = {
-    financial: /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
-    legal: /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
-    medical: /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
-    technical: /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
-    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i
+    financial:
+      /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
+    legal:
+      /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
+    medical:
+      /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
+    technical:
+      /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
+    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i,
   };
 
   for (const [domain, pattern] of Object.entries(domains)) {
@@ -724,12 +773,17 @@ function detectMeetingDomain(text) {
 // Get domain-specific translation instructions
 function getDomainInstructions(domain) {
   const instructions = {
-    financial: 'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
-    legal: 'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
-    medical: 'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
-    technical: 'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
+    financial:
+      'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
+    legal:
+      'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
+    medical:
+      'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
+    technical:
+      'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
     hr: 'This is an HR/talent due diligence meeting. Preserve HR terminology and employment-related terms accurately.',
-    general: 'This is a business due diligence meeting. Preserve business terminology and professional tone.'
+    general:
+      'This is a business due diligence meeting. Preserve business terminology and professional tone.',
   };
   return instructions[domain] || instructions.general;
 }
@@ -751,13 +805,16 @@ async function translateText(text, targetLang = 'en', options = {}) {
     let contextSection = '';
     if (previousSegments.length > 0) {
       contextSection = `\n\nPrevious context (for reference only, do not translate these):
-${previousSegments.slice(-3).map((seg, i) => `[${i + 1}] ${seg}`).join('\n')}
+${previousSegments
+  .slice(-3)
+  .map((seg, i) => `[${i + 1}] ${seg}`)
+  .join('\n')}
 
 Now translate the following new segment, maintaining consistency with the context above:`;
     }
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',  // Use GPT-4o for better translation quality
+      model: 'gpt-4o', // Use GPT-4o for better translation quality
       messages: [
         {
           role: 'system',
@@ -770,14 +827,14 @@ Translate accurately while:
 - Keeping business/technical terms accurate
 - Maintaining consistency with any provided context
 - Not adding or omitting information
-Output only the translation, nothing else.`
+Output only the translation, nothing else.`,
         },
         {
           role: 'user',
-          content: contextSection ? `${contextSection}\n\n${text}` : text
-        }
+          content: contextSection ? `${contextSection}\n\n${text}` : text,
+        },
       ],
-      temperature: 0.3  // Balanced temperature for fluency while maintaining consistency
+      temperature: 0.3, // Balanced temperature for fluency while maintaining consistency
     });
     return response.choices[0].message.content || text;
   } catch (error) {
@@ -814,7 +871,7 @@ Be concise but capture all important information.`;
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.3,
-      max_tokens: 3000
+      max_tokens: 3000,
     });
     return response.choices[0].message.content || '';
   } catch (error) {
@@ -829,10 +886,12 @@ async function generateWordDocument(title, htmlContent, metadata = {}) {
   const sections = [];
 
   // Add title with Calibri font
-  sections.push(new Paragraph({
-    children: [new TextRun({ text: title, font: 'Calibri', size: 48, bold: true })],
-    spacing: { after: 400 }
-  }));
+  sections.push(
+    new Paragraph({
+      children: [new TextRun({ text: title, font: 'Calibri', size: 48, bold: true })],
+      spacing: { after: 400 },
+    })
+  );
 
   // Simple HTML to docx conversion
   const cleanHtml = htmlContent
@@ -886,26 +945,53 @@ async function generateWordDocument(title, htmlContent, metadata = {}) {
     if (!part) continue;
 
     if (part === 'H1' && parts[i + 1]) {
-      sections.push(new Paragraph({
-        children: [new TextRun({ text: parts[i + 1].replace('/H1', '').trim(), font: 'Calibri', size: 36, bold: true })],
-        spacing: { before: 400, after: 200 }
-      }));
+      sections.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: parts[i + 1].replace('/H1', '').trim(),
+              font: 'Calibri',
+              size: 36,
+              bold: true,
+            }),
+          ],
+          spacing: { before: 400, after: 200 },
+        })
+      );
       i++;
     } else if (part === 'H2' && parts[i + 1]) {
-      sections.push(new Paragraph({
-        children: [new TextRun({ text: parts[i + 1].replace('/H2', '').trim(), font: 'Calibri', size: 28, bold: true })],
-        spacing: { before: 300, after: 150 }
-      }));
+      sections.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: parts[i + 1].replace('/H2', '').trim(),
+              font: 'Calibri',
+              size: 28,
+              bold: true,
+            }),
+          ],
+          spacing: { before: 300, after: 150 },
+        })
+      );
       i++;
     } else if (part === 'H3' && parts[i + 1]) {
-      sections.push(new Paragraph({
-        children: [new TextRun({ text: parts[i + 1].replace('/H3', '').trim(), font: 'Calibri', size: 24, bold: true })],
-        spacing: { before: 200, after: 100 }
-      }));
+      sections.push(
+        new Paragraph({
+          children: [
+            new TextRun({
+              text: parts[i + 1].replace('/H3', '').trim(),
+              font: 'Calibri',
+              size: 24,
+              bold: true,
+            }),
+          ],
+          spacing: { before: 200, after: 100 },
+        })
+      );
       i++;
     } else if (!part.startsWith('/H')) {
       // Regular text
-      const lines = part.split('\n').filter(l => l.trim());
+      const lines = part.split('\n').filter((l) => l.trim());
       for (const line of lines) {
         const trimmedLine = line.trim();
         if (!trimmedLine) continue;
@@ -918,31 +1004,37 @@ async function generateWordDocument(title, htmlContent, metadata = {}) {
         const boldParts = trimmedLine.split('**');
         for (let j = 0; j < boldParts.length; j++) {
           if (boldParts[j]) {
-            children.push(new TextRun({
-              text: boldParts[j],
-              font: 'Calibri',
-              size: 22,
-              bold: j % 2 === 1,
-              highlight: isOnlineSource ? 'yellow' : undefined
-            }));
+            children.push(
+              new TextRun({
+                text: boldParts[j],
+                font: 'Calibri',
+                size: 22,
+                bold: j % 2 === 1,
+                highlight: isOnlineSource ? 'yellow' : undefined,
+              })
+            );
           }
         }
 
         if (children.length > 0) {
-          sections.push(new Paragraph({
-            children,
-            spacing: { after: 100 }
-          }));
+          sections.push(
+            new Paragraph({
+              children,
+              spacing: { after: 100 },
+            })
+          );
         }
       }
     }
   }
 
   const doc = new Document({
-    sections: [{
-      properties: {},
-      children: sections
-    }]
+    sections: [
+      {
+        properties: {},
+        children: sections,
+      },
+    ],
   });
 
   return await Packer.toBuffer(doc);
@@ -951,39 +1043,105 @@ async function generateWordDocument(title, htmlContent, metadata = {}) {
 // ============ SEARCH CONFIGURATION ============
 
 const CITY_MAP = {
-  'malaysia': ['Kuala Lumpur', 'Penang', 'Johor Bahru', 'Shah Alam', 'Petaling Jaya', 'Selangor', 'Ipoh', 'Klang', 'Subang', 'Melaka', 'Kuching', 'Kota Kinabalu'],
-  'singapore': ['Singapore', 'Jurong', 'Tuas', 'Woodlands'],
-  'thailand': ['Bangkok', 'Chonburi', 'Rayong', 'Samut Prakan', 'Ayutthaya', 'Chiang Mai', 'Pathum Thani', 'Nonthaburi', 'Samut Sakhon'],
-  'indonesia': ['Jakarta', 'Surabaya', 'Bandung', 'Medan', 'Bekasi', 'Tangerang', 'Semarang', 'Sidoarjo', 'Cikarang', 'Karawang', 'Bogor'],
-  'vietnam': ['Ho Chi Minh City', 'Hanoi', 'Da Nang', 'Hai Phong', 'Binh Duong', 'Dong Nai', 'Long An', 'Ba Ria', 'Can Tho'],
-  'philippines': ['Manila', 'Cebu', 'Davao', 'Quezon City', 'Makati', 'Laguna', 'Cavite', 'Batangas', 'Bulacan'],
-  'southeast asia': ['Kuala Lumpur', 'Singapore', 'Bangkok', 'Jakarta', 'Ho Chi Minh City', 'Manila', 'Penang', 'Johor Bahru', 'Surabaya', 'Hanoi']
+  malaysia: [
+    'Kuala Lumpur',
+    'Penang',
+    'Johor Bahru',
+    'Shah Alam',
+    'Petaling Jaya',
+    'Selangor',
+    'Ipoh',
+    'Klang',
+    'Subang',
+    'Melaka',
+    'Kuching',
+    'Kota Kinabalu',
+  ],
+  singapore: ['Singapore', 'Jurong', 'Tuas', 'Woodlands'],
+  thailand: [
+    'Bangkok',
+    'Chonburi',
+    'Rayong',
+    'Samut Prakan',
+    'Ayutthaya',
+    'Chiang Mai',
+    'Pathum Thani',
+    'Nonthaburi',
+    'Samut Sakhon',
+  ],
+  indonesia: [
+    'Jakarta',
+    'Surabaya',
+    'Bandung',
+    'Medan',
+    'Bekasi',
+    'Tangerang',
+    'Semarang',
+    'Sidoarjo',
+    'Cikarang',
+    'Karawang',
+    'Bogor',
+  ],
+  vietnam: [
+    'Ho Chi Minh City',
+    'Hanoi',
+    'Da Nang',
+    'Hai Phong',
+    'Binh Duong',
+    'Dong Nai',
+    'Long An',
+    'Ba Ria',
+    'Can Tho',
+  ],
+  philippines: [
+    'Manila',
+    'Cebu',
+    'Davao',
+    'Quezon City',
+    'Makati',
+    'Laguna',
+    'Cavite',
+    'Batangas',
+    'Bulacan',
+  ],
+  'southeast asia': [
+    'Kuala Lumpur',
+    'Singapore',
+    'Bangkok',
+    'Jakarta',
+    'Ho Chi Minh City',
+    'Manila',
+    'Penang',
+    'Johor Bahru',
+    'Surabaya',
+    'Hanoi',
+  ],
 };
 
 const LOCAL_SUFFIXES = {
-  'malaysia': ['Sdn Bhd', 'Berhad'],
-  'singapore': ['Pte Ltd', 'Private Limited'],
-  'thailand': ['Co Ltd', 'Co., Ltd.'],
-  'indonesia': ['PT', 'CV'],
-  'vietnam': ['Co Ltd', 'JSC', 'Công ty'],
-  'philippines': ['Inc', 'Corporation']
+  malaysia: ['Sdn Bhd', 'Berhad'],
+  singapore: ['Pte Ltd', 'Private Limited'],
+  thailand: ['Co Ltd', 'Co., Ltd.'],
+  indonesia: ['PT', 'CV'],
+  vietnam: ['Co Ltd', 'JSC', 'Công ty'],
+  philippines: ['Inc', 'Corporation'],
 };
 
 const DOMAIN_MAP = {
-  'malaysia': '.my',
-  'singapore': '.sg',
-  'thailand': '.th',
-  'indonesia': '.co.id',
-  'vietnam': '.vn',
-  'philippines': '.ph'
+  malaysia: '.my',
+  singapore: '.sg',
+  thailand: '.th',
+  indonesia: '.co.id',
+  vietnam: '.vn',
+  philippines: '.ph',
 };
 
 const LOCAL_LANGUAGE_MAP = {
-  'thailand': { lang: 'Thai', examples: ['หมึก', 'สี', 'เคมี'] },
-  'vietnam': { lang: 'Vietnamese', examples: ['mực in', 'sơn', 'hóa chất'] },
-  'indonesia': { lang: 'Bahasa Indonesia', examples: ['tinta', 'cat', 'kimia'] },
-  'philippines': { lang: 'Tagalog', examples: ['tinta', 'pintura'] },
-  'malaysia': { lang: 'Bahasa Malaysia', examples: ['dakwat', 'cat'] }
+  thailand: { lang: 'Thai', examples: ['หมึก', 'สี', 'เคมี'] },
+  vietnam: { lang: 'Vietnamese', examples: ['mực in', 'sơn', 'hóa chất'] },
+  indonesia: { lang: 'Bahasa Indonesia', examples: ['tinta', 'cat', 'kimia'] },
+  philippines: { lang: 'Tagalog', examples: ['tinta', 'pintura'] },
+  malaysia: { lang: 'Bahasa Malaysia', examples: ['dakwat', 'cat'] },
 };
 
 // ============ 14 SPECIALIZED SEARCH STRATEGIES (inspired by n8n workflow) ============
@@ -995,11 +1153,14 @@ Be thorough - include all companies you find. We will verify them later.`;
 
 // Strategy 1: Broad Google Search (SerpAPI)
 function strategy1_BroadSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   // Generate synonyms and variations
-  const terms = business.split(/\s+or\s+|\s+and\s+|,/).map(t => t.trim()).filter(t => t);
+  const terms = business
+    .split(/\s+or\s+|\s+and\s+|,/)
+    .map((t) => t.trim())
+    .filter((t) => t);
 
   for (const c of countries) {
     queries.push(
@@ -1020,7 +1181,7 @@ function strategy1_BroadSerpAPI(business, country, exclusion) {
 // Strategy 2: Broad Perplexity Search (EXPANDED)
 function strategy2_BroadPerplexity(business, country, exclusion) {
   const outputFormat = buildOutputFormat();
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   // General queries
@@ -1047,7 +1208,7 @@ function strategy2_BroadPerplexity(business, country, exclusion) {
 
 // Strategy 3: Lists, Rankings, Top Companies (SerpAPI)
 function strategy3_ListsSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   for (const c of countries) {
@@ -1067,7 +1228,7 @@ function strategy3_ListsSerpAPI(business, country, exclusion) {
 
 // Strategy 4: City-Specific Search (Perplexity) - EXPANDED to ALL cities
 function strategy4_CitiesPerplexity(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const outputFormat = buildOutputFormat();
   const queries = [];
 
@@ -1087,7 +1248,7 @@ function strategy4_CitiesPerplexity(business, country, exclusion) {
 
 // Strategy 5: Industrial Zones + Local Naming (SerpAPI)
 function strategy5_IndustrialSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   for (const c of countries) {
@@ -1118,7 +1279,7 @@ function strategy6_DirectoriesPerplexity(business, country, exclusion) {
     `Chamber of commerce ${business} members in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${country} ${business} industry association member list. No ${exclusion}. ${outputFormat}`,
     `${business} companies on Yellow Pages ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} business directory ${country}. Exclude ${exclusion}. ${outputFormat}`
+    `${business} business directory ${country}. Exclude ${exclusion}. ${outputFormat}`,
   ];
 }
 
@@ -1129,7 +1290,7 @@ function strategy7_ExhibitionsPerplexity(business, country, exclusion) {
     `${business} exhibitors at trade shows in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${business} companies at industry exhibitions in ${country} region. Not ${exclusion}. ${outputFormat}`,
     `${business} participants at expos and conferences in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} exhibitors at international fairs from ${country}. Not ${exclusion}. ${outputFormat}`
+    `${business} exhibitors at international fairs from ${country}. Not ${exclusion}. ${outputFormat}`,
   ];
 }
 
@@ -1142,13 +1303,13 @@ function strategy8_TradePerplexity(business, country, exclusion) {
     `${country} ${business} companies on Global Sources. Exclude ${exclusion}. ${outputFormat}`,
     `${business} OEM suppliers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${business} contract manufacturers in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} approved vendors in ${country}. Exclude ${exclusion}. ${outputFormat}`
+    `${business} approved vendors in ${country}. Exclude ${exclusion}. ${outputFormat}`,
   ];
 }
 
 // Strategy 9: Local Domains + News (Perplexity)
 function strategy9_DomainsPerplexity(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const outputFormat = buildOutputFormat();
   const queries = [];
 
@@ -1171,7 +1332,7 @@ function strategy9_DomainsPerplexity(business, country, exclusion) {
 
 // Strategy 10: Government Registries (SerpAPI)
 function strategy10_RegistriesSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   for (const c of countries) {
@@ -1187,7 +1348,7 @@ function strategy10_RegistriesSerpAPI(business, country, exclusion) {
 
 // Strategy 11: City + Industrial Areas (SerpAPI) - EXPANDED
 function strategy11_CityIndustrialSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   for (const c of countries) {
@@ -1209,7 +1370,7 @@ function strategy11_CityIndustrialSerpAPI(business, country, exclusion) {
 // Strategy 12: Deep Web Search (OpenAI Search) - EXPANDED with real-time search
 function strategy12_DeepOpenAISearch(business, country, exclusion) {
   const outputFormat = buildOutputFormat();
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
   // General deep searches
@@ -1240,13 +1401,13 @@ function strategy13_PublicationsPerplexity(business, country, exclusion) {
     `${business} companies mentioned in industry magazines and trade publications for ${country}. Exclude ${exclusion}. ${outputFormat}`,
     `${business} market report ${country} - list all companies mentioned. Not ${exclusion}. ${outputFormat}`,
     `${business} industry analysis ${country} - companies covered. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} ${country} magazine articles listing companies. Not ${exclusion}. ${outputFormat}`
+    `${business} ${country} magazine articles listing companies. Not ${exclusion}. ${outputFormat}`,
   ];
 }
 
 // Strategy 14: Final Sweep - Local Language + Comprehensive (OpenAI Search)
 function strategy14_LocalLanguageOpenAISearch(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const outputFormat = buildOutputFormat();
   const queries = [];
 
@@ -1298,11 +1459,11 @@ RULES:
 - If website not in text, you may look it up if you know it's a real company
 - hq must be "City, Country" format ONLY
 - Include companies even if some info is incomplete - we'll verify later
-- Be thorough - extract every company that might match`
+- Be thorough - extract every company that might match`,
         },
-        { role: 'user', content: text.substring(0, 15000) }
+        { role: 'user', content: text.substring(0, 15000) },
       ],
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
     });
     const parsed = JSON.parse(extraction.choices[0].message.content);
     return Array.isArray(parsed.companies) ? parsed.companies : [];
@@ -1316,25 +1477,37 @@ RULES:
 
 function normalizeCompanyName(name) {
   if (!name) return '';
-  return name.toLowerCase()
-    // Remove ALL common legal suffixes globally (expanded list)
-    .replace(/\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi, '')
-    // Also remove these if they appear anywhere (for cases like "PT Company Name")
-    .replace(/^(pt\.?|cv\.?)\s+/gi, '')
-    .replace(/[^\w\s]/g, '')  // Remove special characters
-    .replace(/\s+/g, ' ')      // Normalize spaces
-    .trim();
+  return (
+    name
+      .toLowerCase()
+      // Remove ALL common legal suffixes globally (expanded list)
+      .replace(
+        /\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi,
+        ''
+      )
+      // Also remove these if they appear anywhere (for cases like "PT Company Name")
+      .replace(/^(pt\.?|cv\.?)\s+/gi, '')
+      .replace(/[^\w\s]/g, '') // Remove special characters
+      .replace(/\s+/g, ' ') // Normalize spaces
+      .trim()
+  );
 }
 
 function normalizeWebsite(url) {
   if (!url) return '';
-  return url.toLowerCase()
-    .replace(/^https?:\/\//, '')           // Remove protocol
-    .replace(/^www\./, '')                  // Remove www
-    .replace(/\/+$/, '')                    // Remove trailing slashes
-    // Remove common path suffixes that don't differentiate companies
-    .replace(/\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i, '')
-    .replace(/\.(html?|php|aspx?|jsp)$/i, ''); // Remove file extensions
+  return (
+    url
+      .toLowerCase()
+      .replace(/^https?:\/\//, '') // Remove protocol
+      .replace(/^www\./, '') // Remove www
+      .replace(/\/+$/, '') // Remove trailing slashes
+      // Remove common path suffixes that don't differentiate companies
+      .replace(
+        /\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i,
+        ''
+      )
+      .replace(/\.(html?|php|aspx?|jsp)$/i, '')
+  ); // Remove file extensions
 }
 
 // Extract domain root for additional deduplication
@@ -1384,7 +1557,7 @@ function isSpamOrDirectoryURL(url) {
     'facebook.com',
     'twitter.com',
     'instagram.com',
-    'youtube.com'
+    'youtube.com',
   ];
 
   for (const pattern of obviousSpam) {
@@ -1424,7 +1597,7 @@ async function verifyWebsite(url) {
     const response = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
       signal: controller.signal,
-      redirect: 'follow'
+      redirect: 'follow',
     });
     clearTimeout(timeout);
 
@@ -1450,10 +1623,10 @@ async function verifyWebsite(url) {
       'hugedomains',
       'afternic',
       'domain expired',
-      'this site can\'t be reached',
+      "this site can't be reached",
       'page not found',
       '404 not found',
-      'website not found'
+      'website not found',
     ];
 
     for (const sign of parkedSigns) {
@@ -1500,7 +1673,7 @@ async function fetchWebsite(url) {
     'verify you are human',
     'bot detection',
     'please enable javascript',
-    'enable cookies'
+    'enable cookies',
   ];
 
   const tryFetch = async (targetUrl) => {
@@ -1509,21 +1682,25 @@ async function fetchWebsite(url) {
       const timeout = setTimeout(() => controller.abort(), 20000); // Increased to 20 seconds
       const response = await fetch(targetUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.5',
           'Accept-Encoding': 'gzip, deflate',
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1'
+          Connection: 'keep-alive',
+          'Upgrade-Insecure-Requests': '1',
         },
         signal: controller.signal,
-        redirect: 'follow'
+        redirect: 'follow',
       });
       clearTimeout(timeout);
 
       // Check for HTTP-level blocks
       if (response.status === 403 || response.status === 406) {
-        return { status: 'security_blocked', reason: `HTTP ${response.status} - WAF/Security block` };
+        return {
+          status: 'security_blocked',
+          reason: `HTTP ${response.status} - WAF/Security block`,
+        };
       }
       if (!response.ok) return { status: 'error', reason: `HTTP ${response.status}` };
 
@@ -1534,7 +1711,10 @@ async function fetchWebsite(url) {
       for (const pattern of securityBlockPatterns) {
         if (lowerHtml.includes(pattern) && html.length < 5000) {
           // Only flag as security block if page is small (likely a challenge page)
-          return { status: 'security_blocked', reason: `Security protection detected: "${pattern}"` };
+          return {
+            status: 'security_blocked',
+            reason: `Security protection detected: "${pattern}"`,
+          };
         }
       }
 
@@ -1606,9 +1786,14 @@ function buildExclusionRules(exclusion, business) {
   let rules = '';
 
   // Detect if user wants to exclude LARGE companies - use PAGE SIGNALS like n8n
-  if (exclusionLower.includes('large') || exclusionLower.includes('big') ||
-      exclusionLower.includes('mnc') || exclusionLower.includes('multinational') ||
-      exclusionLower.includes('major') || exclusionLower.includes('giant')) {
+  if (
+    exclusionLower.includes('large') ||
+    exclusionLower.includes('big') ||
+    exclusionLower.includes('mnc') ||
+    exclusionLower.includes('multinational') ||
+    exclusionLower.includes('major') ||
+    exclusionLower.includes('giant')
+  ) {
     rules += `
 LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
 - "global presence", "worldwide operations", "global leader", "world's largest"
@@ -1652,13 +1837,16 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
 
 async function validateCompanyStrict(company, business, country, exclusion, pageText) {
   // If we couldn't fetch the website, validate by name only (give benefit of doubt)
-  const contentToValidate = (typeof pageText === 'string' && pageText) ? pageText : `Company name: ${company.company_name}. Validate based on name only.`;
+  const contentToValidate =
+    typeof pageText === 'string' && pageText
+      ? pageText
+      : `Company name: ${company.company_name}. Validate based on name only.`;
 
   const exclusionRules = buildExclusionRules(exclusion, business);
 
   try {
     const validation = await openai.chat.completions.create({
-      model: 'gpt-4o',  // Use smarter model for better validation
+      model: 'gpt-4o', // Use smarter model for better validation
       messages: [
         {
           role: 'system',
@@ -1690,7 +1878,7 @@ ${exclusionRules}
 4. SPAM CHECK:
 - Only reject obvious directories, marketplaces, domain-for-sale sites
 
-OUTPUT: Return JSON only: {"valid": true/false, "reason": "one sentence"}`
+OUTPUT: Return JSON only: {"valid": true/false, "reason": "one sentence"}`,
         },
         {
           role: 'user',
@@ -1699,10 +1887,10 @@ WEBSITE: ${company.website}
 HQ: ${company.hq}
 
 PAGE CONTENT:
-${contentToValidate.substring(0, 10000)}`
-        }
+${contentToValidate.substring(0, 10000)}`,
+        },
       ],
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
     });
 
     const result = JSON.parse(validation.choices[0].message.content);
@@ -1732,9 +1920,11 @@ async function parallelValidationStrict(companies, business, country, exclusion)
       // Use cached _pageContent from verification step, or fetch if not available
       // Add .catch() to prevent any single failure from crashing the batch
       const pageTexts = await Promise.all(
-        batch.map(c => {
+        batch.map((c) => {
           try {
-            return c?._pageContent ? Promise.resolve(c._pageContent) : fetchWebsite(c?.website).catch(() => null);
+            return c?._pageContent
+              ? Promise.resolve(c._pageContent)
+              : fetchWebsite(c?.website).catch(() => null);
           } catch (e) {
             return Promise.resolve(null);
           }
@@ -1745,11 +1935,16 @@ async function parallelValidationStrict(companies, business, country, exclusion)
       const validations = await Promise.all(
         batch.map((company, idx) => {
           try {
-            return validateCompanyStrict(company, business, country, exclusion, pageTexts[idx])
-              .catch(e => {
-                console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
-                return { valid: true, corrected_hq: company?.hq }; // Accept on error
-              });
+            return validateCompanyStrict(
+              company,
+              business,
+              country,
+              exclusion,
+              pageTexts[idx]
+            ).catch((e) => {
+              console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
+              return { valid: true, corrected_hq: company?.hq }; // Accept on error
+            });
           } catch (e) {
             return Promise.resolve({ valid: true, corrected_hq: company?.hq });
           }
@@ -1763,7 +1958,7 @@ async function parallelValidationStrict(companies, business, country, exclusion)
             const { _pageContent, ...cleanCompany } = company;
             validated.push({
               ...cleanCompany,
-              hq: validations[idx].corrected_hq || company.hq
+              hq: validations[idx].corrected_hq || company.hq,
             });
           }
         } catch (e) {
@@ -1771,14 +1966,18 @@ async function parallelValidationStrict(companies, business, country, exclusion)
         }
       });
 
-      console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
+      console.log(
+        `  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`
+      );
     } catch (batchError) {
       console.error(`  Batch error at ${i}-${i + batchSize}: ${batchError.message}`);
       // Continue to next batch instead of crashing
     }
   }
 
-  console.log(`STRICT Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
+  console.log(
+    `STRICT Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`
+  );
   return validated;
 }
 
@@ -1817,7 +2016,7 @@ ${exclusionRules}
 4. SPAM CHECK:
 - Is this a directory, marketplace, domain-for-sale, or aggregator site? → REJECT
 
-OUTPUT: Return JSON: {"valid": true/false, "reason": "brief", "corrected_hq": "City, Country or null"}`
+OUTPUT: Return JSON: {"valid": true/false, "reason": "brief", "corrected_hq": "City, Country or null"}`,
         },
         {
           role: 'user',
@@ -1826,10 +2025,10 @@ WEBSITE: ${company.website}
 HQ: ${company.hq}
 
 PAGE CONTENT:
-${(typeof pageText === 'string' && pageText) ? pageText.substring(0, 8000) : 'Could not fetch - validate by name only'}`
-        }
+${typeof pageText === 'string' && pageText ? pageText.substring(0, 8000) : 'Could not fetch - validate by name only'}`,
+        },
       ],
-      response_format: { type: 'json_object' }
+      response_format: { type: 'json_object' },
     });
 
     const result = JSON.parse(validation.choices[0].message.content);
@@ -1857,15 +2056,14 @@ async function parallelValidation(companies, business, country, exclusion) {
       if (!batch || batch.length === 0) continue;
 
       const pageTexts = await Promise.all(
-        batch.map(c => fetchWebsite(c?.website).catch(() => null))
+        batch.map((c) => fetchWebsite(c?.website).catch(() => null))
       );
       const validations = await Promise.all(
         batch.map((company, idx) =>
-          validateCompany(company, business, country, exclusion, pageTexts[idx])
-            .catch(e => {
-              console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
-              return { valid: true, corrected_hq: company?.hq };
-            })
+          validateCompany(company, business, country, exclusion, pageTexts[idx]).catch((e) => {
+            console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
+            return { valid: true, corrected_hq: company?.hq };
+          })
         )
       );
 
@@ -1874,7 +2072,7 @@ async function parallelValidation(companies, business, country, exclusion) {
           if (validations[idx]?.valid && company) {
             validated.push({
               ...company,
-              hq: validations[idx].corrected_hq || company.hq
+              hq: validations[idx].corrected_hq || company.hq,
             });
           }
         } catch (e) {
@@ -1882,13 +2080,17 @@ async function parallelValidation(companies, business, country, exclusion) {
         }
       });
 
-      console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
+      console.log(
+        `  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`
+      );
     } catch (batchError) {
       console.error(`  Batch error at ${i}-${i + batchSize}: ${batchError.message}`);
     }
   }
 
-  console.log(`Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
+  console.log(
+    `Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`
+  );
   return validated;
 }
 
@@ -1928,7 +2130,9 @@ app.get('/', (req, res) => {
 app.get('/api/transcription-status', (req, res) => {
   res.json({
     available: !!process.env.DEEPGRAM_API_KEY,
-    message: process.env.DEEPGRAM_API_KEY ? 'Ready for real-time transcription' : 'DEEPGRAM_API_KEY not configured'
+    message: process.env.DEEPGRAM_API_KEY
+      ? 'Ready for real-time transcription'
+      : 'DEEPGRAM_API_KEY not configured',
   });
 });
 
@@ -1958,20 +2162,25 @@ const activeSessions = new Map();
 const MAX_ACTIVE_SESSIONS = 50; // Prevent memory exhaustion from too many concurrent sessions
 
 // Periodic cleanup of stale sessions (every 10 minutes)
-setInterval(() => {
-  const now = Date.now();
-  let cleaned = 0;
-  for (const [sessionId, session] of activeSessions.entries()) {
-    // Remove sessions older than 2 hours (safety net for missed cleanups)
-    if (session.startTime && (now - session.startTime.getTime() > 2 * 60 * 60 * 1000)) {
-      activeSessions.delete(sessionId);
-      cleaned++;
+setInterval(
+  () => {
+    const now = Date.now();
+    let cleaned = 0;
+    for (const [sessionId, session] of activeSessions.entries()) {
+      // Remove sessions older than 2 hours (safety net for missed cleanups)
+      if (session.startTime && now - session.startTime.getTime() > 2 * 60 * 60 * 1000) {
+        activeSessions.delete(sessionId);
+        cleaned++;
+      }
     }
-  }
-  if (cleaned > 0) {
-    console.log(`[WS] Periodic cleanup: removed ${cleaned} stale sessions. Active: ${activeSessions.size}`);
-  }
-}, 10 * 60 * 1000);
+    if (cleaned > 0) {
+      console.log(
+        `[WS] Periodic cleanup: removed ${cleaned} stale sessions. Active: ${activeSessions.size}`
+      );
+    }
+  },
+  10 * 60 * 1000
+);
 
 wss.on('connection', (ws, req) => {
   console.log('[WS] New client connected for real-time transcription');
@@ -1992,11 +2201,11 @@ wss.on('connection', (ws, req) => {
   let translatedTranscript = '';
 
   // Segment buffering for improved translation context
-  let segmentBuffer = [];  // Buffer to accumulate segments before translation
-  const translationContext = [];  // Previous translated segments for context
-  let detectedDomain = null;  // Auto-detected meeting domain
-  const SEGMENT_BUFFER_SIZE = 2;  // Number of segments to buffer before translating
-  const MAX_CONTEXT_SEGMENTS = 5;  // Maximum previous segments to keep for context
+  let segmentBuffer = []; // Buffer to accumulate segments before translation
+  const translationContext = []; // Previous translated segments for context
+  let detectedDomain = null; // Auto-detected meeting domain
+  const SEGMENT_BUFFER_SIZE = 2; // Number of segments to buffer before translating
+  const MAX_CONTEXT_SEGMENTS = 5; // Maximum previous segments to keep for context
 
   // Store session data
   activeSessions.set(sessionId, {
@@ -2007,7 +2216,7 @@ wss.on('connection', (ws, req) => {
     language: 'en',
     segmentBuffer: [],
     translationContext: [],
-    detectedDomain: null
+    detectedDomain: null,
   });
   console.log(`[WS] Session ${sessionId} created. Active sessions: ${activeSessions.size}`);
 
@@ -2023,8 +2232,10 @@ wss.on('connection', (ws, req) => {
       if (!isJsonMessage && message instanceof Buffer) {
         // Quick heuristic: JSON messages are usually small (<1KB), audio chunks are larger
         // Also check if it starts with '{' and contains common JSON characters
-        isJsonMessage = message.length < 1024 && message[0] === 123 &&
-                       (message.includes(0x22) || message.toString().includes('"type"'));
+        isJsonMessage =
+          message.length < 1024 &&
+          message[0] === 123 &&
+          (message.includes(0x22) || message.toString().includes('"type"'));
       }
 
       if (isJsonMessage) {
@@ -2032,7 +2243,9 @@ wss.on('connection', (ws, req) => {
 
         if (data.type === 'start') {
           // Start Deepgram connection
-          console.log(`[WS] Starting transcription session ${sessionId}, language: ${data.language || 'auto'}`);
+          console.log(
+            `[WS] Starting transcription session ${sessionId}, language: ${data.language || 'auto'}`
+          );
 
           if (!deepgram) {
             ws.send(JSON.stringify({ type: 'error', message: 'Deepgram API key not configured' }));
@@ -2040,7 +2253,8 @@ wss.on('connection', (ws, req) => {
           }
 
           // Check if multi-language mode is requested
-          const isMultiLang = !data.language || data.language === 'auto' || data.language === 'multi';
+          const isMultiLang =
+            !data.language || data.language === 'auto' || data.language === 'multi';
 
           // Languages supported by Nova-3 (use Nova-2 for unsupported languages)
           // Nova-3 supports: en, es, fr, de, hi, ru, pt, ja, it, nl, bg, ca, cs, da, et, fi,
@@ -2060,7 +2274,7 @@ wss.on('connection', (ws, req) => {
             sample_rate: 16000,
             channels: 1,
             punctuate: true,
-            diarize: true  // Enable speaker identification
+            diarize: true, // Enable speaker identification
           };
 
           // Set language - if specific language requested, use it; otherwise use 'multi' for auto-detection
@@ -2068,8 +2282,8 @@ wss.on('connection', (ws, req) => {
           // See: https://developers.deepgram.com/docs/multilingual-code-switching
           const currentSession = activeSessions.get(sessionId);
           if (isMultiLang) {
-            dgOptions.language = 'multi';  // Multilingual code-switching mode
-            dgOptions.endpointing = 100;   // Recommended for code-switching (100ms)
+            dgOptions.language = 'multi'; // Multilingual code-switching mode
+            dgOptions.endpointing = 100; // Recommended for code-switching (100ms)
             detectedLanguage = 'multi';
             if (currentSession) currentSession.language = 'multi';
           } else {
@@ -2088,7 +2302,7 @@ wss.on('connection', (ws, req) => {
           });
 
           // Helper function to detect language from text content
-          function detectLanguageFromText(text) {
+          const detectLanguageFromText = (text) => {
             if (!text || text.length < 3) return null;
 
             // Check for Chinese characters (CJK Unified Ideographs)
@@ -2099,17 +2313,27 @@ wss.on('connection', (ws, req) => {
             if (/[\uac00-\ud7af\u1100-\u11ff]/.test(text)) return 'ko';
             // Check for Thai
             if (/[\u0e00-\u0e7f]/.test(text)) return 'th';
-            // Check for Vietnamese (special diacritics)
-            if (/[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i.test(text)) return 'vi';
+            // Check for Vietnamese (special diacritics - Unicode ranges for Vietnamese vowels with tones and đ)
+            if (
+              /[\u00c0-\u00c3\u00c8-\u00ca\u00cc-\u00cd\u00d2-\u00d5\u00d9-\u00da\u00dd\u00e0-\u00e3\u00e8-\u00ea\u00ec-\u00ed\u00f2-\u00f5\u00f9-\u00fa\u00fd\u0102-\u0103\u0110-\u0111\u0128-\u0129\u0168-\u0169\u01a0-\u01b0\u1ea0-\u1ef9]/i.test(
+                text
+              )
+            )
+              return 'vi';
             // Check for Hindi/Devanagari
             if (/[\u0900-\u097f]/.test(text)) return 'hi';
             // Check for Arabic
             if (/[\u0600-\u06ff]/.test(text)) return 'ar';
             // Check for Indonesian/Malay (common words)
-            if (/\b(dan|yang|untuk|dengan|ini|itu|dari|ke|tidak|ada|akan|pada|sudah|juga|saya|kami|mereka)\b/i.test(text)) return 'id';
+            if (
+              /\b(dan|yang|untuk|dengan|ini|itu|dari|ke|tidak|ada|akan|pada|sudah|juga|saya|kami|mereka)\b/i.test(
+                text
+              )
+            )
+              return 'id';
 
-            return 'en';  // Default to English
-          }
+            return 'en'; // Default to English
+          };
 
           deepgramConnection.on('Results', async (dgData) => {
             console.log('[WS] Deepgram data received:', JSON.stringify(dgData).substring(0, 200));
@@ -2127,13 +2351,13 @@ wss.on('connection', (ws, req) => {
 
             // Check channel-level languages array (Nova-3 multi format)
             if (dgData.channel?.languages && dgData.channel.languages.length > 0) {
-              detLang = dgData.channel.languages[0];  // Primary language by word count
+              detLang = dgData.channel.languages[0]; // Primary language by word count
             }
 
             // Check for per-word language (code-switching detection)
             let segmentLang = null;
             if (words.length > 0 && words[0].language) {
-              segmentLang = words[0].language;  // Language of first word in segment
+              segmentLang = words[0].language; // Language of first word in segment
             }
 
             // Fallback to detected_language field
@@ -2162,21 +2386,25 @@ wss.on('connection', (ws, req) => {
               // Extract speaker info from words array (diarization)
               let speaker = null;
               if (words.length > 0 && words[0].speaker !== undefined) {
-                speaker = words[0].speaker;  // Speaker number (0, 1, 2, etc.)
+                speaker = words[0].speaker; // Speaker number (0, 1, 2, etc.)
               }
 
               // Use per-segment language for accurate code-switching detection
               const thisSegmentLang = segmentLang || effectiveLang;
 
-              console.log(`[WS] Transcript: "${transcript}" (final: ${isFinal}, lang: ${thisSegmentLang}, speaker: ${speaker})`);
+              console.log(
+                `[WS] Transcript: "${transcript}" (final: ${isFinal}, lang: ${thisSegmentLang}, speaker: ${speaker})`
+              );
               // Send interim results to client with speaker info and per-segment language
-              ws.send(JSON.stringify({
-                type: 'transcript',
-                text: transcript,
-                isFinal,
-                language: thisSegmentLang,
-                speaker: speaker !== null ? speaker + 1 : null  // Convert to 1-indexed
-              }));
+              ws.send(
+                JSON.stringify({
+                  type: 'transcript',
+                  text: transcript,
+                  isFinal,
+                  language: thisSegmentLang,
+                  speaker: speaker !== null ? speaker + 1 : null, // Convert to 1-indexed
+                })
+              );
 
               // Accumulate final transcripts
               if (isFinal) {
@@ -2184,7 +2412,10 @@ wss.on('connection', (ws, req) => {
                 if (session) session.transcript = fullTranscript;
 
                 // Check if this segment is non-English (using per-segment language detection)
-                const isNonEnglishLang = thisSegmentLang && thisSegmentLang !== 'en' && !thisSegmentLang.startsWith('en');
+                const isNonEnglishLang =
+                  thisSegmentLang && thisSegmentLang !== 'en' && !thisSegmentLang.startsWith('en');
+                // prettier-ignore
+                // eslint-disable-next-line no-misleading-character-class
                 const hasNonEnglishChars = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af\u0900-\u097f\u0e00-\u0e7f\u0600-\u06ff]/.test(transcript);
                 const needsTranslation = isNonEnglishLang || hasNonEnglishChars;
 
@@ -2194,7 +2425,7 @@ wss.on('connection', (ws, req) => {
                   segmentBuffer.push({
                     text: transcript,
                     speaker: speaker,
-                    lang: thisSegmentLang
+                    lang: thisSegmentLang,
                   });
 
                   // Update domain detection with accumulated text
@@ -2204,21 +2435,22 @@ wss.on('connection', (ws, req) => {
                   }
 
                   // Translate when buffer reaches threshold OR segment is long enough (for responsiveness)
-                  const shouldTranslateNow = segmentBuffer.length >= SEGMENT_BUFFER_SIZE ||
-                                             transcript.length > 50 ||  // Long segments translate immediately
-                                             /[。！？.!?]$/.test(transcript);  // End of sentence
+                  const shouldTranslateNow =
+                    segmentBuffer.length >= SEGMENT_BUFFER_SIZE ||
+                    transcript.length > 50 || // Long segments translate immediately
+                    /[。！？.!?]$/.test(transcript); // End of sentence
 
                   if (shouldTranslateNow && segmentBuffer.length > 0) {
                     try {
                       // Combine buffered segments for translation
-                      const combinedText = segmentBuffer.map(s => s.text).join(' ');
+                      const combinedText = segmentBuffer.map((s) => s.text).join(' ');
                       const primarySpeaker = segmentBuffer[0].speaker;
                       const primaryLang = segmentBuffer[0].lang;
 
                       // Translate with context
                       const translated = await translateText(combinedText, 'en', {
                         previousSegments: translationContext,
-                        domain: detectedDomain
+                        domain: detectedDomain,
                       });
 
                       // Only add if translation is different from original
@@ -2233,14 +2465,16 @@ wss.on('connection', (ws, req) => {
                         }
                         if (session) session.translationContext = translationContext;
 
-                        ws.send(JSON.stringify({
-                          type: 'translation',
-                          text: translated,
-                          originalLang: primaryLang,
-                          speaker: primarySpeaker !== null ? primarySpeaker + 1 : null,
-                          fullTranslation: translatedTranscript,
-                          domain: detectedDomain  // Include detected domain for UI
-                        }));
+                        ws.send(
+                          JSON.stringify({
+                            type: 'translation',
+                            text: translated,
+                            originalLang: primaryLang,
+                            speaker: primarySpeaker !== null ? primarySpeaker + 1 : null,
+                            fullTranslation: translatedTranscript,
+                            domain: detectedDomain, // Include detected domain for UI
+                          })
+                        );
                       }
 
                       // Clear buffer after translation
@@ -2255,13 +2489,13 @@ wss.on('connection', (ws, req) => {
                   // First, flush any pending non-English segments in buffer
                   if (segmentBuffer.length > 0) {
                     try {
-                      const combinedText = segmentBuffer.map(s => s.text).join(' ');
+                      const combinedText = segmentBuffer.map((s) => s.text).join(' ');
                       const primarySpeaker = segmentBuffer[0].speaker;
                       const primaryLang = segmentBuffer[0].lang;
 
                       const translated = await translateText(combinedText, 'en', {
                         previousSegments: translationContext,
-                        domain: detectedDomain
+                        domain: detectedDomain,
                       });
 
                       if (translated !== combinedText) {
@@ -2274,14 +2508,16 @@ wss.on('connection', (ws, req) => {
                         }
                         if (session) session.translationContext = translationContext;
 
-                        ws.send(JSON.stringify({
-                          type: 'translation',
-                          text: translated,
-                          originalLang: primaryLang,
-                          speaker: primarySpeaker !== null ? primarySpeaker + 1 : null,
-                          fullTranslation: translatedTranscript,
-                          domain: detectedDomain
-                        }));
+                        ws.send(
+                          JSON.stringify({
+                            type: 'translation',
+                            text: translated,
+                            originalLang: primaryLang,
+                            speaker: primarySpeaker !== null ? primarySpeaker + 1 : null,
+                            fullTranslation: translatedTranscript,
+                            domain: detectedDomain,
+                          })
+                        );
                       }
                       segmentBuffer = [];
                       if (session) session.segmentBuffer = [];
@@ -2301,14 +2537,16 @@ wss.on('connection', (ws, req) => {
                   }
                   if (session) session.translationContext = translationContext;
 
-                  ws.send(JSON.stringify({
-                    type: 'translation',
-                    text: transcript,
-                    originalLang: 'en',
-                    speaker: speaker !== null ? speaker + 1 : null,
-                    fullTranslation: translatedTranscript,
-                    domain: detectedDomain
-                  }));
+                  ws.send(
+                    JSON.stringify({
+                      type: 'translation',
+                      text: transcript,
+                      originalLang: 'en',
+                      speaker: speaker !== null ? speaker + 1 : null,
+                      fullTranslation: translatedTranscript,
+                      domain: detectedDomain,
+                    })
+                  );
                 }
               }
             }
@@ -2322,7 +2560,6 @@ wss.on('connection', (ws, req) => {
           deepgramConnection.on('close', () => {
             console.log(`[WS] Deepgram connection closed for session ${sessionId}`);
           });
-
         } else if (data.type === 'stop') {
           // Stop transcription
           console.log(`[WS] Stopping transcription session ${sessionId}`);
@@ -2338,27 +2575,29 @@ wss.on('connection', (ws, req) => {
           // Flush any remaining segments in the translation buffer
           if (segmentBuffer.length > 0) {
             try {
-              const combinedText = segmentBuffer.map(s => s.text).join(' ');
+              const combinedText = segmentBuffer.map((s) => s.text).join(' ');
               const primarySpeaker = segmentBuffer[0].speaker;
               const primaryLang = segmentBuffer[0].lang;
 
               const translated = await translateText(combinedText, 'en', {
                 previousSegments: translationContext,
-                domain: detectedDomain
+                domain: detectedDomain,
               });
 
               if (translated !== combinedText) {
                 translatedTranscript += translated + ' ';
                 if (session) session.translatedTranscript = translatedTranscript;
 
-                ws.send(JSON.stringify({
-                  type: 'translation',
-                  text: translated,
-                  originalLang: primaryLang,
-                  speaker: primarySpeaker !== null ? primarySpeaker + 1 : null,
-                  fullTranslation: translatedTranscript,
-                  domain: detectedDomain
-                }));
+                ws.send(
+                  JSON.stringify({
+                    type: 'translation',
+                    text: translated,
+                    originalLang: primaryLang,
+                    speaker: primarySpeaker !== null ? primarySpeaker + 1 : null,
+                    fullTranslation: translatedTranscript,
+                    domain: detectedDomain,
+                  })
+                );
               }
               segmentBuffer = [];
               console.log(`[WS] Flushed remaining translation buffer for session ${sessionId}`);
@@ -2393,17 +2632,18 @@ wss.on('connection', (ws, req) => {
           }
 
           // Send final results (only include r2Key if upload succeeded)
-          ws.send(JSON.stringify({
-            type: 'complete',
-            sessionId,
-            transcript: fullTranscript.trim(),
-            translatedTranscript: translatedTranscript.trim(),
-            language: detectedLanguage,
-            duration,
-            r2Key: r2Key // Only set if upload actually succeeded
-          }));
+          ws.send(
+            JSON.stringify({
+              type: 'complete',
+              sessionId,
+              transcript: fullTranscript.trim(),
+              translatedTranscript: translatedTranscript.trim(),
+              language: detectedLanguage,
+              duration,
+              r2Key: r2Key, // Only set if upload actually succeeded
+            })
+          );
         }
-
       } else {
         // Binary audio data - forward to Deepgram
         if (deepgramConnection && deepgramConnection.getReadyState() === 1) {
@@ -2414,11 +2654,16 @@ wss.on('connection', (ws, req) => {
           const audioSession = activeSessions.get(sessionId);
           if (audioSession && audioSession.audioChunks) {
             // Memory limit: max 100MB per session to prevent memory exhaustion
-            const currentSize = audioSession.audioChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+            const currentSize = audioSession.audioChunks.reduce(
+              (sum, chunk) => sum + chunk.length,
+              0
+            );
             if (currentSize < 100 * 1024 * 1024) {
               audioSession.audioChunks.push(message);
             } else {
-              console.warn(`[WS] Session ${sessionId} audio limit reached (100MB), skipping chunk storage`);
+              console.warn(
+                `[WS] Session ${sessionId} audio limit reached (100MB), skipping chunk storage`
+              );
             }
           }
         }
@@ -2466,7 +2711,7 @@ app.get('/api/transcription-session/:sessionId', (req, res) => {
     transcript: session.transcript,
     translatedTranscript: session.translatedTranscript,
     language: session.language,
-    duration: Math.round((Date.now() - session.startTime.getTime()) / 1000)
+    duration: Math.round((Date.now() - session.startTime.getTime()) / 1000),
   });
 });
 
@@ -2484,7 +2729,7 @@ app.get('/api/transcription-session/:sessionId/audio', (req, res) => {
   res.json({
     audio: audioBase64,
     mimeType: 'audio/webm',
-    size: audioBuffer.length
+    size: audioBuffer.length,
   });
 });
 
@@ -2510,7 +2755,6 @@ app.get('/api/recording/:r2Key(*)', async (req, res) => {
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.setHeader('Content-Length', audioBuffer.length);
     res.send(audioBuffer);
-
   } catch (error) {
     console.error('[R2] Download endpoint error:', error);
     res.status(500).json({ error: 'Failed to download recording' });
@@ -2526,7 +2770,7 @@ app.get('/api/recording-status/:sessionId', async (req, res) => {
     inMemory: false,
     inR2: false,
     r2Key: null,
-    memorySize: 0
+    memorySize: 0,
   };
 
   if (session) {
@@ -2538,4 +2782,3 @@ app.get('/api/recording-status/:sessionId', async (req, res) => {
 
   res.json(result);
 });
-
