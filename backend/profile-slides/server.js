@@ -2992,14 +2992,23 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
     for (const company of companies) {
       try {
       // Skip companies with no meaningful info (only has website, no business/location/metrics)
-      const hasBusinessInfo = company.business && company.business.trim().length > 0;
-      const hasLocation = company.location && company.location.trim().length > 0;
+      // Helper to check if value is a placeholder (e.g., "Not found", "N/A", etc.)
+      const isPlaceholder = (val) => {
+        if (!val) return true;
+        const lower = String(val).toLowerCase().trim();
+        const placeholders = ['not found', 'not specified', 'n/a', 'unknown', 'not available', 'none', 'not provided', 'not disclosed'];
+        return placeholders.includes(lower) || lower.length === 0;
+      };
+
+      const hasBusinessInfo = company.business && !isPlaceholder(company.business);
+      const hasLocation = company.location && !isPlaceholder(company.location);
+      const hasCompanyName = company.company_name && !isPlaceholder(company.company_name);
       const hasMetrics = company.key_metrics && company.key_metrics.length > 0;
       const hasBreakdown = company.breakdown_items && company.breakdown_items.length > 0;
 
-      // If company has NO business info AND NO location AND NO metrics AND NO breakdown, skip it
-      if (!hasBusinessInfo && !hasLocation && !hasMetrics && !hasBreakdown) {
-        console.log(`  Skipping slide for ${company.company_name || company.website} - no meaningful info extracted`);
+      // If company has NO meaningful data at all, skip it entirely
+      if (!hasCompanyName && !hasBusinessInfo && !hasLocation && !hasMetrics && !hasBreakdown) {
+        console.log(`  Skipping slide for ${company.website} - no meaningful info extracted (all fields are empty/placeholder)`);
         continue;
       }
 
