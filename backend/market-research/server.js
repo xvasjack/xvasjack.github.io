@@ -211,8 +211,17 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true) {
     const outputTokens = data.usage?.completion_tokens || 0;
     trackCost('kimi-128k', inputTokens, outputTokens);
 
+    // Debug: log if response has tool calls or empty content
+    const content = data.choices?.[0]?.message?.content || '';
+    const toolCalls = data.choices?.[0]?.message?.tool_calls;
+    if (!content && toolCalls) {
+      console.log('  [Kimi] Response contains tool_calls instead of content - web search may need handling');
+    } else if (!content) {
+      console.log('  [Kimi] Empty response - finish_reason:', data.choices?.[0]?.finish_reason);
+    }
+
     return {
-      content: data.choices?.[0]?.message?.content || '',
+      content,
       citations: [],
       usage: { input: inputTokens, output: outputTokens }
     };
