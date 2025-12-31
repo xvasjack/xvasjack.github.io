@@ -4022,7 +4022,22 @@ ${scrapedContent.substring(0, 18000)}`
       temperature: 0.3
     });
 
-    return JSON.parse(response.choices[0].message.content);
+    const result = JSON.parse(response.choices[0].message.content);
+
+    // Validate and sanitize breakdown_items
+    if (result.breakdown_items && Array.isArray(result.breakdown_items)) {
+      result.breakdown_items = result.breakdown_items
+        .filter(item => item && typeof item === 'object')
+        .map(item => ({
+          label: String(item.label || ''),
+          value: String(item.value || '')
+        }))
+        .filter(item => item.label && item.value);
+    } else {
+      result.breakdown_items = [];
+    }
+
+    return result;
   } catch (e) {
     console.error('Agent 3b (products) error:', e.message);
     return { breakdown_title: 'Products and Applications', breakdown_items: [] };
