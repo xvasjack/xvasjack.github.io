@@ -3355,7 +3355,11 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       const tableStartY = 1.85;
       const rowHeight = 0.35;
 
-      slide.addTable(rows, {
+      // Skip table if no data (prevents PptxGenJS error "Array expected")
+      if (rows.length === 0) {
+        console.log(`  Skipping table for ${company.company_name || company.website} - no table data`);
+      } else {
+        slide.addTable(rows, {
         x: 0.37, y: tableStartY,
         w: 6.1,
         colW: [1.4, 4.7],
@@ -3365,7 +3369,8 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         valign: 'middle',
         border: { pt: 2.5, color: COLORS.white },
         margin: [0, 0.04, 0, 0.04]
-      });
+        });
+      }
 
       // ===== RIGHT SECTION (varies by business type) =====
       const businessType = company.business_type || 'industrial';
