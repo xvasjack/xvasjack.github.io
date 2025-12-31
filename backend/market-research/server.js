@@ -622,6 +622,203 @@ Return ONLY valid JSON, no markdown or explanation.`;
   }
 }
 
+// ============ DYNAMIC RESEARCH FRAMEWORK GENERATOR ============
+// Generates industry-specific research queries based on user's request
+
+async function generateResearchFramework(scope) {
+  console.log('\n=== GENERATING DYNAMIC RESEARCH FRAMEWORK ===');
+  console.log(`Industry: ${scope.industry}, Project: ${scope.projectType}`);
+
+  const frameworkPrompt = `You are a research strategist designing a comprehensive market research plan.
+
+PROJECT CONTEXT:
+- Industry: ${scope.industry}
+- Project Type: ${scope.projectType}
+- Client Context: ${scope.clientContext || 'Not specified'}
+- Focus Areas: ${(scope.focusAreas || []).join(', ') || 'General analysis'}
+
+Generate a research framework with specific search queries for each category. The queries should be:
+- Specific to the ${scope.industry} industry
+- Appropriate for the ${scope.projectType} project type
+- Designed to find actionable data, not general information
+
+Return a JSON object with this structure:
+{
+  "policy": {
+    "topics": [
+      {
+        "name": "Topic name",
+        "queries": ["5 specific search queries with {country} placeholder"]
+      }
+    ]
+  },
+  "market": {
+    "topics": [
+      {
+        "name": "Market Size & Growth",
+        "queries": ["5 queries about market size, growth, segments for ${scope.industry}"]
+      },
+      {
+        "name": "Industry Dynamics",
+        "queries": ["5 queries about trends, drivers, challenges"]
+      }
+    ]
+  },
+  "competitors": {
+    "topics": [
+      {
+        "name": "Major Players",
+        "queries": ["5 queries about key companies, market share, strategies"]
+      },
+      {
+        "name": "Competitive Dynamics",
+        "queries": ["5 queries about M&A, partnerships, new entrants"]
+      }
+    ]
+  },
+  "depth": {
+    "topics": [
+      {
+        "name": "Business Model & Economics",
+        "queries": ["5 queries about pricing, margins, deal structures in ${scope.industry}"]
+      },
+      {
+        "name": "Entry Strategy",
+        "queries": ["5 queries about market entry modes, partnerships, acquisition targets"]
+      }
+    ]
+  },
+  "insights": {
+    "topics": [
+      {
+        "name": "Failures & Lessons",
+        "queries": ["5 queries about failed projects, exits, what went wrong"]
+      },
+      {
+        "name": "Timing & Triggers",
+        "queries": ["5 queries about regulatory deadlines, incentive expirations, market windows"]
+      }
+    ]
+  }
+}
+
+CRITICAL RULES:
+1. Every query must include "{country}" as a placeholder
+2. Queries should seek SPECIFIC data: numbers, company names, dates, deal sizes
+3. Include queries about failures, not just successes
+4. Include timing-related queries (deadlines, expirations, upcoming changes)
+5. For ${scope.projectType === 'market_entry' ? 'market entry' : scope.projectType}: focus on entry barriers, local partners, investment requirements
+6. Total: 3-4 topics per category, 5 queries per topic
+
+Return ONLY valid JSON.`;
+
+  const result = await callDeepSeekChat(frameworkPrompt, '', 4096);
+
+  try {
+    let jsonStr = result.content.trim();
+    if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+    }
+    const framework = JSON.parse(jsonStr);
+
+    // Count topics and queries
+    let topicCount = 0;
+    let queryCount = 0;
+    for (const category of Object.values(framework)) {
+      if (category.topics) {
+        topicCount += category.topics.length;
+        for (const topic of category.topics) {
+          queryCount += (topic.queries || []).length;
+        }
+      }
+    }
+    console.log(`Generated dynamic framework: ${topicCount} topics, ${queryCount} queries for ${scope.industry}`);
+
+    return framework;
+  } catch (error) {
+    console.error('Failed to parse dynamic framework, using fallback:', error.message);
+    // Return a generic fallback framework
+    return generateFallbackFramework(scope);
+  }
+}
+
+// Fallback generic framework if dynamic generation fails
+function generateFallbackFramework(scope) {
+  const industry = scope.industry || 'the industry';
+  return {
+    policy: {
+      topics: [
+        {
+          name: 'Regulatory Framework',
+          queries: [
+            `{country} ${industry} regulations laws requirements`,
+            `{country} ${industry} licensing permits foreign companies`,
+            `{country} foreign investment restrictions ${industry} sector`,
+            `{country} ${industry} compliance requirements standards`,
+            `{country} government policy ${industry} development`
+          ]
+        }
+      ]
+    },
+    market: {
+      topics: [
+        {
+          name: 'Market Size & Growth',
+          queries: [
+            `{country} ${industry} market size value USD 2024`,
+            `{country} ${industry} market growth rate CAGR forecast`,
+            `{country} ${industry} market segments breakdown`,
+            `{country} ${industry} demand drivers trends`,
+            `{country} ${industry} market outlook 2025 2030`
+          ]
+        }
+      ]
+    },
+    competitors: {
+      topics: [
+        {
+          name: 'Major Players',
+          queries: [
+            `{country} ${industry} top companies market share ranking`,
+            `{country} ${industry} foreign companies presence`,
+            `{country} ${industry} local major players`,
+            `{country} ${industry} competitive landscape analysis`,
+            `{country} ${industry} M&A acquisitions recent`
+          ]
+        }
+      ]
+    },
+    depth: {
+      topics: [
+        {
+          name: 'Business Economics',
+          queries: [
+            `{country} ${industry} pricing margins profitability`,
+            `{country} ${industry} typical deal size contract value`,
+            `{country} ${industry} partnership joint venture examples`,
+            `{country} ${industry} investment requirements costs`,
+            `{country} ${industry} success factors best practices`
+          ]
+        }
+      ]
+    },
+    insights: {
+      topics: [
+        {
+          name: 'Lessons & Timing',
+          queries: [
+            `{country} ${industry} company failures exits reasons`,
+            `{country} ${industry} regulatory changes upcoming 2025`,
+            `{country} ${industry} incentives expiration deadline`,
+            `{country} ${industry} underserved segments gaps`,
+            `{country} ${industry} barriers challenges foreign companies`
+          ]
+        }
+      ]
+    }
+  };
+}
+
 // ============ ITERATIVE RESEARCH SYSTEM WITH CONFIDENCE SCORING ============
 
 // Step 1: Identify gaps in research after first synthesis with detailed scoring
@@ -1145,43 +1342,117 @@ This intelligence is for CEO-level decision making. We need SPECIFIC names, date
   return results;
 }
 
+// ============ UNIVERSAL RESEARCH AGENT ============
+// Uses dynamic framework to research any industry/country
+
+async function universalResearchAgent(category, topics, country, industry, clientContext, projectType) {
+  console.log(`    [${category.toUpperCase()} AGENT] Starting research for ${country}...`);
+  const agentStart = Date.now();
+  const results = {};
+
+  // Run all topics in parallel
+  const topicResults = await Promise.all(
+    topics.map(async (topic, idx) => {
+      const queryContext = `As a senior consultant advising a ${clientContext} on a ${projectType} project, research ${topic.name} for ${country}'s ${industry} market:
+
+SPECIFIC QUESTIONS:
+${topic.queries.map(q => '- ' + q.replace(/{country}/g, country)).join('\n')}
+
+REQUIREMENTS:
+- Provide SPECIFIC data: numbers, company names, dates, deal sizes
+- If data is unavailable, clearly state "data not available" rather than guessing
+- Focus on actionable intelligence, not general observations
+- Include recent developments (2023-2024)`;
+
+      const result = await callKimiDeepResearch(queryContext, country, industry);
+      return {
+        key: `${category}_${idx}_${topic.name.replace(/\s+/g, '_').toLowerCase()}`,
+        name: topic.name,
+        content: result.content,
+        citations: result.citations || []
+      };
+    })
+  );
+
+  for (const r of topicResults) {
+    if (r && r.content) results[r.key] = r;
+  }
+
+  console.log(`    [${category.toUpperCase()} AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  return results;
+}
+
 // ============ COUNTRY RESEARCH ORCHESTRATOR ============
 
-async function researchCountry(country, industry, clientContext) {
+async function researchCountry(country, industry, clientContext, scope = null) {
   console.log(`\n=== RESEARCHING: ${country} ===`);
   const startTime = Date.now();
 
-  // Multi-Agent Deep Research: Run 6 specialized agents in parallel
-  console.log(`  [MULTI-AGENT SYSTEM] Launching 6 specialized research agents...`);
-  console.log(`    - Policy Agent (3 topics)`);
-  console.log(`    - Market Agent (6 topics)`);
-  console.log(`    - Competitor Agent (5 topics)`);
-  console.log(`    - Context Agent (3 topics)`);
-  console.log(`    - Depth Agent (5 topics) - ESCO economics, partners, entry strategy`);
-  console.log(`    - Insights Agent (4 topics) - failures, timing, competitive intel, regulatory reality`);
+  // Use dynamic framework for universal industry support
+  const useDynamicFramework = true; // Enable dynamic framework
+  let researchData = {}; // Declare outside to be accessible in both paths
 
-  const [policyData, marketData, competitorData, contextData, depthData, insightsData] = await Promise.all([
-    policyResearchAgent(country, industry, clientContext),
-    marketResearchAgent(country, industry, clientContext),
-    competitorResearchAgent(country, industry, clientContext),
-    contextResearchAgent(country, industry, clientContext),
-    depthResearchAgent(country, industry, clientContext),
-    insightsResearchAgent(country, industry, clientContext)
-  ]);
+  if (useDynamicFramework && scope) {
+    // Generate industry-specific research framework
+    const dynamicFramework = await generateResearchFramework(scope);
 
-  // Merge all agent results
-  const researchData = {
-    ...policyData,
-    ...marketData,
-    ...competitorData,
-    ...contextData,
-    ...depthData,
-    ...insightsData
-  };
+    // Count topics for logging
+    const categoryCount = Object.keys(dynamicFramework).length;
+    let totalTopics = 0;
+    for (const cat of Object.values(dynamicFramework)) {
+      totalTopics += (cat.topics || []).length;
+    }
 
-  const totalTopics = Object.keys(researchData).length;
-  const researchTime = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(`\n  [AGENTS COMPLETE] ${totalTopics} topics researched in ${researchTime}s (parallel execution)`)
+    console.log(`  [DYNAMIC FRAMEWORK] Launching ${categoryCount} research agents with ${totalTopics} topics for ${scope.industry}...`);
+
+    // Run all categories in parallel
+    const categoryPromises = Object.entries(dynamicFramework).map(([category, data]) =>
+      universalResearchAgent(category, data.topics || [], country, industry, clientContext, scope.projectType)
+    );
+
+    const categoryResults = await Promise.all(categoryPromises);
+
+    // Merge all results
+    for (const result of categoryResults) {
+      Object.assign(researchData, result);
+    }
+
+    const researchTimeTemp = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`\n  [AGENTS COMPLETE] ${Object.keys(researchData).length} topics researched in ${researchTimeTemp}s (dynamic framework)`);
+
+  } else {
+    // Fallback: Use hardcoded framework for energy-specific research
+    console.log(`  [MULTI-AGENT SYSTEM] Launching 6 specialized research agents...`);
+    console.log(`    - Policy Agent (3 topics)`);
+    console.log(`    - Market Agent (6 topics)`);
+    console.log(`    - Competitor Agent (5 topics)`);
+    console.log(`    - Context Agent (3 topics)`);
+    console.log(`    - Depth Agent (5 topics)`);
+    console.log(`    - Insights Agent (4 topics)`);
+
+    const [policyData, marketData, competitorData, contextData, depthData, insightsData] = await Promise.all([
+      policyResearchAgent(country, industry, clientContext),
+      marketResearchAgent(country, industry, clientContext),
+      competitorResearchAgent(country, industry, clientContext),
+      contextResearchAgent(country, industry, clientContext),
+      depthResearchAgent(country, industry, clientContext),
+      insightsResearchAgent(country, industry, clientContext)
+    ]);
+
+    // Merge all agent results
+    researchData = {
+      ...policyData,
+      ...marketData,
+      ...competitorData,
+      ...contextData,
+      ...depthData,
+      ...insightsData
+    };
+
+    const totalTopics = Object.keys(researchData).length;
+    const researchTime = ((Date.now() - startTime) / 1000).toFixed(1);
+    console.log(`\n  [AGENTS COMPLETE] ${totalTopics} topics researched in ${researchTime}s (parallel execution)`);
+  }
 
   // Synthesize research into structured output using DeepSeek
   // Expanded structure for 15+ slides matching Escort template
@@ -4071,7 +4342,7 @@ async function runMarketResearch(userPrompt, email) {
     for (let i = 0; i < scope.targetMarkets.length; i += 2) {
       const batch = scope.targetMarkets.slice(i, i + 2);
       const batchResults = await Promise.all(
-        batch.map(country => researchCountry(country, scope.industry, scope.clientContext))
+        batch.map(country => researchCountry(country, scope.industry, scope.clientContext, scope))
       );
       countryAnalyses.push(...batchResults);
     }
