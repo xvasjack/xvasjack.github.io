@@ -142,6 +142,54 @@ async function withRetry(apiCall, maxRetries = 3, baseDelay = 2000) {
   throw lastError;
 }
 
+// ============ FETCH WITH TIMEOUT AND RETRY (for Gemini) ============
+// Gemini API calls need timeout (can hang) and retry (can fail)
+async function fetchWithTimeoutAndRetry(url, options, timeoutMs = 30000, maxRetries = 2) {
+  let lastError;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      // Create abort controller for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const isRetryable = response.status === 429 || response.status >= 500;
+        if (isRetryable && attempt < maxRetries) {
+          const delay = 2000 * Math.pow(2, attempt); // 2s, 4s
+          console.log(`    ⚠ Gemini API error ${response.status}, retrying in ${delay/1000}s...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        throw new Error(`Gemini API error: ${response.status}`);
+      }
+
+      return response;
+    } catch (error) {
+      lastError = error;
+
+      const isTimeout = error.name === 'AbortError';
+      const isNetworkError = error.message?.includes('fetch') || error.message?.includes('network');
+
+      if ((isTimeout || isNetworkError) && attempt < maxRetries) {
+        const delay = 2000 * Math.pow(2, attempt);
+        console.log(`    ⚠ Gemini ${isTimeout ? 'timeout' : 'network error'}, retrying in ${delay/1000}s...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError;
+}
+
 // ============ MARKER AI (Gemini Flash) ============
 // Scans FULL website content and extracts key snippets for extraction
 // This solves the truncation blind spot - marker sees everything, extractors get curated content
@@ -202,23 +250,24 @@ Website: ${website}
 CONTENT TO SCAN:
 ${contentToScan}`;
 
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.1,
-          maxOutputTokens: 8000,
-          responseMimeType: 'application/json'
-        }
-      })
-    });
-
-    if (!response.ok) {
-      console.log(`    Marker AI failed: ${response.status}`);
-      return null;
-    }
+    // Use fetchWithTimeoutAndRetry for reliability (30s timeout, 2 retries)
+    const response = await fetchWithTimeoutAndRetry(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 8000,
+            responseMimeType: 'application/json'
+          }
+        })
+      },
+      30000,  // 30 second timeout
+      2       // 2 retries
+    );
 
     const data = await response.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -3191,11 +3240,14 @@ async function scrapeWebsite(url) {
 }
 
 // AI Agent 1: Extract company name, established year, location
-// Using gpt-4o-mini (cheaper) since Marker AI pre-identifies content and Validator catches misses
+// Using GPT-4o (not mini) because location extraction is CRITICAL and needs:
+// - Accurate non-English parsing (Thai, Vietnamese addresses)
+// - Complex instruction following (3-level format, province detection)
+// - This is the most important extraction - wrong HQ ruins the profile
 async function extractBasicInfo(scrapedContent, websiteUrl) {
   try {
     const response = await withRetry(() => openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+      model: 'gpt-4o',
       messages: [
         {
           role: 'system',
@@ -3603,6 +3655,63 @@ ${scrapedContent.substring(0, 35000)}`
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
     console.error('Agent 3 error:', e.message);
+    return { key_metrics: [] };
+  }
+}
+
+// AI Agent 3a-focused: Extract SPECIFIC missed metrics identified by validator
+// This is a focused re-extraction that knows exactly what to look for
+async function extractKeyMetricsWithFocus(scrapedContent, context) {
+  try {
+    console.log('    Running focused re-extraction for missed items...');
+
+    const response = await withRetry(() => openai.chat.completions.create({
+      model: 'gpt-4o',  // Use stronger model for focused extraction
+      messages: [
+        {
+          role: 'system',
+          content: `You are extracting SPECIFIC metrics that were missed in the first extraction pass.
+
+## ALREADY EXTRACTED (do NOT duplicate):
+${context.existingMetrics || 'None yet'}
+
+## MISSED ITEMS TO FIND (the validator identified these were in the content but not extracted):
+- ${context.missedItems || 'None specified'}
+
+## YOUR TASK:
+Search the content for the MISSED ITEMS above and extract them as key_metrics.
+
+## OUTPUT FORMAT:
+{
+  "key_metrics": [
+    { "value": "800", "label": "tons/month production capacity" },
+    { "value": "300", "label": "employees" },
+    { "value": "9", "label": "export countries" }
+  ]
+}
+
+RULES:
+- ONLY extract the missed items listed above
+- Do NOT include items already in "ALREADY EXTRACTED"
+- If you cannot find a missed item in the content, skip it
+- Return empty array if nothing new found`
+        },
+        {
+          role: 'user',
+          content: `Company: ${context.company_name}
+Business: ${context.business}
+
+Content to search:
+${scrapedContent.substring(0, 30000)}`
+        }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.2
+    }));
+
+    return JSON.parse(response.choices[0].message.content);
+  } catch (e) {
+    console.error('Focused extraction error:', e.message);
     return { key_metrics: [] };
   }
 }
@@ -4337,28 +4446,36 @@ async function processSingleWebsite(website, index, total) {
     const validatorResult = await reviewAndCleanData(companyData, contentForExtraction, markerResult?.markers);
     companyData = validatorResult.data;
 
-    // Step 6b: ITERATIVE EXTRACTION - If validator found critical issues, re-extract once
-    // Check if we still have gaps after first pass
-    const metricsCount = companyData.key_metrics?.length || 0;
-    const hasLocation = companyData.location && companyData.location.trim().length > 0;
-    const needsReExtraction = validatorResult.issuesFound && (metricsCount < 2 || !hasLocation);
+    // Step 6b: ITERATIVE EXTRACTION - If validator found missed items, try to extract them
+    // Trigger re-extraction if validator identified specific things that were missed
+    const hasMissedItems = validatorResult.missedItems && validatorResult.missedItems.length > 0;
+    const needsReExtraction = validatorResult.issuesFound && hasMissedItems;
 
     if (needsReExtraction) {
-      console.log(`  [${index + 1}] Step 6b: Re-extracting (found issues, metrics=${metricsCount}, hasLocation=${hasLocation})...`);
+      console.log(`  [${index + 1}] Step 6b: Re-extracting ${validatorResult.missedItems.length} missed items...`);
+      validatorResult.missedItems.forEach(item => console.log(`    - ${item}`));
 
-      // Re-run metrics extraction with emphasis on what was missed
-      const reExtractedMetrics = await extractKeyMetrics(contentForExtraction, {
+      // Build focused prompt with explicit missed items
+      const missedItemsText = validatorResult.missedItems.join('\n- ');
+      const existingMetricsText = (companyData.key_metrics || [])
+        .map(m => `${m.value} ${m.label}`)
+        .join(', ');
+
+      // Re-run metrics extraction with explicit focus on missed items
+      const reExtractedMetrics = await extractKeyMetricsWithFocus(contentForExtraction, {
         company_name: companyData.company_name,
         business: companyData.business,
-        previousMetrics: companyData.key_metrics,  // Tell it what we already have
-        focusOn: validatorResult.missedItems || []  // Tell it what to look for
+        existingMetrics: existingMetricsText,
+        missedItems: missedItemsText
       });
 
-      // Merge new metrics with existing (avoid duplicates)
+      // Merge new metrics with existing (avoid duplicates by checking both label and value)
       if (reExtractedMetrics.key_metrics?.length > 0) {
         const existingLabels = new Set((companyData.key_metrics || []).map(m => m.label?.toLowerCase()));
+        const existingValues = new Set((companyData.key_metrics || []).map(m => m.value?.toLowerCase()));
         const newMetrics = reExtractedMetrics.key_metrics.filter(m =>
-          !existingLabels.has(m.label?.toLowerCase())
+          !existingLabels.has(m.label?.toLowerCase()) &&
+          !existingValues.has(m.value?.toLowerCase())
         );
         if (newMetrics.length > 0) {
           console.log(`  [${index + 1}] Added ${newMetrics.length} new metrics from re-extraction`);
