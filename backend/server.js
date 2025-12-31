@@ -4699,9 +4699,9 @@ app.post('/api/validation', async (req, res) => {
 
 // ============ TRADING COMPARABLE ============
 
-// Helper function to calculate median
+// Helper function to calculate median (includes negative values for margins/ratios)
 function calculateMedian(values) {
-  const nums = values.filter(v => typeof v === 'number' && !isNaN(v) && isFinite(v) && v > 0);
+  const nums = values.filter(v => typeof v === 'number' && !isNaN(v) && isFinite(v) && v !== null);
   if (nums.length === 0) return null;
   const sorted = [...nums].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
@@ -5967,9 +5967,11 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       sales: findSalesCol(),
       marketCap: findCol(['market cap', 'mcap', 'market capitalization', 'mkt cap', 'marketcap', 'market value']),
       ev: findCol(['enterprise value', 'total ev', 'ev ', ' ev', 'ev(', 'ev/']),
-      ebitda: findCol(['ebitda', 'operating income']),
-      netMargin: findCol(['net margin', 'net income margin', 'profit margin', 'net profit margin', 'npm', 'net mgn']),
-      opMargin: findCol(['operating margin', 'op margin', 'oper margin', 'opm', 'op mgn', 'oper mgn']),
+      ebitda: findCol(['ebitda'], ['margin', '%']),  // Exclude EBITDA Margin
+      // Net Margin: exclude operating/op to avoid confusion with Op Margin
+      netMargin: findCol(['net margin', 'net income margin', 'net profit margin', 'npm', 'net mgn', 'profit margin'], ['operating', 'op ', 'oper', 'ebitda', 'gross']),
+      // Op Margin: must contain operating/op
+      opMargin: findCol(['operating margin', 'op margin', 'oper margin', 'opm', 'op mgn', 'oper mgn', 'operating profit margin']),
       ebitdaMargin: findCol(['ebitda margin', 'ebitda %', 'ebitda/sales', 'ebitda mgn']),
       evEbitda: findCol(['ev/ebitda', 'ev / ebitda', 'ev-ebitda', 'ev to ebitda']),
       peTTM: peTTMCol,
@@ -5987,6 +5989,8 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     console.log(`  EV: col ${cols.ev} = "${headers[cols.ev] || 'N/A'}"`);
     console.log(`  EBITDA: col ${cols.ebitda} = "${headers[cols.ebitda] || 'N/A'}"`);
     console.log(`  Net Margin: col ${cols.netMargin} = "${headers[cols.netMargin] || 'N/A'}"`);
+    console.log(`  Op Margin: col ${cols.opMargin} = "${headers[cols.opMargin] || 'N/A'}"`);
+    console.log(`  EBITDA Margin: col ${cols.ebitdaMargin} = "${headers[cols.ebitdaMargin] || 'N/A'}"`);
     console.log(`  EV/EBITDA: col ${cols.evEbitda} = "${headers[cols.evEbitda] || 'N/A'}"`);
     console.log(`  P/E TTM: col ${cols.peTTM} = "${headers[cols.peTTM] || 'N/A'}"`);
     console.log(`  P/E FY: col ${cols.peFY} = "${headers[cols.peFY] || 'N/A'}"`);
