@@ -3785,6 +3785,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   );
   // Key metrics recap
   const metricsRows = [tableHeader(['Metric', 'Value', 'Confidence'])];
+  const marketDynamics = market.marketDynamics || {};
   if (marketDynamics.marketSize) {
     metricsRows.push([{ text: 'Market Size' }, { text: truncate(marketDynamics.marketSize, 40) }, { text: `${synthesis.confidenceScore || '--'}/100` }]);
   }
