@@ -23,7 +23,7 @@ app.use(cors());
 app.use(express.json({ limit: '100mb' }));
 
 // Check required environment variables
-const requiredEnvVars = ['DEEPSEEK_API_KEY', 'PERPLEXITY_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
+const requiredEnvVars = ['DEEPSEEK_API_KEY', 'KIMI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
@@ -43,8 +43,8 @@ const costTracker = {
 const PRICING = {
   'deepseek-chat': { input: 0.28, output: 0.42 },      // Cache miss pricing
   'deepseek-reasoner': { input: 0.28, output: 0.42 }, // Same pricing, but thinking mode
-  'perplexity': { perSearch: 0.005 },                  // Sonar basic
-  'perplexity-pro': { perSearch: 0.015 }               // Sonar Pro
+  'kimi-128k': { input: 0.84, output: 0.84 },          // Moonshot v1 128k context
+  'kimi-32k': { input: 0.35, output: 0.35 }            // Moonshot v1 32k context
 };
 
 function trackCost(model, inputTokens, outputTokens, searchCount = 0) {
@@ -163,83 +163,97 @@ async function callDeepSeek(prompt, systemPrompt = '', maxTokens = 16384) {
   }
 }
 
-// Perplexity API for web search - using sonar-pro for deeper research
-async function callPerplexity(query) {
+// Kimi (Moonshot) API - for deep research with web browsing
+// Uses 128k context for thorough analysis
+async function callKimi(query, systemPrompt = '', useWebSearch = true) {
   try {
-    // Use sonar-pro for more thorough search results
-    const response = await fetch('https://api.perplexity.ai/chat/completions', {
+    const messages = [];
+    if (systemPrompt) {
+      messages.push({ role: 'system', content: systemPrompt });
+    }
+    messages.push({ role: 'user', content: query });
+
+    const requestBody = {
+      model: 'moonshot-v1-128k',
+      messages,
+      max_tokens: 8192,
+      temperature: 0.3
+    };
+
+    // Enable web search tool if requested
+    if (useWebSearch) {
+      requestBody.tools = [{
+        type: 'builtin_function',
+        function: { name: '$web_search' }
+      }];
+    }
+
+    const response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`
+        'Authorization': `Bearer ${process.env.KIMI_API_KEY}`
       },
-      body: JSON.stringify({
-        model: 'sonar-pro',
-        messages: [{
-          role: 'system',
-          content: 'You are a market research analyst. Provide detailed, factual information with specific numbers, dates, and sources. Focus on recent data (2023-2025).'
-        }, {
-          role: 'user',
-          content: query
-        }],
-        max_tokens: 4096,
-        temperature: 0.1,
-        search_recency_filter: 'year',
-        return_citations: true
-      })
+      body: JSON.stringify(requestBody)
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Perplexity HTTP error ${response.status}:`, errorText.substring(0, 200));
-      // Fallback to basic sonar model
-      return callPerplexityBasic(query);
-    }
-
-    const data = await response.json();
-    trackCost('perplexity-pro', 0, 0, 1);
-
-    return {
-      content: data.choices?.[0]?.message?.content || '',
-      citations: data.citations || []
-    };
-  } catch (error) {
-    console.error('Perplexity API error:', error.message);
-    return { content: '', citations: [] };
-  }
-}
-
-// Fallback to basic sonar model
-async function callPerplexityBasic(query) {
-  try {
-    const response = await fetch('https://api.perplexity.ai/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: 'sonar',
-        messages: [{ role: 'user', content: query }],
-        max_tokens: 2048,
-        temperature: 0.2
-      })
-    });
-
-    if (!response.ok) {
+      console.error(`Kimi HTTP error ${response.status}:`, errorText.substring(0, 200));
       return { content: '', citations: [] };
     }
 
     const data = await response.json();
-    trackCost('perplexity', 0, 0, 1);
+    const inputTokens = data.usage?.prompt_tokens || 0;
+    const outputTokens = data.usage?.completion_tokens || 0;
+    trackCost('kimi-128k', inputTokens, outputTokens);
 
     return {
       content: data.choices?.[0]?.message?.content || '',
-      citations: data.citations || []
+      citations: [],
+      usage: { input: inputTokens, output: outputTokens }
     };
   } catch (error) {
+    console.error('Kimi API error:', error.message);
     return { content: '', citations: [] };
   }
+}
+
+// Kimi deep research - comprehensive research on a topic
+// Lets Kimi browse and think deeply about the research question
+async function callKimiDeepResearch(topic, country, industry) {
+  console.log(`  [Kimi Deep Research] ${topic} for ${country}...`);
+
+  const systemPrompt = `You are a senior market research analyst at McKinsey. You have access to web search.
+
+Your job is to conduct DEEP research on the given topic. Not surface-level - actually dig into:
+- Primary sources (government websites, official statistics, company filings)
+- Recent news and developments (2024-2025)
+- Specific numbers with sources
+- Company-specific intelligence
+- Regulatory details with enforcement reality
+
+For every claim, you MUST provide:
+- Specific numbers (market size in $, growth %, dates)
+- Source type (government data, company filing, industry report)
+- Context (why this matters, how it compares)
+
+DO NOT give generic statements like "the market is growing". Give specifics like "The ESCO market reached $2.3B in 2024, up 14% YoY, driven by mandatory energy audits under the 2023 Energy Act."`;
+
+  const query = `Research this topic thoroughly for ${country}'s ${industry} market:
+
+${topic}
+
+Search the web for recent data (2024-2025). Find:
+1. Specific statistics and numbers
+2. Key regulations and their enforcement status
+3. Major companies and their market positions
+4. Recent deals, partnerships, or market developments
+5. Government initiatives and deadlines
+
+Be specific. Cite sources. No fluff.`;
+
+  return callKimi(query, systemPrompt, true);
 }
 
 // ============ RESEARCH FRAMEWORK ============
@@ -428,46 +442,46 @@ Return ONLY valid JSON.`;
   }
 }
 
-// Step 2: Execute targeted research to fill gaps
-async function fillResearchGaps(gaps, country) {
-  console.log(`  [Filling research gaps for ${country}...]`);
+// Step 2: Execute targeted research to fill gaps using Kimi
+async function fillResearchGaps(gaps, country, industry) {
+  console.log(`  [Filling research gaps for ${country} with Kimi...]`);
   const additionalData = { gapResearch: [], verificationResearch: [] };
 
-  // Research critical gaps
+  // Research critical gaps with Kimi
   const criticalGaps = gaps.criticalGaps || [];
-  for (const gap of criticalGaps.slice(0, 6)) { // Limit to 6 most critical
+  for (const gap of criticalGaps.slice(0, 4)) { // Limit to 4 most critical
     if (!gap.searchQuery) continue;
-    console.log(`    Gap search: ${gap.searchQuery.substring(0, 50)}...`);
+    console.log(`    Gap search: ${gap.gap.substring(0, 50)}...`);
 
-    const result = await callPerplexity(gap.searchQuery);
+    const result = await callKimiDeepResearch(gap.searchQuery, country, industry);
     if (result.content) {
       additionalData.gapResearch.push({
         area: gap.area,
         gap: gap.gap,
         query: gap.searchQuery,
         findings: result.content,
-        citations: result.citations
+        citations: result.citations || []
       });
     }
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
 
-  // Verify questionable claims
+  // Verify questionable claims with Kimi
   const toVerify = gaps.dataToVerify || [];
-  for (const item of toVerify.slice(0, 4)) { // Limit to 4 verifications
+  for (const item of toVerify.slice(0, 2)) { // Limit to 2 verifications
     if (!item.searchQuery) continue;
-    console.log(`    Verify: ${item.searchQuery.substring(0, 50)}...`);
+    console.log(`    Verify: ${item.claim.substring(0, 50)}...`);
 
-    const result = await callPerplexity(item.searchQuery);
+    const result = await callKimiDeepResearch(item.searchQuery, country, industry);
     if (result.content) {
       additionalData.verificationResearch.push({
         claim: item.claim,
         query: item.searchQuery,
         findings: result.content,
-        citations: result.citations
+        citations: result.citations || []
       });
     }
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
 
   console.log(`    Collected ${additionalData.gapResearch.length} gap fills, ${additionalData.verificationResearch.length} verifications`);
@@ -530,37 +544,85 @@ Return ONLY valid JSON.`;
   }
 }
 
-// ============ COUNTRY RESEARCH AGENT (ITERATIVE) ============
+// ============ COUNTRY RESEARCH AGENT (KIMI + DEEPSEEK) ============
 
 async function researchCountry(country, industry, clientContext) {
   console.log(`\n=== RESEARCHING: ${country} ===`);
   const startTime = Date.now();
 
+  // Use Kimi for deep research on each major topic area
+  // Kimi browses the web and provides comprehensive analysis per topic
+  const researchTopics = [
+    {
+      key: 'macroContext',
+      topic: `Economic context and energy landscape:
+- GDP, population, industrial sector contribution
+- Energy consumption by sector
+- Energy intensity trends vs regional peers
+- Key economic development plans affecting energy`
+    },
+    {
+      key: 'policyRegulatory',
+      topic: `Policy and regulatory environment for ${industry}:
+- Government stance on energy efficiency/ESCOs
+- Key legislation (names, years, requirements, penalties)
+- Foreign ownership limits and exceptions
+- Tax incentives and BOI promotion categories
+- Regulatory enforcement reality (not just what's written)`
+    },
+    {
+      key: 'marketDynamics',
+      topic: `${industry} market dynamics:
+- Market size in USD with year and growth rate
+- Who is buying and why (demand drivers)
+- Electricity and gas tariffs for industrial users
+- Supply chain infrastructure
+- Recent market developments (2024-2025)`
+    },
+    {
+      key: 'competitiveLandscape',
+      topic: `Competitive landscape for ${industry}:
+- Major local players (name, revenue, market position)
+- Foreign companies present (entry mode, success level)
+- Recent M&A, partnerships, or market entries
+- Market concentration and barriers to entry
+- Companies seeking partners or up for acquisition`
+    },
+    {
+      key: 'infrastructure',
+      topic: `Infrastructure and ecosystem:
+- Energy infrastructure (LNG terminals, pipelines, grid quality)
+- Key industrial zones and economic corridors
+- Smart grid and energy management pilot projects
+- Logistics and supply chain bottlenecks`
+    },
+    {
+      key: 'opportunities',
+      topic: `Market entry opportunities for a ${clientContext}:
+- White spaces in the market
+- Potential local partners (who, why they'd partner)
+- Upcoming government projects or tenders
+- Timing factors (why enter now vs wait)`
+    }
+  ];
+
+  console.log(`  [Kimi Deep Research - 6 comprehensive searches]`);
   const researchData = {};
 
-  // Run all research queries
-  for (const [sectionKey, section] of Object.entries(RESEARCH_FRAMEWORK)) {
-    console.log(`  [${section.name}]`);
-    const sectionData = [];
+  for (const { key, topic } of researchTopics) {
+    console.log(`  [${key}] Researching...`);
+    const result = await callKimiDeepResearch(topic, country, industry);
 
-    for (const queryTemplate of section.queries) {
-      const query = queryTemplate.replace(/{country}/g, country).replace(/{industry}/g, industry);
-      console.log(`    Searching: ${query.substring(0, 60)}...`);
-
-      const result = await callPerplexity(query);
-      if (result.content) {
-        sectionData.push({
-          query,
-          content: result.content,
-          citations: result.citations
-        });
-      }
-
-      // Small delay to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 500));
+    if (result.content) {
+      researchData[key] = [{
+        topic,
+        content: result.content,
+        citations: result.citations || []
+      }];
     }
 
-    researchData[sectionKey] = sectionData;
+    // Small delay between research calls
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
 
   // Synthesize research into structured output using DeepSeek
@@ -675,7 +737,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
     console.log(`    → ${criticalGapCount} high-priority gaps, ${(gaps.dataToVerify || []).length} claims to verify`);
 
     // Step 2: Execute targeted research to fill gaps
-    const additionalData = await fillResearchGaps(gaps, country);
+    const additionalData = await fillResearchGaps(gaps, country, industry);
 
     // Step 3: Re-synthesize with the new data
     if (additionalData.gapResearch.length > 0 || additionalData.verificationResearch.length > 0) {
