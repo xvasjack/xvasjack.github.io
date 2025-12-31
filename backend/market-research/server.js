@@ -258,7 +258,7 @@ Be specific. Cite sources. No fluff.`;
 
 // ============ RESEARCH FRAMEWORK ============
 // Deep Research: 50+ queries per country organized by Escort template sections
-// Produces ~25 slides per country with charts, depth analysis, and Go/No-Go decision
+// Produces ~27 slides per country with charts, depth analysis, timing, lessons, and Go/No-Go decision
 
 const RESEARCH_FRAMEWORK = {
   // === SECTION 1: POLICY & REGULATIONS (3 slides) ===
@@ -518,6 +518,52 @@ const RESEARCH_FRAMEWORK = {
       '{country} factories required energy audits compliance status',
       '{country} Japanese manufacturing companies presence factories list'
     ]
+  },
+
+  // === INSIGHT & INTELLIGENCE QUERIES (for non-obvious insights) ===
+  insight_failures: {
+    name: 'Failures & Lessons Learned',
+    slideTitle: '{country} - Market Lessons',
+    queries: [
+      '{country} ESCO contract failures cancelled terminated projects reasons',
+      '{country} foreign energy company exit withdrew market why reasons',
+      '{country} energy project disputes legal cases arbitration',
+      '{country} energy joint venture breakup dissolution reasons lessons',
+      '{country} failed energy investments losses write-offs foreign companies'
+    ]
+  },
+  insight_timing: {
+    name: 'Timing & Triggers',
+    slideTitle: '{country} - Market Timing',
+    queries: [
+      '{country} BOI investment incentives expiration deadline 2027 2028',
+      '{country} carbon tax carbon pricing implementation timeline 2025 2026',
+      '{country} energy regulation changes upcoming 2025 2026 new requirements',
+      '{country} renewable energy targets deadline compliance 2030',
+      '{country} energy efficiency mandate enforcement crackdown 2024 2025'
+    ]
+  },
+  insight_competitive: {
+    name: 'Competitive Intelligence',
+    slideTitle: '{country} - Competitive Dynamics',
+    queries: [
+      '{country} ESCO companies seeking acquisition buyers sale',
+      '{country} energy companies looking for foreign technology partners',
+      '{country} competitor weaknesses complaints customer dissatisfaction',
+      '{country} underserved industrial regions provinces energy services gap',
+      '{country} energy services pricing pressure margins profitability'
+    ]
+  },
+  insight_regulatory: {
+    name: 'Regulatory Reality',
+    slideTitle: '{country} - Regulatory Enforcement',
+    queries: [
+      '{country} energy audit enforcement rate actual compliance statistics',
+      '{country} energy regulation violations penalties fines cases',
+      '{country} DEDE EPPO regulatory capacity auditors inspectors shortage',
+      '{country} energy policy enforcement selective industries targeted',
+      '{country} regulatory relationships government connections importance'
+    ]
   }
 };
 
@@ -527,7 +573,8 @@ const RESEARCH_TOPIC_GROUPS = {
   market: ['market_tpes', 'market_finalDemand', 'market_electricity', 'market_gasLng', 'market_pricing', 'market_escoServices'],
   competitors: ['competitors_japanese', 'competitors_localMajor', 'competitors_foreignPlayers', 'competitors_caseStudy', 'competitors_maActivity'],
   context: ['macro_economicContext', 'opportunities_whitespace', 'risks_assessment'],
-  depth: ['depth_escoEconomics', 'depth_partnerAssessment', 'depth_entryStrategy', 'depth_implementation', 'depth_targetSegments']
+  depth: ['depth_escoEconomics', 'depth_partnerAssessment', 'depth_entryStrategy', 'depth_implementation', 'depth_targetSegments'],
+  insights: ['insight_failures', 'insight_timing', 'insight_competitive', 'insight_regulatory']
 };
 
 // ============ SCOPE PARSER ============
@@ -1031,26 +1078,95 @@ DEPTH IS CRITICAL - We need specifics for executive decision-making, not general
   return results;
 }
 
+// Insights Research Agent - handles non-obvious intelligence: failures, timing, competitive dynamics
+async function insightsResearchAgent(country, industry, clientContext) {
+  console.log(`    [INSIGHTS AGENT] Starting intelligence gathering for ${country}...`);
+  const agentStart = Date.now();
+  const topics = RESEARCH_TOPIC_GROUPS.insights;
+  const results = {};
+
+  // Run insight queries in parallel - these uncover non-obvious intelligence
+  const insightResults = await Promise.all(
+    topics.map(async (topicKey) => {
+      const framework = RESEARCH_FRAMEWORK[topicKey];
+      if (!framework) return null;
+
+      const isFailures = topicKey === 'insight_failures';
+      const isTiming = topicKey === 'insight_timing';
+      const isCompetitive = topicKey === 'insight_competitive';
+      const isRegulatory = topicKey === 'insight_regulatory';
+
+      const queryContext = `As a competitive intelligence analyst helping a ${clientContext} evaluate ${country}'s ${industry} market, research ${framework.name}:
+
+QUESTIONS TO ANSWER:
+${framework.queries.map(q => '- ' + q.replace('{country}', country)).join('\n')}
+
+${isFailures ? `CRITICAL - FIND SPECIFIC EXAMPLES:
+- Name companies that failed or exited
+- Identify specific reasons for failure
+- Extract lessons learned
+- Note warning signs to watch for` : ''}
+
+${isTiming ? `CRITICAL - IDENTIFY SPECIFIC DEADLINES:
+- Incentive expiration dates (month/year)
+- Regulatory compliance deadlines
+- Policy implementation timelines
+- Windows of opportunity closing` : ''}
+
+${isCompetitive ? `CRITICAL - FIND ACTIONABLE INTELLIGENCE:
+- Companies actively seeking partners/buyers
+- Competitors' known weaknesses
+- Underserved regions or segments
+- Pricing and margin pressures` : ''}
+
+${isRegulatory ? `CRITICAL - DISTINGUISH RHETORIC FROM REALITY:
+- Actual enforcement statistics
+- Agencies' real capacity constraints
+- Which regulations are enforced vs ignored
+- How companies navigate the system` : ''}
+
+This intelligence is for CEO-level decision making. We need SPECIFIC names, dates, numbers - not generic observations.`;
+
+      const result = await callKimiDeepResearch(queryContext, country, industry);
+      return {
+        key: topicKey,
+        content: result.content,
+        citations: result.citations || [],
+        slideTitle: framework.slideTitle?.replace('{country}', country) || ''
+      };
+    })
+  );
+
+  for (const r of insightResults) {
+    if (r && r.content) results[r.key] = r;
+  }
+
+  console.log(`    [INSIGHTS AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  return results;
+}
+
 // ============ COUNTRY RESEARCH ORCHESTRATOR ============
 
 async function researchCountry(country, industry, clientContext) {
   console.log(`\n=== RESEARCHING: ${country} ===`);
   const startTime = Date.now();
 
-  // Multi-Agent Deep Research: Run 5 specialized agents in parallel
-  console.log(`  [MULTI-AGENT SYSTEM] Launching 5 specialized research agents...`);
+  // Multi-Agent Deep Research: Run 6 specialized agents in parallel
+  console.log(`  [MULTI-AGENT SYSTEM] Launching 6 specialized research agents...`);
   console.log(`    - Policy Agent (3 topics)`);
   console.log(`    - Market Agent (6 topics)`);
   console.log(`    - Competitor Agent (5 topics)`);
   console.log(`    - Context Agent (3 topics)`);
   console.log(`    - Depth Agent (5 topics) - ESCO economics, partners, entry strategy`);
+  console.log(`    - Insights Agent (4 topics) - failures, timing, competitive intel, regulatory reality`);
 
-  const [policyData, marketData, competitorData, contextData, depthData] = await Promise.all([
+  const [policyData, marketData, competitorData, contextData, depthData, insightsData] = await Promise.all([
     policyResearchAgent(country, industry, clientContext),
     marketResearchAgent(country, industry, clientContext),
     competitorResearchAgent(country, industry, clientContext),
     contextResearchAgent(country, industry, clientContext),
-    depthResearchAgent(country, industry, clientContext)
+    depthResearchAgent(country, industry, clientContext),
+    insightsResearchAgent(country, industry, clientContext)
   ]);
 
   // Merge all agent results
@@ -1059,7 +1175,8 @@ async function researchCountry(country, industry, clientContext) {
     ...marketData,
     ...competitorData,
     ...contextData,
-    ...depthData
+    ...depthData,
+    ...insightsData
   };
 
   const totalTopics = Object.keys(researchData).length;
@@ -1076,6 +1193,25 @@ CRITICAL REQUIREMENTS:
 1. DEPTH over breadth - specific numbers, names, dates for every claim
 2. CHART DATA - provide structured data for charts where indicated
 3. SLIDE-READY - each section maps to a specific slide
+4. STORY FLOW - each slide must answer the reader's question and set up the next
+
+=== NARRATIVE STRUCTURE ===
+Your presentation tells a story. Each section answers a question and raises the next:
+
+POLICY SECTION → "What rules govern this market?" → Leads reader to ask "How big is the opportunity?"
+MARKET SECTION → "How big is the opportunity?" → Leads to "Who's already chasing it?"
+COMPETITOR SECTION → "Who competes here?" → Leads to "Can I win? What's my opening?"
+DEPTH SECTION → "What's the economics/path?" → Leads to "Should I proceed?"
+SUMMARY SECTION → "GO or NO-GO?" → Clear recommendation
+
+Each slide's "subtitle" field should be the INSIGHT, not a description. Answer "So what?" in max 15 words.
+
+=== INSIGHTS INTELLIGENCE ===
+Use the failure cases, timing triggers, and competitive intelligence to:
+- Identify non-obvious opportunities (underserved segments, distressed competitors)
+- Provide timing urgency (incentive expirations, regulatory deadlines)
+- Warn about real risks (what killed previous entrants)
+- Distinguish enforced vs ignored regulations
 
 RESEARCH DATA:
 ${JSON.stringify(researchData, null, 2)}
@@ -1384,6 +1520,25 @@ Return a JSON object with this EXPANDED structure for 15+ slides:
 
   // === SECTION 5: SUMMARY & RECOMMENDATIONS ===
   "summary": {
+    "timingIntelligence": {
+      "slideTitle": "${country} - Why Now?",
+      "subtitle": "Time-sensitive factors driving urgency",
+      "triggers": [
+        {"trigger": "BOI incentives expire Dec 2027", "impact": "Miss tax holiday window", "action": "Apply before Q2 2026"},
+        {"trigger": "Carbon tax effective 2026", "impact": "20-30% demand acceleration", "action": "Position before enforcement"},
+        {"trigger": "3 ESCOs seeking buyers", "impact": "Acquisition window closing", "action": "Approach Absolute Energy Q1"}
+      ],
+      "windowOfOpportunity": "Clear statement of why 2025-2026 is optimal entry timing"
+    },
+    "lessonsLearned": {
+      "slideTitle": "${country} - Lessons from Market",
+      "subtitle": "What killed previous entrants and how to avoid",
+      "failures": [
+        {"company": "Company that failed", "year": "20XX", "reason": "Specific reason", "lesson": "What to do differently"}
+      ],
+      "successFactors": ["What successful entrants did right"],
+      "warningSignsToWatch": ["Red flags that indicate trouble"]
+    },
     "opportunities": [
       {"opportunity": "Specific opportunity", "size": "$X million", "timing": "Why now", "action": "What to do"}
     ],
@@ -1392,28 +1547,29 @@ Return a JSON object with this EXPANDED structure for 15+ slides:
     ],
     "ratings": {
       "attractiveness": 7,
-      "attractivenessRationale": "Multi-factor justification",
+      "attractivenessRationale": "Multi-factor justification with specific evidence",
       "feasibility": 6,
-      "feasibilityRationale": "Multi-factor justification"
+      "feasibilityRationale": "Multi-factor justification with specific evidence"
     },
     "keyInsights": [
       {
-        "title": "Max 10 word headline",
-        "data": "The specific evidence",
-        "pattern": "What it means",
-        "implication": "What to do"
+        "title": "Max 10 word headline - must be NON-OBVIOUS",
+        "data": "The specific evidence - numbers, names, dates",
+        "pattern": "The causal mechanism others miss",
+        "implication": "The strategic response - specific action"
       }
     ],
-    "recommendation": "Clear recommendation for entry or not",
+    "recommendation": "Clear recommendation for entry or not - with specific first step",
     "goNoGo": {
       "criteria": [
         {"criterion": "Market size >$100M", "met": true, "evidence": "Market is $X million"},
         {"criterion": "Regulatory clarity", "met": true, "evidence": "Clear ESCO framework exists"},
         {"criterion": "Viable partners available", "met": true, "evidence": "3 partners identified"},
-        {"criterion": "Acceptable risk level", "met": true, "evidence": "Risk score X/10"}
+        {"criterion": "Acceptable risk level", "met": true, "evidence": "Risk score X/10"},
+        {"criterion": "Timing window open", "met": true, "evidence": "BOI incentives available until Dec 2027"}
       ],
       "overallVerdict": "GO / NO-GO / CONDITIONAL GO",
-      "conditions": ["Condition 1 if conditional"]
+      "conditions": ["Specific condition 1 if conditional", "Specific condition 2"]
     }
   }
 }
@@ -2418,7 +2574,7 @@ function validateChartData(data, chartType) {
 }
 
 // Single country deep-dive PPT - Matches YCP Escort/Shizuoka Gas format
-// Structure: Title → Policy (3) → Market (6 with charts) → Competitors (5) → Depth (5) → Summary (5) = 25 slides
+// Structure: Title → Policy (3) → Market (6 with charts) → Competitors (5) → Depth (5) → Timing (2) → Summary (5) = 27 slides
 async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   console.log(`Generating expanded single-country PPT for ${synthesis.country}...`);
 
@@ -3138,9 +3294,95 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
   }
 
-  // ============ SECTION 5: SUMMARY (4 slides) ============
+  // ============ SECTION 5: TIMING & LESSONS (2 slides) ============
 
-  // SLIDE 21: Go/No-Go Decision
+  // SLIDE 21: Why Now? - Timing Intelligence
+  const timing = synthesis.summary?.timingIntelligence || {};
+  const timingSlide = addSlideWithTitle(
+    timing.slideTitle || `${country} - Why Now?`,
+    truncateSubtitle(timing.windowOfOpportunity || 'Time-sensitive factors driving urgency', 95)
+  );
+  const triggers = safeArray(timing.triggers, 4);
+  if (triggers.length > 0) {
+    const triggerRows = [tableHeader(['Trigger', 'Impact', 'Action Required'])];
+    triggers.forEach(t => {
+      triggerRows.push([
+        { text: truncate(t.trigger || '', 35) },
+        { text: truncate(t.impact || '', 30) },
+        { text: truncate(t.action || '', 30) }
+      ]);
+    });
+    timingSlide.addTable(triggerRows, {
+      x: 0.35, y: 1.3, w: 9.3, h: 3.0,
+      fontSize: 11, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [3.5, 2.9, 2.9],
+      valign: 'top'
+    });
+  }
+  // Window callout
+  if (timing.windowOfOpportunity) {
+    addCalloutBox(timingSlide, 'WINDOW OF OPPORTUNITY', timing.windowOfOpportunity, {
+      y: 4.5, h: 1.0, type: 'recommendation'
+    });
+  }
+
+  // SLIDE 22: Lessons from Market
+  const lessonsData = synthesis.summary?.lessonsLearned || {};
+  const lessonsSlide = addSlideWithTitle(
+    lessonsData.slideTitle || `${country} - Lessons from Market`,
+    truncateSubtitle(lessonsData.subtitle || 'What previous entrants learned', 95)
+  );
+  const failures = safeArray(lessonsData.failures, 3);
+  if (failures.length > 0) {
+    lessonsSlide.addText('FAILURES TO AVOID', {
+      x: 0.35, y: 1.3, w: 4.5, h: 0.3,
+      fontSize: 12, bold: true, color: COLORS.red, fontFace: FONT
+    });
+    const failureRows = [tableHeader(['Company', 'Reason', 'Lesson'])];
+    failures.forEach(f => {
+      failureRows.push([
+        { text: `${f.company || ''} (${f.year || ''})` },
+        { text: truncate(f.reason || '', 35) },
+        { text: truncate(f.lesson || '', 35) }
+      ]);
+    });
+    lessonsSlide.addTable(failureRows, {
+      x: 0.35, y: 1.7, w: 9.3, h: 2.0,
+      fontSize: 10, fontFace: FONT,
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: [2.2, 3.5, 3.6],
+      valign: 'top'
+    });
+  }
+  // Success factors
+  const successFactors = safeArray(lessonsData.successFactors, 3);
+  if (successFactors.length > 0) {
+    lessonsSlide.addText('SUCCESS FACTORS', {
+      x: 0.35, y: 4.0, w: 4.5, h: 0.3,
+      fontSize: 12, bold: true, color: COLORS.green, fontFace: FONT
+    });
+    lessonsSlide.addText(successFactors.map(s => ({ text: truncate(s, 60), options: { bullet: true } })), {
+      x: 0.35, y: 4.4, w: 4.5, h: 1.5,
+      fontSize: 10, fontFace: FONT, color: COLORS.black, valign: 'top'
+    });
+  }
+  // Warning signs
+  const warningsData = safeArray(lessonsData.warningSignsToWatch, 3);
+  if (warningsData.length > 0) {
+    lessonsSlide.addText('WARNING SIGNS', {
+      x: 5.0, y: 4.0, w: 4.5, h: 0.3,
+      fontSize: 12, bold: true, color: COLORS.orange, fontFace: FONT
+    });
+    lessonsSlide.addText(warningsData.map(w => ({ text: truncate(w, 50), options: { bullet: true } })), {
+      x: 5.0, y: 4.4, w: 4.65, h: 1.5,
+      fontSize: 10, fontFace: FONT, color: COLORS.black, valign: 'top'
+    });
+  }
+
+  // ============ SECTION 6: SUMMARY (5 slides) ============
+
+  // SLIDE 23: Go/No-Go Decision
   const goNoGo = synthesis.summary?.goNoGo || {};
   const goNoGoSlide = addSlideWithTitle(
     `${country} - Go/No-Go Assessment`,
@@ -3187,7 +3429,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
   }
 
-  // SLIDE 22: Opportunities & Obstacles
+  // SLIDE 24: Opportunities & Obstacles
   const ooSlide = addSlideWithTitle(
     `${country} - Opportunities & Obstacles`,
     truncateSubtitle(summary.recommendation || '', 95)
@@ -3235,7 +3477,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
   }
 
-  // SLIDE 23: Key Insights
+  // SLIDE 25: Key Insights
   const insightsSlide = addSlideWithTitle(
     `${country} - Key Insights`,
     'Strategic implications for market entry'
@@ -3265,7 +3507,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
   }
 
-  // SLIDE 24: Final Summary with Source Attribution
+  // SLIDE 26: Final Summary with Source Attribution
   const finalSlide = addSlideWithTitle(
     `${country} - Research Summary`,
     `Analysis completed ${new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
@@ -3308,7 +3550,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   ], COLORS, FONT);
 
   const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
-  console.log(`Deep-dive PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB, 25 slides`);
+  console.log(`Deep-dive PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB, 27 slides`);
   return pptxBuffer;
 }
 
