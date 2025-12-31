@@ -1,20 +1,10 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
-const http = require('http');
-const WebSocket = require('ws');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
-const pptxgen = require('pptxgenjs');
-const XLSX = require('xlsx');
-const multer = require('multer');
-const { createClient } = require('@deepgram/sdk');
-const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } = require('docx');
-const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
-const Anthropic = require('@anthropic-ai/sdk');
-const JSZip = require('jszip');
 const { securityHeaders, rateLimiter, escapeHtml } = require('../shared/security');
+const { requestLogger, healthCheck } = require('../shared/middleware');
 
 // ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
 // Memory logging helper for debugging Railway OOM issues
@@ -45,42 +35,16 @@ process.on('uncaughtException', (error) => {
 
 // ============ TYPE SAFETY HELPERS ============
 // Ensure a value is a string (AI models may return objects/arrays instead of strings)
-function ensureString(value, defaultValue = '') {
-  if (typeof value === 'string') return value;
-  if (value === null || value === undefined) return defaultValue;
-  // Handle arrays - join with comma
-  if (Array.isArray(value)) return value.map(v => ensureString(v)).join(', ');
-  // Handle objects - try to extract meaningful string
-  if (typeof value === 'object') {
-    // Common patterns from AI responses
-    if (value.city && value.country) return `${value.city}, ${value.country}`;
-    if (value.text) return ensureString(value.text);
-    if (value.value) return ensureString(value.value);
-    if (value.name) return ensureString(value.name);
-    // Fallback: stringify
-    try { return JSON.stringify(value); } catch { return defaultValue; }
-  }
-  // Convert other types to string
-  return String(value);
-}
-
 const app = express();
 app.use(securityHeaders);
 app.use(rateLimiter);
 app.use(cors());
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ limit: '100mb', extended: true }));
-
-// Multer configuration for file uploads (memory storage)
-// Add 50MB limit to prevent OOM on Railway containers
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }  // 50MB max
-});
+app.use(requestLogger);
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Check required environment variables
 const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
-const optionalEnvVars = ['SERPAPI_API_KEY', 'DEEPSEEK_API_KEY', 'DEEPGRAM_API_KEY', 'ANTHROPIC_API_KEY']; // Optional but recommended
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
@@ -101,133 +65,9 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
 
-// Initialize Anthropic (Claude)
-const anthropic = process.env.ANTHROPIC_API_KEY
-  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  : null;
-
-// Initialize Deepgram
-const deepgram = process.env.DEEPGRAM_API_KEY ? createClient(process.env.DEEPGRAM_API_KEY) : null;
-
-// Initialize Cloudflare R2 (S3-compatible)
-const r2Client = (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY)
-  ? new S3Client({
-      region: 'auto',
-      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-      credentials: {
-        accessKeyId: process.env.R2_ACCESS_KEY_ID,
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-      }
-    })
-  : null;
-
-const R2_BUCKET = process.env.R2_BUCKET_NAME || 'dd-recordings';
-
-if (!r2Client) {
-  console.warn('R2 not configured - recordings will only be stored in memory. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME');
-}
-
-
-
-
 // Extract text from .docx files (Word documents)
-async function extractDocxText(base64Content) {
-  try {
-    const buffer = Buffer.from(base64Content, 'base64');
-    const zip = await JSZip.loadAsync(buffer);
-    const documentXml = await zip.file('word/document.xml')?.async('string');
-
-    if (!documentXml) {
-      return '[Could not extract text from Word document]';
-    }
-
-    // Extract text from XML, removing tags
-    let text = documentXml
-      .replace(/<w:t[^>]*>([^<]*)<\/w:t>/g, '$1')  // Extract text content
-      .replace(/<w:p[^>]*>/g, '\n')  // Paragraph breaks
-      .replace(/<[^>]+>/g, '')  // Remove remaining tags
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/\n\s*\n/g, '\n\n')  // Clean up multiple newlines
-      .trim();
-
-    console.log(`[DD] Extracted ${text.length} chars from DOCX`);
-    return text || '[Empty Word document]';
-  } catch (error) {
-    console.error('[DD] DOCX extraction error:', error.message);
-    return `[Error extracting Word document: ${error.message}]`;
-  }
-}
-
 // Extract text from .pptx files (PowerPoint)
-async function extractPptxText(base64Content) {
-  try {
-    const buffer = Buffer.from(base64Content, 'base64');
-    const zip = await JSZip.loadAsync(buffer);
-
-    let allText = [];
-    let slideNum = 1;
-
-    // Iterate through slide files
-    for (const filename of Object.keys(zip.files)) {
-      if (filename.match(/ppt\/slides\/slide\d+\.xml$/)) {
-        const slideXml = await zip.file(filename)?.async('string');
-        if (slideXml) {
-          // Extract text from slide
-          let slideText = slideXml
-            .replace(/<a:t>([^<]*)<\/a:t>/g, '$1 ')  // Extract text
-            .replace(/<a:p[^>]*>/g, '\n')  // Paragraph breaks
-            .replace(/<[^>]+>/g, '')  // Remove tags
-            .replace(/&amp;/g, '&')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/\s+/g, ' ')
-            .trim();
-
-          if (slideText) {
-            allText.push(`[Slide ${slideNum}]\n${slideText}`);
-          }
-          slideNum++;
-        }
-      }
-    }
-
-    const result = allText.join('\n\n') || '[Empty PowerPoint]';
-    console.log(`[DD] Extracted ${result.length} chars from PPTX (${slideNum - 1} slides)`);
-    return result;
-  } catch (error) {
-    console.error('[DD] PPTX extraction error:', error.message);
-    return `[Error extracting PowerPoint: ${error.message}]`;
-  }
-}
-
 // Extract text from .xlsx files (Excel)
-async function extractXlsxText(base64Content) {
-  try {
-    const buffer = Buffer.from(base64Content, 'base64');
-    const workbook = XLSX.read(buffer, { type: 'buffer' });
-
-    let allText = [];
-    for (const sheetName of workbook.SheetNames) {
-      const sheet = workbook.Sheets[sheetName];
-      const csv = XLSX.utils.sheet_to_csv(sheet);
-      if (csv.trim()) {
-        allText.push(`[Sheet: ${sheetName}]\n${csv}`);
-      }
-    }
-
-    const result = allText.join('\n\n') || '[Empty Excel file]';
-    console.log(`[DD] Extracted ${result.length} chars from XLSX`);
-    return result;
-  } catch (error) {
-    console.error('[DD] XLSX extraction error:', error.message);
-    return `[Error extracting Excel: ${error.message}]`;
-  }
-}
-
-
 // Send email using SendGrid API
 async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) {
   const senderEmail = process.env.SENDER_EMAIL;
@@ -330,99 +170,9 @@ async function callGemini(prompt) {
 
 
 // GPT-4o fallback function for when Gemini fails
-async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
-  try {
-    console.log(`  Falling back to GPT-4o (reason: ${reason})...`);
-
-    const requestOptions = {
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.1
-    };
-
-    // Add JSON mode if requested
-    if (jsonMode) {
-      requestOptions.response_format = { type: 'json_object' };
-    }
-
-    const response = await openai.chat.completions.create(requestOptions);
-    const result = response.choices?.[0]?.message?.content || '';
-
-    if (result) {
-      console.log('  GPT-4o fallback successful');
-    }
-    return result;
-  } catch (fallbackError) {
-    console.error('GPT-4o fallback error:', fallbackError.message);
-    return ''; // Return empty if both fail
-  }
-}
-
 // Gemini 2.5 Pro - Most capable model for critical validation tasks
 // Use this for final data accuracy verification where errors are unacceptable
-async function callGemini2Pro(prompt, jsonMode = false) {
-  try {
-    const requestBody = {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.0  // Zero temperature for deterministic validation
-      }
-    };
-
-    if (jsonMode) {
-      requestBody.generationConfig.responseMimeType = 'application/json';
-    }
-
-    // Using stable gemini-2.5-pro (upgraded from deprecated gemini-2.5-pro-preview-06-05)
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-      timeout: 180000  // Longer timeout for Pro model
-    });
-    const data = await response.json();
-
-    if (data.error) {
-      console.error('Gemini 2.5 Pro API error:', data.error.message);
-      return '';
-    }
-
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  } catch (error) {
-    console.error('Gemini 2.5 Pro error:', error.message);
-    return '';
-  }
-}
-
 // Claude (Anthropic) - excellent reasoning and analysis
-async function callClaude(prompt, systemPrompt = null, jsonMode = false) {
-  if (!anthropic) {
-    console.warn('Claude not available - ANTHROPIC_API_KEY not set');
-    return '';
-  }
-  try {
-    const messages = [{ role: 'user', content: prompt }];
-    const requestParams = {
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 8192,
-      messages
-    };
-
-    if (systemPrompt) {
-      requestParams.system = systemPrompt;
-    }
-
-    const response = await anthropic.messages.create(requestParams);
-    const text = response.content?.[0]?.text || '';
-
-    return text;
-  } catch (error) {
-    console.error('Claude error:', error.message);
-    return '';
-  }
-}
-
-
 async function callPerplexity(prompt) {
   try {
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
@@ -539,73 +289,8 @@ async function callSerpAPI(query) {
 }
 
 // DeepSeek V3.2 - Cost-effective alternative to GPT-4o
-async function callDeepSeek(prompt, maxTokens = 4000) {
-  if (!process.env.DEEPSEEK_API_KEY) {
-    console.warn('DeepSeek API key not set, falling back to GPT-4o');
-    return null; // Caller should handle fallback
-  }
-  try {
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: maxTokens,
-        temperature: 0.3
-      }),
-      timeout: 120000
-    });
-    const data = await response.json();
-    if (data.error) {
-      console.error('DeepSeek API error:', data.error);
-      return null;
-    }
-    return data.choices?.[0]?.message?.content || '';
-  } catch (error) {
-    console.error('DeepSeek error:', error.message);
-    return null;
-  }
-}
-
-
 // Detect domain/context from text for domain-aware translation
-function detectMeetingDomain(text) {
-  const domains = {
-    financial: /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
-    legal: /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
-    medical: /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
-    technical: /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
-    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i
-  };
-
-  for (const [domain, pattern] of Object.entries(domains)) {
-    if (pattern.test(text)) {
-      return domain;
-    }
-  }
-  return 'general';
-}
-
 // Get domain-specific translation instructions
-function getDomainInstructions(domain) {
-  const instructions = {
-    financial: 'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
-    legal: 'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
-    medical: 'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
-    technical: 'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
-    hr: 'This is an HR/talent due diligence meeting. Preserve HR terminology and employment-related terms accurately.',
-    general: 'This is a business due diligence meeting. Preserve business terminology and professional tone.'
-  };
-  return instructions[domain] || instructions.general;
-}
-
-
-
-
 // ============ SEARCH CONFIGURATION ============
 
 const CITY_MAP = {
@@ -652,7 +337,7 @@ Be thorough - include all companies you find. We will verify them later.`;
 }
 
 // Strategy 1: Broad Google Search (SerpAPI)
-function strategy1_BroadSerpAPI(business, country, exclusion) {
+function strategy1_BroadSerpAPI(business, country, _exclusion) {
   const countries = country.split(',').map(c => c.trim());
   const queries = [];
 
@@ -704,7 +389,7 @@ function strategy2_BroadPerplexity(business, country, exclusion) {
 }
 
 // Strategy 3: Lists, Rankings, Top Companies (SerpAPI)
-function strategy3_ListsSerpAPI(business, country, exclusion) {
+function strategy3_ListsSerpAPI(business, country, _exclusion) {
   const countries = country.split(',').map(c => c.trim());
   const queries = [];
 
@@ -744,7 +429,7 @@ function strategy4_CitiesPerplexity(business, country, exclusion) {
 }
 
 // Strategy 5: Industrial Zones + Local Naming (SerpAPI)
-function strategy5_IndustrialSerpAPI(business, country, exclusion) {
+function strategy5_IndustrialSerpAPI(business, country, _exclusion) {
   const countries = country.split(',').map(c => c.trim());
   const queries = [];
 
@@ -828,7 +513,7 @@ function strategy9_DomainsPerplexity(business, country, exclusion) {
 }
 
 // Strategy 10: Government Registries (SerpAPI)
-function strategy10_RegistriesSerpAPI(business, country, exclusion) {
+function strategy10_RegistriesSerpAPI(business, country, _exclusion) {
   const countries = country.split(',').map(c => c.trim());
   const queries = [];
 
@@ -844,7 +529,7 @@ function strategy10_RegistriesSerpAPI(business, country, exclusion) {
 }
 
 // Strategy 11: City + Industrial Areas (SerpAPI) - EXPANDED
-function strategy11_CityIndustrialSerpAPI(business, country, exclusion) {
+function strategy11_CityIndustrialSerpAPI(business, country, _exclusion) {
   const countries = country.split(',').map(c => c.trim());
   const queries = [];
 
@@ -903,7 +588,7 @@ function strategy13_PublicationsPerplexity(business, country, exclusion) {
 }
 
 // Strategy 14: Final Sweep - Local Language + Comprehensive (OpenAI Search)
-function strategy14_LocalLanguageOpenAISearch(business, country, exclusion) {
+function strategy14_LocalLanguageOpenAISearch(business, country, _exclusion) {
   const countries = country.split(',').map(c => c.trim());
   const outputFormat = buildOutputFormat();
   const queries = [];
@@ -1181,70 +866,6 @@ async function exhaustiveSearch(business, country, exclusion) {
 
 // ============ WEBSITE VERIFICATION ============
 
-async function verifyWebsite(url) {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-      signal: controller.signal,
-      redirect: 'follow'
-    });
-    clearTimeout(timeout);
-
-    if (!response.ok) return { valid: false, reason: `HTTP ${response.status}` };
-
-    const html = await response.text();
-    const lowerHtml = html.toLowerCase();
-
-    // Check for parked domain / placeholder signs
-    const parkedSigns = [
-      'domain is for sale',
-      'buy this domain',
-      'this domain is parked',
-      'parked by',
-      'domain parking',
-      'this page is under construction',
-      'coming soon',
-      'website coming soon',
-      'under maintenance',
-      'godaddy',
-      'namecheap parking',
-      'sedoparking',
-      'hugedomains',
-      'afternic',
-      'domain expired',
-      'this site can\'t be reached',
-      'page not found',
-      '404 not found',
-      'website not found'
-    ];
-
-    for (const sign of parkedSigns) {
-      if (lowerHtml.includes(sign)) {
-        return { valid: false, reason: `Parked/placeholder: "${sign}"` };
-      }
-    }
-
-    // Check for minimal content (likely placeholder)
-    const textContent = html
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    if (textContent.length < 200) {
-      return { valid: false, reason: 'Too little content (likely placeholder)' };
-    }
-
-    return { valid: true, content: textContent.substring(0, 15000) };
-  } catch (e) {
-    return { valid: false, reason: e.message || 'Connection failed' };
-  }
-}
-
-
 // ============ FETCH WEBSITE FOR VALIDATION ============
 
 async function fetchWebsite(url) {
@@ -1366,7 +987,7 @@ async function fetchWebsite(url) {
 
 // ============ DYNAMIC EXCLUSION RULES BUILDER (n8n-style PAGE SIGNAL detection) ============
 
-function buildExclusionRules(exclusion, business) {
+function buildExclusionRules(exclusion, _business) {
   const exclusionLower = exclusion.toLowerCase();
   let rules = '';
 
@@ -1525,6 +1146,7 @@ async function parallelValidationStrict(companies, business, country, exclusion)
         try {
           if (validations[idx]?.valid && company) {
             // Remove internal _pageContent before adding to results
+            // eslint-disable-next-line no-unused-vars
             const { _pageContent, ...cleanCompany } = company;
             validated.push({
               ...cleanCompany,
@@ -1549,113 +1171,6 @@ async function parallelValidationStrict(companies, business, country, exclusion)
 
 // ============ VALIDATION FOR SLOW MODE (v23 - n8n style) ============
 
-async function validateCompany(company, business, country, exclusion, pageText) {
-  const exclusionRules = buildExclusionRules(exclusion, business);
-
-  try {
-    const validation = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a company validator. Be LENIENT on business match. Be STRICT on exclusions by detecting signals in page content.
-
-VALIDATION TASK:
-- Business sought: "${business}"
-- Target countries: ${country}
-- Exclusions: ${exclusion}
-
-VALIDATION RULES:
-
-1. LOCATION CHECK:
-- Is HQ actually in one of the target countries (${country})?
-- If HQ is outside these countries → REJECT
-
-2. BUSINESS MATCH (BE LENIENT):
-- Does the company's business relate to "${business}"?
-- Accept related products, services, or sub-categories
-- Only reject if completely unrelated
-
-3. EXCLUSION CHECK - DETECT VIA PAGE SIGNALS:
-${exclusionRules}
-
-4. SPAM CHECK:
-- Is this a directory, marketplace, domain-for-sale, or aggregator site? → REJECT
-
-OUTPUT: Return JSON: {"valid": true/false, "reason": "brief", "corrected_hq": "City, Country or null"}`
-        },
-        {
-          role: 'user',
-          content: `COMPANY: ${company.company_name}
-WEBSITE: ${company.website}
-HQ: ${company.hq}
-
-PAGE CONTENT:
-${(typeof pageText === 'string' && pageText) ? pageText.substring(0, 8000) : 'Could not fetch - validate by name only'}`
-        }
-      ],
-      response_format: { type: 'json_object' }
-    });
-
-    const result = JSON.parse(validation.choices[0].message.content);
-    if (result.valid === true) {
-      return { valid: true, corrected_hq: result.corrected_hq || company.hq };
-    }
-    console.log(`    Rejected: ${company.company_name} - ${result.reason}`);
-    return { valid: false };
-  } catch (e) {
-    // On error, accept (benefit of doubt)
-    console.log(`    Error validating ${company.company_name}, accepting`);
-    return { valid: true, corrected_hq: company.hq };
-  }
-}
-
-async function parallelValidation(companies, business, country, exclusion) {
-  console.log(`\nValidating ${companies.length} companies (strict large company filter)...`);
-  const startTime = Date.now();
-  const batchSize = 8; // Smaller batch for more thorough validation
-  const validated = [];
-
-  for (let i = 0; i < companies.length; i += batchSize) {
-    try {
-      const batch = companies.slice(i, i + batchSize);
-      if (!batch || batch.length === 0) continue;
-
-      const pageTexts = await Promise.all(
-        batch.map(c => fetchWebsite(c?.website).catch(() => null))
-      );
-      const validations = await Promise.all(
-        batch.map((company, idx) =>
-          validateCompany(company, business, country, exclusion, pageTexts[idx])
-            .catch(e => {
-              console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
-              return { valid: true, corrected_hq: company?.hq };
-            })
-        )
-      );
-
-      batch.forEach((company, idx) => {
-        try {
-          if (validations[idx]?.valid && company) {
-            validated.push({
-              ...company,
-              hq: validations[idx].corrected_hq || company.hq
-            });
-          }
-        } catch (e) {
-          console.error(`  Error processing company ${company?.company_name}: ${e.message}`);
-        }
-      });
-
-      console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
-    } catch (batchError) {
-      console.error(`  Batch error at ${i}-${i + batchSize}: ${batchError.message}`);
-    }
-  }
-
-  console.log(`Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
-  return validated;
-}
 
 // ============ EMAIL ============
 
@@ -1877,7 +1392,6 @@ Be EXHAUSTIVE. The goal is to ensure we don't miss any company due to terminolog
 function levenshteinSimilarity(s1, s2) {
   if (!s1 || !s2) return 0;
   const longer = s1.length > s2.length ? s1 : s2;
-  const shorter = s1.length > s2.length ? s2 : s1;
   if (longer.length === 0) return 1.0;
 
   const costs = [];
@@ -2353,6 +1867,8 @@ Find as many as possible - be exhaustive. Search using ALL the terminology varia
   }
 });
 
+// ============ HEALTH CHECK ============
+app.get('/health', healthCheck('target-v4'));
 
 // ============ HEALTHCHECK ============
 app.get('/', (req, res) => {

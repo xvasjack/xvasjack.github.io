@@ -1,20 +1,16 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
-const http = require('http');
-const WebSocket = require('ws');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
-const pptxgen = require('pptxgenjs');
 const XLSX = require('xlsx');
 const multer = require('multer');
 const { createClient } = require('@deepgram/sdk');
-const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } = require('docx');
-const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client } = require('@aws-sdk/client-s3');
 const Anthropic = require('@anthropic-ai/sdk');
 const JSZip = require('jszip');
 const { securityHeaders, rateLimiter, escapeHtml } = require('../shared/security');
+const { requestLogger, healthCheck } = require('../shared/middleware');
 
 // ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
 // Memory logging helper for debugging Railway OOM issues
@@ -68,8 +64,9 @@ const app = express();
 app.use(securityHeaders);
 app.use(rateLimiter);
 app.use(cors());
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ limit: '100mb', extended: true }));
+app.use(requestLogger);
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Multer configuration for file uploads (memory storage)
 // Add 50MB limit to prevent OOM on Railway containers
@@ -139,7 +136,7 @@ async function extractDocxText(base64Content) {
     }
 
     // Extract text from XML, removing tags
-    let text = documentXml
+    const text = documentXml
       .replace(/<w:t[^>]*>([^<]*)<\/w:t>/g, '$1')  // Extract text content
       .replace(/<w:p[^>]*>/g, '\n')  // Paragraph breaks
       .replace(/<[^>]+>/g, '')  // Remove remaining tags
@@ -164,7 +161,7 @@ async function extractPptxText(base64Content) {
     const buffer = Buffer.from(base64Content, 'base64');
     const zip = await JSZip.loadAsync(buffer);
 
-    let allText = [];
+    const allText = [];
     let slideNum = 1;
 
     // Iterate through slide files
@@ -173,7 +170,7 @@ async function extractPptxText(base64Content) {
         const slideXml = await zip.file(filename)?.async('string');
         if (slideXml) {
           // Extract text from slide
-          let slideText = slideXml
+          const slideText = slideXml
             .replace(/<a:t>([^<]*)<\/a:t>/g, '$1 ')  // Extract text
             .replace(/<a:p[^>]*>/g, '\n')  // Paragraph breaks
             .replace(/<[^>]+>/g, '')  // Remove tags
@@ -206,7 +203,7 @@ async function extractXlsxText(base64Content) {
     const buffer = Buffer.from(base64Content, 'base64');
     const workbook = XLSX.read(buffer, { type: 'buffer' });
 
-    let allText = [];
+    const allText = [];
     for (const sheetName of workbook.SheetNames) {
       const sheet = workbook.Sheets[sheetName];
       const csv = XLSX.utils.sheet_to_csv(sheet);
@@ -1567,28 +1564,9 @@ async function generateDueDiligenceReport(files, instructions, reportLength, ins
   }
 
   // Extract URLs from instructions and fetch them
-  let onlineResearchContent = '';
-  let onlineSourcesUsed = [];
-  if (instructions) {
-    const urlRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)/gi;
-    const urls = instructions.match(urlRegex) || [];
-
-    for (const url of urls.slice(0, 3)) { // Limit to 3 URLs
-      console.log(`[DD] Fetching URL for research: ${url}`);
-      try {
-        const scraped = await scrapeWebsite(url);
-        if (scraped.success) {
-          onlineSourcesUsed.push(scraped.url);
-          onlineResearchContent += `\n\n=== ONLINE SOURCE: ${scraped.url} ===\n${scraped.content.substring(0, 15000)}\n`;
-          console.log(`[DD] Fetched ${scraped.content.length} chars from ${url}`);
-        } else {
-          console.log(`[DD] Failed to fetch ${url}: ${scraped.error}`);
-        }
-      } catch (e) {
-        console.log(`[DD] Error fetching ${url}: ${e.message}`);
-      }
-    }
-  }
+  // Note: scrapeWebsite function not implemented yet
+  const onlineResearchContent = '';
+  const onlineSourcesUsed = [];
 
   const lengthInstructions = {
     short: `Create a 1-PAGE summary covering:
@@ -1717,6 +1695,8 @@ OUTPUT FORMAT:
 }
 
 
+// ============ HEALTH CHECK ============
+app.get('/health', healthCheck('due-diligence'));
 
 // ============ HEALTHCHECK ============
 app.get('/', (req, res) => {

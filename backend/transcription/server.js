@@ -1,12 +1,10 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
 const http = require('http');
 const WebSocket = require('ws');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
-const pptxgen = require('pptxgenjs');
 const XLSX = require('xlsx');
 const multer = require('multer');
 const { createClient } = require('@deepgram/sdk');
@@ -15,6 +13,7 @@ const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = re
 const Anthropic = require('@anthropic-ai/sdk');
 const JSZip = require('jszip');
 const { securityHeaders, rateLimiter, sanitizePath, escapeHtml } = require('../shared/security');
+const { requestLogger, healthCheck } = require('../shared/middleware');
 
 // ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
 // Memory logging helper for debugging Railway OOM issues
@@ -68,8 +67,9 @@ const app = express();
 app.use(securityHeaders);
 app.use(rateLimiter);
 app.use(cors());
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ limit: '100mb', extended: true }));
+app.use(requestLogger);
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Multer configuration for file uploads (memory storage)
 // Add 50MB limit to prevent OOM on Railway containers
@@ -218,7 +218,7 @@ async function extractDocxText(base64Content) {
     }
 
     // Extract text from XML, removing tags
-    let text = documentXml
+    const text = documentXml
       .replace(/<w:t[^>]*>([^<]*)<\/w:t>/g, '$1')  // Extract text content
       .replace(/<w:p[^>]*>/g, '\n')  // Paragraph breaks
       .replace(/<[^>]+>/g, '')  // Remove remaining tags
@@ -243,7 +243,7 @@ async function extractPptxText(base64Content) {
     const buffer = Buffer.from(base64Content, 'base64');
     const zip = await JSZip.loadAsync(buffer);
 
-    let allText = [];
+    const allText = [];
     let slideNum = 1;
 
     // Iterate through slide files
@@ -252,7 +252,7 @@ async function extractPptxText(base64Content) {
         const slideXml = await zip.file(filename)?.async('string');
         if (slideXml) {
           // Extract text from slide
-          let slideText = slideXml
+          const slideText = slideXml
             .replace(/<a:t>([^<]*)<\/a:t>/g, '$1 ')  // Extract text
             .replace(/<a:p[^>]*>/g, '\n')  // Paragraph breaks
             .replace(/<[^>]+>/g, '')  // Remove tags
@@ -285,7 +285,7 @@ async function extractXlsxText(base64Content) {
     const buffer = Buffer.from(base64Content, 'base64');
     const workbook = XLSX.read(buffer, { type: 'buffer' });
 
-    let allText = [];
+    const allText = [];
     for (const sheetName of workbook.SheetNames) {
       const sheet = workbook.Sheets[sheetName];
       const csv = XLSX.utils.sheet_to_csv(sheet);
@@ -1915,6 +1915,9 @@ function buildEmailHTML(companies, business, country, exclusion) {
   return html;
 }
 
+// ============ HEALTH CHECK ============
+app.get('/health', healthCheck('transcription'));
+
 // ============ FAST ENDPOINT ============
 
 app.get('/', (req, res) => {
@@ -1982,15 +1985,15 @@ wss.on('connection', (ws, req) => {
   }
 
   let deepgramConnection = null;
-  let sessionId = Date.now().toString();
-  let audioChunks = [];
+  const sessionId = Date.now().toString();
+  const audioChunks = [];
   let fullTranscript = '';
   let detectedLanguage = 'en';
   let translatedTranscript = '';
 
   // Segment buffering for improved translation context
   let segmentBuffer = [];  // Buffer to accumulate segments before translation
-  let translationContext = [];  // Previous translated segments for context
+  const translationContext = [];  // Previous translated segments for context
   let detectedDomain = null;  // Auto-detected meeting domain
   const SEGMENT_BUFFER_SIZE = 2;  // Number of segments to buffer before translating
   const MAX_CONTEXT_SEGMENTS = 5;  // Maximum previous segments to keep for context
