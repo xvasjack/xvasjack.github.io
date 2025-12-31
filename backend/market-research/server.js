@@ -188,7 +188,10 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true) {
       }];
     }
 
-    const response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
+    // Use KIMI_API_BASE env var or default to global endpoint (api.moonshot.ai)
+    // China users should set KIMI_API_BASE=https://api.moonshot.cn/v1
+    const kimiBaseUrl = process.env.KIMI_API_BASE || 'https://api.moonshot.ai/v1';
+    const response = await fetch(`${kimiBaseUrl}/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -4448,6 +4451,7 @@ app.listen(PORT, () => {
   console.log('Environment check:');
   console.log('  - DEEPSEEK_API_KEY:', process.env.DEEPSEEK_API_KEY ? 'Set' : 'MISSING');
   console.log('  - KIMI_API_KEY:', process.env.KIMI_API_KEY ? 'Set' : 'MISSING');
+  console.log('  - KIMI_API_BASE:', process.env.KIMI_API_BASE || 'https://api.moonshot.ai/v1 (default)');
   console.log('  - PERPLEXITY_API_KEY:', process.env.PERPLEXITY_API_KEY ? 'Set' : 'MISSING');
   console.log('  - SENDGRID_API_KEY:', process.env.SENDGRID_API_KEY ? 'Set' : 'MISSING');
   console.log('  - SENDER_EMAIL:', process.env.SENDER_EMAIL || 'MISSING');
