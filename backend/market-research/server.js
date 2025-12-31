@@ -3,21 +3,12 @@ const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
-const { securityHeaders, rateLimiter } = require('./shared/security');
-const { requestLogger, healthCheck } = require('./shared/middleware');
+const { securityHeaders, rateLimiter } = require('../shared/security');
+const { requestLogger, healthCheck } = require('../shared/middleware');
+const { setupGlobalErrorHandlers } = require('../shared/logging');
 
-// ============ GLOBAL ERROR HANDLERS ============
-process.on('unhandledRejection', (reason, _promise) => {
-  console.error('=== UNHANDLED PROMISE REJECTION ===');
-  console.error('Reason:', reason);
-  console.error('Stack:', reason?.stack || 'No stack trace');
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('=== UNCAUGHT EXCEPTION ===');
-  console.error('Error:', error.message);
-  console.error('Stack:', error.stack);
-});
+// Setup global error handlers to prevent crashes
+setupGlobalErrorHandlers({ logMemory: false });
 
 // ============ EXPRESS SETUP ============
 const app = express();
