@@ -7,7 +7,7 @@ const { securityHeaders, rateLimiter } = require('../shared/security');
 const { requestLogger, healthCheck } = require('../shared/middleware');
 
 // ============ GLOBAL ERROR HANDLERS ============
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', (reason, _promise) => {
   console.error('=== UNHANDLED PROMISE REJECTION ===');
   console.error('Reason:', reason);
   console.error('Stack:', reason?.stack || 'No stack trace');
@@ -21,8 +21,11 @@ process.on('uncaughtException', (error) => {
 
 // ============ EXPRESS SETUP ============
 const app = express();
+app.use(securityHeaders);
+app.use(rateLimiter);
 app.use(cors());
-app.use(express.json({ limit: '100mb' }));
+app.use(requestLogger);
+app.use(express.json({ limit: '10mb' }));
 
 // Check required environment variables
 const requiredEnvVars = ['DEEPSEEK_API_KEY', 'KIMI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
@@ -876,7 +879,7 @@ function generateFallbackFramework(scope) {
 // ============ ITERATIVE RESEARCH SYSTEM WITH CONFIDENCE SCORING ============
 
 // Step 1: Identify gaps in research after first synthesis with detailed scoring
-async function identifyResearchGaps(synthesis, country, industry) {
+async function identifyResearchGaps(synthesis, country, _industry) {
   console.log(`  [Analyzing research quality for ${country}...]`);
 
   const gapPrompt = `You are a research quality auditor reviewing a market analysis. Score each section and identify critical gaps.
@@ -1011,7 +1014,7 @@ async function fillResearchGaps(gaps, country, industry) {
 }
 
 // Step 3: Re-synthesize with additional data
-async function reSynthesize(originalSynthesis, additionalData, country, industry, clientContext) {
+async function reSynthesize(originalSynthesis, additionalData, country, _industry, _clientContext) {
   console.log(`  [Re-synthesizing ${country} with additional data...]`);
 
   const prompt = `You are improving a market analysis with NEW DATA that fills previous gaps.
@@ -1094,7 +1097,7 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
 // Specialized agents for each research domain running in parallel
 
 // Policy Research Agent - handles regulatory and policy topics
-async function policyResearchAgent(country, industry, clientContext) {
+async function policyResearchAgent(country, industry, _clientContext) {
   console.log(`    [POLICY AGENT] Starting research for ${country}...`);
   const agentStart = Date.now();
   const topics = RESEARCH_TOPIC_GROUPS.policy;
@@ -1144,7 +1147,7 @@ FOCUS ON:
 }
 
 // Market Research Agent - handles market data and pricing topics
-async function marketResearchAgent(country, industry, clientContext) {
+async function marketResearchAgent(country, industry, _clientContext) {
   console.log(`    [MARKET AGENT] Starting research for ${country}...`);
   const agentStart = Date.now();
   const topics = RESEARCH_TOPIC_GROUPS.market;
@@ -1258,7 +1261,7 @@ REQUIREMENTS:
 }
 
 // Competitor Research Agent - handles competitive intelligence
-async function competitorResearchAgent(country, industry, clientContext) {
+async function competitorResearchAgent(country, industry, _clientContext) {
   console.log(`    [COMPETITOR AGENT] Starting research for ${country}...`);
   const agentStart = Date.now();
   const topics = RESEARCH_TOPIC_GROUPS.competitors;
@@ -3139,126 +3142,6 @@ function addPieChart(slide, title, data, options = {}) {
   });
 }
 
-// Parse numeric data from research text for charting
-function extractChartData(researchText, chartType) {
-  // This function attempts to extract structured data from research text
-  // In practice, the AI synthesis should provide structured data
-  // This is a fallback pattern matcher
-
-  const data = {
-    categories: [],
-    series: [],
-    values: []
-  };
-
-  // Try to find year-based data patterns like "2020: 45, 2021: 48, 2022: 52"
-  const yearPattern = /(\d{4})[:\s]+(\d+(?:\.\d+)?)/g;
-  const yearMatches = [...(researchText || '').matchAll(yearPattern)];
-
-  if (yearMatches.length >= 2) {
-    data.categories = yearMatches.map(m => m[1]);
-    data.values = yearMatches.map(m => parseFloat(m[2]));
-    data.series = [{ name: 'Value', values: data.values }];
-  }
-
-  return data;
-}
-
-// Advanced chart data extraction using AI
-async function extractChartDataWithAI(researchContent, chartType, dataDescription) {
-  const prompt = `Extract structured chart data from this research content for a ${chartType} chart.
-
-RESEARCH CONTENT:
-${researchContent}
-
-CHART PURPOSE: ${dataDescription}
-
-Return ONLY a JSON object in this exact format:
-{
-  "hasData": true/false,
-  "chartData": {
-    "categories": ["2020", "2021", "2022", "2023", "2024"],
-    "series": [
-      {"name": "Series Name", "values": [10, 12, 14, 16, 18]}
-    ],
-    "values": [10, 12, 14, 16, 18],
-    "unit": "Mtoe or % or USD or bcm"
-  },
-  "dataQuality": "high/medium/low",
-  "source": "where this data came from"
-}
-
-RULES:
-- If no clear numeric data exists, set hasData=false
-- Values must be actual numbers (not strings)
-- For time series, use years as categories
-- For breakdowns, use segment names as categories
-- Include the unit of measurement`;
-
-  try {
-    const result = await callDeepSeekChat(prompt, '', 1024);
-    let jsonStr = result.content.trim();
-    if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
-    }
-    const parsed = JSON.parse(jsonStr);
-    if (parsed.hasData && parsed.chartData) {
-      return parsed.chartData;
-    }
-  } catch (error) {
-    console.error('  Chart data extraction failed:', error.message);
-  }
-
-  // Fall back to basic extraction
-  return extractChartData(researchContent, chartType);
-}
-
-// Validate and sanitize chart data before rendering
-function validateChartData(data, chartType) {
-  if (!data) return null;
-
-  const validated = {
-    categories: [],
-    series: [],
-    values: [],
-    unit: data.unit || ''
-  };
-
-  // Validate categories
-  if (Array.isArray(data.categories)) {
-    validated.categories = data.categories.map(c => String(c)).slice(0, 10);
-  }
-
-  // Validate values (for simple bar/pie charts)
-  if (Array.isArray(data.values)) {
-    validated.values = data.values
-      .map(v => typeof v === 'number' ? v : parseFloat(v))
-      .filter(v => !isNaN(v))
-      .slice(0, 10);
-  }
-
-  // Validate series (for stacked/line charts)
-  if (Array.isArray(data.series)) {
-    validated.series = data.series
-      .filter(s => s && s.name && Array.isArray(s.values))
-      .map(s => ({
-        name: String(s.name).substring(0, 30),
-        values: s.values
-          .map(v => typeof v === 'number' ? v : parseFloat(v))
-          .filter(v => !isNaN(v))
-          .slice(0, 10)
-      }))
-      .slice(0, 6); // Max 6 series for readability
-  }
-
-  // Check if we have enough data to render
-  const hasEnoughData =
-    (validated.categories.length >= 2 && validated.values.length >= 2) ||
-    (validated.categories.length >= 2 && validated.series.length >= 1 && validated.series[0].values.length >= 2);
-
-  return hasEnoughData ? validated : null;
-}
-
 // Single country deep-dive PPT - Matches YCP Escort/Shizuoka Gas format
 // Structure: Title → Policy (3) → Market (6 with charts) → Competitors (5) → Depth (5) → Timing (2) → Summary (5) = 27 slides
 async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
@@ -4570,7 +4453,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     chartLabels.push(c.country);
     // Try to extract numeric value from market size string
     const sizeStr = c.marketDynamics?.marketSize || '';
-    const numMatch = sizeStr.match(/[\$€]?\s*([\d,.]+)\s*(billion|million|B|M)?/i);
+    const numMatch = sizeStr.match(/[$€]?\s*([\d,.]+)\s*(billion|million|B|M)?/i);
     let value = 0;
     if (numMatch) {
       value = parseFloat(numMatch[1].replace(/,/g, ''));
@@ -5004,6 +4887,9 @@ app.get('/health', (req, res) => {
     costToday: costTracker.totalCost
   });
 });
+
+// ============ HEALTH CHECK ============
+app.get('/health', healthCheck('market-research'));
 
 // Main research endpoint
 app.post('/api/market-research', async (req, res) => {

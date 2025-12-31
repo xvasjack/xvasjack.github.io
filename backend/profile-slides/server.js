@@ -1,19 +1,18 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
-const http = require('http');
-const WebSocket = require('ws');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
 const XLSX = require('xlsx');
 const multer = require('multer');
 const { createClient } = require('@deepgram/sdk');
-const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } = require('docx');
-const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { Document, Packer, Paragraph, TextRun } = require('docx');
+const { S3Client } = require('@aws-sdk/client-s3');
 const Anthropic = require('@anthropic-ai/sdk');
 const JSZip = require('jszip');
+const { securityHeaders, rateLimiter, escapeHtml } = require('../shared/security');
+const { requestLogger, healthCheck } = require('../shared/middleware');
 
 // ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
 // Memory logging helper for debugging Railway OOM issues
@@ -81,9 +80,12 @@ function extractCompanyNameFromUrl(url) {
 }
 
 const app = express();
+app.use(securityHeaders);
+app.use(rateLimiter);
 app.use(cors());
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ limit: '100mb', extended: true }));
+app.use(requestLogger);
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // Multer configuration for file uploads (memory storage)
 // Add 50MB limit to prevent OOM on Railway containers
@@ -115,6 +117,212 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing'
 });
 
+// ============ RATE LIMIT RETRY WRAPPER ============
+// Retries API calls with exponential backoff when hitting rate limits (429)
+async function withRetry(apiCall, maxRetries = 3, baseDelay = 2000) {
+  let lastError;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await apiCall();
+    } catch (error) {
+      lastError = error;
+      const isRateLimit = error?.status === 429 || error?.message?.includes('429') || error?.message?.includes('rate limit');
+      const isServerError = error?.status >= 500;
+
+      if ((isRateLimit || isServerError) && attempt < maxRetries) {
+        const delay = baseDelay * Math.pow(2, attempt); // 2s, 4s, 8s
+        console.log(`    ⚠ Rate limit/server error, retrying in ${delay/1000}s (attempt ${attempt + 1}/${maxRetries})...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError;
+}
+
+// ============ FETCH WITH TIMEOUT AND RETRY (for Gemini) ============
+// Gemini API calls need timeout (can hang) and retry (can fail)
+async function fetchWithTimeoutAndRetry(url, options, timeoutMs = 30000, maxRetries = 2) {
+  let lastError;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      // Create abort controller for timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        const isRetryable = response.status === 429 || response.status >= 500;
+        if (isRetryable && attempt < maxRetries) {
+          const delay = 2000 * Math.pow(2, attempt); // 2s, 4s
+          console.log(`    ⚠ Gemini API error ${response.status}, retrying in ${delay/1000}s...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        throw new Error(`Gemini API error: ${response.status}`);
+      }
+
+      return response;
+    } catch (error) {
+      lastError = error;
+
+      const isTimeout = error.name === 'AbortError';
+      const isNetworkError = error.message?.includes('fetch') || error.message?.includes('network');
+
+      if ((isTimeout || isNetworkError) && attempt < maxRetries) {
+        const delay = 2000 * Math.pow(2, attempt);
+        console.log(`    ⚠ Gemini ${isTimeout ? 'timeout' : 'network error'}, retrying in ${delay/1000}s...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+        continue;
+      }
+      throw error;
+    }
+  }
+  throw lastError;
+}
+
+// ============ MARKER AI (Gemini Flash) ============
+// Scans FULL website content and extracts key snippets for extraction
+// This solves the truncation blind spot - marker sees everything, extractors get curated content
+async function markImportantContent(fullContent, website) {
+  try {
+    console.log(`    Running Marker AI (Gemini Flash) on ${fullContent.length} chars...`);
+
+    // Gemini Flash can handle large context cheaply
+    const contentToScan = fullContent.substring(0, 100000); // 100k chars max
+
+    const prompt = `You are a content marker for company profile extraction. Scan this website content and extract ALL important snippets that contain:
+
+## WHAT TO EXTRACT (copy exact text, preserve numbers):
+
+### 1. COMPANY IDENTITY
+- Company name, founding year, history
+- Addresses, locations, headquarters (EXACT addresses with postal codes, provinces, districts)
+- Contact information
+
+### 2. STATISTICS & METRICS (CRITICAL - extract ALL numbers)
+- Production capacity (tons, units, sqm per month/year)
+- Number of employees, machines, production lines
+- Number of customers, partners, distributors
+- Years of experience, projects completed
+- Export percentages, countries served
+- Any counter/statistic displays (e.g., "880 Colour Matching", "60 Customers")
+
+### 3. BUSINESS RELATIONSHIPS
+- Partner companies (especially Japanese, international)
+- Client/customer names
+- Distribution network (countries, agents, offices)
+- Certifications, affiliations
+
+### 4. PRODUCTS & SERVICES
+- Product categories and types
+- Industries served
+- Applications
+
+## OUTPUT FORMAT:
+Return a JSON object with these sections. For each section, include the RAW TEXT SNIPPETS from the website (not summaries):
+
+{
+  "identity_snippets": ["exact text about company name/history...", "exact address text..."],
+  "statistics_snippets": ["800 tons per month...", "300 employees...", "250 machines..."],
+  "relationships_snippets": ["partner with Dainichiseika...", "distributors in 9 countries..."],
+  "products_snippets": ["flexographic inks...", "packaging solutions..."],
+  "location_hints": ["Samut Sakhon", "123 Moo 4, Bangplee..."]
+}
+
+IMPORTANT:
+- Extract EXACT text, don't summarize
+- Include ALL numbers and statistics you find
+- Include ALL location/address mentions
+- If you find counter displays or infographics text, include those
+
+Website: ${website}
+
+CONTENT TO SCAN:
+${contentToScan}`;
+
+    // Use fetchWithTimeoutAndRetry for reliability (30s timeout, 2 retries)
+    const response = await fetchWithTimeoutAndRetry(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.1,
+            maxOutputTokens: 8000,
+            responseMimeType: 'application/json'
+          }
+        })
+      },
+      30000,  // 30 second timeout
+      2       // 2 retries
+    );
+
+    const data = await response.json();
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+    if (!text) {
+      console.log('    Marker AI returned empty response');
+      return null;
+    }
+
+    const markers = JSON.parse(text);
+
+    // Warn if critical snippets are empty - these might indicate Marker missed important content
+    if (!markers.statistics_snippets?.length) {
+      console.log(`    ⚠ WARNING: Marker found no statistics - validator will need to catch these`);
+    }
+    if (!markers.location_hints?.length) {
+      console.log(`    ⚠ WARNING: Marker found no location hints - relying on extractBasicInfo with raw content`);
+    }
+    if (!markers.identity_snippets?.length) {
+      console.log(`    ⚠ WARNING: Marker found no company identity info`);
+    }
+
+    // Combine all snippets into a focused content block for extractors
+    const markedContent = [
+      '=== COMPANY IDENTITY ===',
+      ...(markers.identity_snippets || []),
+      '',
+      '=== STATISTICS & METRICS ===',
+      ...(markers.statistics_snippets || []),
+      '',
+      '=== BUSINESS RELATIONSHIPS ===',
+      ...(markers.relationships_snippets || []),
+      '',
+      '=== PRODUCTS & SERVICES ===',
+      ...(markers.products_snippets || []),
+      '',
+      '=== LOCATION HINTS ===',
+      ...(markers.location_hints || [])
+    ].join('\n');
+
+    console.log(`    Marker AI: condensed ${fullContent.length} → ${markedContent.length} chars`);
+    console.log(`    Found: ${markers.statistics_snippets?.length || 0} stats, ${markers.location_hints?.length || 0} locations`);
+
+    return {
+      markedContent,
+      markers,
+      originalLength: fullContent.length,
+      markedLength: markedContent.length
+    };
+
+  } catch (error) {
+    console.error(`    Marker AI error: ${error.message}`);
+    return null;
+  }
+}
+
 // Initialize Anthropic (Claude)
 const anthropic = process.env.ANTHROPIC_API_KEY
   ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -141,84 +349,6 @@ if (!r2Client) {
   console.warn('R2 not configured - recordings will only be stored in memory. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME');
 }
 
-// R2 Upload function
-async function uploadToR2(key, data, contentType = 'audio/webm') {
-  if (!r2Client) {
-    console.warn('[R2] R2 not configured, skipping upload');
-    return null;
-  }
-
-  try {
-    const command = new PutObjectCommand({
-      Bucket: R2_BUCKET,
-      Key: key,
-      Body: data,
-      ContentType: contentType
-    });
-    await r2Client.send(command);
-    console.log(`[R2] Uploaded ${key} (${data.length} bytes)`);
-    return key;
-  } catch (error) {
-    console.error('[R2] Upload error:', error.message);
-    return null;
-  }
-}
-
-// R2 Download function
-async function downloadFromR2(key) {
-  if (!r2Client) {
-    return null;
-  }
-
-  try {
-    const command = new GetObjectCommand({
-      Bucket: R2_BUCKET,
-      Key: key
-    });
-    const response = await r2Client.send(command);
-    const chunks = [];
-    for await (const chunk of response.Body) {
-      chunks.push(chunk);
-    }
-    return Buffer.concat(chunks);
-  } catch (error) {
-    console.error('[R2] Download error:', error.message);
-    return null;
-  }
-}
-
-// Convert PCM to WAV format (adds header for playability)
-function pcmToWav(pcmBuffer, sampleRate = 16000, numChannels = 1, bitsPerSample = 16) {
-  const byteRate = sampleRate * numChannels * bitsPerSample / 8;
-  const blockAlign = numChannels * bitsPerSample / 8;
-  const dataSize = pcmBuffer.length;
-  const headerSize = 44;
-  const fileSize = headerSize + dataSize;
-
-  const wavBuffer = Buffer.alloc(fileSize);
-
-  // RIFF header
-  wavBuffer.write('RIFF', 0);
-  wavBuffer.writeUInt32LE(fileSize - 8, 4);
-  wavBuffer.write('WAVE', 8);
-
-  // fmt chunk
-  wavBuffer.write('fmt ', 12);
-  wavBuffer.writeUInt32LE(16, 16); // fmt chunk size
-  wavBuffer.writeUInt16LE(1, 20);  // audio format (1 = PCM)
-  wavBuffer.writeUInt16LE(numChannels, 22);
-  wavBuffer.writeUInt32LE(sampleRate, 24);
-  wavBuffer.writeUInt32LE(byteRate, 28);
-  wavBuffer.writeUInt16LE(blockAlign, 32);
-  wavBuffer.writeUInt16LE(bitsPerSample, 34);
-
-  // data chunk
-  wavBuffer.write('data', 36);
-  wavBuffer.writeUInt32LE(dataSize, 40);
-  pcmBuffer.copy(wavBuffer, 44);
-
-  return wavBuffer;
-}
 
 // Extract text from .docx files (Word documents)
 async function extractDocxText(base64Content) {
@@ -232,7 +362,7 @@ async function extractDocxText(base64Content) {
     }
 
     // Extract text from XML, removing tags
-    let text = documentXml
+    const text = documentXml
       .replace(/<w:t[^>]*>([^<]*)<\/w:t>/g, '$1')  // Extract text content
       .replace(/<w:p[^>]*>/g, '\n')  // Paragraph breaks
       .replace(/<[^>]+>/g, '')  // Remove remaining tags
@@ -257,7 +387,7 @@ async function extractPptxText(base64Content) {
     const buffer = Buffer.from(base64Content, 'base64');
     const zip = await JSZip.loadAsync(buffer);
 
-    let allText = [];
+    const allText = [];
     let slideNum = 1;
 
     // Iterate through slide files
@@ -266,7 +396,7 @@ async function extractPptxText(base64Content) {
         const slideXml = await zip.file(filename)?.async('string');
         if (slideXml) {
           // Extract text from slide
-          let slideText = slideXml
+          const slideText = slideXml
             .replace(/<a:t>([^<]*)<\/a:t>/g, '$1 ')  // Extract text
             .replace(/<a:p[^>]*>/g, '\n')  // Paragraph breaks
             .replace(/<[^>]+>/g, '')  // Remove tags
@@ -299,7 +429,7 @@ async function extractXlsxText(base64Content) {
     const buffer = Buffer.from(base64Content, 'base64');
     const workbook = XLSX.read(buffer, { type: 'buffer' });
 
-    let allText = [];
+    const allText = [];
     for (const sheetName of workbook.SheetNames) {
       const sheet = workbook.Sheets[sheetName];
       const csv = XLSX.utils.sheet_to_csv(sheet);
@@ -317,25 +447,6 @@ async function extractXlsxText(base64Content) {
   }
 }
 
-// R2 Delete function (cleanup old recordings)
-async function deleteFromR2(key) {
-  if (!r2Client) {
-    return false;
-  }
-
-  try {
-    const command = new DeleteObjectCommand({
-      Bucket: R2_BUCKET,
-      Key: key
-    });
-    await r2Client.send(command);
-    console.log(`[R2] Deleted ${key}`);
-    return true;
-  } catch (error) {
-    console.error('[R2] Delete error:', error.message);
-    return false;
-  }
-}
 
 // Send email using SendGrid API
 async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) {
@@ -582,29 +693,6 @@ async function callClaude(prompt, systemPrompt = null, jsonMode = false) {
   }
 }
 
-// Claude with web search via Perplexity - Claude reasons, Perplexity searches
-async function callClaudeWithSearch(searchPrompt, reasoningTask) {
-  // Step 1: Use Perplexity to search the web
-  const searchResults = await callPerplexity(searchPrompt);
-
-  if (!searchResults) {
-    return { searchResults: '', analysis: '' };
-  }
-
-  // Step 2: Use Claude to analyze and reason about the results
-  const analysis = await callClaude(
-    `Here are search results about: ${searchPrompt}
-
-SEARCH RESULTS:
-${searchResults}
-
-YOUR TASK:
-${reasoningTask}`,
-    'You are an expert M&A research analyst. Analyze the search results thoroughly and extract all relevant information.'
-  );
-
-  return { searchResults, analysis };
-}
 
 async function callPerplexity(prompt) {
   try {
@@ -684,59 +772,6 @@ async function callOpenAISearch(prompt) {
   }
 }
 
-// DeepSeek Reasoner - for deep thinking/analysis tasks
-async function callDeepSeekReasoner(prompt, maxTokens = 8000) {
-  try {
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'deepseek-reasoner',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: maxTokens
-      }),
-      timeout: 120000
-    });
-    const data = await response.json();
-
-    // DeepSeek reasoner returns reasoning_content and content
-    const reasoning = data.choices?.[0]?.message?.reasoning_content || '';
-    const content = data.choices?.[0]?.message?.content || '';
-
-    return { reasoning, content, raw: data };
-  } catch (error) {
-    console.error('DeepSeek Reasoner error:', error.message);
-    return { reasoning: '', content: '', error: error.message };
-  }
-}
-
-// DeepSeek Chat - for faster, simpler tasks
-async function callDeepSeekChat(prompt, maxTokens = 4000) {
-  try {
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: maxTokens,
-        temperature: 0.3
-      }),
-      timeout: 60000
-    });
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || '';
-  } catch (error) {
-    console.error('DeepSeek Chat error:', error.message);
-    return '';
-  }
-}
 
 // SerpAPI - Google Search integration
 async function callSerpAPI(query) {
@@ -806,309 +841,6 @@ async function callDeepSeek(prompt, maxTokens = 4000) {
   }
 }
 
-// Transcribe audio using OpenAI Whisper
-async function transcribeAudio(audioBase64, mimeType, language = 'auto') {
-  try {
-    // Convert base64 to buffer
-    const audioBuffer = Buffer.from(audioBase64, 'base64');
-
-    // Create form data for OpenAI API
-    const FormData = require('form-data');
-    const formData = new FormData();
-
-    // Determine file extension from mime type
-    const extMap = {
-      'audio/webm': 'webm',
-      'audio/mp3': 'mp3',
-      'audio/mpeg': 'mp3',
-      'audio/wav': 'wav',
-      'audio/m4a': 'm4a',
-      'audio/mp4': 'm4a',
-      'audio/ogg': 'ogg',
-      'audio/flac': 'flac'
-    };
-    const ext = extMap[mimeType] || 'webm';
-
-    formData.append('file', audioBuffer, { filename: `audio.${ext}`, contentType: mimeType });
-    formData.append('model', 'whisper-1');
-    formData.append('response_format', 'verbose_json');
-
-    // If specific language is provided (not auto), use it
-    if (language && language !== 'auto') {
-      formData.append('language', language);
-    }
-
-    const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        ...formData.getHeaders()
-      },
-      body: formData
-    });
-
-    const data = await response.json();
-    if (data.error) {
-      console.error('Whisper API error:', data.error);
-      return { text: '', language: 'unknown', error: data.error.message };
-    }
-
-    return {
-      text: data.text || '',
-      language: data.language || 'unknown',
-      duration: data.duration || 0,
-      segments: data.segments || []
-    };
-  } catch (error) {
-    console.error('Whisper transcription error:', error.message);
-    return { text: '', language: 'unknown', error: error.message };
-  }
-}
-
-// Detect domain/context from text for domain-aware translation
-function detectMeetingDomain(text) {
-  const domains = {
-    financial: /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
-    legal: /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
-    medical: /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
-    technical: /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
-    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i
-  };
-
-  for (const [domain, pattern] of Object.entries(domains)) {
-    if (pattern.test(text)) {
-      return domain;
-    }
-  }
-  return 'general';
-}
-
-// Get domain-specific translation instructions
-function getDomainInstructions(domain) {
-  const instructions = {
-    financial: 'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
-    legal: 'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
-    medical: 'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
-    technical: 'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
-    hr: 'This is an HR/talent due diligence meeting. Preserve HR terminology and employment-related terms accurately.',
-    general: 'This is a business due diligence meeting. Preserve business terminology and professional tone.'
-  };
-  return instructions[domain] || instructions.general;
-}
-
-// Translate text using GPT-4o with context awareness
-async function translateText(text, targetLang = 'en', options = {}) {
-  const { previousSegments = [], domain = null } = options;
-
-  // Minimum length check - 3 chars for CJK languages, 10 for others
-  const minLength = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/.test(text) ? 3 : 10;
-  if (!text || text.length < minLength) return text;
-
-  try {
-    // Auto-detect domain if not provided
-    const effectiveDomain = domain || detectMeetingDomain(text + ' ' + previousSegments.join(' '));
-    const domainInstructions = getDomainInstructions(effectiveDomain);
-
-    // Build context from previous segments
-    let contextSection = '';
-    if (previousSegments.length > 0) {
-      contextSection = `\n\nPrevious context (for reference only, do not translate these):
-${previousSegments.slice(-3).map((seg, i) => `[${i + 1}] ${seg}`).join('\n')}
-
-Now translate the following new segment, maintaining consistency with the context above:`;
-    }
-
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',  // Use GPT-4o for better translation quality
-      messages: [
-        {
-          role: 'system',
-          content: `You are a professional translator specializing in business meeting transcriptions.
-${domainInstructions}
-
-Translate accurately while:
-- Preserving the original meaning and tone
-- Using natural, fluent ${targetLang === 'en' ? 'English' : targetLang}
-- Keeping business/technical terms accurate
-- Maintaining consistency with any provided context
-- Not adding or omitting information
-Output only the translation, nothing else.`
-        },
-        {
-          role: 'user',
-          content: contextSection ? `${contextSection}\n\n${text}` : text
-        }
-      ],
-      temperature: 0.3  // Balanced temperature for fluency while maintaining consistency
-    });
-    return response.choices[0].message.content || text;
-  } catch (error) {
-    console.error('Translation error:', error.message);
-    return text;
-  }
-}
-
-// Generate meeting minutes from transcript
-async function generateMeetingMinutes(transcript, instructions = '') {
-  const prompt = `You are an expert meeting summarizer. Create structured meeting minutes from the following transcript.
-
-TRANSCRIPT:
-${transcript}
-
-${instructions ? `SPECIAL INSTRUCTIONS: ${instructions}\n` : ''}
-
-Generate professional meeting minutes in HTML format with the following structure:
-1. <h2>Meeting Summary</h2> - Brief overview (2-3 sentences)
-2. <h2>Key Discussion Points</h2> - Main topics discussed
-3. <h2>Decisions Made</h2> - Any decisions or conclusions reached
-4. <h2>Action Items</h2> - Tasks assigned with responsible parties if mentioned
-5. <h2>Next Steps</h2> - Follow-up items or future meetings
-
-Use proper HTML formatting with bullet points (<ul><li>) where appropriate.
-Be concise but capture all important information.`;
-
-  const result = await callDeepSeek(prompt, 3000);
-  if (result) return result;
-
-  // Fallback to GPT-4o
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.3,
-      max_tokens: 3000
-    });
-    return response.choices[0].message.content || '';
-  } catch (error) {
-    console.error('Meeting minutes error:', error.message);
-    return `<h2>Transcript</h2><p>${transcript}</p>`;
-  }
-}
-
-// Generate Word document from HTML content
-async function generateWordDocument(title, htmlContent, metadata = {}) {
-  // Parse HTML content into sections
-  const sections = [];
-
-  // Add title with Calibri font
-  sections.push(new Paragraph({
-    children: [new TextRun({ text: title, font: 'Calibri', size: 48, bold: true })],
-    spacing: { after: 400 }
-  }));
-
-  // Simple HTML to docx conversion
-  const cleanHtml = htmlContent
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<\/li>/gi, '\n')
-    .replace(/<\/h[1-6]>/gi, '\n');
-
-  // Extract headings and content
-  const h1Regex = /<h1[^>]*>(.*?)<\/h1>/gi;
-  const h2Regex = /<h2[^>]*>(.*?)<\/h2>/gi;
-  const h3Regex = /<h3[^>]*>(.*?)<\/h3>/gi;
-
-  // Split content by headings and process
-  let processedContent = htmlContent;
-
-  // Replace headings with markers
-  processedContent = processedContent.replace(h1Regex, '|||H1|||$1|||/H1|||');
-  processedContent = processedContent.replace(h2Regex, '|||H2|||$1|||/H2|||');
-  processedContent = processedContent.replace(h3Regex, '|||H3|||$1|||/H3|||');
-
-  // Remove other HTML tags
-  processedContent = processedContent
-    .replace(/<ul>/gi, '')
-    .replace(/<\/ul>/gi, '')
-    .replace(/<ol>/gi, '')
-    .replace(/<\/ol>/gi, '')
-    .replace(/<li>/gi, '• ')
-    .replace(/<\/li>/gi, '\n')
-    .replace(/<br\s*\/?>/gi, '\n')
-    .replace(/<p>/gi, '')
-    .replace(/<\/p>/gi, '\n\n')
-    .replace(/<strong>/gi, '**')
-    .replace(/<\/strong>/gi, '**')
-    .replace(/<b>/gi, '**')
-    .replace(/<\/b>/gi, '**')
-    .replace(/<em>/gi, '_')
-    .replace(/<\/em>/gi, '_')
-    .replace(/<[^>]+>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"');
-
-  // Process the content with markers
-  const parts = processedContent.split('|||');
-
-  for (let i = 0; i < parts.length; i++) {
-    const part = parts[i].trim();
-    if (!part) continue;
-
-    if (part === 'H1' && parts[i + 1]) {
-      sections.push(new Paragraph({
-        children: [new TextRun({ text: parts[i + 1].replace('/H1', '').trim(), font: 'Calibri', size: 36, bold: true })],
-        spacing: { before: 400, after: 200 }
-      }));
-      i++;
-    } else if (part === 'H2' && parts[i + 1]) {
-      sections.push(new Paragraph({
-        children: [new TextRun({ text: parts[i + 1].replace('/H2', '').trim(), font: 'Calibri', size: 28, bold: true })],
-        spacing: { before: 300, after: 150 }
-      }));
-      i++;
-    } else if (part === 'H3' && parts[i + 1]) {
-      sections.push(new Paragraph({
-        children: [new TextRun({ text: parts[i + 1].replace('/H3', '').trim(), font: 'Calibri', size: 24, bold: true })],
-        spacing: { before: 200, after: 100 }
-      }));
-      i++;
-    } else if (!part.startsWith('/H')) {
-      // Regular text
-      const lines = part.split('\n').filter(l => l.trim());
-      for (const line of lines) {
-        const trimmedLine = line.trim();
-        if (!trimmedLine) continue;
-
-        // Check if this line contains [Online Source] - highlight it yellow
-        const isOnlineSource = trimmedLine.includes('[Online Source]');
-
-        // Handle bold text markers
-        const children = [];
-        const boldParts = trimmedLine.split('**');
-        for (let j = 0; j < boldParts.length; j++) {
-          if (boldParts[j]) {
-            children.push(new TextRun({
-              text: boldParts[j],
-              font: 'Calibri',
-              size: 22,
-              bold: j % 2 === 1,
-              highlight: isOnlineSource ? 'yellow' : undefined
-            }));
-          }
-        }
-
-        if (children.length > 0) {
-          sections.push(new Paragraph({
-            children,
-            spacing: { after: 100 }
-          }));
-        }
-      }
-    }
-  }
-
-  const doc = new Document({
-    sections: [{
-      properties: {},
-      children: sections
-    }]
-  });
-
-  return await Packer.toBuffer(doc);
-}
 
 // ============ SEARCH CONFIGURATION ============
 
@@ -1556,16 +1288,6 @@ function isSpamOrDirectoryURL(url) {
   return false;
 }
 
-function preFilterCompanies(companies) {
-  return companies.filter(c => {
-    if (!c || !c.website) return false;
-    if (isSpamOrDirectoryURL(c.website)) {
-      console.log(`    Pre-filtered: ${c.company_name} - Social media/wiki`);
-      return false;
-    }
-    return true;
-  });
-}
 
 // ============ EXHAUSTIVE PARALLEL SEARCH WITH 14 STRATEGIES ============
 
@@ -1588,100 +1310,6 @@ ${outputFormat}`;
   return extractCompanies(response, country);
 }
 
-async function exhaustiveSearch(business, country, exclusion) {
-  console.log('Starting EXHAUSTIVE 14-STRATEGY PARALLEL search...');
-  const startTime = Date.now();
-
-  // Generate all queries for each strategy
-  const serpQueries1 = strategy1_BroadSerpAPI(business, country, exclusion);
-  const perpQueries2 = strategy2_BroadPerplexity(business, country, exclusion);
-  const serpQueries3 = strategy3_ListsSerpAPI(business, country, exclusion);
-  const perpQueries4 = strategy4_CitiesPerplexity(business, country, exclusion);
-  const serpQueries5 = strategy5_IndustrialSerpAPI(business, country, exclusion);
-  const perpQueries6 = strategy6_DirectoriesPerplexity(business, country, exclusion);
-  const perpQueries7 = strategy7_ExhibitionsPerplexity(business, country, exclusion);
-  const perpQueries8 = strategy8_TradePerplexity(business, country, exclusion);
-  const perpQueries9 = strategy9_DomainsPerplexity(business, country, exclusion);
-  const serpQueries10 = strategy10_RegistriesSerpAPI(business, country, exclusion);
-  const serpQueries11 = strategy11_CityIndustrialSerpAPI(business, country, exclusion);
-  const openaiQueries12 = strategy12_DeepOpenAISearch(business, country, exclusion);
-  const perpQueries13 = strategy13_PublicationsPerplexity(business, country, exclusion);
-  const openaiQueries14 = strategy14_LocalLanguageOpenAISearch(business, country, exclusion);
-
-  const allSerpQueries = [...serpQueries1, ...serpQueries3, ...serpQueries5, ...serpQueries10, ...serpQueries11];
-  const allPerpQueries = [...perpQueries2, ...perpQueries4, ...perpQueries6, ...perpQueries7, ...perpQueries8, ...perpQueries9, ...perpQueries13];
-  const allOpenAISearchQueries = [...openaiQueries12, ...openaiQueries14];
-
-  console.log(`  Strategy breakdown:`);
-  console.log(`    SerpAPI (Google): ${allSerpQueries.length} queries`);
-  console.log(`    Perplexity: ${allPerpQueries.length} queries`);
-  console.log(`    OpenAI Search: ${allOpenAISearchQueries.length} queries`);
-  console.log(`    Total: ${allSerpQueries.length + allPerpQueries.length + allOpenAISearchQueries.length}`);
-
-  // Run all strategies in parallel (with error handling to prevent one failure from crashing all)
-  const [serpResults, perpResults, openaiSearchResults, geminiResults] = await Promise.all([
-    // SerpAPI queries
-    process.env.SERPAPI_API_KEY
-      ? Promise.all(allSerpQueries.map(q => callSerpAPI(q).catch(e => { console.error(`SerpAPI error: ${e.message}`); return null; })))
-      : Promise.resolve([]),
-
-    // Perplexity queries
-    Promise.all(allPerpQueries.map(q => callPerplexity(q).catch(e => { console.error(`Perplexity error: ${e.message}`); return null; }))),
-
-    // OpenAI Search queries
-    Promise.all(allOpenAISearchQueries.map(q => callOpenAISearch(q).catch(e => { console.error(`OpenAI Search error: ${e.message}`); return null; }))),
-
-    // Also run some Gemini queries for diversity
-    Promise.all([
-      callGemini(`Find ALL ${business} companies in ${country}. Exclude ${exclusion}. ${buildOutputFormat()}`),
-      callGemini(`List ${business} factories and manufacturing plants in ${country}. Not ${exclusion}. ${buildOutputFormat()}`),
-      callGemini(`${business} SME and family businesses in ${country}. Exclude ${exclusion}. ${buildOutputFormat()}`)
-    ].map(p => p.catch(e => { console.error(`Gemini error: ${e.message}`); return null; })))
-  ]);
-
-  console.log(`  All API calls done in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
-
-  // Process SerpAPI results through GPT for extraction
-  let serpCompanies = [];
-  if (serpResults.length > 0) {
-    console.log(`  Processing ${serpResults.filter(r => r).length} SerpAPI results...`);
-    serpCompanies = await processSerpResults(serpResults.filter(r => r), business, country, exclusion);
-    console.log(`    Extracted ${serpCompanies.length} companies from SerpAPI`);
-  }
-
-  // Extract from Perplexity results
-  console.log(`  Extracting from ${perpResults.length} Perplexity results...`);
-  const perpExtractions = await Promise.all(
-    perpResults.filter(r => r).map(text => extractCompanies(text, country).catch(e => { console.error(`Extraction error: ${e.message}`); return []; }))
-  );
-  const perpCompanies = perpExtractions.flat();
-  console.log(`    Extracted ${perpCompanies.length} companies from Perplexity`);
-
-  // Extract from OpenAI Search results
-  console.log(`  Extracting from ${openaiSearchResults.length} OpenAI Search results...`);
-  const openaiExtractions = await Promise.all(
-    openaiSearchResults.filter(r => r).map(text => extractCompanies(text, country).catch(e => { console.error(`Extraction error: ${e.message}`); return []; }))
-  );
-  const openaiCompanies = openaiExtractions.flat();
-  console.log(`    Extracted ${openaiCompanies.length} companies from OpenAI Search`);
-
-  // Extract from Gemini results
-  console.log(`  Extracting from ${geminiResults.length} Gemini results...`);
-  const geminiExtractions = await Promise.all(
-    geminiResults.filter(r => r).map(text => extractCompanies(text, country).catch(e => { console.error(`Extraction error: ${e.message}`); return []; }))
-  );
-  const geminiCompanies = geminiExtractions.flat();
-  console.log(`    Extracted ${geminiCompanies.length} companies from Gemini`);
-
-  // Combine and dedupe all
-  const allCompanies = [...serpCompanies, ...perpCompanies, ...openaiCompanies, ...geminiCompanies];
-  const uniqueCompanies = dedupeCompanies(allCompanies);
-
-  console.log(`  Raw total: ${allCompanies.length}, Unique: ${uniqueCompanies.length}`);
-  console.log(`Search completed in ${((Date.now() - startTime) / 1000).toFixed(1)}s`);
-
-  return uniqueCompanies;
-}
 
 // ============ WEBSITE VERIFICATION ============
 
@@ -1748,33 +1376,6 @@ async function verifyWebsite(url) {
   }
 }
 
-async function filterVerifiedWebsites(companies) {
-  console.log(`\nVerifying ${companies.length} websites...`);
-  const startTime = Date.now();
-  const batchSize = 15; // Increased for better parallelization
-  const verified = [];
-
-  for (let i = 0; i < companies.length; i += batchSize) {
-    const batch = companies.slice(i, i + batchSize);
-    const results = await Promise.all(batch.map(c => verifyWebsite(c.website)));
-
-    batch.forEach((company, idx) => {
-      if (results[idx].valid) {
-        verified.push({
-          ...company,
-          _pageContent: results[idx].content // Cache the content for validation
-        });
-      } else {
-        console.log(`    Removed: ${company.company_name} - ${results[idx].reason}`);
-      }
-    });
-
-    console.log(`  Verified ${Math.min(i + batchSize, companies.length)}/${companies.length}. Working: ${verified.length}`);
-  }
-
-  console.log(`Website verification done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Working: ${verified.length}/${companies.length}`);
-  return verified;
-}
 
 // ============ FETCH WEBSITE FOR VALIDATION ============
 
@@ -2193,9 +1794,9 @@ async function parallelValidation(companies, business, country, exclusion) {
 function buildEmailHTML(companies, business, country, exclusion) {
   let html = `
     <h2>Find Target Results</h2>
-    <p><strong>Business:</strong> ${business}</p>
-    <p><strong>Country:</strong> ${country}</p>
-    <p><strong>Exclusion:</strong> ${exclusion}</p>
+    <p><strong>Business:</strong> ${escapeHtml(business)}</p>
+    <p><strong>Country:</strong> ${escapeHtml(country)}</p>
+    <p><strong>Exclusion:</strong> ${escapeHtml(exclusion)}</p>
     <p><strong>Companies Found:</strong> ${companies.length}</p>
     <br>
     <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
@@ -2205,7 +1806,7 @@ function buildEmailHTML(companies, business, country, exclusion) {
       <tbody>
   `;
   companies.forEach((c, i) => {
-    html += `<tr><td>${i + 1}</td><td>${c.company_name}</td><td><a href="${c.website}">${c.website}</a></td><td>${c.hq}</td></tr>`;
+    html += `<tr><td>${i + 1}</td><td>${escapeHtml(c.company_name)}</td><td><a href="${escapeHtml(c.website)}">${escapeHtml(c.website)}</a></td><td>${escapeHtml(c.hq)}</td></tr>`;
   });
   html += '</tbody></table>';
   return html;
@@ -2992,14 +2593,23 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
     for (const company of companies) {
       try {
       // Skip companies with no meaningful info (only has website, no business/location/metrics)
-      const hasBusinessInfo = company.business && company.business.trim().length > 0;
-      const hasLocation = company.location && company.location.trim().length > 0;
+      // Helper to check if value is a placeholder (e.g., "Not found", "N/A", etc.)
+      const isPlaceholder = (val) => {
+        if (!val) return true;
+        const lower = String(val).toLowerCase().trim();
+        const placeholders = ['not found', 'not specified', 'n/a', 'unknown', 'not available', 'none', 'not provided', 'not disclosed'];
+        return placeholders.includes(lower) || lower.length === 0;
+      };
+
+      const hasBusinessInfo = company.business && !isPlaceholder(company.business);
+      const hasLocation = company.location && !isPlaceholder(company.location);
+      const hasCompanyName = company.company_name && !isPlaceholder(company.company_name);
       const hasMetrics = company.key_metrics && company.key_metrics.length > 0;
       const hasBreakdown = company.breakdown_items && company.breakdown_items.length > 0;
 
-      // If company has NO business info AND NO location AND NO metrics AND NO breakdown, skip it
-      if (!hasBusinessInfo && !hasLocation && !hasMetrics && !hasBreakdown) {
-        console.log(`  Skipping slide for ${company.company_name || company.website} - no meaningful info extracted`);
+      // If company has NO meaningful data at all, skip it entirely
+      if (!hasCompanyName && !hasBusinessInfo && !hasLocation && !hasMetrics && !hasBreakdown) {
+        console.log(`  Skipping slide for ${company.website} - no meaningful info extracted (all fields are empty/placeholder)`);
         continue;
       }
 
@@ -3050,28 +2660,18 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       }
 
       // ===== LOGO (top right of slide) =====
+      // Only use Clearbit for real logos - skip fallback services that return letter placeholders
       if (company.website && typeof company.website === 'string') {
         try {
           const domain = company.website.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
 
-          // Try multiple logo sources
-          const logoSources = [
-            `https://logo.clearbit.com/${domain}`,
-            `https://www.google.com/s2/favicons?domain=${domain}&sz=128`,
-            `https://icon.horse/icon/${domain}`
-          ];
-
-          let logoBase64 = null;
-          for (const logoUrl of logoSources) {
-            console.log(`  Trying logo from: ${logoUrl}`);
-            logoBase64 = await fetchImageAsBase64(logoUrl);
-            if (logoBase64) {
-              console.log(`  Logo fetched successfully from ${logoUrl}`);
-              break;
-            }
-          }
+          // Only try Clearbit - it returns real logos or fails, never letter placeholders
+          const logoUrl = `https://logo.clearbit.com/${domain}`;
+          console.log(`  Trying logo from: ${logoUrl}`);
+          const logoBase64 = await fetchImageAsBase64(logoUrl);
 
           if (logoBase64) {
+            console.log(`  Logo fetched successfully from ${logoUrl}`);
             // Use square container to prevent stretching (logos are typically square)
             slide.addImage({
               data: `data:image/png;base64,${logoBase64}`,
@@ -3079,7 +2679,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
               sizing: { type: 'contain', w: 0.7, h: 0.7 }
             });
           } else {
-            console.log(`  Logo not available for ${domain} from any source`);
+            console.log(`  No logo available for ${domain} - skipping (no placeholder)`);
           }
         } catch (e) {
           console.log('Logo fetch failed for', company.website, e.message);
@@ -3355,7 +2955,11 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       const tableStartY = 1.85;
       const rowHeight = 0.35;
 
-      slide.addTable(rows, {
+      // Skip table if no data (prevents PptxGenJS error "Array expected")
+      if (rows.length === 0) {
+        console.log(`  Skipping table for ${company.company_name || company.website} - no table data`);
+      } else {
+        slide.addTable(rows, {
         x: 0.37, y: tableStartY,
         w: 6.1,
         colW: [1.4, 4.7],
@@ -3365,7 +2969,8 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         valign: 'middle',
         border: { pt: 2.5, color: COLORS.white },
         margin: [0, 0.04, 0, 0.04]
-      });
+        });
+      }
 
       // ===== RIGHT SECTION (varies by business type) =====
       const businessType = company.business_type || 'industrial';
@@ -3645,11 +3250,14 @@ async function scrapeWebsite(url) {
 }
 
 // AI Agent 1: Extract company name, established year, location
-// Using GPT-4o-mini (60% cost savings for simple extraction task)
+// Using GPT-4o (not mini) because location extraction is CRITICAL and needs:
+// - Accurate non-English parsing (Thai, Vietnamese addresses)
+// - Complex instruction following (3-level format, province detection)
+// - This is the most important extraction - wrong HQ ruins the profile
 async function extractBasicInfo(scrapedContent, websiteUrl) {
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
+    const response = await withRetry(() => openai.chat.completions.create({
+      model: 'gpt-4o',
       messages: [
         {
           role: 'system',
@@ -3684,10 +3292,14 @@ OUTPUT JSON with these fields:
   - "Penang, Penang, Malaysia"
   - "Johor Bahru, Johor, Malaysia"
 
-  Thailand (District, Province, Country):
-  - "Bangna, Bangkok, Thailand"
-  - "Bang Phli, Samut Prakan, Thailand"
-  - "Chatuchak, Bangkok, Thailand"
+  Thailand (District, Province, Country) - NOT always Bangkok!:
+  - "Bangna, Bangkok, Thailand" (in Bangkok)
+  - "Chatuchak, Bangkok, Thailand" (in Bangkok)
+  - "Bang Phli, Samut Prakan, Thailand" (NOT Bangkok - different province!)
+  - "Mueang Samut Sakhon, Samut Sakhon, Thailand" (NOT Bangkok!)
+  - "Mueang Rayong, Rayong, Thailand" (NOT Bangkok!)
+  - "Mueang Chonburi, Chonburi, Thailand" (NOT Bangkok!)
+  CRITICAL: Most Thai industrial companies are NOT in Bangkok - check the actual address!
 
   Indonesia (City/Area, Province, Country):
   - "Tangerang, Banten, Indonesia"
@@ -3714,6 +3326,15 @@ OUTPUT JSON with these fields:
   - WRONG: "Singapore, Singapore" ← WRONG! Find the actual area!
   - CORRECT: "Jurong West, Singapore" or "Tuas, Singapore"
   - Look at the address on website to find the area/district name
+  - Common Singapore industrial areas: Jurong, Tuas, Woodlands, Ang Mo Kio, Ubi, Bedok, Paya Lebar
+  - If no area found, leave location EMPTY rather than outputting just "Singapore"
+
+CRITICAL - EXTRACT FROM ACTUAL ADDRESS:
+- Find the ACTUAL address text on the website (e.g., "123 Moo 5, Mueang Samut Sakhon District, Samut Sakhon 74000")
+- Extract the district/city and province FROM THE ADDRESS - do NOT guess or assume
+- If address says "Samut Sakhon", output "Mueang Samut Sakhon, Samut Sakhon, Thailand" NOT "Bangkok, Thailand"
+- NEVER default to capital city (Bangkok, Jakarta, etc.) unless address explicitly mentions it
+- If you cannot find an address, leave location empty rather than guessing
 
 RULES:
 - ONLY extract HQ location - ignore all branches, factories, warehouses, offices
@@ -3726,12 +3347,12 @@ RULES:
         {
           role: 'user',
           content: `Website: ${websiteUrl}
-Content: ${scrapedContent.substring(0, 12000)}`
+Content: ${scrapedContent.substring(0, 25000)}`
         }
       ],
       response_format: { type: 'json_object' },
       temperature: 0.2
-    });
+    }));
 
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -3818,7 +3439,7 @@ function validateAndFixHQFormat(location, websiteUrl) {
 }
 
 // AI Agent 2: Extract business, message, footnote, title
-// Using GPT-4o-mini (60% cost savings for structured output task)
+// Using gpt-4o-mini (cheaper) since Marker AI pre-identifies content and Validator catches misses
 async function extractBusinessInfo(scrapedContent, basicInfo) {
   // Ensure locationText is always a string (AI might return object/array)
   const locationText = typeof basicInfo.location === 'string' ? basicInfo.location : '';
@@ -3827,7 +3448,7 @@ async function extractBusinessInfo(scrapedContent, basicInfo) {
   const currencyExchange = CURRENCY_EXCHANGE[hqCountry] || '';
 
   try {
-    const response = await openai.chat.completions.create({
+    const response = await withRetry(() => openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
@@ -3858,7 +3479,15 @@ OUTPUT JSON:
    - NEVER include vague services like "customized solutions", "quality assurance" unless those are their PRIMARY business
    - Only include points with SPECIFIC, CONCRETE content
 
-2. message: One-liner introductory message about the company. Example: "Malaysia-based distributor specializing in electronic components and industrial automation products across Southeast Asia."
+   CRITICAL - NO MARKETING/BOASTING LANGUAGE:
+   - NEVER use: "high-quality", "premium", "world-class", "leading", "best-in-class", "superior", "excellent", "top-tier"
+   - NEVER use: "state-of-the-art", "cutting-edge", "innovative", "advanced", "modern"
+   - These are unverified claims from the company - we haven't contacted them to verify quality
+   - Use neutral language: "Manufacture printing inks" NOT "Manufacture high-quality printing inks"
+
+2. message: One-liner introductory message about the company. NO marketing words (high-quality, premium, leading, etc.)
+   Example: "Malaysia-based distributor specializing in electronic components and industrial automation products across Southeast Asia."
+   NOT: "Malaysia-based leading distributor of high-quality electronic components..."
 
 3. footnote: Two parts:
    - Notes (optional): If unusual shortforms used, write full-form like "SKU (Stock Keeping Unit)". Separate multiple with comma.
@@ -3883,12 +3512,12 @@ Established: ${basicInfo.established_year}
 Location: ${basicInfo.location}
 
 Website Content:
-${scrapedContent.substring(0, 12000)}`
+${scrapedContent.substring(0, 25000)}`
         }
       ],
       response_format: { type: 'json_object' },
       temperature: 0.2
-    });
+    }));
 
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -3898,15 +3527,23 @@ ${scrapedContent.substring(0, 12000)}`
 }
 
 // AI Agent 3: Extract key metrics for M&A evaluation
-// Using GPT-4o-mini (60% cost savings for pattern-based extraction)
+// Using gpt-4o-mini (cheaper) since Marker AI pre-identifies content and Validator catches misses
 async function extractKeyMetrics(scrapedContent, previousData) {
   try {
-    const response = await openai.chat.completions.create({
+    const response = await withRetry(() => openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
           role: 'system',
           content: `You are an M&A analyst extracting COMPREHENSIVE key business metrics for potential buyers evaluating this company.
+
+CRITICAL - VISIBLE STATISTICS FIRST:
+Before anything else, scan the ENTIRE page for ANY prominently displayed numbers/statistics:
+- Look for large numbers displayed on the homepage (e.g., "880", "300+", "60", "12")
+- These are often shown in counter/stat sections with labels below them
+- Common patterns: "60 Customers", "880 Colour Matching", "300+ Employees", "12 New Projects"
+- TRANSLATE any non-English labels to English (e.g., "Kota Distribusi" = "Distribution Cities", "Project Baru" = "New Projects")
+- Include ALL visible statistics with their labels in the "Key Metrics" field
 
 EXTRACT AS MANY OF THESE METRICS AS POSSIBLE (aim for 8-15 metrics):
 
@@ -3935,7 +3572,9 @@ GEOGRAPHIC REACH (CRITICAL - CAPTURE ALL DISTRIBUTION INFO):
 - Export countries (list ALL countries mentioned: Thailand, Sri Lanka, Pakistan, Bangladesh, UAE, etc.)
 - Distribution network (distributors, agents, dealers - include country names)
 - Markets served (if domestic only, write "Nationwide" instead of listing regions)
-- IMPORTANT: If website mentions "distributors across Thailand, Sri Lanka, Pakistan..." - CAPTURE THIS!
+- CRITICAL: If website mentions "agents and distributors across [countries]" or "network in [countries]" - LIST ALL COUNTRIES!
+- Example: "agents and distributors across Thailand, Sri Lanka, Pakistan, Bangladesh, UAE, Papua New Guinea, Vietnam, Poland, East Malaysia" → capture ALL 9 countries
+- This is CRITICAL M&A info showing international expansion - never skip it!
 
 INDUSTRIES SERVED:
 - List the industries/applications the company serves (e.g., "Gravure Printing, Screen Printing, Footwear, Leather, Rubber")
@@ -4016,12 +3655,12 @@ RULES:
 Industry/Business: ${previousData.business}
 
 Website Content (extract ALL M&A-relevant metrics):
-${scrapedContent.substring(0, 18000)}`
+${scrapedContent.substring(0, 35000)}`
         }
       ],
       response_format: { type: 'json_object' },
       temperature: 0.3
-    });
+    }));
 
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -4030,11 +3669,68 @@ ${scrapedContent.substring(0, 18000)}`
   }
 }
 
+// AI Agent 3a-focused: Extract SPECIFIC missed metrics identified by validator
+// This is a focused re-extraction that knows exactly what to look for
+async function extractKeyMetricsWithFocus(scrapedContent, context) {
+  try {
+    console.log('    Running focused re-extraction for missed items...');
+
+    const response = await withRetry(() => openai.chat.completions.create({
+      model: 'gpt-4o',  // Use stronger model for focused extraction
+      messages: [
+        {
+          role: 'system',
+          content: `You are extracting SPECIFIC metrics that were missed in the first extraction pass.
+
+## ALREADY EXTRACTED (do NOT duplicate):
+${context.existingMetrics || 'None yet'}
+
+## MISSED ITEMS TO FIND (the validator identified these were in the content but not extracted):
+- ${context.missedItems || 'None specified'}
+
+## YOUR TASK:
+Search the content for the MISSED ITEMS above and extract them as key_metrics.
+
+## OUTPUT FORMAT:
+{
+  "key_metrics": [
+    { "value": "800", "label": "tons/month production capacity" },
+    { "value": "300", "label": "employees" },
+    { "value": "9", "label": "export countries" }
+  ]
+}
+
+RULES:
+- ONLY extract the missed items listed above
+- Do NOT include items already in "ALREADY EXTRACTED"
+- If you cannot find a missed item in the content, skip it
+- Return empty array if nothing new found`
+        },
+        {
+          role: 'user',
+          content: `Company: ${context.company_name}
+Business: ${context.business}
+
+Content to search:
+${scrapedContent.substring(0, 30000)}`
+        }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.2
+    }));
+
+    return JSON.parse(response.choices[0].message.content);
+  } catch (e) {
+    console.error('Focused extraction error:', e.message);
+    return { key_metrics: [] };
+  }
+}
+
 // AI Agent 3b: Extract rich content for right-side table
-// This should produce a FULL, rich table with key business information
+// Using gpt-4o-mini (cheaper) since Marker AI pre-identifies content and Validator catches misses
 async function extractProductsBreakdown(scrapedContent, previousData) {
   try {
-    const response = await openai.chat.completions.create({
+    const response = await withRetry(() => openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
@@ -4117,12 +3813,12 @@ Return ONLY valid JSON.`
 Industry/Business: ${previousData.business}
 
 Website Content:
-${scrapedContent.substring(0, 18000)}`
+${scrapedContent.substring(0, 35000)}`
         }
       ],
       response_format: { type: 'json_object' },
       temperature: 0.3
-    });
+    }));
 
     const result = JSON.parse(response.choices[0].message.content);
 
@@ -4169,10 +3865,10 @@ ${scrapedContent.substring(0, 18000)}`
 }
 
 // AI Agent 3c: Extract financial metrics for 財務実績 section
-// Using GPT-4o-mini (60% cost savings for number extraction)
+// Using GPT-4o-mini with retry for rate limits
 async function extractFinancialMetrics(scrapedContent, previousData) {
   try {
-    const response = await openai.chat.completions.create({
+    const response = await withRetry(() => openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
         {
@@ -4219,7 +3915,7 @@ ${scrapedContent.substring(0, 15000)}`
       ],
       response_format: { type: 'json_object' },
       temperature: 0.2
-    });
+    }));
 
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
@@ -4229,6 +3925,7 @@ ${scrapedContent.substring(0, 15000)}`
 }
 
 // AI Agent 4: Search for missing company information (est year, location, HQ)
+// Wrapped with retry for reliability
 async function searchMissingInfo(companyName, website, missingFields) {
   if (!companyName || missingFields.length === 0) {
     return {};
@@ -4238,9 +3935,8 @@ async function searchMissingInfo(companyName, website, missingFields) {
     console.log(`  Searching for missing info: ${missingFields.join(', ')}`);
 
     // Use OpenAI Search model which has web search capability
-    const searchQuery = `${companyName} company ${missingFields.includes('established_year') ? 'founded year established' : ''} ${missingFields.includes('location') ? 'headquarters location country' : ''}`.trim();
-
-    const response = await openai.chat.completions.create({
+    // Wrapped with retry for rate limits
+    const response = await withRetry(() => openai.chat.completions.create({
       model: 'gpt-4o-search-preview',
       messages: [
         {
@@ -4261,7 +3957,7 @@ If you cannot find reliable information for a field, omit it from the response.
 Return ONLY valid JSON, no explanations.`
         }
       ]
-    });
+    }));
 
     const content = response.choices[0].message.content || '';
 
@@ -4444,113 +4140,160 @@ Create MECE segments for these ${targetDescription} companies and mark which seg
   }
 }
 
-// AI Review Agent: Clean up and remove duplicative/unnecessary information
-// Uses Gemini 3 Flash for frontier reasoning - with GPT-4o fallback if Gemini fails
-async function reviewAndCleanData(companyData) {
+// AI Review Agent: Validate extraction against source content and fix issues
+// Uses GPT-4o for accurate validation - compares extracted data against source
+// Returns { data, issuesFound, missedItems } for iterative extraction
+async function reviewAndCleanData(companyData, scrapedContent, markers = null) {
   try {
-    console.log('  Step 6: Running AI review agent (Gemini 3 Flash with GPT-4o fallback)...');
+    console.log('  Step 6: Running AI validator (GPT-4o) - comparing extraction vs source...');
 
-    const prompt = `You are a data quality reviewer for M&A company profiles. Review the extracted data and clean it up by:
+    // Use markers if available (structured snippets), otherwise use raw content
+    let sourceSection;
+    if (markers) {
+      sourceSection = `## MARKED IMPORTANT CONTENT (pre-identified by Marker AI):
 
-1. REMOVE DUPLICATIVE ROWS:
-   - If "Number of X" appears alongside "Key X names", merge them into one row
-   - Example: "Number of Suppliers: 6" + "Key Suppliers: A, B, C" → "Key Suppliers: 6 suppliers including A, B, C"
-   - Example: "Number of Customers" + "Key Customers" → merge into "Key Customers"
+=== STATISTICS (look for these numbers!) ===
+${(markers.statistics_snippets || []).join('\n')}
 
-2. HARD RULE - REMOVE EMPTY/MEANINGLESS METRICS:
-   - Remove ANY metric with values like: "No specific X stated", "Not specified", "Not available", "Unknown", "N/A", "None listed"
-   - If a metric has NO meaningful data, DELETE IT ENTIRELY. Do not include metrics with placeholder text.
-   - Example: {"label": "Key Metrics", "value": "- No specific production capacity stated\\n- No specific factory area stated"} → DELETE THIS ENTIRE METRIC
+=== LOCATION HINTS ===
+${(markers.location_hints || []).join('\n')}
 
-3. CRITICAL - REMOVE FAKE/PLACEHOLDER DATA:
-   - REMOVE any metric containing alphabetical placeholders like "Distributor A", "Partner X", "Supplier B", "Customer 1"
-   - Pattern to detect: "[Word] A, [Word] B, [Word] C" or "[Word] X, [Word] Y, [Word] Z" or "[Word] 1, [Word] 2"
-   - These are AI hallucinations - DELETE THE ENTIRE ROW if it contains such patterns
-   - Example: "Local Distributors: Distributor A, Distributor B, Distributor C" → DELETE ENTIRE ROW
-   - Example: "OEM Partners: Partner X, Partner Y, Partner Z" → DELETE ENTIRE ROW
+=== BUSINESS RELATIONSHIPS ===
+${(markers.relationships_snippets || []).join('\n')}
 
-4. REMOVE UNNECESSARY/WORTHLESS ROWS:
-   - Remove rows with vague values like "Various", "Multiple", "Several" without specifics
-   - Remove rows about awards, achievements, recognitions (not useful for M&A)
-   - Remove rows about years of experience (not useful for M&A)
-   - Remove rows about operating hours, office hours
-   - Remove rows labeled: "Start of Operations", "Market Growth", "Market Outlook", "Future Plans", "Vision", "Mission"
+=== IDENTITY ===
+${(markers.identity_snippets || []).join('\n')}`;
+    } else {
+      sourceSection = `## SOURCE WEBSITE CONTENT (this is the truth):
+${scrapedContent ? scrapedContent.substring(0, 30000) : 'No source content available'}`;
+    }
 
-5. HARD RULE - TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH:
-   - ALL product names, company names, and any text in ANY non-English language MUST be translated to English
-   - This applies to ALL languages: Vietnamese, Chinese, Thai, Malay, Indonesian, Hindi, Korean, Japanese, Arabic, Spanish, etc.
-   - The user CANNOT translate - you MUST translate everything to English
-   - Write ALL text using regular English alphabet only (A-Z, no diacritics, no foreign characters)
+    const prompt = `You are a data validation agent. Your job is to COMPARE the extracted data against the SOURCE CONTENT and FIX any issues.
 
-6. MERGE SIMILAR INFORMATION:
-   - "Customers" and "Customer Segments" → merge into one "Key Customers" row
-   - "Products" and "Product Categories" → keep only the more detailed one
-   - If breakdown_items and key_metrics have overlapping info, keep in key_metrics only
+${sourceSection}
 
-7. CLEAN UP HQ/LOCATION:
-   - If location looks like JSON ({"HQ":"..."}), extract the actual location value
-   - Format should be: "City, State/Province, Country" or "District, Singapore" for Singapore
-   - Remove duplicate city names like "Kuala Lumpur, Kuala Lumpur, Malaysia" → "Kuala Lumpur, Malaysia"
-   - Remove duplicate state names like "Bangkok, Bangkok, Thailand" → "Bangkok, Thailand"
-
-8. FORMAT SHORT LISTS INLINE (NO POINT FORM):
-   - If a metric has only 2-3 items, write them inline separated by commas, NOT as bullet points
-   - Example: Export Countries with 2 items → "Singapore, Sri Lanka" (NOT "- Singapore\\n- Sri Lanka")
-   - Example: Geographic Reach with 3 items → "Malaysia, Singapore, Sri Lanka" (NOT bullet points)
-   - Only use bullet points (\\n- item) for lists with 4+ items or when items need categorization
-
-Review and clean this company data:
-
+## EXTRACTED DATA (may have errors or missing info):
 ${JSON.stringify(companyData, null, 2)}
 
-OUTPUT JSON with the same structure but cleaned up:
+## YOUR TASKS:
+
+### 1. VALIDATE HQ/LOCATION (CRITICAL)
+- Search the SOURCE for actual address/location (look for postal codes, province names, district names)
+- If extracted location does NOT match what's in the source, FIX IT
+- Thailand: Look for province names like "Samut Sakhon", "Samut Prakan", "Chonburi", "Rayong" - NOT always Bangkok!
+- Singapore: Look for area names like "Jurong", "Tuas", "Woodlands" in the address
+- Format: "District, Province, Country" (3 levels) or "Area, Singapore" (2 levels)
+- If source says "Samut Sakhon" but extracted says "Bangkok" → FIX to Samut Sakhon
+
+### 2. FIND MISSED STATISTICS (CRITICAL)
+- Scan SOURCE for visible numbers/statistics that were NOT extracted:
+  - Employee counts (e.g., "300 employees", "300+ staff")
+  - Production capacity (e.g., "800 tons/month", "500 units/day")
+  - Customer counts (e.g., "60 customers", "700 partners")
+  - Machine counts (e.g., "250 machines")
+  - Any other numerical metrics
+- ADD any found statistics to key_metrics that are missing
+
+### 3. FIND MISSED DISTRIBUTION/EXPORT INFO (CRITICAL)
+- Scan SOURCE for country names mentioned with "distributor", "agent", "export", "market"
+- Example: "agents across Thailand, Sri Lanka, Pakistan, Bangladesh, UAE" → capture ALL countries
+- ADD to key_metrics if missing
+
+### 4. FIND MISSED PARTNERSHIPS
+- Scan SOURCE for partnership/JV mentions (e.g., "partnership with Dainichiseika", "technology transfer")
+- ADD to key_metrics if missing
+
+### 5. CLEAN UP (secondary)
+- Remove fake placeholders like "Distributor A, Distributor B"
+- Remove empty metrics with "Not specified", "N/A"
+- Translate non-English to English
+- Remove marketing fluff words like "high-quality", "premium", "leading"
+
+## OUTPUT FORMAT
+Return JSON with:
+- Fixed/validated data
+- "validation_notes": list what you fixed/added
+- "issues_found": true if you found ANY issues or missing info, false if extraction was perfect
+- "missed_items": list of things in source that SHOULD be metrics but weren't extracted (for re-extraction)
+
 {
   "company_name": "...",
   "established_year": "...",
-  "location": "cleaned location",
+  "location": "CORRECTED location based on source",
   "business": "...",
   "message": "...",
   "title": "...",
-  "key_metrics": [cleaned array],
+  "key_metrics": [array with ADDED missing metrics],
   "breakdown_title": "...",
-  "breakdown_items": [cleaned array]
+  "breakdown_items": [...],
+  "validation_notes": ["Fixed HQ from Bangkok to Samut Sakhon", "Added 800 tons/month production capacity"],
+  "issues_found": true,
+  "missed_items": ["300 employees mentioned but not extracted", "partnership with Dainichiseika not captured"]
 }
 
 Return ONLY valid JSON.`;
 
-    // Use Gemini 3 Flash with JSON mode for frontier reasoning
-    const result = await callGemini3Flash(prompt, true);
+    // Wrap OpenAI call with retry for rate limits
+    const response = await withRetry(() => openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        { role: 'system', content: 'You are a data validation agent. Compare extracted data against source content and fix any discrepancies. Add any missing information found in the source.' },
+        { role: 'user', content: prompt }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.2
+    }));
+
+    const result = response.choices[0].message.content;
 
     if (!result) {
-      console.log('  AI review agent (both Gemini 3 Flash and GPT-4o) returned empty, keeping original data');
-      return companyData;
+      console.log('  AI validator returned empty, keeping original data');
+      return { data: companyData, issuesFound: false, missedItems: [] };
     }
 
     // Parse JSON from response
-    let cleaned;
+    let validated;
     try {
-      cleaned = JSON.parse(result);
+      validated = JSON.parse(result);
     } catch (parseError) {
-      // Try to extract JSON from response if not pure JSON
       const jsonMatch = result.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        cleaned = JSON.parse(jsonMatch[0]);
+        validated = JSON.parse(jsonMatch[0]);
       } else {
-        console.log('  Failed to parse Gemini response, keeping original data');
-        return companyData;
+        console.log('  Failed to parse validator response, keeping original data');
+        return { data: companyData, issuesFound: false, missedItems: [] };
       }
     }
 
-    // Merge cleaned data with original (preserve fields not in prompt)
-    return {
+    // Log what was fixed/added
+    if (validated.validation_notes && validated.validation_notes.length > 0) {
+      validated.validation_notes.forEach(note => {
+        console.log(`    [Validator] ${note}`);
+      });
+    }
+
+    // Merge validated data with original (preserve fields not in output)
+    const mergedData = {
       ...companyData,
-      location: cleaned.location || companyData.location,
-      key_metrics: cleaned.key_metrics || companyData.key_metrics,
-      breakdown_items: cleaned.breakdown_items || companyData.breakdown_items
+      company_name: validated.company_name || companyData.company_name,
+      established_year: validated.established_year || companyData.established_year,
+      location: validated.location || companyData.location,
+      business: validated.business || companyData.business,
+      message: validated.message || companyData.message,
+      title: validated.title || companyData.title,
+      key_metrics: validated.key_metrics || companyData.key_metrics,
+      breakdown_title: validated.breakdown_title || companyData.breakdown_title,
+      breakdown_items: validated.breakdown_items || companyData.breakdown_items
+    };
+
+    return {
+      data: mergedData,
+      issuesFound: validated.issues_found || false,
+      missedItems: validated.missed_items || []
     };
   } catch (e) {
-    console.error('Review agent error:', e.message);
-    return companyData; // Return original data if review fails
+    console.error('Validator error:', e.message);
+    return { data: companyData, issuesFound: false, missedItems: [] }; // Return original data if validation fails
   }
 }
 
@@ -4598,6 +4341,234 @@ function buildProfileSlidesEmailHTML(companies, errors, hasPPTX) {
   return html;
 }
 
+// Helper function to process a single website (used for parallel processing)
+async function processSingleWebsite(website, index, total) {
+  const trimmedWebsite = website.trim();
+  if (!trimmedWebsite) return null;
+
+  console.log(`\n[${index + 1}/${total}] Processing: ${trimmedWebsite}`);
+  logMemoryUsage(`start company ${index + 1}`);
+
+  try {
+    // Step 1: Scrape website
+    console.log(`  [${index + 1}] Step 1: Scraping website...`);
+    const scraped = await scrapeWebsite(trimmedWebsite);
+
+    if (!scraped.success) {
+      console.log(`  [${index + 1}] Failed to scrape: ${scraped.error}`);
+      // Mark as inaccessible - will appear on summary slide but not individual profile
+      const companyName = extractCompanyNameFromUrl(trimmedWebsite);
+      return {
+        website: trimmedWebsite,
+        company_name: companyName,
+        title: companyName,
+        location: '',
+        _inaccessible: true,
+        _error: `Failed to scrape: ${scraped.error}`
+      };
+    }
+    console.log(`  [${index + 1}] Scraped ${scraped.content.length} characters`);
+    // Log content preview for debugging (first 500 chars, useful for seeing what was scraped)
+    console.log(`  [${index + 1}] Content preview: ${scraped.content.substring(0, 500).replace(/\n/g, ' ').replace(/\s+/g, ' ')}...`);
+
+    // Step 1b: Run Marker AI to identify important content (avoids truncation blind spots)
+    console.log(`  [${index + 1}] Step 1b: Running Marker AI to identify key content...`);
+    const markerResult = await markImportantContent(scraped.content, trimmedWebsite);
+
+    // Use marked content if available, otherwise fall back to raw content
+    // Marked content is pre-curated snippets (smaller, focused), raw content is full text (needs truncation)
+    const contentForExtraction = markerResult?.markedContent || scraped.content;
+    const usingMarkedContent = !!markerResult?.markedContent;
+    if (usingMarkedContent) {
+      console.log(`  [${index + 1}] Using marked content (${markerResult.markedLength} chars from ${markerResult.originalLength})`);
+    } else {
+      console.log(`  [${index + 1}] Marker failed, using truncated raw content`);
+    }
+
+    // Step 2: Extract basic info (company name, year, location)
+    // CRITICAL: Use RAW content for location extraction - this is the most important field
+    // Marker might miss the actual address, so give extractBasicInfo the full picture
+    console.log(`  [${index + 1}] Step 2: Extracting company name, year, location...`);
+    const basicInfo = await extractBasicInfo(scraped.content, trimmedWebsite);
+    console.log(`  [${index + 1}] Company: ${basicInfo.company_name || 'Not found'}`);
+    if (basicInfo.location) console.log(`  [${index + 1}] Location extracted: ${basicInfo.location}`);
+
+    // Step 3: Extract business details
+    console.log(`  [${index + 1}] Step 3: Extracting business, message, footnote, title...`);
+    const businessInfo = await extractBusinessInfo(contentForExtraction, basicInfo);
+
+    // Step 4: Extract key metrics
+    console.log(`  [${index + 1}] Step 4: Extracting key metrics...`);
+    const metricsInfo = await extractKeyMetrics(contentForExtraction, {
+      company_name: basicInfo.company_name,
+      business: businessInfo.business
+    });
+
+    // Step 4b: Extract products/applications breakdown for right table
+    console.log(`  [${index + 1}] Step 4b: Extracting products/applications breakdown...`);
+    const productsBreakdown = await extractProductsBreakdown(contentForExtraction, {
+      company_name: basicInfo.company_name,
+      business: businessInfo.business
+    });
+
+    // Step 5: Search online for missing mandatory info (established_year, location)
+    // These are mandatory fields - search online if not found on website
+    const missingFields = [];
+    if (!basicInfo.established_year) missingFields.push('established_year');
+    if (!basicInfo.location) missingFields.push('location');
+
+    let searchedInfo = {};
+    if (missingFields.length > 0 && basicInfo.company_name) {
+      console.log(`  [${index + 1}] Step 5: Searching online for missing mandatory info: ${missingFields.join(', ')}...`);
+      searchedInfo = await searchMissingInfo(basicInfo.company_name, trimmedWebsite, missingFields);
+    }
+
+    // Use only key metrics from scraped website (no web search for metrics to prevent hallucination)
+    const allKeyMetrics = metricsInfo.key_metrics || [];
+
+    // Combine all extracted data (mandatory fields supplemented by web search)
+    // Use ensureString() for all AI-generated fields to prevent [object Object] issues
+    let companyData = {
+      website: scraped.url,
+      company_name: ensureString(basicInfo.company_name),
+      established_year: ensureString(basicInfo.established_year || searchedInfo.established_year),
+      location: validateAndFixHQFormat(ensureString(basicInfo.location || searchedInfo.location), trimmedWebsite),
+      business: ensureString(businessInfo.business),
+      message: ensureString(businessInfo.message),
+      footnote: ensureString(businessInfo.footnote),
+      title: ensureString(businessInfo.title),
+      key_metrics: allKeyMetrics,  // Only from scraped website
+      // Right-side content (varies by business type)
+      business_type: productsBreakdown.business_type || 'industrial',
+      breakdown_title: ensureString(productsBreakdown.breakdown_title) || 'Products and Applications',
+      breakdown_items: productsBreakdown.breakdown_items || [],
+      projects: productsBreakdown.projects || [],  // For project-based businesses
+      products: productsBreakdown.products || [],  // For consumer-facing businesses
+      metrics: ensureString(metricsInfo.metrics)  // Fallback for old format
+    };
+
+    // Log metrics count before review
+    console.log(`  [${index + 1}] Metrics extracted before review: ${companyData.key_metrics?.length || 0}`);
+    if (companyData.key_metrics?.length > 0) {
+      console.log(`  [${index + 1}] Raw metrics: ${companyData.key_metrics.map(m => m.label).join(', ')}`);
+    }
+
+    // Step 6: Run AI validator to compare extraction vs source and fix issues
+    // IMPORTANT: Pass RAW scraped content (not marked content) so validator can catch what Marker missed
+    const validatorResult = await reviewAndCleanData(companyData, scraped.content, markerResult?.markers);
+    companyData = validatorResult.data;
+
+    // Step 6b: ITERATIVE EXTRACTION - If validator found missed items, try to extract them
+    // Trigger re-extraction if validator identified specific things that were missed
+    const hasMissedItems = validatorResult.missedItems && validatorResult.missedItems.length > 0;
+    const needsReExtraction = validatorResult.issuesFound && hasMissedItems;
+
+    if (needsReExtraction) {
+      console.log(`  [${index + 1}] Step 6b: Re-extracting ${validatorResult.missedItems.length} missed items...`);
+      validatorResult.missedItems.forEach(item => console.log(`    - ${item}`));
+
+      // Build focused prompt with explicit missed items
+      const missedItemsText = validatorResult.missedItems.join('\n- ');
+      const existingMetricsText = (companyData.key_metrics || [])
+        .map(m => `${m.value} ${m.label}`)
+        .join(', ');
+
+      // Re-run metrics extraction with explicit focus on missed items
+      // Use RAW scraped content so it can find things Marker missed
+      const reExtractedMetrics = await extractKeyMetricsWithFocus(scraped.content, {
+        company_name: companyData.company_name,
+        business: companyData.business,
+        existingMetrics: existingMetricsText,
+        missedItems: missedItemsText
+      });
+
+      // Merge new metrics with existing (avoid duplicates by checking both label and value)
+      if (reExtractedMetrics.key_metrics?.length > 0) {
+        const existingLabels = new Set((companyData.key_metrics || []).map(m => m.label?.toLowerCase()));
+        const existingValues = new Set((companyData.key_metrics || []).map(m => m.value?.toLowerCase()));
+        const newMetrics = reExtractedMetrics.key_metrics.filter(m =>
+          !existingLabels.has(m.label?.toLowerCase()) &&
+          !existingValues.has(m.value?.toLowerCase())
+        );
+        if (newMetrics.length > 0) {
+          console.log(`  [${index + 1}] Added ${newMetrics.length} new metrics from re-extraction`);
+          companyData.key_metrics = [...(companyData.key_metrics || []), ...newMetrics];
+        }
+      }
+
+      // Re-run validator one more time to catch anything else
+      // Use raw content so it can validate against full source
+      const finalValidation = await reviewAndCleanData(companyData, scraped.content, markerResult?.markers);
+      companyData = finalValidation.data;
+    }
+
+    // Step 7: HARD RULE - Filter out empty/meaningless Key Metrics
+    // Remove metrics that say "No specific X stated", "Not specified", etc.
+    const metricsBefore = companyData.key_metrics?.length || 0;
+    companyData.key_metrics = filterEmptyMetrics(companyData.key_metrics);
+    const metricsAfter = companyData.key_metrics?.length || 0;
+    if (metricsBefore !== metricsAfter) {
+      console.log(`  [${index + 1}] Step 7: Filtered ${metricsBefore - metricsAfter} empty metrics (${metricsBefore} → ${metricsAfter})`);
+    }
+
+    console.log(`  [${index + 1}] ✓ Completed: ${companyData.title || companyData.company_name} (${companyData.key_metrics?.length || 0} metrics after review)`);
+
+    // Memory cleanup: Release large objects to prevent OOM on Railway
+    // scraped.content can be 1-5MB per website, must release before next iteration
+    if (scraped) scraped.content = null;
+
+    return companyData;
+
+  } catch (error) {
+    console.error(`  [${index + 1}] Error processing ${trimmedWebsite}:`, error.message);
+    return {
+      website: trimmedWebsite,
+      error: error.message,
+      step: 0
+    };
+  }
+}
+
+// Process websites in parallel batches
+// Reduced to 2 to avoid rate limits (each website now makes more API calls with Marker AI)
+const PARALLEL_BATCH_SIZE = 2;
+
+async function processWebsitesInParallel(websites) {
+  const results = [];
+  const total = websites.length;
+
+  // Process in batches of PARALLEL_BATCH_SIZE
+  for (let batchStart = 0; batchStart < websites.length; batchStart += PARALLEL_BATCH_SIZE) {
+    const batchEnd = Math.min(batchStart + PARALLEL_BATCH_SIZE, websites.length);
+    const batch = websites.slice(batchStart, batchEnd);
+
+    console.log(`\n${'─'.repeat(40)}`);
+    console.log(`BATCH ${Math.floor(batchStart / PARALLEL_BATCH_SIZE) + 1}: Processing ${batch.length} websites in parallel (${batchStart + 1}-${batchEnd} of ${total})`);
+    console.log('─'.repeat(40));
+
+    // Process batch in parallel
+    const batchPromises = batch.map((website, i) =>
+      processSingleWebsite(website, batchStart + i, total)
+    );
+
+    const batchResults = await Promise.all(batchPromises);
+
+    // Add non-null results
+    for (const result of batchResults) {
+      if (result) results.push(result);
+    }
+
+    // Force garbage collection hint between batches (if available)
+    // This helps Railway containers stay under memory limits
+    if (global.gc) {
+      global.gc();
+    }
+    logMemoryUsage(`after batch ${Math.floor(batchStart / PARALLEL_BATCH_SIZE) + 1}`);
+  }
+
+  return results;
+}
+
 // Main profile slides endpoint
 app.post('/api/profile-slides', async (req, res) => {
   const { websites, email, targetDescription } = req.body;
@@ -4630,132 +4601,10 @@ app.post('/api/profile-slides', async (req, res) => {
     total: websites.length
   });
 
-  // Process in background
+  // Process in background using parallel batch processing
   try {
-    const results = [];
-
-    for (let i = 0; i < websites.length; i++) {
-      const website = websites[i].trim();
-      if (!website) continue;
-
-      console.log(`\n[${i + 1}/${websites.length}] Processing: ${website}`);
-      logMemoryUsage(`start company ${i + 1}`);
-
-      try {
-        // Step 1: Scrape website
-        console.log('  Step 1: Scraping website...');
-        const scraped = await scrapeWebsite(website);
-
-        if (!scraped.success) {
-          console.log(`  Failed to scrape: ${scraped.error}`);
-          // Mark as inaccessible - will appear on summary slide but not individual profile
-          const companyName = extractCompanyNameFromUrl(website);
-          results.push({
-            website,
-            company_name: companyName,
-            title: companyName,
-            location: '',
-            _inaccessible: true,
-            _error: `Failed to scrape: ${scraped.error}`
-          });
-          console.log(`  Marked as inaccessible: ${companyName}`);
-          continue;
-        }
-        console.log(`  Scraped ${scraped.content.length} characters`);
-
-        // Step 2: Extract basic info (company name, year, location)
-        console.log('  Step 2: Extracting company name, year, location...');
-        const basicInfo = await extractBasicInfo(scraped.content, website);
-        console.log(`  Company: ${basicInfo.company_name || 'Not found'}`);
-
-        // Step 3: Extract business details
-        console.log('  Step 3: Extracting business, message, footnote, title...');
-        const businessInfo = await extractBusinessInfo(scraped.content, basicInfo);
-
-        // Step 4: Extract key metrics
-        console.log('  Step 4: Extracting key metrics...');
-        const metricsInfo = await extractKeyMetrics(scraped.content, {
-          company_name: basicInfo.company_name,
-          business: businessInfo.business
-        });
-
-        // Step 4b: Extract products/applications breakdown for right table
-        console.log('  Step 4b: Extracting products/applications breakdown...');
-        const productsBreakdown = await extractProductsBreakdown(scraped.content, {
-          company_name: basicInfo.company_name,
-          business: businessInfo.business
-        });
-
-        // Step 5: Search online for missing mandatory info (established_year, location)
-        // These are mandatory fields - search online if not found on website
-        const missingFields = [];
-        if (!basicInfo.established_year) missingFields.push('established_year');
-        if (!basicInfo.location) missingFields.push('location');
-
-        let searchedInfo = {};
-        if (missingFields.length > 0 && basicInfo.company_name) {
-          console.log(`  Step 5: Searching online for missing mandatory info: ${missingFields.join(', ')}...`);
-          searchedInfo = await searchMissingInfo(basicInfo.company_name, website, missingFields);
-        }
-
-        // Use only key metrics from scraped website (no web search for metrics to prevent hallucination)
-        const allKeyMetrics = metricsInfo.key_metrics || [];
-
-        // Combine all extracted data (mandatory fields supplemented by web search)
-        // Use ensureString() for all AI-generated fields to prevent [object Object] issues
-        let companyData = {
-          website: scraped.url,
-          company_name: ensureString(basicInfo.company_name),
-          established_year: ensureString(basicInfo.established_year || searchedInfo.established_year),
-          location: validateAndFixHQFormat(ensureString(basicInfo.location || searchedInfo.location), website),
-          business: ensureString(businessInfo.business),
-          message: ensureString(businessInfo.message),
-          footnote: ensureString(businessInfo.footnote),
-          title: ensureString(businessInfo.title),
-          key_metrics: allKeyMetrics,  // Only from scraped website
-          // Right-side content (varies by business type)
-          business_type: productsBreakdown.business_type || 'industrial',
-          breakdown_title: ensureString(productsBreakdown.breakdown_title) || 'Products and Applications',
-          breakdown_items: productsBreakdown.breakdown_items || [],
-          projects: productsBreakdown.projects || [],  // For project-based businesses
-          products: productsBreakdown.products || [],  // For consumer-facing businesses
-          metrics: ensureString(metricsInfo.metrics)  // Fallback for old format
-        };
-
-        // Step 6: Run AI review agent to clean up duplicative/unnecessary data
-        companyData = await reviewAndCleanData(companyData);
-
-        // Step 7: HARD RULE - Filter out empty/meaningless Key Metrics
-        // Remove metrics that say "No specific X stated", "Not specified", etc.
-        const metricsBefore = companyData.key_metrics?.length || 0;
-        companyData.key_metrics = filterEmptyMetrics(companyData.key_metrics);
-        const metricsAfter = companyData.key_metrics?.length || 0;
-        if (metricsBefore !== metricsAfter) {
-          console.log(`  Step 7: Filtered ${metricsBefore - metricsAfter} empty metrics (${metricsBefore} → ${metricsAfter})`);
-        }
-
-        console.log(`  ✓ Completed: ${companyData.title || companyData.company_name} (${companyData.key_metrics?.length || 0} metrics after review)`);
-        results.push(companyData);
-
-        // Memory cleanup: Release large objects to prevent OOM on Railway
-        // scraped.content can be 1-5MB per website, must release before next iteration
-        if (scraped) scraped.content = null;
-
-      } catch (error) {
-        console.error(`  Error processing ${website}:`, error.message);
-        results.push({
-          website,
-          error: error.message,
-          step: 0
-        });
-      }
-
-      // Force garbage collection hint between companies (if available)
-      // This helps Railway containers stay under memory limits
-      if (global.gc) {
-        global.gc();
-      }
-    }
+    // Process websites in parallel batches of 4 for ~3x faster processing
+    const results = await processWebsitesInParallel(websites);
 
     // Separate successful companies, inaccessible websites, and errors
     const companies = results.filter(r => !r.error && !r._inaccessible);
@@ -4865,11 +4714,14 @@ app.post('/api/generate-ppt', async (req, res) => {
           continue;
         }
         console.log(`  Scraped ${scraped.content.length} characters`);
+        // Log content preview for debugging (first 500 chars, useful for seeing what was scraped)
+        console.log(`  Content preview: ${scraped.content.substring(0, 500).replace(/\n/g, ' ').replace(/\s+/g, ' ')}...`);
 
         // Step 2: Extract basic info
         console.log('  Step 2: Extracting company name, year, location...');
         const basicInfo = await extractBasicInfo(scraped.content, website);
         console.log(`  Company: ${basicInfo.company_name || 'Not found'}`);
+        if (basicInfo.location) console.log(`  Location extracted: ${basicInfo.location}`);
 
         // Step 3: Extract business details
         console.log('  Step 3: Extracting business, message, footnote, title...');
@@ -4921,8 +4773,8 @@ app.post('/api/generate-ppt', async (req, res) => {
           metrics: ensureString(metricsInfo.metrics)
         };
 
-        // Step 6: Review and clean data
-        companyData = await reviewAndCleanData(companyData);
+        // Step 6: Run AI validator to compare extraction vs source and fix issues
+        companyData = await reviewAndCleanData(companyData, scraped.content);
 
         // Step 7: Filter empty metrics
         const metricsBefore = companyData.key_metrics?.length || 0;
@@ -4996,6 +4848,9 @@ app.post('/api/generate-ppt', async (req, res) => {
     });
   }
 });
+
+// ============ HEALTH CHECK ============
+app.get('/health', healthCheck('profile-slides'));
 
 // ============ HEALTHCHECK ============
 app.get('/', (req, res) => {
