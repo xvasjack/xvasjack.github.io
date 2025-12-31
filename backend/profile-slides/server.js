@@ -5046,8 +5046,8 @@ async function processSingleWebsite(website, index, total) {
     }
 
     // Step 6: Run AI validator to compare extraction vs source and fix issues
-    // Pass marked content if available (more focused), otherwise use raw content
-    const validatorResult = await reviewAndCleanData(companyData, contentForExtraction, markerResult?.markers);
+    // IMPORTANT: Pass RAW scraped content (not marked content) so validator can catch what Marker missed
+    const validatorResult = await reviewAndCleanData(companyData, scraped.content, markerResult?.markers);
     companyData = validatorResult.data;
 
     // Step 6b: ITERATIVE EXTRACTION - If validator found missed items, try to extract them
@@ -5066,7 +5066,8 @@ async function processSingleWebsite(website, index, total) {
         .join(', ');
 
       // Re-run metrics extraction with explicit focus on missed items
-      const reExtractedMetrics = await extractKeyMetricsWithFocus(contentForExtraction, {
+      // Use RAW scraped content so it can find things Marker missed
+      const reExtractedMetrics = await extractKeyMetricsWithFocus(scraped.content, {
         company_name: companyData.company_name,
         business: companyData.business,
         existingMetrics: existingMetricsText,
@@ -5088,7 +5089,8 @@ async function processSingleWebsite(website, index, total) {
       }
 
       // Re-run validator one more time to catch anything else
-      const finalValidation = await reviewAndCleanData(companyData, contentForExtraction, markerResult?.markers);
+      // Use raw content so it can validate against full source
+      const finalValidation = await reviewAndCleanData(companyData, scraped.content, markerResult?.markers);
       companyData = finalValidation.data;
     }
 
