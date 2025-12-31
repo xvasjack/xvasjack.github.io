@@ -39,6 +39,7 @@ All services have:
 ## Shared Modules
 - `backend/shared/security.js` - Security middleware and helpers
 - `backend/shared/utils.js` - Common utility functions
+- `backend/shared/middleware.js` - Logging and health checks
 
 ## CI/CD
 - GitHub Actions runs on push/PR to main
@@ -50,3 +51,81 @@ All services have:
 - Prettier for formatting
 - Jest for testing
 - Husky + lint-staged for pre-commit hooks
+
+## Services
+
+### Search Services
+- **target-v3** - Primary company search (~10 min)
+- **target-v4** - Improved filtering
+- **target-v5** - Enhanced with Gemini + ChatGPT
+- **target-v6** - Latest iteration
+
+### Analysis Services
+- **validation** - Validate company lists (Excel/CSV)
+- **market-research** - Generate market analysis PPTX
+- **profile-slides** - Create company profile PPTX
+- **trading-comparable** - Trading comps with Excel uploads
+- **utb** - Unit-to-business analysis
+- **due-diligence** - DD reports with DeepSeek
+
+### Supporting Services
+- **financial-chart** - Financial visualization
+- **transcription** - Real-time audio (Deepgram + R2)
+
+## API Pattern
+All services follow async email delivery:
+```
+POST /api/{service}
+Body: { Business, Country, Exclusion, Email }
+Response: { success: true, message: "Results will be emailed" }
+```
+
+## Environment Variables
+
+### Required
+```
+OPENAI_API_KEY      # GPT-4o
+PERPLEXITY_API_KEY  # Web search
+GEMINI_API_KEY      # Google Gemini
+SENDGRID_API_KEY    # Email delivery
+SENDER_EMAIL        # From address
+```
+
+### Optional
+```
+DEEPSEEK_API_KEY    # Market research (cheaper)
+DEEPGRAM_API_KEY    # Transcription
+ANTHROPIC_API_KEY   # Claude fallback
+SERPAPI_API_KEY     # Google search
+R2_*                # Cloudflare R2 storage
+```
+
+## Railway Deployment
+- Each service is independent Railway project
+- Root: `backend/{service-name}`
+- Start: `node --expose-gc --max-old-space-size=450 server.js`
+- Health check: `GET /health`
+
+## Frontend
+- Static HTML files on GitHub Pages
+- Forms POST directly to Railway URLs
+- Email stored in localStorage (`ycpUserEmail`)
+- Results delivered via email (async)
+
+## Key Functions
+
+### Company Processing
+- `normalizeCompanyName()` - Strip Ltd, Inc, Sdn Bhd, etc.
+- `normalizeWebsite()` - Clean URLs for comparison
+- `dedupeCompanies()` - Remove duplicates by website/domain/name
+- `isSpamOrDirectoryURL()` - Filter Wikipedia, Facebook, etc.
+
+### AI Context
+- `detectMeetingDomain()` - Identify financial/legal/medical
+- `getDomainInstructions()` - Domain-specific prompts
+- `ensureString()` - Handle AI returning objects instead of strings
+
+## Git Workflow
+- Feature branches: `claude/{feature}-{suffix}`
+- Commit style: `Type: Description` (Add, Fix, Improve, Update)
+- Run `npm test` before pushing
