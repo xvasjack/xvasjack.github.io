@@ -1,19 +1,9 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const path = require('path');
-const http = require('http');
-const WebSocket = require('ws');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
-const pptxgen = require('pptxgenjs');
-const XLSX = require('xlsx');
-const multer = require('multer');
-const { createClient } = require('@deepgram/sdk');
-const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } = require('docx');
-const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const Anthropic = require('@anthropic-ai/sdk');
-const JSZip = require('jszip');
 const { securityHeaders, rateLimiter, escapeHtml } = require('../shared/security');
 
 // ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
@@ -71,16 +61,8 @@ app.use(cors());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// Multer configuration for file uploads (memory storage)
-// Add 50MB limit to prevent OOM on Railway containers
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }  // 50MB max
-});
-
 // Check required environment variables
 const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
-const optionalEnvVars = ['SERPAPI_API_KEY', 'DEEPSEEK_API_KEY', 'DEEPGRAM_API_KEY', 'ANTHROPIC_API_KEY']; // Optional but recommended
 const missingVars = requiredEnvVars.filter(v => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
@@ -105,124 +87,6 @@ const openai = new OpenAI({
 const anthropic = process.env.ANTHROPIC_API_KEY
   ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
   : null;
-
-// Initialize Deepgram
-const deepgram = process.env.DEEPGRAM_API_KEY ? createClient(process.env.DEEPGRAM_API_KEY) : null;
-
-// Initialize Cloudflare R2 (S3-compatible)
-const r2Client = (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY)
-  ? new S3Client({
-      region: 'auto',
-      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-      credentials: {
-        accessKeyId: process.env.R2_ACCESS_KEY_ID,
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-      }
-    })
-  : null;
-
-const R2_BUCKET = process.env.R2_BUCKET_NAME || 'dd-recordings';
-
-if (!r2Client) {
-  console.warn('R2 not configured - recordings will only be stored in memory. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME');
-}
-
-// Extract text from .docx files (Word documents)
-async function extractDocxText(base64Content) {
-  try {
-    const buffer = Buffer.from(base64Content, 'base64');
-    const zip = await JSZip.loadAsync(buffer);
-    const documentXml = await zip.file('word/document.xml')?.async('string');
-
-    if (!documentXml) {
-      return '[Could not extract text from Word document]';
-    }
-
-    // Extract text from XML, removing tags
-    let text = documentXml
-      .replace(/<w:t[^>]*>([^<]*)<\/w:t>/g, '$1')  // Extract text content
-      .replace(/<w:p[^>]*>/g, '\n')  // Paragraph breaks
-      .replace(/<[^>]+>/g, '')  // Remove remaining tags
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/\n\s*\n/g, '\n\n')  // Clean up multiple newlines
-      .trim();
-
-    console.log(`[DD] Extracted ${text.length} chars from DOCX`);
-    return text || '[Empty Word document]';
-  } catch (error) {
-    console.error('[DD] DOCX extraction error:', error.message);
-    return `[Error extracting Word document: ${error.message}]`;
-  }
-}
-
-// Extract text from .pptx files (PowerPoint)
-async function extractPptxText(base64Content) {
-  try {
-    const buffer = Buffer.from(base64Content, 'base64');
-    const zip = await JSZip.loadAsync(buffer);
-
-    let allText = [];
-    let slideNum = 1;
-
-    // Iterate through slide files
-    for (const filename of Object.keys(zip.files)) {
-      if (filename.match(/ppt\/slides\/slide\d+\.xml$/)) {
-        const slideXml = await zip.file(filename)?.async('string');
-        if (slideXml) {
-          // Extract text from slide
-          let slideText = slideXml
-            .replace(/<a:t>([^<]*)<\/a:t>/g, '$1 ')  // Extract text
-            .replace(/<a:p[^>]*>/g, '\n')  // Paragraph breaks
-            .replace(/<[^>]+>/g, '')  // Remove tags
-            .replace(/&amp;/g, '&')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/\s+/g, ' ')
-            .trim();
-
-          if (slideText) {
-            allText.push(`[Slide ${slideNum}]\n${slideText}`);
-          }
-          slideNum++;
-        }
-      }
-    }
-
-    const result = allText.join('\n\n') || '[Empty PowerPoint]';
-    console.log(`[DD] Extracted ${result.length} chars from PPTX (${slideNum - 1} slides)`);
-    return result;
-  } catch (error) {
-    console.error('[DD] PPTX extraction error:', error.message);
-    return `[Error extracting PowerPoint: ${error.message}]`;
-  }
-}
-
-// Extract text from .xlsx files (Excel)
-async function extractXlsxText(base64Content) {
-  try {
-    const buffer = Buffer.from(base64Content, 'base64');
-    const workbook = XLSX.read(buffer, { type: 'buffer' });
-
-    let allText = [];
-    for (const sheetName of workbook.SheetNames) {
-      const sheet = workbook.Sheets[sheetName];
-      const csv = XLSX.utils.sheet_to_csv(sheet);
-      if (csv.trim()) {
-        allText.push(`[Sheet: ${sheetName}]\n${csv}`);
-      }
-    }
-
-    const result = allText.join('\n\n') || '[Empty Excel file]';
-    console.log(`[DD] Extracted ${result.length} chars from XLSX`);
-    return result;
-  } catch (error) {
-    console.error('[DD] XLSX extraction error:', error.message);
-    return `[Error extracting Excel: ${error.message}]`;
-  }
-}
 
 // Send email using SendGrid API
 async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) {

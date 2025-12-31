@@ -327,7 +327,7 @@ async function extractDocxText(base64Content) {
     }
 
     // Extract text from XML, removing tags
-    let text = documentXml
+    const text = documentXml
       .replace(/<w:t[^>]*>([^<]*)<\/w:t>/g, '$1')  // Extract text content
       .replace(/<w:p[^>]*>/g, '\n')  // Paragraph breaks
       .replace(/<[^>]+>/g, '')  // Remove remaining tags
@@ -352,7 +352,7 @@ async function extractPptxText(base64Content) {
     const buffer = Buffer.from(base64Content, 'base64');
     const zip = await JSZip.loadAsync(buffer);
 
-    let allText = [];
+    const allText = [];
     let slideNum = 1;
 
     // Iterate through slide files
@@ -361,7 +361,7 @@ async function extractPptxText(base64Content) {
         const slideXml = await zip.file(filename)?.async('string');
         if (slideXml) {
           // Extract text from slide
-          let slideText = slideXml
+          const slideText = slideXml
             .replace(/<a:t>([^<]*)<\/a:t>/g, '$1 ')  // Extract text
             .replace(/<a:p[^>]*>/g, '\n')  // Paragraph breaks
             .replace(/<[^>]+>/g, '')  // Remove tags
@@ -394,7 +394,7 @@ async function extractXlsxText(base64Content) {
     const buffer = Buffer.from(base64Content, 'base64');
     const workbook = XLSX.read(buffer, { type: 'buffer' });
 
-    let allText = [];
+    const allText = [];
     for (const sheetName of workbook.SheetNames) {
       const sheet = workbook.Sheets[sheetName];
       const csv = XLSX.utils.sheet_to_csv(sheet);
@@ -650,7 +650,7 @@ async function callGemini2Pro(prompt, jsonMode = false) {
 }
 
 // Claude (Anthropic) - excellent reasoning and analysis
-async function callClaude(prompt, systemPrompt = null, jsonMode = false) {
+async function callClaude(prompt, systemPrompt = null, _jsonMode = false) {
   if (!anthropic) {
     console.warn('Claude not available - ANTHROPIC_API_KEY not set');
     return '';
@@ -1251,7 +1251,7 @@ Be thorough - include all companies you find. We will verify them later.`;
 }
 
 // Strategy 1: Broad Google Search (SerpAPI)
-function strategy1_BroadSerpAPI(business, country, exclusion) {
+function strategy1_BroadSerpAPI(business, country, _exclusion) {
   const countries = country.split(',').map(c => c.trim());
   const queries = [];
 
@@ -1303,7 +1303,7 @@ function strategy2_BroadPerplexity(business, country, exclusion) {
 }
 
 // Strategy 3: Lists, Rankings, Top Companies (SerpAPI)
-function strategy3_ListsSerpAPI(business, country, exclusion) {
+function strategy3_ListsSerpAPI(business, country, _exclusion) {
   const countries = country.split(',').map(c => c.trim());
   const queries = [];
 
@@ -1343,7 +1343,7 @@ function strategy4_CitiesPerplexity(business, country, exclusion) {
 }
 
 // Strategy 5: Industrial Zones + Local Naming (SerpAPI)
-function strategy5_IndustrialSerpAPI(business, country, exclusion) {
+function strategy5_IndustrialSerpAPI(business, country, _exclusion) {
   const countries = country.split(',').map(c => c.trim());
   const queries = [];
 
@@ -1427,7 +1427,7 @@ function strategy9_DomainsPerplexity(business, country, exclusion) {
 }
 
 // Strategy 10: Government Registries (SerpAPI)
-function strategy10_RegistriesSerpAPI(business, country, exclusion) {
+function strategy10_RegistriesSerpAPI(business, country, _exclusion) {
   const countries = country.split(',').map(c => c.trim());
   const queries = [];
 
@@ -1443,7 +1443,7 @@ function strategy10_RegistriesSerpAPI(business, country, exclusion) {
 }
 
 // Strategy 11: City + Industrial Areas (SerpAPI) - EXPANDED
-function strategy11_CityIndustrialSerpAPI(business, country, exclusion) {
+function strategy11_CityIndustrialSerpAPI(business, country, _exclusion) {
   const countries = country.split(',').map(c => c.trim());
   const queries = [];
 
@@ -1502,7 +1502,7 @@ function strategy13_PublicationsPerplexity(business, country, exclusion) {
 }
 
 // Strategy 14: Final Sweep - Local Language + Comprehensive (OpenAI Search)
-function strategy14_LocalLanguageOpenAISearch(business, country, exclusion) {
+function strategy14_LocalLanguageOpenAISearch(business, country, _exclusion) {
   const countries = country.split(',').map(c => c.trim());
   const outputFormat = buildOutputFormat();
   const queries = [];
@@ -1906,7 +1906,7 @@ async function fetchWebsite(url) {
 
 // ============ DYNAMIC EXCLUSION RULES BUILDER (n8n-style PAGE SIGNAL detection) ============
 
-function buildExclusionRules(exclusion, business) {
+function buildExclusionRules(exclusion, _business) {
   const exclusionLower = exclusion.toLowerCase();
   let rules = '';
 
@@ -4337,7 +4337,9 @@ async function findCompanyWebsiteMulti(companyName, countries) {
       const domain = new URL(url).hostname.replace(/^www\./, '');
       domainCounts[domain] = (domainCounts[domain] || 0) + 1;
       if (!domainToUrl[domain]) domainToUrl[domain] = url;
-    } catch (e) {}
+    } catch (e) {
+      // intentionally empty - skip invalid URLs
+    }
   }
 
   // Find the domain with most votes
@@ -4387,7 +4389,7 @@ async function validateCompanyBusinessStrict(company, targetBusiness, pageText) 
     };
   }
 
-  const systemPrompt = (model) => `You are a company validator. Determine if the company matches the target business criteria STRICTLY based on the website content provided.
+  const systemPrompt = (_model) => `You are a company validator. Determine if the company matches the target business criteria STRICTLY based on the website content provided.
 
 TARGET BUSINESS: "${targetBusiness}"
 
@@ -4460,71 +4462,8 @@ ${(typeof pageText === 'string' && pageText) ? pageText.substring(0, 10000) : 'C
   }
 }
 
-// Build validation results email
-function buildValidationEmailHTML(companies, targetBusiness, countries, outputOption) {
-  const inScopeCompanies = companies.filter(c => c.in_scope);
-  const outOfScopeCompanies = companies.filter(c => !c.in_scope);
-
-  let html = `
-    <h2>Speeda List Validation Results</h2>
-    <p><strong>Target Business:</strong> ${targetBusiness}</p>
-    <p><strong>Countries:</strong> ${countries.join(', ')}</p>
-    <p><strong>Total Companies Processed:</strong> ${companies.length}</p>
-    <p><strong>In-Scope:</strong> ${inScopeCompanies.length}</p>
-    <p><strong>Out-of-Scope:</strong> ${outOfScopeCompanies.length}</p>
-    <br>
-  `;
-
-  if (outputOption === 'all_companies') {
-    html += `
-    <h3>All Companies</h3>
-    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
-      <thead style="background-color: #f0f0f0;">
-        <tr><th>#</th><th>Company</th><th>Website</th><th>Status</th><th>Business Description</th></tr>
-      </thead>
-      <tbody>
-    `;
-    companies.forEach((c, i) => {
-      const statusColor = c.in_scope ? '#10b981' : '#ef4444';
-      const statusText = c.in_scope ? 'IN SCOPE' : 'OUT OF SCOPE';
-      html += `<tr>
-        <td>${i + 1}</td>
-        <td>${c.company_name}</td>
-        <td>${c.website ? `<a href="${c.website}">${c.website}</a>` : 'Not found'}</td>
-        <td style="color: ${statusColor}; font-weight: bold;">${statusText}</td>
-        <td>${c.business_description || c.reason || '-'}</td>
-      </tr>`;
-    });
-    html += '</tbody></table>';
-  } else {
-    html += `
-    <h3>In-Scope Companies</h3>
-    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
-      <thead style="background-color: #f0f0f0;">
-        <tr><th>#</th><th>Company</th><th>Website</th><th>Business Description</th></tr>
-      </thead>
-      <tbody>
-    `;
-    if (inScopeCompanies.length === 0) {
-      html += '<tr><td colspan="4" style="text-align: center;">No in-scope companies found</td></tr>';
-    } else {
-      inScopeCompanies.forEach((c, i) => {
-        html += `<tr>
-          <td>${i + 1}</td>
-          <td>${c.company_name}</td>
-          <td>${c.website ? `<a href="${c.website}">${c.website}</a>` : 'Not found'}</td>
-          <td>${c.business_description || '-'}</td>
-        </tr>`;
-      });
-    }
-    html += '</tbody></table>';
-  }
-
-  return html;
-}
-
 // Build validation results as Excel file (returns base64 string)
-function buildValidationExcel(companies, targetBusiness, countries, outputOption) {
+function buildValidationExcel(companies, _targetBusiness, _countries, _outputOption) {
   const inScopeCompanies = companies.filter(c => c.in_scope);
 
   // Create workbook
@@ -5334,7 +5273,7 @@ When uncertain, keep the company (passes=true) for manual review.`;
  * PHASE 3: Self-Validation
  * Review the final peer set for coherence and catch any mistakes
  */
-async function phase3Validation(companies, targetDescription, analysis) {
+async function phase3Validation(companies, targetDescription, _analysis) {
   console.log('\n' + '='.repeat(60));
   console.log('PHASE 3: SELF-VALIDATION');
   console.log('='.repeat(60));
@@ -5890,7 +5829,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
         if (allSmallIntegers && sampleValues.length >= 3) {
           // Check if they look sequential (like ranks: 1,2,3,4...)
           const sorted = [...sampleValues].sort((a, b) => a - b);
-          const looksLikeRank = sorted.every((v, i) => v >= 1 && v <= 20);
+          const looksLikeRank = sorted.every((v, _i) => v >= 1 && v <= 20);
           if (looksLikeRank) {
             console.log(`    SKIP: Values look like ranking (small integers 1-20)`);
             continue;
@@ -6448,7 +6387,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       const salesB = b.sales !== null && b.sales !== undefined ? b.sales : 0;
       return salesB - salesA;
     });
-    let displayCompanies = sortedCompanies.slice(0, 30);
+    const displayCompanies = sortedCompanies.slice(0, 30);
 
     // ===== AI DATA VALIDATION using Gemini 2.5 Pro =====
     // Critical validation step to ensure data accuracy before PowerPoint generation
@@ -9415,7 +9354,7 @@ EXTRACT and return the EXACT data:
 
 For EACH number, cite: "X% (Source: [Document Name] FY20XX, page Y)"
 
-If you cannot find the official document, state "Official document not accessible".`).catch(e => ''),
+If you cannot find the official document, state "Official document not accessible".`).catch(_e => ''),
 
       // Search for mid-term plan
       callPerplexity(`Find the OFFICIAL MID-TERM MANAGEMENT PLAN (中期経営計画) for ${companyName} (${website}).
@@ -9432,7 +9371,7 @@ EXTRACT and return:
 4. Investment priorities
 5. M&A strategy if mentioned
 
-Cite the source document name and date for each piece of data.`).catch(e => ''),
+Cite the source document name and date for each piece of data.`).catch(_e => ''),
 
       // Search for M&A/merger announcements
       callPerplexity(`Find any MERGER, ACQUISITION, or CORPORATE ACTION announcements for ${companyName} (${website}).
@@ -9450,7 +9389,7 @@ Return:
 2. Transaction type and terms
 3. Timeline and status
 4. Strategic rationale
-5. Source document (press release date, disclosure number)`).catch(e => ''),
+5. Source document (press release date, disclosure number)`).catch(_e => ''),
 
       // Search for recent disclosures
       callPerplexity(`Find the most recent OFFICIAL DISCLOSURES and IR materials for ${companyName} (${website}).
@@ -9465,7 +9404,7 @@ Return key announcements with:
 1. Date
 2. Type of disclosure
 3. Key content
-4. Source URL if available`).catch(e => '')
+4. Source URL if available`).catch(_e => '')
     ];
 
     const [annualReport, midtermPlan, mergerInfo, recentDisclosures] = await Promise.all(docSearchPromises);
@@ -10003,7 +9942,7 @@ async function conductUTBResearch(companyName, website, additionalContext) {
 }
 
 // Generate UTB Excel workbook with structured data
-async function generateUTBExcel(companyName, website, research, additionalContext) {
+async function generateUTBExcel(companyName, website, research, _additionalContext) {
   if (!ExcelJS) {
     throw new Error('ExcelJS not available');
   }
@@ -10401,7 +10340,7 @@ async function generateDueDiligenceReport(files, instructions, reportLength, ins
 
   // Extract URLs from instructions and fetch them
   let onlineResearchContent = '';
-  let onlineSourcesUsed = [];
+  const onlineSourcesUsed = [];
   if (instructions) {
     const urlRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)/gi;
     const urls = instructions.match(urlRegex) || [];
@@ -10579,8 +10518,8 @@ app.post('/api/due-diligence', async (req, res) => {
 
   try {
     // Step 1: Transcribe all audio files
-    let transcripts = [];
-    let detectedLanguages = [];
+    const transcripts = [];
+    const detectedLanguages = [];
 
     for (const audioFile of audioFiles) {
       console.log(`[DD] Transcribing: ${audioFile.name}`);
@@ -10604,7 +10543,7 @@ app.post('/api/due-diligence', async (req, res) => {
     }
 
     // Step 2: Translate if needed (with domain awareness)
-    let translatedTranscripts = [];
+    const translatedTranscripts = [];
     for (const t of transcripts) {
       if (translateToEnglish && t.language !== 'en' && t.language !== 'english' && t.text.length > 10) {
         console.log(`[DD] Translating from ${t.language} to English: ${t.name}`);
@@ -10625,7 +10564,7 @@ app.post('/api/due-diligence', async (req, res) => {
     }
 
     // Step 3: Combine all content
-    let combinedTranscript = translatedTranscripts.map(t =>
+    const combinedTranscript = translatedTranscripts.map(t =>
       `=== ${t.name} ${t.wasTranslated ? `(Translated from ${t.language})` : ''} ===\n${t.text}`
     ).join('\n\n');
 
@@ -10728,7 +10667,7 @@ app.post('/api/due-diligence', async (req, res) => {
     </div>`;
 
     // Step 6: Generate attachments (Word doc, transcript, audio)
-    let attachments = [];
+    const attachments = [];
     const dateStr = new Date().toISOString().slice(0, 10);
 
     // 6a: Word document
@@ -10881,7 +10820,7 @@ setInterval(() => {
   }
 }, 10 * 60 * 1000);
 
-wss.on('connection', (ws, req) => {
+wss.on('connection', (ws, _req) => {
   console.log('[WS] New client connected for real-time transcription');
 
   // Check session limit to prevent memory exhaustion
@@ -10893,15 +10832,15 @@ wss.on('connection', (ws, req) => {
   }
 
   let deepgramConnection = null;
-  let sessionId = Date.now().toString();
-  let audioChunks = [];
+  const sessionId = Date.now().toString();
+  const audioChunks = [];
   let fullTranscript = '';
   let detectedLanguage = 'en';
   let translatedTranscript = '';
 
   // Segment buffering for improved translation context
   let segmentBuffer = [];  // Buffer to accumulate segments before translation
-  let translationContext = [];  // Previous translated segments for context
+  const translationContext = [];  // Previous translated segments for context
   let detectedDomain = null;  // Auto-detected meeting domain
   const SEGMENT_BUFFER_SIZE = 2;  // Number of segments to buffer before translating
   const MAX_CONTEXT_SEGMENTS = 5;  // Maximum previous segments to keep for context

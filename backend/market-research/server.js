@@ -3,10 +3,10 @@ const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
-const { securityHeaders, rateLimiter, escapeHtml } = require('../shared/security');
+const { securityHeaders, rateLimiter } = require('../shared/security');
 
 // ============ GLOBAL ERROR HANDLERS ============
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', (reason, _promise) => {
   console.error('=== UNHANDLED PROMISE REJECTION ===');
   console.error('Reason:', reason);
   console.error('Stack:', reason?.stack || 'No stack trace');
@@ -838,7 +838,7 @@ function generateFallbackFramework(scope) {
 // ============ ITERATIVE RESEARCH SYSTEM WITH CONFIDENCE SCORING ============
 
 // Step 1: Identify gaps in research after first synthesis with detailed scoring
-async function identifyResearchGaps(synthesis, country, industry) {
+async function identifyResearchGaps(synthesis, country, _industry) {
   console.log(`  [Analyzing research quality for ${country}...]`);
 
   const gapPrompt = `You are a research quality auditor reviewing a market analysis. Score each section and identify critical gaps.
@@ -973,7 +973,7 @@ async function fillResearchGaps(gaps, country, industry) {
 }
 
 // Step 3: Re-synthesize with additional data
-async function reSynthesize(originalSynthesis, additionalData, country, industry, clientContext) {
+async function reSynthesize(originalSynthesis, additionalData, country, _industry, _clientContext) {
   console.log(`  [Re-synthesizing ${country} with additional data...]`);
 
   const prompt = `You are improving a market analysis with NEW DATA that fills previous gaps.
@@ -1032,7 +1032,7 @@ Return ONLY valid JSON.`;
 // Specialized agents for each research domain running in parallel
 
 // Policy Research Agent - handles regulatory and policy topics
-async function policyResearchAgent(country, industry, clientContext) {
+async function policyResearchAgent(country, industry, _clientContext) {
   console.log(`    [POLICY AGENT] Starting research for ${country}...`);
   const agentStart = Date.now();
   const topics = RESEARCH_TOPIC_GROUPS.policy;
@@ -1075,7 +1075,7 @@ FOCUS ON:
 }
 
 // Market Research Agent - handles market data and pricing topics
-async function marketResearchAgent(country, industry, clientContext) {
+async function marketResearchAgent(country, industry, _clientContext) {
   console.log(`    [MARKET AGENT] Starting research for ${country}...`);
   const agentStart = Date.now();
   const topics = RESEARCH_TOPIC_GROUPS.market;
@@ -1133,7 +1133,7 @@ FOCUS ON:
 }
 
 // Competitor Research Agent - handles competitive intelligence
-async function competitorResearchAgent(country, industry, clientContext) {
+async function competitorResearchAgent(country, industry, _clientContext) {
   console.log(`    [COMPETITOR AGENT] Starting research for ${country}...`);
   const agentStart = Date.now();
   const topics = RESEARCH_TOPIC_GROUPS.competitors;
@@ -3875,7 +3875,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     chartLabels.push(c.country);
     // Try to extract numeric value from market size string
     const sizeStr = c.marketDynamics?.marketSize || '';
-    const numMatch = sizeStr.match(/[\$€]?\s*([\d,.]+)\s*(billion|million|B|M)?/i);
+    const numMatch = sizeStr.match(/[$€]?\s*([\d,.]+)\s*(billion|million|B|M)?/i);
     let value = 0;
     if (numMatch) {
       value = parseFloat(numMatch[1].replace(/,/g, ''));

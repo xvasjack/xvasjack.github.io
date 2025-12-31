@@ -2,16 +2,13 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
-const http = require('http');
-const WebSocket = require('ws');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
 const XLSX = require('xlsx');
 const multer = require('multer');
 const { createClient } = require('@deepgram/sdk');
-const { Document, Packer, Paragraph, TextRun, HeadingLevel, Table, TableRow, TableCell, WidthType, BorderStyle } = require('docx');
-const { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { S3Client } = require('@aws-sdk/client-s3');
 const Anthropic = require('@anthropic-ai/sdk');
 const JSZip = require('jszip');
 const { securityHeaders, rateLimiter, escapeHtml } = require('../shared/security');
@@ -140,7 +137,7 @@ async function extractDocxText(base64Content) {
     }
 
     // Extract text from XML, removing tags
-    let text = documentXml
+    const text = documentXml
       .replace(/<w:t[^>]*>([^<]*)<\/w:t>/g, '$1')  // Extract text content
       .replace(/<w:p[^>]*>/g, '\n')  // Paragraph breaks
       .replace(/<[^>]+>/g, '')  // Remove remaining tags
@@ -165,7 +162,7 @@ async function extractPptxText(base64Content) {
     const buffer = Buffer.from(base64Content, 'base64');
     const zip = await JSZip.loadAsync(buffer);
 
-    let allText = [];
+    const allText = [];
     let slideNum = 1;
 
     // Iterate through slide files
@@ -174,7 +171,7 @@ async function extractPptxText(base64Content) {
         const slideXml = await zip.file(filename)?.async('string');
         if (slideXml) {
           // Extract text from slide
-          let slideText = slideXml
+          const slideText = slideXml
             .replace(/<a:t>([^<]*)<\/a:t>/g, '$1 ')  // Extract text
             .replace(/<a:p[^>]*>/g, '\n')  // Paragraph breaks
             .replace(/<[^>]+>/g, '')  // Remove tags
@@ -207,7 +204,7 @@ async function extractXlsxText(base64Content) {
     const buffer = Buffer.from(base64Content, 'base64');
     const workbook = XLSX.read(buffer, { type: 'buffer' });
 
-    let allText = [];
+    const allText = [];
     for (const sheetName of workbook.SheetNames) {
       const sheet = workbook.Sheets[sheetName];
       const csv = XLSX.utils.sheet_to_csv(sheet);
@@ -3186,7 +3183,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       const salesB = b.sales !== null && b.sales !== undefined ? b.sales : 0;
       return salesB - salesA;
     });
-    let displayCompanies = sortedCompanies.slice(0, 30);
+    const displayCompanies = sortedCompanies.slice(0, 30);
 
     // ===== AI DATA VALIDATION using Gemini 2.5 Pro =====
     // Critical validation step to ensure data accuracy before PowerPoint generation
