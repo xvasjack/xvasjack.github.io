@@ -13,35 +13,11 @@ const Anthropic = require('@anthropic-ai/sdk');
 const JSZip = require('jszip');
 const { securityHeaders, rateLimiter, escapeHtml } = require('../shared/security');
 const { requestLogger, healthCheck } = require('../shared/middleware');
+const { setupGlobalErrorHandlers } = require('../shared/logging');
+const { sendEmailLegacy: sendEmail } = require('../shared/email');
 
-// ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
-// Memory logging helper for debugging Railway OOM issues
-function logMemoryUsage(label = '') {
-  const mem = process.memoryUsage();
-  const heapUsedMB = Math.round(mem.heapUsed / 1024 / 1024);
-  const heapTotalMB = Math.round(mem.heapTotal / 1024 / 1024);
-  const rssMB = Math.round(mem.rss / 1024 / 1024);
-  console.log(
-    `  [Memory${label ? ': ' + label : ''}] Heap: ${heapUsedMB}/${heapTotalMB}MB, RSS: ${rssMB}MB`
-  );
-}
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('=== UNHANDLED PROMISE REJECTION ===');
-  console.error('Reason:', reason);
-  console.error('Promise:', promise);
-  console.error('Stack:', reason?.stack || 'No stack trace');
-  logMemoryUsage('at rejection');
-  // Don't exit - keep the server running
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('=== UNCAUGHT EXCEPTION ===');
-  console.error('Error:', error.message);
-  console.error('Stack:', error.stack);
-  logMemoryUsage('at exception');
-  // Don't exit - keep the server running
-});
+// Setup global error handlers to prevent crashes
+setupGlobalErrorHandlers();
 
 // ============ TYPE SAFETY HELPERS ============
 // Ensure a value is a string (AI models may return objects/arrays instead of strings)
@@ -241,70 +217,6 @@ async function _extractXlsxText(base64Content) {
     console.error('[DD] XLSX extraction error:', error.message);
     return `[Error extracting Excel: ${error.message}]`;
   }
-}
-
-// Send email using SendGrid API
-async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) {
-  const senderEmail = process.env.SENDER_EMAIL;
-  const emailData = {
-    personalizations: [{ to: [{ email: to }] }],
-    from: { email: senderEmail, name: 'Find Target' },
-    subject: subject,
-    content: [{ type: 'text/html', value: html }],
-  };
-
-  if (attachments) {
-    const attachmentList = Array.isArray(attachments) ? attachments : [attachments];
-    emailData.attachments = attachmentList.map((a) => ({
-      filename: a.filename || a.name, // Support both 'filename' and 'name' properties
-      content: a.content,
-      type: 'application/octet-stream',
-      disposition: 'attachment',
-    }));
-  }
-
-  // Retry logic with exponential backoff
-  let lastError;
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(emailData),
-      });
-
-      if (response.ok) {
-        if (attempt > 1) {
-          console.log(`  Email sent successfully on attempt ${attempt}`);
-        }
-        return { success: true };
-      }
-
-      const error = await response.text();
-      lastError = new Error(`Email failed (attempt ${attempt}/${maxRetries}): ${error}`);
-      console.error(lastError.message);
-
-      // Don't retry on 4xx client errors (except 429 rate limit)
-      if (response.status >= 400 && response.status < 500 && response.status !== 429) {
-        throw lastError;
-      }
-    } catch (fetchError) {
-      lastError = fetchError;
-      console.error(`  Email attempt ${attempt}/${maxRetries} failed:`, fetchError.message);
-    }
-
-    // Exponential backoff: 2s, 4s, 8s
-    if (attempt < maxRetries) {
-      const delay = Math.pow(2, attempt) * 1000;
-      console.log(`  Retrying email in ${delay / 1000}s...`);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-  }
-
-  throw lastError || new Error('Email failed after all retries');
 }
 
 // ============ AI TOOLS ============

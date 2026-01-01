@@ -8,35 +8,10 @@ const { createClient } = require('@deepgram/sdk');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { securityHeaders, rateLimiter, sanitizePath } = require('../shared/security');
 const { requestLogger, healthCheck } = require('../shared/middleware');
+const { setupGlobalErrorHandlers } = require('../shared/logging');
 
-// ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
-// Memory logging helper for debugging Railway OOM issues
-function logMemoryUsage(label = '') {
-  const mem = process.memoryUsage();
-  const heapUsedMB = Math.round(mem.heapUsed / 1024 / 1024);
-  const heapTotalMB = Math.round(mem.heapTotal / 1024 / 1024);
-  const rssMB = Math.round(mem.rss / 1024 / 1024);
-  console.log(
-    `  [Memory${label ? ': ' + label : ''}] Heap: ${heapUsedMB}/${heapTotalMB}MB, RSS: ${rssMB}MB`
-  );
-}
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('=== UNHANDLED PROMISE REJECTION ===');
-  console.error('Reason:', reason);
-  console.error('Promise:', promise);
-  console.error('Stack:', reason?.stack || 'No stack trace');
-  logMemoryUsage('at rejection');
-  // Don't exit - keep the server running
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('=== UNCAUGHT EXCEPTION ===');
-  console.error('Error:', error.message);
-  console.error('Stack:', error.stack);
-  logMemoryUsage('at exception');
-  // Don't exit - keep the server running
-});
+// Setup global error handlers to prevent crashes
+setupGlobalErrorHandlers();
 
 const app = express();
 app.use(securityHeaders);
