@@ -454,28 +454,35 @@ CRITICAL: Only provide data you can source from:
 - Mid-term management plans (中期経営計画)
 - Earnings releases
 - Official company filings (10-K, 20-F, etc.)
+- Company website IR/financial pages
 
 For EVERY number, specify the source document and date.
 
-1. REVENUE BREAKDOWN FROM ANNUAL REPORT:
+1. REVENUE HISTORY (MOST IMPORTANT - need 3-5 years):
+   - Annual revenue for each of the last 3-5 fiscal years
+   - Format: FY2021: XXX, FY2022: XXX, FY2023: XXX, FY2024: XXX
+   - Include the currency and unit (e.g., JPY millions, USD millions)
+   - This is CRITICAL for financial trend analysis
+
+2. REVENUE BREAKDOWN FROM ANNUAL REPORT:
    - Total annual revenue (fiscal year, currency, source document)
    - Revenue by business segment - EXACT percentages from segment reporting
    - Revenue by geography - EXACT percentages from geographic reporting
 
-2. FROM MID-TERM PLAN (if available):
+3. FROM MID-TERM PLAN (if available):
    - Strategic targets and KPIs
    - Growth projections
    - Investment priorities
 
-3. FROM LATEST EARNINGS:
+4. FROM LATEST EARNINGS:
    - Most recent quarterly results
    - Management commentary
 
-DO NOT estimate or approximate. If exact data is not available in official documents, state "Not disclosed in official filings".
+If exact data is not available in official documents, check the company website for any disclosed financial information.
 
 Format each data point as: "[Number] (Source: [Document Name], [Date])"
 
-For Japanese companies specifically search for: 有価証券報告書, 決算短信, 中期経営計画, IR資料`).catch(
+For Japanese companies specifically search for: 有価証券報告書, 決算短信, 中期経営計画, IR資料, 業績ハイライト`).catch(
       (e) => ({ type: 'financials', data: '', error: e.message })
     ),
 
@@ -537,18 +544,20 @@ Provide SPECIFIC data with sources. No generic statements.`).catch((e) => ({
     // Query 5: M&A History & Strategy
     callPerplexity(`Research ${companyName} M&A activity and corporate development - COMPREHENSIVE:
 
-1. PAST ACQUISITIONS (last 10 years):
-   - Target company name
+1. PAST ACQUISITIONS (last 10-15 years) - FOR EACH DEAL PROVIDE ALL OF:
    - Year of acquisition
-   - Deal value (if disclosed)
-   - Strategic rationale
-   - Integration outcome
+   - Target company name
+   - Target company's country/headquarters
+   - Deal type (Acquisition, Merger, JV, Minority stake)
+   - Acquired stake percentage (100%, majority, minority, or undisclosed)
+   - Target's business description (what the acquired company does)
+   - Strategic rationale (why they acquired it)
 
 2. PAST DIVESTITURES:
    - Any businesses sold off
 
 3. STRATEGIC PARTNERSHIPS & JVs:
-   - Partner name
+   - Partner name and country
    - Nature of partnership
    - Year established
 
@@ -561,11 +570,13 @@ Provide SPECIFIC data with sources. No generic statements.`).catch((e) => ({
    - Investor presentation mentions of inorganic growth
    - Recent news about M&A intentions
 
-Provide SPECIFIC deal names, dates, and values.`).catch((e) => ({
-      type: 'ma_history',
-      data: '',
-      error: e.message,
-    })),
+IMPORTANT: For each acquisition, provide ALL details: year, target name, target country, deal type, stake acquired, target business, and rationale.`).catch(
+      (e) => ({
+        type: 'ma_history',
+        data: '',
+        error: e.message,
+      })
+    ),
 
     // Query 6: Leadership & Strategy
     callPerplexity(`Research ${companyName} leadership and strategic direction:
@@ -654,7 +665,7 @@ async function utbPhase2Synthesis(companyName, website, research, context, offic
 
   const synthesisPrompts = [
     // Synthesis 1: Revenue Breakdown Only
-    callChatGPT(`You are extracting VERIFIED revenue data for M&A advisors.
+    callChatGPT(`You are extracting revenue data for M&A advisors.
 
 COMPANY: ${companyName}
 WEBSITE: ${website}
@@ -666,38 +677,37 @@ ${research.financials}
 
 ---
 
-CRITICAL REQUIREMENTS:
-- Only include data you can verify from the research. NO approximations, NO ranges, NO guesses.
-- Every percentage must be EXACT (e.g., "47%" not "approximately 45-50%")
-- Every data point must have a source (company filings, annual report, investor presentation, etc.)
-- If you cannot find an exact verified number, write "Not disclosed" - do NOT estimate
-- Do NOT include generic notes like "largest geography" - only include specific sourced information
+REQUIREMENTS:
+- Extract revenue data from the research. Include data from company websites, annual reports, press releases.
+- For percentages, prefer exact numbers but include approximate if exact not available.
+- Include source when available.
 
 Respond in this EXACT JSON format:
 {
   "financials": {
-    "total_revenue": "Exact amount with currency and fiscal year, with source (e.g., 'USD 2.3B (FY2023 Annual Report)')",
-    "total_revenue_url": "Direct URL to the source document (e.g., 'https://company.com/ir/annual-report-2023.pdf')",
+    "total_revenue": "Amount with currency and fiscal year (e.g., 'JPY 13.5B (FY2023)')",
+    "total_revenue_url": "URL to source if available",
     "revenue_by_segment": [
-      {"segment": "Segment name", "percentage": "Exact % (e.g., '47%')", "source": "Document name", "source_url": "Direct URL to source"}
+      {"segment": "Segment name", "percentage": "% value", "source": "Document name", "source_url": "URL"}
     ],
     "revenue_by_geography": [
-      {"region": "Region name", "percentage": "Exact % (e.g., '32%')", "source": "Document name", "source_url": "Direct URL to source"}
+      {"region": "Region name", "percentage": "% value", "source": "Document name", "source_url": "URL"}
     ],
     "revenue_history": [
-      {"year": "FY2020", "revenue": 123.4},
-      {"year": "FY2021", "revenue": 145.2},
-      {"year": "FY2022", "revenue": 167.8},
-      {"year": "FY2023", "revenue": 189.5}
+      {"year": "FY2021", "revenue": 115},
+      {"year": "FY2022", "revenue": 123},
+      {"year": "FY2023", "revenue": 135}
     ],
     "revenue_unit": "JPY 100M"
   }
 }
 
-IMPORTANT:
-- If you cannot find EXACT percentages with sources, return empty arrays. No approximations allowed.
-- Always include source_url when available. Use the most direct link to the source document.
-- For revenue_history: Extract 3-5 years of annual revenue. Convert to 100M JPY units (億円). If company reports in USD/EUR, convert using approximate rates.
+CRITICAL FOR REVENUE_HISTORY:
+- This is the MOST IMPORTANT field - we need this for the Financial Highlights chart
+- Extract 2-5 years of annual revenue from the research
+- Convert to appropriate units (100M JPY for Japanese companies, USD M for US companies)
+- If only 2 years available, include those 2 years - do NOT leave empty
+- Look for revenue trends, sales figures, or 売上高 in the research
 - For revenue_unit: Use "JPY 100M" for Japanese companies, "USD M" for US companies, etc.`).catch(
       (e) => ({ section: 'profile', error: e.message })
     ),
@@ -828,42 +838,46 @@ ${research.financials}
 
 ---
 
+IMPORTANT: Include ALL acquisitions, mergers, JVs mentioned in the research. Even if some fields are unknown, still include the deal with "undisclosed" or "unknown" for missing fields. Do NOT skip deals just because some details are missing.
+
 Respond in this EXACT JSON format:
 {
   "ma_deep_dive": {
     "deal_history": [
       {
-        "year": "YYYY",
+        "year": "YYYY or unknown",
         "target": "Company name",
-        "target_country": "Country name",
+        "target_country": "Country name or unknown",
         "deal_type": "Acquisition|Merger|JV|Minority",
         "acquired_stake": "100%|Majority|Minority|undisclosed",
         "target_business": "Brief description of target's business",
-        "strategic_rationale": "Technology|Market Access|Capacity|Talent|Vertical Integration",
-        "outcome": "Integrated|Standalone|Divested",
-        "source_url": "URL to announcement"
+        "strategic_rationale": "Technology|Market Access|Capacity|Talent|Vertical Integration|Expansion",
+        "outcome": "Integrated|Standalone|Divested|unknown",
+        "source_url": "URL to announcement or empty string"
       }
     ],
     "ma_profile": {
-      "acquirer_type": "Serial Acquirer|Opportunistic|Transformational|Bolt-on Only",
+      "acquirer_type": "Serial Acquirer|Opportunistic|Transformational|Bolt-on Only|No M&A history",
       "primary_focus": "Technology|Geography|Capacity|Vertical Integration",
-      "typical_deal_size": "$X-YM range",
+      "typical_deal_size": "$X-YM range or unknown",
       "integration_style": "Full Absorption|Standalone|Hybrid",
       "valuation_discipline": "Premium Payer|Disciplined|Value Buyer"
     },
     "deal_capacity": {
-      "dry_powder": "$XM (cash + debt capacity)",
+      "dry_powder": "$XM (cash + debt capacity) or unknown",
       "appetite_level": "High|Medium|Low",
       "decision_speed": "Fast (<6mo)|Normal (6-12mo)|Slow (>12mo)",
-      "source_url": "URL to financials"
+      "source_url": "URL to financials or empty string"
     }
   }
 }
 
-Keep all fields brief. Include source_url for verifiable claims.`).catch((e) => ({
-      section: 'ma_analysis',
-      error: e.message,
-    })),
+Include ALL deals found in research. Use "unknown" or "undisclosed" for missing fields rather than omitting deals.`).catch(
+      (e) => ({
+        section: 'ma_analysis',
+        error: e.message,
+      })
+    ),
 
     // Synthesis 5: Ideal Target Profile - SEA/Asia Target List with Products
     callChatGPT(`Identify 10 REAL acquisition targets for ${companyName} in SOUTHEAST ASIA or ASIA. BE CONCISE.
