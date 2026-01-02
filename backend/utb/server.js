@@ -906,7 +906,7 @@ Respond in this EXACT JSON format:
         "company_name": "Actual company name",
         "hq_country": "Country",
         "hq_city": "City",
-        "revenue": "$XM",
+        "revenue": "4,500",
         "ownership": "Public|Private|PE-backed",
         "products_offered": [true, false, true, false],
         "website": "company URL"
@@ -918,6 +918,7 @@ Respond in this EXACT JSON format:
 IMPORTANT:
 - "segments" should list the 4-6 main product/service categories based on the buyer's business
 - "products_offered" is a boolean array matching the segments array (true = company offers this product/service)
+- "revenue" MUST be a NUMBER in USD millions (e.g., "4,500" for $4.5B, "500" for $500M, "50" for $50M). NO currency symbols, NO letters like B/M. Just the number with commas.
 - Real SEA/Asia companies only
 - Include company website URL`).catch((e) => ({ section: 'ideal_target', error: e.message })),
   ];
@@ -1398,19 +1399,18 @@ async function generateUTBSlides(companyName, website, research, additionalConte
       border: { pt: 2, color: COLORS.white },
     };
 
-    // Get revenue unit from synthesis financials if available
-    const revenueUnit = synthesis.financials?.revenue_unit || 'USD M';
+    // Revenue header includes unit, rows show just numbers
     const headerRow = [
       { text: 'Company', options: headerOpts },
       { text: 'HQ', options: headerOpts },
-      { text: `Revenue (${revenueUnit})`, options: headerOpts },
+      { text: 'Revenue (USD M)', options: headerOpts },
     ];
 
-    // Add segment columns to header (full names, no truncation)
+    // Add segment columns to header (full names, no truncation, font size 14)
     displaySegments.forEach((seg) => {
       headerRow.push({
         text: seg,
-        options: { ...headerOpts, fontSize: 9 },
+        options: headerOpts,
       });
     });
 
