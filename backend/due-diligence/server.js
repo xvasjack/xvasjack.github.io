@@ -9,9 +9,9 @@ const { createClient } = require('@deepgram/sdk');
 const { S3Client } = require('@aws-sdk/client-s3');
 const Anthropic = require('@anthropic-ai/sdk');
 const JSZip = require('jszip');
-const { securityHeaders, rateLimiter, escapeHtml } = require('../shared/security');
-const { requestLogger, healthCheck } = require('../shared/middleware');
-const { setupGlobalErrorHandlers } = require('../shared/logging');
+const { securityHeaders, rateLimiter, escapeHtml } = require('./shared/security');
+const { requestLogger, healthCheck } = require('./shared/middleware');
+const { setupGlobalErrorHandlers } = require('./shared/logging');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();

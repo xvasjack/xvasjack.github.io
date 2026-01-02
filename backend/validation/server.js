@@ -4,10 +4,10 @@ const cors = require('cors');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
 const XLSX = require('xlsx');
-const { securityHeaders, rateLimiter } = require('../shared/security');
-const { requestLogger, healthCheck } = require('../shared/middleware');
-const { setupGlobalErrorHandlers } = require('../shared/logging');
-const { sendEmailLegacy: sendEmail } = require('../shared/email');
+const { securityHeaders, rateLimiter } = require('./shared/security');
+const { requestLogger, healthCheck } = require('./shared/middleware');
+const { setupGlobalErrorHandlers } = require('./shared/logging');
+const { sendEmailLegacy: sendEmail } = require('./shared/email');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
