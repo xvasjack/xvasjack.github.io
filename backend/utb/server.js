@@ -831,10 +831,12 @@ Respond in this EXACT JSON format:
   "ma_deep_dive": {
     "deal_history": [
       {
-        "target": "Company name",
         "year": "YYYY",
-        "deal_value": "$XM or undisclosed",
+        "target": "Company name",
+        "target_country": "Country name",
         "deal_type": "Acquisition|Merger|JV|Minority",
+        "acquired_stake": "100%|Majority|Minority|undisclosed",
+        "target_business": "Brief description of target's business",
         "strategic_rationale": "Technology|Market Access|Capacity|Talent|Vertical Integration",
         "outcome": "Integrated|Standalone|Divested",
         "source_url": "URL to announcement"
@@ -1270,141 +1272,66 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
     addSlideTitle(slide, 'Past M&A');
 
+    // Header options: all columns center aligned, not bold, font 14
+    const maHeaderOpts = {
+      fill: { color: COLORS.headerBg },
+      color: COLORS.white,
+      bold: false,
+      align: 'center',
+      valign: 'middle',
+      border: { pt: 3, color: COLORS.white },
+    };
+
     const rows = [
       [
-        {
-          text: 'Target',
-          options: {
-            fill: { color: COLORS.headerBg },
-            color: COLORS.white,
-            bold: false,
-            align: 'left',
-            valign: 'middle',
-            border: { pt: 3, color: COLORS.white },
-          },
-        },
-        {
-          text: 'Year',
-          options: {
-            fill: { color: COLORS.headerBg },
-            color: COLORS.white,
-            bold: false,
-            align: 'center',
-            valign: 'middle',
-            border: { pt: 3, color: COLORS.white },
-          },
-        },
-        {
-          text: 'Value',
-          options: {
-            fill: { color: COLORS.headerBg },
-            color: COLORS.white,
-            bold: false,
-            align: 'center',
-            valign: 'middle',
-            border: { pt: 3, color: COLORS.white },
-          },
-        },
-        {
-          text: 'Type',
-          options: {
-            fill: { color: COLORS.headerBg },
-            color: COLORS.white,
-            bold: false,
-            align: 'center',
-            valign: 'middle',
-            border: { pt: 3, color: COLORS.white },
-          },
-        },
-        {
-          text: 'Rationale',
-          options: {
-            fill: { color: COLORS.headerBg },
-            color: COLORS.white,
-            bold: false,
-            align: 'left',
-            valign: 'middle',
-            border: { pt: 3, color: COLORS.white },
-          },
-        },
+        { text: 'Year', options: maHeaderOpts },
+        { text: 'Target', options: maHeaderOpts },
+        { text: 'Target Country', options: maHeaderOpts },
+        { text: 'Deal Type', options: maHeaderOpts },
+        { text: 'Acquired Stake', options: maHeaderOpts },
+        { text: 'Target Business', options: maHeaderOpts },
+        { text: 'Rationale', options: maHeaderOpts },
       ],
     ];
 
     const deals = dealHistory.slice(0, 8);
     deals.forEach((deal, i) => {
       const isLastRow = i === deals.length - 1;
+      // Light grey dotted border for row separation
+      const rowBorder = isLastRow
+        ? { pt: 0, color: COLORS.white }
+        : { pt: 0.5, color: COLORS.gray, dashType: 'dash' };
+      const dataCellOpts = {
+        fill: { color: COLORS.white },
+        color: COLORS.black,
+        bold: false,
+        align: 'center',
+        valign: 'middle',
+        border: [
+          { pt: 0, color: COLORS.white },
+          { pt: 0, color: COLORS.white },
+          rowBorder,
+          { pt: 0, color: COLORS.white },
+        ],
+      };
       rows.push([
+        { text: deal.year || '', options: dataCellOpts },
         {
           text: deal.target || deal.deal || '',
           options: {
             fill: { color: COLORS.companyBg },
             color: COLORS.white,
             bold: false,
-            align: 'left',
+            align: 'center',
             valign: 'middle',
             border: { pt: 3, color: COLORS.white },
           },
         },
-        {
-          text: deal.year || '',
-          options: {
-            fill: { color: COLORS.white },
-            color: COLORS.black,
-            align: 'center',
-            valign: 'middle',
-            border: [
-              { pt: 3, color: COLORS.white },
-              { pt: 3, color: COLORS.white },
-              getRowBorder(isLastRow),
-              { pt: 3, color: COLORS.white },
-            ],
-          },
-        },
-        {
-          text: deal.deal_value || '',
-          options: {
-            fill: { color: COLORS.white },
-            color: COLORS.black,
-            align: 'center',
-            valign: 'middle',
-            border: [
-              { pt: 3, color: COLORS.white },
-              { pt: 3, color: COLORS.white },
-              getRowBorder(isLastRow),
-              { pt: 3, color: COLORS.white },
-            ],
-          },
-        },
-        {
-          text: deal.deal_type || '',
-          options: {
-            fill: { color: COLORS.white },
-            color: COLORS.black,
-            align: 'center',
-            valign: 'middle',
-            border: [
-              { pt: 3, color: COLORS.white },
-              { pt: 3, color: COLORS.white },
-              getRowBorder(isLastRow),
-              { pt: 3, color: COLORS.white },
-            ],
-          },
-        },
-        {
-          text: deal.strategic_rationale || '',
-          options: {
-            fill: { color: COLORS.white },
-            color: COLORS.black,
-            align: 'left',
-            valign: 'middle',
-            border: [
-              { pt: 3, color: COLORS.white },
-              { pt: 3, color: COLORS.white },
-              getRowBorder(isLastRow),
-              { pt: 3, color: COLORS.white },
-            ],
-          },
-        },
+        { text: deal.target_country || '', options: dataCellOpts },
+        { text: deal.deal_type || '', options: dataCellOpts },
+        { text: deal.acquired_stake || '', options: dataCellOpts },
+        { text: deal.target_business || '', options: dataCellOpts },
+        { text: deal.strategic_rationale || '', options: { ...dataCellOpts, align: 'left' } },
       ]);
     });
 
@@ -1412,10 +1339,10 @@ async function generateUTBSlides(companyName, website, research, additionalConte
       x: 0.38,
       y: 1.2,
       w: 12.54,
-      colW: [3.0, 1.0, 1.5, 1.8, 5.24],
+      colW: [0.8, 2.2, 1.3, 1.2, 1.2, 2.5, 3.34],
       rowH: 0.5,
       fontFace: 'Segoe UI',
-      fontSize: 10,
+      fontSize: 14,
       valign: 'middle',
     });
 
@@ -1455,10 +1382,12 @@ async function generateUTBSlides(companyName, website, research, additionalConte
       border: { pt: 2, color: COLORS.white },
     };
 
+    // Get revenue unit from synthesis financials if available
+    const revenueUnit = synthesis.financials?.revenue_unit || 'USD M';
     const headerRow = [
-      { text: 'Company', options: { ...headerOpts, align: 'left' } },
+      { text: 'Company', options: headerOpts },
       { text: 'HQ', options: headerOpts },
-      { text: 'Revenue', options: headerOpts },
+      { text: `Revenue (${revenueUnit})`, options: headerOpts },
     ];
 
     // Add segment columns to header (full names, no truncation)
@@ -1755,7 +1684,7 @@ async function generateUTBSlides(companyName, website, research, additionalConte
 
   if (revenueHistory.length >= 2) {
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, 'Revenue Trend');
+    addSlideTitle(slide, 'Financial Highlights');
 
     // Chart data
     const chartData = [
@@ -1766,7 +1695,7 @@ async function generateUTBSlides(companyName, website, research, additionalConte
       },
     ];
 
-    // Add bar chart
+    // Add bar chart - font Segoe UI with font size 14, Y-axis includes unit
     slide.addChart(pptx.charts.BAR, chartData, {
       x: 0.5,
       y: 1.3,
@@ -1777,16 +1706,16 @@ async function generateUTBSlides(companyName, website, research, additionalConte
       chartColors: [COLORS.companyBg], // Bright blue bars
       showValue: true,
       dataLabelPosition: 'outEnd',
-      dataLabelFontSize: 10,
+      dataLabelFontSize: 14,
       dataLabelFontFace: 'Segoe UI',
       dataLabelColor: COLORS.black,
-      catAxisTitle: 'Fiscal Year',
-      catAxisTitleFontSize: 10,
-      catAxisLabelFontSize: 10,
+      catAxisTitle: '',
+      catAxisTitleFontSize: 14,
+      catAxisLabelFontSize: 14,
       catAxisLabelFontFace: 'Segoe UI',
       valAxisTitle: fin.revenue_unit || 'JPY 100M',
-      valAxisTitleFontSize: 10,
-      valAxisLabelFontSize: 9,
+      valAxisTitleFontSize: 14,
+      valAxisLabelFontSize: 14,
       valAxisLabelFontFace: 'Segoe UI',
       valAxisMinVal: 0,
       showLegend: false,
