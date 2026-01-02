@@ -3,9 +3,9 @@ const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
-const { securityHeaders, rateLimiter } = require('../shared/security');
-const { requestLogger, healthCheck } = require('../shared/middleware');
-const { setupGlobalErrorHandlers } = require('../shared/logging');
+const { securityHeaders, rateLimiter } = require('./shared/security');
+const { requestLogger, healthCheck } = require('./shared/middleware');
+const { setupGlobalErrorHandlers } = require('./shared/logging');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers({ logMemory: false });

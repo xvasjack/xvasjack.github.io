@@ -3,10 +3,10 @@ const express = require('express');
 const cors = require('cors');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
-const { securityHeaders, rateLimiter, escapeHtml } = require('../shared/security');
-const { requestLogger, healthCheck } = require('../shared/middleware');
-const { setupGlobalErrorHandlers } = require('../shared/logging');
-const { sendEmailLegacy: sendEmail } = require('../shared/email');
+const { securityHeaders, rateLimiter, escapeHtml } = require('./shared/security');
+const { requestLogger, healthCheck } = require('./shared/middleware');
+const { setupGlobalErrorHandlers } = require('./shared/logging');
+const { sendEmailLegacy: sendEmail } = require('./shared/email');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();

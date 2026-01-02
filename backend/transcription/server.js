@@ -6,9 +6,9 @@ const WebSocket = require('ws');
 const OpenAI = require('openai');
 const { createClient } = require('@deepgram/sdk');
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
-const { securityHeaders, rateLimiter, sanitizePath } = require('../shared/security');
-const { requestLogger, healthCheck } = require('../shared/middleware');
-const { setupGlobalErrorHandlers } = require('../shared/logging');
+const { securityHeaders, rateLimiter, sanitizePath } = require('./shared/security');
+const { requestLogger, healthCheck } = require('./shared/middleware');
+const { setupGlobalErrorHandlers } = require('./shared/logging');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
