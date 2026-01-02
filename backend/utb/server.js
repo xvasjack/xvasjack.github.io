@@ -5,10 +5,12 @@ const OpenAI = require('openai');
 const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
 const { S3Client } = require('@aws-sdk/client-s3');
-const { securityHeaders, rateLimiter } = require('../shared/security');
-const { requestLogger, healthCheck } = require('../shared/middleware');
-const { setupGlobalErrorHandlers } = require('../shared/logging');
-const { sendEmailLegacy: sendEmail } = require('../shared/email');
+// Try local copy first (Railway), fall back to parent (local dev)
+const sharedPath = require('fs').existsSync('./shared') ? './shared' : '../shared';
+const { securityHeaders, rateLimiter } = require(`${sharedPath}/security`);
+const { requestLogger, healthCheck } = require(`${sharedPath}/middleware`);
+const { setupGlobalErrorHandlers } = require(`${sharedPath}/logging`);
+const { sendEmailLegacy: sendEmail } = require(`${sharedPath}/email`);
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
