@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+*.pyc
+
+# Local config (contains API keys)
+config_local.py
+.env
+
+# Logs
+*.log
+guardrail_audit.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Downloaded files
+downloads/
+uploads/
