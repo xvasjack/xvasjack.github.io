@@ -708,9 +708,16 @@ CRITICAL FOR REVENUE_HISTORY:
 - Convert to appropriate units (100M JPY for Japanese companies, USD M for US companies)
 - If only 2 years available, include those 2 years - do NOT leave empty
 - Look for revenue trends, sales figures, or 売上高 in the research
-- For revenue_unit: Use "JPY 100M" for Japanese companies, "USD M" for US companies, etc.`).catch(
-      (e) => ({ section: 'profile', error: e.message })
-    ),
+
+CRITICAL FOR REVENUE_UNIT (Y-axis label):
+- MUST provide revenue_unit - this shows on the chart Y-axis
+- For Japanese companies: ALWAYS use "JPY 100M" (億円 = 100 million yen)
+- For US companies: Use "USD M" (millions)
+- For other currencies: Use appropriate format like "EUR M", "SGD M", etc.
+- The revenue numbers in revenue_history should match this unit`).catch((e) => ({
+      section: 'profile',
+      error: e.message,
+    })),
 
     // Synthesis 2: Products, Services & Operations
     callChatGPT(`You are writing for M&A ADVISORS who need to understand a company's business quickly. NOT engineers.
