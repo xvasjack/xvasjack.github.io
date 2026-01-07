@@ -688,13 +688,15 @@ RULES:
 4. If the website content is unclear or doesn't describe business activities → OUT OF SCOPE
 5. Be accurate - do not guess or assume
 
+IMPORTANT: The website content below was successfully fetched - the website IS accessible. Never say the website is "inaccessible" or "cannot be accessed". If content is unclear, say "unclear" or "insufficient information" but NOT "inaccessible".
+
 OUTPUT: Return JSON: {"in_scope": true/false, "confidence": "high/medium/low", "reason": "brief explanation based on website content", "business_description": "what this company actually does based on website"}`;
 
   const userPrompt = `COMPANY: ${company.company_name}
 WEBSITE: ${company.website}
 
-WEBSITE CONTENT:
-${typeof pageText === 'string' && pageText ? pageText.substring(0, 10000) : 'Could not fetch website - validate by company name only'}`;
+WEBSITE CONTENT (successfully fetched from the live website):
+${pageText.substring(0, 10000)}`;
 
   try {
     // First pass: gpt-4o-mini (fast and cheap)
