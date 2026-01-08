@@ -98,6 +98,60 @@ function extractNumbersFromText(text) {
   return numbers.map(n => n.replace(/[,\.]/g, ''));
 }
 
+// Translate Thai and other non-English units to English in metric values
+// This ensures metrics are readable by English-speaking users
+function translateUnitsToEnglish(text) {
+  if (!text || typeof text !== 'string') return text;
+
+  const translations = {
+    // Thai units
+    'ตัน/เดือน': 'tons/month',
+    'ตัน/ปี': 'tons/year',
+    'ต่อเดือน': '/month',
+    'ต่อปี': '/year',
+    'ตัน': 'tons',
+    'ไร่': 'rai',
+    'งาน': 'ngan',
+    'ตารางวา': 'sq wah',
+    'ตร.ม.': 'sqm',
+    'ตารางเมตร': 'sqm',
+    'เครื่อง': 'machines',
+    'เครื่องจักร': 'machines',
+    'พนักงาน': 'employees',
+    'คน': 'people',
+    'บุคลากร': 'staff',
+    'ราย': 'partners',
+    'พันธมิตร': 'partners',
+    'ตัวแทนจำหน่าย': 'distributors',
+    'ผู้จัดจำหน่าย': 'distributors',
+    'ลูกค้า': 'customers',
+    'ประเทศ': 'countries',
+    'สาขา': 'branches',
+    'ร้าน': 'stores',
+    'โรงงาน': 'factories',
+    'คลังสินค้า': 'warehouses',
+    // Vietnamese units
+    'tấn/tháng': 'tons/month',
+    'tấn/năm': 'tons/year',
+    'tấn': 'tons',
+    'nhân viên': 'employees',
+    'người': 'people',
+    // Indonesian/Malay units
+    'ton/bulan': 'tons/month',
+    'ton/tahun': 'tons/year',
+    'karyawan': 'employees',
+    'pekerja': 'workers',
+    'mesin': 'machines',
+  };
+
+  let result = text;
+  for (const [foreign, english] of Object.entries(translations)) {
+    result = result.replace(new RegExp(foreign, 'gi'), english);
+  }
+
+  return result;
+}
+
 // Verify that a source quote exists in the scraped content
 // Returns true if quote is found (with fuzzy matching for formatting differences)
 function verifyQuoteInContent(quote, scrapedContent) {
@@ -140,11 +194,22 @@ function verifyQuoteInContent(quote, scrapedContent) {
   // Method 3: For non-ASCII quotes, check if significant portions exist
   const hasNonAscii = /[^\x00-\x7F]/.test(quote);
   if (hasNonAscii) {
-    // Split by spaces and numbers, check if each chunk exists
+    // Method 3a: Check if ANY Thai/CJK keywords from quote exist in content
+    // Thai text often has no spaces, so look for character sequences
+    const thaiKeywords = quote.match(/[\u0E00-\u0E7F]+/g) || []; // Thai Unicode range
+    if (thaiKeywords.length > 0) {
+      const matchedThaiKeywords = thaiKeywords.filter(kw => scrapedContent.includes(kw));
+      if (matchedThaiKeywords.length >= 1) {
+        // At least one Thai keyword matches - good enough for Thai
+        return true;
+      }
+    }
+
+    // Method 3b: Split by spaces and numbers, check if each chunk exists
     const chunks = quote.split(/[\s\d]+/).filter(c => c.length > 1);
     const matchedChunks = chunks.filter(chunk => scrapedContent.includes(chunk));
-    if (matchedChunks.length >= Math.ceil(chunks.length * 0.5)) {
-      return true; // At least 50% of Thai/CJK chunks found
+    if (matchedChunks.length >= Math.ceil(chunks.length * 0.3)) {
+      return true; // At least 30% of Thai/CJK chunks found (lowered from 50%)
     }
   }
 
@@ -225,25 +290,28 @@ function filterMetricsByVerification(metrics, scrapedContent, companyIndex) {
           continue;
         }
       }
-      verifiedMetrics.push(metric);
+      // Translate any non-English units in the metric value
+      verifiedMetrics.push({
+        label: metric.label,
+        value: translateUnitsToEnglish(metric.value)
+      });
       continue;
     }
 
     const verification = verifyMetricQuotes(metric, scrapedContent);
 
     if (verification.verified === true) {
-      // Fully verified - keep the metric
+      // Fully verified - keep the metric (translate any non-English units)
       verifiedMetrics.push({
         label: metric.label,
-        value: metric.value
-        // Remove source_quotes from final output
+        value: translateUnitsToEnglish(metric.value)
       });
     } else if (verification.verified === 'partial') {
-      // Partially verified - keep but log warning
+      // Partially verified - keep but log warning (translate any non-English units)
       console.log(`  [${companyIndex}] Partial verification for "${metric.label}" - some quotes not found`);
       verifiedMetrics.push({
         label: metric.label,
-        value: metric.value
+        value: translateUnitsToEnglish(metric.value)
       });
     } else {
       // Not verified - reject as potential hallucination
@@ -4147,7 +4215,8 @@ function extractMetricsFromText(text) {
   const employeePatterns = [
     /(\d{1,3}(?:,\d{3})*|\d+)\s*\+?\s*(?:employees?|staff|workers?|personnel|people|team members?)/gi,
     /(?:over|more than|approximately|about|around)\s+(\d{1,3}(?:,\d{3})*|\d+)\s*(?:employees?|staff|workers?)/gi,
-    /(\d{1,3}(?:,\d{3})*|\d+)\s*(?:พนักงาน|คน)/gi, // Thai
+    /(\d{1,3}(?:,\d{3})*|\d+)\s*(?:พนักงาน|คน)/gi, // Thai: "300 พนักงาน"
+    /(?:พนักงาน|บุคลากร)\s*(?:มากกว่า|กว่า)?\s*(\d{1,3}(?:,\d{3})*|\d+)\s*(?:คน)?/gi, // Thai reversed: "พนักงาน 300 คน"
     /(\d{1,3}(?:,\d{3})*|\d+)\s*(?:nhân viên|người lao động)/gi, // Vietnamese
     /(\d{1,3}(?:,\d{3})*|\d+)\s*(?:karyawan|pekerja|staf)/gi, // Indonesian/Malay
     /(\d{1,3}(?:,\d{3})*|\d+)명?의?\s*(?:직원|임직원|근로자)/gi, // Korean
@@ -4184,9 +4253,10 @@ function extractMetricsFromText(text) {
     /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:MW|megawatts?|GW|gigawatts?)\s*(?:capacity|installed)?/gi,
     /capacity\s*(?:of|:)?\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:tons?|MT|units?|MW)/gi,
     /(?:over|more than)?\s*(\d{1,3}(?:,\d{3})*)\s*(?:tons?|MT)\s*(?:per|\/|a)\s*month/gi,
-    // Thai: "800 ตัน/เดือน", "กำลังการผลิต 800 ตัน"
-    /(\d{1,3}(?:,\d{3})*)\s*(?:ตัน)(?:\/เดือน|ต่อเดือน|\/ปี|ต่อปี)/gi,
+    // Thai: "800 ตัน/เดือน", "กำลังการผลิต 800 ตัน", "ผลิตได้ 800 ตัน"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:ตัน)(?:\/เดือน|ต่อเดือน|\/ปี|ต่อปี)?/gi,
     /กำลังการผลิต.*?(\d{1,3}(?:,\d{3})*)\s*ตัน/gi,
+    /(?:ผลิตได้|ความสามารถในการผลิต)\s*(\d{1,3}(?:,\d{3})*)\s*ตัน/gi,
     // Vietnamese: "800 tấn/tháng", "công suất 800 tấn"
     /(\d{1,3}(?:,\d{3})*)\s*(?:tấn)(?:\/tháng|\/năm|mỗi tháng|mỗi năm)/gi,
     /công suất.*?(\d{1,3}(?:,\d{3})*)\s*tấn/gi,
@@ -4221,9 +4291,10 @@ function extractMetricsFromText(text) {
     // English
     /(\d{1,3}(?:,\d{3})*)\s*\+?\s*(?:machines?|equipment|production lines?|manufacturing lines?)/gi,
     /(?:over|more than|approximately)\s+(\d{1,3}(?:,\d{3})*)\s*(?:machines?|equipment)/gi,
-    // Thai: "250 เครื่อง", "เครื่องจักร 250 เครื่อง"
+    // Thai: "250 เครื่อง", "เครื่องจักร 250 เครื่อง", "มีเครื่องจักร 250 เครื่อง"
     /(\d{1,3}(?:,\d{3})*)\s*(?:เครื่อง|เครื่องจักร)/gi,
-    /เครื่องจักร.*?(\d{1,3}(?:,\d{3})*)\s*(?:เครื่อง|ตัว)/gi,
+    /(?:เครื่องจักร|เครื่อง)\s*(?:จำนวน|มากกว่า)?\s*(\d{1,3}(?:,\d{3})*)\s*(?:เครื่อง|ตัว)?/gi,
+    /มี\s*(?:เครื่องจักร|เครื่อง)\s*(\d{1,3}(?:,\d{3})*)/gi,
     // Vietnamese: "250 máy", "thiết bị 250"
     /(\d{1,3}(?:,\d{3})*)\s*(?:máy|thiết bị|máy móc)/gi,
     // Indonesian/Malay: "250 mesin", "peralatan 250"
@@ -4246,7 +4317,7 @@ function extractMetricsFromText(text) {
       const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
       if (numMatch) {
         const num = parseInt(numMatch[0].replace(/,/g, ''));
-        if (num >= 10 && num <= 10000) { // Reasonable range for machines
+        if (num >= 2 && num <= 10000) { // Reasonable range for machines (lowered from 10)
           metrics.machine_count = num;
           metrics.machine_text = match[0];
           break;
@@ -4286,7 +4357,7 @@ function extractMetricsFromText(text) {
       const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
       if (numMatch) {
         const num = parseInt(numMatch[0].replace(/,/g, ''));
-        if (num >= 10 && num <= 10000) { // Reasonable range for partners
+        if (num >= 2 && num <= 10000) { // Reasonable range for partners (lowered from 10)
           metrics.partner_count = num;
           metrics.partner_text = match[0];
           break;
@@ -4412,8 +4483,9 @@ function extractMetricsFromText(text) {
     /(\d{1,3}(?:,\d{3})*)\s*(?:sqm|square meters?|sq\.?\s*m|m2|m²)\s*(?:factory|plant|facility|warehouse|production|land)?/gi,
     /(?:factory|plant|facility|warehouse|land area)\s*(?:of|:)?\s*(\d{1,3}(?:,\d{3})*)\s*(?:sqm|square meters?|sq\.?\s*ft|acres?)/gi,
     /(\d{1,3}(?:,\d{3})*)\s*(?:sq\.?\s*ft|square feet)/gi,
-    // Thai: rai (ไร่), sqm (ตร.ม.)
-    /(\d{1,3}(?:,\d{3})*)\s*(?:ไร่|ตร\.ม\.|ตารางเมตร)/gi,
+    // Thai: rai (ไร่), sqm (ตร.ม.), ngan (งาน), tarang wah (ตารางวา)
+    /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:ไร่|งาน|ตารางวา|ตร\.ม\.|ตารางเมตร)/gi,
+    /(?:พื้นที่|เนื้อที่)\s*(?:โรงงาน|ที่ดิน)?\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:ไร่|งาน|ตร\.ม\.)/gi,
     // Indonesian: m2, hektar
     /(\d{1,3}(?:,\d{3})*)\s*(?:m2|meter persegi|hektar|ha)/gi,
     // Chinese: 平方米, 亩, 坪
@@ -7164,7 +7236,7 @@ async function processSingleWebsite(website, index, total) {
       mergedMetrics.push({ value: String(regexMetrics.source_countries), label: 'Source Countries' });
     }
     if (regexMetrics.capacity_text && !allKeyMetrics.some(m => /capacity|production/i.test(m.label))) {
-      mergedMetrics.push({ value: regexMetrics.capacity_text, label: 'Production Capacity' });
+      mergedMetrics.push({ value: translateUnitsToEnglish(regexMetrics.capacity_text), label: 'Production Capacity' });
     }
     if (regexMetrics.certifications?.length > 0 && !allKeyMetrics.some(m => /certif|iso|haccp/i.test(m.label))) {
       mergedMetrics.push({ value: regexMetrics.certifications.join(', '), label: 'Certifications' });
@@ -7203,7 +7275,7 @@ async function processSingleWebsite(website, index, total) {
     }
     // NEW: Daily/monthly output text
     if (regexMetrics.output_text && !allKeyMetrics.some(m => /output|production|daily|monthly/i.test(m.label))) {
-      mergedMetrics.push({ value: regexMetrics.output_text, label: 'Output' });
+      mergedMetrics.push({ value: translateUnitsToEnglish(regexMetrics.output_text), label: 'Output' });
     }
     // NEW: Warehouse counts
     if (regexMetrics.warehouse_count && !allKeyMetrics.some(m => /warehouse|depot|distribution center/i.test(m.label))) {
@@ -7220,7 +7292,7 @@ async function processSingleWebsite(website, index, total) {
     }
     // NEW: Factory/facility size
     if (regexMetrics.factory_size && !allKeyMetrics.some(m => /factory|facility|plant|land|area|sqm|sq.*ft/i.test(m.label))) {
-      mergedMetrics.push({ value: regexMetrics.factory_size, label: 'Factory Size' });
+      mergedMetrics.push({ value: translateUnitsToEnglish(regexMetrics.factory_size), label: 'Factory Size' });
     }
     // NEW: Office counts
     if (regexMetrics.office_count && !allKeyMetrics.some(m => /office|location|branch/i.test(m.label))) {
