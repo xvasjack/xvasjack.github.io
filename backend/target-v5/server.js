@@ -1766,6 +1766,9 @@ app.post('/api/find-target-v5', async (req, res) => {
       'Request received. Parallel search running. Results will be emailed in ~10-15 minutes.',
   });
 
+  // Start keep-alive to prevent Railway from stopping container during long search
+  startKeepAlive();
+
   try {
     const totalStart = Date.now();
     const searchLog = [];
@@ -1868,6 +1871,9 @@ app.post('/api/find-target-v5', async (req, res) => {
     } catch (e) {
       console.error('Failed to send error email:', e);
     }
+  } finally {
+    // Stop keep-alive when search completes (success or error)
+    stopKeepAlive();
   }
 });
 
@@ -1878,6 +1884,40 @@ app.get('/health', healthCheck('target-v5'));
 app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'target-v5' });
 });
+
+// ============ KEEP-ALIVE MECHANISM ============
+// Prevents Railway from stopping the container during long-running searches
+let activeSearchCount = 0;
+let keepAliveInterval = null;
+
+function startKeepAlive() {
+  activeSearchCount++;
+  if (keepAliveInterval) return; // Already running
+
+  console.log('  [Keep-Alive] Starting keep-alive pings to prevent container shutdown');
+  keepAliveInterval = setInterval(async () => {
+    if (activeSearchCount <= 0) {
+      stopKeepAlive();
+      return;
+    }
+    try {
+      // Self-ping to keep container active
+      await fetch(`http://localhost:${PORT}/health`);
+      console.log(`  [Keep-Alive] Ping sent (${activeSearchCount} active search(es))`);
+    } catch (e) {
+      // Ignore errors - container is still alive if this code runs
+    }
+  }, 30000); // Ping every 30 seconds
+}
+
+function stopKeepAlive() {
+  activeSearchCount = Math.max(0, activeSearchCount - 1);
+  if (activeSearchCount === 0 && keepAliveInterval) {
+    clearInterval(keepAliveInterval);
+    keepAliveInterval = null;
+    console.log('  [Keep-Alive] Stopped - no active searches');
+  }
+}
 
 // ============ SERVER STARTUP ============
 const PORT = process.env.PORT || 3000;
