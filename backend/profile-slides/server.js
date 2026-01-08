@@ -2373,10 +2373,10 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         const country = parts[parts.length - 1] || 'Other';
         // HQ city is first part only (just the district/area)
         // If only 1 part (country only), hqCity should be empty, not the country name
-        // EXCEPTION: Singapore is a city-state - if country is Singapore, hqCity should also be Singapore
+        // EXCEPTION: Singapore is a city-state - if no area provided, default to "Central"
         let hqCity = parts.length > 1 ? (parts[0] || '') : '';
         if (country.toLowerCase() === 'singapore' && !hqCity) {
-          hqCity = 'Singapore';
+          hqCity = 'Central'; // Default area for Singapore if not specified
         }
         return { country, hqCity };
       };
@@ -2941,21 +2941,6 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       const excludeKeywords = categoryKeywords[rightTableCategory] || [];
 
       // Add key metrics as separate rows if available (skip duplicates and empty values)
-      // Helper: Check if metric value has significant overlap with business description
-      const businessLower = (company.business || '').toLowerCase();
-      const businessWords = businessLower.split(/\W+/).filter(w => w.length > 3);
-
-      const isDuplicateOfBusiness = (metricValue) => {
-        if (!metricValue || businessWords.length === 0) return false;
-        const valueLower = metricValue.toLowerCase();
-        const valueWords = valueLower.split(/\W+/).filter(w => w.length > 3);
-        if (valueWords.length === 0) return false;
-        // Count overlapping significant words
-        const overlap = valueWords.filter(w => businessWords.includes(w)).length;
-        // If >60% of metric value words are in business, it's duplicate
-        return overlap / valueWords.length > 0.6;
-      };
-
       if (company.key_metrics && Array.isArray(company.key_metrics)) {
         company.key_metrics.forEach(metric => {
           // Ensure label and value are strings (AI may return objects/arrays)
@@ -2971,13 +2956,9 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
             // Skip if this category is already shown on the right table
             const isInRightTable = excludeKeywords.some(kw => labelLower.includes(kw));
 
-            // Skip "Key Metrics" if it duplicates Business description content
-            const isKeyMetricsDupe = labelLower === 'key metrics' && isDuplicateOfBusiness(metricValue);
-
             // Skip if this label already exists or is duplicate of business/location
             if (!isExcluded &&
                 !isInRightTable &&
-                !isKeyMetricsDupe &&
                 !existingLabels.has(labelLower) &&
                 !labelLower.includes('business') &&
                 !labelLower.includes('location')) {
@@ -3210,60 +3191,67 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           }
         }
       } else {
-        // INDUSTRIAL B2B: Show table format with PRIORITY SYSTEM
-        // Priority: 1. Customers, 2. Brands, 3. Products/Applications, 4. Others (Principals, Suppliers)
+        // INDUSTRIAL B2B: Show table format - THEMATIC (one category only based on breakdown_title)
+        // Right side should focus on ONE thing: products, OR customers, OR suppliers, etc.
 
         // Get business relationships
         const relationships = company._businessRelationships || {};
-        const hasCustomers = relationships.customers && relationships.customers.length > 0;
-        const hasBrands = relationships.brands && relationships.brands.length > 0;
-        const hasPrincipals = relationships.principals && relationships.principals.length > 0;
-        const hasSuppliers = relationships.suppliers && relationships.suppliers.length > 0;
+        const breakdownTitle = ensureString(company.breakdown_title).toLowerCase();
 
-        // Build right-side table with priority order
-        // NOTE: Key Customers should NOT be on right side - they belong in key_metrics on left side
+        // Build right-side table - THEMATIC based on breakdown_title
         let prioritizedItems = [];
 
-        // Priority 1: Brands (important for distributors, retailers)
-        if (hasBrands) {
-          const brandList = relationships.brands.slice(0, 8).join(', ');
-          prioritizedItems.push({ label: 'Brands', value: brandList });
-          console.log(`  Right side: Adding ${relationships.brands.length} brands`);
-        }
-
-        // Priority 2: Products/Applications breakdown
-        let validBreakdownItems = (company.breakdown_items || [])
-          .map(item => ({
-            label: normalizeLabel(ensureString(item?.label)),  // Always normalize to Title Case
-            value: ensureString(item?.value)
-          }))
-          .filter(item => item.label && item.value && !isEmptyValue(item.label) && !isEmptyValue(item.value));
-
-        // Truncate values to max 3 lines
-        validBreakdownItems = validBreakdownItems.map(item => {
-          let value = item.value;
-          const lines = value.split('\n');
-          if (lines.length > 3) {
-            value = lines.slice(0, 3).join('\n');
+        // Determine what category the right side should show based on breakdown_title
+        if (breakdownTitle.includes('customer') || breakdownTitle.includes('client')) {
+          // Show customers only
+          if (relationships.customers && relationships.customers.length > 0) {
+            relationships.customers.slice(0, 8).forEach(customer => {
+              prioritizedItems.push({ label: customer, value: '' });
+            });
+            console.log(`  Right side (Customers): ${relationships.customers.length} items`);
           }
-          return { label: item.label, value };
-        });
+        } else if (breakdownTitle.includes('supplier') || breakdownTitle.includes('principal') || breakdownTitle.includes('partner')) {
+          // Show suppliers/principals only
+          if (relationships.principals && relationships.principals.length > 0) {
+            relationships.principals.slice(0, 8).forEach(principal => {
+              prioritizedItems.push({ label: principal, value: '' });
+            });
+            console.log(`  Right side (Principals): ${relationships.principals.length} items`);
+          } else if (relationships.suppliers && relationships.suppliers.length > 0) {
+            relationships.suppliers.slice(0, 8).forEach(supplier => {
+              prioritizedItems.push({ label: supplier, value: '' });
+            });
+            console.log(`  Right side (Suppliers): ${relationships.suppliers.length} items`);
+          }
+        } else if (breakdownTitle.includes('brand')) {
+          // Show brands only
+          if (relationships.brands && relationships.brands.length > 0) {
+            relationships.brands.slice(0, 8).forEach(brand => {
+              prioritizedItems.push({ label: brand, value: '' });
+            });
+            console.log(`  Right side (Brands): ${relationships.brands.length} items`);
+          }
+        } else {
+          // Default: Products/Applications/Services - use breakdown_items
+          let validBreakdownItems = (company.breakdown_items || [])
+            .map(item => ({
+              label: normalizeLabel(ensureString(item?.label)),
+              value: ensureString(item?.value)
+            }))
+            .filter(item => item.label && item.value && !isEmptyValue(item.label) && !isEmptyValue(item.value));
 
-        // Add breakdown items to prioritized list
-        prioritizedItems = prioritizedItems.concat(validBreakdownItems);
+          // Truncate values to max 3 lines
+          validBreakdownItems = validBreakdownItems.map(item => {
+            let value = item.value;
+            const lines = value.split('\n');
+            if (lines.length > 3) {
+              value = lines.slice(0, 3).join('\n');
+            }
+            return { label: item.label, value };
+          });
 
-        // Priority 3: Principals (for authorized distributors)
-        if (hasPrincipals) {
-          const principalList = relationships.principals.slice(0, 6).join(', ');
-          prioritizedItems.push({ label: 'Principals', value: principalList });
-          console.log(`  Right side: Adding ${relationships.principals.length} principals`);
-        }
-
-        // Priority 3: Suppliers (for trading/procurement companies)
-        if (hasSuppliers) {
-          const supplierList = relationships.suppliers.slice(0, 6).join(', ');
-          prioritizedItems.push({ label: 'Suppliers', value: supplierList });
-          console.log(`  Right side: Adding ${relationships.suppliers.length} suppliers`);
+          prioritizedItems = validBreakdownItems;
+          console.log(`  Right side (Products/Apps): ${prioritizedItems.length} items`);
         }
 
         // Limit to 8 rows maximum (to fit the slide)
@@ -4631,7 +4619,9 @@ CORRECT EXAMPLES (2 levels only):
 - Indonesia: "West Java, Indonesia", "Banten, Indonesia", "East Java, Indonesia"
 - Vietnam: "Ho Chi Minh City, Vietnam", "Hanoi, Vietnam", "Binh Duong, Vietnam"
 - Philippines: "Metro Manila, Philippines", "Cebu, Philippines"
-- Singapore: "Singapore" (just country name, no area needed)
+- Singapore: "Area, Singapore" - MUST include area! e.g., "Jurong, Singapore", "Tuas, Singapore", "CBD, Singapore", "Changi, Singapore", "Woodlands, Singapore"
+  - Look for Singapore postal codes to identify area: 60xxxx=Jurong, 62xxxx=Tuas, 01-09xxxx=CBD, 5xxxxx=Changi, 7xxxxx=Woodlands
+  - If no area identifiable, use "Central, Singapore" as default
 
 WRONG (too many levels - NO city/district names!):
 - "Shah Alam, Selangor, Malaysia" ← WRONG! Just "Selangor, Malaysia"
@@ -4674,7 +4664,7 @@ Content: ${scrapedContent.substring(0, 25000)}`
 
 // Post-process and validate HQ location format
 // ALL countries: EXACTLY 2 levels (State/Province, Country)
-// Singapore: Just "Singapore"
+// Singapore: "Area, Singapore" preferred, "Singapore" as fallback
 function validateAndFixHQFormat(location, websiteUrl) {
   if (!location || typeof location !== 'string') return location;
 
@@ -4696,7 +4686,13 @@ function validateAndFixHQFormat(location, websiteUrl) {
   const isSingapore = lastPart === 'singapore' || loc.toLowerCase() === 'singapore';
 
   if (isSingapore) {
-    return 'Singapore'; // Just country name, no area needed
+    // Singapore: keep "Area, Singapore" if we have 2 parts, otherwise just "Singapore"
+    if (parts.length >= 2) {
+      // e.g., "Jurong, Singapore" or "CBD, Singapore"
+      return parts.slice(-2).join(', ');
+    }
+    // Just "Singapore" - AI couldn't find specific area
+    return 'Singapore';
   }
 
   // Non-Singapore: must be exactly 2 levels (State/Province, Country)
@@ -5372,24 +5368,27 @@ async function generateMECESegments(targetDescription, companies) {
           role: 'system',
           content: `You are an M&A analyst creating a target list slide. Given a target description and company information, create MECE (Mutually Exclusive, Collectively Exhaustive) segments to categorize these companies.
 
-Create 4-6 segment columns that are:
+Create segment columns that are:
 1. Relevant to the target description (e.g., for "security product distributors" → segments could be product types like "CCTV", "Access Control", "Fire Safety", etc.)
 2. Mutually exclusive (each segment is distinct)
-3. Collectively exhaustive (covers all relevant categories for this industry)
+3. CRITICAL: EVERY segment MUST have at least ONE company with a tick!
+   - Do NOT create segments that no company falls into
+   - Only create segments where you can mark at least one company as TRUE
+   - If a segment would have zero ticks, DO NOT include it
 
 For each company, mark which segments apply to them based on their business description.
 
 OUTPUT JSON:
 {
-  "segments": ["Segment 1", "Segment 2", "Segment 3", "Segment 4", "Segment 5"],
+  "segments": ["Segment 1", "Segment 2", "Segment 3", "Segment 4"],
   "companySegments": {
-    "1": [true, false, true, false, true],
-    "2": [false, true, true, true, false]
+    "1": [true, false, true, false],
+    "2": [false, true, true, true]
   }
 }
 
 Where:
-- "segments" is an array of 4-6 segment names (short, 2-3 words each)
+- "segments" is an array of segment names (short, 2-3 words each) - only include segments that have at least 1 tick!
 - "companySegments" maps company ID to an array of booleans indicating which segments apply
 
 Return ONLY valid JSON.`
@@ -5601,7 +5600,10 @@ ${JSON.stringify(companyData, null, 2)}
 - If extracted location does NOT match what's in the source, FIX IT
 - Thailand: Look for province names like "Samut Sakhon", "Samut Prakan", "Chonburi", "Rayong" - NOT always Bangkok!
 - FORMAT: EXACTLY 2 LEVELS - "Province/State, Country" (e.g., "Bangkok, Thailand", "Selangor, Malaysia")
-- Singapore: Just "Singapore" (no area needed)
+- Singapore: "Area, Singapore" - MUST identify specific area! Look for:
+  - Postal codes: 60xxxx=Jurong, 62xxxx=Tuas, 01-09xxxx=CBD/Downtown, 5xxxxx=Changi, 7xxxxx=Woodlands
+  - Keywords: "Jurong", "Tuas", "Changi", "CBD", "Orchard", "Woodlands", "Tampines"
+  - If cannot identify area, use "Central, Singapore"
 - CRITICAL - ENGLISH ONLY: NEVER output Thai/Chinese/Vietnamese text!
   - WRONG: "กรุงเทพฯ, ประเทศไทย" ← NEVER output this!
   - CORRECT: "Bangkok, Thailand"
@@ -5625,12 +5627,17 @@ ${JSON.stringify(companyData, null, 2)}
 - Scan SOURCE for partnership/JV mentions (e.g., "partnership with Dainichiseika", "technology transfer")
 - ADD to key_metrics if missing
 
-### 5. CLEAN UP (secondary)
-- Remove fake placeholders like "Distributor A, Distributor B"
-- Remove empty metrics with "Not specified", "N/A"
+### 5. CLEAN UP (CRITICAL - CATCH ALL GARBAGE)
+- REJECT AND REMOVE fake placeholder patterns:
+  - Alphabetical: "Distributor A, Distributor B", "Partner X, Partner Y", "Customer 1, Customer 2"
+  - Numbered: "brand1, brand2, brand3", "product1, product2", "supplier1, supplier2"
+  - Generic: "Company A", "Item 1", "Sample Brand"
+  - ANY pattern where items are numbered or lettered sequentially is FAKE - REMOVE IT
+- Remove empty metrics with "Not specified", "N/A", "Unknown", "Not available"
 - TRANSLATE ALL non-English to English (Thai, Chinese, Vietnamese, etc.)
 - Remove marketing fluff words like "high-quality", "premium", "leading"
 - ALL OUTPUT MUST BE IN ENGLISH (A-Z letters only) - NO Thai/Chinese/Vietnamese characters!
+- If you see placeholder data, set that field to empty or remove the metric entirely
 
 ## OUTPUT FORMAT
 Return JSON with:
