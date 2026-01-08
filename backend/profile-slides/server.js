@@ -4180,10 +4180,11 @@ function extractBusinessRelationships(rawHtml) {
       if (name) names.add(name);
     }
 
-    // Method 6: Image filenames
-    const imgSrcPattern = /<img[^>]*src=["']([^"']+)["'][^>]*>/gi;
+    // Method 6: Image filenames (including lazy-loaded data-src)
+    const imgSrcPattern = /<img[^>]*(?:src|data-src|data-lazy-src|data-original)=["']([^"']+)["'][^>]*>/gi;
     while ((match = imgSrcPattern.exec(sectionHtml)) !== null) {
       const src = match[1];
+      if (src.startsWith('data:')) continue; // Skip data URIs
       if (/client|customer|partner|brand|principal|supplier/i.test(src)) {
         const filename = src.split('/').pop()?.split('.')[0] || '';
         const name = cleanCustomerName(
@@ -4304,11 +4305,37 @@ async function extractNamesFromLogosWithVision(rawHtml, websiteUrl) {
     }
 
     // Step 2: Extract image URLs from relevant sections
-    const imgPattern = /<img[^>]*src=["']([^"']+)["'][^>]*>/gi;
-    const imageUrls = [];
-    while ((match = imgPattern.exec(relevantHtml)) !== null) {
-      let imgUrl = match[1];
+    // Handle both regular src and lazy-loaded images (data-src, data-lazy-src, data-original)
+    const imageUrls = new Set();
 
+    // Pattern 1: Regular src attribute
+    const srcPattern = /<img[^>]*\ssrc=["']([^"']+)["'][^>]*>/gi;
+    while ((match = srcPattern.exec(relevantHtml)) !== null) {
+      const url = match[1];
+      if (!url.startsWith('data:')) imageUrls.add(url);
+    }
+
+    // Pattern 2: Lazy-loaded data-src attribute
+    const dataSrcPattern = /<img[^>]*\sdata-src=["']([^"']+)["'][^>]*>/gi;
+    while ((match = dataSrcPattern.exec(relevantHtml)) !== null) {
+      imageUrls.add(match[1]);
+    }
+
+    // Pattern 3: Lazy-loaded data-lazy-src attribute
+    const dataLazySrcPattern = /<img[^>]*\sdata-lazy-src=["']([^"']+)["'][^>]*>/gi;
+    while ((match = dataLazySrcPattern.exec(relevantHtml)) !== null) {
+      imageUrls.add(match[1]);
+    }
+
+    // Pattern 4: data-original (common in jQuery lazy load)
+    const dataOriginalPattern = /<img[^>]*\sdata-original=["']([^"']+)["'][^>]*>/gi;
+    while ((match = dataOriginalPattern.exec(relevantHtml)) !== null) {
+      imageUrls.add(match[1]);
+    }
+
+    // Process and filter URLs
+    const processedUrls = [];
+    for (let imgUrl of imageUrls) {
       // Skip tiny images, icons, and data URIs
       if (imgUrl.startsWith('data:')) continue;
       if (/icon|favicon|pixel|spacer|1x1|loading|placeholder/i.test(imgUrl)) continue;
@@ -4323,11 +4350,11 @@ async function extractNamesFromLogosWithVision(rawHtml, websiteUrl) {
         }
       }
 
-      imageUrls.push(imgUrl);
+      processedUrls.push(imgUrl);
     }
 
     // Limit to 8 images to avoid rate limits and keep response time reasonable
-    const limitedUrls = imageUrls.slice(0, 8);
+    const limitedUrls = processedUrls.slice(0, 8);
 
     if (limitedUrls.length === 0) {
       console.log('    Vision: No logo images found in sections');
