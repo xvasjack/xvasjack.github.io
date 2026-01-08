@@ -7861,43 +7861,34 @@ app.post('/api/generate-ppt', async (req, res) => {
           searchedInfo = await searchMissingInfo(basicInfo.company_name, website, missingFields);
         }
 
-        // Merge regex metrics with VERIFIED AI metrics
+        // Merge regex metrics with VERIFIED AI metrics (REGEX FIRST - ground truth)
         const rawKeyMetrics = metricsInfo.key_metrics || [];
-        // Apply quote verification to prevent hallucination
         const allKeyMetrics = filterMetricsByVerification(rawKeyMetrics, scraped.content, 1);
-        const mergedMetrics = [...allKeyMetrics];
-        if (regexMetrics.office_count && !allKeyMetrics.some(m => /office|branch|location/i.test(m.label))) {
-          mergedMetrics.push({ value: String(regexMetrics.office_count), label: normalizeLabel(regexMetrics.office_text || 'Offices') });
-        }
-        if (regexMetrics.employee_count && !allKeyMetrics.some(m => /employee|staff|worker/i.test(m.label))) {
-          mergedMetrics.push({ value: String(regexMetrics.employee_count), label: 'Employees' });
-        }
-        if (regexMetrics.years_experience && !allKeyMetrics.some(m => /year|experience/i.test(m.label))) {
-          mergedMetrics.push({ value: String(regexMetrics.years_experience), label: 'Years Experience' });
-        }
-        if (regexMetrics.export_countries && !allKeyMetrics.some(m => /export|countr/i.test(m.label))) {
-          mergedMetrics.push({ value: String(regexMetrics.export_countries), label: 'Export Countries' });
-        }
-        if (regexMetrics.source_countries && !allKeyMetrics.some(m => /source|procure|import/i.test(m.label))) {
-          mergedMetrics.push({ value: String(regexMetrics.source_countries), label: 'Source Countries' });
-        }
-        if (regexMetrics.capacity_text && !allKeyMetrics.some(m => /capacity|production/i.test(m.label))) {
-          mergedMetrics.push({ value: regexMetrics.capacity_text, label: 'Production Capacity' });
-        }
-        if (regexMetrics.certifications?.length > 0 && !allKeyMetrics.some(m => /certif|iso|haccp/i.test(m.label))) {
-          mergedMetrics.push({ value: regexMetrics.certifications.join(', '), label: 'Certifications' });
-        }
-        // NEW: Machine counts
-        if (regexMetrics.machine_count && !allKeyMetrics.some(m => /machine|equipment|line/i.test(m.label))) {
-          mergedMetrics.push({ value: String(regexMetrics.machine_count) + '+', label: 'Machines' });
-        }
-        // NEW: Partner/distributor counts
-        if (regexMetrics.partner_count && !allKeyMetrics.some(m => /partner|distributor|dealer|agent/i.test(m.label))) {
-          mergedMetrics.push({ value: String(regexMetrics.partner_count) + '+', label: 'Business Partners' });
-        }
-        // NEW: Export regions (names, not counts)
-        if (regexMetrics.export_regions && !allKeyMetrics.some(m => /export|market|region/i.test(m.label))) {
-          mergedMetrics.push({ value: regexMetrics.export_regions, label: 'Export Markets' });
+
+        // Build regex metrics first (deterministic, no hallucination)
+        const regexBasedMetrics = [];
+        const regexCoveredTypes = new Set();
+        if (regexMetrics.office_count) { regexBasedMetrics.push({ value: String(regexMetrics.office_count), label: normalizeLabel(regexMetrics.office_text || 'Offices') }); regexCoveredTypes.add('office'); }
+        if (regexMetrics.employee_count) { regexBasedMetrics.push({ value: String(regexMetrics.employee_count), label: 'Employees' }); regexCoveredTypes.add('employee'); }
+        if (regexMetrics.years_experience) { regexBasedMetrics.push({ value: String(regexMetrics.years_experience), label: 'Years Experience' }); regexCoveredTypes.add('year'); }
+        if (regexMetrics.export_countries) { regexBasedMetrics.push({ value: String(regexMetrics.export_countries), label: 'Export Countries' }); regexCoveredTypes.add('export'); }
+        if (regexMetrics.source_countries) { regexBasedMetrics.push({ value: String(regexMetrics.source_countries), label: 'Source Countries' }); regexCoveredTypes.add('source'); }
+        if (regexMetrics.capacity_text) { regexBasedMetrics.push({ value: translateUnitsToEnglish(regexMetrics.capacity_text), label: 'Production Capacity' }); regexCoveredTypes.add('capacity'); }
+        if (regexMetrics.certifications?.length > 0) { regexBasedMetrics.push({ value: regexMetrics.certifications.join(', '), label: 'Certifications' }); regexCoveredTypes.add('certif'); }
+        if (regexMetrics.machine_count) { regexBasedMetrics.push({ value: String(regexMetrics.machine_count) + '+', label: 'Machines' }); regexCoveredTypes.add('machine'); }
+        if (regexMetrics.partner_count) { regexBasedMetrics.push({ value: String(regexMetrics.partner_count) + '+', label: 'Business Partners' }); regexCoveredTypes.add('partner'); }
+        if (regexMetrics.export_regions) { regexBasedMetrics.push({ value: regexMetrics.export_regions, label: 'Export Markets' }); regexCoveredTypes.add('market'); }
+        if (regexMetrics.product_count) { regexBasedMetrics.push({ value: String(regexMetrics.product_count) + '+', label: 'Products' }); regexCoveredTypes.add('product'); }
+        if (regexMetrics.customer_count) { regexBasedMetrics.push({ value: String(regexMetrics.customer_count) + '+', label: 'Customers' }); regexCoveredTypes.add('customer'); }
+        if (regexMetrics.fleet_count) { regexBasedMetrics.push({ value: String(regexMetrics.fleet_count) + '+', label: 'Vehicles' }); regexCoveredTypes.add('vehicle'); }
+        if (regexMetrics.factory_size) { regexBasedMetrics.push({ value: translateUnitsToEnglish(regexMetrics.factory_size), label: 'Factory Size' }); regexCoveredTypes.add('factory'); }
+
+        // Add AI metrics only for types not covered by regex
+        const mergedMetrics = [...regexBasedMetrics];
+        for (const aiMetric of allKeyMetrics) {
+          const labelLower = aiMetric.label.toLowerCase();
+          const alreadyCovered = [...regexCoveredTypes].some(type => labelLower.includes(type));
+          if (!alreadyCovered) { mergedMetrics.push(aiMetric); }
         }
 
         // Determine location: prefer AI extraction, fallback to JSON-LD
