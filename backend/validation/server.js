@@ -160,20 +160,65 @@ async function callOpenAISearch(prompt) {
 
 // ============ WEBSITE VERIFICATION ============
 
+// Detect if response is a Cloudflare/WAF challenge page (website exists but blocked)
+function isCloudflareOrWAFChallenge(html) {
+  const lowerHtml = html.toLowerCase();
+  const wafSigns = [
+    'checking your browser',
+    'please wait while we verify',
+    'cloudflare',
+    'cf-browser-verification',
+    'ddos protection',
+    'just a moment',
+    'enable javascript and cookies',
+    'ray id',
+    'performance & security by',
+    'attention required',
+    'access denied',
+    'please complete the security check',
+    'bot protection',
+    'human verification',
+  ];
+  return wafSigns.some((sign) => lowerHtml.includes(sign));
+}
+
 async function verifyWebsite(url) {
   try {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
+    const timeout = setTimeout(() => controller.abort(), 15000);
     const response = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+      headers: {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        Connection: 'keep-alive',
+        'Cache-Control': 'no-cache',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
+      },
       signal: controller.signal,
       redirect: 'follow',
     });
     clearTimeout(timeout);
 
-    if (!response.ok) return { valid: false, reason: `HTTP ${response.status}` };
-
+    // Accept 403 if it's Cloudflare (website exists, just blocked)
     const html = await response.text();
+
+    // If Cloudflare/WAF challenge, the website EXISTS - accept it
+    if (isCloudflareOrWAFChallenge(html)) {
+      console.log(`    [verifyWebsite] ${url} - Cloudflare/WAF detected, website exists`);
+      return { valid: true, reason: 'WAF protected but exists', wafProtected: true };
+    }
+
+    if (!response.ok && response.status !== 403) {
+      return { valid: false, reason: `HTTP ${response.status}` };
+    }
+
     const lowerHtml = html.toLowerCase();
 
     // Check for parked domain / placeholder signs
@@ -219,6 +264,7 @@ async function verifyWebsite(url) {
 
     return { valid: true, content: textContent.substring(0, 15000) };
   } catch (e) {
+    // Connection errors could mean the domain doesn't exist OR is just blocking us
     return { valid: false, reason: e.message || 'Connection failed' };
   }
 }
@@ -331,9 +377,16 @@ async function fetchWebsite(url) {
         console.log(`  [fetchWebsite] Trying ${targetUrl} (attempt ${attempt})`);
         const response = await tryFetch(targetUrl);
 
+        const html = await response.text();
+
+        // Check for Cloudflare/WAF challenge - return special marker
+        if (isCloudflareOrWAFChallenge(html)) {
+          console.log(`  [fetchWebsite] ${targetUrl} - Cloudflare/WAF detected`);
+          return '__WAF_PROTECTED__';
+        }
+
         // Accept any 2xx or 3xx response (redirects are followed automatically)
         if (response.ok || (response.status >= 200 && response.status < 400)) {
-          const html = await response.text();
           console.log(`  [fetchWebsite] ${targetUrl} - got ${html.length} chars HTML`);
 
           const cleanText = extractText(html);
@@ -677,25 +730,26 @@ async function validateCompanyBusinessStrict(company, targetBusiness, pageText) 
 
   const systemPrompt = (
     _model
-  ) => `You are a company validator. Determine if the company matches the target business criteria STRICTLY based on the website content provided.
+  ) => `You are a company validator. Determine if the company matches the target business criteria STRICTLY based on the content provided.
 
 TARGET BUSINESS: "${targetBusiness}"
 
 RULES:
-1. Your determination must be based ONLY on what the website content says
-2. If the website clearly shows the company is in the target business → IN SCOPE
-3. If the website shows a different business → OUT OF SCOPE
-4. If the website content is unclear or doesn't describe business activities → OUT OF SCOPE
+1. Your determination must be based ONLY on the content provided (website content or AI research)
+2. If the content clearly shows the company is in the target business → IN SCOPE
+3. If the content shows a different business → OUT OF SCOPE
+4. If the content is unclear or doesn't describe business activities → OUT OF SCOPE
 5. Be accurate - do not guess or assume
 
-IMPORTANT: The website content below was successfully fetched - the website IS accessible. Never say the website is "inaccessible" or "cannot be accessed". If content is unclear, say "unclear" or "insufficient information" but NOT "inaccessible".
+IMPORTANT: The content below was successfully obtained. Never say the website is "inaccessible" or "cannot be accessed". If content is unclear, say "unclear" or "insufficient information" but NOT "inaccessible".
 
-OUTPUT: Return JSON: {"in_scope": true/false, "confidence": "high/medium/low", "reason": "brief explanation based on website content", "business_description": "what this company actually does based on website"}`;
+OUTPUT: Return JSON: {"in_scope": true/false, "confidence": "high/medium/low", "reason": "brief explanation based on content", "business_description": "what this company actually does"}`;
 
+  const isAIResearch = pageText.startsWith('[AI Research');
   const userPrompt = `COMPANY: ${company.company_name}
 WEBSITE: ${company.website}
 
-WEBSITE CONTENT (successfully fetched from the live website):
+${isAIResearch ? 'COMPANY INFORMATION (from AI research - website was protected):' : 'WEBSITE CONTENT (successfully fetched from the live website):'}
 ${pageText.substring(0, 10000)}`;
 
   try {
@@ -867,20 +921,47 @@ app.post('/api/validation', async (req, res) => {
             };
           }
 
-          const pageText = await fetchWebsite(website);
+          let pageText = await fetchWebsite(website);
 
           console.log(
             `  Fetched pageText for ${companyName}: type=${typeof pageText}, length=${pageText?.length || 0}`
           );
 
-          if (!pageText || pageText.length < 100) {
-            return {
-              company_name: companyName,
-              website,
-              in_scope: false,
-              reason: 'Website inaccessible or no content',
-              business_description: 'Could not fetch website content for validation',
-            };
+          // If WAF-protected or no content, use AI to research the company
+          if (pageText === '__WAF_PROTECTED__' || !pageText || pageText.length < 100) {
+            console.log(`  ${companyName}: Website blocked/inaccessible, using AI to research...`);
+
+            // Use Perplexity to research the company (it has web browsing capability)
+            try {
+              const aiResearch = await callPerplexity(
+                `Research "${companyName}" (website: ${website}).
+                 What does this company do? What industry are they in? What products or services do they offer?
+                 Provide a detailed description of their business activities.
+                 If you cannot find information, say "UNABLE_TO_RESEARCH".`
+              );
+
+              if (aiResearch && !aiResearch.includes('UNABLE_TO_RESEARCH') && aiResearch.length > 50) {
+                console.log(`  ${companyName}: Got AI research (${aiResearch.length} chars)`);
+                pageText = `[AI Research for ${companyName}]\n${aiResearch}`;
+              } else {
+                return {
+                  company_name: companyName,
+                  website,
+                  in_scope: false,
+                  reason: 'Website protected by WAF/Cloudflare, could not research',
+                  business_description: 'Website blocked by security measures, unable to validate',
+                };
+              }
+            } catch (e) {
+              console.error(`  ${companyName}: AI research failed:`, e.message);
+              return {
+                company_name: companyName,
+                website,
+                in_scope: false,
+                reason: 'Website protected, research failed',
+                business_description: 'Website blocked by security measures, unable to validate',
+              };
+            }
           }
 
           const validation = await validateCompanyBusinessStrict(
