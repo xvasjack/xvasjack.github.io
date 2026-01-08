@@ -72,6 +72,174 @@ function normalizeLabel(label) {
     .join(' ');
 }
 
+// ===== QUOTE VERIFICATION SYSTEM =====
+// Verifies that AI-extracted data actually exists in the scraped content
+// This prevents hallucination by requiring proof for every claim
+
+// Normalize text for comparison (handles whitespace, numbers, encoding)
+function normalizeTextForComparison(text) {
+  if (!text) return '';
+  return text
+    .toLowerCase()
+    .replace(/\s+/g, ' ')           // Normalize whitespace
+    .replace(/[,\.]/g, '')           // Remove commas and periods from numbers
+    .replace(/&amp;/g, '&')          // Decode HTML entities
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&#\d+;/g, '')
+    .replace(/['']/g, "'")           // Normalize quotes
+    .replace(/[""]/g, '"')
+    .trim();
+}
+
+// Extract key numbers from text for verification (more lenient matching)
+function extractNumbersFromText(text) {
+  if (!text) return [];
+  const numbers = text.match(/\d+(?:[,\.]\d+)*/g) || [];
+  return numbers.map(n => n.replace(/[,\.]/g, ''));
+}
+
+// Verify that a source quote exists in the scraped content
+// Returns true if quote is found (with fuzzy matching for formatting differences)
+function verifyQuoteInContent(quote, scrapedContent) {
+  if (!quote || !scrapedContent) return false;
+
+  const normalizedQuote = normalizeTextForComparison(quote);
+  const normalizedContent = normalizeTextForComparison(scrapedContent);
+
+  // Method 1: Direct substring match
+  if (normalizedContent.includes(normalizedQuote)) {
+    return true;
+  }
+
+  // Method 2: Check if all significant numbers from quote exist in content
+  // This handles cases where formatting differs but numbers are correct
+  const quoteNumbers = extractNumbersFromText(quote);
+  if (quoteNumbers.length > 0) {
+    const contentNumbers = extractNumbersFromText(scrapedContent);
+    const allNumbersFound = quoteNumbers.every(num =>
+      contentNumbers.some(contentNum => contentNum === num || contentNum.includes(num))
+    );
+    if (allNumbersFound) {
+      // Also check for key non-numeric words (at least 2 must match)
+      const quoteWords = normalizedQuote.split(' ').filter(w => w.length > 3 && !/^\d+$/.test(w));
+      const matchedWords = quoteWords.filter(word => normalizedContent.includes(word));
+      if (matchedWords.length >= Math.min(2, quoteWords.length)) {
+        return true;
+      }
+    }
+  }
+
+  // Method 3: Check for word overlap (for text-heavy quotes)
+  const quoteWords = normalizedQuote.split(' ').filter(w => w.length > 2);
+  if (quoteWords.length >= 3) {
+    const matchedWords = quoteWords.filter(word => normalizedContent.includes(word));
+    const matchRatio = matchedWords.length / quoteWords.length;
+    if (matchRatio >= 0.7) { // 70% word match
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// Verify all quotes for a metric and return verification result
+function verifyMetricQuotes(metric, scrapedContent) {
+  if (!metric || !metric.source_quotes || !Array.isArray(metric.source_quotes)) {
+    return { verified: false, reason: 'no_source_quotes' };
+  }
+
+  if (metric.source_quotes.length === 0) {
+    return { verified: false, reason: 'empty_source_quotes' };
+  }
+
+  const verificationResults = metric.source_quotes.map(quote => ({
+    quote,
+    found: verifyQuoteInContent(quote, scrapedContent)
+  }));
+
+  const allFound = verificationResults.every(r => r.found);
+  const someFound = verificationResults.some(r => r.found);
+
+  if (allFound) {
+    return { verified: true, results: verificationResults };
+  } else if (someFound) {
+    // Partial verification - some quotes found
+    return {
+      verified: 'partial',
+      results: verificationResults,
+      reason: 'some_quotes_not_found'
+    };
+  } else {
+    return {
+      verified: false,
+      results: verificationResults,
+      reason: 'no_quotes_found'
+    };
+  }
+}
+
+// Filter metrics based on quote verification
+// Only keeps metrics where source quotes are verified
+function filterMetricsByVerification(metrics, scrapedContent, companyIndex) {
+  if (!metrics || !Array.isArray(metrics)) return [];
+
+  const verifiedMetrics = [];
+  let rejectedCount = 0;
+
+  for (const metric of metrics) {
+    // Skip metrics without source quotes entirely (legacy or regex-extracted)
+    if (!metric.source_quotes) {
+      // For metrics without quotes, apply strict validation
+      // Only keep if value has actual data (not placeholders)
+      if (metric.value && typeof metric.value === 'string') {
+        const valueLower = metric.value.toLowerCase();
+        // Reject obvious placeholders and vague values
+        if (valueLower.includes('not specified') ||
+            valueLower.includes('not available') ||
+            valueLower.includes('various') ||
+            /customer\s*[a-z1-9]/i.test(valueLower) ||
+            /client\s*[a-z1-9]/i.test(valueLower) ||
+            /supplier\s*[a-z1-9]/i.test(valueLower) ||
+            /partner\s*[a-z1-9]/i.test(valueLower) ||
+            /^0\s+\w/i.test(metric.value)) { // "0 Something" pattern
+          rejectedCount++;
+          continue;
+        }
+      }
+      verifiedMetrics.push(metric);
+      continue;
+    }
+
+    const verification = verifyMetricQuotes(metric, scrapedContent);
+
+    if (verification.verified === true) {
+      // Fully verified - keep the metric
+      verifiedMetrics.push({
+        label: metric.label,
+        value: metric.value
+        // Remove source_quotes from final output
+      });
+    } else if (verification.verified === 'partial') {
+      // Partially verified - keep but log warning
+      console.log(`  [${companyIndex}] Partial verification for "${metric.label}" - some quotes not found`);
+      verifiedMetrics.push({
+        label: metric.label,
+        value: metric.value
+      });
+    } else {
+      // Not verified - reject as potential hallucination
+      console.log(`  [${companyIndex}] REJECTED "${metric.label}" - source quotes not found in content (potential hallucination)`);
+      rejectedCount++;
+    }
+  }
+
+  if (rejectedCount > 0) {
+    console.log(`  [${companyIndex}] Quote verification: kept ${verifiedMetrics.length}, rejected ${rejectedCount} unverified metrics`);
+  }
+
+  return verifiedMetrics;
+}
+
 // Extract a company name from URL for inaccessible websites
 function extractCompanyNameFromUrl(url) {
   try {
@@ -2062,6 +2230,10 @@ function filterEmptyMetrics(keyMetrics) {
     /no information/i,
     /no data/i,
     /^\s*-?\s*$/,  // Empty or just dashes
+    // ZERO VALUE PATTERNS - metrics with "0" values are garbage
+    /^0\s+\w/i,               // "0 Something" - starts with "0 "
+    /^-?\s*0\s+\w/i,          // "- 0 Something" - bullet point with 0
+    /\b0\s+(customers?|clients?|projects?|partners?|employees?|staff|machines?|years?)/i,  // "0 customers", "0 projects", etc.
     // Placeholder text patterns
     /client\s*\d+/i,          // "Client 1", "Client 2", etc.
     /client\s*[a-e]/i,        // "Client A", "Client B", etc.
@@ -2070,6 +2242,12 @@ function filterEmptyMetrics(keyMetrics) {
     /supplier\s*\d+/i,        // "Supplier 1", "Supplier 2", etc.
     /partner\s*\d+/i,         // "Partner 1", "Partner 2", etc.
     /company\s*\d+/i,         // "Company 1", "Company 2", etc.
+    /brand\s*\d+/i,           // "brand1", "brand2", etc.
+    /brands?\s*\d+\s*,\s*brands?\s*\d+/i,  // "brand1, brand2, brand3"
+    /product\s*\d+/i,         // "product1", "product2", etc.
+    /item\s*\d+/i,            // "item1", "item2", etc.
+    /distributor\s*[a-e]/i,   // "Distributor A", "Distributor B", etc.
+    /distributor\s*\d+/i,     // "Distributor 1", "Distributor 2", etc.
     // Generic industry descriptions without specifics
     /various\s+(printers|companies|manufacturers|customers|suppliers|partners)/i,
     /multiple\s+(printers|companies|manufacturers|customers|suppliers|partners)/i,
@@ -3422,8 +3600,123 @@ async function scrapeWebsite(url) {
   }
 }
 
-// Scrape multiple pages from a website (homepage + contact + about + partners)
-// This ensures we capture HQ address from Contact, customer info from Partners, etc.
+// ===== DYNAMIC PAGE DISCOVERY =====
+// Extract all navigation links from HTML and prioritize by importance
+function discoverPagesFromNavigation(html, origin) {
+  if (!html || !origin) return [];
+
+  const discoveredUrls = new Set();
+
+  // Priority keywords - pages likely to have important company info
+  // Higher priority = lower number = scraped first
+  const priorityKeywords = {
+    // Highest priority - manufacturing/production info
+    'manufacturing': 1, 'production': 1, 'factory': 1, 'facilities': 1, 'plant': 1,
+    'capabilities': 2, 'capacity': 2, 'operations': 2,
+    // Company info
+    'about': 3, 'about-us': 3, 'aboutus': 3, 'company': 3, 'profile': 3, 'company-profile': 3,
+    'history': 4, 'milestone': 4, 'journey': 4, 'story': 4,
+    // Products and services
+    'products': 5, 'product': 5, 'services': 5, 'service': 5, 'solutions': 5,
+    // Contact and location
+    'contact': 6, 'contact-us': 6, 'contactus': 6, 'location': 6, 'locations': 6,
+    // Partners and clients
+    'partners': 7, 'clients': 7, 'customers': 7, 'portfolio': 7,
+    // Quality and certifications
+    'quality': 8, 'certification': 8, 'certifications': 8, 'awards': 8,
+    // Team
+    'team': 9, 'leadership': 9, 'management': 9
+  };
+
+  // Pages to SKIP - not useful for company profiles
+  const skipKeywords = [
+    'blog', 'news', 'article', 'post', 'press', 'media',
+    'career', 'careers', 'jobs', 'vacancy', 'vacancies', 'recruitment',
+    'privacy', 'policy', 'terms', 'legal', 'disclaimer', 'cookie',
+    'login', 'signin', 'signup', 'register', 'account', 'cart', 'checkout',
+    'faq', 'help', 'support', 'sitemap', 'search',
+    'facebook', 'twitter', 'linkedin', 'instagram', 'youtube', 'whatsapp',
+    '.pdf', '.doc', '.xls', '.zip', '.jpg', '.png', '.gif'
+  ];
+
+  // Extract links from navigation elements, header, and main content
+  // Pattern matches: <a href="...">
+  const linkPattern = /<a[^>]*href=["']([^"'#]+)["'][^>]*>/gi;
+  let match;
+
+  while ((match = linkPattern.exec(html)) !== null) {
+    let href = match[1].trim();
+
+    // Skip empty, javascript:, mailto:, tel:, anchors
+    if (!href || href.startsWith('javascript:') || href.startsWith('mailto:') ||
+        href.startsWith('tel:') || href.startsWith('#') || href.length > 200) {
+      continue;
+    }
+
+    // Convert relative URLs to absolute
+    let fullUrl;
+    try {
+      if (href.startsWith('http://') || href.startsWith('https://')) {
+        fullUrl = new URL(href);
+        // Skip external domains
+        if (fullUrl.origin !== origin) continue;
+      } else if (href.startsWith('//')) {
+        fullUrl = new URL('https:' + href);
+        if (fullUrl.origin !== origin) continue;
+      } else if (href.startsWith('/')) {
+        fullUrl = new URL(origin + href);
+      } else {
+        fullUrl = new URL(origin + '/' + href);
+      }
+    } catch {
+      continue; // Invalid URL
+    }
+
+    // Normalize: remove trailing slash, query params, fragments
+    let normalizedPath = fullUrl.pathname.replace(/\/+$/, '').toLowerCase();
+    if (!normalizedPath) normalizedPath = '/';
+
+    // Skip homepage (already scraped)
+    if (normalizedPath === '/' || normalizedPath === '/index.html' || normalizedPath === '/index.php' ||
+        normalizedPath === '/home' || normalizedPath === '/en' || normalizedPath === '/th' ||
+        normalizedPath === '/id' || normalizedPath === '/vn') {
+      continue;
+    }
+
+    // Skip unwanted pages
+    const pathLower = normalizedPath.toLowerCase();
+    if (skipKeywords.some(kw => pathLower.includes(kw))) {
+      continue;
+    }
+
+    discoveredUrls.add(origin + normalizedPath);
+  }
+
+  // Convert to array and sort by priority
+  const urlsWithPriority = Array.from(discoveredUrls).map(url => {
+    const path = new URL(url).pathname.toLowerCase();
+    let priority = 100; // Default low priority
+
+    for (const [keyword, prio] of Object.entries(priorityKeywords)) {
+      if (path.includes(keyword)) {
+        priority = Math.min(priority, prio);
+      }
+    }
+
+    return { url, priority, path };
+  });
+
+  // Sort by priority (lower = more important)
+  urlsWithPriority.sort((a, b) => a.priority - b.priority);
+
+  return urlsWithPriority.map(item => item.url);
+}
+
+// Scrape multiple pages from a website using dynamic page discovery
+// 1. Scrape homepage
+// 2. Discover all pages from navigation links
+// 3. Prioritize pages by importance (manufacturing, production, about, etc.)
+// 4. Scrape top priority pages
 async function scrapeMultiplePages(baseUrl) {
   if (!baseUrl.startsWith('http')) {
     baseUrl = 'https://' + baseUrl;
@@ -3433,15 +3726,6 @@ async function scrapeMultiplePages(baseUrl) {
     const parsedUrl = new URL(baseUrl);
     const origin = parsedUrl.origin;
 
-    // Common page paths to scrape for additional info
-    const pagePaths = [
-      '', // homepage
-      '/contact', '/contact-us', '/contact.html', '/contactus',
-      '/about', '/about-us', '/about.html', '/aboutus', '/company',
-      '/partners', '/clients', '/customers', '/our-clients', '/our-customers',
-      '/products', '/services', '/solutions'
-    ];
-
     const results = {
       homepage: null,
       allContent: '',
@@ -3449,44 +3733,74 @@ async function scrapeMultiplePages(baseUrl) {
       pagesScraped: []
     };
 
-    // Scrape homepage first
+    // Step 1: Scrape homepage first
     const homepageResult = await scrapeWebsite(baseUrl);
-    if (homepageResult.success) {
-      results.homepage = homepageResult;
-      results.allContent += homepageResult.content + '\n\n';
-      results.allRawHtml += homepageResult.rawHtml + '\n\n';
-      results.pagesScraped.push(baseUrl);
+    if (!homepageResult.success) {
+      return homepageResult; // Return error if homepage fails
     }
 
-    // Scrape additional pages (limit to 4 to avoid timeout)
-    let pagesScraped = 1;
-    for (const path of pagePaths) {
-      if (path === '' || pagesScraped >= 5) continue;
+    results.homepage = homepageResult;
+    results.allContent = homepageResult.content + '\n\n';
+    results.allRawHtml = homepageResult.rawHtml + '\n\n';
+    results.pagesScraped.push(baseUrl);
 
-      const pageUrl = origin + path;
+    // Step 2: Discover pages from navigation
+    const discoveredPages = discoverPagesFromNavigation(homepageResult.rawHtml, origin);
+
+    // Step 3: Also add common fallback paths that might not be in navigation
+    // (some sites hide these in footer or don't link them prominently)
+    const fallbackPaths = [
+      '/manufacturing', '/production', '/factory', '/facilities', '/plant',
+      '/capabilities', '/capacity', '/operations',
+      '/about', '/about-us', '/about.html', '/aboutus', '/company', '/profile', '/company-profile',
+      '/contact', '/contact-us', '/contact.html', '/contactus',
+      '/products', '/services'
+    ];
+
+    for (const path of fallbackPaths) {
+      const fallbackUrl = origin + path;
+      if (!discoveredPages.includes(fallbackUrl) && !results.pagesScraped.includes(fallbackUrl)) {
+        discoveredPages.push(fallbackUrl);
+      }
+    }
+
+    // Step 4: Scrape discovered pages (limit to 8 to balance coverage vs timeout)
+    const MAX_PAGES = 8;
+    const scrapedUrls = new Set([baseUrl]);
+
+    for (const pageUrl of discoveredPages) {
+      if (results.pagesScraped.length >= MAX_PAGES) break;
+
+      // Skip if already scraped (handles duplicates and variations)
+      const normalizedUrl = pageUrl.replace(/\/+$/, '').toLowerCase();
+      if (scrapedUrls.has(normalizedUrl)) continue;
+      scrapedUrls.add(normalizedUrl);
+
       try {
         const pageResult = await scrapeWebsite(pageUrl);
-        if (pageResult.success && pageResult.content.length > 200) {
-          results.allContent += `\n\n=== ${path.toUpperCase()} PAGE ===\n` + pageResult.content;
+        if (pageResult.success && pageResult.content && pageResult.content.length > 200) {
+          // Extract path for logging
+          const pagePath = new URL(pageUrl).pathname;
+          results.allContent += `\n\n=== ${pagePath.toUpperCase()} PAGE ===\n` + pageResult.content;
           results.allRawHtml += pageResult.rawHtml + '\n\n';
           results.pagesScraped.push(pageUrl);
-          pagesScraped++;
-          console.log(`    Scraped additional page: ${path}`);
+          console.log(`    Scraped additional page: ${pagePath}`);
         }
       } catch {
-        // Ignore failed pages
+        // Ignore failed pages - they might not exist
       }
     }
 
     return {
       success: true,
-      content: results.allContent.substring(0, 50000), // More content from multiple pages
+      content: results.allContent.substring(0, 80000), // Increased limit for more pages
       rawHtml: results.allRawHtml,
       pagesScraped: results.pagesScraped,
       url: baseUrl
     };
   } catch (e) {
     // Fallback to single page if multi-page fails
+    console.log(`    Multi-page scraping failed: ${e.message}, falling back to single page`);
     return scrapeWebsite(baseUrl);
   }
 }
@@ -5601,17 +5915,40 @@ QUALITY & COMPLIANCE:
 - Certifications (ISO, HACCP, GMP, FDA, CE, halal, etc.)
 - Patents or proprietary technology
 
-OUTPUT JSON:
+OUTPUT JSON - CRITICAL: INCLUDE SOURCE QUOTES FOR VERIFICATION:
 {
   "key_metrics": [
-    {"label": "Key Metrics", "value": "- Production capacity of 800+ tons per month\\n- 250+ machines\\n- 300+ employees"},
-    {"label": "Key Suppliers", "value": "6 suppliers including Hikvision, Dahua, Paradox, ZKTeco, Ruijie"},
-    {"label": "Export Countries", "value": "SEA, South Asia, North Africa"},
-    {"label": "Distribution Network", "value": "700 domestic distribution partners"},
-    {"label": "Certification", "value": "ISO 9001, ISO 14001"},
-    {"label": "Notable Partnerships", "value": "Launch partnership with Dainichiseika Color & Chemicals (Japanese) in 2009 technology transfer, joint product development and marketing"}
+    {
+      "label": "Key Metrics",
+      "value": "- Production capacity of 800 tons/month\\n- 250 machines\\n- 300 employees",
+      "source_quotes": ["กำลังการผลิต 800 ตัน/เดือน", "250 เครื่องจักร", "พนักงาน 300 คน"]
+    },
+    {
+      "label": "Key Suppliers",
+      "value": "6 suppliers including Hikvision, Dahua, Paradox, ZKTeco, Ruijie",
+      "source_quotes": ["Our partners include Hikvision, Dahua, Paradox, ZKTeco, and Ruijie"]
+    },
+    {
+      "label": "Export Countries",
+      "value": "Thailand, Sri Lanka, Bangladesh, UAE, Vietnam",
+      "source_quotes": ["we export to Thailand, Sri Lanka, Bangladesh, UAE, and Vietnam"]
+    },
+    {
+      "label": "Certification",
+      "value": "ISO 9001, ISO 14001",
+      "source_quotes": ["ISO 9001:2015", "ISO 14001:2015"]
+    }
   ]
 }
+
+MANDATORY SOURCE QUOTE RULES:
+1. Every metric MUST include "source_quotes" array with EXACT text from the website that proves this data
+2. Source quotes can be in ANY language (Thai, Chinese, etc.) - copy the EXACT text from the website
+3. If you cannot find the EXACT source text to quote, DO NOT include that metric - it would be hallucination
+4. For numerical metrics, the quote MUST contain the actual number (e.g., "800 ตัน/เดือน" for 800 tons/month)
+5. The verification system will check if your quotes actually exist in the scraped content
+6. If your quote is not found in the content, the metric will be REJECTED as hallucination
+7. This is a HARD requirement - metrics without valid source_quotes will be automatically removed
 
 MERGE DUPLICATIVE INFORMATION:
 When you find BOTH a count AND specific names for the same category, MERGE them into ONE coherent entry:
@@ -6334,90 +6671,72 @@ ${(markers.identity_snippets || []).join('\n')}`;
 ${scrapedContent ? scrapedContent.substring(0, 30000) : 'No source content available'}`;
     }
 
-    const prompt = `You are a data validation agent. Your job is to COMPARE the extracted data against the SOURCE CONTENT and FIX any issues.
+    const prompt = `You are a data VALIDATION and CLEANUP agent. Your job is to VERIFY extracted data against SOURCE CONTENT and REMOVE anything that cannot be verified.
+
+CRITICAL RULE: You can ONLY REMOVE or FIX data. You CANNOT ADD new data.
+- If something is not in the extracted data, DO NOT add it
+- If something in extracted data cannot be verified in source, REMOVE IT
+- The extraction step already happened - your job is just to clean up mistakes
 
 ${sourceSection}
 
-## EXTRACTED DATA (may have errors or missing info):
+## EXTRACTED DATA (verify each item against source):
 ${JSON.stringify(companyData, null, 2)}
 
 ## YOUR TASKS:
 
-### 1. VALIDATE HQ/LOCATION (CRITICAL)
-- Search the SOURCE for actual address/location (look for postal codes, province names)
-- If extracted location does NOT match what's in the source, FIX IT
-- Thailand: Look for province names like "Samut Sakhon", "Samut Prakan", "Chonburi", "Rayong" - NOT always Bangkok!
-- FORMAT: EXACTLY 2 LEVELS - "Province/State, Country" (e.g., "Bangkok, Thailand", "Selangor, Malaysia")
-- Singapore: "Area, Singapore" - MUST identify specific area! Look for:
-  - Postal codes: 60xxxx=Jurong, 62xxxx=Tuas, 01-09xxxx=CBD/Downtown, 5xxxxx=Changi, 7xxxxx=Woodlands
-  - Keywords: "Jurong", "Tuas", "Changi", "CBD", "Orchard", "Woodlands", "Tampines"
-  - If cannot identify area, use "Central, Singapore"
-- CRITICAL - ENGLISH ONLY: NEVER output Thai/Chinese/Vietnamese text!
-  - WRONG: "กรุงเทพฯ, ประเทศไทย" ← NEVER output this!
-  - CORRECT: "Bangkok, Thailand"
-  - If source has Thai text like "สมุทรสาคร", output "Samut Sakhon, Thailand"
+### 1. VALIDATE HQ/LOCATION
+- Search SOURCE for actual address/location
+- If extracted location cannot be verified in source, keep it but note the uncertainty
+- FORMAT: "Province/State, Country" (e.g., "Bangkok, Thailand", "Selangor, Malaysia")
+- Singapore: Must have real area name - "Jurong", "Tuas", "Woodlands", "Changi", etc.
+  - INVALID areas to REMOVE: "Central" (not a real place), "Singapore" alone
+  - If postal code visible: 60xxxx=Jurong, 62xxxx=Tuas, 7xxxxx=Woodlands
+  - If cannot find real area in source, leave location empty rather than guess
+- TRANSLATE to English if in Thai/Chinese/etc.
 
-### 2. FIND MISSED STATISTICS (CRITICAL)
-- Scan SOURCE for visible numbers/statistics that were NOT extracted:
-  - Employee counts (e.g., "300 employees", "300+ staff")
-  - Production capacity (e.g., "800 tons/month", "500 units/day")
-  - Customer counts (e.g., "60 customers", "700 partners")
-  - Machine counts (e.g., "250 machines")
-  - Partner/distributor counts (e.g., "700 domestic partners")
-  - Any other numerical metrics
-- MULTILINGUAL PATTERNS TO LOOK FOR:
-  - THAI: "800 ตัน/เดือน" = 800 tons/month, "250 เครื่อง" = 250 machines, "700 พันธมิตร" = 700 partners
-  - VIETNAMESE: "800 tấn/tháng", "250 máy", "700 đối tác"
-  - INDONESIAN: "800 ton/bulan", "250 mesin", "700 mitra"
-  - CHINESE: "800吨/月", "250台设备", "700家经销商"
-  - KOREAN: "800톤/월", "250대 기계", "700개 파트너"
-  - HINDI: "800 टन/माह", "250 मशीन", "700 वितरक"
-  - BENGALI: "800 টন/মাস", "250 মেশিন", "700 পরিবেশক"
-  - Numbers next to ANY non-English text are likely important!
-- ADD any found statistics to key_metrics that are missing
+### 2. VERIFY KEY METRICS (REMOVE WHAT CAN'T BE VERIFIED)
+For EACH metric in key_metrics:
+- Search SOURCE for evidence of this data
+- If you CANNOT find the number/claim in the source content, REMOVE the metric
+- Example: If key_metrics says "300 employees" but source has no mention of 300 or employees, REMOVE IT
+- If metric has placeholder pattern (brand1, Customer A, etc.), REMOVE IT
+- If metric has "0" value (e.g., "0 Customers", "0 Projects"), REMOVE IT
+- If metric says "Not specified", "N/A", "Unknown", REMOVE IT
 
-### 3. FIND MISSED DISTRIBUTION/EXPORT INFO (CRITICAL)
-- Scan SOURCE for country names mentioned with "distributor", "agent", "export", "market"
-- Example: "agents across Thailand, Sri Lanka, Pakistan, Bangladesh, UAE" → capture ALL countries
-- ADD to key_metrics if missing
+### 3. CLEANUP (REMOVE GARBAGE)
+REMOVE any metric containing:
+- Placeholder patterns: "brand1, brand2", "Customer A, Customer B", "Supplier 1, Supplier 2"
+- Zero values: "0 Something", starting with "0 "
+- Empty values: "Not specified", "N/A", "Unknown", "Not available", "Various"
+- Vague descriptions: "Quality Standards", "Innovation Focus", "Service Excellence"
+- Marketing fluff without data: "High quality products", "Industry leading"
 
-### 4. FIND MISSED PARTNERSHIPS
-- Scan SOURCE for partnership/JV mentions (e.g., "partnership with Dainichiseika", "technology transfer")
-- ADD to key_metrics if missing
+### 4. TRANSLATE TO ENGLISH
+- All output must be English (A-Z only)
+- Translate Thai/Chinese/Vietnamese text to English
 
-### 5. CLEAN UP (CRITICAL - CATCH ALL GARBAGE)
-- REJECT AND REMOVE fake placeholder patterns:
-  - Alphabetical: "Distributor A, Distributor B", "Partner X, Partner Y", "Customer 1, Customer 2"
-  - Numbered: "brand1, brand2, brand3", "product1, product2", "supplier1, supplier2"
-  - Generic: "Company A", "Item 1", "Sample Brand"
-  - ANY pattern where items are numbered or lettered sequentially is FAKE - REMOVE IT
-- Remove empty metrics with "Not specified", "N/A", "Unknown", "Not available"
-- TRANSLATE ALL non-English to English (Thai, Chinese, Vietnamese, etc.)
-- Remove marketing fluff words like "high-quality", "premium", "leading"
-- ALL OUTPUT MUST BE IN ENGLISH (A-Z letters only) - NO Thai/Chinese/Vietnamese characters!
-- If you see placeholder data, set that field to empty or remove the metric entirely
+### 5. CHECK FOR REDUNDANCY
+- If "Factory Established" has same year as "Est. Year", REMOVE "Factory Established" metric
+- Merge duplicate information
 
 ## OUTPUT FORMAT
-Return JSON with:
-- Fixed/validated data
-- "validation_notes": list what you fixed/added
-- "issues_found": true if you found ANY issues or missing info, false if extraction was perfect
-- "missed_items": list of things in source that SHOULD be metrics but weren't extracted (for re-extraction)
-
 {
   "company_name": "...",
   "established_year": "...",
-  "location": "CORRECTED location based on source",
+  "location": "VERIFIED location or empty if unverifiable",
   "business": "...",
   "message": "...",
   "title": "...",
-  "key_metrics": [array with ADDED missing metrics],
+  "key_metrics": [ONLY metrics that can be VERIFIED in source - remove unverifiable ones],
   "breakdown_title": "...",
   "breakdown_items": [...],
-  "validation_notes": ["Fixed HQ from Bangkok to Samut Sakhon", "Added 800 tons/month production capacity"],
-  "issues_found": true,
-  "missed_items": ["300 employees mentioned but not extracted", "partnership with Dainichiseika not captured"]
+  "validation_notes": ["Removed unverifiable metric X", "Fixed location from A to B"],
+  "issues_found": true/false,
+  "removed_metrics": ["List of metrics that were removed because they couldn't be verified"]
 }
+
+REMEMBER: You can only REMOVE or FIX. Never ADD new data. If in doubt, REMOVE.
 
 Return ONLY valid JSON.`;
 
@@ -6657,9 +6976,15 @@ async function processSingleWebsite(website, index, total) {
     }
 
     // Use only key metrics from scraped website (no web search for metrics to prevent hallucination)
-    const allKeyMetrics = metricsInfo.key_metrics || [];
+    const rawKeyMetrics = metricsInfo.key_metrics || [];
 
-    // Merge regex-extracted metrics with AI-extracted metrics
+    // ===== QUOTE VERIFICATION =====
+    // Filter AI-extracted metrics by verifying source quotes exist in scraped content
+    // This prevents hallucination by requiring proof for every claim
+    console.log(`  [${index + 1}] Step 5c: Verifying ${rawKeyMetrics.length} AI-extracted metrics against source content...`);
+    const allKeyMetrics = filterMetricsByVerification(rawKeyMetrics, scraped.content, index + 1);
+
+    // Merge regex-extracted metrics with VERIFIED AI-extracted metrics
     // Regex metrics are ground truth (deterministic), so they take precedence
     const mergedMetrics = [...allKeyMetrics];
     if (regexMetrics.office_count && !allKeyMetrics.some(m => /office|branch|location/i.test(m.label))) {
@@ -7223,8 +7548,10 @@ app.post('/api/generate-ppt', async (req, res) => {
           searchedInfo = await searchMissingInfo(basicInfo.company_name, website, missingFields);
         }
 
-        // Merge regex metrics with AI metrics
-        const allKeyMetrics = metricsInfo.key_metrics || [];
+        // Merge regex metrics with VERIFIED AI metrics
+        const rawKeyMetrics = metricsInfo.key_metrics || [];
+        // Apply quote verification to prevent hallucination
+        const allKeyMetrics = filterMetricsByVerification(rawKeyMetrics, scraped.content, 1);
         const mergedMetrics = [...allKeyMetrics];
         if (regexMetrics.office_count && !allKeyMetrics.some(m => /office|branch|location/i.test(m.label))) {
           mergedMetrics.push({ value: String(regexMetrics.office_count), label: normalizeLabel(regexMetrics.office_text || 'Offices') });
