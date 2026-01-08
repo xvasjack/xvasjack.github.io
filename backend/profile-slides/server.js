@@ -2730,30 +2730,20 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       }
 
       // ===== LOGO (top right of slide) =====
-      // Only use Clearbit for real logos - skip fallback services that return letter placeholders
-      if (company.website && typeof company.website === 'string') {
+      // Use pre-extracted logo from processing pipeline (cascade: Clearbit → og:image → apple-touch-icon → img[logo] → favicon)
+      if (company._logo?.data) {
         try {
-          const domain = company.website.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
-
-          // Only try Clearbit - it returns real logos or fails, never letter placeholders
-          const logoUrl = `https://logo.clearbit.com/${domain}`;
-          console.log(`  Trying logo from: ${logoUrl}`);
-          const logoBase64 = await fetchImageAsBase64(logoUrl);
-
-          if (logoBase64) {
-            console.log(`  Logo fetched successfully from ${logoUrl}`);
-            // Use square container to prevent stretching (logos are typically square)
-            slide.addImage({
-              data: `data:image/png;base64,${logoBase64}`,
-              x: 12.1, y: 0.12, w: 0.7, h: 0.7,
-              sizing: { type: 'contain', w: 0.7, h: 0.7 }
-            });
-          } else {
-            console.log(`  No logo available for ${domain} - skipping (no placeholder)`);
-          }
+          console.log(`  Using pre-extracted logo (source: ${company._logo.source})`);
+          slide.addImage({
+            data: company._logo.data,
+            x: 12.1, y: 0.12, w: 0.7, h: 0.7,
+            sizing: { type: 'contain', w: 0.7, h: 0.7 }
+          });
         } catch (e) {
-          console.log('Logo fetch failed for', company.website, e.message);
+          console.log('Logo add failed for', company.website, e.message);
         }
+      } else {
+        console.log(`  No logo available for ${company.website} - skipping (no placeholder)`);
       }
 
       // ===== SECTION HEADERS =====
@@ -3266,6 +3256,7 @@ const CURRENCY_EXCHANGE = {
 };
 
 // Scrape website and convert to clean text (similar to fetchWebsite but returns more content)
+// Returns: { success, content, rawHtml, url } - rawHtml for logo/structured data extraction
 async function scrapeWebsite(url) {
   try {
     // Normalize URL
@@ -3313,10 +3304,490 @@ async function scrapeWebsite(url) {
       return { success: false, error: 'Insufficient content' };
     }
 
-    return { success: true, content: cleanText.substring(0, 25000), url };
+    // Return both cleaned content AND raw HTML for logo/metadata extraction
+    return { success: true, content: cleanText.substring(0, 25000), rawHtml: html, url };
   } catch (e) {
     return { success: false, error: e.message || 'Connection failed' };
   }
+}
+
+// Scrape multiple pages from a website (homepage + contact + about + partners)
+// This ensures we capture HQ address from Contact, customer info from Partners, etc.
+async function scrapeMultiplePages(baseUrl) {
+  if (!baseUrl.startsWith('http')) {
+    baseUrl = 'https://' + baseUrl;
+  }
+
+  try {
+    const parsedUrl = new URL(baseUrl);
+    const origin = parsedUrl.origin;
+
+    // Common page paths to scrape for additional info
+    const pagePaths = [
+      '', // homepage
+      '/contact', '/contact-us', '/contact.html', '/contactus',
+      '/about', '/about-us', '/about.html', '/aboutus', '/company',
+      '/partners', '/clients', '/customers', '/our-clients', '/our-customers',
+      '/products', '/services', '/solutions'
+    ];
+
+    const results = {
+      homepage: null,
+      allContent: '',
+      allRawHtml: '',
+      pagesScraped: []
+    };
+
+    // Scrape homepage first
+    const homepageResult = await scrapeWebsite(baseUrl);
+    if (homepageResult.success) {
+      results.homepage = homepageResult;
+      results.allContent += homepageResult.content + '\n\n';
+      results.allRawHtml += homepageResult.rawHtml + '\n\n';
+      results.pagesScraped.push(baseUrl);
+    }
+
+    // Scrape additional pages (limit to 4 to avoid timeout)
+    let pagesScraped = 1;
+    for (const path of pagePaths) {
+      if (path === '' || pagesScraped >= 5) continue;
+
+      const pageUrl = origin + path;
+      try {
+        const pageResult = await scrapeWebsite(pageUrl);
+        if (pageResult.success && pageResult.content.length > 200) {
+          results.allContent += `\n\n=== ${path.toUpperCase()} PAGE ===\n` + pageResult.content;
+          results.allRawHtml += pageResult.rawHtml + '\n\n';
+          results.pagesScraped.push(pageUrl);
+          pagesScraped++;
+          console.log(`    Scraped additional page: ${path}`);
+        }
+      } catch {
+        // Ignore failed pages
+      }
+    }
+
+    return {
+      success: true,
+      content: results.allContent.substring(0, 50000), // More content from multiple pages
+      rawHtml: results.allRawHtml,
+      pagesScraped: results.pagesScraped,
+      url: baseUrl
+    };
+  } catch (e) {
+    // Fallback to single page if multi-page fails
+    return scrapeWebsite(baseUrl);
+  }
+}
+
+// Extract logo from website using cascade: Clearbit → og:image → apple-touch-icon → img[logo] → favicon
+async function extractLogoFromWebsite(websiteUrl, rawHtml) {
+  if (!websiteUrl) return null;
+
+  try {
+    // Normalize URL and extract domain
+    if (!websiteUrl.startsWith('http')) {
+      websiteUrl = 'https://' + websiteUrl;
+    }
+    const parsedUrl = new URL(websiteUrl);
+    const domain = parsedUrl.hostname.replace(/^www\./, '');
+    const origin = parsedUrl.origin;
+
+    console.log(`  [Logo] Trying extraction cascade for ${domain}`);
+
+    // 1. Try Clearbit (works for many companies)
+    try {
+      const clearbitUrl = `https://logo.clearbit.com/${domain}`;
+      const logoBase64 = await fetchImageAsBase64(clearbitUrl);
+      if (logoBase64) {
+        console.log(`  [Logo] Found via Clearbit`);
+        return { data: `data:image/png;base64,${logoBase64}`, source: 'clearbit' };
+      }
+    } catch { /* continue to next */ }
+
+    // 2. Try og:image from HTML (common for brand logos)
+    if (rawHtml) {
+      const ogImageMatch = rawHtml.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
+                           rawHtml.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
+      if (ogImageMatch && ogImageMatch[1]) {
+        try {
+          let ogUrl = ogImageMatch[1];
+          if (ogUrl.startsWith('/')) ogUrl = origin + ogUrl;
+          if (ogUrl.startsWith('http')) {
+            const logoBase64 = await fetchImageAsBase64(ogUrl);
+            if (logoBase64) {
+              console.log(`  [Logo] Found via og:image: ${ogUrl}`);
+              return { data: `data:image/png;base64,${logoBase64}`, source: 'og:image' };
+            }
+          }
+        } catch { /* continue */ }
+      }
+
+      // 3. Try apple-touch-icon (high-quality brand icon)
+      const appleIconMatch = rawHtml.match(/<link[^>]*rel=["']apple-touch-icon["'][^>]*href=["']([^"']+)["']/i) ||
+                             rawHtml.match(/<link[^>]*href=["']([^"']+)["'][^>]*rel=["']apple-touch-icon["']/i);
+      if (appleIconMatch && appleIconMatch[1]) {
+        try {
+          let iconUrl = appleIconMatch[1];
+          if (iconUrl.startsWith('/')) iconUrl = origin + iconUrl;
+          if (iconUrl.startsWith('http')) {
+            const logoBase64 = await fetchImageAsBase64(iconUrl);
+            if (logoBase64) {
+              console.log(`  [Logo] Found via apple-touch-icon: ${iconUrl}`);
+              return { data: `data:image/png;base64,${logoBase64}`, source: 'apple-touch-icon' };
+            }
+          }
+        } catch { /* continue */ }
+      }
+
+      // 4. Try finding <img> with "logo" in src, class, id, or alt
+      const imgLogoPatterns = [
+        /<img[^>]*src=["']([^"']*logo[^"']*)["']/gi,
+        /<img[^>]*class=["'][^"']*logo[^"']*["'][^>]*src=["']([^"']+)["']/gi,
+        /<img[^>]*id=["'][^"']*logo[^"']*["'][^>]*src=["']([^"']+)["']/gi,
+        /<img[^>]*alt=["'][^"']*logo[^"']*["'][^>]*src=["']([^"']+)["']/gi
+      ];
+
+      for (const pattern of imgLogoPatterns) {
+        const matches = [...rawHtml.matchAll(pattern)];
+        for (const match of matches) {
+          if (match[1]) {
+            try {
+              let imgUrl = match[1];
+              // Skip tiny icons, sprites, placeholder images
+              if (imgUrl.includes('sprite') || imgUrl.includes('1x1') || imgUrl.includes('placeholder')) continue;
+              if (imgUrl.startsWith('/')) imgUrl = origin + imgUrl;
+              if (imgUrl.startsWith('http')) {
+                const logoBase64 = await fetchImageAsBase64(imgUrl);
+                if (logoBase64) {
+                  console.log(`  [Logo] Found via img[logo]: ${imgUrl}`);
+                  return { data: `data:image/png;base64,${logoBase64}`, source: 'html-img' };
+                }
+              }
+            } catch { /* continue */ }
+          }
+        }
+      }
+    }
+
+    // 5. Try Google Favicon as last resort (at least shows something)
+    try {
+      const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+      const logoBase64 = await fetchImageAsBase64(faviconUrl);
+      if (logoBase64) {
+        console.log(`  [Logo] Using Google favicon for ${domain}`);
+        return { data: `data:image/png;base64,${logoBase64}`, source: 'google-favicon' };
+      }
+    } catch { /* no logo available */ }
+
+    console.log(`  [Logo] No logo found for ${domain}`);
+    return null;
+  } catch (e) {
+    console.log(`  [Logo] Error extracting logo: ${e.message}`);
+    return null;
+  }
+}
+
+// Extract customer/partner names from image alt texts and filenames
+// Returns array of company names found in images
+function extractCustomerNamesFromImages(rawHtml) {
+  if (!rawHtml) return [];
+
+  const customerNames = new Set();
+
+  // Pattern 1: Extract from alt text of images in client/customer/partner sections
+  const imgAltPattern = /<img[^>]*alt=["']([^"']+)["'][^>]*>/gi;
+  let match;
+  while ((match = imgAltPattern.exec(rawHtml)) !== null) {
+    const altText = match[1].trim();
+    // Skip generic alt texts
+    if (altText.length > 2 && altText.length < 100 &&
+        !altText.toLowerCase().includes('logo') &&
+        !altText.toLowerCase().includes('image') &&
+        !altText.toLowerCase().includes('photo') &&
+        !altText.toLowerCase().includes('icon') &&
+        !altText.toLowerCase().includes('banner')) {
+      // Clean the name
+      const cleaned = cleanCompanyName(altText);
+      if (cleaned && cleaned.length > 2) {
+        customerNames.add(cleaned);
+      }
+    }
+  }
+
+  // Pattern 2: Extract from image filenames (fallback when no alt text)
+  // e.g., /images/clients/sinarmas-logo.png → Sinarmas
+  const imgSrcPattern = /<img[^>]*src=["']([^"']+)["'][^>]*>/gi;
+  while ((match = imgSrcPattern.exec(rawHtml)) !== null) {
+    const src = match[1];
+    // Look for images in client/customer/partner directories
+    if (/client|customer|partner|brand|logo/i.test(src)) {
+      // Extract filename without extension
+      const filename = src.split('/').pop().split('.')[0];
+      if (filename) {
+        // Clean up filename: remove common suffixes, convert hyphens to spaces
+        const name = filename
+          .replace(/-logo|-icon|-brand|-img|-image$/gi, '')
+          .replace(/[-_]/g, ' ')
+          .replace(/\d+$/g, '') // Remove trailing numbers
+          .trim();
+        if (name.length > 2 && name.length < 50) {
+          // Capitalize first letter of each word
+          const capitalized = name.split(' ')
+            .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+            .join(' ');
+          const cleaned = cleanCompanyName(capitalized);
+          if (cleaned) {
+            customerNames.add(cleaned);
+          }
+        }
+      }
+    }
+  }
+
+  return Array.from(customerNames).slice(0, 20); // Limit to 20 names
+}
+
+// Multilingual regex extraction for key metrics (deterministic, no AI hallucination)
+// Covers: English, Thai, Vietnamese, Indonesian, Malay, Korean, Hindi, Chinese, Japanese
+function extractMetricsFromText(text) {
+  if (!text) return {};
+
+  const metrics = {};
+
+  // ===== OFFICE/BRANCH COUNTS =====
+  // English: "12 offices", "5 branches", "8 locations"
+  // Thai: "12 สาขา" (branches), "5 สำนักงาน" (offices)
+  // Vietnamese: "12 văn phòng" (offices), "5 chi nhánh" (branches)
+  // Indonesian/Malay: "12 kantor" (offices), "5 cabang" (branches)
+  // Korean: "12개 사무소" (offices), "5개 지점" (branches)
+  // Hindi: "12 कार्यालय" (offices)
+  // Chinese: "12个办事处" (offices), "5个分公司" (branches)
+  // Japanese: "12の事務所" (offices), "5支店" (branches)
+  const officePatterns = [
+    /(\d+)\s*(?:offices?|branches?|locations?|outlets?|showrooms?|centers?|stores?)/gi,
+    /(\d+)\s*(?:สาขา|สำนักงาน)/gi, // Thai
+    /(\d+)\s*(?:văn phòng|chi nhánh|cửa hàng)/gi, // Vietnamese
+    /(\d+)\s*(?:kantor|cabang|lokasi|toko)/gi, // Indonesian/Malay
+    /(\d+)개?\s*(?:사무소|지점|매장|센터)/gi, // Korean
+    /(\d+)\s*(?:कार्यालय|शाखा)/gi, // Hindi
+    /(\d+)个?\s*(?:办事处|分公司|门店|办公室)/gi, // Chinese
+    /(\d+)の?\s*(?:事務所|支店|店舗|拠点)/gi, // Japanese
+    /across\s+(\d+)\s+(?:countries|cities|regions)/gi,
+    /in\s+(\d+)\s+(?:countries|cities|locations)/gi,
+    /presence\s+in\s+(\d+)\s+(?:countries|cities)/gi
+  ];
+
+  for (const pattern of officePatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const numMatch = match[0].match(/\d+/);
+      if (numMatch) {
+        const num = parseInt(numMatch[0]);
+        if (num >= 2 && num <= 500) { // Reasonable range
+          metrics.office_count = num;
+          metrics.office_text = match[0];
+          break;
+        }
+      }
+    }
+  }
+
+  // ===== EMPLOYEE COUNTS =====
+  // English: "500 employees", "1,000+ staff", "over 200 workers"
+  // Thai: "500 พนักงาน"
+  // Vietnamese: "500 nhân viên"
+  // Indonesian/Malay: "500 karyawan", "500 pekerja"
+  // Korean: "500명의 직원", "직원 500명"
+  // Hindi: "500 कर्मचारी"
+  // Chinese: "500名员工", "员工500人"
+  // Japanese: "500名の従業員", "従業員500人"
+  const employeePatterns = [
+    /(\d{1,3}(?:,\d{3})*|\d+)\s*\+?\s*(?:employees?|staff|workers?|personnel|people|team members?)/gi,
+    /(?:over|more than|approximately|about|around)\s+(\d{1,3}(?:,\d{3})*|\d+)\s*(?:employees?|staff|workers?)/gi,
+    /(\d{1,3}(?:,\d{3})*|\d+)\s*(?:พนักงาน|คน)/gi, // Thai
+    /(\d{1,3}(?:,\d{3})*|\d+)\s*(?:nhân viên|người lao động)/gi, // Vietnamese
+    /(\d{1,3}(?:,\d{3})*|\d+)\s*(?:karyawan|pekerja|staf)/gi, // Indonesian/Malay
+    /(\d{1,3}(?:,\d{3})*|\d+)명?의?\s*(?:직원|임직원|근로자)/gi, // Korean
+    /(?:직원|임직원)\s*(\d{1,3}(?:,\d{3})*|\d+)명/gi, // Korean (reversed)
+    /(\d{1,3}(?:,\d{3})*|\d+)\s*(?:कर्मचारी)/gi, // Hindi
+    /(\d{1,3}(?:,\d{3})*|\d+)名?(?:员工|職員|雇员)/gi, // Chinese
+    /(?:员工|職員)\s*(\d{1,3}(?:,\d{3})*|\d+)(?:人|名)/gi, // Chinese (reversed)
+    /(\d{1,3}(?:,\d{3})*|\d+)名?の?\s*(?:従業員|社員|スタッフ)/gi, // Japanese
+    /(?:従業員|社員)\s*(\d{1,3}(?:,\d{3})*|\d+)(?:人|名)/gi // Japanese (reversed)
+  ];
+
+  for (const pattern of employeePatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
+      if (numMatch) {
+        const num = parseInt(numMatch[0].replace(/,/g, ''));
+        if (num >= 5 && num <= 1000000) { // Reasonable range
+          metrics.employee_count = num;
+          metrics.employee_text = match[0];
+          break;
+        }
+      }
+    }
+  }
+
+  // ===== PRODUCTION CAPACITY =====
+  // Various units: tons, MT, units, pieces, sqm, MW, etc.
+  const capacityPatterns = [
+    /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:tons?|MT|tonnes?|metric tons?)\s*(?:per|\/)\s*(?:year|month|day|annum)/gi,
+    /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:units?|pieces?|pcs)\s*(?:per|\/)\s*(?:year|month|day)/gi,
+    /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:sqm|square meters?|sq\.?\s*m)\s*(?:per|\/|of)?\s*(?:year|month|production)?/gi,
+    /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:MW|megawatts?|GW|gigawatts?)\s*(?:capacity|installed)?/gi,
+    /capacity\s*(?:of|:)?\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:tons?|MT|units?|MW)/gi,
+    /ตัน\/ปี|ตันต่อปี/gi, // Thai: tons/year
+    /tấn\/năm|tấn mỗi năm/gi, // Vietnamese: tons/year
+    /톤\/년|연간.*?톤/gi // Korean: tons/year
+  ];
+
+  for (const pattern of capacityPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      metrics.capacity_text = match[0];
+      break;
+    }
+  }
+
+  // ===== YEARS OF EXPERIENCE =====
+  const yearsPatterns = [
+    /(\d+)\s*(?:\+\s*)?years?\s*(?:of\s+)?(?:experience|in\s+business|in\s+the\s+industry|in\s+operation)/gi,
+    /(?:over|more than)\s+(\d+)\s*years?/gi,
+    /since\s+(19\d{2}|20[0-2]\d)/gi,
+    /established\s+(?:in\s+)?(19\d{2}|20[0-2]\d)/gi,
+    /(\d+)\s*ปี\s*(?:ประสบการณ์|ในอุตสาหกรรม)/gi, // Thai
+    /(\d+)\s*năm\s*(?:kinh nghiệm|hoạt động)/gi, // Vietnamese
+    /(\d+)\s*tahun\s*(?:pengalaman|beroperasi)/gi, // Indonesian
+    /(\d+)년\s*(?:경험|역사|전통)/gi // Korean
+  ];
+
+  for (const pattern of yearsPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const numMatch = match[0].match(/\d+/);
+      if (numMatch) {
+        const num = parseInt(numMatch[0]);
+        if ((num >= 1 && num <= 100) || (num >= 1900 && num <= 2025)) {
+          metrics.years_experience = num <= 100 ? num : (2025 - num);
+          metrics.years_text = match[0];
+          break;
+        }
+      }
+    }
+  }
+
+  // ===== CERTIFICATIONS =====
+  const certPatterns = [
+    /ISO\s*\d{4,5}(?::\d{4})?/gi,
+    /HACCP|GMP|HALAL|FDA|CE|BSCI|WRAP|SEDEX|OEKO-TEX|FSC|PEFC/gi,
+    /(?:certified|certification|accredited)\s+(?:by|with)\s+[A-Z][A-Za-z\s]+/gi
+  ];
+
+  const certs = [];
+  for (const pattern of certPatterns) {
+    const matches = text.match(pattern);
+    if (matches) {
+      certs.push(...matches.map(m => m.toUpperCase().trim()));
+    }
+  }
+  if (certs.length > 0) {
+    metrics.certifications = [...new Set(certs)].slice(0, 10);
+  }
+
+  // ===== EXPORT COUNTRIES =====
+  const exportPatterns = [
+    /export(?:ing|s)?\s+to\s+(\d+)\s+(?:countries|nations|markets)/gi,
+    /(?:present|presence|available)\s+in\s+(\d+)\s+(?:countries|markets)/gi,
+    /(\d+)\s+(?:export\s+)?(?:countries|destinations|markets)/gi
+  ];
+
+  for (const pattern of exportPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const numMatch = match[0].match(/\d+/);
+      if (numMatch) {
+        const num = parseInt(numMatch[0]);
+        if (num >= 2 && num <= 200) {
+          metrics.export_countries = num;
+          metrics.export_text = match[0];
+          break;
+        }
+      }
+    }
+  }
+
+  // ===== FACTORY SIZE =====
+  const factorySizePatterns = [
+    /(\d{1,3}(?:,\d{3})*)\s*(?:sqm|square meters?|sq\.?\s*m|m2|m²)\s*(?:factory|plant|facility|warehouse|production)/gi,
+    /(?:factory|plant|facility|warehouse)\s*(?:of|:)?\s*(\d{1,3}(?:,\d{3})*)\s*(?:sqm|square meters?)/gi,
+    /(\d{1,3}(?:,\d{3})*)\s*(?:rai|acres?|hectares?)/gi
+  ];
+
+  for (const pattern of factorySizePatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      metrics.factory_size = match[0];
+      break;
+    }
+  }
+
+  return metrics;
+}
+
+// Extract JSON-LD structured data for address information
+function extractStructuredAddress(rawHtml) {
+  if (!rawHtml) return null;
+
+  try {
+    // Find JSON-LD script tags
+    const jsonLdPattern = /<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi;
+    let match;
+
+    while ((match = jsonLdPattern.exec(rawHtml)) !== null) {
+      try {
+        const jsonData = JSON.parse(match[1]);
+
+        // Handle array of schemas
+        const schemas = Array.isArray(jsonData) ? jsonData : [jsonData];
+
+        for (const schema of schemas) {
+          // Look for Organization, LocalBusiness, or Corporation
+          if (schema['@type'] && /Organization|LocalBusiness|Corporation|Company/i.test(schema['@type'])) {
+            const address = schema.address;
+            if (address) {
+              // Address could be a string or PostalAddress object
+              if (typeof address === 'string') {
+                return { formatted: address };
+              } else if (address['@type'] === 'PostalAddress' || address.streetAddress) {
+                return {
+                  street: address.streetAddress,
+                  city: address.addressLocality,
+                  region: address.addressRegion,
+                  country: address.addressCountry,
+                  postal: address.postalCode,
+                  formatted: [
+                    address.addressLocality,
+                    address.addressRegion,
+                    typeof address.addressCountry === 'object' ? address.addressCountry.name : address.addressCountry
+                  ].filter(Boolean).join(', ')
+                };
+              }
+            }
+          }
+        }
+      } catch {
+        // Invalid JSON, continue to next match
+      }
+    }
+  } catch (e) {
+    console.log(`  [StructuredData] Error parsing: ${e.message}`);
+  }
+
+  return null;
 }
 
 // AI Agent 1: Extract company name, established year, location
@@ -4551,9 +5022,9 @@ async function processSingleWebsite(website, index, total) {
   logMemoryUsage(`start company ${index + 1}`);
 
   try {
-    // Step 1: Scrape website
-    console.log(`  [${index + 1}] Step 1: Scraping website...`);
-    const scraped = await scrapeWebsite(trimmedWebsite);
+    // Step 1: Scrape website (now scrapes multiple pages: homepage + contact + about + partners)
+    console.log(`  [${index + 1}] Step 1: Scraping website (multi-page)...`);
+    const scraped = await scrapeMultiplePages(trimmedWebsite);
 
     if (!scraped.success) {
       console.log(`  [${index + 1}] Failed to scrape: ${scraped.error}`);
@@ -4568,12 +5039,42 @@ async function processSingleWebsite(website, index, total) {
         _error: `Failed to scrape: ${scraped.error}`
       };
     }
-    console.log(`  [${index + 1}] Scraped ${scraped.content.length} characters`);
+    const pagesScrapedCount = scraped.pagesScraped?.length || 1;
+    console.log(`  [${index + 1}] Scraped ${scraped.content.length} characters from ${pagesScrapedCount} pages`);
+    if (scraped.pagesScraped) {
+      console.log(`  [${index + 1}] Pages scraped: ${scraped.pagesScraped.join(', ')}`);
+    }
     // Log content preview for debugging (first 500 chars, useful for seeing what was scraped)
     console.log(`  [${index + 1}] Content preview: ${scraped.content.substring(0, 500).replace(/\n/g, ' ').replace(/\s+/g, ' ')}...`);
 
-    // Step 1b: Run Marker AI to identify important content (avoids truncation blind spots)
-    console.log(`  [${index + 1}] Step 1b: Running Marker AI to identify key content...`);
+    // Step 1a: Pre-extract metrics using deterministic regex (no AI hallucination)
+    console.log(`  [${index + 1}] Step 1a: Pre-extracting metrics with regex...`);
+    const regexMetrics = extractMetricsFromText(scraped.content);
+    if (Object.keys(regexMetrics).length > 0) {
+      console.log(`  [${index + 1}] Regex found: ${Object.keys(regexMetrics).filter(k => !k.endsWith('_text')).join(', ')}`);
+    }
+
+    // Step 1b: Extract structured address from JSON-LD (if available)
+    const structuredAddress = extractStructuredAddress(scraped.rawHtml);
+    if (structuredAddress) {
+      console.log(`  [${index + 1}] Found JSON-LD address: ${structuredAddress.formatted}`);
+    }
+
+    // Step 1c: Extract logo using cascade (Clearbit → og:image → apple-touch-icon → img[logo] → favicon)
+    console.log(`  [${index + 1}] Step 1c: Extracting company logo...`);
+    const logoResult = await extractLogoFromWebsite(trimmedWebsite, scraped.rawHtml);
+    if (logoResult) {
+      console.log(`  [${index + 1}] Logo found via ${logoResult.source}`);
+    }
+
+    // Step 1d: Extract customer/partner names from image alt texts
+    const customerNamesFromImages = extractCustomerNamesFromImages(scraped.rawHtml);
+    if (customerNamesFromImages.length > 0) {
+      console.log(`  [${index + 1}] Customer names from images: ${customerNamesFromImages.slice(0, 5).join(', ')}${customerNamesFromImages.length > 5 ? '...' : ''}`);
+    }
+
+    // Step 2: Run Marker AI to identify important content (avoids truncation blind spots)
+    console.log(`  [${index + 1}] Step 2: Running Marker AI to identify key content...`);
     const markerResult = await markImportantContent(scraped.content, trimmedWebsite);
 
     // Use marked content if available, otherwise fall back to raw content
@@ -4586,33 +5087,33 @@ async function processSingleWebsite(website, index, total) {
       console.log(`  [${index + 1}] Marker failed, using truncated raw content`);
     }
 
-    // Step 2: Extract basic info (company name, year, location)
+    // Step 3: Extract basic info (company name, year, location)
     // CRITICAL: Use RAW content for location extraction - this is the most important field
     // Marker might miss the actual address, so give extractBasicInfo the full picture
-    console.log(`  [${index + 1}] Step 2: Extracting company name, year, location...`);
+    console.log(`  [${index + 1}] Step 3: Extracting company name, year, location...`);
     const basicInfo = await extractBasicInfo(scraped.content, trimmedWebsite);
     console.log(`  [${index + 1}] Company: ${basicInfo.company_name || 'Not found'}`);
     if (basicInfo.location) console.log(`  [${index + 1}] Location extracted: ${basicInfo.location}`);
 
-    // Step 3: Extract business details
-    console.log(`  [${index + 1}] Step 3: Extracting business, message, footnote, title...`);
+    // Step 4: Extract business details
+    console.log(`  [${index + 1}] Step 4: Extracting business, message, footnote, title...`);
     const businessInfo = await extractBusinessInfo(contentForExtraction, basicInfo);
 
-    // Step 4: Extract key metrics
-    console.log(`  [${index + 1}] Step 4: Extracting key metrics...`);
+    // Step 5: Extract key metrics
+    console.log(`  [${index + 1}] Step 5: Extracting key metrics...`);
     const metricsInfo = await extractKeyMetrics(contentForExtraction, {
       company_name: basicInfo.company_name,
       business: businessInfo.business
     });
 
-    // Step 4b: Extract products/applications breakdown for right table
-    console.log(`  [${index + 1}] Step 4b: Extracting products/applications breakdown...`);
+    // Step 5b: Extract products/applications breakdown for right table
+    console.log(`  [${index + 1}] Step 5b: Extracting products/applications breakdown...`);
     const productsBreakdown = await extractProductsBreakdown(contentForExtraction, {
       company_name: basicInfo.company_name,
       business: businessInfo.business
     });
 
-    // Step 5: Search online for missing mandatory info (established_year, location)
+    // Step 6: Search online for missing mandatory info (established_year, location)
     // These are mandatory fields - search online if not found on website
     const missingFields = [];
     if (!basicInfo.established_year) missingFields.push('established_year');
@@ -4620,12 +5121,41 @@ async function processSingleWebsite(website, index, total) {
 
     let searchedInfo = {};
     if (missingFields.length > 0 && basicInfo.company_name) {
-      console.log(`  [${index + 1}] Step 5: Searching online for missing mandatory info: ${missingFields.join(', ')}...`);
+      console.log(`  [${index + 1}] Step 6: Searching online for missing mandatory info: ${missingFields.join(', ')}...`);
       searchedInfo = await searchMissingInfo(basicInfo.company_name, trimmedWebsite, missingFields);
     }
 
     // Use only key metrics from scraped website (no web search for metrics to prevent hallucination)
     const allKeyMetrics = metricsInfo.key_metrics || [];
+
+    // Merge regex-extracted metrics with AI-extracted metrics
+    // Regex metrics are ground truth (deterministic), so they take precedence
+    const mergedMetrics = [...allKeyMetrics];
+    if (regexMetrics.office_count && !allKeyMetrics.some(m => /office|branch|location/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.office_count), label: regexMetrics.office_text || 'offices' });
+    }
+    if (regexMetrics.employee_count && !allKeyMetrics.some(m => /employee|staff|worker/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.employee_count), label: 'employees' });
+    }
+    if (regexMetrics.years_experience && !allKeyMetrics.some(m => /year|experience/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.years_experience), label: 'years experience' });
+    }
+    if (regexMetrics.export_countries && !allKeyMetrics.some(m => /export|countr/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.export_countries), label: 'export countries' });
+    }
+    if (regexMetrics.capacity_text && !allKeyMetrics.some(m => /capacity|production/i.test(m.label))) {
+      mergedMetrics.push({ value: regexMetrics.capacity_text, label: 'production capacity' });
+    }
+    if (regexMetrics.certifications?.length > 0 && !allKeyMetrics.some(m => /certif|iso|haccp/i.test(m.label))) {
+      mergedMetrics.push({ value: regexMetrics.certifications.join(', '), label: 'certifications' });
+    }
+
+    // Determine location: prefer AI extraction, fallback to JSON-LD structured address
+    let finalLocation = ensureString(basicInfo.location || searchedInfo.location);
+    if (!finalLocation && structuredAddress?.formatted) {
+      finalLocation = structuredAddress.formatted;
+      console.log(`  [${index + 1}] Using JSON-LD address as fallback: ${finalLocation}`);
+    }
 
     // Combine all extracted data (mandatory fields supplemented by web search)
     // Use ensureString() for all AI-generated fields to prevent [object Object] issues
@@ -4633,19 +5163,23 @@ async function processSingleWebsite(website, index, total) {
       website: scraped.url,
       company_name: ensureString(basicInfo.company_name),
       established_year: ensureString(basicInfo.established_year || searchedInfo.established_year),
-      location: validateAndFixHQFormat(ensureString(basicInfo.location || searchedInfo.location), trimmedWebsite),
+      location: validateAndFixHQFormat(finalLocation, trimmedWebsite),
       business: ensureString(businessInfo.business),
       message: ensureString(businessInfo.message),
       footnote: ensureString(businessInfo.footnote),
       title: ensureString(businessInfo.title),
-      key_metrics: allKeyMetrics,  // Only from scraped website
+      key_metrics: mergedMetrics,  // Merged: AI + regex (ground truth)
       // Right-side content (varies by business type)
       business_type: productsBreakdown.business_type || 'industrial',
       breakdown_title: ensureString(productsBreakdown.breakdown_title) || 'Products and Applications',
       breakdown_items: productsBreakdown.breakdown_items || [],
       projects: productsBreakdown.projects || [],  // For project-based businesses
       products: productsBreakdown.products || [],  // For consumer-facing businesses
-      metrics: ensureString(metricsInfo.metrics)  // Fallback for old format
+      metrics: ensureString(metricsInfo.metrics),  // Fallback for old format
+      // Pre-extracted logo (from cascade: Clearbit → og:image → apple-touch-icon → img[logo] → favicon)
+      _logo: logoResult,
+      // Customer/partner names extracted from image alt texts and filenames
+      _customerNamesFromImages: customerNamesFromImages
     };
 
     // Log metrics count before review
@@ -4654,18 +5188,18 @@ async function processSingleWebsite(website, index, total) {
       console.log(`  [${index + 1}] Raw metrics: ${companyData.key_metrics.map(m => m.label).join(', ')}`);
     }
 
-    // Step 6: Run AI validator to compare extraction vs source and fix issues
+    // Step 7: Run AI validator to compare extraction vs source and fix issues
     // IMPORTANT: Pass RAW scraped content (not marked content) so validator can catch what Marker missed
     const validatorResult = await reviewAndCleanData(companyData, scraped.content, markerResult?.markers);
     companyData = validatorResult.data;
 
-    // Step 6b: ITERATIVE EXTRACTION - If validator found missed items, try to extract them
+    // Step 7b: ITERATIVE EXTRACTION - If validator found missed items, try to extract them
     // Trigger re-extraction if validator identified specific things that were missed
     const hasMissedItems = validatorResult.missedItems && validatorResult.missedItems.length > 0;
     const needsReExtraction = validatorResult.issuesFound && hasMissedItems;
 
     if (needsReExtraction) {
-      console.log(`  [${index + 1}] Step 6b: Re-extracting ${validatorResult.missedItems.length} missed items...`);
+      console.log(`  [${index + 1}] Step 7b: Re-extracting ${validatorResult.missedItems.length} missed items...`);
       validatorResult.missedItems.forEach(item => console.log(`    - ${item}`));
 
       // Build focused prompt with explicit missed items
@@ -4715,8 +5249,11 @@ async function processSingleWebsite(website, index, total) {
     console.log(`  [${index + 1}] ✓ Completed: ${companyData.title || companyData.company_name} (${companyData.key_metrics?.length || 0} metrics after review)`);
 
     // Memory cleanup: Release large objects to prevent OOM on Railway
-    // scraped.content can be 1-5MB per website, must release before next iteration
-    if (scraped) scraped.content = null;
+    // scraped.content and rawHtml can be 1-5MB per website, must release before next iteration
+    if (scraped) {
+      scraped.content = null;
+      scraped.rawHtml = null;
+    }
 
     return companyData;
 
@@ -4895,9 +5432,9 @@ app.post('/api/generate-ppt', async (req, res) => {
       logMemoryUsage(`start company ${i + 1}`);
 
       try {
-        // Step 1: Scrape website
-        console.log('  Step 1: Scraping website...');
-        const scraped = await scrapeWebsite(website);
+        // Step 1: Scrape website (now scrapes multiple pages)
+        console.log('  Step 1: Scraping website (multi-page)...');
+        const scraped = await scrapeMultiplePages(website);
 
         if (!scraped.success) {
           console.log(`  Failed to scrape: ${scraped.error}`);
@@ -4914,9 +5451,35 @@ app.post('/api/generate-ppt', async (req, res) => {
           console.log(`  Marked as inaccessible: ${companyName}`);
           continue;
         }
-        console.log(`  Scraped ${scraped.content.length} characters`);
+        const pagesScrapedCount = scraped.pagesScraped?.length || 1;
+        console.log(`  Scraped ${scraped.content.length} characters from ${pagesScrapedCount} pages`);
         // Log content preview for debugging (first 500 chars, useful for seeing what was scraped)
         console.log(`  Content preview: ${scraped.content.substring(0, 500).replace(/\n/g, ' ').replace(/\s+/g, ' ')}...`);
+
+        // Step 1a: Pre-extract metrics using deterministic regex
+        const regexMetrics = extractMetricsFromText(scraped.content);
+        if (Object.keys(regexMetrics).length > 0) {
+          console.log(`  Regex found: ${Object.keys(regexMetrics).filter(k => !k.endsWith('_text')).join(', ')}`);
+        }
+
+        // Step 1b: Extract structured address from JSON-LD
+        const structuredAddress = extractStructuredAddress(scraped.rawHtml);
+        if (structuredAddress) {
+          console.log(`  Found JSON-LD address: ${structuredAddress.formatted}`);
+        }
+
+        // Step 1c: Extract logo using cascade
+        console.log('  Step 1c: Extracting company logo...');
+        const logoResult = await extractLogoFromWebsite(website, scraped.rawHtml);
+        if (logoResult) {
+          console.log(`  Logo found via ${logoResult.source}`);
+        }
+
+        // Step 1d: Extract customer/partner names from image alt texts
+        const customerNamesFromImages = extractCustomerNamesFromImages(scraped.rawHtml);
+        if (customerNamesFromImages.length > 0) {
+          console.log(`  Customer names from images: ${customerNamesFromImages.slice(0, 5).join(', ')}${customerNamesFromImages.length > 5 ? '...' : ''}`);
+        }
 
         // Step 2: Extract basic info
         console.log('  Step 2: Extracting company name, year, location...');
@@ -4953,25 +5516,43 @@ app.post('/api/generate-ppt', async (req, res) => {
           searchedInfo = await searchMissingInfo(basicInfo.company_name, website, missingFields);
         }
 
+        // Merge regex metrics with AI metrics
         const allKeyMetrics = metricsInfo.key_metrics || [];
+        const mergedMetrics = [...allKeyMetrics];
+        if (regexMetrics.office_count && !allKeyMetrics.some(m => /office|branch|location/i.test(m.label))) {
+          mergedMetrics.push({ value: String(regexMetrics.office_count), label: regexMetrics.office_text || 'offices' });
+        }
+        if (regexMetrics.employee_count && !allKeyMetrics.some(m => /employee|staff|worker/i.test(m.label))) {
+          mergedMetrics.push({ value: String(regexMetrics.employee_count), label: 'employees' });
+        }
+
+        // Determine location: prefer AI extraction, fallback to JSON-LD
+        let finalLocation = ensureString(basicInfo.location || searchedInfo.location);
+        if (!finalLocation && structuredAddress?.formatted) {
+          finalLocation = structuredAddress.formatted;
+          console.log(`  Using JSON-LD address as fallback: ${finalLocation}`);
+        }
 
         let companyData = {
           website: scraped.url,
           company_name: ensureString(basicInfo.company_name),
           established_year: ensureString(basicInfo.established_year || searchedInfo.established_year),
-          location: validateAndFixHQFormat(ensureString(basicInfo.location || searchedInfo.location), website),
+          location: validateAndFixHQFormat(finalLocation, website),
           business: ensureString(businessInfo.business),
           message: ensureString(businessInfo.message),
           footnote: ensureString(businessInfo.footnote),
           title: ensureString(businessInfo.title),
-          key_metrics: allKeyMetrics,
+          key_metrics: mergedMetrics,
           // Right-side content (varies by business type)
           business_type: productsBreakdown.business_type || 'industrial',
           breakdown_title: ensureString(productsBreakdown.breakdown_title) || 'Products and Applications',
           breakdown_items: productsBreakdown.breakdown_items || [],
           projects: productsBreakdown.projects || [],  // For project-based businesses
           products: productsBreakdown.products || [],  // For consumer-facing businesses
-          metrics: ensureString(metricsInfo.metrics)
+          metrics: ensureString(metricsInfo.metrics),
+          // Pre-extracted logo and customer names
+          _logo: logoResult,
+          _customerNamesFromImages: customerNamesFromImages
         };
 
         // Step 6: Run AI validator to compare extraction vs source and fix issues
@@ -4988,7 +5569,10 @@ app.post('/api/generate-ppt', async (req, res) => {
         console.log(`  ✓ Completed: ${companyData.title || companyData.company_name}`);
         results.push(companyData);
 
-        if (scraped) scraped.content = null;
+        if (scraped) {
+          scraped.content = null;
+          scraped.rawHtml = null;
+        }
 
       } catch (error) {
         console.error(`  Error processing ${website}:`, error.message);
