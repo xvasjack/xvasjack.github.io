@@ -120,7 +120,15 @@ function verifyQuoteInContent(quote, scrapedContent) {
       contentNumbers.some(contentNum => contentNum === num || contentNum.includes(num))
     );
     if (allNumbersFound) {
-      // Also check for key non-numeric words (at least 2 must match)
+      // For non-ASCII text (Thai, Chinese, etc.), just verify numbers exist
+      // Thai/CJK doesn't have word boundaries, so word matching doesn't work
+      const hasNonAscii = /[^\x00-\x7F]/.test(quote);
+      if (hasNonAscii) {
+        // For Thai/CJK: if numbers match, that's good enough
+        return true;
+      }
+
+      // For ASCII text: also check for key non-numeric words (at least 2 must match)
       const quoteWords = normalizedQuote.split(' ').filter(w => w.length > 3 && !/^\d+$/.test(w));
       const matchedWords = quoteWords.filter(word => normalizedContent.includes(word));
       if (matchedWords.length >= Math.min(2, quoteWords.length)) {
@@ -129,7 +137,18 @@ function verifyQuoteInContent(quote, scrapedContent) {
     }
   }
 
-  // Method 3: Check for word overlap (for text-heavy quotes)
+  // Method 3: For non-ASCII quotes, check if significant portions exist
+  const hasNonAscii = /[^\x00-\x7F]/.test(quote);
+  if (hasNonAscii) {
+    // Split by spaces and numbers, check if each chunk exists
+    const chunks = quote.split(/[\s\d]+/).filter(c => c.length > 1);
+    const matchedChunks = chunks.filter(chunk => scrapedContent.includes(chunk));
+    if (matchedChunks.length >= Math.ceil(chunks.length * 0.5)) {
+      return true; // At least 50% of Thai/CJK chunks found
+    }
+  }
+
+  // Method 4: Check for word overlap (for text-heavy quotes) - ASCII only
   const quoteWords = normalizedQuote.split(' ').filter(w => w.length > 2);
   if (quoteWords.length >= 3) {
     const matchedWords = quoteWords.filter(word => normalizedContent.includes(word));
@@ -2076,6 +2095,35 @@ const COUNTRY_FLAG_MAP = {
   'hong kong': 'HK', 'hk': 'HK'
 };
 
+// Valid Singapore areas/districts (hardcoded since Singapore is small)
+// "Central" is NOT a valid area - it's a made-up placeholder
+const VALID_SINGAPORE_AREAS = [
+  // West
+  'jurong', 'jurong east', 'jurong west', 'tuas', 'pioneer', 'boon lay', 'clementi', 'bukit batok', 'bukit panjang', 'choa chu kang',
+  // North
+  'woodlands', 'sembawang', 'yishun', 'admiralty', 'marsiling',
+  // Northeast
+  'sengkang', 'punggol', 'hougang', 'serangoon', 'ang mo kio', 'bishan',
+  // East
+  'changi', 'tampines', 'pasir ris', 'bedok', 'simei', 'tanah merah', 'loyang',
+  // Central
+  'orchard', 'somerset', 'bugis', 'city hall', 'raffles place', 'marina bay', 'tanjong pagar', 'chinatown', 'little india', 'lavender', 'kallang', 'geylang', 'aljunied', 'paya lebar', 'eunos', 'kembangan', 'macpherson',
+  // South
+  'sentosa', 'harbourfront', 'telok blangah', 'bukit merah', 'alexandra', 'queenstown', 'commonwealth', 'tiong bahru',
+  // Industrial areas
+  'toh tuck', 'ubi', 'tai seng', 'benoi', 'kaki bukit', 'defu', 'senoko', 'kranji', 'sungei kadut', 'joo koon'
+];
+
+// Check if a Singapore area is valid
+function isValidSingaporeArea(area) {
+  if (!area) return false;
+  const lower = area.toLowerCase().trim();
+  // "Central" alone is NOT valid
+  if (lower === 'central') return false;
+  // Check if any valid area matches
+  return VALID_SINGAPORE_AREAS.some(valid => lower.includes(valid) || valid.includes(lower));
+}
+
 // Common shortform definitions
 const SHORTFORM_DEFINITIONS = {
   'HQ': 'Headquarters',
@@ -2389,9 +2437,31 @@ function detectShortforms(companyData) {
 
   const foundShortforms = [];
 
+  // First, extract inline abbreviations like "PU (Polyurethane)" from text
+  // Pattern: 2-6 uppercase/mixed case letters followed by (explanation)
+  const inlinePattern = /\b([A-Z][A-Za-z]{1,5})\s*\(([^)]+)\)/g;
+  let match;
+  const inlineAbbrevs = new Map();
+  while ((match = inlinePattern.exec(allText)) !== null) {
+    const abbrev = match[1].toUpperCase();
+    const fullForm = match[2].trim();
+    // Skip common ones
+    if (!COMMON_SHORTFORMS.includes(abbrev) && !inlineAbbrevs.has(abbrev)) {
+      inlineAbbrevs.set(abbrev, fullForm);
+    }
+  }
+
+  // Add inline abbreviations to found shortforms
+  for (const [abbrev, fullForm] of inlineAbbrevs) {
+    foundShortforms.push(`${abbrev} (${fullForm})`);
+  }
+
+  // Then check SHORTFORM_DEFINITIONS for any remaining abbreviations
   for (const [shortform, definition] of Object.entries(SHORTFORM_DEFINITIONS)) {
     // Skip common shortforms that don't need explanation
     if (COMMON_SHORTFORMS.includes(shortform)) continue;
+    // Skip if already found inline
+    if (inlineAbbrevs.has(shortform.toUpperCase())) continue;
 
     // Match shortform as whole word (with word boundaries)
     const regex = new RegExp(`\\b${shortform}\\b`, 'i');
@@ -2404,6 +2474,31 @@ function detectShortforms(companyData) {
     return 'Note: ' + foundShortforms.join(', ');
   }
   return null;
+}
+
+// Strip inline longforms from text, leaving only abbreviations
+// "PU (Polyurethane), EVA (Ethylene Vinyl Acetate)" -> "PU, EVA"
+function stripInlineLongforms(text) {
+  if (!text || typeof text !== 'string') return text;
+  // Pattern: ABBREV (Full Form) -> ABBREV
+  return text.replace(/\b([A-Z][A-Za-z]{1,5})\s*\([^)]+\)/g, '$1');
+}
+
+// Apply stripping to all breakdown items and key metrics
+function cleanupInlineLongforms(companyData) {
+  if (companyData.breakdown_items && Array.isArray(companyData.breakdown_items)) {
+    companyData.breakdown_items = companyData.breakdown_items.map(item => ({
+      ...item,
+      value: stripInlineLongforms(item.value)
+    }));
+  }
+  if (companyData.key_metrics && Array.isArray(companyData.key_metrics)) {
+    companyData.key_metrics = companyData.key_metrics.map(metric => ({
+      ...metric,
+      value: stripInlineLongforms(metric.value)
+    }));
+  }
+  return companyData;
 }
 
 // Fetch image as base64
@@ -2551,10 +2646,15 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         const country = parts[parts.length - 1] || 'Other';
         // HQ city is first part only (just the district/area)
         // If only 1 part (country only), hqCity should be empty, not the country name
-        // EXCEPTION: Singapore is a city-state - if no area provided, default to "Central"
         let hqCity = parts.length > 1 ? (parts[0] || '') : '';
-        if (country.toLowerCase() === 'singapore' && !hqCity) {
-          hqCity = 'Central'; // Default area for Singapore if not specified
+
+        // SINGAPORE VALIDATION: If country is Singapore, validate the area
+        if (country.toLowerCase() === 'singapore') {
+          if (!hqCity || !isValidSingaporeArea(hqCity)) {
+            // Invalid or missing area - leave empty rather than making one up
+            // "Central" is NOT a valid Singapore area
+            hqCity = '';
+          }
         }
         return { country, hqCity };
       };
@@ -2874,6 +2974,13 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       }
 
       console.log(`  Generating slide for: ${company.company_name || company.website}`);
+
+      // Step 1: Detect shortforms FIRST (before cleanup) to get footnote from original data with inline longforms
+      const shortformNote = detectShortforms(company);
+
+      // Step 2: Clean up inline longforms from tables (e.g., "PU (Polyurethane)" -> "PU")
+      // This makes tables cleaner; the longforms are already captured in shortformNote
+      cleanupInlineLongforms(company);
 
       // NOTE: Business Overview slide removed - user requested single profile slide only
 
@@ -3494,7 +3601,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       const footnoteLines = [];
 
       // Line 1: Note with shortform explanations (only uncommon ones)
-      const shortformNote = detectShortforms(company);
+      // shortformNote was computed earlier before cleanupInlineLongforms
       if (shortformNote) {
         footnoteLines.push(shortformNote);
       }
@@ -5676,9 +5783,9 @@ CORRECT EXAMPLES (2 levels only):
 - Indonesia: "West Java, Indonesia", "Banten, Indonesia", "East Java, Indonesia"
 - Vietnam: "Ho Chi Minh City, Vietnam", "Hanoi, Vietnam", "Binh Duong, Vietnam"
 - Philippines: "Metro Manila, Philippines", "Cebu, Philippines"
-- Singapore: "Area, Singapore" - MUST include area! e.g., "Jurong, Singapore", "Tuas, Singapore", "CBD, Singapore", "Changi, Singapore", "Woodlands, Singapore"
-  - Look for Singapore postal codes to identify area: 60xxxx=Jurong, 62xxxx=Tuas, 01-09xxxx=CBD, 5xxxxx=Changi, 7xxxxx=Woodlands
-  - If no area identifiable, use "Central, Singapore" as default
+- Singapore: "Area, Singapore" - MUST include REAL area! e.g., "Jurong, Singapore", "Tuas, Singapore", "Tampines, Singapore", "Changi, Singapore", "Woodlands, Singapore"
+  - Look for Singapore postal codes to identify area: 60xxxx=Jurong, 62xxxx=Tuas, 01-09xxxx=Raffles Place, 5xxxxx=Changi, 7xxxxx=Woodlands
+  - "Central" is NOT a valid area - NEVER use it. If no area identifiable, just use "Singapore"
 
 WRONG (too many levels - NO city/district names!):
 - "Shah Alam, Selangor, Malaysia" ← WRONG! Just "Selangor, Malaysia"
@@ -5951,14 +6058,14 @@ OUTPUT JSON - CRITICAL: INCLUDE SOURCE QUOTES FOR VERIFICATION:
   ]
 }
 
-MANDATORY SOURCE QUOTE RULES:
-1. Every metric MUST include "source_quotes" array with EXACT text from the website that proves this data
-2. Source quotes can be in ANY language (Thai, Chinese, etc.) - copy the EXACT text from the website
-3. If you cannot find the EXACT source text to quote, DO NOT include that metric - it would be hallucination
-4. For numerical metrics, the quote MUST contain the actual number (e.g., "800 ตัน/เดือน" for 800 tons/month)
-5. The verification system will check if your quotes actually exist in the scraped content
-6. If your quote is not found in the content, the metric will be REJECTED as hallucination
-7. This is a HARD requirement - metrics without valid source_quotes will be automatically removed
+SOURCE QUOTE RULES (ANTI-HALLUCINATION):
+1. Every metric MUST include "source_quotes" array with text from the website that proves this data
+2. Source quotes can be in ANY language (Thai, Chinese, etc.) - copy text from the website
+3. For numerical metrics, the quote MUST contain the actual number
+4. The system verifies quotes exist in scraped content - unverifiable quotes = metric rejected
+5. NEVER make up data - if you can't quote it from the website, don't include it
+6. Quote matching is FLEXIBLE: partial matches, number + context words will work
+7. Extract ALL metrics you can find AND quote - comprehensive extraction is critical
 
 MERGE DUPLICATIVE INFORMATION:
 When you find BOTH a count AND specific names for the same category, MERGE them into ONE coherent entry:
@@ -6161,10 +6268,10 @@ FOR INDUSTRIAL B2B (manufacturing, chemicals):
   "business_type": "industrial",
   "breakdown_title": "Products and Applications",
   "breakdown_items": [
-    {"label": "Flexographic Inks", "value": "Water-based inks for paper packaging, corrugated boxes"},
-    {"label": "Screen Printing", "value": "Inks for plastics, glass, metal substrates"},
-    {"label": "Paper & Board", "value": "High gloss, matt inks for paper and cardboard"},
-    {"label": "Specialty Coatings", "value": "Overprint varnishes, protective coatings"}
+    {"label": "Flexographic Inks", "value": "Water-based inks for paper packaging, corrugated boxes, flexible packaging"},
+    {"label": "Screen Printing", "value": "UV-curable, solvent-based inks for plastics, glass, metal substrates"},
+    {"label": "Paper & Board", "value": "High-gloss, matt finish inks for magazines, brochures, folding cartons"},
+    {"label": "Specialty Coatings", "value": "Overprint varnishes, UV coatings, anti-scuff lacquers"}
   ]
 }
 
@@ -6173,7 +6280,12 @@ CRITICAL RULES FOR INDUSTRIAL B2B TABLE:
 - NOT generic labels like "Products", "Applications", "Industries Served", "Services"
 - Look at company's actual product naming/categorization
 - 6-8 rows required (more rows = better coverage of product lines)
-- Each value describes what the product is FOR (applications)
+- VALUE DESCRIPTIONS MUST BE SPECIFIC - NOT GENERIC:
+  - BAD: "Chemicals for water treatment applications" (too vague - reader knows nothing new)
+  - GOOD: "Flocculants, coagulants, pH adjusters, scale inhibitors" (specific products)
+  - BAD: "Inks for printing industry" (obvious and useless)
+  - GOOD: "UV-curable inks for flexible packaging, metallized films" (specific applications)
+- If you can't be more specific than "X for Y applications", look deeper in the website content
 
 CRITICAL: For projects/products, extract ACTUAL image URLs from the website content!
 Look for: <img src="...">, background-image: url(...), data-src="...", srcset="..."
@@ -6453,33 +6565,51 @@ async function generateMECESegments(targetDescription, companies) {
   try {
     console.log('Generating MECE segments for target list...');
 
-    // Prepare company summaries for AI
-    const companySummaries = companies.map((c, i) => ({
-      id: i + 1,
-      name: c.title || c.company_name || 'Unknown',
-      business: c.business || '',
-      location: c.location || ''
-    }));
+    // Prepare company summaries for AI - include breakdown_items for better categorization
+    const companySummaries = companies.map((c, i) => {
+      // Extract product/service names from breakdown_items if available
+      let products = '';
+      if (c.breakdown_items && Array.isArray(c.breakdown_items)) {
+        products = c.breakdown_items.map(item => item.label || item.name || '').filter(Boolean).join(', ');
+      }
+      return {
+        id: i + 1,
+        name: c.title || c.company_name || 'Unknown',
+        business: c.business || '',
+        products: products,
+        location: c.location || ''
+      };
+    });
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [
         {
           role: 'system',
-          content: `You are an M&A analyst creating a target list slide. Given a target description and company information, create MECE (Mutually Exclusive, Collectively Exhaustive) segments to categorize these companies.
+          content: `You are an M&A analyst creating a target list slide. Given a target description and company information, create segments to categorize these companies.
 
-Create segment columns that are:
-1. Relevant to the target description (e.g., for "ink manufacturers" → segments could be ink types like "Gravure Inks", "Flexographic Inks", "Screen Inks", etc.)
-2. Mutually exclusive (each segment is distinct)
-3. CRITICAL: ALL segments must be PARALLEL - the SAME CATEGORY TYPE:
-   - If you choose PRODUCTS as the category → ALL segments must be products (e.g., "Gravure Inks", "Flexographic Inks", "Offset Inks")
-   - If you choose INDUSTRIES as the category → ALL segments must be industries (e.g., "Packaging", "Textiles", "Automotive")
-   - NEVER mix categories! Do NOT put "Location" next to "Products" - that's not parallel!
-   - WRONG: ["Gravure Inks", "Flexographic Inks", "Southeast Asia Location"] ← Location is NOT a product type!
-   - CORRECT: ["Gravure Inks", "Flexographic Inks", "Screen Inks", "Offset Inks"]
-4. EVERY segment MUST have at least ONE company with a tick - no empty columns
+CRITICAL - HOW TO CREATE GOOD SEGMENTS:
+1. ANALYZE what products/services the companies ACTUALLY offer (look at their business descriptions)
+2. CREATE segments that MATCH how companies describe themselves, not theoretical categories
+3. EVERY company MUST have at least ONE tick - if a company has no ticks, your segmentation is WRONG
 
-For each company, mark which segments apply to them based on their business description.
+EXAMPLE - INK INDUSTRY:
+- If companies describe products as: "oil-based inks, water-based inks, UV inks, solvent-based inks"
+  → Create segments: "Oil-based Inks", "Water-based Inks", "UV Inks", "Solvent-based Inks"
+- If companies describe by printing method: "gravure inks, flexo inks, offset inks"
+  → Create segments: "Gravure Inks", "Flexo Inks", "Offset Inks"
+- PREFER the categorization that companies use, not textbook categories
+
+MAPPING RULES - Map related terms:
+- "Oil-based inks" → likely serves Offset printing
+- "Solvent-based inks" → likely serves Gravure, Flexo
+- "Water-based inks" → likely serves Flexo, packaging
+- If a company makes "oil-based, solvent-based, water-based inks" → they likely serve multiple printing methods
+
+CRITICAL:
+- ALL segments must be PARALLEL (same category type)
+- EVERY company MUST have at least one segment ticked
+- If a company has no ticks, either the segmentation is wrong OR the company doesn't belong in this list
 
 OUTPUT JSON:
 {
@@ -6490,10 +6620,6 @@ OUTPUT JSON:
   }
 }
 
-Where:
-- "segments" is an array of segment names (short, 2-3 words each) - ALL must be same category type!
-- "companySegments" maps company ID to an array of booleans indicating which segments apply
-
 Return ONLY valid JSON.`
         },
         {
@@ -6501,9 +6627,9 @@ Return ONLY valid JSON.`
           content: `Target Description: ${targetDescription}
 
 Companies:
-${companySummaries.map(c => `${c.id}. ${c.name}\n   Business: ${c.business}\n   Location: ${c.location}`).join('\n\n')}
+${companySummaries.map(c => `${c.id}. ${c.name}\n   Business: ${c.business}${c.products ? `\n   Products: ${c.products}` : ''}\n   Location: ${c.location}`).join('\n\n')}
 
-Create MECE segments for these ${targetDescription} companies and mark which segments apply to each.`
+Create segments for these ${targetDescription} companies. Ensure EVERY company has at least one tick.`
         }
       ],
       response_format: { type: 'json_object' },
@@ -6539,6 +6665,16 @@ Create MECE segments for these ${targetDescription} companies and mark which seg
           result.companySegments[companyId] = indicesToKeep.map(idx => oldTicks[idx] || false);
         }
         console.log(`  Filtered to ${result.segments.length} segments with ticks`);
+      }
+
+      // WARNING: Check for companies with NO ticks at all
+      for (const companyId of Object.keys(result.companySegments)) {
+        const ticks = result.companySegments[companyId];
+        const hasTick = Array.isArray(ticks) && ticks.some(t => t === true);
+        if (!hasTick) {
+          const company = companySummaries.find(c => c.id === parseInt(companyId));
+          console.warn(`  WARNING: Company "${company?.name || companyId}" has NO segment ticks - check segmentation!`);
+        }
       }
     }
 
