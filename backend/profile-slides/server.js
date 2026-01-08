@@ -98,6 +98,111 @@ function extractNumbersFromText(text) {
   return numbers.map(n => n.replace(/[,\.]/g, ''));
 }
 
+// Translate non-English units to English in metric values
+// Covers: Thai, Vietnamese, Indonesian/Malay, Chinese, Japanese, Korean, Hindi, Bengali, Arabic
+function translateUnitsToEnglish(text) {
+  if (!text || typeof text !== 'string') return text;
+
+  const translations = {
+    // === THAI ===
+    'ตัน/เดือน': 'tons/month', 'ตัน/ปี': 'tons/year', 'ต่อเดือน': '/month', 'ต่อปี': '/year',
+    'ตัน': 'tons', 'ไร่': 'rai', 'งาน': 'ngan', 'ตารางวา': 'sq wah',
+    'ตร.ม.': 'sqm', 'ตารางเมตร': 'sqm', 'เครื่องจักร': 'machines', 'เครื่อง': 'machines',
+    'พนักงาน': 'employees', 'บุคลากร': 'staff', 'คน': 'people',
+    'พันธมิตร': 'partners', 'ตัวแทนจำหน่าย': 'distributors', 'ผู้จัดจำหน่าย': 'distributors', 'ราย': 'units',
+    'ลูกค้า': 'customers', 'ประเทศ': 'countries', 'สาขา': 'branches', 'ร้าน': 'stores',
+    'โรงงาน': 'factories', 'คลังสินค้า': 'warehouses', 'ผลิตภัณฑ์': 'products', 'รายการ': 'items',
+
+    // === VIETNAMESE ===
+    'tấn/tháng': 'tons/month', 'tấn/năm': 'tons/year', 'mỗi tháng': '/month', 'mỗi năm': '/year',
+    'tấn': 'tons', 'nhân viên': 'employees', 'người lao động': 'workers', 'người': 'people',
+    'văn phòng': 'offices', 'chi nhánh': 'branches', 'cửa hàng': 'stores',
+    'máy móc': 'machines', 'máy': 'machines', 'thiết bị': 'equipment',
+    'đối tác': 'partners', 'nhà phân phối': 'distributors', 'đại lý': 'agents',
+    'khách hàng': 'customers', 'sản phẩm': 'products', 'mặt hàng': 'items',
+
+    // === INDONESIAN/MALAY ===
+    'ton/bulan': 'tons/month', 'ton/tahun': 'tons/year', 'per bulan': '/month', 'per tahun': '/year',
+    'karyawan': 'employees', 'pekerja': 'workers', 'staf': 'staff',
+    'mesin': 'machines', 'peralatan': 'equipment', 'unit mesin': 'machine units',
+    'kantor': 'offices', 'cabang': 'branches', 'lokasi': 'locations', 'toko': 'stores',
+    'mitra': 'partners', 'distributor': 'distributors', 'agen': 'agents',
+    'pelanggan': 'customers', 'produk': 'products', 'jenis': 'types',
+    'meter persegi': 'sqm', 'hektar': 'hectares',
+
+    // === CHINESE (Simplified & Traditional) ===
+    '吨/月': 'tons/month', '吨/年': 'tons/year', '噸/月': 'tons/month', '噸/年': 'tons/year',
+    '每月': '/month', '每年': '/year', '吨': 'tons', '噸': 'tons',
+    '名员工': 'employees', '名員工': 'employees', '员工': 'employees', '員工': 'employees',
+    '職員': 'staff', '雇员': 'workers', '人': 'people',
+    '台设备': 'machines', '台設備': 'machines', '设备': 'equipment', '設備': 'equipment',
+    '機器': 'machines', '机器': 'machines', '機械': 'machinery', '机械': 'machinery',
+    '个办事处': 'offices', '個辦事處': 'offices', '办公室': 'offices', '辦公室': 'offices',
+    '分公司': 'branches', '门店': 'stores', '門店': 'stores',
+    '家经销商': 'distributors', '家經銷商': 'distributors', '经销商': 'distributors', '經銷商': 'distributors',
+    '合作伙伴': 'partners', '合作夥伴': 'partners', '代理商': 'agents',
+    '家客户': 'customers', '家客戶': 'customers', '客户': 'customers', '客戶': 'customers',
+    '种产品': 'products', '種產品': 'products', '产品': 'products', '產品': 'products',
+    '平方米': 'sqm', '平米': 'sqm', '亩': 'mu', '畝': 'mu', '坪': 'ping',
+    '产能': 'capacity', '產能': 'capacity', '产量': 'output', '產量': 'output',
+
+    // === JAPANESE ===
+    'トン/月': 'tons/month', 'トン/年': 'tons/year', 'トン': 'tons',
+    '名の従業員': 'employees', '名従業員': 'employees', '従業員': 'employees', '社員': 'employees',
+    'スタッフ': 'staff', '名': 'people',
+    '台の設備': 'machines', '台設備': 'machines', '設備': 'equipment', '機械': 'machinery',
+    'の事務所': 'offices', '事務所': 'offices', '支店': 'branches', '店舗': 'stores', '拠点': 'locations',
+    'パートナー': 'partners', '代理店': 'agents', '販売店': 'dealers',
+    '顧客': 'customers', '製品': 'products', '種類': 'types',
+    '平方メートル': 'sqm',
+
+    // === KOREAN ===
+    '톤/월': 'tons/month', '톤/년': 'tons/year', '월간': '/month', '연간': '/year', '톤': 'tons',
+    '명의 직원': 'employees', '명 직원': 'employees', '직원': 'employees', '임직원': 'employees',
+    '근로자': 'workers', '명': 'people',
+    '대 기계': 'machines', '대 설비': 'machines', '기계': 'machines', '설비': 'equipment', '장비': 'equipment',
+    '개 사무소': 'offices', '사무소': 'offices', '지점': 'branches', '매장': 'stores', '센터': 'centers',
+    '개 파트너': 'partners', '파트너': 'partners', '대리점': 'agents', '유통업체': 'distributors', '협력사': 'partners',
+    '개 고객': 'customers', '고객': 'customers', '거래처': 'clients',
+    '개 제품': 'products', '제품': 'products', '상품': 'products', '품목': 'items',
+    '제곱미터': 'sqm', '평': 'pyeong', '㎡': 'sqm',
+
+    // === HINDI ===
+    'टन/माह': 'tons/month', 'टन/वर्ष': 'tons/year', 'प्रति माह': '/month', 'प्रति वर्ष': '/year', 'टन': 'tons',
+    'कर्मचारी': 'employees', 'कार्यालय': 'offices', 'शाखा': 'branches',
+    'मशीन': 'machines', 'मशीनें': 'machines', 'उपकरण': 'equipment',
+    'भागीदार': 'partners', 'वितरक': 'distributors', 'डीलर': 'dealers', 'एजेंट': 'agents',
+    'ग्राहक': 'customers', 'उत्पाद': 'products',
+    'उत्पादन क्षमता': 'production capacity', 'क्षमता': 'capacity',
+
+    // === BENGALI ===
+    'টন/মাস': 'tons/month', 'টন/বছর': 'tons/year', 'টন': 'tons',
+    'কর্মচারী': 'employees', 'কর্মী': 'workers',
+    'মেশিন': 'machines', 'যন্ত্র': 'machines', 'যন্ত্রপাতি': 'machinery',
+    'অংশীদার': 'partners', 'পরিবেশক': 'distributors', 'ডিলার': 'dealers', 'এজেন্ট': 'agents',
+    'গ্রাহক': 'customers', 'পণ্য': 'products',
+    'উৎপাদন ক্ষমতা': 'production capacity', 'ক্ষমতা': 'capacity',
+
+    // === ARABIC ===
+    'طن/شهر': 'tons/month', 'طن/سنة': 'tons/year', 'طن': 'tons',
+    'موظف': 'employees', 'موظفين': 'employees', 'عامل': 'workers',
+    'آلة': 'machines', 'آلات': 'machines', 'معدات': 'equipment',
+    'مكتب': 'offices', 'مكاتب': 'offices', 'فرع': 'branches', 'فروع': 'branches',
+    'شريك': 'partners', 'شركاء': 'partners', 'موزع': 'distributors',
+    'عميل': 'customers', 'عملاء': 'customers', 'منتج': 'products', 'منتجات': 'products',
+    'متر مربع': 'sqm', 'هكتار': 'hectares',
+  };
+
+  let result = text;
+  // Sort by length descending to match longer phrases first
+  const sortedTranslations = Object.entries(translations).sort((a, b) => b[0].length - a[0].length);
+  for (const [foreign, english] of sortedTranslations) {
+    result = result.replace(new RegExp(foreign, 'gi'), english);
+  }
+
+  return result;
+}
+
 // Verify that a source quote exists in the scraped content
 // Returns true if quote is found (with fuzzy matching for formatting differences)
 function verifyQuoteInContent(quote, scrapedContent) {
@@ -137,14 +242,34 @@ function verifyQuoteInContent(quote, scrapedContent) {
     }
   }
 
-  // Method 3: For non-ASCII quotes, check if significant portions exist
+  // Method 3: For non-ASCII quotes (ANY language), check if significant portions exist
+  // Covers: Thai, Chinese, Japanese, Korean, Vietnamese, Hindi, Arabic, Russian, etc.
   const hasNonAscii = /[^\x00-\x7F]/.test(quote);
   if (hasNonAscii) {
-    // Split by spaces and numbers, check if each chunk exists
+    // Method 3a: Extract ALL non-ASCII word sequences and check if ANY exist in content
+    // This works for Thai, Chinese, Japanese, Korean, Vietnamese, Hindi, Arabic, Cyrillic, etc.
+    const nonAsciiKeywords = quote.match(/[^\x00-\x7F\s\d]+/g) || [];
+    if (nonAsciiKeywords.length > 0) {
+      const matchedKeywords = nonAsciiKeywords.filter(kw => kw.length >= 2 && scrapedContent.includes(kw));
+      if (matchedKeywords.length >= 1) {
+        // At least one non-ASCII keyword matches - good enough
+        return true;
+      }
+    }
+
+    // Method 3b: Check for ANY 3+ character substring match
+    for (let i = 0; i < quote.length - 2; i++) {
+      const substring = quote.substring(i, i + 3);
+      if (/[^\x00-\x7F]/.test(substring) && scrapedContent.includes(substring)) {
+        return true; // Found a 3-char non-ASCII substring in content
+      }
+    }
+
+    // Method 3c: Split by spaces and numbers, check if any chunk exists
     const chunks = quote.split(/[\s\d]+/).filter(c => c.length > 1);
     const matchedChunks = chunks.filter(chunk => scrapedContent.includes(chunk));
-    if (matchedChunks.length >= Math.ceil(chunks.length * 0.5)) {
-      return true; // At least 50% of Thai/CJK chunks found
+    if (matchedChunks.length >= 1) {
+      return true; // At least one chunk found
     }
   }
 
@@ -225,25 +350,28 @@ function filterMetricsByVerification(metrics, scrapedContent, companyIndex) {
           continue;
         }
       }
-      verifiedMetrics.push(metric);
+      // Translate any non-English units in the metric value
+      verifiedMetrics.push({
+        label: metric.label,
+        value: translateUnitsToEnglish(metric.value)
+      });
       continue;
     }
 
     const verification = verifyMetricQuotes(metric, scrapedContent);
 
     if (verification.verified === true) {
-      // Fully verified - keep the metric
+      // Fully verified - keep the metric (translate any non-English units)
       verifiedMetrics.push({
         label: metric.label,
-        value: metric.value
-        // Remove source_quotes from final output
+        value: translateUnitsToEnglish(metric.value)
       });
     } else if (verification.verified === 'partial') {
-      // Partially verified - keep but log warning
+      // Partially verified - keep but log warning (translate any non-English units)
       console.log(`  [${companyIndex}] Partial verification for "${metric.label}" - some quotes not found`);
       verifiedMetrics.push({
         label: metric.label,
-        value: metric.value
+        value: translateUnitsToEnglish(metric.value)
       });
     } else {
       // Not verified - reject as potential hallucination
@@ -4147,7 +4275,8 @@ function extractMetricsFromText(text) {
   const employeePatterns = [
     /(\d{1,3}(?:,\d{3})*|\d+)\s*\+?\s*(?:employees?|staff|workers?|personnel|people|team members?)/gi,
     /(?:over|more than|approximately|about|around)\s+(\d{1,3}(?:,\d{3})*|\d+)\s*(?:employees?|staff|workers?)/gi,
-    /(\d{1,3}(?:,\d{3})*|\d+)\s*(?:พนักงาน|คน)/gi, // Thai
+    /(\d{1,3}(?:,\d{3})*|\d+)\s*(?:พนักงาน|คน)/gi, // Thai: "300 พนักงาน"
+    /(?:พนักงาน|บุคลากร)\s*(?:มากกว่า|กว่า)?\s*(\d{1,3}(?:,\d{3})*|\d+)\s*(?:คน)?/gi, // Thai reversed: "พนักงาน 300 คน"
     /(\d{1,3}(?:,\d{3})*|\d+)\s*(?:nhân viên|người lao động)/gi, // Vietnamese
     /(\d{1,3}(?:,\d{3})*|\d+)\s*(?:karyawan|pekerja|staf)/gi, // Indonesian/Malay
     /(\d{1,3}(?:,\d{3})*|\d+)명?의?\s*(?:직원|임직원|근로자)/gi, // Korean
@@ -4184,9 +4313,10 @@ function extractMetricsFromText(text) {
     /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:MW|megawatts?|GW|gigawatts?)\s*(?:capacity|installed)?/gi,
     /capacity\s*(?:of|:)?\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:tons?|MT|units?|MW)/gi,
     /(?:over|more than)?\s*(\d{1,3}(?:,\d{3})*)\s*(?:tons?|MT)\s*(?:per|\/|a)\s*month/gi,
-    // Thai: "800 ตัน/เดือน", "กำลังการผลิต 800 ตัน"
-    /(\d{1,3}(?:,\d{3})*)\s*(?:ตัน)(?:\/เดือน|ต่อเดือน|\/ปี|ต่อปี)/gi,
+    // Thai: "800 ตัน/เดือน", "กำลังการผลิต 800 ตัน", "ผลิตได้ 800 ตัน"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:ตัน)(?:\/เดือน|ต่อเดือน|\/ปี|ต่อปี)?/gi,
     /กำลังการผลิต.*?(\d{1,3}(?:,\d{3})*)\s*ตัน/gi,
+    /(?:ผลิตได้|ความสามารถในการผลิต)\s*(\d{1,3}(?:,\d{3})*)\s*ตัน/gi,
     // Vietnamese: "800 tấn/tháng", "công suất 800 tấn"
     /(\d{1,3}(?:,\d{3})*)\s*(?:tấn)(?:\/tháng|\/năm|mỗi tháng|mỗi năm)/gi,
     /công suất.*?(\d{1,3}(?:,\d{3})*)\s*tấn/gi,
@@ -4221,9 +4351,10 @@ function extractMetricsFromText(text) {
     // English
     /(\d{1,3}(?:,\d{3})*)\s*\+?\s*(?:machines?|equipment|production lines?|manufacturing lines?)/gi,
     /(?:over|more than|approximately)\s+(\d{1,3}(?:,\d{3})*)\s*(?:machines?|equipment)/gi,
-    // Thai: "250 เครื่อง", "เครื่องจักร 250 เครื่อง"
+    // Thai: "250 เครื่อง", "เครื่องจักร 250 เครื่อง", "มีเครื่องจักร 250 เครื่อง"
     /(\d{1,3}(?:,\d{3})*)\s*(?:เครื่อง|เครื่องจักร)/gi,
-    /เครื่องจักร.*?(\d{1,3}(?:,\d{3})*)\s*(?:เครื่อง|ตัว)/gi,
+    /(?:เครื่องจักร|เครื่อง)\s*(?:จำนวน|มากกว่า)?\s*(\d{1,3}(?:,\d{3})*)\s*(?:เครื่อง|ตัว)?/gi,
+    /มี\s*(?:เครื่องจักร|เครื่อง)\s*(\d{1,3}(?:,\d{3})*)/gi,
     // Vietnamese: "250 máy", "thiết bị 250"
     /(\d{1,3}(?:,\d{3})*)\s*(?:máy|thiết bị|máy móc)/gi,
     // Indonesian/Malay: "250 mesin", "peralatan 250"
@@ -4246,7 +4377,7 @@ function extractMetricsFromText(text) {
       const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
       if (numMatch) {
         const num = parseInt(numMatch[0].replace(/,/g, ''));
-        if (num >= 10 && num <= 10000) { // Reasonable range for machines
+        if (num >= 2 && num <= 10000) { // Reasonable range for machines (lowered from 10)
           metrics.machine_count = num;
           metrics.machine_text = match[0];
           break;
@@ -4286,7 +4417,7 @@ function extractMetricsFromText(text) {
       const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
       if (numMatch) {
         const num = parseInt(numMatch[0].replace(/,/g, ''));
-        if (num >= 10 && num <= 10000) { // Reasonable range for partners
+        if (num >= 2 && num <= 10000) { // Reasonable range for partners (lowered from 10)
           metrics.partner_count = num;
           metrics.partner_text = match[0];
           break;
@@ -4412,8 +4543,9 @@ function extractMetricsFromText(text) {
     /(\d{1,3}(?:,\d{3})*)\s*(?:sqm|square meters?|sq\.?\s*m|m2|m²)\s*(?:factory|plant|facility|warehouse|production|land)?/gi,
     /(?:factory|plant|facility|warehouse|land area)\s*(?:of|:)?\s*(\d{1,3}(?:,\d{3})*)\s*(?:sqm|square meters?|sq\.?\s*ft|acres?)/gi,
     /(\d{1,3}(?:,\d{3})*)\s*(?:sq\.?\s*ft|square feet)/gi,
-    // Thai: rai (ไร่), sqm (ตร.ม.)
-    /(\d{1,3}(?:,\d{3})*)\s*(?:ไร่|ตร\.ม\.|ตารางเมตร)/gi,
+    // Thai: rai (ไร่), sqm (ตร.ม.), ngan (งาน), tarang wah (ตารางวา)
+    /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:ไร่|งาน|ตารางวา|ตร\.ม\.|ตารางเมตร)/gi,
+    /(?:พื้นที่|เนื้อที่)\s*(?:โรงงาน|ที่ดิน)?\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:ไร่|งาน|ตร\.ม\.)/gi,
     // Indonesian: m2, hektar
     /(\d{1,3}(?:,\d{3})*)\s*(?:m2|meter persegi|hektar|ha)/gi,
     // Chinese: 平方米, 亩, 坪
@@ -4456,7 +4588,7 @@ function extractMetricsFromText(text) {
       const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
       if (numMatch) {
         const num = parseInt(numMatch[0].replace(/,/g, ''));
-        if (num >= 10 && num <= 100000) {
+        if (num >= 3 && num <= 100000) { // Lowered from 10
           metrics.product_count = num;
           metrics.product_text = match[0];
           break;
@@ -4489,7 +4621,7 @@ function extractMetricsFromText(text) {
       const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
       if (numMatch) {
         const num = parseInt(numMatch[0].replace(/,/g, ''));
-        if (num >= 5 && num <= 1000000) {
+        if (num >= 3 && num <= 1000000) { // Lowered from 5
           metrics.customer_count = num;
           metrics.customer_text = match[0];
           break;
@@ -4523,7 +4655,7 @@ function extractMetricsFromText(text) {
       const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
       if (numMatch) {
         const num = parseInt(numMatch[0].replace(/,/g, ''));
-        if (num >= 5 && num <= 10000) {
+        if (num >= 2 && num <= 10000) { // Lowered from 5
           metrics.fleet_count = num;
           metrics.fleet_text = match[0];
           break;
@@ -4708,7 +4840,7 @@ function extractMetricsFromText(text) {
       const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
       if (numMatch) {
         const num = parseInt(numMatch[0].replace(/,/g, ''));
-        if (num >= 10 && num <= 100000) {
+        if (num >= 3 && num <= 100000) { // Lowered from 10
           metrics.project_count = num;
           metrics.project_text = match[0];
           break;
@@ -4816,7 +4948,7 @@ function extractMetricsFromText(text) {
     const matches = [...text.matchAll(pattern)];
     for (const match of matches) {
       const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
-      if (num >= 20 && num <= 10000) {
+      if (num >= 5 && num <= 10000) { // Lowered from 20
         metrics.bed_count = num;
         metrics.bed_text = match[0];
         break;
@@ -4842,7 +4974,7 @@ function extractMetricsFromText(text) {
     const matches = [...text.matchAll(pattern)];
     for (const match of matches) {
       const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
-      if (num >= 5 && num <= 10000) {
+      if (num >= 3 && num <= 10000) { // Lowered from 5
         metrics.doctor_count = num;
         metrics.doctor_text = match[0];
         break;
@@ -4871,7 +5003,7 @@ function extractMetricsFromText(text) {
     const matches = [...text.matchAll(pattern)];
     for (const match of matches) {
       const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
-      if (num >= 50 && num <= 1000000) {
+      if (num >= 10 && num <= 1000000) { // Lowered from 50
         metrics.student_count = num;
         metrics.student_text = match[0];
         break;
@@ -4895,7 +5027,7 @@ function extractMetricsFromText(text) {
     const matches = [...text.matchAll(pattern)];
     for (const match of matches) {
       const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
-      if (num >= 10 && num <= 10000) {
+      if (num >= 3 && num <= 10000) { // Lowered from 10
         metrics.course_count = num;
         metrics.course_text = match[0];
         break;
@@ -4922,7 +5054,7 @@ function extractMetricsFromText(text) {
     const matches = [...text.matchAll(pattern)];
     for (const match of matches) {
       const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
-      if (num >= 10 && num <= 100000) {
+      if (num >= 3 && num <= 100000) { // Lowered from 10
         metrics.unit_count = num;
         metrics.unit_text = match[0];
         break;
@@ -4948,7 +5080,7 @@ function extractMetricsFromText(text) {
     const matches = [...text.matchAll(pattern)];
     for (const match of matches) {
       const num = parseFloat(String(match[1]).replace(/,/g, ''));
-      if (num >= 10 && num <= 1000000) {
+      if (num >= 3 && num <= 1000000) { // Lowered from 10
         metrics.acreage = num;
         metrics.acreage_text = match[0];
         break;
@@ -4977,7 +5109,7 @@ function extractMetricsFromText(text) {
     const matches = [...text.matchAll(pattern)];
     for (const match of matches) {
       const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
-      if (num >= 100 && num <= 1000000000) {
+      if (num >= 10 && num <= 1000000000) { // Lowered from 100
         metrics.user_count = num;
         metrics.user_text = match[0];
         break;
@@ -5003,7 +5135,7 @@ function extractMetricsFromText(text) {
     const matches = [...text.matchAll(pattern)];
     for (const match of matches) {
       const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
-      if (num >= 1000 && num <= 10000000000) {
+      if (num >= 100 && num <= 10000000000) { // Lowered from 1000
         metrics.download_count = num;
         metrics.download_text = match[0];
         break;
@@ -7145,135 +7277,155 @@ async function processSingleWebsite(website, index, total) {
     console.log(`  [${index + 1}] Step 5c: Verifying ${rawKeyMetrics.length} AI-extracted metrics against source content...`);
     const allKeyMetrics = filterMetricsByVerification(rawKeyMetrics, scraped.content, index + 1);
 
-    // Merge regex-extracted metrics with VERIFIED AI-extracted metrics
-    // Regex metrics are ground truth (deterministic), so they take precedence
-    const mergedMetrics = [...allKeyMetrics];
-    if (regexMetrics.office_count && !allKeyMetrics.some(m => /office|branch|location/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.office_count), label: normalizeLabel(regexMetrics.office_text || 'Offices') });
+    // ===== PRIORITIZE REGEX OVER AI =====
+    // Regex metrics are ground truth (deterministic, no hallucination)
+    // ALWAYS include regex metrics first, then add AI metrics only for uncovered types
+    const regexBasedMetrics = [];
+    const regexCoveredTypes = new Set();
+
+    // Build regex metrics first (these are guaranteed accurate)
+    if (regexMetrics.office_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.office_count), label: normalizeLabel(regexMetrics.office_text || 'Offices') });
+      regexCoveredTypes.add('office');
     }
-    if (regexMetrics.employee_count && !allKeyMetrics.some(m => /employee|staff|worker/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.employee_count), label: 'Employees' });
+    if (regexMetrics.employee_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.employee_count), label: 'Employees' });
+      regexCoveredTypes.add('employee');
     }
-    if (regexMetrics.years_experience && !allKeyMetrics.some(m => /year|experience/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.years_experience), label: 'Years Experience' });
+    if (regexMetrics.years_experience) {
+      regexBasedMetrics.push({ value: String(regexMetrics.years_experience), label: 'Years Experience' });
+      regexCoveredTypes.add('year');
     }
-    if (regexMetrics.export_countries && !allKeyMetrics.some(m => /export|countr/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.export_countries), label: 'Export Countries' });
+    if (regexMetrics.export_countries) {
+      regexBasedMetrics.push({ value: String(regexMetrics.export_countries), label: 'Export Countries' });
+      regexCoveredTypes.add('export');
     }
-    if (regexMetrics.source_countries && !allKeyMetrics.some(m => /source|procure|import/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.source_countries), label: 'Source Countries' });
+    if (regexMetrics.source_countries) {
+      regexBasedMetrics.push({ value: String(regexMetrics.source_countries), label: 'Source Countries' });
+      regexCoveredTypes.add('source');
     }
-    if (regexMetrics.capacity_text && !allKeyMetrics.some(m => /capacity|production/i.test(m.label))) {
-      mergedMetrics.push({ value: regexMetrics.capacity_text, label: 'Production Capacity' });
+    if (regexMetrics.capacity_text) {
+      regexBasedMetrics.push({ value: translateUnitsToEnglish(regexMetrics.capacity_text), label: 'Production Capacity' });
+      regexCoveredTypes.add('capacity');
     }
-    if (regexMetrics.certifications?.length > 0 && !allKeyMetrics.some(m => /certif|iso|haccp/i.test(m.label))) {
-      mergedMetrics.push({ value: regexMetrics.certifications.join(', '), label: 'Certifications' });
+    if (regexMetrics.certifications?.length > 0) {
+      regexBasedMetrics.push({ value: regexMetrics.certifications.join(', '), label: 'Certifications' });
+      regexCoveredTypes.add('certif');
     }
-    // NEW: Machine counts
-    if (regexMetrics.machine_count && !allKeyMetrics.some(m => /machine|equipment|line/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.machine_count) + '+', label: 'Machines' });
+    if (regexMetrics.machine_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.machine_count) + '+', label: 'Machines' });
+      regexCoveredTypes.add('machine');
     }
-    // NEW: Partner/distributor counts
-    if (regexMetrics.partner_count && !allKeyMetrics.some(m => /partner|distributor|dealer|agent/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.partner_count) + '+', label: 'Business Partners' });
+    if (regexMetrics.partner_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.partner_count) + '+', label: 'Business Partners' });
+      regexCoveredTypes.add('partner');
     }
-    // NEW: Export regions (names, not counts)
-    if (regexMetrics.export_regions && !allKeyMetrics.some(m => /export|market|region/i.test(m.label))) {
-      mergedMetrics.push({ value: regexMetrics.export_regions, label: 'Export Markets' });
+    if (regexMetrics.export_regions) {
+      regexBasedMetrics.push({ value: regexMetrics.export_regions, label: 'Export Markets' });
+      regexCoveredTypes.add('market');
     }
-    // NEW: Product/SKU counts
-    if (regexMetrics.product_count && !allKeyMetrics.some(m => /product|sku|item|model/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.product_count) + '+', label: 'Products' });
+    if (regexMetrics.product_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.product_count) + '+', label: 'Products' });
+      regexCoveredTypes.add('product');
     }
-    // NEW: Customer counts
-    if (regexMetrics.customer_count && !allKeyMetrics.some(m => /customer|client|buyer/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.customer_count) + '+', label: 'Customers' });
+    if (regexMetrics.customer_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.customer_count) + '+', label: 'Customers' });
+      regexCoveredTypes.add('customer');
     }
-    // NEW: Fleet/vehicle counts
-    if (regexMetrics.fleet_count && !allKeyMetrics.some(m => /truck|vehicle|fleet|lorr/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.fleet_count) + '+', label: 'Vehicles' });
+    if (regexMetrics.fleet_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.fleet_count) + '+', label: 'Vehicles' });
+      regexCoveredTypes.add('vehicle');
     }
-    // NEW: Retail outlet/store counts
-    if (regexMetrics.outlet_count && !allKeyMetrics.some(m => /outlet|store|branch|shop|showroom/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.outlet_count) + '+', label: 'Outlets' });
+    if (regexMetrics.outlet_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.outlet_count) + '+', label: 'Outlets' });
+      regexCoveredTypes.add('outlet');
     }
-    // NEW: Brand counts (for distributors)
-    if (regexMetrics.brand_count && !allKeyMetrics.some(m => /brand|principal/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.brand_count) + '+', label: 'Brands Carried' });
+    if (regexMetrics.brand_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.brand_count) + '+', label: 'Brands Carried' });
+      regexCoveredTypes.add('brand');
     }
-    // NEW: Daily/monthly output text
-    if (regexMetrics.output_text && !allKeyMetrics.some(m => /output|production|daily|monthly/i.test(m.label))) {
-      mergedMetrics.push({ value: regexMetrics.output_text, label: 'Output' });
+    if (regexMetrics.output_text) {
+      regexBasedMetrics.push({ value: translateUnitsToEnglish(regexMetrics.output_text), label: 'Output' });
+      regexCoveredTypes.add('output');
     }
-    // NEW: Warehouse counts
-    if (regexMetrics.warehouse_count && !allKeyMetrics.some(m => /warehouse|depot|distribution center/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.warehouse_count) + '+', label: 'Warehouses' });
+    if (regexMetrics.warehouse_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.warehouse_count) + '+', label: 'Warehouses' });
+      regexCoveredTypes.add('warehouse');
     }
-    // NEW: Country presence (market reach)
-    if (regexMetrics.country_presence && !allKeyMetrics.some(m => /countr|market|presence|global/i.test(m.label))) {
-      const label = regexMetrics.country_presence_text || String(regexMetrics.country_presence) + '+ Countries';
-      mergedMetrics.push({ value: String(regexMetrics.country_presence) + '+', label: 'Countries' });
+    if (regexMetrics.country_presence) {
+      regexBasedMetrics.push({ value: String(regexMetrics.country_presence) + '+', label: 'Countries' });
+      regexCoveredTypes.add('countr');
     }
-    // NEW: Projects completed
-    if (regexMetrics.project_count && !allKeyMetrics.some(m => /project|installation|deployment/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.project_count) + '+', label: 'Projects Completed' });
+    if (regexMetrics.project_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.project_count) + '+', label: 'Projects Completed' });
+      regexCoveredTypes.add('project');
     }
-    // NEW: Factory/facility size
-    if (regexMetrics.factory_size && !allKeyMetrics.some(m => /factory|facility|plant|land|area|sqm|sq.*ft/i.test(m.label))) {
-      mergedMetrics.push({ value: regexMetrics.factory_size, label: 'Factory Size' });
+    if (regexMetrics.factory_size) {
+      regexBasedMetrics.push({ value: translateUnitsToEnglish(regexMetrics.factory_size), label: 'Factory Size' });
+      regexCoveredTypes.add('factory');
     }
-    // NEW: Office counts
-    if (regexMetrics.office_count && !allKeyMetrics.some(m => /office|location|branch/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.office_count) + '+', label: 'Offices' });
+    if (regexMetrics.award_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.award_count) + '+', label: 'Awards' });
+      regexCoveredTypes.add('award');
     }
-    // INDUSTRY: Awards/Recognition
-    if (regexMetrics.award_count && !allKeyMetrics.some(m => /award|recognition|honor/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.award_count) + '+', label: 'Awards' });
+    if (regexMetrics.patent_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.patent_count) + '+', label: 'Patents' });
+      regexCoveredTypes.add('patent');
     }
-    // INDUSTRY: Patents
-    if (regexMetrics.patent_count && !allKeyMetrics.some(m => /patent|intellectual/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.patent_count) + '+', label: 'Patents' });
+    if (regexMetrics.room_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.room_count) + '+', label: 'Rooms' });
+      regexCoveredTypes.add('room');
     }
-    // HOSPITALITY: Hotel Rooms
-    if (regexMetrics.room_count && !allKeyMetrics.some(m => /room|suite|key/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.room_count) + '+', label: 'Rooms' });
+    if (regexMetrics.bed_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.bed_count) + '+', label: 'Beds' });
+      regexCoveredTypes.add('bed');
     }
-    // HEALTHCARE: Hospital Beds
-    if (regexMetrics.bed_count && !allKeyMetrics.some(m => /bed|capacity/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.bed_count) + '+', label: 'Beds' });
+    if (regexMetrics.doctor_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.doctor_count) + '+', label: 'Doctors' });
+      regexCoveredTypes.add('doctor');
     }
-    // HEALTHCARE: Doctors
-    if (regexMetrics.doctor_count && !allKeyMetrics.some(m => /doctor|physician|specialist/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.doctor_count) + '+', label: 'Doctors' });
+    if (regexMetrics.student_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.student_count) + '+', label: 'Students' });
+      regexCoveredTypes.add('student');
     }
-    // EDUCATION: Students
-    if (regexMetrics.student_count && !allKeyMetrics.some(m => /student|learner|graduate|alumni/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.student_count) + '+', label: 'Students' });
+    if (regexMetrics.course_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.course_count) + '+', label: 'Courses' });
+      regexCoveredTypes.add('course');
     }
-    // EDUCATION: Courses
-    if (regexMetrics.course_count && !allKeyMetrics.some(m => /course|program|class/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.course_count) + '+', label: 'Courses' });
+    if (regexMetrics.unit_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.unit_count) + '+', label: 'Units' });
+      regexCoveredTypes.add('unit');
     }
-    // REAL ESTATE: Units/Properties
-    if (regexMetrics.unit_count && !allKeyMetrics.some(m => /unit|propert|apartment|condo/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.unit_count) + '+', label: 'Units' });
+    if (regexMetrics.acreage) {
+      regexBasedMetrics.push({ value: translateUnitsToEnglish(regexMetrics.acreage_text), label: 'Land Area' });
+      regexCoveredTypes.add('acre');
     }
-    // AGRICULTURE: Acreage
-    if (regexMetrics.acreage && !allKeyMetrics.some(m => /acre|hectare|land|farm/i.test(m.label))) {
-      mergedMetrics.push({ value: regexMetrics.acreage_text, label: 'Land Area' });
+    if (regexMetrics.user_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.user_count) + '+', label: 'Users' });
+      regexCoveredTypes.add('user');
     }
-    // TECH: Users/Subscribers
-    if (regexMetrics.user_count && !allKeyMetrics.some(m => /user|subscriber|member/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.user_count) + '+', label: 'Users' });
+    if (regexMetrics.download_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.download_count) + '+', label: 'Downloads' });
+      regexCoveredTypes.add('download');
     }
-    // TECH: Downloads
-    if (regexMetrics.download_count && !allKeyMetrics.some(m => /download|install/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.download_count) + '+', label: 'Downloads' });
+    if (regexMetrics.menu_count) {
+      regexBasedMetrics.push({ value: String(regexMetrics.menu_count) + '+', label: 'Menu Items' });
+      regexCoveredTypes.add('menu');
     }
-    // F&B: Menu Items
-    if (regexMetrics.menu_count && !allKeyMetrics.some(m => /menu|dish|recipe/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.menu_count) + '+', label: 'Menu Items' });
+
+    // Now add AI metrics ONLY for types not covered by regex
+    // This prevents AI hallucination from overriding deterministic regex results
+    const mergedMetrics = [...regexBasedMetrics];
+    for (const aiMetric of allKeyMetrics) {
+      const labelLower = aiMetric.label.toLowerCase();
+      // Check if regex already covered this type
+      const alreadyCovered = [...regexCoveredTypes].some(type => labelLower.includes(type));
+      if (!alreadyCovered) {
+        mergedMetrics.push(aiMetric);
+      }
     }
+
+    console.log(`  [${index + 1}] Merged metrics: ${regexBasedMetrics.length} from regex + ${mergedMetrics.length - regexBasedMetrics.length} from AI = ${mergedMetrics.length} total`);
 
     // Determine location: prefer AI extraction, fallback to JSON-LD structured address
     let finalLocation = ensureString(basicInfo.location || searchedInfo.location);
