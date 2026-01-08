@@ -2150,7 +2150,31 @@ const SHORTFORM_DEFINITIONS = {
   'POE': 'Power over Ethernet',
   'LAN': 'Local Area Network',
   'WAN': 'Wide Area Network',
-  'VPN': 'Virtual Private Network'
+  'VPN': 'Virtual Private Network',
+  // Chemical/Material shortforms
+  'PU': 'Polyurethane',
+  'EVA': 'Ethylene Vinyl Acetate',
+  'PVC': 'Polyvinyl Chloride',
+  'ABS': 'Acrylonitrile Butadiene Styrene',
+  'PS': 'Polystyrene',
+  'PP': 'Polypropylene',
+  'HDPE': 'High-Density Polyethylene',
+  'LDPE': 'Low-Density Polyethylene',
+  'OPP': 'Oriented Polypropylene',
+  'PET': 'Polyethylene Terephthalate',
+  'TPU': 'Thermoplastic Polyurethane',
+  'TPR': 'Thermoplastic Rubber',
+  'TPE': 'Thermoplastic Elastomer',
+  'NBR': 'Nitrile Butadiene Rubber',
+  'SBR': 'Styrene Butadiene Rubber',
+  'EPDM': 'Ethylene Propylene Diene Monomer',
+  'PA': 'Polyamide (Nylon)',
+  'PC': 'Polycarbonate',
+  'PMMA': 'Polymethyl Methacrylate (Acrylic)',
+  'PTFE': 'Polytetrafluoroethylene (Teflon)',
+  'Phylon': 'Foam Material (EVA-based)',
+  'BOPP': 'Biaxially Oriented Polypropylene',
+  'CPP': 'Cast Polypropylene'
 };
 
 // Exchange rate mapping by country (for footnote)
@@ -2205,6 +2229,60 @@ function getCountryCode(location) {
     if (loc.includes(key)) return code;
   }
   return null;
+}
+
+// Translate Thai units to English equivalents
+// Thai: ไร่ (rai) = 1,600 sqm, ตร.ม./ตารางเมตร = sqm
+// Also translates common Thai words found in metrics
+function translateThaiUnits(text) {
+  if (!text || typeof text !== 'string') return text;
+
+  // Thai unit translations
+  const translations = [
+    // Area units
+    { pattern: /(\d+(?:,\d{3})*(?:\.\d+)?)\s*ไร่/gi, replace: '$1 rai' },
+    { pattern: /(\d+(?:,\d{3})*(?:\.\d+)?)\s*ตร\.ม\./gi, replace: '$1 sqm' },
+    { pattern: /(\d+(?:,\d{3})*(?:\.\d+)?)\s*ตารางเมตร/gi, replace: '$1 sqm' },
+    // Weight units
+    { pattern: /(\d+(?:,\d{3})*(?:\.\d+)?)\s*ตัน\/เดือน/gi, replace: '$1 tons/month' },
+    { pattern: /(\d+(?:,\d{3})*(?:\.\d+)?)\s*ตัน\/ปี/gi, replace: '$1 tons/year' },
+    { pattern: /(\d+(?:,\d{3})*(?:\.\d+)?)\s*ตัน/gi, replace: '$1 tons' },
+    { pattern: /(\d+(?:,\d{3})*(?:\.\d+)?)\s*กิโลกรัม/gi, replace: '$1 kg' },
+    // Count units
+    { pattern: /(\d+(?:,\d{3})*)\s*พนักงาน/gi, replace: '$1 employees' },
+    { pattern: /(\d+(?:,\d{3})*)\s*คน/gi, replace: '$1 people' },
+    { pattern: /(\d+(?:,\d{3})*)\s*เครื่อง/gi, replace: '$1 machines' },
+    { pattern: /(\d+(?:,\d{3})*)\s*สาขา/gi, replace: '$1 branches' },
+    { pattern: /(\d+(?:,\d{3})*)\s*ประเทศ/gi, replace: '$1 countries' },
+    // Production capacity
+    { pattern: /กำลังการผลิต/gi, replace: 'Production capacity' },
+    // Other common Thai words in metrics
+    { pattern: /ปี/gi, replace: 'years' },
+    { pattern: /เดือน/gi, replace: 'month' },
+    { pattern: /โรงงาน/gi, replace: 'factory' },
+    { pattern: /พื้นที่/gi, replace: 'area' }
+  ];
+
+  let result = text;
+  for (const { pattern, replace } of translations) {
+    result = result.replace(pattern, replace);
+  }
+
+  return result;
+}
+
+// Apply Thai translation to all metrics
+function translateMetrics(keyMetrics) {
+  if (!keyMetrics || !Array.isArray(keyMetrics)) return keyMetrics;
+
+  return keyMetrics.map(metric => {
+    if (!metric) return metric;
+    return {
+      ...metric,
+      label: translateThaiUnits(metric.label),
+      value: translateThaiUnits(metric.value)
+    };
+  });
 }
 
 // HARD RULE: Filter out empty/meaningless Key Metrics
@@ -3083,6 +3161,10 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         tableData.push([locationLabel, cleanLocation, null]);
       }
 
+      // Add Shareholding row after HQ - always present with yellow highlight
+      // Fourth element: { highlight: true } indicates yellow background for value cell
+      tableData.push(['Shareholding', 'check speeda & DBD', { highlight: true }]);
+
       // Add Business if available
       if (!isEmptyValue(company.business)) {
         tableData.push(['Business', company.business, null]);
@@ -3175,10 +3257,16 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       };
 
       const rows = tableData.map((row) => {
+        // Check if third element is an options object (for highlighting) or a URL string
+        const thirdElement = row[2];
+        const isHighlighted = thirdElement && typeof thirdElement === 'object' && thirdElement.highlight;
+        const isHyperlink = typeof thirdElement === 'string' && thirdElement.length > 0;
+
         const valueCell = {
           text: formatCellText(row[1]),
           options: {
-            fill: { color: COLORS.white },
+            // Yellow highlight for Shareholding row, white otherwise
+            fill: { color: isHighlighted ? 'FFFF00' : COLORS.white },
             color: COLORS.black,
             align: 'left',
             border: [
@@ -3191,8 +3279,8 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         };
 
         // Add hyperlink if URL is provided (third element in row array)
-        if (row[2]) {
-          valueCell.options.hyperlink = { url: row[2], tooltip: 'Visit company website' };
+        if (isHyperlink) {
+          valueCell.options.hyperlink = { url: thirdElement, tooltip: 'Visit company website' };
           valueCell.options.color = '0563C1'; // Blue hyperlink color
         }
 
@@ -7269,7 +7357,11 @@ async function processSingleWebsite(website, index, total) {
       companyData = finalValidation.data;
     }
 
-    // Step 7: HARD RULE - Filter out empty/meaningless Key Metrics
+    // Step 7: Translate Thai units and filter empty metrics
+    // Translate Thai units (ไร่, ตร.ม., etc.) to English
+    companyData.key_metrics = translateMetrics(companyData.key_metrics);
+
+    // HARD RULE - Filter out empty/meaningless Key Metrics
     // Remove metrics that say "No specific X stated", "Not specified", etc.
     const metricsBefore = companyData.key_metrics?.length || 0;
     companyData.key_metrics = filterEmptyMetrics(companyData.key_metrics);
@@ -7686,7 +7778,8 @@ app.post('/api/generate-ppt', async (req, res) => {
         // Step 6: Run AI validator to compare extraction vs source and fix issues
         companyData = await reviewAndCleanData(companyData, scraped.content);
 
-        // Step 7: Filter empty metrics
+        // Step 7: Translate Thai units and filter empty metrics
+        companyData.key_metrics = translateMetrics(companyData.key_metrics);
         const metricsBefore = companyData.key_metrics?.length || 0;
         companyData.key_metrics = filterEmptyMetrics(companyData.key_metrics);
         const metricsAfter = companyData.key_metrics?.length || 0;
