@@ -3034,95 +3034,141 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
       // ===== RIGHT SECTION (varies by business type) =====
       const businessType = company.business_type || 'industrial';
+      const preExtractedImages = company._productProjectImages || [];
+      const hasPreExtractedImages = preExtractedImages.length > 0;
 
-      if (businessType === 'project' && company.projects && company.projects.length > 0) {
-        // PROJECT-BASED: Show project images in 2x2 grid like LCP example
-        const projects = company.projects.slice(0, 4);
+      // Check if this is a B2C or project-based business with images to show
+      const isImageBusiness = (businessType === 'b2c' || businessType === 'consumer' || businessType === 'project');
+      const hasAIProjects = company.projects && company.projects.length > 0;
+      const hasAIProducts = company.products && company.products.length > 0;
 
-        // 2x2 grid layout
-        const gridStartX = 6.86;
-        const gridStartY = 1.91;
-        const colWidth = 3.0;  // Each column width
-        const rowHeight = 2.4; // Each row height
-        const imageW = 1.4;    // Image width
-        const imageH = 1.1;    // Image height
-        const textOffsetX = 1.5; // Text starts after image
-        const textWidth = 1.4;   // Text width
+      if (isImageBusiness && (hasPreExtractedImages || hasAIProjects || hasAIProducts)) {
+        // B2C/PROJECT-BASED: Show product/project images with labels
+        // Use pre-extracted images first, fallback to AI-extracted data
 
-        for (let i = 0; i < projects.length; i++) {
-          const project = projects[i];
-          const col = i % 2;  // 0 or 1
-          const row = Math.floor(i / 2);  // 0 or 1
+        if (hasPreExtractedImages) {
+          // Use pre-extracted images (from HTML scraping)
+          console.log(`  Using ${preExtractedImages.length} pre-extracted images for right side`);
 
-          const cellX = gridStartX + (col * colWidth);
-          const cellY = gridStartY + (row * rowHeight);
+          // Layout: 2x2 grid for 4 images
+          const gridStartX = 6.86;
+          const gridStartY = 1.91;
+          const colWidth = 3.0;
+          const rowHeight = 2.2;
+          const imageW = 2.8;
+          const imageH = 1.6;
 
-          // Try to fetch and add project image
-          if (project.image_url) {
+          for (let i = 0; i < Math.min(preExtractedImages.length, 4); i++) {
+            const img = preExtractedImages[i];
+            const col = i % 2;
+            const row = Math.floor(i / 2);
+            const cellX = gridStartX + (col * colWidth);
+            const cellY = gridStartY + (row * rowHeight);
+
             try {
-              const imgBase64 = await fetchImageAsBase64(project.image_url);
+              const imgBase64 = await fetchImageAsBase64(img.url);
               if (imgBase64) {
                 slide.addImage({
                   data: `data:image/jpeg;base64,${imgBase64}`,
                   x: cellX, y: cellY, w: imageW, h: imageH,
-                  sizing: { type: 'cover', w: imageW, h: imageH }
+                  sizing: { type: 'contain', w: imageW, h: imageH }
                 });
+
+                // Label below image - Segoe UI font 14 as requested
+                if (img.label) {
+                  slide.addText(img.label, {
+                    x: cellX, y: cellY + imageH + 0.05, w: imageW, h: 0.3,
+                    fontSize: 14, fontFace: 'Segoe UI',
+                    color: COLORS.black, align: 'center', valign: 'top'
+                  });
+                }
               }
             } catch (imgErr) {
-              console.log(`  Failed to fetch project image: ${project.image_url}`);
+              console.log(`  Failed to fetch pre-extracted image: ${img.url}`);
             }
           }
+        } else if (businessType === 'project' && hasAIProjects) {
+          // Fallback: Use AI-extracted project data
+          const projects = company.projects.slice(0, 4);
 
-          // Project name (bold) - positioned to right of image
-          slide.addText(project.name || '', {
-            x: cellX + textOffsetX, y: cellY, w: textWidth, h: 0.5,
-            fontSize: 11, fontFace: 'Segoe UI', bold: true,
-            color: COLORS.black, valign: 'top'
-          });
+          const gridStartX = 6.86;
+          const gridStartY = 1.91;
+          const colWidth = 3.0;
+          const rowHeight = 2.4;
+          const imageW = 1.4;
+          const imageH = 1.1;
+          const textOffsetX = 1.5;
+          const textWidth = 1.4;
 
-          // Project metrics - below name
-          const metricsText = (project.metrics || []).join('\n');
-          if (metricsText) {
-            slide.addText(metricsText, {
-              x: cellX + textOffsetX, y: cellY + 0.5, w: textWidth, h: 0.8,
-              fontSize: 9, fontFace: 'Segoe UI',
+          for (let i = 0; i < projects.length; i++) {
+            const project = projects[i];
+            const col = i % 2;
+            const row = Math.floor(i / 2);
+            const cellX = gridStartX + (col * colWidth);
+            const cellY = gridStartY + (row * rowHeight);
+
+            if (project.image_url) {
+              try {
+                const imgBase64 = await fetchImageAsBase64(project.image_url);
+                if (imgBase64) {
+                  slide.addImage({
+                    data: `data:image/jpeg;base64,${imgBase64}`,
+                    x: cellX, y: cellY, w: imageW, h: imageH,
+                    sizing: { type: 'cover', w: imageW, h: imageH }
+                  });
+                }
+              } catch (imgErr) {
+                console.log(`  Failed to fetch project image: ${project.image_url}`);
+              }
+            }
+
+            slide.addText(project.name || '', {
+              x: cellX + textOffsetX, y: cellY, w: textWidth, h: 0.5,
+              fontSize: 14, fontFace: 'Segoe UI', bold: true,
               color: COLORS.black, valign: 'top'
             });
-          }
-        }
-      } else if (businessType === 'consumer' && company.products && company.products.length > 0) {
-        // CONSUMER-FACING: Show product images with labels
-        const products = company.products.slice(0, 4);
-        const productWidth = 1.4;
-        const productStartX = 6.86;
-        const productY = 1.91;
 
-        for (let i = 0; i < products.length; i++) {
-          const product = products[i];
-          const xPos = productStartX + (i * (productWidth + 0.15));
-
-          // Try to fetch and add product image
-          if (product.image_url) {
-            try {
-              const imgBase64 = await fetchImageAsBase64(product.image_url);
-              if (imgBase64) {
-                slide.addImage({
-                  data: `data:image/jpeg;base64,${imgBase64}`,
-                  x: xPos, y: productY, w: productWidth, h: 1.2,
-                  sizing: { type: 'contain', w: productWidth, h: 1.2 }
-                });
-              }
-            } catch (imgErr) {
-              console.log(`  Failed to fetch product image: ${product.image_url}`);
+            const metricsText = (project.metrics || []).join('\n');
+            if (metricsText) {
+              slide.addText(metricsText, {
+                x: cellX + textOffsetX, y: cellY + 0.5, w: textWidth, h: 0.8,
+                fontSize: 9, fontFace: 'Segoe UI',
+                color: COLORS.black, valign: 'top'
+              });
             }
           }
+        } else if ((businessType === 'consumer' || businessType === 'b2c') && hasAIProducts) {
+          // Fallback: Use AI-extracted product data
+          const products = company.products.slice(0, 4);
+          const productWidth = 1.4;
+          const productStartX = 6.86;
+          const productY = 1.91;
 
-          // Product name
-          slide.addText(product.name || '', {
-            x: xPos, y: productY + 1.25, w: productWidth, h: 0.35,
-            fontSize: 10, fontFace: 'Segoe UI', bold: true,
-            color: COLORS.black, align: 'center', valign: 'top'
-          });
+          for (let i = 0; i < products.length; i++) {
+            const product = products[i];
+            const xPos = productStartX + (i * (productWidth + 0.15));
+
+            if (product.image_url) {
+              try {
+                const imgBase64 = await fetchImageAsBase64(product.image_url);
+                if (imgBase64) {
+                  slide.addImage({
+                    data: `data:image/jpeg;base64,${imgBase64}`,
+                    x: xPos, y: productY, w: productWidth, h: 1.2,
+                    sizing: { type: 'contain', w: productWidth, h: 1.2 }
+                  });
+                }
+              } catch (imgErr) {
+                console.log(`  Failed to fetch product image: ${product.image_url}`);
+              }
+            }
+
+            slide.addText(product.name || '', {
+              x: xPos, y: productY + 1.25, w: productWidth, h: 0.35,
+              fontSize: 14, fontFace: 'Segoe UI', bold: true,
+              color: COLORS.black, align: 'center', valign: 'top'
+            });
+          }
         }
       } else {
         // INDUSTRIAL B2B: Show table format
@@ -3788,6 +3834,349 @@ function extractStructuredAddress(rawHtml) {
   }
 
   return null;
+}
+
+// ===== FIX #1: Extract full 3-level address with retry mechanism =====
+// When initial extraction returns incomplete address (1-2 levels), retry with Contact page focus
+async function extractFullAddress(scrapedContent, websiteUrl, currentLocation) {
+  // Check if current location needs fixing
+  if (!currentLocation) return null;
+
+  const parts = currentLocation.split(',').map(p => p.trim()).filter(p => p);
+  const isSingapore = parts[parts.length - 1]?.toLowerCase() === 'singapore';
+
+  // Singapore needs 2 levels, others need 3
+  const requiredLevels = isSingapore ? 2 : 3;
+  if (parts.length >= requiredLevels) {
+    return currentLocation; // Already valid
+  }
+
+  console.log(`  [HQ Retry] Location "${currentLocation}" has ${parts.length} levels, need ${requiredLevels}. Re-extracting...`);
+
+  try {
+    // Look for Contact page content in scraped content
+    const contactSection = scrapedContent.match(/=== \/CONTACT[^=]*===([\s\S]*?)(?:===|$)/i)?.[1] || '';
+    const contentToSearch = contactSection || scrapedContent;
+
+    const response = await withRetry(() => openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an address extraction specialist. Extract the COMPLETE headquarters address.
+
+TASK: Find the full physical address and return EXACTLY ${requiredLevels} location levels.
+
+${isSingapore ? `
+SINGAPORE FORMAT (2 levels): "Area/District, Singapore"
+Examples: "Jurong West, Singapore", "Tuas, Singapore", "Woodlands, Singapore"
+Look for: postal codes (6 digits), street names, building names to identify the area.
+` : `
+NON-SINGAPORE FORMAT (3 levels): "City/District, State/Province, Country"
+Examples:
+- Thailand: "Bangna, Bangkok, Thailand" or "Bang Phli, Samut Prakan, Thailand"
+- Malaysia: "Shah Alam, Selangor, Malaysia"
+- Indonesia: "Tangerang, Banten, Indonesia"
+- Vietnam: "Thu Duc, Ho Chi Minh City, Vietnam"
+
+CRITICAL: Look for the FULL address with street, district, city, province.
+From the address, extract: City/District + Province/State + Country
+`}
+
+Current incomplete location: "${currentLocation}"
+You MUST find more specific location details from the content.
+
+Return JSON: { "location": "City, Province, Country" } or { "location": "Area, Singapore" }
+If you cannot find more details, return: { "location": "" }`
+        },
+        {
+          role: 'user',
+          content: `Find the complete headquarters address from this content:\n\n${contentToSearch.substring(0, 15000)}`
+        }
+      ],
+      response_format: { type: 'json_object' },
+      temperature: 0.1
+    }));
+
+    const result = JSON.parse(response.choices[0].message.content);
+    if (result.location && result.location !== currentLocation) {
+      const newParts = result.location.split(',').map(p => p.trim()).filter(p => p);
+      if (newParts.length >= requiredLevels) {
+        console.log(`  [HQ Retry] SUCCESS: "${currentLocation}" → "${result.location}"`);
+        return result.location;
+      }
+    }
+
+    console.log(`  [HQ Retry] Could not improve location, keeping: "${currentLocation}"`);
+    return currentLocation;
+  } catch (e) {
+    console.log(`  [HQ Retry] Error: ${e.message}`);
+    return currentLocation;
+  }
+}
+
+// ===== FIX #3: Extract product/project images for B2C and project-based companies =====
+// Returns array of { url, label } objects for display on right side of slide
+function extractProductProjectImages(rawHtml, businessType, websiteUrl) {
+  if (!rawHtml) return [];
+
+  const images = [];
+  const origin = websiteUrl?.startsWith('http') ? new URL(websiteUrl).origin : `https://${websiteUrl?.split('/')[0]}`;
+
+  // Define section patterns based on business type
+  const sectionPatterns = businessType === 'b2c' || businessType === 'consumer'
+    ? [
+        /class=["'][^"']*(?:product|menu|dish|food|item|catalog|gallery)[^"']*["']/gi,
+        /<section[^>]*(?:product|menu|gallery|catalog)[^>]*>([\s\S]*?)<\/section>/gi,
+        /id=["'][^"']*(?:product|menu|gallery)[^"']*["']/gi
+      ]
+    : [
+        /class=["'][^"']*(?:project|portfolio|work|case-study|showcase)[^"']*["']/gi,
+        /<section[^>]*(?:project|portfolio|work)[^>]*>([\s\S]*?)<\/section>/gi,
+        /id=["'][^"']*(?:project|portfolio|gallery)[^"']*["']/gi
+      ];
+
+  // Find images in product/project sections
+  // Pattern: <img> tags with meaningful src (not icons, sprites, placeholders)
+  const imgPattern = /<img[^>]*src=["']([^"']+)["'][^>]*(?:alt=["']([^"']*?)["'])?[^>]*>|<img[^>]*(?:alt=["']([^"']*?)["'])[^>]*src=["']([^"']+)["'][^>]*>/gi;
+
+  // Also look for figure elements with captions
+  const figurePattern = /<figure[^>]*>[\s\S]*?<img[^>]*src=["']([^"']+)["'][^>]*>[\s\S]*?<figcaption[^>]*>([^<]+)<\/figcaption>[\s\S]*?<\/figure>/gi;
+
+  // Extract from figure elements first (they have captions)
+  let match;
+  while ((match = figurePattern.exec(rawHtml)) !== null && images.length < 6) {
+    const [, src, caption] = match;
+    if (src && !isIconOrPlaceholder(src)) {
+      let imgUrl = src;
+      if (imgUrl.startsWith('/')) imgUrl = origin + imgUrl;
+      if (imgUrl.startsWith('http')) {
+        images.push({
+          url: imgUrl,
+          label: cleanImageLabel(caption)
+        });
+      }
+    }
+  }
+
+  // Then extract from img tags in relevant sections
+  // Look for images in product/project/portfolio/menu sections
+  const relevantSectionHtml = extractRelevantSections(rawHtml, businessType);
+
+  while ((match = imgPattern.exec(relevantSectionHtml)) !== null && images.length < 6) {
+    const src = match[1] || match[4];
+    const alt = match[2] || match[3];
+
+    if (src && !isIconOrPlaceholder(src) && !images.some(i => i.url.includes(src))) {
+      let imgUrl = src;
+      if (imgUrl.startsWith('/')) imgUrl = origin + imgUrl;
+      if (imgUrl.startsWith('http')) {
+        images.push({
+          url: imgUrl,
+          label: cleanImageLabel(alt) || extractLabelFromFilename(src)
+        });
+      }
+    }
+  }
+
+  return images.slice(0, 4); // Max 4 images for slide layout
+}
+
+// Helper: Check if image is an icon or placeholder
+function isIconOrPlaceholder(src) {
+  const skipPatterns = [
+    /icon/i, /sprite/i, /placeholder/i, /1x1/i, /blank/i, /spacer/i,
+    /logo/i, /favicon/i, /avatar/i, /profile/i, /user/i,
+    /arrow/i, /button/i, /bg[-_]/i, /background/i,
+    /\.svg$/i, /data:image/i,
+    /social/i, /facebook/i, /twitter/i, /linkedin/i, /instagram/i,
+    /\d+x\d+/  // Dimension patterns like 16x16
+  ];
+  return skipPatterns.some(p => p.test(src));
+}
+
+// Helper: Extract HTML sections relevant to products/projects
+function extractRelevantSections(rawHtml, businessType) {
+  const keywords = businessType === 'b2c' || businessType === 'consumer'
+    ? ['product', 'menu', 'dish', 'food', 'item', 'catalog', 'gallery', 'offering', 'service']
+    : ['project', 'portfolio', 'work', 'case', 'showcase', 'gallery', 'client-work', 'completed'];
+
+  let relevantHtml = '';
+
+  // Extract sections/divs that contain these keywords in class/id
+  for (const keyword of keywords) {
+    const sectionRegex = new RegExp(
+      `<(?:section|div|article)[^>]*(?:class|id)=["'][^"']*${keyword}[^"']*["'][^>]*>[\\s\\S]*?<\\/(?:section|div|article)>`,
+      'gi'
+    );
+    const matches = rawHtml.match(sectionRegex) || [];
+    relevantHtml += matches.join('\n');
+  }
+
+  // If no sections found, return a chunk of the main content
+  if (!relevantHtml) {
+    // Try to find main content area
+    const mainContent = rawHtml.match(/<main[^>]*>([\s\S]*?)<\/main>/i)?.[1] ||
+                        rawHtml.match(/<article[^>]*>([\s\S]*?)<\/article>/i)?.[1] ||
+                        rawHtml.substring(0, 50000);
+    return mainContent;
+  }
+
+  return relevantHtml;
+}
+
+// Helper: Clean image label
+function cleanImageLabel(text) {
+  if (!text) return '';
+  return text
+    .replace(/<[^>]+>/g, '') // Remove HTML
+    .replace(/\s+/g, ' ')
+    .trim()
+    .substring(0, 50); // Limit length
+}
+
+// Helper: Extract label from filename
+function extractLabelFromFilename(src) {
+  const filename = src.split('/').pop()?.split('?')[0]?.split('.')[0] || '';
+  return filename
+    .replace(/[-_]/g, ' ')
+    .replace(/\d+$/g, '')
+    .split(' ')
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ')
+    .trim()
+    .substring(0, 50);
+}
+
+// ===== FIX #5: Extract customer/supplier names from section context =====
+// Finds sections containing client/customer/partner content and extracts all names
+function extractCustomersFromSections(rawHtml) {
+  if (!rawHtml) return [];
+
+  const customerNames = new Set();
+
+  // Section keywords to look for
+  const sectionKeywords = [
+    'client', 'customer', 'partner', 'trusted', 'brand', 'work with',
+    'served', 'portfolio', 'our clients', 'our customers', 'our partners',
+    'they trust us', 'trusted by', 'working with', 'collaborated'
+  ];
+
+  // Build regex to find these sections
+  const sectionPattern = new RegExp(
+    `<(?:section|div|ul|article)[^>]*(?:class|id)=["'][^"']*(?:${sectionKeywords.join('|')})[^"']*["'][^>]*>([\\s\\S]*?)<\\/(?:section|div|ul|article)>`,
+    'gi'
+  );
+
+  // Also find sections with these keywords in headings
+  const headingPattern = new RegExp(
+    `<h[1-6][^>]*>[^<]*(?:${sectionKeywords.join('|')})[^<]*<\\/h[1-6]>([\\s\\S]{0,5000}?)(?=<h[1-6]|<\\/section|<\\/main|$)`,
+    'gi'
+  );
+
+  let match;
+  const sectionHtmls = [];
+
+  // Collect all relevant sections
+  while ((match = sectionPattern.exec(rawHtml)) !== null) {
+    sectionHtmls.push(match[1] || match[0]);
+  }
+  while ((match = headingPattern.exec(rawHtml)) !== null) {
+    sectionHtmls.push(match[1] || match[0]);
+  }
+
+  // Extract names from each section
+  for (const sectionHtml of sectionHtmls) {
+    // Method 1: Alt text from images
+    const altPattern = /<img[^>]*alt=["']([^"']+)["'][^>]*>/gi;
+    while ((match = altPattern.exec(sectionHtml)) !== null) {
+      const name = cleanCustomerName(match[1]);
+      if (name) customerNames.add(name);
+    }
+
+    // Method 2: Title attribute
+    const titlePattern = /<[^>]*title=["']([^"']+)["'][^>]*>/gi;
+    while ((match = titlePattern.exec(sectionHtml)) !== null) {
+      const name = cleanCustomerName(match[1]);
+      if (name) customerNames.add(name);
+    }
+
+    // Method 3: aria-label attribute
+    const ariaPattern = /<[^>]*aria-label=["']([^"']+)["'][^>]*>/gi;
+    while ((match = ariaPattern.exec(sectionHtml)) !== null) {
+      const name = cleanCustomerName(match[1]);
+      if (name) customerNames.add(name);
+    }
+
+    // Method 4: Figure captions
+    const figcaptionPattern = /<figcaption[^>]*>([^<]+)<\/figcaption>/gi;
+    while ((match = figcaptionPattern.exec(sectionHtml)) !== null) {
+      const name = cleanCustomerName(match[1]);
+      if (name) customerNames.add(name);
+    }
+
+    // Method 5: List items (often used for client lists)
+    const liPattern = /<li[^>]*>([^<]{2,50})<\/li>/gi;
+    while ((match = liPattern.exec(sectionHtml)) !== null) {
+      const name = cleanCustomerName(match[1]);
+      if (name) customerNames.add(name);
+    }
+
+    // Method 6: Image filenames in client/customer directories
+    const imgSrcPattern = /<img[^>]*src=["']([^"']+(?:client|customer|partner|brand|logo)[^"']*|[^"']*\/(?:client|customer|partner|brand)s?\/[^"']+)["'][^>]*>/gi;
+    while ((match = imgSrcPattern.exec(sectionHtml)) !== null) {
+      const filename = match[1].split('/').pop()?.split('.')[0] || '';
+      const name = cleanCustomerName(
+        filename.replace(/[-_]/g, ' ').replace(/logo|img|image|\d+/gi, '').trim()
+      );
+      if (name) customerNames.add(name);
+    }
+
+    // Method 7: Span/strong/em text in client sections (often company names)
+    const inlinePattern = /<(?:span|strong|em|b)[^>]*>([A-Z][^<]{1,40})<\/(?:span|strong|em|b)>/g;
+    while ((match = inlinePattern.exec(sectionHtml)) !== null) {
+      const text = match[1].trim();
+      // Check if looks like a company name (starts with capital, not too long)
+      if (text.length >= 2 && text.length <= 40 && /^[A-Z]/.test(text)) {
+        const name = cleanCustomerName(text);
+        if (name) customerNames.add(name);
+      }
+    }
+  }
+
+  return Array.from(customerNames).slice(0, 30); // Limit to 30 names
+}
+
+// Helper: Clean and validate customer name
+function cleanCustomerName(text) {
+  if (!text || typeof text !== 'string') return '';
+
+  let name = text.trim()
+    .replace(/<[^>]+>/g, '') // Remove HTML
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Skip generic terms
+  const skipTerms = [
+    'logo', 'image', 'photo', 'icon', 'banner', 'client', 'customer', 'partner',
+    'view', 'click', 'here', 'more', 'read', 'learn', 'see', 'our', 'the', 'and',
+    'trusted', 'brands', 'companies', 'clients', 'partners', 'customers'
+  ];
+
+  const lowerName = name.toLowerCase();
+  if (skipTerms.some(term => lowerName === term || lowerName.startsWith(term + ' '))) {
+    return '';
+  }
+
+  // Skip if too short, too long, or contains only numbers
+  if (name.length < 2 || name.length > 50 || /^\d+$/.test(name)) {
+    return '';
+  }
+
+  // Clean company name (remove suffixes)
+  name = cleanCompanyName(name);
+
+  return name;
 }
 
 // AI Agent 1: Extract company name, established year, location
@@ -5157,20 +5546,57 @@ async function processSingleWebsite(website, index, total) {
       console.log(`  [${index + 1}] Using JSON-LD address as fallback: ${finalLocation}`);
     }
 
+    // Validate and fix HQ format
+    let validatedLocation = validateAndFixHQFormat(finalLocation, trimmedWebsite);
+
+    // FIX #1: If location is incomplete (< required levels), retry with focused extraction
+    if (validatedLocation) {
+      const locParts = validatedLocation.split(',').map(p => p.trim()).filter(p => p);
+      const isSG = locParts[locParts.length - 1]?.toLowerCase() === 'singapore';
+      const requiredLevels = isSG ? 2 : 3;
+      if (locParts.length < requiredLevels) {
+        console.log(`  [${index + 1}] Step 6b: HQ incomplete (${locParts.length}/${requiredLevels} levels), retrying...`);
+        const improvedLocation = await extractFullAddress(scraped.content, trimmedWebsite, validatedLocation);
+        if (improvedLocation && improvedLocation !== validatedLocation) {
+          validatedLocation = validateAndFixHQFormat(improvedLocation, trimmedWebsite);
+        }
+      }
+    }
+
+    // FIX #3: Extract product/project images for B2C and project-based companies
+    const businessType = productsBreakdown.business_type || 'industrial';
+    let productProjectImages = [];
+    if (businessType === 'b2c' || businessType === 'consumer' || businessType === 'project') {
+      console.log(`  [${index + 1}] Step 6c: Extracting ${businessType === 'project' ? 'project' : 'product'} images...`);
+      productProjectImages = extractProductProjectImages(scraped.rawHtml, businessType, trimmedWebsite);
+      if (productProjectImages.length > 0) {
+        console.log(`  [${index + 1}] Found ${productProjectImages.length} images for right side`);
+      }
+    }
+
+    // FIX #5: Extract customer/supplier names from section context (more comprehensive)
+    console.log(`  [${index + 1}] Step 6d: Extracting customers from section context...`);
+    const customersFromSections = extractCustomersFromSections(scraped.rawHtml);
+    // Merge with previously extracted customer names
+    const allCustomerNames = [...new Set([...customerNamesFromImages, ...customersFromSections])];
+    if (customersFromSections.length > 0) {
+      console.log(`  [${index + 1}] Found ${customersFromSections.length} customer names from sections (total: ${allCustomerNames.length})`);
+    }
+
     // Combine all extracted data (mandatory fields supplemented by web search)
     // Use ensureString() for all AI-generated fields to prevent [object Object] issues
     let companyData = {
       website: scraped.url,
       company_name: ensureString(basicInfo.company_name),
       established_year: ensureString(basicInfo.established_year || searchedInfo.established_year),
-      location: validateAndFixHQFormat(finalLocation, trimmedWebsite),
+      location: validatedLocation,
       business: ensureString(businessInfo.business),
       message: ensureString(businessInfo.message),
       footnote: ensureString(businessInfo.footnote),
       title: ensureString(businessInfo.title),
       key_metrics: mergedMetrics,  // Merged: AI + regex (ground truth)
       // Right-side content (varies by business type)
-      business_type: productsBreakdown.business_type || 'industrial',
+      business_type: businessType,
       breakdown_title: ensureString(productsBreakdown.breakdown_title) || 'Products and Applications',
       breakdown_items: productsBreakdown.breakdown_items || [],
       projects: productsBreakdown.projects || [],  // For project-based businesses
@@ -5178,8 +5604,10 @@ async function processSingleWebsite(website, index, total) {
       metrics: ensureString(metricsInfo.metrics),  // Fallback for old format
       // Pre-extracted logo (from cascade: Clearbit → og:image → apple-touch-icon → img[logo] → favicon)
       _logo: logoResult,
-      // Customer/partner names extracted from image alt texts and filenames
-      _customerNamesFromImages: customerNamesFromImages
+      // Customer/partner names (merged from images + section context)
+      _customerNames: allCustomerNames,
+      // Product/project images for right side (B2C and project-based)
+      _productProjectImages: productProjectImages
     };
 
     // Log metrics count before review
@@ -5533,26 +5961,63 @@ app.post('/api/generate-ppt', async (req, res) => {
           console.log(`  Using JSON-LD address as fallback: ${finalLocation}`);
         }
 
+        // Validate and fix HQ format
+        let validatedLocation = validateAndFixHQFormat(finalLocation, website);
+
+        // FIX #1: If location is incomplete, retry with focused extraction
+        if (validatedLocation) {
+          const locParts = validatedLocation.split(',').map(p => p.trim()).filter(p => p);
+          const isSG = locParts[locParts.length - 1]?.toLowerCase() === 'singapore';
+          const requiredLevels = isSG ? 2 : 3;
+          if (locParts.length < requiredLevels) {
+            console.log(`  HQ incomplete (${locParts.length}/${requiredLevels} levels), retrying...`);
+            const improvedLocation = await extractFullAddress(scraped.content, website, validatedLocation);
+            if (improvedLocation && improvedLocation !== validatedLocation) {
+              validatedLocation = validateAndFixHQFormat(improvedLocation, website);
+            }
+          }
+        }
+
+        // FIX #3: Extract product/project images for B2C and project-based companies
+        const businessType = productsBreakdown.business_type || 'industrial';
+        let productProjectImages = [];
+        if (businessType === 'b2c' || businessType === 'consumer' || businessType === 'project') {
+          productProjectImages = extractProductProjectImages(scraped.rawHtml, businessType, website);
+          if (productProjectImages.length > 0) {
+            console.log(`  Found ${productProjectImages.length} images for right side`);
+          }
+        }
+
+        // FIX #5: Extract customer/supplier names from section context
+        const customersFromSections = extractCustomersFromSections(scraped.rawHtml);
+        const allCustomerNames = [...new Set([...customerNamesFromImages, ...customersFromSections])];
+        if (customersFromSections.length > 0) {
+          console.log(`  Found ${customersFromSections.length} customer names from sections (total: ${allCustomerNames.length})`);
+        }
+
         let companyData = {
           website: scraped.url,
           company_name: ensureString(basicInfo.company_name),
           established_year: ensureString(basicInfo.established_year || searchedInfo.established_year),
-          location: validateAndFixHQFormat(finalLocation, website),
+          location: validatedLocation,
           business: ensureString(businessInfo.business),
           message: ensureString(businessInfo.message),
           footnote: ensureString(businessInfo.footnote),
           title: ensureString(businessInfo.title),
           key_metrics: mergedMetrics,
           // Right-side content (varies by business type)
-          business_type: productsBreakdown.business_type || 'industrial',
+          business_type: businessType,
           breakdown_title: ensureString(productsBreakdown.breakdown_title) || 'Products and Applications',
           breakdown_items: productsBreakdown.breakdown_items || [],
           projects: productsBreakdown.projects || [],  // For project-based businesses
           products: productsBreakdown.products || [],  // For consumer-facing businesses
           metrics: ensureString(metricsInfo.metrics),
-          // Pre-extracted logo and customer names
+          // Pre-extracted logo
           _logo: logoResult,
-          _customerNamesFromImages: customerNamesFromImages
+          // Customer/partner names (merged)
+          _customerNames: allCustomerNames,
+          // Product/project images
+          _productProjectImages: productProjectImages
         };
 
         // Step 6: Run AI validator to compare extraction vs source and fix issues
