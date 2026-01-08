@@ -62,6 +62,16 @@ function ensureString(value, defaultValue = '') {
   return String(value);
 }
 
+// Normalize label to Title Case (e.g., "employees" -> "Employees", "export countries" -> "Export Countries")
+// This prevents lowercase labels from appearing in slides
+function normalizeLabel(label) {
+  if (!label || typeof label !== 'string') return label;
+  return label
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
 // Extract a company name from URL for inaccessible websites
 function extractCompanyNameFromUrl(url) {
   try {
@@ -2971,7 +2981,8 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
                 !existingLabels.has(labelLower) &&
                 !labelLower.includes('business') &&
                 !labelLower.includes('location')) {
-              tableData.push([metricLabel, metricValue, null]);
+              // Always normalize label to Title Case for consistent display
+              tableData.push([normalizeLabel(metricLabel), metricValue, null]);
               existingLabels.add(labelLower);
             }
           }
@@ -3223,7 +3234,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         // Priority 2: Products/Applications breakdown
         let validBreakdownItems = (company.breakdown_items || [])
           .map(item => ({
-            label: ensureString(item?.label),
+            label: normalizeLabel(ensureString(item?.label)),  // Always normalize to Title Case
             value: ensureString(item?.value)
           }))
           .filter(item => item.label && item.value && !isEmptyValue(item.label) && !isEmptyValue(item.value));
@@ -5887,25 +5898,25 @@ async function processSingleWebsite(website, index, total) {
     // Regex metrics are ground truth (deterministic), so they take precedence
     const mergedMetrics = [...allKeyMetrics];
     if (regexMetrics.office_count && !allKeyMetrics.some(m => /office|branch|location/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.office_count), label: regexMetrics.office_text || 'offices' });
+      mergedMetrics.push({ value: String(regexMetrics.office_count), label: normalizeLabel(regexMetrics.office_text || 'Offices') });
     }
     if (regexMetrics.employee_count && !allKeyMetrics.some(m => /employee|staff|worker/i.test(m.label))) {
       mergedMetrics.push({ value: String(regexMetrics.employee_count), label: 'Employees' });
     }
     if (regexMetrics.years_experience && !allKeyMetrics.some(m => /year|experience/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.years_experience), label: 'years experience' });
+      mergedMetrics.push({ value: String(regexMetrics.years_experience), label: 'Years Experience' });
     }
     if (regexMetrics.export_countries && !allKeyMetrics.some(m => /export|countr/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.export_countries), label: 'export countries' });
+      mergedMetrics.push({ value: String(regexMetrics.export_countries), label: 'Export Countries' });
     }
     if (regexMetrics.source_countries && !allKeyMetrics.some(m => /source|procure|import/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.source_countries), label: 'source countries' });
+      mergedMetrics.push({ value: String(regexMetrics.source_countries), label: 'Source Countries' });
     }
     if (regexMetrics.capacity_text && !allKeyMetrics.some(m => /capacity|production/i.test(m.label))) {
-      mergedMetrics.push({ value: regexMetrics.capacity_text, label: 'production capacity' });
+      mergedMetrics.push({ value: regexMetrics.capacity_text, label: 'Production Capacity' });
     }
     if (regexMetrics.certifications?.length > 0 && !allKeyMetrics.some(m => /certif|iso|haccp/i.test(m.label))) {
-      mergedMetrics.push({ value: regexMetrics.certifications.join(', '), label: 'certifications' });
+      mergedMetrics.push({ value: regexMetrics.certifications.join(', '), label: 'Certifications' });
     }
 
     // Determine location: prefer AI extraction, fallback to JSON-LD structured address
@@ -6346,25 +6357,25 @@ app.post('/api/generate-ppt', async (req, res) => {
         const allKeyMetrics = metricsInfo.key_metrics || [];
         const mergedMetrics = [...allKeyMetrics];
         if (regexMetrics.office_count && !allKeyMetrics.some(m => /office|branch|location/i.test(m.label))) {
-          mergedMetrics.push({ value: String(regexMetrics.office_count), label: regexMetrics.office_text || 'offices' });
+          mergedMetrics.push({ value: String(regexMetrics.office_count), label: normalizeLabel(regexMetrics.office_text || 'Offices') });
         }
         if (regexMetrics.employee_count && !allKeyMetrics.some(m => /employee|staff|worker/i.test(m.label))) {
           mergedMetrics.push({ value: String(regexMetrics.employee_count), label: 'Employees' });
         }
         if (regexMetrics.years_experience && !allKeyMetrics.some(m => /year|experience/i.test(m.label))) {
-          mergedMetrics.push({ value: String(regexMetrics.years_experience), label: 'years experience' });
+          mergedMetrics.push({ value: String(regexMetrics.years_experience), label: 'Years Experience' });
         }
         if (regexMetrics.export_countries && !allKeyMetrics.some(m => /export|countr/i.test(m.label))) {
-          mergedMetrics.push({ value: String(regexMetrics.export_countries), label: 'export countries' });
+          mergedMetrics.push({ value: String(regexMetrics.export_countries), label: 'Export Countries' });
         }
         if (regexMetrics.source_countries && !allKeyMetrics.some(m => /source|procure|import/i.test(m.label))) {
-          mergedMetrics.push({ value: String(regexMetrics.source_countries), label: 'source countries' });
+          mergedMetrics.push({ value: String(regexMetrics.source_countries), label: 'Source Countries' });
         }
         if (regexMetrics.capacity_text && !allKeyMetrics.some(m => /capacity|production/i.test(m.label))) {
-          mergedMetrics.push({ value: regexMetrics.capacity_text, label: 'production capacity' });
+          mergedMetrics.push({ value: regexMetrics.capacity_text, label: 'Production Capacity' });
         }
         if (regexMetrics.certifications?.length > 0 && !allKeyMetrics.some(m => /certif|iso|haccp/i.test(m.label))) {
-          mergedMetrics.push({ value: regexMetrics.certifications.join(', '), label: 'certifications' });
+          mergedMetrics.push({ value: regexMetrics.certifications.join(', '), label: 'Certifications' });
         }
 
         // Determine location: prefer AI extraction, fallback to JSON-LD
