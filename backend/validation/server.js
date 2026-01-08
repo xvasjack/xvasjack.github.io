@@ -4,38 +4,13 @@ const cors = require('cors');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
 const XLSX = require('xlsx');
-const { S3Client } = require('@aws-sdk/client-s3');
-const { securityHeaders, rateLimiter } = require('../shared/security');
-const { requestLogger, healthCheck } = require('../shared/middleware');
+const { securityHeaders, rateLimiter } = require('./shared/security');
+const { requestLogger, healthCheck } = require('./shared/middleware');
+const { setupGlobalErrorHandlers } = require('./shared/logging');
+const { sendEmailLegacy: sendEmail } = require('./shared/email');
 
-// ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
-// Memory logging helper for debugging Railway OOM issues
-function logMemoryUsage(label = '') {
-  const mem = process.memoryUsage();
-  const heapUsedMB = Math.round(mem.heapUsed / 1024 / 1024);
-  const heapTotalMB = Math.round(mem.heapTotal / 1024 / 1024);
-  const rssMB = Math.round(mem.rss / 1024 / 1024);
-  console.log(
-    `  [Memory${label ? ': ' + label : ''}] Heap: ${heapUsedMB}/${heapTotalMB}MB, RSS: ${rssMB}MB`
-  );
-}
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('=== UNHANDLED PROMISE REJECTION ===');
-  console.error('Reason:', reason);
-  console.error('Promise:', promise);
-  console.error('Stack:', reason?.stack || 'No stack trace');
-  logMemoryUsage('at rejection');
-  // Don't exit - keep the server running
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('=== UNCAUGHT EXCEPTION ===');
-  console.error('Error:', error.message);
-  console.error('Stack:', error.stack);
-  logMemoryUsage('at exception');
-  // Don't exit - keep the server running
-});
+// Setup global error handlers to prevent crashes
+setupGlobalErrorHandlers();
 
 const app = express();
 app.use(securityHeaders);
@@ -62,70 +37,6 @@ if (missingVars.length > 0) {
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'missing',
 });
-
-// Send email using SendGrid API
-async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) {
-  const senderEmail = process.env.SENDER_EMAIL;
-  const emailData = {
-    personalizations: [{ to: [{ email: to }] }],
-    from: { email: senderEmail, name: 'Find Target' },
-    subject: subject,
-    content: [{ type: 'text/html', value: html }],
-  };
-
-  if (attachments) {
-    const attachmentList = Array.isArray(attachments) ? attachments : [attachments];
-    emailData.attachments = attachmentList.map((a) => ({
-      filename: a.filename || a.name, // Support both 'filename' and 'name' properties
-      content: a.content,
-      type: 'application/octet-stream',
-      disposition: 'attachment',
-    }));
-  }
-
-  // Retry logic with exponential backoff
-  let lastError;
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(emailData),
-      });
-
-      if (response.ok) {
-        if (attempt > 1) {
-          console.log(`  Email sent successfully on attempt ${attempt}`);
-        }
-        return { success: true };
-      }
-
-      const error = await response.text();
-      lastError = new Error(`Email failed (attempt ${attempt}/${maxRetries}): ${error}`);
-      console.error(lastError.message);
-
-      // Don't retry on 4xx client errors (except 429 rate limit)
-      if (response.status >= 400 && response.status < 500 && response.status !== 429) {
-        throw lastError;
-      }
-    } catch (fetchError) {
-      lastError = fetchError;
-      console.error(`  Email attempt ${attempt}/${maxRetries} failed:`, fetchError.message);
-    }
-
-    // Exponential backoff: 2s, 4s, 8s
-    if (attempt < maxRetries) {
-      const delay = Math.pow(2, attempt) * 1000;
-      console.log(`  Retrying email in ${delay / 1000}s...`);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-    }
-  }
-
-  throw lastError || new Error('Email failed after all retries');
-}
 
 // ============ AI TOOLS ============
 
@@ -246,133 +157,6 @@ async function callOpenAISearch(prompt) {
     return callChatGPT(prompt);
   }
 }
-
-// Detect domain/context from text for domain-aware translation
-function detectMeetingDomain(text) {
-  const domains = {
-    financial:
-      /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
-    legal:
-      /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
-    medical:
-      /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
-    technical:
-      /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
-    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i,
-  };
-
-  for (const [domain, pattern] of Object.entries(domains)) {
-    if (pattern.test(text)) {
-      return domain;
-    }
-  }
-  return 'general';
-}
-
-// Get domain-specific translation instructions
-function getDomainInstructions(domain) {
-  const instructions = {
-    financial:
-      'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
-    legal:
-      'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
-    medical:
-      'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
-    technical:
-      'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
-    hr: 'This is an HR/talent due diligence meeting. Preserve HR terminology and employment-related terms accurately.',
-    general:
-      'This is a business due diligence meeting. Preserve business terminology and professional tone.',
-  };
-  return instructions[domain] || instructions.general;
-}
-
-// ============ SEARCH CONFIGURATION ============
-
-const CITY_MAP = {
-  malaysia: [
-    'Kuala Lumpur',
-    'Penang',
-    'Johor Bahru',
-    'Shah Alam',
-    'Petaling Jaya',
-    'Selangor',
-    'Ipoh',
-    'Klang',
-    'Subang',
-    'Melaka',
-    'Kuching',
-    'Kota Kinabalu',
-  ],
-  singapore: ['Singapore', 'Jurong', 'Tuas', 'Woodlands'],
-  thailand: [
-    'Bangkok',
-    'Chonburi',
-    'Rayong',
-    'Samut Prakan',
-    'Ayutthaya',
-    'Chiang Mai',
-    'Pathum Thani',
-    'Nonthaburi',
-    'Samut Sakhon',
-  ],
-  indonesia: [
-    'Jakarta',
-    'Surabaya',
-    'Bandung',
-    'Medan',
-    'Bekasi',
-    'Tangerang',
-    'Semarang',
-    'Sidoarjo',
-    'Cikarang',
-    'Karawang',
-    'Bogor',
-  ],
-  vietnam: [
-    'Ho Chi Minh City',
-    'Hanoi',
-    'Da Nang',
-    'Hai Phong',
-    'Binh Duong',
-    'Dong Nai',
-    'Long An',
-    'Ba Ria',
-    'Can Tho',
-  ],
-  philippines: [
-    'Manila',
-    'Cebu',
-    'Davao',
-    'Quezon City',
-    'Makati',
-    'Laguna',
-    'Cavite',
-    'Batangas',
-    'Bulacan',
-  ],
-  'southeast asia': [
-    'Kuala Lumpur',
-    'Singapore',
-    'Bangkok',
-    'Jakarta',
-    'Ho Chi Minh City',
-    'Manila',
-    'Penang',
-    'Johor Bahru',
-    'Surabaya',
-    'Hanoi',
-  ],
-};
-
-const LOCAL_SUFFIXES = {
-  malaysia: ['Sdn Bhd', 'Berhad'],
-  singapore: ['Pte Ltd', 'Private Limited'],
-  thailand: ['Co Ltd', 'Co., Ltd.'],
-  indonesia: ['PT', 'CV'],
-  vietnam: ['Co Ltd', 'JSC', 'Công ty'],
-  philippines: ['Inc', 'Corporation'],
-};
 
 // ============ WEBSITE VERIFICATION ============
 
@@ -539,7 +323,6 @@ async function fetchWebsite(url) {
   }
 
   const urlVariations = getUrlVariations(url);
-  let lastError = null;
 
   // Try each URL variation with retry logic
   for (const targetUrl of urlVariations) {
@@ -565,7 +348,6 @@ async function fetchWebsite(url) {
           console.log(`  [fetchWebsite] ${targetUrl} - HTTP ${response.status}`);
         }
       } catch (e) {
-        lastError = e;
         console.log(`  [fetchWebsite] ${targetUrl} - ERROR: ${e.message}`);
         // Wait before retry
         if (attempt < 2) {
@@ -894,7 +676,7 @@ async function validateCompanyBusinessStrict(company, targetBusiness, pageText) 
   }
 
   const systemPrompt = (
-    model
+    _model
   ) => `You are a company validator. Determine if the company matches the target business criteria STRICTLY based on the website content provided.
 
 TARGET BUSINESS: "${targetBusiness}"
@@ -906,13 +688,15 @@ RULES:
 4. If the website content is unclear or doesn't describe business activities → OUT OF SCOPE
 5. Be accurate - do not guess or assume
 
+IMPORTANT: The website content below was successfully fetched - the website IS accessible. Never say the website is "inaccessible" or "cannot be accessed". If content is unclear, say "unclear" or "insufficient information" but NOT "inaccessible".
+
 OUTPUT: Return JSON: {"in_scope": true/false, "confidence": "high/medium/low", "reason": "brief explanation based on website content", "business_description": "what this company actually does based on website"}`;
 
   const userPrompt = `COMPANY: ${company.company_name}
 WEBSITE: ${company.website}
 
-WEBSITE CONTENT:
-${typeof pageText === 'string' && pageText ? pageText.substring(0, 10000) : 'Could not fetch website - validate by company name only'}`;
+WEBSITE CONTENT (successfully fetched from the live website):
+${pageText.substring(0, 10000)}`;
 
   try {
     // First pass: gpt-4o-mini (fast and cheap)
@@ -975,7 +759,7 @@ ${typeof pageText === 'string' && pageText ? pageText.substring(0, 10000) : 'Cou
 }
 
 // Build validation results as Excel file (returns base64 string)
-function buildValidationExcel(companies, targetBusiness, countries, outputOption) {
+function buildValidationExcel(companies, _targetBusiness, _countries, _outputOption) {
   const inScopeCompanies = companies.filter((c) => c.in_scope);
 
   // Create workbook

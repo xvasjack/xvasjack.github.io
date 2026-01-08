@@ -5,19 +5,10 @@ const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
 const { securityHeaders, rateLimiter } = require('./shared/security');
 const { requestLogger, healthCheck } = require('./shared/middleware');
+const { setupGlobalErrorHandlers } = require('./shared/logging');
 
-// ============ GLOBAL ERROR HANDLERS ============
-process.on('unhandledRejection', (reason, _promise) => {
-  console.error('=== UNHANDLED PROMISE REJECTION ===');
-  console.error('Reason:', reason);
-  console.error('Stack:', reason?.stack || 'No stack trace');
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('=== UNCAUGHT EXCEPTION ===');
-  console.error('Error:', error.message);
-  console.error('Stack:', error.stack);
-});
+// Setup global error handlers to prevent crashes
+setupGlobalErrorHandlers({ logMemory: false });
 
 // ============ EXPRESS SETUP ============
 const app = express();
@@ -30,7 +21,7 @@ app.use(express.json({ limit: '10mb' }));
 
 // Check required environment variables
 const requiredEnvVars = ['DEEPSEEK_API_KEY', 'KIMI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
-const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
 }
@@ -39,7 +30,7 @@ if (missingVars.length > 0) {
 const costTracker = {
   date: new Date().toISOString().split('T')[0],
   totalCost: 0,
-  calls: []
+  calls: [],
 };
 
 // Pricing per 1M tokens (from DeepSeek docs - Dec 2024)
@@ -47,10 +38,10 @@ const costTracker = {
 // deepseek-chat = V3.2 Non-thinking Mode (max 8K output)
 // deepseek-reasoner = V3.2 Thinking Mode (max 64K output)
 const PRICING = {
-  'deepseek-chat': { input: 0.28, output: 0.42 },      // Cache miss pricing
+  'deepseek-chat': { input: 0.28, output: 0.42 }, // Cache miss pricing
   'deepseek-reasoner': { input: 0.28, output: 0.42 }, // Same pricing, but thinking mode
-  'kimi-128k': { input: 0.84, output: 0.84 },          // Moonshot v1 128k context
-  'kimi-32k': { input: 0.35, output: 0.35 }            // Moonshot v1 32k context
+  'kimi-128k': { input: 0.84, output: 0.84 }, // Moonshot v1 128k context
+  'kimi-32k': { input: 0.35, output: 0.35 }, // Moonshot v1 32k context
 };
 
 function trackCost(model, inputTokens, outputTokens, searchCount = 0) {
@@ -66,8 +57,17 @@ function trackCost(model, inputTokens, outputTokens, searchCount = 0) {
   }
 
   costTracker.totalCost += cost;
-  costTracker.calls.push({ model, inputTokens, outputTokens, searchCount, cost, time: new Date().toISOString() });
-  console.log(`  [Cost] ${model}: $${cost.toFixed(4)} (Total: $${costTracker.totalCost.toFixed(4)})`);
+  costTracker.calls.push({
+    model,
+    inputTokens,
+    outputTokens,
+    searchCount,
+    cost,
+    time: new Date().toISOString(),
+  });
+  console.log(
+    `  [Cost] ${model}: $${cost.toFixed(4)} (Total: $${costTracker.totalCost.toFixed(4)})`
+  );
   return cost;
 }
 
@@ -83,8 +83,10 @@ async function withRetry(fn, maxRetries = 3, baseDelayMs = 1000, operationName =
       lastError = error;
       if (attempt < maxRetries) {
         const delay = baseDelayMs * Math.pow(2, attempt - 1); // 1s, 2s, 4s
-        console.log(`  [Retry] ${operationName} failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`);
-        await new Promise(resolve => setTimeout(resolve, delay));
+        console.log(
+          `  [Retry] ${operationName} failed (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`
+        );
+        await new Promise((resolve) => setTimeout(resolve, delay));
       }
     }
   }
@@ -105,14 +107,14 @@ async function callDeepSeekChat(prompt, systemPrompt = '', maxTokens = 4096) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
+        Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
       },
       body: JSON.stringify({
         model: 'deepseek-chat',
         messages,
         max_tokens: maxTokens,
-        temperature: 0.3
-      })
+        temperature: 0.3,
+      }),
     });
 
     if (!response.ok) {
@@ -128,7 +130,7 @@ async function callDeepSeekChat(prompt, systemPrompt = '', maxTokens = 4096) {
 
     return {
       content: data.choices?.[0]?.message?.content || '',
-      usage: { input: inputTokens, output: outputTokens }
+      usage: { input: inputTokens, output: outputTokens },
     };
   } catch (error) {
     console.error('DeepSeek Chat API error:', error.message);
@@ -149,18 +151,21 @@ async function callDeepSeek(prompt, systemPrompt = '', maxTokens = 16384) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`
+        Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
       },
       body: JSON.stringify({
         model: 'deepseek-reasoner',
         messages,
-        max_tokens: maxTokens
-      })
+        max_tokens: maxTokens,
+      }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`DeepSeek Reasoner HTTP error ${response.status}:`, errorText.substring(0, 200));
+      console.error(
+        `DeepSeek Reasoner HTTP error ${response.status}:`,
+        errorText.substring(0, 200)
+      );
       // Fallback to chat model
       console.log('Falling back to deepseek-chat...');
       return callDeepSeekChat(prompt, systemPrompt, maxTokens);
@@ -175,12 +180,14 @@ async function callDeepSeek(prompt, systemPrompt = '', maxTokens = 16384) {
     const content = data.choices?.[0]?.message?.content || '';
     const reasoning = data.choices?.[0]?.message?.reasoning_content || '';
 
-    console.log(`  [DeepSeek V3.2 Thinking] Reasoning: ${reasoning.length} chars, Output: ${content.length} chars`);
+    console.log(
+      `  [DeepSeek V3.2 Thinking] Reasoning: ${reasoning.length} chars, Output: ${content.length} chars`
+    );
 
     return {
       content,
       reasoning,
-      usage: { input: inputTokens, output: outputTokens }
+      usage: { input: inputTokens, output: outputTokens },
     };
   } catch (error) {
     console.error('DeepSeek Reasoner API error:', error.message);
@@ -201,44 +208,51 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true) {
     model: 'moonshot-v1-128k',
     messages,
     max_tokens: 8192,
-    temperature: 0.3
+    temperature: 0.3,
   };
 
   // Enable web search tool if requested (can be disabled via env var for testing)
   const webSearchEnabled = process.env.KIMI_WEB_SEARCH !== 'false';
   if (useWebSearch && webSearchEnabled) {
-    requestBody.tools = [{
-      type: 'builtin_function',
-      function: { name: '$web_search' }
-    }];
+    requestBody.tools = [
+      {
+        type: 'builtin_function',
+        function: { name: '$web_search' },
+      },
+    ];
   }
 
   const kimiBaseUrl = process.env.KIMI_API_BASE || 'https://api.moonshot.ai/v1';
 
   try {
     // Use retry logic for network resilience
-    const data = await withRetry(async () => {
-      const response = await fetch(`${kimiBaseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.KIMI_API_KEY}`
-        },
-        body: JSON.stringify(requestBody)
-      });
+    const data = await withRetry(
+      async () => {
+        const response = await fetch(`${kimiBaseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${process.env.KIMI_API_KEY}`,
+          },
+          body: JSON.stringify(requestBody),
+        });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        // Throw to trigger retry for server errors
-        if (response.status >= 500 || response.status === 429) {
-          throw new Error(`Kimi HTTP ${response.status}: ${errorText.substring(0, 100)}`);
+        if (!response.ok) {
+          const errorText = await response.text();
+          // Throw to trigger retry for server errors
+          if (response.status >= 500 || response.status === 429) {
+            throw new Error(`Kimi HTTP ${response.status}: ${errorText.substring(0, 100)}`);
+          }
+          console.error(`Kimi HTTP error ${response.status}:`, errorText.substring(0, 200));
+          return null; // Don't retry client errors
         }
-        console.error(`Kimi HTTP error ${response.status}:`, errorText.substring(0, 200));
-        return null; // Don't retry client errors
-      }
 
-      return await response.json();
-    }, 3, 2000, 'Kimi research');
+        return await response.json();
+      },
+      3,
+      2000,
+      'Kimi research'
+    );
 
     if (!data) {
       return { content: '', citations: [], researchQuality: 'failed' };
@@ -255,7 +269,9 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true) {
     // Validate research quality
     let researchQuality = 'good';
     if (!content && toolCalls) {
-      console.log('  [Kimi] Response contains tool_calls instead of content - web search may need handling');
+      console.log(
+        '  [Kimi] Response contains tool_calls instead of content - web search may need handling'
+      );
       researchQuality = 'failed';
     } else if (!content) {
       console.log('  [Kimi] Empty response - finish_reason:', data.choices?.[0]?.finish_reason);
@@ -265,11 +281,27 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true) {
       researchQuality = 'thin';
     }
 
+    // Extract URLs from content for source citations
+    const urlRegex = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/g;
+    const extractedUrls = content.match(urlRegex) || [];
+    // Dedupe and clean URLs
+    const citations = [...new Set(extractedUrls)]
+      .filter(url => {
+        // Filter out common non-source URLs
+        const skipPatterns = ['facebook.com', 'twitter.com', 'linkedin.com', 'youtube.com', 'instagram.com'];
+        return !skipPatterns.some(p => url.includes(p));
+      })
+      .slice(0, 10)
+      .map(url => ({
+        url: url.replace(/[.,;:!?)]+$/, ''), // Clean trailing punctuation
+        title: url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]
+      }));
+
     return {
       content,
-      citations: [],
+      citations,
       usage: { input: inputTokens, output: outputTokens },
-      researchQuality
+      researchQuality,
     };
   } catch (error) {
     console.error('Kimi API error:', error.message);
@@ -328,8 +360,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} energy efficiency act mandatory audits industrial factories',
       '{country} ESCO law energy service company regulations licensing',
       '{country} power development plan PDP official targets capacity',
-      '{country} renewable energy act feed-in tariff regulations'
-    ]
+      '{country} renewable energy act feed-in tariff regulations',
+    ],
   },
   policy_nationalPolicy: {
     name: 'National Energy Policy',
@@ -339,8 +371,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} carbon neutrality net zero 2050 roadmap government',
       '{country} energy efficiency improvement target percentage annual',
       '{country} alternative energy development plan AEDP targets',
-      '{country} energy ministry policy direction minister statements 2024'
-    ]
+      '{country} energy ministry policy direction minister statements 2024',
+    ],
   },
   policy_investmentRestrictions: {
     name: 'Investment Restrictions',
@@ -350,8 +382,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} foreign ownership limit percentage energy power utilities',
       '{country} BOI investment promotion energy projects incentives',
       '{country} joint venture requirements foreign energy companies',
-      '{country} special economic zones energy investment privileges'
-    ]
+      '{country} special economic zones energy investment privileges',
+    ],
   },
 
   // === SECTION 2: MARKET (6 slides with charts) ===
@@ -364,8 +396,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} energy supply by source oil gas coal nuclear renewable percentage',
       '{country} energy imports dependency ratio petroleum natural gas',
       '{country} domestic energy production oil gas coal statistics',
-      '{country} IEA energy statistics TPES breakdown'
-    ]
+      '{country} IEA energy statistics TPES breakdown',
+    ],
   },
   market_finalDemand: {
     name: 'Final Energy Demand by Sector',
@@ -376,8 +408,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} industrial energy demand manufacturing factories statistics',
       '{country} energy consumption growth rate by sector 2020-2024',
       '{country} energy demand forecast 2025 2030 projections',
-      '{country} sectoral energy intensity trends'
-    ]
+      '{country} sectoral energy intensity trends',
+    ],
   },
   market_electricity: {
     name: 'Electricity & Power Generation',
@@ -388,8 +420,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} power generation mix coal gas renewable nuclear hydro percentage',
       '{country} electricity consumption industrial commercial residential TWh',
       '{country} power demand peak load forecast 2025 2030',
-      '{country} independent power producer IPP capacity licensed'
-    ]
+      '{country} independent power producer IPP capacity licensed',
+    ],
   },
   market_gasLng: {
     name: 'Gas & LNG Market',
@@ -400,8 +432,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} LNG imports volume million tons price trends',
       '{country} natural gas pipeline network coverage industrial zones',
       '{country} gas distribution companies market players share',
-      '{country} LNG regasification terminal capacity utilization'
-    ]
+      '{country} LNG regasification terminal capacity utilization',
+    ],
   },
   market_pricing: {
     name: 'Energy Pricing Analysis',
@@ -412,8 +444,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} commercial electricity price comparison regional',
       '{country} natural gas price industrial users USD per mmbtu',
       '{country} energy price subsidy policy government support',
-      '{country} electricity tariff forecast 2025 reform plans'
-    ]
+      '{country} electricity tariff forecast 2025 reform plans',
+    ],
   },
   market_escoServices: {
     name: 'ESCO & Energy Services Market',
@@ -424,8 +456,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} energy service company list registered members',
       '{country} energy performance contracting EPC market projects',
       '{country} energy audit market demand factories industrial',
-      '{country} energy management system EMS adoption rate'
-    ]
+      '{country} energy management system EMS adoption rate',
+    ],
   },
 
   // === SECTION 3: COMPETITOR OVERVIEW (5 slides) ===
@@ -438,8 +470,8 @@ const RESEARCH_FRAMEWORK = {
       'JERA {country} power generation investment projects',
       'Mitsubishi Corporation {country} energy infrastructure projects',
       'Mitsui {country} LNG gas energy investments',
-      'Japanese trading companies {country} energy sector presence'
-    ]
+      'Japanese trading companies {country} energy sector presence',
+    ],
   },
   competitors_localMajor: {
     name: 'Major Local Players',
@@ -449,8 +481,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} state owned energy utility company overview',
       '{country} major industrial conglomerates energy subsidiaries',
       '{country} top 10 ESCO companies market leaders',
-      '{country} energy engineering EPC contractors leading firms'
-    ]
+      '{country} energy engineering EPC contractors leading firms',
+    ],
   },
   competitors_foreignPlayers: {
     name: 'Other Foreign Competitors',
@@ -460,8 +492,8 @@ const RESEARCH_FRAMEWORK = {
       'Schneider Electric {country} energy management business',
       'Siemens {country} energy infrastructure smart grid',
       'European energy companies {country} market presence',
-      'American energy service providers {country} operations'
-    ]
+      'American energy service providers {country} operations',
+    ],
   },
   competitors_caseStudy: {
     name: 'Successful Entry Case Studies',
@@ -471,8 +503,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} ESCO joint venture success stories',
       '{country} energy sector acquisition deals 2020-2024',
       'lessons learned energy market entry {country}',
-      '{country} BOI promoted energy projects foreign investors'
-    ]
+      '{country} BOI promoted energy projects foreign investors',
+    ],
   },
   competitors_maActivity: {
     name: 'M&A and Partnership Activity',
@@ -482,8 +514,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} ESCO companies for sale acquisition targets',
       '{country} energy joint venture announcements partnerships',
       '{country} strategic energy investments 2024',
-      '{country} energy company valuation multiples deal terms'
-    ]
+      '{country} energy company valuation multiples deal terms',
+    ],
   },
 
   // === ADDITIONAL CONTEXT ===
@@ -495,8 +527,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} manufacturing sector contribution GDP industrial output',
       '{country} foreign direct investment inflows energy sector',
       '{country} economic development plan industrial corridor',
-      '{country} labor cost wage trends manufacturing sector'
-    ]
+      '{country} labor cost wage trends manufacturing sector',
+    ],
   },
   opportunities_whitespace: {
     name: 'Market Entry Opportunities',
@@ -506,8 +538,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} energy efficiency potential industrial factories',
       '{country} government energy tender upcoming projects',
       '{country} industrial parks seeking energy solutions',
-      '{country} conglomerates seeking energy partners technology'
-    ]
+      '{country} conglomerates seeking energy partners technology',
+    ],
   },
   risks_assessment: {
     name: 'Risk Assessment',
@@ -517,8 +549,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} foreign investment risks political stability',
       '{country} currency exchange rate risk energy contracts',
       '{country} energy policy reversal examples precedents',
-      '{country} local content requirements energy sector'
-    ]
+      '{country} local content requirements energy sector',
+    ],
   },
 
   // === DEPTH TOPICS: ESCO ECONOMICS & DEAL STRUCTURE ===
@@ -530,8 +562,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} energy performance contracting typical deal size value',
       '{country} ESCO project payback period ROI internal rate return',
       '{country} energy efficiency project financing options banks',
-      '{country} ESCO contract duration terms typical 5 10 years'
-    ]
+      '{country} ESCO contract duration terms typical 5 10 years',
+    ],
   },
   depth_partnerAssessment: {
     name: 'Potential Partners Deep Dive',
@@ -541,8 +573,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} industrial conglomerates seeking foreign technology partners',
       '{country} local ESCO companies acquisition targets valuation',
       '{country} energy consulting firms technical capabilities staff',
-      '{country} companies with Japanese partnership experience energy'
-    ]
+      '{country} companies with Japanese partnership experience energy',
+    ],
   },
   depth_entryStrategy: {
     name: 'Entry Strategy Analysis',
@@ -552,8 +584,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} joint venture requirements foreign companies energy',
       '{country} successful greenfield energy services company examples',
       '{country} acquisition targets ESCO energy services companies',
-      '{country} BOI promotion benefits foreign energy investment timeline'
-    ]
+      '{country} BOI promotion benefits foreign energy investment timeline',
+    ],
   },
   depth_implementation: {
     name: 'Implementation Considerations',
@@ -563,8 +595,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} BOI application approval process duration requirements',
       '{country} hiring energy engineers technical staff availability salary',
       '{country} office industrial facility costs Bangkok provinces',
-      '{country} business license permits energy services company requirements'
-    ]
+      '{country} business license permits energy services company requirements',
+    ],
   },
   depth_targetSegments: {
     name: 'Target Customer Segments',
@@ -574,8 +606,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} industrial estates zones highest energy intensity',
       '{country} manufacturing sectors highest electricity gas consumption',
       '{country} factories required energy audits compliance status',
-      '{country} Japanese manufacturing companies presence factories list'
-    ]
+      '{country} Japanese manufacturing companies presence factories list',
+    ],
   },
 
   // === INSIGHT & INTELLIGENCE QUERIES (for non-obvious insights) ===
@@ -587,8 +619,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} foreign energy company exit withdrew market why reasons',
       '{country} energy project disputes legal cases arbitration',
       '{country} energy joint venture breakup dissolution reasons lessons',
-      '{country} failed energy investments losses write-offs foreign companies'
-    ]
+      '{country} failed energy investments losses write-offs foreign companies',
+    ],
   },
   insight_timing: {
     name: 'Timing & Triggers',
@@ -598,8 +630,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} carbon tax carbon pricing implementation timeline 2025 2026',
       '{country} energy regulation changes upcoming 2025 2026 new requirements',
       '{country} renewable energy targets deadline compliance 2030',
-      '{country} energy efficiency mandate enforcement crackdown 2024 2025'
-    ]
+      '{country} energy efficiency mandate enforcement crackdown 2024 2025',
+    ],
   },
   insight_competitive: {
     name: 'Competitive Intelligence',
@@ -609,8 +641,8 @@ const RESEARCH_FRAMEWORK = {
       '{country} energy companies looking for foreign technology partners',
       '{country} competitor weaknesses complaints customer dissatisfaction',
       '{country} underserved industrial regions provinces energy services gap',
-      '{country} energy services pricing pressure margins profitability'
-    ]
+      '{country} energy services pricing pressure margins profitability',
+    ],
   },
   insight_regulatory: {
     name: 'Regulatory Reality',
@@ -620,19 +652,38 @@ const RESEARCH_FRAMEWORK = {
       '{country} energy regulation violations penalties fines cases',
       '{country} DEDE EPPO regulatory capacity auditors inspectors shortage',
       '{country} energy policy enforcement selective industries targeted',
-      '{country} regulatory relationships government connections importance'
-    ]
-  }
+      '{country} regulatory relationships government connections importance',
+    ],
+  },
 };
 
 // Research topic groups for efficient parallel processing
 const RESEARCH_TOPIC_GROUPS = {
   policy: ['policy_foundationalActs', 'policy_nationalPolicy', 'policy_investmentRestrictions'],
-  market: ['market_tpes', 'market_finalDemand', 'market_electricity', 'market_gasLng', 'market_pricing', 'market_escoServices'],
-  competitors: ['competitors_japanese', 'competitors_localMajor', 'competitors_foreignPlayers', 'competitors_caseStudy', 'competitors_maActivity'],
+  market: [
+    'market_tpes',
+    'market_finalDemand',
+    'market_electricity',
+    'market_gasLng',
+    'market_pricing',
+    'market_escoServices',
+  ],
+  competitors: [
+    'competitors_japanese',
+    'competitors_localMajor',
+    'competitors_foreignPlayers',
+    'competitors_caseStudy',
+    'competitors_maActivity',
+  ],
   context: ['macro_economicContext', 'opportunities_whitespace', 'risks_assessment'],
-  depth: ['depth_escoEconomics', 'depth_partnerAssessment', 'depth_entryStrategy', 'depth_implementation', 'depth_targetSegments'],
-  insights: ['insight_failures', 'insight_timing', 'insight_competitive', 'insight_regulatory']
+  depth: [
+    'depth_escoEconomics',
+    'depth_partnerAssessment',
+    'depth_entryStrategy',
+    'depth_implementation',
+    'depth_targetSegments',
+  ],
+  insights: ['insight_failures', 'insight_timing', 'insight_competitive', 'insight_regulatory'],
 };
 
 // ============ SCOPE PARSER ============
@@ -662,7 +713,10 @@ Return ONLY valid JSON, no markdown or explanation.`;
     // Clean up response - remove markdown code blocks if present
     let jsonStr = result.content.trim();
     if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      jsonStr = jsonStr
+        .replace(/```json?\n?/g, '')
+        .replace(/```/g, '')
+        .trim();
     }
     const scope = JSON.parse(jsonStr);
     console.log('Parsed scope:', JSON.stringify(scope, null, 2));
@@ -675,7 +729,7 @@ Return ONLY valid JSON, no markdown or explanation.`;
       industry: 'energy services',
       targetMarkets: ['Thailand', 'Vietnam', 'Malaysia', 'Philippines', 'Indonesia'],
       clientContext: 'Japanese company',
-      focusAreas: ['market size', 'competition', 'regulations']
+      focusAreas: ['market size', 'competition', 'regulations'],
     };
   }
 }
@@ -775,7 +829,10 @@ Return ONLY valid JSON.`;
   try {
     let jsonStr = result.content.trim();
     if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      jsonStr = jsonStr
+        .replace(/```json?\n?/g, '')
+        .replace(/```/g, '')
+        .trim();
     }
     const framework = JSON.parse(jsonStr);
 
@@ -790,7 +847,9 @@ Return ONLY valid JSON.`;
         }
       }
     }
-    console.log(`Generated dynamic framework: ${topicCount} topics, ${queryCount} queries for ${scope.industry}`);
+    console.log(
+      `Generated dynamic framework: ${topicCount} topics, ${queryCount} queries for ${scope.industry}`
+    );
 
     return framework;
   } catch (error) {
@@ -813,10 +872,10 @@ function generateFallbackFramework(scope) {
             `{country} ${industry} licensing permits foreign companies`,
             `{country} foreign investment restrictions ${industry} sector`,
             `{country} ${industry} compliance requirements standards`,
-            `{country} government policy ${industry} development`
-          ]
-        }
-      ]
+            `{country} government policy ${industry} development`,
+          ],
+        },
+      ],
     },
     market: {
       topics: [
@@ -827,10 +886,10 @@ function generateFallbackFramework(scope) {
             `{country} ${industry} market growth rate CAGR forecast`,
             `{country} ${industry} market segments breakdown`,
             `{country} ${industry} demand drivers trends`,
-            `{country} ${industry} market outlook 2025 2030`
-          ]
-        }
-      ]
+            `{country} ${industry} market outlook 2025 2030`,
+          ],
+        },
+      ],
     },
     competitors: {
       topics: [
@@ -841,10 +900,10 @@ function generateFallbackFramework(scope) {
             `{country} ${industry} foreign companies presence`,
             `{country} ${industry} local major players`,
             `{country} ${industry} competitive landscape analysis`,
-            `{country} ${industry} M&A acquisitions recent`
-          ]
-        }
-      ]
+            `{country} ${industry} M&A acquisitions recent`,
+          ],
+        },
+      ],
     },
     depth: {
       topics: [
@@ -855,10 +914,10 @@ function generateFallbackFramework(scope) {
             `{country} ${industry} typical deal size contract value`,
             `{country} ${industry} partnership joint venture examples`,
             `{country} ${industry} investment requirements costs`,
-            `{country} ${industry} success factors best practices`
-          ]
-        }
-      ]
+            `{country} ${industry} success factors best practices`,
+          ],
+        },
+      ],
     },
     insights: {
       topics: [
@@ -869,11 +928,11 @@ function generateFallbackFramework(scope) {
             `{country} ${industry} regulatory changes upcoming 2025`,
             `{country} ${industry} incentives expiration deadline`,
             `{country} ${industry} underserved segments gaps`,
-            `{country} ${industry} barriers challenges foreign companies`
-          ]
-        }
-      ]
-    }
+            `{country} ${industry} barriers challenges foreign companies`,
+          ],
+        },
+      ],
+    },
   };
 }
 
@@ -944,16 +1003,27 @@ Return ONLY valid JSON.`;
   try {
     let jsonStr = result.content.trim();
     if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      jsonStr = jsonStr
+        .replace(/```json?\n?/g, '')
+        .replace(/```/g, '')
+        .trim();
     }
     const gaps = JSON.parse(jsonStr);
 
     // Log detailed scoring
     const scores = gaps.sectionScores || {};
-    console.log(`    Section Scores: Policy=${scores.policy?.score || '?'}, Market=${scores.market?.score || '?'}, Competitors=${scores.competitors?.score || '?'}`);
-    console.log(`    Overall: ${gaps.overallScore || '?'}/100 | Confidence: ${gaps.confidenceAssessment?.overall || 'unknown'}`);
-    console.log(`    Gaps: ${gaps.criticalGaps?.length || 0} critical | Verify: ${gaps.dataToVerify?.length || 0} claims`);
-    console.log(`    Ready for client: ${gaps.confidenceAssessment?.readyForClient ? 'YES' : 'NO'}`);
+    console.log(
+      `    Section Scores: Policy=${scores.policy?.score || '?'}, Market=${scores.market?.score || '?'}, Competitors=${scores.competitors?.score || '?'}`
+    );
+    console.log(
+      `    Overall: ${gaps.overallScore || '?'}/100 | Confidence: ${gaps.confidenceAssessment?.overall || 'unknown'}`
+    );
+    console.log(
+      `    Gaps: ${gaps.criticalGaps?.length || 0} critical | Verify: ${gaps.dataToVerify?.length || 0} claims`
+    );
+    console.log(
+      `    Ready for client: ${gaps.confidenceAssessment?.readyForClient ? 'YES' : 'NO'}`
+    );
 
     return gaps;
   } catch (error) {
@@ -963,7 +1033,7 @@ Return ONLY valid JSON.`;
       overallScore: 40,
       criticalGaps: [],
       dataToVerify: [],
-      confidenceAssessment: { overall: 'low', numericConfidence: 40, readyForClient: false }
+      confidenceAssessment: { overall: 'low', numericConfidence: 40, readyForClient: false },
     };
   }
 }
@@ -975,7 +1045,8 @@ async function fillResearchGaps(gaps, country, industry) {
 
   // Research critical gaps with Kimi
   const criticalGaps = gaps.criticalGaps || [];
-  for (const gap of criticalGaps.slice(0, 4)) { // Limit to 4 most critical
+  for (const gap of criticalGaps.slice(0, 4)) {
+    // Limit to 4 most critical
     if (!gap.searchQuery) continue;
     console.log(`    Gap search: ${gap.gap.substring(0, 50)}...`);
 
@@ -986,15 +1057,16 @@ async function fillResearchGaps(gaps, country, industry) {
         gap: gap.gap,
         query: gap.searchQuery,
         findings: result.content,
-        citations: result.citations || []
+        citations: result.citations || [],
       });
     }
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
   // Verify questionable claims with Kimi
   const toVerify = gaps.dataToVerify || [];
-  for (const item of toVerify.slice(0, 2)) { // Limit to 2 verifications
+  for (const item of toVerify.slice(0, 2)) {
+    // Limit to 2 verifications
     if (!item.searchQuery) continue;
     console.log(`    Verify: ${item.claim.substring(0, 50)}...`);
 
@@ -1004,13 +1076,15 @@ async function fillResearchGaps(gaps, country, industry) {
         claim: item.claim,
         query: item.searchQuery,
         findings: result.content,
-        citations: result.citations || []
+        citations: result.citations || [],
       });
     }
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
-  console.log(`    Collected ${additionalData.gapResearch.length} gap fills, ${additionalData.verificationResearch.length} verifications`);
+  console.log(
+    `    Collected ${additionalData.gapResearch.length} gap fills, ${additionalData.verificationResearch.length} verifications`
+  );
   return additionalData;
 }
 
@@ -1068,7 +1142,10 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
   try {
     let jsonStr = result.content.trim();
     if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      jsonStr = jsonStr
+        .replace(/```json?\n?/g, '')
+        .replace(/```/g, '')
+        .trim();
     }
     const newSynthesis = JSON.parse(jsonStr);
 
@@ -1079,7 +1156,9 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
 
     if (!hasPolicy || !hasMarket || !hasCompetitors) {
       console.warn('  [reSynthesize] Structure mismatch detected - falling back to original');
-      console.warn(`    Missing: ${!hasPolicy ? 'policy ' : ''}${!hasMarket ? 'market ' : ''}${!hasCompetitors ? 'competitors' : ''}`);
+      console.warn(
+        `    Missing: ${!hasPolicy ? 'policy ' : ''}${!hasMarket ? 'market ' : ''}${!hasCompetitors ? 'competitors' : ''}`
+      );
       // Preserve country field from original
       originalSynthesis.country = country;
       return originalSynthesis;
@@ -1113,7 +1192,7 @@ async function policyResearchAgent(country, industry, _clientContext) {
       const queryContext = `As a regulatory affairs specialist, research ${framework.name} for ${country}'s ${industry} market:
 
 SPECIFIC QUESTIONS:
-${framework.queries.map(q => '- ' + q.replace('{country}', country)).join('\n')}
+${framework.queries.map((q) => '- ' + q.replace('{country}', country)).join('\n')}
 
 FOCUS ON:
 - Exact law names, years enacted, enforcement status
@@ -1127,7 +1206,7 @@ FOCUS ON:
         key: topicKey,
         content: result.content,
         citations: result.citations || [],
-        slideTitle: framework.slideTitle?.replace('{country}', country) || ''
+        slideTitle: framework.slideTitle?.replace('{country}', country) || '',
       };
     })
   );
@@ -1143,7 +1222,9 @@ FOCUS ON:
   }
 
   const successCount = Object.keys(results).length;
-  console.log(`    [POLICY AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${successCount} topics${droppedCount > 0 ? ` (${droppedCount} dropped)` : ''}`);
+  console.log(
+    `    [POLICY AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${successCount} topics${droppedCount > 0 ? ` (${droppedCount} dropped)` : ''}`
+  );
   return results;
 }
 
@@ -1164,8 +1245,9 @@ async function marketResearchAgent(country, industry, _clientContext) {
         if (!framework) return null;
 
         // Determine chart structure based on chartType
-        const chartStructure = framework.chartType === 'stackedBar'
-          ? `"chartData": {
+        const chartStructure =
+          framework.chartType === 'stackedBar'
+            ? `"chartData": {
               "categories": ["2020", "2021", "2022", "2023", "2024"],
               "series": [
                 {"name": "Category1", "values": [number, number, number, number, number]},
@@ -1173,26 +1255,26 @@ async function marketResearchAgent(country, industry, _clientContext) {
               ],
               "unit": "Mtoe or TWh or bcm"
             }`
-          : framework.chartType === 'pie'
-          ? `"chartData": {
+            : framework.chartType === 'pie'
+              ? `"chartData": {
               "categories": ["Segment1", "Segment2", "Segment3"],
               "values": [percentage, percentage, percentage],
               "unit": "%"
             }`
-          : framework.chartType === 'line'
-          ? `"chartData": {
+              : framework.chartType === 'line'
+                ? `"chartData": {
               "categories": ["2020", "2021", "2022", "2023", "2024"],
               "series": [
                 {"name": "Metric1", "values": [number, number, number, number, number]}
               ],
               "unit": "USD/kWh or USD/mmbtu"
             }`
-          : '';
+                : '';
 
         const queryContext = `As a market research analyst, research ${framework.name} for ${country}'s ${industry} market:
 
 SPECIFIC QUESTIONS:
-${framework.queries.map(q => '- ' + q.replace('{country}', country)).join('\n')}
+${framework.queries.map((q) => '- ' + q.replace('{country}', country)).join('\n')}
 
 CRITICAL - RETURN STRUCTURED DATA:
 Your response MUST include a JSON block with chart data. Use this EXACT format:
@@ -1235,7 +1317,7 @@ REQUIREMENTS:
           citations: result.citations || [],
           chartType: framework.chartType || null,
           slideTitle: framework.slideTitle?.replace('{country}', country) || '',
-          dataQuality: structuredData?.dataQuality || 'unknown'
+          dataQuality: structuredData?.dataQuality || 'unknown',
         };
       })
     );
@@ -1250,14 +1332,16 @@ REQUIREMENTS:
 
     // Brief pause between batches
     if (i + 3 < topics.length) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   }
 
   const successCount = Object.keys(results).length;
   const attemptedCount = topics.length;
   const droppedCount = attemptedCount - successCount;
-  console.log(`    [MARKET AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${successCount}/${attemptedCount} topics${droppedCount > 0 ? ` (${droppedCount} dropped)` : ''}`);
+  console.log(
+    `    [MARKET AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${successCount}/${attemptedCount} topics${droppedCount > 0 ? ` (${droppedCount} dropped)` : ''}`
+  );
   return results;
 }
 
@@ -1278,13 +1362,17 @@ async function competitorResearchAgent(country, industry, _clientContext) {
       const queryContext = `As a competitive intelligence analyst, research ${framework.name} for ${country}'s ${industry} market:
 
 SPECIFIC QUESTIONS:
-${framework.queries.map(q => '- ' + q.replace('{country}', country)).join('\n')}
+${framework.queries.map((q) => '- ' + q.replace('{country}', country)).join('\n')}
 
-${isJapanese ? `SPECIAL FOCUS - JAPANESE COMPANIES:
+${
+  isJapanese
+    ? `SPECIAL FOCUS - JAPANESE COMPANIES:
 - Tokyo Gas, Osaka Gas, JERA, Mitsubishi, Mitsui presence
 - Entry mode (JV, subsidiary, partnership)
 - Specific projects and contract values
-- Success/failure assessment with reasons` : ''}
+- Success/failure assessment with reasons`
+    : ''
+}
 
 CRITICAL - RETURN STRUCTURED DATA:
 Your response MUST include a JSON block. Use this format:
@@ -1335,7 +1423,7 @@ Use REAL data from research. Mark dataQuality as "low" if information is estimat
         structuredData: structuredData,
         citations: result.citations || [],
         slideTitle: framework.slideTitle?.replace('{country}', country) || '',
-        dataQuality: structuredData?.dataQuality || 'unknown'
+        dataQuality: structuredData?.dataQuality || 'unknown',
       };
     })
   );
@@ -1344,7 +1432,9 @@ Use REAL data from research. Mark dataQuality as "low" if information is estimat
     if (r && r.content) results[r.key] = r;
   }
 
-  console.log(`    [COMPETITOR AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  console.log(
+    `    [COMPETITOR AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`
+  );
   return results;
 }
 
@@ -1364,7 +1454,7 @@ async function contextResearchAgent(country, industry, clientContext) {
       const queryContext = `As a strategy consultant advising a ${clientContext}, research ${framework.name} for ${country}'s ${industry} market:
 
 SPECIFIC QUESTIONS:
-${framework.queries.map(q => '- ' + q.replace('{country}', country)).join('\n')}
+${framework.queries.map((q) => '- ' + q.replace('{country}', country)).join('\n')}
 
 FOCUS ON:
 - Actionable opportunities with sizing
@@ -1378,7 +1468,7 @@ FOCUS ON:
         key: topicKey,
         content: result.content,
         citations: result.citations || [],
-        slideTitle: framework.slideTitle?.replace('{country}', country) || ''
+        slideTitle: framework.slideTitle?.replace('{country}', country) || '',
       };
     })
   );
@@ -1387,7 +1477,9 @@ FOCUS ON:
     if (r && r.content) results[r.key] = r;
   }
 
-  console.log(`    [CONTEXT AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  console.log(
+    `    [CONTEXT AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`
+  );
   return results;
 }
 
@@ -1479,30 +1571,42 @@ AFTER your analysis, provide a JSON block with structured data:
       const queryContext = `As a senior M&A advisor helping a ${clientContext} enter ${country}'s ${industry} market, research ${framework.name}:
 
 SPECIFIC QUESTIONS:
-${framework.queries.map(q => '- ' + q.replace('{country}', country)).join('\n')}
+${framework.queries.map((q) => '- ' + q.replace('{country}', country)).join('\n')}
 
-${isEconomics ? `CRITICAL - PROVIDE SPECIFIC NUMBERS:
+${
+  isEconomics
+    ? `CRITICAL - PROVIDE SPECIFIC NUMBERS:
 - Typical ESCO contract size (USD range)
 - Contract duration (years)
 - Shared savings split (% client vs ESCO)
 - Payback period (years)
 - IRR expectations (%)
-- Common financing structures` : ''}
+- Common financing structures`
+    : ''
+}
 
-${isPartner ? `CRITICAL - FOR EACH POTENTIAL PARTNER:
+${
+  isPartner
+    ? `CRITICAL - FOR EACH POTENTIAL PARTNER:
 - Company name and ownership
 - Annual revenue (USD)
 - Number of employees
 - Technical capabilities
 - Current partnerships
 - Acquisition likelihood (1-5 scale)
-- Estimated valuation range` : ''}
+- Estimated valuation range`
+    : ''
+}
 
-${isEntry ? `CRITICAL - COMPARE OPTIONS:
+${
+  isEntry
+    ? `CRITICAL - COMPARE OPTIONS:
 - Joint Venture: requirements, timeline, control level
 - Acquisition: targets, valuations, integration challenges
 - Greenfield: timeline, costs, risks
-- Recommend best option with reasoning` : ''}
+- Recommend best option with reasoning`
+    : ''
+}
 
 DEPTH IS CRITICAL - We need specifics for executive decision-making, not general observations.${jsonStructure}`;
 
@@ -1531,7 +1635,7 @@ DEPTH IS CRITICAL - We need specifics for executive decision-making, not general
         slideTitle: framework.slideTitle?.replace('{country}', country) || '',
         structuredData,
         dataQuality,
-        researchQuality: result.researchQuality || 'unknown'
+        researchQuality: result.researchQuality || 'unknown',
       };
     })
   );
@@ -1540,7 +1644,9 @@ DEPTH IS CRITICAL - We need specifics for executive decision-making, not general
     if (r && r.content) results[r.key] = r;
   }
 
-  console.log(`    [DEPTH AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  console.log(
+    `    [DEPTH AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`
+  );
   return results;
 }
 
@@ -1652,31 +1758,47 @@ AFTER your analysis, provide a JSON block with structured data:
       const queryContext = `As a competitive intelligence analyst helping a ${clientContext} evaluate ${country}'s ${industry} market, research ${framework.name}:
 
 QUESTIONS TO ANSWER:
-${framework.queries.map(q => '- ' + q.replace('{country}', country)).join('\n')}
+${framework.queries.map((q) => '- ' + q.replace('{country}', country)).join('\n')}
 
-${isFailures ? `CRITICAL - FIND SPECIFIC EXAMPLES:
+${
+  isFailures
+    ? `CRITICAL - FIND SPECIFIC EXAMPLES:
 - Name companies that failed or exited
 - Identify specific reasons for failure
 - Extract lessons learned
-- Note warning signs to watch for` : ''}
+- Note warning signs to watch for`
+    : ''
+}
 
-${isTiming ? `CRITICAL - IDENTIFY SPECIFIC DEADLINES:
+${
+  isTiming
+    ? `CRITICAL - IDENTIFY SPECIFIC DEADLINES:
 - Incentive expiration dates (month/year)
 - Regulatory compliance deadlines
 - Policy implementation timelines
-- Windows of opportunity closing` : ''}
+- Windows of opportunity closing`
+    : ''
+}
 
-${isCompetitive ? `CRITICAL - FIND ACTIONABLE INTELLIGENCE:
+${
+  isCompetitive
+    ? `CRITICAL - FIND ACTIONABLE INTELLIGENCE:
 - Companies actively seeking partners/buyers
 - Competitors' known weaknesses
 - Underserved regions or segments
-- Pricing and margin pressures` : ''}
+- Pricing and margin pressures`
+    : ''
+}
 
-${isRegulatory ? `CRITICAL - DISTINGUISH RHETORIC FROM REALITY:
+${
+  isRegulatory
+    ? `CRITICAL - DISTINGUISH RHETORIC FROM REALITY:
 - Actual enforcement statistics
 - Agencies' real capacity constraints
 - Which regulations are enforced vs ignored
-- How companies navigate the system` : ''}
+- How companies navigate the system`
+    : ''
+}
 
 This intelligence is for CEO-level decision making. We need SPECIFIC names, dates, numbers - not generic observations.${jsonStructure}`;
 
@@ -1705,7 +1827,7 @@ This intelligence is for CEO-level decision making. We need SPECIFIC names, date
         slideTitle: framework.slideTitle?.replace('{country}', country) || '',
         structuredData,
         dataQuality,
-        researchQuality: result.researchQuality || 'unknown'
+        researchQuality: result.researchQuality || 'unknown',
       };
     })
   );
@@ -1714,14 +1836,23 @@ This intelligence is for CEO-level decision making. We need SPECIFIC names, date
     if (r && r.content) results[r.key] = r;
   }
 
-  console.log(`    [INSIGHTS AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  console.log(
+    `    [INSIGHTS AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`
+  );
   return results;
 }
 
 // ============ UNIVERSAL RESEARCH AGENT ============
 // Uses dynamic framework to research any industry/country
 
-async function universalResearchAgent(category, topics, country, industry, clientContext, projectType) {
+async function universalResearchAgent(
+  category,
+  topics,
+  country,
+  industry,
+  clientContext,
+  projectType
+) {
   console.log(`    [${category.toUpperCase()} AGENT] Starting research for ${country}...`);
   const agentStart = Date.now();
   const results = {};
@@ -1732,7 +1863,7 @@ async function universalResearchAgent(category, topics, country, industry, clien
       const queryContext = `As a senior consultant advising a ${clientContext} on a ${projectType} project, research ${topic.name} for ${country}'s ${industry} market:
 
 SPECIFIC QUESTIONS:
-${topic.queries.map(q => '- ' + q.replace(/{country}/g, country)).join('\n')}
+${topic.queries.map((q) => '- ' + q.replace(/{country}/g, country)).join('\n')}
 
 REQUIREMENTS:
 - Provide SPECIFIC data: numbers, company names, dates, deal sizes
@@ -1745,7 +1876,7 @@ REQUIREMENTS:
         key: `${category}_${idx}_${topic.name.replace(/\s+/g, '_').toLowerCase()}`,
         name: topic.name,
         content: result.content,
-        citations: result.citations || []
+        citations: result.citations || [],
       };
     })
   );
@@ -1754,7 +1885,9 @@ REQUIREMENTS:
     if (r && r.content) results[r.key] = r;
   }
 
-  console.log(`    [${category.toUpperCase()} AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`);
+  console.log(
+    `    [${category.toUpperCase()} AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`
+  );
   return results;
 }
 
@@ -1779,11 +1912,20 @@ async function researchCountry(country, industry, clientContext, scope = null) {
       totalTopics += (cat.topics || []).length;
     }
 
-    console.log(`  [DYNAMIC FRAMEWORK] Launching ${categoryCount} research agents with ${totalTopics} topics for ${scope.industry}...`);
+    console.log(
+      `  [DYNAMIC FRAMEWORK] Launching ${categoryCount} research agents with ${totalTopics} topics for ${scope.industry}...`
+    );
 
     // Run all categories in parallel
     const categoryPromises = Object.entries(dynamicFramework).map(([category, data]) =>
-      universalResearchAgent(category, data.topics || [], country, industry, clientContext, scope.projectType)
+      universalResearchAgent(
+        category,
+        data.topics || [],
+        country,
+        industry,
+        clientContext,
+        scope.projectType
+      )
     );
 
     const categoryResults = await Promise.all(categoryPromises);
@@ -1794,8 +1936,9 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     }
 
     const researchTimeTemp = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`\n  [AGENTS COMPLETE] ${Object.keys(researchData).length} topics researched in ${researchTimeTemp}s (dynamic framework)`);
-
+    console.log(
+      `\n  [AGENTS COMPLETE] ${Object.keys(researchData).length} topics researched in ${researchTimeTemp}s (dynamic framework)`
+    );
   } else {
     // Fallback: Use hardcoded framework for energy-specific research
     console.log(`  [MULTI-AGENT SYSTEM] Launching 6 specialized research agents...`);
@@ -1806,14 +1949,15 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     console.log(`    - Depth Agent (5 topics)`);
     console.log(`    - Insights Agent (4 topics)`);
 
-    const [policyData, marketData, competitorData, contextData, depthData, insightsData] = await Promise.all([
-      policyResearchAgent(country, industry, clientContext),
-      marketResearchAgent(country, industry, clientContext),
-      competitorResearchAgent(country, industry, clientContext),
-      contextResearchAgent(country, industry, clientContext),
-      depthResearchAgent(country, industry, clientContext),
-      insightsResearchAgent(country, industry, clientContext)
-    ]);
+    const [policyData, marketData, competitorData, contextData, depthData, insightsData] =
+      await Promise.all([
+        policyResearchAgent(country, industry, clientContext),
+        marketResearchAgent(country, industry, clientContext),
+        competitorResearchAgent(country, industry, clientContext),
+        contextResearchAgent(country, industry, clientContext),
+        depthResearchAgent(country, industry, clientContext),
+        insightsResearchAgent(country, industry, clientContext),
+      ]);
 
     // Merge all agent results
     researchData = {
@@ -1822,23 +1966,27 @@ async function researchCountry(country, industry, clientContext, scope = null) {
       ...competitorData,
       ...contextData,
       ...depthData,
-      ...insightsData
+      ...insightsData,
     };
 
     const totalTopics = Object.keys(researchData).length;
     const researchTime = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`\n  [AGENTS COMPLETE] ${totalTopics} topics researched in ${researchTime}s (parallel execution)`);
+    console.log(
+      `\n  [AGENTS COMPLETE] ${totalTopics} topics researched in ${researchTime}s (parallel execution)`
+    );
 
     // Validate minimum research data before synthesis
     const MIN_TOPICS_REQUIRED = 5;
     if (totalTopics < MIN_TOPICS_REQUIRED) {
-      console.error(`  [ERROR] Insufficient research data: ${totalTopics} topics (minimum ${MIN_TOPICS_REQUIRED} required)`);
+      console.error(
+        `  [ERROR] Insufficient research data: ${totalTopics} topics (minimum ${MIN_TOPICS_REQUIRED} required)`
+      );
       return {
         country,
         error: 'Insufficient research data',
         message: `Only ${totalTopics} topics returned data. Research may have failed due to API issues.`,
         topicsFound: totalTopics,
-        researchTimeMs: Date.now() - startTime
+        researchTimeMs: Date.now() - startTime,
       };
     }
   }
@@ -2250,19 +2398,24 @@ Return ONLY valid JSON.`;
   try {
     // Validate synthesis response before parsing
     if (!synthesis.content || synthesis.content.length < 100) {
-      console.error(`  [ERROR] Synthesis returned empty or insufficient content (${synthesis.content?.length || 0} chars)`);
+      console.error(
+        `  [ERROR] Synthesis returned empty or insufficient content (${synthesis.content?.length || 0} chars)`
+      );
       return {
         country,
         error: 'Synthesis returned empty response',
         message: 'DeepSeek API may be experiencing issues. Please retry.',
         rawData: researchData,
-        researchTimeMs: Date.now() - startTime
+        researchTimeMs: Date.now() - startTime,
       };
     }
 
     let jsonStr = synthesis.content.trim();
     if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      jsonStr = jsonStr
+        .replace(/```json?\n?/g, '')
+        .replace(/```/g, '')
+        .trim();
     }
     countryAnalysis = JSON.parse(jsonStr);
     // Preserve raw research data with citations for PPT footer
@@ -2280,7 +2433,7 @@ Return ONLY valid JSON.`;
       country,
       error: 'Synthesis failed',
       rawData: researchData,
-      researchTimeMs: Date.now() - startTime
+      researchTimeMs: Date.now() - startTime,
     };
   }
 
@@ -2312,20 +2465,28 @@ Return ONLY valid JSON.`;
       break;
     }
 
-    const criticalGapCount = (gaps.criticalGaps || []).filter(g => g.priority === 'high').length;
+    const criticalGapCount = (gaps.criticalGaps || []).filter((g) => g.priority === 'high').length;
     if (criticalGapCount === 0 && (gaps.dataToVerify || []).length === 0) {
       console.log(`    ✓ No actionable gaps found (score: ${confidenceScore}/100) - stopping`);
       break;
     }
 
-    console.log(`    → Score: ${confidenceScore}/100 | ${criticalGapCount} high-priority gaps | Targeting ${MIN_CONFIDENCE_SCORE}+ for completion`);
+    console.log(
+      `    → Score: ${confidenceScore}/100 | ${criticalGapCount} high-priority gaps | Targeting ${MIN_CONFIDENCE_SCORE}+ for completion`
+    );
 
     // Step 2: Execute targeted research to fill gaps
     const additionalData = await fillResearchGaps(gaps, country, industry);
 
     // Step 3: Re-synthesize with the new data
     if (additionalData.gapResearch.length > 0 || additionalData.verificationResearch.length > 0) {
-      countryAnalysis = await reSynthesize(countryAnalysis, additionalData, country, industry, clientContext);
+      countryAnalysis = await reSynthesize(
+        countryAnalysis,
+        additionalData,
+        country,
+        industry,
+        clientContext
+      );
       countryAnalysis.country = country; // Ensure country is set
       countryAnalysis.iterationsCompleted = iteration;
     } else {
@@ -2340,8 +2501,12 @@ Return ONLY valid JSON.`;
   countryAnalysis.readyForClient = readyForClient || confidenceScore >= MIN_CONFIDENCE_SCORE;
 
   console.log(`\n  ✓ Completed ${country}:`);
-  console.log(`    Time: ${(countryAnalysis.researchTimeMs / 1000).toFixed(1)}s | Iterations: ${iteration}`);
-  console.log(`    Confidence: ${confidenceScore}/100 | Ready: ${countryAnalysis.readyForClient ? 'YES' : 'NEEDS REVIEW'}`);
+  console.log(
+    `    Time: ${(countryAnalysis.researchTimeMs / 1000).toFixed(1)}s | Iterations: ${iteration}`
+  );
+  console.log(
+    `    Confidence: ${confidenceScore}/100 | Ready: ${countryAnalysis.readyForClient ? 'YES' : 'NEEDS REVIEW'}`
+  );
 
   return countryAnalysis;
 }
@@ -2417,11 +2582,18 @@ Return ONLY valid JSON.`;
   try {
     let jsonStr = result.content.trim();
     if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      jsonStr = jsonStr
+        .replace(/```json?\n?/g, '')
+        .replace(/```/g, '')
+        .trim();
     }
     const review = JSON.parse(jsonStr);
-    console.log(`    Score: ${review.overallScore}/10 | Confidence: ${review.confidence} | Verdict: ${review.verdict}`);
-    console.log(`    Issues: ${review.criticalIssues?.length || 0} critical | Strengths: ${review.strengths?.length || 0}`);
+    console.log(
+      `    Score: ${review.overallScore}/10 | Confidence: ${review.confidence} | Verdict: ${review.verdict}`
+    );
+    console.log(
+      `    Issues: ${review.criticalIssues?.length || 0} critical | Strengths: ${review.strengths?.length || 0}`
+    );
     return review;
   } catch (error) {
     console.error('  Reviewer failed to parse:', error.message);
@@ -2429,9 +2601,9 @@ Return ONLY valid JSON.`;
     return {
       overallScore: 4,
       confidence: 'low',
-      verdict: 'REVISE',  // Force revision instead of approving low-quality output
+      verdict: 'REVISE', // Force revision instead of approving low-quality output
       criticalIssues: ['Reviewer parsing failed - manual review recommended'],
-      reviewerError: true
+      reviewerError: true,
     };
   }
 }
@@ -2476,7 +2648,10 @@ Return ONLY valid JSON with the full analysis structure.`;
   try {
     let jsonStr = result.content.trim();
     if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      jsonStr = jsonStr
+        .replace(/```json?\n?/g, '')
+        .replace(/```/g, '')
+        .trim();
     }
     const revised = JSON.parse(jsonStr);
     revised.isSingleCountry = true;
@@ -2674,7 +2849,10 @@ CRITICAL QUALITY STANDARDS:
   try {
     let jsonStr = result.content.trim();
     if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      jsonStr = jsonStr
+        .replace(/```json?\n?/g, '')
+        .replace(/```/g, '')
+        .trim();
     }
     synthesis = JSON.parse(jsonStr);
     synthesis.isSingleCountry = true;
@@ -2685,7 +2863,7 @@ CRITICAL QUALITY STANDARDS:
       isSingleCountry: true,
       country: countryAnalysis.country,
       executiveSummary: ['Deep analysis parsing failed - raw content available'],
-      rawContent: result.content
+      rawContent: result.content,
     };
   }
 
@@ -2703,7 +2881,9 @@ CRITICAL QUALITY STANDARDS:
     const review = await reviewAnalysis(synthesis, countryAnalysis, scope);
 
     if (review.verdict === 'APPROVE' || review.overallScore >= 7) {
-      console.log(`  ✓ APPROVED after ${revisionCount} revision(s) | Final score: ${review.overallScore}/10`);
+      console.log(
+        `  ✓ APPROVED after ${revisionCount} revision(s) | Final score: ${review.overallScore}/10`
+      );
       approved = true;
       synthesis.qualityScore = review.overallScore;
       synthesis.reviewIterations = revisionCount;
@@ -2711,7 +2891,9 @@ CRITICAL QUALITY STANDARDS:
     }
 
     revisionCount++;
-    console.log(`\n  [REVISION ${revisionCount}/${MAX_REVISIONS}] Score: ${review.overallScore}/10 - Revising...`);
+    console.log(
+      `\n  [REVISION ${revisionCount}/${MAX_REVISIONS}] Score: ${review.overallScore}/10 - Revising...`
+    );
 
     // Working AI revises based on feedback
     synthesis = await reviseAnalysis(synthesis, review, countryAnalysis, scope, systemPrompt);
@@ -2819,14 +3001,17 @@ Focus on COMPARISONS and TRADE-OFFS, not just summaries.`;
   try {
     let jsonStr = result.content.trim();
     if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr.replace(/```json?\n?/g, '').replace(/```/g, '').trim();
+      jsonStr = jsonStr
+        .replace(/```json?\n?/g, '')
+        .replace(/```/g, '')
+        .trim();
     }
     return JSON.parse(jsonStr);
   } catch (error) {
     console.error('Failed to parse synthesis:', error.message);
     return {
       executiveSummary: ['Synthesis parsing failed - raw content available'],
-      rawContent: result.content
+      rawContent: result.content,
     };
   }
 }
@@ -2860,10 +3045,7 @@ function truncate(text, maxLen = 150) {
   }
 
   // Try to end at strong phrase boundary (; or :)
-  const strongPhrase = Math.max(
-    truncated.lastIndexOf('; '),
-    truncated.lastIndexOf(': ')
-  );
+  const strongPhrase = Math.max(truncated.lastIndexOf('; '), truncated.lastIndexOf(': '));
   if (strongPhrase > maxLen * 0.4) {
     return truncated.substring(0, strongPhrase + 1).trim();
   }
@@ -2886,7 +3068,35 @@ function truncate(text, maxLen = 150) {
     // Check if ending on a preposition/article - if so, cut earlier
     const words = truncated.substring(0, lastSpace).split(' ');
     const lastWord = words[words.length - 1].toLowerCase();
-    const badEndings = ['for', 'to', 'the', 'a', 'an', 'of', 'in', 'on', 'at', 'by', 'with', 'and', 'or', 'but', 'are', 'is', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'largely', 'mostly', 'mainly'];
+    const badEndings = [
+      'for',
+      'to',
+      'the',
+      'a',
+      'an',
+      'of',
+      'in',
+      'on',
+      'at',
+      'by',
+      'with',
+      'and',
+      'or',
+      'but',
+      'are',
+      'is',
+      'was',
+      'were',
+      'be',
+      'been',
+      'being',
+      'have',
+      'has',
+      'had',
+      'largely',
+      'mostly',
+      'mainly',
+    ];
     if (badEndings.includes(lastWord) && words.length > 1) {
       // Remove the dangling preposition/article
       words.pop();
@@ -2938,14 +3148,23 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
   if (typeof sources === 'string') {
     sourceText = `Source: ${sources}`;
   } else if (Array.isArray(sources)) {
-    const sourceList = sources.slice(0, 3).map(s => typeof s === 'string' ? s : s.name || s.source || '').filter(Boolean);
+    const sourceList = sources
+      .slice(0, 3)
+      .map((s) => (typeof s === 'string' ? s : s.name || s.source || ''))
+      .filter(Boolean);
     sourceText = sourceList.length > 0 ? `Sources: ${sourceList.join('; ')}` : '';
   }
 
   if (sourceText) {
     slide.addText(truncate(sourceText, 120), {
-      x: 0.4, y: 6.85, w: 12.5, h: 0.2,
-      fontSize: 8, fontFace: FONT, color: COLORS?.footerText || '666666', valign: 'top'
+      x: 0.4,
+      y: 6.85,
+      w: 12.5,
+      h: 0.2,
+      fontSize: 8,
+      fontFace: FONT,
+      color: COLORS?.footerText || '666666',
+      valign: 'top',
     });
   }
 }
@@ -2953,9 +3172,9 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
 // Helper: add callout/insight box to slide
 // Uses widescreen dimensions (13.333" x 7.5" = 16:9)
 function addCalloutBox(slide, title, content, options = {}) {
-  const boxX = options.x || 0.4;     // LEFT_MARGIN for widescreen
+  const boxX = options.x || 0.4; // LEFT_MARGIN for widescreen
   const boxY = options.y || 5.3;
-  const boxW = options.w || 12.5;    // CONTENT_WIDTH for widescreen
+  const boxW = options.w || 12.5; // CONTENT_WIDTH for widescreen
   const boxH = options.h || 1.2;
   const boxType = options.type || 'insight'; // insight, warning, recommendation
   const FONT = 'Segoe UI';
@@ -2966,35 +3185,56 @@ function addCalloutBox(slide, title, content, options = {}) {
     warning: { fill: 'FFF8E1', border: 'E46C0A', titleColor: 'E46C0A' },
     recommendation: { fill: 'EDFDFF', border: '007FFF', titleColor: '007FFF' },
     positive: { fill: 'F0FFF0', border: '2E7D32', titleColor: '2E7D32' },
-    negative: { fill: 'FFF0F0', border: 'C62828', titleColor: 'C62828' }
+    negative: { fill: 'FFF0F0', border: 'C62828', titleColor: 'C62828' },
   };
   const colors = typeColors[boxType] || typeColors.insight;
 
   // Box background with border
   slide.addShape('rect', {
-    x: boxX, y: boxY, w: boxW, h: boxH,
+    x: boxX,
+    y: boxY,
+    w: boxW,
+    h: boxH,
     fill: { color: colors.fill },
-    line: { color: colors.border, pt: 1.5 }
+    line: { color: colors.border, pt: 1.5 },
   });
 
   // Title (if provided)
   if (title) {
     slide.addText(title, {
-      x: boxX + 0.1, y: boxY + 0.05, w: boxW - 0.2, h: 0.25,
-      fontSize: 10, bold: true, color: colors.titleColor, fontFace: FONT
+      x: boxX + 0.1,
+      y: boxY + 0.05,
+      w: boxW - 0.2,
+      h: 0.25,
+      fontSize: 10,
+      bold: true,
+      color: colors.titleColor,
+      fontFace: FONT,
     });
     // Content below title
     if (content) {
       slide.addText(truncate(content, 200), {
-        x: boxX + 0.1, y: boxY + 0.35, w: boxW - 0.2, h: boxH - 0.45,
-        fontSize: 10, color: '000000', fontFace: FONT, valign: 'top'
+        x: boxX + 0.1,
+        y: boxY + 0.35,
+        w: boxW - 0.2,
+        h: boxH - 0.45,
+        fontSize: 10,
+        color: '000000',
+        fontFace: FONT,
+        valign: 'top',
       });
     }
   } else if (content) {
     // Just content, no title
     slide.addText(truncate(content, 200), {
-      x: boxX + 0.1, y: boxY + 0.1, w: boxW - 0.2, h: boxH - 0.2,
-      fontSize: 10, color: '000000', fontFace: FONT, valign: 'top'
+      x: boxX + 0.1,
+      y: boxY + 0.1,
+      w: boxW - 0.2,
+      h: boxH - 0.2,
+      fontSize: 10,
+      color: '000000',
+      fontFace: FONT,
+      valign: 'top',
     });
   }
 }
@@ -3002,14 +3242,14 @@ function addCalloutBox(slide, title, content, options = {}) {
 // ============ CHART GENERATION ============
 // YCP Color Palette for charts
 const CHART_COLORS = [
-  '007FFF',  // Blue (primary)
-  '011AB7',  // Dark blue
-  'E46C0A',  // Orange
-  '2E7D32',  // Green
-  '1F497D',  // Navy
-  'C62828',  // Red
-  '9C27B0',  // Purple
-  'FF9800'   // Amber
+  '007FFF', // Blue (primary)
+  '011AB7', // Dark blue
+  'E46C0A', // Orange
+  '2E7D32', // Green
+  '1F497D', // Navy
+  'C62828', // Red
+  '9C27B0', // Purple
+  'FF9800', // Amber
 ];
 
 // Add a stacked bar chart to a slide
@@ -3023,7 +3263,7 @@ function addStackedBarChart(slide, title, data, options = {}) {
     name: s.name,
     labels: data.categories,
     values: s.values,
-    color: CHART_COLORS[idx % CHART_COLORS.length]
+    color: CHART_COLORS[idx % CHART_COLORS.length],
   }));
 
   slide.addChart('bar', chartData, {
@@ -3044,7 +3284,7 @@ function addStackedBarChart(slide, title, data, options = {}) {
     valAxisLabelFontFace: 'Segoe UI',
     valAxisLabelFontSize: 10,
     dataLabelFontFace: 'Segoe UI',
-    showValue: options.showValues || false
+    showValue: options.showValues || false,
   });
 }
 
@@ -3059,7 +3299,7 @@ function addLineChart(slide, title, data, options = {}) {
     name: s.name,
     labels: data.categories,
     values: s.values,
-    color: CHART_COLORS[idx % CHART_COLORS.length]
+    color: CHART_COLORS[idx % CHART_COLORS.length],
   }));
 
   slide.addChart('line', chartData, {
@@ -3078,7 +3318,7 @@ function addLineChart(slide, title, data, options = {}) {
     valAxisLabelFontFace: 'Segoe UI',
     valAxisLabelFontSize: 10,
     lineDataSymbol: 'circle',
-    lineDataSymbolSize: 6
+    lineDataSymbolSize: 6,
   });
 }
 
@@ -3088,12 +3328,14 @@ function addBarChart(slide, title, data, options = {}) {
     return; // Skip if no valid data
   }
 
-  const chartData = [{
-    name: data.name || 'Value',
-    labels: data.categories,
-    values: data.values,
-    color: CHART_COLORS[0]
-  }];
+  const chartData = [
+    {
+      name: data.name || 'Value',
+      labels: data.categories,
+      values: data.values,
+      color: CHART_COLORS[0],
+    },
+  ];
 
   slide.addChart('bar', chartData, {
     x: options.x || 0.5,
@@ -3112,7 +3354,7 @@ function addBarChart(slide, title, data, options = {}) {
     valAxisLabelFontSize: 10,
     showValue: true,
     dataLabelFontFace: 'Segoe UI',
-    dataLabelFontSize: 9
+    dataLabelFontSize: 9,
   });
 }
 
@@ -3122,11 +3364,13 @@ function addPieChart(slide, title, data, options = {}) {
     return; // Skip if no valid data
   }
 
-  const chartData = [{
-    name: data.name || 'Share',
-    labels: data.categories,
-    values: data.values
-  }];
+  const chartData = [
+    {
+      name: data.name || 'Share',
+      labels: data.categories,
+      values: data.values,
+    },
+  ];
 
   slide.addChart(options.doughnut ? 'doughnut' : 'pie', chartData, {
     x: options.x || 2,
@@ -3140,12 +3384,134 @@ function addPieChart(slide, title, data, options = {}) {
     titleFontFace: 'Segoe UI',
     titleFontSize: 14,
     showPercent: true,
-    chartColors: CHART_COLORS.slice(0, data.categories.length)
+    chartColors: CHART_COLORS.slice(0, data.categories.length),
   });
 }
 
-// Single country deep-dive PPT - Matches YCP Escort/Shizuoka Gas format
-// Structure: Title → Policy (3) → Market (6 with charts) → Competitors (5) → Depth (5) → Timing (2) → Summary (5) = 27 slides
+// ============ STORY ARCHITECT ============
+// Transforms raw research data into a narrative with key insights
+// Returns a universal slide structure based on the story, not hardcoded slides
+async function buildStoryNarrative(countryAnalysis, scope) {
+  console.log('\n  [STORY ARCHITECT] Building narrative from research...');
+
+  const systemPrompt = `You are a senior partner at McKinsey preparing a board presentation. Your job is to transform raw research into a compelling narrative that drives a decision.
+
+=== STORYTELLING PRINCIPLES ===
+1. LEAD WITH THE VERDICT: Executives want the answer first, then the reasoning.
+2. EVERY SLIDE = ONE INSIGHT: Not "here's information about X" but "here's what X means for you"
+3. CONNECT THE DOTS: Each slide should logically lead to the next
+4. CUT RUTHLESSLY: If a fact doesn't support the decision, delete it. 8 great slides beat 25 mediocre ones.
+5. QUANTIFY EVERYTHING: "Big market" → "$1.5B market growing 12% annually"
+
+=== INSIGHT QUALITY ===
+BAD (information): "Thailand requires 50% local content for energy services"
+GOOD (insight): "The 50% local content rule means you can't compete on cost alone—local partnerships aren't optional, they're your competitive moat"
+
+BAD (list): "Key players include Schlumberger, Halliburton, Baker Hughes"
+GOOD (insight): "The Big 3 dominate offshore, but none have cracked the industrial efficiency market—a $200M segment growing 15% annually"
+
+=== SLIDE TYPES TO USE ===
+1. VERDICT: Go/No-Go with conditions (always first after title)
+2. OPPORTUNITY: Market size, growth, timing window
+3. BARRIER: What makes this hard (regulatory, competitive, operational)
+4. COMPETITIVE_LANDSCAPE: Who's winning, who's losing, white spaces
+5. ENTRY_PATH: How to get in (JV, acquisition, greenfield)
+6. ECONOMICS: Deal sizes, margins, investment required
+7. RISKS: Top 3-5 risks with mitigations
+8. ACTION: Specific next steps with timeline
+
+Return 8-12 slides maximum. Quality over quantity.`;
+
+  const prompt = `RESEARCH DATA:
+${JSON.stringify(countryAnalysis, null, 2)}
+
+CLIENT CONTEXT:
+- Industry: ${scope.industry}
+- Project Type: ${scope.projectType}
+- Client: ${scope.clientContext || 'Not specified'}
+- Target Market: ${scope.targetMarkets?.join(', ') || countryAnalysis.country}
+
+Transform this research into a narrative. Return JSON:
+
+{
+  "storyHook": "One sentence that frames the entire presentation (e.g., 'The 2025 deadline changes everything')",
+
+  "verdict": {
+    "decision": "GO" | "CONDITIONAL_GO" | "NO_GO",
+    "confidence": "HIGH" | "MEDIUM" | "LOW",
+    "conditions": ["condition 1", "condition 2"],
+    "oneLiner": "One sentence summary of recommendation"
+  },
+
+  "slides": [
+    {
+      "type": "VERDICT" | "OPPORTUNITY" | "BARRIER" | "COMPETITIVE_LANDSCAPE" | "ENTRY_PATH" | "ECONOMICS" | "RISKS" | "ACTION",
+      "title": "Slide title (max 60 chars)",
+      "insight": "The 'so what' - one sentence that makes this slide matter",
+      "content": {
+        // Type-specific content structure
+        // For VERDICT: { decision, conditions, ratings: {attractiveness, feasibility} }
+        // For OPPORTUNITY: { marketSize, growth, timingWindow, keyDrivers }
+        // For BARRIER: { barriers: [{name, severity, mitigation}] }
+        // For COMPETITIVE_LANDSCAPE: { leaders: [{name, strength, weakness}], whiteSpaces }
+        // For ENTRY_PATH: { options: [{name, timeline, investment, pros, cons}], recommended }
+        // For ECONOMICS: { dealSize, margins, investment, breakeven }
+        // For RISKS: { risks: [{name, severity, likelihood, mitigation}] }
+        // For ACTION: { steps: [{action, owner, timeline}] }
+      },
+      "sources": ["source URLs or names relevant to this slide"]
+    }
+  ],
+
+  "aggregatedSources": [
+    {"url": "actual URL", "title": "source name"}
+  ]
+}`;
+
+  try {
+    const response = await callDeepSeek(prompt, systemPrompt, 8192);
+
+    // Parse response
+    let story;
+    try {
+      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        story = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('No JSON found in response');
+      }
+    } catch (parseError) {
+      console.error('  [STORY ARCHITECT] Failed to parse response:', parseError.message);
+      // Return minimal default structure
+      return {
+        storyHook: `${countryAnalysis.country} Market Entry Analysis`,
+        verdict: {
+          decision: 'CONDITIONAL_GO',
+          confidence: 'MEDIUM',
+          conditions: ['Further analysis required'],
+          oneLiner: 'Proceed with caution'
+        },
+        slides: [],
+        aggregatedSources: []
+      };
+    }
+
+    console.log(`  [STORY ARCHITECT] Generated ${story.slides?.length || 0} slides with narrative`);
+    return story;
+
+  } catch (error) {
+    console.error('  [STORY ARCHITECT] Error:', error.message);
+    return {
+      storyHook: `${countryAnalysis.country} Market Entry Analysis`,
+      verdict: { decision: 'CONDITIONAL_GO', confidence: 'LOW', conditions: [], oneLiner: '' },
+      slides: [],
+      aggregatedSources: []
+    };
+  }
+}
+
+// ============ UNIVERSAL SLIDE GENERATOR ============
+// Generates slides dynamically based on story narrative, not hardcoded structure
 async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   console.log(`Generating expanded single-country PPT for ${synthesis.country}...`);
 
@@ -3155,24 +3521,38 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   pptx.defineLayout({ name: 'YCP', width: 13.333, height: 7.5 });
   pptx.layout = 'YCP';
 
+  // YCP Theme Colors (from profile-slides template)
+  const COLORS = {
+    headerLine: '293F55', // Dark navy for header/footer lines
+    accent3: '011AB7', // Dark blue - table header background
+    accent1: '007FFF', // Bright blue - secondary/subtitle
+    dk2: '1F497D', // Section underline/title color
+    white: 'FFFFFF',
+    black: '000000',
+    gray: 'BFBFBF', // Border color
+    footerText: '808080', // Gray footer text
+    green: '2E7D32', // Positive/Opportunity
+    orange: 'E46C0A', // Warning/Obstacle
+    red: 'C62828', // Negative/Risk
+  };
+
+  // ===== DEFINE MASTER SLIDE WITH FIXED LINES (matching profile-slides) =====
+  pptx.defineSlideMaster({
+    title: 'YCP_MASTER',
+    background: { color: 'FFFFFF' },
+    objects: [
+      // Thick header line (y: 1.02")
+      { line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } } },
+      // Thin header line (y: 1.10")
+      { line: { x: 0, y: 1.10, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
+      // Footer line (y: 7.24")
+      { line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } }
+    ]
+  });
+
   pptx.author = 'YCP Market Research';
   pptx.title = `${synthesis.country} - ${scope.industry} Market Analysis`;
   pptx.subject = scope.projectType;
-
-  // YCP Theme Colors (from profile-slides template)
-  const COLORS = {
-    headerLine: '293F55',    // Dark navy for header/footer lines
-    accent3: '011AB7',       // Dark blue - table header background
-    accent1: '007FFF',       // Bright blue - secondary/subtitle
-    dk2: '1F497D',           // Section underline/title color
-    white: 'FFFFFF',
-    black: '000000',
-    gray: 'BFBFBF',          // Border color
-    footerText: '808080',    // Gray footer text
-    green: '2E7D32',         // Positive/Opportunity
-    orange: 'E46C0A',        // Warning/Obstacle
-    red: 'C62828'            // Negative/Risk
-  };
 
   // Set default font to Segoe UI (YCP standard)
   pptx.theme = { headFontFace: 'Segoe UI', bodyFontFace: 'Segoe UI' };
@@ -3194,7 +3574,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     ratings: rawSummary.ratings || { attractiveness: 0, feasibility: 0 },
     keyInsights: rawSummary.keyInsights || [],
     goNoGo: rawSummary.goNoGo || {},
-    recommendation: rawSummary.recommendation || ''
+    recommendation: rawSummary.recommendation || '',
   };
   const country = countryAnalysis.country || synthesis.country;
 
@@ -3217,85 +3597,162 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // Standard slide layout with title, subtitle, and navy divider line
   // Uses widescreen dimensions (13.333" x 7.5" = 16:9)
-  const CONTENT_WIDTH = 12.5;  // Full content width for 16:9 widescreen
-  const LEFT_MARGIN = 0.4;     // Left margin matching YCP template
+  const CONTENT_WIDTH = 12.5; // Full content width for 16:9 widescreen
+  const LEFT_MARGIN = 0.4; // Left margin matching YCP template
 
-  // Options: { citations: string[], dataQuality: 'high'|'medium'|'low'|'estimated' }
+  // Options: { sources: [{url, title}], dataQuality: 'high'|'medium'|'low'|'estimated' }
   function addSlideWithTitle(title, subtitle = '', options = {}) {
-    const slide = pptx.addSlide();
-    // Title - 24pt bold navy
+    // Use master slide with fixed header/footer lines
+    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+
+    // Title - 24pt Segoe UI, dark blue
     slide.addText(truncateTitle(title), {
-      x: LEFT_MARGIN, y: 0.15, w: CONTENT_WIDTH, h: 0.7,
-      fontSize: 24, bold: true, color: COLORS.dk2, fontFace: FONT,
-      valign: 'top', wrap: true
+      x: LEFT_MARGIN,
+      y: 0.15,
+      w: CONTENT_WIDTH,
+      h: 0.7,
+      fontSize: 24,
+      bold: true,
+      color: COLORS.dk2,
+      fontFace: FONT,
+      valign: 'top',
+      wrap: true,
     });
     // Navy divider line under title
     slide.addShape('line', {
-      x: LEFT_MARGIN, y: 0.9, w: CONTENT_WIDTH, h: 0,
-      line: { color: COLORS.dk2, width: 2.5 }
+      x: LEFT_MARGIN,
+      y: 0.9,
+      w: CONTENT_WIDTH,
+      h: 0,
+      line: { color: COLORS.dk2, width: 2.5 },
     });
-    // Message/subtitle - 14pt blue (the "so what")
+    // Message/subtitle - 14pt blue (the "so what" insight)
     if (subtitle) {
-      // Add asterisk for estimated data
-      const dataQualityIndicator = options.dataQuality === 'estimated' ? ' *' :
-                                   options.dataQuality === 'low' ? ' †' : '';
+      const dataQualityIndicator =
+        options.dataQuality === 'estimated' ? ' *' : options.dataQuality === 'low' ? ' †' : '';
       slide.addText(subtitle + dataQualityIndicator, {
-        x: LEFT_MARGIN, y: 0.95, w: CONTENT_WIDTH, h: 0.3,
-        fontSize: 14, color: COLORS.accent1, fontFace: FONT
+        x: LEFT_MARGIN,
+        y: 0.95,
+        w: CONTENT_WIDTH,
+        h: 0.3,
+        fontSize: 14,
+        color: COLORS.accent1,
+        fontFace: FONT,
       });
     }
-    // Add data quality indicator legend if applicable
+
+    // Add data quality indicator if applicable
     if (options.dataQuality === 'estimated' || options.dataQuality === 'low') {
-      const legend = options.dataQuality === 'estimated'
-        ? '* Estimated data - verify independently'
-        : '† Limited data availability';
+      const legend =
+        options.dataQuality === 'estimated'
+          ? '* Estimated data - verify independently'
+          : '† Limited data availability';
       slide.addText(legend, {
-        x: LEFT_MARGIN, y: 6.9, w: 4, h: 0.2,
-        fontSize: 8, italic: true, color: 'E46C0A', fontFace: FONT
+        x: LEFT_MARGIN,
+        y: 6.9,
+        w: 4,
+        h: 0.2,
+        fontSize: 8,
+        italic: true,
+        color: 'E46C0A',
+        fontFace: FONT,
       });
     }
-    // Add source citations in footer if provided
-    if (options.citations && options.citations.length > 0) {
-      const citationText = 'Sources: ' + options.citations.slice(0, 3).map(c => {
-        // Extract domain from URL for brevity
-        try {
-          const url = new URL(c);
-          return url.hostname.replace('www.', '');
-        } catch (e) {
-          return truncate(c, 30);
+
+    // Add clickable source citations in footer (supports both sources and citations)
+    const sourcesToRender = options.sources || options.citations;
+    if (sourcesToRender && sourcesToRender.length > 0) {
+      const sourceElements = [];
+      sourceElements.push({ text: 'Sources: ', options: { fontSize: 8, fontFace: FONT, color: '666666' } });
+
+      sourcesToRender.slice(0, 3).forEach((source, idx) => {
+        if (idx > 0) sourceElements.push({ text: ', ', options: { fontSize: 8, fontFace: FONT, color: '666666' } });
+
+        // Handle both object format {url, title} and plain string URLs
+        const sourceUrl = typeof source === 'object' ? source.url : source;
+        const sourceTitle = typeof source === 'object' ? source.title : null;
+
+        if (sourceUrl && sourceUrl.startsWith('http')) {
+          // Extract domain for display
+          let displayText;
+          try {
+            const url = new URL(sourceUrl);
+            displayText = sourceTitle || url.hostname.replace('www.', '');
+          } catch (e) {
+            displayText = sourceTitle || truncate(sourceUrl, 30);
+          }
+          // Clickable hyperlink
+          sourceElements.push({
+            text: displayText,
+            options: {
+              fontSize: 8,
+              fontFace: FONT,
+              color: '0066CC',
+              hyperlink: { url: sourceUrl },
+            },
+          });
+        } else {
+          // Plain text source
+          sourceElements.push({
+            text: sourceTitle || String(source),
+            options: { fontSize: 8, fontFace: FONT, color: '666666' },
+          });
         }
-      }).join(', ');
-      slide.addText(citationText, {
-        x: LEFT_MARGIN + 4.5, y: 6.9, w: CONTENT_WIDTH - 4.5, h: 0.2,
-        fontSize: 7, color: '888888', fontFace: FONT, align: 'right'
+      });
+
+      slide.addText(sourceElements, {
+        x: LEFT_MARGIN + 4.5,
+        y: 6.9,
+        w: CONTENT_WIDTH - 4.5,
+        h: 0.2,
+        valign: 'top',
+        align: 'right',
       });
     }
+
     return slide;
   }
 
   // Helper for table header row
   function tableHeader(cols) {
-    return cols.map(text => ({
+    return cols.map((text) => ({
       text,
-      options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT }
+      options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT },
     }));
   }
 
   // Helper to show "Data unavailable" message on slides with missing data
   function addDataUnavailableMessage(slide, message = 'Data not available for this section') {
     slide.addShape('rect', {
-      x: LEFT_MARGIN, y: 2.5, w: CONTENT_WIDTH, h: 1.5,
-      fill: { color: 'FFF8E1' },  // Light yellow warning background
-      line: { color: 'E46C0A', pt: 1 }
+      x: LEFT_MARGIN,
+      y: 2.5,
+      w: CONTENT_WIDTH,
+      h: 1.5,
+      fill: { color: 'FFF8E1' }, // Light yellow warning background
+      line: { color: 'E46C0A', pt: 1 },
     });
     slide.addText('⚠ ' + message, {
-      x: LEFT_MARGIN + 0.2, y: 2.7, w: CONTENT_WIDTH - 0.4, h: 0.4,
-      fontSize: 14, bold: true, color: 'E46C0A', fontFace: FONT
+      x: LEFT_MARGIN + 0.2,
+      y: 2.7,
+      w: CONTENT_WIDTH - 0.4,
+      h: 0.4,
+      fontSize: 14,
+      bold: true,
+      color: 'E46C0A',
+      fontFace: FONT,
     });
-    slide.addText('This data could not be verified through research. Please validate independently before making decisions.', {
-      x: LEFT_MARGIN + 0.2, y: 3.2, w: CONTENT_WIDTH - 0.4, h: 0.6,
-      fontSize: 11, color: '666666', fontFace: FONT
-    });
+    slide.addText(
+      'This data could not be verified through research. Please validate independently before making decisions.',
+      {
+        x: LEFT_MARGIN + 0.2,
+        y: 3.2,
+        w: CONTENT_WIDTH - 0.4,
+        h: 0.6,
+        fontSize: 11,
+        color: '666666',
+        fontFace: FONT,
+      }
+    );
   }
 
   // Helper to extract citations from raw research data for a specific topic category
@@ -3328,53 +3785,379 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     return 'unknown';
   }
 
+  // ============ STORY ARCHITECT: BUILD NARRATIVE ============
+  const story = await buildStoryNarrative(countryAnalysis, scope);
+
+  // If Story Architect generated slides, use dynamic generation
+  if (story.slides && story.slides.length > 0) {
+    console.log(`  [PPT] Using Story Architect narrative (${story.slides.length} slides)`);
+
+    // TITLE SLIDE
+    const titleSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+    titleSlide.addText(country.toUpperCase(), {
+      x: 0.5, y: 2.2, w: 12, h: 0.8,
+      fontSize: 42, bold: true, color: COLORS.dk2, fontFace: FONT
+    });
+    titleSlide.addText(`${scope.industry} Market Analysis`, {
+      x: 0.5, y: 3.0, w: 12, h: 0.5,
+      fontSize: 24, color: COLORS.accent1, fontFace: FONT
+    });
+    // Story hook as subtitle
+    if (story.storyHook) {
+      titleSlide.addText(story.storyHook, {
+        x: 0.5, y: 3.6, w: 12, h: 0.5,
+        fontSize: 16, italic: true, color: COLORS.black, fontFace: FONT
+      });
+    }
+    titleSlide.addText(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' }), {
+      x: 0.5, y: 6.5, w: 9, h: 0.3,
+      fontSize: 10, color: '666666', fontFace: FONT
+    });
+
+    // DYNAMIC SLIDES FROM STORY
+    for (const slideData of story.slides) {
+      const slide = addSlideWithTitle(
+        slideData.title || 'Analysis',
+        slideData.insight || '',
+        { sources: slideData.sources?.map(s => typeof s === 'string' ? { title: s } : s) || [] }
+      );
+
+      const content = slideData.content || {};
+      const contentY = slideData.insight ? 1.55 : 1.2;
+
+      switch (slideData.type) {
+        case 'VERDICT': {
+          // Verdict box
+          const verdictColor = content.decision === 'GO' ? COLORS.green :
+                              content.decision === 'NO_GO' ? COLORS.red : COLORS.orange;
+          slide.addShape('rect', {
+            x: LEFT_MARGIN, y: contentY, w: CONTENT_WIDTH, h: 1.2,
+            fill: { color: verdictColor }, line: { color: verdictColor, pt: 0 }
+          });
+          slide.addText(`VERDICT: ${content.decision?.replace('_', ' ') || 'CONDITIONAL GO'}`, {
+            x: LEFT_MARGIN + 0.2, y: contentY + 0.1, w: CONTENT_WIDTH - 0.4, h: 0.5,
+            fontSize: 24, bold: true, color: COLORS.white, fontFace: FONT
+          });
+          slide.addText(content.oneLiner || '', {
+            x: LEFT_MARGIN + 0.2, y: contentY + 0.6, w: CONTENT_WIDTH - 0.4, h: 0.5,
+            fontSize: 14, color: COLORS.white, fontFace: FONT
+          });
+
+          // Conditions
+          if (content.conditions && content.conditions.length > 0) {
+            slide.addText('Conditions:', {
+              x: LEFT_MARGIN, y: contentY + 1.4, w: CONTENT_WIDTH, h: 0.3,
+              fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
+            });
+            const conditionText = content.conditions.map((c, i) => `${i + 1}. ${c}`).join('\n');
+            slide.addText(conditionText, {
+              x: LEFT_MARGIN, y: contentY + 1.8, w: CONTENT_WIDTH, h: 2,
+              fontSize: 12, color: COLORS.black, fontFace: FONT, valign: 'top'
+            });
+          }
+
+          // Ratings
+          if (content.ratings) {
+            slide.addText(`Attractiveness: ${content.ratings.attractiveness || '?'}/10  |  Feasibility: ${content.ratings.feasibility || '?'}/10`, {
+              x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 0.4,
+              fontSize: 14, color: COLORS.accent1, fontFace: FONT
+            });
+          }
+          break;
+        }
+
+        case 'OPPORTUNITY': {
+          // Market metrics
+          const metrics = [
+            { label: 'Market Size', value: content.marketSize || 'N/A' },
+            { label: 'Growth', value: content.growth || 'N/A' },
+            { label: 'Timing Window', value: content.timingWindow || 'N/A' }
+          ];
+          metrics.forEach((m, i) => {
+            slide.addText(m.label, {
+              x: LEFT_MARGIN + (i * 4.2), y: contentY, w: 4, h: 0.3,
+              fontSize: 12, color: COLORS.footerText, fontFace: FONT
+            });
+            slide.addText(m.value, {
+              x: LEFT_MARGIN + (i * 4.2), y: contentY + 0.35, w: 4, h: 0.6,
+              fontSize: 18, bold: true, color: COLORS.dk2, fontFace: FONT
+            });
+          });
+
+          // Key drivers
+          if (content.keyDrivers && content.keyDrivers.length > 0) {
+            slide.addText('Key Drivers:', {
+              x: LEFT_MARGIN, y: contentY + 1.5, w: CONTENT_WIDTH, h: 0.3,
+              fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
+            });
+            const driverText = content.keyDrivers.map(d => `• ${d}`).join('\n');
+            slide.addText(driverText, {
+              x: LEFT_MARGIN, y: contentY + 1.9, w: CONTENT_WIDTH, h: 3,
+              fontSize: 12, color: COLORS.black, fontFace: FONT, valign: 'top'
+            });
+          }
+          break;
+        }
+
+        case 'BARRIER': {
+          // Barriers table
+          if (content.barriers && content.barriers.length > 0) {
+            const rows = [tableHeader(['Barrier', 'Severity', 'Mitigation'])];
+            content.barriers.forEach(b => {
+              rows.push([
+                { text: b.name || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.black } },
+                { text: b.severity || '', options: { fontFace: FONT, fontSize: 11, color: b.severity === 'High' ? COLORS.red : COLORS.orange } },
+                { text: b.mitigation || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.black } }
+              ]);
+            });
+            slide.addTable(rows, {
+              x: LEFT_MARGIN, y: contentY, w: CONTENT_WIDTH, h: 4,
+              fontFace: FONT, fontSize: 11, valign: 'middle',
+              border: { pt: 0.5, color: COLORS.gray }
+            });
+          }
+          break;
+        }
+
+        case 'COMPETITIVE_LANDSCAPE': {
+          // Leaders table
+          if (content.leaders && content.leaders.length > 0) {
+            const rows = [tableHeader(['Company', 'Strength', 'Weakness'])];
+            content.leaders.forEach(l => {
+              rows.push([
+                { text: l.name || '', options: { fontFace: FONT, fontSize: 11, bold: true, color: COLORS.black } },
+                { text: l.strength || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.green } },
+                { text: l.weakness || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.red } }
+              ]);
+            });
+            slide.addTable(rows, {
+              x: LEFT_MARGIN, y: contentY, w: CONTENT_WIDTH, h: 3,
+              fontFace: FONT, fontSize: 11, valign: 'middle',
+              border: { pt: 0.5, color: COLORS.gray }
+            });
+          }
+
+          // White spaces
+          if (content.whiteSpaces && content.whiteSpaces.length > 0) {
+            slide.addText('Market White Spaces:', {
+              x: LEFT_MARGIN, y: contentY + 3.3, w: CONTENT_WIDTH, h: 0.3,
+              fontSize: 14, bold: true, color: COLORS.green, fontFace: FONT
+            });
+            const wsText = content.whiteSpaces.map(w => `• ${w}`).join('\n');
+            slide.addText(wsText, {
+              x: LEFT_MARGIN, y: contentY + 3.7, w: CONTENT_WIDTH, h: 1.5,
+              fontSize: 12, color: COLORS.black, fontFace: FONT, valign: 'top'
+            });
+          }
+          break;
+        }
+
+        case 'ENTRY_PATH': {
+          // Entry options comparison
+          if (content.options && content.options.length > 0) {
+            const rows = [tableHeader(['Option', 'Timeline', 'Investment', 'Key Considerations'])];
+            content.options.forEach(o => {
+              const isRecommended = o.name === content.recommended;
+              rows.push([
+                { text: (isRecommended ? '★ ' : '') + (o.name || ''), options: { fontFace: FONT, fontSize: 11, bold: isRecommended, color: isRecommended ? COLORS.accent1 : COLORS.black } },
+                { text: o.timeline || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.black } },
+                { text: o.investment || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.black } },
+                { text: (o.pros || []).slice(0, 2).join('; '), options: { fontFace: FONT, fontSize: 10, color: COLORS.black } }
+              ]);
+            });
+            slide.addTable(rows, {
+              x: LEFT_MARGIN, y: contentY, w: CONTENT_WIDTH, h: 4,
+              fontFace: FONT, fontSize: 11, valign: 'middle',
+              border: { pt: 0.5, color: COLORS.gray }
+            });
+          }
+
+          if (content.recommended) {
+            slide.addText(`Recommended: ${content.recommended}`, {
+              x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 0.4,
+              fontSize: 14, bold: true, color: COLORS.accent1, fontFace: FONT
+            });
+          }
+          break;
+        }
+
+        case 'ECONOMICS': {
+          // Economics metrics
+          const ecoMetrics = [
+            { label: 'Typical Deal Size', value: content.dealSize || 'N/A' },
+            { label: 'Investment Required', value: content.investment || 'N/A' },
+            { label: 'Breakeven', value: content.breakeven || 'N/A' }
+          ];
+          ecoMetrics.forEach((m, i) => {
+            slide.addText(m.label, {
+              x: LEFT_MARGIN + (i * 4.2), y: contentY, w: 4, h: 0.3,
+              fontSize: 12, color: COLORS.footerText, fontFace: FONT
+            });
+            slide.addText(m.value, {
+              x: LEFT_MARGIN + (i * 4.2), y: contentY + 0.35, w: 4, h: 0.6,
+              fontSize: 16, bold: true, color: COLORS.dk2, fontFace: FONT
+            });
+          });
+
+          if (content.margins) {
+            slide.addText(`Expected Margins: ${content.margins}`, {
+              x: LEFT_MARGIN, y: contentY + 1.5, w: CONTENT_WIDTH, h: 0.4,
+              fontSize: 14, color: COLORS.black, fontFace: FONT
+            });
+          }
+          break;
+        }
+
+        case 'RISKS': {
+          // Risks table
+          if (content.risks && content.risks.length > 0) {
+            const rows = [tableHeader(['Risk', 'Severity', 'Likelihood', 'Mitigation'])];
+            content.risks.forEach(r => {
+              const sevColor = r.severity === 'High' ? COLORS.red : r.severity === 'Medium' ? COLORS.orange : COLORS.green;
+              rows.push([
+                { text: r.name || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.black } },
+                { text: r.severity || '', options: { fontFace: FONT, fontSize: 11, color: sevColor } },
+                { text: r.likelihood || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.black } },
+                { text: r.mitigation || '', options: { fontFace: FONT, fontSize: 10, color: COLORS.black } }
+              ]);
+            });
+            slide.addTable(rows, {
+              x: LEFT_MARGIN, y: contentY, w: CONTENT_WIDTH, h: 4.5,
+              fontFace: FONT, fontSize: 11, valign: 'middle',
+              border: { pt: 0.5, color: COLORS.gray }
+            });
+          }
+          break;
+        }
+
+        case 'ACTION': {
+          // Action steps
+          if (content.steps && content.steps.length > 0) {
+            const rows = [tableHeader(['Action', 'Owner', 'Timeline'])];
+            content.steps.forEach((s, i) => {
+              rows.push([
+                { text: `${i + 1}. ${s.action || ''}`, options: { fontFace: FONT, fontSize: 11, color: COLORS.black } },
+                { text: s.owner || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.black } },
+                { text: s.timeline || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.accent1 } }
+              ]);
+            });
+            slide.addTable(rows, {
+              x: LEFT_MARGIN, y: contentY, w: CONTENT_WIDTH, h: 4,
+              fontFace: FONT, fontSize: 11, valign: 'middle',
+              border: { pt: 0.5, color: COLORS.gray }
+            });
+          }
+          break;
+        }
+
+        default: {
+          // Generic content slide - render as bullet points
+          const textContent = typeof content === 'string' ? content :
+                             Array.isArray(content) ? content.map(c => `• ${c}`).join('\n') :
+                             JSON.stringify(content, null, 2);
+          slide.addText(textContent, {
+            x: LEFT_MARGIN, y: contentY, w: CONTENT_WIDTH, h: 5,
+            fontSize: 12, color: COLORS.black, fontFace: FONT, valign: 'top'
+          });
+        }
+      }
+    }
+
+    // Sources slide
+    if (story.aggregatedSources && story.aggregatedSources.length > 0) {
+      const sourcesSlide = addSlideWithTitle('Sources', 'Research citations and references');
+      const sourceText = story.aggregatedSources.map((s, i) => `${i + 1}. ${s.title || s.url}`).join('\n');
+      sourcesSlide.addText(sourceText, {
+        x: LEFT_MARGIN, y: 1.55, w: CONTENT_WIDTH, h: 5,
+        fontSize: 10, color: COLORS.black, fontFace: FONT, valign: 'top'
+      });
+    }
+
+    const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
+    console.log(`Narrative PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB, ${story.slides.length + 2} slides`);
+    return pptxBuffer;
+  }
+
+  // ============ FALLBACK: HARDCODED SLIDES (when Story Architect fails) ============
+  console.log('  [PPT] Using fallback hardcoded slide structure');
+
   // ============ SLIDE 1: TITLE ============
-  const titleSlide = pptx.addSlide();
+  const titleSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
   titleSlide.addText(country.toUpperCase(), {
-    x: 0.5, y: 2.2, w: 9, h: 0.8,
-    fontSize: 42, bold: true, color: COLORS.dk2, fontFace: FONT
+    x: 0.5,
+    y: 2.2,
+    w: 9,
+    h: 0.8,
+    fontSize: 42,
+    bold: true,
+    color: COLORS.dk2,
+    fontFace: FONT,
   });
   titleSlide.addText(`${scope.industry} Market Analysis`, {
-    x: 0.5, y: 3.0, w: 9, h: 0.5,
-    fontSize: 24, color: COLORS.accent1, fontFace: FONT
+    x: 0.5,
+    y: 3.0,
+    w: 9,
+    h: 0.5,
+    fontSize: 24,
+    color: COLORS.accent1,
+    fontFace: FONT,
   });
   titleSlide.addText(`Deep Research Report`, {
-    x: 0.5, y: 3.6, w: 9, h: 0.4,
-    fontSize: 14, color: COLORS.black, fontFace: FONT
+    x: 0.5,
+    y: 3.6,
+    w: 9,
+    h: 0.4,
+    fontSize: 14,
+    color: COLORS.black,
+    fontFace: FONT,
   });
   titleSlide.addText(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' }), {
-    x: 0.5, y: 6.5, w: 9, h: 0.3,
-    fontSize: 10, color: '666666', fontFace: FONT
+    x: 0.5,
+    y: 6.5,
+    w: 9,
+    h: 0.3,
+    fontSize: 10,
+    color: '666666',
+    fontFace: FONT,
   });
 
   // ============ SECTION 1: POLICY & REGULATIONS (3 slides) ============
 
   // SLIDE 2: Foundational Acts
   const foundationalActs = policy.foundationalActs || {};
-  console.log(`  [PPT Debug] foundationalActs keys: ${Object.keys(foundationalActs).join(', ') || 'EMPTY'}`);
+  console.log(
+    `  [PPT Debug] foundationalActs keys: ${Object.keys(foundationalActs).join(', ') || 'EMPTY'}`
+  );
   const actsSlide = addSlideWithTitle(
     foundationalActs.slideTitle || `${country} - Energy Foundational Acts`,
     truncateSubtitle(foundationalActs.subtitle || foundationalActs.keyMessage || '', 95),
-    { citations: getCitationsForCategory('policy_'), dataQuality: getDataQualityForCategory('policy_') }
+    {
+      citations: getCitationsForCategory('policy_'),
+      dataQuality: getDataQualityForCategory('policy_'),
+    }
   );
   const acts = safeArray(foundationalActs.acts, 5);
   console.log(`  [PPT Debug] acts array length: ${acts.length}`);
   if (acts.length > 0) {
     const actsRows = [tableHeader(['Act Name', 'Year', 'Requirements', 'Enforcement'])];
-    acts.forEach(act => {
+    acts.forEach((act) => {
       actsRows.push([
         { text: truncate(act.name || '', 25) },
         { text: act.year || '' },
         { text: truncate(act.requirements || '', 50) },
-        { text: truncate(act.enforcement || '', 40) }
+        { text: truncate(act.enforcement || '', 40) },
       ]);
     });
     actsSlide.addTable(actsRows, {
-      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 5.2,
-      fontSize: 12, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 1.3,
+      w: CONTENT_WIDTH,
+      h: 5.2,
+      fontSize: 12,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.2, 0.8, 3.3, 3.0],
-      valign: 'top'
+      valign: 'top',
     });
   } else {
     addDataUnavailableMessage(actsSlide, 'Energy legislation data not available');
@@ -3385,7 +4168,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const policySlide = addSlideWithTitle(
     nationalPolicy.slideTitle || `${country} - National Energy Policy`,
     truncateSubtitle(nationalPolicy.policyDirection || '', 95),
-    { citations: getCitationsForCategory('policy_'), dataQuality: getDataQualityForCategory('policy_') }
+    {
+      citations: getCitationsForCategory('policy_'),
+      dataQuality: getDataQualityForCategory('policy_'),
+    }
   );
   const targets = safeArray(nationalPolicy.targets, 4);
   if (targets.length === 0 && safeArray(nationalPolicy.keyInitiatives, 4).length === 0) {
@@ -3393,33 +4179,52 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
   if (targets.length > 0) {
     const targetRows = [tableHeader(['Metric', 'Target', 'Deadline', 'Status'])];
-    targets.forEach(t => {
+    targets.forEach((t) => {
       targetRows.push([
         { text: t.metric || '' },
         { text: t.target || '' },
         { text: t.deadline || '' },
-        { text: t.status || '' }
+        { text: t.status || '' },
       ]);
     });
     policySlide.addTable(targetRows, {
-      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 2.5,
-      fontSize: 12, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 1.3,
+      w: CONTENT_WIDTH,
+      h: 2.5,
+      fontSize: 12,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [3.0, 2.3, 2.0, 2.0],
-      valign: 'top'
+      valign: 'top',
     });
   }
   // Key initiatives as bullets
   const initiatives = safeArray(nationalPolicy.keyInitiatives, 4);
   if (initiatives.length > 0) {
     policySlide.addText('Key Initiatives', {
-      x: LEFT_MARGIN, y: 4.0, w: CONTENT_WIDTH, h: 0.3,
-      fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
+      x: LEFT_MARGIN,
+      y: 4.0,
+      w: CONTENT_WIDTH,
+      h: 0.3,
+      fontSize: 14,
+      bold: true,
+      color: COLORS.dk2,
+      fontFace: FONT,
     });
-    policySlide.addText(initiatives.map(i => ({ text: truncate(i, 100), options: { bullet: true } })), {
-      x: LEFT_MARGIN, y: 4.4, w: CONTENT_WIDTH, h: 2.0,
-      fontSize: 12, fontFace: FONT, color: COLORS.black, valign: 'top'
-    });
+    policySlide.addText(
+      initiatives.map((i) => ({ text: truncate(i, 100), options: { bullet: true } })),
+      {
+        x: LEFT_MARGIN,
+        y: 4.4,
+        w: CONTENT_WIDTH,
+        h: 2.0,
+        fontSize: 12,
+        fontFace: FONT,
+        color: COLORS.black,
+        valign: 'top',
+      }
+    );
   }
 
   // SLIDE 4: Investment Restrictions
@@ -3427,48 +4232,78 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const investSlide = addSlideWithTitle(
     investRestrict.slideTitle || `${country} - Foreign Investment Rules`,
     truncateSubtitle(investRestrict.riskJustification || '', 95),
-    { citations: getCitationsForCategory('policy_'), dataQuality: getDataQualityForCategory('policy_') }
+    {
+      citations: getCitationsForCategory('policy_'),
+      dataQuality: getDataQualityForCategory('policy_'),
+    }
   );
   // Ownership limits
   const ownership = investRestrict.ownershipLimits || {};
   const ownershipRows = [tableHeader(['Category', 'Limit', 'Details'])];
-  if (ownership.general) ownershipRows.push([{ text: 'General Sectors' }, { text: ownership.general }, { text: truncate(ownership.exceptions || '', 60) }]);
-  if (ownership.promoted) ownershipRows.push([{ text: 'BOI Promoted' }, { text: ownership.promoted }, { text: 'Tax incentives apply' }]);
+  if (ownership.general)
+    ownershipRows.push([
+      { text: 'General Sectors' },
+      { text: ownership.general },
+      { text: truncate(ownership.exceptions || '', 60) },
+    ]);
+  if (ownership.promoted)
+    ownershipRows.push([
+      { text: 'BOI Promoted' },
+      { text: ownership.promoted },
+      { text: 'Tax incentives apply' },
+    ]);
   if (ownershipRows.length > 1) {
     investSlide.addTable(ownershipRows, {
-      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 1.5,
-      fontSize: 12, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 1.3,
+      w: CONTENT_WIDTH,
+      h: 1.5,
+      fontSize: 12,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.5, 1.5, 5.3],
-      valign: 'top'
+      valign: 'top',
     });
   }
   // Incentives
   const incentivesList = safeArray(investRestrict.incentives, 3);
   if (incentivesList.length > 0) {
     const incRows = [tableHeader(['Incentive', 'Benefit', 'Eligibility'])];
-    incentivesList.forEach(inc => {
+    incentivesList.forEach((inc) => {
       incRows.push([
         { text: inc.name || '' },
         { text: inc.benefit || '' },
-        { text: truncate(inc.eligibility || '', 50) }
+        { text: truncate(inc.eligibility || '', 50) },
       ]);
     });
     investSlide.addTable(incRows, {
-      x: LEFT_MARGIN, y: 3.0, w: CONTENT_WIDTH, h: 2.0,
-      fontSize: 12, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 3.0,
+      w: CONTENT_WIDTH,
+      h: 2.0,
+      fontSize: 12,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.5, 2.5, 4.3],
-      valign: 'top'
+      valign: 'top',
     });
   }
   // Risk level indicator
   if (investRestrict.riskLevel) {
-    const riskColor = investRestrict.riskLevel.toLowerCase().includes('high') ? COLORS.red :
-                      investRestrict.riskLevel.toLowerCase().includes('low') ? COLORS.green : COLORS.orange;
+    const riskColor = investRestrict.riskLevel.toLowerCase().includes('high')
+      ? COLORS.red
+      : investRestrict.riskLevel.toLowerCase().includes('low')
+        ? COLORS.green
+        : COLORS.orange;
     investSlide.addText(`Regulatory Risk: ${investRestrict.riskLevel.toUpperCase()}`, {
-      x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 0.4,
-      fontSize: 14, bold: true, color: riskColor, fontFace: FONT
+      x: LEFT_MARGIN,
+      y: 5.5,
+      w: CONTENT_WIDTH,
+      h: 0.4,
+      fontSize: 14,
+      bold: true,
+      color: riskColor,
+      fontFace: FONT,
     });
   }
 
@@ -3484,7 +4319,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     { citations: marketCitations, dataQuality: marketDataQuality }
   );
   if (tpes.chartData && tpes.chartData.series) {
-    addStackedBarChart(tpesSlide, `TPES by Source (${tpes.chartData.unit || 'Mtoe'})`, tpes.chartData, { y: 1.3, h: 5.0 });
+    addStackedBarChart(
+      tpesSlide,
+      `TPES by Source (${tpes.chartData.unit || 'Mtoe'})`,
+      tpes.chartData,
+      { y: 1.3, h: 5.0 }
+    );
   } else {
     addDataUnavailableMessage(tpesSlide, 'Energy supply data not available');
   }
@@ -3497,17 +4337,31 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     { citations: marketCitations, dataQuality: marketDataQuality }
   );
   if (finalDemand.chartData && finalDemand.chartData.series) {
-    addStackedBarChart(demandSlide, `Demand by Sector (${finalDemand.chartData.unit || '%'})`, finalDemand.chartData, { y: 1.3, h: 4.0 });
+    addStackedBarChart(
+      demandSlide,
+      `Demand by Sector (${finalDemand.chartData.unit || '%'})`,
+      finalDemand.chartData,
+      { y: 1.3, h: 4.0 }
+    );
   } else if (safeArray(finalDemand.keyDrivers, 3).length === 0) {
     addDataUnavailableMessage(demandSlide, 'Energy demand data not available');
   }
   // Key drivers as bullets
   const drivers = safeArray(finalDemand.keyDrivers, 3);
   if (drivers.length > 0) {
-    demandSlide.addText(drivers.map(d => ({ text: truncate(d, 100), options: { bullet: true } })), {
-      x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 1.2,
-      fontSize: 12, fontFace: FONT, color: COLORS.black, valign: 'top'
-    });
+    demandSlide.addText(
+      drivers.map((d) => ({ text: truncate(d, 100), options: { bullet: true } })),
+      {
+        x: LEFT_MARGIN,
+        y: 5.5,
+        w: CONTENT_WIDTH,
+        h: 1.2,
+        fontSize: 12,
+        fontFace: FONT,
+        color: COLORS.black,
+        valign: 'top',
+      }
+    );
   }
 
   // SLIDE 7: Electricity & Power
@@ -3518,18 +4372,35 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     { citations: marketCitations, dataQuality: marketDataQuality }
   );
   if (electricity.chartData && electricity.chartData.values) {
-    addPieChart(elecSlide, `Power Generation Mix (${electricity.chartData.unit || '%'})`, electricity.chartData, { x: 0.5, y: 1.3, w: 5, h: 4 });
+    addPieChart(
+      elecSlide,
+      `Power Generation Mix (${electricity.chartData.unit || '%'})`,
+      electricity.chartData,
+      { x: 0.5, y: 1.3, w: 5, h: 4 }
+    );
   } else if (!electricity.demandGrowth && !electricity.keyTrend) {
     addDataUnavailableMessage(elecSlide, 'Electricity market data not available');
   }
   // Add key stats on the right
-  elecSlide.addText([
-    { text: `Demand Growth: ${electricity.demandGrowth || 'N/A'}`, options: { bullet: true } },
-    { text: `Key Trend: ${truncate(electricity.keyTrend || 'N/A', 80)}`, options: { bullet: true } }
-  ], {
-    x: 5.5, y: 2, w: 4.3, h: 3,
-    fontSize: 12, fontFace: FONT, color: COLORS.black, valign: 'top'
-  });
+  elecSlide.addText(
+    [
+      { text: `Demand Growth: ${electricity.demandGrowth || 'N/A'}`, options: { bullet: true } },
+      {
+        text: `Key Trend: ${truncate(electricity.keyTrend || 'N/A', 80)}`,
+        options: { bullet: true },
+      },
+    ],
+    {
+      x: 5.5,
+      y: 2,
+      w: 4.3,
+      h: 3,
+      fontSize: 12,
+      fontFace: FONT,
+      color: COLORS.black,
+      valign: 'top',
+    }
+  );
 
   // SLIDE 8: Gas & LNG
   const gasLng = market.gasLng || {};
@@ -3539,7 +4410,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     { citations: marketCitations, dataQuality: marketDataQuality }
   );
   if (gasLng.chartData && gasLng.chartData.series) {
-    addLineChart(gasSlide, `Gas Supply Trend (${gasLng.chartData.unit || 'bcm'})`, gasLng.chartData, { y: 1.3, h: 3.5 });
+    addLineChart(
+      gasSlide,
+      `Gas Supply Trend (${gasLng.chartData.unit || 'bcm'})`,
+      gasLng.chartData,
+      { y: 1.3, h: 3.5 }
+    );
   } else if (safeArray(gasLng.lngTerminals, 3).length === 0) {
     addDataUnavailableMessage(gasSlide, 'Gas/LNG market data not available');
   }
@@ -3547,19 +4423,23 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const terminals = safeArray(gasLng.lngTerminals, 3);
   if (terminals.length > 0) {
     const termRows = [tableHeader(['Terminal', 'Capacity', 'Utilization'])];
-    terminals.forEach(t => {
+    terminals.forEach((t) => {
       termRows.push([
         { text: t.name || '' },
         { text: t.capacity || '' },
-        { text: t.utilization || '' }
+        { text: t.utilization || '' },
       ]);
     });
     gasSlide.addTable(termRows, {
-      x: LEFT_MARGIN, y: 5.0, w: CONTENT_WIDTH, h: 1.5,
-      fontSize: 11, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 5.0,
+      w: CONTENT_WIDTH,
+      h: 1.5,
+      fontSize: 11,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [4.0, 2.65, 2.65],
-      valign: 'top'
+      valign: 'top',
     });
   }
 
@@ -3577,8 +4457,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
   if (pricing.comparison) {
     priceSlide.addText(`Regional Comparison: ${truncate(pricing.comparison, 100)}`, {
-      x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 0.5,
-      fontSize: 12, fontFace: FONT, color: COLORS.black
+      x: LEFT_MARGIN,
+      y: 5.5,
+      w: CONTENT_WIDTH,
+      h: 0.5,
+      fontSize: 12,
+      fontFace: FONT,
+      color: COLORS.black,
     });
   }
 
@@ -3590,7 +4475,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     { citations: marketCitations, dataQuality: marketDataQuality }
   );
   if (escoMarket.chartData && escoMarket.chartData.values) {
-    addBarChart(escoSlide, `Market Segments (${escoMarket.chartData.unit || '%'})`, escoMarket.chartData, { y: 1.3, h: 3.5 });
+    addBarChart(
+      escoSlide,
+      `Market Segments (${escoMarket.chartData.unit || '%'})`,
+      escoMarket.chartData,
+      { y: 1.3, h: 3.5 }
+    );
   } else if (safeArray(escoMarket.segments, 4).length === 0) {
     addDataUnavailableMessage(escoSlide, 'ESCO market data not available');
   }
@@ -3598,19 +4488,19 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const segments = safeArray(escoMarket.segments, 4);
   if (segments.length > 0) {
     const segRows = [tableHeader(['Segment', 'Size', 'Share'])];
-    segments.forEach(s => {
-      segRows.push([
-        { text: s.name || '' },
-        { text: s.size || '' },
-        { text: s.share || '' }
-      ]);
+    segments.forEach((s) => {
+      segRows.push([{ text: s.name || '' }, { text: s.size || '' }, { text: s.share || '' }]);
     });
     escoSlide.addTable(segRows, {
-      x: LEFT_MARGIN, y: 5.0, w: CONTENT_WIDTH, h: 1.5,
-      fontSize: 11, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 5.0,
+      w: CONTENT_WIDTH,
+      h: 1.5,
+      fontSize: 11,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [4.0, 2.65, 2.65],
-      valign: 'top'
+      valign: 'top',
     });
   }
 
@@ -3631,20 +4521,24 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
   if (jpPlayers.length > 0) {
     const jpRows = [tableHeader(['Company', 'Presence', 'Projects', 'Assessment'])];
-    jpPlayers.forEach(p => {
+    jpPlayers.forEach((p) => {
       jpRows.push([
         { text: p.name || '' },
         { text: truncate(p.presence || '', 30) },
         { text: truncate(p.projects || '', 35) },
-        { text: p.assessment || '' }
+        { text: p.assessment || '' },
       ]);
     });
     jpSlide.addTable(jpRows, {
-      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 5.2,
-      fontSize: 11, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 1.3,
+      w: CONTENT_WIDTH,
+      h: 5.2,
+      fontSize: 11,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.0, 2.5, 3.0, 1.8],
-      valign: 'top'
+      valign: 'top',
     });
   }
 
@@ -3661,21 +4555,25 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
   if (localPlayers.length > 0) {
     const localRows = [tableHeader(['Company', 'Type', 'Revenue', 'Market Share', 'Strengths'])];
-    localPlayers.forEach(p => {
+    localPlayers.forEach((p) => {
       localRows.push([
         { text: p.name || '' },
         { text: p.type || '' },
         { text: p.revenue || '' },
         { text: p.marketShare || '' },
-        { text: truncate(p.strengths || '', 35) }
+        { text: truncate(p.strengths || '', 35) },
       ]);
     });
     localSlide.addTable(localRows, {
-      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 5.2,
-      fontSize: 10, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 1.3,
+      w: CONTENT_WIDTH,
+      h: 5.2,
+      fontSize: 10,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.0, 1.3, 1.5, 1.3, 3.2],
-      valign: 'top'
+      valign: 'top',
     });
   }
 
@@ -3692,21 +4590,25 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
   if (foreignList.length > 0) {
     const foreignRows = [tableHeader(['Company', 'Origin', 'Entry Year', 'Mode', 'Success'])];
-    foreignList.forEach(p => {
+    foreignList.forEach((p) => {
       foreignRows.push([
         { text: p.name || '' },
         { text: p.origin || '' },
         { text: p.entryYear || '' },
         { text: p.mode || '' },
-        { text: p.success || '' }
+        { text: p.success || '' },
       ]);
     });
     foreignSlide.addTable(foreignRows, {
-      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 5.2,
-      fontSize: 11, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 1.3,
+      w: CONTENT_WIDTH,
+      h: 5.2,
+      fontSize: 11,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.5, 1.5, 1.3, 2.0, 2.0],
-      valign: 'top'
+      valign: 'top',
     });
   }
 
@@ -3726,23 +4628,47 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     `Entry Year: ${caseStudy.entryYear || 'N/A'}`,
     `Entry Mode: ${caseStudy.entryMode || 'N/A'}`,
     `Investment: ${caseStudy.investment || 'N/A'}`,
-    `Outcome: ${truncate(caseStudy.outcome || 'N/A', 80)}`
+    `Outcome: ${truncate(caseStudy.outcome || 'N/A', 80)}`,
   ];
-  caseSlide.addText(caseDetails.map(d => ({ text: d, options: { bullet: true } })), {
-    x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 2.5,
-    fontSize: 12, fontFace: FONT, color: COLORS.black, valign: 'top'
-  });
+  caseSlide.addText(
+    caseDetails.map((d) => ({ text: d, options: { bullet: true } })),
+    {
+      x: LEFT_MARGIN,
+      y: 1.3,
+      w: CONTENT_WIDTH,
+      h: 2.5,
+      fontSize: 12,
+      fontFace: FONT,
+      color: COLORS.black,
+      valign: 'top',
+    }
+  );
   // Key lessons
   const lessons = safeArray(caseStudy.keyLessons, 4);
   if (lessons.length > 0) {
     caseSlide.addText('Key Lessons', {
-      x: LEFT_MARGIN, y: 4.0, w: CONTENT_WIDTH, h: 0.3,
-      fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
+      x: LEFT_MARGIN,
+      y: 4.0,
+      w: CONTENT_WIDTH,
+      h: 0.3,
+      fontSize: 14,
+      bold: true,
+      color: COLORS.dk2,
+      fontFace: FONT,
     });
-    caseSlide.addText(lessons.map(l => ({ text: truncate(l, 100), options: { bullet: true } })), {
-      x: LEFT_MARGIN, y: 4.4, w: CONTENT_WIDTH, h: 2.0,
-      fontSize: 12, fontFace: FONT, color: COLORS.black, valign: 'top'
-    });
+    caseSlide.addText(
+      lessons.map((l) => ({ text: truncate(l, 100), options: { bullet: true } })),
+      {
+        x: LEFT_MARGIN,
+        y: 4.4,
+        w: CONTENT_WIDTH,
+        h: 2.0,
+        fontSize: 12,
+        fontFace: FONT,
+        color: COLORS.black,
+        valign: 'top',
+      }
+    );
   }
 
   // SLIDE 15: M&A Activity
@@ -3755,45 +4681,59 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const deals = safeArray(maActivity.recentDeals, 3);
   if (deals.length > 0) {
     const dealRows = [tableHeader(['Year', 'Buyer', 'Target', 'Value', 'Rationale'])];
-    deals.forEach(d => {
+    deals.forEach((d) => {
       dealRows.push([
         { text: d.year || '' },
         { text: d.buyer || '' },
         { text: d.target || '' },
         { text: d.value || '' },
-        { text: truncate(d.rationale || '', 30) }
+        { text: truncate(d.rationale || '', 30) },
       ]);
     });
     maSlide.addTable(dealRows, {
-      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 2.0,
-      fontSize: 10, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 1.3,
+      w: CONTENT_WIDTH,
+      h: 2.0,
+      fontSize: 10,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [0.8, 1.8, 1.8, 1.5, 3.4],
-      valign: 'top'
+      valign: 'top',
     });
   }
   // Potential targets
   const potentialTargets = safeArray(maActivity.potentialTargets, 3);
   if (potentialTargets.length > 0) {
     maSlide.addText('Potential Acquisition Targets', {
-      x: LEFT_MARGIN, y: 3.5, w: CONTENT_WIDTH, h: 0.3,
-      fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
+      x: LEFT_MARGIN,
+      y: 3.5,
+      w: CONTENT_WIDTH,
+      h: 0.3,
+      fontSize: 14,
+      bold: true,
+      color: COLORS.dk2,
+      fontFace: FONT,
     });
     const targetRows = [tableHeader(['Company', 'Est. Value', 'Rationale', 'Timing'])];
-    potentialTargets.forEach(t => {
+    potentialTargets.forEach((t) => {
       targetRows.push([
         { text: t.name || '' },
         { text: t.estimatedValue || '' },
         { text: truncate(t.rationale || '', 40) },
-        { text: t.timing || '' }
+        { text: t.timing || '' },
       ]);
     });
     maSlide.addTable(targetRows, {
-      x: LEFT_MARGIN, y: 3.9, w: CONTENT_WIDTH, h: 2.0,
-      fontSize: 10, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 3.9,
+      w: CONTENT_WIDTH,
+      h: 2.0,
+      fontSize: 10,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.0, 1.5, 4.0, 1.8],
-      valign: 'top'
+      valign: 'top',
     });
   }
 
@@ -3813,35 +4753,68 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const terms = escoEcon.contractTerms || {};
   const financials = escoEcon.financials || {};
   const econRows = [tableHeader(['Metric', 'Value', 'Notes'])];
-  if (dealSize.average) econRows.push([{ text: 'Typical Deal Size' }, { text: `${dealSize.min || ''} - ${dealSize.max || ''}` }, { text: `Avg: ${dealSize.average}` }]);
-  if (terms.duration) econRows.push([{ text: 'Contract Duration' }, { text: terms.duration }, { text: '' }]);
-  if (terms.savingsSplit) econRows.push([{ text: 'Savings Split' }, { text: terms.savingsSplit }, { text: terms.guaranteeStructure || '' }]);
-  if (financials.paybackPeriod) econRows.push([{ text: 'Payback Period' }, { text: financials.paybackPeriod }, { text: '' }]);
-  if (financials.irr) econRows.push([{ text: 'Expected IRR' }, { text: financials.irr }, { text: '' }]);
-  if (financials.marginProfile) econRows.push([{ text: 'Gross Margin' }, { text: financials.marginProfile }, { text: '' }]);
+  if (dealSize.average)
+    econRows.push([
+      { text: 'Typical Deal Size' },
+      { text: `${dealSize.min || ''} - ${dealSize.max || ''}` },
+      { text: `Avg: ${dealSize.average}` },
+    ]);
+  if (terms.duration)
+    econRows.push([{ text: 'Contract Duration' }, { text: terms.duration }, { text: '' }]);
+  if (terms.savingsSplit)
+    econRows.push([
+      { text: 'Savings Split' },
+      { text: terms.savingsSplit },
+      { text: terms.guaranteeStructure || '' },
+    ]);
+  if (financials.paybackPeriod)
+    econRows.push([{ text: 'Payback Period' }, { text: financials.paybackPeriod }, { text: '' }]);
+  if (financials.irr)
+    econRows.push([{ text: 'Expected IRR' }, { text: financials.irr }, { text: '' }]);
+  if (financials.marginProfile)
+    econRows.push([{ text: 'Gross Margin' }, { text: financials.marginProfile }, { text: '' }]);
   if (econRows.length === 1 && safeArray(escoEcon.financingOptions, 3).length === 0) {
     addDataUnavailableMessage(econSlide, 'ESCO economics data not available');
   }
   if (econRows.length > 1) {
     econSlide.addTable(econRows, {
-      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 4.0,
-      fontSize: 12, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 1.3,
+      w: CONTENT_WIDTH,
+      h: 4.0,
+      fontSize: 12,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.5, 3.0, 3.8],
-      valign: 'top'
+      valign: 'top',
     });
   }
   // Financing options
   const financing = safeArray(escoEcon.financingOptions, 3);
   if (financing.length > 0) {
     econSlide.addText('Financing Options', {
-      x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 0.3,
-      fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT
+      x: LEFT_MARGIN,
+      y: 5.5,
+      w: CONTENT_WIDTH,
+      h: 0.3,
+      fontSize: 12,
+      bold: true,
+      color: COLORS.dk2,
+      fontFace: FONT,
     });
-    econSlide.addText(financing.map(f => ({ text: truncate(f, 80), options: { bullet: true } })), {
-      x: LEFT_MARGIN, y: 5.9, w: CONTENT_WIDTH, h: 0.8,
-      fontSize: 11, fontFace: FONT, color: COLORS.black, valign: 'top'
-    });
+    econSlide.addText(
+      financing.map((f) => ({ text: truncate(f, 80), options: { bullet: true } })),
+      {
+        x: LEFT_MARGIN,
+        y: 5.9,
+        w: CONTENT_WIDTH,
+        h: 0.8,
+        fontSize: 11,
+        fontFace: FONT,
+        color: COLORS.black,
+        valign: 'top',
+      }
+    );
   }
 
   // SLIDE 17: Partner Assessment
@@ -3856,23 +4829,36 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     addDataUnavailableMessage(partnerSlide, 'Partner assessment data not available');
   }
   if (partners.length > 0) {
-    const partnerRows = [tableHeader(['Company', 'Type', 'Revenue', 'Partnership Fit', 'Acquisition Fit', 'Est. Value'])];
-    partners.forEach(p => {
+    const partnerRows = [
+      tableHeader([
+        'Company',
+        'Type',
+        'Revenue',
+        'Partnership Fit',
+        'Acquisition Fit',
+        'Est. Value',
+      ]),
+    ];
+    partners.forEach((p) => {
       partnerRows.push([
         { text: truncate(p.name || '', 20) },
         { text: truncate(p.type || '', 15) },
         { text: p.revenue || '' },
         { text: p.partnershipFit ? `${p.partnershipFit}/5` : '' },
         { text: p.acquisitionFit ? `${p.acquisitionFit}/5` : '' },
-        { text: p.estimatedValuation || '' }
+        { text: p.estimatedValuation || '' },
       ]);
     });
     partnerSlide.addTable(partnerRows, {
-      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 5.2,
-      fontSize: 10, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 1.3,
+      w: CONTENT_WIDTH,
+      h: 5.2,
+      fontSize: 10,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [1.8, 1.5, 1.3, 1.3, 1.3, 2.1],
-      valign: 'top'
+      valign: 'top',
     });
   }
 
@@ -3888,31 +4874,43 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     addDataUnavailableMessage(entrySlide, 'Entry strategy analysis not available');
   }
   if (options.length > 0) {
-    const optRows = [tableHeader(['Option', 'Timeline', 'Investment', 'Control', 'Risk', 'Key Pros'])];
-    options.forEach(opt => {
+    const optRows = [
+      tableHeader(['Option', 'Timeline', 'Investment', 'Control', 'Risk', 'Key Pros']),
+    ];
+    options.forEach((opt) => {
       optRows.push([
         { text: opt.mode || '' },
         { text: opt.timeline || '' },
         { text: opt.investment || '' },
         { text: opt.controlLevel || '' },
         { text: opt.riskLevel || '' },
-        { text: truncate((opt.pros || []).join('; '), 40) }
+        { text: truncate((opt.pros || []).join('; '), 40) },
       ]);
     });
     entrySlide.addTable(optRows, {
-      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 2.5,
-      fontSize: 10, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 1.3,
+      w: CONTENT_WIDTH,
+      h: 2.5,
+      fontSize: 10,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [1.3, 1.2, 1.3, 1.3, 1.0, 3.2],
-      valign: 'top'
+      valign: 'top',
     });
   }
   // Harvey Balls comparison (if available)
   const harvey = entryStrat.harveyBalls || {};
   if (harvey.criteria && Array.isArray(harvey.criteria) && harvey.criteria.length > 0) {
     entrySlide.addText('Comparison Matrix (1-5 scale)', {
-      x: LEFT_MARGIN, y: 4.0, w: CONTENT_WIDTH, h: 0.3,
-      fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT
+      x: LEFT_MARGIN,
+      y: 4.0,
+      w: CONTENT_WIDTH,
+      h: 0.3,
+      fontSize: 12,
+      bold: true,
+      color: COLORS.dk2,
+      fontFace: FONT,
     });
     // Safe Harvey Ball renderer - handles missing/invalid values
     const renderHarvey = (arr, idx) => {
@@ -3926,15 +4924,19 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         { text: String(crit || '') },
         { text: renderHarvey(harvey.jv, idx) },
         { text: renderHarvey(harvey.acquisition, idx) },
-        { text: renderHarvey(harvey.greenfield, idx) }
+        { text: renderHarvey(harvey.greenfield, idx) },
       ]);
     });
     entrySlide.addTable(harveyRows, {
-      x: LEFT_MARGIN, y: 4.4, w: CONTENT_WIDTH, h: 2.0,
-      fontSize: 10, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 4.4,
+      w: CONTENT_WIDTH,
+      h: 2.0,
+      fontSize: 10,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.5, 2.3, 2.25, 2.25],
-      valign: 'middle'
+      valign: 'middle',
     });
   }
 
@@ -3942,40 +4944,73 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const impl = depth.implementation || {};
   const implSlide = addSlideWithTitle(
     impl.slideTitle || `${country} - Implementation Roadmap`,
-    truncateSubtitle(`Total: ${impl.totalInvestment || 'TBD'} | Breakeven: ${impl.breakeven || 'TBD'}`, 95)
+    truncateSubtitle(
+      `Total: ${impl.totalInvestment || 'TBD'} | Breakeven: ${impl.breakeven || 'TBD'}`,
+      95
+    )
   );
   const phases = safeArray(impl.phases, 3);
   let phaseX = 0.35;
   const phaseWidth = 3.0;
   phases.forEach((phase, idx) => {
     // Phase header box
-    const phaseColor = idx === 0 ? COLORS.accent1 : (idx === 1 ? COLORS.green : COLORS.orange);
+    const phaseColor = idx === 0 ? COLORS.accent1 : idx === 1 ? COLORS.green : COLORS.orange;
     implSlide.addText(phase.name || `Phase ${idx + 1}`, {
-      x: phaseX, y: 1.3, w: phaseWidth, h: 0.4,
-      fontSize: 11, bold: true, color: COLORS.white, fill: { color: phaseColor }, fontFace: FONT,
-      align: 'center', valign: 'middle'
+      x: phaseX,
+      y: 1.3,
+      w: phaseWidth,
+      h: 0.4,
+      fontSize: 11,
+      bold: true,
+      color: COLORS.white,
+      fill: { color: phaseColor },
+      fontFace: FONT,
+      align: 'center',
+      valign: 'middle',
     });
     // Activities
     const activities = safeArray(phase.activities, 4);
     if (activities.length > 0) {
-      implSlide.addText(activities.map(a => ({ text: truncate(a, 35), options: { bullet: true } })), {
-        x: phaseX, y: 1.8, w: phaseWidth, h: 2.5,
-        fontSize: 9, fontFace: FONT, color: COLORS.black, valign: 'top'
-      });
+      implSlide.addText(
+        activities.map((a) => ({ text: truncate(a, 35), options: { bullet: true } })),
+        {
+          x: phaseX,
+          y: 1.8,
+          w: phaseWidth,
+          h: 2.5,
+          fontSize: 9,
+          fontFace: FONT,
+          color: COLORS.black,
+          valign: 'top',
+        }
+      );
     }
     // Milestones
     const milestones = safeArray(phase.milestones, 2);
     if (milestones.length > 0) {
-      implSlide.addText(`Milestones: ${milestones.map(m => truncate(m, 25)).join(', ')}`, {
-        x: phaseX, y: 4.4, w: phaseWidth, h: 0.5,
-        fontSize: 8, fontFace: FONT, color: COLORS.footerText, valign: 'top'
+      implSlide.addText(`Milestones: ${milestones.map((m) => truncate(m, 25)).join(', ')}`, {
+        x: phaseX,
+        y: 4.4,
+        w: phaseWidth,
+        h: 0.5,
+        fontSize: 8,
+        fontFace: FONT,
+        color: COLORS.footerText,
+        valign: 'top',
       });
     }
     // Investment
     if (phase.investment) {
       implSlide.addText(`Investment: ${phase.investment}`, {
-        x: phaseX, y: 4.9, w: phaseWidth, h: 0.3,
-        fontSize: 9, bold: true, fontFace: FONT, color: COLORS.dk2, valign: 'top'
+        x: phaseX,
+        y: 4.9,
+        w: phaseWidth,
+        h: 0.3,
+        fontSize: 9,
+        bold: true,
+        fontFace: FONT,
+        color: COLORS.dk2,
+        valign: 'top',
       });
     }
     phaseX += phaseWidth + 0.15;
@@ -3989,46 +5024,62 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   );
   const segmentsList = safeArray(targetSeg.segments, 4);
   if (segmentsList.length > 0) {
-    const segmentRows = [tableHeader(['Segment', 'Size', 'Energy Intensity', 'Decision Maker', 'Priority'])];
-    segmentsList.forEach(s => {
+    const segmentRows = [
+      tableHeader(['Segment', 'Size', 'Energy Intensity', 'Decision Maker', 'Priority']),
+    ];
+    segmentsList.forEach((s) => {
       segmentRows.push([
         { text: s.name || '' },
         { text: truncate(s.size || '', 25) },
         { text: s.energyIntensity || '' },
         { text: truncate(s.decisionMaker || '', 20) },
-        { text: s.priority ? `${s.priority}/5` : '' }
+        { text: s.priority ? `${s.priority}/5` : '' },
       ]);
     });
     targetSlide.addTable(segmentRows, {
-      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 2.5,
-      fontSize: 10, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 1.3,
+      w: CONTENT_WIDTH,
+      h: 2.5,
+      fontSize: 10,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.0, 2.3, 1.5, 2.0, 1.5],
-      valign: 'top'
+      valign: 'top',
     });
   }
   // Top targets
   const topTargets = safeArray(targetSeg.topTargets, 4);
   if (topTargets.length > 0) {
     targetSlide.addText('Priority Target Companies', {
-      x: LEFT_MARGIN, y: 4.0, w: CONTENT_WIDTH, h: 0.3,
-      fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT
+      x: LEFT_MARGIN,
+      y: 4.0,
+      w: CONTENT_WIDTH,
+      h: 0.3,
+      fontSize: 12,
+      bold: true,
+      color: COLORS.dk2,
+      fontFace: FONT,
     });
     const targetCompRows = [tableHeader(['Company', 'Industry', 'Energy Spend', 'Location'])];
-    topTargets.forEach(t => {
+    topTargets.forEach((t) => {
       targetCompRows.push([
         { text: t.company || '' },
         { text: t.industry || '' },
         { text: t.energySpend || '' },
-        { text: t.location || '' }
+        { text: t.location || '' },
       ]);
     });
     targetSlide.addTable(targetCompRows, {
-      x: LEFT_MARGIN, y: 4.4, w: CONTENT_WIDTH, h: 2.0,
-      fontSize: 10, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 4.4,
+      w: CONTENT_WIDTH,
+      h: 2.0,
+      fontSize: 10,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.5, 2.3, 2.25, 2.25],
-      valign: 'top'
+      valign: 'top',
     });
   }
 
@@ -4043,25 +5094,31 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const triggers = safeArray(timing.triggers, 4);
   if (triggers.length > 0) {
     const triggerRows = [tableHeader(['Trigger', 'Impact', 'Action Required'])];
-    triggers.forEach(t => {
+    triggers.forEach((t) => {
       triggerRows.push([
         { text: truncate(t.trigger || '', 35) },
         { text: truncate(t.impact || '', 30) },
-        { text: truncate(t.action || '', 30) }
+        { text: truncate(t.action || '', 30) },
       ]);
     });
     timingSlide.addTable(triggerRows, {
-      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 3.0,
-      fontSize: 11, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 1.3,
+      w: CONTENT_WIDTH,
+      h: 3.0,
+      fontSize: 11,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [3.5, 2.9, 2.9],
-      valign: 'top'
+      valign: 'top',
     });
   }
   // Window callout
   if (timing.windowOfOpportunity) {
     addCalloutBox(timingSlide, 'WINDOW OF OPPORTUNITY', timing.windowOfOpportunity, {
-      y: 4.5, h: 1.0, type: 'recommendation'
+      y: 4.5,
+      h: 1.0,
+      type: 'recommendation',
     });
   }
 
@@ -4074,48 +5131,88 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const failures = safeArray(lessonsData.failures, 3);
   if (failures.length > 0) {
     lessonsSlide.addText('FAILURES TO AVOID', {
-      x: LEFT_MARGIN, y: 1.3, w: 4.5, h: 0.3,
-      fontSize: 12, bold: true, color: COLORS.red, fontFace: FONT
+      x: LEFT_MARGIN,
+      y: 1.3,
+      w: 4.5,
+      h: 0.3,
+      fontSize: 12,
+      bold: true,
+      color: COLORS.red,
+      fontFace: FONT,
     });
     const failureRows = [tableHeader(['Company', 'Reason', 'Lesson'])];
-    failures.forEach(f => {
+    failures.forEach((f) => {
       failureRows.push([
         { text: `${f.company || ''} (${f.year || ''})` },
         { text: truncate(f.reason || '', 35) },
-        { text: truncate(f.lesson || '', 35) }
+        { text: truncate(f.lesson || '', 35) },
       ]);
     });
     lessonsSlide.addTable(failureRows, {
-      x: LEFT_MARGIN, y: 1.7, w: CONTENT_WIDTH, h: 2.0,
-      fontSize: 10, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 1.7,
+      w: CONTENT_WIDTH,
+      h: 2.0,
+      fontSize: 10,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.2, 3.5, 3.6],
-      valign: 'top'
+      valign: 'top',
     });
   }
   // Success factors
   const successFactors = safeArray(lessonsData.successFactors, 3);
   if (successFactors.length > 0) {
     lessonsSlide.addText('SUCCESS FACTORS', {
-      x: LEFT_MARGIN, y: 4.0, w: 4.5, h: 0.3,
-      fontSize: 12, bold: true, color: COLORS.green, fontFace: FONT
+      x: LEFT_MARGIN,
+      y: 4.0,
+      w: 4.5,
+      h: 0.3,
+      fontSize: 12,
+      bold: true,
+      color: COLORS.green,
+      fontFace: FONT,
     });
-    lessonsSlide.addText(successFactors.map(s => ({ text: truncate(s, 60), options: { bullet: true } })), {
-      x: LEFT_MARGIN, y: 4.4, w: 4.5, h: 1.5,
-      fontSize: 10, fontFace: FONT, color: COLORS.black, valign: 'top'
-    });
+    lessonsSlide.addText(
+      successFactors.map((s) => ({ text: truncate(s, 60), options: { bullet: true } })),
+      {
+        x: LEFT_MARGIN,
+        y: 4.4,
+        w: 4.5,
+        h: 1.5,
+        fontSize: 10,
+        fontFace: FONT,
+        color: COLORS.black,
+        valign: 'top',
+      }
+    );
   }
   // Warning signs
   const warningsData = safeArray(lessonsData.warningSignsToWatch, 3);
   if (warningsData.length > 0) {
     lessonsSlide.addText('WARNING SIGNS', {
-      x: 5.0, y: 4.0, w: 4.5, h: 0.3,
-      fontSize: 12, bold: true, color: COLORS.orange, fontFace: FONT
+      x: 5.0,
+      y: 4.0,
+      w: 4.5,
+      h: 0.3,
+      fontSize: 12,
+      bold: true,
+      color: COLORS.orange,
+      fontFace: FONT,
     });
-    lessonsSlide.addText(warningsData.map(w => ({ text: truncate(w, 50), options: { bullet: true } })), {
-      x: 5.0, y: 4.4, w: 4.65, h: 1.5,
-      fontSize: 10, fontFace: FONT, color: COLORS.black, valign: 'top'
-    });
+    lessonsSlide.addText(
+      warningsData.map((w) => ({ text: truncate(w, 50), options: { bullet: true } })),
+      {
+        x: 5.0,
+        y: 4.4,
+        w: 4.65,
+        h: 1.5,
+        fontSize: 10,
+        fontFace: FONT,
+        color: COLORS.black,
+        valign: 'top',
+      }
+    );
   }
 
   // ============ SECTION 6: SUMMARY (5 slides) ============
@@ -4129,42 +5226,74 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const goNoGoCriteria = safeArray(goNoGo.criteria, 6);
   if (goNoGoCriteria.length > 0) {
     const goNoGoRows = [tableHeader(['Criterion', 'Status', 'Evidence'])];
-    goNoGoCriteria.forEach(c => {
-      const statusIcon = c.met === true ? '✓' : (c.met === false ? '✗' : '?');
-      const statusColor = c.met === true ? COLORS.green : (c.met === false ? COLORS.red : COLORS.orange);
+    goNoGoCriteria.forEach((c) => {
+      const statusIcon = c.met === true ? '✓' : c.met === false ? '✗' : '?';
+      const statusColor =
+        c.met === true ? COLORS.green : c.met === false ? COLORS.red : COLORS.orange;
       goNoGoRows.push([
         { text: truncate(c.criterion || '', 40) },
         { text: statusIcon, options: { color: statusColor, bold: true, align: 'center' } },
-        { text: truncate(c.evidence || '', 50) }
+        { text: truncate(c.evidence || '', 50) },
       ]);
     });
     goNoGoSlide.addTable(goNoGoRows, {
-      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 3.5,
-      fontSize: 11, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 1.3,
+      w: CONTENT_WIDTH,
+      h: 3.5,
+      fontSize: 11,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [3.0, 0.8, 5.5],
-      valign: 'top'
+      valign: 'top',
     });
   }
   // Verdict box
-  const verdictColor = goNoGo.overallVerdict?.includes('GO') && !goNoGo.overallVerdict?.includes('NO')
-    ? COLORS.green : (goNoGo.overallVerdict?.includes('NO') ? COLORS.red : COLORS.orange);
+  const verdictColor =
+    goNoGo.overallVerdict?.includes('GO') && !goNoGo.overallVerdict?.includes('NO')
+      ? COLORS.green
+      : goNoGo.overallVerdict?.includes('NO')
+        ? COLORS.red
+        : COLORS.orange;
   goNoGoSlide.addText(`VERDICT: ${goNoGo.overallVerdict || 'CONDITIONAL'}`, {
-    x: LEFT_MARGIN, y: 5.0, w: 4.0, h: 0.5,
-    fontSize: 16, bold: true, color: COLORS.white, fill: { color: verdictColor }, fontFace: FONT,
-    align: 'center', valign: 'middle'
+    x: LEFT_MARGIN,
+    y: 5.0,
+    w: 4.0,
+    h: 0.5,
+    fontSize: 16,
+    bold: true,
+    color: COLORS.white,
+    fill: { color: verdictColor },
+    fontFace: FONT,
+    align: 'center',
+    valign: 'middle',
   });
   // Conditions (if any)
   const conditions = safeArray(goNoGo.conditions, 3);
   if (conditions.length > 0) {
     goNoGoSlide.addText('Conditions to proceed:', {
-      x: 4.5, y: 5.0, w: 5.15, h: 0.3,
-      fontSize: 11, bold: true, color: COLORS.dk2, fontFace: FONT
+      x: 4.5,
+      y: 5.0,
+      w: 5.15,
+      h: 0.3,
+      fontSize: 11,
+      bold: true,
+      color: COLORS.dk2,
+      fontFace: FONT,
     });
-    goNoGoSlide.addText(conditions.map(c => ({ text: truncate(c, 60), options: { bullet: true } })), {
-      x: 4.5, y: 5.35, w: 5.15, h: 1.2,
-      fontSize: 10, fontFace: FONT, color: COLORS.black, valign: 'top'
-    });
+    goNoGoSlide.addText(
+      conditions.map((c) => ({ text: truncate(c, 60), options: { bullet: true } })),
+      {
+        x: 4.5,
+        y: 5.35,
+        w: 5.15,
+        h: 1.2,
+        fontSize: 10,
+        fontFace: FONT,
+        color: COLORS.black,
+        valign: 'top',
+      }
+    );
   }
 
   // SLIDE 24: Opportunities & Obstacles
@@ -4178,41 +5307,86 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // Opportunities column (left)
   ooSlide.addText('OPPORTUNITIES', {
-    x: LEFT_MARGIN, y: 1.3, w: 4.5, h: 0.3,
-    fontSize: 14, bold: true, color: COLORS.green, fontFace: FONT
+    x: LEFT_MARGIN,
+    y: 1.3,
+    w: 4.5,
+    h: 0.3,
+    fontSize: 14,
+    bold: true,
+    color: COLORS.green,
+    fontFace: FONT,
   });
   if (opportunities.length > 0) {
-    ooSlide.addText(opportunities.map(o => ({
-      text: typeof o === 'string' ? truncate(o, 70) : truncate(`${o.opportunity || ''} (${o.size || ''})`, 70),
-      options: { bullet: true }
-    })), {
-      x: LEFT_MARGIN, y: 1.7, w: 4.5, h: 4.5,
-      fontSize: 11, fontFace: FONT, color: COLORS.black, valign: 'top'
-    });
+    ooSlide.addText(
+      opportunities.map((o) => ({
+        text:
+          typeof o === 'string'
+            ? truncate(o, 70)
+            : truncate(`${o.opportunity || ''} (${o.size || ''})`, 70),
+        options: { bullet: true },
+      })),
+      {
+        x: LEFT_MARGIN,
+        y: 1.7,
+        w: 4.5,
+        h: 4.5,
+        fontSize: 11,
+        fontFace: FONT,
+        color: COLORS.black,
+        valign: 'top',
+      }
+    );
   }
 
   // Obstacles column (right)
   ooSlide.addText('OBSTACLES', {
-    x: 5.0, y: 1.3, w: 4.5, h: 0.3,
-    fontSize: 14, bold: true, color: COLORS.orange, fontFace: FONT
+    x: 5.0,
+    y: 1.3,
+    w: 4.5,
+    h: 0.3,
+    fontSize: 14,
+    bold: true,
+    color: COLORS.orange,
+    fontFace: FONT,
   });
   if (obstacles.length > 0) {
-    ooSlide.addText(obstacles.map(o => ({
-      text: typeof o === 'string' ? truncate(o, 70) : truncate(`${o.obstacle || ''} [${o.severity || ''}]`, 70),
-      options: { bullet: true }
-    })), {
-      x: 5.0, y: 1.7, w: 4.5, h: 4.5,
-      fontSize: 11, fontFace: FONT, color: COLORS.black, valign: 'top'
-    });
+    ooSlide.addText(
+      obstacles.map((o) => ({
+        text:
+          typeof o === 'string'
+            ? truncate(o, 70)
+            : truncate(`${o.obstacle || ''} [${o.severity || ''}]`, 70),
+        options: { bullet: true },
+      })),
+      {
+        x: 5.0,
+        y: 1.7,
+        w: 4.5,
+        h: 4.5,
+        fontSize: 11,
+        fontFace: FONT,
+        color: COLORS.black,
+        valign: 'top',
+      }
+    );
   }
 
   // Ratings at bottom
   const ratings = summary.ratings || {};
   if (ratings.attractiveness || ratings.feasibility) {
-    ooSlide.addText(`Attractiveness: ${ratings.attractiveness || 'N/A'}/10 | Feasibility: ${ratings.feasibility || 'N/A'}/10`, {
-      x: LEFT_MARGIN, y: 6.2, w: CONTENT_WIDTH, h: 0.3,
-      fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT
-    });
+    ooSlide.addText(
+      `Attractiveness: ${ratings.attractiveness || 'N/A'}/10 | Feasibility: ${ratings.feasibility || 'N/A'}/10`,
+      {
+        x: LEFT_MARGIN,
+        y: 6.2,
+        w: CONTENT_WIDTH,
+        h: 0.3,
+        fontSize: 12,
+        bold: true,
+        color: COLORS.dk2,
+        fontFace: FONT,
+      }
+    );
   }
 
   // SLIDE 25: Key Insights
@@ -4223,17 +5397,32 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const insights = safeArray(summary.keyInsights, 3);
   let insightY = 1.3;
   insights.forEach((insight, idx) => {
-    const title = typeof insight === 'string' ? `Insight ${idx + 1}` : (insight.title || `Insight ${idx + 1}`);
-    const content = typeof insight === 'string' ? insight :
-      `${insight.data || ''} ${insight.pattern || ''} ${insight.implication || ''}`;
+    const title =
+      typeof insight === 'string' ? `Insight ${idx + 1}` : insight.title || `Insight ${idx + 1}`;
+    const content =
+      typeof insight === 'string'
+        ? insight
+        : `${insight.data || ''} ${insight.pattern || ''} ${insight.implication || ''}`;
 
     insightsSlide.addText(title, {
-      x: LEFT_MARGIN, y: insightY, w: CONTENT_WIDTH, h: 0.35,
-      fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
+      x: LEFT_MARGIN,
+      y: insightY,
+      w: CONTENT_WIDTH,
+      h: 0.35,
+      fontSize: 14,
+      bold: true,
+      color: COLORS.dk2,
+      fontFace: FONT,
     });
     insightsSlide.addText(truncate(content, 200), {
-      x: LEFT_MARGIN, y: insightY + 0.35, w: CONTENT_WIDTH, h: 1.2,
-      fontSize: 11, fontFace: FONT, color: COLORS.black, valign: 'top'
+      x: LEFT_MARGIN,
+      y: insightY + 0.35,
+      w: CONTENT_WIDTH,
+      h: 1.2,
+      fontSize: 11,
+      fontFace: FONT,
+      color: COLORS.black,
+      valign: 'top',
     });
     insightY += 1.7;
   });
@@ -4241,7 +5430,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // Add recommendation callout box at bottom
   if (summary.recommendation) {
     addCalloutBox(insightsSlide, 'RECOMMENDATION', summary.recommendation, {
-      y: 5.6, h: 1.0, type: 'recommendation'
+      y: 5.6,
+      h: 1.0,
+      type: 'recommendation',
     });
   }
 
@@ -4254,39 +5445,79 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const metricsRows = [tableHeader(['Metric', 'Value', 'Confidence'])];
   const marketDynamics = market.marketDynamics || {};
   if (marketDynamics.marketSize) {
-    metricsRows.push([{ text: 'Market Size' }, { text: truncate(marketDynamics.marketSize, 40) }, { text: `${synthesis.confidenceScore || '--'}/100` }]);
+    metricsRows.push([
+      { text: 'Market Size' },
+      { text: truncate(marketDynamics.marketSize, 40) },
+      { text: `${synthesis.confidenceScore || '--'}/100` },
+    ]);
   }
   if (depth.escoEconomics?.typicalDealSize?.average) {
-    metricsRows.push([{ text: 'Typical Deal Size' }, { text: depth.escoEconomics.typicalDealSize.average }, { text: '' }]);
+    metricsRows.push([
+      { text: 'Typical Deal Size' },
+      { text: depth.escoEconomics.typicalDealSize.average },
+      { text: '' },
+    ]);
   }
   const finalRatings = summary.ratings || {};
   if (finalRatings.attractiveness) {
-    metricsRows.push([{ text: 'Attractiveness' }, { text: `${finalRatings.attractiveness}/10` }, { text: finalRatings.attractivenessRationale ? truncate(finalRatings.attractivenessRationale, 30) : '' }]);
+    metricsRows.push([
+      { text: 'Attractiveness' },
+      { text: `${finalRatings.attractiveness}/10` },
+      {
+        text: finalRatings.attractivenessRationale
+          ? truncate(finalRatings.attractivenessRationale, 30)
+          : '',
+      },
+    ]);
   }
   if (finalRatings.feasibility) {
-    metricsRows.push([{ text: 'Feasibility' }, { text: `${finalRatings.feasibility}/10` }, { text: finalRatings.feasibilityRationale ? truncate(finalRatings.feasibilityRationale, 30) : '' }]);
+    metricsRows.push([
+      { text: 'Feasibility' },
+      { text: `${finalRatings.feasibility}/10` },
+      {
+        text: finalRatings.feasibilityRationale
+          ? truncate(finalRatings.feasibilityRationale, 30)
+          : '',
+      },
+    ]);
   }
   finalSlide.addTable(metricsRows, {
-    x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 2.5,
-    fontSize: 11, fontFace: FONT,
+    x: LEFT_MARGIN,
+    y: 1.3,
+    w: CONTENT_WIDTH,
+    h: 2.5,
+    fontSize: 11,
+    fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
     colW: [2.5, 3.5, 3.3],
-    valign: 'top'
+    valign: 'top',
   });
   // Go/No-Go verdict callout
   const finalGoNoGo = summary.goNoGo || {};
-  const finalVerdictType = finalGoNoGo.overallVerdict?.includes('GO') && !finalGoNoGo.overallVerdict?.includes('NO')
-    ? 'positive' : (finalGoNoGo.overallVerdict?.includes('NO') ? 'negative' : 'warning');
-  addCalloutBox(finalSlide, `VERDICT: ${finalGoNoGo.overallVerdict || 'CONDITIONAL'}`,
-    (finalGoNoGo.conditions || []).slice(0, 2).join('; ') || 'Proceed with recommended entry strategy',
+  const finalVerdictType =
+    finalGoNoGo.overallVerdict?.includes('GO') && !finalGoNoGo.overallVerdict?.includes('NO')
+      ? 'positive'
+      : finalGoNoGo.overallVerdict?.includes('NO')
+        ? 'negative'
+        : 'warning';
+  addCalloutBox(
+    finalSlide,
+    `VERDICT: ${finalGoNoGo.overallVerdict || 'CONDITIONAL'}`,
+    (finalGoNoGo.conditions || []).slice(0, 2).join('; ') ||
+      'Proceed with recommended entry strategy',
     { y: 4.0, h: 0.9, type: finalVerdictType }
   );
   // Source attribution footnote
-  addSourceFootnote(finalSlide, [
-    'Government statistical agencies',
-    'Industry associations',
-    'Company filings and annual reports'
-  ], COLORS, FONT);
+  addSourceFootnote(
+    finalSlide,
+    [
+      'Government statistical agencies',
+      'Industry associations',
+      'Company filings and annual reports',
+    ],
+    COLORS,
+    FONT
+  );
 
   const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
   console.log(`Deep-dive PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB, 27 slides`);
@@ -4315,17 +5546,17 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
 
   // YCP Theme Colors (from profile-slides template)
   const COLORS = {
-    headerLine: '293F55',    // Dark navy for header/footer lines
-    accent3: '011AB7',       // Dark blue - table header background
-    accent1: '007FFF',       // Bright blue - secondary/subtitle
-    dk2: '1F497D',           // Section underline/title color
+    headerLine: '293F55', // Dark navy for header/footer lines
+    accent3: '011AB7', // Dark blue - table header background
+    accent1: '007FFF', // Bright blue - secondary/subtitle
+    dk2: '1F497D', // Section underline/title color
     white: 'FFFFFF',
     black: '000000',
-    gray: 'BFBFBF',          // Border color
-    footerText: '808080',    // Gray footer text
-    green: '2E7D32',         // Positive/Opportunity
-    orange: 'E46C0A',        // Warning/Obstacle
-    red: 'C62828'            // Negative/Risk
+    gray: 'BFBFBF', // Border color
+    footerText: '808080', // Gray footer text
+    green: '2E7D32', // Positive/Opportunity
+    orange: 'E46C0A', // Warning/Obstacle
+    red: 'C62828', // Negative/Risk
   };
 
   // Set default font to Segoe UI (YCP standard)
@@ -4333,8 +5564,8 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   const FONT = 'Segoe UI';
 
   // Widescreen dimensions (13.333" x 7.5" = 16:9)
-  const CONTENT_WIDTH = 12.5;  // Full content width for 16:9 widescreen
-  const LEFT_MARGIN = 0.4;     // Left margin matching YCP template
+  const CONTENT_WIDTH = 12.5; // Full content width for 16:9 widescreen
+  const LEFT_MARGIN = 0.4; // Left margin matching YCP template
 
   // Truncate title to max 70 chars
   function truncateTitle(text) {
@@ -4351,20 +5582,35 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     const slide = pptx.addSlide();
     // Title - 24pt bold navy
     slide.addText(truncateTitle(title), {
-      x: LEFT_MARGIN, y: 0.15, w: CONTENT_WIDTH, h: 0.7,
-      fontSize: 24, bold: true, color: COLORS.dk2, fontFace: FONT,
-      valign: 'top', wrap: true
+      x: LEFT_MARGIN,
+      y: 0.15,
+      w: CONTENT_WIDTH,
+      h: 0.7,
+      fontSize: 24,
+      bold: true,
+      color: COLORS.dk2,
+      fontFace: FONT,
+      valign: 'top',
+      wrap: true,
     });
     // Navy divider line under title
     slide.addShape('line', {
-      x: LEFT_MARGIN, y: 0.9, w: CONTENT_WIDTH, h: 0,
-      line: { color: COLORS.dk2, width: 2.5 }
+      x: LEFT_MARGIN,
+      y: 0.9,
+      w: CONTENT_WIDTH,
+      h: 0,
+      line: { color: COLORS.dk2, width: 2.5 },
     });
     // Message/subtitle - 14pt blue (the "so what")
     if (subtitle) {
       slide.addText(subtitle, {
-        x: LEFT_MARGIN, y: 0.95, w: CONTENT_WIDTH, h: 0.3,
-        fontSize: 14, color: COLORS.accent1, fontFace: FONT
+        x: LEFT_MARGIN,
+        y: 0.95,
+        w: CONTENT_WIDTH,
+        h: 0.3,
+        fontSize: 14,
+        color: COLORS.accent1,
+        fontFace: FONT,
       });
     }
     return slide;
@@ -4373,20 +5619,41 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   // ============ SLIDE 1: TITLE ============
   const titleSlide = pptx.addSlide();
   titleSlide.addText(scope.industry.toUpperCase(), {
-    x: 0.5, y: 2.2, w: 9, h: 0.8,
-    fontSize: 36, bold: true, color: COLORS.dk2, fontFace: FONT
+    x: 0.5,
+    y: 2.2,
+    w: 9,
+    h: 0.8,
+    fontSize: 36,
+    bold: true,
+    color: COLORS.dk2,
+    fontFace: FONT,
   });
   titleSlide.addText('Market Comparison', {
-    x: 0.5, y: 3.0, w: 9, h: 0.5,
-    fontSize: 24, color: COLORS.accent1, fontFace: FONT
+    x: 0.5,
+    y: 3.0,
+    w: 9,
+    h: 0.5,
+    fontSize: 24,
+    color: COLORS.accent1,
+    fontFace: FONT,
   });
   titleSlide.addText(scope.targetMarkets.join(' | '), {
-    x: 0.5, y: 3.6, w: 9, h: 0.4,
-    fontSize: 14, color: COLORS.black, fontFace: FONT
+    x: 0.5,
+    y: 3.6,
+    w: 9,
+    h: 0.4,
+    fontSize: 14,
+    color: COLORS.black,
+    fontFace: FONT,
   });
   titleSlide.addText(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' }), {
-    x: 0.5, y: 6.5, w: 9, h: 0.3,
-    fontSize: 10, color: '666666', fontFace: FONT
+    x: 0.5,
+    y: 6.5,
+    w: 9,
+    h: 0.3,
+    fontSize: 10,
+    color: '666666',
+    fontFace: FONT,
   });
 
   // ============ SLIDE 2: OVERVIEW (Comparison Table) ============
@@ -4394,54 +5661,123 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
 
   const overviewRows = [
     [
-      { text: 'Country', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Market Size', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Foreign Ownership', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Risk Level', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } }
-    ]
+      {
+        text: 'Country',
+        options: {
+          bold: true,
+          fill: { color: COLORS.accent3 },
+          color: COLORS.white,
+          fontFace: FONT,
+        },
+      },
+      {
+        text: 'Market Size',
+        options: {
+          bold: true,
+          fill: { color: COLORS.accent3 },
+          color: COLORS.white,
+          fontFace: FONT,
+        },
+      },
+      {
+        text: 'Foreign Ownership',
+        options: {
+          bold: true,
+          fill: { color: COLORS.accent3 },
+          color: COLORS.white,
+          fontFace: FONT,
+        },
+      },
+      {
+        text: 'Risk Level',
+        options: {
+          bold: true,
+          fill: { color: COLORS.accent3 },
+          color: COLORS.white,
+          fontFace: FONT,
+        },
+      },
+    ],
   ];
 
-  countryAnalyses.forEach(c => {
+  countryAnalyses.forEach((c) => {
     if (c.error) return;
     overviewRows.push([
       { text: c.country, options: { fontFace: FONT } },
       { text: truncate(c.marketDynamics?.marketSize || 'N/A', 60), options: { fontFace: FONT } },
-      { text: truncate(c.policyRegulatory?.foreignOwnershipRules || 'N/A', 60), options: { fontFace: FONT } },
-      { text: truncate(c.policyRegulatory?.regulatoryRisk || 'N/A', 40), options: { fontFace: FONT } }
+      {
+        text: truncate(c.policyRegulatory?.foreignOwnershipRules || 'N/A', 60),
+        options: { fontFace: FONT },
+      },
+      {
+        text: truncate(c.policyRegulatory?.regulatoryRisk || 'N/A', 40),
+        options: { fontFace: FONT },
+      },
     ]);
   });
 
   overviewSlide.addTable(overviewRows, {
-    x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 5.2,
+    x: LEFT_MARGIN,
+    y: 1.3,
+    w: CONTENT_WIDTH,
+    h: 5.2,
     fontSize: 12,
     fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
     colW: [2.0, 2.5, 2.5, 2.3],
-    valign: 'top'
+    valign: 'top',
   });
 
   // ============ SLIDE 3: EXECUTIVE SUMMARY ============
-  const execSlide = addSlide('Executive Summary', synthesis.executiveSummary?.subtitle || 'Key findings across markets');
-  const keyFindings = safeArray(synthesis.executiveSummary?.keyFindings || synthesis.keyFindings, 4);
+  const execSlide = addSlide(
+    'Executive Summary',
+    synthesis.executiveSummary?.subtitle || 'Key findings across markets'
+  );
+  const keyFindings = safeArray(
+    synthesis.executiveSummary?.keyFindings || synthesis.keyFindings,
+    4
+  );
   if (keyFindings.length > 0) {
-    execSlide.addText(keyFindings.map((f, idx) => ({
-      text: `${idx + 1}. ${truncate(typeof f === 'string' ? f : f.finding || f.text || '', 120)}`,
-      options: { bullet: false, paraSpaceBefore: idx > 0 ? 8 : 0 }
-    })), {
-      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 4.5,
-      fontSize: 13, fontFace: FONT, color: COLORS.black, valign: 'top'
-    });
+    execSlide.addText(
+      keyFindings.map((f, idx) => ({
+        text: `${idx + 1}. ${truncate(typeof f === 'string' ? f : f.finding || f.text || '', 120)}`,
+        options: { bullet: false, paraSpaceBefore: idx > 0 ? 8 : 0 },
+      })),
+      {
+        x: LEFT_MARGIN,
+        y: 1.3,
+        w: CONTENT_WIDTH,
+        h: 4.5,
+        fontSize: 13,
+        fontFace: FONT,
+        color: COLORS.black,
+        valign: 'top',
+      }
+    );
   }
   // Recommendation box
   if (synthesis.recommendation) {
     execSlide.addText('RECOMMENDATION', {
-      x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 0.3,
-      fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT
+      x: LEFT_MARGIN,
+      y: 5.5,
+      w: CONTENT_WIDTH,
+      h: 0.3,
+      fontSize: 12,
+      bold: true,
+      color: COLORS.dk2,
+      fontFace: FONT,
     });
     execSlide.addText(truncate(synthesis.recommendation, 200), {
-      x: LEFT_MARGIN, y: 5.85, w: CONTENT_WIDTH, h: 0.7,
-      fontSize: 11, fontFace: FONT, color: COLORS.black, valign: 'top',
-      fill: { color: 'EDFDFF' }, line: { color: COLORS.accent1, pt: 1 }
+      x: LEFT_MARGIN,
+      y: 5.85,
+      w: CONTENT_WIDTH,
+      h: 0.7,
+      fontSize: 11,
+      fontFace: FONT,
+      color: COLORS.black,
+      valign: 'top',
+      fill: { color: 'EDFDFF' },
+      line: { color: COLORS.accent1, pt: 1 },
     });
   }
 
@@ -4450,7 +5786,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   // Extract market sizes for chart
   const chartLabels = [];
   const chartValues = [];
-  countryAnalyses.forEach(c => {
+  countryAnalyses.forEach((c) => {
     if (c.error) return;
     chartLabels.push(c.country);
     // Try to extract numeric value from market size string
@@ -4464,48 +5800,91 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     chartValues.push(value || 100); // Default to 100 if can't parse
   });
 
-  if (chartLabels.length > 0 && chartValues.some(v => v > 0)) {
-    sizeSlide.addChart('bar', [{
-      name: 'Market Size ($M)',
-      labels: chartLabels,
-      values: chartValues
-    }], {
-      x: LEFT_MARGIN, y: 1.4, w: CONTENT_WIDTH, h: 4.5,
-      barDir: 'bar',
-      showValue: true,
-      dataLabelPosition: 'outEnd',
-      dataLabelFontFace: FONT,
-      dataLabelFontSize: 10,
-      chartColors: [COLORS.accent1],
-      valAxisMaxVal: Math.max(...chartValues) * 1.2,
-      catAxisLabelFontFace: FONT,
-      catAxisLabelFontSize: 11,
-      valAxisLabelFontFace: FONT,
-      valAxisLabelFontSize: 10
-    });
+  if (chartLabels.length > 0 && chartValues.some((v) => v > 0)) {
+    sizeSlide.addChart(
+      'bar',
+      [
+        {
+          name: 'Market Size ($M)',
+          labels: chartLabels,
+          values: chartValues,
+        },
+      ],
+      {
+        x: LEFT_MARGIN,
+        y: 1.4,
+        w: CONTENT_WIDTH,
+        h: 4.5,
+        barDir: 'bar',
+        showValue: true,
+        dataLabelPosition: 'outEnd',
+        dataLabelFontFace: FONT,
+        dataLabelFontSize: 10,
+        chartColors: [COLORS.accent1],
+        valAxisMaxVal: Math.max(...chartValues) * 1.2,
+        catAxisLabelFontFace: FONT,
+        catAxisLabelFontSize: 11,
+        valAxisLabelFontFace: FONT,
+        valAxisLabelFontSize: 10,
+      }
+    );
   }
 
   // ============ SLIDE 5: ATTRACTIVENESS vs FEASIBILITY MATRIX ============
-  const matrixSlide = addSlide('Market Positioning Matrix', 'Attractiveness vs Feasibility across markets');
+  const matrixSlide = addSlide(
+    'Market Positioning Matrix',
+    'Attractiveness vs Feasibility across markets'
+  );
   // Draw quadrant background
   matrixSlide.addShape('rect', {
-    x: 0.5, y: 1.3, w: 4.25, h: 2.5, fill: { color: 'FFF0F0' } // Bottom-left (low-low) - light red
+    x: 0.5,
+    y: 1.3,
+    w: 4.25,
+    h: 2.5,
+    fill: { color: 'FFF0F0' }, // Bottom-left (low-low) - light red
   });
   matrixSlide.addShape('rect', {
-    x: 4.75, y: 1.3, w: 4.25, h: 2.5, fill: { color: 'FFFAED' } // Bottom-right (high attract, low feas) - light orange
+    x: 4.75,
+    y: 1.3,
+    w: 4.25,
+    h: 2.5,
+    fill: { color: 'FFFAED' }, // Bottom-right (high attract, low feas) - light orange
   });
   matrixSlide.addShape('rect', {
-    x: 0.5, y: 3.8, w: 4.25, h: 2.5, fill: { color: 'FFFAED' } // Top-left (low attract, high feas) - light orange
+    x: 0.5,
+    y: 3.8,
+    w: 4.25,
+    h: 2.5,
+    fill: { color: 'FFFAED' }, // Top-left (low attract, high feas) - light orange
   });
   matrixSlide.addShape('rect', {
-    x: 4.75, y: 3.8, w: 4.25, h: 2.5, fill: { color: 'F0FFF0' } // Top-right (high-high) - light green
+    x: 4.75,
+    y: 3.8,
+    w: 4.25,
+    h: 2.5,
+    fill: { color: 'F0FFF0' }, // Top-right (high-high) - light green
   });
   // Axis labels
   matrixSlide.addText('← Low Attractiveness | High Attractiveness →', {
-    x: 0.5, y: 6.4, w: 8.5, h: 0.25, fontSize: 9, color: COLORS.footerText, fontFace: FONT, align: 'center'
+    x: 0.5,
+    y: 6.4,
+    w: 8.5,
+    h: 0.25,
+    fontSize: 9,
+    color: COLORS.footerText,
+    fontFace: FONT,
+    align: 'center',
   });
   matrixSlide.addText('High\nFeasibility\n\n\n\n\n\nLow\nFeasibility', {
-    x: 9.1, y: 1.3, w: 0.6, h: 5.0, fontSize: 8, color: COLORS.footerText, fontFace: FONT, align: 'center', valign: 'middle'
+    x: 9.1,
+    y: 1.3,
+    w: 0.6,
+    h: 5.0,
+    fontSize: 8,
+    color: COLORS.footerText,
+    fontFace: FONT,
+    align: 'center',
+    valign: 'middle',
   });
   // Plot countries as circles
   countryAnalyses.forEach((c, idx) => {
@@ -4513,28 +5892,55 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     const attract = c.summary?.ratings?.attractiveness || 5;
     const feas = c.summary?.ratings?.feasibility || 5;
     // Map 0-10 to x: 0.5-8.5 and y: 1.3-5.8 (inverted for y)
-    const x = 0.5 + ((attract / 10) * 8.0);
-    const y = 5.8 - ((feas / 10) * 4.5) + 0.3;
+    const x = 0.5 + (attract / 10) * 8.0;
+    const y = 5.8 - (feas / 10) * 4.5 + 0.3;
     // Country bubble
     const colors = [COLORS.accent1, COLORS.accent3, '2E7D32', 'E46C0A', 'C62828'];
     matrixSlide.addShape('ellipse', {
-      x: x - 0.4, y: y - 0.3, w: 0.8, h: 0.6,
-      fill: { color: colors[idx % colors.length] }
+      x: x - 0.4,
+      y: y - 0.3,
+      w: 0.8,
+      h: 0.6,
+      fill: { color: colors[idx % colors.length] },
     });
     matrixSlide.addText(c.country.substring(0, 3).toUpperCase(), {
-      x: x - 0.4, y: y - 0.15, w: 0.8, h: 0.3,
-      fontSize: 8, bold: true, color: COLORS.white, fontFace: FONT, align: 'center', valign: 'middle'
+      x: x - 0.4,
+      y: y - 0.15,
+      w: 0.8,
+      h: 0.3,
+      fontSize: 8,
+      bold: true,
+      color: COLORS.white,
+      fontFace: FONT,
+      align: 'center',
+      valign: 'middle',
     });
   });
   // Legend
   matrixSlide.addText('Score Legend:', {
-    x: 0.5, y: 6.7, w: 1.5, h: 0.2, fontSize: 8, bold: true, color: COLORS.dk2, fontFace: FONT
+    x: 0.5,
+    y: 6.7,
+    w: 1.5,
+    h: 0.2,
+    fontSize: 8,
+    bold: true,
+    color: COLORS.dk2,
+    fontFace: FONT,
   });
   countryAnalyses.forEach((c, idx) => {
     if (c.error) return;
-    matrixSlide.addText(`${c.country}: A=${c.summary?.ratings?.attractiveness || '?'}/F=${c.summary?.ratings?.feasibility || '?'}`, {
-      x: 2.0 + (idx * 2.2), y: 6.7, w: 2.2, h: 0.2, fontSize: 8, color: COLORS.black, fontFace: FONT
-    });
+    matrixSlide.addText(
+      `${c.country}: A=${c.summary?.ratings?.attractiveness || '?'}/F=${c.summary?.ratings?.feasibility || '?'}`,
+      {
+        x: 2.0 + idx * 2.2,
+        y: 6.7,
+        w: 2.2,
+        h: 0.2,
+        fontSize: 8,
+        color: COLORS.black,
+        fontFace: FONT,
+      }
+    );
   });
 
   // ============ SLIDE 6: RECOMMENDATION SUMMARY ============
@@ -4542,54 +5948,113 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   // Build recommendation table
   const recRows = [
     [
-      { text: 'Country', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Priority', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Entry Mode', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
-      { text: 'Key Action', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } }
-    ]
+      {
+        text: 'Country',
+        options: {
+          bold: true,
+          fill: { color: COLORS.accent3 },
+          color: COLORS.white,
+          fontFace: FONT,
+        },
+      },
+      {
+        text: 'Priority',
+        options: {
+          bold: true,
+          fill: { color: COLORS.accent3 },
+          color: COLORS.white,
+          fontFace: FONT,
+        },
+      },
+      {
+        text: 'Entry Mode',
+        options: {
+          bold: true,
+          fill: { color: COLORS.accent3 },
+          color: COLORS.white,
+          fontFace: FONT,
+        },
+      },
+      {
+        text: 'Key Action',
+        options: {
+          bold: true,
+          fill: { color: COLORS.accent3 },
+          color: COLORS.white,
+          fontFace: FONT,
+        },
+      },
+    ],
   ];
   // Sort by attractiveness score
-  const sortedCountries = [...countryAnalyses].filter(c => !c.error).sort((a, b) => {
-    const aScore = (a.summary?.ratings?.attractiveness || 0) + (a.summary?.ratings?.feasibility || 0);
-    const bScore = (b.summary?.ratings?.attractiveness || 0) + (b.summary?.ratings?.feasibility || 0);
-    return bScore - aScore;
-  });
+  const sortedCountries = [...countryAnalyses]
+    .filter((c) => !c.error)
+    .sort((a, b) => {
+      const aScore =
+        (a.summary?.ratings?.attractiveness || 0) + (a.summary?.ratings?.feasibility || 0);
+      const bScore =
+        (b.summary?.ratings?.attractiveness || 0) + (b.summary?.ratings?.feasibility || 0);
+      return bScore - aScore;
+    });
   sortedCountries.forEach((c, idx) => {
-    const priority = idx === 0 ? 'PRIMARY' : (idx === 1 ? 'SECONDARY' : 'MONITOR');
-    const priorityColor = idx === 0 ? COLORS.green : (idx === 1 ? COLORS.accent1 : COLORS.footerText);
+    const priority = idx === 0 ? 'PRIMARY' : idx === 1 ? 'SECONDARY' : 'MONITOR';
+    const priorityColor = idx === 0 ? COLORS.green : idx === 1 ? COLORS.accent1 : COLORS.footerText;
     const entryMode = c.depth?.entryStrategy?.recommendation || c.summary?.recommendation || 'TBD';
-    const keyAction = c.summary?.opportunities?.[0] || c.summary?.keyInsights?.[0]?.implication || '';
+    const keyAction =
+      c.summary?.opportunities?.[0] || c.summary?.keyInsights?.[0]?.implication || '';
     recRows.push([
       { text: c.country },
       { text: priority, options: { color: priorityColor, bold: true } },
       { text: truncate(entryMode, 30) },
-      { text: truncate(typeof keyAction === 'string' ? keyAction : keyAction.opportunity || '', 50) }
+      {
+        text: truncate(typeof keyAction === 'string' ? keyAction : keyAction.opportunity || '', 50),
+      },
     ]);
   });
   recSlide.addTable(recRows, {
-    x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 4.0,
-    fontSize: 11, fontFace: FONT,
+    x: LEFT_MARGIN,
+    y: 1.3,
+    w: CONTENT_WIDTH,
+    h: 4.0,
+    fontSize: 11,
+    fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
     colW: [1.8, 1.3, 2.5, 3.7],
-    valign: 'top'
+    valign: 'top',
   });
   // Next steps
   recSlide.addText('Recommended Next Steps:', {
-    x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 0.3,
-    fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT
+    x: LEFT_MARGIN,
+    y: 5.5,
+    w: CONTENT_WIDTH,
+    h: 0.3,
+    fontSize: 12,
+    bold: true,
+    color: COLORS.dk2,
+    fontFace: FONT,
   });
-  const nextSteps = synthesis.nextSteps || synthesis.executiveSummary?.nextSteps || [
-    'Conduct detailed due diligence on primary market',
-    'Identify and approach potential partners',
-    'Develop market entry business case'
-  ];
-  recSlide.addText(safeArray(nextSteps, 3).map(s => ({
-    text: truncate(typeof s === 'string' ? s : s.step || '', 80),
-    options: { bullet: true }
-  })), {
-    x: LEFT_MARGIN, y: 5.85, w: CONTENT_WIDTH, h: 0.8,
-    fontSize: 10, fontFace: FONT, color: COLORS.black, valign: 'top'
-  });
+  const nextSteps = synthesis.nextSteps ||
+    synthesis.executiveSummary?.nextSteps || [
+      'Conduct detailed due diligence on primary market',
+      'Identify and approach potential partners',
+      'Develop market entry business case',
+    ];
+  recSlide.addText(
+    safeArray(nextSteps, 3).map((s) => ({
+      text: truncate(typeof s === 'string' ? s : s.step || '', 80),
+      options: { bullet: true },
+    })),
+    {
+      x: LEFT_MARGIN,
+      y: 5.85,
+      w: CONTENT_WIDTH,
+      h: 0.8,
+      fontSize: 10,
+      fontFace: FONT,
+      color: COLORS.black,
+      valign: 'top',
+    }
+  );
 
   // ============ COUNTRY SECTIONS ============
   // For each country: Policy & Regulations → Market → Competitor Overview
@@ -4604,22 +6069,38 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
 
     const regRows = [
       [
-        { text: 'Area', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
-        { text: 'Details', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } }
-      ]
+        {
+          text: 'Area',
+          options: {
+            bold: true,
+            fill: { color: COLORS.accent3 },
+            color: COLORS.white,
+            fontFace: FONT,
+          },
+        },
+        {
+          text: 'Details',
+          options: {
+            bold: true,
+            fill: { color: COLORS.accent3 },
+            color: COLORS.white,
+            fontFace: FONT,
+          },
+        },
+      ],
     ];
 
     // Add key legislation
     const laws = safeArray(reg.keyLegislation, 3);
     laws.forEach((law, idx) => {
-      regRows.push([
-        { text: `Key Law ${idx + 1}` },
-        { text: truncate(law, 100) }
-      ]);
+      regRows.push([{ text: `Key Law ${idx + 1}` }, { text: truncate(law, 100) }]);
     });
 
     if (reg.foreignOwnershipRules) {
-      regRows.push([{ text: 'Foreign Ownership' }, { text: truncate(reg.foreignOwnershipRules, 100) }]);
+      regRows.push([
+        { text: 'Foreign Ownership' },
+        { text: truncate(reg.foreignOwnershipRules, 100) },
+      ]);
     }
 
     const incentives = safeArray(reg.incentives, 2);
@@ -4632,11 +6113,15 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     }
 
     regSlide.addTable(regRows, {
-      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 5.2,
-      fontSize: 14, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 1.3,
+      w: CONTENT_WIDTH,
+      h: 5.2,
+      fontSize: 14,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.0, 7.3],
-      valign: 'top'
+      valign: 'top',
     });
 
     // ---------- SLIDE: {Country} - Market ----------
@@ -4647,9 +6132,25 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
 
     const marketRows = [
       [
-        { text: 'Metric', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
-        { text: 'Value', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } }
-      ]
+        {
+          text: 'Metric',
+          options: {
+            bold: true,
+            fill: { color: COLORS.accent3 },
+            color: COLORS.white,
+            fontFace: FONT,
+          },
+        },
+        {
+          text: 'Value',
+          options: {
+            bold: true,
+            fill: { color: COLORS.accent3 },
+            color: COLORS.white,
+            fontFace: FONT,
+          },
+        },
+      ],
     ];
 
     if (market.marketSize) {
@@ -4665,18 +6166,25 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       marketRows.push([{ text: 'Supply Chain' }, { text: truncate(market.supplyChain, 100) }]);
     }
     if (macro.energyIntensity) {
-      marketRows.push([{ text: 'Energy Intensity' }, { text: truncate(macro.energyIntensity, 100) }]);
+      marketRows.push([
+        { text: 'Energy Intensity' },
+        { text: truncate(macro.energyIntensity, 100) },
+      ]);
     }
     if (macro.keyObservation) {
       marketRows.push([{ text: 'Key Observation' }, { text: truncate(macro.keyObservation, 100) }]);
     }
 
     marketSlide.addTable(marketRows, {
-      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 5.2,
-      fontSize: 14, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 1.3,
+      w: CONTENT_WIDTH,
+      h: 5.2,
+      fontSize: 14,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.0, 7.3],
-      valign: 'top'
+      valign: 'top',
     });
 
     // ---------- SLIDE: {Country} - Competitor Overview ----------
@@ -4696,55 +6204,101 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
 
     const compRows = [
       [
-        { text: 'Company', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
-        { text: 'Type', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } },
-        { text: 'Notes', options: { bold: true, fill: { color: COLORS.accent3 }, color: COLORS.white, fontFace: FONT } }
-      ]
+        {
+          text: 'Company',
+          options: {
+            bold: true,
+            fill: { color: COLORS.accent3 },
+            color: COLORS.white,
+            fontFace: FONT,
+          },
+        },
+        {
+          text: 'Type',
+          options: {
+            bold: true,
+            fill: { color: COLORS.accent3 },
+            color: COLORS.white,
+            fontFace: FONT,
+          },
+        },
+        {
+          text: 'Notes',
+          options: {
+            bold: true,
+            fill: { color: COLORS.accent3 },
+            color: COLORS.white,
+            fontFace: FONT,
+          },
+        },
+      ],
     ];
 
-    safeArray(comp.localPlayers, 3).forEach(p => {
-      const name = typeof p === 'string' ? p : (p.name || 'Unknown');
-      const desc = typeof p === 'string' ? '' : (p.description || '');
+    safeArray(comp.localPlayers, 3).forEach((p) => {
+      const name = typeof p === 'string' ? p : p.name || 'Unknown';
+      const desc = typeof p === 'string' ? '' : p.description || '';
       compRows.push([
         { text: truncate(name, 30) },
         { text: 'Local' },
-        { text: truncate(desc, 70) }
+        { text: truncate(desc, 70) },
       ]);
     });
 
-    safeArray(comp.foreignPlayers, 3).forEach(p => {
-      const name = typeof p === 'string' ? p : (p.name || 'Unknown');
-      const desc = typeof p === 'string' ? '' : (p.description || '');
+    safeArray(comp.foreignPlayers, 3).forEach((p) => {
+      const name = typeof p === 'string' ? p : p.name || 'Unknown';
+      const desc = typeof p === 'string' ? '' : p.description || '';
       compRows.push([
         { text: truncate(name, 30) },
         { text: 'Foreign' },
-        { text: truncate(desc, 70) }
+        { text: truncate(desc, 70) },
       ]);
     });
 
     compSlide.addTable(compRows, {
-      x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 3.5,
-      fontSize: 14, fontFace: FONT,
+      x: LEFT_MARGIN,
+      y: 1.3,
+      w: CONTENT_WIDTH,
+      h: 3.5,
+      fontSize: 14,
+      fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.5, 1.0, 5.8],
-      valign: 'top'
+      valign: 'top',
     });
 
     // Entry barriers section
     const barriers = safeArray(comp.entryBarriers, 4);
     if (barriers.length > 0) {
       compSlide.addShape('line', {
-        x: LEFT_MARGIN, y: 4.9, w: CONTENT_WIDTH, h: 0,
-        line: { color: COLORS.dk2, width: 2.5 }
+        x: LEFT_MARGIN,
+        y: 4.9,
+        w: CONTENT_WIDTH,
+        h: 0,
+        line: { color: COLORS.dk2, width: 2.5 },
       });
       compSlide.addText('Barriers to Entry', {
-        x: LEFT_MARGIN, y: 5.0, w: CONTENT_WIDTH, h: 0.35,
-        fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
+        x: LEFT_MARGIN,
+        y: 5.0,
+        w: CONTENT_WIDTH,
+        h: 0.35,
+        fontSize: 14,
+        bold: true,
+        color: COLORS.dk2,
+        fontFace: FONT,
       });
-      compSlide.addText(barriers.map(b => ({ text: truncate(b, 90), options: { bullet: true } })), {
-        x: LEFT_MARGIN, y: 5.4, w: CONTENT_WIDTH, h: 1.3,
-        fontSize: 14, fontFace: FONT, color: COLORS.black, valign: 'top'
-      });
+      compSlide.addText(
+        barriers.map((b) => ({ text: truncate(b, 90), options: { bullet: true } })),
+        {
+          x: LEFT_MARGIN,
+          y: 5.4,
+          w: CONTENT_WIDTH,
+          h: 1.3,
+          fontSize: 14,
+          fontFace: FONT,
+          color: COLORS.black,
+          valign: 'top',
+        }
+      );
     }
   }
 
@@ -4765,21 +6319,23 @@ async function sendEmail(to, subject, html, attachment) {
     from: { email: process.env.SENDER_EMAIL, name: 'Market Research AI' },
     subject: subject,
     content: [{ type: 'text/html', value: html }],
-    attachments: [{
-      filename: attachment.filename,
-      content: attachment.content,
-      type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-      disposition: 'attachment'
-    }]
+    attachments: [
+      {
+        filename: attachment.filename,
+        content: attachment.content,
+        type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        disposition: 'attachment',
+      },
+    ],
   };
 
   const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
-      'Content-Type': 'application/json'
+      Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
+      'Content-Type': 'application/json',
     },
-    body: JSON.stringify(emailData)
+    body: JSON.stringify(emailData),
   });
 
   if (!response.ok) {
@@ -4819,7 +6375,7 @@ async function runMarketResearch(userPrompt, email) {
     for (let i = 0; i < scope.targetMarkets.length; i += 2) {
       const batch = scope.targetMarkets.slice(i, i + 2);
       const batchResults = await Promise.all(
-        batch.map(country => researchCountry(country, scope.industry, scope.clientContext, scope))
+        batch.map((country) => researchCountry(country, scope.industry, scope.clientContext, scope))
       );
       countryAnalyses.push(...batchResults);
     }
@@ -4838,16 +6394,23 @@ async function runMarketResearch(userPrompt, email) {
       <p style="color: #666; font-size: 12px;">${scope.industry} - ${scope.targetMarkets.join(', ')}</p>
     `;
 
-    await sendEmail(email, `Market Research: ${scope.industry} - ${scope.targetMarkets.join(', ')}`, emailHtml, {
-      filename,
-      content: pptBuffer.toString('base64')
-    });
+    await sendEmail(
+      email,
+      `Market Research: ${scope.industry} - ${scope.targetMarkets.join(', ')}`,
+      emailHtml,
+      {
+        filename,
+        content: pptBuffer.toString('base64'),
+      }
+    );
 
     const totalTime = (Date.now() - startTime) / 1000;
     console.log('\n========================================');
     console.log('MARKET RESEARCH - COMPLETE');
     console.log('========================================');
-    console.log(`Total time: ${totalTime.toFixed(0)} seconds (${(totalTime / 60).toFixed(1)} minutes)`);
+    console.log(
+      `Total time: ${totalTime.toFixed(0)} seconds (${(totalTime / 60).toFixed(1)} minutes)`
+    );
     console.log(`Total cost: $${costTracker.totalCost.toFixed(2)}`);
     console.log(`Countries analyzed: ${countryAnalyses.length}`);
 
@@ -4856,20 +6419,27 @@ async function runMarketResearch(userPrompt, email) {
       scope,
       countriesAnalyzed: countryAnalyses.length,
       totalCost: costTracker.totalCost,
-      totalTimeSeconds: totalTime
+      totalTimeSeconds: totalTime,
     };
-
   } catch (error) {
     console.error('Market research failed:', error);
 
     // Try to send error email
     try {
-      await sendEmail(email, 'Market Research Failed', `
+      await sendEmail(
+        email,
+        'Market Research Failed',
+        `
         <h2>Market Research Error</h2>
         <p>Your market research request encountered an error:</p>
         <pre>${error.message}</pre>
         <p>Please try again or contact support.</p>
-      `, { filename: 'error.txt', content: Buffer.from(error.stack || error.message).toString('base64') });
+      `,
+        {
+          filename: 'error.txt',
+          content: Buffer.from(error.stack || error.message).toString('base64'),
+        }
+      );
     } catch (emailError) {
       console.error('Failed to send error email:', emailError);
     }
@@ -4886,7 +6456,7 @@ app.get('/health', (req, res) => {
     status: 'ok',
     service: 'market-research',
     timestamp: new Date().toISOString(),
-    costToday: costTracker.totalCost
+    costToday: costTracker.totalCost,
   });
 });
 
@@ -4905,11 +6475,11 @@ app.post('/api/market-research', async (req, res) => {
   res.json({
     success: true,
     message: 'Market research started. Results will be emailed when complete.',
-    estimatedTime: '30-60 minutes'
+    estimatedTime: '30-60 minutes',
   });
 
   // Run research in background
-  runMarketResearch(prompt, email).catch(error => {
+  runMarketResearch(prompt, email).catch((error) => {
     console.error('Background research failed:', error);
   });
 });
@@ -4927,7 +6497,10 @@ app.listen(PORT, () => {
   console.log('Environment check:');
   console.log('  - DEEPSEEK_API_KEY:', process.env.DEEPSEEK_API_KEY ? 'Set' : 'MISSING');
   console.log('  - KIMI_API_KEY:', process.env.KIMI_API_KEY ? 'Set' : 'MISSING');
-  console.log('  - KIMI_API_BASE:', process.env.KIMI_API_BASE || 'https://api.moonshot.ai/v1 (default)');
+  console.log(
+    '  - KIMI_API_BASE:',
+    process.env.KIMI_API_BASE || 'https://api.moonshot.ai/v1 (default)'
+  );
   console.log('  - PERPLEXITY_API_KEY:', process.env.PERPLEXITY_API_KEY ? 'Set' : 'MISSING');
   console.log('  - SENDGRID_API_KEY:', process.env.SENDGRID_API_KEY ? 'Set' : 'MISSING');
   console.log('  - SENDER_EMAIL:', process.env.SENDER_EMAIL || 'MISSING');

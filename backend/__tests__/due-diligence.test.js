@@ -11,13 +11,17 @@
 function ensureString(value, defaultValue = '') {
   if (typeof value === 'string') return value;
   if (value === null || value === undefined) return defaultValue;
-  if (Array.isArray(value)) return value.map(v => ensureString(v)).join(', ');
+  if (Array.isArray(value)) return value.map((v) => ensureString(v)).join(', ');
   if (typeof value === 'object') {
     if (value.city && value.country) return `${value.city}, ${value.country}`;
     if (value.text) return ensureString(value.text);
     if (value.value) return ensureString(value.value);
     if (value.name) return ensureString(value.name);
-    try { return JSON.stringify(value); } catch { return defaultValue; }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return defaultValue;
+    }
   }
   return String(value);
 }
@@ -26,11 +30,15 @@ function ensureString(value, defaultValue = '') {
 
 function detectMeetingDomain(text) {
   const domains = {
-    financial: /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
-    legal: /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
-    medical: /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
-    technical: /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
-    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i
+    financial:
+      /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
+    legal:
+      /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
+    medical:
+      /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
+    technical:
+      /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
+    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i,
   };
 
   for (const [domain, pattern] of Object.entries(domains)) {
@@ -43,12 +51,17 @@ function detectMeetingDomain(text) {
 
 function getDomainInstructions(domain) {
   const instructions = {
-    financial: 'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
-    legal: 'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
-    medical: 'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
-    technical: 'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
+    financial:
+      'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
+    legal:
+      'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
+    medical:
+      'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
+    technical:
+      'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
     hr: 'This is an HR/talent due diligence meeting. Preserve HR terminology and employment-related terms accurately.',
-    general: 'This is a business due diligence meeting. Preserve business terminology and professional tone.'
+    general:
+      'This is a business due diligence meeting. Preserve business terminology and professional tone.',
   };
   return instructions[domain] || instructions.general;
 }
@@ -64,8 +77,12 @@ Be thorough - include all companies you find. We will verify them later.`;
 
 function normalizeCompanyName(name) {
   if (!name) return '';
-  return name.toLowerCase()
-    .replace(/\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi, '')
+  return name
+    .toLowerCase()
+    .replace(
+      /\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi,
+      ''
+    )
     .replace(/^(pt\.?|cv\.?)\s+/gi, '')
     .replace(/[^\w\s]/g, '')
     .replace(/\s+/g, ' ')
@@ -74,11 +91,15 @@ function normalizeCompanyName(name) {
 
 function normalizeWebsite(url) {
   if (!url) return '';
-  return url.toLowerCase()
+  return url
+    .toLowerCase()
     .replace(/^https?:\/\//, '')
     .replace(/^www\./, '')
     .replace(/\/+$/, '')
-    .replace(/\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i, '')
+    .replace(
+      /\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i,
+      ''
+    )
     .replace(/\.(html?|php|aspx?|jsp)$/i, '');
 }
 
@@ -96,7 +117,7 @@ function isSpamOrDirectoryURL(url) {
     'facebook.com',
     'twitter.com',
     'instagram.com',
-    'youtube.com'
+    'youtube.com',
   ];
 
   for (const pattern of obviousSpam) {
@@ -137,13 +158,18 @@ function dedupeCompanies(allCompanies) {
 
 // ============ EXCLUSION RULES ============
 
-function buildExclusionRules(exclusion, business) {
+function buildExclusionRules(exclusion, _business) {
   const exclusionLower = exclusion.toLowerCase();
   let rules = '';
 
-  if (exclusionLower.includes('large') || exclusionLower.includes('big') ||
-      exclusionLower.includes('mnc') || exclusionLower.includes('multinational') ||
-      exclusionLower.includes('major') || exclusionLower.includes('giant')) {
+  if (
+    exclusionLower.includes('large') ||
+    exclusionLower.includes('big') ||
+    exclusionLower.includes('mnc') ||
+    exclusionLower.includes('multinational') ||
+    exclusionLower.includes('major') ||
+    exclusionLower.includes('giant')
+  ) {
     rules += `
 LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
 - "global presence", "worldwide operations", "global leader", "world's largest"
@@ -206,11 +232,14 @@ function buildEmailHTML(companies, business, country, exclusion) {
 
 // ============ SEARCH STRATEGIES ============
 
-function strategy1_BroadSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
+function strategy1_BroadSerpAPI(business, country, _exclusion) {
+  const countries = country.split(',').map((c) => c.trim());
   const queries = [];
 
-  const terms = business.split(/\s+or\s+|\s+and\s+|,/).map(t => t.trim()).filter(t => t);
+  const terms = business
+    .split(/\s+or\s+|\s+and\s+|,/)
+    .map((t) => t.trim())
+    .filter((t) => t);
 
   for (const c of countries) {
     queries.push(
@@ -230,12 +259,12 @@ function strategy1_BroadSerpAPI(business, country, exclusion) {
 
 function strategy4_CitiesPerplexity(business, country, exclusion) {
   const CITY_MAP = {
-    'malaysia': ['Kuala Lumpur', 'Penang', 'Johor Bahru', 'Shah Alam', 'Petaling Jaya'],
-    'singapore': ['Singapore', 'Jurong', 'Tuas', 'Woodlands'],
-    'thailand': ['Bangkok', 'Chonburi', 'Rayong', 'Samut Prakan', 'Ayutthaya']
+    malaysia: ['Kuala Lumpur', 'Penang', 'Johor Bahru', 'Shah Alam', 'Petaling Jaya'],
+    singapore: ['Singapore', 'Jurong', 'Tuas', 'Woodlands'],
+    thailand: ['Bangkok', 'Chonburi', 'Rayong', 'Samut Prakan', 'Ayutthaya'],
   };
 
-  const countries = country.split(',').map(c => c.trim());
+  const countries = country.split(',').map((c) => c.trim());
   const outputFormat = buildOutputFormat();
   const queries = [];
 
@@ -309,7 +338,12 @@ describe('ensureString', () => {
   });
 
   test('handles nested arrays', () => {
-    expect(ensureString([['a', 'b'], ['c', 'd']])).toBe('a, b, c, d');
+    expect(
+      ensureString([
+        ['a', 'b'],
+        ['c', 'd'],
+      ])
+    ).toBe('a, b, c, d');
   });
 });
 
@@ -420,7 +454,7 @@ describe('getDomainInstructions', () => {
 
   test('all instructions mention due diligence', () => {
     const domains = ['financial', 'legal', 'medical', 'technical', 'hr', 'general'];
-    domains.forEach(domain => {
+    domains.forEach((domain) => {
       const instructions = getDomainInstructions(domain);
       expect(instructions).toContain('due diligence');
     });
@@ -534,9 +568,13 @@ describe('normalizeCompanyName', () => {
 
   test('handles complex names', () => {
     // Removes PT prefix, removes Co., Ltd. suffix, but (Thailand) stays in middle
-    expect(normalizeCompanyName('PT. ABC Manufacturing (Thailand) Co., Ltd.')).toBe('abc manufacturing thailand');
+    expect(normalizeCompanyName('PT. ABC Manufacturing (Thailand) Co., Ltd.')).toBe(
+      'abc manufacturing thailand'
+    );
     // Removes (Malaysia) at end, but "Sdn. Bhd." is not at the very end so it stays
-    expect(normalizeCompanyName('XYZ Industries Sdn. Bhd. (Malaysia)')).toBe('xyz industries sdn bhd');
+    expect(normalizeCompanyName('XYZ Industries Sdn. Bhd. (Malaysia)')).toBe(
+      'xyz industries sdn bhd'
+    );
     // When Sdn Bhd is at the actual end, it gets removed
     expect(normalizeCompanyName('XYZ Industries Sdn Bhd')).toBe('xyz industries');
   });
@@ -694,7 +732,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicate websites (exact match)', () => {
     const companies = [
       { company_name: 'Company A', website: 'http://example.com', hq: 'City, Country' },
-      { company_name: 'Company B', website: 'http://example.com', hq: 'City, Country' }
+      { company_name: 'Company B', website: 'http://example.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -704,7 +742,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicate websites (http vs https)', () => {
     const companies = [
       { company_name: 'Company A', website: 'http://example.com', hq: 'City, Country' },
-      { company_name: 'Company B', website: 'https://example.com', hq: 'City, Country' }
+      { company_name: 'Company B', website: 'https://example.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -713,7 +751,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicate websites (www vs non-www)', () => {
     const companies = [
       { company_name: 'Company A', website: 'http://www.example.com', hq: 'City, Country' },
-      { company_name: 'Company B', website: 'http://example.com', hq: 'City, Country' }
+      { company_name: 'Company B', website: 'http://example.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -722,7 +760,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicate domain roots', () => {
     const companies = [
       { company_name: 'Company A', website: 'http://example.com/path1', hq: 'City, Country' },
-      { company_name: 'Company B', website: 'http://example.com/path2', hq: 'City, Country' }
+      { company_name: 'Company B', website: 'http://example.com/path2', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -731,7 +769,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicate company names', () => {
     const companies = [
       { company_name: 'Acme Inc.', website: 'http://acme1.com', hq: 'City, Country' },
-      { company_name: 'Acme Corporation', website: 'http://acme2.com', hq: 'City, Country' }
+      { company_name: 'Acme Corporation', website: 'http://acme2.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -740,7 +778,7 @@ describe('dedupeCompanies', () => {
   test('keeps companies with different domains and names', () => {
     const companies = [
       { company_name: 'Company A', website: 'http://companya.com', hq: 'City, Country' },
-      { company_name: 'Company B', website: 'http://companyb.com', hq: 'City, Country' }
+      { company_name: 'Company B', website: 'http://companyb.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(2);
@@ -749,7 +787,7 @@ describe('dedupeCompanies', () => {
   test('filters out entries without website', () => {
     const companies = [
       { company_name: 'Company A', website: 'http://example.com', hq: 'City, Country' },
-      { company_name: 'Company B', hq: 'City, Country' }
+      { company_name: 'Company B', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -759,7 +797,7 @@ describe('dedupeCompanies', () => {
   test('filters out entries without company_name', () => {
     const companies = [
       { company_name: 'Company A', website: 'http://example.com', hq: 'City, Country' },
-      { website: 'http://test.com', hq: 'City, Country' }
+      { website: 'http://test.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -769,7 +807,7 @@ describe('dedupeCompanies', () => {
   test('filters out entries with invalid website (no http)', () => {
     const companies = [
       { company_name: 'Company A', website: 'http://example.com', hq: 'City, Country' },
-      { company_name: 'Company B', website: 'example.com', hq: 'City, Country' }
+      { company_name: 'Company B', website: 'example.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -781,7 +819,7 @@ describe('dedupeCompanies', () => {
       { company_name: 'Company A', website: 'http://example.com', hq: 'City, Country' },
       null,
       undefined,
-      { company_name: 'Company B', website: 'http://test.com', hq: 'City, Country' }
+      { company_name: 'Company B', website: 'http://test.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(2);
@@ -792,7 +830,7 @@ describe('dedupeCompanies', () => {
       { company_name: 'Acme Sdn Bhd', website: 'http://www.acme.com/home', hq: 'KL, Malaysia' },
       { company_name: 'ACME Ltd.', website: 'https://acme.com/index', hq: 'KL, Malaysia' },
       { company_name: 'Beta Corp', website: 'http://beta.com', hq: 'Singapore' },
-      { company_name: 'Gamma Inc.', website: 'http://gamma.com', hq: 'Bangkok, Thailand' }
+      { company_name: 'Gamma Inc.', website: 'http://gamma.com', hq: 'Bangkok, Thailand' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(3); // Acme deduplicated, Beta and Gamma remain
@@ -882,7 +920,7 @@ describe('buildEmailHTML', () => {
   test('includes all required sections', () => {
     const companies = [
       { company_name: 'Company A', website: 'http://a.com', hq: 'City A, Country' },
-      { company_name: 'Company B', website: 'http://b.com', hq: 'City B, Country' }
+      { company_name: 'Company B', website: 'http://b.com', hq: 'City B, Country' },
     ];
     const html = buildEmailHTML(companies, 'ink', 'Thailand', 'large companies');
 
@@ -897,7 +935,7 @@ describe('buildEmailHTML', () => {
     const companies = [
       { company_name: 'A', website: 'http://a.com', hq: 'City, Country' },
       { company_name: 'B', website: 'http://b.com', hq: 'City, Country' },
-      { company_name: 'C', website: 'http://c.com', hq: 'City, Country' }
+      { company_name: 'C', website: 'http://c.com', hq: 'City, Country' },
     ];
     const html = buildEmailHTML(companies, 'business', 'country', 'none');
 
@@ -906,7 +944,7 @@ describe('buildEmailHTML', () => {
 
   test('creates table with correct structure', () => {
     const companies = [
-      { company_name: 'Test Co', website: 'http://test.com', hq: 'Bangkok, Thailand' }
+      { company_name: 'Test Co', website: 'http://test.com', hq: 'Bangkok, Thailand' },
     ];
     const html = buildEmailHTML(companies, 'business', 'country', 'none');
 
@@ -917,9 +955,7 @@ describe('buildEmailHTML', () => {
   });
 
   test('includes table headers', () => {
-    const companies = [
-      { company_name: 'A', website: 'http://a.com', hq: 'City, Country' }
-    ];
+    const companies = [{ company_name: 'A', website: 'http://a.com', hq: 'City, Country' }];
     const html = buildEmailHTML(companies, 'business', 'country', 'none');
 
     expect(html).toContain('<th>#</th>');
@@ -930,7 +966,7 @@ describe('buildEmailHTML', () => {
 
   test('includes company data in rows', () => {
     const companies = [
-      { company_name: 'Test Company', website: 'http://test.com', hq: 'Bangkok, Thailand' }
+      { company_name: 'Test Company', website: 'http://test.com', hq: 'Bangkok, Thailand' },
     ];
     const html = buildEmailHTML(companies, 'business', 'country', 'none');
 
@@ -940,9 +976,7 @@ describe('buildEmailHTML', () => {
   });
 
   test('creates clickable links', () => {
-    const companies = [
-      { company_name: 'A', website: 'http://example.com', hq: 'City, Country' }
-    ];
+    const companies = [{ company_name: 'A', website: 'http://example.com', hq: 'City, Country' }];
     const html = buildEmailHTML(companies, 'business', 'country', 'none');
 
     expect(html).toContain('<a href="http://example.com">http://example.com</a>');
@@ -952,7 +986,7 @@ describe('buildEmailHTML', () => {
     const companies = [
       { company_name: 'A', website: 'http://a.com', hq: 'City, Country' },
       { company_name: 'B', website: 'http://b.com', hq: 'City, Country' },
-      { company_name: 'C', website: 'http://c.com', hq: 'City, Country' }
+      { company_name: 'C', website: 'http://c.com', hq: 'City, Country' },
     ];
     const html = buildEmailHTML(companies, 'business', 'country', 'none');
 
@@ -970,9 +1004,7 @@ describe('buildEmailHTML', () => {
   });
 
   test('applies table styling', () => {
-    const companies = [
-      { company_name: 'A', website: 'http://a.com', hq: 'City, Country' }
-    ];
+    const companies = [{ company_name: 'A', website: 'http://a.com', hq: 'City, Country' }];
     const html = buildEmailHTML(companies, 'business', 'country', 'none');
 
     expect(html).toContain('border-collapse: collapse');
@@ -991,86 +1023,86 @@ describe('strategy1_BroadSerpAPI', () => {
 
   test('generates queries for multiple countries', () => {
     const queries = strategy1_BroadSerpAPI('ink', 'Thailand, Vietnam', 'large');
-    expect(queries.some(q => q.includes('Thailand'))).toBe(true);
-    expect(queries.some(q => q.includes('Vietnam'))).toBe(true);
+    expect(queries.some((q) => q.includes('Thailand'))).toBe(true);
+    expect(queries.some((q) => q.includes('Vietnam'))).toBe(true);
   });
 
   test('handles business with "or" variations', () => {
     const queries = strategy1_BroadSerpAPI('ink or paint', 'Thailand', 'large');
-    expect(queries.some(q => q.includes('ink'))).toBe(true);
-    expect(queries.some(q => q.includes('paint'))).toBe(true);
+    expect(queries.some((q) => q.includes('ink'))).toBe(true);
+    expect(queries.some((q) => q.includes('paint'))).toBe(true);
   });
 
   test('handles business with "and" variations', () => {
     const queries = strategy1_BroadSerpAPI('ink and chemicals', 'Thailand', 'large');
-    expect(queries.some(q => q.includes('ink'))).toBe(true);
-    expect(queries.some(q => q.includes('chemicals'))).toBe(true);
+    expect(queries.some((q) => q.includes('ink'))).toBe(true);
+    expect(queries.some((q) => q.includes('chemicals'))).toBe(true);
   });
 
   test('includes list queries', () => {
     const queries = strategy1_BroadSerpAPI('ink', 'Thailand', 'large');
-    expect(queries.some(q => q.includes('list of'))).toBe(true);
+    expect(queries.some((q) => q.includes('list of'))).toBe(true);
   });
 
   test('includes industry queries', () => {
     const queries = strategy1_BroadSerpAPI('ink', 'Thailand', 'large');
-    expect(queries.some(q => q.includes('industry'))).toBe(true);
+    expect(queries.some((q) => q.includes('industry'))).toBe(true);
   });
 
   test('trims country names with whitespace', () => {
     const queries = strategy1_BroadSerpAPI('ink', ' Thailand , Vietnam ', 'large');
-    expect(queries.some(q => q.includes(' Thailand '))).toBe(false); // Should not have extra spaces
-    expect(queries.some(q => q.includes('Thailand'))).toBe(true);
-    expect(queries.some(q => q.includes('Vietnam'))).toBe(true);
+    expect(queries.some((q) => q.includes(' Thailand '))).toBe(false); // Should not have extra spaces
+    expect(queries.some((q) => q.includes('Thailand'))).toBe(true);
+    expect(queries.some((q) => q.includes('Vietnam'))).toBe(true);
   });
 });
 
 describe('strategy4_CitiesPerplexity', () => {
   test('generates queries for cities in Malaysia', () => {
     const queries = strategy4_CitiesPerplexity('ink', 'Malaysia', 'large');
-    expect(queries.some(q => q.includes('Kuala Lumpur'))).toBe(true);
-    expect(queries.some(q => q.includes('Penang'))).toBe(true);
+    expect(queries.some((q) => q.includes('Kuala Lumpur'))).toBe(true);
+    expect(queries.some((q) => q.includes('Penang'))).toBe(true);
   });
 
   test('generates queries for cities in Singapore', () => {
     const queries = strategy4_CitiesPerplexity('ink', 'Singapore', 'large');
-    expect(queries.some(q => q.includes('Singapore'))).toBe(true);
+    expect(queries.some((q) => q.includes('Singapore'))).toBe(true);
   });
 
   test('generates queries for cities in Thailand', () => {
     const queries = strategy4_CitiesPerplexity('ink', 'Thailand', 'large');
-    expect(queries.some(q => q.includes('Bangkok'))).toBe(true);
+    expect(queries.some((q) => q.includes('Bangkok'))).toBe(true);
   });
 
   test('includes exclusion in queries', () => {
     const queries = strategy4_CitiesPerplexity('ink', 'Malaysia', 'large companies');
-    expect(queries.some(q => q.includes('Exclude large companies'))).toBe(true);
+    expect(queries.some((q) => q.includes('Exclude large companies'))).toBe(true);
   });
 
   test('includes output format in queries', () => {
     const queries = strategy4_CitiesPerplexity('ink', 'Malaysia', 'large');
-    expect(queries.some(q => q.includes('company_name'))).toBe(true);
+    expect(queries.some((q) => q.includes('company_name'))).toBe(true);
   });
 
   test('generates manufacturer queries', () => {
     const queries = strategy4_CitiesPerplexity('ink', 'Thailand', 'large');
-    expect(queries.some(q => q.includes('manufacturers near'))).toBe(true);
+    expect(queries.some((q) => q.includes('manufacturers near'))).toBe(true);
   });
 
   test('handles multiple countries', () => {
     const queries = strategy4_CitiesPerplexity('ink', 'Malaysia, Thailand', 'large');
-    expect(queries.some(q => q.includes('Kuala Lumpur'))).toBe(true);
-    expect(queries.some(q => q.includes('Bangkok'))).toBe(true);
+    expect(queries.some((q) => q.includes('Kuala Lumpur'))).toBe(true);
+    expect(queries.some((q) => q.includes('Bangkok'))).toBe(true);
   });
 
   test('falls back to country name if no city mapping', () => {
     const queries = strategy4_CitiesPerplexity('ink', 'Unknown Country', 'large');
-    expect(queries.some(q => q.includes('Unknown Country'))).toBe(true);
+    expect(queries.some((q) => q.includes('Unknown Country'))).toBe(true);
   });
 
   test('generates two queries per city', () => {
     const queries = strategy4_CitiesPerplexity('ink', 'Singapore', 'large');
-    const singaporeQueries = queries.filter(q => q.includes('Singapore'));
+    const singaporeQueries = queries.filter((q) => q.includes('Singapore'));
     // Should have at least 2 queries per city (companies in + manufacturers near) × number of cities
     expect(singaporeQueries.length).toBeGreaterThanOrEqual(2);
   });

@@ -11,13 +11,17 @@ describe('target-v5 utility functions', () => {
     function ensureString(value, defaultValue = '') {
       if (typeof value === 'string') return value;
       if (value === null || value === undefined) return defaultValue;
-      if (Array.isArray(value)) return value.map(v => ensureString(v)).join(', ');
+      if (Array.isArray(value)) return value.map((v) => ensureString(v)).join(', ');
       if (typeof value === 'object') {
         if (value.city && value.country) return `${value.city}, ${value.country}`;
         if (value.text) return ensureString(value.text);
         if (value.value) return ensureString(value.value);
         if (value.name) return ensureString(value.name);
-        try { return JSON.stringify(value); } catch { return defaultValue; }
+        try {
+          return JSON.stringify(value);
+        } catch {
+          return defaultValue;
+        }
       }
       return String(value);
     }
@@ -44,14 +48,17 @@ describe('target-v5 utility functions', () => {
 
     test('handles nested arrays', () => {
       expect(ensureString([['x', 'y'], ['z']])).toBe('x, y, z');
-      expect(ensureString([[1, 2], [3, 4]])).toBe('1, 2, 3, 4');
+      expect(
+        ensureString([
+          [1, 2],
+          [3, 4],
+        ])
+      ).toBe('1, 2, 3, 4');
     });
 
     test('extracts city and country from object', () => {
-      expect(ensureString({ city: 'Bangkok', country: 'Thailand' }))
-        .toBe('Bangkok, Thailand');
-      expect(ensureString({ city: 'Jakarta', country: 'Indonesia' }))
-        .toBe('Jakarta, Indonesia');
+      expect(ensureString({ city: 'Bangkok', country: 'Thailand' })).toBe('Bangkok, Thailand');
+      expect(ensureString({ city: 'Jakarta', country: 'Indonesia' })).toBe('Jakarta, Indonesia');
     });
 
     test('extracts text property from object', () => {
@@ -125,8 +132,12 @@ Be thorough - include all companies you find. We will verify them later.`;
   describe('normalizeCompanyName', () => {
     function normalizeCompanyName(name) {
       if (!name) return '';
-      return name.toLowerCase()
-        .replace(/\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi, '')
+      return name
+        .toLowerCase()
+        .replace(
+          /\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi,
+          ''
+        )
         .replace(/^(pt\.?|cv\.?)\s+/gi, '')
         .replace(/[^\w\s]/g, '')
         .replace(/\s+/g, ' ')
@@ -208,11 +219,15 @@ Be thorough - include all companies you find. We will verify them later.`;
   describe('normalizeWebsite', () => {
     function normalizeWebsite(url) {
       if (!url) return '';
-      return url.toLowerCase()
+      return url
+        .toLowerCase()
         .replace(/^https?:\/\//, '')
         .replace(/^www\./, '')
         .replace(/\/+$/, '')
-        .replace(/\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i, '')
+        .replace(
+          /\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i,
+          ''
+        )
         .replace(/\.(html?|php|aspx?|jsp)$/i, '');
     }
 
@@ -270,10 +285,10 @@ Be thorough - include all companies you find. We will verify them later.`;
     });
 
     test('handles complex URLs', () => {
-      expect(normalizeWebsite('https://www.example.com/en/about-us/company.html'))
-        .toBe('example.com');
-      expect(normalizeWebsite('https://example.com/products/category'))
-        .toBe('example.com');
+      expect(normalizeWebsite('https://www.example.com/en/about-us/company.html')).toBe(
+        'example.com'
+      );
+      expect(normalizeWebsite('https://example.com/products/category')).toBe('example.com');
     });
 
     test('removes language path with trailing content', () => {
@@ -287,11 +302,15 @@ Be thorough - include all companies you find. We will verify them later.`;
   describe('extractDomainRoot', () => {
     function normalizeWebsite(url) {
       if (!url) return '';
-      return url.toLowerCase()
+      return url
+        .toLowerCase()
         .replace(/^https?:\/\//, '')
         .replace(/^www\./, '')
         .replace(/\/+$/, '')
-        .replace(/\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i, '')
+        .replace(
+          /\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i,
+          ''
+        )
         .replace(/\.(html?|php|aspx?|jsp)$/i, '');
     }
 
@@ -338,7 +357,7 @@ Be thorough - include all companies you find. We will verify them later.`;
         'facebook.com',
         'twitter.com',
         'instagram.com',
-        'youtube.com'
+        'youtube.com',
       ];
 
       for (const pattern of obviousSpam) {
@@ -388,8 +407,12 @@ Be thorough - include all companies you find. We will verify them later.`;
   describe('dedupeCompanies', () => {
     function normalizeCompanyName(name) {
       if (!name) return '';
-      return name.toLowerCase()
-        .replace(/\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi, '')
+      return name
+        .toLowerCase()
+        .replace(
+          /\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi,
+          ''
+        )
         .replace(/^(pt\.?|cv\.?)\s+/gi, '')
         .replace(/[^\w\s]/g, '')
         .replace(/\s+/g, ' ')
@@ -398,11 +421,15 @@ Be thorough - include all companies you find. We will verify them later.`;
 
     function normalizeWebsite(url) {
       if (!url) return '';
-      return url.toLowerCase()
+      return url
+        .toLowerCase()
         .replace(/^https?:\/\//, '')
         .replace(/^www\./, '')
         .replace(/\/+$/, '')
-        .replace(/\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i, '')
+        .replace(
+          /\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i,
+          ''
+        )
         .replace(/\.(html?|php|aspx?|jsp)$/i, '');
     }
 
@@ -441,7 +468,7 @@ Be thorough - include all companies you find. We will verify them later.`;
     test('removes duplicate websites', () => {
       const companies = [
         { company_name: 'Acme Inc', website: 'https://example.com', hq: 'Bangkok' },
-        { company_name: 'Acme Corp', website: 'https://example.com/about', hq: 'Bangkok' }
+        { company_name: 'Acme Corp', website: 'https://example.com/about', hq: 'Bangkok' },
       ];
       const result = dedupeCompanies(companies);
       expect(result).toHaveLength(1);
@@ -450,7 +477,7 @@ Be thorough - include all companies you find. We will verify them later.`;
     test('removes companies with same domain', () => {
       const companies = [
         { company_name: 'Acme Inc', website: 'https://example.com', hq: 'Bangkok' },
-        { company_name: 'Acme Corp', website: 'https://example.com/products', hq: 'Bangkok' }
+        { company_name: 'Acme Corp', website: 'https://example.com/products', hq: 'Bangkok' },
       ];
       const result = dedupeCompanies(companies);
       expect(result).toHaveLength(1);
@@ -459,7 +486,7 @@ Be thorough - include all companies you find. We will verify them later.`;
     test('removes companies with same normalized name', () => {
       const companies = [
         { company_name: 'Acme Inc', website: 'https://acme1.com', hq: 'Bangkok' },
-        { company_name: 'Acme Corporation', website: 'https://acme2.com', hq: 'Bangkok' }
+        { company_name: 'Acme Corporation', website: 'https://acme2.com', hq: 'Bangkok' },
       ];
       const result = dedupeCompanies(companies);
       expect(result).toHaveLength(1);
@@ -468,7 +495,7 @@ Be thorough - include all companies you find. We will verify them later.`;
     test('keeps companies with different names and domains', () => {
       const companies = [
         { company_name: 'Acme Inc', website: 'https://acme.com', hq: 'Bangkok' },
-        { company_name: 'Best Corp', website: 'https://best.com', hq: 'Bangkok' }
+        { company_name: 'Best Corp', website: 'https://best.com', hq: 'Bangkok' },
       ];
       const result = dedupeCompanies(companies);
       expect(result).toHaveLength(2);
@@ -477,7 +504,7 @@ Be thorough - include all companies you find. We will verify them later.`;
     test('filters out companies without website', () => {
       const companies = [
         { company_name: 'Acme Inc', website: '', hq: 'Bangkok' },
-        { company_name: 'Best Corp', website: 'https://best.com', hq: 'Bangkok' }
+        { company_name: 'Best Corp', website: 'https://best.com', hq: 'Bangkok' },
       ];
       const result = dedupeCompanies(companies);
       expect(result).toHaveLength(1);
@@ -487,7 +514,7 @@ Be thorough - include all companies you find. We will verify them later.`;
     test('filters out companies without name', () => {
       const companies = [
         { company_name: '', website: 'https://acme.com', hq: 'Bangkok' },
-        { company_name: 'Best Corp', website: 'https://best.com', hq: 'Bangkok' }
+        { company_name: 'Best Corp', website: 'https://best.com', hq: 'Bangkok' },
       ];
       const result = dedupeCompanies(companies);
       expect(result).toHaveLength(1);
@@ -497,7 +524,7 @@ Be thorough - include all companies you find. We will verify them later.`;
     test('filters out companies with invalid website URLs', () => {
       const companies = [
         { company_name: 'Acme Inc', website: 'example.com', hq: 'Bangkok' },
-        { company_name: 'Best Corp', website: 'https://best.com', hq: 'Bangkok' }
+        { company_name: 'Best Corp', website: 'https://best.com', hq: 'Bangkok' },
       ];
       const result = dedupeCompanies(companies);
       expect(result).toHaveLength(1);
@@ -508,7 +535,7 @@ Be thorough - include all companies you find. We will verify them later.`;
       const companies = [
         null,
         undefined,
-        { company_name: 'Acme Inc', website: 'https://acme.com', hq: 'Bangkok' }
+        { company_name: 'Acme Inc', website: 'https://acme.com', hq: 'Bangkok' },
       ];
       const result = dedupeCompanies(companies);
       expect(result).toHaveLength(1);
@@ -517,7 +544,7 @@ Be thorough - include all companies you find. We will verify them later.`;
     test('handles www and non-www versions as duplicates', () => {
       const companies = [
         { company_name: 'Acme Inc', website: 'https://www.example.com', hq: 'Bangkok' },
-        { company_name: 'Acme Corp', website: 'https://example.com', hq: 'Bangkok' }
+        { company_name: 'Acme Corp', website: 'https://example.com', hq: 'Bangkok' },
       ];
       const result = dedupeCompanies(companies);
       expect(result).toHaveLength(1);
@@ -526,7 +553,7 @@ Be thorough - include all companies you find. We will verify them later.`;
     test('handles PT prefix in company names', () => {
       const companies = [
         { company_name: 'PT Acme Indonesia', website: 'https://acme1.com', hq: 'Jakarta' },
-        { company_name: 'Acme Indonesia', website: 'https://acme2.com', hq: 'Jakarta' }
+        { company_name: 'Acme Indonesia', website: 'https://acme2.com', hq: 'Jakarta' },
       ];
       const result = dedupeCompanies(companies);
       expect(result).toHaveLength(1);
@@ -535,7 +562,7 @@ Be thorough - include all companies you find. We will verify them later.`;
     test('handles legal suffix variations', () => {
       const companies = [
         { company_name: 'Acme Sdn Bhd', website: 'https://acme1.com', hq: 'Kuala Lumpur' },
-        { company_name: 'Acme Berhad', website: 'https://acme2.com', hq: 'Kuala Lumpur' }
+        { company_name: 'Acme Berhad', website: 'https://acme2.com', hq: 'Kuala Lumpur' },
       ];
       const result = dedupeCompanies(companies);
       expect(result).toHaveLength(1);
@@ -553,7 +580,7 @@ Be thorough - include all companies you find. We will verify them later.`;
         'facebook.com',
         'twitter.com',
         'instagram.com',
-        'youtube.com'
+        'youtube.com',
       ];
       for (const pattern of obviousSpam) {
         if (urlLower.includes(pattern)) return true;
@@ -562,7 +589,7 @@ Be thorough - include all companies you find. We will verify them later.`;
     }
 
     function preFilterCompanies(companies) {
-      return companies.filter(c => {
+      return companies.filter((c) => {
         if (!c || !c.website) return false;
         if (isSpamOrDirectoryURL(c.website)) {
           return false;
@@ -574,7 +601,7 @@ Be thorough - include all companies you find. We will verify them later.`;
     test('removes companies with social media URLs', () => {
       const companies = [
         { company_name: 'Acme', website: 'https://facebook.com/acme', hq: 'Bangkok' },
-        { company_name: 'Best', website: 'https://best.com', hq: 'Bangkok' }
+        { company_name: 'Best', website: 'https://best.com', hq: 'Bangkok' },
       ];
       const result = preFilterCompanies(companies);
       expect(result).toHaveLength(1);
@@ -584,7 +611,7 @@ Be thorough - include all companies you find. We will verify them later.`;
     test('removes companies without website', () => {
       const companies = [
         { company_name: 'Acme', website: '', hq: 'Bangkok' },
-        { company_name: 'Best', website: 'https://best.com', hq: 'Bangkok' }
+        { company_name: 'Best', website: 'https://best.com', hq: 'Bangkok' },
       ];
       const result = preFilterCompanies(companies);
       expect(result).toHaveLength(1);
@@ -593,7 +620,7 @@ Be thorough - include all companies you find. We will verify them later.`;
     test('removes companies with Wikipedia URLs', () => {
       const companies = [
         { company_name: 'Acme', website: 'https://wikipedia.org/wiki/Acme', hq: 'Bangkok' },
-        { company_name: 'Best', website: 'https://best.com', hq: 'Bangkok' }
+        { company_name: 'Best', website: 'https://best.com', hq: 'Bangkok' },
       ];
       const result = preFilterCompanies(companies);
       expect(result).toHaveLength(1);
@@ -602,7 +629,7 @@ Be thorough - include all companies you find. We will verify them later.`;
     test('keeps legitimate companies', () => {
       const companies = [
         { company_name: 'Acme', website: 'https://acme.com', hq: 'Bangkok' },
-        { company_name: 'Best', website: 'https://best.com', hq: 'Bangkok' }
+        { company_name: 'Best', website: 'https://best.com', hq: 'Bangkok' },
       ];
       const result = preFilterCompanies(companies);
       expect(result).toHaveLength(2);
@@ -611,7 +638,7 @@ Be thorough - include all companies you find. We will verify them later.`;
     test('handles null companies', () => {
       const companies = [
         null,
-        { company_name: 'Best', website: 'https://best.com', hq: 'Bangkok' }
+        { company_name: 'Best', website: 'https://best.com', hq: 'Bangkok' },
       ];
       const result = preFilterCompanies(companies);
       expect(result).toHaveLength(1);
@@ -621,13 +648,18 @@ Be thorough - include all companies you find. We will verify them later.`;
   // ============ BUILD EXCLUSION RULES ============
 
   describe('buildExclusionRules', () => {
-    function buildExclusionRules(exclusion, business) {
+    function buildExclusionRules(exclusion, _business) {
       const exclusionLower = exclusion.toLowerCase();
       let rules = '';
 
-      if (exclusionLower.includes('large') || exclusionLower.includes('big') ||
-          exclusionLower.includes('mnc') || exclusionLower.includes('multinational') ||
-          exclusionLower.includes('major') || exclusionLower.includes('giant')) {
+      if (
+        exclusionLower.includes('large') ||
+        exclusionLower.includes('big') ||
+        exclusionLower.includes('mnc') ||
+        exclusionLower.includes('multinational') ||
+        exclusionLower.includes('major') ||
+        exclusionLower.includes('giant')
+      ) {
         rules += `
 LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
 - "global presence", "worldwide operations", "global leader", "world's largest"
@@ -760,7 +792,7 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
 
     test('generates HTML with search parameters', () => {
       const companies = [
-        { company_name: 'Acme Inc', website: 'https://acme.com', hq: 'Bangkok, Thailand' }
+        { company_name: 'Acme Inc', website: 'https://acme.com', hq: 'Bangkok, Thailand' },
       ];
       const html = buildEmailHTML(companies, 'ink manufacturers', 'Thailand', 'large companies');
 
@@ -774,7 +806,7 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
     test('generates table rows for each company', () => {
       const companies = [
         { company_name: 'Acme Inc', website: 'https://acme.com', hq: 'Bangkok, Thailand' },
-        { company_name: 'Best Corp', website: 'https://best.com', hq: 'Jakarta, Indonesia' }
+        { company_name: 'Best Corp', website: 'https://best.com', hq: 'Jakarta, Indonesia' },
       ];
       const html = buildEmailHTML(companies, 'ink', 'Southeast Asia', 'none');
 
@@ -789,7 +821,7 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
     test('numbers companies sequentially', () => {
       const companies = [
         { company_name: 'Acme', website: 'https://acme.com', hq: 'Bangkok' },
-        { company_name: 'Best', website: 'https://best.com', hq: 'Jakarta' }
+        { company_name: 'Best', website: 'https://best.com', hq: 'Jakarta' },
       ];
       const html = buildEmailHTML(companies, 'ink', 'SEA', 'none');
 
@@ -803,16 +835,14 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
     });
 
     test('creates clickable website links', () => {
-      const companies = [
-        { company_name: 'Acme', website: 'https://acme.com', hq: 'Bangkok' }
-      ];
+      const companies = [{ company_name: 'Acme', website: 'https://acme.com', hq: 'Bangkok' }];
       const html = buildEmailHTML(companies, 'ink', 'Thailand', 'none');
       expect(html).toContain('<a href="https://acme.com">https://acme.com</a>');
     });
 
     test('escapes HTML in company data', () => {
       const companies = [
-        { company_name: 'Acme & Co.', website: 'https://acme.com', hq: 'Bangkok' }
+        { company_name: 'Acme & Co.', website: 'https://acme.com', hq: 'Bangkok' },
       ];
       const html = buildEmailHTML(companies, 'ink & coatings', 'Thailand', 'none');
       expect(html).toContain('Acme &amp; Co.');
@@ -820,9 +850,7 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
     });
 
     test('includes table headers', () => {
-      const companies = [
-        { company_name: 'Acme', website: 'https://acme.com', hq: 'Bangkok' }
-      ];
+      const companies = [{ company_name: 'Acme', website: 'https://acme.com', hq: 'Bangkok' }];
       const html = buildEmailHTML(companies, 'ink', 'Thailand', 'none');
       expect(html).toContain('<th>#</th>');
       expect(html).toContain('<th>Company</th>');
@@ -838,45 +866,71 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
       const input = 'Thailand, Vietnam, Indonesia';
       const hasComma = input.includes(',');
       expect(hasComma).toBe(true);
-      const result = input.split(',').map(c => c.trim());
+      const result = input.split(',').map((c) => c.trim());
       expect(result).toEqual(['Thailand', 'Vietnam', 'Indonesia']);
     });
 
     test('recognizes Southeast Asia region', () => {
       const regionMappings = {
-        'southeast asia': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines']
+        'southeast asia': [
+          'Malaysia',
+          'Indonesia',
+          'Singapore',
+          'Thailand',
+          'Vietnam',
+          'Philippines',
+        ],
       };
       const input = 'southeast asia';
       expect(regionMappings[input.toLowerCase()]).toEqual([
-        'Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'
+        'Malaysia',
+        'Indonesia',
+        'Singapore',
+        'Thailand',
+        'Vietnam',
+        'Philippines',
       ]);
     });
 
     test('recognizes East Asia region', () => {
       const regionMappings = {
-        'east asia': ['Japan', 'South Korea', 'Taiwan', 'China', 'Hong Kong']
+        'east asia': ['Japan', 'South Korea', 'Taiwan', 'China', 'Hong Kong'],
       };
       const input = 'east asia';
       expect(regionMappings[input.toLowerCase()]).toEqual([
-        'Japan', 'South Korea', 'Taiwan', 'China', 'Hong Kong'
+        'Japan',
+        'South Korea',
+        'Taiwan',
+        'China',
+        'Hong Kong',
       ]);
     });
 
     test('recognizes SEA abbreviation', () => {
       const regionMappings = {
-        'sea': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines']
+        sea: ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'],
       };
       expect(regionMappings['sea']).toEqual([
-        'Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'
+        'Malaysia',
+        'Indonesia',
+        'Singapore',
+        'Thailand',
+        'Vietnam',
+        'Philippines',
       ]);
     });
 
     test('recognizes ASEAN', () => {
       const regionMappings = {
-        'asean': ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines']
+        asean: ['Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'],
       };
       expect(regionMappings['asean']).toEqual([
-        'Malaysia', 'Indonesia', 'Singapore', 'Thailand', 'Vietnam', 'Philippines'
+        'Malaysia',
+        'Indonesia',
+        'Singapore',
+        'Thailand',
+        'Vietnam',
+        'Philippines',
       ]);
     });
 
@@ -889,7 +943,7 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
 
     test('handles trimming of whitespace', () => {
       const input = ' Thailand , Vietnam , Indonesia ';
-      const result = input.split(',').map(c => c.trim());
+      const result = input.split(',').map((c) => c.trim());
       expect(result).toEqual(['Thailand', 'Vietnam', 'Indonesia']);
     });
   });
@@ -897,11 +951,14 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
   // ============ STRATEGY FUNCTIONS - QUERY GENERATION ============
 
   describe('strategy1_BroadSerpAPI', () => {
-    function strategy1_BroadSerpAPI(business, country, exclusion) {
-      const countries = country.split(',').map(c => c.trim());
+    function strategy1_BroadSerpAPI(business, country, _exclusion) {
+      const countries = country.split(',').map((c) => c.trim());
       const queries = [];
 
-      const terms = business.split(/\s+or\s+|\s+and\s+|,/).map(t => t.trim()).filter(t => t);
+      const terms = business
+        .split(/\s+or\s+|\s+and\s+|,/)
+        .map((t) => t.trim())
+        .filter((t) => t);
 
       for (const c of countries) {
         queries.push(
@@ -929,22 +986,22 @@ ACCEPT if they manufacture (even if also distribute) - most manufacturers also s
 
     test('generates queries for multiple countries', () => {
       const queries = strategy1_BroadSerpAPI('ink', 'Thailand, Vietnam', 'none');
-      const thailandQueries = queries.filter(q => q.includes('Thailand'));
-      const vietnamQueries = queries.filter(q => q.includes('Vietnam'));
+      const thailandQueries = queries.filter((q) => q.includes('Thailand'));
+      const vietnamQueries = queries.filter((q) => q.includes('Vietnam'));
       expect(thailandQueries.length).toBeGreaterThan(0);
       expect(vietnamQueries.length).toBeGreaterThan(0);
     });
 
     test('handles business terms with "or"', () => {
       const queries = strategy1_BroadSerpAPI('ink or coating', 'Thailand', 'none');
-      expect(queries.some(q => q === 'ink Thailand')).toBe(true);
-      expect(queries.some(q => q === 'coating Thailand')).toBe(true);
+      expect(queries.some((q) => q === 'ink Thailand')).toBe(true);
+      expect(queries.some((q) => q === 'coating Thailand')).toBe(true);
     });
 
     test('handles business terms with "and"', () => {
       const queries = strategy1_BroadSerpAPI('ink and coating', 'Thailand', 'none');
-      expect(queries.some(q => q === 'ink Thailand')).toBe(true);
-      expect(queries.some(q => q === 'coating Thailand')).toBe(true);
+      expect(queries.some((q) => q === 'ink Thailand')).toBe(true);
+      expect(queries.some((q) => q === 'coating Thailand')).toBe(true);
     });
   });
 

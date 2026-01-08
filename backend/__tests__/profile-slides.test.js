@@ -6,42 +6,97 @@
 // ============ CONSTANTS (copied from server.js) ============
 
 const COUNTRY_FLAG_MAP = {
-  'philippines': 'PH', 'ph': 'PH', 'manila': 'PH',
-  'thailand': 'TH', 'th': 'TH', 'bangkok': 'TH',
-  'malaysia': 'MY', 'my': 'MY', 'kuala lumpur': 'MY',
-  'indonesia': 'ID', 'id': 'ID', 'jakarta': 'ID',
-  'singapore': 'SG', 'sg': 'SG',
-  'vietnam': 'VN', 'vn': 'VN', 'ho chi minh': 'VN', 'hanoi': 'VN',
-  'japan': 'JP', 'jp': 'JP', 'tokyo': 'JP',
-  'china': 'CN', 'cn': 'CN', 'beijing': 'CN', 'shanghai': 'CN',
-  'korea': 'KR', 'kr': 'KR', 'seoul': 'KR',
-  'taiwan': 'TW', 'tw': 'TW', 'taipei': 'TW',
-  'usa': 'US', 'us': 'US', 'united states': 'US', 'america': 'US',
-  'uk': 'GB', 'united kingdom': 'GB', 'england': 'GB', 'london': 'GB',
-  'australia': 'AU', 'au': 'AU', 'sydney': 'AU',
-  'india': 'IN', 'in': 'IN', 'mumbai': 'IN', 'delhi': 'IN',
-  'hong kong': 'HK', 'hk': 'HK'
+  philippines: 'PH',
+  ph: 'PH',
+  manila: 'PH',
+  thailand: 'TH',
+  th: 'TH',
+  bangkok: 'TH',
+  malaysia: 'MY',
+  my: 'MY',
+  'kuala lumpur': 'MY',
+  indonesia: 'ID',
+  id: 'ID',
+  jakarta: 'ID',
+  singapore: 'SG',
+  sg: 'SG',
+  vietnam: 'VN',
+  vn: 'VN',
+  'ho chi minh': 'VN',
+  hanoi: 'VN',
+  japan: 'JP',
+  jp: 'JP',
+  tokyo: 'JP',
+  china: 'CN',
+  cn: 'CN',
+  beijing: 'CN',
+  shanghai: 'CN',
+  korea: 'KR',
+  kr: 'KR',
+  seoul: 'KR',
+  taiwan: 'TW',
+  tw: 'TW',
+  taipei: 'TW',
+  usa: 'US',
+  us: 'US',
+  'united states': 'US',
+  america: 'US',
+  uk: 'GB',
+  'united kingdom': 'GB',
+  england: 'GB',
+  london: 'GB',
+  australia: 'AU',
+  au: 'AU',
+  sydney: 'AU',
+  india: 'IN',
+  in: 'IN',
+  mumbai: 'IN',
+  delhi: 'IN',
+  'hong kong': 'HK',
+  hk: 'HK',
 };
 
 const SHORTFORM_DEFINITIONS = {
-  'SEA': 'Southeast Asia',
-  'OEM': 'Original Equipment Manufacturer',
-  'SKU': 'Stock Keeping Unit',
-  'ERP': 'Enterprise Resource Planning',
-  'CRM': 'Customer Relationship Management'
+  SEA: 'Southeast Asia',
+  OEM: 'Original Equipment Manufacturer',
+  SKU: 'Stock Keeping Unit',
+  ERP: 'Enterprise Resource Planning',
+  CRM: 'Customer Relationship Management',
 };
 
 const COMMON_SHORTFORMS = [
-  'M', 'B', 'K',
+  'M',
+  'B',
+  'K',
   'HQ',
-  'CEO', 'CFO', 'COO',
-  'USD', 'EUR', 'GBP', 'JPY', 'CNY', 'KRW', 'TWD',
-  'IDR', 'SGD', 'MYR', 'THB', 'PHP', 'VND', 'INR', 'HKD', 'AUD',
+  'CEO',
+  'CFO',
+  'COO',
+  'USD',
+  'EUR',
+  'GBP',
+  'JPY',
+  'CNY',
+  'KRW',
+  'TWD',
+  'IDR',
+  'SGD',
+  'MYR',
+  'THB',
+  'PHP',
+  'VND',
+  'INR',
+  'HKD',
+  'AUD',
   'ISO',
   'FY',
-  'YoY', 'QoQ',
-  'B2B', 'B2C',
-  'AI', 'IT', 'IoT'
+  'YoY',
+  'QoQ',
+  'B2B',
+  'B2C',
+  'AI',
+  'IT',
+  'IoT',
 ];
 
 // ============ PURE FUNCTIONS (copied from server.js) ============
@@ -49,13 +104,17 @@ const COMMON_SHORTFORMS = [
 function ensureString(value, defaultValue = '') {
   if (typeof value === 'string') return value;
   if (value === null || value === undefined) return defaultValue;
-  if (Array.isArray(value)) return value.map(v => ensureString(v)).join(', ');
+  if (Array.isArray(value)) return value.map((v) => ensureString(v)).join(', ');
   if (typeof value === 'object') {
     if (value.city && value.country) return `${value.city}, ${value.country}`;
     if (value.text) return ensureString(value.text);
     if (value.value) return ensureString(value.value);
     if (value.name) return ensureString(value.name);
-    try { return JSON.stringify(value); } catch { return defaultValue; }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return defaultValue;
+    }
   }
   return String(value);
 }
@@ -64,9 +123,13 @@ function extractCompanyNameFromUrl(url) {
   try {
     const urlObj = new URL(url);
     let domain = urlObj.hostname.replace(/^www\./, '');
-    domain = domain.replace(/\.(com|co|org|net|io|ai|jp|cn|kr|sg|my|th|vn|id|ph|tw|hk|in|de|uk|fr|it|es|au|nz|ca|us|br|mx|ru|nl|be|ch|at|se|no|dk|fi|pl|cz|hu|ro|bg|gr|tr|ae|sa|il|za|ng|eg|ke)(\.[a-z]{2,3})?$/i, '');
-    const name = domain.split(/[-_.]/)
-      .map(part => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
+    domain = domain.replace(
+      /\.(com|co|org|net|io|ai|jp|cn|kr|sg|my|th|vn|id|ph|tw|hk|in|de|uk|fr|it|es|au|nz|ca|us|br|mx|ru|nl|be|ch|at|se|no|dk|fi|pl|cz|hu|ro|bg|gr|tr|ae|sa|il|za|ng|eg|ke)(\.[a-z]{2,3})?$/i,
+      ''
+    );
+    const name = domain
+      .split(/[-_.]/)
+      .map((part) => part.charAt(0).toUpperCase() + part.slice(1).toLowerCase())
       .join(' ');
     return name || domain;
   } catch (e) {
@@ -76,11 +139,15 @@ function extractCompanyNameFromUrl(url) {
 
 function detectMeetingDomain(text) {
   const domains = {
-    financial: /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
-    legal: /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
-    medical: /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
-    technical: /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
-    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i
+    financial:
+      /\b(revenue|EBITDA|valuation|M&A|merger|acquisition|IPO|equity|debt|ROI|P&L|balance sheet|cash flow|投資|収益|利益|財務)\b/i,
+    legal:
+      /\b(contract|agreement|liability|compliance|litigation|IP|intellectual property|NDA|terms|clause|legal|lawyer|attorney|契約|法的|弁護士)\b/i,
+    medical:
+      /\b(clinical|trial|FDA|patient|therapeutic|drug|pharmaceutical|biotech|efficacy|dosage|治療|患者|医療|臨床)\b/i,
+    technical:
+      /\b(API|architecture|infrastructure|database|server|cloud|deployment|code|software|engineering|システム|開発|技術)\b/i,
+    hr: /\b(employee|hiring|compensation|benefits|performance|talent|HR|recruitment|人事|採用|給与)\b/i,
   };
 
   for (const [domain, pattern] of Object.entries(domains)) {
@@ -93,20 +160,29 @@ function detectMeetingDomain(text) {
 
 function getDomainInstructions(domain) {
   const instructions = {
-    financial: 'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
-    legal: 'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
-    medical: 'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
-    technical: 'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
+    financial:
+      'This is a financial/investment due diligence meeting. Preserve financial terms like M&A, EBITDA, ROI, P&L accurately. Use standard financial terminology.',
+    legal:
+      'This is a legal due diligence meeting. Preserve legal terms and contract language precisely. Maintain formal legal register.',
+    medical:
+      'This is a medical/pharmaceutical due diligence meeting. Preserve medical terminology, drug names, and clinical terms accurately.',
+    technical:
+      'This is a technical due diligence meeting. Preserve technical terms, acronyms, and engineering terminology accurately.',
     hr: 'This is an HR/talent due diligence meeting. Preserve HR terminology and employment-related terms accurately.',
-    general: 'This is a business due diligence meeting. Preserve business terminology and professional tone.'
+    general:
+      'This is a business due diligence meeting. Preserve business terminology and professional tone.',
   };
   return instructions[domain] || instructions.general;
 }
 
 function normalizeCompanyName(name) {
   if (!name) return '';
-  return name.toLowerCase()
-    .replace(/\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi, '')
+  return name
+    .toLowerCase()
+    .replace(
+      /\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi,
+      ''
+    )
     .replace(/^(pt\.?|cv\.?)\s+/gi, '')
     .replace(/[^\w\s]/g, '')
     .replace(/\s+/g, ' ')
@@ -115,11 +191,15 @@ function normalizeCompanyName(name) {
 
 function normalizeWebsite(url) {
   if (!url) return '';
-  return url.toLowerCase()
+  return url
+    .toLowerCase()
     .replace(/^https?:\/\//, '')
     .replace(/^www\./, '')
     .replace(/\/+$/, '')
-    .replace(/\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i, '')
+    .replace(
+      /\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i,
+      ''
+    )
     .replace(/\.(html?|php|aspx?|jsp)$/i, '');
 }
 
@@ -164,7 +244,7 @@ function isSpamOrDirectoryURL(url) {
     'facebook.com',
     'twitter.com',
     'instagram.com',
-    'youtube.com'
+    'youtube.com',
   ];
 
   for (const pattern of obviousSpam) {
@@ -175,7 +255,7 @@ function isSpamOrDirectoryURL(url) {
 }
 
 function preFilterCompanies(companies) {
-  return companies.filter(c => {
+  return companies.filter((c) => {
     if (!c || !c.website) return false;
     if (isSpamOrDirectoryURL(c.website)) {
       return false;
@@ -189,13 +269,18 @@ function buildOutputFormat() {
 Be thorough - include all companies you find. We will verify them later.`;
 }
 
-function buildExclusionRules(exclusion, business) {
+function buildExclusionRules(exclusion, _business) {
   const exclusionLower = exclusion.toLowerCase();
   let rules = '';
 
-  if (exclusionLower.includes('large') || exclusionLower.includes('big') ||
-      exclusionLower.includes('mnc') || exclusionLower.includes('multinational') ||
-      exclusionLower.includes('major') || exclusionLower.includes('giant')) {
+  if (
+    exclusionLower.includes('large') ||
+    exclusionLower.includes('big') ||
+    exclusionLower.includes('mnc') ||
+    exclusionLower.includes('multinational') ||
+    exclusionLower.includes('major') ||
+    exclusionLower.includes('giant')
+  ) {
     rules += `
 LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
 - "global presence", "worldwide operations", "global leader", "world's largest"
@@ -240,14 +325,14 @@ function getCountryCode(location) {
   const hqMatch = loc.match(/hq:\s*([^\n]+)/i);
   if (hqMatch) {
     const hqLocation = hqMatch[1].trim();
-    const parts = hqLocation.split(',').map(p => p.trim());
+    const parts = hqLocation.split(',').map((p) => p.trim());
     const country = parts[parts.length - 1];
     for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
       if (country.includes(key)) return code;
     }
   }
 
-  const parts = loc.split(',').map(p => p.trim());
+  const parts = loc.split(',').map((p) => p.trim());
   if (parts.length >= 1) {
     const lastPart = parts[parts.length - 1];
     for (const [key, code] of Object.entries(COUNTRY_FLAG_MAP)) {
@@ -290,7 +375,7 @@ function filterEmptyMetrics(keyMetrics) {
     /company\s*\d+/i,
     /various\s+(printers|companies|manufacturers|customers|suppliers|partners)/i,
     /multiple\s+(printers|companies|manufacturers|customers|suppliers|partners)/i,
-    /local\s+printers\s+and\s+multinational/i
+    /local\s+printers\s+and\s+multinational/i,
   ];
 
   const badLabels = [
@@ -319,10 +404,10 @@ function filterEmptyMetrics(keyMetrics) {
     /technical support/i,
     /customer satisfaction/i,
     /commitment/i,
-    /dedication/i
+    /dedication/i,
   ];
 
-  return keyMetrics.filter(metric => {
+  return keyMetrics.filter((metric) => {
     if (!metric || !metric.value) return false;
     const value = String(metric.value).trim();
     const label = String(metric.label || '').trim();
@@ -350,18 +435,18 @@ function detectShortforms(companyData) {
     companyData.location,
     companyData.business,
     companyData.metrics,
-    companyData.footnote
+    companyData.footnote,
   ];
 
   if (companyData.key_metrics && Array.isArray(companyData.key_metrics)) {
-    companyData.key_metrics.forEach(metric => {
+    companyData.key_metrics.forEach((metric) => {
       if (metric?.label) textParts.push(ensureString(metric.label));
       if (metric?.value) textParts.push(ensureString(metric.value));
     });
   }
 
   if (companyData.breakdown_items && Array.isArray(companyData.breakdown_items)) {
-    companyData.breakdown_items.forEach(item => {
+    companyData.breakdown_items.forEach((item) => {
       if (item?.label) textParts.push(ensureString(item.label));
       if (item?.value) textParts.push(ensureString(item.value));
     });
@@ -390,28 +475,35 @@ function validateAndFixHQFormat(location, websiteUrl) {
   let loc = location.trim();
   loc = loc.replace(/^-?\s*HQ:\s*/i, '').trim();
 
-  const parts = loc.split(',').map(p => p.trim()).filter(p => p);
+  const parts = loc
+    .split(',')
+    .map((p) => p.trim())
+    .filter((p) => p);
   const lastPart = parts[parts.length - 1]?.toLowerCase() || '';
 
   const isSingapore = lastPart === 'singapore' || loc.toLowerCase() === 'singapore';
 
   if (isSingapore) {
     if (parts.length === 1 || loc.toLowerCase() === 'singapore') {
-      const domain = websiteUrl?.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0] || '';
+      const domain =
+        websiteUrl
+          ?.replace(/^https?:\/\//, '')
+          .replace(/^www\./, '')
+          .split('/')[0] || '';
 
       const areaHints = {
-        'jurong': 'Jurong',
-        'tuas': 'Tuas',
-        'woodlands': 'Woodlands',
-        'ubi': 'Ubi',
-        'changi': 'Changi',
-        'bedok': 'Bedok',
-        'tampines': 'Tampines',
+        jurong: 'Jurong',
+        tuas: 'Tuas',
+        woodlands: 'Woodlands',
+        ubi: 'Ubi',
+        changi: 'Changi',
+        bedok: 'Bedok',
+        tampines: 'Tampines',
         'ang mo kio': 'Ang Mo Kio',
-        'amk': 'Ang Mo Kio',
+        amk: 'Ang Mo Kio',
         'paya lebar': 'Paya Lebar',
-        'kallang': 'Kallang',
-        'geylang': 'Geylang'
+        kallang: 'Kallang',
+        geylang: 'Geylang',
       };
 
       let area = null;
@@ -593,7 +685,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicate websites', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://example.com', hq: 'City, Country' },
-      { company_name: 'XYZ', website: 'https://example.com', hq: 'City, Country' }
+      { company_name: 'XYZ', website: 'https://example.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -602,7 +694,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicate domains', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://example.com/home', hq: 'City, Country' },
-      { company_name: 'XYZ', website: 'https://example.com/about', hq: 'City, Country' }
+      { company_name: 'XYZ', website: 'https://example.com/about', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -611,7 +703,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicate company names', () => {
     const companies = [
       { company_name: 'ABC Ltd', website: 'https://abc1.com', hq: 'City, Country' },
-      { company_name: 'ABC Limited', website: 'https://abc2.com', hq: 'City, Country' }
+      { company_name: 'ABC Limited', website: 'https://abc2.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -622,7 +714,7 @@ describe('dedupeCompanies', () => {
       { company_name: 'ABC', website: 'https://example.com', hq: 'City, Country' },
       { company_name: 'XYZ', website: null, hq: 'City, Country' },
       { company_name: null, website: 'https://test.com', hq: 'City, Country' },
-      { company_name: 'DEF', website: 'not-http-url', hq: 'City, Country' }
+      { company_name: 'DEF', website: 'not-http-url', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -633,7 +725,7 @@ describe('dedupeCompanies', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://abc.com', hq: 'City, Country' },
       { company_name: 'XYZ', website: 'https://xyz.com', hq: 'City, Country' },
-      { company_name: 'DEF', website: 'https://def.com', hq: 'City, Country' }
+      { company_name: 'DEF', website: 'https://def.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(3);
@@ -667,7 +759,7 @@ describe('preFilterCompanies', () => {
   test('filters out spam URLs', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://facebook.com/abc' },
-      { company_name: 'XYZ', website: 'https://mycompany.com' }
+      { company_name: 'XYZ', website: 'https://mycompany.com' },
     ];
     const result = preFilterCompanies(companies);
     expect(result).toHaveLength(1);
@@ -677,7 +769,7 @@ describe('preFilterCompanies', () => {
   test('filters out companies without websites', () => {
     const companies = [
       { company_name: 'ABC', website: null },
-      { company_name: 'XYZ', website: 'https://mycompany.com' }
+      { company_name: 'XYZ', website: 'https://mycompany.com' },
     ];
     const result = preFilterCompanies(companies);
     expect(result).toHaveLength(1);
@@ -685,11 +777,7 @@ describe('preFilterCompanies', () => {
   });
 
   test('filters out null companies', () => {
-    const companies = [
-      null,
-      { company_name: 'XYZ', website: 'https://mycompany.com' },
-      undefined
-    ];
+    const companies = [null, { company_name: 'XYZ', website: 'https://mycompany.com' }, undefined];
     const result = preFilterCompanies(companies);
     expect(result).toHaveLength(1);
   });
@@ -775,7 +863,7 @@ describe('filterEmptyMetrics', () => {
     const metrics = [
       { label: 'Revenue', value: 'Not specified' },
       { label: 'Employees', value: '500' },
-      { label: 'Market', value: 'N/A' }
+      { label: 'Market', value: 'N/A' },
     ];
     const result = filterEmptyMetrics(metrics);
     expect(result).toHaveLength(1);
@@ -786,7 +874,7 @@ describe('filterEmptyMetrics', () => {
     const metrics = [
       { label: 'Clients', value: 'Client 1, Client 2, Client 3' },
       { label: 'Revenue', value: '$10M' },
-      { label: 'Customers', value: 'Customer A, Customer B' }
+      { label: 'Customers', value: 'Customer A, Customer B' },
     ];
     const result = filterEmptyMetrics(metrics);
     expect(result).toHaveLength(1);
@@ -797,7 +885,7 @@ describe('filterEmptyMetrics', () => {
     const metrics = [
       { label: 'Mission Statement', value: 'We strive for excellence' },
       { label: 'Revenue', value: '$10M' },
-      { label: 'Company Values', value: 'Integrity, Quality' }
+      { label: 'Company Values', value: 'Integrity, Quality' },
     ];
     const result = filterEmptyMetrics(metrics);
     expect(result).toHaveLength(1);
@@ -808,7 +896,7 @@ describe('filterEmptyMetrics', () => {
     const metrics = [
       { label: 'Revenue', value: '$10M' },
       { label: 'Employees', value: '500' },
-      { label: 'Factory Size', value: '50,000 sqm' }
+      { label: 'Factory Size', value: '50,000 sqm' },
     ];
     const result = filterEmptyMetrics(metrics);
     expect(result).toHaveLength(3);
@@ -823,7 +911,7 @@ describe('filterEmptyMetrics', () => {
   test('filters out generic descriptions', () => {
     const metrics = [
       { label: 'Quality', value: 'Various printers and companies' },
-      { label: 'Capacity', value: '1000 units/day' }
+      { label: 'Capacity', value: '1000 units/day' },
     ];
     const result = filterEmptyMetrics(metrics);
     expect(result).toHaveLength(1);
@@ -836,9 +924,7 @@ describe('detectShortforms', () => {
     const data = {
       company_name: 'ABC Company',
       business: 'We provide OEM services in SEA region',
-      key_metrics: [
-        { label: 'SKU Count', value: '500' }
-      ]
+      key_metrics: [{ label: 'SKU Count', value: '500' }],
     };
     const result = detectShortforms(data);
     expect(result).toContain('OEM');
@@ -850,9 +936,7 @@ describe('detectShortforms', () => {
     const data = {
       company_name: 'ABC Ltd',
       business: 'B2B solutions',
-      key_metrics: [
-        { label: 'Revenue', value: '10M USD' }
-      ]
+      key_metrics: [{ label: 'Revenue', value: '10M USD' }],
     };
     const result = detectShortforms(data);
     expect(result).toBe(null); // B2B, M, USD are common
@@ -861,7 +945,7 @@ describe('detectShortforms', () => {
   test('returns null when no shortforms found', () => {
     const data = {
       company_name: 'ABC Company',
-      business: 'Manufacturing and distribution'
+      business: 'Manufacturing and distribution',
     };
     const result = detectShortforms(data);
     expect(result).toBe(null);
@@ -876,9 +960,7 @@ describe('detectShortforms', () => {
   test('checks breakdown_items', () => {
     const data = {
       company_name: 'ABC',
-      breakdown_items: [
-        { label: 'OEM Products', value: '40%' }
-      ]
+      breakdown_items: [{ label: 'OEM Products', value: '40%' }],
     };
     const result = detectShortforms(data);
     expect(result).toContain('OEM');
@@ -928,6 +1010,8 @@ describe('validateAndFixHQFormat', () => {
 
   test('detects area from URL for Singapore', () => {
     expect(validateAndFixHQFormat('Singapore', 'https://tuas-company.com')).toBe('Tuas, Singapore');
-    expect(validateAndFixHQFormat('Singapore', 'https://woodlands-business.sg')).toBe('Woodlands, Singapore');
+    expect(validateAndFixHQFormat('Singapore', 'https://woodlands-business.sg')).toBe(
+      'Woodlands, Singapore'
+    );
   });
 });

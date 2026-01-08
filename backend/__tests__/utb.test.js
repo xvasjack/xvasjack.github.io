@@ -8,13 +8,17 @@
 function ensureString(value, defaultValue = '') {
   if (typeof value === 'string') return value;
   if (value === null || value === undefined) return defaultValue;
-  if (Array.isArray(value)) return value.map(v => ensureString(v)).join(', ');
+  if (Array.isArray(value)) return value.map((v) => ensureString(v)).join(', ');
   if (typeof value === 'object') {
     if (value.city && value.country) return `${value.city}, ${value.country}`;
     if (value.text) return ensureString(value.text);
     if (value.value) return ensureString(value.value);
     if (value.name) return ensureString(value.name);
-    try { return JSON.stringify(value); } catch { return defaultValue; }
+    try {
+      return JSON.stringify(value);
+    } catch {
+      return defaultValue;
+    }
   }
   return String(value);
 }
@@ -26,8 +30,12 @@ Be thorough - include all companies you find. We will verify them later.`;
 
 function normalizeCompanyName(name) {
   if (!name) return '';
-  return name.toLowerCase()
-    .replace(/\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi, '')
+  return name
+    .toLowerCase()
+    .replace(
+      /\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi,
+      ''
+    )
     .replace(/^(pt\.?|cv\.?)\s+/gi, '')
     .replace(/[^\w\s]/g, '')
     .replace(/\s+/g, ' ')
@@ -36,11 +44,15 @@ function normalizeCompanyName(name) {
 
 function normalizeWebsite(url) {
   if (!url) return '';
-  return url.toLowerCase()
+  return url
+    .toLowerCase()
     .replace(/^https?:\/\//, '')
     .replace(/^www\./, '')
     .replace(/\/+$/, '')
-    .replace(/\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i, '')
+    .replace(
+      /\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i,
+      ''
+    )
     .replace(/\.(html?|php|aspx?|jsp)$/i, '');
 }
 
@@ -85,7 +97,7 @@ function isSpamOrDirectoryURL(url) {
     'facebook.com',
     'twitter.com',
     'instagram.com',
-    'youtube.com'
+    'youtube.com',
   ];
 
   for (const pattern of obviousSpam) {
@@ -95,13 +107,18 @@ function isSpamOrDirectoryURL(url) {
   return false;
 }
 
-function buildExclusionRules(exclusion, business) {
+function buildExclusionRules(exclusion, _business) {
   const exclusionLower = exclusion.toLowerCase();
   let rules = '';
 
-  if (exclusionLower.includes('large') || exclusionLower.includes('big') ||
-      exclusionLower.includes('mnc') || exclusionLower.includes('multinational') ||
-      exclusionLower.includes('major') || exclusionLower.includes('giant')) {
+  if (
+    exclusionLower.includes('large') ||
+    exclusionLower.includes('big') ||
+    exclusionLower.includes('mnc') ||
+    exclusionLower.includes('multinational') ||
+    exclusionLower.includes('major') ||
+    exclusionLower.includes('giant')
+  ) {
     rules += `
 LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
 - "global presence", "worldwide operations", "global leader", "world's largest"
@@ -175,15 +192,15 @@ function detectLanguage(website) {
   const domainMatch = website.match(/\.([a-z]{2,3})(?:\/|$)/i);
   const tld = domainMatch ? domainMatch[1].toLowerCase() : '';
   const languageMap = {
-    'jp': { lang: 'Japanese', native: '日本語', searchPrefix: '日本語で' },
-    'cn': { lang: 'Chinese', native: '中文', searchPrefix: '用中文' },
-    'kr': { lang: 'Korean', native: '한국어', searchPrefix: '한국어로' },
-    'de': { lang: 'German', native: 'Deutsch', searchPrefix: 'Auf Deutsch:' },
-    'fr': { lang: 'French', native: 'Français', searchPrefix: 'En français:' },
-    'th': { lang: 'Thai', native: 'ไทย', searchPrefix: 'ภาษาไทย:' },
-    'vn': { lang: 'Vietnamese', native: 'Tiếng Việt', searchPrefix: 'Bằng tiếng Việt:' },
-    'id': { lang: 'Indonesian', native: 'Indonesia', searchPrefix: 'Dalam Bahasa Indonesia:' },
-    'tw': { lang: 'Chinese (Traditional)', native: '繁體中文', searchPrefix: '用繁體中文' }
+    jp: { lang: 'Japanese', native: '日本語', searchPrefix: '日本語で' },
+    cn: { lang: 'Chinese', native: '中文', searchPrefix: '用中文' },
+    kr: { lang: 'Korean', native: '한국어', searchPrefix: '한국어로' },
+    de: { lang: 'German', native: 'Deutsch', searchPrefix: 'Auf Deutsch:' },
+    fr: { lang: 'French', native: 'Français', searchPrefix: 'En français:' },
+    th: { lang: 'Thai', native: 'ไทย', searchPrefix: 'ภาษาไทย:' },
+    vn: { lang: 'Vietnamese', native: 'Tiếng Việt', searchPrefix: 'Bằng tiếng Việt:' },
+    id: { lang: 'Indonesian', native: 'Indonesia', searchPrefix: 'Dalam Bahasa Indonesia:' },
+    tw: { lang: 'Chinese (Traditional)', native: '繁體中文', searchPrefix: '用繁體中文' },
   };
   return languageMap[tld] || null;
 }
@@ -377,7 +394,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicate websites', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://example.com', hq: 'City, Country' },
-      { company_name: 'XYZ', website: 'https://example.com', hq: 'City, Country' }
+      { company_name: 'XYZ', website: 'https://example.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -387,7 +404,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicate domains', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://example.com/home', hq: 'City, Country' },
-      { company_name: 'XYZ', website: 'https://example.com/about', hq: 'City, Country' }
+      { company_name: 'XYZ', website: 'https://example.com/about', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -396,7 +413,7 @@ describe('dedupeCompanies', () => {
   test('removes duplicate company names', () => {
     const companies = [
       { company_name: 'ABC Ltd', website: 'https://abc1.com', hq: 'City, Country' },
-      { company_name: 'ABC Limited', website: 'https://abc2.com', hq: 'City, Country' }
+      { company_name: 'ABC Limited', website: 'https://abc2.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -409,7 +426,7 @@ describe('dedupeCompanies', () => {
       { company_name: null, website: 'https://test.com', hq: 'City, Country' },
       { company_name: 'DEF', website: 'not-http-url', hq: 'City, Country' },
       null,
-      undefined
+      undefined,
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -420,7 +437,7 @@ describe('dedupeCompanies', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://abc.com', hq: 'City, Country' },
       { company_name: 'XYZ', website: 'https://xyz.com', hq: 'City, Country' },
-      { company_name: 'DEF', website: 'https://def.com', hq: 'City, Country' }
+      { company_name: 'DEF', website: 'https://def.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(3);
@@ -429,7 +446,7 @@ describe('dedupeCompanies', () => {
   test('handles www variations', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://www.example.com', hq: 'City, Country' },
-      { company_name: 'XYZ', website: 'https://example.com', hq: 'City, Country' }
+      { company_name: 'XYZ', website: 'https://example.com', hq: 'City, Country' },
     ];
     const result = dedupeCompanies(companies);
     expect(result).toHaveLength(1);
@@ -535,7 +552,7 @@ describe('buildEmailHTML', () => {
   test('builds valid HTML with company data', () => {
     const companies = [
       { company_name: 'ABC', website: 'https://abc.com', hq: 'Bangkok, Thailand' },
-      { company_name: 'XYZ', website: 'https://xyz.com', hq: 'Jakarta, Indonesia' }
+      { company_name: 'XYZ', website: 'https://xyz.com', hq: 'Jakarta, Indonesia' },
     ];
     const html = buildEmailHTML(companies, 'ink manufacturing', 'Thailand', 'large companies');
 
@@ -551,9 +568,7 @@ describe('buildEmailHTML', () => {
   });
 
   test('escapes HTML in company data', () => {
-    const companies = [
-      { company_name: 'A&B <Script>', website: 'https://test.com', hq: 'City' }
-    ];
+    const companies = [{ company_name: 'A&B <Script>', website: 'https://test.com', hq: 'City' }];
     const html = buildEmailHTML(companies, 'test', 'country', 'none');
 
     expect(html).toContain('A&amp;B &lt;Script&gt;');
@@ -570,7 +585,7 @@ describe('buildEmailHTML', () => {
     const companies = [
       { company_name: 'A', website: 'https://a.com', hq: 'City' },
       { company_name: 'B', website: 'https://b.com', hq: 'City' },
-      { company_name: 'C', website: 'https://c.com', hq: 'City' }
+      { company_name: 'C', website: 'https://c.com', hq: 'City' },
     ];
     const html = buildEmailHTML(companies, 'test', 'country', 'none');
 
@@ -580,9 +595,7 @@ describe('buildEmailHTML', () => {
   });
 
   test('creates clickable links for websites', () => {
-    const companies = [
-      { company_name: 'Test', website: 'https://test.com', hq: 'City' }
-    ];
+    const companies = [{ company_name: 'Test', website: 'https://test.com', hq: 'City' }];
     const html = buildEmailHTML(companies, 'test', 'country', 'none');
 
     expect(html).toContain('<a href="https://test.com">https://test.com</a>');
@@ -595,7 +608,7 @@ describe('detectLanguage', () => {
     expect(lang).toEqual({
       lang: 'Japanese',
       native: '日本語',
-      searchPrefix: '日本語で'
+      searchPrefix: '日本語で',
     });
   });
 
@@ -604,7 +617,7 @@ describe('detectLanguage', () => {
     expect(lang).toEqual({
       lang: 'Chinese',
       native: '中文',
-      searchPrefix: '用中文'
+      searchPrefix: '用中文',
     });
   });
 
@@ -613,7 +626,7 @@ describe('detectLanguage', () => {
     expect(lang).toEqual({
       lang: 'Korean',
       native: '한국어',
-      searchPrefix: '한국어로'
+      searchPrefix: '한국어로',
     });
   });
 
@@ -622,7 +635,7 @@ describe('detectLanguage', () => {
     expect(lang).toEqual({
       lang: 'German',
       native: 'Deutsch',
-      searchPrefix: 'Auf Deutsch:'
+      searchPrefix: 'Auf Deutsch:',
     });
   });
 
@@ -631,7 +644,7 @@ describe('detectLanguage', () => {
     expect(lang).toEqual({
       lang: 'French',
       native: 'Français',
-      searchPrefix: 'En français:'
+      searchPrefix: 'En français:',
     });
   });
 
@@ -640,7 +653,7 @@ describe('detectLanguage', () => {
     expect(lang).toEqual({
       lang: 'Thai',
       native: 'ไทย',
-      searchPrefix: 'ภาษาไทย:'
+      searchPrefix: 'ภาษาไทย:',
     });
   });
 
@@ -649,7 +662,7 @@ describe('detectLanguage', () => {
     expect(lang).toEqual({
       lang: 'Vietnamese',
       native: 'Tiếng Việt',
-      searchPrefix: 'Bằng tiếng Việt:'
+      searchPrefix: 'Bằng tiếng Việt:',
     });
   });
 
@@ -658,7 +671,7 @@ describe('detectLanguage', () => {
     expect(lang).toEqual({
       lang: 'Indonesian',
       native: 'Indonesia',
-      searchPrefix: 'Dalam Bahasa Indonesia:'
+      searchPrefix: 'Dalam Bahasa Indonesia:',
     });
   });
 
@@ -667,7 +680,7 @@ describe('detectLanguage', () => {
     expect(lang).toEqual({
       lang: 'Chinese (Traditional)',
       native: '繁體中文',
-      searchPrefix: '用繁體中文'
+      searchPrefix: '用繁體中文',
     });
   });
 

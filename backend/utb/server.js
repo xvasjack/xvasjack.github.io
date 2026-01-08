@@ -4,63 +4,16 @@ const cors = require('cors');
 const OpenAI = require('openai');
 const fetch = require('node-fetch');
 const pptxgen = require('pptxgenjs');
-const XLSX = require('xlsx');
-const multer = require('multer');
-const { createClient } = require('@deepgram/sdk');
-const { Document, Packer, Paragraph, TextRun } = require('docx');
 const { S3Client } = require('@aws-sdk/client-s3');
-const Anthropic = require('@anthropic-ai/sdk');
-const JSZip = require('jszip');
-const { securityHeaders, rateLimiter, escapeHtml } = require('../shared/security');
-const { requestLogger, healthCheck } = require('../shared/middleware');
+// Try local copy first (Railway), fall back to parent (local dev)
+const sharedPath = require('fs').existsSync('./shared') ? './shared' : '../shared';
+const { securityHeaders, rateLimiter } = require(`${sharedPath}/security`);
+const { requestLogger, healthCheck } = require(`${sharedPath}/middleware`);
+const { setupGlobalErrorHandlers } = require(`${sharedPath}/logging`);
+const { sendEmailLegacy: sendEmail } = require(`${sharedPath}/email`);
 
-// ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
-// Memory logging helper for debugging Railway OOM issues
-function logMemoryUsage(label = '') {
-  const mem = process.memoryUsage();
-  const heapUsedMB = Math.round(mem.heapUsed / 1024 / 1024);
-  const heapTotalMB = Math.round(mem.heapTotal / 1024 / 1024);
-  const rssMB = Math.round(mem.rss / 1024 / 1024);
-  console.log(`  [Memory${label ? ': ' + label : ''}] Heap: ${heapUsedMB}/${heapTotalMB}MB, RSS: ${rssMB}MB`);
-}
-
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('=== UNHANDLED PROMISE REJECTION ===');
-  console.error('Reason:', reason);
-  console.error('Promise:', promise);
-  console.error('Stack:', reason?.stack || 'No stack trace');
-  logMemoryUsage('at rejection');
-  // Don't exit - keep the server running
-});
-
-process.on('uncaughtException', (error) => {
-  console.error('=== UNCAUGHT EXCEPTION ===');
-  console.error('Error:', error.message);
-  console.error('Stack:', error.stack);
-  logMemoryUsage('at exception');
-  // Don't exit - keep the server running
-});
-
-// ============ TYPE SAFETY HELPERS ============
-// Ensure a value is a string (AI models may return objects/arrays instead of strings)
-function ensureString(value, defaultValue = '') {
-  if (typeof value === 'string') return value;
-  if (value === null || value === undefined) return defaultValue;
-  // Handle arrays - join with comma
-  if (Array.isArray(value)) return value.map(v => ensureString(v)).join(', ');
-  // Handle objects - try to extract meaningful string
-  if (typeof value === 'object') {
-    // Common patterns from AI responses
-    if (value.city && value.country) return `${value.city}, ${value.country}`;
-    if (value.text) return ensureString(value.text);
-    if (value.value) return ensureString(value.value);
-    if (value.name) return ensureString(value.name);
-    // Fallback: stringify
-    try { return JSON.stringify(value); } catch { return defaultValue; }
-  }
-  // Convert other types to string
-  return String(value);
-}
+// Setup global error handlers to prevent crashes
+setupGlobalErrorHandlers();
 
 const app = express();
 app.use(securityHeaders);
@@ -70,17 +23,15 @@ app.use(requestLogger);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
-// Multer configuration for file uploads (memory storage)
-// Add 50MB limit to prevent OOM on Railway containers
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }  // 50MB max
-});
-
 // Check required environment variables
-const requiredEnvVars = ['OPENAI_API_KEY', 'PERPLEXITY_API_KEY', 'GEMINI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
-const optionalEnvVars = ['SERPAPI_API_KEY', 'DEEPSEEK_API_KEY', 'DEEPGRAM_API_KEY', 'ANTHROPIC_API_KEY']; // Optional but recommended
-const missingVars = requiredEnvVars.filter(v => !process.env[v]);
+const requiredEnvVars = [
+  'OPENAI_API_KEY',
+  'PERPLEXITY_API_KEY',
+  'GEMINI_API_KEY',
+  'SENDGRID_API_KEY',
+  'SENDER_EMAIL',
+];
+const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
 }
@@ -97,323 +48,26 @@ if (!process.env.DEEPGRAM_API_KEY) {
 
 // Initialize OpenAI
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'missing'
+  apiKey: process.env.OPENAI_API_KEY || 'missing',
 });
 
-// Initialize Anthropic (Claude)
-const anthropic = process.env.ANTHROPIC_API_KEY
-  ? new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
-  : null;
-
-// Initialize Deepgram
-const deepgram = process.env.DEEPGRAM_API_KEY ? createClient(process.env.DEEPGRAM_API_KEY) : null;
-
 // Initialize Cloudflare R2 (S3-compatible)
-const r2Client = (process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY)
-  ? new S3Client({
-      region: 'auto',
-      endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-      credentials: {
-        accessKeyId: process.env.R2_ACCESS_KEY_ID,
-        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY
-      }
-    })
-  : null;
-
-const R2_BUCKET = process.env.R2_BUCKET_NAME || 'dd-recordings';
+const r2Client =
+  process.env.R2_ACCOUNT_ID && process.env.R2_ACCESS_KEY_ID && process.env.R2_SECRET_ACCESS_KEY
+    ? new S3Client({
+        region: 'auto',
+        endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+        credentials: {
+          accessKeyId: process.env.R2_ACCESS_KEY_ID,
+          secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+        },
+      })
+    : null;
 
 if (!r2Client) {
-  console.warn('R2 not configured - recordings will only be stored in memory. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME');
-}
-
-// Extract text from .docx files (Word documents)
-async function extractDocxText(base64Content) {
-  try {
-    const buffer = Buffer.from(base64Content, 'base64');
-    const zip = await JSZip.loadAsync(buffer);
-    const documentXml = await zip.file('word/document.xml')?.async('string');
-
-    if (!documentXml) {
-      return '[Could not extract text from Word document]';
-    }
-
-    // Extract text from XML, removing tags
-    const text = documentXml
-      .replace(/<w:t[^>]*>([^<]*)<\/w:t>/g, '$1')  // Extract text content
-      .replace(/<w:p[^>]*>/g, '\n')  // Paragraph breaks
-      .replace(/<[^>]+>/g, '')  // Remove remaining tags
-      .replace(/&amp;/g, '&')
-      .replace(/&lt;/g, '<')
-      .replace(/&gt;/g, '>')
-      .replace(/&quot;/g, '"')
-      .replace(/\n\s*\n/g, '\n\n')  // Clean up multiple newlines
-      .trim();
-
-    console.log(`[DD] Extracted ${text.length} chars from DOCX`);
-    return text || '[Empty Word document]';
-  } catch (error) {
-    console.error('[DD] DOCX extraction error:', error.message);
-    return `[Error extracting Word document: ${error.message}]`;
-  }
-}
-
-// Extract text from .pptx files (PowerPoint)
-async function extractPptxText(base64Content) {
-  try {
-    const buffer = Buffer.from(base64Content, 'base64');
-    const zip = await JSZip.loadAsync(buffer);
-
-    const allText = [];
-    let slideNum = 1;
-
-    // Iterate through slide files
-    for (const filename of Object.keys(zip.files)) {
-      if (filename.match(/ppt\/slides\/slide\d+\.xml$/)) {
-        const slideXml = await zip.file(filename)?.async('string');
-        if (slideXml) {
-          // Extract text from slide
-          const slideText = slideXml
-            .replace(/<a:t>([^<]*)<\/a:t>/g, '$1 ')  // Extract text
-            .replace(/<a:p[^>]*>/g, '\n')  // Paragraph breaks
-            .replace(/<[^>]+>/g, '')  // Remove tags
-            .replace(/&amp;/g, '&')
-            .replace(/&lt;/g, '<')
-            .replace(/&gt;/g, '>')
-            .replace(/\s+/g, ' ')
-            .trim();
-
-          if (slideText) {
-            allText.push(`[Slide ${slideNum}]\n${slideText}`);
-          }
-          slideNum++;
-        }
-      }
-    }
-
-    const result = allText.join('\n\n') || '[Empty PowerPoint]';
-    console.log(`[DD] Extracted ${result.length} chars from PPTX (${slideNum - 1} slides)`);
-    return result;
-  } catch (error) {
-    console.error('[DD] PPTX extraction error:', error.message);
-    return `[Error extracting PowerPoint: ${error.message}]`;
-  }
-}
-
-// Extract text from .xlsx files (Excel)
-async function extractXlsxText(base64Content) {
-  try {
-    const buffer = Buffer.from(base64Content, 'base64');
-    const workbook = XLSX.read(buffer, { type: 'buffer' });
-
-    const allText = [];
-    for (const sheetName of workbook.SheetNames) {
-      const sheet = workbook.Sheets[sheetName];
-      const csv = XLSX.utils.sheet_to_csv(sheet);
-      if (csv.trim()) {
-        allText.push(`[Sheet: ${sheetName}]\n${csv}`);
-      }
-    }
-
-    const result = allText.join('\n\n') || '[Empty Excel file]';
-    console.log(`[DD] Extracted ${result.length} chars from XLSX`);
-    return result;
-  } catch (error) {
-    console.error('[DD] XLSX extraction error:', error.message);
-    return `[Error extracting Excel: ${error.message}]`;
-  }
-}
-
-// Send email using SendGrid API
-async function sendEmail(to, subject, html, attachments = null, maxRetries = 3) {
-  const senderEmail = process.env.SENDER_EMAIL;
-  const emailData = {
-    personalizations: [{ to: [{ email: to }] }],
-    from: { email: senderEmail, name: 'Find Target' },
-    subject: subject,
-    content: [{ type: 'text/html', value: html }]
-  };
-
-  if (attachments) {
-    const attachmentList = Array.isArray(attachments) ? attachments : [attachments];
-    emailData.attachments = attachmentList.map(a => ({
-      filename: a.filename || a.name,  // Support both 'filename' and 'name' properties
-      content: a.content,
-      type: 'application/octet-stream',
-      disposition: 'attachment'
-    }));
-  }
-
-  // Retry logic with exponential backoff
-  let lastError;
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${process.env.SENDGRID_API_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(emailData)
-      });
-
-      if (response.ok) {
-        if (attempt > 1) {
-          console.log(`  Email sent successfully on attempt ${attempt}`);
-        }
-        return { success: true };
-      }
-
-      const error = await response.text();
-      lastError = new Error(`Email failed (attempt ${attempt}/${maxRetries}): ${error}`);
-      console.error(lastError.message);
-
-      // Don't retry on 4xx client errors (except 429 rate limit)
-      if (response.status >= 400 && response.status < 500 && response.status !== 429) {
-        throw lastError;
-      }
-    } catch (fetchError) {
-      lastError = fetchError;
-      console.error(`  Email attempt ${attempt}/${maxRetries} failed:`, fetchError.message);
-    }
-
-    // Exponential backoff: 2s, 4s, 8s
-    if (attempt < maxRetries) {
-      const delay = Math.pow(2, attempt) * 1000;
-      console.log(`  Retrying email in ${delay / 1000}s...`);
-      await new Promise(resolve => setTimeout(resolve, delay));
-    }
-  }
-
-  throw lastError || new Error('Email failed after all retries');
-}
-
-// ============ AI TOOLS ============
-
-// Gemini 2.5 Flash-Lite - cost-effective for general tasks ($0.10/$0.40 per 1M tokens)
-async function callGemini(prompt) {
-  try {
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      timeout: 90000
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`Gemini 2.5 Flash-Lite HTTP error ${response.status}:`, errorText.substring(0, 200));
-      return '';
-    }
-
-    const data = await response.json();
-
-    if (data.error) {
-      console.error('Gemini 2.5 Flash-Lite API error:', data.error.message);
-      return '';
-    }
-
-    const result = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    if (!result) {
-      console.warn('Gemini 2.5 Flash-Lite returned empty response');
-    }
-    return result;
-  } catch (error) {
-    console.error('Gemini 2.5 Flash-Lite error:', error.message);
-    return '';
-  }
-}
-
-// GPT-4o fallback function for when Gemini fails
-async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
-  try {
-    console.log(`  Falling back to GPT-4o (reason: ${reason})...`);
-
-    const requestOptions = {
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.1
-    };
-
-    // Add JSON mode if requested
-    if (jsonMode) {
-      requestOptions.response_format = { type: 'json_object' };
-    }
-
-    const response = await openai.chat.completions.create(requestOptions);
-    const result = response.choices?.[0]?.message?.content || '';
-
-    if (result) {
-      console.log('  GPT-4o fallback successful');
-    }
-    return result;
-  } catch (fallbackError) {
-    console.error('GPT-4o fallback error:', fallbackError.message);
-    return ''; // Return empty if both fail
-  }
-}
-
-// Gemini 2.5 Pro - Most capable model for critical validation tasks
-// Use this for final data accuracy verification where errors are unacceptable
-async function callGemini2Pro(prompt, jsonMode = false) {
-  try {
-    const requestBody = {
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.0  // Zero temperature for deterministic validation
-      }
-    };
-
-    if (jsonMode) {
-      requestBody.generationConfig.responseMimeType = 'application/json';
-    }
-
-    // Using stable gemini-2.5-pro (upgraded from deprecated gemini-2.5-pro-preview-06-05)
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(requestBody),
-      timeout: 180000  // Longer timeout for Pro model
-    });
-    const data = await response.json();
-
-    if (data.error) {
-      console.error('Gemini 2.5 Pro API error:', data.error.message);
-      return '';
-    }
-
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  } catch (error) {
-    console.error('Gemini 2.5 Pro error:', error.message);
-    return '';
-  }
-}
-
-// Claude (Anthropic) - excellent reasoning and analysis
-async function callClaude(prompt, systemPrompt = null, jsonMode = false) {
-  if (!anthropic) {
-    console.warn('Claude not available - ANTHROPIC_API_KEY not set');
-    return '';
-  }
-  try {
-    const messages = [{ role: 'user', content: prompt }];
-    const requestParams = {
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 8192,
-      messages
-    };
-
-    if (systemPrompt) {
-      requestParams.system = systemPrompt;
-    }
-
-    const response = await anthropic.messages.create(requestParams);
-    const text = response.content?.[0]?.text || '';
-
-    return text;
-  } catch (error) {
-    console.error('Claude error:', error.message);
-    return '';
-  }
+  console.warn(
+    'R2 not configured - recordings will only be stored in memory. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME'
+  );
 }
 
 async function callPerplexity(prompt) {
@@ -421,14 +75,14 @@ async function callPerplexity(prompt) {
     const response = await fetch('https://api.perplexity.ai/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${process.env.PERPLEXITY_API_KEY}`,
-        'Content-Type': 'application/json'
+        Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'sonar-pro',  // Upgraded from 'sonar' for better search results
-        messages: [{ role: 'user', content: prompt }]
+        model: 'sonar-pro', // Upgraded from 'sonar' for better search results
+        messages: [{ role: 'user', content: prompt }],
       }),
-      timeout: 90000
+      timeout: 90000,
     });
 
     if (!response.ok) {
@@ -460,7 +114,7 @@ async function callChatGPT(prompt) {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
-      temperature: 0.2
+      temperature: 0.2,
     });
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -470,627 +124,6 @@ async function callChatGPT(prompt) {
   } catch (error) {
     console.error('ChatGPT error:', error.message);
     return '';
-  }
-}
-
-// OpenAI Search model - has real-time web search capability
-// Updated to use gpt-4o-search-preview (more stable than mini version)
-async function callOpenAISearch(prompt) {
-  try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-search-preview',
-      messages: [{ role: 'user', content: prompt }]
-    });
-    const result = response.choices[0].message.content || '';
-    if (!result) {
-      console.warn('OpenAI Search returned empty response, falling back to ChatGPT');
-      return callChatGPT(prompt);
-    }
-    return result;
-  } catch (error) {
-    console.error('OpenAI Search error:', error.message, '- falling back to ChatGPT');
-    // Fallback to regular gpt-4o if search model not available
-    return callChatGPT(prompt);
-  }
-}
-
-// SerpAPI - Google Search integration
-async function callSerpAPI(query) {
-  if (!process.env.SERPAPI_API_KEY) {
-    return '';
-  }
-  try {
-    const params = new URLSearchParams({
-      q: query,
-      api_key: process.env.SERPAPI_API_KEY,
-      engine: 'google',
-      num: 100 // Get more results
-    });
-    const response = await fetch(`https://serpapi.com/search?${params}`, {
-      timeout: 30000
-    });
-    const data = await response.json();
-
-    // Extract organic results
-    const results = [];
-    if (data.organic_results) {
-      for (const result of data.organic_results) {
-        results.push({
-          title: result.title || '',
-          link: result.link || '',
-          snippet: result.snippet || ''
-        });
-      }
-    }
-    return JSON.stringify(results);
-  } catch (error) {
-    console.error('SerpAPI error:', error.message);
-    return '';
-  }
-}
-
-// DeepSeek V3.2 - Cost-effective alternative to GPT-4o
-async function callDeepSeek(prompt, maxTokens = 4000) {
-  if (!process.env.DEEPSEEK_API_KEY) {
-    console.warn('DeepSeek API key not set, falling back to GPT-4o');
-    return null; // Caller should handle fallback
-  }
-  try {
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: maxTokens,
-        temperature: 0.3
-      }),
-      timeout: 120000
-    });
-    const data = await response.json();
-    if (data.error) {
-      console.error('DeepSeek API error:', data.error);
-      return null;
-    }
-    return data.choices?.[0]?.message?.content || '';
-  } catch (error) {
-    console.error('DeepSeek error:', error.message);
-    return null;
-  }
-}
-
-// ============ SEARCH CONFIGURATION ============
-
-const CITY_MAP = {
-  'malaysia': ['Kuala Lumpur', 'Penang', 'Johor Bahru', 'Shah Alam', 'Petaling Jaya', 'Selangor', 'Ipoh', 'Klang', 'Subang', 'Melaka', 'Kuching', 'Kota Kinabalu'],
-  'singapore': ['Singapore', 'Jurong', 'Tuas', 'Woodlands'],
-  'thailand': ['Bangkok', 'Chonburi', 'Rayong', 'Samut Prakan', 'Ayutthaya', 'Chiang Mai', 'Pathum Thani', 'Nonthaburi', 'Samut Sakhon'],
-  'indonesia': ['Jakarta', 'Surabaya', 'Bandung', 'Medan', 'Bekasi', 'Tangerang', 'Semarang', 'Sidoarjo', 'Cikarang', 'Karawang', 'Bogor'],
-  'vietnam': ['Ho Chi Minh City', 'Hanoi', 'Da Nang', 'Hai Phong', 'Binh Duong', 'Dong Nai', 'Long An', 'Ba Ria', 'Can Tho'],
-  'philippines': ['Manila', 'Cebu', 'Davao', 'Quezon City', 'Makati', 'Laguna', 'Cavite', 'Batangas', 'Bulacan'],
-  'southeast asia': ['Kuala Lumpur', 'Singapore', 'Bangkok', 'Jakarta', 'Ho Chi Minh City', 'Manila', 'Penang', 'Johor Bahru', 'Surabaya', 'Hanoi']
-};
-
-const LOCAL_SUFFIXES = {
-  'malaysia': ['Sdn Bhd', 'Berhad'],
-  'singapore': ['Pte Ltd', 'Private Limited'],
-  'thailand': ['Co Ltd', 'Co., Ltd.'],
-  'indonesia': ['PT', 'CV'],
-  'vietnam': ['Co Ltd', 'JSC', 'Công ty'],
-  'philippines': ['Inc', 'Corporation']
-};
-
-const DOMAIN_MAP = {
-  'malaysia': '.my',
-  'singapore': '.sg',
-  'thailand': '.th',
-  'indonesia': '.co.id',
-  'vietnam': '.vn',
-  'philippines': '.ph'
-};
-
-const LOCAL_LANGUAGE_MAP = {
-  'thailand': { lang: 'Thai', examples: ['หมึก', 'สี', 'เคมี'] },
-  'vietnam': { lang: 'Vietnamese', examples: ['mực in', 'sơn', 'hóa chất'] },
-  'indonesia': { lang: 'Bahasa Indonesia', examples: ['tinta', 'cat', 'kimia'] },
-  'philippines': { lang: 'Tagalog', examples: ['tinta', 'pintura'] },
-  'malaysia': { lang: 'Bahasa Malaysia', examples: ['dakwat', 'cat'] }
-};
-
-// ============ 14 SPECIALIZED SEARCH STRATEGIES (inspired by n8n workflow) ============
-
-function buildOutputFormat() {
-  return `For each company provide: company_name, website (URL starting with http), hq (format: "City, Country" only).
-Be thorough - include all companies you find. We will verify them later.`;
-}
-
-// Strategy 1: Broad Google Search (SerpAPI)
-function strategy1_BroadSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
-  const queries = [];
-
-  // Generate synonyms and variations
-  const terms = business.split(/\s+or\s+|\s+and\s+|,/).map(t => t.trim()).filter(t => t);
-
-  for (const c of countries) {
-    queries.push(
-      `${business} companies ${c}`,
-      `${business} manufacturers ${c}`,
-      `${business} suppliers ${c}`,
-      `list of ${business} companies in ${c}`,
-      `${business} industry ${c}`
-    );
-    for (const term of terms) {
-      queries.push(`${term} ${c}`);
-    }
-  }
-
-  return queries;
-}
-
-// Strategy 2: Broad Perplexity Search (EXPANDED)
-function strategy2_BroadPerplexity(business, country, exclusion) {
-  const outputFormat = buildOutputFormat();
-  const countries = country.split(',').map(c => c.trim());
-  const queries = [];
-
-  // General queries
-  queries.push(
-    `Find ALL ${business} companies headquartered in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Complete list of ${business} manufacturers in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} producers and makers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `All local ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `SME and family-owned ${business} businesses in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `Independent ${business} companies in ${country} not owned by multinationals. ${outputFormat}`
-  );
-
-  // Per-country queries for more specificity
-  for (const c of countries) {
-    queries.push(
-      `List all ${business} companies based in ${c}. ${outputFormat}`,
-      `${business} factories and plants in ${c}. ${outputFormat}`,
-      `Local ${business} manufacturers in ${c}. ${outputFormat}`
-    );
-  }
-
-  return queries;
-}
-
-// Strategy 3: Lists, Rankings, Top Companies (SerpAPI)
-function strategy3_ListsSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
-  const queries = [];
-
-  for (const c of countries) {
-    queries.push(
-      `top ${business} companies ${c}`,
-      `biggest ${business} ${c}`,
-      `leading ${business} manufacturers ${c}`,
-      `list of ${business} ${c}`,
-      `best ${business} suppliers ${c}`,
-      `${business} industry ${c} overview`,
-      `major ${business} players ${c}`
-    );
-  }
-
-  return queries;
-}
-
-// Strategy 4: City-Specific Search (Perplexity) - EXPANDED to ALL cities
-function strategy4_CitiesPerplexity(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
-  const outputFormat = buildOutputFormat();
-  const queries = [];
-
-  for (const c of countries) {
-    const cities = CITY_MAP[c.toLowerCase()] || [c];
-    // Use ALL cities, not just top 5
-    for (const city of cities) {
-      queries.push(
-        `${business} companies in ${city}, ${c}. Exclude ${exclusion}. ${outputFormat}`,
-        `${business} manufacturers near ${city}. ${outputFormat}`
-      );
-    }
-  }
-
-  return queries;
-}
-
-// Strategy 5: Industrial Zones + Local Naming (SerpAPI)
-function strategy5_IndustrialSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
-  const queries = [];
-
-  for (const c of countries) {
-    const suffixes = LOCAL_SUFFIXES[c.toLowerCase()] || [];
-
-    // Local naming conventions
-    for (const suffix of suffixes) {
-      queries.push(`${business} ${suffix} ${c}`);
-    }
-
-    // Industrial zones
-    queries.push(
-      `${business} industrial estate ${c}`,
-      `${business} manufacturing zone ${c}`,
-      `${business} factory ${c}`
-    );
-  }
-
-  return queries;
-}
-
-// Strategy 6: Associations & Directories (Perplexity)
-function strategy6_DirectoriesPerplexity(business, country, exclusion) {
-  const outputFormat = buildOutputFormat();
-  return [
-    `${business} companies in trade associations in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} firms in Kompass directory for ${country}. Not ${exclusion}. ${outputFormat}`,
-    `Chamber of commerce ${business} members in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${country} ${business} industry association member list. No ${exclusion}. ${outputFormat}`,
-    `${business} companies on Yellow Pages ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} business directory ${country}. Exclude ${exclusion}. ${outputFormat}`
-  ];
-}
-
-// Strategy 7: Trade Shows & Exhibitions (Perplexity)
-function strategy7_ExhibitionsPerplexity(business, country, exclusion) {
-  const outputFormat = buildOutputFormat();
-  return [
-    `${business} exhibitors at trade shows in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} companies at industry exhibitions in ${country} region. Not ${exclusion}. ${outputFormat}`,
-    `${business} participants at expos and conferences in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} exhibitors at international fairs from ${country}. Not ${exclusion}. ${outputFormat}`
-  ];
-}
-
-// Strategy 8: Import/Export & Supplier Databases (Perplexity)
-function strategy8_TradePerplexity(business, country, exclusion) {
-  const outputFormat = buildOutputFormat();
-  return [
-    `${business} importers and exporters in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} suppliers on Alibaba from ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${country} ${business} companies on Global Sources. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} OEM suppliers in ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} contract manufacturers in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} approved vendors in ${country}. Exclude ${exclusion}. ${outputFormat}`
-  ];
-}
-
-// Strategy 9: Local Domains + News (Perplexity)
-function strategy9_DomainsPerplexity(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
-  const outputFormat = buildOutputFormat();
-  const queries = [];
-
-  for (const c of countries) {
-    const domain = DOMAIN_MAP[c.toLowerCase()];
-    if (domain) {
-      queries.push(
-        `${business} companies with ${domain} websites. Exclude ${exclusion}. ${outputFormat}`
-      );
-    }
-  }
-
-  queries.push(
-    `Recent news about ${business} companies in ${country}. Not ${exclusion}. ${outputFormat}`,
-    `${business} company announcements and press releases ${country}. Exclude ${exclusion}. ${outputFormat}`
-  );
-
-  return queries;
-}
-
-// Strategy 10: Government Registries (SerpAPI)
-function strategy10_RegistriesSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
-  const queries = [];
-
-  for (const c of countries) {
-    queries.push(
-      `${business} company registration ${c}`,
-      `${business} registered companies ${c}`,
-      `${business} business registry ${c}`
-    );
-  }
-
-  return queries;
-}
-
-// Strategy 11: City + Industrial Areas (SerpAPI) - EXPANDED
-function strategy11_CityIndustrialSerpAPI(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
-  const queries = [];
-
-  for (const c of countries) {
-    const cities = CITY_MAP[c.toLowerCase()] || [c];
-    // Use ALL cities
-    for (const city of cities) {
-      queries.push(
-        `${business} ${city}`,
-        `${business} companies ${city}`,
-        `${business} factory ${city}`,
-        `${business} manufacturer ${city}`
-      );
-    }
-  }
-
-  return queries;
-}
-
-// Strategy 12: Deep Web Search (OpenAI Search) - EXPANDED with real-time search
-function strategy12_DeepOpenAISearch(business, country, exclusion) {
-  const outputFormat = buildOutputFormat();
-  const countries = country.split(',').map(c => c.trim());
-  const queries = [];
-
-  // General deep searches
-  queries.push(
-    `Search the web for ${business} companies in ${country}. Find company websites, LinkedIn profiles, industry directories. Exclude ${exclusion}. ${outputFormat}`,
-    `Find lesser-known ${business} companies in ${country} that may not appear in top search results. ${outputFormat}`,
-    `Search for small and medium ${business} enterprises (SMEs) in ${country}. ${outputFormat}`,
-    `Find independent local ${business} companies in ${country}, not subsidiaries of multinationals. ${outputFormat}`,
-    `Search industry news and press releases for ${business} companies in ${country}. ${outputFormat}`,
-    `Find ${business} startups and new companies in ${country}. ${outputFormat}`
-  );
-
-  // Per-country deep searches
-  for (const c of countries) {
-    queries.push(
-      `Search for all ${business} manufacturers in ${c}. Include company name, website, and location. ${outputFormat}`,
-      `Find ${business} producers in ${c} with their official websites. ${outputFormat}`
-    );
-  }
-
-  return queries;
-}
-
-// Strategy 13: Industry Publications (Perplexity)
-function strategy13_PublicationsPerplexity(business, country, exclusion) {
-  const outputFormat = buildOutputFormat();
-  return [
-    `${business} companies mentioned in industry magazines and trade publications for ${country}. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} market report ${country} - list all companies mentioned. Not ${exclusion}. ${outputFormat}`,
-    `${business} industry analysis ${country} - companies covered. Exclude ${exclusion}. ${outputFormat}`,
-    `${business} ${country} magazine articles listing companies. Not ${exclusion}. ${outputFormat}`
-  ];
-}
-
-// Strategy 14: Final Sweep - Local Language + Comprehensive (OpenAI Search)
-function strategy14_LocalLanguageOpenAISearch(business, country, exclusion) {
-  const countries = country.split(',').map(c => c.trim());
-  const outputFormat = buildOutputFormat();
-  const queries = [];
-
-  // Local language searches
-  queries.push(
-    `Search for ${business} companies in ${country} using local language terms. Translate "${business}" to Thai, Vietnamese, Bahasa Indonesia, Tagalog, Malay as appropriate. ${outputFormat}`
-  );
-
-  for (const c of countries) {
-    const langInfo = LOCAL_LANGUAGE_MAP[c.toLowerCase()];
-    if (langInfo) {
-      queries.push(
-        `Search in ${langInfo.lang} for ${business} companies in ${c}. ${outputFormat}`,
-        `Find ${business} manufacturers in ${c} using local language search terms. ${outputFormat}`
-      );
-    }
-  }
-
-  // Supply chain and related industry searches
-  queries.push(
-    `Find companies in the ${business} supply chain in ${country}. Include raw material suppliers and equipment makers. ${outputFormat}`,
-    `Search for ${business} related companies in ${country}: formulators, blenders, repackagers. ${outputFormat}`,
-    `Find niche and specialty ${business} companies in ${country}. ${outputFormat}`
-  );
-
-  // Final comprehensive sweep
-  queries.push(
-    `Comprehensive search: Find ALL ${business} companies in ${country} that have not been mentioned yet. Search obscure directories, local business listings, industry forums. ${outputFormat}`
-  );
-
-  return queries;
-}
-
-// ============ EXTRACTION WITH GPT-4o-mini ============
-
-async function extractCompanies(text, country) {
-  if (!text || text.length < 50) return [];
-  try {
-    const extraction = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `Extract company information from the text. Return JSON: {"companies": [{"company_name": "...", "website": "...", "hq": "..."}]}
-
-RULES:
-- Extract ALL companies mentioned that could be in: ${country}
-- website must start with http:// or https://
-- If website not in text, you may look it up if you know it's a real company
-- hq must be "City, Country" format ONLY
-- Include companies even if some info is incomplete - we'll verify later
-- Be thorough - extract every company that might match`
-        },
-        { role: 'user', content: text.substring(0, 15000) }
-      ],
-      response_format: { type: 'json_object' }
-    });
-    const parsed = JSON.parse(extraction.choices[0].message.content);
-    return Array.isArray(parsed.companies) ? parsed.companies : [];
-  } catch (e) {
-    console.error('Extraction error:', e.message);
-    return [];
-  }
-}
-
-// ============ DEDUPLICATION (Enhanced for v20) ============
-
-function normalizeCompanyName(name) {
-  if (!name) return '';
-  return name.toLowerCase()
-    // Remove ALL common legal suffixes globally (expanded list)
-    .replace(/\s*(sdn\.?\s*bhd\.?|bhd\.?|berhad|pte\.?\s*ltd\.?|ltd\.?|limited|inc\.?|incorporated|corp\.?|corporation|co\.?,?\s*ltd\.?|llc|llp|gmbh|s\.?a\.?|pt\.?|cv\.?|tbk\.?|jsc|plc|public\s*limited|private\s*limited|joint\s*stock|company|\(.*?\))$/gi, '')
-    // Also remove these if they appear anywhere (for cases like "PT Company Name")
-    .replace(/^(pt\.?|cv\.?)\s+/gi, '')
-    .replace(/[^\w\s]/g, '')  // Remove special characters
-    .replace(/\s+/g, ' ')      // Normalize spaces
-    .trim();
-}
-
-function normalizeWebsite(url) {
-  if (!url) return '';
-  return url.toLowerCase()
-    .replace(/^https?:\/\//, '')           // Remove protocol
-    .replace(/^www\./, '')                  // Remove www
-    .replace(/\/+$/, '')                    // Remove trailing slashes
-    // Remove common path suffixes that don't differentiate companies
-    .replace(/\/(home|index|main|default|about|about-us|contact|products?|services?|en|th|id|vn|my|sg|ph|company)(\/.*)?$/i, '')
-    .replace(/\.(html?|php|aspx?|jsp)$/i, ''); // Remove file extensions
-}
-
-// Extract domain root for additional deduplication
-function extractDomainRoot(url) {
-  const normalized = normalizeWebsite(url);
-  // Get just the domain without any path
-  return normalized.split('/')[0];
-}
-
-function dedupeCompanies(allCompanies) {
-  const seenWebsites = new Map();
-  const seenDomains = new Map();
-  const seenNames = new Map();
-  const results = [];
-
-  for (const c of allCompanies) {
-    if (!c || !c.website || !c.company_name) continue;
-    if (!c.website.startsWith('http')) continue;
-
-    const websiteKey = normalizeWebsite(c.website);
-    const domainKey = extractDomainRoot(c.website);
-    const nameKey = normalizeCompanyName(c.company_name);
-
-    // Skip if we've seen this exact URL, domain, or normalized name
-    if (seenWebsites.has(websiteKey)) continue;
-    if (seenDomains.has(domainKey)) continue;
-    if (nameKey && seenNames.has(nameKey)) continue;
-
-    seenWebsites.set(websiteKey, true);
-    seenDomains.set(domainKey, true);
-    if (nameKey) seenNames.set(nameKey, true);
-    results.push(c);
-  }
-
-  return results;
-}
-
-// ============ PRE-FILTER: Remove only obvious non-company URLs ============
-
-function isSpamOrDirectoryURL(url) {
-  if (!url) return true;
-  const urlLower = url.toLowerCase();
-
-  // Only filter out obvious non-company URLs (very conservative)
-  const obviousSpam = [
-    'wikipedia.org',
-    'facebook.com',
-    'twitter.com',
-    'instagram.com',
-    'youtube.com'
-  ];
-
-  for (const pattern of obviousSpam) {
-    if (urlLower.includes(pattern)) return true;
-  }
-
-  return false;
-}
-
-// ============ EXHAUSTIVE PARALLEL SEARCH WITH 14 STRATEGIES ============
-
-// Process SerpAPI results and extract companies using GPT
-async function processSerpResults(serpResults, business, country, exclusion) {
-  if (!serpResults || serpResults.length === 0) return [];
-
-  const outputFormat = buildOutputFormat();
-  const prompt = `From these Google search results, extract companies that match:
-- Business: ${business}
-- Country: ${country}
-- Exclude: ${exclusion}
-
-Search Results:
-${serpResults.join('\n\n')}
-
-${outputFormat}`;
-
-  const response = await callChatGPT(prompt);
-  return extractCompanies(response, country);
-}
-
-// ============ WEBSITE VERIFICATION ============
-
-async function verifyWebsite(url) {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000);
-    const response = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-      signal: controller.signal,
-      redirect: 'follow'
-    });
-    clearTimeout(timeout);
-
-    if (!response.ok) return { valid: false, reason: `HTTP ${response.status}` };
-
-    const html = await response.text();
-    const lowerHtml = html.toLowerCase();
-
-    // Check for parked domain / placeholder signs
-    const parkedSigns = [
-      'domain is for sale',
-      'buy this domain',
-      'this domain is parked',
-      'parked by',
-      'domain parking',
-      'this page is under construction',
-      'coming soon',
-      'website coming soon',
-      'under maintenance',
-      'godaddy',
-      'namecheap parking',
-      'sedoparking',
-      'hugedomains',
-      'afternic',
-      'domain expired',
-      'this site can\'t be reached',
-      'page not found',
-      '404 not found',
-      'website not found'
-    ];
-
-    for (const sign of parkedSigns) {
-      if (lowerHtml.includes(sign)) {
-        return { valid: false, reason: `Parked/placeholder: "${sign}"` };
-      }
-    }
-
-    // Check for minimal content (likely placeholder)
-    const textContent = html
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim();
-
-    if (textContent.length < 200) {
-      return { valid: false, reason: 'Too little content (likely placeholder)' };
-    }
-
-    return { valid: true, content: textContent.substring(0, 15000) };
-  } catch (e) {
-    return { valid: false, reason: e.message || 'Connection failed' };
   }
 }
 
@@ -1114,7 +147,7 @@ async function fetchWebsite(url) {
     'verify you are human',
     'bot detection',
     'please enable javascript',
-    'enable cookies'
+    'enable cookies',
   ];
 
   const tryFetch = async (targetUrl) => {
@@ -1123,21 +156,25 @@ async function fetchWebsite(url) {
       const timeout = setTimeout(() => controller.abort(), 20000); // Increased to 20 seconds
       const response = await fetch(targetUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+          'User-Agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.5',
           'Accept-Encoding': 'gzip, deflate',
-          'Connection': 'keep-alive',
-          'Upgrade-Insecure-Requests': '1'
+          Connection: 'keep-alive',
+          'Upgrade-Insecure-Requests': '1',
         },
         signal: controller.signal,
-        redirect: 'follow'
+        redirect: 'follow',
       });
       clearTimeout(timeout);
 
       // Check for HTTP-level blocks
       if (response.status === 403 || response.status === 406) {
-        return { status: 'security_blocked', reason: `HTTP ${response.status} - WAF/Security block` };
+        return {
+          status: 'security_blocked',
+          reason: `HTTP ${response.status} - WAF/Security block`,
+        };
       }
       if (!response.ok) return { status: 'error', reason: `HTTP ${response.status}` };
 
@@ -1148,7 +185,10 @@ async function fetchWebsite(url) {
       for (const pattern of securityBlockPatterns) {
         if (lowerHtml.includes(pattern) && html.length < 5000) {
           // Only flag as security block if page is small (likely a challenge page)
-          return { status: 'security_blocked', reason: `Security protection detected: "${pattern}"` };
+          return {
+            status: 'security_blocked',
+            reason: `Security protection detected: "${pattern}"`,
+          };
         }
       }
 
@@ -1213,348 +253,22 @@ async function fetchWebsite(url) {
   return { status: 'inaccessible', reason: 'Could not fetch content from any URL variation' };
 }
 
-// ============ DYNAMIC EXCLUSION RULES BUILDER (n8n-style PAGE SIGNAL detection) ============
-
-function buildExclusionRules(exclusion, business) {
-  const exclusionLower = exclusion.toLowerCase();
-  let rules = '';
-
-  // Detect if user wants to exclude LARGE companies - use PAGE SIGNALS like n8n
-  if (exclusionLower.includes('large') || exclusionLower.includes('big') ||
-      exclusionLower.includes('mnc') || exclusionLower.includes('multinational') ||
-      exclusionLower.includes('major') || exclusionLower.includes('giant')) {
-    rules += `
-LARGE COMPANY DETECTION - Look for these PAGE SIGNALS to REJECT:
-- "global presence", "worldwide operations", "global leader", "world's largest"
-- Stock ticker symbols or mentions of: NYSE, NASDAQ, SGX, SET, IDX, listed, IPO
-- "multinational", "global network", offices/operations in 10+ countries
-- Revenue figures >$100M, employee count >1000
-- "Fortune 500", "Forbes Global"
-- Company name contains known MNC: Toyo Ink, Sakata, Flint, Siegwerk, Sun Chemical, DIC
-- Website says "subsidiary of", "part of [X] Group", "member of [X] Group"
-- Company name ends with "Tbk" (Indonesian listed)
-
-If NONE of these signals are found → ACCEPT (assume local company)
-`;
-  }
-
-  // Detect if user wants to exclude LISTED/PUBLIC companies
-  if (exclusionLower.includes('listed') || exclusionLower.includes('public')) {
-    rules += `
-LISTED COMPANY DETECTION - REJECT if page shows:
-- Stock ticker, NYSE, NASDAQ, SGX, SET, IDX, or any stock exchange
-- "publicly traded", "listed company", "IPO"
-- Company name contains "Tbk"
-`;
-  }
-
-  // Detect if user wants to exclude DISTRIBUTORS
-  if (exclusionLower.includes('distributor')) {
-    rules += `
-DISTRIBUTOR DETECTION - REJECT only if:
-- Company ONLY distributes/resells with NO manufacturing
-- No mention of factory, plant, production facility, "we manufacture"
-
-ACCEPT if they manufacture (even if also distribute) - most manufacturers also sell their products
-`;
-  }
-
-  return rules;
-}
-
-// ============ VALIDATION (v24 - GPT-4o with LENIENT filtering) ============
-
-async function validateCompanyStrict(company, business, country, exclusion, pageText) {
-  // If we couldn't fetch the website, validate by name only (give benefit of doubt)
-  const contentToValidate = (typeof pageText === 'string' && pageText) ? pageText : `Company name: ${company.company_name}. Validate based on name only.`;
-
-  const exclusionRules = buildExclusionRules(exclusion, business);
-
-  try {
-    const validation = await openai.chat.completions.create({
-      model: 'gpt-4o',  // Use smarter model for better validation
-      messages: [
-        {
-          role: 'system',
-          content: `You are a company validator for M&A research. Be LENIENT - when in doubt, ACCEPT.
-
-VALIDATION TASK:
-- Business sought: "${business}"
-- Target countries: ${country}
-- Exclusions: ${exclusion}
-
-VALIDATION RULES:
-
-1. LOCATION CHECK:
-- Is HQ in one of the target countries (${country})?
-- IMPORTANT: If country is a REGION like "Southeast Asia", accept companies in ANY Southeast Asian country (Malaysia, Thailand, Vietnam, Indonesia, Philippines, Singapore, etc.)
-- If HQ is clearly outside the target region → REJECT
-
-2. BUSINESS MATCH (BE LENIENT):
-- Does the company's business relate to "${business}"?
-- Accept related products, services, manufacturers, suppliers
-- Only reject if COMPLETELY unrelated
-
-3. EXCLUSION CHECK:
-${exclusionRules}
-- For "large companies" exclusion: REJECT both large multinationals AND their subsidiaries
-- Example: "DIC Indonesia", "Toyo Ink Philippines", "Sun Chemical" → REJECT (subsidiaries of large corporations)
-- Only accept truly independent SMEs and local companies
-
-4. SPAM CHECK:
-- Only reject obvious directories, marketplaces, domain-for-sale sites
-
-OUTPUT: Return JSON only: {"valid": true/false, "reason": "one sentence"}`
-        },
-        {
-          role: 'user',
-          content: `COMPANY: ${company.company_name}
-WEBSITE: ${company.website}
-HQ: ${company.hq}
-
-PAGE CONTENT:
-${contentToValidate.substring(0, 10000)}`
-        }
-      ],
-      response_format: { type: 'json_object' }
-    });
-
-    const result = JSON.parse(validation.choices[0].message.content);
-    if (result.valid === true) {
-      return { valid: true, corrected_hq: company.hq };
-    }
-    console.log(`    Rejected: ${company.company_name} - ${result.reason}`);
-    return { valid: false };
-  } catch (e) {
-    // On error, accept (benefit of doubt)
-    console.log(`    Error validating ${company.company_name}, accepting`);
-    return { valid: true, corrected_hq: company.hq };
-  }
-}
-
-async function parallelValidationStrict(companies, business, country, exclusion) {
-  console.log(`\nSTRICT Validating ${companies.length} verified companies...`);
-  const startTime = Date.now();
-  const batchSize = 10; // Increased for better parallelization
-  const validated = [];
-
-  for (let i = 0; i < companies.length; i += batchSize) {
-    try {
-      const batch = companies.slice(i, i + batchSize);
-      if (!batch || batch.length === 0) continue;
-
-      // Use cached _pageContent from verification step, or fetch if not available
-      // Add .catch() to prevent any single failure from crashing the batch
-      const pageTexts = await Promise.all(
-        batch.map(c => {
-          try {
-            return c?._pageContent ? Promise.resolve(c._pageContent) : fetchWebsite(c?.website).catch(() => null);
-          } catch (e) {
-            return Promise.resolve(null);
-          }
-        })
-      );
-
-      // Add .catch() to each validation to prevent single failures from crashing batch
-      const validations = await Promise.all(
-        batch.map((company, idx) => {
-          try {
-            return validateCompanyStrict(company, business, country, exclusion, pageTexts[idx])
-              .catch(e => {
-                console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
-                return { valid: true, corrected_hq: company?.hq }; // Accept on error
-              });
-          } catch (e) {
-            return Promise.resolve({ valid: true, corrected_hq: company?.hq });
-          }
-        })
-      );
-
-      batch.forEach((company, idx) => {
-        try {
-          if (validations[idx]?.valid && company) {
-            // Remove internal _pageContent before adding to results
-            const { _pageContent, ...cleanCompany } = company;
-            validated.push({
-              ...cleanCompany,
-              hq: validations[idx].corrected_hq || company.hq
-            });
-          }
-        } catch (e) {
-          console.error(`  Error processing company ${company?.company_name}: ${e.message}`);
-        }
-      });
-
-      console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
-    } catch (batchError) {
-      console.error(`  Batch error at ${i}-${i + batchSize}: ${batchError.message}`);
-      // Continue to next batch instead of crashing
-    }
-  }
-
-  console.log(`STRICT Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
-  return validated;
-}
-
-// ============ VALIDATION FOR SLOW MODE (v23 - n8n style) ============
-
-async function validateCompany(company, business, country, exclusion, pageText) {
-  const exclusionRules = buildExclusionRules(exclusion, business);
-
-  try {
-    const validation = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a company validator. Be LENIENT on business match. Be STRICT on exclusions by detecting signals in page content.
-
-VALIDATION TASK:
-- Business sought: "${business}"
-- Target countries: ${country}
-- Exclusions: ${exclusion}
-
-VALIDATION RULES:
-
-1. LOCATION CHECK:
-- Is HQ actually in one of the target countries (${country})?
-- If HQ is outside these countries → REJECT
-
-2. BUSINESS MATCH (BE LENIENT):
-- Does the company's business relate to "${business}"?
-- Accept related products, services, or sub-categories
-- Only reject if completely unrelated
-
-3. EXCLUSION CHECK - DETECT VIA PAGE SIGNALS:
-${exclusionRules}
-
-4. SPAM CHECK:
-- Is this a directory, marketplace, domain-for-sale, or aggregator site? → REJECT
-
-OUTPUT: Return JSON: {"valid": true/false, "reason": "brief", "corrected_hq": "City, Country or null"}`
-        },
-        {
-          role: 'user',
-          content: `COMPANY: ${company.company_name}
-WEBSITE: ${company.website}
-HQ: ${company.hq}
-
-PAGE CONTENT:
-${(typeof pageText === 'string' && pageText) ? pageText.substring(0, 8000) : 'Could not fetch - validate by name only'}`
-        }
-      ],
-      response_format: { type: 'json_object' }
-    });
-
-    const result = JSON.parse(validation.choices[0].message.content);
-    if (result.valid === true) {
-      return { valid: true, corrected_hq: result.corrected_hq || company.hq };
-    }
-    console.log(`    Rejected: ${company.company_name} - ${result.reason}`);
-    return { valid: false };
-  } catch (e) {
-    // On error, accept (benefit of doubt)
-    console.log(`    Error validating ${company.company_name}, accepting`);
-    return { valid: true, corrected_hq: company.hq };
-  }
-}
-
-async function parallelValidation(companies, business, country, exclusion) {
-  console.log(`\nValidating ${companies.length} companies (strict large company filter)...`);
-  const startTime = Date.now();
-  const batchSize = 8; // Smaller batch for more thorough validation
-  const validated = [];
-
-  for (let i = 0; i < companies.length; i += batchSize) {
-    try {
-      const batch = companies.slice(i, i + batchSize);
-      if (!batch || batch.length === 0) continue;
-
-      const pageTexts = await Promise.all(
-        batch.map(c => fetchWebsite(c?.website).catch(() => null))
-      );
-      const validations = await Promise.all(
-        batch.map((company, idx) =>
-          validateCompany(company, business, country, exclusion, pageTexts[idx])
-            .catch(e => {
-              console.error(`  Validation error for ${company?.company_name}: ${e.message}`);
-              return { valid: true, corrected_hq: company?.hq };
-            })
-        )
-      );
-
-      batch.forEach((company, idx) => {
-        try {
-          if (validations[idx]?.valid && company) {
-            validated.push({
-              ...company,
-              hq: validations[idx].corrected_hq || company.hq
-            });
-          }
-        } catch (e) {
-          console.error(`  Error processing company ${company?.company_name}: ${e.message}`);
-        }
-      });
-
-      console.log(`  Validated ${Math.min(i + batchSize, companies.length)}/${companies.length}. Valid: ${validated.length}`);
-    } catch (batchError) {
-      console.error(`  Batch error at ${i}-${i + batchSize}: ${batchError.message}`);
-    }
-  }
-
-  console.log(`Validation done in ${((Date.now() - startTime) / 1000).toFixed(1)}s. Valid: ${validated.length}`);
-  return validated;
-}
-
-// ============ EMAIL ============
-
-function buildEmailHTML(companies, business, country, exclusion) {
-  let html = `
-    <h2>Find Target Results</h2>
-    <p><strong>Business:</strong> ${escapeHtml(business)}</p>
-    <p><strong>Country:</strong> ${escapeHtml(country)}</p>
-    <p><strong>Exclusion:</strong> ${escapeHtml(exclusion)}</p>
-    <p><strong>Companies Found:</strong> ${companies.length}</p>
-    <br>
-    <table border="1" cellpadding="8" cellspacing="0" style="border-collapse: collapse; width: 100%;">
-      <thead style="background-color: #f0f0f0;">
-        <tr><th>#</th><th>Company</th><th>Website</th><th>Headquarters</th></tr>
-      </thead>
-      <tbody>
-  `;
-  companies.forEach((c, i) => {
-    html += `<tr><td>${i + 1}</td><td>${escapeHtml(c.company_name)}</td><td><a href="${escapeHtml(c.website)}">${escapeHtml(c.website)}</a></td><td>${escapeHtml(c.hq)}</td></tr>`;
-  });
-  html += '</tbody></table>';
-  return html;
-}
-
-// ============ FAST ENDPOINT ============
-
 // ============ UTB (UNDERSTANDING THE BUSINESS) - COMPREHENSIVE M&A INTELLIGENCE ============
-
-// Initialize ExcelJS
-let ExcelJS;
-try {
-  ExcelJS = require('exceljs');
-} catch (e) {
-  console.warn('ExcelJS not available - UTB Excel generation disabled');
-}
 
 // Language detection from domain
 function detectLanguage(website) {
   const domainMatch = website.match(/\.([a-z]{2,3})(?:\/|$)/i);
   const tld = domainMatch ? domainMatch[1].toLowerCase() : '';
   const languageMap = {
-    'jp': { lang: 'Japanese', native: '日本語', searchPrefix: '日本語で' },
-    'cn': { lang: 'Chinese', native: '中文', searchPrefix: '用中文' },
-    'kr': { lang: 'Korean', native: '한국어', searchPrefix: '한국어로' },
-    'de': { lang: 'German', native: 'Deutsch', searchPrefix: 'Auf Deutsch:' },
-    'fr': { lang: 'French', native: 'Français', searchPrefix: 'En français:' },
-    'th': { lang: 'Thai', native: 'ไทย', searchPrefix: 'ภาษาไทย:' },
-    'vn': { lang: 'Vietnamese', native: 'Tiếng Việt', searchPrefix: 'Bằng tiếng Việt:' },
-    'id': { lang: 'Indonesian', native: 'Indonesia', searchPrefix: 'Dalam Bahasa Indonesia:' },
-    'tw': { lang: 'Chinese (Traditional)', native: '繁體中文', searchPrefix: '用繁體中文' }
+    jp: { lang: 'Japanese', native: '日本語', searchPrefix: '日本語で' },
+    cn: { lang: 'Chinese', native: '中文', searchPrefix: '用中文' },
+    kr: { lang: 'Korean', native: '한국어', searchPrefix: '한국어로' },
+    de: { lang: 'German', native: 'Deutsch', searchPrefix: 'Auf Deutsch:' },
+    fr: { lang: 'French', native: 'Français', searchPrefix: 'En français:' },
+    th: { lang: 'Thai', native: 'ไทย', searchPrefix: 'ภาษาไทย:' },
+    vn: { lang: 'Vietnamese', native: 'Tiếng Việt', searchPrefix: 'Bằng tiếng Việt:' },
+    id: { lang: 'Indonesian', native: 'Indonesia', searchPrefix: 'Dalam Bahasa Indonesia:' },
+    tw: { lang: 'Chinese (Traditional)', native: '繁體中文', searchPrefix: '用繁體中文' },
   };
   return languageMap[tld] || null;
 }
@@ -1571,7 +285,7 @@ async function utbPhase0FetchDocuments(companyName, website, context) {
     annualReport: '',
     midtermPlan: '',
     mergerInfo: '',
-    recentDisclosures: ''
+    recentDisclosures: '',
   };
 
   try {
@@ -1584,7 +298,7 @@ async function utbPhase0FetchDocuments(companyName, website, context) {
       `${baseUrl}/ir`,
       `${baseUrl}/investor-relations/`,
       `${baseUrl}/en/ir/`,
-      `${baseUrl}/english/ir/`
+      `${baseUrl}/english/ir/`,
     ];
 
     for (const irUrl of irUrls) {
@@ -1614,7 +328,9 @@ EXTRACT and return the EXACT data:
 
 For EACH number, cite: "X% (Source: [Document Name] FY20XX, page Y)"
 
-If you cannot find the official document, state "Official document not accessible".`).catch(e => ''),
+If you cannot find the official document, state "Official document not accessible".`).catch(
+        (_e) => ''
+      ),
 
       // Search for mid-term plan
       callPerplexity(`Find the OFFICIAL MID-TERM MANAGEMENT PLAN (中期経営計画) for ${companyName} (${website}).
@@ -1631,7 +347,7 @@ EXTRACT and return:
 4. Investment priorities
 5. M&A strategy if mentioned
 
-Cite the source document name and date for each piece of data.`).catch(e => ''),
+Cite the source document name and date for each piece of data.`).catch((_e) => ''),
 
       // Search for M&A/merger announcements
       callPerplexity(`Find any MERGER, ACQUISITION, or CORPORATE ACTION announcements for ${companyName} (${website}).
@@ -1649,7 +365,7 @@ Return:
 2. Transaction type and terms
 3. Timeline and status
 4. Strategic rationale
-5. Source document (press release date, disclosure number)`).catch(e => ''),
+5. Source document (press release date, disclosure number)`).catch((_e) => ''),
 
       // Search for recent disclosures
       callPerplexity(`Find the most recent OFFICIAL DISCLOSURES and IR materials for ${companyName} (${website}).
@@ -1664,18 +380,20 @@ Return key announcements with:
 1. Date
 2. Type of disclosure
 3. Key content
-4. Source URL if available`).catch(e => '')
+4. Source URL if available`).catch((_e) => ''),
     ];
 
-    const [annualReport, midtermPlan, mergerInfo, recentDisclosures] = await Promise.all(docSearchPromises);
+    const [annualReport, midtermPlan, mergerInfo, recentDisclosures] =
+      await Promise.all(docSearchPromises);
 
     documents.annualReport = annualReport || '';
     documents.midtermPlan = midtermPlan || '';
     documents.mergerInfo = mergerInfo || '';
     documents.recentDisclosures = recentDisclosures || '';
 
-    console.log(`[UTB Phase 0] Documents fetched - IR: ${documents.irPage.length}chars, Annual: ${documents.annualReport.length}chars, Midterm: ${documents.midtermPlan.length}chars, Merger: ${documents.mergerInfo.length}chars`);
-
+    console.log(
+      `[UTB Phase 0] Documents fetched - IR: ${documents.irPage.length}chars, Annual: ${documents.annualReport.length}chars, Midterm: ${documents.midtermPlan.length}chars, Merger: ${documents.mergerInfo.length}chars`
+    );
   } catch (error) {
     console.error(`[UTB Phase 0] Error fetching documents:`, error.message);
   }
@@ -1689,11 +407,16 @@ async function utbPhase1Research(companyName, website, context, officialDocs = {
 
   // Build document context string from Phase 0
   const docContext = [];
-  if (officialDocs.annualReport) docContext.push(`ANNUAL REPORT DATA:\n${officialDocs.annualReport}`);
+  if (officialDocs.annualReport)
+    docContext.push(`ANNUAL REPORT DATA:\n${officialDocs.annualReport}`);
   if (officialDocs.midtermPlan) docContext.push(`MID-TERM PLAN DATA:\n${officialDocs.midtermPlan}`);
   if (officialDocs.mergerInfo) docContext.push(`MERGER/M&A INFO:\n${officialDocs.mergerInfo}`);
-  if (officialDocs.recentDisclosures) docContext.push(`RECENT DISCLOSURES:\n${officialDocs.recentDisclosures}`);
-  const documentContext = docContext.length > 0 ? `\n\nOFFICIAL DOCUMENT DATA (use this as primary source):\n${docContext.join('\n\n')}` : '';
+  if (officialDocs.recentDisclosures)
+    docContext.push(`RECENT DISCLOSURES:\n${officialDocs.recentDisclosures}`);
+  const documentContext =
+    docContext.length > 0
+      ? `\n\nOFFICIAL DOCUMENT DATA (use this as primary source):\n${docContext.join('\n\n')}`
+      : '';
 
   const queries = [
     // Query 1: Company Deep Dive - Products & Services
@@ -1715,7 +438,11 @@ CRITICAL: I need SPECIFIC details, not general descriptions.
 4. VALUE CHAIN POSITION: Where they sit (R&D, manufacturing, distribution, etc.)
 
 BE SPECIFIC with names and numbers. Generic descriptions are NOT useful.
-${context ? `CONTEXT: ${context}` : ''}`).catch(e => ({ type: 'products', data: '', error: e.message })),
+${context ? `CONTEXT: ${context}` : ''}`).catch((e) => ({
+      type: 'products',
+      data: '',
+      error: e.message,
+    })),
 
     // Query 2: Financial Analysis FROM OFFICIAL DOCUMENTS
     callPerplexity(`Research ${companyName} financial data - DATA MUST COME FROM OFFICIAL COMPANY DOCUMENTS:
@@ -1727,28 +454,37 @@ CRITICAL: Only provide data you can source from:
 - Mid-term management plans (中期経営計画)
 - Earnings releases
 - Official company filings (10-K, 20-F, etc.)
+- Company website IR/financial pages
 
 For EVERY number, specify the source document and date.
 
-1. REVENUE BREAKDOWN FROM ANNUAL REPORT:
+1. REVENUE HISTORY (MOST IMPORTANT - need 3-5 years):
+   - Annual revenue for each of the last 3-5 fiscal years
+   - Format: FY2021: XXX, FY2022: XXX, FY2023: XXX, FY2024: XXX
+   - Include the currency and unit (e.g., JPY millions, USD millions)
+   - This is CRITICAL for financial trend analysis
+
+2. REVENUE BREAKDOWN FROM ANNUAL REPORT:
    - Total annual revenue (fiscal year, currency, source document)
    - Revenue by business segment - EXACT percentages from segment reporting
    - Revenue by geography - EXACT percentages from geographic reporting
 
-2. FROM MID-TERM PLAN (if available):
+3. FROM MID-TERM PLAN (if available):
    - Strategic targets and KPIs
    - Growth projections
    - Investment priorities
 
-3. FROM LATEST EARNINGS:
+4. FROM LATEST EARNINGS:
    - Most recent quarterly results
    - Management commentary
 
-DO NOT estimate or approximate. If exact data is not available in official documents, state "Not disclosed in official filings".
+If exact data is not available in official documents, check the company website for any disclosed financial information.
 
 Format each data point as: "[Number] (Source: [Document Name], [Date])"
 
-For Japanese companies specifically search for: 有価証券報告書, 決算短信, 中期経営計画, IR資料`).catch(e => ({ type: 'financials', data: '', error: e.message })),
+For Japanese companies specifically search for: 有価証券報告書, 決算短信, 中期経営計画, IR資料, 業績ハイライト`).catch(
+      (e) => ({ type: 'financials', data: '', error: e.message })
+    ),
 
     // Query 3: Manufacturing & Operations
     callPerplexity(`Research ${companyName} manufacturing and operations footprint:
@@ -1770,7 +506,11 @@ For Japanese companies specifically search for: 有価証券報告書, 決算短
    - Number of locations globally
    - Sales/distribution offices by region
 
-Provide SPECIFIC locations (city, country) not just "facilities in Asia".`).catch(e => ({ type: 'operations', data: '', error: e.message })),
+Provide SPECIFIC locations (city, country) not just "facilities in Asia".`).catch((e) => ({
+      type: 'operations',
+      data: '',
+      error: e.message,
+    })),
 
     // Query 4: Competitive Landscape - COMPREHENSIVE
     callPerplexity(`Research ${companyName} competitive landscape - COMPREHENSIVE GLOBAL ANALYSIS:
@@ -1795,23 +535,29 @@ CRITICAL: This is a large global industry. Provide a COMPREHENSIVE list of compe
 Include all major global players, regional champions, and emerging competitors.
 This should be an exhaustive view of the competitive landscape, not a shortlist.
 
-Provide SPECIFIC data with sources. No generic statements.`).catch(e => ({ type: 'competitors', data: '', error: e.message })),
+Provide SPECIFIC data with sources. No generic statements.`).catch((e) => ({
+      type: 'competitors',
+      data: '',
+      error: e.message,
+    })),
 
     // Query 5: M&A History & Strategy
     callPerplexity(`Research ${companyName} M&A activity and corporate development - COMPREHENSIVE:
 
-1. PAST ACQUISITIONS (last 10 years):
-   - Target company name
+1. PAST ACQUISITIONS (last 10-15 years) - FOR EACH DEAL PROVIDE ALL OF:
    - Year of acquisition
-   - Deal value (if disclosed)
-   - Strategic rationale
-   - Integration outcome
+   - Target company name
+   - Target company's country/headquarters
+   - Deal type (Acquisition, Merger, JV, Minority stake)
+   - Acquired stake percentage (100%, majority, minority, or undisclosed)
+   - Target's business description (what the acquired company does)
+   - Strategic rationale (why they acquired it)
 
 2. PAST DIVESTITURES:
    - Any businesses sold off
 
 3. STRATEGIC PARTNERSHIPS & JVs:
-   - Partner name
+   - Partner name and country
    - Nature of partnership
    - Year established
 
@@ -1824,7 +570,13 @@ Provide SPECIFIC data with sources. No generic statements.`).catch(e => ({ type:
    - Investor presentation mentions of inorganic growth
    - Recent news about M&A intentions
 
-Provide SPECIFIC deal names, dates, and values.`).catch(e => ({ type: 'ma_history', data: '', error: e.message })),
+IMPORTANT: For each acquisition, provide ALL details: year, target name, target country, deal type, stake acquired, target business, and rationale.`).catch(
+      (e) => ({
+        type: 'ma_history',
+        data: '',
+        error: e.message,
+      })
+    ),
 
     // Query 6: Leadership & Strategy
     callPerplexity(`Research ${companyName} leadership and strategic direction:
@@ -1848,7 +600,11 @@ Provide SPECIFIC deal names, dates, and values.`).catch(e => ({ type: 'ma_histor
    - Key themes from investor presentations
    - Guidance or targets shared
 
-Provide SPECIFIC names and quotes where available.`).catch(e => ({ type: 'leadership', data: '', error: e.message }))
+Provide SPECIFIC names and quotes where available.`).catch((e) => ({
+      type: 'leadership',
+      data: '',
+      error: e.message,
+    })),
   ];
 
   // Add local language query if applicable
@@ -1864,7 +620,11 @@ Search for ${companyName} in ${localLang.lang}:
 - Detailed product/service information not available in English
 - Employee reviews or company culture insights
 
-Provide findings in English with specific details.`).catch(e => ({ type: 'local', data: '', error: e.message }))
+Provide findings in English with specific details.`).catch((e) => ({
+        type: 'local',
+        data: '',
+        error: e.message,
+      }))
     );
   }
 
@@ -1879,10 +639,12 @@ Provide findings in English with specific details.`).catch(e => ({ type: 'local'
     competitors: typeof results[3] === 'string' ? results[3] : '',
     maHistory: typeof results[4] === 'string' ? results[4] : '',
     leadership: typeof results[5] === 'string' ? results[5] : '',
-    localInsights: localLang && results[6] && typeof results[6] === 'string' ? results[6] : ''
+    localInsights: localLang && results[6] && typeof results[6] === 'string' ? results[6] : '',
   };
 
-  console.log(`[UTB Phase 1] Complete. Research lengths: products=${research.products.length}, financials=${research.financials.length}, operations=${research.operations.length}, competitors=${research.competitors.length}, maHistory=${research.maHistory.length}, leadership=${research.leadership.length}`);
+  console.log(
+    `[UTB Phase 1] Complete. Research lengths: products=${research.products.length}, financials=${research.financials.length}, operations=${research.operations.length}, competitors=${research.competitors.length}, maHistory=${research.maHistory.length}, leadership=${research.leadership.length}`
+  );
 
   return research;
 }
@@ -1896,11 +658,14 @@ async function utbPhase2Synthesis(companyName, website, research, context, offic
   if (officialDocs.annualReport) docContext.push(`ANNUAL REPORT:\n${officialDocs.annualReport}`);
   if (officialDocs.midtermPlan) docContext.push(`MID-TERM PLAN:\n${officialDocs.midtermPlan}`);
   if (officialDocs.mergerInfo) docContext.push(`MERGER INFO:\n${officialDocs.mergerInfo}`);
-  const officialDocContext = docContext.length > 0 ? `\n\nOFFICIAL DOCUMENTS (PRIMARY SOURCE - use this data):\n${docContext.join('\n\n')}` : '';
+  const officialDocContext =
+    docContext.length > 0
+      ? `\n\nOFFICIAL DOCUMENTS (PRIMARY SOURCE - use this data):\n${docContext.join('\n\n')}`
+      : '';
 
   const synthesisPrompts = [
     // Synthesis 1: Revenue Breakdown Only
-    callChatGPT(`You are extracting VERIFIED revenue data for M&A advisors.
+    callChatGPT(`You are extracting revenue data for M&A advisors.
 
 COMPANY: ${companyName}
 WEBSITE: ${website}
@@ -1912,39 +677,47 @@ ${research.financials}
 
 ---
 
-CRITICAL REQUIREMENTS:
-- Only include data you can verify from the research. NO approximations, NO ranges, NO guesses.
-- Every percentage must be EXACT (e.g., "47%" not "approximately 45-50%")
-- Every data point must have a source (company filings, annual report, investor presentation, etc.)
-- If you cannot find an exact verified number, write "Not disclosed" - do NOT estimate
-- Do NOT include generic notes like "largest geography" - only include specific sourced information
+REQUIREMENTS:
+- Extract revenue data from the research. Include data from company websites, annual reports, press releases.
+- For percentages, prefer exact numbers but include approximate if exact not available.
+- Include source when available.
 
 Respond in this EXACT JSON format:
 {
   "financials": {
-    "total_revenue": "Exact amount with currency and fiscal year, with source (e.g., 'USD 2.3B (FY2023 Annual Report)')",
-    "total_revenue_url": "Direct URL to the source document (e.g., 'https://company.com/ir/annual-report-2023.pdf')",
+    "total_revenue": "Amount with currency and fiscal year (e.g., 'JPY 13.5B (FY2023)')",
+    "total_revenue_url": "URL to source if available",
     "revenue_by_segment": [
-      {"segment": "Segment name", "percentage": "Exact % (e.g., '47%')", "source": "Document name", "source_url": "Direct URL to source"}
+      {"segment": "Segment name", "percentage": "% value", "source": "Document name", "source_url": "URL"}
     ],
     "revenue_by_geography": [
-      {"region": "Region name", "percentage": "Exact % (e.g., '32%')", "source": "Document name", "source_url": "Direct URL to source"}
+      {"region": "Region name", "percentage": "% value", "source": "Document name", "source_url": "URL"}
     ],
     "revenue_history": [
-      {"year": "FY2020", "revenue": 123.4},
-      {"year": "FY2021", "revenue": 145.2},
-      {"year": "FY2022", "revenue": 167.8},
-      {"year": "FY2023", "revenue": 189.5}
+      {"year": "FY2021", "revenue": 115},
+      {"year": "FY2022", "revenue": 123},
+      {"year": "FY2023", "revenue": 135}
     ],
     "revenue_unit": "JPY 100M"
   }
 }
 
-IMPORTANT:
-- If you cannot find EXACT percentages with sources, return empty arrays. No approximations allowed.
-- Always include source_url when available. Use the most direct link to the source document.
-- For revenue_history: Extract 3-5 years of annual revenue. Convert to 100M JPY units (億円). If company reports in USD/EUR, convert using approximate rates.
-- For revenue_unit: Use "JPY 100M" for Japanese companies, "USD M" for US companies, etc.`).catch(e => ({ section: 'profile', error: e.message })),
+CRITICAL FOR REVENUE_HISTORY:
+- This is the MOST IMPORTANT field - we need this for the Financial Highlights chart
+- Extract 2-5 years of annual revenue from the research
+- Convert to appropriate units (100M JPY for Japanese companies, USD M for US companies)
+- If only 2 years available, include those 2 years - do NOT leave empty
+- Look for revenue trends, sales figures, or 売上高 in the research
+
+CRITICAL FOR REVENUE_UNIT (Y-axis label):
+- MUST provide revenue_unit - this shows on the chart Y-axis
+- For Japanese companies: ALWAYS use "JPY 100M" (億円 = 100 million yen)
+- For US companies: Use "USD M" (millions)
+- For other currencies: Use appropriate format like "EUR M", "SGD M", etc.
+- The revenue numbers in revenue_history should match this unit`).catch((e) => ({
+      section: 'profile',
+      error: e.message,
+    })),
 
     // Synthesis 2: Products, Services & Operations
     callChatGPT(`You are writing for M&A ADVISORS who need to understand a company's business quickly. NOT engineers.
@@ -1999,7 +772,9 @@ Respond in this EXACT JSON format:
   }
 }
 
-BE CONCISE. Each field should be brief and scannable. Include source_url for every data point.`).catch(e => ({ section: 'products', error: e.message })),
+BE CONCISE. Each field should be brief and scannable. Include source_url for every data point.`).catch(
+      (e) => ({ section: 'products', error: e.message })
+    ),
 
     // Synthesis 3: Competitive Landscape
     callChatGPT(`You are writing a COMPREHENSIVE competitive analysis for M&A ADVISORS.
@@ -2051,7 +826,10 @@ Respond in this EXACT JSON format:
   }
 }
 
-IMPORTANT: List 10 competitors. Keep each field brief and scannable.`).catch(e => ({ section: 'competitors', error: e.message })),
+IMPORTANT: List 10 competitors. Keep each field brief and scannable.`).catch((e) => ({
+      section: 'competitors',
+      error: e.message,
+    })),
 
     // Synthesis 4: M&A Deep Dive - Structured Analysis
     callChatGPT(`Extract M&A intelligence for ${companyName}. BE CONCISE - one sentence per field max.
@@ -2067,37 +845,46 @@ ${research.financials}
 
 ---
 
+IMPORTANT: Include ALL acquisitions, mergers, JVs mentioned in the research. Even if some fields are unknown, still include the deal with "undisclosed" or "unknown" for missing fields. Do NOT skip deals just because some details are missing.
+
 Respond in this EXACT JSON format:
 {
   "ma_deep_dive": {
     "deal_history": [
       {
+        "year": "YYYY or unknown",
         "target": "Company name",
-        "year": "YYYY",
-        "deal_value": "$XM or undisclosed",
+        "target_country": "Country name or unknown",
         "deal_type": "Acquisition|Merger|JV|Minority",
-        "strategic_rationale": "Technology|Market Access|Capacity|Talent|Vertical Integration",
-        "outcome": "Integrated|Standalone|Divested",
-        "source_url": "URL to announcement"
+        "acquired_stake": "100%|Majority|Minority|undisclosed",
+        "target_business": "Brief description of target's business",
+        "strategic_rationale": "Technology|Market Access|Capacity|Talent|Vertical Integration|Expansion",
+        "outcome": "Integrated|Standalone|Divested|unknown",
+        "source_url": "URL to announcement or empty string"
       }
     ],
     "ma_profile": {
-      "acquirer_type": "Serial Acquirer|Opportunistic|Transformational|Bolt-on Only",
+      "acquirer_type": "Serial Acquirer|Opportunistic|Transformational|Bolt-on Only|No M&A history",
       "primary_focus": "Technology|Geography|Capacity|Vertical Integration",
-      "typical_deal_size": "$X-YM range",
+      "typical_deal_size": "$X-YM range or unknown",
       "integration_style": "Full Absorption|Standalone|Hybrid",
       "valuation_discipline": "Premium Payer|Disciplined|Value Buyer"
     },
     "deal_capacity": {
-      "dry_powder": "$XM (cash + debt capacity)",
+      "dry_powder": "$XM (cash + debt capacity) or unknown",
       "appetite_level": "High|Medium|Low",
       "decision_speed": "Fast (<6mo)|Normal (6-12mo)|Slow (>12mo)",
-      "source_url": "URL to financials"
+      "source_url": "URL to financials or empty string"
     }
   }
 }
 
-Keep all fields brief. Include source_url for verifiable claims.`).catch(e => ({ section: 'ma_analysis', error: e.message })),
+Include ALL deals found in research. Use "unknown" or "undisclosed" for missing fields rather than omitting deals.`).catch(
+      (e) => ({
+        section: 'ma_analysis',
+        error: e.message,
+      })
+    ),
 
     // Synthesis 5: Ideal Target Profile - SEA/Asia Target List with Products
     callChatGPT(`Identify 10 REAL acquisition targets for ${companyName} in SOUTHEAST ASIA or ASIA. BE CONCISE.
@@ -2126,7 +913,7 @@ Respond in this EXACT JSON format:
         "company_name": "Actual company name",
         "hq_country": "Country",
         "hq_city": "City",
-        "revenue": "$XM",
+        "revenue": "4,500",
         "ownership": "Public|Private|PE-backed",
         "products_offered": [true, false, true, false],
         "website": "company URL"
@@ -2138,8 +925,9 @@ Respond in this EXACT JSON format:
 IMPORTANT:
 - "segments" should list the 4-6 main product/service categories based on the buyer's business
 - "products_offered" is a boolean array matching the segments array (true = company offers this product/service)
+- "revenue" MUST be a NUMBER in USD millions (e.g., "4,500" for $4.5B, "500" for $500M, "50" for $50M). NO currency symbols, NO letters like B/M. Just the number with commas.
 - Real SEA/Asia companies only
-- Include company website URL`).catch(e => ({ section: 'ideal_target', error: e.message }))
+- Include company website URL`).catch((e) => ({ section: 'ideal_target', error: e.message })),
   ];
 
   // Add local insights synthesis if available
@@ -2158,7 +946,7 @@ Respond in JSON:
     "recent_developments": "Recent news or announcements",
     "cultural_considerations": "Any cultural factors relevant for engagement"
   }
-}`).catch(e => ({ section: 'local', error: e.message }))
+}`).catch((e) => ({ section: 'local', error: e.message }))
     );
   }
 
@@ -2199,10 +987,21 @@ async function conductUTBResearch(companyName, website, additionalContext) {
   const officialDocs = await utbPhase0FetchDocuments(companyName, website, additionalContext);
 
   // Phase 1: Deep fact-finding (with document context)
-  const rawResearch = await utbPhase1Research(companyName, website, additionalContext, officialDocs);
+  const rawResearch = await utbPhase1Research(
+    companyName,
+    website,
+    additionalContext,
+    officialDocs
+  );
 
   // Phase 2: Section-by-section synthesis (with document context)
-  const synthesis = await utbPhase2Synthesis(companyName, website, rawResearch, additionalContext, officialDocs);
+  const synthesis = await utbPhase2Synthesis(
+    companyName,
+    website,
+    rawResearch,
+    additionalContext,
+    officialDocs
+  );
 
   console.log(`[UTB] Research complete for: ${companyName}`);
 
@@ -2213,319 +1012,16 @@ async function conductUTBResearch(companyName, website, additionalContext) {
       company: companyName,
       website,
       generatedAt: new Date().toISOString(),
-      localLanguage: detectLanguage(website)?.lang || null
-    }
+      localLanguage: detectLanguage(website)?.lang || null,
+    },
   };
 }
 
 // Generate UTB Excel workbook with structured data
-async function generateUTBExcel(companyName, website, research, additionalContext) {
-  if (!ExcelJS) {
-    throw new Error('ExcelJS not available');
-  }
-
-  const { synthesis, metadata } = research;
-  const workbook = new ExcelJS.Workbook();
-  workbook.creator = 'UTB - M&A Buyer Intelligence';
-  workbook.created = new Date();
-
-  // Colors
-  const navy = 'FF1A365D';
-  const blue = 'FF2563EB';
-  const lightBlue = 'FFDBEAFE';
-  const lightGray = 'FFF8FAFC';
-  const white = 'FFFFFFFF';
-
-  // Helper: Style header row
-  const styleHeaderRow = (row, color = navy) => {
-    row.eachCell(cell => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: color } };
-      cell.font = { bold: true, color: { argb: 'FFFFFFFF' }, size: 11 };
-      cell.alignment = { vertical: 'middle', horizontal: 'left', wrapText: true };
-      cell.border = {
-        top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
-        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } }
-      };
-    });
-    row.height = 22;
-  };
-
-  // Helper: Style data row
-  const styleDataRow = (row, isAlternate = false) => {
-    row.eachCell(cell => {
-      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isAlternate ? lightGray : white } };
-      cell.font = { size: 10 };
-      cell.alignment = { vertical: 'top', wrapText: true };
-      cell.border = {
-        bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } }
-      };
-    });
-  };
-
-  // Helper: Add section title
-  const addSectionTitle = (ws, title, row) => {
-    ws.mergeCells(`A${row}:F${row}`);
-    const cell = ws.getCell(`A${row}`);
-    cell.value = title;
-    cell.font = { bold: true, size: 14, color: { argb: navy } };
-    cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: lightBlue } };
-    cell.alignment = { vertical: 'middle' };
-    ws.getRow(row).height = 28;
-    return row + 1;
-  };
-
-  // ========== SHEET 1: COMPANY ANALYSIS ==========
-  const sheet1 = workbook.addWorksheet('Company Analysis');
-  sheet1.columns = [
-    { key: 'a', width: 25 },
-    { key: 'b', width: 25 },
-    { key: 'c', width: 25 },
-    { key: 'd', width: 25 },
-    { key: 'e', width: 25 },
-    { key: 'f', width: 25 }
-  ];
-
-  // Title
-  sheet1.mergeCells('A1:F1');
-  const titleCell = sheet1.getCell('A1');
-  titleCell.value = `UTB: ${companyName}`;
-  titleCell.font = { bold: true, size: 18, color: { argb: navy } };
-  titleCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: lightBlue } };
-  sheet1.getRow(1).height = 35;
-
-  sheet1.mergeCells('A2:F2');
-  sheet1.getCell('A2').value = website;
-  sheet1.getCell('A2').font = { size: 11, color: { argb: 'FF64748B' } };
-
-  let r = 4;
-  const fin = synthesis.financials || {};
-
-  // Revenue by Segment (with sources)
-  if (fin.revenue_by_segment && fin.revenue_by_segment.length > 0) {
-    r = addSectionTitle(sheet1, 'Revenue by Segment', r);
-    const segHeader = sheet1.getRow(r);
-    segHeader.values = ['Segment', 'Share', 'Source', '', '', ''];
-    styleHeaderRow(segHeader, blue);
-    r++;
-    fin.revenue_by_segment.forEach((seg, i) => {
-      sheet1.getCell(`A${r}`).value = seg.segment;
-      sheet1.getCell(`A${r}`).font = { bold: true };
-      sheet1.getCell(`B${r}`).value = seg.percentage || seg.revenue;
-      sheet1.getCell(`C${r}`).value = seg.source || '';
-      styleDataRow(sheet1.getRow(r), i % 2 === 0);
-      r++;
-    });
-    r++;
-  }
-
-  // Revenue by Geography (with sources)
-  if (fin.revenue_by_geography && fin.revenue_by_geography.length > 0) {
-    r = addSectionTitle(sheet1, 'Revenue by Geography', r);
-    const geoHeader = sheet1.getRow(r);
-    geoHeader.values = ['Region', 'Share', 'Source', '', '', ''];
-    styleHeaderRow(geoHeader, blue);
-    r++;
-    fin.revenue_by_geography.forEach((geo, i) => {
-      sheet1.getCell(`A${r}`).value = geo.region;
-      sheet1.getCell(`A${r}`).font = { bold: true };
-      sheet1.getCell(`B${r}`).value = geo.percentage;
-      sheet1.getCell(`C${r}`).value = geo.source || '';
-      styleDataRow(sheet1.getRow(r), i % 2 === 0);
-      r++;
-    });
-    r++;
-  }
-
-  // Business Segments
-  const prod = synthesis.products_and_services || {};
-  if (prod.product_lines && prod.product_lines.length > 0) {
-    r = addSectionTitle(sheet1, 'Business Segments', r);
-    const plHeader = sheet1.getRow(r);
-    plHeader.values = ['Segment', 'What It Does', 'Revenue Significance', '', '', ''];
-    styleHeaderRow(plHeader, blue);
-    r++;
-    prod.product_lines.forEach((line, i) => {
-      sheet1.getCell(`A${r}`).value = line.name;
-      sheet1.getCell(`A${r}`).font = { bold: true };
-      sheet1.mergeCells(`B${r}:C${r}`);
-      sheet1.getCell(`B${r}`).value = line.what_it_does || line.description || '';
-      sheet1.getCell(`D${r}`).value = line.revenue_significance || '';
-      styleDataRow(sheet1.getRow(r), i % 2 === 0);
-      r++;
-    });
-    r++;
-  }
-
-  // Strategic Capabilities (with concrete evidence)
-  if (prod.strategic_capabilities && prod.strategic_capabilities.length > 0) {
-    r = addSectionTitle(sheet1, 'Strategic Capabilities', r);
-    const capHeader = sheet1.getRow(r);
-    capHeader.values = ['Capability', 'Evidence', '', '', '', ''];
-    styleHeaderRow(capHeader, navy);
-    r++;
-    prod.strategic_capabilities.forEach((cap, i) => {
-      sheet1.getCell(`A${r}`).value = cap.capability;
-      sheet1.getCell(`A${r}`).font = { bold: true };
-      sheet1.mergeCells(`B${r}:D${r}`);
-      sheet1.getCell(`B${r}`).value = cap.evidence || cap.business_impact || '';
-      sheet1.getCell(`B${r}`).alignment = { wrapText: true };
-      styleDataRow(sheet1.getRow(r), i % 2 === 0);
-      r++;
-    });
-    r++;
-  }
-
-  // Manufacturing Footprint
-  const ops = synthesis.operations || {};
-  if (ops.manufacturing_footprint && ops.manufacturing_footprint.length > 0) {
-    r = addSectionTitle(sheet1, 'Manufacturing Footprint', r);
-    const mfgHeader = sheet1.getRow(r);
-    mfgHeader.values = ['Location', 'Details', '', '', '', ''];
-    styleHeaderRow(mfgHeader);
-    r++;
-    ops.manufacturing_footprint.forEach((mfg, i) => {
-      sheet1.getCell(`A${r}`).value = mfg.location;
-      sheet1.getCell(`A${r}`).font = { bold: true };
-      sheet1.mergeCells(`B${r}:D${r}`);
-      sheet1.getCell(`B${r}`).value = mfg.details || mfg.strategic_value || '';
-      styleDataRow(sheet1.getRow(r), i % 2 === 0);
-      r++;
-    });
-    r++;
-  }
-
-  // Why This Company Wins
-  const comp = synthesis.competitive_landscape || {};
-  const pos = comp.company_position || {};
-  if (pos.market_rank || pos.why_they_win) {
-    r = addSectionTitle(sheet1, 'Why This Company Wins', r);
-
-    if (pos.market_rank) {
-      sheet1.getCell(`A${r}`).value = 'Market Position';
-      sheet1.getCell(`A${r}`).font = { bold: true };
-      sheet1.mergeCells(`B${r}:D${r}`);
-      sheet1.getCell(`B${r}`).value = pos.market_rank;
-      styleDataRow(sheet1.getRow(r));
-      r++;
-    }
-
-    // New format: why_they_win as array of {point, reasoning}
-    if (pos.why_they_win && Array.isArray(pos.why_they_win)) {
-      pos.why_they_win.forEach((item, i) => {
-        sheet1.getCell(`A${r}`).value = item.point;
-        sheet1.getCell(`A${r}`).font = { bold: true, color: { argb: 'FF16A34A' } };
-        sheet1.mergeCells(`B${r}:E${r}`);
-        sheet1.getCell(`B${r}`).value = item.reasoning;
-        sheet1.getCell(`B${r}`).alignment = { wrapText: true };
-        sheet1.getRow(r).height = 40;
-        styleDataRow(sheet1.getRow(r), i % 2 === 0);
-        r++;
-      });
-    }
-
-    if (pos.vulnerability) {
-      sheet1.getCell(`A${r}`).value = 'Vulnerability';
-      sheet1.getCell(`A${r}`).font = { bold: true, color: { argb: 'FFDC2626' } };
-      sheet1.mergeCells(`B${r}:D${r}`);
-      sheet1.getCell(`B${r}`).value = pos.vulnerability;
-      sheet1.getCell(`B${r}`).alignment = { wrapText: true };
-      styleDataRow(sheet1.getRow(r), true);
-      r++;
-    }
-    r++;
-  }
-
-  // Competitors (comprehensive - 10-12)
-  const competitors = comp.key_competitors || [];
-  if (competitors.length > 0) {
-    r = addSectionTitle(sheet1, 'Competitive Landscape', r);
-    const compHeader = sheet1.getRow(r);
-    compHeader.values = ['Company', 'HQ', 'Revenue', 'Market Share', 'Key Products', 'Competitive Threat'];
-    styleHeaderRow(compHeader, blue);
-    r++;
-    competitors.forEach((c, i) => {
-      sheet1.getCell(`A${r}`).value = c.name;
-      sheet1.getCell(`A${r}`).font = { bold: true };
-      sheet1.getCell(`B${r}`).value = c.hq_country || '';
-      sheet1.getCell(`C${r}`).value = c.revenue || '';
-      sheet1.getCell(`D${r}`).value = c.market_share || '';
-      sheet1.getCell(`E${r}`).value = c.key_products || '';
-      sheet1.getCell(`F${r}`).value = c.competitive_threat || c.positioning || '';
-      sheet1.getRow(r).height = 30;
-      styleDataRow(sheet1.getRow(r), i % 2 === 0);
-      r++;
-    });
-  }
-
-  // ========== M&A DATA (on same sheet) ==========
-  const maDeepDive = synthesis.ma_deep_dive || {};
-  const dealStories = maDeepDive.deal_stories || [];
-
-  // M&A History
-  if (dealStories.length > 0) {
-    r++;
-    r = addSectionTitle(sheet1, 'M&A History', r);
-    dealStories.forEach((story, i) => {
-      sheet1.getCell(`A${r}`).value = story.deal;
-      sheet1.getCell(`A${r}`).font = { bold: true, color: { argb: blue } };
-      sheet1.mergeCells(`B${r}:F${r}`);
-      sheet1.getCell(`B${r}`).value = story.full_story;
-      sheet1.getCell(`B${r}`).alignment = { wrapText: true, vertical: 'top' };
-      sheet1.getRow(r).height = 60;
-      styleDataRow(sheet1.getRow(r), i % 2 === 0);
-      r++;
-    });
-    r++;
-  }
-
-  // M&A Philosophy
-  if (maDeepDive.ma_philosophy) {
-    r = addSectionTitle(sheet1, 'M&A Philosophy', r);
-    sheet1.mergeCells(`A${r}:F${r}`);
-    sheet1.getCell(`A${r}`).value = maDeepDive.ma_philosophy;
-    sheet1.getCell(`A${r}`).alignment = { wrapText: true, vertical: 'top' };
-    sheet1.getRow(r).height = 80;
-    r += 2;
-  }
-
-  // Deal Capacity
-  const capacity = maDeepDive.deal_capacity || {};
-  if (capacity.financial_firepower || capacity.appetite_level) {
-    r = addSectionTitle(sheet1, 'Deal Capacity', r);
-    if (capacity.financial_firepower) {
-      sheet1.getCell(`A${r}`).value = 'Financial Firepower';
-      sheet1.getCell(`A${r}`).font = { bold: true };
-      sheet1.mergeCells(`B${r}:D${r}`);
-      sheet1.getCell(`B${r}`).value = capacity.financial_firepower;
-      styleDataRow(sheet1.getRow(r));
-      r++;
-    }
-    if (capacity.appetite_level) {
-      sheet1.getCell(`A${r}`).value = 'Appetite Level';
-      sheet1.getCell(`A${r}`).font = { bold: true };
-      sheet1.mergeCells(`B${r}:D${r}`);
-      sheet1.getCell(`B${r}`).value = capacity.appetite_level;
-      styleDataRow(sheet1.getRow(r), true);
-      r++;
-    }
-    if (capacity.decision_process) {
-      sheet1.getCell(`A${r}`).value = 'Decision Speed';
-      sheet1.getCell(`A${r}`).font = { bold: true };
-      sheet1.mergeCells(`B${r}:D${r}`);
-      sheet1.getCell(`B${r}`).value = capacity.decision_process;
-      styleDataRow(sheet1.getRow(r));
-      r++;
-    }
-  }
-
-  // Generate buffer
-  const buffer = await workbook.xlsx.writeBuffer();
-  return buffer.toString('base64');
-}
 
 // Generate UTB PowerPoint slides with structured data (1 slide per segment)
 async function generateUTBSlides(companyName, website, research, additionalContext) {
-  const { synthesis, metadata } = research;
+  const { synthesis, metadata: _metadata } = research;
 
   console.log('[UTB] Generating slides...');
 
@@ -2540,14 +1036,14 @@ async function generateUTBSlides(companyName, website, research, additionalConte
 
   // YCP Theme Colors (matching profile-slides template exactly)
   const COLORS = {
-    headerLine: '293F55',    // Dark navy for header/footer lines
-    headerBg: '1524A9',      // Dark blue for table header row
-    labelBg: '011AB7',       // Dark blue for label column (accent3)
-    companyBg: '007FFF',     // Bright blue for company column
+    headerLine: '293F55', // Dark navy for header/footer lines
+    headerBg: '1524A9', // Dark blue for table header row
+    labelBg: '011AB7', // Dark blue for label column (accent3)
+    companyBg: '007FFF', // Bright blue for company column
     white: 'FFFFFF',
     black: '000000',
-    gray: 'BFBFBF',          // Gray for dotted borders between rows
-    footerText: '808080'     // Gray footer text
+    gray: 'BFBFBF', // Gray for dotted borders between rows
+    footerText: '808080', // Gray footer text
   };
 
   // Define master slide with fixed lines (matching YCP template)
@@ -2558,35 +1054,43 @@ async function generateUTBSlides(companyName, website, research, additionalConte
       // Thick header line (y: 1.02")
       { line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } } },
       // Thin header line (y: 1.10")
-      { line: { x: 0, y: 1.10, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
+      { line: { x: 0, y: 1.1, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
       // Footer line (y: 7.24")
-      { line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } }
-    ]
+      { line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
+    ],
   });
 
   // Helper: Add slide title (YCP format - black text, left-aligned, valign bottom)
   const addSlideTitle = (slide, title) => {
     slide.addText(title, {
-      x: 0.38, y: 0.07, w: 9.5, h: 0.9,
-      fontSize: 24, fontFace: 'Segoe UI',
-      color: COLORS.black, valign: 'bottom'
+      x: 0.38,
+      y: 0.07,
+      w: 9.5,
+      h: 0.9,
+      fontSize: 24,
+      fontFace: 'Segoe UI',
+      color: COLORS.black,
+      valign: 'bottom',
     });
   };
 
   // Helper: Add footnote
   const addFootnote = (slide, text = 'Source: Company disclosures, public filings') => {
     slide.addText(text, {
-      x: 0.38, y: 6.85, w: 12.5, h: 0.3,
-      fontSize: 10, fontFace: 'Segoe UI',
-      color: COLORS.footerText, valign: 'top'
+      x: 0.38,
+      y: 6.85,
+      w: 12.5,
+      h: 0.3,
+      fontSize: 10,
+      fontFace: 'Segoe UI',
+      color: COLORS.black,
+      valign: 'top',
     });
   };
 
   // Helper: Get row border (dotted between rows, solid white on edges)
   const getRowBorder = (isLastRow) => {
-    return isLastRow
-      ? { pt: 3, color: COLORS.white }
-      : { pt: 1, color: COLORS.gray, type: 'dash' };
+    return isLastRow ? { pt: 3, color: COLORS.white } : { pt: 1, color: COLORS.gray, type: 'dash' };
   };
 
   const prod = synthesis.products_and_services || {};
@@ -2597,25 +1101,41 @@ async function generateUTBSlides(companyName, website, research, additionalConte
 
   // Company name - centered, black, large
   titleSlide.addText(companyName, {
-    x: 0.38, y: 2.5, w: 12.54, h: 1.0,
-    fontSize: 36, fontFace: 'Segoe UI', bold: true,
-    color: COLORS.black, align: 'center'
+    x: 0.38,
+    y: 2.5,
+    w: 12.54,
+    h: 1.0,
+    fontSize: 36,
+    fontFace: 'Segoe UI',
+    bold: true,
+    color: COLORS.black,
+    align: 'center',
   });
 
   // Client intention (from additionalContext)
   if (additionalContext) {
     titleSlide.addText(additionalContext, {
-      x: 0.38, y: 3.6, w: 12.54, h: 0.8,
-      fontSize: 16, fontFace: 'Segoe UI',
-      color: COLORS.footerText, align: 'center'
+      x: 0.38,
+      y: 3.6,
+      w: 12.54,
+      h: 0.8,
+      fontSize: 16,
+      fontFace: 'Segoe UI',
+      color: COLORS.footerText,
+      align: 'center',
     });
   }
 
   // Generated date at bottom
   titleSlide.addText(`Generated: ${new Date().toLocaleDateString()}`, {
-    x: 0.38, y: 6.5, w: 12.54, h: 0.3,
-    fontSize: 10, fontFace: 'Segoe UI',
-    color: COLORS.footerText, align: 'center'
+    x: 0.38,
+    y: 6.5,
+    w: 12.54,
+    h: 0.3,
+    fontSize: 10,
+    fontFace: 'Segoe UI',
+    color: COLORS.footerText,
+    align: 'center',
   });
 
   // ========== SLIDE 2: BUSINESS OVERVIEW ==========
@@ -2624,17 +1144,27 @@ async function generateUTBSlides(companyName, website, research, additionalConte
 
     // Title with smaller height for subtitle space
     slide.addText('Business Overview', {
-      x: 0.38, y: 0.15, w: 9.5, h: 0.55,
-      fontSize: 24, fontFace: 'Segoe UI',
-      color: COLORS.black, valign: 'bottom'
+      x: 0.38,
+      y: 0.15,
+      w: 9.5,
+      h: 0.55,
+      fontSize: 24,
+      fontFace: 'Segoe UI',
+      color: COLORS.black,
+      valign: 'bottom',
     });
 
     // Subtitle: one-line business descriptor (between title and double lines)
     const overview = prod.overview || `${companyName} business segments and operations`;
     slide.addText(overview, {
-      x: 0.38, y: 0.72, w: 12.54, h: 0.25,
-      fontSize: 11, fontFace: 'Segoe UI',
-      color: COLORS.footerText, align: 'left'
+      x: 0.38,
+      y: 0.72,
+      w: 12.54,
+      h: 0.25,
+      fontSize: 16,
+      fontFace: 'Segoe UI',
+      color: COLORS.black,
+      align: 'left',
     });
 
     // Column widths: Segment (2.5") + Description (9.92")
@@ -2648,28 +1178,48 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     const availableHeight = 6.75 - tableStartY - headerHeight - 0.1;
     const rowHeight = Math.min(0.68, availableHeight / lines.length);
 
-    // Column header: Business Segment
+    // Column header: Business Segment (centered, not bold)
     slide.addText('Business Segment', {
-      x: tableStartX, y: tableStartY, w: segmentColW, h: headerHeight,
-      fontSize: 11, fontFace: 'Segoe UI', bold: true,
-      color: COLORS.black, align: 'left', valign: 'bottom'
+      x: tableStartX,
+      y: tableStartY,
+      w: segmentColW,
+      h: headerHeight,
+      fontSize: 14,
+      fontFace: 'Segoe UI',
+      bold: false,
+      color: COLORS.black,
+      align: 'center',
+      valign: 'bottom',
     });
-    // Header underline for segment column
+    // Header underline for segment column (thin blue)
     slide.addShape(pptx.shapes.LINE, {
-      x: tableStartX, y: tableStartY + headerHeight, w: segmentColW - 0.1, h: 0,
-      line: { color: COLORS.gray, width: 1 }
+      x: tableStartX,
+      y: tableStartY + headerHeight,
+      w: segmentColW - 0.1,
+      h: 0,
+      line: { color: COLORS.headerLine, width: 1 },
     });
 
-    // Column header: Description
+    // Column header: Description (centered, not bold)
     slide.addText('Description', {
-      x: tableStartX + segmentColW + 0.12, y: tableStartY, w: descColW, h: headerHeight,
-      fontSize: 11, fontFace: 'Segoe UI', bold: true,
-      color: COLORS.black, align: 'left', valign: 'bottom'
+      x: tableStartX + segmentColW + 0.12,
+      y: tableStartY,
+      w: descColW,
+      h: headerHeight,
+      fontSize: 14,
+      fontFace: 'Segoe UI',
+      bold: false,
+      color: COLORS.black,
+      align: 'center',
+      valign: 'bottom',
     });
-    // Header underline for description column
+    // Header underline for description column (thin blue)
     slide.addShape(pptx.shapes.LINE, {
-      x: tableStartX + segmentColW + 0.12, y: tableStartY + headerHeight, w: descColW, h: 0,
-      line: { color: COLORS.gray, width: 1 }
+      x: tableStartX + segmentColW + 0.12,
+      y: tableStartY + headerHeight,
+      w: descColW,
+      h: 0,
+      line: { color: COLORS.headerLine, width: 1 },
     });
 
     // Data rows
@@ -2681,35 +1231,58 @@ async function generateUTBSlides(companyName, website, research, additionalConte
 
       // Blue segment block (fixed width, uniform height)
       slide.addShape(pptx.shapes.RECTANGLE, {
-        x: tableStartX, y: y, w: segmentColW, h: rowHeight - 0.06,
+        x: tableStartX,
+        y: y,
+        w: segmentColW,
+        h: rowHeight - 0.06,
         fill: { color: COLORS.labelBg },
-        line: { type: 'none' }
+        line: { type: 'none' },
       });
 
-      // Segment name (white text, centered both ways)
+      // Segment name (white text, centered both ways, not bold)
       slide.addText(line.name || '', {
-        x: tableStartX + 0.08, y: y, w: segmentColW - 0.16, h: rowHeight - 0.06,
-        fontSize: 10, fontFace: 'Segoe UI', bold: true,
-        color: COLORS.white, align: 'center', valign: 'middle'
+        x: tableStartX + 0.08,
+        y: y,
+        w: segmentColW - 0.16,
+        h: rowHeight - 0.06,
+        fontSize: 14,
+        fontFace: 'Segoe UI',
+        bold: false,
+        color: COLORS.white,
+        align: 'center',
+        valign: 'middle',
       });
 
       // Description with solid square bullets
       const desc = line.what_it_does || line.description || '';
-      const sentences = desc.replace(/\. /g, '.|').split('|').filter(s => s.trim()).slice(0, 2);
-      const bulletText = sentences.map(s => '■  ' + s.trim()).join('\n');
+      const sentences = desc
+        .replace(/\. /g, '.|')
+        .split('|')
+        .filter((s) => s.trim())
+        .slice(0, 2);
+      const bulletText = sentences.map((s) => '■  ' + s.trim()).join('\n');
 
       slide.addText(bulletText, {
-        x: tableStartX + segmentColW + 0.12, y: y + 0.05, w: descColW, h: rowHeight - 0.1,
-        fontSize: 10, fontFace: 'Segoe UI',
-        color: COLORS.black, align: 'left', valign: 'middle',
-        lineSpacing: 14
+        x: tableStartX + segmentColW + 0.12,
+        y: y + 0.05,
+        w: descColW,
+        h: rowHeight - 0.1,
+        fontSize: 14,
+        fontFace: 'Segoe UI',
+        color: COLORS.black,
+        align: 'left',
+        valign: 'middle',
+        lineSpacing: 16,
       });
 
       // Dotted horizontal divider spanning full width (not on last row)
       if (!isLastRow) {
         slide.addShape(pptx.shapes.LINE, {
-          x: tableStartX, y: y + rowHeight - 0.03, w: segmentColW + 0.12 + descColW, h: 0,
-          line: { color: COLORS.gray, width: 0.5, dashType: 'dash' }
+          x: tableStartX,
+          y: y + rowHeight - 0.03,
+          w: segmentColW + 0.12 + descColW,
+          h: 0,
+          line: { color: COLORS.gray, width: 0.5, dashType: 'dash' },
         });
       }
     });
@@ -2723,66 +1296,78 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
     addSlideTitle(slide, 'Past M&A');
 
+    // Header options: all columns center aligned, not bold, font 14
+    const maHeaderOpts = {
+      fill: { color: COLORS.headerBg },
+      color: COLORS.white,
+      bold: false,
+      align: 'center',
+      valign: 'middle',
+      border: { pt: 3, color: COLORS.white },
+    };
+
     const rows = [
       [
-        { text: 'Target', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'left', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
-        { text: 'Year', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'center', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
-        { text: 'Value', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'center', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
-        { text: 'Type', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'center', valign: 'middle', border: { pt: 3, color: COLORS.white } } },
-        { text: 'Rationale', options: { fill: { color: COLORS.headerBg }, color: COLORS.white, bold: false, align: 'left', valign: 'middle', border: { pt: 3, color: COLORS.white } } }
-      ]
+        { text: 'Year', options: maHeaderOpts },
+        { text: 'Target', options: maHeaderOpts },
+        { text: 'Target Country', options: maHeaderOpts },
+        { text: 'Deal Type', options: maHeaderOpts },
+        { text: 'Acquired Stake', options: maHeaderOpts },
+        { text: 'Target Business', options: maHeaderOpts },
+        { text: 'Rationale', options: maHeaderOpts },
+      ],
     ];
 
     const deals = dealHistory.slice(0, 8);
     deals.forEach((deal, i) => {
       const isLastRow = i === deals.length - 1;
+      // Light grey dotted border for row separation
+      const rowBorder = isLastRow
+        ? { pt: 0, color: COLORS.white }
+        : { pt: 0.5, color: COLORS.gray, dashType: 'dash' };
+      const dataCellOpts = {
+        fill: { color: COLORS.white },
+        color: COLORS.black,
+        bold: false,
+        align: 'center',
+        valign: 'middle',
+        border: [
+          { pt: 0, color: COLORS.white },
+          { pt: 0, color: COLORS.white },
+          rowBorder,
+          { pt: 0, color: COLORS.white },
+        ],
+      };
       rows.push([
-        { text: deal.target || deal.deal || '', options: {
-          fill: { color: COLORS.companyBg },
-          color: COLORS.white,
-          bold: false,
-          align: 'left',
-          valign: 'middle',
-          border: { pt: 3, color: COLORS.white }
-        }},
-        { text: deal.year || '', options: {
-          fill: { color: COLORS.white },
-          color: COLORS.black,
-          align: 'center',
-          valign: 'middle',
-          border: [{ pt: 3, color: COLORS.white }, { pt: 3, color: COLORS.white }, getRowBorder(isLastRow), { pt: 3, color: COLORS.white }]
-        }},
-        { text: deal.deal_value || '', options: {
-          fill: { color: COLORS.white },
-          color: COLORS.black,
-          align: 'center',
-          valign: 'middle',
-          border: [{ pt: 3, color: COLORS.white }, { pt: 3, color: COLORS.white }, getRowBorder(isLastRow), { pt: 3, color: COLORS.white }]
-        }},
-        { text: deal.deal_type || '', options: {
-          fill: { color: COLORS.white },
-          color: COLORS.black,
-          align: 'center',
-          valign: 'middle',
-          border: [{ pt: 3, color: COLORS.white }, { pt: 3, color: COLORS.white }, getRowBorder(isLastRow), { pt: 3, color: COLORS.white }]
-        }},
-        { text: deal.strategic_rationale || '', options: {
-          fill: { color: COLORS.white },
-          color: COLORS.black,
-          align: 'left',
-          valign: 'middle',
-          border: [{ pt: 3, color: COLORS.white }, { pt: 3, color: COLORS.white }, getRowBorder(isLastRow), { pt: 3, color: COLORS.white }]
-        }}
+        { text: deal.year || '', options: dataCellOpts },
+        {
+          text: deal.target || deal.deal || '',
+          options: {
+            fill: { color: COLORS.companyBg },
+            color: COLORS.white,
+            bold: false,
+            align: 'center',
+            valign: 'middle',
+            border: { pt: 3, color: COLORS.white },
+          },
+        },
+        { text: deal.target_country || '', options: dataCellOpts },
+        { text: deal.deal_type || '', options: dataCellOpts },
+        { text: deal.acquired_stake || '', options: dataCellOpts },
+        { text: deal.target_business || '', options: dataCellOpts },
+        { text: deal.strategic_rationale || '', options: { ...dataCellOpts, align: 'left' } },
       ]);
     });
 
     slide.addTable(rows, {
-      x: 0.38, y: 1.2, w: 12.54,
-      colW: [3.0, 1.0, 1.5, 1.8, 5.24],
+      x: 0.38,
+      y: 1.2,
+      w: 12.54,
+      colW: [0.8, 2.2, 1.3, 1.2, 1.2, 2.5, 3.34],
       rowH: 0.5,
       fontFace: 'Segoe UI',
-      fontSize: 10,
-      valign: 'middle'
+      fontSize: 14,
+      valign: 'middle',
     });
 
     addFootnote(slide);
@@ -2811,27 +1396,28 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     const segmentColW = (12.54 - fixedColsW) / numSegments;
     const colWidths = [2.6, 0.9, 1.0, ...Array(numSegments).fill(segmentColW)];
 
-    // Build header row with tall uniform blocks
+    // Build header row with tall uniform blocks (not bold per design requirements)
     const headerOpts = {
       fill: { color: COLORS.headerBg },
       color: COLORS.white,
-      bold: true,
+      bold: false,
       align: 'center',
       valign: 'middle',
-      border: { pt: 2, color: COLORS.white }
+      border: { pt: 2, color: COLORS.white },
     };
 
+    // Revenue header includes unit, rows show just numbers
     const headerRow = [
-      { text: 'Company', options: { ...headerOpts, align: 'left' } },
+      { text: 'Company', options: headerOpts },
       { text: 'HQ', options: headerOpts },
-      { text: 'Revenue', options: headerOpts }
+      { text: 'Revenue (USD M)', options: headerOpts },
     ];
 
-    // Add segment columns to header (full names, no truncation)
-    displaySegments.forEach(seg => {
+    // Add segment columns to header (full names, no truncation, font size 14)
+    displaySegments.forEach((seg) => {
       headerRow.push({
         text: seg,
-        options: { ...headerOpts, fontSize: 9 }
+        options: headerOpts,
       });
     });
 
@@ -2841,30 +1427,54 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     targets.forEach((t, i) => {
       const isLastRow = i === targets.length - 1;
 
-      // Company column: lighter blue, plain text (no hyperlinks)
+      // Company column: lighter blue, with hyperlink to company website
+      const companyOpts = {
+        fill: { color: COLORS.companyBg },
+        color: COLORS.white,
+        bold: false,
+        align: 'left',
+        valign: 'middle',
+        border: { pt: 2, color: COLORS.white },
+      };
+      // Add hyperlink if website is available
+      if (t.website) {
+        companyOpts.hyperlink = { url: t.website };
+      }
       const row = [
-        { text: `${i + 1}. ${t.company_name || ''}`, options: {
-          fill: { color: COLORS.companyBg },
-          color: COLORS.white,
-          bold: false,
-          align: 'left',
-          valign: 'middle',
-          border: { pt: 2, color: COLORS.white }
-        }},
-        { text: t.hq_country || '', options: {
-          fill: { color: COLORS.white },
-          color: COLORS.black,
-          align: 'center',
-          valign: 'middle',
-          border: [{ pt: 2, color: COLORS.white }, { pt: 2, color: COLORS.white }, getRowBorder(isLastRow), { pt: 2, color: COLORS.white }]
-        }},
-        { text: t.revenue || t.estimated_revenue || '', options: {
-          fill: { color: COLORS.white },
-          color: COLORS.black,
-          align: 'center',
-          valign: 'middle',
-          border: [{ pt: 2, color: COLORS.white }, { pt: 2, color: COLORS.white }, getRowBorder(isLastRow), { pt: 2, color: COLORS.white }]
-        }}
+        {
+          text: `${i + 1}. ${t.company_name || ''}`,
+          options: companyOpts,
+        },
+        {
+          text: t.hq_country || '',
+          options: {
+            fill: { color: COLORS.white },
+            color: COLORS.black,
+            align: 'center',
+            valign: 'middle',
+            border: [
+              { pt: 2, color: COLORS.white },
+              { pt: 2, color: COLORS.white },
+              getRowBorder(isLastRow),
+              { pt: 2, color: COLORS.white },
+            ],
+          },
+        },
+        {
+          text: t.revenue || t.estimated_revenue || '',
+          options: {
+            fill: { color: COLORS.white },
+            color: COLORS.black,
+            align: 'center',
+            valign: 'middle',
+            border: [
+              { pt: 2, color: COLORS.white },
+              { pt: 2, color: COLORS.white },
+              getRowBorder(isLastRow),
+              { pt: 2, color: COLORS.white },
+            ],
+          },
+        },
       ];
 
       // Add tick marks for each segment (centered, consistent size)
@@ -2880,8 +1490,13 @@ async function generateUTBSlides(companyName, website, research, additionalConte
             bold: true,
             align: 'center',
             valign: 'middle',
-            border: [{ pt: 2, color: COLORS.white }, { pt: 2, color: COLORS.white }, getRowBorder(isLastRow), { pt: 2, color: COLORS.white }]
-          }
+            border: [
+              { pt: 2, color: COLORS.white },
+              { pt: 2, color: COLORS.white },
+              getRowBorder(isLastRow),
+              { pt: 2, color: COLORS.white },
+            ],
+          },
         });
       });
 
@@ -2889,19 +1504,24 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     });
 
     slide.addTable(rows, {
-      x: 0.38, y: 1.2, w: 12.54,
+      x: 0.38,
+      y: 1.2,
+      w: 12.54,
       colW: colWidths,
       rowH: [0.55, ...Array(targets.length).fill(0.5)], // Taller header row
       fontFace: 'Segoe UI',
-      fontSize: 10,
-      valign: 'middle'
+      fontSize: 14,
+      valign: 'middle',
     });
 
     // Bottom boundary line
-    const tableBottom = 1.2 + 0.55 + (targets.length * 0.5);
+    const tableBottom = 1.2 + 0.55 + targets.length * 0.5;
     slide.addShape(pptx.shapes.LINE, {
-      x: 0.38, y: tableBottom, w: 12.54, h: 0,
-      line: { color: COLORS.gray, width: 1 }
+      x: 0.38,
+      y: tableBottom,
+      w: 12.54,
+      h: 0,
+      line: { color: COLORS.gray, width: 1 },
     });
 
     addFootnote(slide, 'Source: Company disclosures, industry databases');
@@ -2910,68 +1530,83 @@ async function generateUTBSlides(companyName, website, research, additionalConte
   // ========== SLIDE 5: M&A STRATEGY (Row-Based Geographic Framework) ==========
   if (targetList.length >= 2) {
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, 'M&A Strategy');
+    addSlideTitle(slide, 'Hypothetical M&A Strategies');
 
     // Define geographic strategy themes based on target locations
     const geoStrategies = [];
 
     // Group targets by region
-    const seaCountries = ['Singapore', 'Thailand', 'Vietnam', 'Indonesia', 'Malaysia', 'Philippines'];
+    const seaCountries = [
+      'Singapore',
+      'Thailand',
+      'Vietnam',
+      'Indonesia',
+      'Malaysia',
+      'Philippines',
+    ];
     const greaterChinaCountries = ['China', 'Taiwan', 'Hong Kong'];
     const neaCountries = ['Japan', 'Korea', 'South Korea'];
 
-    const seaTargets = targetList.filter(t => seaCountries.some(c => (t.hq_country || '').includes(c)));
-    const gcTargets = targetList.filter(t => greaterChinaCountries.some(c => (t.hq_country || '').includes(c)));
-    const neaTargets = targetList.filter(t => neaCountries.some(c => (t.hq_country || '').includes(c)));
-    const otherTargets = targetList.filter(t =>
-      !seaCountries.some(c => (t.hq_country || '').includes(c)) &&
-      !greaterChinaCountries.some(c => (t.hq_country || '').includes(c)) &&
-      !neaCountries.some(c => (t.hq_country || '').includes(c))
+    const seaTargets = targetList.filter((t) =>
+      seaCountries.some((c) => (t.hq_country || '').includes(c))
+    );
+    const gcTargets = targetList.filter((t) =>
+      greaterChinaCountries.some((c) => (t.hq_country || '').includes(c))
+    );
+    const neaTargets = targetList.filter((t) =>
+      neaCountries.some((c) => (t.hq_country || '').includes(c))
+    );
+    const otherTargets = targetList.filter(
+      (t) =>
+        !seaCountries.some((c) => (t.hq_country || '').includes(c)) &&
+        !greaterChinaCountries.some((c) => (t.hq_country || '').includes(c)) &&
+        !neaCountries.some((c) => (t.hq_country || '').includes(c))
     );
 
-    // Build strategy rows based on available targets
+    // Build strategy rows based on available targets (without company names per design requirements)
     if (seaTargets.length > 0) {
-      const topTarget = seaTargets[0];
       geoStrategies.push({
         region: 'Southeast Asia',
-        strategy: `■  Acquire ${topTarget.company_name} (${topTarget.hq_country}) to establish regional footprint\n■  Leverage local distribution networks and customer relationships`,
-        rationale: `■  Access to high-growth ASEAN markets with favorable demographics\n■  Cost-effective manufacturing base and supply chain diversification`
+        strategy: `■  Acquire regional player to establish footprint\n■  Leverage local distribution networks and customer relationships`,
+        rationale: `■  Access to high-growth ASEAN markets with favorable demographics\n■  Cost-effective manufacturing base and supply chain diversification`,
       });
     }
 
     if (gcTargets.length > 0) {
-      const topTarget = gcTargets[0];
       geoStrategies.push({
         region: 'Greater China',
-        strategy: `■  Target ${topTarget.company_name} for technology and scale expansion\n■  Build presence in world's largest manufacturing ecosystem`,
-        rationale: `■  Access to advanced manufacturing capabilities and R&D talent\n■  Strategic positioning in key supply chain hub`
+        strategy: `■  Target local manufacturer for technology and scale expansion\n■  Build presence in world's largest manufacturing ecosystem`,
+        rationale: `■  Access to advanced manufacturing capabilities and R&D talent\n■  Strategic positioning in key supply chain hub`,
       });
     }
 
     if (neaTargets.length > 0) {
-      const topTarget = neaTargets[0];
       geoStrategies.push({
         region: 'Northeast Asia',
-        strategy: `■  Partner with or acquire ${topTarget.company_name} for premium segment\n■  Strengthen technical capabilities through talent acquisition`,
-        rationale: `■  Access to high-value customer segments and premium pricing\n■  Technology transfer and quality improvement opportunities`
+        strategy: `■  Partner with or acquire regional company for premium segment\n■  Strengthen technical capabilities through talent acquisition`,
+        rationale: `■  Access to high-value customer segments and premium pricing\n■  Technology transfer and quality improvement opportunities`,
       });
     }
 
     if (otherTargets.length > 0 && geoStrategies.length < 3) {
-      const topTarget = otherTargets[0];
       geoStrategies.push({
         region: 'Other Asia',
-        strategy: `■  Evaluate ${topTarget.company_name} for niche market entry\n■  Diversify geographic exposure beyond core markets`,
-        rationale: `■  Risk diversification across multiple markets\n■  Access to unique capabilities or customer segments`
+        strategy: `■  Evaluate regional targets for niche market entry\n■  Diversify geographic exposure beyond core markets`,
+        rationale: `■  Risk diversification across multiple markets\n■  Access to unique capabilities or customer segments`,
       });
     }
 
     // Ensure at least 3 rows
     while (geoStrategies.length < 3) {
       geoStrategies.push({
-        region: geoStrategies.length === 0 ? 'Southeast Asia' : (geoStrategies.length === 1 ? 'Greater China' : 'Northeast Asia'),
+        region:
+          geoStrategies.length === 0
+            ? 'Southeast Asia'
+            : geoStrategies.length === 1
+              ? 'Greater China'
+              : 'Northeast Asia',
         strategy: '■  Identify acquisition targets in region\n■  Build local market intelligence',
-        rationale: '■  Expand geographic footprint\n■  Diversify revenue streams'
+        rationale: '■  Expand geographic footprint\n■  Diversify revenue streams',
       });
     }
 
@@ -2982,64 +1617,85 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     const headerHeight = 0.5;
     const rowHeight = 1.2;
 
-    // Header row
+    // Header row (not bold per design requirements)
     const headerOpts = {
       fill: { color: COLORS.headerBg },
       color: COLORS.white,
-      bold: true,
+      bold: false,
       align: 'center',
       valign: 'middle',
-      border: { pt: 2, color: COLORS.white }
+      border: { pt: 2, color: COLORS.white },
     };
 
     const rows = [
       [
         { text: 'Region', options: headerOpts },
         { text: 'Strategy', options: headerOpts },
-        { text: 'Rationale', options: headerOpts }
-      ]
+        { text: 'Rationale', options: headerOpts },
+      ],
     ];
 
-    // Data rows
+    // Data rows (not bold per design requirements)
     geoStrategies.slice(0, 4).forEach((gs, i) => {
       const isLastRow = i === Math.min(geoStrategies.length, 4) - 1;
 
       rows.push([
-        { text: gs.region, options: {
-          fill: { color: COLORS.labelBg },
-          color: COLORS.white,
-          bold: true,
-          fontSize: 12,
-          align: 'center',
-          valign: 'middle',
-          border: { pt: 2, color: COLORS.white }
-        }},
-        { text: gs.strategy, options: {
-          fill: { color: COLORS.white },
-          color: COLORS.black,
-          fontSize: 10,
-          align: 'left',
-          valign: 'top',
-          border: [{ pt: 2, color: COLORS.white }, { pt: 2, color: COLORS.white }, getRowBorder(isLastRow), { pt: 2, color: COLORS.white }]
-        }},
-        { text: gs.rationale, options: {
-          fill: { color: COLORS.white },
-          color: COLORS.black,
-          fontSize: 10,
-          align: 'left',
-          valign: 'top',
-          border: [{ pt: 2, color: COLORS.white }, { pt: 2, color: COLORS.white }, getRowBorder(isLastRow), { pt: 2, color: COLORS.white }]
-        }}
+        {
+          text: gs.region,
+          options: {
+            fill: { color: COLORS.labelBg },
+            color: COLORS.white,
+            bold: false,
+            fontSize: 14,
+            align: 'center',
+            valign: 'middle',
+            border: { pt: 2, color: COLORS.white },
+          },
+        },
+        {
+          text: gs.strategy,
+          options: {
+            fill: { color: COLORS.white },
+            color: COLORS.black,
+            fontSize: 14,
+            align: 'left',
+            valign: 'top',
+            border: [
+              { pt: 2, color: COLORS.white },
+              { pt: 2, color: COLORS.white },
+              getRowBorder(isLastRow),
+              { pt: 2, color: COLORS.white },
+            ],
+          },
+        },
+        {
+          text: gs.rationale,
+          options: {
+            fill: { color: COLORS.white },
+            color: COLORS.black,
+            fontSize: 14,
+            align: 'left',
+            valign: 'top',
+            border: [
+              { pt: 2, color: COLORS.white },
+              { pt: 2, color: COLORS.white },
+              getRowBorder(isLastRow),
+              { pt: 2, color: COLORS.white },
+            ],
+          },
+        },
       ]);
     });
 
     slide.addTable(rows, {
-      x: tableStartX, y: tableStartY, w: 12.54,
+      x: tableStartX,
+      y: tableStartY,
+      w: 12.54,
       colW: colWidths,
       rowH: [headerHeight, ...Array(rows.length - 1).fill(rowHeight)],
       fontFace: 'Segoe UI',
       fontSize: 14,
-      valign: 'middle'
+      valign: 'middle',
     });
 
     addFootnote(slide);
@@ -3051,37 +1707,42 @@ async function generateUTBSlides(companyName, website, research, additionalConte
 
   if (revenueHistory.length >= 2) {
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, 'Revenue Trend');
+    addSlideTitle(slide, 'Financial Highlights');
 
     // Chart data
-    const chartData = [{
-      name: 'Revenue',
-      labels: revenueHistory.map(r => r.year),
-      values: revenueHistory.map(r => r.revenue)
-    }];
+    const chartData = [
+      {
+        name: 'Revenue',
+        labels: revenueHistory.map((r) => r.year),
+        values: revenueHistory.map((r) => r.revenue),
+      },
+    ];
 
-    // Add bar chart
+    // Add bar chart - font Segoe UI with font size 14, Y-axis includes unit
     slide.addChart(pptx.charts.BAR, chartData, {
-      x: 0.5, y: 1.3, w: 12, h: 5.0,
+      x: 0.5,
+      y: 1.3,
+      w: 12,
+      h: 5.0,
       barDir: 'col', // Vertical bars
       barGapWidthPct: 50,
       chartColors: [COLORS.companyBg], // Bright blue bars
       showValue: true,
       dataLabelPosition: 'outEnd',
-      dataLabelFontSize: 10,
+      dataLabelFontSize: 14,
       dataLabelFontFace: 'Segoe UI',
       dataLabelColor: COLORS.black,
-      catAxisTitle: 'Fiscal Year',
-      catAxisTitleFontSize: 10,
-      catAxisLabelFontSize: 10,
+      catAxisTitle: '',
+      catAxisTitleFontSize: 14,
+      catAxisLabelFontSize: 14,
       catAxisLabelFontFace: 'Segoe UI',
       valAxisTitle: fin.revenue_unit || 'JPY 100M',
-      valAxisTitleFontSize: 10,
-      valAxisLabelFontSize: 9,
+      valAxisTitleFontSize: 14,
+      valAxisLabelFontSize: 14,
       valAxisLabelFontFace: 'Segoe UI',
       valAxisMinVal: 0,
       showLegend: false,
-      showTitle: false
+      showTitle: false,
     });
 
     addFootnote(slide, 'Source: Company disclosures, annual reports');
@@ -3110,7 +1771,10 @@ app.post('/api/utb', async (req, res) => {
   console.log('='.repeat(60));
 
   // Respond immediately
-  res.json({ success: true, message: `UTB report for ${companyName} will be emailed in 10-15 minutes.` });
+  res.json({
+    success: true,
+    message: `UTB report for ${companyName} will be emailed in 10-15 minutes.`,
+  });
 
   try {
     // Conduct comprehensive research
@@ -3129,16 +1793,20 @@ app.post('/api/utb', async (req, res) => {
         <p>Your UTB buyer intelligence report is attached.</p>
         <p style="font-size:12px;color:#94a3b8;">Generated: ${new Date().toLocaleString()}</p>
       </div>`,
-      { content: slidesBase64, name: `UTB_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pptx` }
+      {
+        content: slidesBase64,
+        name: `UTB_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pptx`,
+      }
     );
 
     console.log(`[UTB] Slides report sent successfully to ${email}`);
   } catch (error) {
     console.error('[UTB] Error:', error);
-    await sendEmail(email, `UTB Error - ${companyName}`, `<p>Error: ${error.message}</p>`).catch(() => {});
+    await sendEmail(email, `UTB Error - ${companyName}`, `<p>Error: ${error.message}</p>`).catch(
+      () => {}
+    );
   }
 });
-
 
 // ============ HEALTH CHECK ============
 app.get('/health', healthCheck('utb'));
