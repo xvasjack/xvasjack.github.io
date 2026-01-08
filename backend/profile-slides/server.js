@@ -3083,6 +3083,10 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         tableData.push([locationLabel, cleanLocation, null]);
       }
 
+      // Add Shareholding row after HQ - always present with yellow highlight
+      // Fourth element: { highlight: true } indicates yellow background for value cell
+      tableData.push(['Shareholding', 'check speeda & DBD', { highlight: true }]);
+
       // Add Business if available
       if (!isEmptyValue(company.business)) {
         tableData.push(['Business', company.business, null]);
@@ -3175,10 +3179,16 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       };
 
       const rows = tableData.map((row) => {
+        // Check if third element is an options object (for highlighting) or a URL string
+        const thirdElement = row[2];
+        const isHighlighted = thirdElement && typeof thirdElement === 'object' && thirdElement.highlight;
+        const isHyperlink = typeof thirdElement === 'string' && thirdElement.length > 0;
+
         const valueCell = {
           text: formatCellText(row[1]),
           options: {
-            fill: { color: COLORS.white },
+            // Yellow highlight for Shareholding row, white otherwise
+            fill: { color: isHighlighted ? 'FFFF00' : COLORS.white },
             color: COLORS.black,
             align: 'left',
             border: [
@@ -3191,8 +3201,8 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         };
 
         // Add hyperlink if URL is provided (third element in row array)
-        if (row[2]) {
-          valueCell.options.hyperlink = { url: row[2], tooltip: 'Visit company website' };
+        if (isHyperlink) {
+          valueCell.options.hyperlink = { url: thirdElement, tooltip: 'Visit company website' };
           valueCell.options.color = '0563C1'; // Blue hyperlink color
         }
 
@@ -5973,9 +5983,17 @@ IMPORTANT: Always use "- " prefix for each segment line to create point form for
 
 RULES:
 - HARD RULE - TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH:
-  - ALL product names, company names, and any other text in ANY non-English language MUST be translated to English
-  - This applies to ALL languages: Vietnamese, Chinese, Thai, Malay, Indonesian, Hindi, Korean, Japanese, Arabic, Spanish, etc.
+  - ALL text in ANY non-English language MUST be translated to English
+  - This applies to ALL languages: Thai, Vietnamese, Chinese, Malay, Indonesian, Hindi, Korean, Japanese, Arabic, Spanish, etc.
+  - Units: "ไร่" → "rai", "ตร.ม." → "sqm", "ตัน/เดือน" → "tons/month", "พนักงาน" → "employees"
+  - NEVER leave Thai, Chinese, or other non-English characters in the output
   - The user CANNOT translate - you MUST translate everything to English
+- UNCOMMON ABBREVIATIONS - INCLUDE DEFINITIONS INLINE:
+  - For technical/industry abbreviations that are NOT common knowledge, include the full form in parentheses
+  - Example: "PU (Polyurethane)", "EVA (Ethylene Vinyl Acetate)", "ABS (Acrylonitrile Butadiene Styrene)"
+  - Example: "OPP (Oriented Polypropylene)", "PET (Polyethylene Terephthalate)", "HDPE (High-Density Polyethylene)"
+  - Common abbreviations that DON'T need explanation: ISO, FDA, GMP, HACCP, B2B, B2C, CEO, CFO, HQ, USD, EUR, sqm, kg
+  - Use your judgment: if a reader unfamiliar with the industry wouldn't know what it means, include the definition
 - Write ALL text using regular English alphabet only (A-Z, no diacritics, no foreign characters)
 - Remove company suffixes from ALL names: Co., Ltd, JSC, Sdn Bhd, Pte Ltd, Inc, Corp, LLC, GmbH
 - Extract as many metrics as found (8-15 ideally)
@@ -6715,8 +6733,15 @@ REMOVE any metric containing:
 ### 4. TRANSLATE TO ENGLISH
 - All output must be English (A-Z only)
 - Translate Thai/Chinese/Vietnamese text to English
+- Units: "ไร่" → "rai", "ตร.ม." → "sqm", "ตัน/เดือน" → "tons/month"
+- NEVER leave non-English characters in output
 
-### 5. CHECK FOR REDUNDANCY
+### 5. UNCOMMON ABBREVIATIONS
+- For technical abbreviations NOT common knowledge, include full form inline
+- Example: "PU (Polyurethane)", "EVA (Ethylene Vinyl Acetate)", "ABS (Acrylonitrile Butadiene Styrene)"
+- Common abbreviations DON'T need explanation: ISO, FDA, GMP, B2B, B2C, HQ, USD, sqm, kg
+
+### 6. CHECK FOR REDUNDANCY
 - If "Factory Established" has same year as "Est. Year", REMOVE "Factory Established" metric
 - Merge duplicate information
 
@@ -7269,7 +7294,7 @@ async function processSingleWebsite(website, index, total) {
       companyData = finalValidation.data;
     }
 
-    // Step 7: HARD RULE - Filter out empty/meaningless Key Metrics
+    // Step 7: Filter out empty/meaningless Key Metrics
     // Remove metrics that say "No specific X stated", "Not specified", etc.
     const metricsBefore = companyData.key_metrics?.length || 0;
     companyData.key_metrics = filterEmptyMetrics(companyData.key_metrics);
