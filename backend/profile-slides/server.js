@@ -3744,22 +3744,137 @@ function extractMetricsFromText(text) {
   }
 
   // ===== PRODUCTION CAPACITY =====
-  // Various units: tons, MT, units, pieces, sqm, MW, etc.
+  // Covers: English, Thai, Vietnamese, Indonesian/Malay, Chinese, Korean, Hindi, Bengali
   const capacityPatterns = [
+    // English
     /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:tons?|MT|tonnes?|metric tons?)\s*(?:per|\/)\s*(?:year|month|day|annum)/gi,
     /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:units?|pieces?|pcs)\s*(?:per|\/)\s*(?:year|month|day)/gi,
     /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:sqm|square meters?|sq\.?\s*m)\s*(?:per|\/|of)?\s*(?:year|month|production)?/gi,
     /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:MW|megawatts?|GW|gigawatts?)\s*(?:capacity|installed)?/gi,
     /capacity\s*(?:of|:)?\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:tons?|MT|units?|MW)/gi,
-    /ตัน\/ปี|ตันต่อปี/gi, // Thai: tons/year
-    /tấn\/năm|tấn mỗi năm/gi, // Vietnamese: tons/year
-    /톤\/년|연간.*?톤/gi // Korean: tons/year
+    /(?:over|more than)?\s*(\d{1,3}(?:,\d{3})*)\s*(?:tons?|MT)\s*(?:per|\/|a)\s*month/gi,
+    // Thai: "800 ตัน/เดือน", "กำลังการผลิต 800 ตัน"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:ตัน)(?:\/เดือน|ต่อเดือน|\/ปี|ต่อปี)/gi,
+    /กำลังการผลิต.*?(\d{1,3}(?:,\d{3})*)\s*ตัน/gi,
+    // Vietnamese: "800 tấn/tháng", "công suất 800 tấn"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:tấn)(?:\/tháng|\/năm|mỗi tháng|mỗi năm)/gi,
+    /công suất.*?(\d{1,3}(?:,\d{3})*)\s*tấn/gi,
+    // Indonesian/Malay: "800 ton/bulan", "kapasitas 800 ton"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:ton)(?:\/bulan|\/tahun|per bulan|per tahun)/gi,
+    /kapasitas.*?(\d{1,3}(?:,\d{3})*)\s*ton/gi,
+    // Chinese (Simplified & Traditional): "800吨/月", "产能800吨", "產能800噸"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:吨|噸)(?:\/月|\/年|每月|每年)/gi,
+    /(?:产能|產能|产量|產量).*?(\d{1,3}(?:,\d{3})*)\s*(?:吨|噸)/gi,
+    // Korean: "800톤/월", "생산능력 800톤"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:톤)(?:\/월|\/년|월간|연간)/gi,
+    /(?:생산능력|생산량).*?(\d{1,3}(?:,\d{3})*)\s*톤/gi,
+    // Hindi: "800 टन/माह", "उत्पादन क्षमता 800 टन"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:टन)(?:\/माह|\/वर्ष|प्रति माह|प्रति वर्ष)/gi,
+    /(?:उत्पादन क्षमता|क्षमता).*?(\d{1,3}(?:,\d{3})*)\s*टन/gi,
+    // Bengali: "800 টন/মাস", "উৎপাদন ক্ষমতা 800 টন"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:টন)(?:\/মাস|\/বছর)/gi,
+    /(?:উৎপাদন ক্ষমতা|ক্ষমতা).*?(\d{1,3}(?:,\d{3})*)\s*টন/gi
   ];
 
   for (const pattern of capacityPatterns) {
     const match = text.match(pattern);
     if (match) {
       metrics.capacity_text = match[0];
+      break;
+    }
+  }
+
+  // ===== MACHINE COUNTS =====
+  // Covers: English, Thai, Vietnamese, Indonesian/Malay, Chinese, Korean, Hindi, Bengali
+  const machinePatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\s*\+?\s*(?:machines?|equipment|production lines?|manufacturing lines?)/gi,
+    /(?:over|more than|approximately)\s+(\d{1,3}(?:,\d{3})*)\s*(?:machines?|equipment)/gi,
+    // Thai: "250 เครื่อง", "เครื่องจักร 250 เครื่อง"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:เครื่อง|เครื่องจักร)/gi,
+    /เครื่องจักร.*?(\d{1,3}(?:,\d{3})*)\s*(?:เครื่อง|ตัว)/gi,
+    // Vietnamese: "250 máy", "thiết bị 250"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:máy|thiết bị|máy móc)/gi,
+    // Indonesian/Malay: "250 mesin", "peralatan 250"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:mesin|peralatan|unit mesin)/gi,
+    // Chinese: "250台设备", "设备250台", "機器250台"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:台|臺)?\s*(?:设备|機器|机器|機械|机械)/gi,
+    /(?:设备|機器|机器|機械|机械).*?(\d{1,3}(?:,\d{3})*)\s*(?:台|臺|套)/gi,
+    // Korean: "250대 기계", "설비 250대"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:대|台)?\s*(?:기계|설비|장비)/gi,
+    /(?:기계|설비|장비).*?(\d{1,3}(?:,\d{3})*)\s*대/gi,
+    // Hindi: "250 मशीन", "उपकरण 250"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:मशीन|मशीनें|उपकरण)/gi,
+    // Bengali: "250 মেশিন", "যন্ত্রপাতি 250"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:মেশিন|যন্ত্র|যন্ত্রপাতি)/gi
+  ];
+
+  for (const pattern of machinePatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
+      if (numMatch) {
+        const num = parseInt(numMatch[0].replace(/,/g, ''));
+        if (num >= 10 && num <= 10000) { // Reasonable range for machines
+          metrics.machine_count = num;
+          metrics.machine_text = match[0];
+          break;
+        }
+      }
+    }
+  }
+
+  // ===== BUSINESS PARTNERS / DISTRIBUTORS =====
+  // Covers: English, Thai, Vietnamese, Indonesian/Malay, Chinese, Korean, Hindi, Bengali
+  const partnerPatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\s*\+?\s*(?:domestic\s+)?(?:partners?|distributors?|dealers?|resellers?|agents?)/gi,
+    /(?:over|more than)\s+(\d{1,3}(?:,\d{3})*)\s*(?:partners?|distributors?|dealers?)/gi,
+    // Thai: "700 พันธมิตร", "ตัวแทนจำหน่าย 700 ราย"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:พันธมิตร|ตัวแทน|ตัวแทนจำหน่าย|ผู้จัดจำหน่าย|ราย)/gi,
+    /(?:พันธมิตรทางธุรกิจ|ตัวแทนจำหน่าย).*?(\d{1,3}(?:,\d{3})*)/gi,
+    // Vietnamese: "700 đối tác", "nhà phân phối 700"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:đối tác|nhà phân phối|đại lý|đại lý phân phối)/gi,
+    // Indonesian/Malay: "700 mitra", "distributor 700"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:mitra|distributor|agen|mitra bisnis|mitra usaha)/gi,
+    // Chinese: "700家经销商", "合作伙伴700家", "經銷商700家"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:家|個)?\s*(?:经销商|經銷商|合作伙伴|合作夥伴|代理商|分销商|分銷商)/gi,
+    /(?:经销商|經銷商|合作伙伴|合作夥伴|代理商).*?(\d{1,3}(?:,\d{3})*)\s*(?:家|個)?/gi,
+    // Korean: "700개 파트너", "대리점 700개"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:개|家)?\s*(?:파트너|대리점|유통업체|협력사)/gi,
+    /(?:파트너|대리점|유통업체|협력사).*?(\d{1,3}(?:,\d{3})*)\s*개/gi,
+    // Hindi: "700 भागीदार", "वितरक 700"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:भागीदार|वितरक|डीलर|एजेंट)/gi,
+    // Bengali: "700 অংশীদার", "পরিবেশক 700"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:অংশীদার|পরিবেশক|ডিলার|এজেন্ট)/gi
+  ];
+
+  for (const pattern of partnerPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
+      if (numMatch) {
+        const num = parseInt(numMatch[0].replace(/,/g, ''));
+        if (num >= 10 && num <= 10000) { // Reasonable range for partners
+          metrics.partner_count = num;
+          metrics.partner_text = match[0];
+          break;
+        }
+      }
+    }
+  }
+
+  // ===== EXPORT REGIONS =====
+  // Capture region names like "Southeast Asia, South Asia, North Africa"
+  const exportRegionPatterns = [
+    /(?:export(?:ing|s)?|market(?:s)?|expand(?:ed)?)\s+(?:to|into|in)\s+([A-Za-z\s,]+(?:Asia|Africa|Europe|America|Middle East)[A-Za-z\s,]*)/gi,
+    /(?:Southeast Asia|South Asia|North Africa|Middle East|Europe|North America|Latin America|East Asia|Central Asia|Sub-Saharan Africa)[,\s]+(?:and\s+)?(?:Southeast Asia|South Asia|North Africa|Middle East|Europe|North America|Latin America|East Asia|Central Asia|Sub-Saharan Africa)/gi
+  ];
+
+  for (const pattern of exportRegionPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      metrics.export_regions = match[0];
       break;
     }
   }
@@ -3859,11 +3974,23 @@ function extractMetricsFromText(text) {
     }
   }
 
-  // ===== FACTORY SIZE =====
+  // ===== FACTORY SIZE / LAND AREA =====
+  // Covers: sqm, sq ft, rai (Thai), acres, hectares, 坪 (ping), 평 (pyeong)
   const factorySizePatterns = [
-    /(\d{1,3}(?:,\d{3})*)\s*(?:sqm|square meters?|sq\.?\s*m|m2|m²)\s*(?:factory|plant|facility|warehouse|production)/gi,
-    /(?:factory|plant|facility|warehouse)\s*(?:of|:)?\s*(\d{1,3}(?:,\d{3})*)\s*(?:sqm|square meters?)/gi,
-    /(\d{1,3}(?:,\d{3})*)\s*(?:rai|acres?|hectares?)/gi
+    // English
+    /(\d{1,3}(?:,\d{3})*)\s*(?:sqm|square meters?|sq\.?\s*m|m2|m²)\s*(?:factory|plant|facility|warehouse|production|land)?/gi,
+    /(?:factory|plant|facility|warehouse|land area)\s*(?:of|:)?\s*(\d{1,3}(?:,\d{3})*)\s*(?:sqm|square meters?|sq\.?\s*ft|acres?)/gi,
+    /(\d{1,3}(?:,\d{3})*)\s*(?:sq\.?\s*ft|square feet)/gi,
+    // Thai: rai (ไร่), sqm (ตร.ม.)
+    /(\d{1,3}(?:,\d{3})*)\s*(?:ไร่|ตร\.ม\.|ตารางเมตร)/gi,
+    // Indonesian: m2, hektar
+    /(\d{1,3}(?:,\d{3})*)\s*(?:m2|meter persegi|hektar|ha)/gi,
+    // Chinese: 平方米, 亩, 坪
+    /(\d{1,3}(?:,\d{3})*)\s*(?:平方米|平米|亩|畝|坪)/gi,
+    // Korean: 평 (pyeong), 제곱미터
+    /(\d{1,3}(?:,\d{3})*)\s*(?:평|제곱미터|㎡)/gi,
+    // General
+    /(\d{1,3}(?:,\d{3})*)\s*(?:rai|acres?|hectares?|ha)/gi
   ];
 
   for (const pattern of factorySizePatterns) {
@@ -3872,6 +3999,612 @@ function extractMetricsFromText(text) {
       metrics.factory_size = match[0];
       break;
     }
+  }
+
+  // ===== PRODUCTS / SKUs COUNT =====
+  // Important for distributors, manufacturers, retailers
+  const productCountPatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\s*\+?\s*(?:products?|SKUs?|items?|varieties|models?|types?)/gi,
+    /(?:over|more than)\s+(\d{1,3}(?:,\d{3})*)\s*(?:products?|SKUs?|items?)/gi,
+    // Thai: "500 รายการสินค้า", "500 ผลิตภัณฑ์"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:รายการ|ผลิตภัณฑ์|สินค้า|ชนิด)/gi,
+    // Vietnamese: "500 sản phẩm"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:sản phẩm|mặt hàng|loại)/gi,
+    // Indonesian: "500 produk"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:produk|jenis|item|macam)/gi,
+    // Chinese: "500种产品", "500款"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:种|種|款|个|個)?\s*(?:产品|產品|商品)/gi,
+    // Korean: "500개 제품"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:개|종)?\s*(?:제품|상품|품목)/gi
+  ];
+
+  for (const pattern of productCountPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
+      if (numMatch) {
+        const num = parseInt(numMatch[0].replace(/,/g, ''));
+        if (num >= 10 && num <= 100000) {
+          metrics.product_count = num;
+          metrics.product_text = match[0];
+          break;
+        }
+      }
+    }
+  }
+
+  // ===== CUSTOMERS COUNT =====
+  // Important for all businesses
+  const customerCountPatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\s*\+?\s*(?:customers?|clients?|buyers?|accounts?)/gi,
+    /(?:over|more than|serving)\s+(\d{1,3}(?:,\d{3})*)\s*(?:customers?|clients?)/gi,
+    // Thai: "500 ลูกค้า"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:ลูกค้า|ราย|บริษัท)/gi,
+    // Vietnamese: "500 khách hàng"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:khách hàng|khách)/gi,
+    // Indonesian: "500 pelanggan"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:pelanggan|klien|pembeli)/gi,
+    // Chinese: "500家客户"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:家|位|个|個)?\s*(?:客户|客戶|顾客|顧客)/gi,
+    // Korean: "500개 고객"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:개|명)?\s*(?:고객|거래처|클라이언트)/gi
+  ];
+
+  for (const pattern of customerCountPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
+      if (numMatch) {
+        const num = parseInt(numMatch[0].replace(/,/g, ''));
+        if (num >= 5 && num <= 1000000) {
+          metrics.customer_count = num;
+          metrics.customer_text = match[0];
+          break;
+        }
+      }
+    }
+  }
+
+  // ===== FLEET / TRUCKS / VEHICLES =====
+  // Important for logistics, distribution, delivery companies
+  const fleetPatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\s*\+?\s*(?:trucks?|vehicles?|vans?|lorries?|fleet|delivery vehicles?)/gi,
+    /fleet\s*(?:of|:)?\s*(\d{1,3}(?:,\d{3})*)\s*(?:trucks?|vehicles?)/gi,
+    // Thai: "100 คัน", "รถบรรทุก 100 คัน"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:คัน)/gi,
+    /(?:รถบรรทุก|รถขนส่ง|ยานพาหนะ).*?(\d{1,3}(?:,\d{3})*)\s*คัน/gi,
+    // Vietnamese: "100 xe tải"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:xe tải|xe|phương tiện)/gi,
+    // Indonesian: "100 truk"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:truk|kendaraan|mobil|unit armada)/gi,
+    // Chinese: "100辆卡车"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:辆|輛|台|臺)\s*(?:卡车|貨車|车辆|車輛|运输车|運輸車)/gi,
+    // Korean: "100대 트럭"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:대|台)\s*(?:트럭|차량|운송차)/gi
+  ];
+
+  for (const pattern of fleetPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
+      if (numMatch) {
+        const num = parseInt(numMatch[0].replace(/,/g, ''));
+        if (num >= 5 && num <= 10000) {
+          metrics.fleet_count = num;
+          metrics.fleet_text = match[0];
+          break;
+        }
+      }
+    }
+  }
+
+  // ===== RETAIL OUTLETS / STORES / BRANCHES =====
+  // Important for retail chains, franchise businesses
+  const outletPatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\s*\+?\s*(?:outlets?|stores?|shops?|branches?|showrooms?|retail locations?)/gi,
+    /(?:over|more than)\s+(\d{1,3}(?:,\d{3})*)\s*(?:outlets?|stores?|branches?)/gi,
+    // Thai: "100 สาขา", "100 ร้าน"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:สาขา|ร้าน|ร้านค้า|จุดขาย)/gi,
+    // Vietnamese: "100 cửa hàng"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:cửa hàng|chi nhánh|điểm bán)/gi,
+    // Indonesian: "100 toko"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:toko|outlet|cabang|gerai)/gi,
+    // Chinese: "100家门店"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:家|个|個)?\s*(?:门店|門店|店铺|店鋪|分店|零售店)/gi,
+    // Korean: "100개 매장"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:개|곳)?\s*(?:매장|점포|지점|대리점)/gi
+  ];
+
+  for (const pattern of outletPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
+      if (numMatch) {
+        const num = parseInt(numMatch[0].replace(/,/g, ''));
+        if (num >= 2 && num <= 50000) {
+          metrics.outlet_count = num;
+          metrics.outlet_text = match[0];
+          break;
+        }
+      }
+    }
+  }
+
+  // ===== BRANDS CARRIED =====
+  // Important for distributors
+  const brandCountPatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\s*\+?\s*(?:brands?|principals?|labels?)/gi,
+    /(?:carrying|distributing|representing)\s+(\d{1,3}(?:,\d{3})*)\s*(?:brands?)/gi,
+    // Thai: "50 แบรนด์"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:แบรนด์|ยี่ห้อ|ตรา)/gi,
+    // Vietnamese: "50 thương hiệu"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:thương hiệu|nhãn hiệu)/gi,
+    // Indonesian: "50 merek"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:merek|brand)/gi,
+    // Chinese: "50个品牌"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:个|個)?\s*(?:品牌|牌子)/gi,
+    // Korean: "50개 브랜드"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:개)?\s*(?:브랜드|상표)/gi
+  ];
+
+  for (const pattern of brandCountPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
+      if (numMatch) {
+        const num = parseInt(numMatch[0].replace(/,/g, ''));
+        if (num >= 2 && num <= 1000) {
+          metrics.brand_count = num;
+          metrics.brand_text = match[0];
+          break;
+        }
+      }
+    }
+  }
+
+  // ===== DAILY/MONTHLY OUTPUT (units, not weight) =====
+  // Important for manufacturing
+  const outputPatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\s*(?:units?|pieces?|pcs|items?)\s*(?:per|\/|a)\s*(?:day|month)/gi,
+    /(?:daily|monthly)\s*(?:output|production|capacity)\s*(?:of|:)?\s*(\d{1,3}(?:,\d{3})*)/gi,
+    // Thai: "10,000 ชิ้น/วัน"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:ชิ้น|หน่วย)(?:\/วัน|\/เดือน|ต่อวัน|ต่อเดือน)/gi,
+    // Vietnamese: "10,000 sản phẩm/ngày"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:sản phẩm|đơn vị|chiếc)(?:\/ngày|\/tháng)/gi,
+    // Chinese: "日产10,000件"
+    /(?:日产|月产|日產|月產).*?(\d{1,3}(?:,\d{3})*)/gi,
+    /(\d{1,3}(?:,\d{3})*)\s*(?:件|个|個)(?:\/天|\/月|每天|每月)/gi
+  ];
+
+  for (const pattern of outputPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      metrics.output_text = match[0];
+      break;
+    }
+  }
+
+  // ===== WAREHOUSE COUNT =====
+  // Important for distribution, logistics
+  const warehousePatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\s*\+?\s*(?:warehouses?|distribution centers?|DCs?|storage facilities?)/gi,
+    // Thai: "10 คลังสินค้า"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:คลังสินค้า|โกดัง|คลัง)/gi,
+    // Vietnamese: "10 kho"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:kho|nhà kho|kho hàng)/gi,
+    // Indonesian: "10 gudang"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:gudang|warehouse)/gi,
+    // Chinese: "10个仓库"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:个|個)?\s*(?:仓库|倉庫|配送中心)/gi,
+    // Korean: "10개 물류센터"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:개)?\s*(?:물류센터|창고|배송센터)/gi
+  ];
+
+  for (const pattern of warehousePatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
+      if (numMatch) {
+        const num = parseInt(numMatch[0].replace(/,/g, ''));
+        if (num >= 1 && num <= 500) {
+          metrics.warehouse_count = num;
+          metrics.warehouse_text = match[0];
+          break;
+        }
+      }
+    }
+  }
+
+  // ===== COUNTRIES/MARKETS PRESENCE =====
+  // Important for international companies
+  const countryPresencePatterns = [
+    // English
+    /(?:present|presence|operating|available)\s+in\s+(\d+)\s+(?:countries|markets|nations)/gi,
+    /(\d+)\s+(?:countries|markets)\s+(?:worldwide|globally|across)/gi,
+    // Thai: "50 ประเทศ"
+    /(\d+)\s*(?:ประเทศ)/gi,
+    // Vietnamese: "50 quốc gia"
+    /(\d+)\s*(?:quốc gia|nước)/gi,
+    // Chinese: "50个国家"
+    /(\d+)\s*(?:个|個)?\s*(?:国家|國家|市场|市場)/gi,
+    // Korean: "50개국"
+    /(\d+)\s*(?:개국|개 국가|개 시장)/gi
+  ];
+
+  for (const pattern of countryPresencePatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const numMatch = match[0].match(/\d+/);
+      if (numMatch) {
+        const num = parseInt(numMatch[0]);
+        if (num >= 2 && num <= 200) {
+          metrics.country_presence = num;
+          metrics.country_presence_text = match[0];
+          break;
+        }
+      }
+    }
+  }
+
+  // ===== PROJECTS COMPLETED =====
+  // Important for construction, engineering, service companies
+  const projectPatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\s*\+?\s*(?:projects?|installations?|implementations?)\s*(?:completed|delivered)?/gi,
+    /(?:completed|delivered)\s+(\d{1,3}(?:,\d{3})*)\s*(?:projects?)/gi,
+    // Thai: "500 โครงการ"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:โครงการ|งาน)/gi,
+    // Vietnamese: "500 dự án"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:dự án|công trình)/gi,
+    // Indonesian: "500 proyek"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:proyek|projek)/gi,
+    // Chinese: "500个项目"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:个|個)?\s*(?:项目|項目|工程)/gi,
+    // Korean: "500개 프로젝트"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:개)?\s*(?:프로젝트|공사|시공)/gi
+  ];
+
+  for (const pattern of projectPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
+      if (numMatch) {
+        const num = parseInt(numMatch[0].replace(/,/g, ''));
+        if (num >= 10 && num <= 100000) {
+          metrics.project_count = num;
+          metrics.project_text = match[0];
+          break;
+        }
+      }
+    }
+  }
+
+  // ===== INDUSTRY-SPECIFIC: Awards/Recognition =====
+  const awardPatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:awards?|recognitions?|accolades?|honors?)/gi,
+    /(?:won|received|earned)\s*(\d{1,3}(?:,\d{3})*)\+?\s*(?:awards?|prizes?)/gi,
+    // Thai: "20 รางวัล" (awards)
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:รางวัล)/gi,
+    // Vietnamese: "20 giải thưởng"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:giải thưởng)/gi,
+    // Chinese: "20项荣誉" / "20個獎項"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:项荣誉|個獎項|个奖项|项奖)/gi,
+    // Indonesian: "20 penghargaan"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:penghargaan)/gi,
+    // Korean: "20개 수상"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:개\s*수상)/gi,
+  ];
+  for (const pattern of awardPatterns) {
+    const matches = [...text.matchAll(pattern)];
+    for (const match of matches) {
+      const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
+      if (num >= 3 && num <= 1000) {
+        metrics.award_count = num;
+        metrics.award_text = match[0];
+        break;
+      }
+    }
+    if (metrics.award_count) break;
+  }
+
+  // ===== INDUSTRY-SPECIFIC: Patents =====
+  const patentPatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:patents?|intellectual propert)/gi,
+    /(?:hold|own|filed)\s*(\d{1,3}(?:,\d{3})*)\+?\s*(?:patents?)/gi,
+    // Chinese: "50项专利" / "50項專利"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:项专利|項專利|个专利)/gi,
+    // Korean: "50개 특허"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:개\s*특허)/gi,
+    // Thai: "50 สิทธิบัตร"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:สิทธิบัตร)/gi,
+  ];
+  for (const pattern of patentPatterns) {
+    const matches = [...text.matchAll(pattern)];
+    for (const match of matches) {
+      const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
+      if (num >= 5 && num <= 50000) {
+        metrics.patent_count = num;
+        metrics.patent_text = match[0];
+        break;
+      }
+    }
+    if (metrics.patent_count) break;
+  }
+
+  // ===== HOSPITALITY: Hotel Rooms =====
+  const roomPatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:rooms?|suites?|guest rooms?|keys)/gi,
+    /(?:has|with|offers?)\s*(\d{1,3}(?:,\d{3})*)\+?\s*(?:rooms?)/gi,
+    // Thai: "200 ห้องพัก"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:ห้องพัก|ห้อง)/gi,
+    // Vietnamese: "200 phòng"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:phòng)/gi,
+    // Chinese: "200间客房" / "200間客房"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:间客房|間客房|个房间)/gi,
+    // Indonesian: "200 kamar"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:kamar)/gi,
+  ];
+  for (const pattern of roomPatterns) {
+    const matches = [...text.matchAll(pattern)];
+    for (const match of matches) {
+      const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
+      if (num >= 10 && num <= 10000) {
+        metrics.room_count = num;
+        metrics.room_text = match[0];
+        break;
+      }
+    }
+    if (metrics.room_count) break;
+  }
+
+  // ===== HEALTHCARE: Hospital Beds =====
+  const bedPatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:beds?|patient beds?|hospital beds?)/gi,
+    /(?:hospital with|clinic with)\s*(\d{1,3}(?:,\d{3})*)\+?\s*(?:beds?)/gi,
+    // Thai: "500 เตียง"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:เตียง)/gi,
+    // Vietnamese: "500 giường bệnh"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:giường bệnh|giường)/gi,
+    // Chinese: "500张病床" / "500張病床"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:张病床|張病床|个床位)/gi,
+    // Indonesian: "500 tempat tidur"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:tempat tidur)/gi,
+  ];
+  for (const pattern of bedPatterns) {
+    const matches = [...text.matchAll(pattern)];
+    for (const match of matches) {
+      const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
+      if (num >= 20 && num <= 10000) {
+        metrics.bed_count = num;
+        metrics.bed_text = match[0];
+        break;
+      }
+    }
+    if (metrics.bed_count) break;
+  }
+
+  // ===== HEALTHCARE: Doctors/Specialists =====
+  const doctorPatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:doctors?|physicians?|specialists?|medical staff)/gi,
+    // Thai: "100 แพทย์"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:แพทย์|หมอ)/gi,
+    // Vietnamese: "100 bác sĩ"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:bác sĩ)/gi,
+    // Chinese: "100位医生" / "100位醫生"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:位医生|位醫生|名医生)/gi,
+    // Indonesian: "100 dokter"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:dokter)/gi,
+  ];
+  for (const pattern of doctorPatterns) {
+    const matches = [...text.matchAll(pattern)];
+    for (const match of matches) {
+      const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
+      if (num >= 5 && num <= 10000) {
+        metrics.doctor_count = num;
+        metrics.doctor_text = match[0];
+        break;
+      }
+    }
+    if (metrics.doctor_count) break;
+  }
+
+  // ===== EDUCATION: Students =====
+  const studentPatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:students?|learners?|graduates?|alumni)/gi,
+    /(?:trained|educated)\s*(\d{1,3}(?:,\d{3})*)\+?\s*(?:students?)/gi,
+    // Thai: "5,000 นักเรียน"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:นักเรียน|นักศึกษา)/gi,
+    // Vietnamese: "5,000 học sinh"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:học sinh|sinh viên)/gi,
+    // Chinese: "5,000名学生" / "5,000名學生"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:名学生|名學生|个学生)/gi,
+    // Indonesian: "5,000 siswa"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:siswa|mahasiswa)/gi,
+    // Korean: "5,000명 학생"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:명\s*학생)/gi,
+  ];
+  for (const pattern of studentPatterns) {
+    const matches = [...text.matchAll(pattern)];
+    for (const match of matches) {
+      const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
+      if (num >= 50 && num <= 1000000) {
+        metrics.student_count = num;
+        metrics.student_text = match[0];
+        break;
+      }
+    }
+    if (metrics.student_count) break;
+  }
+
+  // ===== EDUCATION: Courses =====
+  const coursePatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:courses?|programs?|classes?|training modules?)/gi,
+    // Thai: "100 หลักสูตร"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:หลักสูตร|คอร์ส)/gi,
+    // Vietnamese: "100 khóa học"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:khóa học)/gi,
+    // Chinese: "100门课程" / "100門課程"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:门课程|門課程|个课程)/gi,
+  ];
+  for (const pattern of coursePatterns) {
+    const matches = [...text.matchAll(pattern)];
+    for (const match of matches) {
+      const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
+      if (num >= 10 && num <= 10000) {
+        metrics.course_count = num;
+        metrics.course_text = match[0];
+        break;
+      }
+    }
+    if (metrics.course_count) break;
+  }
+
+  // ===== REAL ESTATE: Units/Properties =====
+  const unitPatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:units?|properties|apartments?|condos?|villas?|homes?)/gi,
+    /(?:developed|built|sold)\s*(\d{1,3}(?:,\d{3})*)\+?\s*(?:units?|properties)/gi,
+    // Thai: "1,000 ยูนิต"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:ยูนิต|ห้องชุด)/gi,
+    // Vietnamese: "1,000 căn hộ"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:căn hộ|căn)/gi,
+    // Chinese: "1,000套房产" / "1,000套物業"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:套房产|套物業|个单位)/gi,
+    // Indonesian: "1,000 unit"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:unit)/gi,
+  ];
+  for (const pattern of unitPatterns) {
+    const matches = [...text.matchAll(pattern)];
+    for (const match of matches) {
+      const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
+      if (num >= 10 && num <= 100000) {
+        metrics.unit_count = num;
+        metrics.unit_text = match[0];
+        break;
+      }
+    }
+    if (metrics.unit_count) break;
+  }
+
+  // ===== AGRICULTURE: Acreage/Hectares =====
+  const acreagePatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\+?\s*(?:acres?|hectares?|ha)\s*(?:of land|of farm|cultivated)?/gi,
+    // Thai: "1,000 ไร่" (rai = 0.16 hectares)
+    /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\+?\s*(?:ไร่)/gi,
+    // Vietnamese: "1,000 hecta"
+    /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\+?\s*(?:hecta|mẫu)/gi,
+    // Chinese: "1,000公顷" / "1,000畝"
+    /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\+?\s*(?:公顷|畝|亩)/gi,
+    // Indonesian: "1,000 hektar"
+    /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\+?\s*(?:hektar)/gi,
+  ];
+  for (const pattern of acreagePatterns) {
+    const matches = [...text.matchAll(pattern)];
+    for (const match of matches) {
+      const num = parseFloat(String(match[1]).replace(/,/g, ''));
+      if (num >= 10 && num <= 1000000) {
+        metrics.acreage = num;
+        metrics.acreage_text = match[0];
+        break;
+      }
+    }
+    if (metrics.acreage) break;
+  }
+
+  // ===== TECH/DIGITAL: Users/Subscribers =====
+  const userPatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:users?|subscribers?|members?|registered users?|active users?)/gi,
+    /(?:over|more than)\s*(\d{1,3}(?:,\d{3})*)\+?\s*(?:users?|subscribers?)/gi,
+    // Chinese: "100万用户" / "100萬用戶"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:万用户|萬用戶|个用户|名用户)/gi,
+    // Thai: "1,000,000 ผู้ใช้"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:ผู้ใช้|สมาชิก)/gi,
+    // Vietnamese: "1,000,000 người dùng"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:người dùng|thành viên)/gi,
+    // Indonesian: "1,000,000 pengguna"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:pengguna|anggota)/gi,
+    // Korean: "100만 사용자"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:만\s*사용자|명\s*회원)/gi,
+  ];
+  for (const pattern of userPatterns) {
+    const matches = [...text.matchAll(pattern)];
+    for (const match of matches) {
+      const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
+      if (num >= 100 && num <= 1000000000) {
+        metrics.user_count = num;
+        metrics.user_text = match[0];
+        break;
+      }
+    }
+    if (metrics.user_count) break;
+  }
+
+  // ===== TECH/DIGITAL: Downloads =====
+  const downloadPatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:downloads?|installs?|app downloads?)/gi,
+    // Chinese: "100万下载" / "100萬下載"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:万下载|萬下載|次下载)/gi,
+    // Thai: "1,000,000 ดาวน์โหลด"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:ดาวน์โหลด)/gi,
+    // Vietnamese: "1,000,000 lượt tải"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:lượt tải|tải xuống)/gi,
+    // Indonesian: "1,000,000 unduhan"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:unduhan)/gi,
+  ];
+  for (const pattern of downloadPatterns) {
+    const matches = [...text.matchAll(pattern)];
+    for (const match of matches) {
+      const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
+      if (num >= 1000 && num <= 10000000000) {
+        metrics.download_count = num;
+        metrics.download_text = match[0];
+        break;
+      }
+    }
+    if (metrics.download_count) break;
+  }
+
+  // ===== F&B: Menu Items/Recipes =====
+  const menuPatterns = [
+    // English
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:menu items?|dishes?|recipes?|food items?)/gi,
+    // Thai: "100 เมนู"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:เมนู|รายการอาหาร)/gi,
+    // Vietnamese: "100 món ăn"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:món ăn|thực đơn)/gi,
+    // Chinese: "100道菜" / "100道菜品"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:道菜|道菜品|个菜品)/gi,
+    // Indonesian: "100 menu"
+    /(\d{1,3}(?:,\d{3})*)\+?\s*(?:menu makanan)/gi,
+  ];
+  for (const pattern of menuPatterns) {
+    const matches = [...text.matchAll(pattern)];
+    for (const match of matches) {
+      const num = parseInt(String(match[1]).replace(/,/g, ''), 10);
+      if (num >= 20 && num <= 5000) {
+        metrics.menu_count = num;
+        metrics.menu_text = match[0];
+        break;
+      }
+    }
+    if (metrics.menu_count) break;
   }
 
   return metrics;
@@ -4817,6 +5550,18 @@ Before anything else, scan the ENTIRE page for ANY prominently displayed numbers
 - TRANSLATE any non-English labels to English (e.g., "Kota Distribusi" = "Distribution Cities", "Project Baru" = "New Projects")
 - Include ALL visible statistics with their labels in the "Key Metrics" field
 
+NON-ENGLISH WEBSITE PATTERNS (CRITICAL - recognize these!):
+
+THAI: "800 ตัน/เดือน" = 800 tons/month, "250 เครื่อง" = 250 machines, "700 พันธมิตร" = 700 partners
+VIETNAMESE: "800 tấn/tháng" = 800 tons/month, "250 máy" = 250 machines, "700 đối tác" = 700 partners
+INDONESIAN: "800 ton/bulan" = 800 tons/month, "250 mesin" = 250 machines, "700 mitra" = 700 partners
+CHINESE: "800吨/月" = 800 tons/month, "250台设备" = 250 machines, "700家经销商" = 700 distributors
+KOREAN: "800톤/월" = 800 tons/month, "250대 기계" = 250 machines, "700개 파트너" = 700 partners
+HINDI: "800 टन/माह" = 800 tons/month, "250 मशीन" = 250 machines, "700 वितरक" = 700 distributors
+BENGALI: "800 টন/মাস" = 800 tons/month, "250 মেশিন" = 250 machines, "700 পরিবেশক" = 700 distributors
+
+Numbers next to ANY non-English text are likely important metrics - EXTRACT THEM and TRANSLATE the label to English!
+
 EXTRACT AS MANY OF THESE METRICS AS POSSIBLE (aim for 8-15 metrics):
 
 CUSTOMERS & MARKET (CRITICAL - LOOK EVERYWHERE FOR CLIENTS):
@@ -5369,12 +6114,15 @@ async function generateMECESegments(targetDescription, companies) {
           content: `You are an M&A analyst creating a target list slide. Given a target description and company information, create MECE (Mutually Exclusive, Collectively Exhaustive) segments to categorize these companies.
 
 Create segment columns that are:
-1. Relevant to the target description (e.g., for "security product distributors" → segments could be product types like "CCTV", "Access Control", "Fire Safety", etc.)
+1. Relevant to the target description (e.g., for "ink manufacturers" → segments could be ink types like "Gravure Inks", "Flexographic Inks", "Screen Inks", etc.)
 2. Mutually exclusive (each segment is distinct)
-3. CRITICAL: EVERY segment MUST have at least ONE company with a tick!
-   - Do NOT create segments that no company falls into
-   - Only create segments where you can mark at least one company as TRUE
-   - If a segment would have zero ticks, DO NOT include it
+3. CRITICAL: ALL segments must be PARALLEL - the SAME CATEGORY TYPE:
+   - If you choose PRODUCTS as the category → ALL segments must be products (e.g., "Gravure Inks", "Flexographic Inks", "Offset Inks")
+   - If you choose INDUSTRIES as the category → ALL segments must be industries (e.g., "Packaging", "Textiles", "Automotive")
+   - NEVER mix categories! Do NOT put "Location" next to "Products" - that's not parallel!
+   - WRONG: ["Gravure Inks", "Flexographic Inks", "Southeast Asia Location"] ← Location is NOT a product type!
+   - CORRECT: ["Gravure Inks", "Flexographic Inks", "Screen Inks", "Offset Inks"]
+4. EVERY segment MUST have at least ONE company with a tick - no empty columns
 
 For each company, mark which segments apply to them based on their business description.
 
@@ -5388,7 +6136,7 @@ OUTPUT JSON:
 }
 
 Where:
-- "segments" is an array of segment names (short, 2-3 words each) - only include segments that have at least 1 tick!
+- "segments" is an array of segment names (short, 2-3 words each) - ALL must be same category type!
 - "companySegments" maps company ID to an array of booleans indicating which segments apply
 
 Return ONLY valid JSON.`
@@ -5615,7 +6363,17 @@ ${JSON.stringify(companyData, null, 2)}
   - Production capacity (e.g., "800 tons/month", "500 units/day")
   - Customer counts (e.g., "60 customers", "700 partners")
   - Machine counts (e.g., "250 machines")
+  - Partner/distributor counts (e.g., "700 domestic partners")
   - Any other numerical metrics
+- MULTILINGUAL PATTERNS TO LOOK FOR:
+  - THAI: "800 ตัน/เดือน" = 800 tons/month, "250 เครื่อง" = 250 machines, "700 พันธมิตร" = 700 partners
+  - VIETNAMESE: "800 tấn/tháng", "250 máy", "700 đối tác"
+  - INDONESIAN: "800 ton/bulan", "250 mesin", "700 mitra"
+  - CHINESE: "800吨/月", "250台设备", "700家经销商"
+  - KOREAN: "800톤/월", "250대 기계", "700개 파트너"
+  - HINDI: "800 टन/माह", "250 मशीन", "700 वितरक"
+  - BENGALI: "800 টন/মাস", "250 মেশিন", "700 পরিবেশক"
+  - Numbers next to ANY non-English text are likely important!
 - ADD any found statistics to key_metrics that are missing
 
 ### 3. FIND MISSED DISTRIBUTION/EXPORT INFO (CRITICAL)
@@ -5924,6 +6682,111 @@ async function processSingleWebsite(website, index, total) {
     }
     if (regexMetrics.certifications?.length > 0 && !allKeyMetrics.some(m => /certif|iso|haccp/i.test(m.label))) {
       mergedMetrics.push({ value: regexMetrics.certifications.join(', '), label: 'Certifications' });
+    }
+    // NEW: Machine counts
+    if (regexMetrics.machine_count && !allKeyMetrics.some(m => /machine|equipment|line/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.machine_count) + '+', label: 'Machines' });
+    }
+    // NEW: Partner/distributor counts
+    if (regexMetrics.partner_count && !allKeyMetrics.some(m => /partner|distributor|dealer|agent/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.partner_count) + '+', label: 'Business Partners' });
+    }
+    // NEW: Export regions (names, not counts)
+    if (regexMetrics.export_regions && !allKeyMetrics.some(m => /export|market|region/i.test(m.label))) {
+      mergedMetrics.push({ value: regexMetrics.export_regions, label: 'Export Markets' });
+    }
+    // NEW: Product/SKU counts
+    if (regexMetrics.product_count && !allKeyMetrics.some(m => /product|sku|item|model/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.product_count) + '+', label: 'Products' });
+    }
+    // NEW: Customer counts
+    if (regexMetrics.customer_count && !allKeyMetrics.some(m => /customer|client|buyer/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.customer_count) + '+', label: 'Customers' });
+    }
+    // NEW: Fleet/vehicle counts
+    if (regexMetrics.fleet_count && !allKeyMetrics.some(m => /truck|vehicle|fleet|lorr/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.fleet_count) + '+', label: 'Vehicles' });
+    }
+    // NEW: Retail outlet/store counts
+    if (regexMetrics.outlet_count && !allKeyMetrics.some(m => /outlet|store|branch|shop|showroom/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.outlet_count) + '+', label: 'Outlets' });
+    }
+    // NEW: Brand counts (for distributors)
+    if (regexMetrics.brand_count && !allKeyMetrics.some(m => /brand|principal/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.brand_count) + '+', label: 'Brands Carried' });
+    }
+    // NEW: Daily/monthly output text
+    if (regexMetrics.output_text && !allKeyMetrics.some(m => /output|production|daily|monthly/i.test(m.label))) {
+      mergedMetrics.push({ value: regexMetrics.output_text, label: 'Output' });
+    }
+    // NEW: Warehouse counts
+    if (regexMetrics.warehouse_count && !allKeyMetrics.some(m => /warehouse|depot|distribution center/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.warehouse_count) + '+', label: 'Warehouses' });
+    }
+    // NEW: Country presence (market reach)
+    if (regexMetrics.country_presence && !allKeyMetrics.some(m => /countr|market|presence|global/i.test(m.label))) {
+      const label = regexMetrics.country_presence_text || String(regexMetrics.country_presence) + '+ Countries';
+      mergedMetrics.push({ value: String(regexMetrics.country_presence) + '+', label: 'Countries' });
+    }
+    // NEW: Projects completed
+    if (regexMetrics.project_count && !allKeyMetrics.some(m => /project|installation|deployment/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.project_count) + '+', label: 'Projects Completed' });
+    }
+    // NEW: Factory/facility size
+    if (regexMetrics.factory_size && !allKeyMetrics.some(m => /factory|facility|plant|land|area|sqm|sq.*ft/i.test(m.label))) {
+      mergedMetrics.push({ value: regexMetrics.factory_size, label: 'Factory Size' });
+    }
+    // NEW: Office counts
+    if (regexMetrics.office_count && !allKeyMetrics.some(m => /office|location|branch/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.office_count) + '+', label: 'Offices' });
+    }
+    // INDUSTRY: Awards/Recognition
+    if (regexMetrics.award_count && !allKeyMetrics.some(m => /award|recognition|honor/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.award_count) + '+', label: 'Awards' });
+    }
+    // INDUSTRY: Patents
+    if (regexMetrics.patent_count && !allKeyMetrics.some(m => /patent|intellectual/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.patent_count) + '+', label: 'Patents' });
+    }
+    // HOSPITALITY: Hotel Rooms
+    if (regexMetrics.room_count && !allKeyMetrics.some(m => /room|suite|key/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.room_count) + '+', label: 'Rooms' });
+    }
+    // HEALTHCARE: Hospital Beds
+    if (regexMetrics.bed_count && !allKeyMetrics.some(m => /bed|capacity/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.bed_count) + '+', label: 'Beds' });
+    }
+    // HEALTHCARE: Doctors
+    if (regexMetrics.doctor_count && !allKeyMetrics.some(m => /doctor|physician|specialist/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.doctor_count) + '+', label: 'Doctors' });
+    }
+    // EDUCATION: Students
+    if (regexMetrics.student_count && !allKeyMetrics.some(m => /student|learner|graduate|alumni/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.student_count) + '+', label: 'Students' });
+    }
+    // EDUCATION: Courses
+    if (regexMetrics.course_count && !allKeyMetrics.some(m => /course|program|class/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.course_count) + '+', label: 'Courses' });
+    }
+    // REAL ESTATE: Units/Properties
+    if (regexMetrics.unit_count && !allKeyMetrics.some(m => /unit|propert|apartment|condo/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.unit_count) + '+', label: 'Units' });
+    }
+    // AGRICULTURE: Acreage
+    if (regexMetrics.acreage && !allKeyMetrics.some(m => /acre|hectare|land|farm/i.test(m.label))) {
+      mergedMetrics.push({ value: regexMetrics.acreage_text, label: 'Land Area' });
+    }
+    // TECH: Users/Subscribers
+    if (regexMetrics.user_count && !allKeyMetrics.some(m => /user|subscriber|member/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.user_count) + '+', label: 'Users' });
+    }
+    // TECH: Downloads
+    if (regexMetrics.download_count && !allKeyMetrics.some(m => /download|install/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.download_count) + '+', label: 'Downloads' });
+    }
+    // F&B: Menu Items
+    if (regexMetrics.menu_count && !allKeyMetrics.some(m => /menu|dish|recipe/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.menu_count) + '+', label: 'Menu Items' });
     }
 
     // Determine location: prefer AI extraction, fallback to JSON-LD structured address
@@ -6383,6 +7246,18 @@ app.post('/api/generate-ppt', async (req, res) => {
         }
         if (regexMetrics.certifications?.length > 0 && !allKeyMetrics.some(m => /certif|iso|haccp/i.test(m.label))) {
           mergedMetrics.push({ value: regexMetrics.certifications.join(', '), label: 'Certifications' });
+        }
+        // NEW: Machine counts
+        if (regexMetrics.machine_count && !allKeyMetrics.some(m => /machine|equipment|line/i.test(m.label))) {
+          mergedMetrics.push({ value: String(regexMetrics.machine_count) + '+', label: 'Machines' });
+        }
+        // NEW: Partner/distributor counts
+        if (regexMetrics.partner_count && !allKeyMetrics.some(m => /partner|distributor|dealer|agent/i.test(m.label))) {
+          mergedMetrics.push({ value: String(regexMetrics.partner_count) + '+', label: 'Business Partners' });
+        }
+        // NEW: Export regions (names, not counts)
+        if (regexMetrics.export_regions && !allKeyMetrics.some(m => /export|market|region/i.test(m.label))) {
+          mergedMetrics.push({ value: regexMetrics.export_regions, label: 'Export Markets' });
         }
 
         // Determine location: prefer AI extraction, fallback to JSON-LD
