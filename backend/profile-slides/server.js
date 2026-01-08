@@ -3751,15 +3751,87 @@ function extractMetricsFromText(text) {
     /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:sqm|square meters?|sq\.?\s*m)\s*(?:per|\/|of)?\s*(?:year|month|production)?/gi,
     /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:MW|megawatts?|GW|gigawatts?)\s*(?:capacity|installed)?/gi,
     /capacity\s*(?:of|:)?\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:tons?|MT|units?|MW)/gi,
+    /(?:over|more than)?\s*(\d{1,3}(?:,\d{3})*)\s*(?:tons?|MT)\s*(?:per|\/|a)\s*month/gi, // "800 tons per month", "over 800 tons/month"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:ตัน)(?:\/เดือน|ต่อเดือน)/gi, // Thai: tons/month "800 ตัน/เดือน"
+    /กำลังการผลิต.*?(\d{1,3}(?:,\d{3})*)\s*ตัน/gi, // Thai: production capacity X tons
     /ตัน\/ปี|ตันต่อปี/gi, // Thai: tons/year
-    /tấn\/năm|tấn mỗi năm/gi, // Vietnamese: tons/year
-    /톤\/년|연간.*?톤/gi // Korean: tons/year
+    /tấn\/năm|tấn mỗi năm|tấn\/tháng/gi, // Vietnamese: tons/year, tons/month
+    /톤\/년|연간.*?톤|톤\/월/gi // Korean: tons/year, tons/month
   ];
 
   for (const pattern of capacityPatterns) {
     const match = text.match(pattern);
     if (match) {
       metrics.capacity_text = match[0];
+      break;
+    }
+  }
+
+  // ===== MACHINE COUNTS =====
+  // English: "250 machines", "300+ machines", "over 200 machines"
+  // Thai: "250 เครื่อง", "250 เครื่องจักร"
+  const machinePatterns = [
+    /(\d{1,3}(?:,\d{3})*)\s*\+?\s*(?:machines?|equipment|production lines?|manufacturing lines?)/gi,
+    /(?:over|more than|approximately)\s+(\d{1,3}(?:,\d{3})*)\s*(?:machines?|equipment)/gi,
+    /(\d{1,3}(?:,\d{3})*)\s*(?:เครื่อง|เครื่องจักร)/gi, // Thai: machines
+    /เครื่องจักร.*?(\d{1,3}(?:,\d{3})*)\s*(?:เครื่อง|ตัว)/gi, // Thai: machines X units
+    /(\d{1,3}(?:,\d{3})*)\s*(?:máy|thiết bị)/gi, // Vietnamese: machines
+    /(\d{1,3}(?:,\d{3})*)\s*(?:mesin|peralatan)/gi // Indonesian: machines
+  ];
+
+  for (const pattern of machinePatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
+      if (numMatch) {
+        const num = parseInt(numMatch[0].replace(/,/g, ''));
+        if (num >= 10 && num <= 10000) { // Reasonable range for machines
+          metrics.machine_count = num;
+          metrics.machine_text = match[0];
+          break;
+        }
+      }
+    }
+  }
+
+  // ===== BUSINESS PARTNERS / DISTRIBUTORS =====
+  // English: "700 domestic partners", "500 distributors", "300 dealers"
+  // Thai: "700 พันธมิตรทางธุรกิจ", "500 ตัวแทนจำหน่าย"
+  const partnerPatterns = [
+    /(\d{1,3}(?:,\d{3})*)\s*\+?\s*(?:domestic\s+)?(?:partners?|distributors?|dealers?|resellers?|agents?)/gi,
+    /(?:over|more than)\s+(\d{1,3}(?:,\d{3})*)\s*(?:partners?|distributors?|dealers?)/gi,
+    /(\d{1,3}(?:,\d{3})*)\s*(?:พันธมิตร|ตัวแทน|ตัวแทนจำหน่าย|ผู้จัดจำหน่าย)/gi, // Thai: partners/distributors
+    /พันธมิตรทางธุรกิจ.*?(\d{1,3}(?:,\d{3})*)/gi, // Thai: business partners
+    /(\d{1,3}(?:,\d{3})*)\s*(?:đối tác|nhà phân phối|đại lý)/gi, // Vietnamese
+    /(\d{1,3}(?:,\d{3})*)\s*(?:mitra|distributor|agen)/gi // Indonesian
+  ];
+
+  for (const pattern of partnerPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const numMatch = match[0].match(/\d{1,3}(?:,\d{3})*|\d+/);
+      if (numMatch) {
+        const num = parseInt(numMatch[0].replace(/,/g, ''));
+        if (num >= 10 && num <= 10000) { // Reasonable range for partners
+          metrics.partner_count = num;
+          metrics.partner_text = match[0];
+          break;
+        }
+      }
+    }
+  }
+
+  // ===== EXPORT REGIONS =====
+  // Capture region names like "Southeast Asia, South Asia, North Africa"
+  const exportRegionPatterns = [
+    /(?:export(?:ing|s)?|market(?:s)?|expand(?:ed)?)\s+(?:to|into|in)\s+([A-Za-z\s,]+(?:Asia|Africa|Europe|America|Middle East)[A-Za-z\s,]*)/gi,
+    /(?:Southeast Asia|South Asia|North Africa|Middle East|Europe|North America|Latin America|East Asia|Central Asia|Sub-Saharan Africa)[,\s]+(?:and\s+)?(?:Southeast Asia|South Asia|North Africa|Middle East|Europe|North America|Latin America|East Asia|Central Asia|Sub-Saharan Africa)/gi
+  ];
+
+  for (const pattern of exportRegionPatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      metrics.export_regions = match[0];
       break;
     }
   }
@@ -4817,6 +4889,14 @@ Before anything else, scan the ENTIRE page for ANY prominently displayed numbers
 - TRANSLATE any non-English labels to English (e.g., "Kota Distribusi" = "Distribution Cities", "Project Baru" = "New Projects")
 - Include ALL visible statistics with their labels in the "Key Metrics" field
 
+THAI WEBSITE PATTERNS (CRITICAL - recognize these!):
+- "800 ตัน/เดือน" or "800 ตันต่อเดือน" = "800 tons/month" (production capacity)
+- "250 เครื่อง" or "เครื่องจักร 250 เครื่อง" = "250 machines"
+- "700 พันธมิตร" or "พันธมิตรทางธุรกิจ 700 ราย" = "700 business partners"
+- "กำลังการผลิต" = production capacity - look for numbers after this
+- "ผู้จัดจำหน่าย" = distributors
+- Numbers next to Thai text are still important metrics - EXTRACT THEM!
+
 EXTRACT AS MANY OF THESE METRICS AS POSSIBLE (aim for 8-15 metrics):
 
 CUSTOMERS & MARKET (CRITICAL - LOOK EVERYWHERE FOR CLIENTS):
@@ -5369,12 +5449,15 @@ async function generateMECESegments(targetDescription, companies) {
           content: `You are an M&A analyst creating a target list slide. Given a target description and company information, create MECE (Mutually Exclusive, Collectively Exhaustive) segments to categorize these companies.
 
 Create segment columns that are:
-1. Relevant to the target description (e.g., for "security product distributors" → segments could be product types like "CCTV", "Access Control", "Fire Safety", etc.)
+1. Relevant to the target description (e.g., for "ink manufacturers" → segments could be ink types like "Gravure Inks", "Flexographic Inks", "Screen Inks", etc.)
 2. Mutually exclusive (each segment is distinct)
-3. CRITICAL: EVERY segment MUST have at least ONE company with a tick!
-   - Do NOT create segments that no company falls into
-   - Only create segments where you can mark at least one company as TRUE
-   - If a segment would have zero ticks, DO NOT include it
+3. CRITICAL: ALL segments must be PARALLEL - the SAME CATEGORY TYPE:
+   - If you choose PRODUCTS as the category → ALL segments must be products (e.g., "Gravure Inks", "Flexographic Inks", "Offset Inks")
+   - If you choose INDUSTRIES as the category → ALL segments must be industries (e.g., "Packaging", "Textiles", "Automotive")
+   - NEVER mix categories! Do NOT put "Location" next to "Products" - that's not parallel!
+   - WRONG: ["Gravure Inks", "Flexographic Inks", "Southeast Asia Location"] ← Location is NOT a product type!
+   - CORRECT: ["Gravure Inks", "Flexographic Inks", "Screen Inks", "Offset Inks"]
+4. EVERY segment MUST have at least ONE company with a tick - no empty columns
 
 For each company, mark which segments apply to them based on their business description.
 
@@ -5388,7 +5471,7 @@ OUTPUT JSON:
 }
 
 Where:
-- "segments" is an array of segment names (short, 2-3 words each) - only include segments that have at least 1 tick!
+- "segments" is an array of segment names (short, 2-3 words each) - ALL must be same category type!
 - "companySegments" maps company ID to an array of booleans indicating which segments apply
 
 Return ONLY valid JSON.`
@@ -5615,7 +5698,13 @@ ${JSON.stringify(companyData, null, 2)}
   - Production capacity (e.g., "800 tons/month", "500 units/day")
   - Customer counts (e.g., "60 customers", "700 partners")
   - Machine counts (e.g., "250 machines")
+  - Partner/distributor counts (e.g., "700 domestic partners")
   - Any other numerical metrics
+- THAI PATTERNS TO LOOK FOR:
+  - "800 ตัน/เดือน" = 800 tons/month (production capacity)
+  - "250 เครื่อง" = 250 machines
+  - "700 พันธมิตร" = 700 business partners
+  - Numbers next to ANY Thai text are likely important!
 - ADD any found statistics to key_metrics that are missing
 
 ### 3. FIND MISSED DISTRIBUTION/EXPORT INFO (CRITICAL)
@@ -5924,6 +6013,18 @@ async function processSingleWebsite(website, index, total) {
     }
     if (regexMetrics.certifications?.length > 0 && !allKeyMetrics.some(m => /certif|iso|haccp/i.test(m.label))) {
       mergedMetrics.push({ value: regexMetrics.certifications.join(', '), label: 'Certifications' });
+    }
+    // NEW: Machine counts
+    if (regexMetrics.machine_count && !allKeyMetrics.some(m => /machine|equipment|line/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.machine_count) + '+', label: 'Machines' });
+    }
+    // NEW: Partner/distributor counts
+    if (regexMetrics.partner_count && !allKeyMetrics.some(m => /partner|distributor|dealer|agent/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.partner_count) + '+', label: 'Business Partners' });
+    }
+    // NEW: Export regions (names, not counts)
+    if (regexMetrics.export_regions && !allKeyMetrics.some(m => /export|market|region/i.test(m.label))) {
+      mergedMetrics.push({ value: regexMetrics.export_regions, label: 'Export Markets' });
     }
 
     // Determine location: prefer AI extraction, fallback to JSON-LD structured address
@@ -6383,6 +6484,18 @@ app.post('/api/generate-ppt', async (req, res) => {
         }
         if (regexMetrics.certifications?.length > 0 && !allKeyMetrics.some(m => /certif|iso|haccp/i.test(m.label))) {
           mergedMetrics.push({ value: regexMetrics.certifications.join(', '), label: 'Certifications' });
+        }
+        // NEW: Machine counts
+        if (regexMetrics.machine_count && !allKeyMetrics.some(m => /machine|equipment|line/i.test(m.label))) {
+          mergedMetrics.push({ value: String(regexMetrics.machine_count) + '+', label: 'Machines' });
+        }
+        // NEW: Partner/distributor counts
+        if (regexMetrics.partner_count && !allKeyMetrics.some(m => /partner|distributor|dealer|agent/i.test(m.label))) {
+          mergedMetrics.push({ value: String(regexMetrics.partner_count) + '+', label: 'Business Partners' });
+        }
+        // NEW: Export regions (names, not counts)
+        if (regexMetrics.export_regions && !allKeyMetrics.some(m => /export|market|region/i.test(m.label))) {
+          mergedMetrics.push({ value: regexMetrics.export_regions, label: 'Export Markets' });
         }
 
         // Determine location: prefer AI extraction, fallback to JSON-LD
