@@ -2166,7 +2166,8 @@ const COMMON_SHORTFORMS = [
   'FY',                    // Fiscal Year
   'YoY', 'QoQ',            // Year over Year, Quarter over Quarter
   'B2B', 'B2C',            // Business models
-  'AI', 'IT', 'IoT'        // Tech terms - widely known
+  'AI', 'IT', 'IoT',       // Tech terms - widely known
+  'CE', 'UL', 'FDA', 'GMP', 'HACCP'  // Well-known certifications
 ];
 
 // Detect shortforms in text and return formatted note (only uncommon ones)
@@ -2362,7 +2363,11 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         const country = parts[parts.length - 1] || 'Other';
         // HQ city is first part only (just the district/area)
         // If only 1 part (country only), hqCity should be empty, not the country name
-        const hqCity = parts.length > 1 ? (parts[0] || '') : '';
+        // EXCEPTION: Singapore is a city-state - if country is Singapore, hqCity should also be Singapore
+        let hqCity = parts.length > 1 ? (parts[0] || '') : '';
+        if (country.toLowerCase() === 'singapore' && !hqCity) {
+          hqCity = 'Singapore';
+        }
         return { country, hqCity };
       };
 
@@ -2805,10 +2810,14 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           /\b(distributor|partner|supplier|customer|client|vendor)\s+[1-3]\b/gi,
           /\b[a-z]+\s+[a-c],\s*[a-z]+\s+[a-c]/gi,  // "Something A, Something B"
           /\b[a-z]+\s+[x-z],\s*[a-z]+\s+[x-z]/gi,  // "Something X, Something Y"
+          /\b(brand|product|item|supplier|customer)\s*\d+\s*,/gi,  // "brand1, brand2" or "product 1, product 2"
+          /\bbrand\d+\b.*\bbrand\d+\b/gi,  // "brands1, brands2, brands3" pattern
         ];
         for (const pattern of placeholderPatterns) {
           if (pattern.test(strVal)) return true;
         }
+        // Also check for simple numbered placeholder patterns like "brands1, brands2"
+        if (/\b\w+[1-3]\s*,\s*\w+[1-3]/i.test(strVal)) return true;
         return false;
       };
 
@@ -2922,6 +2931,21 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       const excludeKeywords = categoryKeywords[rightTableCategory] || [];
 
       // Add key metrics as separate rows if available (skip duplicates and empty values)
+      // Helper: Check if metric value has significant overlap with business description
+      const businessLower = (company.business || '').toLowerCase();
+      const businessWords = businessLower.split(/\W+/).filter(w => w.length > 3);
+
+      const isDuplicateOfBusiness = (metricValue) => {
+        if (!metricValue || businessWords.length === 0) return false;
+        const valueLower = metricValue.toLowerCase();
+        const valueWords = valueLower.split(/\W+/).filter(w => w.length > 3);
+        if (valueWords.length === 0) return false;
+        // Count overlapping significant words
+        const overlap = valueWords.filter(w => businessWords.includes(w)).length;
+        // If >60% of metric value words are in business, it's duplicate
+        return overlap / valueWords.length > 0.6;
+      };
+
       if (company.key_metrics && Array.isArray(company.key_metrics)) {
         company.key_metrics.forEach(metric => {
           // Ensure label and value are strings (AI may return objects/arrays)
@@ -2937,9 +2961,13 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
             // Skip if this category is already shown on the right table
             const isInRightTable = excludeKeywords.some(kw => labelLower.includes(kw));
 
+            // Skip "Key Metrics" if it duplicates Business description content
+            const isKeyMetricsDupe = labelLower === 'key metrics' && isDuplicateOfBusiness(metricValue);
+
             // Skip if this label already exists or is duplicate of business/location
             if (!isExcluded &&
                 !isInRightTable &&
+                !isKeyMetricsDupe &&
                 !existingLabels.has(labelLower) &&
                 !labelLower.includes('business') &&
                 !labelLower.includes('location')) {
@@ -3182,23 +3210,17 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         const hasSuppliers = relationships.suppliers && relationships.suppliers.length > 0;
 
         // Build right-side table with priority order
+        // NOTE: Key Customers should NOT be on right side - they belong in key_metrics on left side
         let prioritizedItems = [];
 
-        // Priority 1: Key Customers
-        if (hasCustomers) {
-          const customerList = relationships.customers.slice(0, 8).join(', ');
-          prioritizedItems.push({ label: 'Key Customers', value: customerList });
-          console.log(`  Right side: Adding ${relationships.customers.length} customers`);
-        }
-
-        // Priority 2: Brands (important for distributors, retailers)
+        // Priority 1: Brands (important for distributors, retailers)
         if (hasBrands) {
           const brandList = relationships.brands.slice(0, 8).join(', ');
           prioritizedItems.push({ label: 'Brands', value: brandList });
           console.log(`  Right side: Adding ${relationships.brands.length} brands`);
         }
 
-        // Priority 3: Products/Applications breakdown
+        // Priority 2: Products/Applications breakdown
         let validBreakdownItems = (company.breakdown_items || [])
           .map(item => ({
             label: ensureString(item?.label),
@@ -3219,14 +3241,14 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         // Add breakdown items to prioritized list
         prioritizedItems = prioritizedItems.concat(validBreakdownItems);
 
-        // Priority 4: Principals (for authorized distributors)
+        // Priority 3: Principals (for authorized distributors)
         if (hasPrincipals) {
           const principalList = relationships.principals.slice(0, 6).join(', ');
           prioritizedItems.push({ label: 'Principals', value: principalList });
           console.log(`  Right side: Adding ${relationships.principals.length} principals`);
         }
 
-        // Priority 4: Suppliers (for trading/procurement companies)
+        // Priority 3: Suppliers (for trading/procurement companies)
         if (hasSuppliers) {
           const supplierList = relationships.suppliers.slice(0, 6).join(', ');
           prioritizedItems.push({ label: 'Suppliers', value: supplierList });
@@ -5377,6 +5399,36 @@ Create MECE segments for these ${targetDescription} companies and mark which seg
 
     const result = JSON.parse(response.choices[0].message.content);
     console.log(`Generated ${result.segments?.length || 0} MECE segments`);
+
+    // Filter out segments that have NO ticks from any company (useless columns)
+    if (result.segments && result.companySegments) {
+      const segmentsWithTicks = [];
+      const indicesToKeep = [];
+
+      result.segments.forEach((seg, segIdx) => {
+        // Check if ANY company has a tick for this segment
+        const hasTick = Object.values(result.companySegments).some(
+          ticks => Array.isArray(ticks) && ticks[segIdx] === true
+        );
+        if (hasTick) {
+          segmentsWithTicks.push(seg);
+          indicesToKeep.push(segIdx);
+        } else {
+          console.log(`  Removing empty segment column: "${seg}" (no companies ticked)`);
+        }
+      });
+
+      // Update segments and companySegments to only keep columns with ticks
+      if (indicesToKeep.length < result.segments.length) {
+        result.segments = segmentsWithTicks;
+        for (const companyId of Object.keys(result.companySegments)) {
+          const oldTicks = result.companySegments[companyId];
+          result.companySegments[companyId] = indicesToKeep.map(idx => oldTicks[idx] || false);
+        }
+        console.log(`  Filtered to ${result.segments.length} segments with ticks`);
+      }
+    }
+
     return result;
   } catch (e) {
     console.error('MECE segmentation error:', e.message);
@@ -5838,7 +5890,7 @@ async function processSingleWebsite(website, index, total) {
       mergedMetrics.push({ value: String(regexMetrics.office_count), label: regexMetrics.office_text || 'offices' });
     }
     if (regexMetrics.employee_count && !allKeyMetrics.some(m => /employee|staff|worker/i.test(m.label))) {
-      mergedMetrics.push({ value: String(regexMetrics.employee_count), label: 'employees' });
+      mergedMetrics.push({ value: String(regexMetrics.employee_count), label: 'Employees' });
     }
     if (regexMetrics.years_experience && !allKeyMetrics.some(m => /year|experience/i.test(m.label))) {
       mergedMetrics.push({ value: String(regexMetrics.years_experience), label: 'years experience' });
@@ -6297,7 +6349,7 @@ app.post('/api/generate-ppt', async (req, res) => {
           mergedMetrics.push({ value: String(regexMetrics.office_count), label: regexMetrics.office_text || 'offices' });
         }
         if (regexMetrics.employee_count && !allKeyMetrics.some(m => /employee|staff|worker/i.test(m.label))) {
-          mergedMetrics.push({ value: String(regexMetrics.employee_count), label: 'employees' });
+          mergedMetrics.push({ value: String(regexMetrics.employee_count), label: 'Employees' });
         }
         if (regexMetrics.years_experience && !allKeyMetrics.some(m => /year|experience/i.test(m.label))) {
           mergedMetrics.push({ value: String(regexMetrics.years_experience), label: 'years experience' });
