@@ -3917,8 +3917,8 @@ async function extractFullAddress(scrapedContent, websiteUrl, currentLocation) {
   const parts = currentLocation.split(',').map(p => p.trim()).filter(p => p);
   const isSingapore = parts[parts.length - 1]?.toLowerCase() === 'singapore';
 
-  // Singapore needs 2 levels, others need 3
-  const requiredLevels = isSingapore ? 2 : 3;
+  // 2 levels for all countries (state/province, country)
+  const requiredLevels = 2;
   if (parts.length >= requiredLevels) {
     return currentLocation; // Already valid
   }
@@ -3935,30 +3935,30 @@ async function extractFullAddress(scrapedContent, websiteUrl, currentLocation) {
       messages: [
         {
           role: 'system',
-          content: `You are an address extraction specialist. Extract the COMPLETE headquarters address.
+          content: `You are an address extraction specialist. Extract the headquarters location.
 
-TASK: Find the full physical address and return EXACTLY ${requiredLevels} location levels.
+TASK: Find the location and return EXACTLY 2 levels: "State/Province, Country"
 
 ${isSingapore ? `
 SINGAPORE FORMAT (2 levels): "Area/District, Singapore"
 Examples: "Jurong West, Singapore", "Tuas, Singapore", "Woodlands, Singapore"
 Look for: postal codes (6 digits), street names, building names to identify the area.
 ` : `
-NON-SINGAPORE FORMAT (3 levels): "City/District, State/Province, Country"
+FORMAT (2 levels): "State/Province, Country"
 Examples:
-- Thailand: "Bangna, Bangkok, Thailand" or "Bang Phli, Samut Prakan, Thailand"
-- Malaysia: "Shah Alam, Selangor, Malaysia"
-- Indonesia: "Tangerang, Banten, Indonesia"
-- Vietnam: "Thu Duc, Ho Chi Minh City, Vietnam"
+- Thailand: "Bangkok, Thailand" or "Samut Prakan, Thailand"
+- Malaysia: "Selangor, Malaysia" or "Penang, Malaysia"
+- Indonesia: "Banten, Indonesia" or "East Java, Indonesia"
+- Vietnam: "Ho Chi Minh City, Vietnam" or "Hanoi, Vietnam"
+- Philippines: "Metro Manila, Philippines" or "Cebu, Philippines"
 
-CRITICAL: Look for the FULL address with street, district, city, province.
-From the address, extract: City/District + Province/State + Country
+CRITICAL: Extract the STATE/PROVINCE level (not city/district) + Country
 `}
 
 Current incomplete location: "${currentLocation}"
 You MUST find more specific location details from the content.
 
-Return JSON: { "location": "City, Province, Country" } or { "location": "Area, Singapore" }
+Return JSON: { "location": "Province, Country" } or { "location": "Area, Singapore" }
 If you cannot find more details, return: { "location": "" }`
         },
         {
@@ -5942,11 +5942,10 @@ async function processSingleWebsite(website, index, total) {
     // Validate and fix HQ format
     let validatedLocation = validateAndFixHQFormat(finalLocation, trimmedWebsite);
 
-    // FIX #1: If location is incomplete (< required levels), retry with focused extraction
+    // FIX #1: If location is incomplete (< 2 levels), retry with focused extraction
     if (validatedLocation) {
       const locParts = validatedLocation.split(',').map(p => p.trim()).filter(p => p);
-      const isSG = locParts[locParts.length - 1]?.toLowerCase() === 'singapore';
-      const requiredLevels = isSG ? 2 : 3;
+      const requiredLevels = 2; // 2 levels for all countries (state/province, country)
       if (locParts.length < requiredLevels) {
         console.log(`  [${index + 1}] Step 6b: HQ incomplete (${locParts.length}/${requiredLevels} levels), retrying...`);
         const improvedLocation = await extractFullAddress(scraped.content, trimmedWebsite, validatedLocation);
@@ -6401,11 +6400,10 @@ app.post('/api/generate-ppt', async (req, res) => {
         // Validate and fix HQ format
         let validatedLocation = validateAndFixHQFormat(finalLocation, website);
 
-        // FIX #1: If location is incomplete, retry with focused extraction
+        // FIX #1: If location is incomplete (< 2 levels), retry with focused extraction
         if (validatedLocation) {
           const locParts = validatedLocation.split(',').map(p => p.trim()).filter(p => p);
-          const isSG = locParts[locParts.length - 1]?.toLowerCase() === 'singapore';
-          const requiredLevels = isSG ? 2 : 3;
+          const requiredLevels = 2; // 2 levels for all countries (state/province, country)
           if (locParts.length < requiredLevels) {
             console.log(`  HQ incomplete (${locParts.length}/${requiredLevels} levels), retrying...`);
             const improvedLocation = await extractFullAddress(scraped.content, website, validatedLocation);
