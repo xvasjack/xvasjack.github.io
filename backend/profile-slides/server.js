@@ -4258,6 +4258,201 @@ function extractCustomersFromSections(rawHtml) {
   ])].slice(0, 30);
 }
 
+// ===== GPT-4o Vision-based Logo Reading =====
+// Extracts company/brand names by actually reading logo images with GPT-4o vision
+async function extractNamesFromLogosWithVision(rawHtml, websiteUrl) {
+  if (!rawHtml) return { customers: [], brands: [] };
+
+  try {
+    // Step 1: Find images in customer/client/partner/brand sections
+    const sectionKeywords = [
+      'client', 'customer', 'partner', 'brand', 'principal', 'supplier',
+      'trusted', 'work with', 'served', 'portfolio'
+    ];
+    const keywordPattern = sectionKeywords.join('|');
+
+    // Find relevant sections
+    const sectionPattern = new RegExp(
+      `<(?:section|div|ul|article)[^>]*(?:class|id)=["'][^"']*(?:${keywordPattern})[^"']*["'][^>]*>([\\s\\S]*?)<\\/(?:section|div|ul|article)>`,
+      'gi'
+    );
+    const headingPattern = new RegExp(
+      `<h[1-6][^>]*>[^<]*(?:${keywordPattern})[^<]*<\\/h[1-6]>([\\s\\S]{0,5000}?)(?=<h[1-6]|<\\/section|<\\/main|$)`,
+      'gi'
+    );
+
+    let relevantHtml = '';
+    let match;
+    while ((match = sectionPattern.exec(rawHtml)) !== null) {
+      relevantHtml += match[0] + '\n';
+    }
+    while ((match = headingPattern.exec(rawHtml)) !== null) {
+      relevantHtml += match[0] + '\n';
+    }
+
+    // If no relevant sections found, check for logo grids anywhere
+    if (!relevantHtml) {
+      const logoGridPattern = /<(?:div|ul)[^>]*class=["'][^"']*(?:logo|grid|carousel|slider)[^"']*["'][^>]*>[\s\S]*?<\/(?:div|ul)>/gi;
+      while ((match = logoGridPattern.exec(rawHtml)) !== null) {
+        relevantHtml += match[0] + '\n';
+      }
+    }
+
+    if (!relevantHtml) {
+      console.log('    Vision: No customer/brand sections found');
+      return { customers: [], brands: [] };
+    }
+
+    // Step 2: Extract image URLs from relevant sections
+    const imgPattern = /<img[^>]*src=["']([^"']+)["'][^>]*>/gi;
+    const imageUrls = [];
+    while ((match = imgPattern.exec(relevantHtml)) !== null) {
+      let imgUrl = match[1];
+
+      // Skip tiny images, icons, and data URIs
+      if (imgUrl.startsWith('data:')) continue;
+      if (/icon|favicon|pixel|spacer|1x1|loading|placeholder/i.test(imgUrl)) continue;
+
+      // Convert relative URLs to absolute
+      if (!imgUrl.startsWith('http')) {
+        try {
+          const base = new URL(websiteUrl);
+          imgUrl = new URL(imgUrl, base.origin).href;
+        } catch {
+          continue;
+        }
+      }
+
+      imageUrls.push(imgUrl);
+    }
+
+    // Limit to 8 images to avoid rate limits and keep response time reasonable
+    const limitedUrls = imageUrls.slice(0, 8);
+
+    if (limitedUrls.length === 0) {
+      console.log('    Vision: No logo images found in sections');
+      return { customers: [], brands: [] };
+    }
+
+    console.log(`    Vision: Found ${limitedUrls.length} logo images to analyze`);
+
+    // Step 3: Fetch images as base64 (parallel, with timeout)
+    const imageContents = [];
+    const fetchPromises = limitedUrls.map(async (url) => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5000); // 5s timeout per image
+
+        const response = await fetch(url, {
+          signal: controller.signal,
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; ProfileBot/1.0)' }
+        });
+        clearTimeout(timeout);
+
+        if (!response.ok) return null;
+
+        const contentType = response.headers.get('content-type') || '';
+        if (!contentType.includes('image')) return null;
+
+        const buffer = await response.buffer();
+        if (buffer.length < 500) return null; // Skip tiny images
+        if (buffer.length > 2 * 1024 * 1024) return null; // Skip > 2MB
+
+        const base64 = buffer.toString('base64');
+        const mimeType = contentType.split(';')[0] || 'image/jpeg';
+
+        return { url, base64, mimeType };
+      } catch {
+        return null;
+      }
+    });
+
+    const results = await Promise.all(fetchPromises);
+    const validImages = results.filter(r => r !== null);
+
+    if (validImages.length === 0) {
+      console.log('    Vision: Failed to fetch any logo images');
+      return { customers: [], brands: [] };
+    }
+
+    console.log(`    Vision: Successfully fetched ${validImages.length} images, sending to GPT-4o...`);
+
+    // Step 4: Send to GPT-4o Vision (single API call with all images)
+    const visionContent = [
+      {
+        type: 'text',
+        text: `These are logo images from a company website's "clients", "partners", or "brands" section.
+For each logo image, identify the company or brand name shown.
+Return ONLY a JSON object with this exact format:
+{"customers": ["Company A", "Company B"], "brands": ["Brand X", "Brand Y"]}
+
+Rules:
+- "customers" = companies that appear to be clients/customers (usually corporate logos)
+- "brands" = product brands or consumer brands (usually product logos)
+- If you can't read a logo clearly, skip it
+- Return empty arrays if no names can be identified
+- Do NOT include generic words like "logo", "image", "client"
+- Return ONLY the JSON, no explanation`
+      }
+    ];
+
+    // Add all images to the content
+    for (const img of validImages) {
+      visionContent.push({
+        type: 'image_url',
+        image_url: {
+          url: `data:${img.mimeType};base64,${img.base64}`,
+          detail: 'low' // Use low detail to reduce tokens and speed up
+        }
+      });
+    }
+
+    const visionResponse = await withRetry(async () => {
+      return await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: visionContent }],
+        max_tokens: 500,
+        temperature: 0.1
+      });
+    }, 2, 3000); // 2 retries, 3s base delay for rate limits
+
+    const responseText = visionResponse.choices[0]?.message?.content || '{}';
+
+    // Parse JSON response
+    let parsed = { customers: [], brands: [] };
+    try {
+      // Extract JSON from response (handle markdown code blocks)
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0]);
+      }
+    } catch (parseErr) {
+      console.log(`    Vision: Failed to parse response: ${responseText.substring(0, 100)}`);
+    }
+
+    // Clean and validate names
+    const cleanNames = (arr) => {
+      if (!Array.isArray(arr)) return [];
+      return arr
+        .map(name => cleanCustomerName(String(name)))
+        .filter(name => name && name.length >= 2);
+    };
+
+    const result = {
+      customers: cleanNames(parsed.customers),
+      brands: cleanNames(parsed.brands)
+    };
+
+    console.log(`    Vision: Identified ${result.customers.length} customers, ${result.brands.length} brands`);
+
+    return result;
+
+  } catch (error) {
+    console.log(`    Vision: Error - ${error.message}`);
+    return { customers: [], brands: [] };
+  }
+}
+
 // ===== Business Type Detection =====
 // Detects B2C, project-based, or industrial based on keywords in business description
 function detectBusinessType(businessDescription, scrapedContent) {
@@ -5753,18 +5948,35 @@ async function processSingleWebsite(website, index, total) {
     }
 
     // FIX #5: Extract categorized business relationships (customers, suppliers, principals, brands)
-    console.log(`  [${index + 1}] Step 6d: Extracting business relationships...`);
+    console.log(`  [${index + 1}] Step 6d: Extracting business relationships (metadata)...`);
     const businessRelationships = extractBusinessRelationships(scraped.rawHtml);
+
+    // Step 6e: Use GPT-4o Vision to read logo images (more accurate than metadata)
+    console.log(`  [${index + 1}] Step 6e: Reading logos with GPT-4o Vision...`);
+    const visionResults = await extractNamesFromLogosWithVision(scraped.rawHtml, trimmedWebsite);
+
+    // Merge vision results with metadata-based extraction
+    // Vision results take priority as they're more accurate
+    const allCustomers = [...new Set([
+      ...visionResults.customers,
+      ...customerNamesFromImages,
+      ...businessRelationships.customers
+    ])];
+    const allBrands = [...new Set([
+      ...visionResults.brands,
+      ...businessRelationships.brands
+    ])];
+
+    businessRelationships.customers = allCustomers;
+    businessRelationships.brands = allBrands;
+
     const relationshipCounts = Object.entries(businessRelationships)
       .filter(([, arr]) => arr.length > 0)
       .map(([key, arr]) => `${key}: ${arr.length}`)
       .join(', ');
     if (relationshipCounts) {
-      console.log(`  [${index + 1}] Found relationships: ${relationshipCounts}`);
+      console.log(`  [${index + 1}] Total relationships: ${relationshipCounts}`);
     }
-    // Also merge with image-based extraction for customers
-    const allCustomerNames = [...new Set([...customerNamesFromImages, ...businessRelationships.customers])];
-    businessRelationships.customers = allCustomerNames;
 
     // Combine all extracted data (mandatory fields supplemented by web search)
     // Use ensureString() for all AI-generated fields to prevent [object Object] issues
@@ -6194,17 +6406,34 @@ app.post('/api/generate-ppt', async (req, res) => {
         }
 
         // FIX #5: Extract categorized business relationships (customers, suppliers, principals, brands)
+        console.log('  Step 5b: Extracting business relationships (metadata)...');
         const businessRelationships = extractBusinessRelationships(scraped.rawHtml);
+
+        // Step 5c: Use GPT-4o Vision to read logo images
+        console.log('  Step 5c: Reading logos with GPT-4o Vision...');
+        const visionResults = await extractNamesFromLogosWithVision(scraped.rawHtml, website);
+
+        // Merge vision results with metadata-based extraction
+        const allCustomers = [...new Set([
+          ...visionResults.customers,
+          ...customerNamesFromImages,
+          ...businessRelationships.customers
+        ])];
+        const allBrands = [...new Set([
+          ...visionResults.brands,
+          ...businessRelationships.brands
+        ])];
+
+        businessRelationships.customers = allCustomers;
+        businessRelationships.brands = allBrands;
+
         const relationshipCounts = Object.entries(businessRelationships)
           .filter(([, arr]) => arr.length > 0)
           .map(([key, arr]) => `${key}: ${arr.length}`)
           .join(', ');
         if (relationshipCounts) {
-          console.log(`  Found relationships: ${relationshipCounts}`);
+          console.log(`  Total relationships: ${relationshipCounts}`);
         }
-        // Also merge with image-based extraction for customers
-        const allCustomerNames = [...new Set([...customerNamesFromImages, ...businessRelationships.customers])];
-        businessRelationships.customers = allCustomerNames;
 
         let companyData = {
           website: scraped.url,
