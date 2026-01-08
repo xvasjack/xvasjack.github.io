@@ -4572,7 +4572,7 @@ function cleanCustomerName(text) {
 // AI Agent 1: Extract company name, established year, location
 // Using GPT-4o (not mini) because location extraction is CRITICAL and needs:
 // - Accurate non-English parsing (Thai, Vietnamese addresses)
-// - Complex instruction following (3-level format, province detection)
+// - Simple 2-level format (State/Province, Country)
 // - This is the most important extraction - wrong HQ ruins the profile
 async function extractBasicInfo(scrapedContent, websiteUrl) {
   try {
@@ -4586,82 +4586,40 @@ async function extractBasicInfo(scrapedContent, websiteUrl) {
 OUTPUT JSON with these fields:
 - company_name: Company name with first letter of each word capitalized. Remove suffixes like Limited, Ltd, Sdn Bhd, Pte Ltd, PT, Inc, Corp, Company.
 - established_year: Clean numbers only (e.g., "1995"), leave empty if not found
-- location: HEADQUARTERS ONLY - extract ONLY the main HQ location, NEVER include branches/factories/warehouses/offices.
+- location: HEADQUARTERS ONLY - extract ONLY the main HQ location.
 
-  CRITICAL: EXACTLY 3 LEVELS for non-Singapore countries: "City/District, State/Province, Country"
-  CRITICAL: EXACTLY 2 LEVELS for Singapore: "Area, Singapore"
+LOCATION FORMAT - EXACTLY 2 LEVELS: "State/Province, Country"
+- NO city names, NO district names, NO street addresses
+- Just STATE/PROVINCE and COUNTRY
 
-  WRONG (too few levels):
-  - "Selangor, Malaysia" ← WRONG! Missing city
-  - "Bangkok, Thailand" ← WRONG! Missing district
-  - "Jakarta, Indonesia" ← WRONG! Missing area
+CORRECT EXAMPLES (2 levels only):
+- Malaysia: "Selangor, Malaysia", "Johor, Malaysia", "Penang, Malaysia"
+- Thailand: "Bangkok, Thailand", "Samut Prakan, Thailand", "Rayong, Thailand", "Chonburi, Thailand"
+- Indonesia: "West Java, Indonesia", "Banten, Indonesia", "East Java, Indonesia"
+- Vietnam: "Ho Chi Minh City, Vietnam", "Hanoi, Vietnam", "Binh Duong, Vietnam"
+- Philippines: "Metro Manila, Philippines", "Cebu, Philippines"
+- Singapore: "Singapore" (just country name, no area needed)
 
-  WRONG (too many levels):
-  - "Seksyen 27, Shah Alam, Selangor, Malaysia" ← WRONG! 4 levels, use only 3
-  - "Jalan ABC, Puchong, Selangor, Malaysia" ← WRONG! No street names
+WRONG (too many levels - NO city/district names!):
+- "Shah Alam, Selangor, Malaysia" ← WRONG! Just "Selangor, Malaysia"
+- "Bang Bon, Bangkok, Thailand" ← WRONG! Just "Bangkok, Thailand"
+- "Tangerang, Banten, Indonesia" ← WRONG! Just "Banten, Indonesia"
 
-  WRONG (includes non-HQ):
-  - "HQ: Singapore; Branches: Shenzhen" ← WRONG! Only HQ, no branches
-  - "Headquarters: Bangkok; Factory: Rayong" ← WRONG! Only HQ
+WRONG (includes addresses):
+- "22, Jalan Sementa 27/91, Shah Alam" ← WRONG! No addresses!
 
-  CORRECT examples by country:
-
-  Malaysia (City, State, Country):
-  - "Shah Alam, Selangor, Malaysia"
-  - "Puchong, Selangor, Malaysia"
-  - "Penang, Penang, Malaysia"
-  - "Johor Bahru, Johor, Malaysia"
-
-  Thailand (District, Province, Country) - NOT always Bangkok!:
-  - "Bangna, Bangkok, Thailand" (in Bangkok)
-  - "Chatuchak, Bangkok, Thailand" (in Bangkok)
-  - "Bang Phli, Samut Prakan, Thailand" (NOT Bangkok - different province!)
-  - "Mueang Samut Sakhon, Samut Sakhon, Thailand" (NOT Bangkok!)
-  - "Mueang Rayong, Rayong, Thailand" (NOT Bangkok!)
-  - "Mueang Chonburi, Chonburi, Thailand" (NOT Bangkok!)
-  CRITICAL: Most Thai industrial companies are NOT in Bangkok - check the actual address!
-
-  Indonesia (City/Area, Province, Country):
-  - "Tangerang, Banten, Indonesia"
-  - "Cikarang, West Java, Indonesia"
-  - "Bekasi, West Java, Indonesia"
-
-  Vietnam (District, City, Country):
-  - "Thu Duc, Ho Chi Minh City, Vietnam"
-  - "Binh Duong, Binh Duong Province, Vietnam"
-
-  Philippines (City, Region, Country):
-  - "Makati, Metro Manila, Philippines"
-  - "Caloocan, Metro Manila, Philippines"
-
-  Singapore (Area, Singapore) - ONLY 2 LEVELS:
-  - "Jurong West, Singapore"
-  - "Jurong East, Singapore"
-  - "Tuas, Singapore"
-  - "Ubi, Singapore"
-  - "Woodlands, Singapore"
-
-  CRITICAL SINGAPORE RULE: NEVER output just "Singapore" alone!
-  - WRONG: "Singapore" ← UNACCEPTABLE! Must have area!
-  - WRONG: "Singapore, Singapore" ← WRONG! Find the actual area!
-  - CORRECT: "Jurong West, Singapore" or "Tuas, Singapore"
-  - Look at the address on website to find the area/district name
-  - Common Singapore industrial areas: Jurong, Tuas, Woodlands, Ang Mo Kio, Ubi, Bedok, Paya Lebar
-  - If no area found, leave location EMPTY rather than outputting just "Singapore"
-
-CRITICAL - EXTRACT FROM ACTUAL ADDRESS:
-- Find the ACTUAL address text on the website (e.g., "123 Moo 5, Mueang Samut Sakhon District, Samut Sakhon 74000")
-- Extract the district/city and province FROM THE ADDRESS - do NOT guess or assume
-- If address says "Samut Sakhon", output "Mueang Samut Sakhon, Samut Sakhon, Thailand" NOT "Bangkok, Thailand"
-- NEVER default to capital city (Bangkok, Jakarta, etc.) unless address explicitly mentions it
-- If you cannot find an address, leave location empty rather than guessing
+CRITICAL - ENGLISH ONLY:
+- ALL output MUST be in English letters (A-Z) only
+- NEVER output Thai: กรุงเทพ → "Bangkok", สมุทรสาคร → "Samut Sakhon"
+- NEVER output Vietnamese with diacritics: "Hồ Chí Minh" → "Ho Chi Minh City"
+- NEVER output Chinese: 北京 → "Beijing"
+- If you see Thai/Chinese/Vietnamese text, TRANSLATE it to English
 
 RULES:
-- ONLY extract HQ location - ignore all branches, factories, warehouses, offices
-- Write ALL text using regular English alphabet only (A-Z, no diacritics/accents)
-- Convert ALL Vietnamese: "Phú" → "Phu", "Đông" → "Dong", "Nguyễn" → "Nguyen"
-- Convert ALL foreign characters: "São" → "Sao", "北京" → "Beijing"
-- Leave fields empty if information not found
+- ONLY extract HQ location - ignore branches, factories, warehouses
+- Extract province/state from actual address on website
+- Most Thai industrial companies are NOT in Bangkok - check actual address!
+- If you cannot find an address, leave location empty
 - Return ONLY valid JSON`
         },
         {
@@ -4682,12 +4640,18 @@ Content: ${scrapedContent.substring(0, 25000)}`
 }
 
 // Post-process and validate HQ location format
-// Singapore: MUST be 2 levels (Area, Singapore) - NEVER just "Singapore"
-// Non-Singapore: MUST be 3 levels (City, State, Country) - NEVER just 2 levels
+// ALL countries: EXACTLY 2 levels (State/Province, Country)
+// Singapore: Just "Singapore"
 function validateAndFixHQFormat(location, websiteUrl) {
   if (!location || typeof location !== 'string') return location;
 
   let loc = location.trim();
+
+  // SAFETY: Reject non-ASCII (Thai/Chinese/Vietnamese) text entirely
+  if (/[^\x00-\x7F]/.test(loc)) {
+    console.log(`  [HQ Fix] REJECTED non-English location: "${loc}"`);
+    return ''; // Return empty - extraction prompt should have given English
+  }
 
   // Remove any "HQ:" prefix
   loc = loc.replace(/^-?\s*HQ:\s*/i, '').trim();
@@ -4699,75 +4663,22 @@ function validateAndFixHQFormat(location, websiteUrl) {
   const isSingapore = lastPart === 'singapore' || loc.toLowerCase() === 'singapore';
 
   if (isSingapore) {
-    // Singapore: must be exactly 2 levels
-    if (parts.length === 1 || loc.toLowerCase() === 'singapore') {
-      // Only "Singapore" - extract area from website URL or use default
-      const domain = websiteUrl?.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0] || '';
-
-      // Try to guess area from common Singapore industrial areas in domain
-      const areaHints = {
-        'jurong': 'Jurong',
-        'tuas': 'Tuas',
-        'woodlands': 'Woodlands',
-        'ubi': 'Ubi',
-        'changi': 'Changi',
-        'bedok': 'Bedok',
-        'tampines': 'Tampines',
-        'ang mo kio': 'Ang Mo Kio',
-        'amk': 'Ang Mo Kio',
-        'paya lebar': 'Paya Lebar',
-        'kallang': 'Kallang',
-        'geylang': 'Geylang'
-      };
-
-      let area = null;
-      for (const [hint, areaName] of Object.entries(areaHints)) {
-        if (domain.toLowerCase().includes(hint)) {
-          area = areaName;
-          break;
-        }
-      }
-
-      // If no area found, don't just use "Singapore" alone - better to leave it for manual fix
-      // But log it so we know
-      if (!area) {
-        console.log(`  [HQ Fix] Singapore missing area, couldn't determine from URL: ${websiteUrl}`);
-        // Return just Singapore for now - better than making up an area
-        return 'Singapore';
-      }
-
-      console.log(`  [HQ Fix] Fixed Singapore HQ: "${loc}" → "${area}, Singapore"`);
-      return `${area}, Singapore`;
-    }
-    if (parts.length > 2) {
-      // Too many levels, keep first and last
-      const fixed = `${parts[0]}, Singapore`;
-      console.log(`  [HQ Fix] Fixed Singapore HQ (too many levels): "${loc}" → "${fixed}"`);
-      return fixed;
-    }
-    return loc; // Already 2 levels
-  } else {
-    // Non-Singapore: must be exactly 3 levels
-    if (parts.length > 3) {
-      // Too many levels, keep last 3
-      const fixed = parts.slice(-3).join(', ');
-      console.log(`  [HQ Fix] Fixed non-Singapore HQ (too many levels): "${loc}" → "${fixed}"`);
-      return fixed;
-    }
-    if (parts.length === 1) {
-      // Only country name (e.g., "Thailand") - this is incomplete
-      // Log warning so we know this location is missing city info
-      console.log(`  [HQ Warning] Location missing city/province: "${loc}" - needs manual fix`);
-      return ''; // Return empty so it doesn't show incorrect data in target list
-    }
-    if (parts.length === 2) {
-      // Only 2 levels - this is also incomplete for non-Singapore
-      // Log warning
-      console.log(`  [HQ Warning] Location only has 2 levels: "${loc}" - may be missing city`);
-      return loc; // Return as-is, but flagged
-    }
-    return loc; // Already 3 levels
+    return 'Singapore'; // Just country name, no area needed
   }
+
+  // Non-Singapore: must be exactly 2 levels (State/Province, Country)
+  if (parts.length > 2) {
+    // Too many levels, keep last 2 only
+    const fixed = parts.slice(-2).join(', ');
+    console.log(`  [HQ Fix] Trimmed to 2 levels: "${loc}" → "${fixed}"`);
+    return fixed;
+  }
+  if (parts.length === 1) {
+    // Only country name - incomplete
+    console.log(`  [HQ Warning] Location missing province: "${loc}"`);
+    return ''; // Return empty
+  }
+  return loc; // Already 2 levels
 }
 
 // AI Agent 2: Extract business, message, footnote, title
@@ -5036,7 +4947,8 @@ RULES:
 - ONLY extract the missed items listed above
 - Do NOT include items already in "ALREADY EXTRACTED"
 - If you cannot find a missed item in the content, skip it
-- Return empty array if nothing new found`
+- Return empty array if nothing new found
+- Return ONLY valid JSON`
         },
         {
           role: 'user',
@@ -5622,12 +5534,15 @@ ${JSON.stringify(companyData, null, 2)}
 ## YOUR TASKS:
 
 ### 1. VALIDATE HQ/LOCATION (CRITICAL)
-- Search the SOURCE for actual address/location (look for postal codes, province names, district names)
+- Search the SOURCE for actual address/location (look for postal codes, province names)
 - If extracted location does NOT match what's in the source, FIX IT
 - Thailand: Look for province names like "Samut Sakhon", "Samut Prakan", "Chonburi", "Rayong" - NOT always Bangkok!
-- Singapore: Look for area names like "Jurong", "Tuas", "Woodlands" in the address
-- Format: "District, Province, Country" (3 levels) or "Area, Singapore" (2 levels)
-- If source says "Samut Sakhon" but extracted says "Bangkok" → FIX to Samut Sakhon
+- FORMAT: EXACTLY 2 LEVELS - "Province/State, Country" (e.g., "Bangkok, Thailand", "Selangor, Malaysia")
+- Singapore: Just "Singapore" (no area needed)
+- CRITICAL - ENGLISH ONLY: NEVER output Thai/Chinese/Vietnamese text!
+  - WRONG: "กรุงเทพฯ, ประเทศไทย" ← NEVER output this!
+  - CORRECT: "Bangkok, Thailand"
+  - If source has Thai text like "สมุทรสาคร", output "Samut Sakhon, Thailand"
 
 ### 2. FIND MISSED STATISTICS (CRITICAL)
 - Scan SOURCE for visible numbers/statistics that were NOT extracted:
@@ -5650,8 +5565,9 @@ ${JSON.stringify(companyData, null, 2)}
 ### 5. CLEAN UP (secondary)
 - Remove fake placeholders like "Distributor A, Distributor B"
 - Remove empty metrics with "Not specified", "N/A"
-- Translate non-English to English
+- TRANSLATE ALL non-English to English (Thai, Chinese, Vietnamese, etc.)
 - Remove marketing fluff words like "high-quality", "premium", "leading"
+- ALL OUTPUT MUST BE IN ENGLISH (A-Z letters only) - NO Thai/Chinese/Vietnamese characters!
 
 ## OUTPUT FORMAT
 Return JSON with:
@@ -5724,11 +5640,19 @@ Return ONLY valid JSON.`;
     const cleanedCompanyName = cleanCompanyName(rawCompanyName, websiteUrl);
     const cleanedTitle = cleanCompanyName(rawTitle, websiteUrl);
 
+    // SAFETY: Reject validator location if it contains non-ASCII (Thai/Chinese/Vietnamese)
+    // Keep original location instead
+    let finalLocation = validated.location || companyData.location;
+    if (finalLocation && /[^\x00-\x7F]/.test(finalLocation)) {
+      console.log(`    [Validator] REJECTED non-English location: "${finalLocation}" - keeping original`);
+      finalLocation = companyData.location; // Keep original English location
+    }
+
     const mergedData = {
       ...companyData,
       company_name: cleanedCompanyName,
       established_year: validated.established_year || companyData.established_year,
-      location: validated.location || companyData.location,
+      location: finalLocation,
       business: validated.business || companyData.business,
       message: validated.message || companyData.message,
       title: cleanedTitle || cleanedCompanyName,
@@ -5958,8 +5882,9 @@ async function processSingleWebsite(website, index, total) {
     // Determine business type: keyword detection can override AI's classification
     let businessType = productsBreakdown.business_type || 'industrial';
     const detectedType = detectBusinessType(businessInfo.business, scraped.content);
-    if (detectedType && detectedType !== businessType) {
-      console.log(`  [${index + 1}] Business type override: "${businessType}" → "${detectedType}" (keyword detection)`);
+    // Only use keyword detection as fallback when AI didn't provide classification
+    if (!productsBreakdown.business_type && detectedType) {
+      console.log(`  [${index + 1}] Business type: "${detectedType}" (keyword fallback, AI had no classification)`);
       businessType = detectedType;
     }
 
@@ -6416,8 +6341,9 @@ app.post('/api/generate-ppt', async (req, res) => {
         // Determine business type: keyword detection can override AI's classification
         let businessType = productsBreakdown.business_type || 'industrial';
         const detectedType = detectBusinessType(businessInfo.business, scraped.content);
-        if (detectedType && detectedType !== businessType) {
-          console.log(`  Business type override: "${businessType}" → "${detectedType}" (keyword detection)`);
+        // Only use keyword detection as fallback when AI didn't provide classification
+        if (!productsBreakdown.business_type && detectedType) {
+          console.log(`  Business type: "${detectedType}" (keyword fallback, AI had no classification)`);
           businessType = detectedType;
         }
 
