@@ -3744,19 +3744,36 @@ function extractMetricsFromText(text) {
   }
 
   // ===== PRODUCTION CAPACITY =====
-  // Various units: tons, MT, units, pieces, sqm, MW, etc.
+  // Covers: English, Thai, Vietnamese, Indonesian/Malay, Chinese, Korean, Hindi, Bengali
   const capacityPatterns = [
+    // English
     /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:tons?|MT|tonnes?|metric tons?)\s*(?:per|\/)\s*(?:year|month|day|annum)/gi,
     /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:units?|pieces?|pcs)\s*(?:per|\/)\s*(?:year|month|day)/gi,
     /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:sqm|square meters?|sq\.?\s*m)\s*(?:per|\/|of)?\s*(?:year|month|production)?/gi,
     /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:MW|megawatts?|GW|gigawatts?)\s*(?:capacity|installed)?/gi,
     /capacity\s*(?:of|:)?\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:tons?|MT|units?|MW)/gi,
-    /(?:over|more than)?\s*(\d{1,3}(?:,\d{3})*)\s*(?:tons?|MT)\s*(?:per|\/|a)\s*month/gi, // "800 tons per month", "over 800 tons/month"
-    /(\d{1,3}(?:,\d{3})*)\s*(?:ตัน)(?:\/เดือน|ต่อเดือน)/gi, // Thai: tons/month "800 ตัน/เดือน"
-    /กำลังการผลิต.*?(\d{1,3}(?:,\d{3})*)\s*ตัน/gi, // Thai: production capacity X tons
-    /ตัน\/ปี|ตันต่อปี/gi, // Thai: tons/year
-    /tấn\/năm|tấn mỗi năm|tấn\/tháng/gi, // Vietnamese: tons/year, tons/month
-    /톤\/년|연간.*?톤|톤\/월/gi // Korean: tons/year, tons/month
+    /(?:over|more than)?\s*(\d{1,3}(?:,\d{3})*)\s*(?:tons?|MT)\s*(?:per|\/|a)\s*month/gi,
+    // Thai: "800 ตัน/เดือน", "กำลังการผลิต 800 ตัน"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:ตัน)(?:\/เดือน|ต่อเดือน|\/ปี|ต่อปี)/gi,
+    /กำลังการผลิต.*?(\d{1,3}(?:,\d{3})*)\s*ตัน/gi,
+    // Vietnamese: "800 tấn/tháng", "công suất 800 tấn"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:tấn)(?:\/tháng|\/năm|mỗi tháng|mỗi năm)/gi,
+    /công suất.*?(\d{1,3}(?:,\d{3})*)\s*tấn/gi,
+    // Indonesian/Malay: "800 ton/bulan", "kapasitas 800 ton"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:ton)(?:\/bulan|\/tahun|per bulan|per tahun)/gi,
+    /kapasitas.*?(\d{1,3}(?:,\d{3})*)\s*ton/gi,
+    // Chinese (Simplified & Traditional): "800吨/月", "产能800吨", "產能800噸"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:吨|噸)(?:\/月|\/年|每月|每年)/gi,
+    /(?:产能|產能|产量|產量).*?(\d{1,3}(?:,\d{3})*)\s*(?:吨|噸)/gi,
+    // Korean: "800톤/월", "생산능력 800톤"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:톤)(?:\/월|\/년|월간|연간)/gi,
+    /(?:생산능력|생산량).*?(\d{1,3}(?:,\d{3})*)\s*톤/gi,
+    // Hindi: "800 टन/माह", "उत्पादन क्षमता 800 टन"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:टन)(?:\/माह|\/वर्ष|प्रति माह|प्रति वर्ष)/gi,
+    /(?:उत्पादन क्षमता|क्षमता).*?(\d{1,3}(?:,\d{3})*)\s*टन/gi,
+    // Bengali: "800 টন/মাস", "উৎপাদন ক্ষমতা 800 টন"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:টন)(?:\/মাস|\/বছর)/gi,
+    /(?:উৎপাদন ক্ষমতা|ক্ষমতা).*?(\d{1,3}(?:,\d{3})*)\s*টন/gi
   ];
 
   for (const pattern of capacityPatterns) {
@@ -3768,15 +3785,28 @@ function extractMetricsFromText(text) {
   }
 
   // ===== MACHINE COUNTS =====
-  // English: "250 machines", "300+ machines", "over 200 machines"
-  // Thai: "250 เครื่อง", "250 เครื่องจักร"
+  // Covers: English, Thai, Vietnamese, Indonesian/Malay, Chinese, Korean, Hindi, Bengali
   const machinePatterns = [
+    // English
     /(\d{1,3}(?:,\d{3})*)\s*\+?\s*(?:machines?|equipment|production lines?|manufacturing lines?)/gi,
     /(?:over|more than|approximately)\s+(\d{1,3}(?:,\d{3})*)\s*(?:machines?|equipment)/gi,
-    /(\d{1,3}(?:,\d{3})*)\s*(?:เครื่อง|เครื่องจักร)/gi, // Thai: machines
-    /เครื่องจักร.*?(\d{1,3}(?:,\d{3})*)\s*(?:เครื่อง|ตัว)/gi, // Thai: machines X units
-    /(\d{1,3}(?:,\d{3})*)\s*(?:máy|thiết bị)/gi, // Vietnamese: machines
-    /(\d{1,3}(?:,\d{3})*)\s*(?:mesin|peralatan)/gi // Indonesian: machines
+    // Thai: "250 เครื่อง", "เครื่องจักร 250 เครื่อง"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:เครื่อง|เครื่องจักร)/gi,
+    /เครื่องจักร.*?(\d{1,3}(?:,\d{3})*)\s*(?:เครื่อง|ตัว)/gi,
+    // Vietnamese: "250 máy", "thiết bị 250"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:máy|thiết bị|máy móc)/gi,
+    // Indonesian/Malay: "250 mesin", "peralatan 250"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:mesin|peralatan|unit mesin)/gi,
+    // Chinese: "250台设备", "设备250台", "機器250台"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:台|臺)?\s*(?:设备|機器|机器|機械|机械)/gi,
+    /(?:设备|機器|机器|機械|机械).*?(\d{1,3}(?:,\d{3})*)\s*(?:台|臺|套)/gi,
+    // Korean: "250대 기계", "설비 250대"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:대|台)?\s*(?:기계|설비|장비)/gi,
+    /(?:기계|설비|장비).*?(\d{1,3}(?:,\d{3})*)\s*대/gi,
+    // Hindi: "250 मशीन", "उपकरण 250"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:मशीन|मशीनें|उपकरण)/gi,
+    // Bengali: "250 মেশিন", "যন্ত্রপাতি 250"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:মেশিন|যন্ত্র|যন্ত্রপাতি)/gi
   ];
 
   for (const pattern of machinePatterns) {
@@ -3795,15 +3825,28 @@ function extractMetricsFromText(text) {
   }
 
   // ===== BUSINESS PARTNERS / DISTRIBUTORS =====
-  // English: "700 domestic partners", "500 distributors", "300 dealers"
-  // Thai: "700 พันธมิตรทางธุรกิจ", "500 ตัวแทนจำหน่าย"
+  // Covers: English, Thai, Vietnamese, Indonesian/Malay, Chinese, Korean, Hindi, Bengali
   const partnerPatterns = [
+    // English
     /(\d{1,3}(?:,\d{3})*)\s*\+?\s*(?:domestic\s+)?(?:partners?|distributors?|dealers?|resellers?|agents?)/gi,
     /(?:over|more than)\s+(\d{1,3}(?:,\d{3})*)\s*(?:partners?|distributors?|dealers?)/gi,
-    /(\d{1,3}(?:,\d{3})*)\s*(?:พันธมิตร|ตัวแทน|ตัวแทนจำหน่าย|ผู้จัดจำหน่าย)/gi, // Thai: partners/distributors
-    /พันธมิตรทางธุรกิจ.*?(\d{1,3}(?:,\d{3})*)/gi, // Thai: business partners
-    /(\d{1,3}(?:,\d{3})*)\s*(?:đối tác|nhà phân phối|đại lý)/gi, // Vietnamese
-    /(\d{1,3}(?:,\d{3})*)\s*(?:mitra|distributor|agen)/gi // Indonesian
+    // Thai: "700 พันธมิตร", "ตัวแทนจำหน่าย 700 ราย"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:พันธมิตร|ตัวแทน|ตัวแทนจำหน่าย|ผู้จัดจำหน่าย|ราย)/gi,
+    /(?:พันธมิตรทางธุรกิจ|ตัวแทนจำหน่าย).*?(\d{1,3}(?:,\d{3})*)/gi,
+    // Vietnamese: "700 đối tác", "nhà phân phối 700"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:đối tác|nhà phân phối|đại lý|đại lý phân phối)/gi,
+    // Indonesian/Malay: "700 mitra", "distributor 700"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:mitra|distributor|agen|mitra bisnis|mitra usaha)/gi,
+    // Chinese: "700家经销商", "合作伙伴700家", "經銷商700家"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:家|個)?\s*(?:经销商|經銷商|合作伙伴|合作夥伴|代理商|分销商|分銷商)/gi,
+    /(?:经销商|經銷商|合作伙伴|合作夥伴|代理商).*?(\d{1,3}(?:,\d{3})*)\s*(?:家|個)?/gi,
+    // Korean: "700개 파트너", "대리점 700개"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:개|家)?\s*(?:파트너|대리점|유통업체|협력사)/gi,
+    /(?:파트너|대리점|유통업체|협력사).*?(\d{1,3}(?:,\d{3})*)\s*개/gi,
+    // Hindi: "700 भागीदार", "वितरक 700"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:भागीदार|वितरक|डीलर|एजेंट)/gi,
+    // Bengali: "700 অংশীদার", "পরিবেশক 700"
+    /(\d{1,3}(?:,\d{3})*)\s*(?:অংশীদার|পরিবেশক|ডিলার|এজেন্ট)/gi
   ];
 
   for (const pattern of partnerPatterns) {
@@ -4889,13 +4932,17 @@ Before anything else, scan the ENTIRE page for ANY prominently displayed numbers
 - TRANSLATE any non-English labels to English (e.g., "Kota Distribusi" = "Distribution Cities", "Project Baru" = "New Projects")
 - Include ALL visible statistics with their labels in the "Key Metrics" field
 
-THAI WEBSITE PATTERNS (CRITICAL - recognize these!):
-- "800 ตัน/เดือน" or "800 ตันต่อเดือน" = "800 tons/month" (production capacity)
-- "250 เครื่อง" or "เครื่องจักร 250 เครื่อง" = "250 machines"
-- "700 พันธมิตร" or "พันธมิตรทางธุรกิจ 700 ราย" = "700 business partners"
-- "กำลังการผลิต" = production capacity - look for numbers after this
-- "ผู้จัดจำหน่าย" = distributors
-- Numbers next to Thai text are still important metrics - EXTRACT THEM!
+NON-ENGLISH WEBSITE PATTERNS (CRITICAL - recognize these!):
+
+THAI: "800 ตัน/เดือน" = 800 tons/month, "250 เครื่อง" = 250 machines, "700 พันธมิตร" = 700 partners
+VIETNAMESE: "800 tấn/tháng" = 800 tons/month, "250 máy" = 250 machines, "700 đối tác" = 700 partners
+INDONESIAN: "800 ton/bulan" = 800 tons/month, "250 mesin" = 250 machines, "700 mitra" = 700 partners
+CHINESE: "800吨/月" = 800 tons/month, "250台设备" = 250 machines, "700家经销商" = 700 distributors
+KOREAN: "800톤/월" = 800 tons/month, "250대 기계" = 250 machines, "700개 파트너" = 700 partners
+HINDI: "800 टन/माह" = 800 tons/month, "250 मशीन" = 250 machines, "700 वितरक" = 700 distributors
+BENGALI: "800 টন/মাস" = 800 tons/month, "250 মেশিন" = 250 machines, "700 পরিবেশক" = 700 distributors
+
+Numbers next to ANY non-English text are likely important metrics - EXTRACT THEM and TRANSLATE the label to English!
 
 EXTRACT AS MANY OF THESE METRICS AS POSSIBLE (aim for 8-15 metrics):
 
@@ -5700,11 +5747,15 @@ ${JSON.stringify(companyData, null, 2)}
   - Machine counts (e.g., "250 machines")
   - Partner/distributor counts (e.g., "700 domestic partners")
   - Any other numerical metrics
-- THAI PATTERNS TO LOOK FOR:
-  - "800 ตัน/เดือน" = 800 tons/month (production capacity)
-  - "250 เครื่อง" = 250 machines
-  - "700 พันธมิตร" = 700 business partners
-  - Numbers next to ANY Thai text are likely important!
+- MULTILINGUAL PATTERNS TO LOOK FOR:
+  - THAI: "800 ตัน/เดือน" = 800 tons/month, "250 เครื่อง" = 250 machines, "700 พันธมิตร" = 700 partners
+  - VIETNAMESE: "800 tấn/tháng", "250 máy", "700 đối tác"
+  - INDONESIAN: "800 ton/bulan", "250 mesin", "700 mitra"
+  - CHINESE: "800吨/月", "250台设备", "700家经销商"
+  - KOREAN: "800톤/월", "250대 기계", "700개 파트너"
+  - HINDI: "800 टन/माह", "250 मशीन", "700 वितरक"
+  - BENGALI: "800 টন/মাস", "250 মেশিন", "700 পরিবেশক"
+  - Numbers next to ANY non-English text are likely important!
 - ADD any found statistics to key_metrics that are missing
 
 ### 3. FIND MISSED DISTRIBUTION/EXPORT INFO (CRITICAL)
