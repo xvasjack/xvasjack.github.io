@@ -2150,31 +2150,7 @@ const SHORTFORM_DEFINITIONS = {
   'POE': 'Power over Ethernet',
   'LAN': 'Local Area Network',
   'WAN': 'Wide Area Network',
-  'VPN': 'Virtual Private Network',
-  // Chemical/Material shortforms
-  'PU': 'Polyurethane',
-  'EVA': 'Ethylene Vinyl Acetate',
-  'PVC': 'Polyvinyl Chloride',
-  'ABS': 'Acrylonitrile Butadiene Styrene',
-  'PS': 'Polystyrene',
-  'PP': 'Polypropylene',
-  'HDPE': 'High-Density Polyethylene',
-  'LDPE': 'Low-Density Polyethylene',
-  'OPP': 'Oriented Polypropylene',
-  'PET': 'Polyethylene Terephthalate',
-  'TPU': 'Thermoplastic Polyurethane',
-  'TPR': 'Thermoplastic Rubber',
-  'TPE': 'Thermoplastic Elastomer',
-  'NBR': 'Nitrile Butadiene Rubber',
-  'SBR': 'Styrene Butadiene Rubber',
-  'EPDM': 'Ethylene Propylene Diene Monomer',
-  'PA': 'Polyamide (Nylon)',
-  'PC': 'Polycarbonate',
-  'PMMA': 'Polymethyl Methacrylate (Acrylic)',
-  'PTFE': 'Polytetrafluoroethylene (Teflon)',
-  'Phylon': 'Foam Material (EVA-based)',
-  'BOPP': 'Biaxially Oriented Polypropylene',
-  'CPP': 'Cast Polypropylene'
+  'VPN': 'Virtual Private Network'
 };
 
 // Exchange rate mapping by country (for footnote)
@@ -2229,60 +2205,6 @@ function getCountryCode(location) {
     if (loc.includes(key)) return code;
   }
   return null;
-}
-
-// Translate Thai units to English equivalents
-// Thai: ไร่ (rai) = 1,600 sqm, ตร.ม./ตารางเมตร = sqm
-// Also translates common Thai words found in metrics
-function translateThaiUnits(text) {
-  if (!text || typeof text !== 'string') return text;
-
-  // Thai unit translations
-  const translations = [
-    // Area units
-    { pattern: /(\d+(?:,\d{3})*(?:\.\d+)?)\s*ไร่/gi, replace: '$1 rai' },
-    { pattern: /(\d+(?:,\d{3})*(?:\.\d+)?)\s*ตร\.ม\./gi, replace: '$1 sqm' },
-    { pattern: /(\d+(?:,\d{3})*(?:\.\d+)?)\s*ตารางเมตร/gi, replace: '$1 sqm' },
-    // Weight units
-    { pattern: /(\d+(?:,\d{3})*(?:\.\d+)?)\s*ตัน\/เดือน/gi, replace: '$1 tons/month' },
-    { pattern: /(\d+(?:,\d{3})*(?:\.\d+)?)\s*ตัน\/ปี/gi, replace: '$1 tons/year' },
-    { pattern: /(\d+(?:,\d{3})*(?:\.\d+)?)\s*ตัน/gi, replace: '$1 tons' },
-    { pattern: /(\d+(?:,\d{3})*(?:\.\d+)?)\s*กิโลกรัม/gi, replace: '$1 kg' },
-    // Count units
-    { pattern: /(\d+(?:,\d{3})*)\s*พนักงาน/gi, replace: '$1 employees' },
-    { pattern: /(\d+(?:,\d{3})*)\s*คน/gi, replace: '$1 people' },
-    { pattern: /(\d+(?:,\d{3})*)\s*เครื่อง/gi, replace: '$1 machines' },
-    { pattern: /(\d+(?:,\d{3})*)\s*สาขา/gi, replace: '$1 branches' },
-    { pattern: /(\d+(?:,\d{3})*)\s*ประเทศ/gi, replace: '$1 countries' },
-    // Production capacity
-    { pattern: /กำลังการผลิต/gi, replace: 'Production capacity' },
-    // Other common Thai words in metrics
-    { pattern: /ปี/gi, replace: 'years' },
-    { pattern: /เดือน/gi, replace: 'month' },
-    { pattern: /โรงงาน/gi, replace: 'factory' },
-    { pattern: /พื้นที่/gi, replace: 'area' }
-  ];
-
-  let result = text;
-  for (const { pattern, replace } of translations) {
-    result = result.replace(pattern, replace);
-  }
-
-  return result;
-}
-
-// Apply Thai translation to all metrics
-function translateMetrics(keyMetrics) {
-  if (!keyMetrics || !Array.isArray(keyMetrics)) return keyMetrics;
-
-  return keyMetrics.map(metric => {
-    if (!metric) return metric;
-    return {
-      ...metric,
-      label: translateThaiUnits(metric.label),
-      value: translateThaiUnits(metric.value)
-    };
-  });
 }
 
 // HARD RULE: Filter out empty/meaningless Key Metrics
@@ -6061,9 +5983,17 @@ IMPORTANT: Always use "- " prefix for each segment line to create point form for
 
 RULES:
 - HARD RULE - TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH:
-  - ALL product names, company names, and any other text in ANY non-English language MUST be translated to English
-  - This applies to ALL languages: Vietnamese, Chinese, Thai, Malay, Indonesian, Hindi, Korean, Japanese, Arabic, Spanish, etc.
+  - ALL text in ANY non-English language MUST be translated to English
+  - This applies to ALL languages: Thai, Vietnamese, Chinese, Malay, Indonesian, Hindi, Korean, Japanese, Arabic, Spanish, etc.
+  - Units: "ไร่" → "rai", "ตร.ม." → "sqm", "ตัน/เดือน" → "tons/month", "พนักงาน" → "employees"
+  - NEVER leave Thai, Chinese, or other non-English characters in the output
   - The user CANNOT translate - you MUST translate everything to English
+- UNCOMMON ABBREVIATIONS - INCLUDE DEFINITIONS INLINE:
+  - For technical/industry abbreviations that are NOT common knowledge, include the full form in parentheses
+  - Example: "PU (Polyurethane)", "EVA (Ethylene Vinyl Acetate)", "ABS (Acrylonitrile Butadiene Styrene)"
+  - Example: "OPP (Oriented Polypropylene)", "PET (Polyethylene Terephthalate)", "HDPE (High-Density Polyethylene)"
+  - Common abbreviations that DON'T need explanation: ISO, FDA, GMP, HACCP, B2B, B2C, CEO, CFO, HQ, USD, EUR, sqm, kg
+  - Use your judgment: if a reader unfamiliar with the industry wouldn't know what it means, include the definition
 - Write ALL text using regular English alphabet only (A-Z, no diacritics, no foreign characters)
 - Remove company suffixes from ALL names: Co., Ltd, JSC, Sdn Bhd, Pte Ltd, Inc, Corp, LLC, GmbH
 - Extract as many metrics as found (8-15 ideally)
@@ -6803,8 +6733,15 @@ REMOVE any metric containing:
 ### 4. TRANSLATE TO ENGLISH
 - All output must be English (A-Z only)
 - Translate Thai/Chinese/Vietnamese text to English
+- Units: "ไร่" → "rai", "ตร.ม." → "sqm", "ตัน/เดือน" → "tons/month"
+- NEVER leave non-English characters in output
 
-### 5. CHECK FOR REDUNDANCY
+### 5. UNCOMMON ABBREVIATIONS
+- For technical abbreviations NOT common knowledge, include full form inline
+- Example: "PU (Polyurethane)", "EVA (Ethylene Vinyl Acetate)", "ABS (Acrylonitrile Butadiene Styrene)"
+- Common abbreviations DON'T need explanation: ISO, FDA, GMP, B2B, B2C, HQ, USD, sqm, kg
+
+### 6. CHECK FOR REDUNDANCY
 - If "Factory Established" has same year as "Est. Year", REMOVE "Factory Established" metric
 - Merge duplicate information
 
@@ -7357,11 +7294,7 @@ async function processSingleWebsite(website, index, total) {
       companyData = finalValidation.data;
     }
 
-    // Step 7: Translate Thai units and filter empty metrics
-    // Translate Thai units (ไร่, ตร.ม., etc.) to English
-    companyData.key_metrics = translateMetrics(companyData.key_metrics);
-
-    // HARD RULE - Filter out empty/meaningless Key Metrics
+    // Step 7: Filter out empty/meaningless Key Metrics
     // Remove metrics that say "No specific X stated", "Not specified", etc.
     const metricsBefore = companyData.key_metrics?.length || 0;
     companyData.key_metrics = filterEmptyMetrics(companyData.key_metrics);
@@ -7778,8 +7711,7 @@ app.post('/api/generate-ppt', async (req, res) => {
         // Step 6: Run AI validator to compare extraction vs source and fix issues
         companyData = await reviewAndCleanData(companyData, scraped.content);
 
-        // Step 7: Translate Thai units and filter empty metrics
-        companyData.key_metrics = translateMetrics(companyData.key_metrics);
+        // Step 7: Filter empty metrics
         const metricsBefore = companyData.key_metrics?.length || 0;
         companyData.key_metrics = filterEmptyMetrics(companyData.key_metrics);
         const metricsAfter = companyData.key_metrics?.length || 0;
