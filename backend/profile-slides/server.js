@@ -3171,18 +3171,40 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           }
         }
       } else {
-        // INDUSTRIAL B2B: Show table format
+        // INDUSTRIAL B2B: Show table format with PRIORITY SYSTEM
+        // Priority: 1. Customers, 2. Brands, 3. Products/Applications, 4. Others (Principals, Suppliers)
+
+        // Get business relationships
+        const relationships = company._businessRelationships || {};
+        const hasCustomers = relationships.customers && relationships.customers.length > 0;
+        const hasBrands = relationships.brands && relationships.brands.length > 0;
+        const hasPrincipals = relationships.principals && relationships.principals.length > 0;
+        const hasSuppliers = relationships.suppliers && relationships.suppliers.length > 0;
+
+        // Build right-side table with priority order
+        let prioritizedItems = [];
+
+        // Priority 1: Key Customers
+        if (hasCustomers) {
+          const customerList = relationships.customers.slice(0, 8).join(', ');
+          prioritizedItems.push({ label: 'Key Customers', value: customerList });
+          console.log(`  Right side: Adding ${relationships.customers.length} customers`);
+        }
+
+        // Priority 2: Brands (important for distributors, retailers)
+        if (hasBrands) {
+          const brandList = relationships.brands.slice(0, 8).join(', ');
+          prioritizedItems.push({ label: 'Brands', value: brandList });
+          console.log(`  Right side: Adding ${relationships.brands.length} brands`);
+        }
+
+        // Priority 3: Products/Applications breakdown
         let validBreakdownItems = (company.breakdown_items || [])
           .map(item => ({
             label: ensureString(item?.label),
             value: ensureString(item?.value)
           }))
           .filter(item => item.label && item.value && !isEmptyValue(item.label) && !isEmptyValue(item.value));
-
-        // Limit to 8 rows maximum (to fit like Premink example with 9 product lines)
-        if (validBreakdownItems.length > 8) {
-          validBreakdownItems = validBreakdownItems.slice(0, 8);
-        }
 
         // Truncate values to max 3 lines
         validBreakdownItems = validBreakdownItems.map(item => {
@@ -3194,8 +3216,30 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           return { label: item.label, value };
         });
 
-        if (validBreakdownItems.length >= 1) {
-          const rightTableData = validBreakdownItems.map(item => [String(item.label || ''), String(item.value || '')]);
+        // Add breakdown items to prioritized list
+        prioritizedItems = prioritizedItems.concat(validBreakdownItems);
+
+        // Priority 4: Principals (for authorized distributors)
+        if (hasPrincipals) {
+          const principalList = relationships.principals.slice(0, 6).join(', ');
+          prioritizedItems.push({ label: 'Principals', value: principalList });
+          console.log(`  Right side: Adding ${relationships.principals.length} principals`);
+        }
+
+        // Priority 4: Suppliers (for trading/procurement companies)
+        if (hasSuppliers) {
+          const supplierList = relationships.suppliers.slice(0, 6).join(', ');
+          prioritizedItems.push({ label: 'Suppliers', value: supplierList });
+          console.log(`  Right side: Adding ${relationships.suppliers.length} suppliers`);
+        }
+
+        // Limit to 8 rows maximum (to fit the slide)
+        if (prioritizedItems.length > 8) {
+          prioritizedItems = prioritizedItems.slice(0, 8);
+        }
+
+        if (prioritizedItems.length >= 1) {
+          const rightTableData = prioritizedItems.map(item => [String(item.label || ''), String(item.value || '')]);
 
           const rightRows = rightTableData.map((row) => [
             {
@@ -3744,11 +3788,14 @@ function extractMetricsFromText(text) {
     metrics.certifications = [...new Set(certs)].slice(0, 10);
   }
 
-  // ===== EXPORT COUNTRIES =====
+  // ===== EXPORT COUNTRIES (selling TO) =====
+  // CRITICAL: Only match "export to", "sell to", "distribute to" - NOT "source from"
   const exportPatterns = [
     /export(?:ing|s)?\s+to\s+(\d+)\s+(?:countries|nations|markets)/gi,
+    /sell(?:ing|s)?\s+to\s+(\d+)\s+(?:countries|nations|markets)/gi,
+    /distribut(?:e|ing|ion)\s+to\s+(\d+)\s+(?:countries|markets)/gi,
     /(?:present|presence|available)\s+in\s+(\d+)\s+(?:countries|markets)/gi,
-    /(\d+)\s+(?:export\s+)?(?:countries|destinations|markets)/gi
+    /(\d+)\s+export\s+(?:countries|destinations|markets)/gi
   ];
 
   for (const pattern of exportPatterns) {
@@ -3760,6 +3807,31 @@ function extractMetricsFromText(text) {
         if (num >= 2 && num <= 200) {
           metrics.export_countries = num;
           metrics.export_text = match[0];
+          break;
+        }
+      }
+    }
+  }
+
+  // ===== SOURCE/PROCUREMENT COUNTRIES (buying FROM) =====
+  // CRITICAL: "source from", "procure from", "import from" - OPPOSITE of export
+  const sourcePatterns = [
+    /sourc(?:e|ing)\s+from\s+(\d+)\s+(?:countries|nations|origins)/gi,
+    /procur(?:e|ing|ement)\s+from\s+(\d+)\s+(?:countries|nations)/gi,
+    /import(?:ing|s)?\s+from\s+(\d+)\s+(?:countries|nations|origins)/gi,
+    /(?:raw materials?|ingredients?|products?)\s+from\s+(\d+)\s+(?:countries|origins)/gi,
+    /(\d+)\s+(?:source|procurement|origin)\s+countries/gi
+  ];
+
+  for (const pattern of sourcePatterns) {
+    const match = text.match(pattern);
+    if (match) {
+      const numMatch = match[0].match(/\d+/);
+      if (numMatch) {
+        const num = parseInt(numMatch[0]);
+        if (num >= 2 && num <= 200) {
+          metrics.source_countries = num;
+          metrics.source_text = match[0];
           break;
         }
       }
@@ -4048,104 +4120,200 @@ function extractLabelFromFilename(src) {
     .substring(0, 50);
 }
 
-// ===== FIX #5: Extract customer/supplier names from section context =====
-// Finds sections containing client/customer/partner content and extracts all names
-function extractCustomersFromSections(rawHtml) {
-  if (!rawHtml) return [];
+// ===== FIX #5: Extract categorized business relationships from section context =====
+// Returns: { customers: [], suppliers: [], principals: [], brands: [] }
+function extractBusinessRelationships(rawHtml) {
+  if (!rawHtml) return { customers: [], suppliers: [], principals: [], brands: [] };
 
-  const customerNames = new Set();
+  const results = {
+    customers: new Set(),    // Companies we sell to
+    suppliers: new Set(),    // Companies we buy from
+    principals: new Set(),   // Companies we represent/distribute for
+    brands: new Set()        // Brands we carry/distribute
+  };
 
-  // Section keywords to look for
-  const sectionKeywords = [
-    'client', 'customer', 'partner', 'trusted', 'brand', 'work with',
-    'served', 'portfolio', 'our clients', 'our customers', 'our partners',
-    'they trust us', 'trusted by', 'working with', 'collaborated'
-  ];
+  // Category-specific section keywords
+  const categoryKeywords = {
+    customers: ['client', 'customer', 'served', 'trusted by', 'work with', 'our clients', 'our customers', 'they trust us'],
+    suppliers: ['supplier', 'vendor', 'source', 'procurement', 'our suppliers', 'supply chain', 'raw material'],
+    principals: ['principal', 'represent', 'authorized', 'distributor for', 'agency', 'our principals', 'we represent'],
+    brands: ['brand', 'carry', 'distribute', 'portfolio', 'our brands', 'brands we', 'product line']
+  };
 
-  // Build regex to find these sections
-  const sectionPattern = new RegExp(
-    `<(?:section|div|ul|article)[^>]*(?:class|id)=["'][^"']*(?:${sectionKeywords.join('|')})[^"']*["'][^>]*>([\\s\\S]*?)<\\/(?:section|div|ul|article)>`,
-    'gi'
-  );
+  // Extract names from a section
+  function extractNamesFromSection(sectionHtml) {
+    const names = new Set();
+    let match;
 
-  // Also find sections with these keywords in headings
-  const headingPattern = new RegExp(
-    `<h[1-6][^>]*>[^<]*(?:${sectionKeywords.join('|')})[^<]*<\\/h[1-6]>([\\s\\S]{0,5000}?)(?=<h[1-6]|<\\/section|<\\/main|$)`,
-    'gi'
-  );
-
-  let match;
-  const sectionHtmls = [];
-
-  // Collect all relevant sections
-  while ((match = sectionPattern.exec(rawHtml)) !== null) {
-    sectionHtmls.push(match[1] || match[0]);
-  }
-  while ((match = headingPattern.exec(rawHtml)) !== null) {
-    sectionHtmls.push(match[1] || match[0]);
-  }
-
-  // Extract names from each section
-  for (const sectionHtml of sectionHtmls) {
     // Method 1: Alt text from images
     const altPattern = /<img[^>]*alt=["']([^"']+)["'][^>]*>/gi;
     while ((match = altPattern.exec(sectionHtml)) !== null) {
       const name = cleanCustomerName(match[1]);
-      if (name) customerNames.add(name);
+      if (name) names.add(name);
     }
 
     // Method 2: Title attribute
     const titlePattern = /<[^>]*title=["']([^"']+)["'][^>]*>/gi;
     while ((match = titlePattern.exec(sectionHtml)) !== null) {
       const name = cleanCustomerName(match[1]);
-      if (name) customerNames.add(name);
+      if (name) names.add(name);
     }
 
     // Method 3: aria-label attribute
     const ariaPattern = /<[^>]*aria-label=["']([^"']+)["'][^>]*>/gi;
     while ((match = ariaPattern.exec(sectionHtml)) !== null) {
       const name = cleanCustomerName(match[1]);
-      if (name) customerNames.add(name);
+      if (name) names.add(name);
     }
 
     // Method 4: Figure captions
     const figcaptionPattern = /<figcaption[^>]*>([^<]+)<\/figcaption>/gi;
     while ((match = figcaptionPattern.exec(sectionHtml)) !== null) {
       const name = cleanCustomerName(match[1]);
-      if (name) customerNames.add(name);
+      if (name) names.add(name);
     }
 
-    // Method 5: List items (often used for client lists)
+    // Method 5: List items
     const liPattern = /<li[^>]*>([^<]{2,50})<\/li>/gi;
     while ((match = liPattern.exec(sectionHtml)) !== null) {
       const name = cleanCustomerName(match[1]);
-      if (name) customerNames.add(name);
+      if (name) names.add(name);
     }
 
-    // Method 6: Image filenames in client/customer directories
-    const imgSrcPattern = /<img[^>]*src=["']([^"']+(?:client|customer|partner|brand|logo)[^"']*|[^"']*\/(?:client|customer|partner|brand)s?\/[^"']+)["'][^>]*>/gi;
+    // Method 6: Image filenames
+    const imgSrcPattern = /<img[^>]*src=["']([^"']+)["'][^>]*>/gi;
     while ((match = imgSrcPattern.exec(sectionHtml)) !== null) {
-      const filename = match[1].split('/').pop()?.split('.')[0] || '';
-      const name = cleanCustomerName(
-        filename.replace(/[-_]/g, ' ').replace(/logo|img|image|\d+/gi, '').trim()
-      );
-      if (name) customerNames.add(name);
+      const src = match[1];
+      if (/client|customer|partner|brand|principal|supplier/i.test(src)) {
+        const filename = src.split('/').pop()?.split('.')[0] || '';
+        const name = cleanCustomerName(
+          filename.replace(/[-_]/g, ' ').replace(/logo|img|image|\d+/gi, '').trim()
+        );
+        if (name) names.add(name);
+      }
     }
 
-    // Method 7: Span/strong/em text in client sections (often company names)
+    // Method 7: Inline text (span, strong, em)
     const inlinePattern = /<(?:span|strong|em|b)[^>]*>([A-Z][^<]{1,40})<\/(?:span|strong|em|b)>/g;
     while ((match = inlinePattern.exec(sectionHtml)) !== null) {
       const text = match[1].trim();
-      // Check if looks like a company name (starts with capital, not too long)
       if (text.length >= 2 && text.length <= 40 && /^[A-Z]/.test(text)) {
         const name = cleanCustomerName(text);
-        if (name) customerNames.add(name);
+        if (name) names.add(name);
       }
+    }
+
+    return names;
+  }
+
+  // Process each category
+  for (const [category, keywords] of Object.entries(categoryKeywords)) {
+    // Build section pattern for this category
+    const keywordPattern = keywords.join('|');
+
+    // Find sections by class/id
+    const sectionPattern = new RegExp(
+      `<(?:section|div|ul|article)[^>]*(?:class|id)=["'][^"']*(?:${keywordPattern})[^"']*["'][^>]*>([\\s\\S]*?)<\\/(?:section|div|ul|article)>`,
+      'gi'
+    );
+
+    // Find sections by heading
+    const headingPattern = new RegExp(
+      `<h[1-6][^>]*>[^<]*(?:${keywordPattern})[^<]*<\\/h[1-6]>([\\s\\S]{0,5000}?)(?=<h[1-6]|<\\/section|<\\/main|$)`,
+      'gi'
+    );
+
+    let match;
+    while ((match = sectionPattern.exec(rawHtml)) !== null) {
+      const sectionHtml = match[1] || match[0];
+      const names = extractNamesFromSection(sectionHtml);
+      names.forEach(name => results[category].add(name));
+    }
+
+    while ((match = headingPattern.exec(rawHtml)) !== null) {
+      const sectionHtml = match[1] || match[0];
+      const names = extractNamesFromSection(sectionHtml);
+      names.forEach(name => results[category].add(name));
     }
   }
 
-  return Array.from(customerNames).slice(0, 30); // Limit to 30 names
+  // Convert Sets to Arrays and limit
+  return {
+    customers: Array.from(results.customers).slice(0, 20),
+    suppliers: Array.from(results.suppliers).slice(0, 20),
+    principals: Array.from(results.principals).slice(0, 20),
+    brands: Array.from(results.brands).slice(0, 20)
+  };
 }
+
+// Legacy wrapper for backward compatibility
+function extractCustomersFromSections(rawHtml) {
+  const relationships = extractBusinessRelationships(rawHtml);
+  // Return all as one array for backward compatibility
+  return [...new Set([
+    ...relationships.customers,
+    ...relationships.suppliers,
+    ...relationships.principals,
+    ...relationships.brands
+  ])].slice(0, 30);
+}
+
+// ===== Business Type Detection =====
+// Detects B2C, project-based, or industrial based on keywords in business description
+function detectBusinessType(businessDescription, scrapedContent) {
+  const text = `${businessDescription || ''} ${scrapedContent || ''}`.toLowerCase();
+
+  // B2C keywords (restaurants, hotels, retail, consumer products)
+  const b2cKeywords = [
+    'restaurant', 'cafe', 'coffee', 'bakery', 'food service', 'catering',
+    'hotel', 'resort', 'hospitality', 'accommodation', 'lodging',
+    'retail', 'shop', 'store', 'boutique', 'mall', 'outlet',
+    'salon', 'spa', 'beauty', 'wellness', 'fitness', 'gym',
+    'clinic', 'dental', 'medical center', 'healthcare',
+    'school', 'education', 'training center', 'academy',
+    'entertainment', 'cinema', 'theater', 'amusement',
+    'consumer', 'b2c', 'end user', 'retail customer',
+    'menu', 'dine', 'dining', 'cuisine', 'chef',
+    'fashion', 'clothing', 'apparel', 'accessories',
+    'supermarket', 'grocery', 'convenience store', 'minimart'
+  ];
+
+  // Project-based keywords (construction, engineering, development)
+  const projectKeywords = [
+    'construction', 'contractor', 'builder', 'developer',
+    'engineering', 'epc', 'design and build', 'turnkey',
+    'infrastructure', 'civil works', 'building project',
+    'architecture', 'interior design', 'renovation',
+    'property development', 'real estate development',
+    'installation', 'commissioning', 'project management',
+    'marine', 'offshore', 'shipyard', 'vessel',
+    'power plant', 'oil and gas', 'refinery',
+    'completed project', 'project portfolio', 'project reference',
+    'our project', 'past project', 'recent project'
+  ];
+
+  // Count keyword matches
+  let b2cScore = 0;
+  let projectScore = 0;
+
+  for (const keyword of b2cKeywords) {
+    if (text.includes(keyword)) b2cScore++;
+  }
+
+  for (const keyword of projectKeywords) {
+    if (text.includes(keyword)) projectScore++;
+  }
+
+  // Determine type based on scores
+  if (b2cScore >= 2 || (b2cScore >= 1 && projectScore === 0)) {
+    return 'b2c';
+  } else if (projectScore >= 2 || (projectScore >= 1 && b2cScore === 0)) {
+    return 'project';
+  }
+
+  return null; // Let AI decide
+}
+
 
 // Helper: Clean and validate customer name
 function cleanCustomerName(text) {
@@ -5532,6 +5700,9 @@ async function processSingleWebsite(website, index, total) {
     if (regexMetrics.export_countries && !allKeyMetrics.some(m => /export|countr/i.test(m.label))) {
       mergedMetrics.push({ value: String(regexMetrics.export_countries), label: 'export countries' });
     }
+    if (regexMetrics.source_countries && !allKeyMetrics.some(m => /source|procure|import/i.test(m.label))) {
+      mergedMetrics.push({ value: String(regexMetrics.source_countries), label: 'source countries' });
+    }
     if (regexMetrics.capacity_text && !allKeyMetrics.some(m => /capacity|production/i.test(m.label))) {
       mergedMetrics.push({ value: regexMetrics.capacity_text, label: 'production capacity' });
     }
@@ -5563,8 +5734,15 @@ async function processSingleWebsite(website, index, total) {
       }
     }
 
+    // Determine business type: keyword detection can override AI's classification
+    let businessType = productsBreakdown.business_type || 'industrial';
+    const detectedType = detectBusinessType(businessInfo.business, scraped.content);
+    if (detectedType && detectedType !== businessType) {
+      console.log(`  [${index + 1}] Business type override: "${businessType}" → "${detectedType}" (keyword detection)`);
+      businessType = detectedType;
+    }
+
     // FIX #3: Extract product/project images for B2C and project-based companies
-    const businessType = productsBreakdown.business_type || 'industrial';
     let productProjectImages = [];
     if (businessType === 'b2c' || businessType === 'consumer' || businessType === 'project') {
       console.log(`  [${index + 1}] Step 6c: Extracting ${businessType === 'project' ? 'project' : 'product'} images...`);
@@ -5574,14 +5752,19 @@ async function processSingleWebsite(website, index, total) {
       }
     }
 
-    // FIX #5: Extract customer/supplier names from section context (more comprehensive)
-    console.log(`  [${index + 1}] Step 6d: Extracting customers from section context...`);
-    const customersFromSections = extractCustomersFromSections(scraped.rawHtml);
-    // Merge with previously extracted customer names
-    const allCustomerNames = [...new Set([...customerNamesFromImages, ...customersFromSections])];
-    if (customersFromSections.length > 0) {
-      console.log(`  [${index + 1}] Found ${customersFromSections.length} customer names from sections (total: ${allCustomerNames.length})`);
+    // FIX #5: Extract categorized business relationships (customers, suppliers, principals, brands)
+    console.log(`  [${index + 1}] Step 6d: Extracting business relationships...`);
+    const businessRelationships = extractBusinessRelationships(scraped.rawHtml);
+    const relationshipCounts = Object.entries(businessRelationships)
+      .filter(([, arr]) => arr.length > 0)
+      .map(([key, arr]) => `${key}: ${arr.length}`)
+      .join(', ');
+    if (relationshipCounts) {
+      console.log(`  [${index + 1}] Found relationships: ${relationshipCounts}`);
     }
+    // Also merge with image-based extraction for customers
+    const allCustomerNames = [...new Set([...customerNamesFromImages, ...businessRelationships.customers])];
+    businessRelationships.customers = allCustomerNames;
 
     // Combine all extracted data (mandatory fields supplemented by web search)
     // Use ensureString() for all AI-generated fields to prevent [object Object] issues
@@ -5604,8 +5787,8 @@ async function processSingleWebsite(website, index, total) {
       metrics: ensureString(metricsInfo.metrics),  // Fallback for old format
       // Pre-extracted logo (from cascade: Clearbit → og:image → apple-touch-icon → img[logo] → favicon)
       _logo: logoResult,
-      // Customer/partner names (merged from images + section context)
-      _customerNames: allCustomerNames,
+      // Categorized business relationships (customers, suppliers, principals, brands)
+      _businessRelationships: businessRelationships,
       // Product/project images for right side (B2C and project-based)
       _productProjectImages: productProjectImages
     };
@@ -5953,6 +6136,21 @@ app.post('/api/generate-ppt', async (req, res) => {
         if (regexMetrics.employee_count && !allKeyMetrics.some(m => /employee|staff|worker/i.test(m.label))) {
           mergedMetrics.push({ value: String(regexMetrics.employee_count), label: 'employees' });
         }
+        if (regexMetrics.years_experience && !allKeyMetrics.some(m => /year|experience/i.test(m.label))) {
+          mergedMetrics.push({ value: String(regexMetrics.years_experience), label: 'years experience' });
+        }
+        if (regexMetrics.export_countries && !allKeyMetrics.some(m => /export|countr/i.test(m.label))) {
+          mergedMetrics.push({ value: String(regexMetrics.export_countries), label: 'export countries' });
+        }
+        if (regexMetrics.source_countries && !allKeyMetrics.some(m => /source|procure|import/i.test(m.label))) {
+          mergedMetrics.push({ value: String(regexMetrics.source_countries), label: 'source countries' });
+        }
+        if (regexMetrics.capacity_text && !allKeyMetrics.some(m => /capacity|production/i.test(m.label))) {
+          mergedMetrics.push({ value: regexMetrics.capacity_text, label: 'production capacity' });
+        }
+        if (regexMetrics.certifications?.length > 0 && !allKeyMetrics.some(m => /certif|iso|haccp/i.test(m.label))) {
+          mergedMetrics.push({ value: regexMetrics.certifications.join(', '), label: 'certifications' });
+        }
 
         // Determine location: prefer AI extraction, fallback to JSON-LD
         let finalLocation = ensureString(basicInfo.location || searchedInfo.location);
@@ -5978,8 +6176,15 @@ app.post('/api/generate-ppt', async (req, res) => {
           }
         }
 
+        // Determine business type: keyword detection can override AI's classification
+        let businessType = productsBreakdown.business_type || 'industrial';
+        const detectedType = detectBusinessType(businessInfo.business, scraped.content);
+        if (detectedType && detectedType !== businessType) {
+          console.log(`  Business type override: "${businessType}" → "${detectedType}" (keyword detection)`);
+          businessType = detectedType;
+        }
+
         // FIX #3: Extract product/project images for B2C and project-based companies
-        const businessType = productsBreakdown.business_type || 'industrial';
         let productProjectImages = [];
         if (businessType === 'b2c' || businessType === 'consumer' || businessType === 'project') {
           productProjectImages = extractProductProjectImages(scraped.rawHtml, businessType, website);
@@ -5988,12 +6193,18 @@ app.post('/api/generate-ppt', async (req, res) => {
           }
         }
 
-        // FIX #5: Extract customer/supplier names from section context
-        const customersFromSections = extractCustomersFromSections(scraped.rawHtml);
-        const allCustomerNames = [...new Set([...customerNamesFromImages, ...customersFromSections])];
-        if (customersFromSections.length > 0) {
-          console.log(`  Found ${customersFromSections.length} customer names from sections (total: ${allCustomerNames.length})`);
+        // FIX #5: Extract categorized business relationships (customers, suppliers, principals, brands)
+        const businessRelationships = extractBusinessRelationships(scraped.rawHtml);
+        const relationshipCounts = Object.entries(businessRelationships)
+          .filter(([, arr]) => arr.length > 0)
+          .map(([key, arr]) => `${key}: ${arr.length}`)
+          .join(', ');
+        if (relationshipCounts) {
+          console.log(`  Found relationships: ${relationshipCounts}`);
         }
+        // Also merge with image-based extraction for customers
+        const allCustomerNames = [...new Set([...customerNamesFromImages, ...businessRelationships.customers])];
+        businessRelationships.customers = allCustomerNames;
 
         let companyData = {
           website: scraped.url,
@@ -6014,8 +6225,8 @@ app.post('/api/generate-ppt', async (req, res) => {
           metrics: ensureString(metricsInfo.metrics),
           // Pre-extracted logo
           _logo: logoResult,
-          // Customer/partner names (merged)
-          _customerNames: allCustomerNames,
+          // Categorized business relationships (customers, suppliers, principals, brands)
+          _businessRelationships: businessRelationships,
           // Product/project images
           _productProjectImages: productProjectImages
         };
