@@ -84,46 +84,81 @@ function stripCompanySuffix(name) {
 
 // Filter garbage from customer/partner name arrays before display
 // Removes image artifacts, URLs, descriptions, product names mixed in customer lists
-function filterGarbageNames(names) {
+// Optional companyName parameter to filter out the company's own name
+function filterGarbageNames(names, companyName = '') {
   if (!Array.isArray(names)) return [];
+
+  const companyLower = (companyName || '').toLowerCase().replace(/\s+/g, '');
+
   return names.filter(name => {
     if (!name || typeof name !== 'string') return false;
     const lower = name.toLowerCase();
+    const normalized = lower.replace(/\s+/g, '');
 
-    // Filter out image artifacts (more specific patterns to avoid false positives)
-    // Use word boundaries or specific patterns
-    if (/[-_]removebg|removebg[-_]/i.test(name)) return false; // removebg artifact
-    if (/[-_]preview|preview[-_]|\spreview$/i.test(name)) return false; // "xxx preview" or "xxx-preview"
-    if (/[-_]scaled|scaled[-_]|\d+x\s*scaled/i.test(name)) return false; // scaled artifact
-    if (/[-_]cover[-_]|home[-_]page[-_]cover/i.test(name)) return false; // cover as filename part
-    if (/\d+x\d*$/.test(name)) return false; // Dimensions like "140x" at end
+    // Too short (1-2 chars) or too long (>60 chars)
+    if (name.length < 3 || name.length > 60) return false;
 
-    // Filter out URLs and paths (but allow S/A which is common in company names)
-    if (name.includes('~')) return false;
-    if (/\/\d+\/|\/blog\/|\/images?\//i.test(name)) return false; // URL paths
-    if (/page\s*client\s*sponsor/i.test(name)) return false;
-    if (/\d{4}\/\d+\/\d+/.test(name)) return false; // Date paths like 2025/6/4
+    // Filter out company's own name
+    if (companyLower && normalized.includes(companyLower)) return false;
+    if (companyLower && companyLower.includes(normalized) && normalized.length > 5) return false;
 
-    // Filter out descriptions (sentences)
-    if (name.split(/\s+/).length > 8) return false; // Too many words
-    if (/^a\s+\w+\s+with\s+/i.test(name)) return false; // "A room with..."
-    if (/^the\s+\w+\s+(is|are|was|has)/i.test(name)) return false; // "The company is..."
+    // HTML artifacts
+    if (/<[^>]+>/.test(name)) return false; // HTML tags
+    if (/style\s*=|href\s*=|src\s*=|class\s*=/i.test(name)) return false; // HTML attributes
+    if (/&[a-z]+;|&#\d+;/i.test(name)) return false; // HTML entities
+    if (/alt\s+text/i.test(name)) return false;
+
+    // Page elements and navigation
+    const pageElements = [
+      'home', 'footer', 'header', 'copyright', 'loading', 'contact', 'menu',
+      'product & system', 'cctv & vms', 'about us', 'our services', 'our products',
+      'read more', 'learn more', 'click here', 'download', 'subscribe',
+      'navigation', 'sidebar', 'breadcrumb', 'pagination', 'next', 'previous'
+    ];
+    if (pageElements.includes(lower.trim())) return false;
+    if (/^(page|section|slide)\s*\d*$/i.test(name)) return false;
+
+    // Generic single-word garbage
+    const genericTerms = [
+      'logo', 'email', 'phone', 'address', 'fax', 'website', 'english', 'indonesia',
+      'image', 'photo', 'picture', 'icon', 'button', 'link', 'banner', 'background',
+      'thumbnail', 'gallery', 'slider', 'carousel', 'video', 'animation'
+    ];
+    if (genericTerms.includes(lower.trim())) return false;
+
+    // Product names that aren't customers (security industry specific)
+    const productTerms = [
+      'ai camera', 'smart home', 'turnstile', 'access control', 'barrier gate',
+      'cctv system', 'fingerprint', 'visitor management', 'fire alarm',
+      'smart security', 'building solution', 'integration system', 'security system'
+    ];
+    if (productTerms.some(p => lower === p || lower === p + 's')) return false;
+
+    // Image artifacts (more specific patterns)
+    if (/[-_]removebg|removebg[-_]/i.test(name)) return false;
+    if (/[-_]preview|preview[-_]|\spreview$/i.test(name)) return false;
+    if (/[-_]scaled|scaled[-_]|\d+x\s*scaled/i.test(name)) return false;
+    if (/[-_]cover[-_]|home[-_]page[-_]cover/i.test(name)) return false;
+    if (/\d+x\d*$/.test(name)) return false; // Dimensions like "140x"
+    if (/[-_]\d{5,}[-_\.]/.test(name)) return false; // Long number sequences in filenames
+
+    // URLs and paths
+    if (name.includes('~') || name.includes('://')) return false;
+    if (/\/\d+\/|\/blog\/|\/images?\//i.test(name)) return false;
+    if (/\d{4}\/\d+\/\d+/.test(name)) return false; // Date paths
+    if (/\.(jpg|jpeg|png|gif|webp|svg|pdf)$/i.test(name)) return false; // File extensions
+
+    // Descriptions (sentences)
+    if (name.split(/\s+/).length > 8) return false;
+    if (/^a\s+\w+\s+with\s+/i.test(name)) return false;
+    if (/^the\s+\w+\s+(is|are|was|has)/i.test(name)) return false;
     if (/\s+displaying\s+|\s+showing\s+|\s+featuring\s+/i.test(name)) return false;
     if (/multiple\s+(security|camera|monitor)/i.test(name)) return false;
-    if (/various\s+(camera|security|monitor)/i.test(name)) return false;
-    if (/camera\s+feeds/i.test(name)) return false;
-    if (/security\s+monitors\s+displaying/i.test(name)) return false;
-    if (/control\s+room\s+with/i.test(name)) return false;
-    if (/group\s+of\s+people/i.test(name)) return false;
+    if (/camera\s+feeds|control\s+room\s+with|group\s+of\s+people/i.test(name)) return false;
 
-    // Filter out product names that got mixed in
-    if (lower.includes('smart security building solution')) return false;
-    if (lower.includes('intelligent inspection system')) return false;
-    if (/access\s+control.*turnstile|turnstile.*access\s+control/i.test(name)) return false;
-    if (/ai\s+camera.*system|system.*ai\s+camera/i.test(name)) return false;
-
-    // Filter out combined product listings (brand + brand)
-    if (/hanwha\s+vision.*hikvision|hikvision.*hanwha/i.test(name)) return false;
+    // Combined brand/product listings
+    if (/hanwha.*hikvision|hikvision.*hanwha/i.test(name)) return false;
+    if (/dahua.*hikvision|hikvision.*dahua/i.test(name)) return false;
 
     return true;
   }).map(name => stripCompanySuffix(name)); // Strip suffixes from valid names
@@ -3450,8 +3485,11 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       // Add Principal Partners row if available (from businessRelationships)
       const relationships = company._businessRelationships || {};
 
+      // Get company name for filtering (to exclude company's own name from customers list)
+      const companyNameForFilter = company.company_name || company.title || '';
+
       if (relationships.principals && relationships.principals.length > 0) {
-        const cleanedPrincipals = filterGarbageNames(relationships.principals);
+        const cleanedPrincipals = filterGarbageNames(relationships.principals, companyNameForFilter);
         if (cleanedPrincipals.length > 0) {
           const principalsList = cleanedPrincipals.slice(0, 10).join(', ');
           if (!existingLabels.has('principal partners') && !existingLabels.has('principals')) {
@@ -3469,7 +3507,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         const rightTitle = ensureString(company.breakdown_title).toLowerCase();
         const isCustomersOnRight = rightTitle.includes('customer') || rightTitle.includes('client');
         if (!isCustomersOnRight && !existingLabels.has('customers') && !existingLabels.has('key customers')) {
-          const cleanedCustomers = filterGarbageNames(relationships.customers);
+          const cleanedCustomers = filterGarbageNames(relationships.customers, companyNameForFilter);
           if (cleanedCustomers.length > 0) {
             const customersList = cleanedCustomers.slice(0, 10).join(', ');
             tableData.push(['Customers', customersList, null]);
@@ -3802,6 +3840,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         // Get business relationships
         const relationships = company._businessRelationships || {};
         const breakdownTitle = ensureString(company.breakdown_title).toLowerCase();
+        const companyNameForFilter = company.company_name || company.title || '';
 
         // Build right-side table - THEMATIC based on breakdown_title
         let prioritizedItems = [];
@@ -3809,7 +3848,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         // Determine what category the right side should show based on breakdown_title
         if (breakdownTitle.includes('customer') || breakdownTitle.includes('client')) {
           // Show customers only - filter garbage data first
-          const cleanedCustomers = filterGarbageNames(relationships.customers || []);
+          const cleanedCustomers = filterGarbageNames(relationships.customers || [], companyNameForFilter);
           if (cleanedCustomers.length > 0) {
             cleanedCustomers.slice(0, maxRows).forEach(customer => {
               prioritizedItems.push({ label: customer, value: '' });
@@ -3818,14 +3857,14 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           }
         } else if (breakdownTitle.includes('supplier') || breakdownTitle.includes('principal') || breakdownTitle.includes('partner')) {
           // Show suppliers/principals only - filter garbage data first
-          const cleanedPrincipals = filterGarbageNames(relationships.principals || []);
+          const cleanedPrincipals = filterGarbageNames(relationships.principals || [], companyNameForFilter);
           if (cleanedPrincipals.length > 0) {
             cleanedPrincipals.slice(0, maxRows).forEach(principal => {
               prioritizedItems.push({ label: principal, value: '' });
             });
             console.log(`  Right side (Principals): ${cleanedPrincipals.length} items after filtering`);
           } else {
-            const cleanedSuppliers = filterGarbageNames(relationships.suppliers || []);
+            const cleanedSuppliers = filterGarbageNames(relationships.suppliers || [], companyNameForFilter);
             if (cleanedSuppliers.length > 0) {
               cleanedSuppliers.slice(0, maxRows).forEach(supplier => {
                 prioritizedItems.push({ label: supplier, value: '' });
@@ -3835,7 +3874,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           }
         } else if (breakdownTitle.includes('brand')) {
           // Show brands only - filter garbage data first
-          const cleanedBrands = filterGarbageNames(relationships.brands || []);
+          const cleanedBrands = filterGarbageNames(relationships.brands || [], companyNameForFilter);
           if (cleanedBrands.length > 0) {
             cleanedBrands.slice(0, maxRows).forEach(brand => {
               prioritizedItems.push({ label: brand, value: '' });
