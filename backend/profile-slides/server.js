@@ -3865,9 +3865,9 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           console.log(`  Right side (Products/Apps): ${prioritizedItems.length} items`);
         }
 
-        // Limit to 6 rows maximum (to fit the slide)
-        if (prioritizedItems.length > 6) {
-          prioritizedItems = prioritizedItems.slice(0, 6);
+        // Limit to maxRows (based on rightLayout setting)
+        if (prioritizedItems.length > maxRows) {
+          prioritizedItems = prioritizedItems.slice(0, maxRows);
         }
 
         if (prioritizedItems.length >= 1) {
