@@ -5,6 +5,96 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Profile Slides</title>
   <link rel="stylesheet" href="styles.css">
+  <style>
+    /* Right-side layout selector */
+    .layout-selector {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+      margin-top: 8px;
+    }
+    .layout-option {
+      position: relative;
+      cursor: pointer;
+    }
+    .layout-option input {
+      position: absolute;
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .layout-preview {
+      border: 2px solid #ddd;
+      border-radius: 8px;
+      padding: 8px;
+      background: #fafafa;
+      transition: all 0.2s;
+    }
+    .layout-option input:checked + .layout-preview {
+      border-color: #2563eb;
+      background: #eff6ff;
+    }
+    .layout-option:hover .layout-preview {
+      border-color: #93c5fd;
+    }
+    /* Mini slide preview */
+    .preview-slide {
+      display: flex;
+      gap: 4px;
+      height: 60px;
+      background: #1e3a5f;
+      border-radius: 4px;
+      padding: 4px;
+      margin-bottom: 6px;
+    }
+    .preview-left {
+      flex: 1;
+      background: #fff;
+      border-radius: 2px;
+    }
+    .preview-right {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .preview-row {
+      flex: 1;
+      background: #3b82f6;
+      border-radius: 1px;
+      display: flex;
+    }
+    .preview-row-label {
+      width: 30%;
+      background: #1d4ed8;
+      border-radius: 1px 0 0 1px;
+    }
+    .preview-row-value {
+      flex: 1;
+      background: #fff;
+      border-radius: 0 1px 1px 0;
+    }
+    .preview-empty {
+      flex: 1;
+      background: transparent;
+    }
+    .preview-images {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2px;
+      flex: 1;
+    }
+    .preview-img {
+      background: #94a3b8;
+      border-radius: 2px;
+    }
+    .layout-name {
+      font-size: 11px;
+      font-weight: 500;
+      text-align: center;
+      color: #374151;
+    }
+  </style>
 </head>
 <body>
   <header class="app-header">
@@ -73,6 +163,97 @@
               <p class="hint-text">One URL per line. Up to 50 websites.</p>
             </div>
 
+            <div class="form-group">
+              <label>Right Side Layout</label>
+              <div class="layout-selector">
+                <!-- Option 1: Full table 6 rows -->
+                <label class="layout-option">
+                  <input type="radio" name="rightLayout" value="table-6" checked>
+                  <div class="layout-preview">
+                    <div class="preview-slide">
+                      <div class="preview-left"></div>
+                      <div class="preview-right">
+                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                      </div>
+                    </div>
+                    <div class="layout-name">Table (6 rows)</div>
+                  </div>
+                </label>
+                <!-- Option 2: Full table unlimited -->
+                <label class="layout-option">
+                  <input type="radio" name="rightLayout" value="table-unlimited">
+                  <div class="layout-preview">
+                    <div class="preview-slide">
+                      <div class="preview-left"></div>
+                      <div class="preview-right">
+                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                      </div>
+                    </div>
+                    <div class="layout-name">Table (no limit)</div>
+                  </div>
+                </label>
+                <!-- Option 3: Half table -->
+                <label class="layout-option">
+                  <input type="radio" name="rightLayout" value="table-half">
+                  <div class="layout-preview">
+                    <div class="preview-slide">
+                      <div class="preview-left"></div>
+                      <div class="preview-right">
+                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                        <div class="preview-empty"></div>
+                      </div>
+                    </div>
+                    <div class="layout-name">Table (3-4 rows)</div>
+                  </div>
+                </label>
+                <!-- Option 4: Images -->
+                <label class="layout-option">
+                  <input type="radio" name="rightLayout" value="images">
+                  <div class="layout-preview">
+                    <div class="preview-slide">
+                      <div class="preview-left"></div>
+                      <div class="preview-right">
+                        <div class="preview-images">
+                          <div class="preview-img"></div>
+                          <div class="preview-img"></div>
+                          <div class="preview-img"></div>
+                          <div class="preview-img"></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="layout-name">Product/Project Images</div>
+                  </div>
+                </label>
+                <!-- Option 5: Empty -->
+                <label class="layout-option">
+                  <input type="radio" name="rightLayout" value="empty">
+                  <div class="layout-preview">
+                    <div class="preview-slide">
+                      <div class="preview-left"></div>
+                      <div class="preview-right">
+                        <div class="preview-empty"></div>
+                      </div>
+                    </div>
+                    <div class="layout-name">Empty</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
             <button type="submit" class="submit-btn" id="submitBtn">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
@@ -120,6 +301,7 @@
       const targetDescription = document.getElementById('targetDescription').value.trim();
       const websitesInput = document.getElementById('websites').value.trim();
       const email = globalEmailInput.value.trim() || localStorage.getItem('ycpUserEmail');
+      const rightLayout = document.querySelector('input[name="rightLayout"]:checked').value;
 
       if (!targetDescription || !websitesInput) {
         alert('Please fill in all fields');
@@ -152,7 +334,7 @@
         const response = await fetch('https://xvasjackgithubio-production-fb38.up.railway.app/api/profile-slides', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ websites, email, targetDescription })
+          body: JSON.stringify({ websites, email, targetDescription, rightLayout })
         });
 
         if (!response.ok) {

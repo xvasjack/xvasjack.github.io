@@ -72,6 +72,35 @@ function normalizeLabel(label) {
     .join(' ');
 }
 
+// Filter garbage from customer/partner name arrays before display
+// Removes image artifacts, URLs, descriptions, product names mixed in customer lists
+function filterGarbageNames(names) {
+  if (!Array.isArray(names)) return [];
+  return names.filter(name => {
+    if (!name || typeof name !== 'string') return false;
+    const lower = name.toLowerCase();
+    // Filter out image artifacts
+    if (/removebg|preview|scaled|cover|home-page/i.test(name)) return false;
+    if (/\d+x\d*$/.test(name)) return false; // Dimensions like "140x"
+    // Filter out URLs and paths
+    if (name.includes('~') || name.includes('/')) return false;
+    if (/page\s*client\s*sponsor/i.test(name)) return false;
+    if (/\d{4}\/\d+\/\d+/.test(name)) return false; // Date paths
+    // Filter out descriptions (sentences)
+    if (name.split(/\s+/).length > 8) return false; // Too many words
+    if (/^a\s+|^the\s+|\s+with\s+|\s+displaying\s+/i.test(name)) return false;
+    if (/multiple\s+|various\s+|camera\s+feeds?|security\s+monitors?|control\s+room/i.test(name)) return false;
+    if (/group\s+of\s+people/i.test(name)) return false;
+    // Filter out product names that got mixed in
+    if (lower.includes('smart security building') || lower.includes('intelligent inspection')) return false;
+    if (lower.includes('access control') && lower.includes('turnstile')) return false;
+    if (lower.includes('ai camera') && lower.includes('system')) return false;
+    // Filter out combined product listings
+    if (/hanwha\s+vision.*hikvision|hikvision.*hanwha/i.test(name)) return false;
+    return true;
+  });
+}
+
 // ===== QUOTE VERIFICATION SYSTEM =====
 // Verifies that AI-extracted data actually exists in the scraped content
 // This prevents hallucination by requiring proof for every claim
@@ -2644,7 +2673,7 @@ async function fetchImageAsBase64(url) {
 
 // Generate PPTX using PptxGenJS - matching YCP template
 // inaccessibleWebsites: websites that couldn't be scraped (appear on summary slide only, no individual profiles)
-async function generatePPTX(companies, targetDescription = '', inaccessibleWebsites = []) {
+async function generatePPTX(companies, targetDescription = '', inaccessibleWebsites = [], rightLayout = 'table-6') {
   try {
     console.log('Generating PPTX with PptxGenJS...');
     if (inaccessibleWebsites.length > 0) {
@@ -3392,12 +3421,16 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
       // Add Principal Partners row if available (from businessRelationships)
       const relationships = company._businessRelationships || {};
+
       if (relationships.principals && relationships.principals.length > 0) {
-        const principalsList = relationships.principals.slice(0, 10).join(', ');
-        if (!existingLabels.has('principal partners') && !existingLabels.has('principals')) {
-          tableData.push(['Principal Partners', principalsList, null]);
-          existingLabels.add('principal partners');
-          console.log(`    Added Principal Partners: ${principalsList}`);
+        const cleanedPrincipals = filterGarbageNames(relationships.principals);
+        if (cleanedPrincipals.length > 0) {
+          const principalsList = cleanedPrincipals.slice(0, 10).join(', ');
+          if (!existingLabels.has('principal partners') && !existingLabels.has('principals')) {
+            tableData.push(['Principal Partners', principalsList, null]);
+            existingLabels.add('principal partners');
+            console.log(`    Added Principal Partners: ${principalsList}`);
+          }
         }
       } else {
         console.log(`    No principals found in _businessRelationships`);
@@ -3408,10 +3441,13 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         const rightTitle = ensureString(company.breakdown_title).toLowerCase();
         const isCustomersOnRight = rightTitle.includes('customer') || rightTitle.includes('client');
         if (!isCustomersOnRight && !existingLabels.has('customers') && !existingLabels.has('key customers')) {
-          const customersList = relationships.customers.slice(0, 10).join(', ');
-          tableData.push(['Customers', customersList, null]);
-          existingLabels.add('customers');
-          console.log(`    Added Customers: ${customersList.substring(0, 80)}...`);
+          const cleanedCustomers = filterGarbageNames(relationships.customers);
+          if (cleanedCustomers.length > 0) {
+            const customersList = cleanedCustomers.slice(0, 10).join(', ');
+            tableData.push(['Customers', customersList, null]);
+            existingLabels.add('customers');
+            console.log(`    Added Customers: ${customersList.substring(0, 80)}...`);
+          }
         }
       }
 
@@ -3500,17 +3536,29 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         });
       }
 
-      // ===== RIGHT SECTION (varies by business type) =====
-      const businessType = company.business_type || 'industrial';
-      const preExtractedImages = company._productProjectImages || [];
-      const hasPreExtractedImages = preExtractedImages.length > 0;
+      // ===== RIGHT SECTION (varies by layout selection and business type) =====
+      // rightLayout options: 'table-6' (default), 'table-unlimited', 'table-half', 'images', 'empty'
+      console.log(`  Right layout setting: ${rightLayout}`);
 
-      // Check if this is a B2C or project-based business with images to show
-      const isImageBusiness = (businessType === 'b2c' || businessType === 'consumer' || businessType === 'project');
-      const hasAIProjects = company.projects && company.projects.length > 0;
-      const hasAIProducts = company.products && company.products.length > 0;
+      // Skip entire right section if empty layout selected
+      if (rightLayout === 'empty') {
+        console.log('  Skipping right section (empty layout selected)');
+      } else {
+        const businessType = company.business_type || 'industrial';
+        const preExtractedImages = company._productProjectImages || [];
+        const hasPreExtractedImages = preExtractedImages.length > 0;
 
-      if (isImageBusiness && (hasPreExtractedImages || hasAIProjects || hasAIProducts)) {
+        // Check if this is a B2C or project-based business with images to show
+        const isImageBusiness = (businessType === 'b2c' || businessType === 'consumer' || businessType === 'project');
+        const hasAIProjects = company.projects && company.projects.length > 0;
+        const hasAIProducts = company.products && company.products.length > 0;
+
+        // Determine if we should show images or table based on rightLayout
+        const forceImages = rightLayout === 'images';
+        const forceTable = rightLayout.startsWith('table-');
+        const hasImages = hasPreExtractedImages || hasAIProjects || hasAIProducts;
+
+        if ((forceImages && hasImages) || (!forceTable && isImageBusiness && hasImages)) {
         // B2C/PROJECT-BASED: Show product/project images with labels
         // Use pre-extracted images first, fallback to AI-extracted data
 
@@ -3638,9 +3686,20 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
             });
           }
         }
-      } else {
-        // INDUSTRIAL B2B: Show table format - THEMATIC (one category only based on breakdown_title)
+      } else if (forceTable || !isImageBusiness || !hasImages) {
+        // TABLE LAYOUT: Show table format - THEMATIC (one category only based on breakdown_title)
         // Right side should focus on ONE thing: products, OR customers, OR suppliers, etc.
+        // Row limit based on rightLayout: 'table-6' = 6 rows, 'table-unlimited' = no limit, 'table-half' = 3-4 rows
+
+        // Determine max rows based on layout
+        let maxRows;
+        if (rightLayout === 'table-unlimited') {
+          maxRows = 999; // effectively no limit
+        } else if (rightLayout === 'table-half') {
+          maxRows = 4;
+        } else {
+          maxRows = 6; // default for table-6
+        }
 
         // Get business relationships
         const relationships = company._businessRelationships || {};
@@ -3651,33 +3710,39 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
         // Determine what category the right side should show based on breakdown_title
         if (breakdownTitle.includes('customer') || breakdownTitle.includes('client')) {
-          // Show customers only
-          if (relationships.customers && relationships.customers.length > 0) {
-            relationships.customers.slice(0, 6).forEach(customer => {
+          // Show customers only - filter garbage data first
+          const cleanedCustomers = filterGarbageNames(relationships.customers || []);
+          if (cleanedCustomers.length > 0) {
+            cleanedCustomers.slice(0, maxRows).forEach(customer => {
               prioritizedItems.push({ label: customer, value: '' });
             });
-            console.log(`  Right side (Customers): ${relationships.customers.length} items`);
+            console.log(`  Right side (Customers): ${cleanedCustomers.length} items after filtering`);
           }
         } else if (breakdownTitle.includes('supplier') || breakdownTitle.includes('principal') || breakdownTitle.includes('partner')) {
-          // Show suppliers/principals only
-          if (relationships.principals && relationships.principals.length > 0) {
-            relationships.principals.slice(0, 6).forEach(principal => {
+          // Show suppliers/principals only - filter garbage data first
+          const cleanedPrincipals = filterGarbageNames(relationships.principals || []);
+          if (cleanedPrincipals.length > 0) {
+            cleanedPrincipals.slice(0, maxRows).forEach(principal => {
               prioritizedItems.push({ label: principal, value: '' });
             });
-            console.log(`  Right side (Principals): ${relationships.principals.length} items`);
-          } else if (relationships.suppliers && relationships.suppliers.length > 0) {
-            relationships.suppliers.slice(0, 6).forEach(supplier => {
-              prioritizedItems.push({ label: supplier, value: '' });
-            });
-            console.log(`  Right side (Suppliers): ${relationships.suppliers.length} items`);
+            console.log(`  Right side (Principals): ${cleanedPrincipals.length} items after filtering`);
+          } else {
+            const cleanedSuppliers = filterGarbageNames(relationships.suppliers || []);
+            if (cleanedSuppliers.length > 0) {
+              cleanedSuppliers.slice(0, maxRows).forEach(supplier => {
+                prioritizedItems.push({ label: supplier, value: '' });
+              });
+              console.log(`  Right side (Suppliers): ${cleanedSuppliers.length} items after filtering`);
+            }
           }
         } else if (breakdownTitle.includes('brand')) {
-          // Show brands only
-          if (relationships.brands && relationships.brands.length > 0) {
-            relationships.brands.slice(0, 6).forEach(brand => {
+          // Show brands only - filter garbage data first
+          const cleanedBrands = filterGarbageNames(relationships.brands || []);
+          if (cleanedBrands.length > 0) {
+            cleanedBrands.slice(0, maxRows).forEach(brand => {
               prioritizedItems.push({ label: brand, value: '' });
             });
-            console.log(`  Right side (Brands): ${relationships.brands.length} items`);
+            console.log(`  Right side (Brands): ${cleanedBrands.length} items after filtering`);
           }
         } else {
           // Default: Products/Applications/Services - use breakdown_items
@@ -6098,6 +6163,10 @@ function cleanCustomerName(text) {
 
   let name = text.trim()
     .replace(/<[^>]+>/g, '') // Remove HTML
+    .replace(/&amp;/g, '&') // Decode HTML entity
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&#\d+;/g, '') // Remove numeric HTML entities
     .replace(/\s+/g, ' ')
     .trim();
 
@@ -6117,6 +6186,73 @@ function cleanCustomerName(text) {
   if (name.length < 2 || name.length > 50 || /^\d+$/.test(name)) {
     return '';
   }
+
+  // ========== NEW: Filter out garbage data ==========
+
+  // Skip image filenames and artifacts
+  const imageGarbagePatterns = [
+    /removebg/i, /preview/i, /scaled/i, /cover/i, /home-page/i,
+    /\d+x\d*$/, // Dimensions like "140x" or "800x600"
+    /^\d+$/, // Just numbers
+    /_\d+$/, // Trailing numbers like "_1"
+    /\.(jpg|jpeg|png|gif|webp|svg|ico)$/i, // File extensions
+    /^(img|image|pic|photo|logo|icon)[-_]/i, // Image prefixes
+  ];
+
+  if (imageGarbagePatterns.some(pattern => pattern.test(name))) {
+    return '';
+  }
+
+  // Skip URL fragments and paths
+  if (name.includes('~') || name.includes('/') || name.includes('\\')) {
+    return '';
+  }
+  if (/^blog\/|\/blog|\/\d+\/\d+\//.test(name)) {
+    return '';
+  }
+
+  // Skip image descriptions (sentences with verbs/articles)
+  const descriptionPatterns = [
+    /^a\s+/i, // "A room with..."
+    /^the\s+/i, // "The company..."
+    /\s+with\s+/i, // "...with multiple..."
+    /\s+displaying\s+/i,
+    /\s+showing\s+/i,
+    /\s+featuring\s+/i,
+    /multiple\s+/i,
+    /various\s+/i,
+    /camera\s+feeds?/i,
+    /security\s+monitors?/i,
+    /control\s+room/i,
+    /group\s+of\s+people/i,
+  ];
+
+  if (descriptionPatterns.some(pattern => pattern.test(name))) {
+    return '';
+  }
+
+  // Skip if looks like a sentence (too many words for a company name)
+  const wordCount = name.split(/\s+/).length;
+  if (wordCount > 8) {
+    return '';
+  }
+
+  // Skip CSS class-like patterns
+  if (/^[a-z]+-[a-z]+-[a-z]+$/i.test(name) && !name.includes(' ')) {
+    return '';
+  }
+
+  // Skip "Page Client Sponsor" patterns
+  if (/page\s*client\s*sponsor/i.test(name)) {
+    return '';
+  }
+
+  // Skip if contains blog/date patterns
+  if (/\d{4}\/\d+\/\d+/.test(name)) {
+    return '';
+  }
+
+  // ========== END NEW FILTERS ==========
 
   // Clean company name (remove suffixes)
   name = cleanCompanyName(name);
@@ -7909,7 +8045,8 @@ async function processWebsitesInParallel(websites) {
 
 // Main profile slides endpoint
 app.post('/api/profile-slides', async (req, res) => {
-  const { websites, email, targetDescription } = req.body;
+  const { websites, email, targetDescription, rightLayout } = req.body;
+  // rightLayout options: 'table-6' (default), 'table-unlimited', 'table-half', 'images', 'empty'
 
   if (!websites || !Array.isArray(websites) || websites.length === 0) {
     return res.status(400).json({ error: 'Please provide an array of website URLs' });
@@ -7967,7 +8104,7 @@ app.post('/api/profile-slides', async (req, res) => {
     // Pass inaccessible websites to include on summary slide
     let pptxResult = null;
     if (companies.length > 0 || inaccessibleWebsites.length > 0) {
-      pptxResult = await generatePPTX(companies, targetDescription, inaccessibleWebsites);
+      pptxResult = await generatePPTX(companies, targetDescription, inaccessibleWebsites, rightLayout || 'table-6');
       logMemoryUsage('after PPTX generation');
     }
 
@@ -8005,7 +8142,7 @@ app.post('/api/profile-slides', async (req, res) => {
 // ============ GENERATE PPT ENDPOINT (returns content, no email) ============
 // Used by v6 search to generate PPT and attach to its own email
 app.post('/api/generate-ppt', async (req, res) => {
-  const { websites, targetDescription } = req.body;
+  const { websites, targetDescription, rightLayout } = req.body;
 
   if (!websites || !Array.isArray(websites) || websites.length === 0) {
     return res.status(400).json({ error: 'Please provide an array of website URLs' });
@@ -8308,7 +8445,7 @@ app.post('/api/generate-ppt', async (req, res) => {
     // Generate PPTX - pass inaccessible websites to include on summary slide
     let pptxResult = null;
     if (companies.length > 0 || inaccessibleWebsites.length > 0) {
-      pptxResult = await generatePPTX(companies, targetDescription, inaccessibleWebsites);
+      pptxResult = await generatePPTX(companies, targetDescription, inaccessibleWebsites, rightLayout || 'table-6');
     }
 
     if (pptxResult?.success) {
