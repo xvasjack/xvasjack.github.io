@@ -72,6 +72,16 @@ function normalizeLabel(label) {
     .join(' ');
 }
 
+// Strip company suffixes from customer/partner names (simpler than cleanCompanyName)
+// Just removes suffixes, doesn't reject non-ASCII or descriptive names
+function stripCompanySuffix(name) {
+  if (!name || typeof name !== 'string') return name;
+  return name
+    .replace(/\s*(Sdn\.?\s*Bhd\.?|Bhd\.?|Berhad|Pte\.?\s*Ltd\.?|Ltd\.?|Limited|Inc\.?|Incorporated|Corp\.?|Corporation|Co\.?,?\s*Ltd\.?|LLC|LLP|GmbH|S\.?A\.?|Tbk\.?|JSC|PLC|Public\s*Limited|Private\s*Limited|Joint\s*Stock|Company|\(.*?\))$/gi, '')
+    .replace(/^(PT\.?|CV\.?)\s+/gi, '')  // Remove PT/CV prefix
+    .trim();
+}
+
 // Filter garbage from customer/partner name arrays before display
 // Removes image artifacts, URLs, descriptions, product names mixed in customer lists
 function filterGarbageNames(names) {
@@ -79,26 +89,44 @@ function filterGarbageNames(names) {
   return names.filter(name => {
     if (!name || typeof name !== 'string') return false;
     const lower = name.toLowerCase();
-    // Filter out image artifacts
-    if (/removebg|preview|scaled|cover|home-page/i.test(name)) return false;
-    if (/\d+x\d*$/.test(name)) return false; // Dimensions like "140x"
-    // Filter out URLs and paths
-    if (name.includes('~') || name.includes('/')) return false;
+
+    // Filter out image artifacts (more specific patterns to avoid false positives)
+    // Use word boundaries or specific patterns
+    if (/[-_]removebg|removebg[-_]/i.test(name)) return false; // removebg artifact
+    if (/[-_]preview|preview[-_]|\spreview$/i.test(name)) return false; // "xxx preview" or "xxx-preview"
+    if (/[-_]scaled|scaled[-_]|\d+x\s*scaled/i.test(name)) return false; // scaled artifact
+    if (/[-_]cover[-_]|home[-_]page[-_]cover/i.test(name)) return false; // cover as filename part
+    if (/\d+x\d*$/.test(name)) return false; // Dimensions like "140x" at end
+
+    // Filter out URLs and paths (but allow S/A which is common in company names)
+    if (name.includes('~')) return false;
+    if (/\/\d+\/|\/blog\/|\/images?\//i.test(name)) return false; // URL paths
     if (/page\s*client\s*sponsor/i.test(name)) return false;
-    if (/\d{4}\/\d+\/\d+/.test(name)) return false; // Date paths
+    if (/\d{4}\/\d+\/\d+/.test(name)) return false; // Date paths like 2025/6/4
+
     // Filter out descriptions (sentences)
     if (name.split(/\s+/).length > 8) return false; // Too many words
-    if (/^a\s+|^the\s+|\s+with\s+|\s+displaying\s+/i.test(name)) return false;
-    if (/multiple\s+|various\s+|camera\s+feeds?|security\s+monitors?|control\s+room/i.test(name)) return false;
+    if (/^a\s+\w+\s+with\s+/i.test(name)) return false; // "A room with..."
+    if (/^the\s+\w+\s+(is|are|was|has)/i.test(name)) return false; // "The company is..."
+    if (/\s+displaying\s+|\s+showing\s+|\s+featuring\s+/i.test(name)) return false;
+    if (/multiple\s+(security|camera|monitor)/i.test(name)) return false;
+    if (/various\s+(camera|security|monitor)/i.test(name)) return false;
+    if (/camera\s+feeds/i.test(name)) return false;
+    if (/security\s+monitors\s+displaying/i.test(name)) return false;
+    if (/control\s+room\s+with/i.test(name)) return false;
     if (/group\s+of\s+people/i.test(name)) return false;
+
     // Filter out product names that got mixed in
-    if (lower.includes('smart security building') || lower.includes('intelligent inspection')) return false;
-    if (lower.includes('access control') && lower.includes('turnstile')) return false;
-    if (lower.includes('ai camera') && lower.includes('system')) return false;
-    // Filter out combined product listings
+    if (lower.includes('smart security building solution')) return false;
+    if (lower.includes('intelligent inspection system')) return false;
+    if (/access\s+control.*turnstile|turnstile.*access\s+control/i.test(name)) return false;
+    if (/ai\s+camera.*system|system.*ai\s+camera/i.test(name)) return false;
+
+    // Filter out combined product listings (brand + brand)
     if (/hanwha\s+vision.*hikvision|hikvision.*hanwha/i.test(name)) return false;
+
     return true;
-  });
+  }).map(name => stripCompanySuffix(name)); // Strip suffixes from valid names
 }
 
 // ===== QUOTE VERIFICATION SYSTEM =====
@@ -3537,7 +3565,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       }
 
       // ===== RIGHT SECTION (varies by layout selection and business type) =====
-      // rightLayout options: 'table-6' (default), 'table-unlimited', 'table-half', 'images', 'empty'
+      // rightLayout options: 'table-6' (default), 'table-unlimited', 'table-half', 'images', 'images-6', 'images-labeled', 'empty'
       console.log(`  Right layout setting: ${rightLayout}`);
 
       // Skip entire right section if empty layout selected
@@ -3554,53 +3582,123 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         const hasAIProducts = company.products && company.products.length > 0;
 
         // Determine if we should show images or table based on rightLayout
-        const forceImages = rightLayout === 'images';
+        const forceImages = rightLayout.startsWith('images');
         const forceTable = rightLayout.startsWith('table-');
         const hasImages = hasPreExtractedImages || hasAIProjects || hasAIProducts;
 
         if ((forceImages && hasImages) || (!forceTable && isImageBusiness && hasImages)) {
-        // B2C/PROJECT-BASED: Show product/project images with labels
+        // IMAGE LAYOUTS: Show product/project images
         // Use pre-extracted images first, fallback to AI-extracted data
 
         if (hasPreExtractedImages) {
           // Use pre-extracted images (from HTML scraping)
-          console.log(`  Using ${preExtractedImages.length} pre-extracted images for right side`);
+          console.log(`  Using ${preExtractedImages.length} pre-extracted images for right side (layout: ${rightLayout})`);
 
-          // Layout: 2x2 grid for 4 images
           const gridStartX = 6.86;
           const gridStartY = 1.91;
-          const colWidth = 3.0;
-          const rowHeight = 2.2;
-          const imageW = 2.8;
-          const imageH = 1.6;
 
-          for (let i = 0; i < Math.min(preExtractedImages.length, 4); i++) {
-            const img = preExtractedImages[i];
-            const col = i % 2;
-            const row = Math.floor(i / 2);
-            const cellX = gridStartX + (col * colWidth);
-            const cellY = gridStartY + (row * rowHeight);
+          if (rightLayout === 'images-labeled') {
+            // Layout: Image on left, label on right - 3-4 rows
+            const rowHeight = 1.15;
+            const imageW = 2.0;
+            const imageH = 1.0;
+            const labelX = gridStartX + imageW + 0.15;
+            const labelW = 3.8;
 
-            try {
-              const imgBase64 = await fetchImageAsBase64(img.url);
-              if (imgBase64) {
-                slide.addImage({
-                  data: `data:image/jpeg;base64,${imgBase64}`,
-                  x: cellX, y: cellY, w: imageW, h: imageH,
-                  sizing: { type: 'contain', w: imageW, h: imageH }
-                });
+            for (let i = 0; i < Math.min(preExtractedImages.length, 4); i++) {
+              const img = preExtractedImages[i];
+              const cellY = gridStartY + (i * rowHeight);
 
-                // Label below image - Segoe UI font 14 as requested
-                if (img.label) {
-                  slide.addText(img.label, {
-                    x: cellX, y: cellY + imageH + 0.05, w: imageW, h: 0.3,
-                    fontSize: 14, fontFace: 'Segoe UI',
-                    color: COLORS.black, align: 'center', valign: 'top'
+              try {
+                const imgBase64 = await fetchImageAsBase64(img.url);
+                if (imgBase64) {
+                  slide.addImage({
+                    data: `data:image/jpeg;base64,${imgBase64}`,
+                    x: gridStartX, y: cellY, w: imageW, h: imageH,
+                    sizing: { type: 'contain', w: imageW, h: imageH }
                   });
+
+                  if (img.label) {
+                    slide.addText(img.label, {
+                      x: labelX, y: cellY, w: labelW, h: imageH,
+                      fontSize: 14, fontFace: 'Segoe UI',
+                      color: COLORS.black, align: 'left', valign: 'middle'
+                    });
+                  }
                 }
+              } catch (imgErr) {
+                console.log(`  Failed to fetch image: ${img.url}`);
               }
-            } catch (imgErr) {
-              console.log(`  Failed to fetch pre-extracted image: ${img.url}`);
+            }
+          } else if (rightLayout === 'images-6') {
+            // Layout: 2x3 grid for 6 images
+            const colWidth = 3.0;
+            const rowHeight = 1.5;
+            const imageW = 2.8;
+            const imageH = 1.2;
+
+            for (let i = 0; i < Math.min(preExtractedImages.length, 6); i++) {
+              const img = preExtractedImages[i];
+              const col = i % 2;
+              const row = Math.floor(i / 2);
+              const cellX = gridStartX + (col * colWidth);
+              const cellY = gridStartY + (row * rowHeight);
+
+              try {
+                const imgBase64 = await fetchImageAsBase64(img.url);
+                if (imgBase64) {
+                  slide.addImage({
+                    data: `data:image/jpeg;base64,${imgBase64}`,
+                    x: cellX, y: cellY, w: imageW, h: imageH,
+                    sizing: { type: 'contain', w: imageW, h: imageH }
+                  });
+
+                  if (img.label) {
+                    slide.addText(img.label, {
+                      x: cellX, y: cellY + imageH + 0.02, w: imageW, h: 0.25,
+                      fontSize: 11, fontFace: 'Segoe UI',
+                      color: COLORS.black, align: 'center', valign: 'top'
+                    });
+                  }
+                }
+              } catch (imgErr) {
+                console.log(`  Failed to fetch image: ${img.url}`);
+              }
+            }
+          } else {
+            // Default: 2x2 grid for 4 images
+            const colWidth = 3.0;
+            const rowHeight = 2.2;
+            const imageW = 2.8;
+            const imageH = 1.6;
+
+            for (let i = 0; i < Math.min(preExtractedImages.length, 4); i++) {
+              const img = preExtractedImages[i];
+              const col = i % 2;
+              const row = Math.floor(i / 2);
+              const cellX = gridStartX + (col * colWidth);
+              const cellY = gridStartY + (row * rowHeight);
+
+              try {
+                const imgBase64 = await fetchImageAsBase64(img.url);
+                if (imgBase64) {
+                  slide.addImage({
+                    data: `data:image/jpeg;base64,${imgBase64}`,
+                    x: cellX, y: cellY, w: imageW, h: imageH,
+                    sizing: { type: 'contain', w: imageW, h: imageH }
+                  });
+
+                  if (img.label) {
+                    slide.addText(img.label, {
+                      x: cellX, y: cellY + imageH + 0.05, w: imageW, h: 0.3,
+                      fontSize: 14, fontFace: 'Segoe UI',
+                      color: COLORS.black, align: 'center', valign: 'top'
+                    });
+                  }
+                }
+              } catch (imgErr) {
+                console.log(`  Failed to fetch image: ${img.url}`);
+              }
             }
           }
         } else if (businessType === 'project' && hasAIProjects) {
@@ -3819,6 +3917,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           });
         }
       }
+      } // End of rightLayout !== 'empty' else block
 
       // ===== FOOTNOTE (single text box with stacked content) =====
       const footnoteLines = [];
@@ -6187,12 +6286,15 @@ function cleanCustomerName(text) {
     return '';
   }
 
-  // ========== NEW: Filter out garbage data ==========
+  // ========== Filter out garbage data ==========
 
-  // Skip image filenames and artifacts
+  // Skip image filenames and artifacts (specific patterns to avoid false positives)
   const imageGarbagePatterns = [
-    /removebg/i, /preview/i, /scaled/i, /cover/i, /home-page/i,
-    /\d+x\d*$/, // Dimensions like "140x" or "800x600"
+    /[-_]removebg|removebg[-_]/i, // removebg artifact
+    /[-_]preview|preview[-_]|\spreview$/i, // "xxx preview" or "xxx-preview"
+    /[-_]scaled|scaled[-_]|\d+x\s*scaled/i, // scaled artifact
+    /[-_]cover[-_]|home[-_]page[-_]cover/i, // cover as filename part
+    /\d+x\d*$/, // Dimensions like "140x" at end
     /^\d+$/, // Just numbers
     /_\d+$/, // Trailing numbers like "_1"
     /\.(jpg|jpeg|png|gif|webp|svg|ico)$/i, // File extensions
@@ -6203,27 +6305,23 @@ function cleanCustomerName(text) {
     return '';
   }
 
-  // Skip URL fragments and paths
-  if (name.includes('~') || name.includes('/') || name.includes('\\')) {
-    return '';
-  }
-  if (/^blog\/|\/blog|\/\d+\/\d+\//.test(name)) {
-    return '';
-  }
+  // Skip URL fragments and paths (but allow S/A which is common in company names)
+  if (name.includes('~')) return '';
+  if (/\/\d+\/|\/blog\/|\/images?\//i.test(name)) return '';
+  if (/\d{4}\/\d+\/\d+/.test(name)) return ''; // Date paths like 2025/6/4
 
-  // Skip image descriptions (sentences with verbs/articles)
+  // Skip image descriptions (more specific patterns)
   const descriptionPatterns = [
-    /^a\s+/i, // "A room with..."
-    /^the\s+/i, // "The company..."
-    /\s+with\s+/i, // "...with multiple..."
+    /^a\s+\w+\s+with\s+/i, // "A room with..."
+    /^the\s+\w+\s+(is|are|was|has)/i, // "The company is..."
     /\s+displaying\s+/i,
     /\s+showing\s+/i,
     /\s+featuring\s+/i,
-    /multiple\s+/i,
-    /various\s+/i,
-    /camera\s+feeds?/i,
-    /security\s+monitors?/i,
-    /control\s+room/i,
+    /multiple\s+(security|camera|monitor)/i,
+    /various\s+(camera|security|monitor)/i,
+    /camera\s+feeds/i,
+    /security\s+monitors\s+displaying/i,
+    /control\s+room\s+with/i,
     /group\s+of\s+people/i,
   ];
 
@@ -6247,12 +6345,7 @@ function cleanCustomerName(text) {
     return '';
   }
 
-  // Skip if contains blog/date patterns
-  if (/\d{4}\/\d+\/\d+/.test(name)) {
-    return '';
-  }
-
-  // ========== END NEW FILTERS ==========
+  // ========== END FILTERS ==========
 
   // Clean company name (remove suffixes)
   name = cleanCompanyName(name);
