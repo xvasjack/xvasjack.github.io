@@ -3649,7 +3649,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         if (breakdownTitle.includes('customer') || breakdownTitle.includes('client')) {
           // Show customers only
           if (relationships.customers && relationships.customers.length > 0) {
-            relationships.customers.slice(0, 8).forEach(customer => {
+            relationships.customers.slice(0, 6).forEach(customer => {
               prioritizedItems.push({ label: customer, value: '' });
             });
             console.log(`  Right side (Customers): ${relationships.customers.length} items`);
@@ -3657,12 +3657,12 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         } else if (breakdownTitle.includes('supplier') || breakdownTitle.includes('principal') || breakdownTitle.includes('partner')) {
           // Show suppliers/principals only
           if (relationships.principals && relationships.principals.length > 0) {
-            relationships.principals.slice(0, 8).forEach(principal => {
+            relationships.principals.slice(0, 6).forEach(principal => {
               prioritizedItems.push({ label: principal, value: '' });
             });
             console.log(`  Right side (Principals): ${relationships.principals.length} items`);
           } else if (relationships.suppliers && relationships.suppliers.length > 0) {
-            relationships.suppliers.slice(0, 8).forEach(supplier => {
+            relationships.suppliers.slice(0, 6).forEach(supplier => {
               prioritizedItems.push({ label: supplier, value: '' });
             });
             console.log(`  Right side (Suppliers): ${relationships.suppliers.length} items`);
@@ -3670,7 +3670,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         } else if (breakdownTitle.includes('brand')) {
           // Show brands only
           if (relationships.brands && relationships.brands.length > 0) {
-            relationships.brands.slice(0, 8).forEach(brand => {
+            relationships.brands.slice(0, 6).forEach(brand => {
               prioritizedItems.push({ label: brand, value: '' });
             });
             console.log(`  Right side (Brands): ${relationships.brands.length} items`);
@@ -3698,13 +3698,17 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           console.log(`  Right side (Products/Apps): ${prioritizedItems.length} items`);
         }
 
-        // Limit to 8 rows maximum (to fit the slide)
-        if (prioritizedItems.length > 8) {
-          prioritizedItems = prioritizedItems.slice(0, 8);
+        // Limit to 6 rows maximum (to fit the slide)
+        if (prioritizedItems.length > 6) {
+          prioritizedItems = prioritizedItems.slice(0, 6);
         }
 
         if (prioritizedItems.length >= 1) {
           const rightTableData = prioritizedItems.map(item => [String(item.label || ''), String(item.value || '')]);
+
+          // Calculate row height to distribute evenly within 4.75" height
+          const rightTableHeight = 4.75;
+          const rightRowHeight = rightTableHeight / rightTableData.length;
 
           const rightRows = rightTableData.map((row) => [
             {
@@ -3735,8 +3739,9 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           slide.addTable(rightRows, {
             x: 6.86, y: 1.91,
             w: 6.1,
+            h: rightTableHeight,
             colW: [1.4, 4.7],
-            rowH: rowHeight,
+            rowH: rightRowHeight,
             fontFace: 'Segoe UI',
             fontSize: 14,
             valign: 'middle',
