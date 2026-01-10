@@ -79,24 +79,42 @@ function filterGarbageNames(names) {
   return names.filter(name => {
     if (!name || typeof name !== 'string') return false;
     const lower = name.toLowerCase();
-    // Filter out image artifacts
-    if (/removebg|preview|scaled|cover|home-page/i.test(name)) return false;
-    if (/\d+x\d*$/.test(name)) return false; // Dimensions like "140x"
-    // Filter out URLs and paths
-    if (name.includes('~') || name.includes('/')) return false;
+
+    // Filter out image artifacts (more specific patterns to avoid false positives)
+    // Use word boundaries or specific patterns
+    if (/[-_]removebg|removebg[-_]/i.test(name)) return false; // removebg artifact
+    if (/[-_]preview|preview[-_]|\spreview$/i.test(name)) return false; // "xxx preview" or "xxx-preview"
+    if (/[-_]scaled|scaled[-_]|\d+x\s*scaled/i.test(name)) return false; // scaled artifact
+    if (/[-_]cover[-_]|home[-_]page[-_]cover/i.test(name)) return false; // cover as filename part
+    if (/\d+x\d*$/.test(name)) return false; // Dimensions like "140x" at end
+
+    // Filter out URLs and paths (but allow S/A which is common in company names)
+    if (name.includes('~')) return false;
+    if (/\/\d+\/|\/blog\/|\/images?\//i.test(name)) return false; // URL paths
     if (/page\s*client\s*sponsor/i.test(name)) return false;
-    if (/\d{4}\/\d+\/\d+/.test(name)) return false; // Date paths
+    if (/\d{4}\/\d+\/\d+/.test(name)) return false; // Date paths like 2025/6/4
+
     // Filter out descriptions (sentences)
     if (name.split(/\s+/).length > 8) return false; // Too many words
-    if (/^a\s+|^the\s+|\s+with\s+|\s+displaying\s+/i.test(name)) return false;
-    if (/multiple\s+|various\s+|camera\s+feeds?|security\s+monitors?|control\s+room/i.test(name)) return false;
+    if (/^a\s+\w+\s+with\s+/i.test(name)) return false; // "A room with..."
+    if (/^the\s+\w+\s+(is|are|was|has)/i.test(name)) return false; // "The company is..."
+    if (/\s+displaying\s+|\s+showing\s+|\s+featuring\s+/i.test(name)) return false;
+    if (/multiple\s+(security|camera|monitor)/i.test(name)) return false;
+    if (/various\s+(camera|security|monitor)/i.test(name)) return false;
+    if (/camera\s+feeds/i.test(name)) return false;
+    if (/security\s+monitors\s+displaying/i.test(name)) return false;
+    if (/control\s+room\s+with/i.test(name)) return false;
     if (/group\s+of\s+people/i.test(name)) return false;
+
     // Filter out product names that got mixed in
-    if (lower.includes('smart security building') || lower.includes('intelligent inspection')) return false;
-    if (lower.includes('access control') && lower.includes('turnstile')) return false;
-    if (lower.includes('ai camera') && lower.includes('system')) return false;
-    // Filter out combined product listings
+    if (lower.includes('smart security building solution')) return false;
+    if (lower.includes('intelligent inspection system')) return false;
+    if (/access\s+control.*turnstile|turnstile.*access\s+control/i.test(name)) return false;
+    if (/ai\s+camera.*system|system.*ai\s+camera/i.test(name)) return false;
+
+    // Filter out combined product listings (brand + brand)
     if (/hanwha\s+vision.*hikvision|hikvision.*hanwha/i.test(name)) return false;
+
     return true;
   });
 }
@@ -3819,6 +3837,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           });
         }
       }
+      } // End of rightLayout !== 'empty' else block
 
       // ===== FOOTNOTE (single text box with stacked content) =====
       const footnoteLines = [];
@@ -6187,12 +6206,15 @@ function cleanCustomerName(text) {
     return '';
   }
 
-  // ========== NEW: Filter out garbage data ==========
+  // ========== Filter out garbage data ==========
 
-  // Skip image filenames and artifacts
+  // Skip image filenames and artifacts (specific patterns to avoid false positives)
   const imageGarbagePatterns = [
-    /removebg/i, /preview/i, /scaled/i, /cover/i, /home-page/i,
-    /\d+x\d*$/, // Dimensions like "140x" or "800x600"
+    /[-_]removebg|removebg[-_]/i, // removebg artifact
+    /[-_]preview|preview[-_]|\spreview$/i, // "xxx preview" or "xxx-preview"
+    /[-_]scaled|scaled[-_]|\d+x\s*scaled/i, // scaled artifact
+    /[-_]cover[-_]|home[-_]page[-_]cover/i, // cover as filename part
+    /\d+x\d*$/, // Dimensions like "140x" at end
     /^\d+$/, // Just numbers
     /_\d+$/, // Trailing numbers like "_1"
     /\.(jpg|jpeg|png|gif|webp|svg|ico)$/i, // File extensions
@@ -6203,27 +6225,23 @@ function cleanCustomerName(text) {
     return '';
   }
 
-  // Skip URL fragments and paths
-  if (name.includes('~') || name.includes('/') || name.includes('\\')) {
-    return '';
-  }
-  if (/^blog\/|\/blog|\/\d+\/\d+\//.test(name)) {
-    return '';
-  }
+  // Skip URL fragments and paths (but allow S/A which is common in company names)
+  if (name.includes('~')) return '';
+  if (/\/\d+\/|\/blog\/|\/images?\//i.test(name)) return '';
+  if (/\d{4}\/\d+\/\d+/.test(name)) return ''; // Date paths like 2025/6/4
 
-  // Skip image descriptions (sentences with verbs/articles)
+  // Skip image descriptions (more specific patterns)
   const descriptionPatterns = [
-    /^a\s+/i, // "A room with..."
-    /^the\s+/i, // "The company..."
-    /\s+with\s+/i, // "...with multiple..."
+    /^a\s+\w+\s+with\s+/i, // "A room with..."
+    /^the\s+\w+\s+(is|are|was|has)/i, // "The company is..."
     /\s+displaying\s+/i,
     /\s+showing\s+/i,
     /\s+featuring\s+/i,
-    /multiple\s+/i,
-    /various\s+/i,
-    /camera\s+feeds?/i,
-    /security\s+monitors?/i,
-    /control\s+room/i,
+    /multiple\s+(security|camera|monitor)/i,
+    /various\s+(camera|security|monitor)/i,
+    /camera\s+feeds/i,
+    /security\s+monitors\s+displaying/i,
+    /control\s+room\s+with/i,
     /group\s+of\s+people/i,
   ];
 
@@ -6247,12 +6265,7 @@ function cleanCustomerName(text) {
     return '';
   }
 
-  // Skip if contains blog/date patterns
-  if (/\d{4}\/\d+\/\d+/.test(name)) {
-    return '';
-  }
-
-  // ========== END NEW FILTERS ==========
+  // ========== END FILTERS ==========
 
   // Clean company name (remove suffixes)
   name = cleanCompanyName(name);
