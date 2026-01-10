@@ -1760,11 +1760,33 @@ app.post('/api/find-target-v5', async (req, res) => {
   console.log(`Email: ${Email}`);
   console.log('='.repeat(70));
 
-  res.json({
-    success: true,
-    message:
-      'Request received. Parallel search running. Results will be emailed in ~10-15 minutes.',
+  // Use streaming response to keep Railway connection alive during long processing
+  // This prevents Railway from shutting down the container due to "idle" detection
+  res.writeHead(200, {
+    'Content-Type': 'text/plain',
+    'Transfer-Encoding': 'chunked',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+    'Access-Control-Allow-Origin': '*',
   });
+
+  // Send initial response immediately so frontend knows request was received
+  res.write(
+    JSON.stringify({
+      success: true,
+      message: 'Request received. Parallel search running. Results will be emailed in ~10-15 minutes.',
+    }) + '\n'
+  );
+
+  // Send keep-alive chunks every 30 seconds to prevent Railway timeout
+  const keepAliveInterval = setInterval(() => {
+    try {
+      res.write(`{"keepalive":true,"timestamp":"${new Date().toISOString()}"}\n`);
+      console.log('  [Keep-Alive] Sent chunk to keep connection open');
+    } catch (e) {
+      // Connection might be closed by client, ignore
+    }
+  }, 30000);
 
   try {
     const totalStart = Date.now();
@@ -1867,6 +1889,15 @@ app.post('/api/find-target-v5', async (req, res) => {
       await sendEmail(Email, `Find Target V5 - Error`, `<p>Error: ${error.message}</p>`);
     } catch (e) {
       console.error('Failed to send error email:', e);
+    }
+  } finally {
+    // Stop keep-alive and close the streaming response
+    clearInterval(keepAliveInterval);
+    try {
+      res.write(`{"done":true,"timestamp":"${new Date().toISOString()}"}\n`);
+      res.end();
+    } catch (e) {
+      // Connection might already be closed
     }
   }
 });
