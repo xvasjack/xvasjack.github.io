@@ -101,6 +101,8 @@ DEEPGRAM_API_KEY    # Transcription
 ANTHROPIC_API_KEY   # Claude fallback
 SERPAPI_API_KEY     # Google search
 R2_*                # Cloudflare R2 storage
+SCREENSHOT_API_KEY  # Screenshot API for partner extraction (screenshotapi.net)
+SCREENSHOT_API_URL  # Custom screenshot API URL (optional)
 ```
 
 ## Railway Deployment
