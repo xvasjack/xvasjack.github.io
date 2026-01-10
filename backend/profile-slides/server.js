@@ -2332,7 +2332,7 @@ const SHORTFORM_DEFINITIONS = {
 // Exchange rate mapping by country (for footnote)
 const EXCHANGE_RATE_MAP = {
   'PH': '為替レート: PHP 100M = 3億円',
-  'TH': '為替レート: THB 100M = 4億円',
+  'TH': '為替レート: THB 100M = 5億円',
   'MY': '為替レート: MYR 10M = 3億円',
   'ID': '為替レート: IDR 100B = 10億円',
   'SG': '為替レート: SGD 1M = 1億円',
@@ -3782,7 +3782,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 // Currency exchange mapping by country
 const CURRENCY_EXCHANGE = {
   'philippines': '為替レート: PHP 100M = 3億円',
-  'thailand': '為替レート: THB 100M = 4億円',
+  'thailand': '為替レート: THB 100M = 5億円',
   'malaysia': '為替レート: MYR 10M = 3億円',
   'indonesia': '為替レート: IDR 10B = 1億円',
   'singapore': '為替レート: SGD 1M = 1億円',
@@ -5797,6 +5797,150 @@ Rules:
   }
 }
 
+// ===== Full-Page Screenshot + Vision Analysis =====
+// Takes a screenshot of the entire page and uses GPT-4o Vision to identify partner/customer logos
+// This bypasses all HTML parsing issues - sees what humans see
+async function extractPartnersFromScreenshot(websiteUrl) {
+  if (!websiteUrl) return { customers: [], brands: [], principals: [] };
+
+  // Check if screenshot API is configured
+  const screenshotApiKey = process.env.SCREENSHOT_API_KEY;
+  const screenshotApiUrl = process.env.SCREENSHOT_API_URL || 'https://shot.screenshotapi.net/screenshot';
+
+  if (!screenshotApiKey) {
+    console.log('    Screenshot: Skipped (SCREENSHOT_API_KEY not configured)');
+    return { customers: [], brands: [], principals: [] };
+  }
+
+  try {
+    console.log('    Screenshot: Taking full-page screenshot...');
+
+    // Normalize URL
+    let url = websiteUrl;
+    if (!url.startsWith('http')) {
+      url = 'https://' + url;
+    }
+
+    // Take screenshot using external API
+    // Supports: screenshotapi.net, screenshotone.com, or similar services
+    const screenshotParams = new URLSearchParams({
+      token: screenshotApiKey,
+      url: url,
+      output: 'image',
+      file_type: 'png',
+      wait_for_event: 'load',
+      delay: 2000,  // Wait 2s for JS to render
+      full_page: 'false',  // Just viewport, not full page (faster, cheaper)
+      width: 1280,
+      height: 800
+    });
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000);
+
+    const response = await fetch(`${screenshotApiUrl}?${screenshotParams}`, {
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+
+    if (!response.ok) {
+      console.log(`    Screenshot: API returned ${response.status}`);
+      return { customers: [], brands: [], principals: [] };
+    }
+
+    const imageBuffer = await response.buffer();
+    if (imageBuffer.length < 10000) {
+      console.log('    Screenshot: Image too small, likely failed');
+      return { customers: [], brands: [], principals: [] };
+    }
+
+    const base64Image = imageBuffer.toString('base64');
+    console.log(`    Screenshot: Got ${Math.round(imageBuffer.length / 1024)}KB image, analyzing with Vision...`);
+
+    // Send to GPT-4o Vision
+    const visionResponse = await withRetry(async () => {
+      return await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'image_url',
+              image_url: {
+                url: `data:image/png;base64,${base64Image}`,
+                detail: 'high'  // Use high detail for better logo recognition
+              }
+            },
+            {
+              type: 'text',
+              text: `Analyze this company website screenshot. Look for sections showing:
+- Partners / Principal brands (companies they distribute for or represent)
+- Customers / Clients (companies they sell to)
+- Brands they carry or distribute
+
+These are typically shown as logo grids, carousels, or lists with company names.
+
+Return ONLY a JSON object:
+{
+  "principals": ["Brand A", "Brand B"],
+  "customers": ["Customer 1", "Customer 2"],
+  "brands": ["Brand X", "Brand Y"]
+}
+
+Rules:
+- Extract actual company/brand names visible on the page
+- "principals" = brands/companies this company distributes for or represents
+- "customers" = companies that buy from this company
+- "brands" = product brands this company carries
+- Skip generic text like "Our Partners", "Clients", etc.
+- If a section is not visible or empty, return empty array
+- Return ONLY valid JSON, no explanation`
+            }
+          ]
+        }],
+        max_tokens: 800,
+        temperature: 0.1
+      });
+    }, 2, 3000);
+
+    const responseText = visionResponse.choices[0]?.message?.content || '{}';
+
+    // Parse JSON response
+    let parsed = { customers: [], brands: [], principals: [] };
+    try {
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0]);
+      }
+    } catch (parseErr) {
+      console.log(`    Screenshot: Failed to parse response`);
+    }
+
+    // Clean names
+    const cleanNames = (arr) => {
+      if (!Array.isArray(arr)) return [];
+      return arr
+        .map(name => cleanCustomerName(String(name)))
+        .filter(name => name && name.length >= 2);
+    };
+
+    const result = {
+      customers: cleanNames(parsed.customers),
+      brands: cleanNames(parsed.brands),
+      principals: cleanNames(parsed.principals)
+    };
+
+    const total = result.customers.length + result.brands.length + result.principals.length;
+    console.log(`    Screenshot: Found ${result.principals.length} principals, ${result.customers.length} customers, ${result.brands.length} brands`);
+
+    return result;
+
+  } catch (error) {
+    console.log(`    Screenshot: Error - ${error.message}`);
+    return { customers: [], brands: [], principals: [] };
+  }
+}
+
 // ===== Business Type Detection =====
 // Detects B2C, project-based, or industrial based on keywords in business description
 function detectBusinessType(businessDescription, scrapedContent) {
@@ -7477,20 +7621,37 @@ async function processSingleWebsite(website, index, total) {
     console.log(`  [${index + 1}] Step 6e: Reading logos with GPT-4o Vision...`);
     const visionResults = await extractNamesFromLogosWithVision(scraped.rawHtml, trimmedWebsite);
 
+    // Step 6f: Screenshot fallback - if vision/metadata extraction found few partners, use full-page screenshot
+    let screenshotResults = { customers: [], brands: [], principals: [] };
+    const totalFromVision = visionResults.customers.length + visionResults.brands.length;
+    const totalFromMeta = businessRelationships.customers.length + businessRelationships.principals.length + businessRelationships.brands.length;
+
+    if (totalFromVision + totalFromMeta < 3 && process.env.SCREENSHOT_API_KEY) {
+      console.log(`  [${index + 1}] Step 6f: Few partners found (${totalFromVision + totalFromMeta}), trying screenshot analysis...`);
+      screenshotResults = await extractPartnersFromScreenshot(trimmedWebsite);
+    }
+
     // Merge vision results with metadata-based extraction
     // Vision results take priority as they're more accurate
     const allCustomers = [...new Set([
       ...visionResults.customers,
+      ...screenshotResults.customers,
       ...customerNamesFromImages,
       ...businessRelationships.customers
     ])];
     const allBrands = [...new Set([
       ...visionResults.brands,
+      ...screenshotResults.brands,
       ...businessRelationships.brands
+    ])];
+    const allPrincipals = [...new Set([
+      ...screenshotResults.principals,
+      ...businessRelationships.principals
     ])];
 
     businessRelationships.customers = allCustomers;
     businessRelationships.brands = allBrands;
+    businessRelationships.principals = allPrincipals;
 
     const relationshipCounts = Object.entries(businessRelationships)
       .filter(([, arr]) => arr.length > 0)
@@ -7940,19 +8101,36 @@ app.post('/api/generate-ppt', async (req, res) => {
         console.log('  Step 5c: Reading logos with GPT-4o Vision...');
         const visionResults = await extractNamesFromLogosWithVision(scraped.rawHtml, website);
 
+        // Step 5d: Screenshot fallback - if vision/metadata extraction found few partners, use full-page screenshot
+        let screenshotResults = { customers: [], brands: [], principals: [] };
+        const totalFromVision = visionResults.customers.length + visionResults.brands.length;
+        const totalFromMeta = businessRelationships.customers.length + businessRelationships.principals.length + businessRelationships.brands.length;
+
+        if (totalFromVision + totalFromMeta < 3 && process.env.SCREENSHOT_API_KEY) {
+          console.log(`  Step 5d: Few partners found (${totalFromVision + totalFromMeta}), trying screenshot analysis...`);
+          screenshotResults = await extractPartnersFromScreenshot(website);
+        }
+
         // Merge vision results with metadata-based extraction
         const allCustomers = [...new Set([
           ...visionResults.customers,
+          ...screenshotResults.customers,
           ...customerNamesFromImages,
           ...businessRelationships.customers
         ])];
         const allBrands = [...new Set([
           ...visionResults.brands,
+          ...screenshotResults.brands,
           ...businessRelationships.brands
+        ])];
+        const allPrincipals = [...new Set([
+          ...screenshotResults.principals,
+          ...businessRelationships.principals
         ])];
 
         businessRelationships.customers = allCustomers;
         businessRelationships.brands = allBrands;
+        businessRelationships.principals = allPrincipals;
 
         const relationshipCounts = Object.entries(businessRelationships)
           .filter(([, arr]) => arr.length > 0)

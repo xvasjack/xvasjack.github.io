@@ -4,6 +4,9 @@
 - Be concise and plain
 - No fluff, no emojis unless asked
 - Get to the point
+- Give high-level, user-friendly summaries (no technical tool names)
+- Use table format for comparisons and options
+- Avoid lengthy explanations - brevity is key
 
 ## Project Overview
 - 10 backend microservices (target-v3, profile-slides, market-research, etc.)
@@ -98,6 +101,8 @@ DEEPGRAM_API_KEY    # Transcription
 ANTHROPIC_API_KEY   # Claude fallback
 SERPAPI_API_KEY     # Google search
 R2_*                # Cloudflare R2 storage
+SCREENSHOT_API_KEY  # Screenshot API for partner extraction (screenshotapi.net)
+SCREENSHOT_API_URL  # Custom screenshot API URL (optional)
 ```
 
 ## Railway Deployment
