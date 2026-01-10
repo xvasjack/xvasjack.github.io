@@ -84,9 +84,38 @@
       gap: 2px;
       flex: 1;
     }
+    .preview-images-6 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: 1fr 1fr 1fr;
+      gap: 2px;
+      flex: 1;
+    }
     .preview-img {
       background: #94a3b8;
       border-radius: 2px;
+    }
+    .preview-img-row {
+      display: flex;
+      gap: 2px;
+      flex: 1;
+    }
+    .preview-img-left {
+      width: 40%;
+      background: #94a3b8;
+      border-radius: 2px;
+    }
+    .preview-img-label {
+      flex: 1;
+      background: #e2e8f0;
+      border-radius: 2px;
+    }
+    .preview-right-half {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      padding-bottom: 12px;
     }
     .layout-name {
       font-size: 11px;
@@ -210,17 +239,16 @@
                   <div class="layout-preview">
                     <div class="preview-slide">
                       <div class="preview-left"></div>
-                      <div class="preview-right">
+                      <div class="preview-right-half">
                         <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
                         <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
                         <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                        <div class="preview-empty"></div>
                       </div>
                     </div>
                     <div class="layout-name">Table (3-4 rows)</div>
                   </div>
                 </label>
-                <!-- Option 4: Images -->
+                <!-- Option 4: Images 2x2 -->
                 <label class="layout-option">
                   <input type="radio" name="rightLayout" value="images">
                   <div class="layout-preview">
@@ -235,7 +263,43 @@
                         </div>
                       </div>
                     </div>
-                    <div class="layout-name">Product/Project Images</div>
+                    <div class="layout-name">Images (4)</div>
+                  </div>
+                </label>
+                <!-- Option 5: Images 2x3 -->
+                <label class="layout-option">
+                  <input type="radio" name="rightLayout" value="images-6">
+                  <div class="layout-preview">
+                    <div class="preview-slide">
+                      <div class="preview-left"></div>
+                      <div class="preview-right">
+                        <div class="preview-images-6">
+                          <div class="preview-img"></div>
+                          <div class="preview-img"></div>
+                          <div class="preview-img"></div>
+                          <div class="preview-img"></div>
+                          <div class="preview-img"></div>
+                          <div class="preview-img"></div>
+                        </div>
+                      </div>
+                    </div>
+                    <div class="layout-name">Images (6)</div>
+                  </div>
+                </label>
+                <!-- Option 6: Images with labels -->
+                <label class="layout-option">
+                  <input type="radio" name="rightLayout" value="images-labeled">
+                  <div class="layout-preview">
+                    <div class="preview-slide">
+                      <div class="preview-left"></div>
+                      <div class="preview-right">
+                        <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
+                        <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
+                        <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
+                        <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
+                      </div>
+                    </div>
+                    <div class="layout-name">Images + Labels</div>
                   </div>
                 </label>
                 <!-- Option 5: Empty -->

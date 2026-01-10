@@ -3565,7 +3565,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       }
 
       // ===== RIGHT SECTION (varies by layout selection and business type) =====
-      // rightLayout options: 'table-6' (default), 'table-unlimited', 'table-half', 'images', 'empty'
+      // rightLayout options: 'table-6' (default), 'table-unlimited', 'table-half', 'images', 'images-6', 'images-labeled', 'empty'
       console.log(`  Right layout setting: ${rightLayout}`);
 
       // Skip entire right section if empty layout selected
@@ -3582,53 +3582,123 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         const hasAIProducts = company.products && company.products.length > 0;
 
         // Determine if we should show images or table based on rightLayout
-        const forceImages = rightLayout === 'images';
+        const forceImages = rightLayout.startsWith('images');
         const forceTable = rightLayout.startsWith('table-');
         const hasImages = hasPreExtractedImages || hasAIProjects || hasAIProducts;
 
         if ((forceImages && hasImages) || (!forceTable && isImageBusiness && hasImages)) {
-        // B2C/PROJECT-BASED: Show product/project images with labels
+        // IMAGE LAYOUTS: Show product/project images
         // Use pre-extracted images first, fallback to AI-extracted data
 
         if (hasPreExtractedImages) {
           // Use pre-extracted images (from HTML scraping)
-          console.log(`  Using ${preExtractedImages.length} pre-extracted images for right side`);
+          console.log(`  Using ${preExtractedImages.length} pre-extracted images for right side (layout: ${rightLayout})`);
 
-          // Layout: 2x2 grid for 4 images
           const gridStartX = 6.86;
           const gridStartY = 1.91;
-          const colWidth = 3.0;
-          const rowHeight = 2.2;
-          const imageW = 2.8;
-          const imageH = 1.6;
 
-          for (let i = 0; i < Math.min(preExtractedImages.length, 4); i++) {
-            const img = preExtractedImages[i];
-            const col = i % 2;
-            const row = Math.floor(i / 2);
-            const cellX = gridStartX + (col * colWidth);
-            const cellY = gridStartY + (row * rowHeight);
+          if (rightLayout === 'images-labeled') {
+            // Layout: Image on left, label on right - 3-4 rows
+            const rowHeight = 1.15;
+            const imageW = 2.0;
+            const imageH = 1.0;
+            const labelX = gridStartX + imageW + 0.15;
+            const labelW = 3.8;
 
-            try {
-              const imgBase64 = await fetchImageAsBase64(img.url);
-              if (imgBase64) {
-                slide.addImage({
-                  data: `data:image/jpeg;base64,${imgBase64}`,
-                  x: cellX, y: cellY, w: imageW, h: imageH,
-                  sizing: { type: 'contain', w: imageW, h: imageH }
-                });
+            for (let i = 0; i < Math.min(preExtractedImages.length, 4); i++) {
+              const img = preExtractedImages[i];
+              const cellY = gridStartY + (i * rowHeight);
 
-                // Label below image - Segoe UI font 14 as requested
-                if (img.label) {
-                  slide.addText(img.label, {
-                    x: cellX, y: cellY + imageH + 0.05, w: imageW, h: 0.3,
-                    fontSize: 14, fontFace: 'Segoe UI',
-                    color: COLORS.black, align: 'center', valign: 'top'
+              try {
+                const imgBase64 = await fetchImageAsBase64(img.url);
+                if (imgBase64) {
+                  slide.addImage({
+                    data: `data:image/jpeg;base64,${imgBase64}`,
+                    x: gridStartX, y: cellY, w: imageW, h: imageH,
+                    sizing: { type: 'contain', w: imageW, h: imageH }
                   });
+
+                  if (img.label) {
+                    slide.addText(img.label, {
+                      x: labelX, y: cellY, w: labelW, h: imageH,
+                      fontSize: 14, fontFace: 'Segoe UI',
+                      color: COLORS.black, align: 'left', valign: 'middle'
+                    });
+                  }
                 }
+              } catch (imgErr) {
+                console.log(`  Failed to fetch image: ${img.url}`);
               }
-            } catch (imgErr) {
-              console.log(`  Failed to fetch pre-extracted image: ${img.url}`);
+            }
+          } else if (rightLayout === 'images-6') {
+            // Layout: 2x3 grid for 6 images
+            const colWidth = 3.0;
+            const rowHeight = 1.5;
+            const imageW = 2.8;
+            const imageH = 1.2;
+
+            for (let i = 0; i < Math.min(preExtractedImages.length, 6); i++) {
+              const img = preExtractedImages[i];
+              const col = i % 2;
+              const row = Math.floor(i / 2);
+              const cellX = gridStartX + (col * colWidth);
+              const cellY = gridStartY + (row * rowHeight);
+
+              try {
+                const imgBase64 = await fetchImageAsBase64(img.url);
+                if (imgBase64) {
+                  slide.addImage({
+                    data: `data:image/jpeg;base64,${imgBase64}`,
+                    x: cellX, y: cellY, w: imageW, h: imageH,
+                    sizing: { type: 'contain', w: imageW, h: imageH }
+                  });
+
+                  if (img.label) {
+                    slide.addText(img.label, {
+                      x: cellX, y: cellY + imageH + 0.02, w: imageW, h: 0.25,
+                      fontSize: 11, fontFace: 'Segoe UI',
+                      color: COLORS.black, align: 'center', valign: 'top'
+                    });
+                  }
+                }
+              } catch (imgErr) {
+                console.log(`  Failed to fetch image: ${img.url}`);
+              }
+            }
+          } else {
+            // Default: 2x2 grid for 4 images
+            const colWidth = 3.0;
+            const rowHeight = 2.2;
+            const imageW = 2.8;
+            const imageH = 1.6;
+
+            for (let i = 0; i < Math.min(preExtractedImages.length, 4); i++) {
+              const img = preExtractedImages[i];
+              const col = i % 2;
+              const row = Math.floor(i / 2);
+              const cellX = gridStartX + (col * colWidth);
+              const cellY = gridStartY + (row * rowHeight);
+
+              try {
+                const imgBase64 = await fetchImageAsBase64(img.url);
+                if (imgBase64) {
+                  slide.addImage({
+                    data: `data:image/jpeg;base64,${imgBase64}`,
+                    x: cellX, y: cellY, w: imageW, h: imageH,
+                    sizing: { type: 'contain', w: imageW, h: imageH }
+                  });
+
+                  if (img.label) {
+                    slide.addText(img.label, {
+                      x: cellX, y: cellY + imageH + 0.05, w: imageW, h: 0.3,
+                      fontSize: 14, fontFace: 'Segoe UI',
+                      color: COLORS.black, align: 'center', valign: 'top'
+                    });
+                  }
+                }
+              } catch (imgErr) {
+                console.log(`  Failed to fetch image: ${img.url}`);
+              }
             }
           }
         } else if (businessType === 'project' && hasAIProjects) {
