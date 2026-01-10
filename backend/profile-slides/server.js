@@ -4342,7 +4342,11 @@ async function scrapeMultiplePages(baseUrl) {
       '/capabilities', '/capacity', '/operations',
       '/about', '/about-us', '/about.html', '/aboutus', '/company', '/profile', '/company-profile',
       '/contact', '/contact-us', '/contact.html', '/contactus',
-      '/products', '/services'
+      '/products', '/services',
+      // Indonesian client/customer pages - often contain customer logos
+      '/klien-kami', '/klien', '/pelanggan', '/pelanggan-kami', '/mitra', '/mitra-kami',
+      // Partners and clients pages - common patterns
+      '/clients', '/customers', '/partners', '/our-clients', '/our-customers', '/our-partners'
     ];
 
     for (const path of fallbackPaths) {
