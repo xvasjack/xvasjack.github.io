@@ -72,6 +72,16 @@ function normalizeLabel(label) {
     .join(' ');
 }
 
+// Strip company suffixes from customer/partner names (simpler than cleanCompanyName)
+// Just removes suffixes, doesn't reject non-ASCII or descriptive names
+function stripCompanySuffix(name) {
+  if (!name || typeof name !== 'string') return name;
+  return name
+    .replace(/\s*(Sdn\.?\s*Bhd\.?|Bhd\.?|Berhad|Pte\.?\s*Ltd\.?|Ltd\.?|Limited|Inc\.?|Incorporated|Corp\.?|Corporation|Co\.?,?\s*Ltd\.?|LLC|LLP|GmbH|S\.?A\.?|Tbk\.?|JSC|PLC|Public\s*Limited|Private\s*Limited|Joint\s*Stock|Company|\(.*?\))$/gi, '')
+    .replace(/^(PT\.?|CV\.?)\s+/gi, '')  // Remove PT/CV prefix
+    .trim();
+}
+
 // Filter garbage from customer/partner name arrays before display
 // Removes image artifacts, URLs, descriptions, product names mixed in customer lists
 function filterGarbageNames(names) {
@@ -116,7 +126,7 @@ function filterGarbageNames(names) {
     if (/hanwha\s+vision.*hikvision|hikvision.*hanwha/i.test(name)) return false;
 
     return true;
-  });
+  }).map(name => stripCompanySuffix(name)); // Strip suffixes from valid names
 }
 
 // ===== QUOTE VERIFICATION SYSTEM =====
