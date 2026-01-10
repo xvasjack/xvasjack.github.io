@@ -5691,9 +5691,22 @@ async function extractNamesFromLogosWithVision(rawHtml, websiteUrl) {
 
     // If no relevant sections found, check for logo grids anywhere
     if (!relevantHtml) {
-      const logoGridPattern = /<(?:div|ul)[^>]*class=["'][^"']*(?:logo|grid|carousel|slider)[^"']*["'][^>]*>[\s\S]*?<\/(?:div|ul)>/gi;
+      const logoGridPattern = /<(?:div|ul)[^>]*class=["'][^"']*(?:logo|grid|carousel|slider|swiper|owl|slick)[^"']*["'][^>]*>[\s\S]*?<\/(?:div|ul)>/gi;
       while ((match = logoGridPattern.exec(rawHtml)) !== null) {
         relevantHtml += match[0] + '\n';
+      }
+    }
+
+    // AGGRESSIVE FALLBACK: If still nothing found, scan entire page for image clusters
+    // Look for any div/section containing 3+ images (likely a logo grid)
+    if (!relevantHtml) {
+      console.log('    Vision: No keyword sections found, scanning for image clusters...');
+      const allSections = rawHtml.match(/<(?:div|section|ul)[^>]*>[\s\S]*?<\/(?:div|section|ul)>/gi) || [];
+      for (const section of allSections) {
+        const imgCount = (section.match(/<img/gi) || []).length;
+        if (imgCount >= 3 && section.length < 50000) {
+          relevantHtml += section + '\n';
+        }
       }
     }
 
