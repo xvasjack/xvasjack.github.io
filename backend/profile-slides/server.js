@@ -181,6 +181,22 @@ function filterGarbageNames(names, companyName = '') {
   }).map(name => toTitleCase(stripCompanySuffix(name))); // Strip suffixes and title case
 }
 
+// ===== TOKEN ESTIMATION =====
+// Rough estimate: 1 token ≈ 4 characters for English text
+// GPT-4o limit: 128K tokens ≈ 512K chars, but leave margin for response
+const MAX_INPUT_CHARS = 100000; // ~25K tokens, safe margin for 128K limit
+
+function estimateTokens(text) {
+  return Math.ceil((text || '').length / 4);
+}
+
+// Safely truncate content to fit within token limits
+function truncateForTokenLimit(content, maxChars = MAX_INPUT_CHARS) {
+  if (!content || content.length <= maxChars) return content;
+  console.log(`  [Token] Truncating content from ${content.length} to ${maxChars} chars`);
+  return content.substring(0, maxChars);
+}
+
 // ===== QUOTE VERIFICATION SYSTEM =====
 // Verifies that AI-extracted data actually exists in the scraped content
 // This prevents hallucination by requiring proof for every claim
@@ -3930,8 +3946,9 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           const rightTableData = prioritizedItems.map(item => [String(item.label || ''), String(item.value || '')]);
 
           // Calculate row height to distribute evenly within 4.75" height
+          // Use Math.max to prevent division by zero edge case
           const rightTableHeight = 4.75;
-          const rightRowHeight = rightTableHeight / rightTableData.length;
+          const rightRowHeight = rightTableHeight / Math.max(rightTableData.length, 1);
 
           const rightRows = rightTableData.map((row) => [
             {
@@ -5692,11 +5709,21 @@ function extractRelevantSections(rawHtml, businessType) {
   return relevantHtml;
 }
 
-// Helper: Clean image label
+// Helper: Clean image label (decode HTML entities, remove tags)
 function cleanImageLabel(text) {
   if (!text) return '';
   return text
-    .replace(/<[^>]+>/g, '') // Remove HTML
+    // Decode common HTML entities first
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
+    .replace(/&#x([a-fA-F\d]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    // Remove remaining HTML tags
+    .replace(/<[^>]+>/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .substring(0, 50); // Limit length
@@ -5823,10 +5850,17 @@ function extractBusinessRelationships(rawHtml) {
       if (src.startsWith('data:')) continue; // Skip data URIs
       if (/client|customer|partner|brand|principal|supplier/i.test(src)) {
         const filename = src.split('/').pop()?.split('.')[0] || '';
-        const name = cleanCustomerName(
-          filename.replace(/[-_]/g, ' ').replace(/logo|img|image|\d+/gi, '').trim()
-        );
-        if (name) names.add(name);
+        // Enhanced preprocessing before cleanCustomerName
+        const preprocessed = filename
+          .replace(/[-_]/g, ' ')
+          .replace(/logo|img|image|graphic|vector|icon|photo|picture|thumb|thumbnail|banner|\d+/gi, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+        // Only process if meaningful text remains (3+ chars)
+        if (preprocessed.length >= 3) {
+          const name = cleanCustomerName(preprocessed);
+          if (name) names.add(name);
+        }
       }
     }
 
@@ -8225,26 +8259,42 @@ async function processWebsitesInParallel(websites) {
 
     const batchResults = await Promise.all(batchPromises);
 
-    // Add non-null results
+    // Add non-null results and clear batch immediately to free memory
     for (const result of batchResults) {
-      if (result) results.push(result);
+      if (result) {
+        // Clear large scraped content before storing
+        if (result.scrapedContent) result.scrapedContent = null;
+        if (result.rawHtml) result.rawHtml = null;
+        results.push(result);
+      }
     }
+    // Clear batch array reference
+    batchResults.length = 0;
 
-    // Force garbage collection hint between batches (if available)
-    // This helps Railway containers stay under memory limits
+    // Force garbage collection between batches (critical for Railway 450MB limit)
     if (global.gc) {
       global.gc();
     }
     logMemoryUsage(`after batch ${Math.floor(batchStart / PARALLEL_BATCH_SIZE) + 1}`);
+
+    // Add small delay between batches if processing many websites (50+)
+    // Prevents memory pressure from accumulating too fast
+    if (websites.length >= 20 && batchStart + PARALLEL_BATCH_SIZE < websites.length) {
+      await new Promise(r => setTimeout(r, 500));
+    }
   }
 
   return results;
 }
 
+// Valid layout options (whitelist to prevent XSS/injection)
+const VALID_LAYOUTS = ['table-6', 'table-unlimited', 'table-half', 'images', 'images-4', 'images-6', 'images-labeled', 'empty'];
+
 // Main profile slides endpoint
 app.post('/api/profile-slides', async (req, res) => {
-  const { websites, email, targetDescription, rightLayout } = req.body;
-  // rightLayout options: 'table-6' (default), 'table-unlimited', 'table-half', 'images', 'empty'
+  const { websites, email, targetDescription, rightLayout: rawLayout } = req.body;
+  // Validate layout against whitelist
+  const rightLayout = VALID_LAYOUTS.includes(rawLayout) ? rawLayout : 'table-6';
 
   if (!websites || !Array.isArray(websites) || websites.length === 0) {
     return res.status(400).json({ error: 'Please provide an array of website URLs' });
