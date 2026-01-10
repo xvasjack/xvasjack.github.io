@@ -803,6 +803,28 @@ ${pageText.substring(0, 10000)}`;
       business_description: result.business_description,
     };
   } catch (e) {
+    // If OpenAI fails (quota exceeded, rate limit, etc.), try Gemini as fallback
+    if (e.message?.includes('429') || e.message?.includes('quota') || e.message?.includes('rate')) {
+      console.log(`  OpenAI failed for ${company.company_name}, trying Gemini fallback...`);
+      try {
+        const geminiPrompt = `${systemPrompt('gemini')}\n\n${userPrompt}\n\nRespond with valid JSON only.`;
+        const geminiResult = await callGemini(geminiPrompt);
+
+        // Parse the JSON response from Gemini
+        const jsonMatch = geminiResult.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          return {
+            in_scope: parsed.in_scope === true,
+            reason: parsed.reason || 'Validated via Gemini',
+            business_description: parsed.business_description || 'Business description from Gemini',
+          };
+        }
+      } catch (geminiError) {
+        console.error(`  Gemini fallback also failed for ${company.company_name}:`, geminiError.message);
+      }
+    }
+
     console.error(`Error validating ${company.company_name}:`, e.message);
     return {
       in_scope: false,
