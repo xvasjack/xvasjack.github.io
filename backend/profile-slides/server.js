@@ -3390,6 +3390,31 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         tableData.push(['Key Metrics', company.metrics, null]);
       }
 
+      // Add Principal Partners row if available (from businessRelationships)
+      const relationships = company._businessRelationships || {};
+      if (relationships.principals && relationships.principals.length > 0) {
+        const principalsList = relationships.principals.slice(0, 10).join(', ');
+        if (!existingLabels.has('principal partners') && !existingLabels.has('principals')) {
+          tableData.push(['Principal Partners', principalsList, null]);
+          existingLabels.add('principal partners');
+          console.log(`    Added Principal Partners: ${principalsList}`);
+        }
+      } else {
+        console.log(`    No principals found in _businessRelationships`);
+      }
+
+      // Add Key Customers row if available and not already shown on right side
+      if (relationships.customers && relationships.customers.length > 0) {
+        const rightTitle = ensureString(company.breakdown_title).toLowerCase();
+        const isCustomersOnRight = rightTitle.includes('customer') || rightTitle.includes('client');
+        if (!isCustomersOnRight && !existingLabels.has('customers') && !existingLabels.has('key customers')) {
+          const customersList = relationships.customers.slice(0, 10).join(', ');
+          tableData.push(['Customers', customersList, null]);
+          existingLabels.add('customers');
+          console.log(`    Added Customers: ${customersList.substring(0, 80)}...`);
+        }
+      }
+
       // Helper function to format cell text with bullet points
       // Uses regular bullet • (U+2022) directly in text
       const formatCellText = (text) => {
@@ -3628,7 +3653,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         if (breakdownTitle.includes('customer') || breakdownTitle.includes('client')) {
           // Show customers only
           if (relationships.customers && relationships.customers.length > 0) {
-            relationships.customers.slice(0, 8).forEach(customer => {
+            relationships.customers.slice(0, 6).forEach(customer => {
               prioritizedItems.push({ label: customer, value: '' });
             });
             console.log(`  Right side (Customers): ${relationships.customers.length} items`);
@@ -3636,12 +3661,12 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         } else if (breakdownTitle.includes('supplier') || breakdownTitle.includes('principal') || breakdownTitle.includes('partner')) {
           // Show suppliers/principals only
           if (relationships.principals && relationships.principals.length > 0) {
-            relationships.principals.slice(0, 8).forEach(principal => {
+            relationships.principals.slice(0, 6).forEach(principal => {
               prioritizedItems.push({ label: principal, value: '' });
             });
             console.log(`  Right side (Principals): ${relationships.principals.length} items`);
           } else if (relationships.suppliers && relationships.suppliers.length > 0) {
-            relationships.suppliers.slice(0, 8).forEach(supplier => {
+            relationships.suppliers.slice(0, 6).forEach(supplier => {
               prioritizedItems.push({ label: supplier, value: '' });
             });
             console.log(`  Right side (Suppliers): ${relationships.suppliers.length} items`);
@@ -3649,7 +3674,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         } else if (breakdownTitle.includes('brand')) {
           // Show brands only
           if (relationships.brands && relationships.brands.length > 0) {
-            relationships.brands.slice(0, 8).forEach(brand => {
+            relationships.brands.slice(0, 6).forEach(brand => {
               prioritizedItems.push({ label: brand, value: '' });
             });
             console.log(`  Right side (Brands): ${relationships.brands.length} items`);
@@ -3677,13 +3702,17 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           console.log(`  Right side (Products/Apps): ${prioritizedItems.length} items`);
         }
 
-        // Limit to 8 rows maximum (to fit the slide)
-        if (prioritizedItems.length > 8) {
-          prioritizedItems = prioritizedItems.slice(0, 8);
+        // Limit to 6 rows maximum (to fit the slide)
+        if (prioritizedItems.length > 6) {
+          prioritizedItems = prioritizedItems.slice(0, 6);
         }
 
         if (prioritizedItems.length >= 1) {
           const rightTableData = prioritizedItems.map(item => [String(item.label || ''), String(item.value || '')]);
+
+          // Calculate row height to distribute evenly within 4.75" height
+          const rightTableHeight = 4.75;
+          const rightRowHeight = rightTableHeight / rightTableData.length;
 
           const rightRows = rightTableData.map((row) => [
             {
@@ -3714,8 +3743,9 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           slide.addTable(rightRows, {
             x: 6.86, y: 1.91,
             w: 6.1,
+            h: rightTableHeight,
             colW: [1.4, 4.7],
-            rowH: rowHeight,
+            rowH: rightRowHeight,
             fontFace: 'Segoe UI',
             fontSize: 14,
             valign: 'middle',
@@ -5449,12 +5479,53 @@ function extractBusinessRelationships(rawHtml) {
     brands: new Set()        // Brands we carry/distribute
   };
 
-  // Category-specific section keywords
+  // Category-specific section keywords (English + Indonesian + Thai + Vietnamese + Malay + Chinese)
   const categoryKeywords = {
-    customers: ['client', 'customer', 'served', 'trusted by', 'work with', 'our clients', 'our customers', 'they trust us'],
-    suppliers: ['supplier', 'vendor', 'source', 'procurement', 'our suppliers', 'supply chain', 'raw material'],
-    principals: ['principal', 'represent', 'authorized', 'distributor for', 'agency', 'our principals', 'we represent'],
-    brands: ['brand', 'carry', 'distribute', 'portfolio', 'our brands', 'brands we', 'product line']
+    customers: [
+      // English
+      'client', 'customer', 'served', 'trusted by', 'work with', 'our clients', 'our customers', 'they trust us',
+      // Indonesian
+      'pelanggan', 'klien', 'mitra-pelanggan',
+      // Thai
+      'ลูกค้า', 'ผู้ใช้บริการ',
+      // Vietnamese
+      'khách hàng',
+      // Chinese
+      '客户', '客戶'
+    ],
+    suppliers: [
+      // English
+      'supplier', 'vendor', 'source', 'procurement', 'our suppliers', 'supply chain', 'raw material',
+      // Indonesian
+      'pemasok', 'vendor',
+      // Thai
+      'ผู้จัดจำหน่าย', 'ซัพพลายเออร์'
+    ],
+    principals: [
+      // English
+      'principal', 'represent', 'authorized', 'distributor for', 'agency', 'our principals', 'we represent',
+      'partner', 'our partners', 'technology partner', 'strategic partner',
+      // Indonesian
+      'mitra', 'mitra-utama', 'mitra bisnis', 'mitra kami', 'partner',
+      // Thai
+      'พันธมิตร', 'ตัวแทนจำหน่าย', 'เอเจนซี่',
+      // Vietnamese
+      'đối tác', 'đại lý',
+      // Chinese
+      '合作伙伴', '合作夥伴', '代理'
+    ],
+    brands: [
+      // English
+      'brand', 'carry', 'distribute', 'portfolio', 'our brands', 'brands we', 'product line',
+      // Indonesian
+      'merek', 'brand-kami',
+      // Thai
+      'แบรนด์', 'ยี่ห้อ',
+      // Vietnamese
+      'thương hiệu',
+      // Chinese
+      '品牌'
+    ]
   };
 
   // Extract names from a section
@@ -5583,9 +5654,19 @@ async function extractNamesFromLogosWithVision(rawHtml, websiteUrl) {
 
   try {
     // Step 1: Find images in customer/client/partner/brand sections
+    // Includes English + Indonesian + Thai + Vietnamese + Chinese keywords
     const sectionKeywords = [
+      // English
       'client', 'customer', 'partner', 'brand', 'principal', 'supplier',
-      'trusted', 'work with', 'served', 'portfolio'
+      'trusted', 'work with', 'served', 'portfolio', 'logo',
+      // Indonesian
+      'mitra', 'pelanggan', 'klien', 'merek', 'pemasok',
+      // Thai
+      'พันธมิตร', 'ลูกค้า', 'แบรนด์',
+      // Vietnamese
+      'đối tác', 'khách hàng',
+      // Chinese
+      '合作', '客户', '品牌'
     ];
     const keywordPattern = sectionKeywords.join('|');
 
@@ -5610,9 +5691,22 @@ async function extractNamesFromLogosWithVision(rawHtml, websiteUrl) {
 
     // If no relevant sections found, check for logo grids anywhere
     if (!relevantHtml) {
-      const logoGridPattern = /<(?:div|ul)[^>]*class=["'][^"']*(?:logo|grid|carousel|slider)[^"']*["'][^>]*>[\s\S]*?<\/(?:div|ul)>/gi;
+      const logoGridPattern = /<(?:div|ul)[^>]*class=["'][^"']*(?:logo|grid|carousel|slider|swiper|owl|slick)[^"']*["'][^>]*>[\s\S]*?<\/(?:div|ul)>/gi;
       while ((match = logoGridPattern.exec(rawHtml)) !== null) {
         relevantHtml += match[0] + '\n';
+      }
+    }
+
+    // AGGRESSIVE FALLBACK: If still nothing found, scan entire page for image clusters
+    // Look for any div/section containing 3+ images (likely a logo grid)
+    if (!relevantHtml) {
+      console.log('    Vision: No keyword sections found, scanning for image clusters...');
+      const allSections = rawHtml.match(/<(?:div|section|ul)[^>]*>[\s\S]*?<\/(?:div|section|ul)>/gi) || [];
+      for (const section of allSections) {
+        const imgCount = (section.match(/<img/gi) || []).length;
+        if (imgCount >= 3 && section.length < 50000) {
+          relevantHtml += section + '\n';
+        }
       }
     }
 
