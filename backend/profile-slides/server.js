@@ -8047,14 +8047,26 @@ async function processSingleWebsite(website, index, total) {
       screenshotResults = await extractPartnersFromScreenshot(trimmedWebsite);
     }
 
-    // Merge vision results with metadata-based extraction
-    // Vision results take priority as they're more accurate
-    const allCustomers = [...new Set([
+    // Merge results with CONFIDENCE-BASED prioritization
+    // HIGH confidence: Vision API, Screenshot analysis (AI actually sees images)
+    // LOW confidence: Alt text extraction, metadata regex (prone to garbage)
+    // Strategy: Only use low-confidence sources if high-confidence found < 3 items
+
+    const highConfidenceCustomers = [...new Set([
       ...visionResults.customers,
-      ...screenshotResults.customers,
+      ...screenshotResults.customers
+    ])];
+
+    const lowConfidenceCustomers = [...new Set([
       ...customerNamesFromImages,
       ...businessRelationships.customers
     ])];
+
+    // Only add low-confidence customers if we don't have enough from high-confidence
+    const allCustomers = highConfidenceCustomers.length >= 3
+      ? highConfidenceCustomers
+      : [...new Set([...highConfidenceCustomers, ...lowConfidenceCustomers])];
+
     const allBrands = [...new Set([
       ...visionResults.brands,
       ...screenshotResults.brands,
@@ -8528,13 +8540,20 @@ app.post('/api/generate-ppt', async (req, res) => {
           screenshotResults = await extractPartnersFromScreenshot(website);
         }
 
-        // Merge vision results with metadata-based extraction
-        const allCustomers = [...new Set([
+        // Merge results with CONFIDENCE-BASED prioritization
+        const highConfidenceCustomers = [...new Set([
           ...visionResults.customers,
-          ...screenshotResults.customers,
+          ...screenshotResults.customers
+        ])];
+        const lowConfidenceCustomers = [...new Set([
           ...customerNamesFromImages,
           ...businessRelationships.customers
         ])];
+        // Only add low-confidence if high-confidence found < 3
+        const allCustomers = highConfidenceCustomers.length >= 3
+          ? highConfidenceCustomers
+          : [...new Set([...highConfidenceCustomers, ...lowConfidenceCustomers])];
+
         const allBrands = [...new Set([
           ...visionResults.brands,
           ...screenshotResults.brands,
