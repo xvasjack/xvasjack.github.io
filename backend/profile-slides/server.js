@@ -3390,6 +3390,27 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         tableData.push(['Key Metrics', company.metrics, null]);
       }
 
+      // Add Principal Partners row if available (from businessRelationships)
+      const relationships = company._businessRelationships || {};
+      if (relationships.principals && relationships.principals.length > 0) {
+        const principalsList = relationships.principals.slice(0, 10).join(', ');
+        if (!existingLabels.has('principal partners') && !existingLabels.has('principals')) {
+          tableData.push(['Principal Partners', principalsList, null]);
+          existingLabels.add('principal partners');
+        }
+      }
+
+      // Add Key Customers row if available and not already shown on right side
+      if (relationships.customers && relationships.customers.length > 0) {
+        const rightTitle = ensureString(company.breakdown_title).toLowerCase();
+        const isCustomersOnRight = rightTitle.includes('customer') || rightTitle.includes('client');
+        if (!isCustomersOnRight && !existingLabels.has('customers') && !existingLabels.has('key customers')) {
+          const customersList = relationships.customers.slice(0, 10).join(', ');
+          tableData.push(['Customers', customersList, null]);
+          existingLabels.add('customers');
+        }
+      }
+
       // Helper function to format cell text with bullet points
       // Uses regular bullet • (U+2022) directly in text
       const formatCellText = (text) => {
@@ -5449,12 +5470,53 @@ function extractBusinessRelationships(rawHtml) {
     brands: new Set()        // Brands we carry/distribute
   };
 
-  // Category-specific section keywords
+  // Category-specific section keywords (English + Indonesian + Thai + Vietnamese + Malay + Chinese)
   const categoryKeywords = {
-    customers: ['client', 'customer', 'served', 'trusted by', 'work with', 'our clients', 'our customers', 'they trust us'],
-    suppliers: ['supplier', 'vendor', 'source', 'procurement', 'our suppliers', 'supply chain', 'raw material'],
-    principals: ['principal', 'represent', 'authorized', 'distributor for', 'agency', 'our principals', 'we represent'],
-    brands: ['brand', 'carry', 'distribute', 'portfolio', 'our brands', 'brands we', 'product line']
+    customers: [
+      // English
+      'client', 'customer', 'served', 'trusted by', 'work with', 'our clients', 'our customers', 'they trust us',
+      // Indonesian
+      'pelanggan', 'klien', 'mitra-pelanggan',
+      // Thai
+      'ลูกค้า', 'ผู้ใช้บริการ',
+      // Vietnamese
+      'khách hàng',
+      // Chinese
+      '客户', '客戶'
+    ],
+    suppliers: [
+      // English
+      'supplier', 'vendor', 'source', 'procurement', 'our suppliers', 'supply chain', 'raw material',
+      // Indonesian
+      'pemasok', 'vendor',
+      // Thai
+      'ผู้จัดจำหน่าย', 'ซัพพลายเออร์'
+    ],
+    principals: [
+      // English
+      'principal', 'represent', 'authorized', 'distributor for', 'agency', 'our principals', 'we represent',
+      'partner', 'our partners', 'technology partner', 'strategic partner',
+      // Indonesian
+      'mitra', 'mitra-utama', 'mitra bisnis', 'mitra kami', 'partner',
+      // Thai
+      'พันธมิตร', 'ตัวแทนจำหน่าย', 'เอเจนซี่',
+      // Vietnamese
+      'đối tác', 'đại lý',
+      // Chinese
+      '合作伙伴', '合作夥伴', '代理'
+    ],
+    brands: [
+      // English
+      'brand', 'carry', 'distribute', 'portfolio', 'our brands', 'brands we', 'product line',
+      // Indonesian
+      'merek', 'brand-kami',
+      // Thai
+      'แบรนด์', 'ยี่ห้อ',
+      // Vietnamese
+      'thương hiệu',
+      // Chinese
+      '品牌'
+    ]
   };
 
   // Extract names from a section
@@ -5583,9 +5645,19 @@ async function extractNamesFromLogosWithVision(rawHtml, websiteUrl) {
 
   try {
     // Step 1: Find images in customer/client/partner/brand sections
+    // Includes English + Indonesian + Thai + Vietnamese + Chinese keywords
     const sectionKeywords = [
+      // English
       'client', 'customer', 'partner', 'brand', 'principal', 'supplier',
-      'trusted', 'work with', 'served', 'portfolio'
+      'trusted', 'work with', 'served', 'portfolio', 'logo',
+      // Indonesian
+      'mitra', 'pelanggan', 'klien', 'merek', 'pemasok',
+      // Thai
+      'พันธมิตร', 'ลูกค้า', 'แบรนด์',
+      // Vietnamese
+      'đối tác', 'khách hàng',
+      // Chinese
+      '合作', '客户', '品牌'
     ];
     const keywordPattern = sectionKeywords.join('|');
 
