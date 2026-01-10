@@ -5991,30 +5991,31 @@ async function extractNamesFromLogosWithVision(rawHtml, websiteUrl) {
       relevantHtml += match[0] + '\n';
     }
 
-    // If no relevant sections found, check for logo grids anywhere
+    // If no relevant sections found, check for logo grids/carousels anywhere
+    // Extended patterns for various carousel libraries and implementations
     if (!relevantHtml) {
-      const logoGridPattern = /<(?:div|ul)[^>]*class=["'][^"']*(?:logo|grid|carousel|slider|swiper|owl|slick)[^"']*["'][^>]*>[\s\S]*?<\/(?:div|ul)>/gi;
-      while ((match = logoGridPattern.exec(rawHtml)) !== null) {
-        relevantHtml += match[0] + '\n';
-      }
-    }
+      const carouselPatterns = [
+        // Class-based patterns (swiper, owl, slick, splide, flickity, glide, etc.)
+        /<(?:div|ul|section)[^>]*class=["'][^"']*(?:logo|grid|carousel|slider|swiper|owl|slick|splide|flickity|glide|embla|keen|marquee|scroll)[^"']*["'][^>]*>[\s\S]{0,30000}?<\/(?:div|ul|section)>/gi,
+        // ID-based patterns
+        /<(?:div|ul|section)[^>]*id=["'][^"']*(?:logo|partner|client|brand|carousel|slider)[^"']*["'][^>]*>[\s\S]{0,30000}?<\/(?:div|ul|section)>/gi,
+        // Data attribute patterns (many libraries use data-*)
+        /<(?:div|ul)[^>]*data-(?:slick|swiper|carousel|slider|owl)[^>]*>[\s\S]{0,30000}?<\/(?:div|ul)>/gi,
+      ];
 
-    // AGGRESSIVE FALLBACK: If still nothing found, scan entire page for image clusters
-    // Look for any div/section containing 3+ images (likely a logo grid)
-    if (!relevantHtml) {
-      console.log('    Vision: No keyword sections found, scanning for image clusters...');
-      const allSections = rawHtml.match(/<(?:div|section|ul)[^>]*>[\s\S]*?<\/(?:div|section|ul)>/gi) || [];
-      for (const section of allSections) {
-        const imgCount = (section.match(/<img/gi) || []).length;
-        if (imgCount >= 3 && section.length < 50000) {
-          relevantHtml += section + '\n';
+      for (const pattern of carouselPatterns) {
+        while ((match = pattern.exec(rawHtml)) !== null) {
+          relevantHtml += match[0] + '\n';
         }
       }
     }
 
-    if (!relevantHtml) {
-      console.log('    Vision: No customer/brand sections found');
-      return { customers: [], brands: [] };
+    // AGGRESSIVE FALLBACK: If still nothing, extract ALL images from page
+    // Don't limit to sections - many sites have logos scattered
+    if (!relevantHtml || relevantHtml.length < 1000) {
+      console.log('    Vision: No keyword sections found, extracting ALL images from page...');
+      // Just use the entire HTML to extract all images
+      relevantHtml = rawHtml;
     }
 
     // Step 2: Extract image URLs from relevant sections
@@ -6049,9 +6050,10 @@ async function extractNamesFromLogosWithVision(rawHtml, websiteUrl) {
     // Process and filter URLs
     const processedUrls = [];
     for (let imgUrl of imageUrls) {
-      // Skip tiny images, icons, and data URIs
+      // Skip tiny images, icons, data URIs, and SVG (not supported by Vision API)
       if (imgUrl.startsWith('data:')) continue;
       if (/icon|favicon|pixel|spacer|1x1|loading|placeholder/i.test(imgUrl)) continue;
+      if (/\.svg(\?|$)/i.test(imgUrl)) continue;  // SVG not supported by GPT-4o Vision
 
       // Convert relative URLs to absolute
       if (!imgUrl.startsWith('http')) {
@@ -6113,7 +6115,7 @@ async function extractNamesFromLogosWithVision(rawHtml, websiteUrl) {
 
     if (validImages.length === 0) {
       console.log('    Vision: Failed to fetch any logo images');
-      return { customers: [], brands: [] };
+      return { customers: [], brands: [], principals: [] };
     }
 
     console.log(`    Vision: Successfully fetched ${validImages.length} images, sending to GPT-4o...`);
@@ -6230,10 +6232,9 @@ async function extractPartnersFromScreenshot(websiteUrl) {
       output: 'image',
       file_type: 'png',
       wait_for_event: 'load',
-      delay: 2000,  // Wait 2s for JS to render
-      full_page: 'false',  // Just viewport, not full page (faster, cheaper)
-      width: 1280,
-      height: 800
+      delay: 3000,  // Wait 3s for JS to render (carousels need time)
+      full_page: 'true',  // FULL PAGE to capture partner logos at bottom!
+      width: 1280
     });
 
     const controller = new AbortController();
@@ -6274,14 +6275,19 @@ async function extractPartnersFromScreenshot(websiteUrl) {
             },
             {
               type: 'text',
-              text: `Analyze this company website screenshot. Look for sections showing:
-- Partners / Principal brands (companies they distribute for or represent)
-- Customers / Clients (companies they sell to)
-- Brands they carry or distribute
+              text: `Analyze this FULL-PAGE company website screenshot. Scan the ENTIRE image from top to bottom.
 
-These are typically shown as logo grids, carousels, sliders, or lists with company names.
+IMPORTANT: Partner/client logos are typically at the BOTTOM of the page, often in carousels or grids.
 
-CRITICAL: Be EXHAUSTIVE - extract EVERY logo/company name you can see. Do not stop at just a few.
+Look for ANY of these sections:
+- "Our Partners" / "Partners" / "Principal Partners" / "Mitra" (Indonesian)
+- "Our Clients" / "Clients" / "Customers" / "Trusted By" / "Pelanggan" (Indonesian)
+- "Our Brands" / "Brands We Carry" / "Merek" (Indonesian)
+- Horizontal rows of company logos
+- Carousel/slider sections with logos
+- Footer sections with partner logos
+
+CRITICAL: Be EXHAUSTIVE - extract EVERY logo/company name you can identify. Count them - there may be 10-20+ logos.
 
 Return ONLY a JSON object:
 {
@@ -6291,14 +6297,13 @@ Return ONLY a JSON object:
 }
 
 Rules:
-- EXTRACT ALL visible company/brand names - be exhaustive, not selective
-- Look carefully at carousels and sliders - they often contain 10+ logos
-- Common security industry brands: Hikvision, Dahua, Axis, Hanwha, Wisenet, Samsung, Honeywell, Bosch, HID, ZKTeco, Genetec, Milestone, Dahua, NxWitness, Hitron
-- "principals" = brands/companies this company distributes for or represents
+- SCAN THE ENTIRE IMAGE - logos are often near the bottom!
+- EXTRACT ALL visible logos - if you see 15 logos, list all 15
+- Look for logo carousels that may show: Hanwha, Wisenet, Samsung, Honeywell, Axis, Hikvision, Dahua, Bosch, HID, ZKTeco, NxWitness, Hitron, Genetec, Milestone
+- "principals" = supplier/vendor brands this company distributes for
 - "customers" = companies that buy from this company
-- "brands" = product brands this company carries
-- Skip generic text like "Our Partners", "Clients", etc.
-- If a section is not visible or empty, return empty array
+- "brands" = product brands
+- Skip section headers like "Our Partners", just extract the actual logo names
 - Return ONLY valid JSON, no explanation`
             }
           ]
