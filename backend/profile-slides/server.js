@@ -99,6 +99,21 @@ function stripCompanySuffix(name) {
     .trim();
 }
 
+// Clean PT/CV prefixes from company names within a text string
+// Handles lists like "PT. Nara Summit, PT. Liebherr" -> "Nara Summit, Liebherr"
+function cleanCompanyPrefixesInText(text) {
+  if (!text || typeof text !== 'string') return text;
+  // Remove PT./PT prefix followed by space and company name
+  // Handles: "PT. Name", "PT Name", "CV. Name", "CV Name"
+  return text
+    .replace(/\bPT\.\s*/gi, '')
+    .replace(/\bPT\s+(?=[A-Z])/g, '')
+    .replace(/\bCV\.\s*/gi, '')
+    .replace(/\bCV\s+(?=[A-Z])/g, '')
+    .replace(/\s{2,}/g, ' ')  // Clean up double spaces
+    .trim();
+}
+
 // Filter garbage from customer/partner name arrays before display
 // Removes image artifacts, URLs, descriptions, product names mixed in customer lists
 // Optional companyName parameter to filter out the company's own name
@@ -2746,10 +2761,15 @@ function cleanupInlineLongforms(companyData) {
     }));
   }
   if (companyData.key_metrics && Array.isArray(companyData.key_metrics)) {
-    companyData.key_metrics = companyData.key_metrics.map(metric => ({
-      ...metric,
-      value: stripInlineLongforms(metric.value)
-    }));
+    companyData.key_metrics = companyData.key_metrics.map(metric => {
+      let cleanedValue = stripInlineLongforms(metric.value);
+      // Clean PT/CV prefixes from customer/supplier names in Key Customers, Key Suppliers, Customers labels
+      const label = (metric.label || '').toLowerCase();
+      if (label.includes('customer') || label.includes('supplier') || label.includes('client')) {
+        cleanedValue = cleanCompanyPrefixesInText(cleanedValue);
+      }
+      return { ...metric, value: cleanedValue };
+    });
   }
   return companyData;
 }
@@ -6046,8 +6066,9 @@ async function extractNamesFromLogosWithVision(rawHtml, websiteUrl) {
       processedUrls.push(imgUrl);
     }
 
-    // Limit to 8 images to avoid rate limits and keep response time reasonable
-    const limitedUrls = processedUrls.slice(0, 8);
+    // Limit to 20 images to capture more logos while staying within rate limits
+    // Critical for carousels/sliders that show many partner logos
+    const limitedUrls = processedUrls.slice(0, 20);
 
     if (limitedUrls.length === 0) {
       console.log('    Vision: No logo images found in sections');
@@ -6101,16 +6122,19 @@ async function extractNamesFromLogosWithVision(rawHtml, websiteUrl) {
     const visionContent = [
       {
         type: 'text',
-        text: `These are logo images from a company website's "clients", "partners", or "brands" section.
-For each logo image, identify the company or brand name shown.
+        text: `These are logo images from a company website's "clients", "partners", "principals", or "brands" section.
+For EVERY logo image, identify the company or brand name shown. BE EXHAUSTIVE - extract ALL visible logos.
+
 Return ONLY a JSON object with this exact format:
-{"customers": ["Company A", "Company B"], "brands": ["Brand X", "Brand Y"]}
+{"customers": ["Company A", "Company B"], "brands": ["Brand X", "Brand Y"], "principals": ["Principal1", "Principal2"]}
 
 Rules:
 - "customers" = companies that appear to be clients/customers (usually corporate logos)
 - "brands" = product brands or consumer brands (usually product logos)
-- If you can't read a logo clearly, skip it
-- Return empty arrays if no names can be identified
+- "principals" = brands/companies this company distributes for or represents (supplier brands like Hikvision, Honeywell, Axis, Bosch, etc.)
+- CRITICAL: Be EXHAUSTIVE - extract EVERY logo you can identify, not just a few
+- Common security industry principals: Hikvision, Dahua, Axis, Hanwha, Wisenet, Samsung, Honeywell, Bosch, HID, ZKTeco, Genetec, Milestone
+- If you can't read a logo clearly, still try to identify it from shape/colors
 - Do NOT include generic words like "logo", "image", "client"
 - Return ONLY the JSON, no explanation`
       }
@@ -6139,7 +6163,7 @@ Rules:
     const responseText = visionResponse.choices[0]?.message?.content || '{}';
 
     // Parse JSON response
-    let parsed = { customers: [], brands: [] };
+    let parsed = { customers: [], brands: [], principals: [] };
     try {
       // Extract JSON from response (handle markdown code blocks)
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -6160,16 +6184,17 @@ Rules:
 
     const result = {
       customers: cleanNames(parsed.customers),
-      brands: cleanNames(parsed.brands)
+      brands: cleanNames(parsed.brands),
+      principals: cleanNames(parsed.principals || [])
     };
 
-    console.log(`    Vision: Identified ${result.customers.length} customers, ${result.brands.length} brands`);
+    console.log(`    Vision: Identified ${result.customers.length} customers, ${result.brands.length} brands, ${result.principals.length} principals`);
 
     return result;
 
   } catch (error) {
     console.log(`    Vision: Error - ${error.message}`);
-    return { customers: [], brands: [] };
+    return { customers: [], brands: [], principals: [] };
   }
 }
 
@@ -6254,17 +6279,21 @@ async function extractPartnersFromScreenshot(websiteUrl) {
 - Customers / Clients (companies they sell to)
 - Brands they carry or distribute
 
-These are typically shown as logo grids, carousels, or lists with company names.
+These are typically shown as logo grids, carousels, sliders, or lists with company names.
+
+CRITICAL: Be EXHAUSTIVE - extract EVERY logo/company name you can see. Do not stop at just a few.
 
 Return ONLY a JSON object:
 {
-  "principals": ["Brand A", "Brand B"],
-  "customers": ["Customer 1", "Customer 2"],
-  "brands": ["Brand X", "Brand Y"]
+  "principals": ["Brand A", "Brand B", "Brand C", ...],
+  "customers": ["Customer 1", "Customer 2", "Customer 3", ...],
+  "brands": ["Brand X", "Brand Y", "Brand Z", ...]
 }
 
 Rules:
-- Extract actual company/brand names visible on the page
+- EXTRACT ALL visible company/brand names - be exhaustive, not selective
+- Look carefully at carousels and sliders - they often contain 10+ logos
+- Common security industry brands: Hikvision, Dahua, Axis, Hanwha, Wisenet, Samsung, Honeywell, Bosch, HID, ZKTeco, Genetec, Milestone, Dahua, NxWitness, Hitron
 - "principals" = brands/companies this company distributes for or represents
 - "customers" = companies that buy from this company
 - "brands" = product brands this company carries
@@ -6560,6 +6589,49 @@ function validateAndFixHQFormat(location, websiteUrl) {
   // Remove any "HQ:" prefix
   loc = loc.replace(/^-?\s*HQ:\s*/i, '').trim();
 
+  // Remove postal codes (5-6 digit numbers at end or in middle)
+  loc = loc.replace(/\s+\d{5,6}(\s|,|$)/g, '$1').trim();
+
+  // INDONESIA PROVINCE NORMALIZATION
+  // DKI Jakarta is a special administrative region - normalize to just "Jakarta"
+  // Also handle other Indonesian province variations
+  const indonesianProvinceNormalization = {
+    'dki jakarta': 'Jakarta',
+    'daerah khusus ibukota jakarta': 'Jakarta',
+    'jakarta utara': 'Jakarta',
+    'jakarta selatan': 'Jakarta',
+    'jakarta barat': 'Jakarta',
+    'jakarta timur': 'Jakarta',
+    'jakarta pusat': 'Jakarta',
+    'jawa barat': 'West Java',
+    'jawa timur': 'East Java',
+    'jawa tengah': 'Central Java',
+    'kalimantan barat': 'West Kalimantan',
+    'kalimantan timur': 'East Kalimantan',
+    'kalimantan selatan': 'South Kalimantan',
+    'kalimantan tengah': 'Central Kalimantan',
+    'sulawesi selatan': 'South Sulawesi',
+    'sulawesi utara': 'North Sulawesi',
+    'sumatera utara': 'North Sumatra',
+    'sumatera selatan': 'South Sumatra',
+    'sumatera barat': 'West Sumatra',
+    'nusa tenggara barat': 'West Nusa Tenggara',
+    'nusa tenggara timur': 'East Nusa Tenggara',
+    'kepulauan riau': 'Riau Islands',
+    'di yogyakarta': 'Yogyakarta',
+    'daerah istimewa yogyakarta': 'Yogyakarta'
+  };
+
+  // Check and normalize Indonesian province names
+  const locLower = loc.toLowerCase();
+  for (const [indonesian, english] of Object.entries(indonesianProvinceNormalization)) {
+    if (locLower.includes(indonesian)) {
+      loc = loc.replace(new RegExp(indonesian, 'gi'), english);
+      console.log(`  [HQ Fix] Normalized Indonesian province: "${indonesian}" → "${english}"`);
+      break;
+    }
+  }
+
   const parts = loc.split(',').map(p => p.trim()).filter(p => p);
   const lastPart = parts[parts.length - 1]?.toLowerCase() || '';
 
@@ -6798,12 +6870,21 @@ When you find BOTH a count AND specific names for the same category, MERGE them 
 SEGMENTATION REQUIREMENT:
 For metrics with MANY items (e.g., Customers, Suppliers), segment them by category using POINT FORM:
 Example for Customers:
-{"label": "Customers", "value": "- Residential: Customer1, Customer2, Customer3\\n- Commercial: Customer4, Customer5\\n- Industrial: Customer6, Customer7"}
+{"label": "Key Customers", "value": "- Banking: Bank Mandiri, BNI, Bank Mestika\\n- Energy: Pertamina, Medco Energy\\n- Manufacturing: Kalbe, Sinarmas"}
 
 Example for Suppliers:
-{"label": "Suppliers", "value": "- Raw Materials: Supplier1, Supplier2\\n- Packaging: Supplier3, Supplier4\\n- Equipment: Supplier5"}
+{"label": "Key Suppliers", "value": "- CCTV: Hikvision, Dahua, Axis\\n- Access Control: HID, ZKTeco\\n- Video Management: Milestone, Genetec"}
 
 IMPORTANT: Always use "- " prefix for each segment line to create point form for easier reading.
+
+CRITICAL - CUSTOMER/SUPPLIER NAMES ONLY:
+- For Key Customers and Key Suppliers, extract ONLY the company/brand NAMES
+- NEVER include information ABOUT the customer/supplier (their size, employees, visitors, revenue, etc.)
+- BAD: "Bank Mandiri: 12,000 employees, 7,000 visitors daily" ← This describes Bank Mandiri, NOT relevant!
+- GOOD: "Bank Mandiri" ← Just the name
+- BAD: "Pertamina (state-owned oil company)" ← No descriptions
+- GOOD: "Pertamina" ← Just the name
+- The customer/supplier's own business details are IRRELEVANT - we only need their names to show who the target company serves
 
 RULES:
 - HARD RULE - TRANSLATE ALL NON-ENGLISH TEXT TO ENGLISH:
@@ -6819,7 +6900,12 @@ RULES:
   - Common abbreviations that DON'T need explanation: ISO, FDA, GMP, HACCP, B2B, B2C, CEO, CFO, HQ, USD, EUR, sqm, kg
   - Use your judgment: if a reader unfamiliar with the industry wouldn't know what it means, include the definition
 - Write ALL text using regular English alphabet only (A-Z, no diacritics, no foreign characters)
-- Remove company suffixes from ALL names: Co., Ltd, JSC, Sdn Bhd, Pte Ltd, Inc, Corp, LLC, GmbH
+- COMPANY NAME CLEANING (CRITICAL):
+  - Remove ALL company suffixes: Co., Ltd, JSC, Sdn Bhd, Pte Ltd, Inc, Corp, LLC, GmbH, Tbk
+  - Remove ALL company prefixes: PT, PT., CV, CV. (Indonesian prefixes - MUST remove!)
+  - BAD: "PT. Nara Summit Industry", "PT Liebherr Indonesia Perkasa"
+  - GOOD: "Nara Summit Industry", "Liebherr Indonesia Perkasa"
+  - This applies to ALL customer, supplier, and partner names
 - Extract as many metrics as found (8-15 ideally)
 - For metrics with multiple items, use "- " bullet points separated by "\\n"
 - For long lists of customers/suppliers, SEGMENT by category as shown above
@@ -8073,7 +8159,7 @@ async function processSingleWebsite(website, index, total) {
 
     // Step 6f: Screenshot fallback - if vision/metadata extraction found few partners, use full-page screenshot
     let screenshotResults = { customers: [], brands: [], principals: [] };
-    const totalFromVision = visionResults.customers.length + visionResults.brands.length;
+    const totalFromVision = visionResults.customers.length + visionResults.brands.length + (visionResults.principals?.length || 0);
     const totalFromMeta = businessRelationships.customers.length + businessRelationships.principals.length + businessRelationships.brands.length;
 
     if (totalFromVision + totalFromMeta < 3 && process.env.SCREENSHOT_API_KEY) {
@@ -8107,6 +8193,7 @@ async function processSingleWebsite(website, index, total) {
       ...businessRelationships.brands
     ])];
     const allPrincipals = [...new Set([
+      ...(visionResults.principals || []),
       ...screenshotResults.principals,
       ...businessRelationships.principals
     ])];
@@ -8582,7 +8669,7 @@ app.post('/api/generate-ppt', async (req, res) => {
 
         // Step 5d: Screenshot fallback - if vision/metadata extraction found few partners, use full-page screenshot
         let screenshotResults = { customers: [], brands: [], principals: [] };
-        const totalFromVision = visionResults.customers.length + visionResults.brands.length;
+        const totalFromVision = visionResults.customers.length + visionResults.brands.length + (visionResults.principals?.length || 0);
         const totalFromMeta = businessRelationships.customers.length + businessRelationships.principals.length + businessRelationships.brands.length;
 
         if (totalFromVision + totalFromMeta < 3 && process.env.SCREENSHOT_API_KEY) {
@@ -8610,6 +8697,7 @@ app.post('/api/generate-ppt', async (req, res) => {
           ...businessRelationships.brands
         ])];
         const allPrincipals = [...new Set([
+          ...(visionResults.principals || []),
           ...screenshotResults.principals,
           ...businessRelationships.principals
         ])];
