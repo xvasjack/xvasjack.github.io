@@ -3397,7 +3397,10 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         if (!existingLabels.has('principal partners') && !existingLabels.has('principals')) {
           tableData.push(['Principal Partners', principalsList, null]);
           existingLabels.add('principal partners');
+          console.log(`    Added Principal Partners: ${principalsList}`);
         }
+      } else {
+        console.log(`    No principals found in _businessRelationships`);
       }
 
       // Add Key Customers row if available and not already shown on right side
@@ -3408,6 +3411,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           const customersList = relationships.customers.slice(0, 10).join(', ');
           tableData.push(['Customers', customersList, null]);
           existingLabels.add('customers');
+          console.log(`    Added Customers: ${customersList.substring(0, 80)}...`);
         }
       }
 
