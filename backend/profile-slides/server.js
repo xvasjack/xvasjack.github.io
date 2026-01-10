@@ -4513,7 +4513,7 @@ function extractCustomerNamesFromImages(rawHtml) {
     }
   }
 
-  return Array.from(customerNames).slice(0, 15); // Limit to 15 names
+  return Array.from(customerNames).slice(0, 30); // Limit to 30 names for exhaustive extraction
 }
 
 // Multilingual regex extraction for key metrics (deterministic, no AI hallucination)
@@ -5928,12 +5928,12 @@ function extractBusinessRelationships(rawHtml) {
     }
   }
 
-  // Convert Sets to Arrays and limit
+  // Convert Sets to Arrays and limit (30 max for exhaustive extraction)
   return {
-    customers: Array.from(results.customers).slice(0, 20),
-    suppliers: Array.from(results.suppliers).slice(0, 20),
-    principals: Array.from(results.principals).slice(0, 20),
-    brands: Array.from(results.brands).slice(0, 20)
+    customers: Array.from(results.customers).slice(0, 30),
+    suppliers: Array.from(results.suppliers).slice(0, 30),
+    principals: Array.from(results.principals).slice(0, 30),
+    brands: Array.from(results.brands).slice(0, 30)
   };
 }
 
@@ -5952,7 +5952,7 @@ function extractCustomersFromSections(rawHtml) {
 // ===== GPT-4o Vision-based Logo Reading =====
 // Extracts company/brand names by actually reading logo images with GPT-4o vision
 async function extractNamesFromLogosWithVision(rawHtml, websiteUrl) {
-  if (!rawHtml) return { customers: [], brands: [] };
+  if (!rawHtml) return { customers: [], brands: [], principals: [] };
 
   try {
     // Step 1: Find images in customer/client/partner/brand sections
@@ -6066,13 +6066,13 @@ async function extractNamesFromLogosWithVision(rawHtml, websiteUrl) {
       processedUrls.push(imgUrl);
     }
 
-    // Limit to 20 images to capture more logos while staying within rate limits
+    // Limit to 30 images to capture ALL logos exhaustively
     // Critical for carousels/sliders that show many partner logos
-    const limitedUrls = processedUrls.slice(0, 20);
+    const limitedUrls = processedUrls.slice(0, 30);
 
     if (limitedUrls.length === 0) {
       console.log('    Vision: No logo images found in sections');
-      return { customers: [], brands: [] };
+      return { customers: [], brands: [], principals: [] };
     }
 
     console.log(`    Vision: Found ${limitedUrls.length} logo images to analyze`);
@@ -6155,7 +6155,7 @@ Rules:
       return await openai.chat.completions.create({
         model: 'gpt-4o',
         messages: [{ role: 'user', content: visionContent }],
-        max_tokens: 500,
+        max_tokens: 1200,  // Increased for exhaustive extraction (30+ logos)
         temperature: 0.1
       });
     }, 2, 3000); // 2 retries, 3s base delay for rate limits
@@ -6303,7 +6303,7 @@ Rules:
             }
           ]
         }],
-        max_tokens: 800,
+        max_tokens: 1500,  // Increased for exhaustive extraction (30+ logos)
         temperature: 0.1
       });
     }, 2, 3000);
@@ -6784,19 +6784,21 @@ Numbers next to ANY non-English text are likely important metrics - EXTRACT THEM
 
 EXTRACT AS MANY OF THESE METRICS AS POSSIBLE (aim for 8-15 metrics):
 
-CUSTOMERS & MARKET (CRITICAL - LOOK EVERYWHERE FOR CLIENTS):
+CUSTOMERS & MARKET (CRITICAL - EXHAUSTIVE EXTRACTION):
 - Key customer names (look for: "Clients", "Customers", "Our Clients", logo sections, testimonials)
-- IMPORTANT: If website shows CLIENT LOGOS, extract those company names (e.g., Sinarmas, Dole, SCG logos = customer names)
+- IMPORTANT: If website shows CLIENT LOGOS, extract ALL company names you can identify - be EXHAUSTIVE!
 - Number of customers (total active customers)
 - Customer segments served
+- EXHAUSTIVE: Extract ALL customer names visible, not just 3-5. If there are 15 customer logos, extract all 15 names!
 
-SUPPLIERS & PARTNERSHIPS (CRITICAL FOR DISTRIBUTORS):
+SUPPLIERS & PARTNERSHIPS (CRITICAL - EXHAUSTIVE EXTRACTION):
 - Principal brands/suppliers (for distributors: look for "Our Brands", "Principals", "Partners" with LOGOS)
-- IMPORTANT: If website shows SUPPLIER/BRAND LOGOS, extract those company names!
+- IMPORTANT: If website shows SUPPLIER/BRAND LOGOS, extract ALL company names - be EXHAUSTIVE!
 - Key supplier/partner names
 - Notable partnerships, JVs, technology transfers
 - Exclusive distribution agreements
 - For distributors: the brands they distribute are CRITICAL info - capture ALL of them!
+- EXHAUSTIVE: If there are 10+ principal/supplier logos, extract ALL names, not just a few!
 
 OPERATIONS & SCALE:
 - Production capacity (units/month, tons/month)
