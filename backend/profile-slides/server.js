@@ -7437,8 +7437,9 @@ ${(markers.relationships_snippets || []).join('\n')}
 === IDENTITY ===
 ${(markers.identity_snippets || []).join('\n')}`;
     } else {
+      // Truncate to 15000 chars to avoid token limit (128K tokens ≈ 100K chars)
       sourceSection = `## SOURCE WEBSITE CONTENT (this is the truth):
-${scrapedContent ? scrapedContent.substring(0, 30000) : 'No source content available'}`;
+${scrapedContent ? scrapedContent.substring(0, 15000) : 'No source content available'}`;
     }
 
     const prompt = `You are a data VALIDATION and CLEANUP agent. Your job is to VERIFY extracted data against SOURCE CONTENT and REMOVE anything that cannot be verified.
@@ -7451,7 +7452,16 @@ CRITICAL RULE: You can ONLY REMOVE or FIX data. You CANNOT ADD new data.
 ${sourceSection}
 
 ## EXTRACTED DATA (verify each item against source):
-${JSON.stringify(companyData, null, 2)}
+${JSON.stringify({
+      ...companyData,
+      // Truncate large arrays to avoid token overflow
+      breakdown_items: (companyData.breakdown_items || []).slice(0, 10),
+      key_metrics: (companyData.key_metrics || []).slice(0, 15),
+      // Remove internal fields not needed for validation
+      _businessRelationships: undefined,
+      _productProjectImages: undefined,
+      rawContent: undefined
+    }, null, 2)}
 
 ## YOUR TASKS:
 
@@ -8215,6 +8225,8 @@ app.post('/api/profile-slides', async (req, res) => {
     if (companies.length > 0 || inaccessibleWebsites.length > 0) {
       pptxResult = await generatePPTX(companies, targetDescription, inaccessibleWebsites, rightLayout || 'table-6');
       logMemoryUsage('after PPTX generation');
+      // Force GC after PPTX generation to free memory before email
+      if (global.gc) global.gc();
     }
 
     // Build email content
