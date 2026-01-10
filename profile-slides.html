@@ -8,25 +8,31 @@
   <style>
     /* Wide form layout */
     .form-card {
-      max-width: 1100px;
+      max-width: 1000px;
     }
     .form-columns {
       display: flex;
-      gap: 32px;
+      gap: 40px;
     }
     .form-left {
       flex: 1;
-      min-width: 350px;
+      min-width: 380px;
     }
     .form-right {
-      width: 420px;
+      width: 480px;
       flex-shrink: 0;
     }
-    /* Layout selector grid */
+    /* Layout selector box */
+    .layout-box {
+      border: 2px solid #e5e7eb;
+      border-radius: 12px;
+      padding: 20px;
+      background: #f9fafb;
+    }
     .layout-selector {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 12px;
     }
     .layout-option {
       position: relative;
@@ -39,15 +45,16 @@
       height: 0;
     }
     .layout-preview {
-      border: 2px solid #ddd;
-      border-radius: 6px;
-      padding: 6px;
-      background: #fafafa;
+      border: 2px solid #d1d5db;
+      border-radius: 10px;
+      padding: 10px;
+      background: #fff;
       transition: all 0.2s;
     }
     .layout-option input:checked + .layout-preview {
       border-color: #2563eb;
       background: #eff6ff;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
     }
     .layout-option:hover .layout-preview {
       border-color: #93c5fd;
@@ -55,39 +62,39 @@
     /* Mini slide preview */
     .preview-slide {
       display: flex;
-      gap: 3px;
-      height: 45px;
+      gap: 4px;
+      height: 70px;
       background: #1e3a5f;
-      border-radius: 3px;
-      padding: 3px;
-      margin-bottom: 4px;
+      border-radius: 6px;
+      padding: 5px;
+      margin-bottom: 8px;
     }
     .preview-left {
       flex: 1;
       background: #fff;
-      border-radius: 2px;
+      border-radius: 4px;
     }
     .preview-right {
       flex: 1;
       display: flex;
       flex-direction: column;
-      gap: 1px;
+      gap: 2px;
     }
     .preview-row {
       flex: 1;
       background: #3b82f6;
-      border-radius: 1px;
+      border-radius: 2px;
       display: flex;
     }
     .preview-row-label {
       width: 30%;
       background: #1d4ed8;
-      border-radius: 1px 0 0 1px;
+      border-radius: 2px 0 0 2px;
     }
     .preview-row-value {
       flex: 1;
       background: #fff;
-      border-radius: 0 1px 1px 0;
+      border-radius: 0 2px 2px 0;
     }
     .preview-empty {
       flex: 1;
@@ -96,53 +103,53 @@
     .preview-images {
       display: grid;
       grid-template-columns: 1fr 1fr;
-      gap: 2px;
+      gap: 3px;
       flex: 1;
     }
     .preview-images-6 {
       display: grid;
       grid-template-columns: 1fr 1fr;
       grid-template-rows: 1fr 1fr 1fr;
-      gap: 1px;
+      gap: 2px;
       flex: 1;
     }
     .preview-img {
       background: #94a3b8;
-      border-radius: 2px;
+      border-radius: 3px;
     }
     .preview-img-row {
       display: flex;
-      gap: 2px;
+      gap: 3px;
       flex: 1;
     }
     .preview-img-left {
       width: 40%;
       background: #94a3b8;
-      border-radius: 2px;
+      border-radius: 3px;
     }
     .preview-img-label {
       flex: 1;
       background: #e2e8f0;
-      border-radius: 2px;
+      border-radius: 3px;
     }
     .preview-right-half {
       flex: 1;
       display: flex;
       flex-direction: column;
-      gap: 1px;
-      padding-bottom: 10px;
+      gap: 2px;
+      padding-bottom: 18px;
     }
     .layout-name {
-      font-size: 10px;
-      font-weight: 500;
+      font-size: 14px;
+      font-weight: 600;
       text-align: center;
-      color: #374151;
+      color: #1f2937;
     }
     .layout-section-label {
-      font-size: 14px;
-      font-weight: 500;
-      color: #374151;
-      margin-bottom: 8px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #1f2937;
+      margin-bottom: 16px;
     }
   </style>
 </head>
@@ -224,8 +231,9 @@
               </div>
 
               <div class="form-right">
-                <div class="layout-section-label">Right Side Layout</div>
-                <div class="layout-selector">
+                <div class="layout-box">
+                  <div class="layout-section-label">Right Side Layout</div>
+                  <div class="layout-selector">
                   <!-- Row 1 -->
                   <label class="layout-option">
                     <input type="radio" name="rightLayout" value="table-6" checked>
@@ -341,6 +349,7 @@
                       <div class="layout-name">Img + Label</div>
                     </div>
                   </label>
+                  </div>
                 </div>
               </div>
             </div>
