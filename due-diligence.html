@@ -4,317 +4,171 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Due Diligence Report Generator</title>
-  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
   <style>
-    .page-content.dd-container {
-      display: block !important;
-      align-items: unset !important;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 20px;
-    }
-
-    .dd-header {
-      text-align: center;
-      margin-bottom: 24px;
-    }
-    .dd-header h1 {
-      font-size: 22px;
-      margin: 0 0 8px 0;
-      font-weight: 600;
-    }
-    .dd-header p {
-      font-size: 14px;
-      color: var(--text-muted);
-      margin: 0;
-    }
-
-    /* Upload Zone */
-    .dd-upload-zone {
-      border: 2px dashed var(--border-medium);
-      border-radius: var(--radius-md);
-      padding: 40px 20px;
-      text-align: center;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      background: var(--bg-body);
-      margin-bottom: 16px;
-    }
-    .dd-upload-zone:hover, .dd-upload-zone.active {
-      border-color: var(--accent);
-      background: var(--accent-soft);
-    }
-    .dd-upload-zone svg {
-      color: var(--accent);
-      width: 48px;
-      height: 48px;
-      margin-bottom: 12px;
-    }
-    .dd-upload-zone p {
-      font-size: 16px;
-      color: var(--text-main);
-      margin: 0 0 8px 0;
-    }
-    .dd-upload-zone span {
-      font-size: 13px;
-      color: var(--text-muted);
-    }
-    #fileInput { display: none; }
-
-    .dd-file-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-bottom: 20px;
-    }
-    .dd-file-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 14px;
-      background: #f1f5f9;
-      border: 1px solid #cbd5e1;
-      border-radius: 6px;
-    }
-    .dd-file-item svg { width: 20px; height: 20px; color: #3b82f6; flex-shrink: 0; }
-    .dd-file-item span {
-      flex: 1;
-      font-size: 14px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      color: #1e293b;
-    }
-    .dd-file-item .file-size {
-      font-size: 12px;
-      color: #64748b;
-      flex-shrink: 0;
-    }
-    .dd-file-item button {
-      background: #fee2e2;
-      border: 1px solid #fca5a5;
-      color: #dc2626;
-      cursor: pointer;
-      padding: 4px 10px;
-      border-radius: 4px;
-      font-weight: 600;
-      font-size: 12px;
-    }
-    .dd-file-item button:hover { background: #fecaca; }
-
-    /* Form Section */
-    .dd-form-section {
-      background: var(--bg-surface);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-md);
-      padding: 20px;
-      margin-bottom: 16px;
-    }
-    .dd-form-label {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 10px;
-    }
-    .dd-form-label label {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text-main);
-    }
-    .dd-mode-toggle {
-      display: flex;
-      gap: 6px;
-    }
-    .dd-mode-btn {
-      padding: 5px 12px;
-      font-size: 12px;
-      font-weight: 600;
-      border: 1px solid var(--border-medium);
-      border-radius: 4px;
-      background: var(--bg-body);
-      color: var(--text-muted);
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .dd-mode-btn:hover { border-color: var(--accent); color: var(--accent); }
-    .dd-mode-btn.active {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: white;
-    }
-    .dd-auto-hint {
-      font-size: 13px;
-      color: var(--text-muted);
-      padding: 12px;
-      background: var(--accent-soft);
-      border-radius: 4px;
-      margin-bottom: 12px;
-    }
-    .dd-instructions-box {
-      width: 100%;
-      padding: 12px;
-      border: 1px solid var(--border-medium);
-      border-radius: 4px;
-      font-size: 13px;
-      resize: vertical;
-      min-height: 100px;
-      line-height: 1.5;
-      font-family: inherit;
-    }
-    .dd-instructions-box:focus {
-      outline: none;
-      border-color: var(--accent);
-    }
-
-    /* Submit Button */
-    .dd-submit-btn {
-      width: 100%;
-      padding: 14px 20px;
-      font-size: 15px;
-      font-weight: 600;
-      background: var(--accent);
-      color: white;
-      border: none;
-      border-radius: var(--radius-md);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      transition: background 0.2s;
-    }
-    .dd-submit-btn:hover { background: var(--accent-hover); }
-    .dd-submit-btn:disabled {
-      background: var(--text-light);
-      cursor: not-allowed;
-    }
-    .dd-submit-btn svg { width: 20px; height: 20px; }
-
-    /* Supported formats */
-    .dd-formats {
-      font-size: 12px;
-      color: var(--text-muted);
-      text-align: center;
-      margin-top: 8px;
-    }
-
-    /* Spinner */
-    .spinner {
-      animation: spin 1s linear infinite;
-      width: 20px;
-      height: 20px;
-    }
-    @keyframes spin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 1s linear infinite; width: 16px; height: 16px; }
   </style>
 </head>
-<body>
-  <header class="app-header">
-    <a href="find-target.html" class="logo">
-      <span class="logo-icon">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
-        </svg>
-      </span>
-      YCP Gary Team's Tool
-    </a>
-    <nav>
-      <div class="nav-dropdown">
-        <button class="nav-dropdown-toggle">
-          Search
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </button>
-        <div class="nav-dropdown-menu">
-          <a href="find-target.html">v3 Search</a>
-          <a href="find-target-v5.html">v5 Search</a>
-          <a href="find-target-v6.html">v6 Search</a>
-        </div>
+<body class="font-sans bg-slate-100 text-slate-900 h-screen flex overflow-hidden">
+  <!-- Sidebar -->
+  <aside class="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm flex-shrink-0">
+    <div class="p-5 border-b border-slate-200">
+      <a href="find-target.html" class="flex items-center gap-3 text-slate-900 no-underline">
+        <span class="w-9 h-9 bg-indigo-600 rounded-lg flex items-center justify-center">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+          </svg>
+        </span>
+        <span class="font-semibold text-lg">YCP Tools</span>
+      </a>
+    </div>
+
+    <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+      <div class="mb-4">
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Search</p>
+        <a href="find-target.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v3 Search
+        </a>
+        <a href="find-target-v5.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v5 Search
+        </a>
+        <a href="find-target-v6.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v6 Search
+        </a>
       </div>
-      <a href="validation.html">Validation</a>
-      <a href="trading-comparable.html">Trading Comp</a>
-      <a href="profile-slides.html">Slides</a>
-      <a href="utb.html">UTB</a>
-      <a href="market-research.html">Market Research</a>
-      <a href="due-diligence.html" class="active">Due Diligence</a>
-      <div class="nav-dropdown">
-        <button class="nav-dropdown-toggle">
-          Other Tools
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </button>
-        <div class="nav-dropdown-menu">
-          <a href="find-target-slow.html">v3 Slow</a>
-          <a href="find-target-v4.html">v4 Search</a>
-        </div>
+
+      <div class="mb-4">
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Tools</p>
+        <a href="validation.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Validation
+        </a>
+        <a href="trading-comparable.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          Trading Comp
+        </a>
+        <a href="profile-slides.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Profile Slides
+        </a>
+        <a href="utb.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+          UTB
+        </a>
+        <a href="market-research.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          Market Research
+        </a>
+        <a href="due-diligence.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium bg-indigo-50 text-indigo-700 rounded-lg">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+          Due Diligence
+        </a>
+      </div>
+
+      <div>
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Other</p>
+        <a href="find-target-slow.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          v3 Slow
+        </a>
+        <a href="find-target-v4.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+          v4 Search
+        </a>
       </div>
     </nav>
-    <div class="header-email">
-      <span class="header-email-label">Your email:</span>
-      <input type="email" id="globalEmail" placeholder="your@company.com">
+
+    <div class="p-4 border-t border-slate-200 bg-slate-50">
+      <label class="block text-xs font-medium text-slate-500 mb-1.5">Your Email</label>
+      <input type="email" id="globalEmail" placeholder="your@company.com"
+        class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow">
     </div>
-  </header>
+  </aside>
 
-  <main class="app-main" style="padding-top: 20px;">
-    <section class="page-content dd-container">
-      <!-- Header -->
-      <div class="dd-header">
-        <h1>Due Diligence Report Generator</h1>
-        <p>Upload documents and receive a comprehensive DD report in Word format</p>
-      </div>
+  <!-- Main Content -->
+  <main class="flex-1 flex flex-col overflow-hidden">
+    <header class="bg-white border-b border-slate-200 px-6 py-4">
+      <h1 class="text-xl font-bold text-slate-900">Due Diligence Report</h1>
+      <p class="text-slate-600 text-sm mt-1">Upload documents and receive a comprehensive DD report in Word format via email.</p>
+    </header>
 
+    <div class="flex-1 overflow-y-auto p-6">
       <!-- Messages -->
-      <div class="message success" id="successMessage">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-        <span id="successText">Success!</span>
+      <div id="successMessage" class="hidden mb-4 p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg">
+        <div class="flex items-start gap-3">
+          <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+          <span id="successText">Success!</span>
+        </div>
       </div>
-      <div class="message error" id="errorMessage">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      <div id="errorMessage" class="hidden mb-4 flex items-center gap-3 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         <span id="errorText">Error</span>
       </div>
 
-      <!-- Upload Zone -->
-      <input type="file" id="fileInput" multiple accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.rtf,.csv,.xlsx,.xls">
-      <div class="dd-upload-zone" id="uploadZone">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-        </svg>
-        <p>Drop files here or click to upload</p>
-        <span>PDF, Word, PowerPoint, Excel, TXT - No limit on number of files</span>
-      </div>
-      <div class="dd-formats">Supported: .pdf .doc .docx .ppt .pptx .xls .xlsx .txt .csv .rtf (100MB max per file)</div>
-
-      <!-- File List -->
-      <div class="dd-file-list" id="fileList"></div>
-
-      <!-- Instructions Section -->
-      <div class="dd-form-section">
-        <div class="dd-form-label">
-          <label>Instructions</label>
-          <div class="dd-mode-toggle">
-            <button type="button" class="dd-mode-btn active" id="autoModeBtn" onclick="setInstructionMode('auto')">Auto</button>
-            <button type="button" class="dd-mode-btn" id="manualModeBtn" onclick="setInstructionMode('manual')">Manual</button>
+      <div class="max-w-2xl mx-auto space-y-5">
+        <!-- Upload Section -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+          <div class="flex items-center gap-2 mb-4">
+            <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+            <span class="font-semibold text-slate-900">Upload Documents</span>
           </div>
+
+          <input type="file" id="fileInput" multiple accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.rtf,.csv,.xlsx,.xls" class="hidden">
+          <div id="uploadZone" class="border-2 border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-colors">
+            <svg class="w-12 h-12 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+            <p class="text-slate-700 font-medium">Drop files here or click to upload</p>
+            <p class="text-slate-500 text-sm">PDF, Word, PowerPoint, Excel, TXT - No limit on files</p>
+          </div>
+          <p class="text-xs text-slate-400 text-center mt-2">100MB max per file</p>
+
+          <div id="fileList" class="mt-4 space-y-2"></div>
         </div>
-        <div class="dd-auto-hint" id="autoModeHint">
-          AI will automatically analyze uploaded documents and generate a comprehensive DD report.
-        </div>
-        <textarea id="ddInstructions" class="dd-instructions-box" rows="5" placeholder="Example instructions:
+
+        <!-- Instructions Section -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <span class="font-semibold text-slate-900">Instructions</span>
+            <div class="flex gap-1">
+              <button type="button" id="autoModeBtn" onclick="setInstructionMode('auto')" class="px-3 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg bg-indigo-600 text-white">Auto</button>
+              <button type="button" id="manualModeBtn" onclick="setInstructionMode('manual')" class="px-3 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg bg-white text-slate-500 hover:border-indigo-500">Manual</button>
+            </div>
+          </div>
+          <div id="autoModeHint" class="text-sm text-slate-600 bg-indigo-50 rounded-lg p-3">
+            AI will automatically analyze uploaded documents and generate a comprehensive DD report.
+          </div>
+          <textarea id="ddInstructions" rows="4" placeholder="Example instructions:
 • Focus on financial performance and risks
 • Summarize key findings for buyer's perspective
 • Highlight any red flags or concerns
-• Include market position analysis" style="display: none;"></textarea>
-      </div>
+• Include market position analysis" class="hidden w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y mt-3"></textarea>
+        </div>
 
-      <!-- Submit Button -->
-      <button type="button" class="dd-submit-btn" id="ddSubmitBtn">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-        </svg>
-        Generate DD Report
-      </button>
-    </section>
+        <!-- Submit Button -->
+        <button type="button" id="ddSubmitBtn" class="w-full flex items-center justify-center gap-2 px-4 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-sm transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Generate DD Report
+        </button>
+      </div>
+    </div>
   </main>
 
   <script>
@@ -323,12 +177,8 @@
     // Email caching
     const globalEmailInput = document.getElementById('globalEmail');
     const cachedEmail = localStorage.getItem('ycpUserEmail');
-    if (cachedEmail) {
-      globalEmailInput.value = cachedEmail;
-    }
-    globalEmailInput.addEventListener('input', () => {
-      localStorage.setItem('ycpUserEmail', globalEmailInput.value);
-    });
+    if (cachedEmail) globalEmailInput.value = cachedEmail;
+    globalEmailInput.addEventListener('input', () => localStorage.setItem('ycpUserEmail', globalEmailInput.value));
 
     const API_BASE = 'https://xvasjackgithubio-production.up.railway.app';
 
@@ -346,7 +196,6 @@
     let selectedFiles = [];
     let instructionMode = 'auto';
 
-    // Instruction mode toggle
     window.setInstructionMode = function(mode) {
       instructionMode = mode;
       const autoBtn = document.getElementById('autoModeBtn');
@@ -355,32 +204,36 @@
       const instructionsBox = document.getElementById('ddInstructions');
 
       if (mode === 'auto') {
-        autoBtn.classList.add('active');
-        manualBtn.classList.remove('active');
-        autoHint.style.display = 'block';
-        instructionsBox.style.display = 'none';
+        autoBtn.classList.remove('bg-white', 'text-slate-500');
+        autoBtn.classList.add('bg-indigo-600', 'text-white');
+        manualBtn.classList.remove('bg-indigo-600', 'text-white');
+        manualBtn.classList.add('bg-white', 'text-slate-500');
+        autoHint.classList.remove('hidden');
+        instructionsBox.classList.add('hidden');
       } else {
-        autoBtn.classList.remove('active');
-        manualBtn.classList.add('active');
-        autoHint.style.display = 'none';
-        instructionsBox.style.display = 'block';
+        manualBtn.classList.remove('bg-white', 'text-slate-500');
+        manualBtn.classList.add('bg-indigo-600', 'text-white');
+        autoBtn.classList.remove('bg-indigo-600', 'text-white');
+        autoBtn.classList.add('bg-white', 'text-slate-500');
+        autoHint.classList.add('hidden');
+        instructionsBox.classList.remove('hidden');
       }
     };
 
-    // Upload handlers
+    // Upload handling
     uploadZone.addEventListener('click', () => fileInput.click());
-    uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('active'); });
-    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('active'));
-    uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('active'); handleFiles(e.dataTransfer.files); });
+    uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('border-indigo-500', 'bg-indigo-50'); });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('border-indigo-500', 'bg-indigo-50'));
+    uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('border-indigo-500', 'bg-indigo-50'); handleFiles(e.dataTransfer.files); });
     fileInput.addEventListener('change', e => handleFiles(e.target.files));
 
     function handleFiles(files) {
       const allowed = ['pdf', 'ppt', 'pptx', 'doc', 'docx', 'txt', 'rtf', 'csv', 'xlsx', 'xls'];
       const newFiles = Array.from(files).filter(f => {
         const ext = f.name.split('.').pop().toLowerCase();
-        return allowed.includes(ext) && f.size <= 100 * 1024 * 1024; // 100MB limit per file
+        return allowed.includes(ext) && f.size <= 100 * 1024 * 1024;
       });
-      selectedFiles = [...selectedFiles, ...newFiles]; // No limit on number of files
+      selectedFiles = [...selectedFiles, ...newFiles];
       updateFileList();
     }
 
@@ -394,50 +247,33 @@
       fileList.innerHTML = '';
       if (selectedFiles.length === 0) return;
 
-      // Calculate total size
       const totalSize = selectedFiles.reduce((sum, f) => sum + f.size, 0);
       const totalMB = totalSize / (1024 * 1024);
 
-      // Show summary header
+      // Summary
       const summary = document.createElement('div');
-      summary.style.cssText = 'display: flex; justify-content: space-between; font-size: 13px; padding: 8px 12px; background: #f8fafc; border-radius: 6px; margin-bottom: 8px;';
-
-      let sizeColor = '#64748b'; // gray
-      let sizeWarning = '';
-      if (totalMB > 50) {
-        sizeColor = '#f59e0b'; // amber
-        sizeWarning = ' (large - will be summarized)';
-      }
-      if (totalMB > 200) {
-        sizeColor = '#dc2626'; // red
-        sizeWarning = ' (may be slow)';
-      }
-
-      summary.innerHTML = `
-        <span><strong>${selectedFiles.length}</strong> file${selectedFiles.length > 1 ? 's' : ''}</span>
-        <span style="color: ${sizeColor};">Total: <strong>${formatFileSize(totalSize)}</strong>${sizeWarning}</span>
-      `;
+      summary.className = 'flex items-center justify-between text-sm px-3 py-2 bg-slate-50 rounded-lg';
+      let sizeClass = 'text-slate-600';
+      let sizeNote = '';
+      if (totalMB > 50) { sizeClass = 'text-amber-600'; sizeNote = ' (will be summarized)'; }
+      if (totalMB > 200) { sizeClass = 'text-red-600'; sizeNote = ' (may be slow)'; }
+      summary.innerHTML = `<span class="font-medium">${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''}</span><span class="${sizeClass}">Total: ${formatFileSize(totalSize)}${sizeNote}</span>`;
       fileList.appendChild(summary);
 
       selectedFiles.forEach((file, index) => {
         const item = document.createElement('div');
-        item.className = 'dd-file-item';
+        item.className = 'flex items-center gap-3 px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg';
         item.innerHTML = `
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-          </svg>
-          <span>${file.name}</span>
-          <span class="file-size">${formatFileSize(file.size)}</span>
-          <button onclick="removeFile(${index})">Remove</button>
+          <svg class="w-4 h-4 text-indigo-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          <span class="flex-1 text-sm text-slate-800 truncate">${file.name}</span>
+          <span class="text-xs text-slate-500">${formatFileSize(file.size)}</span>
+          <button onclick="removeFile(${index})" class="px-2 py-1 bg-red-100 text-red-600 rounded text-xs font-bold hover:bg-red-200">Remove</button>
         `;
         fileList.appendChild(item);
       });
     }
 
-    window.removeFile = function(i) {
-      selectedFiles.splice(i, 1);
-      updateFileList();
-    };
+    window.removeFile = function(i) { selectedFiles.splice(i, 1); updateFileList(); };
 
     async function extractPDFText(file) {
       try {
@@ -450,9 +286,7 @@
           text += content.items.map(item => item.str).join(' ') + '\n\n';
         }
         return text;
-      } catch (e) {
-        return `[Could not extract: ${file.name}]`;
-      }
+      } catch (e) { return `[Could not extract: ${file.name}]`; }
     }
 
     async function fileToBase64(file) {
@@ -466,20 +300,16 @@
 
     async function processFiles(files) {
       const results = { documents: [] };
-
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      for (const file of files) {
         const ext = file.name.split('.').pop().toLowerCase();
-
         try {
           let content = '';
-          if (ext === 'pdf') {
-            content = await extractPDFText(file);
-          } else if (['txt', 'rtf', 'csv'].includes(ext)) {
+          if (ext === 'pdf') { content = await extractPDFText(file); }
+          else if (['txt', 'rtf', 'csv'].includes(ext)) {
             content = await new Promise((resolve, reject) => {
               const reader = new FileReader();
               reader.onload = e => resolve(e.target.result);
-              reader.onerror = () => reject(new Error('Failed to read text file'));
+              reader.onerror = () => reject(new Error('Failed'));
               reader.readAsText(file);
             });
           } else {
@@ -488,12 +318,7 @@
           }
           results.documents.push({ name: file.name, type: ext, content, isAudio: false });
         } catch (fileError) {
-          results.documents.push({
-            name: file.name,
-            type: ext,
-            content: `[Error processing file ${file.name}: ${fileError.message}]`,
-            isAudio: false
-          });
+          results.documents.push({ name: file.name, type: ext, content: `[Error: ${fileError.message}]`, isAudio: false });
         }
       }
       return results;
@@ -504,14 +329,8 @@
       const email = globalEmailInput.value.trim() || localStorage.getItem('ycpUserEmail');
       const instructions = ddInstructions.value.trim();
 
-      if (selectedFiles.length === 0) {
-        showError('Please upload at least one file');
-        return;
-      }
-      if (!email) {
-        showError('Please enter your email in the top right');
-        return;
-      }
+      if (selectedFiles.length === 0) { showError('Please upload at least one file'); return; }
+      if (!email) { showError('Please enter your email in the sidebar'); return; }
 
       ddSubmitBtn.disabled = true;
       ddSubmitBtn.innerHTML = '<svg class="spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25" fill="none"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Processing...';
@@ -535,41 +354,35 @@
         });
 
         if (!response.ok) throw new Error('Request failed');
-
         showSuccess(`DD Report will be emailed to ${email} within 10-15 minutes.`);
-
-        // Clear files for next submission
         selectedFiles = [];
         updateFileList();
         ddInstructions.value = '';
-
       } catch (err) {
         showError(err.message);
       } finally {
         ddSubmitBtn.disabled = false;
-        ddSubmitBtn.innerHTML = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-        </svg> Generate DD Report`;
+        ddSubmitBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Generate DD Report';
       }
     });
 
     function showSuccess(msg) {
       successText.textContent = msg;
-      successMessage.classList.add('show');
-      errorMessage.classList.remove('show');
-      setTimeout(() => successMessage.classList.remove('show'), 8000);
+      successMessage.classList.remove('hidden');
+      errorMessage.classList.add('hidden');
+      setTimeout(() => successMessage.classList.add('hidden'), 8000);
     }
 
     function showError(msg) {
       errorText.textContent = msg;
-      errorMessage.classList.add('show');
-      successMessage.classList.remove('show');
-      setTimeout(() => errorMessage.classList.remove('show'), 5000);
+      errorMessage.classList.remove('hidden');
+      successMessage.classList.add('hidden');
+      setTimeout(() => errorMessage.classList.add('hidden'), 5000);
     }
 
     function hideMessages() {
-      successMessage.classList.remove('show');
-      errorMessage.classList.remove('show');
+      successMessage.classList.add('hidden');
+      errorMessage.classList.add('hidden');
     }
   </script>
 </body>

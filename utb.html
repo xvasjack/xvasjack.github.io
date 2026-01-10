@@ -4,129 +4,181 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>UTB - Understanding The Business</title>
-  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 1s linear infinite; }
+  </style>
 </head>
-<body>
-  <header class="app-header">
-    <a href="find-target.html" class="logo">
-      <span class="logo-icon">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
-        </svg>
-      </span>
-      YCP Gary Team's Tool
-    </a>
-    <nav>
-      <div class="nav-dropdown">
-        <button class="nav-dropdown-toggle">
-          Search
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </button>
-        <div class="nav-dropdown-menu">
-          <a href="find-target.html">v3 Search</a>
-          <a href="find-target-v5.html">v5 Search</a>
-          <a href="find-target-v6.html">v6 Search</a>
-        </div>
+<body class="font-sans bg-slate-100 text-slate-900 h-screen flex overflow-hidden">
+  <!-- Sidebar -->
+  <aside class="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm">
+    <div class="p-5 border-b border-slate-200">
+      <a href="find-target.html" class="flex items-center gap-3 text-slate-900 no-underline">
+        <span class="w-9 h-9 bg-indigo-600 rounded-lg flex items-center justify-center">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+          </svg>
+        </span>
+        <span class="font-semibold text-lg">YCP Tools</span>
+      </a>
+    </div>
+
+    <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+      <div class="mb-4">
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Search</p>
+        <a href="find-target.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v3 Search
+        </a>
+        <a href="find-target-v5.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v5 Search
+        </a>
+        <a href="find-target-v6.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v6 Search
+        </a>
       </div>
-      <a href="validation.html">Validation</a>
-      <a href="trading-comparable.html">Trading Comp</a>
-      <a href="profile-slides.html">Slides</a>
-      <a href="utb.html" class="active">UTB</a>
-      <a href="market-research.html">Market Research</a>
-      <a href="due-diligence.html">Due Diligence</a>
-      <div class="nav-dropdown">
-        <button class="nav-dropdown-toggle">
-          Other Tools
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </button>
-        <div class="nav-dropdown-menu">
-          <a href="find-target-slow.html">v3 Slow</a>
-          <a href="find-target-v4.html">v4 Search</a>
-        </div>
+
+      <div class="mb-4">
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Tools</p>
+        <a href="validation.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Validation
+        </a>
+        <a href="trading-comparable.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          Trading Comp
+        </a>
+        <a href="profile-slides.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Profile Slides
+        </a>
+        <a href="utb.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium bg-indigo-50 text-indigo-700 rounded-lg">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+          UTB
+        </a>
+        <a href="market-research.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          Market Research
+        </a>
+      </div>
+
+      <div>
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Other</p>
+        <a href="due-diligence.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+          Due Diligence
+        </a>
+        <a href="find-target-slow.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          v3 Slow
+        </a>
+        <a href="find-target-v4.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+          v4 Search
+        </a>
       </div>
     </nav>
-    <div class="header-email">
-      <span class="header-email-label">Your email:</span>
-      <input type="email" id="globalEmail" placeholder="your@company.com">
+
+    <div class="p-4 border-t border-slate-200 bg-slate-50">
+      <label class="block text-xs font-medium text-slate-500 mb-1.5">Your Email</label>
+      <input type="email" id="globalEmail" placeholder="your@company.com"
+        class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow">
     </div>
-  </header>
+  </aside>
 
-  <main class="app-main">
-    <section class="page-info">
-      <span class="status-badge">Online</span>
-      <h1 class="page-title">Understanding The Business</h1>
-      <p class="page-description">For the "Understanding Client's Business" section in discussion paper. PPT in 15 minutes.</p>
-    </section>
+  <!-- Main Content -->
+  <main class="flex-1 flex flex-col overflow-hidden">
+    <header class="bg-white border-b border-slate-200 px-8 py-5">
+      <div class="flex items-center gap-3 mb-1">
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
+          <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+          Online
+        </span>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900">Understanding The Business</h1>
+      <p class="text-slate-600 mt-1">For the "Understanding Client's Business" section in discussion paper. PPT in 15 minutes.</p>
+    </header>
 
-    <section class="page-content" style="max-width: 900px;">
-      <div class="form-card">
-        <form id="utbForm">
-          <div class="form-body">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
-              <!-- Left Column: Main Fields -->
-              <div>
-                <div class="form-group">
-                  <label for="companyName">Company Name</label>
-                  <input type="text" id="companyName" name="companyName" required placeholder="e.g., TOYO Innovex Co., Ltd.">
+    <div class="flex-1 overflow-y-auto p-8">
+      <div class="max-w-3xl mx-auto">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+          <form id="utbForm">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div class="space-y-5">
+                <div>
+                  <label for="companyName" class="block text-sm font-medium text-slate-700 mb-1.5">Company Name</label>
+                  <input type="text" id="companyName" name="companyName" required placeholder="e.g., TOYO Innovex Co., Ltd."
+                    class="w-full px-4 py-3 text-base bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow">
                 </div>
 
-                <div class="form-group" style="margin-top: 14px;">
-                  <label for="website">Company Website</label>
-                  <input type="text" id="website" name="website" required placeholder="https://www.company.com">
+                <div>
+                  <label for="website" class="block text-sm font-medium text-slate-700 mb-1.5">Company Website</label>
+                  <input type="text" id="website" name="website" required placeholder="https://www.company.com"
+                    class="w-full px-4 py-3 text-base bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow">
                 </div>
-
               </div>
 
-              <!-- Right Column: Context -->
-              <div>
-                <div class="form-group">
-                  <label for="context">Additional Context (Optional)</label>
-                  <textarea id="context" name="context" rows="3" placeholder="Focus areas, M&A interests, meeting notes..."></textarea>
+              <div class="space-y-5">
+                <div>
+                  <label for="context" class="block text-sm font-medium text-slate-700 mb-1.5">Additional Context (Optional)</label>
+                  <textarea id="context" name="context" rows="3" placeholder="Focus areas, M&A interests, meeting notes..."
+                    class="w-full px-4 py-3 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow resize-none"></textarea>
                 </div>
 
-                <div class="form-group" style="margin-top: 14px;">
-                  <label for="contextFile">Or Upload File</label>
-                  <div class="upload-zone" id="contextUploadZone" style="padding: 12px;">
-                    <input type="file" id="contextFile" accept=".pdf,.doc,.docx,.txt,.xlsx,.xls">
-                    <div class="upload-content">
-                      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 20px; height: 20px;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-                      <p style="font-size: 13px;">Upload context file</p>
-                    </div>
-                    <div class="file-name" id="contextFileName"></div>
+                <div>
+                  <label class="block text-sm font-medium text-slate-700 mb-1.5">Or Upload File</label>
+                  <div id="contextUploadZone" class="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-colors relative">
+                    <input type="file" id="contextFile" accept=".pdf,.doc,.docx,.txt,.xlsx,.xls" class="absolute inset-0 opacity-0 cursor-pointer">
+                    <svg class="w-6 h-6 mx-auto text-slate-400 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                    <p class="text-sm text-slate-500">Upload context file</p>
                   </div>
+                  <p id="contextFileName" class="hidden mt-2 text-sm text-indigo-600 font-medium text-center"></p>
                 </div>
               </div>
             </div>
 
-            <button type="submit" class="submit-btn" id="submitBtn" style="margin-top: 20px;">Submit</button>
+            <button type="submit" id="submitBtn"
+              class="w-full mt-6 flex items-center justify-center gap-2 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+              Submit
+            </button>
 
-            <div class="message success" id="successMessage">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+            <div id="successMessage" class="hidden mt-5 flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg">
+              <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
               <span id="successText">Request received! Your UTB report will be emailed within 10-15 minutes.</span>
             </div>
 
-            <div class="message error" id="errorMessage">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+            <div id="errorMessage" class="hidden mt-5 flex items-center gap-3 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+              <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
               <span id="errorText">Error submitting request. Please try again.</span>
             </div>
-          </div>
-        </form>
+          </form>
+        </div>
       </div>
-    </section>
+    </div>
   </main>
 
   <script>
-    // Email caching
     const globalEmailInput = document.getElementById('globalEmail');
-
     const cachedEmail = localStorage.getItem('ycpUserEmail');
-    if (cachedEmail) {
-      globalEmailInput.value = cachedEmail;
-    }
-
-    globalEmailInput.addEventListener('input', () => {
-      localStorage.setItem('ycpUserEmail', globalEmailInput.value);
-    });
+    if (cachedEmail) globalEmailInput.value = cachedEmail;
+    globalEmailInput.addEventListener('input', () => localStorage.setItem('ycpUserEmail', globalEmailInput.value));
 
     const form = document.getElementById('utbForm');
     const submitBtn = document.getElementById('submitBtn');
@@ -138,17 +190,16 @@
     const contextFileName = document.getElementById('contextFileName');
     const contextUploadZone = document.getElementById('contextUploadZone');
 
-    // File upload handling
     contextFile.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (file) {
         contextFileName.textContent = file.name;
-        contextFileName.classList.add('show');
-        contextUploadZone.classList.add('active');
+        contextFileName.classList.remove('hidden');
+        contextUploadZone.classList.add('border-indigo-500', 'bg-indigo-50');
       } else {
         contextFileName.textContent = '';
-        contextFileName.classList.remove('show');
-        contextUploadZone.classList.remove('active');
+        contextFileName.classList.add('hidden');
+        contextUploadZone.classList.remove('border-indigo-500', 'bg-indigo-50');
       }
     });
 
@@ -161,24 +212,16 @@
       const email = globalEmailInput.value.trim() || localStorage.getItem('ycpUserEmail');
       const file = contextFile.files[0];
 
-      if (!companyName || !website) {
-        alert('Please fill in all required fields');
-        return;
-      }
-      if (!email) {
-        alert('Please enter your email in the top right');
-        return;
-      }
+      if (!companyName || !website) { alert('Please fill in all required fields'); return; }
+      if (!email) { alert('Please enter your email in the sidebar'); return; }
 
-      // Disable and show loading
       submitBtn.disabled = true;
-      submitBtn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Submitting...';
+      submitBtn.innerHTML = '<svg class="spinner w-5 h-5" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Submitting...';
 
-      successMessage.classList.remove('show');
-      errorMessage.classList.remove('show');
+      successMessage.classList.add('hidden');
+      errorMessage.classList.add('hidden');
 
       try {
-        // Use FormData if file is present
         let body;
         let headers = {};
 
@@ -204,11 +247,11 @@
 
         if (response.ok && result) {
           successText.textContent = `Request received! UTB report for "${companyName}" will be emailed to ${email} within 10-15 minutes.`;
-          successMessage.classList.add('show');
+          successMessage.classList.remove('hidden');
           form.reset();
           contextFileName.textContent = '';
-          contextFileName.classList.remove('show');
-          contextUploadZone.classList.remove('active');
+          contextFileName.classList.add('hidden');
+          contextUploadZone.classList.remove('border-indigo-500', 'bg-indigo-50');
         } else if (!response.ok && response.status === 404) {
           throw new Error('API endpoint not available. Please try again later.');
         } else {
@@ -217,7 +260,7 @@
       } catch (err) {
         console.error('Error:', err);
         errorText.textContent = err.message || 'Error submitting request. Please try again.';
-        errorMessage.classList.add('show');
+        errorMessage.classList.remove('hidden');
       } finally {
         submitBtn.disabled = false;
         submitBtn.innerHTML = 'Submit';
