@@ -72,6 +72,23 @@ function normalizeLabel(label) {
     .join(' ');
 }
 
+// Capitalize first letter of each word (title case)
+function toTitleCase(name) {
+  if (!name || typeof name !== 'string') return name;
+  return name
+    .toLowerCase()
+    .split(/\s+/)
+    .map(word => {
+      // Keep acronyms uppercase (2-4 letter all-caps words)
+      if (/^[A-Z]{2,4}$/i.test(word) && word === word.toUpperCase()) {
+        return word.toUpperCase();
+      }
+      // Capitalize first letter
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(' ');
+}
+
 // Strip company suffixes from customer/partner names (simpler than cleanCompanyName)
 // Just removes suffixes, doesn't reject non-ASCII or descriptive names
 function stripCompanySuffix(name) {
@@ -161,7 +178,7 @@ function filterGarbageNames(names, companyName = '') {
     if (/dahua.*hikvision|hikvision.*dahua/i.test(name)) return false;
 
     return true;
-  }).map(name => stripCompanySuffix(name)); // Strip suffixes from valid names
+  }).map(name => toTitleCase(stripCompanySuffix(name))); // Strip suffixes and title case
 }
 
 // ===== QUOTE VERIFICATION SYSTEM =====
@@ -4392,63 +4409,74 @@ async function extractLogoFromWebsite(websiteUrl, rawHtml) {
 }
 
 // Extract customer/partner names from image alt texts and filenames
-// Returns array of company names found in images
+// ONLY extracts from sections that are explicitly marked as client/customer/partner areas
+// This prevents extracting random product images as customer names
 function extractCustomerNamesFromImages(rawHtml) {
   if (!rawHtml) return [];
 
   const customerNames = new Set();
 
-  // Pattern 1: Extract from alt text of images in client/customer/partner sections
-  const imgAltPattern = /<img[^>]*alt=["']([^"']+)["'][^>]*>/gi;
-  let match;
-  while ((match = imgAltPattern.exec(rawHtml)) !== null) {
-    const altText = match[1].trim();
-    // Skip generic alt texts
-    if (altText.length > 2 && altText.length < 100 &&
-        !altText.toLowerCase().includes('logo') &&
-        !altText.toLowerCase().includes('image') &&
-        !altText.toLowerCase().includes('photo') &&
-        !altText.toLowerCase().includes('icon') &&
-        !altText.toLowerCase().includes('banner')) {
-      // Clean the name
-      const cleaned = cleanCompanyName(altText);
-      if (cleaned && cleaned.length > 2) {
-        customerNames.add(cleaned);
-      }
-    }
+  // First, find sections that contain client/customer/partner keywords
+  // Only extract from these sections to avoid product images, banners, etc.
+  const sectionKeywords = ['client', 'customer', 'partner', 'trusted by', 'our clients', 'our customers'];
+  const sectionPatterns = sectionKeywords.map(kw =>
+    new RegExp(`<(?:section|div|ul)[^>]*(?:class|id)=["'][^"']*${kw}[^"']*["'][^>]*>[\\s\\S]*?<\\/(?:section|div|ul)>`, 'gi')
+  );
+
+  let clientSectionsHtml = '';
+  for (const pattern of sectionPatterns) {
+    const matches = rawHtml.match(pattern) || [];
+    clientSectionsHtml += matches.join('\n');
   }
 
-  // Pattern 2: Extract from image filenames (fallback when no alt text)
-  // e.g., /images/clients/sinarmas-logo.png → Sinarmas
-  const imgSrcPattern = /<img[^>]*src=["']([^"']+)["'][^>]*>/gi;
-  while ((match = imgSrcPattern.exec(rawHtml)) !== null) {
-    const src = match[1];
-    // Look for images in client/customer/partner directories
-    if (/client|customer|partner|brand|logo/i.test(src)) {
-      // Extract filename without extension
-      const filename = src.split('/').pop().split('.')[0];
-      if (filename) {
-        // Clean up filename: remove common suffixes, convert hyphens to spaces
-        const name = filename
-          .replace(/-logo|-icon|-brand|-img|-image$/gi, '')
-          .replace(/[-_]/g, ' ')
-          .replace(/\d+$/g, '') // Remove trailing numbers
-          .trim();
-        if (name.length > 2 && name.length < 50) {
-          // Capitalize first letter of each word
-          const capitalized = name.split(' ')
-            .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-            .join(' ');
-          const cleaned = cleanCompanyName(capitalized);
-          if (cleaned) {
-            customerNames.add(cleaned);
-          }
+  // If no explicit client sections found, skip alt text extraction entirely
+  // This prevents extracting random product/service images as customers
+  if (clientSectionsHtml.length > 0) {
+    // Pattern 1: Extract from alt text ONLY within client sections
+    const imgAltPattern = /<img[^>]*alt=["']([^"']+)["'][^>]*>/gi;
+    let match;
+    while ((match = imgAltPattern.exec(clientSectionsHtml)) !== null) {
+      const altText = match[1].trim();
+      // Skip generic/garbage alt texts
+      if (altText.length > 2 && altText.length < 60 &&
+          !/logo|image|photo|icon|banner|button|arrow|background/i.test(altText) &&
+          !/\.(jpg|png|gif|webp|svg)$/i.test(altText) &&
+          !/<|>|style=|href=/i.test(altText)) {
+        const cleaned = cleanCompanyName(altText);
+        if (cleaned && cleaned.length > 2 && cleaned.length < 50) {
+          customerNames.add(cleaned);
         }
       }
     }
   }
 
-  return Array.from(customerNames).slice(0, 20); // Limit to 20 names
+  // Pattern 2: Extract from image filenames in client/customer directories
+  // e.g., /images/clients/sinarmas-logo.png → Sinarmas
+  // This is more reliable as directory structure indicates intent
+  const imgSrcPattern = /<img[^>]*src=["']([^"']+(?:client|customer|partner)[^"']+)["'][^>]*>/gi;
+  let match;
+  while ((match = imgSrcPattern.exec(rawHtml)) !== null) {
+    const src = match[1];
+    const filename = src.split('/').pop().split('.')[0];
+    if (filename) {
+      const name = filename
+        .replace(/-logo|-icon|-brand|-img|-image$/gi, '')
+        .replace(/[-_]/g, ' ')
+        .replace(/\d+$/g, '')
+        .trim();
+      if (name.length > 2 && name.length < 50 && !/removebg|preview|scaled|cover/i.test(name)) {
+        const capitalized = name.split(' ')
+          .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+          .join(' ');
+        const cleaned = cleanCompanyName(capitalized);
+        if (cleaned) {
+          customerNames.add(cleaned);
+        }
+      }
+    }
+  }
+
+  return Array.from(customerNames).slice(0, 15); // Limit to 15 names
 }
 
 // Multilingual regex extraction for key metrics (deterministic, no AI hallucination)
