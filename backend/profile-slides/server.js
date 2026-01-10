@@ -3865,9 +3865,9 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           console.log(`  Right side (Products/Apps): ${prioritizedItems.length} items`);
         }
 
-        // Limit to 6 rows maximum (to fit the slide)
-        if (prioritizedItems.length > 6) {
-          prioritizedItems = prioritizedItems.slice(0, 6);
+        // Limit to maxRows (based on rightLayout setting)
+        if (prioritizedItems.length > maxRows) {
+          prioritizedItems = prioritizedItems.slice(0, maxRows);
         }
 
         if (prioritizedItems.length >= 1) {
@@ -5562,27 +5562,45 @@ function extractProductProjectImages(rawHtml, businessType, websiteUrl) {
     }
   }
 
-  return images.slice(0, 4); // Max 4 images for slide layout
+  return images.slice(0, 6); // Max 6 images for slide layout (images-6 option)
 }
 
-// Helper: Check if image is an icon or placeholder
+// Helper: Check if image is an icon, placeholder, or junk
 function isIconOrPlaceholder(src) {
   const skipPatterns = [
+    // Icons and UI elements
     /icon/i, /sprite/i, /placeholder/i, /1x1/i, /blank/i, /spacer/i,
     /logo/i, /favicon/i, /avatar/i, /profile/i, /user/i,
     /arrow/i, /button/i, /bg[-_]/i, /background/i,
     /\.svg$/i, /data:image/i,
-    /social/i, /facebook/i, /twitter/i, /linkedin/i, /instagram/i,
-    /\d+x\d+/  // Dimension patterns like 16x16
+    // Social media
+    /social/i, /facebook/i, /twitter/i, /linkedin/i, /instagram/i, /youtube/i,
+    /\d+x\d+/,  // Dimension patterns like 16x16
+    // Stock photo sites
+    /shutterstock/i, /istockphoto/i, /gettyimages/i, /unsplash/i, /pexels/i,
+    /stock[-_]?photo/i, /depositphotos/i, /dreamstime/i, /123rf/i,
+    // Common junk patterns
+    /banner/i, /hero[-_]?image/i, /slider/i, /carousel/i,
+    /header[-_]?bg/i, /footer/i, /sidebar/i,
+    /thumbnail[-_]?placeholder/i, /loading/i, /spinner/i,
+    /badge/i, /certificate/i, /award[-_]?icon/i,
+    // Tracking pixels
+    /pixel/i, /tracking/i, /analytics/i, /beacon/i
   ];
   return skipPatterns.some(p => p.test(src));
 }
 
 // Helper: Extract HTML sections relevant to products/projects
 function extractRelevantSections(rawHtml, businessType) {
-  const keywords = businessType === 'b2c' || businessType === 'consumer'
-    ? ['product', 'menu', 'dish', 'food', 'item', 'catalog', 'gallery', 'offering', 'service']
-    : ['project', 'portfolio', 'work', 'case', 'showcase', 'gallery', 'client-work', 'completed'];
+  let keywords;
+  if (businessType === 'b2c' || businessType === 'consumer') {
+    keywords = ['product', 'menu', 'dish', 'food', 'item', 'catalog', 'gallery', 'offering', 'service'];
+  } else if (businessType === 'project') {
+    keywords = ['project', 'portfolio', 'work', 'case', 'showcase', 'gallery', 'client-work', 'completed'];
+  } else {
+    // Industrial: manufacturing, equipment, capabilities, facilities
+    keywords = ['product', 'equipment', 'machinery', 'manufacturing', 'capability', 'facility', 'solution', 'gallery', 'showcase'];
+  }
 
   let relevantHtml = '';
 
@@ -5596,13 +5614,12 @@ function extractRelevantSections(rawHtml, businessType) {
     relevantHtml += matches.join('\n');
   }
 
-  // If no sections found, return a chunk of the main content
+  // If no sections found, try main content (but limit to avoid random images)
   if (!relevantHtml) {
-    // Try to find main content area
     const mainContent = rawHtml.match(/<main[^>]*>([\s\S]*?)<\/main>/i)?.[1] ||
-                        rawHtml.match(/<article[^>]*>([\s\S]*?)<\/article>/i)?.[1] ||
-                        rawHtml.substring(0, 50000);
-    return mainContent;
+                        rawHtml.match(/<article[^>]*>([\s\S]*?)<\/article>/i)?.[1];
+    // Only use main content if it exists, don't fall back to random HTML chunk
+    return mainContent || '';
   }
 
   return relevantHtml;
@@ -7926,14 +7943,13 @@ async function processSingleWebsite(website, index, total) {
       businessType = detectedType;
     }
 
-    // FIX #3: Extract product/project images for B2C and project-based companies
+    // FIX #3: Extract product/project images for ALL business types
+    // Images are only displayed if user selects an image layout option
     let productProjectImages = [];
-    if (businessType === 'b2c' || businessType === 'consumer' || businessType === 'project') {
-      console.log(`  [${index + 1}] Step 6c: Extracting ${businessType === 'project' ? 'project' : 'product'} images...`);
-      productProjectImages = extractProductProjectImages(scraped.rawHtml, businessType, trimmedWebsite);
-      if (productProjectImages.length > 0) {
-        console.log(`  [${index + 1}] Found ${productProjectImages.length} images for right side`);
-      }
+    console.log(`  [${index + 1}] Step 6c: Extracting product/project images...`);
+    productProjectImages = extractProductProjectImages(scraped.rawHtml, businessType, trimmedWebsite);
+    if (productProjectImages.length > 0) {
+      console.log(`  [${index + 1}] Found ${productProjectImages.length} images for right side`);
     }
 
     // FIX #5: Extract categorized business relationships (customers, suppliers, principals, brands)
@@ -8408,13 +8424,11 @@ app.post('/api/generate-ppt', async (req, res) => {
           businessType = detectedType;
         }
 
-        // FIX #3: Extract product/project images for B2C and project-based companies
+        // FIX #3: Extract product/project images for ALL business types
         let productProjectImages = [];
-        if (businessType === 'b2c' || businessType === 'consumer' || businessType === 'project') {
-          productProjectImages = extractProductProjectImages(scraped.rawHtml, businessType, website);
-          if (productProjectImages.length > 0) {
-            console.log(`  Found ${productProjectImages.length} images for right side`);
-          }
+        productProjectImages = extractProductProjectImages(scraped.rawHtml, businessType, website);
+        if (productProjectImages.length > 0) {
+          console.log(`  Found ${productProjectImages.length} images for right side`);
         }
 
         // FIX #5: Extract categorized business relationships (customers, suppliers, principals, brands)

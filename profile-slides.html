@@ -6,12 +6,27 @@
   <title>Profile Slides</title>
   <link rel="stylesheet" href="styles.css">
   <style>
-    /* Right-side layout selector */
+    /* Wide form layout */
+    .form-card {
+      max-width: 1100px;
+    }
+    .form-columns {
+      display: flex;
+      gap: 32px;
+    }
+    .form-left {
+      flex: 1;
+      min-width: 350px;
+    }
+    .form-right {
+      width: 420px;
+      flex-shrink: 0;
+    }
+    /* Layout selector grid */
     .layout-selector {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 12px;
-      margin-top: 8px;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
     }
     .layout-option {
       position: relative;
@@ -25,8 +40,8 @@
     }
     .layout-preview {
       border: 2px solid #ddd;
-      border-radius: 8px;
-      padding: 8px;
+      border-radius: 6px;
+      padding: 6px;
       background: #fafafa;
       transition: all 0.2s;
     }
@@ -40,12 +55,12 @@
     /* Mini slide preview */
     .preview-slide {
       display: flex;
-      gap: 4px;
-      height: 60px;
+      gap: 3px;
+      height: 45px;
       background: #1e3a5f;
-      border-radius: 4px;
-      padding: 4px;
-      margin-bottom: 6px;
+      border-radius: 3px;
+      padding: 3px;
+      margin-bottom: 4px;
     }
     .preview-left {
       flex: 1;
@@ -56,7 +71,7 @@
       flex: 1;
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 1px;
     }
     .preview-row {
       flex: 1;
@@ -88,7 +103,7 @@
       display: grid;
       grid-template-columns: 1fr 1fr;
       grid-template-rows: 1fr 1fr 1fr;
-      gap: 2px;
+      gap: 1px;
       flex: 1;
     }
     .preview-img {
@@ -114,14 +129,20 @@
       flex: 1;
       display: flex;
       flex-direction: column;
-      gap: 2px;
-      padding-bottom: 12px;
+      gap: 1px;
+      padding-bottom: 10px;
     }
     .layout-name {
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 500;
       text-align: center;
       color: #374151;
+    }
+    .layout-section-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: #374151;
+      margin-bottom: 8px;
     }
   </style>
 </head>
@@ -181,149 +202,148 @@
       <div class="form-card">
         <form id="slidesForm">
           <div class="form-body">
-            <div class="form-group">
-              <label for="targetDescription">Title</label>
-              <input type="text" id="targetDescription" name="targetDescription" placeholder="e.g., Semiconductor manufacturers in Southeast Asia" required>
-            </div>
+            <div class="form-columns">
+              <div class="form-left">
+                <div class="form-group">
+                  <label for="targetDescription">Title</label>
+                  <input type="text" id="targetDescription" name="targetDescription" placeholder="e.g., Semiconductor manufacturers in Southeast Asia" required>
+                </div>
 
-            <div class="form-group">
-              <label for="websites">Company Websites</label>
-              <textarea id="websites" name="websites" rows="6" placeholder="https://www.company1.com&#10;https://www.company2.com&#10;https://www.company3.com" required></textarea>
-              <p class="hint-text">One URL per line. Up to 50 websites.</p>
-            </div>
+                <div class="form-group">
+                  <label for="websites">Company Websites</label>
+                  <textarea id="websites" name="websites" rows="5" placeholder="https://www.company1.com&#10;https://www.company2.com&#10;https://www.company3.com" required></textarea>
+                  <p class="hint-text">One URL per line. Up to 50 websites.</p>
+                </div>
 
-            <div class="form-group">
-              <label>Right Side Layout</label>
-              <div class="layout-selector">
-                <!-- Option 1: Full table 6 rows -->
-                <label class="layout-option">
-                  <input type="radio" name="rightLayout" value="table-6" checked>
-                  <div class="layout-preview">
-                    <div class="preview-slide">
-                      <div class="preview-left"></div>
-                      <div class="preview-right">
-                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                      </div>
-                    </div>
-                    <div class="layout-name">Table (6 rows)</div>
-                  </div>
-                </label>
-                <!-- Option 2: Full table unlimited -->
-                <label class="layout-option">
-                  <input type="radio" name="rightLayout" value="table-unlimited">
-                  <div class="layout-preview">
-                    <div class="preview-slide">
-                      <div class="preview-left"></div>
-                      <div class="preview-right">
-                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                      </div>
-                    </div>
-                    <div class="layout-name">Table (no limit)</div>
-                  </div>
-                </label>
-                <!-- Option 3: Half table -->
-                <label class="layout-option">
-                  <input type="radio" name="rightLayout" value="table-half">
-                  <div class="layout-preview">
-                    <div class="preview-slide">
-                      <div class="preview-left"></div>
-                      <div class="preview-right-half">
-                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                        <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
-                      </div>
-                    </div>
-                    <div class="layout-name">Table (3-4 rows)</div>
-                  </div>
-                </label>
-                <!-- Option 4: Images 2x2 -->
-                <label class="layout-option">
-                  <input type="radio" name="rightLayout" value="images">
-                  <div class="layout-preview">
-                    <div class="preview-slide">
-                      <div class="preview-left"></div>
-                      <div class="preview-right">
-                        <div class="preview-images">
-                          <div class="preview-img"></div>
-                          <div class="preview-img"></div>
-                          <div class="preview-img"></div>
-                          <div class="preview-img"></div>
+                <button type="submit" class="submit-btn" id="submitBtn">
+                  <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                  </svg>
+                  Submit
+                </button>
+              </div>
+
+              <div class="form-right">
+                <div class="layout-section-label">Right Side Layout</div>
+                <div class="layout-selector">
+                  <!-- Row 1 -->
+                  <label class="layout-option">
+                    <input type="radio" name="rightLayout" value="table-6" checked>
+                    <div class="layout-preview">
+                      <div class="preview-slide">
+                        <div class="preview-left"></div>
+                        <div class="preview-right">
+                          <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                          <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                          <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                          <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                          <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                          <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
                         </div>
                       </div>
+                      <div class="layout-name">Table (6)</div>
                     </div>
-                    <div class="layout-name">Images (4)</div>
-                  </div>
-                </label>
-                <!-- Option 5: Images 2x3 -->
-                <label class="layout-option">
-                  <input type="radio" name="rightLayout" value="images-6">
-                  <div class="layout-preview">
-                    <div class="preview-slide">
-                      <div class="preview-left"></div>
-                      <div class="preview-right">
-                        <div class="preview-images-6">
-                          <div class="preview-img"></div>
-                          <div class="preview-img"></div>
-                          <div class="preview-img"></div>
-                          <div class="preview-img"></div>
-                          <div class="preview-img"></div>
-                          <div class="preview-img"></div>
+                  </label>
+                  <label class="layout-option">
+                    <input type="radio" name="rightLayout" value="table-unlimited">
+                    <div class="layout-preview">
+                      <div class="preview-slide">
+                        <div class="preview-left"></div>
+                        <div class="preview-right">
+                          <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                          <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                          <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                          <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                          <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                          <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                          <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                          <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
                         </div>
                       </div>
+                      <div class="layout-name">Table (all)</div>
                     </div>
-                    <div class="layout-name">Images (6)</div>
-                  </div>
-                </label>
-                <!-- Option 6: Images with labels -->
-                <label class="layout-option">
-                  <input type="radio" name="rightLayout" value="images-labeled">
-                  <div class="layout-preview">
-                    <div class="preview-slide">
-                      <div class="preview-left"></div>
-                      <div class="preview-right">
-                        <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
-                        <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
-                        <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
-                        <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
+                  </label>
+                  <label class="layout-option">
+                    <input type="radio" name="rightLayout" value="table-half">
+                    <div class="layout-preview">
+                      <div class="preview-slide">
+                        <div class="preview-left"></div>
+                        <div class="preview-right-half">
+                          <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                          <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                          <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                        </div>
                       </div>
+                      <div class="layout-name">Table (half)</div>
                     </div>
-                    <div class="layout-name">Images + Labels</div>
-                  </div>
-                </label>
-                <!-- Option 5: Empty -->
-                <label class="layout-option">
-                  <input type="radio" name="rightLayout" value="empty">
-                  <div class="layout-preview">
-                    <div class="preview-slide">
-                      <div class="preview-left"></div>
-                      <div class="preview-right">
-                        <div class="preview-empty"></div>
+                  </label>
+                  <label class="layout-option">
+                    <input type="radio" name="rightLayout" value="empty">
+                    <div class="layout-preview">
+                      <div class="preview-slide">
+                        <div class="preview-left"></div>
+                        <div class="preview-right">
+                          <div class="preview-empty"></div>
+                        </div>
                       </div>
+                      <div class="layout-name">Empty</div>
                     </div>
-                    <div class="layout-name">Empty</div>
-                  </div>
-                </label>
+                  </label>
+                  <!-- Row 2 -->
+                  <label class="layout-option">
+                    <input type="radio" name="rightLayout" value="images">
+                    <div class="layout-preview">
+                      <div class="preview-slide">
+                        <div class="preview-left"></div>
+                        <div class="preview-right">
+                          <div class="preview-images">
+                            <div class="preview-img"></div>
+                            <div class="preview-img"></div>
+                            <div class="preview-img"></div>
+                            <div class="preview-img"></div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="layout-name">Images (4)</div>
+                    </div>
+                  </label>
+                  <label class="layout-option">
+                    <input type="radio" name="rightLayout" value="images-6">
+                    <div class="layout-preview">
+                      <div class="preview-slide">
+                        <div class="preview-left"></div>
+                        <div class="preview-right">
+                          <div class="preview-images-6">
+                            <div class="preview-img"></div>
+                            <div class="preview-img"></div>
+                            <div class="preview-img"></div>
+                            <div class="preview-img"></div>
+                            <div class="preview-img"></div>
+                            <div class="preview-img"></div>
+                          </div>
+                        </div>
+                      </div>
+                      <div class="layout-name">Images (6)</div>
+                    </div>
+                  </label>
+                  <label class="layout-option">
+                    <input type="radio" name="rightLayout" value="images-labeled">
+                    <div class="layout-preview">
+                      <div class="preview-slide">
+                        <div class="preview-left"></div>
+                        <div class="preview-right">
+                          <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
+                          <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
+                          <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
+                          <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
+                        </div>
+                      </div>
+                      <div class="layout-name">Img + Label</div>
+                    </div>
+                  </label>
+                </div>
               </div>
             </div>
-
-            <button type="submit" class="submit-btn" id="submitBtn">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-              </svg>
-              Submit
-            </button>
 
             <div class="message success" id="successMessage">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
