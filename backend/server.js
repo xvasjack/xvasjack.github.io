@@ -68,14 +68,15 @@ app.use(securityHeaders);
 app.use(rateLimiter);
 app.use(cors());
 app.use(requestLogger);
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+// Increased to 100MB for DD tool which sends base64-encoded files in JSON
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 // Multer configuration for file uploads (memory storage)
-// Add 50MB limit to prevent OOM on Railway containers
+// 100MB limit per file for DD tool
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB max
 });
 
 // Check required environment variables
@@ -91,6 +92,7 @@ const _optionalEnvVars = [
   'DEEPSEEK_API_KEY',
   'DEEPGRAM_API_KEY',
   'ANTHROPIC_API_KEY',
+  'KIMI_API_KEY',
 ]; // Optional but recommended
 const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
 if (missingVars.length > 0) {
@@ -869,6 +871,71 @@ async function callDeepSeek(prompt, maxTokens = 4000) {
     console.error('DeepSeek error:', error.message);
     return null;
   }
+}
+
+// Kimi (Moonshot) - 128k context model for deep analysis
+// Uses same setup as market-research for consistency
+async function callKimi128k(prompt, maxTokens = 16000, retries = 3) {
+  if (!process.env.KIMI_API_KEY) {
+    console.warn('[Kimi] API key not set, falling back to Gemini');
+    return null;
+  }
+
+  const kimiBaseUrl = process.env.KIMI_API_BASE || 'https://api.moonshot.ai/v1';
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`[Kimi] Starting analysis (attempt ${attempt}/${retries})...`);
+      const response = await fetch(`${kimiBaseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.KIMI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'moonshot-v1-128k',
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: maxTokens,
+          temperature: 0.2,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        // Retry on server errors or rate limits
+        if ((response.status >= 500 || response.status === 429) && attempt < retries) {
+          console.warn(`[Kimi] HTTP ${response.status}, retrying in ${attempt * 2}s...`);
+          await new Promise((r) => setTimeout(r, attempt * 2000));
+          continue;
+        }
+        console.error(`[Kimi] HTTP error ${response.status}:`, errorText.substring(0, 200));
+        return null;
+      }
+
+      const data = await response.json();
+      if (data.error) {
+        console.error('[Kimi] API error:', data.error);
+        return null;
+      }
+
+      const result = data.choices?.[0]?.message?.content || '';
+      if (!result) {
+        console.warn('[Kimi] Empty response');
+        return null;
+      }
+
+      console.log(`[Kimi] Analysis complete (${result.length} chars)`);
+      return result;
+    } catch (error) {
+      console.error(`[Kimi] Error (attempt ${attempt}):`, error.message);
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, attempt * 2000));
+        continue;
+      }
+      return null;
+    }
+  }
+  return null;
 }
 
 // Transcribe audio using OpenAI Whisper
@@ -11383,7 +11450,45 @@ app.post('/api/utb', async (req, res) => {
   }
 });
 
-// ============ DUE DILIGENCE REPORT GENERATOR ============
+// ============ DUE DILIGENCE REPORT GENERATOR (MULTI-AGENT) ============
+// Uses a 3-phase pipeline for high-quality DD reports:
+// Phase 1: Extract ALL content from uploaded files (with chunking for large inputs)
+// Phase 2: Deep analysis with Kimi 128k or Gemini
+// Phase 3: Generate well-structured report with Gemini 2.5 Pro
+
+// Content limits (in characters)
+const DD_CONTENT_LIMIT = 400000; // ~100K tokens, safe for most models
+const DD_CHUNK_SIZE = 80000; // Size for individual file summaries
+
+// Helper: Summarize a single file if it's too large
+async function summarizeFileContent(fileName, content, maxChars = DD_CHUNK_SIZE) {
+  if (content.length <= maxChars) {
+    return content;
+  }
+
+  console.log(`[DD]   Summarizing large file: ${fileName} (${content.length} -> ${maxChars} chars)`);
+
+  const summaryPrompt = `Summarize the following document content, preserving ALL:
+- Company names, people names, organization names
+- Numbers, dates, financial figures, percentages
+- Key facts, claims, and data points
+- Risks, concerns, opportunities mentioned
+
+Document: ${fileName}
+Content (truncated for summarization):
+${content.substring(0, maxChars * 2)}
+
+Provide a detailed summary that captures all factual information. Do not omit any numbers or names.`;
+
+  // Use Gemini Flash for fast summarization
+  const summary = await callGemini3Flash(summaryPrompt, false);
+  if (summary && summary.length > 100) {
+    return `[SUMMARIZED from ${content.length} chars]\n${summary}`;
+  }
+
+  // Fallback: truncate with notice
+  return `[TRUNCATED - original was ${content.length} chars]\n${content.substring(0, maxChars)}`;
+}
 
 async function generateDueDiligenceReport(
   files,
@@ -11391,24 +11496,30 @@ async function generateDueDiligenceReport(
   reportLength,
   instructionMode = 'auto'
 ) {
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`[DD] MULTI-AGENT DD REPORT GENERATION`);
   console.log(`[DD] Processing ${files.length} source files...`);
+  console.log('='.repeat(60));
 
-  // Combine all file contents
-  let combinedContent = '';
+  // ========== PHASE 1: EXTRACT ALL CONTENT ==========
+  console.log('\n[DD] === PHASE 1: CONTENT EXTRACTION ===');
+
   const filesSummary = [];
+  const extractedFiles = [];
 
   for (const file of files) {
-    console.log(`[DD] - File: ${file.name} (${file.type}) - ${file.content?.length || 0} chars`);
+    console.log(`[DD] Extracting: ${file.name} (${file.type}) - ${file.content?.length || 0} chars raw`);
     filesSummary.push(`- ${file.name} (${file.type.toUpperCase()})`);
 
-    // Handle base64 encoded files (binary formats) - extract actual content
-    if (file.content.startsWith('[BASE64:')) {
+    let extractedContent = '';
+
+    // Handle base64 encoded files (binary formats)
+    if (file.content && file.content.startsWith('[BASE64:')) {
       const base64Match = file.content.match(/\[BASE64:(\w+)\](.+)/);
       if (base64Match) {
         const ext = base64Match[1].toLowerCase();
         const base64Data = base64Match[2];
 
-        let extractedContent = '';
         try {
           if (ext === 'docx' || ext === 'doc') {
             extractedContent = await extractDocxText(base64Data);
@@ -11419,162 +11530,226 @@ async function generateDueDiligenceReport(
           } else {
             extractedContent = `[Binary file type .${ext} - cannot extract text]`;
           }
+          console.log(`[DD]   -> Extracted ${extractedContent.length} chars from ${file.name}`);
         } catch (extractError) {
-          console.error(`[DD] Extraction error for ${file.name}:`, extractError.message);
+          console.error(`[DD]   -> Extraction error for ${file.name}:`, extractError.message);
           extractedContent = `[Error extracting ${file.name}: ${extractError.message}]`;
         }
-
-        combinedContent += `\n\n=== SOURCE: ${file.name} ===\n${extractedContent}\n`;
-      } else {
-        combinedContent += `\n\n=== SOURCE: ${file.name} ===\n[Could not parse binary content]\n`;
       }
-    } else {
-      combinedContent += `\n\n=== SOURCE: ${file.name} ===\n${file.content}\n`;
+    } else if (file.content) {
+      extractedContent = file.content;
+    }
+
+    if (extractedContent && extractedContent.length > 0) {
+      extractedFiles.push({ name: file.name, content: extractedContent });
     }
   }
 
-  console.log(`[DD] Total combined content: ${combinedContent.length} chars`);
+  // Calculate total content size
+  let totalChars = extractedFiles.reduce((sum, f) => sum + f.content.length, 0);
+  console.log(`[DD] Phase 1 Raw: ${extractedFiles.length} files, ${totalChars} total chars`);
 
-  // Extract URLs from instructions and fetch them
+  // ========== PHASE 1.5: CHUNKING (if content too large) ==========
+  let combinedContent = '';
+
+  if (totalChars > DD_CONTENT_LIMIT) {
+    console.log(`\n[DD] === PHASE 1.5: CHUNKING (content exceeds ${DD_CONTENT_LIMIT} chars) ===`);
+
+    // Summarize each file to fit within limits
+    const targetPerFile = Math.floor(DD_CONTENT_LIMIT / extractedFiles.length);
+
+    for (const file of extractedFiles) {
+      const processedContent = await summarizeFileContent(file.name, file.content, targetPerFile);
+      combinedContent += `\n\n${'='.repeat(50)}\nSOURCE FILE: ${file.name}\n${'='.repeat(50)}\n${processedContent}\n`;
+    }
+
+    console.log(`[DD] After chunking: ${combinedContent.length} chars (was ${totalChars})`);
+  } else {
+    // No chunking needed - use full content
+    for (const file of extractedFiles) {
+      combinedContent += `\n\n${'='.repeat(50)}\nSOURCE FILE: ${file.name}\n${'='.repeat(50)}\n${file.content}\n`;
+    }
+  }
+
+  console.log(`[DD] Phase 1 Complete: ${extractedFiles.length} files, ${combinedContent.length} chars for analysis`);
+
+  // Fetch any URLs in instructions
   let onlineResearchContent = '';
-  const onlineSourcesUsed = [];
   if (instructions) {
-    const urlRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)/gi;
+    const urlRegex = /(https?:\/\/[^\s]+)/gi;
     const urls = instructions.match(urlRegex) || [];
-
-    for (const url of urls.slice(0, 3)) {
-      // Limit to 3 URLs
-      console.log(`[DD] Fetching URL for research: ${url}`);
+    for (const url of urls.slice(0, 5)) {
       try {
+        console.log(`[DD] Fetching URL: ${url}`);
         const scraped = await scrapeWebsite(url);
         if (scraped.success) {
-          onlineSourcesUsed.push(scraped.url);
-          onlineResearchContent += `\n\n=== ONLINE SOURCE: ${scraped.url} ===\n${scraped.content.substring(0, 15000)}\n`;
-          console.log(`[DD] Fetched ${scraped.content.length} chars from ${url}`);
-        } else {
-          console.log(`[DD] Failed to fetch ${url}: ${scraped.error}`);
+          onlineResearchContent += `\n\n=== ONLINE: ${scraped.url} ===\n${scraped.content.substring(0, 20000)}\n`;
         }
       } catch (e) {
-        console.log(`[DD] Error fetching ${url}: ${e.message}`);
+        console.log(`[DD] URL fetch failed: ${e.message}`);
       }
     }
   }
 
-  const lengthInstructions = {
-    short: `Create a 1-PAGE summary covering:
-- Business overview (what does the company do)
-- Key facts and figures mentioned
-- Notable risks or concerns
-- Growth potential or opportunities`,
+  // ========== PHASE 2: DEEP ANALYSIS WITH THINKING MODEL ==========
+  console.log('\n[DD] === PHASE 2: DEEP ANALYSIS ===');
 
-    medium: `Create a 2-3 PAGE report with these sections (SKIP any section that has no relevant content):
-1. BUSINESS OVERVIEW - What the company does, products/services, market position
-2. KEY FACTS & FIGURES - Financial metrics, revenue, growth, any numbers mentioned
-3. RISKS & CONCERNS - Business, financial, operational issues identified
-4. OPPORTUNITIES - Growth potential, market opportunities, synergies`,
+  const analysisPrompt = `You are a senior due diligence analyst. Carefully read and analyze ALL the source materials provided below.
 
-    long: `Create a COMPREHENSIVE report (SKIP any section that has no relevant content):
-1. COMPANY OVERVIEW - Business description, history, structure, management
-2. INDUSTRY & MARKET - Market context, competition, trends
-3. BUSINESS MODEL - Revenue streams, customers, competitive advantages
-4. FINANCIAL OVERVIEW - Any financial data, metrics, performance indicators
-5. OPERATIONS - How the business operates, technology, processes
-6. RISKS & CONCERNS - All identified risks and red flags
-7. OPPORTUNITIES - Growth potential, synergies, strategic options
-8. KEY QUESTIONS - What additional information would be needed`,
-  };
+SOURCE MATERIALS (${extractedFiles.length} files):
+${filesSummary.join('\n')}
 
-  // Build instruction section based on mode
-  let instructionSection = '';
-  if (instructionMode === 'manual' && instructions) {
-    instructionSection = `
-CONTEXT FROM USER:
-${instructions}
-`;
+${instructionMode === 'manual' && instructions ? `USER INSTRUCTIONS:\n${instructions}\n` : ''}
+
+=== BEGIN ALL SOURCE CONTENT ===
+${combinedContent}
+=== END ALL SOURCE CONTENT ===
+
+${onlineResearchContent ? `=== ONLINE RESEARCH ===\n${onlineResearchContent}` : ''}
+
+YOUR TASK: Perform a thorough analysis of ALL the materials above. Extract and organize:
+
+1. COMPANY IDENTIFICATION
+   - Full company name(s) mentioned
+   - Location/headquarters
+   - Industry/sector
+   - Year founded (if mentioned)
+
+2. BUSINESS DESCRIPTION
+   - What does the company do? (specific products/services)
+   - Business model
+   - Target customers/markets
+   - Key differentiators
+
+3. FINANCIAL DATA (extract ALL numbers mentioned)
+   - Revenue figures (with years/periods)
+   - Profit/loss data
+   - Growth rates
+   - Valuation metrics
+   - Any financial projections
+
+4. OPERATIONAL DETAILS
+   - Number of employees
+   - Key locations/facilities
+   - Technology/systems used
+   - Partnerships/suppliers
+
+5. MANAGEMENT & OWNERSHIP
+   - Key executives mentioned
+   - Ownership structure
+   - Board composition
+
+6. RISKS & CONCERNS
+   - Business risks identified
+   - Financial risks
+   - Regulatory/legal issues
+   - Red flags or concerns
+
+7. OPPORTUNITIES & STRENGTHS
+   - Growth potential
+   - Competitive advantages
+   - Market opportunities
+   - Synergy potential (if M&A context)
+
+8. KEY GAPS
+   - What important information is MISSING from the materials?
+   - What questions should be asked?
+
+CRITICAL: Only include information explicitly stated in the source materials. Quote specific data points.
+Be exhaustive - extract EVERYTHING relevant from the documents.`;
+
+  let deepAnalysis = '';
+
+  // Try Kimi 128k first (best context window for large content)
+  if (process.env.KIMI_API_KEY) {
+    console.log('[DD] Using Kimi 128k for deep analysis...');
+    deepAnalysis = await callKimi128k(analysisPrompt, 16000);
   }
 
-  const _onlineSourceNote =
-    onlineSourcesUsed.length > 0
-      ? `\nONLINE SOURCES RESEARCHED:\n${onlineSourcesUsed.map((u) => `- ${u}`).join('\n')}\n\nIMPORTANT: Any information from online sources MUST be clearly marked with [Online Source] at the start of that bullet point or paragraph.`
-      : '';
+  // Fallback to Gemini 2.5 Pro if Kimi unavailable
+  if (!deepAnalysis) {
+    console.log('[DD] Using Gemini 2.5 Pro for analysis...');
+    deepAnalysis = await callGemini2Pro(analysisPrompt);
+  }
 
-  const prompt = `You are writing a factual due diligence summary. Your job is to extract and organize information from the provided materials.
-
-SOURCE MATERIALS (${filesSummary.length} files):
-${filesSummary.join('\n')}
-${instructionSection}
-=== BEGIN SOURCE CONTENT ===
-${combinedContent}
-=== END SOURCE CONTENT ===
-
-${
-  onlineResearchContent
-    ? `=== BEGIN ONLINE RESEARCH (from websites) ===
-${onlineResearchContent}
-=== END ONLINE RESEARCH ===`
-    : ''
-}
-
-REPORT STRUCTURE:
-${lengthInstructions[reportLength]}
-
-CRITICAL RULES - FOLLOW EXACTLY:
-1. **NO HALLUCINATION**: ONLY include facts explicitly stated in the source materials above. Do NOT make up or assume any information.
-2. If something is not mentioned in the sources, do NOT include it. Do NOT write generic statements.
-3. Quote specific names, numbers, dates, and facts directly from the materials.
-4. For each fact you include, it must be traceable to the source content above.
-
-${onlineResearchContent ? `5. Any information from ONLINE RESEARCH section must be prefixed with **[Online Source]** - this text will be highlighted yellow in the final document.` : ''}
-
-OUTPUT FORMAT:
-- Start with: <h1 style="font-family: Calibri, sans-serif;">Due Diligence: [Actual Company Name from materials]</h1>
-- Use <h2> for section headers, <ul><li> for bullet points
-- Add style="font-family: Calibri, sans-serif;" to all elements
-- Generate CLEAN HTML only - no markdown, no \`\`\`
-- SKIP sections with no relevant content from sources
-- Output the report ONCE only`;
-
-  try {
-    const maxTokens = reportLength === 'short' ? 2000 : reportLength === 'medium' ? 4000 : 8000;
-    console.log(`[DD] Starting AI generation with Gemini 2.5 Pro...`);
-
-    // Use Gemini 2.5 Pro for best quality DD reports
-    const geminiResult = await callGemini2Pro(prompt);
-    if (geminiResult) {
-      let result = geminiResult;
-      // Clean up any markdown artifacts
-      result = result
-        .replace(/```html/gi, '')
-        .replace(/```/g, '')
-        .trim();
-      console.log(`[DD] Report generated using Gemini 2.5 Pro (${result.length} chars)`);
-      return result;
-    }
-
-    // Fallback to GPT-4o if Gemini fails
-    console.log('[DD] Gemini unavailable, falling back to GPT-4o...');
+  // Final fallback to GPT-4o
+  if (!deepAnalysis) {
+    console.log('[DD] Using GPT-4o for analysis...');
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.2,
-      max_tokens: maxTokens,
+      messages: [{ role: 'user', content: analysisPrompt }],
+      temperature: 0.1,
+      max_tokens: 16000,
     });
-
-    let result = response.choices[0].message.content || '';
-
-    // Clean up any markdown artifacts
-    result = result
-      .replace(/```html/gi, '')
-      .replace(/```/g, '')
-      .trim();
-
-    console.log(`[DD] Report generated using GPT-4o (${result.length} chars)`);
-    return result;
-  } catch (error) {
-    console.error('[DD] Error in AI report generation:', error.message);
-    console.error('[DD] Stack:', error.stack);
-    throw error;
+    deepAnalysis = response.choices?.[0]?.message?.content || '';
   }
+
+  console.log(`[DD] Phase 2 Complete: Analysis ${deepAnalysis.length} chars`);
+
+  // ========== PHASE 3: GENERATE STRUCTURED REPORT ==========
+  console.log('\n[DD] === PHASE 3: REPORT GENERATION ===');
+
+  const reportStructure = {
+    short: `1-2 pages with: Executive Summary, Key Facts, Risks, Opportunities`,
+    medium: `3-5 pages with sections for each major topic identified in the analysis`,
+    long: `Comprehensive report covering all aspects in detail with subsections`,
+  };
+
+  const reportPrompt = `You are a professional report writer. Using the analysis below, generate a well-structured Due Diligence Report.
+
+=== DEEP ANALYSIS FROM PHASE 2 ===
+${deepAnalysis}
+=== END ANALYSIS ===
+
+${instructionMode === 'manual' && instructions ? `USER'S SPECIFIC REQUIREMENTS:\n${instructions}\n` : ''}
+
+REPORT REQUIREMENTS:
+- Length: ${reportStructure[reportLength] || reportStructure.medium}
+- Include ONLY facts from the analysis above
+- No hallucination - if data isn't in the analysis, don't include it
+- Use specific numbers, names, and dates from the analysis
+- Mark any data gaps or missing information clearly
+
+OUTPUT FORMAT (HTML for Word document):
+- Start with: <h1 style="font-family: Calibri, sans-serif; color: #1e3a5f;">Due Diligence Report: [Company Name]</h1>
+- Add date: <p style="font-family: Calibri, sans-serif; color: #666; font-size: 12px;">Generated: ${new Date().toLocaleDateString()}</p>
+- Use <h2 style="font-family: Calibri, sans-serif; color: #2563eb; border-bottom: 2px solid #2563eb; padding-bottom: 5px;"> for section headers
+- Use <h3 style="font-family: Calibri, sans-serif; color: #1e40af;"> for subsections
+- Use <ul style="font-family: Calibri, sans-serif;"><li> for bullet points
+- Use <table style="font-family: Calibri, sans-serif; border-collapse: collapse; width: 100%;"> for financial data
+- Table cells: <td style="border: 1px solid #ddd; padding: 8px;">
+- Important text: <strong>
+- Add a final section: "Information Gaps & Recommended Next Steps"
+
+Generate CLEAN HTML only. No markdown, no code blocks.`;
+
+  let finalReport = '';
+
+  // Use Gemini 2.5 Pro for final report writing
+  console.log('[DD] Generating final report with Gemini 2.5 Pro...');
+  finalReport = await callGemini2Pro(reportPrompt);
+
+  if (!finalReport) {
+    console.log('[DD] Gemini failed, using GPT-4o for report...');
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: reportPrompt }],
+      temperature: 0.2,
+      max_tokens: 16000,
+    });
+    finalReport = response.choices?.[0]?.message?.content || '';
+  }
+
+  // Clean up markdown artifacts
+  finalReport = finalReport
+    .replace(/```html/gi, '')
+    .replace(/```/g, '')
+    .trim();
+
+  console.log(`[DD] Phase 3 Complete: Report ${finalReport.length} chars`);
+  console.log(`[DD] === MULTI-AGENT DD REPORT COMPLETE ===\n`);
+
+  return finalReport;
 }
 
 app.post('/api/due-diligence', async (req, res) => {

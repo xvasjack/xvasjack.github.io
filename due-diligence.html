@@ -21,11 +21,6 @@
     }
   </script>
   <style>
-    @keyframes pulse-record {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-      50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
-    }
-    .recording-pulse { animation: pulse-record 1.5s infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     .spinner { animation: spin 1s linear infinite; width: 16px; height: 16px; }
   </style>
@@ -83,14 +78,14 @@
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
           Market Research
         </a>
-      </div>
-
-      <div>
-        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Other</p>
         <a href="due-diligence.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium bg-indigo-50 text-indigo-700 rounded-lg">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
           Due Diligence
         </a>
+      </div>
+
+      <div>
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Other</p>
         <a href="find-target-slow.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
           v3 Slow
@@ -112,14 +107,8 @@
   <!-- Main Content -->
   <main class="flex-1 flex flex-col overflow-hidden">
     <header class="bg-white border-b border-slate-200 px-6 py-4">
-      <div class="flex items-center gap-3 mb-1">
-        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
-          <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
-          Online
-        </span>
-      </div>
       <h1 class="text-xl font-bold text-slate-900">Due Diligence Report</h1>
-      <p class="text-slate-600 text-sm mt-1">Record meetings, upload materials, and get AI-generated DD reports.</p>
+      <p class="text-slate-600 text-sm mt-1">Upload documents and receive a comprehensive DD report in Word format via email.</p>
     </header>
 
     <div class="flex-1 overflow-y-auto p-6">
@@ -135,126 +124,49 @@
         <span id="errorText">Error</span>
       </div>
 
-      <!-- Instructions -->
-      <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-3 mb-4 text-sm">
-        <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
-          <span class="font-semibold text-indigo-700">How to use:</span>
-          <span class="text-slate-700">1. Select language and record</span>
-          <span class="text-slate-700">2. Edit transcript if needed</span>
-          <span class="text-slate-700">3. Upload materials (optional)</span>
-          <span class="text-slate-700">4. Submit for DD report</span>
-        </div>
-      </div>
-
-      <!-- Recovery Banner -->
-      <div id="recoveryBanner" class="hidden mb-4 bg-amber-50 border border-amber-300 rounded-lg p-4 flex items-center justify-between gap-4">
-        <p class="text-amber-800 text-sm"><strong class="text-amber-900">Unsaved recording found!</strong> Your previous session was interrupted.</p>
-        <div class="flex gap-2">
-          <button onclick="restoreSession()" class="px-3 py-1.5 bg-amber-500 text-white text-sm font-semibold rounded-lg hover:bg-amber-600">Restore</button>
-          <button onclick="dismissRecovery()" class="px-3 py-1.5 bg-white text-amber-700 text-sm font-semibold rounded-lg border border-amber-400 hover:bg-amber-50">Dismiss</button>
-        </div>
-      </div>
-
-      <!-- Main Two-Column Layout -->
-      <div class="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-5">
-        <!-- Left Column -->
-        <div class="space-y-4">
-          <!-- Recording Section -->
-          <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-            <div class="flex items-center gap-2 mb-3">
-              <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
-              <span class="font-semibold text-slate-900 text-sm">Record Meeting</span>
-            </div>
-
-            <!-- Language Selector -->
-            <div id="langSelect" class="flex flex-wrap gap-1.5 mb-3">
-              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-gradient-to-br from-indigo-500 to-purple-600 text-white" data-lang="multi">Multi</button>
-              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="en">English</button>
-              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="zh">Chinese</button>
-              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="ja">Japanese</button>
-              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="ko">Korean</button>
-              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="vi">Vietnamese</button>
-              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="id">Indonesian</button>
-              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="ms">Malay</button>
-              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="th">Thai</button>
-              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="hi">Hindi</button>
-              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="tl">Filipino</button>
-            </div>
-
-            <div id="langHint" class="text-xs text-slate-700 bg-blue-50 border border-blue-200 rounded-md p-2 mb-3">
-              <strong class="text-blue-800">Multi-language mode:</strong> <span class="text-blue-700">Auto-detects English, Japanese, Korean, Vietnamese, Hindi and more.</span><br>
-              <span class="text-slate-500 text-[11px]">Note: Chinese, Thai, Malay, Filipino - select directly.</span>
-            </div>
-
-            <!-- Record Controls -->
-            <div class="flex items-center gap-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
-              <button id="recordBtn" class="w-11 h-11 rounded-full border-[3px] border-red-500 bg-white flex items-center justify-center cursor-pointer hover:scale-105 transition-transform flex-shrink-0">
-                <svg id="recordIcon" class="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
-              </button>
-              <div class="flex flex-col gap-0.5">
-                <span id="recordTimer" class="font-mono text-xl font-bold text-slate-900">00:00</span>
-                <span id="recordStatus" class="text-sm text-slate-500">Click to start</span>
-              </div>
-              <button type="button" id="downloadRecordingBtn" class="hidden ml-auto px-2 py-1 text-[10px] bg-white border border-slate-300 rounded text-slate-500 hover:text-slate-700">Download</button>
-            </div>
+      <div class="max-w-2xl mx-auto space-y-5">
+        <!-- Upload Section -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+          <div class="flex items-center gap-2 mb-4">
+            <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+            <span class="font-semibold text-slate-900">Upload Documents</span>
           </div>
 
-          <!-- Upload Section -->
-          <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-            <div class="flex items-center gap-2 mb-3">
-              <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-              <span class="font-semibold text-slate-900 text-sm">Upload Materials</span>
-              <span class="text-slate-400 text-xs font-normal">(optional)</span>
-            </div>
-            <input type="file" id="fileInput" multiple accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.rtf,.csv,.xlsx,.xls,.mp3,.wav,.m4a,.webm,.ogg" class="hidden">
-            <div id="uploadZone" class="border-2 border-dashed border-slate-300 rounded-lg p-4 flex items-center justify-center gap-3 cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-colors">
-              <svg class="w-6 h-6 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-              <p class="text-sm text-slate-500">Drop files or click</p>
-            </div>
-            <div id="fileList" class="mt-2 space-y-1.5"></div>
+          <input type="file" id="fileInput" multiple accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.rtf,.csv,.xlsx,.xls" class="hidden">
+          <div id="uploadZone" class="border-2 border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center gap-3 cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-colors">
+            <svg class="w-12 h-12 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+            <p class="text-slate-700 font-medium">Drop files here or click to upload</p>
+            <p class="text-slate-500 text-sm">PDF, Word, PowerPoint, Excel, TXT - No limit on files</p>
           </div>
+          <p class="text-xs text-slate-400 text-center mt-2">100MB max per file</p>
 
-          <!-- Form Section -->
-          <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-            <div class="flex items-center justify-between mb-2">
-              <label class="font-semibold text-slate-900 text-sm">Instructions</label>
-              <div class="flex gap-1">
-                <button type="button" id="autoModeBtn" onclick="setInstructionMode('auto')" class="px-2.5 py-1 text-xs font-semibold border border-slate-300 rounded bg-indigo-600 text-white">Auto</button>
-                <button type="button" id="manualModeBtn" onclick="setInstructionMode('manual')" class="px-2.5 py-1 text-xs font-semibold border border-slate-300 rounded bg-white text-slate-500 hover:border-indigo-500">Manual</button>
-              </div>
-            </div>
-            <div id="autoModeHint" class="text-xs text-slate-600 bg-indigo-50 rounded-md p-2 mb-3">
-              AI will automatically analyze the transcript and materials to generate a comprehensive DD report.
-            </div>
-            <textarea id="ddInstructions" rows="4" placeholder="Example instructions:
-• We are YCP, representing Speaker 1 (the buyer)
-• Speaker 2 is the target company CEO
-• Focus on: financials, risks, synergies
-• Summarize from our client's perspective" class="hidden w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"></textarea>
-
-            <button type="button" id="ddSubmitBtn" class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm transition-colors">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-              Generate DD Report
-            </button>
-          </div>
+          <div id="fileList" class="mt-4 space-y-2"></div>
         </div>
 
-        <!-- Right Column: Transcript Panels -->
-        <div class="space-y-4">
-          <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-[200px] max-h-[350px]">
-            <div class="px-4 py-2.5 border-b border-slate-200 flex items-center gap-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
-              <span>Live Transcript</span>
-              <span id="detectedLang" class="bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full text-[11px] font-medium normal-case">--</span>
-              <span class="ml-auto text-[11px] text-slate-400 font-normal normal-case">Click to edit</span>
+        <!-- Instructions Section -->
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
+          <div class="flex items-center justify-between mb-3">
+            <span class="font-semibold text-slate-900">Instructions</span>
+            <div class="flex gap-1">
+              <button type="button" id="autoModeBtn" onclick="setInstructionMode('auto')" class="px-3 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg bg-indigo-600 text-white">Auto</button>
+              <button type="button" id="manualModeBtn" onclick="setInstructionMode('manual')" class="px-3 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg bg-white text-slate-500 hover:border-indigo-500">Manual</button>
             </div>
-            <div id="transcriptContent" contenteditable="true" class="flex-1 p-4 text-sm leading-relaxed overflow-y-auto text-slate-400 italic flex items-center justify-center cursor-text focus:outline-2 focus:outline-indigo-500 focus:outline-offset-[-2px]">Start recording to see live transcription...</div>
           </div>
-
-          <div id="translationPanel" class="hidden bg-white rounded-xl shadow-sm border border-slate-200 border-l-[3px] border-l-emerald-500 flex flex-col min-h-[200px] max-h-[350px]">
-            <div class="px-4 py-2.5 border-b border-slate-200 text-xs font-semibold text-emerald-600 uppercase tracking-wide">English Translation</div>
-            <div id="translationContent" contenteditable="true" class="flex-1 p-4 text-sm leading-relaxed overflow-y-auto cursor-text focus:outline-2 focus:outline-indigo-500 focus:outline-offset-[-2px]"></div>
+          <div id="autoModeHint" class="text-sm text-slate-600 bg-indigo-50 rounded-lg p-3">
+            AI will automatically analyze uploaded documents and generate a comprehensive DD report.
           </div>
+          <textarea id="ddInstructions" rows="4" placeholder="Example instructions:
+• Focus on financial performance and risks
+• Summarize key findings for buyer's perspective
+• Highlight any red flags or concerns
+• Include market position analysis" class="hidden w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y mt-3"></textarea>
         </div>
+
+        <!-- Submit Button -->
+        <button type="button" id="ddSubmitBtn" class="w-full flex items-center justify-center gap-2 px-4 py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl shadow-sm transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Generate DD Report
+        </button>
       </div>
     </div>
   </main>
@@ -269,81 +181,20 @@
     globalEmailInput.addEventListener('input', () => localStorage.setItem('ycpUserEmail', globalEmailInput.value));
 
     const API_BASE = 'https://xvasjackgithubio-production.up.railway.app';
-    const WS_BASE = API_BASE.replace('https://', 'wss://').replace('http://', 'ws://');
 
     // Elements
     const uploadZone = document.getElementById('uploadZone');
     const fileInput = document.getElementById('fileInput');
     const fileList = document.getElementById('fileList');
-    const recordBtn = document.getElementById('recordBtn');
-    const recordIcon = document.getElementById('recordIcon');
-    const recordTimer = document.getElementById('recordTimer');
-    const recordStatus = document.getElementById('recordStatus');
-    const downloadRecordingBtn = document.getElementById('downloadRecordingBtn');
     const ddSubmitBtn = document.getElementById('ddSubmitBtn');
     const ddInstructions = document.getElementById('ddInstructions');
-    const transcriptContent = document.getElementById('transcriptContent');
-    const translationContent = document.getElementById('translationContent');
-    const translationPanel = document.getElementById('translationPanel');
-    const detectedLang = document.getElementById('detectedLang');
     const successMessage = document.getElementById('successMessage');
     const errorMessage = document.getElementById('errorMessage');
     const successText = document.getElementById('successText');
     const errorText = document.getElementById('errorText');
 
     let selectedFiles = [];
-    let selectedLang = 'multi';
-    let isRecording = false;
-
-    // Language selector
-    document.getElementById('langSelect').addEventListener('click', (e) => {
-      if (e.target.classList.contains('dd-lang-btn')) {
-        if (isRecording) { alert('Stop recording before changing language'); return; }
-        document.querySelectorAll('#langSelect .dd-lang-btn').forEach(btn => {
-          btn.classList.remove('bg-gradient-to-br', 'from-indigo-500', 'to-purple-600', 'text-white', 'bg-indigo-600');
-          btn.classList.add('bg-white', 'text-slate-600');
-        });
-        e.target.classList.remove('bg-white', 'text-slate-600');
-        if (e.target.dataset.lang === 'multi') {
-          e.target.classList.add('bg-gradient-to-br', 'from-indigo-500', 'to-purple-600', 'text-white');
-        } else {
-          e.target.classList.add('bg-indigo-600', 'text-white');
-        }
-        selectedLang = e.target.dataset.lang;
-
-        const langHint = document.getElementById('langHint');
-        const noCodeSwitchLangs = ['zh', 'th', 'ms', 'tl'];
-        if (selectedLang === 'multi') {
-          langHint.innerHTML = '<strong class="text-blue-800">Multi-language mode:</strong> <span class="text-blue-700">Auto-detects English, Japanese, Korean, Vietnamese, Hindi and more.</span><br><span class="text-slate-500 text-[11px]">Note: Chinese, Thai, Malay, Filipino - select directly.</span>';
-          langHint.className = 'text-xs text-slate-700 bg-blue-50 border border-blue-200 rounded-md p-2 mb-3';
-        } else if (selectedLang === 'en') {
-          langHint.innerHTML = '<strong class="text-emerald-800">English mode:</strong> <span class="text-emerald-700">Optimized for English-only meetings.</span>';
-          langHint.className = 'text-xs text-slate-700 bg-emerald-50 border border-emerald-200 rounded-md p-2 mb-3';
-        } else if (noCodeSwitchLangs.includes(selectedLang)) {
-          langHint.innerHTML = '<strong class="text-amber-800">' + e.target.textContent + ':</strong> <span class="text-amber-700">Single-language mode. Translated to English.</span>';
-          langHint.className = 'text-xs text-slate-700 bg-amber-50 border border-amber-200 rounded-md p-2 mb-3';
-        } else {
-          langHint.innerHTML = '<strong class="text-amber-800">' + e.target.textContent + ':</strong> <span class="text-amber-700">Will be translated to English.</span>';
-          langHint.className = 'text-xs text-slate-700 bg-amber-50 border border-amber-200 rounded-md p-2 mb-3';
-        }
-      }
-    });
-
-    let mediaRecorder = null;
-    let audioContext = null;
-    let ws = null;
-    let sessionId = null;
-    let timerInterval = null;
-    let recordingStartTime = null;
-    let finalTranscript = '';
-    let finalTranslation = '';
-    let currentLanguage = 'en';
     let instructionMode = 'auto';
-    let autoSaveInterval = null;
-    let currentR2Key = null;
-    let currentSpeaker = null;
-    let currentTranslationSpeaker = null;
-    let wsErrorShown = false;
 
     window.setInstructionMode = function(mode) {
       instructionMode = mode;
@@ -369,59 +220,6 @@
       }
     };
 
-    // Auto-save & Recovery
-    const STORAGE_KEY = 'dd_recording_backup';
-
-    function saveToLocalStorage() {
-      if (!finalTranscript && !finalTranslation) return;
-      const backup = { transcript: finalTranscript, translation: finalTranslation, language: currentLanguage, timestamp: Date.now(), duration: recordingStartTime ? Math.floor((Date.now() - recordingStartTime) / 1000) : 0 };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(backup));
-    }
-
-    function checkForRecovery() {
-      const backup = localStorage.getItem(STORAGE_KEY);
-      if (backup) {
-        try {
-          const data = JSON.parse(backup);
-          if (Date.now() - data.timestamp < 24 * 60 * 60 * 1000 && data.transcript) {
-            document.getElementById('recoveryBanner').classList.remove('hidden');
-            return data;
-          }
-        } catch (e) {}
-      }
-      return null;
-    }
-
-    window.restoreSession = function() {
-      const backup = localStorage.getItem(STORAGE_KEY);
-      if (backup) {
-        try {
-          const data = JSON.parse(backup);
-          finalTranscript = data.transcript || '';
-          finalTranslation = data.translation || '';
-          currentLanguage = data.language || 'en';
-          transcriptContent.innerHTML = finalTranscript;
-          transcriptContent.classList.remove('text-slate-400', 'italic', 'flex', 'items-center', 'justify-center');
-          transcriptContent.classList.add('text-slate-900');
-          detectedLang.textContent = currentLanguage.toUpperCase();
-          if (finalTranslation) {
-            translationContent.innerHTML = finalTranslation;
-            translationPanel.classList.remove('hidden');
-            translationPanel.classList.add('flex');
-          }
-          recordStatus.textContent = `Restored ${Math.floor(data.duration / 60)}m ${data.duration % 60}s of transcript`;
-        } catch (e) {}
-      }
-      document.getElementById('recoveryBanner').classList.add('hidden');
-    };
-
-    window.dismissRecovery = function() {
-      localStorage.removeItem(STORAGE_KEY);
-      document.getElementById('recoveryBanner').classList.add('hidden');
-    };
-
-    checkForRecovery();
-
     // Upload handling
     uploadZone.addEventListener('click', () => fileInput.click());
     uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('border-indigo-500', 'bg-indigo-50'); });
@@ -430,21 +228,47 @@
     fileInput.addEventListener('change', e => handleFiles(e.target.files));
 
     function handleFiles(files) {
-      const allowed = ['pdf', 'ppt', 'pptx', 'doc', 'docx', 'txt', 'rtf', 'csv', 'xlsx', 'xls', 'mp3', 'wav', 'm4a', 'webm', 'ogg'];
+      const allowed = ['pdf', 'ppt', 'pptx', 'doc', 'docx', 'txt', 'rtf', 'csv', 'xlsx', 'xls'];
       const newFiles = Array.from(files).filter(f => {
         const ext = f.name.split('.').pop().toLowerCase();
-        return allowed.includes(ext) && f.size <= 50 * 1024 * 1024;
+        return allowed.includes(ext) && f.size <= 100 * 1024 * 1024;
       });
-      selectedFiles = [...selectedFiles, ...newFiles].slice(0, 10);
+      selectedFiles = [...selectedFiles, ...newFiles];
       updateFileList();
+    }
+
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
     }
 
     function updateFileList() {
       fileList.innerHTML = '';
+      if (selectedFiles.length === 0) return;
+
+      const totalSize = selectedFiles.reduce((sum, f) => sum + f.size, 0);
+      const totalMB = totalSize / (1024 * 1024);
+
+      // Summary
+      const summary = document.createElement('div');
+      summary.className = 'flex items-center justify-between text-sm px-3 py-2 bg-slate-50 rounded-lg';
+      let sizeClass = 'text-slate-600';
+      let sizeNote = '';
+      if (totalMB > 50) { sizeClass = 'text-amber-600'; sizeNote = ' (will be summarized)'; }
+      if (totalMB > 200) { sizeClass = 'text-red-600'; sizeNote = ' (may be slow)'; }
+      summary.innerHTML = `<span class="font-medium">${selectedFiles.length} file${selectedFiles.length > 1 ? 's' : ''}</span><span class="${sizeClass}">Total: ${formatFileSize(totalSize)}${sizeNote}</span>`;
+      fileList.appendChild(summary);
+
       selectedFiles.forEach((file, index) => {
         const item = document.createElement('div');
-        item.className = 'flex items-center gap-2 px-3 py-2 bg-slate-100 border border-slate-300 rounded-lg';
-        item.innerHTML = `<span class="text-base">📄</span><span class="flex-1 text-sm text-slate-800 truncate">${file.name}</span><button onclick="removeFile(${index})" class="px-2 py-0.5 bg-red-100 border border-red-300 text-red-600 rounded text-xs font-bold hover:bg-red-200">✕</button>`;
+        item.className = 'flex items-center gap-3 px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg';
+        item.innerHTML = `
+          <svg class="w-4 h-4 text-indigo-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          <span class="flex-1 text-sm text-slate-800 truncate">${file.name}</span>
+          <span class="text-xs text-slate-500">${formatFileSize(file.size)}</span>
+          <button onclick="removeFile(${index})" class="px-2 py-1 bg-red-100 text-red-600 rounded text-xs font-bold hover:bg-red-200">Remove</button>
+        `;
         fileList.appendChild(item);
       });
     }
@@ -475,21 +299,24 @@
     }
 
     async function processFiles(files) {
-      const results = { documents: [], audioFiles: [] };
+      const results = { documents: [] };
       for (const file of files) {
         const ext = file.name.split('.').pop().toLowerCase();
-        const audioExts = ['mp3', 'wav', 'm4a', 'webm', 'ogg', 'aac', 'flac'];
         try {
-          if (audioExts.includes(ext)) {
-            const base64 = await fileToBase64(file);
-            results.audioFiles.push({ name: file.name, type: ext, content: base64, mimeType: file.type || `audio/${ext}`, isAudio: true });
+          let content = '';
+          if (ext === 'pdf') { content = await extractPDFText(file); }
+          else if (['txt', 'rtf', 'csv'].includes(ext)) {
+            content = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = e => resolve(e.target.result);
+              reader.onerror = () => reject(new Error('Failed'));
+              reader.readAsText(file);
+            });
           } else {
-            let content = '';
-            if (ext === 'pdf') { content = await extractPDFText(file); }
-            else if (['txt', 'rtf', 'csv'].includes(ext)) { content = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = e => resolve(e.target.result); reader.onerror = () => reject(new Error('Failed')); reader.readAsText(file); }); }
-            else { const base64 = await fileToBase64(file); content = `[BASE64:${ext}]${base64}`; }
-            results.documents.push({ name: file.name, type: ext, content, isAudio: false });
+            const base64 = await fileToBase64(file);
+            content = `[BASE64:${ext}]${base64}`;
           }
+          results.documents.push({ name: file.name, type: ext, content, isAudio: false });
         } catch (fileError) {
           results.documents.push({ name: file.name, type: ext, content: `[Error: ${fileError.message}]`, isAudio: false });
         }
@@ -501,33 +328,33 @@
     ddSubmitBtn.addEventListener('click', async () => {
       const email = globalEmailInput.value.trim() || localStorage.getItem('ycpUserEmail');
       const instructions = ddInstructions.value.trim();
-      const hasTranscript = finalTranscript.trim().length > 0;
-      const hasFiles = selectedFiles.length > 0;
 
-      if (!hasTranscript && !hasFiles) { alert('Please record a meeting or upload materials'); return; }
-      if (!email) { alert('Please enter your email in the sidebar'); return; }
+      if (selectedFiles.length === 0) { showError('Please upload at least one file'); return; }
+      if (!email) { showError('Please enter your email in the sidebar'); return; }
 
       ddSubmitBtn.disabled = true;
       ddSubmitBtn.innerHTML = '<svg class="spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25" fill="none"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Processing...';
       hideMessages();
 
       try {
-        let processed = { documents: [], audioFiles: [] };
-        if (hasFiles) processed = await processFiles(selectedFiles);
-        const editedTranscript = transcriptContent.innerText.trim();
-        if (hasTranscript) {
-          processed.documents.unshift({ name: `Meeting_Recording_${new Date().toISOString().slice(0,10)}`, type: 'transcript', content: finalTranslation || editedTranscript, isAudio: false });
-        }
+        const processed = await processFiles(selectedFiles);
 
         const response = await fetch(`${API_BASE}/api/due-diligence`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ files: processed.documents, audioFiles: processed.audioFiles, instructions: instructionMode === 'manual' ? instructions : '', instructionMode, reportLength: 'medium', email, generateWord: true, rawTranscript: editedTranscript, translatedTranscript: finalTranslation, detectedLanguage: currentLanguage, sessionId })
+          body: JSON.stringify({
+            files: processed.documents,
+            audioFiles: [],
+            instructions: instructionMode === 'manual' ? instructions : '',
+            instructionMode,
+            reportLength: 'medium',
+            email,
+            generateWord: true
+          })
         });
 
         if (!response.ok) throw new Error('Request failed');
-        showSuccess(`DD Report & Transcript will be emailed to ${email} within 10-15 minutes.`);
-        localStorage.removeItem(STORAGE_KEY);
+        showSuccess(`DD Report will be emailed to ${email} within 10-15 minutes.`);
         selectedFiles = [];
         updateFileList();
         ddInstructions.value = '';
@@ -535,148 +362,15 @@
         showError(err.message);
       } finally {
         ddSubmitBtn.disabled = false;
-        ddSubmitBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg> Generate DD Report';
+        ddSubmitBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Generate DD Report';
       }
-    });
-
-    // Recording
-    recordBtn.addEventListener('click', async () => {
-      if (isRecording) stopRecording();
-      else await startRecording();
-    });
-
-    async function startRecording() {
-      try {
-        currentSpeaker = null;
-        currentTranslationSpeaker = null;
-        wsErrorShown = false;
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        audioContext = new AudioContext({ sampleRate: 16000 });
-        const source = audioContext.createMediaStreamSource(stream);
-        const processor = audioContext.createScriptProcessor(4096, 1, 1);
-
-        ws = new WebSocket(`${WS_BASE}/ws/transcribe`);
-        ws.onopen = () => ws.send(JSON.stringify({ type: 'start', language: selectedLang }));
-        ws.onmessage = (event) => {
-          let data;
-          try { data = JSON.parse(event.data); } catch (e) { return; }
-          if (data.type === 'session') { sessionId = data.sessionId; }
-          else if (data.type === 'ready') { source.connect(processor); processor.connect(audioContext.destination); }
-          else if (data.type === 'transcript') {
-            currentLanguage = data.language;
-            detectedLang.textContent = data.language?.toUpperCase() || '--';
-            if (data.isFinal) {
-              if (data.speaker !== null && data.speaker !== currentSpeaker) { currentSpeaker = data.speaker; finalTranscript += '<br><span class="text-indigo-600 font-semibold text-xs uppercase">Speaker ' + data.speaker + ':</span> '; }
-              finalTranscript += data.text + ' ';
-              transcriptContent.innerHTML = finalTranscript;
-            } else {
-              let interimPrefix = '';
-              if (data.speaker !== null && data.speaker !== currentSpeaker) { interimPrefix = '<br><span class="text-indigo-600 font-semibold text-xs uppercase">Speaker ' + data.speaker + ':</span> '; }
-              transcriptContent.innerHTML = finalTranscript + interimPrefix + '<span class="text-slate-400">' + data.text + '</span>';
-            }
-            transcriptContent.classList.remove('text-slate-400', 'italic', 'flex', 'items-center', 'justify-center');
-            transcriptContent.classList.add('text-slate-900');
-            transcriptContent.scrollTop = transcriptContent.scrollHeight;
-            if (data.language && data.language !== 'en') { translationPanel.classList.remove('hidden'); translationPanel.classList.add('flex'); }
-          } else if (data.type === 'translation') {
-            if (data.speaker !== null && data.speaker !== currentTranslationSpeaker) { currentTranslationSpeaker = data.speaker; finalTranslation += '<br><span class="text-indigo-600 font-semibold text-xs uppercase">Speaker ' + data.speaker + ':</span> '; }
-            finalTranslation += data.text + ' ';
-            translationContent.innerHTML = finalTranslation;
-            translationContent.scrollTop = translationContent.scrollHeight;
-          } else if (data.type === 'complete') {
-            if (data.r2Key) { currentR2Key = data.r2Key; downloadRecordingBtn.classList.remove('hidden'); }
-          } else if (data.type === 'error') { showError(data.message); }
-        };
-        ws.onerror = () => { if (!wsErrorShown) { wsErrorShown = true; showError('Connection error. Please try again.'); } stopRecording(); };
-        ws.onclose = (event) => { if (!event.wasClean && isRecording && !wsErrorShown) { wsErrorShown = true; showError(`Connection closed (code: ${event.code})`); stopRecording(); } };
-
-        processor.onaudioprocess = (e) => {
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            const inputData = e.inputBuffer.getChannelData(0);
-            const int16Data = new Int16Array(inputData.length);
-            for (let i = 0; i < inputData.length; i++) { int16Data[i] = Math.max(-32768, Math.min(32767, Math.floor(inputData[i] * 32768))); }
-            ws.send(int16Data.buffer);
-          }
-        };
-
-        mediaRecorder = { stream, processor, source };
-        isRecording = true;
-        recordBtn.classList.add('recording-pulse', 'bg-red-500', 'border-red-500');
-        recordIcon.innerHTML = '<rect x="6" y="6" width="12" height="12" rx="2"/>';
-        recordIcon.classList.remove('text-red-500');
-        recordIcon.classList.add('text-white');
-        recordTimer.classList.add('text-red-500');
-        recordStatus.textContent = 'Recording... Click to stop';
-        recordStatus.classList.add('text-red-500', 'font-semibold');
-
-        recordingStartTime = Date.now();
-        timerInterval = setInterval(updateTimer, 1000);
-        autoSaveInterval = setInterval(saveToLocalStorage, 10000);
-
-        finalTranscript = '';
-        finalTranslation = '';
-        currentR2Key = null;
-        localStorage.removeItem(STORAGE_KEY);
-        transcriptContent.innerHTML = '';
-        transcriptContent.textContent = 'Listening...';
-        transcriptContent.classList.add('text-slate-400', 'italic', 'flex', 'items-center', 'justify-center');
-        translationContent.textContent = '';
-        translationPanel.classList.add('hidden');
-        translationPanel.classList.remove('flex');
-        detectedLang.textContent = '--';
-        downloadRecordingBtn.classList.add('hidden');
-        document.getElementById('recoveryBanner').classList.add('hidden');
-      } catch (err) {
-        showError('Could not access microphone. Please allow microphone access.');
-      }
-    }
-
-    function stopRecording() {
-      isRecording = false;
-      clearInterval(timerInterval);
-      clearInterval(autoSaveInterval);
-      saveToLocalStorage();
-
-      recordBtn.classList.remove('recording-pulse', 'bg-red-500', 'border-red-500');
-      recordIcon.innerHTML = '<circle cx="12" cy="12" r="8"/>';
-      recordIcon.classList.add('text-red-500');
-      recordIcon.classList.remove('text-white');
-      recordTimer.classList.remove('text-red-500');
-      recordStatus.textContent = 'Recording complete. Click to record again.';
-      recordStatus.classList.remove('text-red-500', 'font-semibold');
-
-      if (mediaRecorder) {
-        mediaRecorder.processor.disconnect();
-        mediaRecorder.source.disconnect();
-        mediaRecorder.stream.getTracks().forEach(t => t.stop());
-        mediaRecorder = null;
-      }
-      if (audioContext) { audioContext.close(); audioContext = null; }
-      if (ws) {
-        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'stop' }));
-        ws.onopen = null; ws.onmessage = null; ws.onerror = null; ws.onclose = null;
-        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close();
-        ws = null;
-      }
-    }
-
-    function updateTimer() {
-      const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
-      const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
-      const secs = (elapsed % 60).toString().padStart(2, '0');
-      recordTimer.textContent = `${mins}:${secs}`;
-    }
-
-    downloadRecordingBtn.addEventListener('click', () => {
-      if (!currentR2Key) { showError('No recording available'); return; }
-      window.open(`${API_BASE}/api/recording/${encodeURIComponent(currentR2Key)}`, '_blank');
     });
 
     function showSuccess(msg) {
       successText.textContent = msg;
       successMessage.classList.remove('hidden');
       errorMessage.classList.add('hidden');
-      setTimeout(() => successMessage.classList.add('hidden'), 5000);
+      setTimeout(() => successMessage.classList.add('hidden'), 8000);
     }
 
     function showError(msg) {

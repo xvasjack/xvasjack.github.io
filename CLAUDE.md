@@ -37,7 +37,7 @@ All services have:
 - Rate limiting (100 req/min)
 - XSS protection (escapeHtml in emails)
 - Path traversal protection
-- 10MB body size limit (DOS prevention)
+- 100MB body size limit (for DD file uploads)
 
 ## Shared Modules
 - `backend/shared/security.js` - Security middleware and helpers
@@ -69,7 +69,7 @@ All services have:
 - **profile-slides** - Create company profile PPTX
 - **trading-comparable** - Trading comps with Excel uploads
 - **utb** - Unit-to-business analysis
-- **due-diligence** - DD reports with DeepSeek
+- **due-diligence** - DD reports (multi-agent: Kimi K2 + Gemini)
 
 ### Supporting Services
 - **financial-chart** - Financial visualization
@@ -100,6 +100,7 @@ DEEPSEEK_API_KEY    # Market research (cheaper)
 DEEPGRAM_API_KEY    # Transcription
 ANTHROPIC_API_KEY   # Claude fallback
 SERPAPI_API_KEY     # Google search
+KIMI_API_KEY        # Kimi K2 (Moonshot) for DD deep analysis
 R2_*                # Cloudflare R2 storage
 SCREENSHOT_API_KEY  # Screenshot API for partner extraction (screenshotapi.net)
 SCREENSHOT_API_URL  # Custom screenshot API URL (optional)
