@@ -7658,7 +7658,7 @@ const SHORTFORM_DEFINITIONS = {
 // Exchange rate mapping by country (for footnote)
 const EXCHANGE_RATE_MAP = {
   PH: '為替レート: PHP 100M = 3億円',
-  TH: '為替レート: THB 100M = 4億円',
+  TH: '為替レート: THB 100M = 5億円',
   MY: '為替レート: MYR 10M = 3億円',
   ID: '為替レート: IDR 100B = 10億円',
   SG: '為替レート: SGD 1M = 1億円',
@@ -8774,7 +8774,7 @@ async function generatePPTX(companies, targetDescription = '') {
 // Currency exchange mapping by country
 const CURRENCY_EXCHANGE = {
   philippines: '為替レート: PHP 100M = 3億円',
-  thailand: '為替レート: THB 100M = 4億円',
+  thailand: '為替レート: THB 100M = 5億円',
   malaysia: '為替レート: MYR 10M = 3億円',
   indonesia: '為替レート: IDR 10B = 1億円',
   singapore: '為替レート: SGD 1M = 1億円',
