@@ -4,105 +4,181 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Find Target - v3</title>
-  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 1s linear infinite; }
+  </style>
 </head>
-<body>
-  <header class="app-header">
-    <a href="find-target.html" class="logo">
-      <span class="logo-icon">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
-        </svg>
-      </span>
-      YCP Gary Team's Tool
-    </a>
-    <nav>
-      <div class="nav-dropdown">
-        <button class="nav-dropdown-toggle">
-          Search
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </button>
-        <div class="nav-dropdown-menu">
-          <a href="find-target.html" class="active">v3 Search</a>
-          <a href="find-target-v5.html">v5 Search</a>
-          <a href="find-target-v6.html">v6 Search</a>
-        </div>
+<body class="font-sans bg-slate-100 text-slate-900 h-screen flex overflow-hidden">
+  <!-- Sidebar -->
+  <aside class="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm">
+    <!-- Logo -->
+    <div class="p-5 border-b border-slate-200">
+      <a href="find-target.html" class="flex items-center gap-3 text-slate-900 no-underline">
+        <span class="w-9 h-9 bg-indigo-600 rounded-lg flex items-center justify-center">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+          </svg>
+        </span>
+        <span class="font-semibold text-lg">YCP Tools</span>
+      </a>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+      <!-- Search Section -->
+      <div class="mb-4">
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Search</p>
+        <a href="find-target.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium bg-indigo-50 text-indigo-700 rounded-lg">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v3 Search
+        </a>
+        <a href="find-target-v5.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v5 Search
+        </a>
+        <a href="find-target-v6.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v6 Search
+        </a>
       </div>
-      <a href="validation.html">Validation</a>
-      <a href="trading-comparable.html">Trading Comp</a>
-      <a href="profile-slides.html">Slides</a>
-      <a href="utb.html">UTB</a>
-      <a href="market-research.html">Market Research</a>
-      <a href="due-diligence.html">Due Diligence</a>
-      <div class="nav-dropdown">
-        <button class="nav-dropdown-toggle">
-          Other Tools
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </button>
-        <div class="nav-dropdown-menu">
-          <a href="find-target-slow.html">v3 Slow</a>
-          <a href="find-target-v4.html">v4 Search</a>
-        </div>
+
+      <!-- Tools Section -->
+      <div class="mb-4">
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Tools</p>
+        <a href="validation.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Validation
+        </a>
+        <a href="trading-comparable.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          Trading Comp
+        </a>
+        <a href="profile-slides.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Profile Slides
+        </a>
+        <a href="utb.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+          UTB
+        </a>
+        <a href="market-research.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          Market Research
+        </a>
+      </div>
+
+      <!-- Other Section -->
+      <div>
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Other</p>
+        <a href="due-diligence.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+          Due Diligence
+        </a>
+        <a href="find-target-slow.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          v3 Slow
+        </a>
+        <a href="find-target-v4.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+          v4 Search
+        </a>
       </div>
     </nav>
-    <div class="header-email">
-      <span class="header-email-label">Your email:</span>
-      <input type="email" id="globalEmail" placeholder="your@company.com">
+
+    <!-- Email Input -->
+    <div class="p-4 border-t border-slate-200 bg-slate-50">
+      <label class="block text-xs font-medium text-slate-500 mb-1.5">Your Email</label>
+      <input type="email" id="globalEmail" placeholder="your@company.com"
+        class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow">
     </div>
-  </header>
+  </aside>
 
-  <main class="app-main">
-    <section class="page-info">
-      <span class="status-badge">Online</span>
-      <h1 class="page-title">v3 Search</h1>
-      <p class="page-description">50% effectiveness. Results in &lt;10 minutes. Advised to run twice for better coverage.</p>
-    </section>
-
-    <section class="page-content">
-      <div class="form-card">
-        <form id="findTargetForm" method="POST" action="https://target-v3-production.up.railway.app/api/find-target">
-          <div class="form-grid">
-            <div class="form-group full-width">
-              <label for="business">Business Type</label>
-              <input type="text" id="business" name="Business" required placeholder="e.g. Semiconductor distributor">
-            </div>
-            <div class="form-group">
-              <label for="country">Country</label>
-              <input type="text" id="country" name="Country" required placeholder="e.g. Malaysia, Thailand" value="Southeast Asia">
-            </div>
-            <div class="form-group">
-              <label for="exclusion">Exclusions</label>
-              <input type="text" id="exclusion" name="Exclusion" required placeholder="e.g. MNC, Listed" value="Large companies">
-            </div>
-          </div>
-
-          <button type="submit" class="submit-btn" id="submitBtn">Submit</button>
-
-          <div class="message success" id="successMessage">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-            Request submitted! Results will arrive in &lt;10 minutes. Run twice for better coverage.
-          </div>
-
-          <div class="message error" id="errorMessage">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-            Error submitting request. Please try again.
-          </div>
-        </form>
+  <!-- Main Content -->
+  <main class="flex-1 flex flex-col overflow-hidden">
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 px-8 py-5">
+      <div class="flex items-center gap-3 mb-1">
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
+          <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+          Online
+        </span>
       </div>
-    </section>
+      <h1 class="text-2xl font-bold text-slate-900">v3 Search</h1>
+      <p class="text-slate-600 mt-1">50% effectiveness. Results in &lt;10 minutes. Advised to run twice for better coverage.</p>
+    </header>
+
+    <!-- Content -->
+    <div class="flex-1 overflow-y-auto p-8">
+      <div class="max-w-xl mx-auto">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+          <form id="findTargetForm" method="POST" action="https://target-v3-production.up.railway.app/api/find-target">
+            <div class="space-y-5">
+              <div>
+                <label for="business" class="block text-sm font-medium text-slate-700 mb-1.5">Business Type</label>
+                <input type="text" id="business" name="Business" required placeholder="e.g. Semiconductor distributor"
+                  class="w-full px-4 py-3 text-base bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow">
+              </div>
+
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label for="country" class="block text-sm font-medium text-slate-700 mb-1.5">Country</label>
+                  <input type="text" id="country" name="Country" required placeholder="e.g. Malaysia, Thailand" value="Southeast Asia"
+                    class="w-full px-4 py-3 text-base bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow">
+                </div>
+                <div>
+                  <label for="exclusion" class="block text-sm font-medium text-slate-700 mb-1.5">Exclusions</label>
+                  <input type="text" id="exclusion" name="Exclusion" required placeholder="e.g. MNC, Listed" value="Large companies"
+                    class="w-full px-4 py-3 text-base bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow">
+                </div>
+              </div>
+
+              <button type="submit" id="submitBtn"
+                class="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+                Submit
+              </button>
+
+              <!-- Messages -->
+              <div id="successMessage" class="hidden flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+                <span>Request submitted! Results will arrive in &lt;10 minutes. Run twice for better coverage.</span>
+              </div>
+
+              <div id="errorMessage" class="hidden flex items-center gap-3 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+                <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+                <span>Error submitting request. Please try again.</span>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
   </main>
 
   <script>
     // Email caching
     const globalEmailInput = document.getElementById('globalEmail');
 
-    // Load cached email on page load
     const cachedEmail = localStorage.getItem('ycpUserEmail');
     if (cachedEmail) {
       globalEmailInput.value = cachedEmail;
     }
 
-    // Save to cache on input
     globalEmailInput.addEventListener('input', () => {
       localStorage.setItem('ycpUserEmail', globalEmailInput.value);
     });
@@ -115,14 +191,14 @@
 
       const email = globalEmailInput.value || localStorage.getItem('ycpUserEmail');
       if (!email) {
-        alert('Please enter your email in the top right');
+        alert('Please enter your email in the sidebar');
         return;
       }
 
-      success.classList.remove('show');
-      error.classList.remove('show');
+      success.classList.add('hidden');
+      error.classList.add('hidden');
       btn.disabled = true;
-      btn.innerHTML = '<svg class="spinner" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Processing...';
+      btn.innerHTML = '<svg class="spinner w-5 h-5" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Processing...';
 
       try {
         const formData = new FormData(this);
@@ -134,8 +210,7 @@
           body: JSON.stringify(data)
         });
         if (response.ok) {
-          success.classList.add('show');
-          // Reset but keep defaults
+          success.classList.remove('hidden');
           document.getElementById('business').value = '';
           document.getElementById('country').value = 'Southeast Asia';
           document.getElementById('exclusion').value = 'Large companies';
@@ -143,7 +218,7 @@
           throw new Error();
         }
       } catch {
-        error.classList.add('show');
+        error.classList.remove('hidden');
       } finally {
         btn.disabled = false;
         btn.innerHTML = 'Submit';

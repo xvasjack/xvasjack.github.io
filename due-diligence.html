@@ -4,317 +4,259 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Due Diligence Report Generator</title>
-  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
   <style>
-    .page-content.dd-container {
-      display: block !important;
-      align-items: unset !important;
-      max-width: 800px;
-      margin: 0 auto;
-      padding: 20px;
+    @keyframes pulse-record {
+      0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
+      50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
     }
-
-    .dd-header {
-      text-align: center;
-      margin-bottom: 24px;
-    }
-    .dd-header h1 {
-      font-size: 22px;
-      margin: 0 0 8px 0;
-      font-weight: 600;
-    }
-    .dd-header p {
-      font-size: 14px;
-      color: var(--text-muted);
-      margin: 0;
-    }
-
-    /* Upload Zone */
-    .dd-upload-zone {
-      border: 2px dashed var(--border-medium);
-      border-radius: var(--radius-md);
-      padding: 40px 20px;
-      text-align: center;
-      cursor: pointer;
-      transition: all 0.2s ease;
-      background: var(--bg-body);
-      margin-bottom: 16px;
-    }
-    .dd-upload-zone:hover, .dd-upload-zone.active {
-      border-color: var(--accent);
-      background: var(--accent-soft);
-    }
-    .dd-upload-zone svg {
-      color: var(--accent);
-      width: 48px;
-      height: 48px;
-      margin-bottom: 12px;
-    }
-    .dd-upload-zone p {
-      font-size: 16px;
-      color: var(--text-main);
-      margin: 0 0 8px 0;
-    }
-    .dd-upload-zone span {
-      font-size: 13px;
-      color: var(--text-muted);
-    }
-    #fileInput { display: none; }
-
-    .dd-file-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      margin-bottom: 20px;
-    }
-    .dd-file-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 12px 14px;
-      background: #f1f5f9;
-      border: 1px solid #cbd5e1;
-      border-radius: 6px;
-    }
-    .dd-file-item svg { width: 20px; height: 20px; color: #3b82f6; flex-shrink: 0; }
-    .dd-file-item span {
-      flex: 1;
-      font-size: 14px;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      color: #1e293b;
-    }
-    .dd-file-item .file-size {
-      font-size: 12px;
-      color: #64748b;
-      flex-shrink: 0;
-    }
-    .dd-file-item button {
-      background: #fee2e2;
-      border: 1px solid #fca5a5;
-      color: #dc2626;
-      cursor: pointer;
-      padding: 4px 10px;
-      border-radius: 4px;
-      font-weight: 600;
-      font-size: 12px;
-    }
-    .dd-file-item button:hover { background: #fecaca; }
-
-    /* Form Section */
-    .dd-form-section {
-      background: var(--bg-surface);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-md);
-      padding: 20px;
-      margin-bottom: 16px;
-    }
-    .dd-form-label {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 10px;
-    }
-    .dd-form-label label {
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text-main);
-    }
-    .dd-mode-toggle {
-      display: flex;
-      gap: 6px;
-    }
-    .dd-mode-btn {
-      padding: 5px 12px;
-      font-size: 12px;
-      font-weight: 600;
-      border: 1px solid var(--border-medium);
-      border-radius: 4px;
-      background: var(--bg-body);
-      color: var(--text-muted);
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .dd-mode-btn:hover { border-color: var(--accent); color: var(--accent); }
-    .dd-mode-btn.active {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: white;
-    }
-    .dd-auto-hint {
-      font-size: 13px;
-      color: var(--text-muted);
-      padding: 12px;
-      background: var(--accent-soft);
-      border-radius: 4px;
-      margin-bottom: 12px;
-    }
-    .dd-instructions-box {
-      width: 100%;
-      padding: 12px;
-      border: 1px solid var(--border-medium);
-      border-radius: 4px;
-      font-size: 13px;
-      resize: vertical;
-      min-height: 100px;
-      line-height: 1.5;
-      font-family: inherit;
-    }
-    .dd-instructions-box:focus {
-      outline: none;
-      border-color: var(--accent);
-    }
-
-    /* Submit Button */
-    .dd-submit-btn {
-      width: 100%;
-      padding: 14px 20px;
-      font-size: 15px;
-      font-weight: 600;
-      background: var(--accent);
-      color: white;
-      border: none;
-      border-radius: var(--radius-md);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
-      transition: background 0.2s;
-    }
-    .dd-submit-btn:hover { background: var(--accent-hover); }
-    .dd-submit-btn:disabled {
-      background: var(--text-light);
-      cursor: not-allowed;
-    }
-    .dd-submit-btn svg { width: 20px; height: 20px; }
-
-    /* Supported formats */
-    .dd-formats {
-      font-size: 12px;
-      color: var(--text-muted);
-      text-align: center;
-      margin-top: 8px;
-    }
-
-    /* Spinner */
-    .spinner {
-      animation: spin 1s linear infinite;
-      width: 20px;
-      height: 20px;
-    }
-    @keyframes spin {
-      from { transform: rotate(0deg); }
-      to { transform: rotate(360deg); }
-    }
+    .recording-pulse { animation: pulse-record 1.5s infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 1s linear infinite; width: 16px; height: 16px; }
   </style>
 </head>
-<body>
-  <header class="app-header">
-    <a href="find-target.html" class="logo">
-      <span class="logo-icon">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
-        </svg>
-      </span>
-      YCP Gary Team's Tool
-    </a>
-    <nav>
-      <div class="nav-dropdown">
-        <button class="nav-dropdown-toggle">
-          Search
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </button>
-        <div class="nav-dropdown-menu">
-          <a href="find-target.html">v3 Search</a>
-          <a href="find-target-v5.html">v5 Search</a>
-          <a href="find-target-v6.html">v6 Search</a>
-        </div>
+<body class="font-sans bg-slate-100 text-slate-900 h-screen flex overflow-hidden">
+  <!-- Sidebar -->
+  <aside class="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm flex-shrink-0">
+    <div class="p-5 border-b border-slate-200">
+      <a href="find-target.html" class="flex items-center gap-3 text-slate-900 no-underline">
+        <span class="w-9 h-9 bg-indigo-600 rounded-lg flex items-center justify-center">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+          </svg>
+        </span>
+        <span class="font-semibold text-lg">YCP Tools</span>
+      </a>
+    </div>
+
+    <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+      <div class="mb-4">
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Search</p>
+        <a href="find-target.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v3 Search
+        </a>
+        <a href="find-target-v5.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v5 Search
+        </a>
+        <a href="find-target-v6.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v6 Search
+        </a>
       </div>
-      <a href="validation.html">Validation</a>
-      <a href="trading-comparable.html">Trading Comp</a>
-      <a href="profile-slides.html">Slides</a>
-      <a href="utb.html">UTB</a>
-      <a href="market-research.html">Market Research</a>
-      <a href="due-diligence.html" class="active">Due Diligence</a>
-      <div class="nav-dropdown">
-        <button class="nav-dropdown-toggle">
-          Other Tools
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-        </button>
-        <div class="nav-dropdown-menu">
-          <a href="find-target-slow.html">v3 Slow</a>
-          <a href="find-target-v4.html">v4 Search</a>
-        </div>
+
+      <div class="mb-4">
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Tools</p>
+        <a href="validation.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Validation
+        </a>
+        <a href="trading-comparable.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          Trading Comp
+        </a>
+        <a href="profile-slides.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Profile Slides
+        </a>
+        <a href="utb.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+          UTB
+        </a>
+        <a href="market-research.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          Market Research
+        </a>
+      </div>
+
+      <div>
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Other</p>
+        <a href="due-diligence.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium bg-indigo-50 text-indigo-700 rounded-lg">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+          Due Diligence
+        </a>
+        <a href="find-target-slow.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          v3 Slow
+        </a>
+        <a href="find-target-v4.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/></svg>
+          v4 Search
+        </a>
       </div>
     </nav>
-    <div class="header-email">
-      <span class="header-email-label">Your email:</span>
-      <input type="email" id="globalEmail" placeholder="your@company.com">
+
+    <div class="p-4 border-t border-slate-200 bg-slate-50">
+      <label class="block text-xs font-medium text-slate-500 mb-1.5">Your Email</label>
+      <input type="email" id="globalEmail" placeholder="your@company.com"
+        class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow">
     </div>
-  </header>
+  </aside>
 
-  <main class="app-main" style="padding-top: 20px;">
-    <section class="page-content dd-container">
-      <!-- Header -->
-      <div class="dd-header">
-        <h1>Due Diligence Report Generator</h1>
-        <p>Upload documents and receive a comprehensive DD report in Word format</p>
+  <!-- Main Content -->
+  <main class="flex-1 flex flex-col overflow-hidden">
+    <header class="bg-white border-b border-slate-200 px-6 py-4">
+      <div class="flex items-center gap-3 mb-1">
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
+          <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+          Online
+        </span>
       </div>
+      <h1 class="text-xl font-bold text-slate-900">Due Diligence Report</h1>
+      <p class="text-slate-600 text-sm mt-1">Record meetings, upload materials, and get AI-generated DD reports.</p>
+    </header>
 
+    <div class="flex-1 overflow-y-auto p-6">
       <!-- Messages -->
-      <div class="message success" id="successMessage">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
-        <span id="successText">Success!</span>
+      <div id="successMessage" class="hidden mb-4 p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg">
+        <div class="flex items-start gap-3">
+          <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+          <span id="successText">Success!</span>
+        </div>
       </div>
-      <div class="message error" id="errorMessage">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      <div id="errorMessage" class="hidden mb-4 flex items-center gap-3 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+        <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         <span id="errorText">Error</span>
       </div>
 
-      <!-- Upload Zone -->
-      <input type="file" id="fileInput" multiple accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.rtf,.csv,.xlsx,.xls">
-      <div class="dd-upload-zone" id="uploadZone">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
-        </svg>
-        <p>Drop files here or click to upload</p>
-        <span>PDF, Word, PowerPoint, Excel, TXT (max 50MB each)</span>
+      <!-- Instructions -->
+      <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-3 mb-4 text-sm">
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1">
+          <span class="font-semibold text-indigo-700">How to use:</span>
+          <span class="text-slate-700">1. Select language and record</span>
+          <span class="text-slate-700">2. Edit transcript if needed</span>
+          <span class="text-slate-700">3. Upload materials (optional)</span>
+          <span class="text-slate-700">4. Submit for DD report</span>
+        </div>
       </div>
-      <div class="dd-formats">Supported: .pdf .doc .docx .ppt .pptx .xls .xlsx .txt .csv .rtf</div>
 
-      <!-- File List -->
-      <div class="dd-file-list" id="fileList"></div>
+      <!-- Recovery Banner -->
+      <div id="recoveryBanner" class="hidden mb-4 bg-amber-50 border border-amber-300 rounded-lg p-4 flex items-center justify-between gap-4">
+        <p class="text-amber-800 text-sm"><strong class="text-amber-900">Unsaved recording found!</strong> Your previous session was interrupted.</p>
+        <div class="flex gap-2">
+          <button onclick="restoreSession()" class="px-3 py-1.5 bg-amber-500 text-white text-sm font-semibold rounded-lg hover:bg-amber-600">Restore</button>
+          <button onclick="dismissRecovery()" class="px-3 py-1.5 bg-white text-amber-700 text-sm font-semibold rounded-lg border border-amber-400 hover:bg-amber-50">Dismiss</button>
+        </div>
+      </div>
 
-      <!-- Instructions Section -->
-      <div class="dd-form-section">
-        <div class="dd-form-label">
-          <label>Instructions</label>
-          <div class="dd-mode-toggle">
-            <button type="button" class="dd-mode-btn active" id="autoModeBtn" onclick="setInstructionMode('auto')">Auto</button>
-            <button type="button" class="dd-mode-btn" id="manualModeBtn" onclick="setInstructionMode('manual')">Manual</button>
+      <!-- Main Two-Column Layout -->
+      <div class="grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-5">
+        <!-- Left Column -->
+        <div class="space-y-4">
+          <!-- Recording Section -->
+          <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <div class="flex items-center gap-2 mb-3">
+              <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
+              <span class="font-semibold text-slate-900 text-sm">Record Meeting</span>
+            </div>
+
+            <!-- Language Selector -->
+            <div id="langSelect" class="flex flex-wrap gap-1.5 mb-3">
+              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-gradient-to-br from-indigo-500 to-purple-600 text-white" data-lang="multi">Multi</button>
+              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="en">English</button>
+              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="zh">Chinese</button>
+              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="ja">Japanese</button>
+              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="ko">Korean</button>
+              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="vi">Vietnamese</button>
+              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="id">Indonesian</button>
+              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="ms">Malay</button>
+              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="th">Thai</button>
+              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="hi">Hindi</button>
+              <button type="button" class="dd-lang-btn px-2.5 py-1.5 text-xs font-medium border border-slate-300 rounded-md bg-white text-slate-600 hover:border-indigo-500" data-lang="tl">Filipino</button>
+            </div>
+
+            <div id="langHint" class="text-xs text-slate-700 bg-blue-50 border border-blue-200 rounded-md p-2 mb-3">
+              <strong class="text-blue-800">Multi-language mode:</strong> <span class="text-blue-700">Auto-detects English, Japanese, Korean, Vietnamese, Hindi and more.</span><br>
+              <span class="text-slate-500 text-[11px]">Note: Chinese, Thai, Malay, Filipino - select directly.</span>
+            </div>
+
+            <!-- Record Controls -->
+            <div class="flex items-center gap-4 p-3 bg-slate-50 rounded-lg border border-slate-200">
+              <button id="recordBtn" class="w-11 h-11 rounded-full border-[3px] border-red-500 bg-white flex items-center justify-center cursor-pointer hover:scale-105 transition-transform flex-shrink-0">
+                <svg id="recordIcon" class="w-5 h-5 text-red-500" fill="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>
+              </button>
+              <div class="flex flex-col gap-0.5">
+                <span id="recordTimer" class="font-mono text-xl font-bold text-slate-900">00:00</span>
+                <span id="recordStatus" class="text-sm text-slate-500">Click to start</span>
+              </div>
+              <button type="button" id="downloadRecordingBtn" class="hidden ml-auto px-2 py-1 text-[10px] bg-white border border-slate-300 rounded text-slate-500 hover:text-slate-700">Download</button>
+            </div>
+          </div>
+
+          <!-- Upload Section -->
+          <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <div class="flex items-center gap-2 mb-3">
+              <svg class="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+              <span class="font-semibold text-slate-900 text-sm">Upload Materials</span>
+              <span class="text-slate-400 text-xs font-normal">(optional)</span>
+            </div>
+            <input type="file" id="fileInput" multiple accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.rtf,.csv,.xlsx,.xls,.mp3,.wav,.m4a,.webm,.ogg" class="hidden">
+            <div id="uploadZone" class="border-2 border-dashed border-slate-300 rounded-lg p-4 flex items-center justify-center gap-3 cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-colors">
+              <svg class="w-6 h-6 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+              <p class="text-sm text-slate-500">Drop files or click</p>
+            </div>
+            <div id="fileList" class="mt-2 space-y-1.5"></div>
+          </div>
+
+          <!-- Form Section -->
+          <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
+            <div class="flex items-center justify-between mb-2">
+              <label class="font-semibold text-slate-900 text-sm">Instructions</label>
+              <div class="flex gap-1">
+                <button type="button" id="autoModeBtn" onclick="setInstructionMode('auto')" class="px-2.5 py-1 text-xs font-semibold border border-slate-300 rounded bg-indigo-600 text-white">Auto</button>
+                <button type="button" id="manualModeBtn" onclick="setInstructionMode('manual')" class="px-2.5 py-1 text-xs font-semibold border border-slate-300 rounded bg-white text-slate-500 hover:border-indigo-500">Manual</button>
+              </div>
+            </div>
+            <div id="autoModeHint" class="text-xs text-slate-600 bg-indigo-50 rounded-md p-2 mb-3">
+              AI will automatically analyze the transcript and materials to generate a comprehensive DD report.
+            </div>
+            <textarea id="ddInstructions" rows="4" placeholder="Example instructions:
+• We are YCP, representing Speaker 1 (the buyer)
+• Speaker 2 is the target company CEO
+• Focus on: financials, risks, synergies
+• Summarize from our client's perspective" class="hidden w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"></textarea>
+
+            <button type="button" id="ddSubmitBtn" class="w-full flex items-center justify-center gap-2 px-4 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm transition-colors">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+              Generate DD Report
+            </button>
           </div>
         </div>
-        <div class="dd-auto-hint" id="autoModeHint">
-          AI will automatically analyze uploaded documents and generate a comprehensive DD report.
-        </div>
-        <textarea id="ddInstructions" class="dd-instructions-box" rows="5" placeholder="Example instructions:
-• Focus on financial performance and risks
-• Summarize key findings for buyer's perspective
-• Highlight any red flags or concerns
-• Include market position analysis" style="display: none;"></textarea>
-      </div>
 
-      <!-- Submit Button -->
-      <button type="button" class="dd-submit-btn" id="ddSubmitBtn">
-        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-        </svg>
-        Generate DD Report
-      </button>
-    </section>
+        <!-- Right Column: Transcript Panels -->
+        <div class="space-y-4">
+          <div class="bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col min-h-[200px] max-h-[350px]">
+            <div class="px-4 py-2.5 border-b border-slate-200 flex items-center gap-3 text-xs font-semibold text-slate-500 uppercase tracking-wide">
+              <span>Live Transcript</span>
+              <span id="detectedLang" class="bg-indigo-100 text-indigo-600 px-2 py-0.5 rounded-full text-[11px] font-medium normal-case">--</span>
+              <span class="ml-auto text-[11px] text-slate-400 font-normal normal-case">Click to edit</span>
+            </div>
+            <div id="transcriptContent" contenteditable="true" class="flex-1 p-4 text-sm leading-relaxed overflow-y-auto text-slate-400 italic flex items-center justify-center cursor-text focus:outline-2 focus:outline-indigo-500 focus:outline-offset-[-2px]">Start recording to see live transcription...</div>
+          </div>
+
+          <div id="translationPanel" class="hidden bg-white rounded-xl shadow-sm border border-slate-200 border-l-[3px] border-l-emerald-500 flex flex-col min-h-[200px] max-h-[350px]">
+            <div class="px-4 py-2.5 border-b border-slate-200 text-xs font-semibold text-emerald-600 uppercase tracking-wide">English Translation</div>
+            <div id="translationContent" contenteditable="true" class="flex-1 p-4 text-sm leading-relaxed overflow-y-auto cursor-text focus:outline-2 focus:outline-indigo-500 focus:outline-offset-[-2px]"></div>
+          </div>
+        </div>
+      </div>
+    </div>
   </main>
 
   <script>
@@ -323,30 +265,86 @@
     // Email caching
     const globalEmailInput = document.getElementById('globalEmail');
     const cachedEmail = localStorage.getItem('ycpUserEmail');
-    if (cachedEmail) {
-      globalEmailInput.value = cachedEmail;
-    }
-    globalEmailInput.addEventListener('input', () => {
-      localStorage.setItem('ycpUserEmail', globalEmailInput.value);
-    });
+    if (cachedEmail) globalEmailInput.value = cachedEmail;
+    globalEmailInput.addEventListener('input', () => localStorage.setItem('ycpUserEmail', globalEmailInput.value));
 
     const API_BASE = 'https://xvasjackgithubio-production.up.railway.app';
+    const WS_BASE = API_BASE.replace('https://', 'wss://').replace('http://', 'ws://');
 
     // Elements
     const uploadZone = document.getElementById('uploadZone');
     const fileInput = document.getElementById('fileInput');
     const fileList = document.getElementById('fileList');
+    const recordBtn = document.getElementById('recordBtn');
+    const recordIcon = document.getElementById('recordIcon');
+    const recordTimer = document.getElementById('recordTimer');
+    const recordStatus = document.getElementById('recordStatus');
+    const downloadRecordingBtn = document.getElementById('downloadRecordingBtn');
     const ddSubmitBtn = document.getElementById('ddSubmitBtn');
     const ddInstructions = document.getElementById('ddInstructions');
+    const transcriptContent = document.getElementById('transcriptContent');
+    const translationContent = document.getElementById('translationContent');
+    const translationPanel = document.getElementById('translationPanel');
+    const detectedLang = document.getElementById('detectedLang');
     const successMessage = document.getElementById('successMessage');
     const errorMessage = document.getElementById('errorMessage');
     const successText = document.getElementById('successText');
     const errorText = document.getElementById('errorText');
 
     let selectedFiles = [];
-    let instructionMode = 'auto';
+    let selectedLang = 'multi';
+    let isRecording = false;
 
-    // Instruction mode toggle
+    // Language selector
+    document.getElementById('langSelect').addEventListener('click', (e) => {
+      if (e.target.classList.contains('dd-lang-btn')) {
+        if (isRecording) { alert('Stop recording before changing language'); return; }
+        document.querySelectorAll('#langSelect .dd-lang-btn').forEach(btn => {
+          btn.classList.remove('bg-gradient-to-br', 'from-indigo-500', 'to-purple-600', 'text-white', 'bg-indigo-600');
+          btn.classList.add('bg-white', 'text-slate-600');
+        });
+        e.target.classList.remove('bg-white', 'text-slate-600');
+        if (e.target.dataset.lang === 'multi') {
+          e.target.classList.add('bg-gradient-to-br', 'from-indigo-500', 'to-purple-600', 'text-white');
+        } else {
+          e.target.classList.add('bg-indigo-600', 'text-white');
+        }
+        selectedLang = e.target.dataset.lang;
+
+        const langHint = document.getElementById('langHint');
+        const noCodeSwitchLangs = ['zh', 'th', 'ms', 'tl'];
+        if (selectedLang === 'multi') {
+          langHint.innerHTML = '<strong class="text-blue-800">Multi-language mode:</strong> <span class="text-blue-700">Auto-detects English, Japanese, Korean, Vietnamese, Hindi and more.</span><br><span class="text-slate-500 text-[11px]">Note: Chinese, Thai, Malay, Filipino - select directly.</span>';
+          langHint.className = 'text-xs text-slate-700 bg-blue-50 border border-blue-200 rounded-md p-2 mb-3';
+        } else if (selectedLang === 'en') {
+          langHint.innerHTML = '<strong class="text-emerald-800">English mode:</strong> <span class="text-emerald-700">Optimized for English-only meetings.</span>';
+          langHint.className = 'text-xs text-slate-700 bg-emerald-50 border border-emerald-200 rounded-md p-2 mb-3';
+        } else if (noCodeSwitchLangs.includes(selectedLang)) {
+          langHint.innerHTML = '<strong class="text-amber-800">' + e.target.textContent + ':</strong> <span class="text-amber-700">Single-language mode. Translated to English.</span>';
+          langHint.className = 'text-xs text-slate-700 bg-amber-50 border border-amber-200 rounded-md p-2 mb-3';
+        } else {
+          langHint.innerHTML = '<strong class="text-amber-800">' + e.target.textContent + ':</strong> <span class="text-amber-700">Will be translated to English.</span>';
+          langHint.className = 'text-xs text-slate-700 bg-amber-50 border border-amber-200 rounded-md p-2 mb-3';
+        }
+      }
+    });
+
+    let mediaRecorder = null;
+    let audioContext = null;
+    let ws = null;
+    let sessionId = null;
+    let timerInterval = null;
+    let recordingStartTime = null;
+    let finalTranscript = '';
+    let finalTranslation = '';
+    let currentLanguage = 'en';
+    let instructionMode = 'auto';
+    let autoSaveInterval = null;
+    let currentR2Key = null;
+    let currentSpeaker = null;
+    let currentTranslationSpeaker = null;
+    let wsErrorShown = false;
+
     window.setInstructionMode = function(mode) {
       instructionMode = mode;
       const autoBtn = document.getElementById('autoModeBtn');
@@ -355,27 +353,84 @@
       const instructionsBox = document.getElementById('ddInstructions');
 
       if (mode === 'auto') {
-        autoBtn.classList.add('active');
-        manualBtn.classList.remove('active');
-        autoHint.style.display = 'block';
-        instructionsBox.style.display = 'none';
+        autoBtn.classList.remove('bg-white', 'text-slate-500');
+        autoBtn.classList.add('bg-indigo-600', 'text-white');
+        manualBtn.classList.remove('bg-indigo-600', 'text-white');
+        manualBtn.classList.add('bg-white', 'text-slate-500');
+        autoHint.classList.remove('hidden');
+        instructionsBox.classList.add('hidden');
       } else {
-        autoBtn.classList.remove('active');
-        manualBtn.classList.add('active');
-        autoHint.style.display = 'none';
-        instructionsBox.style.display = 'block';
+        manualBtn.classList.remove('bg-white', 'text-slate-500');
+        manualBtn.classList.add('bg-indigo-600', 'text-white');
+        autoBtn.classList.remove('bg-indigo-600', 'text-white');
+        autoBtn.classList.add('bg-white', 'text-slate-500');
+        autoHint.classList.add('hidden');
+        instructionsBox.classList.remove('hidden');
       }
     };
 
-    // Upload handlers
+    // Auto-save & Recovery
+    const STORAGE_KEY = 'dd_recording_backup';
+
+    function saveToLocalStorage() {
+      if (!finalTranscript && !finalTranslation) return;
+      const backup = { transcript: finalTranscript, translation: finalTranslation, language: currentLanguage, timestamp: Date.now(), duration: recordingStartTime ? Math.floor((Date.now() - recordingStartTime) / 1000) : 0 };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(backup));
+    }
+
+    function checkForRecovery() {
+      const backup = localStorage.getItem(STORAGE_KEY);
+      if (backup) {
+        try {
+          const data = JSON.parse(backup);
+          if (Date.now() - data.timestamp < 24 * 60 * 60 * 1000 && data.transcript) {
+            document.getElementById('recoveryBanner').classList.remove('hidden');
+            return data;
+          }
+        } catch (e) {}
+      }
+      return null;
+    }
+
+    window.restoreSession = function() {
+      const backup = localStorage.getItem(STORAGE_KEY);
+      if (backup) {
+        try {
+          const data = JSON.parse(backup);
+          finalTranscript = data.transcript || '';
+          finalTranslation = data.translation || '';
+          currentLanguage = data.language || 'en';
+          transcriptContent.innerHTML = finalTranscript;
+          transcriptContent.classList.remove('text-slate-400', 'italic', 'flex', 'items-center', 'justify-center');
+          transcriptContent.classList.add('text-slate-900');
+          detectedLang.textContent = currentLanguage.toUpperCase();
+          if (finalTranslation) {
+            translationContent.innerHTML = finalTranslation;
+            translationPanel.classList.remove('hidden');
+            translationPanel.classList.add('flex');
+          }
+          recordStatus.textContent = `Restored ${Math.floor(data.duration / 60)}m ${data.duration % 60}s of transcript`;
+        } catch (e) {}
+      }
+      document.getElementById('recoveryBanner').classList.add('hidden');
+    };
+
+    window.dismissRecovery = function() {
+      localStorage.removeItem(STORAGE_KEY);
+      document.getElementById('recoveryBanner').classList.add('hidden');
+    };
+
+    checkForRecovery();
+
+    // Upload handling
     uploadZone.addEventListener('click', () => fileInput.click());
-    uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('active'); });
-    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('active'));
-    uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('active'); handleFiles(e.dataTransfer.files); });
+    uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('border-indigo-500', 'bg-indigo-50'); });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('border-indigo-500', 'bg-indigo-50'));
+    uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('border-indigo-500', 'bg-indigo-50'); handleFiles(e.dataTransfer.files); });
     fileInput.addEventListener('change', e => handleFiles(e.target.files));
 
     function handleFiles(files) {
-      const allowed = ['pdf', 'ppt', 'pptx', 'doc', 'docx', 'txt', 'rtf', 'csv', 'xlsx', 'xls'];
+      const allowed = ['pdf', 'ppt', 'pptx', 'doc', 'docx', 'txt', 'rtf', 'csv', 'xlsx', 'xls', 'mp3', 'wav', 'm4a', 'webm', 'ogg'];
       const newFiles = Array.from(files).filter(f => {
         const ext = f.name.split('.').pop().toLowerCase();
         return allowed.includes(ext) && f.size <= 50 * 1024 * 1024;
@@ -384,35 +439,17 @@
       updateFileList();
     }
 
-    function formatFileSize(bytes) {
-      if (bytes < 1024) return bytes + ' B';
-      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-    }
-
     function updateFileList() {
       fileList.innerHTML = '';
-      if (selectedFiles.length === 0) return;
-
       selectedFiles.forEach((file, index) => {
         const item = document.createElement('div');
-        item.className = 'dd-file-item';
-        item.innerHTML = `
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-          </svg>
-          <span>${file.name}</span>
-          <span class="file-size">${formatFileSize(file.size)}</span>
-          <button onclick="removeFile(${index})">Remove</button>
-        `;
+        item.className = 'flex items-center gap-2 px-3 py-2 bg-slate-100 border border-slate-300 rounded-lg';
+        item.innerHTML = `<span class="text-base">📄</span><span class="flex-1 text-sm text-slate-800 truncate">${file.name}</span><button onclick="removeFile(${index})" class="px-2 py-0.5 bg-red-100 border border-red-300 text-red-600 rounded text-xs font-bold hover:bg-red-200">✕</button>`;
         fileList.appendChild(item);
       });
     }
 
-    window.removeFile = function(i) {
-      selectedFiles.splice(i, 1);
-      updateFileList();
-    };
+    window.removeFile = function(i) { selectedFiles.splice(i, 1); updateFileList(); };
 
     async function extractPDFText(file) {
       try {
@@ -425,9 +462,7 @@
           text += content.items.map(item => item.str).join(' ') + '\n\n';
         }
         return text;
-      } catch (e) {
-        return `[Could not extract: ${file.name}]`;
-      }
+      } catch (e) { return `[Could not extract: ${file.name}]`; }
     }
 
     async function fileToBase64(file) {
@@ -440,35 +475,23 @@
     }
 
     async function processFiles(files) {
-      const results = { documents: [] };
-
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+      const results = { documents: [], audioFiles: [] };
+      for (const file of files) {
         const ext = file.name.split('.').pop().toLowerCase();
-
+        const audioExts = ['mp3', 'wav', 'm4a', 'webm', 'ogg', 'aac', 'flac'];
         try {
-          let content = '';
-          if (ext === 'pdf') {
-            content = await extractPDFText(file);
-          } else if (['txt', 'rtf', 'csv'].includes(ext)) {
-            content = await new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onload = e => resolve(e.target.result);
-              reader.onerror = () => reject(new Error('Failed to read text file'));
-              reader.readAsText(file);
-            });
-          } else {
+          if (audioExts.includes(ext)) {
             const base64 = await fileToBase64(file);
-            content = `[BASE64:${ext}]${base64}`;
+            results.audioFiles.push({ name: file.name, type: ext, content: base64, mimeType: file.type || `audio/${ext}`, isAudio: true });
+          } else {
+            let content = '';
+            if (ext === 'pdf') { content = await extractPDFText(file); }
+            else if (['txt', 'rtf', 'csv'].includes(ext)) { content = await new Promise((resolve, reject) => { const reader = new FileReader(); reader.onload = e => resolve(e.target.result); reader.onerror = () => reject(new Error('Failed')); reader.readAsText(file); }); }
+            else { const base64 = await fileToBase64(file); content = `[BASE64:${ext}]${base64}`; }
+            results.documents.push({ name: file.name, type: ext, content, isAudio: false });
           }
-          results.documents.push({ name: file.name, type: ext, content, isAudio: false });
         } catch (fileError) {
-          results.documents.push({
-            name: file.name,
-            type: ext,
-            content: `[Error processing file ${file.name}: ${fileError.message}]`,
-            isAudio: false
-          });
+          results.documents.push({ name: file.name, type: ext, content: `[Error: ${fileError.message}]`, isAudio: false });
         }
       }
       return results;
@@ -478,73 +501,194 @@
     ddSubmitBtn.addEventListener('click', async () => {
       const email = globalEmailInput.value.trim() || localStorage.getItem('ycpUserEmail');
       const instructions = ddInstructions.value.trim();
+      const hasTranscript = finalTranscript.trim().length > 0;
+      const hasFiles = selectedFiles.length > 0;
 
-      if (selectedFiles.length === 0) {
-        showError('Please upload at least one file');
-        return;
-      }
-      if (!email) {
-        showError('Please enter your email in the top right');
-        return;
-      }
+      if (!hasTranscript && !hasFiles) { alert('Please record a meeting or upload materials'); return; }
+      if (!email) { alert('Please enter your email in the sidebar'); return; }
 
       ddSubmitBtn.disabled = true;
       ddSubmitBtn.innerHTML = '<svg class="spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25" fill="none"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Processing...';
       hideMessages();
 
       try {
-        const processed = await processFiles(selectedFiles);
+        let processed = { documents: [], audioFiles: [] };
+        if (hasFiles) processed = await processFiles(selectedFiles);
+        const editedTranscript = transcriptContent.innerText.trim();
+        if (hasTranscript) {
+          processed.documents.unshift({ name: `Meeting_Recording_${new Date().toISOString().slice(0,10)}`, type: 'transcript', content: finalTranslation || editedTranscript, isAudio: false });
+        }
 
         const response = await fetch(`${API_BASE}/api/due-diligence`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            files: processed.documents,
-            audioFiles: [],
-            instructions: instructionMode === 'manual' ? instructions : '',
-            instructionMode,
-            reportLength: 'medium',
-            email,
-            generateWord: true
-          })
+          body: JSON.stringify({ files: processed.documents, audioFiles: processed.audioFiles, instructions: instructionMode === 'manual' ? instructions : '', instructionMode, reportLength: 'medium', email, generateWord: true, rawTranscript: editedTranscript, translatedTranscript: finalTranslation, detectedLanguage: currentLanguage, sessionId })
         });
 
         if (!response.ok) throw new Error('Request failed');
-
-        showSuccess(`DD Report will be emailed to ${email} within 10-15 minutes.`);
-
-        // Clear files for next submission
+        showSuccess(`DD Report & Transcript will be emailed to ${email} within 10-15 minutes.`);
+        localStorage.removeItem(STORAGE_KEY);
         selectedFiles = [];
         updateFileList();
         ddInstructions.value = '';
-
       } catch (err) {
         showError(err.message);
       } finally {
         ddSubmitBtn.disabled = false;
-        ddSubmitBtn.innerHTML = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
-        </svg> Generate DD Report`;
+        ddSubmitBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg> Generate DD Report';
       }
+    });
+
+    // Recording
+    recordBtn.addEventListener('click', async () => {
+      if (isRecording) stopRecording();
+      else await startRecording();
+    });
+
+    async function startRecording() {
+      try {
+        currentSpeaker = null;
+        currentTranslationSpeaker = null;
+        wsErrorShown = false;
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioContext = new AudioContext({ sampleRate: 16000 });
+        const source = audioContext.createMediaStreamSource(stream);
+        const processor = audioContext.createScriptProcessor(4096, 1, 1);
+
+        ws = new WebSocket(`${WS_BASE}/ws/transcribe`);
+        ws.onopen = () => ws.send(JSON.stringify({ type: 'start', language: selectedLang }));
+        ws.onmessage = (event) => {
+          let data;
+          try { data = JSON.parse(event.data); } catch (e) { return; }
+          if (data.type === 'session') { sessionId = data.sessionId; }
+          else if (data.type === 'ready') { source.connect(processor); processor.connect(audioContext.destination); }
+          else if (data.type === 'transcript') {
+            currentLanguage = data.language;
+            detectedLang.textContent = data.language?.toUpperCase() || '--';
+            if (data.isFinal) {
+              if (data.speaker !== null && data.speaker !== currentSpeaker) { currentSpeaker = data.speaker; finalTranscript += '<br><span class="text-indigo-600 font-semibold text-xs uppercase">Speaker ' + data.speaker + ':</span> '; }
+              finalTranscript += data.text + ' ';
+              transcriptContent.innerHTML = finalTranscript;
+            } else {
+              let interimPrefix = '';
+              if (data.speaker !== null && data.speaker !== currentSpeaker) { interimPrefix = '<br><span class="text-indigo-600 font-semibold text-xs uppercase">Speaker ' + data.speaker + ':</span> '; }
+              transcriptContent.innerHTML = finalTranscript + interimPrefix + '<span class="text-slate-400">' + data.text + '</span>';
+            }
+            transcriptContent.classList.remove('text-slate-400', 'italic', 'flex', 'items-center', 'justify-center');
+            transcriptContent.classList.add('text-slate-900');
+            transcriptContent.scrollTop = transcriptContent.scrollHeight;
+            if (data.language && data.language !== 'en') { translationPanel.classList.remove('hidden'); translationPanel.classList.add('flex'); }
+          } else if (data.type === 'translation') {
+            if (data.speaker !== null && data.speaker !== currentTranslationSpeaker) { currentTranslationSpeaker = data.speaker; finalTranslation += '<br><span class="text-indigo-600 font-semibold text-xs uppercase">Speaker ' + data.speaker + ':</span> '; }
+            finalTranslation += data.text + ' ';
+            translationContent.innerHTML = finalTranslation;
+            translationContent.scrollTop = translationContent.scrollHeight;
+          } else if (data.type === 'complete') {
+            if (data.r2Key) { currentR2Key = data.r2Key; downloadRecordingBtn.classList.remove('hidden'); }
+          } else if (data.type === 'error') { showError(data.message); }
+        };
+        ws.onerror = () => { if (!wsErrorShown) { wsErrorShown = true; showError('Connection error. Please try again.'); } stopRecording(); };
+        ws.onclose = (event) => { if (!event.wasClean && isRecording && !wsErrorShown) { wsErrorShown = true; showError(`Connection closed (code: ${event.code})`); stopRecording(); } };
+
+        processor.onaudioprocess = (e) => {
+          if (ws && ws.readyState === WebSocket.OPEN) {
+            const inputData = e.inputBuffer.getChannelData(0);
+            const int16Data = new Int16Array(inputData.length);
+            for (let i = 0; i < inputData.length; i++) { int16Data[i] = Math.max(-32768, Math.min(32767, Math.floor(inputData[i] * 32768))); }
+            ws.send(int16Data.buffer);
+          }
+        };
+
+        mediaRecorder = { stream, processor, source };
+        isRecording = true;
+        recordBtn.classList.add('recording-pulse', 'bg-red-500', 'border-red-500');
+        recordIcon.innerHTML = '<rect x="6" y="6" width="12" height="12" rx="2"/>';
+        recordIcon.classList.remove('text-red-500');
+        recordIcon.classList.add('text-white');
+        recordTimer.classList.add('text-red-500');
+        recordStatus.textContent = 'Recording... Click to stop';
+        recordStatus.classList.add('text-red-500', 'font-semibold');
+
+        recordingStartTime = Date.now();
+        timerInterval = setInterval(updateTimer, 1000);
+        autoSaveInterval = setInterval(saveToLocalStorage, 10000);
+
+        finalTranscript = '';
+        finalTranslation = '';
+        currentR2Key = null;
+        localStorage.removeItem(STORAGE_KEY);
+        transcriptContent.innerHTML = '';
+        transcriptContent.textContent = 'Listening...';
+        transcriptContent.classList.add('text-slate-400', 'italic', 'flex', 'items-center', 'justify-center');
+        translationContent.textContent = '';
+        translationPanel.classList.add('hidden');
+        translationPanel.classList.remove('flex');
+        detectedLang.textContent = '--';
+        downloadRecordingBtn.classList.add('hidden');
+        document.getElementById('recoveryBanner').classList.add('hidden');
+      } catch (err) {
+        showError('Could not access microphone. Please allow microphone access.');
+      }
+    }
+
+    function stopRecording() {
+      isRecording = false;
+      clearInterval(timerInterval);
+      clearInterval(autoSaveInterval);
+      saveToLocalStorage();
+
+      recordBtn.classList.remove('recording-pulse', 'bg-red-500', 'border-red-500');
+      recordIcon.innerHTML = '<circle cx="12" cy="12" r="8"/>';
+      recordIcon.classList.add('text-red-500');
+      recordIcon.classList.remove('text-white');
+      recordTimer.classList.remove('text-red-500');
+      recordStatus.textContent = 'Recording complete. Click to record again.';
+      recordStatus.classList.remove('text-red-500', 'font-semibold');
+
+      if (mediaRecorder) {
+        mediaRecorder.processor.disconnect();
+        mediaRecorder.source.disconnect();
+        mediaRecorder.stream.getTracks().forEach(t => t.stop());
+        mediaRecorder = null;
+      }
+      if (audioContext) { audioContext.close(); audioContext = null; }
+      if (ws) {
+        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: 'stop' }));
+        ws.onopen = null; ws.onmessage = null; ws.onerror = null; ws.onclose = null;
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) ws.close();
+        ws = null;
+      }
+    }
+
+    function updateTimer() {
+      const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
+      const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
+      const secs = (elapsed % 60).toString().padStart(2, '0');
+      recordTimer.textContent = `${mins}:${secs}`;
+    }
+
+    downloadRecordingBtn.addEventListener('click', () => {
+      if (!currentR2Key) { showError('No recording available'); return; }
+      window.open(`${API_BASE}/api/recording/${encodeURIComponent(currentR2Key)}`, '_blank');
     });
 
     function showSuccess(msg) {
       successText.textContent = msg;
-      successMessage.classList.add('show');
-      errorMessage.classList.remove('show');
-      setTimeout(() => successMessage.classList.remove('show'), 8000);
+      successMessage.classList.remove('hidden');
+      errorMessage.classList.add('hidden');
+      setTimeout(() => successMessage.classList.add('hidden'), 5000);
     }
 
     function showError(msg) {
       errorText.textContent = msg;
-      errorMessage.classList.add('show');
-      successMessage.classList.remove('show');
-      setTimeout(() => errorMessage.classList.remove('show'), 5000);
+      errorMessage.classList.remove('hidden');
+      successMessage.classList.add('hidden');
+      setTimeout(() => errorMessage.classList.add('hidden'), 5000);
     }
 
     function hideMessages() {
-      successMessage.classList.remove('show');
-      errorMessage.classList.remove('show');
+      successMessage.classList.add('hidden');
+      errorMessage.classList.add('hidden');
     }
   </script>
 </body>
