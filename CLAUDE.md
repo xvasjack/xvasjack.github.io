@@ -37,7 +37,7 @@ All services have:
 - Rate limiting (100 req/min)
 - XSS protection (escapeHtml in emails)
 - Path traversal protection
-- 10MB body size limit (DOS prevention)
+- 100MB body size limit (for DD file uploads)
 
 ## Shared Modules
 - `backend/shared/security.js` - Security middleware and helpers

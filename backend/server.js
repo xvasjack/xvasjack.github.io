@@ -68,14 +68,15 @@ app.use(securityHeaders);
 app.use(rateLimiter);
 app.use(cors());
 app.use(requestLogger);
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
+// Increased to 100MB for DD tool which sends base64-encoded files in JSON
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 // Multer configuration for file uploads (memory storage)
-// Add 50MB limit to prevent OOM on Railway containers
+// 100MB limit per file for DD tool
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 50 * 1024 * 1024 }, // 50MB max
+  limits: { fileSize: 100 * 1024 * 1024 }, // 100MB max
 });
 
 // Check required environment variables
@@ -872,41 +873,69 @@ async function callDeepSeek(prompt, maxTokens = 4000) {
   }
 }
 
-// Kimi K2 - Moonshot's thinking model for deep analysis
-// Excellent for reasoning tasks, analysis, and structured thinking
-async function callKimiK2(prompt, maxTokens = 16000) {
+// Kimi (Moonshot) - 128k context model for deep analysis
+// Uses same setup as market-research for consistency
+async function callKimi128k(prompt, maxTokens = 16000, retries = 3) {
   if (!process.env.KIMI_API_KEY) {
     console.warn('[Kimi] API key not set, falling back to Gemini');
     return null;
   }
-  try {
-    console.log('[Kimi K2] Starting deep analysis...');
-    const response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.KIMI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'kimi-k2-0711-preview',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: maxTokens,
-        temperature: 0.2,
-      }),
-      timeout: 300000, // 5 minutes - thinking models take longer
-    });
-    const data = await response.json();
-    if (data.error) {
-      console.error('[Kimi K2] API error:', data.error);
+
+  const kimiBaseUrl = process.env.KIMI_API_BASE || 'https://api.moonshot.ai/v1';
+
+  for (let attempt = 1; attempt <= retries; attempt++) {
+    try {
+      console.log(`[Kimi] Starting analysis (attempt ${attempt}/${retries})...`);
+      const response = await fetch(`${kimiBaseUrl}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${process.env.KIMI_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: 'moonshot-v1-128k',
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: maxTokens,
+          temperature: 0.2,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        // Retry on server errors or rate limits
+        if ((response.status >= 500 || response.status === 429) && attempt < retries) {
+          console.warn(`[Kimi] HTTP ${response.status}, retrying in ${attempt * 2}s...`);
+          await new Promise((r) => setTimeout(r, attempt * 2000));
+          continue;
+        }
+        console.error(`[Kimi] HTTP error ${response.status}:`, errorText.substring(0, 200));
+        return null;
+      }
+
+      const data = await response.json();
+      if (data.error) {
+        console.error('[Kimi] API error:', data.error);
+        return null;
+      }
+
+      const result = data.choices?.[0]?.message?.content || '';
+      if (!result) {
+        console.warn('[Kimi] Empty response');
+        return null;
+      }
+
+      console.log(`[Kimi] Analysis complete (${result.length} chars)`);
+      return result;
+    } catch (error) {
+      console.error(`[Kimi] Error (attempt ${attempt}):`, error.message);
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, attempt * 2000));
+        continue;
+      }
       return null;
     }
-    const result = data.choices?.[0]?.message?.content || '';
-    console.log(`[Kimi K2] Analysis complete (${result.length} chars)`);
-    return result;
-  } catch (error) {
-    console.error('[Kimi K2] Error:', error.message);
-    return null;
   }
+  return null;
 }
 
 // Transcribe audio using OpenAI Whisper
@@ -11423,9 +11452,43 @@ app.post('/api/utb', async (req, res) => {
 
 // ============ DUE DILIGENCE REPORT GENERATOR (MULTI-AGENT) ============
 // Uses a 3-phase pipeline for high-quality DD reports:
-// Phase 1: Extract ALL content from uploaded files
-// Phase 2: Deep analysis with thinking model (Kimi K2 or Gemini)
+// Phase 1: Extract ALL content from uploaded files (with chunking for large inputs)
+// Phase 2: Deep analysis with Kimi 128k or Gemini
 // Phase 3: Generate well-structured report with Gemini 2.5 Pro
+
+// Content limits (in characters)
+const DD_CONTENT_LIMIT = 400000; // ~100K tokens, safe for most models
+const DD_CHUNK_SIZE = 80000; // Size for individual file summaries
+
+// Helper: Summarize a single file if it's too large
+async function summarizeFileContent(fileName, content, maxChars = DD_CHUNK_SIZE) {
+  if (content.length <= maxChars) {
+    return content;
+  }
+
+  console.log(`[DD]   Summarizing large file: ${fileName} (${content.length} -> ${maxChars} chars)`);
+
+  const summaryPrompt = `Summarize the following document content, preserving ALL:
+- Company names, people names, organization names
+- Numbers, dates, financial figures, percentages
+- Key facts, claims, and data points
+- Risks, concerns, opportunities mentioned
+
+Document: ${fileName}
+Content (truncated for summarization):
+${content.substring(0, maxChars * 2)}
+
+Provide a detailed summary that captures all factual information. Do not omit any numbers or names.`;
+
+  // Use Gemini Flash for fast summarization
+  const summary = await callGemini3Flash(summaryPrompt, false);
+  if (summary && summary.length > 100) {
+    return `[SUMMARIZED from ${content.length} chars]\n${summary}`;
+  }
+
+  // Fallback: truncate with notice
+  return `[TRUNCATED - original was ${content.length} chars]\n${content.substring(0, maxChars)}`;
+}
 
 async function generateDueDiligenceReport(
   files,
@@ -11441,12 +11504,11 @@ async function generateDueDiligenceReport(
   // ========== PHASE 1: EXTRACT ALL CONTENT ==========
   console.log('\n[DD] === PHASE 1: CONTENT EXTRACTION ===');
 
-  let combinedContent = '';
   const filesSummary = [];
   const extractedFiles = [];
 
   for (const file of files) {
-    console.log(`[DD] Extracting: ${file.name} (${file.type}) - ${file.content?.length || 0} chars`);
+    console.log(`[DD] Extracting: ${file.name} (${file.type}) - ${file.content?.length || 0} chars raw`);
     filesSummary.push(`- ${file.name} (${file.type.toUpperCase()})`);
 
     let extractedContent = '';
@@ -11480,11 +11542,36 @@ async function generateDueDiligenceReport(
 
     if (extractedContent && extractedContent.length > 0) {
       extractedFiles.push({ name: file.name, content: extractedContent });
-      combinedContent += `\n\n${'='.repeat(50)}\nSOURCE FILE: ${file.name}\n${'='.repeat(50)}\n${extractedContent}\n`;
     }
   }
 
-  console.log(`[DD] Phase 1 Complete: ${extractedFiles.length} files, ${combinedContent.length} total chars`);
+  // Calculate total content size
+  let totalChars = extractedFiles.reduce((sum, f) => sum + f.content.length, 0);
+  console.log(`[DD] Phase 1 Raw: ${extractedFiles.length} files, ${totalChars} total chars`);
+
+  // ========== PHASE 1.5: CHUNKING (if content too large) ==========
+  let combinedContent = '';
+
+  if (totalChars > DD_CONTENT_LIMIT) {
+    console.log(`\n[DD] === PHASE 1.5: CHUNKING (content exceeds ${DD_CONTENT_LIMIT} chars) ===`);
+
+    // Summarize each file to fit within limits
+    const targetPerFile = Math.floor(DD_CONTENT_LIMIT / extractedFiles.length);
+
+    for (const file of extractedFiles) {
+      const processedContent = await summarizeFileContent(file.name, file.content, targetPerFile);
+      combinedContent += `\n\n${'='.repeat(50)}\nSOURCE FILE: ${file.name}\n${'='.repeat(50)}\n${processedContent}\n`;
+    }
+
+    console.log(`[DD] After chunking: ${combinedContent.length} chars (was ${totalChars})`);
+  } else {
+    // No chunking needed - use full content
+    for (const file of extractedFiles) {
+      combinedContent += `\n\n${'='.repeat(50)}\nSOURCE FILE: ${file.name}\n${'='.repeat(50)}\n${file.content}\n`;
+    }
+  }
+
+  console.log(`[DD] Phase 1 Complete: ${extractedFiles.length} files, ${combinedContent.length} chars for analysis`);
 
   // Fetch any URLs in instructions
   let onlineResearchContent = '';
@@ -11505,7 +11592,7 @@ async function generateDueDiligenceReport(
   }
 
   // ========== PHASE 2: DEEP ANALYSIS WITH THINKING MODEL ==========
-  console.log('\n[DD] === PHASE 2: DEEP ANALYSIS (Thinking Model) ===');
+  console.log('\n[DD] === PHASE 2: DEEP ANALYSIS ===');
 
   const analysisPrompt = `You are a senior due diligence analyst. Carefully read and analyze ALL the source materials provided below.
 
@@ -11573,10 +11660,10 @@ Be exhaustive - extract EVERYTHING relevant from the documents.`;
 
   let deepAnalysis = '';
 
-  // Try Kimi K2 first (best for deep thinking)
+  // Try Kimi 128k first (best context window for large content)
   if (process.env.KIMI_API_KEY) {
-    console.log('[DD] Using Kimi K2 for deep analysis...');
-    deepAnalysis = await callKimiK2(analysisPrompt, 32000);
+    console.log('[DD] Using Kimi 128k for deep analysis...');
+    deepAnalysis = await callKimi128k(analysisPrompt, 16000);
   }
 
   // Fallback to Gemini 2.5 Pro if Kimi unavailable

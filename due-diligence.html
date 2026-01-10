@@ -394,6 +394,31 @@
       fileList.innerHTML = '';
       if (selectedFiles.length === 0) return;
 
+      // Calculate total size
+      const totalSize = selectedFiles.reduce((sum, f) => sum + f.size, 0);
+      const totalMB = totalSize / (1024 * 1024);
+
+      // Show summary header
+      const summary = document.createElement('div');
+      summary.style.cssText = 'display: flex; justify-content: space-between; font-size: 13px; padding: 8px 12px; background: #f8fafc; border-radius: 6px; margin-bottom: 8px;';
+
+      let sizeColor = '#64748b'; // gray
+      let sizeWarning = '';
+      if (totalMB > 50) {
+        sizeColor = '#f59e0b'; // amber
+        sizeWarning = ' (large - will be summarized)';
+      }
+      if (totalMB > 200) {
+        sizeColor = '#dc2626'; // red
+        sizeWarning = ' (may be slow)';
+      }
+
+      summary.innerHTML = `
+        <span><strong>${selectedFiles.length}</strong> file${selectedFiles.length > 1 ? 's' : ''}</span>
+        <span style="color: ${sizeColor};">Total: <strong>${formatFileSize(totalSize)}</strong>${sizeWarning}</span>
+      `;
+      fileList.appendChild(summary);
+
       selectedFiles.forEach((file, index) => {
         const item = document.createElement('div');
         item.className = 'dd-file-item';
