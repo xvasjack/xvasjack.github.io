@@ -7,308 +7,128 @@
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <style>
-    /* Override page-content flex layout */
     .page-content.dd-container {
       display: block !important;
       align-items: unset !important;
-      max-width: 1200px;
+      max-width: 800px;
       margin: 0 auto;
-      padding: 12px 20px;
+      padding: 20px;
     }
 
-    /* Instructions */
-    .dd-instructions {
-      background: var(--accent-soft);
-      border: 1px solid var(--accent);
-      border-radius: 6px;
-      padding: 8px 12px;
-      margin-bottom: 12px;
-      font-size: 11px;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 4px 14px;
-      align-items: center;
+    .dd-header {
+      text-align: center;
+      margin-bottom: 24px;
     }
-    .dd-instructions strong { color: var(--accent); }
-    .dd-instructions span { color: var(--text-main); }
-
-    /* Main 2-column grid */
-    .dd-two-col {
-      display: grid;
-      grid-template-columns: 400px 1fr;
-      gap: 18px;
+    .dd-header h1 {
+      font-size: 22px;
+      margin: 0 0 8px 0;
+      font-weight: 600;
     }
-    @media (max-width: 900px) {
-      .dd-two-col { grid-template-columns: 1fr; }
-    }
-
-    .dd-left-col {
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      max-height: calc(100vh - 160px);
-      overflow-y: auto;
-      padding-right: 4px;
+    .dd-header p {
       font-size: 14px;
+      color: var(--text-muted);
+      margin: 0;
     }
 
-    /* Upload Zone - Compact */
+    /* Upload Zone */
     .dd-upload-zone {
-      border: 1px dashed var(--border-medium);
+      border: 2px dashed var(--border-medium);
       border-radius: var(--radius-md);
-      padding: 10px;
+      padding: 40px 20px;
       text-align: center;
       cursor: pointer;
       transition: all 0.2s ease;
       background: var(--bg-body);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 10px;
+      margin-bottom: 16px;
     }
     .dd-upload-zone:hover, .dd-upload-zone.active {
       border-color: var(--accent);
       background: var(--accent-soft);
     }
-    .dd-upload-zone svg { color: var(--accent); width: 20px; height: 20px; }
-    .dd-upload-zone p { font-size: 14px; color: var(--text-muted); margin: 0; }
+    .dd-upload-zone svg {
+      color: var(--accent);
+      width: 48px;
+      height: 48px;
+      margin-bottom: 12px;
+    }
+    .dd-upload-zone p {
+      font-size: 16px;
+      color: var(--text-main);
+      margin: 0 0 8px 0;
+    }
+    .dd-upload-zone span {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
     #fileInput { display: none; }
 
     .dd-file-list {
-      margin-top: 8px;
-      display: flex !important;
+      display: flex;
       flex-direction: column;
-      gap: 6px;
-      max-height: 150px;
-      overflow-y: auto;
+      gap: 8px;
+      margin-bottom: 20px;
     }
     .dd-file-item {
-      display: flex !important;
-      align-items: center;
-      gap: 8px;
-      padding: 10px 12px;
-      background: #f1f5f9 !important;
-      border: 1px solid #cbd5e1 !important;
-      border-radius: 6px;
-      min-height: 40px;
-    }
-    .dd-file-item svg { width: 16px; height: 16px; color: #3b82f6; flex-shrink: 0; }
-    .dd-file-item span { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #1e293b; }
-    .dd-file-item button { background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 18px; padding: 0 4px; line-height: 1; }
-    .dd-file-item button:hover { color: #ef4444; }
-
-    /* Recording Controls */
-    .dd-record-controls {
-      background: var(--bg-surface);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-md);
-      padding: 12px;
-      display: flex;
-      align-items: center;
-      gap: 14px;
-    }
-    .dd-record-btn {
-      width: 44px;
-      height: 44px;
-      border-radius: 50%;
-      border: 3px solid var(--error);
-      background: white;
-      cursor: pointer;
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.3s;
-    }
-    .dd-record-btn:hover { transform: scale(1.05); }
-    .dd-record-btn.recording {
-      animation: pulse-record 1.5s infinite;
-      background: var(--error);
-      border-color: var(--error);
-    }
-    .dd-record-btn svg { width: 22px; height: 22px; color: var(--error); }
-    .dd-record-btn.recording svg { color: white; }
-    @keyframes pulse-record {
-      0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); }
-      50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
-    }
-    .dd-record-info {
-      display: flex;
-      flex-direction: column;
-      gap: 3px;
-    }
-    .dd-record-timer {
-      font-family: monospace;
-      font-size: 20px;
-      font-weight: 700;
-      color: var(--text-main);
-    }
-    .dd-record-timer.recording { color: var(--error); }
-    .dd-record-status {
-      font-size: 14px;
-      color: var(--text-muted);
-    }
-    .dd-record-status.recording { color: var(--error); font-weight: 600; }
-
-    .dd-lang-select {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 5px;
-      justify-content: center;
-    }
-    .dd-lang-btn {
-      padding: 6px 12px;
-      border: 1px solid var(--border-medium);
-      border-radius: var(--radius-sm);
-      background: var(--bg-body);
-      cursor: pointer;
-      font-size: 13px;
-      transition: all 0.15s;
-    }
-    .dd-lang-btn:hover { border-color: var(--accent); }
-    .dd-lang-btn.active {
-      background: var(--accent);
-      border-color: var(--accent);
-      color: white;
-    }
-    .dd-lang-multi.active {
-      background: linear-gradient(135deg, #4f46e5, #7c3aed) !important;
-      border-color: #4f46e5 !important;
-    }
-
-    /* Transcript Panels - Main Focus */
-    .dd-transcript-panels {
-      display: flex;
-      flex-direction: column;
-      gap: 14px;
-      min-width: 0;
-      max-height: calc(100vh - 160px);
-      overflow-y: auto;
-    }
-    .dd-transcript-panel {
-      flex: none;
-      background: var(--bg-surface);
-      border: 1px solid var(--border-subtle);
-      border-radius: var(--radius-md);
-      display: flex;
-      flex-direction: column;
-      min-height: 200px;
-      max-height: 350px;
-    }
-    .dd-panel-header {
-      padding: 8px 12px;
-      border-bottom: 1px solid var(--border-subtle);
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
       display: flex;
       align-items: center;
       gap: 10px;
+      padding: 12px 14px;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
     }
-    .dd-panel-header .lang-badge {
-      background: var(--accent-soft);
-      color: var(--accent);
-      padding: 3px 8px;
-      border-radius: 10px;
-      font-size: 11px;
-    }
-    .dd-panel-content {
+    .dd-file-item svg { width: 20px; height: 20px; color: #3b82f6; flex-shrink: 0; }
+    .dd-file-item span {
       flex: 1;
-      padding: 16px;
       font-size: 14px;
-      line-height: 1.6;
-      overflow-y: auto;
-      color: var(--text-main);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: #1e293b;
     }
-    .dd-panel-content:focus {
-      outline: 2px solid var(--accent);
-      outline-offset: -2px;
+    .dd-file-item .file-size {
+      font-size: 12px;
+      color: #64748b;
+      flex-shrink: 0;
     }
-    .dd-panel-content .speaker {
-      color: var(--accent);
-      font-weight: 600;
-      margin-right: 4px;
-    }
-    .dd-panel-content.empty {
-      color: var(--text-light);
-      font-style: italic;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-    }
-
-    /* Recovery Banner */
-    .dd-recovery-banner {
-      background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-      border: 1px solid #f59e0b;
-      border-radius: var(--radius-md);
-      padding: 14px 18px;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 14px;
-    }
-    .dd-recovery-banner p { margin: 0; font-size: 14px; color: #92400e; }
-    .dd-recovery-banner strong { color: #78350f; }
-    .dd-recovery-actions { display: flex; gap: 10px; }
-    .dd-recovery-btn {
-      padding: 8px 14px;
-      border: none;
-      border-radius: var(--radius-sm);
-      font-size: 13px;
-      font-weight: 600;
+    .dd-file-item button {
+      background: #fee2e2;
+      border: 1px solid #fca5a5;
+      color: #dc2626;
       cursor: pointer;
-    }
-    .dd-recovery-btn.restore { background: #f59e0b; color: white; }
-    .dd-recovery-btn.dismiss { background: white; color: #92400e; border: 1px solid #f59e0b; }
-    .dd-panel-content .interim { color: var(--text-muted); }
-    .dd-panel-content .speaker-label {
-      color: var(--accent);
+      padding: 4px 10px;
+      border-radius: 4px;
       font-weight: 600;
       font-size: 12px;
-      text-transform: uppercase;
     }
-    .dd-transcript-panel.translation { border-left: 3px solid var(--success); }
-    .dd-transcript-panel.translation .dd-panel-header { color: var(--success); }
-
-    /* Section Headers */
-    .dd-section-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 15px;
-      font-weight: 600;
-      color: var(--text-main);
-      margin-bottom: 8px;
-    }
-    .dd-section-header svg { color: var(--accent); width: 16px; height: 16px; }
+    .dd-file-item button:hover { background: #fecaca; }
 
     /* Form Section */
     .dd-form-section {
-      margin-top: 12px;
-      padding-top: 12px;
-      border-top: 1px solid var(--border-subtle);
-      position: sticky;
-      bottom: 0;
-      background: var(--bg-body);
-      padding-bottom: 4px;
+      background: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      margin-bottom: 16px;
     }
-    .dd-form-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 16px;
+    .dd-form-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
     }
-    @media (max-width: 600px) {
-      .dd-form-row { grid-template-columns: 1fr; }
+    .dd-form-label label {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
     }
-
-    /* Mode Toggle Buttons */
+    .dd-mode-toggle {
+      display: flex;
+      gap: 6px;
+    }
     .dd-mode-btn {
-      padding: 4px 10px;
-      font-size: 11px;
+      padding: 5px 12px;
+      font-size: 12px;
       font-weight: 600;
       border: 1px solid var(--border-medium);
       border-radius: 4px;
@@ -322,6 +142,72 @@
       background: var(--accent);
       border-color: var(--accent);
       color: white;
+    }
+    .dd-auto-hint {
+      font-size: 13px;
+      color: var(--text-muted);
+      padding: 12px;
+      background: var(--accent-soft);
+      border-radius: 4px;
+      margin-bottom: 12px;
+    }
+    .dd-instructions-box {
+      width: 100%;
+      padding: 12px;
+      border: 1px solid var(--border-medium);
+      border-radius: 4px;
+      font-size: 13px;
+      resize: vertical;
+      min-height: 100px;
+      line-height: 1.5;
+      font-family: inherit;
+    }
+    .dd-instructions-box:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    /* Submit Button */
+    .dd-submit-btn {
+      width: 100%;
+      padding: 14px 20px;
+      font-size: 15px;
+      font-weight: 600;
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: background 0.2s;
+    }
+    .dd-submit-btn:hover { background: var(--accent-hover); }
+    .dd-submit-btn:disabled {
+      background: var(--text-light);
+      cursor: not-allowed;
+    }
+    .dd-submit-btn svg { width: 20px; height: 20px; }
+
+    /* Supported formats */
+    .dd-formats {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: 8px;
+    }
+
+    /* Spinner */
+    .spinner {
+      animation: spin 1s linear infinite;
+      width: 20px;
+      height: 20px;
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
     }
   </style>
 </head>
@@ -352,6 +238,7 @@
       <a href="profile-slides.html">Slides</a>
       <a href="utb.html">UTB</a>
       <a href="market-research.html">Market Research</a>
+      <a href="due-diligence.html" class="active">Due Diligence</a>
       <div class="nav-dropdown">
         <button class="nav-dropdown-toggle">
           Other Tools
@@ -360,7 +247,6 @@
         <div class="nav-dropdown-menu">
           <a href="find-target-slow.html">v3 Slow</a>
           <a href="find-target-v4.html">v4 Search</a>
-          <a href="due-diligence.html" class="active">Due Diligence</a>
         </div>
       </div>
     </nav>
@@ -370,132 +256,64 @@
     </div>
   </header>
 
-  <main class="app-main" style="padding-top: 10px;">
+  <main class="app-main" style="padding-top: 20px;">
     <section class="page-content dd-container">
-      <!-- Compact Header -->
-      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-        <span class="status-badge" style="margin: 0; font-size: 10px; padding: 2px 8px;">Online</span>
-        <h1 style="font-size: 16px; margin: 0; font-weight: 600;">Due Diligence Report</h1>
+      <!-- Header -->
+      <div class="dd-header">
+        <h1>Due Diligence Report Generator</h1>
+        <p>Upload documents and receive a comprehensive DD report in Word format</p>
       </div>
 
-      <!-- Messages (moved to top for visibility) -->
-      <div class="message success" id="successMessage" style="margin-bottom: 12px;">
+      <!-- Messages -->
+      <div class="message success" id="successMessage">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
         <span id="successText">Success!</span>
       </div>
-      <div class="message error" id="errorMessage" style="margin-bottom: 12px;">
+      <div class="message error" id="errorMessage">
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         <span id="errorText">Error</span>
       </div>
 
-      <!-- How to Use Instructions -->
-      <div class="dd-instructions">
-        <strong>How to use:</strong>
-        <span>1. Select your language and click record</span>
-        <span>2. Edit transcript if needed</span>
-        <span>3. Optionally upload supporting materials (PDF, PPT, Word)</span>
-        <span>4. Add context and submit to receive DD report via email</span>
+      <!-- Upload Zone -->
+      <input type="file" id="fileInput" multiple accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.rtf,.csv,.xlsx,.xls">
+      <div class="dd-upload-zone" id="uploadZone">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
+        </svg>
+        <p>Drop files here or click to upload</p>
+        <span>PDF, Word, PowerPoint, Excel, TXT (max 50MB each)</span>
       </div>
+      <div class="dd-formats">Supported: .pdf .doc .docx .ppt .pptx .xls .xlsx .txt .csv .rtf</div>
 
-      <!-- Recovery Banner (hidden by default) -->
-      <div class="dd-recovery-banner" id="recoveryBanner" style="display: none; margin-bottom: 12px;">
-        <p><strong>Unsaved recording found!</strong> Your previous session was interrupted.</p>
-        <div class="dd-recovery-actions">
-          <button class="dd-recovery-btn restore" onclick="restoreSession()">Restore</button>
-          <button class="dd-recovery-btn dismiss" onclick="dismissRecovery()">Dismiss</button>
-        </div>
-      </div>
+      <!-- File List -->
+      <div class="dd-file-list" id="fileList"></div>
 
-      <!-- Main 2-Column Layout -->
-      <div class="dd-two-col">
-        <!-- Left Column: Recording + Upload + Form -->
-        <div class="dd-left-col">
-          <!-- Recording Section -->
-          <div class="dd-section-header">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/></svg>
-            <span>Record Meeting</span>
-          </div>
-          <!-- Language Selector -->
-          <div class="dd-lang-select" id="langSelect">
-            <button type="button" class="dd-lang-btn dd-lang-multi" data-lang="multi" style="background: linear-gradient(135deg, #4f46e5, #7c3aed); color: white; font-weight: 600;">Multi</button>
-            <button type="button" class="dd-lang-btn" data-lang="en">English</button>
-            <button type="button" class="dd-lang-btn" data-lang="zh">Chinese</button>
-            <button type="button" class="dd-lang-btn" data-lang="ja">Japanese</button>
-            <button type="button" class="dd-lang-btn" data-lang="ko">Korean</button>
-            <button type="button" class="dd-lang-btn" data-lang="vi">Vietnamese</button>
-            <button type="button" class="dd-lang-btn" data-lang="id">Indonesian</button>
-            <button type="button" class="dd-lang-btn" data-lang="ms">Malay</button>
-            <button type="button" class="dd-lang-btn" data-lang="th">Thai</button>
-            <button type="button" class="dd-lang-btn" data-lang="hi">Hindi</button>
-            <button type="button" class="dd-lang-btn" data-lang="tl">Filipino</button>
-          </div>
-          <div id="langHint" style="font-size: 13px; color: var(--text-main); text-align: center; margin-bottom: 8px; padding: 8px 10px; background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%); border-radius: 4px; border: 1px solid #3b82f6;">
-            <strong style="color: #1e40af;">Multi-language mode:</strong> <span style="color: #1e3a5f;">Auto-detects English, Japanese, Korean, Vietnamese, Hindi and more.</span><br><span style="font-size: 11px; color: #64748b;">Note: Chinese, Thai, Malay, Filipino - select directly.</span>
-          </div>
-          <div class="dd-record-controls">
-            <button class="dd-record-btn" id="recordBtn">
-              <svg fill="currentColor" viewBox="0 0 24 24" id="recordIcon"><circle cx="12" cy="12" r="8"/></svg>
-            </button>
-            <div class="dd-record-info">
-              <div class="dd-record-timer" id="recordTimer">00:00</div>
-              <div class="dd-record-status" id="recordStatus">Click to start</div>
-            </div>
-            <button type="button" id="downloadRecordingBtn" style="display: none; margin-left: auto; padding: 4px 8px; font-size: 10px; background: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: 4px; color: var(--text-muted); cursor: pointer;">Download</button>
-          </div>
-
-          <!-- Upload Section -->
-          <div class="dd-section-header" style="margin-top: 10px;">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
-            <span>Upload Materials <span style="font-weight: 400; color: var(--text-muted);">(optional)</span></span>
-          </div>
-          <input type="file" id="fileInput" multiple accept=".pdf,.ppt,.pptx,.doc,.docx,.txt,.rtf,.csv,.xlsx,.xls,.mp3,.wav,.m4a,.webm,.ogg">
-          <div class="dd-upload-zone" id="uploadZone">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="24" height="24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-            <p>Drop files or click</p>
-          </div>
-          <div id="fileList"></div>
-
-          <!-- Form Section -->
-          <div class="dd-form-section">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-              <label style="font-size: 13px; font-weight: 600; color: var(--text-main);">Instructions</label>
-              <div class="dd-mode-toggle" style="display: flex; gap: 5px;">
-                <button type="button" class="dd-mode-btn active" id="autoModeBtn" onclick="setInstructionMode('auto')">Auto</button>
-                <button type="button" class="dd-mode-btn" id="manualModeBtn" onclick="setInstructionMode('manual')">Manual</button>
-              </div>
-            </div>
-            <div id="autoModeHint" style="font-size: 12px; color: var(--text-muted); margin-bottom: 8px; padding: 8px 10px; background: var(--accent-soft); border-radius: 4px;">
-              AI will automatically analyze the transcript and materials to generate a comprehensive DD report.
-            </div>
-            <textarea id="ddInstructions" rows="4" placeholder="Example instructions:
-• We are YCP, representing Speaker 1 (the buyer)
-• Speaker 2 is the target company CEO
-• Focus on: financials, risks, synergies
-• Summarize from our client's perspective" style="width: 100%; padding: 10px; border: 1px solid var(--border-medium); border-radius: 4px; font-size: 12px; resize: vertical; display: none; line-height: 1.5;"></textarea>
-
-            <button type="button" class="submit-btn" id="ddSubmitBtn" style="width: 100%; padding: 12px; font-size: 14px; margin-top: 10px;">
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="16" height="16"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
-              Generate DD Report
-            </button>
+      <!-- Instructions Section -->
+      <div class="dd-form-section">
+        <div class="dd-form-label">
+          <label>Instructions</label>
+          <div class="dd-mode-toggle">
+            <button type="button" class="dd-mode-btn active" id="autoModeBtn" onclick="setInstructionMode('auto')">Auto</button>
+            <button type="button" class="dd-mode-btn" id="manualModeBtn" onclick="setInstructionMode('manual')">Manual</button>
           </div>
         </div>
-
-        <!-- Right Column: Editable Transcript -->
-        <div class="dd-transcript-panels">
-          <div class="dd-transcript-panel">
-            <div class="dd-panel-header">
-              <span>Live Transcript</span>
-              <span class="lang-badge" id="detectedLang">--</span>
-              <span style="margin-left: auto; font-size: 11px; color: var(--text-muted);">Click to edit</span>
-            </div>
-            <div class="dd-panel-content empty" id="transcriptContent" contenteditable="true" style="cursor: text;">Start recording to see live transcription...</div>
-          </div>
-          <div class="dd-transcript-panel translation" id="translationPanel" style="display: none;">
-            <div class="dd-panel-header"><span>English Translation</span></div>
-            <div class="dd-panel-content" id="translationContent" contenteditable="true"></div>
-          </div>
+        <div class="dd-auto-hint" id="autoModeHint">
+          AI will automatically analyze uploaded documents and generate a comprehensive DD report.
         </div>
+        <textarea id="ddInstructions" class="dd-instructions-box" rows="5" placeholder="Example instructions:
+• Focus on financial performance and risks
+• Summarize key findings for buyer's perspective
+• Highlight any red flags or concerns
+• Include market position analysis" style="display: none;"></textarea>
       </div>
+
+      <!-- Submit Button -->
+      <button type="button" class="dd-submit-btn" id="ddSubmitBtn">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg>
+        Generate DD Report
+      </button>
     </section>
   </main>
 
@@ -504,94 +322,29 @@
 
     // Email caching
     const globalEmailInput = document.getElementById('globalEmail');
-
     const cachedEmail = localStorage.getItem('ycpUserEmail');
     if (cachedEmail) {
       globalEmailInput.value = cachedEmail;
     }
-
     globalEmailInput.addEventListener('input', () => {
       localStorage.setItem('ycpUserEmail', globalEmailInput.value);
     });
 
     const API_BASE = 'https://xvasjackgithubio-production.up.railway.app';
-    const WS_BASE = API_BASE.replace('https://', 'wss://').replace('http://', 'ws://');
 
     // Elements
     const uploadZone = document.getElementById('uploadZone');
     const fileInput = document.getElementById('fileInput');
     const fileList = document.getElementById('fileList');
-    const recordBtn = document.getElementById('recordBtn');
-    const recordIcon = document.getElementById('recordIcon');
-    const recordTimer = document.getElementById('recordTimer');
-    const recordStatus = document.getElementById('recordStatus');
-    const downloadRecordingBtn = document.getElementById('downloadRecordingBtn');
     const ddSubmitBtn = document.getElementById('ddSubmitBtn');
     const ddInstructions = document.getElementById('ddInstructions');
-    const transcriptContent = document.getElementById('transcriptContent');
-    const translationContent = document.getElementById('translationContent');
-    const translationPanel = document.getElementById('translationPanel');
-    const detectedLang = document.getElementById('detectedLang');
     const successMessage = document.getElementById('successMessage');
     const errorMessage = document.getElementById('errorMessage');
     const successText = document.getElementById('successText');
     const errorText = document.getElementById('errorText');
 
     let selectedFiles = [];
-    let selectedLang = 'multi';  // Default to Multi (auto-detect)
-    let isRecording = false;
-
-    // Set Multi as default selected on page load
-    document.querySelector('#langSelect .dd-lang-btn[data-lang="multi"]').classList.add('active');
-
-    // Language selector click handler
-    document.getElementById('langSelect').addEventListener('click', (e) => {
-      if (e.target.classList.contains('dd-lang-btn')) {
-        // Don't allow changing language while recording
-        if (isRecording) {
-          alert('Stop recording before changing language');
-          return;
-        }
-        // Update selection
-        document.querySelectorAll('#langSelect .dd-lang-btn').forEach(btn => btn.classList.remove('active'));
-        e.target.classList.add('active');
-        selectedLang = e.target.dataset.lang;
-        console.log('Language selected:', selectedLang);
-
-        // Update hint text based on selection
-        const langHint = document.getElementById('langHint');
-        // Languages that don't support code-switching (need single-language mode)
-        const noCodeSwitchLangs = ['zh', 'th', 'ms', 'tl'];
-
-        if (selectedLang === 'multi') {
-          langHint.innerHTML = '<strong style="color: #1e40af;">Multi-language mode:</strong> <span style="color: #1e3a5f;">Auto-detects English, Japanese, Korean, Vietnamese, Hindi and more.</span><br><span style="font-size: 11px; color: #64748b;">Note: Chinese, Thai, Malay, Filipino - select directly.</span>';
-          langHint.style.background = 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)';
-          langHint.style.borderColor = '#3b82f6';
-        } else if (selectedLang === 'en') {
-          langHint.innerHTML = '<strong style="color: #166534;">English mode:</strong> <span style="color: #14532d;">Optimized for English-only meetings.</span>';
-          langHint.style.background = 'linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%)';
-          langHint.style.borderColor = '#22c55e';
-        } else if (noCodeSwitchLangs.includes(selectedLang)) {
-          langHint.innerHTML = '<strong style="color: #92400e;">' + e.target.textContent + ':</strong> <span style="color: #78350f;">Single-language mode. Translated to English.</span>';
-          langHint.style.background = 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)';
-          langHint.style.borderColor = '#f59e0b';
-        } else {
-          langHint.innerHTML = '<strong style="color: #92400e;">' + e.target.textContent + ':</strong> <span style="color: #78350f;">Will be translated to English.</span>';
-          langHint.style.background = 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)';
-          langHint.style.borderColor = '#f59e0b';
-        }
-      }
-    });
-    let mediaRecorder = null;
-    let audioContext = null;
-    let ws = null;
-    let sessionId = null;
-    let timerInterval = null;
-    let recordingStartTime = null;
-    let finalTranscript = '';
-    let finalTranslation = '';
-    let currentLanguage = 'en';
-    let instructionMode = 'auto';  // 'auto' or 'manual'
+    let instructionMode = 'auto';
 
     // Instruction mode toggle
     window.setInstructionMode = function(mode) {
@@ -613,81 +366,8 @@
         instructionsBox.style.display = 'block';
       }
     };
-    let autoSaveInterval = null;
-    let currentR2Key = null;
-    let currentSpeaker = null;  // Track current speaker for diarization
-    let currentTranslationSpeaker = null;  // Track speaker for translation panel
-    let wsErrorShown = false;  // Prevent duplicate error messages from same connection failure
 
-    // ============ AUTO-SAVE & RECOVERY ============
-    const STORAGE_KEY = 'dd_recording_backup';
-
-    function saveToLocalStorage() {
-      if (!finalTranscript && !finalTranslation) return;
-      const backup = {
-        transcript: finalTranscript,
-        translation: finalTranslation,
-        language: currentLanguage,
-        timestamp: Date.now(),
-        duration: recordingStartTime ? Math.floor((Date.now() - recordingStartTime) / 1000) : 0
-      };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(backup));
-      console.log('[AutoSave] Backup saved');
-    }
-
-    function checkForRecovery() {
-      const backup = localStorage.getItem(STORAGE_KEY);
-      if (backup) {
-        try {
-          const data = JSON.parse(backup);
-          // Only show recovery if backup is less than 24 hours old
-          if (Date.now() - data.timestamp < 24 * 60 * 60 * 1000 && data.transcript) {
-            document.getElementById('recoveryBanner').style.display = 'flex';
-            return data;
-          }
-        } catch (e) { console.error('Recovery parse error:', e); }
-      }
-      return null;
-    }
-
-    window.restoreSession = function() {
-      const backup = localStorage.getItem(STORAGE_KEY);
-      if (backup) {
-        try {
-          const data = JSON.parse(backup);
-          finalTranscript = data.transcript || '';
-          finalTranslation = data.translation || '';
-          currentLanguage = data.language || 'en';
-
-          transcriptContent.innerHTML = finalTranscript;
-          transcriptContent.classList.remove('empty');
-          detectedLang.textContent = currentLanguage.toUpperCase();
-
-          if (finalTranslation) {
-            translationContent.textContent = finalTranslation;
-            translationPanel.style.display = 'flex';
-          }
-
-          recordStatus.textContent = `Restored ${Math.floor(data.duration / 60)}m ${data.duration % 60}s of transcript`;
-        } catch (e) { console.error('Restore error:', e); }
-      }
-      document.getElementById('recoveryBanner').style.display = 'none';
-    };
-
-    window.dismissRecovery = function() {
-      localStorage.removeItem(STORAGE_KEY);
-      document.getElementById('recoveryBanner').style.display = 'none';
-    };
-
-    // Check for recovery on page load
-    checkForRecovery();
-
-    // Clear any stale error messages on page load
-    errorMessage.classList.remove('show');
-    successMessage.classList.remove('show');
-
-    // ============ UPLOAD MODE ============
-
+    // Upload handlers
     uploadZone.addEventListener('click', () => fileInput.click());
     uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('active'); });
     uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('active'));
@@ -695,56 +375,44 @@
     fileInput.addEventListener('change', e => handleFiles(e.target.files));
 
     function handleFiles(files) {
-      console.log('[DD] handleFiles called with:', files);
-      console.log('[DD] Number of files:', files?.length);
-      const allowed = ['pdf', 'ppt', 'pptx', 'doc', 'docx', 'txt', 'rtf', 'csv', 'xlsx', 'xls', 'mp3', 'wav', 'm4a', 'webm', 'ogg'];
+      const allowed = ['pdf', 'ppt', 'pptx', 'doc', 'docx', 'txt', 'rtf', 'csv', 'xlsx', 'xls'];
       const newFiles = Array.from(files).filter(f => {
         const ext = f.name.split('.').pop().toLowerCase();
-        const isAllowed = allowed.includes(ext) && f.size <= 50 * 1024 * 1024;
-        console.log('[DD] File:', f.name, 'ext:', ext, 'allowed:', isAllowed, 'size:', f.size);
-        return isAllowed;
+        return allowed.includes(ext) && f.size <= 50 * 1024 * 1024;
       });
-      console.log('[DD] Filtered files:', newFiles.length);
       selectedFiles = [...selectedFiles, ...newFiles].slice(0, 10);
-      console.log('[DD] Total selectedFiles:', selectedFiles.length);
       updateFileList();
     }
 
+    function formatFileSize(bytes) {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    }
+
     function updateFileList() {
-      const container = document.getElementById('fileList');
-      if (!container) return;
-
-      // Clear existing content
-      container.innerHTML = '';
-
+      fileList.innerHTML = '';
       if (selectedFiles.length === 0) return;
 
-      // Create file items using DOM methods (more reliable than innerHTML)
       selectedFiles.forEach((file, index) => {
         const item = document.createElement('div');
-        item.style.cssText = 'display:flex; align-items:center; gap:8px; padding:10px 12px; background:#e2e8f0; border:2px solid #64748b; border-radius:6px; margin-top:6px;';
-
-        const icon = document.createElement('span');
-        icon.textContent = '📄';
-        icon.style.fontSize = '16px';
-
-        const name = document.createElement('span');
-        name.textContent = file.name;
-        name.style.cssText = 'flex:1; font-size:13px; color:#1e293b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;';
-
-        const removeBtn = document.createElement('button');
-        removeBtn.textContent = '✕';
-        removeBtn.style.cssText = 'background:#fee2e2; border:1px solid #fca5a5; color:#dc2626; cursor:pointer; padding:2px 8px; border-radius:4px; font-weight:bold;';
-        removeBtn.onclick = () => { selectedFiles.splice(index, 1); updateFileList(); };
-
-        item.appendChild(icon);
-        item.appendChild(name);
-        item.appendChild(removeBtn);
-        container.appendChild(item);
+        item.className = 'dd-file-item';
+        item.innerHTML = `
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+          </svg>
+          <span>${file.name}</span>
+          <span class="file-size">${formatFileSize(file.size)}</span>
+          <button onclick="removeFile(${index})">Remove</button>
+        `;
+        fileList.appendChild(item);
       });
     }
 
-    window.removeFile = function(i) { selectedFiles.splice(i, 1); updateFileList(); };
+    window.removeFile = function(i) {
+      selectedFiles.splice(i, 1);
+      updateFileList();
+    };
 
     async function extractPDFText(file) {
       try {
@@ -757,7 +425,9 @@
           text += content.items.map(item => item.str).join(' ') + '\n\n';
         }
         return text;
-      } catch (e) { return `[Could not extract: ${file.name}]`; }
+      } catch (e) {
+        return `[Could not extract: ${file.name}]`;
+      }
     }
 
     async function fileToBase64(file) {
@@ -770,137 +440,80 @@
     }
 
     async function processFiles(files) {
-      console.log('[DD] processFiles called with', files.length, 'files');
-      const results = { documents: [], audioFiles: [] };
-      const totalFiles = files.length;
+      const results = { documents: [] };
 
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
-        const fileNum = i + 1;
         const ext = file.name.split('.').pop().toLowerCase();
-        console.log(`[DD] Processing file ${fileNum}/${totalFiles}: ${file.name} (${ext})`);
-        const audioExts = ['mp3', 'wav', 'm4a', 'webm', 'ogg', 'aac', 'flac'];
 
         try {
-          if (audioExts.includes(ext)) {
-            const base64 = await fileToBase64(file);
-            results.audioFiles.push({ name: file.name, type: ext, content: base64, mimeType: file.type || `audio/${ext}`, isAudio: true });
-            console.log(`[DD] Added audio file ${fileNum}/${totalFiles}: ${file.name}`);
+          let content = '';
+          if (ext === 'pdf') {
+            content = await extractPDFText(file);
+          } else if (['txt', 'rtf', 'csv'].includes(ext)) {
+            content = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onload = e => resolve(e.target.result);
+              reader.onerror = () => reject(new Error('Failed to read text file'));
+              reader.readAsText(file);
+            });
           } else {
-            let content = '';
-            if (ext === 'pdf') {
-              content = await extractPDFText(file);
-              console.log(`[DD] Extracted PDF text from ${file.name}: ${content.length} chars`);
-            } else if (['txt', 'rtf', 'csv'].includes(ext)) {
-              content = await new Promise((resolve, reject) => {
-                const reader = new FileReader();
-                reader.onload = e => resolve(e.target.result);
-                reader.onerror = () => reject(new Error('Failed to read text file'));
-                reader.readAsText(file);
-              });
-              console.log(`[DD] Read text file ${file.name}: ${content.length} chars`);
-            } else {
-              const base64 = await fileToBase64(file);
-              content = `[BASE64:${ext}]${base64}`;
-              console.log(`[DD] Encoded binary file ${file.name}: ${base64.length} chars`);
-            }
-            results.documents.push({ name: file.name, type: ext, content, isAudio: false });
-            console.log(`[DD] Added document ${fileNum}/${totalFiles}: ${file.name}`);
+            const base64 = await fileToBase64(file);
+            content = `[BASE64:${ext}]${base64}`;
           }
+          results.documents.push({ name: file.name, type: ext, content, isAudio: false });
         } catch (fileError) {
-          console.error(`[DD] Error processing file ${file.name}:`, fileError);
-          // Still add the file with an error message so it's not skipped
           results.documents.push({
             name: file.name,
             type: ext,
             content: `[Error processing file ${file.name}: ${fileError.message}]`,
             isAudio: false
           });
-          console.log(`[DD] Added document ${fileNum}/${totalFiles} with error: ${file.name}`);
         }
       }
-      console.log(`[DD] processFiles complete: ${results.documents.length} docs, ${results.audioFiles.length} audio (expected ${totalFiles} total)`);
       return results;
     }
 
-    // Combined submission - handles both transcript and uploaded materials
+    // Submit handler
     ddSubmitBtn.addEventListener('click', async () => {
       const email = globalEmailInput.value.trim() || localStorage.getItem('ycpUserEmail');
       const instructions = ddInstructions.value.trim();
-      const hasTranscript = finalTranscript.trim().length > 0;
-      const hasFiles = selectedFiles.length > 0;
 
-      // Need at least transcript or files
-      if (!hasTranscript && !hasFiles) {
-        alert('Please record a meeting or upload materials');
+      if (selectedFiles.length === 0) {
+        showError('Please upload at least one file');
         return;
       }
-      if (!email) { alert('Please enter your email in the top right'); return; }
+      if (!email) {
+        showError('Please enter your email in the top right');
+        return;
+      }
 
       ddSubmitBtn.disabled = true;
       ddSubmitBtn.innerHTML = '<svg class="spinner" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25" fill="none"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Processing...';
       hideMessages();
 
       try {
-        // Process uploaded files (if any)
-        let processed = { documents: [], audioFiles: [] };
-        if (hasFiles) {
-          processed = await processFiles(selectedFiles);
-        }
-
-        // Get edited transcript from contenteditable element
-        const editedTranscript = transcriptContent.innerText.trim();
-
-        // Add transcript as a document if available
-        if (hasTranscript) {
-          processed.documents.unshift({
-            name: `Meeting_Recording_${new Date().toISOString().slice(0,10)}`,
-            type: 'transcript',
-            content: finalTranslation || editedTranscript,
-            isAudio: false
-          });
-        }
-
-        console.log(`[DD] ============================================`);
-        console.log(`[DD] SENDING TO API:`);
-        console.log(`[DD]   Total documents: ${processed.documents.length}`);
-        console.log(`[DD]   Total audio files: ${processed.audioFiles.length}`);
-        processed.documents.forEach((d, i) => {
-          console.log(`[DD]   Doc ${i + 1}: "${d.name}" (type: ${d.type}, content: ${d.content?.length || 0} chars)`);
-          // Log first 100 chars of content for debugging
-          if (d.content) {
-            console.log(`[DD]     Content preview: ${d.content.substring(0, 100)}...`);
-          }
-        });
-        console.log(`[DD] ============================================`);
+        const processed = await processFiles(selectedFiles);
 
         const response = await fetch(`${API_BASE}/api/due-diligence`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             files: processed.documents,
-            audioFiles: processed.audioFiles,
+            audioFiles: [],
             instructions: instructionMode === 'manual' ? instructions : '',
             instructionMode,
             reportLength: 'medium',
             email,
-            generateWord: true,
-            rawTranscript: editedTranscript,
-            translatedTranscript: finalTranslation,
-            detectedLanguage: currentLanguage,
-            sessionId
+            generateWord: true
           })
         });
 
         if (!response.ok) throw new Error('Request failed');
 
-        showSuccess(`DD Report & Transcript will be emailed to ${email} within 10-15 minutes.`);
+        showSuccess(`DD Report will be emailed to ${email} within 10-15 minutes.`);
 
-        // Clear backup only - keep transcript visible for user reference
-        localStorage.removeItem(STORAGE_KEY);
-
-        // Don't reset transcript - user may want to review it
-        // Only reset files and instructions for next submission
+        // Clear files for next submission
         selectedFiles = [];
         updateFileList();
         ddInstructions.value = '';
@@ -909,264 +522,24 @@
         showError(err.message);
       } finally {
         ddSubmitBtn.disabled = false;
-        ddSubmitBtn.innerHTML = '<svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg> Generate DD Report & Transcript';
+        ddSubmitBtn.innerHTML = `<svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+        </svg> Generate DD Report`;
       }
     });
-
-    // ============ RECORD MODE ============
-
-    recordBtn.addEventListener('click', async () => {
-      if (isRecording) {
-        stopRecording();
-      } else {
-        await startRecording();
-      }
-    });
-
-    async function startRecording() {
-      try {
-        // Reset speaker tracking for new recording
-        currentSpeaker = null;
-        currentTranslationSpeaker = null;
-        wsErrorShown = false;  // Reset error flag for new connection attempt
-
-        // Get microphone access
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-
-        // Set up audio context for resampling to 16kHz
-        audioContext = new AudioContext({ sampleRate: 16000 });
-        const source = audioContext.createMediaStreamSource(stream);
-        const processor = audioContext.createScriptProcessor(4096, 1, 1);
-
-        // Connect WebSocket
-        console.log('Connecting to WebSocket:', `${WS_BASE}/ws/transcribe`);
-        ws = new WebSocket(`${WS_BASE}/ws/transcribe`);
-
-        ws.onopen = () => {
-          console.log('WebSocket connected');
-          ws.send(JSON.stringify({ type: 'start', language: selectedLang }));
-        };
-
-        ws.onmessage = (event) => {
-          let data;
-          try {
-            data = JSON.parse(event.data);
-          } catch (e) {
-            console.error('Failed to parse WebSocket message:', e, event.data);
-            return;  // Skip invalid messages
-          }
-
-          if (data.type === 'session') {
-            sessionId = data.sessionId;
-          } else if (data.type === 'ready') {
-            // Start sending audio
-            source.connect(processor);
-            processor.connect(audioContext.destination);
-          } else if (data.type === 'transcript') {
-            currentLanguage = data.language;
-            detectedLang.textContent = data.language?.toUpperCase() || '--';
-
-            if (data.isFinal) {
-              // Add speaker label if speaker changed
-              if (data.speaker !== null && data.speaker !== currentSpeaker) {
-                currentSpeaker = data.speaker;
-                finalTranscript += '<br><span class="speaker-label">Speaker ' + data.speaker + ':</span> ';
-              }
-              finalTranscript += data.text + ' ';
-              transcriptContent.innerHTML = finalTranscript;
-            } else {
-              // Show interim with speaker label if needed
-              let interimPrefix = '';
-              if (data.speaker !== null && data.speaker !== currentSpeaker) {
-                interimPrefix = '<br><span class="speaker-label">Speaker ' + data.speaker + ':</span> ';
-              }
-              transcriptContent.innerHTML = finalTranscript + interimPrefix + '<span class="interim">' + data.text + '</span>';
-            }
-            transcriptContent.classList.remove('empty');
-            transcriptContent.scrollTop = transcriptContent.scrollHeight;
-
-            // Show translation panel if non-English
-            if (data.language && data.language !== 'en') {
-              translationPanel.style.display = 'flex';
-            }
-          } else if (data.type === 'translation') {
-            // Add speaker label if speaker changed (same as transcript panel)
-            if (data.speaker !== null && data.speaker !== currentTranslationSpeaker) {
-              currentTranslationSpeaker = data.speaker;
-              finalTranslation += '<br><span class="speaker-label">Speaker ' + data.speaker + ':</span> ';
-            }
-            finalTranslation += data.text + ' ';
-            translationContent.innerHTML = finalTranslation;
-            translationContent.scrollTop = translationContent.scrollHeight;
-          } else if (data.type === 'complete') {
-            // Recording complete - store R2 key for download
-            if (data.r2Key) {
-              currentR2Key = data.r2Key;
-              downloadRecordingBtn.style.display = 'inline-block';
-            }
-          } else if (data.type === 'error') {
-            showError(data.message);
-          }
-        };
-
-        ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
-          console.error('WebSocket URL was:', `${WS_BASE}/ws/transcribe`);
-          if (!wsErrorShown) {
-            wsErrorShown = true;
-            showError('Connection error. Please try again.');
-          }
-          stopRecording();
-        };
-
-        ws.onclose = (event) => {
-          console.log('WebSocket closed:', event.code, event.reason);
-          if (!event.wasClean && isRecording && !wsErrorShown) {
-            wsErrorShown = true;
-            showError(`Connection closed unexpectedly (code: ${event.code})`);
-            stopRecording();
-          }
-        };
-
-        // Process audio and send to WebSocket
-        processor.onaudioprocess = (e) => {
-          if (ws && ws.readyState === WebSocket.OPEN) {
-            const inputData = e.inputBuffer.getChannelData(0);
-            // Convert float32 to int16
-            const int16Data = new Int16Array(inputData.length);
-            for (let i = 0; i < inputData.length; i++) {
-              int16Data[i] = Math.max(-32768, Math.min(32767, Math.floor(inputData[i] * 32768)));
-            }
-            ws.send(int16Data.buffer);
-          }
-        };
-
-        // Store for cleanup
-        mediaRecorder = { stream, processor, source };
-
-        // Update UI
-        isRecording = true;
-        recordBtn.classList.add('recording');
-        recordIcon.innerHTML = '<rect x="6" y="6" width="12" height="12" rx="2"/>';
-        recordTimer.classList.add('recording');
-        recordStatus.classList.add('recording');
-        recordStatus.textContent = 'Recording... Click to stop';
-
-        // Start timer
-        recordingStartTime = Date.now();
-        timerInterval = setInterval(updateTimer, 1000);
-
-        // Start auto-save every 10 seconds
-        autoSaveInterval = setInterval(saveToLocalStorage, 10000);
-
-        // Clear previous transcript and backup
-        finalTranscript = '';
-        finalTranslation = '';
-        currentR2Key = null;
-        localStorage.removeItem(STORAGE_KEY);
-        transcriptContent.innerHTML = '';
-        transcriptContent.classList.add('empty');
-        transcriptContent.textContent = 'Listening...';
-        translationContent.textContent = '';
-        translationPanel.style.display = 'none';
-        detectedLang.textContent = '--';
-        downloadRecordingBtn.style.display = 'none';
-        document.getElementById('recoveryBanner').style.display = 'none';
-
-      } catch (err) {
-        console.error('Recording error:', err);
-        showError('Could not access microphone. Please allow microphone access.');
-      }
-    }
-
-    function stopRecording() {
-      isRecording = false;
-
-      // Stop timer and auto-save
-      clearInterval(timerInterval);
-      clearInterval(autoSaveInterval);
-
-      // Final save to localStorage (in case user doesn't submit immediately)
-      saveToLocalStorage();
-
-      // Update UI
-      recordBtn.classList.remove('recording');
-      recordIcon.innerHTML = '<circle cx="12" cy="12" r="8"/>';
-      recordTimer.classList.remove('recording');
-      recordStatus.classList.remove('recording');
-      recordStatus.textContent = 'Recording complete. Click to record again.';
-
-      // Cleanup audio
-      if (mediaRecorder) {
-        mediaRecorder.processor.disconnect();
-        mediaRecorder.source.disconnect();
-        mediaRecorder.stream.getTracks().forEach(t => t.stop());
-        mediaRecorder = null;
-      }
-      if (audioContext) {
-        audioContext.close();
-        audioContext = null;
-      }
-
-      // Tell server to stop and close WebSocket
-      if (ws) {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'stop' }));
-        }
-        // Remove event handlers to prevent further error messages
-        ws.onopen = null;
-        ws.onmessage = null;
-        ws.onerror = null;
-        ws.onclose = null;
-        // Close the WebSocket if still open or connecting
-        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-          ws.close();
-        }
-        ws = null;
-      }
-
-    }
-
-    function updateTimer() {
-      const elapsed = Math.floor((Date.now() - recordingStartTime) / 1000);
-      const mins = Math.floor(elapsed / 60).toString().padStart(2, '0');
-      const secs = (elapsed % 60).toString().padStart(2, '0');
-      recordTimer.textContent = `${mins}:${secs}`;
-    }
-
-    // Download recording from R2
-    downloadRecordingBtn.addEventListener('click', () => {
-      if (!currentR2Key) {
-        showError('No recording available');
-        return;
-      }
-
-      // Open download in new tab
-      const downloadUrl = `${API_BASE}/api/recording/${encodeURIComponent(currentR2Key)}`;
-      window.open(downloadUrl, '_blank');
-    });
-
-
-    // ============ HELPERS ============
 
     function showSuccess(msg) {
       successText.textContent = msg;
       successMessage.classList.add('show');
       errorMessage.classList.remove('show');
-      // Auto-hide after 5 seconds so it doesn't block the UI
-      setTimeout(() => {
-        successMessage.classList.remove('show');
-      }, 5000);
+      setTimeout(() => successMessage.classList.remove('show'), 8000);
     }
 
     function showError(msg) {
       errorText.textContent = msg;
       errorMessage.classList.add('show');
       successMessage.classList.remove('show');
-      // Auto-hide after 5 seconds to prevent endless error display
-      setTimeout(() => {
-        errorMessage.classList.remove('show');
-      }, 5000);
+      setTimeout(() => errorMessage.classList.remove('show'), 5000);
     }
 
     function hideMessages() {
