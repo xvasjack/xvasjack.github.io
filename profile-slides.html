@@ -8,26 +8,31 @@
   <style>
     /* Wide form layout */
     .form-card {
-      max-width: 1000px;
+      max-width: 1100px !important;
+      width: 100% !important;
+    }
+    .form-body {
+      padding: 24px !important;
     }
     .form-columns {
-      display: flex;
-      gap: 40px;
+      display: flex !important;
+      gap: 32px;
+      align-items: flex-start;
     }
     .form-left {
       flex: 1;
-      min-width: 380px;
+      min-width: 400px;
     }
     .form-right {
-      width: 480px;
+      width: 520px;
       flex-shrink: 0;
     }
     /* Layout selector box */
     .layout-box {
-      border: 2px solid #e5e7eb;
+      border: 2px solid #d1d5db;
       border-radius: 12px;
       padding: 20px;
-      background: #f9fafb;
+      background: #fff;
     }
     .layout-selector {
       display: grid;
