@@ -105,13 +105,57 @@ function cleanCompanyPrefixesInText(text) {
   if (!text || typeof text !== 'string') return text;
   // Remove PT./PT prefix followed by space and company name
   // Handles: "PT. Name", "PT Name", "CV. Name", "CV Name"
-  return text
+  let cleaned = text
     .replace(/\bPT\.\s*/gi, '')
     .replace(/\bPT\s+(?=[A-Z])/g, '')
     .replace(/\bCV\.\s*/gi, '')
     .replace(/\bCV\s+(?=[A-Z])/g, '')
     .replace(/\s{2,}/g, ' ')  // Clean up double spaces
     .trim();
+
+  // Fix acronym casing - these should always be ALL CAPS
+  return fixAcronymCasing(cleaned);
+}
+
+// Fix casing for known acronyms that should be ALL CAPS
+// Common Indonesian/SEA company acronyms and abbreviations
+function fixAcronymCasing(text) {
+  if (!text || typeof text !== 'string') return text;
+
+  // Known acronyms that should be ALL CAPS
+  const allCapsAcronyms = [
+    'BNI', 'BRI', 'BCA', 'BTN', 'BSI', 'CIMB', 'OCBC', 'UOB', 'DBS', 'HSBC',  // Banks
+    'PLN', 'PGN', 'PDAM', 'BUMN',  // Indonesian state companies
+    'SPBU', 'BPJS', 'KPK', 'DPR', 'MPR', 'TNI', 'POLRI',  // Indonesian institutions
+    'VVF', 'KFC', 'MNC', 'SCG', 'PTT', 'AIS', 'TRUE', 'DTAC',  // Companies
+    'IBM', 'HP', 'AMD', 'ASUS', 'MSI', 'LG', 'GE', 'ABB', 'SKF',  // Tech/Industrial
+    'BMW', 'VW', 'GM', 'JLR', 'MAN',  // Automotive
+    'AMP', 'UPS', 'DHL', 'FDX', 'TNT',  // Logistics
+    'HID', 'NEC', 'NTT', 'NXP', 'TDK',  // Electronics
+    'ENI', 'BP', 'EDF', 'RWE', 'EON',  // Energy
+  ];
+
+  let result = text;
+  for (const acronym of allCapsAcronyms) {
+    // Match case-insensitive but replace with all caps
+    const regex = new RegExp(`\\b${acronym}\\b`, 'gi');
+    result = result.replace(regex, acronym);
+  }
+
+  // Also fix any 2-4 letter words that are all letters and look like acronyms
+  // If a word is 2-4 chars and has mixed case like "Bni" or "vvf", make it ALL CAPS
+  result = result.replace(/\b([A-Za-z]{2,4})\b/g, (match) => {
+    // If it's a known lowercase word, don't change it
+    const lowerWords = ['and', 'the', 'for', 'with', 'from', 'into', 'bank', 'city', 'east', 'west', 'asia'];
+    if (lowerWords.includes(match.toLowerCase())) return match;
+    // If all consonants or has numbers, likely an acronym - make ALL CAPS
+    if (!/[aeiou]/i.test(match) || match.toUpperCase() === match) {
+      return match.toUpperCase();
+    }
+    return match;
+  });
+
+  return result;
 }
 
 // Filter garbage from customer/partner name arrays before display
@@ -2577,6 +2621,14 @@ function filterEmptyMetrics(keyMetrics) {
     /focus(ing|ed)?\s+on\s+(quality|innovation|customer)/i,  // Generic focus statements
     /commitment to/i,         // Generic commitment statements
     /world of color/i,        // Corporate slogans
+    // Redundant/useless metrics that belong elsewhere
+    /^-?\s*established\s+in\s+\d{4}/i,  // "Established in 2015" - goes in Est. Year field
+    /^-?\s*founded\s+in\s+\d{4}/i,      // "Founded in 2015" - goes in Est. Year field
+    /team\s+with\s+over\s+\d+\s+years?\s+of\s+experience/i,  // Too vague
+    /over\s+\d+\s+years?\s+of\s+experience/i,  // Belongs in company history, not metrics
+    /\d+\s+years?\s+of\s+experience/i,  // "10 years of experience" - not actionable
+    /years?\s+in\s+(?:the\s+)?(?:industry|business|market)/i,  // "Years in industry" - redundant
+    /customer\s+service\s+representatives?/i,  // "12 customer service representatives" - not M&A relevant
     /value creation/i,        // Generic value statements
     /environmental impact/i,  // Generic sustainability
     /high standards in/i,     // "High standards in customer service"
@@ -3544,7 +3596,8 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       if (relationships.principals && relationships.principals.length > 0) {
         const cleanedPrincipals = filterGarbageNames(relationships.principals, companyNameForFilter);
         if (cleanedPrincipals.length > 0) {
-          const principalsList = cleanedPrincipals.slice(0, 10).join(', ');
+          // Apply acronym fixing (AMP, HID, etc. should be ALL CAPS)
+          const principalsList = fixAcronymCasing(cleanedPrincipals.slice(0, 10).join(', '));
           if (!existingLabels.has('principal partners') && !existingLabels.has('principals')) {
             tableData.push(['Principal Partners', principalsList, null]);
             existingLabels.add('principal partners');
@@ -3562,7 +3615,8 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         if (!isCustomersOnRight && !existingLabels.has('customers') && !existingLabels.has('key customers')) {
           const cleanedCustomers = filterGarbageNames(relationships.customers, companyNameForFilter);
           if (cleanedCustomers.length > 0) {
-            const customersList = cleanedCustomers.slice(0, 10).join(', ');
+            // Apply acronym fixing to customer names (VVF, BNI, PLN should be ALL CAPS)
+            const customersList = fixAcronymCasing(cleanedCustomers.slice(0, 10).join(', '));
             tableData.push(['Customers', customersList, null]);
             existingLabels.add('customers');
             console.log(`    Added Customers: ${customersList.substring(0, 80)}...`);
@@ -4152,8 +4206,10 @@ function discoverPagesFromNavigation(html, origin) {
     'products': 5, 'product': 5, 'services': 5, 'service': 5, 'solutions': 5,
     // Contact and location
     'contact': 6, 'contact-us': 6, 'contactus': 6, 'location': 6, 'locations': 6,
-    // Partners and clients
+    // Partners and clients (English + Indonesian + Thai + Vietnamese)
     'partners': 7, 'clients': 7, 'customers': 7, 'portfolio': 7,
+    'klien': 7, 'pelanggan': 7, 'mitra': 7,  // Indonesian: klien=clients, pelanggan=customers, mitra=partners
+    'customer': 7, 'client': 7, 'partner': 7,
     // Quality and certifications
     'quality': 8, 'certification': 8, 'certifications': 8, 'awards': 8,
     // Team
