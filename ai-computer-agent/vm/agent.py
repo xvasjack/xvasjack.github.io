@@ -541,14 +541,19 @@ class Agent:
     async def listen_for_tasks(self):
         """Listen for tasks from host"""
         await self.connect_to_host()
+        print("Agent is listening for tasks...")
 
         while True:
             try:
+                print("Waiting for message from host...")
                 message = await self.ws.recv()
+                print(f"Received raw message: {message[:200]}...")
                 msg_type, payload = decode_message(message)
+                print(f"Message type: {msg_type}, Expected: {MESSAGE_TYPES['NEW_TASK']}")
 
                 if msg_type == MESSAGE_TYPES["NEW_TASK"]:
                     task = Task.from_dict(payload)
+                    print(f"Task parsed successfully: {task.id}")
                     logger.info(f"Received new task: {task.id}")
 
                     result = await self.run_task(task)
