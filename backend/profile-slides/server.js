@@ -105,13 +105,57 @@ function cleanCompanyPrefixesInText(text) {
   if (!text || typeof text !== 'string') return text;
   // Remove PT./PT prefix followed by space and company name
   // Handles: "PT. Name", "PT Name", "CV. Name", "CV Name"
-  return text
+  let cleaned = text
     .replace(/\bPT\.\s*/gi, '')
     .replace(/\bPT\s+(?=[A-Z])/g, '')
     .replace(/\bCV\.\s*/gi, '')
     .replace(/\bCV\s+(?=[A-Z])/g, '')
     .replace(/\s{2,}/g, ' ')  // Clean up double spaces
     .trim();
+
+  // Fix acronym casing - these should always be ALL CAPS
+  return fixAcronymCasing(cleaned);
+}
+
+// Fix casing for known acronyms that should be ALL CAPS
+// Common Indonesian/SEA company acronyms and abbreviations
+function fixAcronymCasing(text) {
+  if (!text || typeof text !== 'string') return text;
+
+  // Known acronyms that should be ALL CAPS
+  const allCapsAcronyms = [
+    'BNI', 'BRI', 'BCA', 'BTN', 'BSI', 'CIMB', 'OCBC', 'UOB', 'DBS', 'HSBC',  // Banks
+    'PLN', 'PGN', 'PDAM', 'BUMN',  // Indonesian state companies
+    'SPBU', 'BPJS', 'KPK', 'DPR', 'MPR', 'TNI', 'POLRI',  // Indonesian institutions
+    'VVF', 'KFC', 'MNC', 'SCG', 'PTT', 'AIS', 'TRUE', 'DTAC',  // Companies
+    'IBM', 'HP', 'AMD', 'ASUS', 'MSI', 'LG', 'GE', 'ABB', 'SKF',  // Tech/Industrial
+    'BMW', 'VW', 'GM', 'JLR', 'MAN',  // Automotive
+    'AMP', 'UPS', 'DHL', 'FDX', 'TNT',  // Logistics
+    'HID', 'NEC', 'NTT', 'NXP', 'TDK',  // Electronics
+    'ENI', 'BP', 'EDF', 'RWE', 'EON',  // Energy
+  ];
+
+  let result = text;
+  for (const acronym of allCapsAcronyms) {
+    // Match case-insensitive but replace with all caps
+    const regex = new RegExp(`\\b${acronym}\\b`, 'gi');
+    result = result.replace(regex, acronym);
+  }
+
+  // Also fix any 2-4 letter words that are all letters and look like acronyms
+  // If a word is 2-4 chars and has mixed case like "Bni" or "vvf", make it ALL CAPS
+  result = result.replace(/\b([A-Za-z]{2,4})\b/g, (match) => {
+    // If it's a known lowercase word, don't change it
+    const lowerWords = ['and', 'the', 'for', 'with', 'from', 'into', 'bank', 'city', 'east', 'west', 'asia'];
+    if (lowerWords.includes(match.toLowerCase())) return match;
+    // If all consonants or has numbers, likely an acronym - make ALL CAPS
+    if (!/[aeiou]/i.test(match) || match.toUpperCase() === match) {
+      return match.toUpperCase();
+    }
+    return match;
+  });
+
+  return result;
 }
 
 // Filter garbage from customer/partner name arrays before display
@@ -2577,6 +2621,14 @@ function filterEmptyMetrics(keyMetrics) {
     /focus(ing|ed)?\s+on\s+(quality|innovation|customer)/i,  // Generic focus statements
     /commitment to/i,         // Generic commitment statements
     /world of color/i,        // Corporate slogans
+    // Redundant/useless metrics that belong elsewhere
+    /^-?\s*established\s+in\s+\d{4}/i,  // "Established in 2015" - goes in Est. Year field
+    /^-?\s*founded\s+in\s+\d{4}/i,      // "Founded in 2015" - goes in Est. Year field
+    /team\s+with\s+over\s+\d+\s+years?\s+of\s+experience/i,  // Too vague
+    /over\s+\d+\s+years?\s+of\s+experience/i,  // Belongs in company history, not metrics
+    /\d+\s+years?\s+of\s+experience/i,  // "10 years of experience" - not actionable
+    /years?\s+in\s+(?:the\s+)?(?:industry|business|market)/i,  // "Years in industry" - redundant
+    /customer\s+service\s+representatives?/i,  // "12 customer service representatives" - not M&A relevant
     /value creation/i,        // Generic value statements
     /environmental impact/i,  // Generic sustainability
     /high standards in/i,     // "High standards in customer service"
@@ -3544,7 +3596,8 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       if (relationships.principals && relationships.principals.length > 0) {
         const cleanedPrincipals = filterGarbageNames(relationships.principals, companyNameForFilter);
         if (cleanedPrincipals.length > 0) {
-          const principalsList = cleanedPrincipals.slice(0, 10).join(', ');
+          // Apply acronym fixing (AMP, HID, etc. should be ALL CAPS)
+          const principalsList = fixAcronymCasing(cleanedPrincipals.slice(0, 10).join(', '));
           if (!existingLabels.has('principal partners') && !existingLabels.has('principals')) {
             tableData.push(['Principal Partners', principalsList, null]);
             existingLabels.add('principal partners');
@@ -3562,7 +3615,8 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         if (!isCustomersOnRight && !existingLabels.has('customers') && !existingLabels.has('key customers')) {
           const cleanedCustomers = filterGarbageNames(relationships.customers, companyNameForFilter);
           if (cleanedCustomers.length > 0) {
-            const customersList = cleanedCustomers.slice(0, 10).join(', ');
+            // Apply acronym fixing to customer names (VVF, BNI, PLN should be ALL CAPS)
+            const customersList = fixAcronymCasing(cleanedCustomers.slice(0, 10).join(', '));
             tableData.push(['Customers', customersList, null]);
             existingLabels.add('customers');
             console.log(`    Added Customers: ${customersList.substring(0, 80)}...`);
@@ -3571,7 +3625,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       }
 
       // Helper function to format cell text with bullet points
-      // Uses regular bullet • (U+2022) directly in text
+      // Uses proper PPT bullet formatting with BLACK SQUARE (U+25A0)
       const formatCellText = (text) => {
         if (!text || typeof text !== 'string') return text;
 
@@ -3583,12 +3637,18 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           // Split by newline and filter out empty lines
           const lines = text.split('\n').filter(line => line.trim());
 
-          // Format ALL lines with bullets (even single line if it starts with -)
-          const formattedLines = lines.map(line => {
+          // Return array of text objects with proper PPT bullet formatting
+          return lines.map((line, index) => {
             const cleanLine = line.replace(/^[■\-•]\s*/, '').trim();
-            return '• ' + cleanLine;
+            const isLastLine = index === lines.length - 1;
+            return {
+              text: cleanLine,
+              options: {
+                bullet: { code: '25A0' }, // BLACK SQUARE ■
+                breakLine: !isLastLine
+              }
+            };
           });
-          return formattedLines.join('\n');
         }
         return text;
       };
@@ -4141,6 +4201,8 @@ function discoverPagesFromNavigation(html, origin) {
 
   // Priority keywords - pages likely to have important company info
   // Higher priority = lower number = scraped first
+  // NOTE: Only use universal English keywords - local language pages will be
+  // discovered via link text analysis below, not hardcoded URL patterns
   const priorityKeywords = {
     // Highest priority - manufacturing/production info
     'manufacturing': 1, 'production': 1, 'factory': 1, 'facilities': 1, 'plant': 1,
@@ -4152,8 +4214,9 @@ function discoverPagesFromNavigation(html, origin) {
     'products': 5, 'product': 5, 'services': 5, 'service': 5, 'solutions': 5,
     // Contact and location
     'contact': 6, 'contact-us': 6, 'contactus': 6, 'location': 6, 'locations': 6,
-    // Partners and clients
+    // Partners and clients (English only - universal in business URLs)
     'partners': 7, 'clients': 7, 'customers': 7, 'portfolio': 7,
+    'customer': 7, 'client': 7, 'partner': 7,
     // Quality and certifications
     'quality': 8, 'certification': 8, 'certifications': 8, 'awards': 8,
     // Team
@@ -4171,8 +4234,7 @@ function discoverPagesFromNavigation(html, origin) {
     '.pdf', '.doc', '.xls', '.zip', '.jpg', '.png', '.gif'
   ];
 
-  // Extract links from navigation elements, header, and main content
-  // Pattern matches: <a href="...">
+  // Extract all internal links from the page
   const linkPattern = /<a[^>]*href=["']([^"'#]+)["'][^>]*>/gi;
   let match;
 
@@ -4227,8 +4289,13 @@ function discoverPagesFromNavigation(html, origin) {
   // Convert to array and sort by priority
   const urlsWithPriority = Array.from(discoveredUrls).map(url => {
     const path = new URL(url).pathname.toLowerCase();
-    let priority = 100; // Default low priority
+    const pathDepth = (path.match(/\//g) || []).length;
 
+    // Start with depth-based priority: shallower pages = more important
+    // /about = depth 1 = priority 10, /about/team = depth 2 = priority 20, etc.
+    let priority = Math.min(pathDepth * 10, 50);
+
+    // Boost pages matching English keywords (universal in business URLs)
     for (const [keyword, prio] of Object.entries(priorityKeywords)) {
       if (path.includes(keyword)) {
         priority = Math.min(priority, prio);
@@ -4279,14 +4346,17 @@ async function scrapeMultiplePages(baseUrl) {
     // Step 2: Discover pages from navigation
     const discoveredPages = discoverPagesFromNavigation(homepageResult.rawHtml, origin);
 
-    // Step 3: Also add common fallback paths that might not be in navigation
+    // Step 3: Also add common ENGLISH fallback paths that might not be in navigation
     // (some sites hide these in footer or don't link them prominently)
+    // NOTE: We don't hardcode language-specific paths - the link text analysis above
+    // will catch local language pages like /klien-kami based on their link text
     const fallbackPaths = [
       '/manufacturing', '/production', '/factory', '/facilities', '/plant',
       '/capabilities', '/capacity', '/operations',
       '/about', '/about-us', '/about.html', '/aboutus', '/company', '/profile', '/company-profile',
       '/contact', '/contact-us', '/contact.html', '/contactus',
-      '/products', '/services'
+      '/products', '/services',
+      '/clients', '/customers', '/partners', '/our-clients', '/our-customers', '/our-partners'
     ];
 
     for (const path of fallbackPaths) {
@@ -4296,8 +4366,8 @@ async function scrapeMultiplePages(baseUrl) {
       }
     }
 
-    // Step 4: Scrape discovered pages (limit to 8 to balance coverage vs timeout)
-    const MAX_PAGES = 8;
+    // Step 4: Scrape discovered pages (increased limit to catch more local language pages)
+    const MAX_PAGES = 12;
     const scrapedUrls = new Set([baseUrl]);
 
     for (const pageUrl of discoveredPages) {
@@ -4337,7 +4407,8 @@ async function scrapeMultiplePages(baseUrl) {
   }
 }
 
-// Extract logo from website using cascade: Clearbit → og:image → apple-touch-icon → img[logo] → favicon
+// Extract logo from website using cascade: Clearbit → apple-touch-icon → favicon → explicit logo img
+// Reordered to prioritize reliable sources over unreliable ones (og:image often returns promo images)
 async function extractLogoFromWebsite(websiteUrl, rawHtml) {
   if (!websiteUrl) return null;
 
@@ -4352,7 +4423,7 @@ async function extractLogoFromWebsite(websiteUrl, rawHtml) {
 
     console.log(`  [Logo] Trying extraction cascade for ${domain}`);
 
-    // 1. Try Clearbit (works for many companies)
+    // 1. Try Clearbit (best quality for known companies)
     try {
       const clearbitUrl = `https://logo.clearbit.com/${domain}`;
       const logoBase64 = await fetchImageAsBase64(clearbitUrl);
@@ -4362,25 +4433,8 @@ async function extractLogoFromWebsite(websiteUrl, rawHtml) {
       }
     } catch { /* continue to next */ }
 
-    // 2. Try og:image from HTML (common for brand logos)
+    // 2. Try apple-touch-icon (high-quality brand icon, very reliable)
     if (rawHtml) {
-      const ogImageMatch = rawHtml.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
-                           rawHtml.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
-      if (ogImageMatch && ogImageMatch[1]) {
-        try {
-          let ogUrl = ogImageMatch[1];
-          if (ogUrl.startsWith('/')) ogUrl = origin + ogUrl;
-          if (ogUrl.startsWith('http')) {
-            const logoBase64 = await fetchImageAsBase64(ogUrl);
-            if (logoBase64) {
-              console.log(`  [Logo] Found via og:image: ${ogUrl}`);
-              return { data: `data:image/png;base64,${logoBase64}`, source: 'og:image' };
-            }
-          }
-        } catch { /* continue */ }
-      }
-
-      // 3. Try apple-touch-icon (high-quality brand icon)
       const appleIconMatch = rawHtml.match(/<link[^>]*rel=["']apple-touch-icon["'][^>]*href=["']([^"']+)["']/i) ||
                              rawHtml.match(/<link[^>]*href=["']([^"']+)["'][^>]*rel=["']apple-touch-icon["']/i);
       if (appleIconMatch && appleIconMatch[1]) {
@@ -4396,46 +4450,63 @@ async function extractLogoFromWebsite(websiteUrl, rawHtml) {
           }
         } catch { /* continue */ }
       }
-
-      // 4. Try finding <img> with "logo" in src, class, id, or alt
-      const imgLogoPatterns = [
-        /<img[^>]*src=["']([^"']*logo[^"']*)["']/gi,
-        /<img[^>]*class=["'][^"']*logo[^"']*["'][^>]*src=["']([^"']+)["']/gi,
-        /<img[^>]*id=["'][^"']*logo[^"']*["'][^>]*src=["']([^"']+)["']/gi,
-        /<img[^>]*alt=["'][^"']*logo[^"']*["'][^>]*src=["']([^"']+)["']/gi
-      ];
-
-      for (const pattern of imgLogoPatterns) {
-        const matches = [...rawHtml.matchAll(pattern)];
-        for (const match of matches) {
-          if (match[1]) {
-            try {
-              let imgUrl = match[1];
-              // Skip tiny icons, sprites, placeholder images
-              if (imgUrl.includes('sprite') || imgUrl.includes('1x1') || imgUrl.includes('placeholder')) continue;
-              if (imgUrl.startsWith('/')) imgUrl = origin + imgUrl;
-              if (imgUrl.startsWith('http')) {
-                const logoBase64 = await fetchImageAsBase64(imgUrl);
-                if (logoBase64) {
-                  console.log(`  [Logo] Found via img[logo]: ${imgUrl}`);
-                  return { data: `data:image/png;base64,${logoBase64}`, source: 'html-img' };
-                }
-              }
-            } catch { /* continue */ }
-          }
-        }
-      }
     }
 
-    // 5. Try Google Favicon as last resort (at least shows something)
+    // 3. Try Google Favicon (reliable for most sites, moved up from last resort)
     try {
       const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
       const logoBase64 = await fetchImageAsBase64(faviconUrl);
       if (logoBase64) {
-        console.log(`  [Logo] Using Google favicon for ${domain}`);
+        console.log(`  [Logo] Found via Google favicon for ${domain}`);
         return { data: `data:image/png;base64,${logoBase64}`, source: 'google-favicon' };
       }
-    } catch { /* no logo available */ }
+    } catch { /* continue */ }
+
+    // 4. Try finding <img> with explicit "logo" filename (more strict matching)
+    if (rawHtml) {
+      // Only match images where the filename itself contains "logo" (e.g., logo.png, company-logo.svg)
+      const strictLogoPattern = /<img[^>]*src=["']([^"']*\/[^"']*logo[^"']*\.(png|jpg|jpeg|svg|webp))["']/gi;
+      const matches = [...rawHtml.matchAll(strictLogoPattern)];
+      for (const match of matches) {
+        if (match[1]) {
+          try {
+            let imgUrl = match[1];
+            // Skip sprites, placeholders, tiny icons, and promotional banners
+            if (/sprite|1x1|placeholder|banner|promo|hero|slider/i.test(imgUrl)) continue;
+            if (imgUrl.startsWith('/')) imgUrl = origin + imgUrl;
+            if (imgUrl.startsWith('http')) {
+              const logoBase64 = await fetchImageAsBase64(imgUrl);
+              if (logoBase64) {
+                console.log(`  [Logo] Found via img[logo]: ${imgUrl}`);
+                return { data: `data:image/png;base64,${logoBase64}`, source: 'html-img' };
+              }
+            }
+          } catch { /* continue */ }
+        }
+      }
+    }
+
+    // 5. Try og:image as last resort (often returns promotional images, not logos)
+    if (rawHtml) {
+      const ogImageMatch = rawHtml.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
+                           rawHtml.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
+      if (ogImageMatch && ogImageMatch[1]) {
+        try {
+          let ogUrl = ogImageMatch[1];
+          // Only use og:image if it looks like a logo (contains "logo" in URL)
+          if (/logo/i.test(ogUrl)) {
+            if (ogUrl.startsWith('/')) ogUrl = origin + ogUrl;
+            if (ogUrl.startsWith('http')) {
+              const logoBase64 = await fetchImageAsBase64(ogUrl);
+              if (logoBase64) {
+                console.log(`  [Logo] Found via og:image (logo in URL): ${ogUrl}`);
+                return { data: `data:image/png;base64,${logoBase64}`, source: 'og:image' };
+              }
+            }
+          }
+        } catch { /* continue */ }
+      }
+    }
 
     console.log(`  [Logo] No logo found for ${domain}`);
     return null;
