@@ -1,5 +1,48 @@
 # CLAUDE.md
 
+## User Workflow (READ THIS FIRST)
+
+This is an automated development loop. User provides inputs, Claude Code executes the full cycle:
+
+### The Loop
+```
+1. USER PROVIDES: template, input, process, expected output, context
+2. CLAUDE: Write code → commit → push → merge PR
+3. CLAUDE: Run backend locally OR trigger deployed service
+4. CLAUDE: Submit test via frontend (localhost:3000) using computer use tool
+5. CLAUDE: Receive result via email → compare output to template
+6. CLAUDE: Identify gaps between output and template
+7. CLAUDE: Write fix → commit → push → merge PR
+8. REPEAT steps 3-7 until output matches template
+```
+
+### What User Expects Claude to Do
+- Write and fix code autonomously
+- Run tests and check results
+- Use computer use tool to interact with localhost:3000
+- Check email for async results (PPTX, Excel, HTML)
+- Compare deliverables against provided templates
+- Identify specific gaps (missing sections, wrong format, data errors)
+- Self-correct without user intervention until output matches template
+
+### Gap Detection Checklist
+When comparing output to template:
+- [ ] All required sections present?
+- [ ] Data format matches template?
+- [ ] Styling/layout matches?
+- [ ] No missing fields?
+- [ ] No extra unwanted content?
+- [ ] File type correct (PPTX, Excel, etc.)?
+
+### Key Limitation
+Claude Code currently CANNOT:
+- Access email inbox directly (user must provide email content/attachments)
+- Use computer use tool without explicit MCP setup
+
+User should provide email results for Claude to analyze.
+
+---
+
 ## Communication Style
 - Be concise and plain
 - No fluff, no emojis unless asked
