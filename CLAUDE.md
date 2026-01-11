@@ -41,6 +41,23 @@ Claude Code currently CANNOT:
 
 User should provide email results for Claude to analyze.
 
+### AI Computer Agent (for full automation)
+See `ai-computer-agent/ARCHITECTURE.md` for the VM-based automation system that:
+- Runs computer use to interact with frontend/Outlook
+- Waits for email outputs
+- Compares against templates
+- Sends fix requests back to Claude Code
+
+### Template Files (in repo root)
+| Service | Template File |
+|---------|---------------|
+| target-v3/v4/v5/v6 | `YCP Target List Slide Template.pptx` |
+| profile-slides | `YCP profile slide template v3.pptx`, `profile slide ref v4.pptx` |
+| trading-comparable | `trading comps slide ref.pptx` |
+| market-research | `Market_Research_*.pptx` samples |
+
+When comparing outputs, use these as visual/structural reference.
+
 ---
 
 ## Communication Style
