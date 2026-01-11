@@ -34,6 +34,12 @@ When comparing output to template:
 - [ ] No extra unwanted content?
 - [ ] File type correct (PPTX, Excel, etc.)?
 
+### User Setup (IMPORTANT)
+- **Anthropic Max plan ($200/month)** - Claude Code CLI uses this, NO separate API key needed
+- **Gmail** for receiving automation outputs (personal Gmail, not Outlook)
+- **Windows VM** already exists - just run the agent code there
+- **Claude Code CLI** already installed - you're using it now
+
 ### Key Limitation
 Claude Code currently CANNOT:
 - Access email inbox directly (user must provide email content/attachments)
@@ -43,10 +49,10 @@ User should provide email results for Claude to analyze.
 
 ### AI Computer Agent (for full automation)
 See `ai-computer-agent/ARCHITECTURE.md` for the VM-based automation system that:
-- Runs computer use to interact with frontend/Outlook
+- Runs computer use to interact with frontend/Gmail
 - Waits for email outputs
 - Compares against templates
-- Sends fix requests back to Claude Code
+- Sends fix requests back to Claude Code CLI (uses Max plan, no API cost)
 
 ### Template Files (in repo root)
 | Service | Template File |

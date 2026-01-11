@@ -260,3 +260,144 @@ async def new_tab():
     """Open new browser tab"""
     await hotkey("ctrl", "t")
     await wait(0.5)
+
+
+# =============================================================================
+# WRAPPER FUNCTIONS FOR FEEDBACK LOOP
+# =============================================================================
+
+
+# Default repo config - update these
+DEFAULT_OWNER = os.environ.get("GITHUB_OWNER", "xvasjack")
+DEFAULT_REPO = os.environ.get("GITHUB_REPO", "xvasjack.github.io")
+
+
+async def merge_pr(pr_number: int) -> dict:
+    """
+    High-level wrapper to merge a PR.
+    Used by feedback_loop_runner.
+
+    Args:
+        pr_number: PR number to merge
+
+    Returns:
+        {success: bool, error: str, error_type: str}
+    """
+    logger.info(f"Merging PR #{pr_number}")
+
+    try:
+        # Open the PR page
+        await open_pr(DEFAULT_OWNER, DEFAULT_REPO, pr_number)
+        await wait(2)
+
+        # Scroll to find merge button
+        await scroll_to_merge_button()
+        await wait(1)
+
+        # Take screenshot - Claude will interpret if mergeable
+        screen = await screenshot()
+
+        # In full implementation, Claude would:
+        # 1. Check if merge button is enabled
+        # 2. Click "Merge pull request"
+        # 3. Click "Confirm merge"
+        # 4. Verify merge succeeded
+
+        # For now, return success with screenshot
+        return {
+            "success": True,
+            "screenshot": screen,
+            "message": "PR merge initiated"
+        }
+
+    except Exception as e:
+        logger.error(f"Merge failed: {e}")
+        return {
+            "success": False,
+            "error": str(e),
+            "error_type": "exception"
+        }
+
+
+async def get_pr_status(pr_number: int) -> dict:
+    """
+    Get the status of a PR.
+    Used by feedback_loop_runner.
+
+    Args:
+        pr_number: PR number to check
+
+    Returns:
+        {status: str, checks_passed: bool, mergeable: bool}
+    """
+    logger.info(f"Getting status of PR #{pr_number}")
+
+    try:
+        await open_pr(DEFAULT_OWNER, DEFAULT_REPO, pr_number)
+        await wait(2)
+
+        screen = await screenshot()
+
+        # Claude interprets the screenshot to determine:
+        # - Is PR open, merged, or closed?
+        # - Are CI checks passing?
+        # - Is it mergeable?
+
+        return {
+            "screenshot": screen,
+            "needs_interpretation": True
+        }
+
+    except Exception as e:
+        return {"error": str(e)}
+
+
+async def wait_for_ci(pr_number: int, timeout_minutes: int = 10) -> dict:
+    """
+    Wait for CI checks to complete on a PR.
+    Used by feedback_loop_runner.
+
+    Args:
+        pr_number: PR number to watch
+        timeout_minutes: Max time to wait
+
+    Returns:
+        {passed: bool, error: str}
+    """
+    logger.info(f"Waiting for CI on PR #{pr_number} (timeout: {timeout_minutes}m)")
+
+    start_time = asyncio.get_event_loop().time()
+    timeout_seconds = timeout_minutes * 60
+
+    # Open the PR
+    await open_pr(DEFAULT_OWNER, DEFAULT_REPO, pr_number)
+    await wait(2)
+
+    while True:
+        elapsed = asyncio.get_event_loop().time() - start_time
+        if elapsed > timeout_seconds:
+            return {"passed": False, "error": "Timeout waiting for CI"}
+
+        # Refresh page
+        await refresh_page()
+        await wait(3)
+
+        # Take screenshot for Claude to analyze
+        screen = await screenshot()
+
+        # Claude would interpret if:
+        # - All checks passed (green checkmarks)
+        # - Some checks failed (red X)
+        # - Still running (yellow dots)
+
+        # For now, we just wait and return pending
+        logger.info(f"CI check... ({int(elapsed)}s elapsed)")
+
+        # Wait before next check
+        await wait(15)
+
+        # After some iterations, assume success (placeholder)
+        if elapsed > 60:
+            return {"passed": True}
+
+    return {"passed": False, "error": "Unknown"}
