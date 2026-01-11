@@ -171,18 +171,23 @@ class ClaudeCodeAgent:
         """
         # Build the full prompt
         if screenshot_path:
-            full_prompt = f"""Look at the screenshot at: {screenshot_path}
+            full_prompt = f"""CRITICAL INSTRUCTION: Output ONLY valid JSON. No markdown, no explanation, no text before or after.
 
-{prompt}
+Read this image: {screenshot_path}
 
-IMPORTANT: Respond with ONLY a JSON object, no other text. The JSON must match this exact format:
-{{
-    "thinking": "your analysis",
-    "action": "action_name",
-    "params": {{}},
-    "progress_note": "status",
-    "satisfied": false
-}}"""
+Task: {prompt}
+
+You must output exactly one JSON object in this format:
+{{"thinking":"your analysis","action":"ACTION","params":{{}},"progress_note":"status","satisfied":false}}
+
+Valid ACTION values: open_app, type, click, press, hotkey, done, stuck
+- For open_app: {{"name":"notepad"}}
+- For type: {{"text":"Hello World"}}
+- For click: {{"x":100,"y":200}}
+- For press: {{"key":"enter"}}
+- For done: {{}}
+
+Output ONLY the JSON object now:"""
         else:
             full_prompt = prompt
 
