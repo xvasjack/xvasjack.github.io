@@ -641,21 +641,22 @@ class Agent:
                 continue
 
             # Execute the action
+            exec_result = {"success": False}
             try:
-                result = await execute_action(action)
+                exec_result = await execute_action(action)
                 # Record result in the action for history
-                if result.get("success"):
+                if exec_result.get("success"):
                     action['result'] = 'success'
                     logger.info(f"Action succeeded: {action.get('action')}")
                 else:
-                    action['result'] = f"failed: {result.get('error')}"
-                    logger.warning(f"Action failed: {result.get('error')}")
+                    action['result'] = f"failed: {exec_result.get('error')}"
+                    logger.warning(f"Action failed: {exec_result.get('error')}")
             except Exception as e:
                 action['result'] = f"error: {e}"
                 logger.error(f"Error executing action: {e}")
 
             # Track PR merges
-            if "merge" in action.get("thinking", "").lower() and "success" in str(result).lower():
+            if "merge" in action.get("thinking", "").lower() and exec_result.get("success"):
                 self.prs_merged += 1
 
             # Small delay before next iteration
