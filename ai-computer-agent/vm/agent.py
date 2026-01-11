@@ -3,10 +3,13 @@ Main Agent Loop - The brain that orchestrates computer use.
 
 This is the core loop that:
 1. Takes screenshots
-2. Sends to Claude for analysis
+2. Sends to Claude Code CLI for analysis (uses your Max subscription!)
 3. Executes Claude's recommended actions
 4. Checks guardrails before every action
 5. Reports progress back to host
+
+NOTE: This version uses Claude Code CLI instead of direct API calls,
+so it uses your Claude Max subscription instead of API credits.
 """
 
 import asyncio
@@ -14,6 +17,9 @@ import json
 import time
 import os
 import sys
+import subprocess
+import tempfile
+import base64
 from typing import Optional
 from dataclasses import dataclass
 import logging
@@ -22,7 +28,6 @@ import websockets
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from anthropic import Anthropic
 from shared.protocol import (
     Task, TaskStatus, TaskUpdate, TaskResult,
     MESSAGE_TYPES, encode_message, decode_message
@@ -47,23 +52,28 @@ logger = logging.getLogger("agent")
 
 @dataclass
 class AgentConfig:
-    anthropic_api_key: str
     host_ws_url: str = "ws://192.168.1.100:3000/agent"  # Your host PC IP
-    model: str = "claude-opus-4-5-20250514"
-    max_tokens: int = 4096
-    screenshot_scale: float = 0.75  # Reduce size to save tokens
+    claude_code_path: str = "claude"  # Path to Claude Code CLI
+    screenshot_dir: str = ""  # Where to save screenshots for Claude to read
+    working_dir: str = ""  # Working directory for Claude Code
 
 
 # Load config from environment or file
 def load_config() -> AgentConfig:
+    # Default screenshot dir to temp
+    screenshot_dir = os.environ.get("SCREENSHOT_DIR", tempfile.gettempdir())
+    working_dir = os.environ.get("WORKING_DIR", os.getcwd())
+
     return AgentConfig(
-        anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
         host_ws_url=os.environ.get("HOST_WS_URL", "ws://192.168.1.100:3000/agent"),
+        claude_code_path=os.environ.get("CLAUDE_CODE_PATH", "claude"),
+        screenshot_dir=screenshot_dir,
+        working_dir=working_dir,
     )
 
 
 # =============================================================================
-# CLAUDE INTERACTION
+# CLAUDE CODE CLI INTERACTION
 # =============================================================================
 
 
@@ -101,7 +111,7 @@ When you encounter an error or blocker:
 - Describe the issue clearly
 - Return action "stuck" with explanation
 
-Response format (JSON):
+Response format (JSON ONLY - no other text):
 {
     "thinking": "What I see on screen and my reasoning",
     "action": "click|double_click|right_click|type|press|hotkey|scroll|wait|focus_window|open_url|open_app|done|stuck|ask_user",
@@ -125,15 +135,112 @@ Set "satisfied": true when the task is complete and output meets requirements.
 """
 
 
-class ClaudeAgent:
+class ClaudeCodeAgent:
+    """
+    Uses Claude Code CLI instead of direct API calls.
+    This uses your Claude Max subscription instead of API credits!
+    """
+
     def __init__(self, config: AgentConfig):
         self.config = config
-        self.client = Anthropic(api_key=config.anthropic_api_key)
         self.conversation_history = []
+        self.screenshot_counter = 0
 
     def reset_conversation(self):
         """Clear conversation history for new task"""
         self.conversation_history = []
+        self.screenshot_counter = 0
+
+    def _save_screenshot(self, screenshot_base64: str) -> str:
+        """Save screenshot to file and return path"""
+        self.screenshot_counter += 1
+        filename = f"screen_{self.screenshot_counter}.png"
+        filepath = os.path.join(self.config.screenshot_dir, filename)
+
+        # Decode and save
+        image_data = base64.b64decode(screenshot_base64)
+        with open(filepath, "wb") as f:
+            f.write(image_data)
+
+        return filepath
+
+    def _call_claude_code(self, prompt: str, screenshot_path: Optional[str] = None) -> str:
+        """
+        Call Claude Code CLI with a prompt.
+        Uses --print flag to get output without interactive mode.
+        """
+        # Build the full prompt
+        if screenshot_path:
+            full_prompt = f"""Look at the screenshot at: {screenshot_path}
+
+{prompt}
+
+IMPORTANT: Respond with ONLY a JSON object, no other text. The JSON must match this exact format:
+{{
+    "thinking": "your analysis",
+    "action": "action_name",
+    "params": {{}},
+    "progress_note": "status",
+    "satisfied": false
+}}"""
+        else:
+            full_prompt = prompt
+
+        try:
+            # Call Claude Code CLI with --print flag for non-interactive output
+            # Using -p for prompt input
+            result = subprocess.run(
+                [
+                    self.config.claude_code_path,
+                    "--print",  # Non-interactive, just print response
+                    "--dangerously-skip-permissions",  # Skip permission prompts
+                    "-p", full_prompt,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=120,  # 2 minute timeout
+                cwd=self.config.working_dir,
+            )
+
+            if result.returncode != 0:
+                logger.error(f"Claude Code CLI error: {result.stderr}")
+                return json.dumps({
+                    "thinking": f"Claude Code CLI error: {result.stderr}",
+                    "action": "stuck",
+                    "params": {},
+                    "progress_note": "CLI error",
+                    "satisfied": False
+                })
+
+            return result.stdout
+
+        except subprocess.TimeoutExpired:
+            logger.error("Claude Code CLI timeout")
+            return json.dumps({
+                "thinking": "Claude Code CLI timed out",
+                "action": "stuck",
+                "params": {},
+                "progress_note": "Timeout",
+                "satisfied": False
+            })
+        except FileNotFoundError:
+            logger.error(f"Claude Code CLI not found at: {self.config.claude_code_path}")
+            return json.dumps({
+                "thinking": "Claude Code CLI not installed or not in PATH",
+                "action": "stuck",
+                "params": {},
+                "progress_note": "CLI not found",
+                "satisfied": False
+            })
+        except Exception as e:
+            logger.error(f"Error calling Claude Code: {e}")
+            return json.dumps({
+                "thinking": f"Error: {str(e)}",
+                "action": "stuck",
+                "params": {},
+                "progress_note": "Error",
+                "satisfied": False
+            })
 
     async def get_next_action(
         self,
@@ -143,21 +250,15 @@ class ClaudeAgent:
         elapsed_seconds: int,
         prs_merged: int,
     ) -> dict:
-        """Ask Claude what to do next based on current screen"""
+        """Ask Claude Code what to do next based on current screen"""
 
-        # Build the user message with screenshot
-        user_content = [
-            {
-                "type": "image",
-                "source": {
-                    "type": "base64",
-                    "media_type": "image/png",
-                    "data": screen_context["screenshot_base64"],
-                },
-            },
-            {
-                "type": "text",
-                "text": f"""Current state:
+        # Save screenshot to file so Claude Code can read it
+        screenshot_path = self._save_screenshot(screen_context["screenshot_base64"])
+
+        # Build context for Claude
+        context_prompt = f"""{SYSTEM_PROMPT}
+
+Current state:
 - Task: {task.description}
 - Plan: {task.approved_plan or 'No plan yet'}
 - Context: {task.context or 'None'}
@@ -170,39 +271,29 @@ class ClaudeAgent:
 - Mouse position: ({screen_context.get('mouse_x', 0)}, {screen_context.get('mouse_y', 0)})
 - Screen size: {screen_context.get('screen_width', 1920)}x{screen_context.get('screen_height', 1080)}
 
-What action should I take next? Respond with JSON only."""
-            }
-        ]
+What action should I take next?"""
 
-        self.conversation_history.append({
-            "role": "user",
-            "content": user_content
-        })
+        # Add conversation history context
+        if self.conversation_history:
+            history_text = "\n\nPrevious actions in this session:\n"
+            for entry in self.conversation_history[-5:]:  # Last 5 actions
+                history_text += f"- {entry.get('action', 'unknown')}: {entry.get('progress_note', '')}\n"
+            context_prompt += history_text
 
-        response = self.client.messages.create(
-            model=self.config.model,
-            max_tokens=self.config.max_tokens,
-            system=SYSTEM_PROMPT,
-            messages=self.conversation_history,
-        )
+        # Call Claude Code CLI
+        response_text = self._call_claude_code(context_prompt, screenshot_path)
 
         # Parse response
-        assistant_text = response.content[0].text
-
-        self.conversation_history.append({
-            "role": "assistant",
-            "content": assistant_text
-        })
-
-        # Extract JSON from response
         try:
             # Try to find JSON in the response
             import re
-            json_match = re.search(r'\{[\s\S]*\}', assistant_text)
+            json_match = re.search(r'\{[\s\S]*\}', response_text)
             if json_match:
-                return json.loads(json_match.group())
+                action = json.loads(json_match.group())
+                self.conversation_history.append(action)
+                return action
             else:
-                logger.error(f"No JSON found in response: {assistant_text}")
+                logger.error(f"No JSON found in response: {response_text[:500]}")
                 return {
                     "thinking": "Failed to parse response",
                     "action": "stuck",
@@ -221,22 +312,17 @@ What action should I take next? Respond with JSON only."""
             }
 
     async def create_plan(self, task_description: str) -> str:
-        """Ask Claude to create a plan for the task"""
+        """Ask Claude Code to create a plan for the task"""
 
-        response = self.client.messages.create(
-            model=self.config.model,
-            max_tokens=2048,
-            system="""You are planning an automation task. Create a clear, step-by-step plan.
+        prompt = f"""You are planning an automation task. Create a clear, step-by-step plan.
 Be specific about what windows/apps to open, what to click, what to type.
 Consider error cases and how to handle them.
-Keep the plan concise but complete.""",
-            messages=[{
-                "role": "user",
-                "content": f"Create a plan for this task:\n\n{task_description}"
-            }]
-        )
+Keep the plan concise but complete.
 
-        return response.content[0].text
+Task: {task_description}"""
+
+        response = self._call_claude_code(prompt)
+        return response
 
 
 # =============================================================================
@@ -247,7 +333,7 @@ Keep the plan concise but complete.""",
 class Agent:
     def __init__(self, config: AgentConfig):
         self.config = config
-        self.claude = ClaudeAgent(config)
+        self.claude = ClaudeCodeAgent(config)  # Uses Claude Code CLI (your subscription!)
         self.current_task: Optional[Task] = None
         self.ws: Optional[websockets.WebSocketClientProtocol] = None
         self.running = False
@@ -493,9 +579,26 @@ class Agent:
 async def main():
     config = load_config()
 
-    if not config.anthropic_api_key:
-        print("ERROR: ANTHROPIC_API_KEY environment variable not set")
+    # Check that Claude Code CLI is available
+    try:
+        result = subprocess.run(
+            [config.claude_code_path, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode == 0:
+            print(f"Using Claude Code CLI: {result.stdout.strip()}")
+            print("This uses your Claude Max subscription - no extra API costs!")
+        else:
+            print(f"WARNING: Claude Code CLI returned error: {result.stderr}")
+    except FileNotFoundError:
+        print("ERROR: Claude Code CLI not found!")
+        print("Please install Claude Code: npm install -g @anthropic-ai/claude-code")
+        print("Or set CLAUDE_CODE_PATH environment variable to the correct path")
         sys.exit(1)
+    except Exception as e:
+        print(f"WARNING: Could not verify Claude Code CLI: {e}")
 
     agent = Agent(config)
     await agent.listen_for_tasks()
