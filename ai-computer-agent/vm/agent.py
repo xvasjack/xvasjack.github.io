@@ -316,9 +316,13 @@ What's the next action to complete this task?"""
 
         # Add conversation history context
         if self.conversation_history:
-            history_text = "\n\nPrevious actions in this session:\n"
+            history_text = "\n\nPrevious actions:\n"
             for entry in self.conversation_history[-5:]:  # Last 5 actions
-                history_text += f"- {entry.get('action', 'unknown')}: {entry.get('progress_note', '')}\n"
+                if 'action' in entry:
+                    result = entry.get('result', 'ok')
+                    history_text += f"- {entry['action']}: {result}\n"
+                elif 'content' in entry:
+                    history_text += f"- {entry['content']}\n"
             context_prompt += history_text
 
         # Call Claude Code CLI
@@ -639,13 +643,15 @@ class Agent:
             # Execute the action
             try:
                 result = await execute_action(action)
-                if not result.get("success"):
+                # Record result in the action for history
+                if result.get("success"):
+                    action['result'] = 'success'
+                    logger.info(f"Action succeeded: {action.get('action')}")
+                else:
+                    action['result'] = f"failed: {result.get('error')}"
                     logger.warning(f"Action failed: {result.get('error')}")
-                    self.claude.conversation_history.append({
-                        "role": "user",
-                        "content": f"Action failed: {result.get('error')}. Please try again or try a different approach."
-                    })
             except Exception as e:
+                action['result'] = f"error: {e}"
                 logger.error(f"Error executing action: {e}")
 
             # Track PR merges
