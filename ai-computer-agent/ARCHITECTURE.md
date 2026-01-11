@@ -43,11 +43,11 @@ Repeat until output matches template
 │  │  │  ├── template_comparison → Output validation         │  │ │
 │  │  │  ├── guardrails.py       → Security                  │  │ │
 │  │  │  └── actions/                                        │  │ │
-│  │  │      ├── claude_code.py  → Claude Code CLI [MISSING] │  │ │
-│  │  │      ├── outlook.py      → Email access              │  │ │
+│  │  │      ├── claude_code.py  → Claude Code CLI           │  │ │
+│  │  │      ├── gmail.py        → Email access (Gmail)      │  │ │
 │  │  │      └── github.py       → PR operations             │  │ │
 │  │  ├──────────────────────────────────────────────────────┤  │ │
-│  │  │  Chrome | Outlook | Claude Code CLI | File Explorer  │  │ │
+│  │  │  Chrome | Gmail | Claude Code CLI | File Explorer    │  │ │
 │  │  └──────────────────────────────────────────────────────┘  │ │
 │  └────────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
@@ -85,95 +85,24 @@ Output (PPTX/Excel)
     generate_claude_code_prompt()
 ```
 
-## Missing Pieces (TODO)
+## Implementation Status
 
-### 1. Claude Code CLI Bridge (CRITICAL)
-File: `vm/actions/claude_code.py`
+All critical pieces are now implemented:
 
-```python
-# Needed functions:
-async def send_prompt_to_claude_code(prompt: str) -> Dict:
-    """
-    1. Open Claude Code CLI in terminal
-    2. Paste prompt
-    3. Wait for Claude to process
-    4. Capture response
-    5. Return {success: bool, pr_number: int}
-    """
-    pass
+| Component | File | Status |
+|-----------|------|--------|
+| Claude Code CLI Bridge | `vm/agent.py`, `vm/actions/claude_code.py` | ✓ Done |
+| Email Polling (Gmail) | `vm/actions/gmail.py` | ✓ Done |
+| Task Persistence | `host/server.js` (saves to `state.json`) | ✓ Done |
+| Template File Mapping | Defined in `CLAUDE.md` | ✓ Done |
+| Service Test Inputs | `test_inputs.json` | ✓ Done |
+| Feedback Loop Runner | `vm/feedback_loop_runner.py` | ✓ Done |
 
-async def check_claude_code_status() -> Dict:
-    """Check if Claude Code is ready"""
-    pass
-```
+### Key Design Decisions
 
-### 2. Email Polling (CRITICAL)
-File: `vm/actions/outlook.py`
-
-```python
-# Needed functions:
-async def wait_for_email_with_attachment(
-    sender_pattern: str,
-    subject_pattern: str,
-    timeout_minutes: int
-) -> Dict:
-    """
-    1. Open Outlook
-    2. Navigate to inbox
-    3. Search for matching email
-    4. Download attachment
-    5. Return {success: bool, file_path: str}
-    """
-    pass
-```
-
-### 3. Task Persistence (HIGH)
-File: `host/tasks.json`
-
-```json
-{
-  "active_task": {
-    "id": "task-123",
-    "service": "target-v6",
-    "template": "target-search",
-    "test_input": {...},
-    "started_at": "2024-01-11T10:00:00Z",
-    "iteration": 3,
-    "state": "WAITING_FOR_EMAIL",
-    "issues": [...]
-  },
-  "history": [...]
-}
-```
-
-### 4. Template File Mapping (HIGH)
-Map TEMPLATES dict to actual files in root:
-
-| Template Name | Reference File |
-|--------------|----------------|
-| target-search | `YCP Target List Slide Template.pptx` |
-| profile-slides | `YCP profile slide template v3.pptx` |
-| trading-comps | `trading comps slide ref.pptx` |
-| market-research | `Market_Research_*.pptx` |
-
-### 5. Service Test Inputs (MEDIUM)
-File: `test_inputs.json`
-
-```json
-{
-  "target-v6": {
-    "business": "packaging companies",
-    "country": "Thailand",
-    "exclusion": "trading companies",
-    "email": "test@example.com"
-  },
-  "profile-slides": {
-    "websites": ["https://example.com"],
-    "targetDescription": "logistics",
-    "email": "test@example.com"
-  }
-}
-```
+1. **No Anthropic API Key Needed**: `agent.py` uses Claude Code CLI (`claude --print --message`) which uses your Max subscription
+2. **Gmail over Outlook**: Personal Gmail for receiving automation outputs
+3. **Screenshots saved to temp files**: Claude Code CLI reads them via file path
 
 ## Potential Issues & Mitigations
 
@@ -209,11 +138,11 @@ File: `test_inputs.json`
 
 ### Guardrails (guardrails.py)
 - BLOCKED: Teams, email composition, billing pages, chat apps
-- ALLOWED: GitHub (your repos), frontend, Outlook (read only), Railway logs
+- ALLOWED: GitHub (your repos), frontend, Gmail (read only), Railway logs
 
-### API Keys
-- Stored in `config_local.py` (gitignored)
-- Never logged or transmitted
+### No API Keys Needed
+- Uses Claude Code CLI authenticated via Anthropic Max subscription
+- No API keys to manage or protect
 
 ### Audit
 - All actions logged to `guardrail_audit.log`
