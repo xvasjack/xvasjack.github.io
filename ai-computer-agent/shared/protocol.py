@@ -51,7 +51,21 @@ class Task:
 
     @classmethod
     def from_dict(cls, d: dict):
-        d['status'] = TaskStatus(d['status'])
+        # Handle status field - may be missing or string
+        if 'status' in d:
+            if isinstance(d['status'], str):
+                d['status'] = TaskStatus(d['status'])
+        else:
+            d['status'] = TaskStatus.PENDING
+
+        # Handle field name differences between JS and Python
+        if 'max_duration_minutes' in d:
+            d['max_duration_minutes'] = d.pop('max_duration_minutes')
+
+        # Remove any extra fields not in the dataclass
+        valid_fields = {'id', 'description', 'max_duration_minutes', 'approved_plan', 'context', 'status'}
+        d = {k: v for k, v in d.items() if k in valid_fields}
+
         return cls(**d)
 
 
