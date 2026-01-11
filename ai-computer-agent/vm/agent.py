@@ -118,9 +118,9 @@ JSON array:"""
         return create_fallback_plan(task_description)
 
 
-def extract_json_array(text: str) -> Optional[str]:
-    """Extract JSON array by tracking bracket depth (handles nested arrays)"""
-    start_idx = text.find('[')
+def extract_balanced(text: str, open_char: str, close_char: str) -> Optional[str]:
+    """Extract balanced brackets/braces from text"""
+    start_idx = text.find(open_char)
     if start_idx == -1:
         return None
 
@@ -140,13 +140,23 @@ def extract_json_array(text: str) -> Optional[str]:
             continue
         if in_string:
             continue
-        if char == '[':
+        if char == open_char:
             depth += 1
-        elif char == ']':
+        elif char == close_char:
             depth -= 1
             if depth == 0:
                 return text[start_idx:i+1]
     return None
+
+
+def extract_json_array(text: str) -> Optional[str]:
+    """Extract JSON array by tracking bracket depth"""
+    return extract_balanced(text, '[', ']')
+
+
+def extract_json_object(text: str) -> Optional[str]:
+    """Extract JSON object by tracking brace depth"""
+    return extract_balanced(text, '{', '}')
 
 
 def extract_steps_from_response(response: str) -> List[dict]:
@@ -169,13 +179,20 @@ def extract_steps_from_response(response: str) -> List[dict]:
             pass
 
     # Method 2: Find individual JSON objects with "action" field
-    for match in re.finditer(r'\{[^{}]*"action"[^{}]*\}', response):
-        try:
-            obj = json.loads(match.group())
-            if 'action' in obj:
-                steps.append(normalize_action(obj))
-        except json.JSONDecodeError:
-            continue
+    remaining = response
+    while '"action"' in remaining:
+        idx = remaining.find('{')
+        if idx == -1:
+            break
+        obj_str = extract_json_object(remaining[idx:])
+        if obj_str and '"action"' in obj_str:
+            try:
+                obj = json.loads(obj_str)
+                if 'action' in obj:
+                    steps.append(normalize_action(obj))
+            except json.JSONDecodeError:
+                pass
+        remaining = remaining[idx + 1:]
 
     if steps:
         return steps
