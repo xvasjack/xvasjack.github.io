@@ -169,27 +169,22 @@ class ClaudeCodeAgent:
         Call Claude Code CLI with a prompt.
         Uses --print flag to get output without interactive mode.
         """
-        # Build the full prompt
-        if screenshot_path:
-            full_prompt = f"""CRITICAL INSTRUCTION: Output ONLY valid JSON. No markdown, no explanation, no text before or after.
+        # Simple prompt - no screenshot for now, just task-based
+        full_prompt = f"""{prompt}
 
-Read this image: {screenshot_path}
+Respond with ONLY a JSON object (no other text):
+{{"thinking":"brief reasoning","action":"ACTION","params":{{}},"progress_note":"status","satisfied":false}}
 
-Task: {prompt}
+ACTION must be one of: open_app, type, press, hotkey, wait, done, stuck
+Params examples:
+- open_app: {{"name":"notepad"}}
+- type: {{"text":"Hello World"}}
+- press: {{"key":"enter"}}
+- hotkey: {{"keys":["ctrl","s"]}}
+- wait: {{"seconds":2}}
+- done/stuck: {{}}
 
-You must output exactly one JSON object in this format:
-{{"thinking":"your analysis","action":"ACTION","params":{{}},"progress_note":"status","satisfied":false}}
-
-Valid ACTION values: open_app, type, click, press, hotkey, done, stuck
-- For open_app: {{"name":"notepad"}}
-- For type: {{"text":"Hello World"}}
-- For click: {{"x":100,"y":200}}
-- For press: {{"key":"enter"}}
-- For done: {{}}
-
-Output ONLY the JSON object now:"""
-        else:
-            full_prompt = prompt
+JSON only:"""
 
         try:
             # Call Claude Code CLI with --print and --output-format json
@@ -304,28 +299,14 @@ Output ONLY the JSON object now:"""
         elapsed_seconds: int,
         prs_merged: int,
     ) -> dict:
-        """Ask Claude Code what to do next based on current screen"""
+        """Ask Claude Code what to do next"""
 
-        # Save screenshot to file so Claude Code can read it
-        screenshot_path = self._save_screenshot(screen_context["screenshot_base64"])
+        # Build simple context prompt
+        context_prompt = f"""Task: {task.description}
+Step: {iteration}
+Active window: {screen_context.get('window_title', 'Unknown')}
 
-        # Build context for Claude
-        context_prompt = f"""{SYSTEM_PROMPT}
-
-Current state:
-- Task: {task.description}
-- Plan: {task.approved_plan or 'No plan yet'}
-- Context: {task.context or 'None'}
-- Iteration: {iteration}
-- Time elapsed: {elapsed_seconds // 60}m {elapsed_seconds % 60}s
-- Max duration: {task.max_duration_minutes} minutes
-- PRs merged so far: {prs_merged}
-- Active window: {screen_context.get('window_title', 'Unknown')}
-- Current URL: {screen_context.get('window_url', 'N/A')}
-- Mouse position: ({screen_context.get('mouse_x', 0)}, {screen_context.get('mouse_y', 0)})
-- Screen size: {screen_context.get('screen_width', 1920)}x{screen_context.get('screen_height', 1080)}
-
-What action should I take next?"""
+What's the next action to complete this task?"""
 
         # Add conversation history context
         if self.conversation_history:
@@ -335,7 +316,7 @@ What action should I take next?"""
             context_prompt += history_text
 
         # Call Claude Code CLI
-        response_text = self._call_claude_code(context_prompt, screenshot_path)
+        response_text = self._call_claude_code(context_prompt)
 
         # Parse response
         try:
