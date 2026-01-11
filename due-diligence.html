@@ -143,23 +143,56 @@
           <div id="fileList" class="mt-4 space-y-2"></div>
         </div>
 
-        <!-- Instructions Section -->
+        <!-- Report Type Section -->
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-          <div class="flex items-center justify-between mb-3">
-            <span class="font-semibold text-slate-900">Instructions</span>
-            <div class="flex gap-1">
-              <button type="button" id="autoModeBtn" onclick="setInstructionMode('auto')" class="px-3 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg bg-indigo-600 text-white">Auto</button>
-              <button type="button" id="manualModeBtn" onclick="setInstructionMode('manual')" class="px-3 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg bg-white text-slate-500 hover:border-indigo-500">Manual</button>
-            </div>
+          <div class="flex items-center gap-2 mb-4">
+            <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+            <span class="font-semibold text-slate-900">Report Type</span>
           </div>
-          <div id="autoModeHint" class="text-sm text-slate-600 bg-indigo-50 rounded-lg p-3">
-            AI will automatically analyze uploaded documents and generate a comprehensive DD report.
+
+          <div class="grid grid-cols-1 gap-2" id="reportTypeGrid">
+            <label class="report-type-option flex items-start gap-3 p-3 border-2 border-indigo-500 bg-indigo-50 rounded-lg cursor-pointer transition-all">
+              <input type="radio" name="reportType" value="target_overview" checked class="mt-1">
+              <div>
+                <div class="font-medium text-slate-900">Target Overview</div>
+                <div class="text-sm text-slate-500">Company profile: business model, products, operations, team</div>
+              </div>
+            </label>
+            <label class="report-type-option flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
+              <input type="radio" name="reportType" value="commercial_dd" class="mt-1">
+              <div>
+                <div class="font-medium text-slate-900">Commercial DD</div>
+                <div class="text-sm text-slate-500">Market position, customers, competition, growth potential</div>
+              </div>
+            </label>
+            <label class="report-type-option flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
+              <input type="radio" name="reportType" value="red_flags" class="mt-1">
+              <div>
+                <div class="font-medium text-slate-900">Red Flag Analysis</div>
+                <div class="text-sm text-slate-500">Risks, concerns, deal-breakers, information gaps</div>
+              </div>
+            </label>
+            <label class="report-type-option flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
+              <input type="radio" name="reportType" value="meeting_summary" class="mt-1">
+              <div>
+                <div class="font-medium text-slate-900">Meeting Summary</div>
+                <div class="text-sm text-slate-500">Key takeaways, action items, follow-up questions</div>
+              </div>
+            </label>
+            <label class="report-type-option flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
+              <input type="radio" name="reportType" value="investment_thesis" class="mt-1">
+              <div>
+                <div class="font-medium text-slate-900">Investment Thesis</div>
+                <div class="text-sm text-slate-500">Deal rationale, strategic fit, synergy potential</div>
+              </div>
+            </label>
           </div>
-          <textarea id="ddInstructions" rows="4" placeholder="Example instructions:
-• Focus on financial performance and risks
-• Summarize key findings for buyer's perspective
-• Highlight any red flags or concerns
-• Include market position analysis" class="hidden w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y mt-3"></textarea>
+
+          <!-- Optional additional context -->
+          <div class="mt-4 pt-4 border-t border-slate-200">
+            <label class="text-sm font-medium text-slate-700 mb-2 block">Additional Context (optional)</label>
+            <textarea id="ddInstructions" rows="2" placeholder="e.g., Focus on APAC operations, buyer is a PE fund..." class="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-y"></textarea>
+          </div>
         </div>
 
         <!-- Submit Button -->
@@ -194,31 +227,24 @@
     const errorText = document.getElementById('errorText');
 
     let selectedFiles = [];
-    let instructionMode = 'auto';
 
-    window.setInstructionMode = function(mode) {
-      instructionMode = mode;
-      const autoBtn = document.getElementById('autoModeBtn');
-      const manualBtn = document.getElementById('manualModeBtn');
-      const autoHint = document.getElementById('autoModeHint');
-      const instructionsBox = document.getElementById('ddInstructions');
+    // Report type selection styling
+    document.querySelectorAll('input[name="reportType"]').forEach(radio => {
+      radio.addEventListener('change', () => {
+        document.querySelectorAll('.report-type-option').forEach(label => {
+          label.classList.remove('border-2', 'border-indigo-500', 'bg-indigo-50');
+          label.classList.add('border', 'border-slate-200');
+        });
+        const selected = radio.closest('.report-type-option');
+        selected.classList.remove('border', 'border-slate-200');
+        selected.classList.add('border-2', 'border-indigo-500', 'bg-indigo-50');
+      });
+    });
 
-      if (mode === 'auto') {
-        autoBtn.classList.remove('bg-white', 'text-slate-500');
-        autoBtn.classList.add('bg-indigo-600', 'text-white');
-        manualBtn.classList.remove('bg-indigo-600', 'text-white');
-        manualBtn.classList.add('bg-white', 'text-slate-500');
-        autoHint.classList.remove('hidden');
-        instructionsBox.classList.add('hidden');
-      } else {
-        manualBtn.classList.remove('bg-white', 'text-slate-500');
-        manualBtn.classList.add('bg-indigo-600', 'text-white');
-        autoBtn.classList.remove('bg-indigo-600', 'text-white');
-        autoBtn.classList.add('bg-white', 'text-slate-500');
-        autoHint.classList.add('hidden');
-        instructionsBox.classList.remove('hidden');
-      }
-    };
+    function getSelectedReportType() {
+      const selected = document.querySelector('input[name="reportType"]:checked');
+      return selected ? selected.value : 'target_overview';
+    }
 
     // Upload handling
     uploadZone.addEventListener('click', () => fileInput.click());
@@ -345,8 +371,8 @@
           body: JSON.stringify({
             files: processed.documents,
             audioFiles: [],
-            instructions: instructionMode === 'manual' ? instructions : '',
-            instructionMode,
+            instructions,
+            reportType: getSelectedReportType(),
             reportLength: 'medium',
             email,
             generateWord: true
