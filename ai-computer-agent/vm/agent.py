@@ -218,31 +218,52 @@ Output ONLY the JSON object now:"""
                 })
 
             # Parse the JSON output format from Claude Code
-            output = result.stdout
-            print(f"Raw Claude output: {output[:500]}...")  # Debug
+            output = result.stdout.strip()
+            print(f"=== Claude Code Raw Output ({len(output)} chars) ===")
+            print(output[:1000])
+            print("=== End Raw Output ===")
 
             # Try to extract the text response from JSON format
             try:
                 cli_response = json.loads(output)
+                print(f"Parsed as JSON. Type: {type(cli_response).__name__}")
+
                 # Claude Code JSON format has response in 'result' or 'content'
                 if isinstance(cli_response, dict):
+                    print(f"Dict keys: {list(cli_response.keys())}")
                     if 'result' in cli_response:
                         return cli_response['result']
                     elif 'content' in cli_response:
                         return cli_response['content']
                     elif 'text' in cli_response:
                         return cli_response['text']
+                    elif 'message' in cli_response:
+                        return cli_response['message']
+
                 # If it's a list of messages, get the last assistant message
                 if isinstance(cli_response, list):
+                    print(f"List with {len(cli_response)} items")
                     for msg in reversed(cli_response):
-                        if isinstance(msg, dict) and msg.get('role') == 'assistant':
-                            content = msg.get('content', '')
-                            if isinstance(content, list):
-                                for c in content:
-                                    if isinstance(c, dict) and c.get('type') == 'text':
-                                        return c.get('text', '')
-                            return content
-            except json.JSONDecodeError:
+                        if isinstance(msg, dict):
+                            print(f"  Item keys: {list(msg.keys())}, role: {msg.get('role')}")
+                            if msg.get('role') == 'assistant':
+                                content = msg.get('content', '')
+                                if isinstance(content, list):
+                                    for c in content:
+                                        if isinstance(c, dict) and c.get('type') == 'text':
+                                            return c.get('text', '')
+                                elif isinstance(content, str):
+                                    return content
+                            # Also check for 'message' field pattern
+                            if msg.get('type') == 'assistant' and 'message' in msg:
+                                return msg['message']
+
+                # If parsed but structure unknown, return stringified
+                print(f"Unknown JSON structure, returning as string")
+                return json.dumps(cli_response)
+
+            except json.JSONDecodeError as e:
+                print(f"Not valid JSON: {e}")
                 pass  # Fall through to return raw output
 
             return output
@@ -318,24 +339,44 @@ What action should I take next?"""
 
         # Parse response
         try:
-            # Try to find JSON in the response
+            # Try to find JSON in the response - handle nested braces properly
             import re
-            json_match = re.search(r'\{[\s\S]*\}', response_text)
+
+            # Method 1: Try to parse the entire response as JSON first
+            try:
+                action = json.loads(response_text.strip())
+                if self._is_valid_action(action):
+                    self.conversation_history.append(action)
+                    return action
+            except json.JSONDecodeError:
+                pass
+
+            # Method 2: Find JSON by tracking brace depth
+            json_obj = self._extract_json_object(response_text)
+            if json_obj:
+                action = json.loads(json_obj)
+                if self._is_valid_action(action):
+                    self.conversation_history.append(action)
+                    return action
+
+            # Method 3: Try greedy regex as fallback
+            json_match = re.search(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', response_text)
             if json_match:
                 action = json.loads(json_match.group())
-                self.conversation_history.append(action)
-                return action
-            else:
-                logger.error(f"No JSON found in response: {response_text[:500]}")
-                return {
-                    "thinking": "Failed to parse response",
-                    "action": "stuck",
-                    "params": {},
-                    "progress_note": "Internal error - could not parse Claude response",
-                    "satisfied": False
-                }
+                if self._is_valid_action(action):
+                    self.conversation_history.append(action)
+                    return action
+
+            logger.error(f"No valid JSON found in response: {response_text[:1000]}")
+            return {
+                "thinking": f"Failed to parse response. Raw: {response_text[:200]}",
+                "action": "stuck",
+                "params": {},
+                "progress_note": "Internal error - could not parse Claude response",
+                "satisfied": False
+            }
         except json.JSONDecodeError as e:
-            logger.error(f"JSON parse error: {e}")
+            logger.error(f"JSON parse error: {e}\nResponse: {response_text[:500]}")
             return {
                 "thinking": f"JSON parse error: {e}",
                 "action": "stuck",
@@ -343,6 +384,51 @@ What action should I take next?"""
                 "progress_note": "Internal error - JSON parse failed",
                 "satisfied": False
             }
+
+    def _is_valid_action(self, obj: dict) -> bool:
+        """Check if parsed object looks like a valid action"""
+        if not isinstance(obj, dict):
+            return False
+        # Must have 'action' field with valid value
+        valid_actions = {'click', 'double_click', 'right_click', 'type', 'press',
+                        'hotkey', 'scroll', 'wait', 'focus_window', 'open_url',
+                        'open_app', 'done', 'stuck', 'ask_user'}
+        return obj.get('action') in valid_actions
+
+    def _extract_json_object(self, text: str) -> Optional[str]:
+        """Extract first valid JSON object by tracking brace depth"""
+        start_idx = text.find('{')
+        if start_idx == -1:
+            return None
+
+        depth = 0
+        in_string = False
+        escape_next = False
+
+        for i, char in enumerate(text[start_idx:], start_idx):
+            if escape_next:
+                escape_next = False
+                continue
+
+            if char == '\\' and in_string:
+                escape_next = True
+                continue
+
+            if char == '"' and not escape_next:
+                in_string = not in_string
+                continue
+
+            if in_string:
+                continue
+
+            if char == '{':
+                depth += 1
+            elif char == '}':
+                depth -= 1
+                if depth == 0:
+                    return text[start_idx:i+1]
+
+        return None
 
     async def create_plan(self, task_description: str) -> str:
         """Ask Claude Code to create a plan for the task"""
