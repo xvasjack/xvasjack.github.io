@@ -1,49 +1,35 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
     <title>AI Agent</title>
     <style>
-        body { font-family: system-ui; background: #1a1a2e; color: #eee; padding: 20px; margin: 0; max-width: 600px; margin: 0 auto; }
-        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-        .status { padding: 6px 14px; background: #252540; border-radius: 16px; font-size: 13px; }
-        .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ff4757; margin-right: 8px; }
+        body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; max-width: 700px; margin: 0 auto; }
+        .top { display: flex; gap: 10px; margin-bottom: 10px; }
+        input { flex: 1; padding: 10px; background: #252540; border: 1px solid #333; border-radius: 4px; color: #eee; font-family: monospace; }
+        button { padding: 10px 16px; border: none; border-radius: 4px; cursor: pointer; font-family: monospace; }
+        .go { background: #5352ed; color: white; }
+        .go:disabled { background: #444; }
+        .stop { background: #ff4757; color: white; display: none; }
+        .log { height: 500px; overflow-y: auto; background: #111; padding: 10px; font-size: 13px; border-radius: 4px; }
+        .log div { padding: 2px 0; }
+        .t { color: #666; }
+        .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ff4757; margin-right: 6px; }
         .dot.on { background: #2ed573; }
-        .panel { background: #252540; border-radius: 10px; padding: 16px; }
-        textarea { width: 100%; height: 80px; background: #1a1a2e; border: 1px solid #333; border-radius: 6px; color: #eee; padding: 12px; font-size: 13px; resize: none; box-sizing: border-box; }
-        textarea:focus { outline: none; border-color: #5352ed; }
-        .row { display: flex; gap: 10px; margin: 10px 0; align-items: center; }
-        input[type="number"] { width: 60px; padding: 8px; background: #1a1a2e; border: 1px solid #333; border-radius: 6px; color: #eee; text-align: center; }
-        button { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; }
-        .primary { background: #5352ed; color: white; }
-        .primary:disabled { background: #444; cursor: not-allowed; }
-        .danger { background: #ff4757; color: white; }
-        .log { height: 350px; overflow-y: auto; background: #1a1a2e; border-radius: 6px; padding: 10px; font-size: 12px; font-family: monospace; }
-        .log div { padding: 4px 0; border-bottom: 1px solid #2a2a4a; }
-        .log .time { color: #666; margin-right: 8px; }
-        label { font-size: 12px; color: #888; }
     </style>
 </head>
 <body>
-    <div class="header">
-        <h2 style="margin:0">AI Agent</h2>
-        <div class="status"><span class="dot" id="dot"></span><span id="vmText">Disconnected</span></div>
+    <div class="top">
+        <span class="dot" id="dot"></span>
+        <input id="in" placeholder="Type task or comment..." onkeydown="if(event.key==='Enter')send()">
+        <button class="go" id="go" onclick="send()" disabled>Send</button>
+        <button class="stop" id="stop" onclick="cancel()">Stop</button>
     </div>
-    <div class="panel">
-        <textarea id="task" placeholder="Describe task..."></textarea>
-        <div class="row">
-            <label>Max:</label>
-            <input type="number" id="dur" value="120" min="10" max="240">
-            <label>min</label>
-            <button class="primary" id="startBtn" onclick="start()" disabled>Start</button>
-            <button class="danger" onclick="cancel()" id="cancelBtn" style="display:none">Cancel</button>
-        </div>
-        <div class="log" id="log"></div>
-    </div>
+    <div class="log" id="log"></div>
     <script>
-        let ws;
+        let ws, running = false;
         function connect() {
-            ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}`);
+            ws = new WebSocket(`${location.protocol==='https:'?'wss:':'ws:'}//${location.host}`);
             ws.onopen = () => log('Connected');
             ws.onclose = () => { log('Disconnected'); setTimeout(connect, 3000); };
             ws.onmessage = e => handle(JSON.parse(e.data));
@@ -53,46 +39,40 @@
             switch(m.type) {
                 case 'init': setVM(p.vmConnected); break;
                 case 'vm_status': setVM(p.connected); break;
-                case 'task_created':
-                    document.getElementById('cancelBtn').style.display = 'inline';
-                    log('Task started');
-                    break;
-                case 'task_update':
-                    if (p.task?.messages?.length) log(p.task.messages[p.task.messages.length-1].message);
-                    break;
-                case 'task_complete':
-                    log(`Done: ${p.task.status}`);
-                    if (p.task.result) log(p.task.result);
-                    document.getElementById('cancelBtn').style.display = 'none';
-                    break;
-                case 'error': log('Error: ' + p.message); break;
-                case 'plan_proposal':
-                    log('Plan: ' + p.plan);
-                    if (confirm('Approve plan?')) {
-                        ws.send(JSON.stringify({type:'approve_plan',payload:{plan:p.plan}}));
-                        log('Plan approved');
-                    }
-                    break;
+                case 'task_created': setRunning(true); log('> Task started'); break;
+                case 'task_update': if(p.task?.messages?.length) log(p.task.messages[p.task.messages.length-1].message); break;
+                case 'task_complete': setRunning(false); log('> Done: '+p.task.status); if(p.task.result) log(p.task.result); break;
+                case 'error': log('ERROR: '+p.message); break;
+                case 'plan_proposal': log('Plan: '+p.plan); ws.send(JSON.stringify({type:'approve_plan',payload:{plan:p.plan}})); log('> Auto-approved'); break;
             }
         }
         function setVM(on) {
             document.getElementById('dot').classList.toggle('on', on);
-            document.getElementById('vmText').textContent = on ? 'Connected' : 'Disconnected';
-            document.getElementById('startBtn').disabled = !on;
+            document.getElementById('go').disabled = !on;
         }
-        function start() {
-            const desc = document.getElementById('task').value.trim();
-            if (!desc) return alert('Enter task');
-            ws.send(JSON.stringify({type:'new_task',payload:{description:desc,maxDurationMinutes:+document.getElementById('dur').value}}));
-            document.getElementById('task').value = '';
+        function setRunning(r) {
+            running = r;
+            document.getElementById('stop').style.display = r ? 'inline' : 'none';
+        }
+        function send() {
+            const v = document.getElementById('in').value.trim();
+            if (!v) return;
+            if (running) {
+                ws.send(JSON.stringify({type:'user_input',payload:{input:v}}));
+                log('You: '+v);
+            } else {
+                ws.send(JSON.stringify({type:'new_task',payload:{description:v,maxDurationMinutes:120}}));
+                log('Task: '+v);
+            }
+            document.getElementById('in').value = '';
         }
         function cancel() {
-            if (confirm('Cancel task?')) ws.send(JSON.stringify({type:'cancel_task',payload:{}}));
+            if(confirm('Stop?')) ws.send(JSON.stringify({type:'cancel_task',payload:{}}));
         }
         function log(msg) {
             const d = document.getElementById('log');
             const t = new Date().toLocaleTimeString();
-            d.innerHTML += `<div><span class="time">${t}</span>${msg}</div>`;
+            d.innerHTML += `<div><span class="t">${t}</span> ${msg}</div>`;
             d.scrollTop = d.scrollHeight;
         }
         connect();
