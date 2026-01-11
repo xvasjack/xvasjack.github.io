@@ -1,8 +1,6 @@
 # AI Computer Agent - VM Requirements
 # Python 3.11+
-
-# Anthropic API
-anthropic>=0.18.0
+# NOTE: No Anthropic API package needed - uses Claude Code CLI (Max subscription)
 
 # Computer control
 pyautogui>=0.9.54
