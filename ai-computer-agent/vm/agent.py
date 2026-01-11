@@ -118,16 +118,47 @@ JSON array:"""
         return create_fallback_plan(task_description)
 
 
+def extract_json_array(text: str) -> Optional[str]:
+    """Extract JSON array by tracking bracket depth (handles nested arrays)"""
+    start_idx = text.find('[')
+    if start_idx == -1:
+        return None
+
+    depth = 0
+    in_string = False
+    escape_next = False
+
+    for i, char in enumerate(text[start_idx:], start_idx):
+        if escape_next:
+            escape_next = False
+            continue
+        if char == '\\' and in_string:
+            escape_next = True
+            continue
+        if char == '"' and not escape_next:
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char == '[':
+            depth += 1
+        elif char == ']':
+            depth -= 1
+            if depth == 0:
+                return text[start_idx:i+1]
+    return None
+
+
 def extract_steps_from_response(response: str) -> List[dict]:
     """Extract action steps from Claude's response (handles various formats)"""
 
     steps = []
 
-    # Method 1: Try to find a JSON array directly
-    array_match = re.search(r'\[[\s\S]*?\]', response)
-    if array_match:
+    # Method 1: Try to find a JSON array by tracking bracket depth
+    array_str = extract_json_array(response)
+    if array_str:
         try:
-            arr = json.loads(array_match.group())
+            arr = json.loads(array_str)
             if isinstance(arr, list) and len(arr) > 0:
                 for item in arr:
                     if isinstance(item, dict) and 'action' in item:
@@ -137,7 +168,7 @@ def extract_steps_from_response(response: str) -> List[dict]:
         except json.JSONDecodeError:
             pass
 
-    # Method 2: Find individual JSON objects
+    # Method 2: Find individual JSON objects with "action" field
     for match in re.finditer(r'\{[^{}]*"action"[^{}]*\}', response):
         try:
             obj = json.loads(match.group())
@@ -146,21 +177,20 @@ def extract_steps_from_response(response: str) -> List[dict]:
         except json.JSONDecodeError:
             continue
 
-    # Method 3: Look for action keywords and construct steps
-    if not steps:
-        response_lower = response.lower()
-        if 'notepad' in response_lower or 'open' in response_lower:
-            # Try to extract app name
-            app_match = re.search(r'open[_\s]+(\w+)|(\w+)\.exe', response_lower)
-            if app_match:
-                app_name = app_match.group(1) or app_match.group(2)
-                steps.append({"action": "open_app", "params": {"name": app_name}})
+    if steps:
+        return steps
 
-        if 'type' in response_lower or 'write' in response_lower:
-            # Try to extract text to type
-            text_match = re.search(r'["\']([^"\']+)["\']', response)
-            if text_match:
-                steps.append({"action": "type", "params": {"text": text_match.group(1)}})
+    # Method 3: Look for action keywords and construct steps
+    response_lower = response.lower()
+    if 'notepad' in response_lower:
+        steps.append({"action": "open_app", "params": {"name": "notepad"}})
+    elif 'chrome' in response_lower:
+        steps.append({"action": "open_app", "params": {"name": "chrome"}})
+
+    # Look for text to type in quotes
+    text_match = re.search(r'["\']([^"\']+)["\']', response)
+    if text_match and ('type' in response_lower or 'write' in response_lower or 'hello' in response_lower):
+        steps.append({"action": "type", "params": {"text": text_match.group(1)}})
 
     return steps
 
