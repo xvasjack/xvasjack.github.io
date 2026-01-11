@@ -4228,18 +4228,12 @@ function discoverPagesFromNavigation(html, origin) {
     '.pdf', '.doc', '.xls', '.zip', '.jpg', '.png', '.gif'
   ];
 
-  // Extract links WITH their link text - this lets us prioritize based on
-  // what the link says (in any language), not just the URL path
-  // Pattern matches: <a href="...">link text</a>
-  const linkPattern = /<a[^>]*href=["']([^"'#]+)["'][^>]*>([^<]*)</gi;
+  // Extract all internal links from the page
+  const linkPattern = /<a[^>]*href=["']([^"'#]+)["'][^>]*>/gi;
   let match;
-
-  // Store url -> linkText mapping for priority boosting
-  const urlLinkText = new Map();
 
   while ((match = linkPattern.exec(html)) !== null) {
     let href = match[1].trim();
-    const linkText = (match[2] || '').trim().toLowerCase();
 
     // Skip empty, javascript:, mailto:, tel:, anchors
     if (!href || href.startsWith('javascript:') || href.startsWith('mailto:') ||
@@ -4283,43 +4277,26 @@ function discoverPagesFromNavigation(html, origin) {
       continue;
     }
 
-    const fullUrlStr = origin + normalizedPath;
-    discoveredUrls.add(fullUrlStr);
-    // Store longest link text for this URL (more descriptive)
-    if (!urlLinkText.has(fullUrlStr) || linkText.length > urlLinkText.get(fullUrlStr).length) {
-      urlLinkText.set(fullUrlStr, linkText);
-    }
+    discoveredUrls.add(origin + normalizedPath);
   }
 
   // Convert to array and sort by priority
   const urlsWithPriority = Array.from(discoveredUrls).map(url => {
     const path = new URL(url).pathname.toLowerCase();
-    const linkText = urlLinkText.get(url) || '';
-    let priority = 50; // Default MID priority (not lowest) - scrape unknown pages too
+    const pathDepth = (path.match(/\//g) || []).length;
 
-    // Check URL path for English keywords
+    // Start with depth-based priority: shallower pages = more important
+    // /about = depth 1 = priority 10, /about/team = depth 2 = priority 20, etc.
+    let priority = Math.min(pathDepth * 10, 50);
+
+    // Boost pages matching English keywords (universal in business URLs)
     for (const [keyword, prio] of Object.entries(priorityKeywords)) {
       if (path.includes(keyword)) {
         priority = Math.min(priority, prio);
       }
     }
 
-    // ALSO check link text - this catches local language pages
-    // If link text mentions customers/clients/partners (in any language that uses
-    // similar concepts), we boost the priority
-    for (const [keyword, prio] of Object.entries(priorityKeywords)) {
-      if (linkText.includes(keyword)) {
-        priority = Math.min(priority, prio);
-      }
-    }
-
-    // Shorter paths are usually more important (e.g., /about vs /about/team/member1)
-    const pathDepth = (path.match(/\//g) || []).length;
-    if (pathDepth <= 1 && priority === 50) {
-      priority = 40; // Boost shallow unknown pages
-    }
-
-    return { url, priority, path, linkText };
+    return { url, priority, path };
   });
 
   // Sort by priority (lower = more important)
