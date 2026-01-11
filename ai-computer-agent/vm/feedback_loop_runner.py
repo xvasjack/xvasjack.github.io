@@ -22,9 +22,10 @@ from template_comparison import compare_output_to_template, TEMPLATES
 from file_readers.pptx_reader import analyze_pptx
 from file_readers.xlsx_reader import analyze_xlsx
 from actions.claude_code import run_claude_code, fix_pptx_output, ClaudeCodeResult
-from actions.outlook import (
-    open_outlook_web, search_emails, open_latest_email,
-    download_attachment, DOWNLOAD_PATH
+# Use Gmail instead of Outlook (user's personal Gmail)
+from actions.gmail import (
+    open_gmail, search_emails, open_first_email,
+    download_attachment, DOWNLOAD_PATH, get_recent_downloads
 )
 from actions.frontend import submit_form, wait_for_form_submission
 from actions.github import merge_pr, get_pr_status, wait_for_ci
@@ -121,20 +122,23 @@ async def download_email_callback(
             return {"success": False, "error": "Timeout waiting for email"}
 
         try:
-            # Open Outlook and search
-            await open_outlook_web()
-            await search_emails(f"subject:{subject} hasattachment:true")
+            # Open Gmail and search
+            await open_gmail()
+            await search_emails(f"subject:{subject} has:attachment newer_than:1d")
             await asyncio.sleep(2)
 
-            # Open latest email
-            await open_latest_email()
+            # Open first email in results
+            await open_first_email()
             await asyncio.sleep(1)
 
             # Download attachment
             result = await download_attachment()
+            await asyncio.sleep(3)
 
-            if result and result.get("file_path"):
-                return {"success": True, "file_path": result["file_path"]}
+            # Check for recently downloaded files
+            recent_files = get_recent_downloads(max_age_minutes=2)
+            if recent_files:
+                return {"success": True, "file_path": recent_files[0]}
 
         except Exception as e:
             logger.warning(f"Email check failed: {e}")
