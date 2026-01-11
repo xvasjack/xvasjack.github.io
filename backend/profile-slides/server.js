@@ -3571,7 +3571,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       }
 
       // Helper function to format cell text with bullet points
-      // Uses regular bullet • (U+2022) directly in text
+      // Uses proper PPT bullet formatting with BLACK SQUARE (U+25A0)
       const formatCellText = (text) => {
         if (!text || typeof text !== 'string') return text;
 
@@ -3583,12 +3583,18 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           // Split by newline and filter out empty lines
           const lines = text.split('\n').filter(line => line.trim());
 
-          // Format ALL lines with bullets (even single line if it starts with -)
-          const formattedLines = lines.map(line => {
+          // Return array of text objects with proper PPT bullet formatting
+          return lines.map((line, index) => {
             const cleanLine = line.replace(/^[■\-•]\s*/, '').trim();
-            return '• ' + cleanLine;
+            const isLastLine = index === lines.length - 1;
+            return {
+              text: cleanLine,
+              options: {
+                bullet: { code: '25A0' }, // BLACK SQUARE ■
+                breakLine: !isLastLine
+              }
+            };
           });
-          return formattedLines.join('\n');
         }
         return text;
       };
@@ -4337,7 +4343,8 @@ async function scrapeMultiplePages(baseUrl) {
   }
 }
 
-// Extract logo from website using cascade: Clearbit → og:image → apple-touch-icon → img[logo] → favicon
+// Extract logo from website using cascade: Clearbit → apple-touch-icon → favicon → explicit logo img
+// Reordered to prioritize reliable sources over unreliable ones (og:image often returns promo images)
 async function extractLogoFromWebsite(websiteUrl, rawHtml) {
   if (!websiteUrl) return null;
 
@@ -4352,7 +4359,7 @@ async function extractLogoFromWebsite(websiteUrl, rawHtml) {
 
     console.log(`  [Logo] Trying extraction cascade for ${domain}`);
 
-    // 1. Try Clearbit (works for many companies)
+    // 1. Try Clearbit (best quality for known companies)
     try {
       const clearbitUrl = `https://logo.clearbit.com/${domain}`;
       const logoBase64 = await fetchImageAsBase64(clearbitUrl);
@@ -4362,25 +4369,8 @@ async function extractLogoFromWebsite(websiteUrl, rawHtml) {
       }
     } catch { /* continue to next */ }
 
-    // 2. Try og:image from HTML (common for brand logos)
+    // 2. Try apple-touch-icon (high-quality brand icon, very reliable)
     if (rawHtml) {
-      const ogImageMatch = rawHtml.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
-                           rawHtml.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
-      if (ogImageMatch && ogImageMatch[1]) {
-        try {
-          let ogUrl = ogImageMatch[1];
-          if (ogUrl.startsWith('/')) ogUrl = origin + ogUrl;
-          if (ogUrl.startsWith('http')) {
-            const logoBase64 = await fetchImageAsBase64(ogUrl);
-            if (logoBase64) {
-              console.log(`  [Logo] Found via og:image: ${ogUrl}`);
-              return { data: `data:image/png;base64,${logoBase64}`, source: 'og:image' };
-            }
-          }
-        } catch { /* continue */ }
-      }
-
-      // 3. Try apple-touch-icon (high-quality brand icon)
       const appleIconMatch = rawHtml.match(/<link[^>]*rel=["']apple-touch-icon["'][^>]*href=["']([^"']+)["']/i) ||
                              rawHtml.match(/<link[^>]*href=["']([^"']+)["'][^>]*rel=["']apple-touch-icon["']/i);
       if (appleIconMatch && appleIconMatch[1]) {
@@ -4396,46 +4386,63 @@ async function extractLogoFromWebsite(websiteUrl, rawHtml) {
           }
         } catch { /* continue */ }
       }
-
-      // 4. Try finding <img> with "logo" in src, class, id, or alt
-      const imgLogoPatterns = [
-        /<img[^>]*src=["']([^"']*logo[^"']*)["']/gi,
-        /<img[^>]*class=["'][^"']*logo[^"']*["'][^>]*src=["']([^"']+)["']/gi,
-        /<img[^>]*id=["'][^"']*logo[^"']*["'][^>]*src=["']([^"']+)["']/gi,
-        /<img[^>]*alt=["'][^"']*logo[^"']*["'][^>]*src=["']([^"']+)["']/gi
-      ];
-
-      for (const pattern of imgLogoPatterns) {
-        const matches = [...rawHtml.matchAll(pattern)];
-        for (const match of matches) {
-          if (match[1]) {
-            try {
-              let imgUrl = match[1];
-              // Skip tiny icons, sprites, placeholder images
-              if (imgUrl.includes('sprite') || imgUrl.includes('1x1') || imgUrl.includes('placeholder')) continue;
-              if (imgUrl.startsWith('/')) imgUrl = origin + imgUrl;
-              if (imgUrl.startsWith('http')) {
-                const logoBase64 = await fetchImageAsBase64(imgUrl);
-                if (logoBase64) {
-                  console.log(`  [Logo] Found via img[logo]: ${imgUrl}`);
-                  return { data: `data:image/png;base64,${logoBase64}`, source: 'html-img' };
-                }
-              }
-            } catch { /* continue */ }
-          }
-        }
-      }
     }
 
-    // 5. Try Google Favicon as last resort (at least shows something)
+    // 3. Try Google Favicon (reliable for most sites, moved up from last resort)
     try {
       const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
       const logoBase64 = await fetchImageAsBase64(faviconUrl);
       if (logoBase64) {
-        console.log(`  [Logo] Using Google favicon for ${domain}`);
+        console.log(`  [Logo] Found via Google favicon for ${domain}`);
         return { data: `data:image/png;base64,${logoBase64}`, source: 'google-favicon' };
       }
-    } catch { /* no logo available */ }
+    } catch { /* continue */ }
+
+    // 4. Try finding <img> with explicit "logo" filename (more strict matching)
+    if (rawHtml) {
+      // Only match images where the filename itself contains "logo" (e.g., logo.png, company-logo.svg)
+      const strictLogoPattern = /<img[^>]*src=["']([^"']*\/[^"']*logo[^"']*\.(png|jpg|jpeg|svg|webp))["']/gi;
+      const matches = [...rawHtml.matchAll(strictLogoPattern)];
+      for (const match of matches) {
+        if (match[1]) {
+          try {
+            let imgUrl = match[1];
+            // Skip sprites, placeholders, tiny icons, and promotional banners
+            if (/sprite|1x1|placeholder|banner|promo|hero|slider/i.test(imgUrl)) continue;
+            if (imgUrl.startsWith('/')) imgUrl = origin + imgUrl;
+            if (imgUrl.startsWith('http')) {
+              const logoBase64 = await fetchImageAsBase64(imgUrl);
+              if (logoBase64) {
+                console.log(`  [Logo] Found via img[logo]: ${imgUrl}`);
+                return { data: `data:image/png;base64,${logoBase64}`, source: 'html-img' };
+              }
+            }
+          } catch { /* continue */ }
+        }
+      }
+    }
+
+    // 5. Try og:image as last resort (often returns promotional images, not logos)
+    if (rawHtml) {
+      const ogImageMatch = rawHtml.match(/<meta[^>]*property=["']og:image["'][^>]*content=["']([^"']+)["']/i) ||
+                           rawHtml.match(/<meta[^>]*content=["']([^"']+)["'][^>]*property=["']og:image["']/i);
+      if (ogImageMatch && ogImageMatch[1]) {
+        try {
+          let ogUrl = ogImageMatch[1];
+          // Only use og:image if it looks like a logo (contains "logo" in URL)
+          if (/logo/i.test(ogUrl)) {
+            if (ogUrl.startsWith('/')) ogUrl = origin + ogUrl;
+            if (ogUrl.startsWith('http')) {
+              const logoBase64 = await fetchImageAsBase64(ogUrl);
+              if (logoBase64) {
+                console.log(`  [Logo] Found via og:image (logo in URL): ${ogUrl}`);
+                return { data: `data:image/png;base64,${logoBase64}`, source: 'og:image' };
+              }
+            }
+          }
+        } catch { /* continue */ }
+      }
+    }
 
     console.log(`  [Logo] No logo found for ${domain}`);
     return null;
