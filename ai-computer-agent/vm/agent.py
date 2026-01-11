@@ -169,22 +169,28 @@ class ClaudeCodeAgent:
         Call Claude Code CLI with a prompt.
         Uses --print flag to get output without interactive mode.
         """
-        # Simple prompt - no screenshot for now, just task-based
-        full_prompt = f"""{prompt}
+        # Very strict JSON-only prompt
+        full_prompt = f"""You are a computer automation assistant. You must respond with ONLY a JSON object.
 
-Respond with ONLY a JSON object (no other text):
-{{"thinking":"brief reasoning","action":"ACTION","params":{{}},"progress_note":"status","satisfied":false}}
+TASK: {prompt}
 
-ACTION must be one of: open_app, type, press, hotkey, wait, done, stuck
-Params examples:
-- open_app: {{"name":"notepad"}}
-- type: {{"text":"Hello World"}}
-- press: {{"key":"enter"}}
-- hotkey: {{"keys":["ctrl","s"]}}
-- wait: {{"seconds":2}}
-- done/stuck: {{}}
+RULES:
+1. Output ONLY valid JSON - no other text, no explanation, no markdown
+2. Do NOT actually perform the action - just tell me what action to take
+3. I will execute the action for you
 
-JSON only:"""
+RESPOND WITH THIS EXACT FORMAT:
+{{"action":"ACTION_NAME","params":{{}},"note":"brief status"}}
+
+ACTION_NAME options:
+- "open_app" with params {{"name":"notepad"}}
+- "type" with params {{"text":"your text here"}}
+- "press" with params {{"key":"enter"}}
+- "hotkey" with params {{"keys":["ctrl","s"]}}
+- "wait" with params {{"seconds":2}}
+- "done" with params {{}}
+
+ONLY OUTPUT THE JSON:"""
 
         try:
             # Call Claude Code CLI with --print and --output-format json
@@ -374,7 +380,18 @@ What's the next action to complete this task?"""
         valid_actions = {'click', 'double_click', 'right_click', 'type', 'press',
                         'hotkey', 'scroll', 'wait', 'focus_window', 'open_url',
                         'open_app', 'done', 'stuck', 'ask_user'}
-        return obj.get('action') in valid_actions
+        if obj.get('action') in valid_actions:
+            # Normalize to expected format
+            if 'thinking' not in obj:
+                obj['thinking'] = obj.get('note', '')
+            if 'progress_note' not in obj:
+                obj['progress_note'] = obj.get('note', '')
+            if 'satisfied' not in obj:
+                obj['satisfied'] = obj.get('action') == 'done'
+            if 'params' not in obj:
+                obj['params'] = {}
+            return True
+        return False
 
     def _extract_json_object(self, text: str) -> Optional[str]:
         """Extract first valid JSON object by tracking brace depth"""
