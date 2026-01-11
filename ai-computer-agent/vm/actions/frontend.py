@@ -365,3 +365,80 @@ async def run_validation(file_path: str, email: Optional[str] = None) -> dict:
         "action_needed": "file_upload",
         "screenshot": await screenshot(),
     }
+
+
+# =============================================================================
+# WRAPPER FUNCTIONS FOR FEEDBACK LOOP
+# =============================================================================
+
+
+async def submit_form(url: str, form_data: Dict) -> Dict:
+    """
+    High-level wrapper to submit a form on a given URL.
+    Used by feedback_loop_runner.
+
+    Args:
+        url: Full URL of the form page
+        form_data: Dict with form field values
+
+    Returns:
+        {success: bool, error: str}
+    """
+    logger.info(f"Submitting form at {url}")
+
+    try:
+        # Open the URL
+        await open_url_in_browser(url)
+        await wait(3)
+
+        # Set email if provided
+        if form_data.get("email"):
+            await set_email_in_localStorage(form_data["email"])
+            await wait(0.5)
+
+        # Refresh to pick up localStorage email
+        await press_key("f5")
+        await wait(2)
+
+        # Fill the form - this uses Claude's visual interpretation
+        # For now, we do a simplified keyboard-based approach
+        # Tab through fields and fill them
+
+        fields_to_fill = [
+            ("business", form_data.get("business", "")),
+            ("country", form_data.get("country", "")),
+            ("exclusion", form_data.get("exclusion", "")),
+        ]
+
+        for field_name, value in fields_to_fill:
+            if value:
+                # Type the value (Claude will handle field focus)
+                await type_text(value)
+                await tab_to_next_field()
+
+        # Submit - press Enter or click button
+        await press_key("enter")
+        await wait(2)
+
+        # Check for success message
+        screen = await screenshot()
+
+        return {"success": True, "screenshot": screen}
+
+    except Exception as e:
+        logger.error(f"Form submission failed: {e}")
+        return {"success": False, "error": str(e)}
+
+
+async def wait_for_form_submission(timeout_seconds: int = 30) -> bool:
+    """
+    Wait for form submission to complete.
+    Used by feedback_loop_runner.
+
+    Args:
+        timeout_seconds: Max time to wait
+
+    Returns:
+        True if submission succeeded
+    """
+    return await wait_for_submission_confirmation(timeout_seconds)

@@ -13,6 +13,7 @@ const http = require('http');
 const WebSocket = require('ws');
 const path = require('path');
 const cors = require('cors');
+const fs = require('fs');
 const { v4: uuidv4 } = require('uuid');
 
 const app = express();
@@ -22,12 +23,60 @@ const wss = new WebSocket.Server({ server });
 // Configuration
 const PORT = process.env.PORT || 3000;
 const MAX_TASK_DURATION_MINUTES = 240; // 4 hours max
+const STATE_FILE = path.join(__dirname, 'state.json');
+
+// ============================================================================
+// State Persistence
+// ============================================================================
+
+function loadState() {
+  try {
+    if (fs.existsSync(STATE_FILE)) {
+      const data = fs.readFileSync(STATE_FILE, 'utf8');
+      const saved = JSON.parse(data);
+      console.log(`Loaded state: ${saved.taskHistory?.length || 0} historical tasks`);
+      return {
+        vmAgent: null,
+        currentTask: saved.currentTask || null,
+        taskHistory: saved.taskHistory || [],
+        uiClients: new Set(),
+        latestScreenshot: null,
+        stats: saved.stats || {
+          totalTasks: 0,
+          completedTasks: 0,
+          failedTasks: 0,
+          totalPRsMerged: 0,
+        },
+      };
+    }
+  } catch (e) {
+    console.error('Failed to load state:', e.message);
+  }
+  return null;
+}
+
+function saveState() {
+  try {
+    const toSave = {
+      currentTask: state.currentTask ? state.currentTask.toJSON() : null,
+      taskHistory: state.taskHistory.map((t) => t.toJSON ? t.toJSON() : t),
+      stats: state.stats,
+      savedAt: new Date().toISOString(),
+    };
+    fs.writeFileSync(STATE_FILE, JSON.stringify(toSave, null, 2));
+  } catch (e) {
+    console.error('Failed to save state:', e.message);
+  }
+}
+
+// Save state periodically and on changes
+setInterval(saveState, 30000); // Every 30 seconds
 
 // ============================================================================
 // State Management
 // ============================================================================
 
-const state = {
+const state = loadState() || {
   // Connected VM agent
   vmAgent: null,
 
@@ -217,6 +266,7 @@ function handleVMMessage(message) {
         });
 
         state.currentTask = null;
+        saveState(); // Persist on task completion
       }
       break;
 
