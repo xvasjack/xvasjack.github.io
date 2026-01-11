@@ -11490,11 +11490,229 @@ Provide a detailed summary that captures all factual information. Do not omit an
   return `[TRUNCATED - original was ${content.length} chars]\n${content.substring(0, maxChars)}`;
 }
 
+// Report type configurations for M&A buy-side DD
+const DD_REPORT_TYPES = {
+  target_overview: {
+    title: 'Target Company Overview',
+    analysisPrompt: `You are an M&A analyst preparing a target company overview for a buyer. Extract and organize:
+
+1. COMPANY PROFILE
+   - Company name, headquarters, founding year
+   - Industry/sector classification
+   - Company history and key milestones
+
+2. BUSINESS MODEL
+   - Core products/services offered
+   - Revenue streams and how they make money
+   - Target customers and segments served
+   - Geographic markets
+
+3. OPERATIONS
+   - Key facilities/locations
+   - Employee count and organizational structure
+   - Technology and systems used
+   - Key suppliers and partners
+
+4. MANAGEMENT TEAM
+   - Key executives and their backgrounds
+   - Ownership structure
+   - Board composition (if mentioned)
+
+5. MARKET POSITION
+   - Key competitors mentioned
+   - Market share or positioning
+   - Competitive advantages/differentiation
+
+6. KEY METRICS (if available)
+   - Revenue, growth rates
+   - Profitability indicators
+   - Operational KPIs`,
+    reportInstruction: `Create a comprehensive Target Company Overview suitable for an investment committee.
+Structure: Executive Summary, Company Profile, Business Model, Operations, Management, Market Position, Key Metrics (if available), Information Gaps.`
+  },
+
+  commercial_dd: {
+    title: 'Commercial Due Diligence',
+    analysisPrompt: `You are conducting commercial due diligence for an M&A buyer. Focus on:
+
+1. MARKET ANALYSIS
+   - Total addressable market (TAM)
+   - Market growth trends
+   - Key market drivers and headwinds
+   - Regulatory environment
+
+2. CUSTOMER ANALYSIS
+   - Customer segments and profiles
+   - Customer concentration (top customers %)
+   - Customer retention/churn patterns
+   - Customer relationships and contracts
+
+3. COMPETITIVE LANDSCAPE
+   - Direct and indirect competitors
+   - Competitive positioning
+   - Barriers to entry
+   - Competitive threats
+
+4. PRODUCTS & SERVICES
+   - Product portfolio and lifecycle
+   - Pricing strategy
+   - Product differentiation
+   - Pipeline/roadmap
+
+5. GROWTH OPPORTUNITIES
+   - Geographic expansion potential
+   - New product/service opportunities
+   - Cross-sell/upsell potential
+   - M&A or partnership opportunities
+
+6. COMMERCIAL RISKS
+   - Market disruption threats
+   - Customer concentration risks
+   - Pricing pressure risks
+   - Competitive threats`,
+    reportInstruction: `Create a Commercial Due Diligence report for a buy-side client.
+Structure: Executive Summary, Market Overview, Customer Analysis, Competitive Landscape, Products & Services, Growth Opportunities, Key Commercial Risks, Recommendations.`
+  },
+
+  red_flags: {
+    title: 'Red Flag Analysis',
+    analysisPrompt: `You are a skeptical due diligence analyst looking for red flags and concerns. Identify:
+
+1. BUSINESS RISKS
+   - Customer concentration issues
+   - Supplier dependencies
+   - Key person dependencies
+   - Competitive vulnerabilities
+
+2. FINANCIAL CONCERNS
+   - Revenue quality issues
+   - Margin sustainability questions
+   - Working capital concerns
+   - Unusual financial patterns
+
+3. OPERATIONAL ISSUES
+   - Scalability limitations
+   - Technology/system risks
+   - Capacity constraints
+   - Process weaknesses
+
+4. MARKET RISKS
+   - Industry decline signals
+   - Regulatory threats
+   - Disruption risks
+   - Competitive pressures
+
+5. MANAGEMENT CONCERNS
+   - Leadership gaps
+   - Governance issues
+   - Alignment of interests
+   - Track record concerns
+
+6. DEAL-BREAKERS
+   - Any absolute red flags
+   - Material misrepresentations
+   - Undisclosed liabilities
+   - Reputation issues
+
+7. INFORMATION GAPS
+   - What critical information is missing?
+   - What should be verified independently?
+   - What questions need answers?`,
+    reportInstruction: `Create a Red Flag Analysis highlighting concerns for the buyer's attention.
+Structure: Executive Summary (key concerns), Critical Red Flags, Business Risks, Financial Concerns, Operational Issues, Market Risks, Management Concerns, Information Gaps, Recommended Due Diligence Actions.
+Be direct and skeptical. Prioritize concerns by severity.`
+  },
+
+  meeting_summary: {
+    title: 'Meeting Summary',
+    analysisPrompt: `You are summarizing a management meeting or call for an M&A buyer. Extract:
+
+1. MEETING CONTEXT
+   - Who was present (attendees)
+   - Meeting date/purpose
+   - Topics discussed
+
+2. KEY DISCUSSIONS
+   - Main topics covered
+   - Management's key messages
+   - Important claims made
+
+3. NUMBERS & DATA SHARED
+   - Any financial figures mentioned
+   - Metrics and KPIs discussed
+   - Projections or targets stated
+
+4. COMMITMENTS & PROMISES
+   - What did management commit to?
+   - Follow-up items promised
+   - Timelines mentioned
+
+5. CONCERNS RAISED
+   - Issues or challenges discussed
+   - Risks acknowledged
+   - Questions that weren't answered
+
+6. NOTABLE QUOTES
+   - Important statements (paraphrase key points)
+   - Management's own words on key topics
+
+7. FOLLOW-UP NEEDED
+   - Unanswered questions
+   - Items to verify
+   - Additional information requested`,
+    reportInstruction: `Create a concise Meeting Summary for internal distribution.
+Structure: Meeting Details (date, attendees, purpose), Key Takeaways (3-5 bullets), Discussion Summary (by topic), Key Data Points, Commitments Made, Concerns & Open Items, Action Items & Follow-ups.
+Keep it practical and actionable.`
+  },
+
+  investment_thesis: {
+    title: 'Investment Thesis',
+    analysisPrompt: `You are validating an investment thesis for an M&A buyer. Analyze:
+
+1. STRATEGIC RATIONALE
+   - Why would a buyer want this company?
+   - Strategic fit with potential acquirers
+   - Platform vs. add-on potential
+
+2. VALUE DRIVERS
+   - What makes this company valuable?
+   - Unique assets or capabilities
+   - Growth potential
+   - Market position advantages
+
+3. SYNERGY POTENTIAL
+   - Revenue synergy opportunities
+   - Cost synergy opportunities
+   - Operational improvements possible
+   - Strategic capabilities gained
+
+4. GROWTH THESIS
+   - Historical growth trajectory
+   - Future growth opportunities
+   - Market tailwinds
+   - Execution requirements
+
+5. RISK/REWARD ASSESSMENT
+   - Key risks to the thesis
+   - Mitigating factors
+   - Upside scenarios
+   - Downside scenarios
+
+6. KEY ASSUMPTIONS
+   - What must be true for this deal to work?
+   - Critical success factors
+   - Dependencies and contingencies`,
+    reportInstruction: `Create an Investment Thesis document for deal evaluation.
+Structure: Investment Highlights (3-5 bullets), Strategic Rationale, Value Drivers, Synergy Opportunities, Growth Thesis, Key Risks, Critical Assumptions, Thesis Validation (supported/challenged by materials).
+Be balanced - highlight both opportunities and risks.`
+  }
+};
+
 async function generateDueDiligenceReport(
   files,
   instructions,
   reportLength,
-  instructionMode = 'auto'
+  reportType = 'target_overview'
 ) {
   console.log(`\n${'='.repeat(60)}`);
   console.log(`[DD] MULTI-AGENT DD REPORT GENERATION`);
@@ -11594,12 +11812,16 @@ async function generateDueDiligenceReport(
   // ========== PHASE 2: DEEP ANALYSIS WITH THINKING MODEL ==========
   console.log('\n[DD] === PHASE 2: DEEP ANALYSIS ===');
 
-  const analysisPrompt = `You are a senior due diligence analyst. Carefully read and analyze ALL the source materials provided below.
+  // Get report type configuration
+  const reportConfig = DD_REPORT_TYPES[reportType] || DD_REPORT_TYPES.target_overview;
+  console.log(`[DD] Report Type: ${reportConfig.title}`);
+
+  const analysisPrompt = `${reportConfig.analysisPrompt}
 
 SOURCE MATERIALS (${extractedFiles.length} files):
 ${filesSummary.join('\n')}
 
-${instructionMode === 'manual' && instructions ? `USER INSTRUCTIONS:\n${instructions}\n` : ''}
+${instructions ? `ADDITIONAL CONTEXT FROM USER:\n${instructions}\n` : ''}
 
 === BEGIN ALL SOURCE CONTENT ===
 ${combinedContent}
@@ -11607,56 +11829,12 @@ ${combinedContent}
 
 ${onlineResearchContent ? `=== ONLINE RESEARCH ===\n${onlineResearchContent}` : ''}
 
-YOUR TASK: Perform a thorough analysis of ALL the materials above. Extract and organize:
-
-1. COMPANY IDENTIFICATION
-   - Full company name(s) mentioned
-   - Location/headquarters
-   - Industry/sector
-   - Year founded (if mentioned)
-
-2. BUSINESS DESCRIPTION
-   - What does the company do? (specific products/services)
-   - Business model
-   - Target customers/markets
-   - Key differentiators
-
-3. FINANCIAL DATA (extract ALL numbers mentioned)
-   - Revenue figures (with years/periods)
-   - Profit/loss data
-   - Growth rates
-   - Valuation metrics
-   - Any financial projections
-
-4. OPERATIONAL DETAILS
-   - Number of employees
-   - Key locations/facilities
-   - Technology/systems used
-   - Partnerships/suppliers
-
-5. MANAGEMENT & OWNERSHIP
-   - Key executives mentioned
-   - Ownership structure
-   - Board composition
-
-6. RISKS & CONCERNS
-   - Business risks identified
-   - Financial risks
-   - Regulatory/legal issues
-   - Red flags or concerns
-
-7. OPPORTUNITIES & STRENGTHS
-   - Growth potential
-   - Competitive advantages
-   - Market opportunities
-   - Synergy potential (if M&A context)
-
-8. KEY GAPS
-   - What important information is MISSING from the materials?
-   - What questions should be asked?
-
-CRITICAL: Only include information explicitly stated in the source materials. Quote specific data points.
-Be exhaustive - extract EVERYTHING relevant from the documents.`;
+CRITICAL INSTRUCTIONS:
+- Only include information explicitly stated in the source materials
+- Quote specific data points, names, and figures
+- Clearly mark anything that is inferred vs. directly stated
+- Note important information that is MISSING from the materials
+- Be thorough but focused on what's relevant to this report type`;
 
   let deepAnalysis = '';
 
@@ -11689,37 +11867,41 @@ Be exhaustive - extract EVERYTHING relevant from the documents.`;
   // ========== PHASE 3: GENERATE STRUCTURED REPORT ==========
   console.log('\n[DD] === PHASE 3: REPORT GENERATION ===');
 
-  const reportStructure = {
-    short: `1-2 pages with: Executive Summary, Key Facts, Risks, Opportunities`,
-    medium: `3-5 pages with sections for each major topic identified in the analysis`,
-    long: `Comprehensive report covering all aspects in detail with subsections`,
+  const reportLengthGuide = {
+    short: `Keep it concise: 1-2 pages, focus on key points only`,
+    medium: `Standard length: 3-5 pages with proper sections`,
+    long: `Comprehensive: detailed coverage of all topics with subsections`,
   };
 
-  const reportPrompt = `You are a professional report writer. Using the analysis below, generate a well-structured Due Diligence Report.
+  const reportPrompt = `You are a professional M&A report writer. Using the analysis below, generate a ${reportConfig.title}.
 
-=== DEEP ANALYSIS FROM PHASE 2 ===
+=== ANALYSIS ===
 ${deepAnalysis}
 === END ANALYSIS ===
 
-${instructionMode === 'manual' && instructions ? `USER'S SPECIFIC REQUIREMENTS:\n${instructions}\n` : ''}
+${instructions ? `USER'S ADDITIONAL REQUIREMENTS:\n${instructions}\n` : ''}
 
-REPORT REQUIREMENTS:
-- Length: ${reportStructure[reportLength] || reportStructure.medium}
+REPORT INSTRUCTIONS:
+${reportConfig.reportInstruction}
+
+LENGTH: ${reportLengthGuide[reportLength] || reportLengthGuide.medium}
+
+QUALITY REQUIREMENTS:
 - Include ONLY facts from the analysis above
-- No hallucination - if data isn't in the analysis, don't include it
-- Use specific numbers, names, and dates from the analysis
-- Mark any data gaps or missing information clearly
+- No hallucination - if data isn't available, say so
+- Use specific numbers, names, and dates
+- Write for a sophisticated M&A audience (investment bankers, PE professionals)
+- Be direct and professional in tone
 
 OUTPUT FORMAT (HTML for Word document):
-- Start with: <h1 style="font-family: Calibri, sans-serif; color: #1e3a5f;">Due Diligence Report: [Company Name]</h1>
-- Add date: <p style="font-family: Calibri, sans-serif; color: #666; font-size: 12px;">Generated: ${new Date().toLocaleDateString()}</p>
-- Use <h2 style="font-family: Calibri, sans-serif; color: #2563eb; border-bottom: 2px solid #2563eb; padding-bottom: 5px;"> for section headers
-- Use <h3 style="font-family: Calibri, sans-serif; color: #1e40af;"> for subsections
-- Use <ul style="font-family: Calibri, sans-serif;"><li> for bullet points
-- Use <table style="font-family: Calibri, sans-serif; border-collapse: collapse; width: 100%;"> for financial data
-- Table cells: <td style="border: 1px solid #ddd; padding: 8px;">
+- Title: <h1 style="font-family: Calibri, sans-serif; color: #1e3a5f;">${reportConfig.title}: [Company Name]</h1>
+- Date: <p style="font-family: Calibri, sans-serif; color: #666; font-size: 12px;">Prepared: ${new Date().toLocaleDateString()}</p>
+- Section headers: <h2 style="font-family: Calibri, sans-serif; color: #2563eb; border-bottom: 2px solid #2563eb; padding-bottom: 5px;">
+- Subsections: <h3 style="font-family: Calibri, sans-serif; color: #1e40af;">
+- Bullet points: <ul style="font-family: Calibri, sans-serif;"><li>
+- Tables (for data): <table style="font-family: Calibri, sans-serif; border-collapse: collapse; width: 100%;"> with <td style="border: 1px solid #ddd; padding: 8px;">
 - Important text: <strong>
-- Add a final section: "Information Gaps & Recommended Next Steps"
+- End with: "Information Gaps & Next Steps" section
 
 Generate CLEAN HTML only. No markdown, no code blocks.`;
 
@@ -11757,7 +11939,7 @@ app.post('/api/due-diligence', async (req, res) => {
     files = [],
     audioFiles = [],
     instructions,
-    instructionMode = 'auto', // 'auto' or 'manual'
+    reportType = 'target_overview', // target_overview, commercial_dd, red_flags, meeting_summary, investment_thesis
     reportLength,
     outputType = 'dd_report',
     audioLang = 'auto',
@@ -11791,10 +11973,10 @@ app.post('/api/due-diligence', async (req, res) => {
     `[DD] Has Raw Transcript: ${rawTranscript ? 'Yes (' + rawTranscript.length + ' chars)' : 'No'}`
   );
   console.log(`[DD] Report Length: ${length}`);
+  console.log(`[DD] Report Type: ${reportType}`);
   console.log(`[DD] Email: ${email}`);
-  console.log(`[DD] Instruction Mode: ${instructionMode}`);
   console.log(
-    `[DD] Instructions: ${instructions ? instructions.substring(0, 100) + '...' : 'None'}`
+    `[DD] Additional Context: ${instructions ? instructions.substring(0, 100) + '...' : 'None'}`
   );
   console.log('='.repeat(60));
 
@@ -11951,15 +12133,11 @@ app.post('/api/due-diligence', async (req, res) => {
         allFiles,
         instructions,
         length,
-        instructionMode
+        reportType
       );
-      const lengthLabel = {
-        short: '1-Page Summary',
-        medium: '2-3 Page Report',
-        long: 'Comprehensive Report',
-      };
-      emailSubject = `Due Diligence Report - ${files[0]?.name || audioFiles[0]?.name || 'Analysis'} (${lengthLabel[length]})`;
-      docTitle = 'Due Diligence Report';
+      const reportConfig = DD_REPORT_TYPES[reportType] || DD_REPORT_TYPES.target_overview;
+      emailSubject = `${reportConfig.title} - ${files[0]?.name || audioFiles[0]?.name || 'Analysis'}`;
+      docTitle = reportConfig.title;
     }
 
     // Step 5: Build email HTML
