@@ -4195,6 +4195,8 @@ function discoverPagesFromNavigation(html, origin) {
 
   // Priority keywords - pages likely to have important company info
   // Higher priority = lower number = scraped first
+  // NOTE: Only use universal English keywords - local language pages will be
+  // discovered via link text analysis below, not hardcoded URL patterns
   const priorityKeywords = {
     // Highest priority - manufacturing/production info
     'manufacturing': 1, 'production': 1, 'factory': 1, 'facilities': 1, 'plant': 1,
@@ -4206,9 +4208,8 @@ function discoverPagesFromNavigation(html, origin) {
     'products': 5, 'product': 5, 'services': 5, 'service': 5, 'solutions': 5,
     // Contact and location
     'contact': 6, 'contact-us': 6, 'contactus': 6, 'location': 6, 'locations': 6,
-    // Partners and clients (English + Indonesian + Thai + Vietnamese)
+    // Partners and clients (English only - universal in business URLs)
     'partners': 7, 'clients': 7, 'customers': 7, 'portfolio': 7,
-    'klien': 7, 'pelanggan': 7, 'mitra': 7,  // Indonesian: klien=clients, pelanggan=customers, mitra=partners
     'customer': 7, 'client': 7, 'partner': 7,
     // Quality and certifications
     'quality': 8, 'certification': 8, 'certifications': 8, 'awards': 8,
@@ -4227,13 +4228,18 @@ function discoverPagesFromNavigation(html, origin) {
     '.pdf', '.doc', '.xls', '.zip', '.jpg', '.png', '.gif'
   ];
 
-  // Extract links from navigation elements, header, and main content
-  // Pattern matches: <a href="...">
-  const linkPattern = /<a[^>]*href=["']([^"'#]+)["'][^>]*>/gi;
+  // Extract links WITH their link text - this lets us prioritize based on
+  // what the link says (in any language), not just the URL path
+  // Pattern matches: <a href="...">link text</a>
+  const linkPattern = /<a[^>]*href=["']([^"'#]+)["'][^>]*>([^<]*)</gi;
   let match;
+
+  // Store url -> linkText mapping for priority boosting
+  const urlLinkText = new Map();
 
   while ((match = linkPattern.exec(html)) !== null) {
     let href = match[1].trim();
+    const linkText = (match[2] || '').trim().toLowerCase();
 
     // Skip empty, javascript:, mailto:, tel:, anchors
     if (!href || href.startsWith('javascript:') || href.startsWith('mailto:') ||
@@ -4277,21 +4283,43 @@ function discoverPagesFromNavigation(html, origin) {
       continue;
     }
 
-    discoveredUrls.add(origin + normalizedPath);
+    const fullUrlStr = origin + normalizedPath;
+    discoveredUrls.add(fullUrlStr);
+    // Store longest link text for this URL (more descriptive)
+    if (!urlLinkText.has(fullUrlStr) || linkText.length > urlLinkText.get(fullUrlStr).length) {
+      urlLinkText.set(fullUrlStr, linkText);
+    }
   }
 
   // Convert to array and sort by priority
   const urlsWithPriority = Array.from(discoveredUrls).map(url => {
     const path = new URL(url).pathname.toLowerCase();
-    let priority = 100; // Default low priority
+    const linkText = urlLinkText.get(url) || '';
+    let priority = 50; // Default MID priority (not lowest) - scrape unknown pages too
 
+    // Check URL path for English keywords
     for (const [keyword, prio] of Object.entries(priorityKeywords)) {
       if (path.includes(keyword)) {
         priority = Math.min(priority, prio);
       }
     }
 
-    return { url, priority, path };
+    // ALSO check link text - this catches local language pages
+    // If link text mentions customers/clients/partners (in any language that uses
+    // similar concepts), we boost the priority
+    for (const [keyword, prio] of Object.entries(priorityKeywords)) {
+      if (linkText.includes(keyword)) {
+        priority = Math.min(priority, prio);
+      }
+    }
+
+    // Shorter paths are usually more important (e.g., /about vs /about/team/member1)
+    const pathDepth = (path.match(/\//g) || []).length;
+    if (pathDepth <= 1 && priority === 50) {
+      priority = 40; // Boost shallow unknown pages
+    }
+
+    return { url, priority, path, linkText };
   });
 
   // Sort by priority (lower = more important)
@@ -4335,17 +4363,16 @@ async function scrapeMultiplePages(baseUrl) {
     // Step 2: Discover pages from navigation
     const discoveredPages = discoverPagesFromNavigation(homepageResult.rawHtml, origin);
 
-    // Step 3: Also add common fallback paths that might not be in navigation
+    // Step 3: Also add common ENGLISH fallback paths that might not be in navigation
     // (some sites hide these in footer or don't link them prominently)
+    // NOTE: We don't hardcode language-specific paths - the link text analysis above
+    // will catch local language pages like /klien-kami based on their link text
     const fallbackPaths = [
       '/manufacturing', '/production', '/factory', '/facilities', '/plant',
       '/capabilities', '/capacity', '/operations',
       '/about', '/about-us', '/about.html', '/aboutus', '/company', '/profile', '/company-profile',
       '/contact', '/contact-us', '/contact.html', '/contactus',
       '/products', '/services',
-      // Indonesian client/customer pages - often contain customer logos
-      '/klien-kami', '/klien', '/pelanggan', '/pelanggan-kami', '/mitra', '/mitra-kami',
-      // Partners and clients pages - common patterns
       '/clients', '/customers', '/partners', '/our-clients', '/our-customers', '/our-partners'
     ];
 
@@ -4356,8 +4383,8 @@ async function scrapeMultiplePages(baseUrl) {
       }
     }
 
-    // Step 4: Scrape discovered pages (limit to 8 to balance coverage vs timeout)
-    const MAX_PAGES = 8;
+    // Step 4: Scrape discovered pages (increased limit to catch more local language pages)
+    const MAX_PAGES = 12;
     const scrapedUrls = new Set([baseUrl]);
 
     for (const pageUrl of discoveredPages) {
