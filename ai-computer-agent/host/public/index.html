@@ -4,32 +4,24 @@
     <meta charset="UTF-8">
     <title>AI Agent</title>
     <style>
-        body { font-family: system-ui; background: #1a1a2e; color: #eee; padding: 20px; margin: 0; }
+        body { font-family: system-ui; background: #1a1a2e; color: #eee; padding: 20px; margin: 0; max-width: 600px; margin: 0 auto; }
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         .status { padding: 6px 14px; background: #252540; border-radius: 16px; font-size: 13px; }
         .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ff4757; margin-right: 8px; }
         .dot.on { background: #2ed573; }
-        .main { display: grid; grid-template-columns: 1fr 350px; gap: 20px; }
         .panel { background: #252540; border-radius: 10px; padding: 16px; }
-        .screen { background: #111; border-radius: 6px; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
-        .screen img { max-width: 100%; max-height: 100%; }
-        .screen span { color: #555; font-size: 13px; }
-        textarea { width: 100%; height: 100px; background: #1a1a2e; border: 1px solid #333; border-radius: 6px; color: #eee; padding: 12px; font-size: 13px; resize: none; box-sizing: border-box; }
+        textarea { width: 100%; height: 80px; background: #1a1a2e; border: 1px solid #333; border-radius: 6px; color: #eee; padding: 12px; font-size: 13px; resize: none; box-sizing: border-box; }
         textarea:focus { outline: none; border-color: #5352ed; }
-        .row { display: flex; gap: 10px; margin-top: 10px; align-items: center; }
+        .row { display: flex; gap: 10px; margin: 10px 0; align-items: center; }
         input[type="number"] { width: 60px; padding: 8px; background: #1a1a2e; border: 1px solid #333; border-radius: 6px; color: #eee; text-align: center; }
         button { padding: 8px 16px; border: none; border-radius: 6px; cursor: pointer; font-size: 13px; }
         .primary { background: #5352ed; color: white; }
         .primary:disabled { background: #444; cursor: not-allowed; }
         .danger { background: #ff4757; color: white; }
-        .secondary { background: #333; color: #eee; }
-        .log { height: 300px; overflow-y: auto; background: #1a1a2e; border-radius: 6px; padding: 10px; font-size: 12px; font-family: monospace; }
+        .log { height: 350px; overflow-y: auto; background: #1a1a2e; border-radius: 6px; padding: 10px; font-size: 12px; font-family: monospace; }
         .log div { padding: 4px 0; border-bottom: 1px solid #2a2a4a; }
         .log .time { color: #666; margin-right: 8px; }
-        .stats { display: flex; gap: 20px; margin: 12px 0; font-size: 13px; color: #888; }
-        .stats span { color: #5352ed; font-weight: bold; }
         label { font-size: 12px; color: #888; }
-        @media (max-width: 900px) { .main { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
@@ -37,28 +29,19 @@
         <h2 style="margin:0">AI Agent</h2>
         <div class="status"><span class="dot" id="dot"></span><span id="vmText">Disconnected</span></div>
     </div>
-    <div class="main">
-        <div class="panel">
-            <div class="screen" id="screen"><span>No screenshot</span></div>
-            <div class="stats" id="stats" style="display:none">
-                Iteration: <span id="iter">0</span> | PRs: <span id="prs">0</span> | <span id="status">-</span>
-            </div>
-            <button class="secondary" onclick="refresh()">Refresh Screenshot</button>
-            <button class="danger" onclick="cancel()" id="cancelBtn" style="display:none;margin-left:10px">Cancel</button>
+    <div class="panel">
+        <textarea id="task" placeholder="Describe task..."></textarea>
+        <div class="row">
+            <label>Max:</label>
+            <input type="number" id="dur" value="120" min="10" max="240">
+            <label>min</label>
+            <button class="primary" id="startBtn" onclick="start()" disabled>Start</button>
+            <button class="danger" onclick="cancel()" id="cancelBtn" style="display:none">Cancel</button>
         </div>
-        <div class="panel">
-            <textarea id="task" placeholder="Describe task..."></textarea>
-            <div class="row">
-                <label>Max:</label>
-                <input type="number" id="dur" value="120" min="10" max="240">
-                <label>min</label>
-                <button class="primary" id="startBtn" onclick="start()" disabled>Start</button>
-            </div>
-            <div class="log" id="log"></div>
-        </div>
+        <div class="log" id="log"></div>
     </div>
     <script>
-        let ws, task = null;
+        let ws;
         function connect() {
             ws = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}`);
             ws.onopen = () => log('Connected');
@@ -68,25 +51,20 @@
         function handle(m) {
             const p = m.payload;
             switch(m.type) {
-                case 'init':
-                    setVM(p.vmConnected);
-                    if (p.latestScreenshot) setImg(p.latestScreenshot);
-                    if (p.currentTask) setTask(p.currentTask);
-                    break;
+                case 'init': setVM(p.vmConnected); break;
                 case 'vm_status': setVM(p.connected); break;
-                case 'task_created': setTask(p.task); log('Task started'); break;
+                case 'task_created':
+                    document.getElementById('cancelBtn').style.display = 'inline';
+                    log('Task started');
+                    break;
                 case 'task_update':
-                    if (p.task) updateTask(p.task);
-                    if (p.screenshot) setImg(p.screenshot);
+                    if (p.task?.messages?.length) log(p.task.messages[p.task.messages.length-1].message);
                     break;
                 case 'task_complete':
                     log(`Done: ${p.task.status}`);
                     if (p.task.result) log(p.task.result);
-                    task = null;
                     document.getElementById('cancelBtn').style.display = 'none';
-                    document.getElementById('stats').style.display = 'none';
                     break;
-                case 'screenshot': setImg(p.screenshot); break;
                 case 'error': log('Error: ' + p.message); break;
                 case 'plan_proposal':
                     log('Plan: ' + p.plan);
@@ -102,21 +80,6 @@
             document.getElementById('vmText').textContent = on ? 'Connected' : 'Disconnected';
             document.getElementById('startBtn').disabled = !on;
         }
-        function setImg(b64) {
-            document.getElementById('screen').innerHTML = `<img src="data:image/png;base64,${b64}">`;
-        }
-        function setTask(t) {
-            task = t;
-            document.getElementById('stats').style.display = 'flex';
-            document.getElementById('cancelBtn').style.display = 'inline';
-            updateTask(t);
-        }
-        function updateTask(t) {
-            document.getElementById('iter').textContent = t.iterations || 0;
-            document.getElementById('prs').textContent = t.prsMerged || 0;
-            document.getElementById('status').textContent = t.status;
-            if (t.messages?.length) log(t.messages[t.messages.length-1].message);
-        }
         function start() {
             const desc = document.getElementById('task').value.trim();
             if (!desc) return alert('Enter task');
@@ -125,9 +88,6 @@
         }
         function cancel() {
             if (confirm('Cancel task?')) ws.send(JSON.stringify({type:'cancel_task',payload:{}}));
-        }
-        function refresh() {
-            ws.send(JSON.stringify({type:'request_screenshot',payload:{}}));
         }
         function log(msg) {
             const d = document.getElementById('log');
