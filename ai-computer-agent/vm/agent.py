@@ -192,12 +192,12 @@ Output ONLY the JSON object now:"""
             full_prompt = prompt
 
         try:
-            # Call Claude Code CLI with --print flag for non-interactive output
-            # Using -p for prompt input
+            # Call Claude Code CLI with --print and --output-format json
             result = subprocess.run(
                 [
                     self.config.claude_code_path,
                     "--print",  # Non-interactive, just print response
+                    "--output-format", "json",  # Get structured JSON output
                     "--dangerously-skip-permissions",  # Skip permission prompts
                     "-p", full_prompt,
                 ],
@@ -217,7 +217,35 @@ Output ONLY the JSON object now:"""
                     "satisfied": False
                 })
 
-            return result.stdout
+            # Parse the JSON output format from Claude Code
+            output = result.stdout
+            print(f"Raw Claude output: {output[:500]}...")  # Debug
+
+            # Try to extract the text response from JSON format
+            try:
+                cli_response = json.loads(output)
+                # Claude Code JSON format has response in 'result' or 'content'
+                if isinstance(cli_response, dict):
+                    if 'result' in cli_response:
+                        return cli_response['result']
+                    elif 'content' in cli_response:
+                        return cli_response['content']
+                    elif 'text' in cli_response:
+                        return cli_response['text']
+                # If it's a list of messages, get the last assistant message
+                if isinstance(cli_response, list):
+                    for msg in reversed(cli_response):
+                        if isinstance(msg, dict) and msg.get('role') == 'assistant':
+                            content = msg.get('content', '')
+                            if isinstance(content, list):
+                                for c in content:
+                                    if isinstance(c, dict) and c.get('type') == 'text':
+                                        return c.get('text', '')
+                            return content
+            except json.JSONDecodeError:
+                pass  # Fall through to return raw output
+
+            return output
 
         except subprocess.TimeoutExpired:
             logger.error("Claude Code CLI timeout")
