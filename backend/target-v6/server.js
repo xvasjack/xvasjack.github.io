@@ -1876,11 +1876,25 @@ app.post('/api/find-target-v6', async (req, res) => {
         // Round 8: Emerging and newer companies
         `Find emerging and newer ${business} companies in ${country}. Look for companies founded in recent years.${termHint}${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
 
-        // Round 9: Specialized/niche players
-        `Find specialized and niche ${business} companies in ${country}. Look for companies with specific focus areas within the industry.${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+        // Round 9: Gap-filling - what's missing from our list?
+        `Here are ${business} companies in ${country} that we've already found: ${alreadyFoundList || 'none yet'}
 
-        // Round 10: Final exhaustive sweep
-        `Find any remaining ${business} companies in ${country} not yet found. Use ALL search variations.${termHint}${localHint}${citiesHint}${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
+What OTHER ${business} companies exist in ${country} that are NOT on this list? Think about:
+- Lesser-known local players
+- Companies using different business names or trading names
+- Companies that might be categorized differently but do the same business
+
+Only return companies with real, working websites. Return company name, website, HQ location. Exclude: ${exclusion}`,
+
+        // Round 10: Final gap-filling with knowledge recall
+        `We are researching ${business} companies in ${country}. We have found these companies so far: ${alreadyFoundList || 'none yet'}
+
+Based on your knowledge, what other ${business} companies in ${country} are we missing? Consider:
+- Companies you know exist in this industry
+- Regional players that might not rank high in search results
+- Companies with alternative names or subsidiaries
+
+Only include companies you are confident exist and have websites. Return company name, website, HQ location. Exclude: ${exclusion}`,
       ];
 
       return prompts[round % prompts.length];
@@ -1895,16 +1909,18 @@ app.post('/api/find-target-v6', async (req, res) => {
       'alt terminology',
       'regional/city',
       'emerging',
-      'specialized',
-      'final sweep',
+      'gap-filling',
+      'knowledge recall',
     ];
 
     for (let round = 0; round < NUM_ROUNDS; round++) {
       const roundStart = Date.now();
 
       // Build "already found" list (company names only to save tokens)
+      // Use more names for gap-filling rounds (8, 9) to give AI better context
+      const alreadyFoundLimit = round >= 8 ? 200 : 100;
       const alreadyFound = allCompanies
-        .slice(0, 100)
+        .slice(0, alreadyFoundLimit)
         .map((c) => c.company_name)
         .join(', ');
 
