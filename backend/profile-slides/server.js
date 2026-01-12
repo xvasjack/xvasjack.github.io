@@ -3609,14 +3609,27 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       }
 
       // Add Key Customers row if available and not already shown on right side
+      // Display as industry-segmented list: "Industry1: Cust1, Cust2\nIndustry2: Cust3"
       if (relationships.customers && relationships.customers.length > 0) {
         const rightTitle = ensureString(company.breakdown_title).toLowerCase();
         const isCustomersOnRight = rightTitle.includes('customer') || rightTitle.includes('client');
         if (!isCustomersOnRight && !existingLabels.has('customers') && !existingLabels.has('key customers')) {
           const cleanedCustomers = filterGarbageNames(relationships.customers, companyNameForFilter);
           if (cleanedCustomers.length > 0) {
-            // Apply acronym fixing to customer names (VVF, BNI, PLN should be ALL CAPS)
-            const customersList = fixAcronymCasing(cleanedCustomers.slice(0, 10).join(', '));
+            // If we have segmented customers (from AI), use that format
+            // Otherwise just list them comma-separated
+            const segmented = company._customerSegments;
+            let customersList;
+            if (segmented && Object.keys(segmented).length > 0) {
+              // Format: "Industry: Cust1, Cust2\nIndustry2: Cust3, Cust4"
+              customersList = Object.entries(segmented)
+                .map(([industry, names]) => `${industry}: ${names.join(', ')}`)
+                .join('\n');
+            } else {
+              customersList = cleanedCustomers.slice(0, 10).join(', ');
+            }
+            // Apply acronym fixing (VVF, BNI, PLN should be ALL CAPS)
+            customersList = fixAcronymCasing(customersList);
             tableData.push(['Customers', customersList, null]);
             existingLabels.add('customers');
             console.log(`    Added Customers: ${customersList.substring(0, 80)}...`);
@@ -3638,13 +3651,15 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           const lines = text.split('\n').filter(line => line.trim());
 
           // Return array of text objects with proper PPT bullet formatting
+          // Using hanging indent: bullet at 0.24", text at 0.48" (0.24" hanging)
           return lines.map((line, index) => {
             const cleanLine = line.replace(/^[■\-•]\s*/, '').trim();
             const isLastLine = index === lines.length - 1;
             return {
               text: cleanLine,
               options: {
-                bullet: { code: '25A0' }, // BLACK SQUARE ■
+                bullet: { code: '25A0', indent: 17 }, // BLACK SQUARE ■ with 0.24" indent (17pt)
+                indentLevel: 0,
                 breakLine: !isLastLine
               }
             };
@@ -3938,14 +3953,14 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       } else if (forceTable || !isImageBusiness || !hasImages) {
         // TABLE LAYOUT: Show table format - THEMATIC (one category only based on breakdown_title)
         // Right side should focus on ONE thing: products, OR customers, OR suppliers, etc.
-        // Row limit based on rightLayout: 'table-6' = 6 rows, 'table-unlimited' = no limit, 'table-half' = 3-4 rows
+        // Row limit based on rightLayout: 'table-6' = 6 rows, 'table-unlimited' = no limit, 'table-half' = 3 rows (half height with 財務実績 section below)
 
         // Determine max rows based on layout
         let maxRows;
         if (rightLayout === 'table-unlimited') {
           maxRows = 999; // effectively no limit
         } else if (rightLayout === 'table-half') {
-          maxRows = 4;
+          maxRows = 3;  // Half page = only 3 rows to leave room for section below
         } else {
           maxRows = 6; // default for table-6
         }
@@ -4025,9 +4040,10 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         if (prioritizedItems.length >= 1) {
           const rightTableData = prioritizedItems.map(item => [String(item.label || ''), String(item.value || '')]);
 
-          // Calculate row height to distribute evenly within 4.75" height
-          // Use Math.max to prevent division by zero edge case
-          const rightTableHeight = 4.75;
+          // Calculate row height to distribute evenly
+          // For table-half: use shorter height (1.8") to leave room for 財務実績 section below
+          // For other layouts: use full height (4.75")
+          const rightTableHeight = rightLayout === 'table-half' ? 1.8 : 4.75;
           const rightRowHeight = rightTableHeight / Math.max(rightTableData.length, 1);
 
           const rightRows = rightTableData.map((row) => [
@@ -4067,6 +4083,22 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
             valign: 'middle',
             border: { pt: 2.5, color: COLORS.white },
             margin: [0, 0.04, 0, 0.04]
+          });
+
+        }
+
+        // For table-half: Add 財務実績 header and line below the table (even if no items)
+        if (rightLayout === 'table-half') {
+          // 財務実績 header - same format as top right header
+          slide.addText('財務実績', {
+            x: 6.86, y: 3.98, w: 6.1, h: 0.35,
+            fontSize: 14, fontFace: 'Segoe UI',
+            color: COLORS.black, align: 'center'
+          });
+          // Line below header
+          slide.addShape(pptx.shapes.LINE, {
+            x: 6.86, y: 4.33, w: 6.1, h: 0,
+            line: { color: COLORS.dk2, width: 1.75 }
           });
         }
       }
@@ -6118,6 +6150,13 @@ async function extractNamesFromLogosWithVision(rawHtml, websiteUrl) {
       imageUrls.add(match[1]);
     }
 
+    // Pattern 5: Background images in style attributes (common for logo carousels)
+    const bgImagePattern = /style=["'][^"']*background(?:-image)?:\s*url\(['"]?([^"')]+)['"]?\)/gi;
+    while ((match = bgImagePattern.exec(relevantHtml)) !== null) {
+      const url = match[1];
+      if (!url.startsWith('data:')) imageUrls.add(url);
+    }
+
     // Process and filter URLs
     const processedUrls = [];
     for (let imgUrl of imageUrls) {
@@ -6204,9 +6243,10 @@ Return ONLY a JSON object with this exact format:
 Rules:
 - "customers" = companies that appear to be clients/customers (usually corporate logos)
 - "brands" = product brands or consumer brands (usually product logos)
-- "principals" = brands/companies this company distributes for or represents (supplier brands like Hikvision, Honeywell, Axis, Bosch, etc.)
-- CRITICAL: Be EXHAUSTIVE - extract EVERY logo you can identify, not just a few
-- Common security industry principals: Hikvision, Dahua, Axis, Hanwha, Wisenet, Samsung, Honeywell, Bosch, HID, ZKTeco, Genetec, Milestone
+- "principals" = brands/companies this company distributes for or represents (supplier/vendor brands)
+- CRITICAL: Be EXHAUSTIVE - extract EVERY logo you can identify, not just a few. If you see 20 logos, list all 20!
+- Security industry principals: Gallagher, Hikvision, Dahua, Axis, Hanwha, Wisenet, Samsung, Honeywell, Bosch, HID, ZKTeco, Genetec, Milestone, Suprema, Paxton, ASSA ABLOY, dormakaba, Allegion, Verkada, Avigilon, IDEMIA, NEC, Lenel, Inner Range, SALTO, SimonsVoss, Vanderbilt, Commend, Comelit, 2N, BioStar, Virdi, ANVIZ, ESSL, Mantra, Realtime, Matrix, eSSL, Fingertec, Seagate, Western Digital, QNAP, Synology
+- Access control: Gallagher, Paxton, Genetec, Inner Range, SALTO, Suprema, HID, ASSA ABLOY
 - If you can't read a logo clearly, still try to identify it from shape/colors
 - Do NOT include generic words like "logo", "image", "client"
 - Return ONLY the JSON, no explanation`
@@ -6369,8 +6409,8 @@ Return ONLY a JSON object:
 
 Rules:
 - SCAN THE ENTIRE IMAGE - logos are often near the bottom!
-- EXTRACT ALL visible logos - if you see 15 logos, list all 15
-- Look for logo carousels that may show: Hanwha, Wisenet, Samsung, Honeywell, Axis, Hikvision, Dahua, Bosch, HID, ZKTeco, NxWitness, Hitron, Genetec, Milestone
+- EXTRACT ALL visible logos - if you see 15 logos, list all 15. If you see 30, list all 30!
+- Security industry logos to look for: Gallagher, Hanwha, Wisenet, Samsung, Honeywell, Axis, Hikvision, Dahua, Bosch, HID, ZKTeco, NxWitness, Hitron, Genetec, Milestone, Suprema, Paxton, ASSA ABLOY, dormakaba, Allegion, Verkada, Avigilon, IDEMIA, NEC, Lenel, Inner Range, SALTO, SimonsVoss, Vanderbilt, Commend, Comelit, 2N, BioStar, Virdi, ANVIZ, Seagate, Western Digital, QNAP, Synology
 - "principals" = supplier/vendor brands this company distributes for
 - "customers" = companies that buy from this company
 - "brands" = product brands
@@ -6420,6 +6460,57 @@ Rules:
     console.log(`    Screenshot: Error - ${error.message}`);
     return { customers: [], brands: [], principals: [] };
   }
+}
+
+// Segment customers by industry using AI (for cleaner display)
+// Returns: { "Industry1": ["Cust1", "Cust2"], "Industry2": ["Cust3"] }
+async function segmentCustomersByIndustry(customers, openai) {
+  if (!customers || customers.length < 3) return null;  // Only segment if we have enough customers
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{
+        role: 'user',
+        content: `Group these company names by industry. Use SHORT industry labels (1-2 words max).
+
+Companies: ${customers.slice(0, 15).join(', ')}
+
+Return ONLY a JSON object like: {"Banking": ["Bank A", "Bank B"], "Energy": ["Oil Co"], "Government": ["Agency X"]}
+
+Rules:
+- Use common industry labels: Banking, Energy, Government, Manufacturing, Construction, Healthcare, Retail, Technology, Automotive, Real Estate, etc.
+- Maximum 5 industry groups
+- Each company goes in only one industry
+- If unsure of industry, use "Others"
+- Return ONLY valid JSON, no explanation`
+      }],
+      max_tokens: 500,
+      temperature: 0.1
+    });
+
+    const responseText = response.choices[0]?.message?.content || '{}';
+    const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      // Validate structure
+      if (typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+        // Filter out empty arrays and ensure arrays contain strings
+        const cleaned = {};
+        for (const [industry, names] of Object.entries(parsed)) {
+          if (Array.isArray(names) && names.length > 0) {
+            cleaned[industry] = names.map(n => String(n)).filter(n => n.length > 0);
+          }
+        }
+        if (Object.keys(cleaned).length > 0) {
+          return cleaned;
+        }
+      }
+    }
+  } catch (err) {
+    console.log(`    Customer segmentation failed: ${err.message}`);
+  }
+  return null;
 }
 
 // ===== Business Type Detection =====
@@ -8051,10 +8142,8 @@ async function processSingleWebsite(website, index, total) {
       regexBasedMetrics.push({ value: String(regexMetrics.employee_count), label: 'Employees' });
       regexCoveredTypes.add('employee');
     }
-    if (regexMetrics.years_experience) {
-      regexBasedMetrics.push({ value: String(regexMetrics.years_experience), label: 'Years Experience' });
-      regexCoveredTypes.add('year');
-    }
+    // Years experience is NOT a key metric - skip it
+    // (Operating for X years provides no investment insight)
     if (regexMetrics.export_countries) {
       regexBasedMetrics.push({ value: String(regexMetrics.export_countries), label: 'Export Countries' });
       regexCoveredTypes.add('export');
@@ -8152,7 +8241,9 @@ async function processSingleWebsite(website, index, total) {
       regexCoveredTypes.add('course');
     }
     if (regexMetrics.unit_count) {
-      regexBasedMetrics.push({ value: String(regexMetrics.unit_count) + '+', label: 'Units' });
+      // Use unit_text for context (e.g., "150+ Vivotek CCTV units" not just "150+ Units")
+      const unitLabel = regexMetrics.unit_text ? translateUnitsToEnglish(regexMetrics.unit_text) : String(regexMetrics.unit_count) + '+ Units';
+      regexBasedMetrics.push({ value: unitLabel, label: 'Units Installed' });
       regexCoveredTypes.add('unit');
     }
     if (regexMetrics.acreage) {
@@ -8280,6 +8371,12 @@ async function processSingleWebsite(website, index, total) {
     businessRelationships.brands = allBrands;
     businessRelationships.principals = allPrincipals;
 
+    // Segment customers by industry for cleaner display (if we have enough)
+    let customerSegments = null;
+    if (allCustomers.length >= 3) {
+      customerSegments = await segmentCustomersByIndustry(allCustomers, openai);
+    }
+
     const relationshipCounts = Object.entries(businessRelationships)
       .filter(([, arr]) => arr.length > 0)
       .map(([key, arr]) => `${key}: ${arr.length}`)
@@ -8311,6 +8408,8 @@ async function processSingleWebsite(website, index, total) {
       _logo: logoResult,
       // Categorized business relationships (customers, suppliers, principals, brands)
       _businessRelationships: businessRelationships,
+      // Customers segmented by industry (for display)
+      _customerSegments: customerSegments,
       // Product/project images for right side (B2C and project-based)
       _productProjectImages: productProjectImages
     };
@@ -8784,6 +8883,12 @@ app.post('/api/generate-ppt', async (req, res) => {
         businessRelationships.brands = allBrands;
         businessRelationships.principals = allPrincipals;
 
+        // Segment customers by industry for cleaner display
+        let customerSegments = null;
+        if (allCustomers.length >= 3) {
+          customerSegments = await segmentCustomersByIndustry(allCustomers, openai);
+        }
+
         const relationshipCounts = Object.entries(businessRelationships)
           .filter(([, arr]) => arr.length > 0)
           .map(([key, arr]) => `${key}: ${arr.length}`)
@@ -8813,6 +8918,8 @@ app.post('/api/generate-ppt', async (req, res) => {
           _logo: logoResult,
           // Categorized business relationships (customers, suppliers, principals, brands)
           _businessRelationships: businessRelationships,
+          // Customers segmented by industry (for display)
+          _customerSegments: customerSegments,
           // Product/project images
           _productProjectImages: productProjectImages
         };
