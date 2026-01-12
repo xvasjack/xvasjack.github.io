@@ -3764,7 +3764,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           const gridStartY = 1.91;
 
           if (rightLayout === 'images-labeled') {
-            // Layout: Image on left, label on right - 3-4 rows
+            // Layout: Image on left, label on right - 3-4 rows (vertical stack)
             const rowHeight = 1.15;
             const imageW = 2.0;
             const imageH = 1.0;
@@ -3797,42 +3797,107 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
               }
             }
           } else if (rightLayout === 'images-6') {
-            // Layout: 2x3 grid for 6 images
-            const colWidth = 3.0;
-            const rowHeight = 1.5;
-            const imageW = 2.8;
-            const imageH = 1.2;
+            // Layout: 1 large image LEFT + 6 small images (2x3 grid) RIGHT
+            // Based on user diagram: [Large][2x3 grid]
+            const mainImageW = 2.8;
+            const mainImageH = 4.2;
+            const smallColWidth = 1.55;
+            const smallRowHeight = 1.4;
+            const smallImageW = 1.45;
+            const smallImageH = 1.1;
+            const smallGridStartX = gridStartX + mainImageW + 0.15;
 
-            for (let i = 0; i < Math.min(preExtractedImages.length, 6); i++) {
+            // First image is the large main image
+            if (preExtractedImages.length > 0) {
+              try {
+                const mainImg = preExtractedImages[0];
+                const imgBase64 = await fetchImageAsBase64(mainImg.url);
+                if (imgBase64) {
+                  slide.addImage({
+                    data: `data:image/jpeg;base64,${imgBase64}`,
+                    x: gridStartX, y: gridStartY, w: mainImageW, h: mainImageH,
+                    sizing: { type: 'contain', w: mainImageW, h: mainImageH }
+                  });
+                }
+              } catch (imgErr) {
+                console.log(`  Failed to fetch main image: ${preExtractedImages[0].url}`);
+              }
+            }
+
+            // Remaining images in 2x3 grid on the right
+            for (let i = 1; i < Math.min(preExtractedImages.length, 7); i++) {
               const img = preExtractedImages[i];
-              const col = i % 2;
-              const row = Math.floor(i / 2);
-              const cellX = gridStartX + (col * colWidth);
-              const cellY = gridStartY + (row * rowHeight);
+              const gridIndex = i - 1;
+              const col = gridIndex % 2;
+              const row = Math.floor(gridIndex / 2);
+              const cellX = smallGridStartX + (col * smallColWidth);
+              const cellY = gridStartY + (row * smallRowHeight);
 
               try {
                 const imgBase64 = await fetchImageAsBase64(img.url);
                 if (imgBase64) {
                   slide.addImage({
                     data: `data:image/jpeg;base64,${imgBase64}`,
-                    x: cellX, y: cellY, w: imageW, h: imageH,
-                    sizing: { type: 'contain', w: imageW, h: imageH }
+                    x: cellX, y: cellY, w: smallImageW, h: smallImageH,
+                    sizing: { type: 'contain', w: smallImageW, h: smallImageH }
                   });
+                }
+              } catch (imgErr) {
+                console.log(`  Failed to fetch image: ${img.url}`);
+              }
+            }
+          } else if (rightLayout === 'images-4' || rightLayout === 'images') {
+            // Layout: 1 large image LEFT + 4 small images (2x2 grid) RIGHT
+            // Based on user diagram: [Large][2x2 grid]
+            const mainImageW = 2.8;
+            const mainImageH = 4.2;
+            const smallColWidth = 1.55;
+            const smallRowHeight = 2.1;
+            const smallImageW = 1.45;
+            const smallImageH = 1.7;
+            const smallGridStartX = gridStartX + mainImageW + 0.15;
 
-                  if (img.label) {
-                    slide.addText(img.label, {
-                      x: cellX, y: cellY + imageH + 0.02, w: imageW, h: 0.25,
-                      fontSize: 11, fontFace: 'Segoe UI',
-                      color: COLORS.black, align: 'center', valign: 'top'
-                    });
-                  }
+            // First image is the large main image
+            if (preExtractedImages.length > 0) {
+              try {
+                const mainImg = preExtractedImages[0];
+                const imgBase64 = await fetchImageAsBase64(mainImg.url);
+                if (imgBase64) {
+                  slide.addImage({
+                    data: `data:image/jpeg;base64,${imgBase64}`,
+                    x: gridStartX, y: gridStartY, w: mainImageW, h: mainImageH,
+                    sizing: { type: 'contain', w: mainImageW, h: mainImageH }
+                  });
+                }
+              } catch (imgErr) {
+                console.log(`  Failed to fetch main image: ${preExtractedImages[0].url}`);
+              }
+            }
+
+            // Remaining images in 2x2 grid on the right
+            for (let i = 1; i < Math.min(preExtractedImages.length, 5); i++) {
+              const img = preExtractedImages[i];
+              const gridIndex = i - 1;
+              const col = gridIndex % 2;
+              const row = Math.floor(gridIndex / 2);
+              const cellX = smallGridStartX + (col * smallColWidth);
+              const cellY = gridStartY + (row * smallRowHeight);
+
+              try {
+                const imgBase64 = await fetchImageAsBase64(img.url);
+                if (imgBase64) {
+                  slide.addImage({
+                    data: `data:image/jpeg;base64,${imgBase64}`,
+                    x: cellX, y: cellY, w: smallImageW, h: smallImageH,
+                    sizing: { type: 'contain', w: smallImageW, h: smallImageH }
+                  });
                 }
               } catch (imgErr) {
                 console.log(`  Failed to fetch image: ${img.url}`);
               }
             }
           } else {
-            // Default: 2x2 grid for 4 images
+            // Fallback: Simple 2x2 grid for 4 images (no main image)
             const colWidth = 3.0;
             const rowHeight = 2.2;
             const imageW = 2.8;
@@ -3853,14 +3918,6 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
                     x: cellX, y: cellY, w: imageW, h: imageH,
                     sizing: { type: 'contain', w: imageW, h: imageH }
                   });
-
-                  if (img.label) {
-                    slide.addText(img.label, {
-                      x: cellX, y: cellY + imageH + 0.05, w: imageW, h: 0.3,
-                      fontSize: 14, fontFace: 'Segoe UI',
-                      color: COLORS.black, align: 'center', valign: 'top'
-                    });
-                  }
                 }
               } catch (imgErr) {
                 console.log(`  Failed to fetch image: ${img.url}`);
