@@ -5926,60 +5926,84 @@ function extractRelevantSections(rawHtml, businessType) {
   if (businessType === 'b2c' || businessType === 'consumer') {
     keywords = [
       // English
-      'product', 'menu', 'dish', 'food', 'item', 'catalog', 'gallery', 'offering', 'service',
+      'product', 'menu', 'dish', 'food', 'item', 'catalog', 'gallery', 'offering', 'service', 'retail', 'shop', 'store',
       // Indonesian
-      'produk', 'layanan', 'katalog', 'menu', 'makanan',
+      'produk', 'layanan', 'katalog', 'menu', 'makanan', 'toko', 'gerai', 'warung', 'kedai',
       // Thai
-      'สินค้า', 'ผลิตภัณฑ์', 'บริการ', 'เมนู',
+      'สินค้า', 'ผลิตภัณฑ์', 'บริการ', 'เมนู', 'ร้านค้า', 'ร้านอาหาร', 'อาหาร',
       // Vietnamese
-      'sản phẩm', 'dịch vụ', 'thực đơn',
+      'sản phẩm', 'dịch vụ', 'thực đơn', 'cửa hàng', 'quán', 'món ăn',
       // Korean
-      '제품', '상품', '서비스', '메뉴',
+      '제품', '상품', '서비스', '메뉴', '매장', '음식',
       // Chinese/Taiwanese
-      '產品', '商品', '服務', '菜單',
+      '產品', '商品', '服務', '菜單', '店鋪', '美食',
       // Japanese
-      '製品', '商品', 'サービス',
+      '製品', '商品', 'サービス', 'メニュー', '店舗',
       // Malay
-      'produk', 'perkhidmatan'
+      'produk', 'perkhidmatan', 'kedai', 'menu', 'makanan',
+      // Filipino
+      'produkto', 'serbisyo', 'menu', 'pagkain', 'tindahan',
+      // Burmese
+      'ထုတ်ကုန်', 'ဝန်ဆောင်မှု', 'စာရင်း',
+      // Khmer
+      'ផលិតផល', 'សេវាកម្ម', 'ម៉ឺនុយ',
+      // Lao
+      'ຜະລິດຕະພັນ', 'ບໍລິການ', 'ເມນູ'
     ];
   } else if (businessType === 'project') {
     keywords = [
       // English
-      'project', 'portfolio', 'work', 'case', 'showcase', 'gallery', 'client-work', 'completed', 'track-record',
+      'project', 'portfolio', 'work', 'case', 'showcase', 'gallery', 'client-work', 'completed', 'track-record', 'reference', 'achievement',
       // Indonesian
-      'proyek', 'portofolio', 'pengalaman', 'prestasi',
+      'proyek', 'portofolio', 'pengalaman', 'prestasi', 'karya', 'referensi', 'hasil kerja',
       // Thai
-      'โครงการ', 'ผลงาน', 'โปรเจกต์',
+      'โครงการ', 'ผลงาน', 'โปรเจกต์', 'อ้างอิง', 'ประวัติงาน', 'งานที่เสร็จ',
       // Vietnamese
-      'dự án', 'công trình', 'danh mục dự án',
+      'dự án', 'công trình', 'danh mục dự án', 'tham khảo', 'thành tựu', 'công trình hoàn thành',
       // Korean
-      '프로젝트', '포트폴리오', '실적', '수행실적',
+      '프로젝트', '포트폴리오', '실적', '수행실적', '레퍼런스', '준공',
       // Chinese/Taiwanese
-      '專案', '案例', '工程實績', '實績',
+      '專案', '案例', '工程實績', '實績', '參考', '完工',
       // Japanese
-      'プロジェクト', '事例', '実績',
+      'プロジェクト', '事例', '実績', '施工実績', '参考',
       // Malay
-      'projek', 'portfolio'
+      'projek', 'portfolio', 'kerja', 'rujukan', 'pencapaian',
+      // Filipino
+      'proyekto', 'portfolio', 'gawa', 'sanggunian', 'nagawa',
+      // Burmese
+      'စီမံကိန်း', 'လုပ်ငန်း', 'ရည်ညွှန်း',
+      // Khmer
+      'គម្រោង', 'ស្នាដៃ', 'ឯកសារយោង',
+      // Lao
+      'ໂຄງການ', 'ຜົນງານ', 'ອ້າງອີງ'
     ];
   } else {
     // Industrial: manufacturing, equipment, capabilities, facilities
     keywords = [
       // English
-      'product', 'equipment', 'machinery', 'manufacturing', 'capability', 'facility', 'solution', 'gallery', 'showcase',
+      'product', 'equipment', 'machinery', 'manufacturing', 'capability', 'facility', 'solution', 'gallery', 'showcase', 'factory', 'plant', 'production',
       // Indonesian
-      'produk', 'peralatan', 'mesin', 'fasilitas', 'solusi',
+      'produk', 'peralatan', 'mesin', 'fasilitas', 'solusi', 'pabrik', 'manufaktur', 'produksi', 'kapasitas',
       // Thai
-      'สินค้า', 'ผลิตภัณฑ์', 'อุปกรณ์', 'เครื่องจักร',
+      'สินค้า', 'ผลิตภัณฑ์', 'อุปกรณ์', 'เครื่องจักร', 'โรงงาน', 'การผลิต', 'กำลังการผลิต', 'โซลูชัน',
       // Vietnamese
-      'sản phẩm', 'thiết bị', 'máy móc', 'giải pháp',
+      'sản phẩm', 'thiết bị', 'máy móc', 'giải pháp', 'nhà máy', 'sản xuất', 'công suất', 'năng lực',
       // Korean
-      '제품', '장비', '설비', '솔루션', '사업분야',
+      '제품', '장비', '설비', '솔루션', '사업분야', '공장', '제조', '생산', '시설',
       // Chinese/Taiwanese
-      '產品', '設備', '機械', '解決方案',
+      '產品', '設備', '機械', '解決方案', '工廠', '製造', '生產', '設施',
       // Japanese
-      '製品', '設備', '機械', 'ソリューション',
+      '製品', '設備', '機械', 'ソリューション', '工場', '製造', '生産', '施設',
       // Malay
-      'produk', 'peralatan', 'jentera'
+      'produk', 'peralatan', 'jentera', 'kilang', 'penyelesaian', 'pembuatan', 'pengeluaran',
+      // Filipino
+      'produkto', 'kagamitan', 'makinarya', 'pabrika', 'solusyon', 'paggawa', 'produksyon',
+      // Burmese
+      'ထုတ်ကုန်', 'စက်ပစ္စည်း', 'စက်ရုံ', 'ထုတ်လုပ်မှု',
+      // Khmer
+      'ផលិតផល', 'ឧបករណ៍', 'រោងចក្រ', 'ផលិតកម្ម',
+      // Lao
+      'ຜະລິດຕະພັນ', 'ອຸປະກອນ', 'ໂຮງງານ', 'ການຜະລິດ'
     ];
   }
 
@@ -6694,6 +6718,7 @@ function detectBusinessType(businessDescription, scrapedContent) {
 
   // B2C keywords (restaurants, hotels, retail, consumer products)
   const b2cKeywords = [
+    // English
     'restaurant', 'cafe', 'coffee', 'bakery', 'food service', 'catering',
     'hotel', 'resort', 'hospitality', 'accommodation', 'lodging',
     'retail', 'shop', 'store', 'boutique', 'mall', 'outlet',
@@ -6704,11 +6729,61 @@ function detectBusinessType(businessDescription, scrapedContent) {
     'consumer', 'b2c', 'end user', 'retail customer',
     'menu', 'dine', 'dining', 'cuisine', 'chef',
     'fashion', 'clothing', 'apparel', 'accessories',
-    'supermarket', 'grocery', 'convenience store', 'minimart'
+    'supermarket', 'grocery', 'convenience store', 'minimart',
+    // Indonesian
+    'restoran', 'kafe', 'warung', 'kedai kopi', 'rumah makan', 'toko roti',
+    'penginapan', 'losmen', 'homestay', 'villa',
+    'toko', 'gerai', 'pusat perbelanjaan',
+    'klinik', 'apotek', 'puskesmas',
+    'sekolah', 'kursus', 'bimbel', 'les',
+    'bioskop', 'tempat hiburan',
+    'swalayan', 'minimarket', 'indomaret', 'alfamart',
+    // Thai
+    'ร้านอาหาร', 'คาเฟ่', 'ร้านกาแฟ', 'ร้านเบเกอรี่', 'ภัตตาคาร',
+    'โรงแรม', 'รีสอร์ท', 'ที่พัก', 'เกสต์เฮาส์',
+    'ร้านค้า', 'ร้านขายของ', 'ห้างสรรพสินค้า', 'ศูนย์การค้า',
+    'คลินิก', 'ร้านขายยา', 'สถานพยาบาล',
+    'โรงเรียน', 'สถาบันกวดวิชา', 'ศูนย์ฝึกอบรม',
+    'โรงภาพยนตร์', 'สถานบันเทิง',
+    'ซุปเปอร์มาร์เก็ต', 'ร้านสะดวกซื้อ', 'เซเว่น', 'โลตัส',
+    // Vietnamese
+    'nhà hàng', 'quán ăn', 'quán cà phê', 'tiệm bánh', 'quán ăn nhanh',
+    'khách sạn', 'nhà nghỉ', 'homestay', 'resort',
+    'cửa hàng', 'siêu thị', 'trung tâm thương mại', 'chợ',
+    'phòng khám', 'nhà thuốc', 'bệnh viện',
+    'trường học', 'trung tâm đào tạo', 'học viện',
+    'rạp chiếu phim', 'khu vui chơi',
+    // Malay (Malaysia/Brunei)
+    'restoran', 'kedai makan', 'warung', 'kopitiam', 'kedai kopi',
+    'hotel', 'resort', 'penginapan', 'chalet',
+    'kedai', 'pasar raya', 'pusat membeli-belah',
+    'klinik', 'farmasi', 'pusat kesihatan',
+    'sekolah', 'pusat latihan', 'akademi',
+    'pawagam', 'pusat hiburan',
+    // Filipino/Tagalog
+    'kainan', 'karinderya', 'kapihan', 'panaderya', 'fastfood',
+    'otel', 'resort', 'inn', 'pension house',
+    'tindahan', 'mall', 'palengke', 'merkado',
+    'klinika', 'botika', 'ospital',
+    'paaralan', 'eskwelahan', 'training center',
+    'sinehan', 'pasyalan',
+    // Burmese (Myanmar)
+    'စားသောက်ဆိုင်', 'ကော်ဖီဆိုင်', 'မုန့်ဆိုင်',
+    'ဟိုတယ်', 'တည်းခိုခန်း',
+    'ဆိုင်', 'စျေး',
+    // Khmer (Cambodia)
+    'ភោជនីយដ្ឋាន', 'ហាងកាហ្វេ', 'ហាងនំ',
+    'សណ្ឋាគារ', 'ផ្ទះសំណាក់',
+    'ហាង', 'ផ្សារ',
+    // Lao
+    'ຮ້ານອາຫານ', 'ຮ້ານກາເຟ',
+    'ໂຮງແຮມ', 'ເຮືອນພັກ',
+    'ຮ້ານຄ້າ', 'ຕະຫຼາດ'
   ];
 
   // Project-based keywords (construction, engineering, development)
   const projectKeywords = [
+    // English
     'construction', 'contractor', 'builder', 'developer',
     'engineering', 'epc', 'design and build', 'turnkey',
     'infrastructure', 'civil works', 'building project',
@@ -6718,7 +6793,56 @@ function detectBusinessType(businessDescription, scrapedContent) {
     'marine', 'offshore', 'shipyard', 'vessel',
     'power plant', 'oil and gas', 'refinery',
     'completed project', 'project portfolio', 'project reference',
-    'our project', 'past project', 'recent project'
+    'our project', 'past project', 'recent project',
+    // Indonesian
+    'konstruksi', 'kontraktor', 'pemborong', 'pengembang', 'developer',
+    'rekayasa', 'sipil', 'bangunan', 'gedung', 'proyek',
+    'arsitektur', 'desain interior', 'renovasi', 'pembangunan',
+    'properti', 'perumahan', 'real estate',
+    'instalasi', 'pemasangan', 'manajemen proyek',
+    'galangan kapal', 'pelabuhan', 'dermaga',
+    'pembangkit listrik', 'migas', 'kilang',
+    'proyek selesai', 'portofolio proyek', 'referensi proyek',
+    // Thai
+    'ก่อสร้าง', 'ผู้รับเหมา', 'รับเหมา', 'นักพัฒนา',
+    'วิศวกรรม', 'งานโครงสร้าง', 'โครงการก่อสร้าง',
+    'สถาปัตยกรรม', 'ออกแบบภายใน', 'ตกแต่งภายใน', 'ปรับปรุง',
+    'อสังหาริมทรัพย์', 'พัฒนาที่ดิน', 'บ้านจัดสรร', 'คอนโด',
+    'ติดตั้ง', 'บริหารโครงการ',
+    'อู่ต่อเรือ', 'ท่าเรือ',
+    'โรงไฟฟ้า', 'น้ำมันและก๊าซ', 'โรงกลั่น',
+    'โครงการที่เสร็จ', 'ผลงานโครงการ',
+    // Vietnamese
+    'xây dựng', 'nhà thầu', 'thầu xây dựng', 'chủ đầu tư',
+    'kỹ thuật', 'công trình dân dụng', 'dự án xây dựng',
+    'kiến trúc', 'thiết kế nội thất', 'cải tạo', 'sửa chữa',
+    'bất động sản', 'phát triển bất động sản', 'chung cư', 'nhà phố',
+    'lắp đặt', 'quản lý dự án',
+    'nhà máy đóng tàu', 'cảng biển',
+    'nhà máy điện', 'dầu khí', 'lọc dầu',
+    'dự án hoàn thành', 'danh mục dự án',
+    // Malay
+    'pembinaan', 'kontraktor', 'pemaju', 'developer',
+    'kejuruteraan', 'sivil', 'projek bangunan',
+    'arkitek', 'rekabentuk dalaman', 'pengubahsuaian',
+    'hartanah', 'pembangunan hartanah', 'perumahan',
+    'pemasangan', 'pengurusan projek',
+    'limbungan kapal', 'pelabuhan',
+    'loji kuasa', 'minyak dan gas', 'kilang penapisan',
+    // Filipino
+    'konstruksyon', 'kontratista', 'developer', 'tagapagpaunlad',
+    'inhinyeriya', 'proyektong sibil', 'gusali',
+    'arkitektura', 'interior design', 'renovasyon',
+    'real estate', 'bahay', 'condominium',
+    'instalasyon', 'pamamahala ng proyekto',
+    'shipyard', 'pantalan',
+    'planta ng kuryente', 'langis at gas',
+    // Burmese
+    'ဆောက်လုပ်ရေး', 'ကန်ထရိုက်တာ', 'အင်ဂျင်နီယာ',
+    // Khmer
+    'សំណង់', 'អ្នកម៉ៅការ', 'វិស្វកម្ម',
+    // Lao
+    'ກໍ່ສ້າງ', 'ຜູ້ຮັບເໝົາ', 'ວິສະວະກຳ'
   ];
 
   // Count keyword matches
