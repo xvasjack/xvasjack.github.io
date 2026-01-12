@@ -3953,14 +3953,14 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       } else if (forceTable || !isImageBusiness || !hasImages) {
         // TABLE LAYOUT: Show table format - THEMATIC (one category only based on breakdown_title)
         // Right side should focus on ONE thing: products, OR customers, OR suppliers, etc.
-        // Row limit based on rightLayout: 'table-6' = 6 rows, 'table-unlimited' = no limit, 'table-half' = 3-4 rows
+        // Row limit based on rightLayout: 'table-6' = 6 rows, 'table-unlimited' = no limit, 'table-half' = 3 rows (half height with 財務実績 section below)
 
         // Determine max rows based on layout
         let maxRows;
         if (rightLayout === 'table-unlimited') {
           maxRows = 999; // effectively no limit
         } else if (rightLayout === 'table-half') {
-          maxRows = 4;
+          maxRows = 3;  // Half page = only 3 rows to leave room for section below
         } else {
           maxRows = 6; // default for table-6
         }
@@ -4040,9 +4040,10 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
         if (prioritizedItems.length >= 1) {
           const rightTableData = prioritizedItems.map(item => [String(item.label || ''), String(item.value || '')]);
 
-          // Calculate row height to distribute evenly within 4.75" height
-          // Use Math.max to prevent division by zero edge case
-          const rightTableHeight = 4.75;
+          // Calculate row height to distribute evenly
+          // For table-half: use shorter height (1.8") to leave room for 財務実績 section below
+          // For other layouts: use full height (4.75")
+          const rightTableHeight = rightLayout === 'table-half' ? 1.8 : 4.75;
           const rightRowHeight = rightTableHeight / Math.max(rightTableData.length, 1);
 
           const rightRows = rightTableData.map((row) => [
@@ -4082,6 +4083,22 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
             valign: 'middle',
             border: { pt: 2.5, color: COLORS.white },
             margin: [0, 0.04, 0, 0.04]
+          });
+
+        }
+
+        // For table-half: Add 財務実績 header and line below the table (even if no items)
+        if (rightLayout === 'table-half') {
+          // 財務実績 header - same format as top right header
+          slide.addText('財務実績', {
+            x: 6.86, y: 3.98, w: 6.1, h: 0.35,
+            fontSize: 14, fontFace: 'Segoe UI',
+            color: COLORS.black, align: 'center'
+          });
+          // Line below header
+          slide.addShape(pptx.shapes.LINE, {
+            x: 6.86, y: 4.33, w: 6.1, h: 0,
+            line: { color: COLORS.dk2, width: 1.75 }
           });
         }
       }
