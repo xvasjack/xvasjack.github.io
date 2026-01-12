@@ -149,48 +149,68 @@
           <div id="fileList" class="mt-4 space-y-2"></div>
         </div>
 
-        <!-- Report Type Section -->
+        <!-- Report Components Section -->
         <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5">
-          <div class="flex items-center gap-2 mb-4">
-            <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-            <span class="font-semibold text-slate-900">Report Type</span>
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+              <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+              <span class="font-semibold text-slate-900">Report Sections</span>
+            </div>
+            <div class="flex gap-2">
+              <button type="button" onclick="selectAllComponents()" class="text-xs text-indigo-600 hover:text-indigo-800">Select All</button>
+              <span class="text-slate-300">|</span>
+              <button type="button" onclick="clearComponents()" class="text-xs text-slate-500 hover:text-slate-700">Clear</button>
+            </div>
           </div>
 
-          <div class="grid grid-cols-1 gap-2" id="reportTypeGrid">
-            <label class="report-type-option flex items-start gap-3 p-3 border-2 border-indigo-500 bg-indigo-50 rounded-lg cursor-pointer transition-all">
-              <input type="radio" name="reportType" value="target_overview" checked class="mt-1">
-              <div>
-                <div class="font-medium text-slate-900">Target Overview</div>
-                <div class="text-sm text-slate-500">Company profile: business model, products, operations, team</div>
-              </div>
+          <div class="grid grid-cols-2 gap-2" id="componentGrid">
+            <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
+              <input type="checkbox" name="component" value="executive_summary" checked class="rounded text-indigo-600">
+              <span class="text-sm text-slate-700">Executive Summary</span>
             </label>
-            <label class="report-type-option flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
-              <input type="radio" name="reportType" value="commercial_dd" class="mt-1">
-              <div>
-                <div class="font-medium text-slate-900">Commercial DD</div>
-                <div class="text-sm text-slate-500">Market position, customers, competition, growth potential</div>
-              </div>
+            <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
+              <input type="checkbox" name="component" value="company_profile" checked class="rounded text-indigo-600">
+              <span class="text-sm text-slate-700">Company Profile</span>
             </label>
-            <label class="report-type-option flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
-              <input type="radio" name="reportType" value="red_flags" class="mt-1">
-              <div>
-                <div class="font-medium text-slate-900">Red Flag Analysis</div>
-                <div class="text-sm text-slate-500">Risks, concerns, deal-breakers, information gaps</div>
-              </div>
+            <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
+              <input type="checkbox" name="component" value="business_model" checked class="rounded text-indigo-600">
+              <span class="text-sm text-slate-700">Business Model</span>
             </label>
-            <label class="report-type-option flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
-              <input type="radio" name="reportType" value="meeting_summary" class="mt-1">
-              <div>
-                <div class="font-medium text-slate-900">Meeting Summary</div>
-                <div class="text-sm text-slate-500">Key takeaways, action items, follow-up questions</div>
-              </div>
+            <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
+              <input type="checkbox" name="component" value="market_analysis" class="rounded text-indigo-600">
+              <span class="text-sm text-slate-700">Market Analysis</span>
             </label>
-            <label class="report-type-option flex items-start gap-3 p-3 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
-              <input type="radio" name="reportType" value="investment_thesis" class="mt-1">
-              <div>
-                <div class="font-medium text-slate-900">Investment Thesis</div>
-                <div class="text-sm text-slate-500">Deal rationale, strategic fit, synergy potential</div>
-              </div>
+            <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
+              <input type="checkbox" name="component" value="customers" class="rounded text-indigo-600">
+              <span class="text-sm text-slate-700">Customer Analysis</span>
+            </label>
+            <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
+              <input type="checkbox" name="component" value="competition" class="rounded text-indigo-600">
+              <span class="text-sm text-slate-700">Competition</span>
+            </label>
+            <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
+              <input type="checkbox" name="component" value="management" class="rounded text-indigo-600">
+              <span class="text-sm text-slate-700">Management Team</span>
+            </label>
+            <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
+              <input type="checkbox" name="component" value="operations" class="rounded text-indigo-600">
+              <span class="text-sm text-slate-700">Operations</span>
+            </label>
+            <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
+              <input type="checkbox" name="component" value="risks" checked class="rounded text-indigo-600">
+              <span class="text-sm text-slate-700">Risks & Red Flags</span>
+            </label>
+            <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
+              <input type="checkbox" name="component" value="opportunities" class="rounded text-indigo-600">
+              <span class="text-sm text-slate-700">Growth Opportunities</span>
+            </label>
+            <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
+              <input type="checkbox" name="component" value="gaps" checked class="rounded text-indigo-600">
+              <span class="text-sm text-slate-700">Information Gaps</span>
+            </label>
+            <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
+              <input type="checkbox" name="component" value="meeting_notes" class="rounded text-indigo-600">
+              <span class="text-sm text-slate-700">Meeting Notes</span>
             </label>
           </div>
 
@@ -234,22 +254,39 @@
 
     let selectedFiles = [];
 
-    // Report type selection styling
-    document.querySelectorAll('input[name="reportType"]').forEach(radio => {
-      radio.addEventListener('change', () => {
-        document.querySelectorAll('.report-type-option').forEach(label => {
-          label.classList.remove('border-2', 'border-indigo-500', 'bg-indigo-50');
-          label.classList.add('border', 'border-slate-200');
-        });
-        const selected = radio.closest('.report-type-option');
-        selected.classList.remove('border', 'border-slate-200');
-        selected.classList.add('border-2', 'border-indigo-500', 'bg-indigo-50');
+    // Component selection styling
+    document.querySelectorAll('input[name="component"]').forEach(checkbox => {
+      checkbox.addEventListener('change', () => {
+        const label = checkbox.closest('.component-option');
+        if (checkbox.checked) {
+          label.classList.add('border-indigo-500', 'bg-indigo-50');
+        } else {
+          label.classList.remove('border-indigo-500', 'bg-indigo-50');
+        }
       });
+      // Initialize styling for pre-checked boxes
+      if (checkbox.checked) {
+        checkbox.closest('.component-option').classList.add('border-indigo-500', 'bg-indigo-50');
+      }
     });
 
-    function getSelectedReportType() {
-      const selected = document.querySelector('input[name="reportType"]:checked');
-      return selected ? selected.value : 'target_overview';
+    window.selectAllComponents = function() {
+      document.querySelectorAll('input[name="component"]').forEach(cb => {
+        cb.checked = true;
+        cb.closest('.component-option').classList.add('border-indigo-500', 'bg-indigo-50');
+      });
+    };
+
+    window.clearComponents = function() {
+      document.querySelectorAll('input[name="component"]').forEach(cb => {
+        cb.checked = false;
+        cb.closest('.component-option').classList.remove('border-indigo-500', 'bg-indigo-50');
+      });
+    };
+
+    function getSelectedComponents() {
+      const checked = document.querySelectorAll('input[name="component"]:checked');
+      return Array.from(checked).map(cb => cb.value);
     }
 
     // Upload handling
@@ -371,6 +408,9 @@
       try {
         const processed = await processFiles(selectedFiles);
 
+        const components = getSelectedComponents();
+        if (components.length === 0) { showError('Please select at least one report section'); return; }
+
         const response = await fetch(`${API_BASE}/api/due-diligence`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -378,7 +418,7 @@
             files: processed.documents,
             audioFiles: [],
             instructions,
-            reportType: getSelectedReportType(),
+            components,
             reportLength: 'medium',
             email,
             generateWord: true
