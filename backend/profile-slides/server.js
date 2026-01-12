@@ -3763,15 +3763,15 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           const gridStartX = 6.86;
           const gridStartY = 1.91;
 
-          if (rightLayout === 'images-labeled') {
-            // Layout: Image on left, label on right - 3-4 rows (vertical stack)
-            const rowHeight = 1.15;
-            const imageW = 2.0;
-            const imageH = 1.0;
-            const labelX = gridStartX + imageW + 0.15;
-            const labelW = 3.8;
+          if (rightLayout === 'images-vertical' || rightLayout === 'images-labeled') {
+            // Layout: Images stacked vertically with labels BELOW each image
+            // Compact layout - 2 images with labels underneath
+            const imageW = 2.8;
+            const imageH = 1.8;
+            const labelH = 0.35;
+            const rowHeight = imageH + labelH + 0.15; // image + label + gap
 
-            for (let i = 0; i < Math.min(preExtractedImages.length, 4); i++) {
+            for (let i = 0; i < Math.min(preExtractedImages.length, 2); i++) {
               const img = preExtractedImages[i];
               const cellY = gridStartY + (i * rowHeight);
 
@@ -3786,9 +3786,9 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
                   if (img.label) {
                     slide.addText(img.label, {
-                      x: labelX, y: cellY, w: labelW, h: imageH,
-                      fontSize: 14, fontFace: 'Segoe UI',
-                      color: COLORS.black, align: 'left', valign: 'middle'
+                      x: gridStartX, y: cellY + imageH + 0.05, w: imageW, h: labelH,
+                      fontSize: 12, fontFace: 'Segoe UI',
+                      color: COLORS.black, align: 'center', valign: 'top'
                     });
                   }
                 }
@@ -8868,7 +8868,7 @@ async function processWebsitesInParallel(websites) {
 }
 
 // Valid layout options (whitelist to prevent XSS/injection)
-const VALID_LAYOUTS = ['table-6', 'table-unlimited', 'table-half', 'images', 'images-4', 'images-6', 'images-labeled', 'empty'];
+const VALID_LAYOUTS = ['table-6', 'table-unlimited', 'table-half', 'images', 'images-4', 'images-6', 'images-vertical', 'images-labeled', 'empty'];
 
 // Main profile slides endpoint
 app.post('/api/profile-slides', async (req, res) => {
