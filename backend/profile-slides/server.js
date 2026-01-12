@@ -3764,14 +3764,14 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           const gridStartY = 1.91;
 
           if (rightLayout === 'images-vertical' || rightLayout === 'images-labeled') {
-            // Layout: Images stacked vertically with labels BELOW each image
-            // Compact layout - 2 images with labels underneath
-            const imageW = 2.8;
-            const imageH = 1.8;
-            const labelH = 0.35;
-            const rowHeight = imageH + labelH + 0.15; // image + label + gap
+            // Layout: 4 images stacked vertically, label on RIGHT of each image
+            const rowHeight = 1.1;
+            const imageW = 1.8;
+            const imageH = 1.0;
+            const labelX = gridStartX + imageW + 0.1;
+            const labelW = 4.0;
 
-            for (let i = 0; i < Math.min(preExtractedImages.length, 2); i++) {
+            for (let i = 0; i < Math.min(preExtractedImages.length, 4); i++) {
               const img = preExtractedImages[i];
               const cellY = gridStartY + (i * rowHeight);
 
@@ -3786,9 +3786,9 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
                   if (img.label) {
                     slide.addText(img.label, {
-                      x: gridStartX, y: cellY + imageH + 0.05, w: imageW, h: labelH,
+                      x: labelX, y: cellY, w: labelW, h: imageH,
                       fontSize: 12, fontFace: 'Segoe UI',
-                      color: COLORS.black, align: 'center', valign: 'top'
+                      color: COLORS.black, align: 'left', valign: 'middle'
                     });
                   }
                 }
