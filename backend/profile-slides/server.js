@@ -3658,8 +3658,8 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
             return {
               text: cleanLine,
               options: {
-                bullet: { code: '25A0', indent: 17 }, // BLACK SQUARE ■ with 0.24" indent (17pt), 82% size
-                fontSize: 11.5, // 82% of table fontSize 14
+                bullet: { code: '25A0', indent: 17, sizePercent: 82 }, // BLACK SQUARE ■ with 0.24" indent (17pt), 82% bullet size
+                fontSize: 14, // Full size text
                 indentLevel: 0,
                 breakLine: !isLastLine
               }
