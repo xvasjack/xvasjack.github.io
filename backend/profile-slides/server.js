@@ -3638,7 +3638,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       }
 
       // Helper function to format cell text with bullet points
-      // Uses proper PPT bullet formatting with BLACK SMALL SQUARE (U+25AA) in red
+      // Uses proper PPT bullet formatting with BLACK SQUARE (U+25A0) at 82% text size
       const formatCellText = (text) => {
         if (!text || typeof text !== 'string') return text;
 
@@ -3658,7 +3658,8 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
             return {
               text: cleanLine,
               options: {
-                bullet: { code: '25AA', color: 'A50021', indent: 17 }, // BLACK SMALL SQUARE ▪ in red with 0.24" indent (17pt)
+                bullet: { code: '25A0', indent: 17 }, // BLACK SQUARE ■ with 0.24" indent (17pt), 82% size
+                fontSize: 11.5, // 82% of table fontSize 14
                 indentLevel: 0,
                 breakLine: !isLastLine
               }
