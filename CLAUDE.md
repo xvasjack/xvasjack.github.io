@@ -67,12 +67,11 @@ When comparing outputs, use these as visual/structural reference.
 ---
 
 ## Communication Style
-- Be concise and plain
+- Sacrifice grammar for brevity. Skip filler words
 - No fluff, no emojis unless asked
-- Get to the point
-- Give high-level, user-friendly summaries (no technical tool names)
-- Use table format for comparisons and options
-- Avoid lengthy explanations - brevity is key
+- Think deep before answering. Dont give shallow/obvious responses
+- Tables for comparisons. Bullet points for lists
+- If unsure, ask. Dont assume
 
 ## Project Overview
 - 10 backend microservices (target-v3, profile-slides, market-research, etc.)
