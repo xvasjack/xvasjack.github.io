@@ -1830,16 +1830,333 @@ function _buildEmailHTML(companies, business, country, exclusion) {
   return html;
 }
 
-// ============ DUE DILIGENCE REPORT GENERATOR (DD Report v4 - 3-Phase Pipeline) ============
+// ============ DD V5: INTELLIGENT MULTI-PHASE PIPELINE ============
+
+// Phase 2: Analyze documents to identify company and data categories
+async function analyzeDocumentStructure(combinedContent, filesSummary) {
+  console.log('[DD] Phase 2: Analyzing document structure...');
+
+  const analysisPrompt = `You are an M&A analyst. Analyze these source documents and identify:
+
+1. TARGET COMPANY: What company is this DD about? Extract:
+   - Company name
+   - Country/HQ location
+   - Industry/sector
+   - Is it publicly listed? (stock exchange, ticker if known)
+
+2. DATA CATEGORIES FOUND: List ALL data categories present in the documents:
+   - Company background/history
+   - Products/services offered
+   - Market overview
+   - Competition analysis
+   - Revenue data (and any breakdowns: by country, product, customer, etc.)
+   - Financial statements (P&L, balance sheet, cash flow)
+   - Customer information (top customers, concentration)
+   - Employee/headcount data
+   - Management/leadership info
+   - Growth projections/forecasts
+   - Risks and challenges
+   - Any other significant data categories
+
+3. TABLES IDENTIFIED: List any tables or structured data found
+
+SOURCE DOCUMENTS:
+${filesSummary.join('\n')}
+
+CONTENT:
+${combinedContent.substring(0, 100000)}
+
+Return JSON format:
+{
+  "company": {
+    "name": "...",
+    "hq": "City, Country",
+    "industry": "...",
+    "isListed": true/false,
+    "stockExchange": "SGX/NYSE/etc or null",
+    "ticker": "ABC or null"
+  },
+  "dataCategories": [
+    {"category": "company_background", "found": true, "details": "Founding year, history available"},
+    {"category": "revenue_by_country", "found": true, "details": "SG, MY, PH breakdown available"},
+    {"category": "top_customers", "found": true, "details": "Top 5 customers with revenue %"},
+    ...
+  ],
+  "tablesFound": [
+    {"name": "Income Statement", "years": ["2022", "2023", "2024"]},
+    {"name": "Revenue by Country", "columns": ["Country", "Revenue", "%"]}
+  ]
+}`;
+
+  let result = null;
+
+  // Try Gemini 2.5 Pro for analysis (good at structured extraction)
+  const response = await callGemini2Pro(analysisPrompt, true);
+  if (response) {
+    try {
+      result = JSON.parse(response);
+    } catch (e) {
+      console.error('[DD] Failed to parse structure analysis:', e.message);
+    }
+  }
+
+  // Fallback to GPT-4o
+  if (!result) {
+    try {
+      const gptResponse = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: analysisPrompt }],
+        response_format: { type: 'json_object' },
+        temperature: 0.1,
+      });
+      result = JSON.parse(gptResponse.choices?.[0]?.message?.content || '{}');
+    } catch (e) {
+      console.error('[DD] GPT-4o structure analysis failed:', e.message);
+    }
+  }
+
+  if (result?.company?.name) {
+    console.log(`[DD] Company identified: ${result.company.name}`);
+    console.log(
+      `[DD] Data categories found: ${result.dataCategories?.filter((d) => d.found).length || 0}`
+    );
+    console.log(`[DD] Tables found: ${result.tablesFound?.length || 0}`);
+  }
+
+  return result || { company: {}, dataCategories: [], tablesFound: [] };
+}
+
+// Phase 3: Online research for company (official sources only)
+async function searchCompanyOnline(companyInfo) {
+  console.log('[DD] Phase 3: Online research...');
+
+  if (!companyInfo?.name) {
+    console.log('[DD] No company name, skipping online research');
+    return { verified: [], unverified: [] };
+  }
+
+  const companyName = companyInfo.name;
+  const isListed = companyInfo.isListed;
+  const stockExchange = companyInfo.stockExchange;
+
+  console.log(
+    `[DD] Searching for: ${companyName} (Listed: ${isListed ? 'Yes - ' + stockExchange : 'No'})`
+  );
+
+  const searchResults = [];
+
+  // Search 1: Company official info
+  const searchPrompt1 = `Search for official information about "${companyName}" company:
+- Official company website
+- Company registration details
+- Official annual reports
+- Official press releases
+${isListed ? `- Stock exchange filings (${stockExchange})` : ''}
+
+Find ONLY from official sources:
+- Company's own website
+- Government registries (ACRA, SEC, etc.)
+- Stock exchange official filings
+- Official press releases from company
+
+Return JSON:
+{
+  "officialWebsite": "https://...",
+  "sources": [
+    {"type": "annual_report", "url": "...", "year": "2024", "isOfficial": true},
+    {"type": "company_website", "url": "...", "content": "About page content...", "isOfficial": true}
+  ]
+}`;
+
+  // Use Perplexity for web search (has real-time search)
+  try {
+    const searchResponse = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'sonar-pro',
+        messages: [{ role: 'user', content: searchPrompt1 }],
+      }),
+      timeout: 60000,
+    });
+
+    if (searchResponse.ok) {
+      const data = await searchResponse.json();
+      const content = data.choices?.[0]?.message?.content || '';
+      searchResults.push({ query: 'official_info', result: content });
+      console.log(`[DD] Official info search completed`);
+    }
+  } catch (e) {
+    console.error('[DD] Perplexity search error:', e.message);
+  }
+
+  // Search 2: For listed companies - get financial filings
+  if (isListed && stockExchange) {
+    const filingPrompt = `Find the latest official financial filings for "${companyName}" listed on ${stockExchange}:
+- Latest annual report (audited)
+- Latest quarterly results
+- Any recent announcements
+
+ONLY include information from:
+- Official stock exchange filings
+- Company's investor relations page
+- Audited financial statements
+
+Return key financial data found (revenue, profit, assets) with the SOURCE URL for each.`;
+
+    try {
+      const filingResponse = await fetch('https://api.perplexity.ai/chat/completions', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'sonar-pro',
+          messages: [{ role: 'user', content: filingPrompt }],
+        }),
+        timeout: 60000,
+      });
+
+      if (filingResponse.ok) {
+        const data = await filingResponse.json();
+        const content = data.choices?.[0]?.message?.content || '';
+        searchResults.push({ query: 'financial_filings', result: content });
+        console.log(`[DD] Financial filings search completed`);
+      }
+    } catch (e) {
+      console.error('[DD] Financial filings search error:', e.message);
+    }
+  }
+
+  // Search 3: Management and leadership
+  const mgmtPrompt = `Find official management/leadership information for "${companyName}":
+- CEO, CFO, key executives
+- Board of directors
+- Management backgrounds
+
+ONLY from official sources:
+- Company's official website (About/Team page)
+- Official annual reports
+- LinkedIn official company page
+- Stock exchange filings (for listed companies)
+
+Return names and titles found, with source URL.`;
+
+  try {
+    const mgmtResponse = await fetch('https://api.perplexity.ai/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'sonar-pro',
+        messages: [{ role: 'user', content: mgmtPrompt }],
+      }),
+      timeout: 60000,
+    });
+
+    if (mgmtResponse.ok) {
+      const data = await mgmtResponse.json();
+      const content = data.choices?.[0]?.message?.content || '';
+      searchResults.push({ query: 'management', result: content });
+      console.log(`[DD] Management search completed`);
+    }
+  } catch (e) {
+    console.error('[DD] Management search error:', e.message);
+  }
+
+  console.log(`[DD] Phase 3 Complete: ${searchResults.length} search queries executed`);
+
+  return { searchResults, companyName };
+}
+
+// Phase 3.5: Verify online information against official sources
+async function verifyOnlineInfo(searchResults, combinedContent) {
+  console.log('[DD] Phase 3.5: Verifying online information...');
+
+  if (!searchResults?.searchResults?.length) {
+    console.log('[DD] No online results to verify');
+    return { verifiedInfo: '', verificationNotes: [] };
+  }
+
+  const allSearchContent = searchResults.searchResults.map((s) => s.result).join('\n\n');
+
+  const verifyPrompt = `You are a fact-checker for M&A due diligence. Your job is to verify online information.
+
+ONLINE SEARCH RESULTS:
+${allSearchContent}
+
+SOURCE DOCUMENTS (user-provided, considered authoritative):
+${combinedContent.substring(0, 50000)}
+
+VERIFICATION RULES:
+1. ONLY include information that meets ONE of these criteria:
+   - Comes from company's official website
+   - Comes from official stock exchange filings (SGX, SEC, etc.)
+   - Comes from audited annual reports
+   - Matches data in the source documents (cross-verified)
+   - Comes from government registries (ACRA, SEC, etc.)
+
+2. REJECT information from:
+   - News articles (unless quoting official sources)
+   - Wikipedia
+   - Third-party databases
+   - Social media
+   - Unverified sources
+
+3. For each piece of information, note the official source
+
+OUTPUT FORMAT:
+Return ONLY verified information as structured text:
+
+VERIFIED COMPANY INFORMATION:
+[Only include facts that pass verification]
+
+VERIFICATION NOTES:
+- [List what was verified and from which official source]
+- [List what was rejected and why]`;
+
+  let verifiedInfo = '';
+  let verificationNotes = [];
+
+  try {
+    const verifyResponse = await callGemini2Pro(verifyPrompt);
+    if (verifyResponse) {
+      verifiedInfo = verifyResponse;
+
+      // Extract verification notes
+      const notesMatch = verifyResponse.match(/VERIFICATION NOTES:([\s\S]*?)$/i);
+      if (notesMatch) {
+        verificationNotes = notesMatch[1]
+          .split('\n')
+          .filter((l) => l.trim().startsWith('-'))
+          .map((l) => l.trim());
+      }
+
+      console.log(`[DD] Verification complete: ${verificationNotes.length} notes`);
+    }
+  } catch (e) {
+    console.error('[DD] Verification error:', e.message);
+  }
+
+  return { verifiedInfo, verificationNotes };
+}
+
+// ============ DUE DILIGENCE REPORT GENERATOR (DD Report v5 - 5-Phase Pipeline) ============
 
 async function generateDueDiligenceReport(
   files,
   instructions,
   reportLength,
-  components = ['overview', 'market_competition', 'financials', 'future_plans', 'workplan']
+  _components = ['overview', 'market_competition', 'financials', 'future_plans', 'workplan']
 ) {
   console.log(`\n${'='.repeat(60)}`);
-  console.log(`[DD] MULTI-AGENT DD REPORT GENERATION (v4)`);
+  console.log(`[DD] INTELLIGENT DD REPORT GENERATION (v5)`);
   console.log(`[DD] Processing ${files.length} source files...`);
   console.log('='.repeat(60));
 
@@ -1919,42 +2236,97 @@ async function generateDueDiligenceReport(
     `[DD] Phase 1 Complete: ${extractedFiles.length} files, ${combinedContent.length} chars for analysis`
   );
 
-  // ========== PHASE 2: DEEP ANALYSIS WITH THINKING MODEL ==========
-  console.log('\n[DD] === PHASE 2: DEEP ANALYSIS ===');
+  // ========== PHASE 2: DOCUMENT STRUCTURE ANALYSIS ==========
+  const docStructure = await analyzeDocumentStructure(combinedContent, filesSummary);
+  const companyInfo = docStructure.company || {};
+  const dataCategories = docStructure.dataCategories || [];
+  const foundCategories = dataCategories.filter((d) => d.found);
 
-  // Build analysis prompts from selected components
-  const selectedComponents = components.filter((c) => DD_COMPONENTS[c]);
-  const componentTitles = selectedComponents.map((c) => DD_COMPONENTS[c].title);
-  console.log(`[DD] Components: ${componentTitles.join(', ')}`);
+  console.log(`[DD] Phase 2 Complete: ${foundCategories.length} data categories identified`);
 
-  const componentPrompts = selectedComponents
-    .map((c, i) => {
-      const comp = DD_COMPONENTS[c];
-      return `${i + 1}. ${comp.title.toUpperCase()}\n   Extract: ${comp.analysisPrompt}`;
-    })
-    .join('\n\n');
+  // ========== PHASE 3: ONLINE RESEARCH ==========
+  const onlineResults = await searchCompanyOnline(companyInfo);
 
-  const analysisPrompt = `You are an M&A analyst conducting due diligence on a target company for a buy-side client.
+  // ========== PHASE 3.5: VERIFY ONLINE INFORMATION ==========
+  const { verifiedInfo } = await verifyOnlineInfo(onlineResults, combinedContent);
 
-Analyze the source materials and extract information for these sections:
+  // ========== PHASE 4: DEEP ANALYSIS WITH COMBINED DATA ==========
+  console.log('\n[DD] === PHASE 4: DEEP ANALYSIS ===');
 
-${componentPrompts}
+  // Build dynamic section list based on found data categories
+  const sectionMapping = {
+    company_background: '1.1 Company Background',
+    company_capabilities: '1.2 Company Capabilities',
+    products_services: '1.3 Products & Services',
+    market_overview: '2.1 Market Overview',
+    competition_analysis: '2.2 Competition Analysis',
+    competitive_advantages: '2.3 Competitive Advantages',
+    vulnerabilities: '2.4 Vulnerabilities',
+    key_metrics: '3.0 Key Metrics',
+    income_statement: '4.1 Income Statement',
+    revenue_by_country: '4.2 Revenue Breakdown by Country',
+    revenue_by_product: '4.3 Revenue Breakdown by Product/Service',
+    revenue_by_service: '4.4 Revenue Breakdown by Service Line',
+    top_customers: '4.5 Top Customers',
+    balance_sheet: '4.6 Balance Sheet',
+    cash_flow: '4.7 Cash Flow',
+    employee_data: '5.0 Employee & Organization',
+    management_info: '5.1 Management Team',
+    growth_projections: '6.0 Growth Projections',
+    future_plans: '7.0 Future Plans & Strategy',
+    risks_challenges: '8.0 Risks & Challenges',
+    workplan: '9.0 Pre-DD Workplan',
+  };
 
-SOURCE MATERIALS (${extractedFiles.length} files):
+  // Determine which sections to generate based on found data
+  const sectionsToGenerate = foundCategories
+    .map((c) => sectionMapping[c.category] || c.category)
+    .filter((s) => s);
+
+  // Add standard sections that should always appear if relevant data exists
+  const standardFlow = [
+    'Company Overview',
+    'Market',
+    'Competition',
+    'Key Metrics',
+    'Key Financials',
+    'Pre-DD Workplan',
+  ];
+
+  console.log(`[DD] Sections to generate: ${sectionsToGenerate.length}`);
+
+  const analysisPrompt = `You are an M&A analyst conducting due diligence on ${companyInfo.name || 'a target company'}.
+
+COMPANY IDENTIFIED: ${companyInfo.name || 'Unknown'}
+HQ: ${companyInfo.hq || 'Unknown'}
+INDUSTRY: ${companyInfo.industry || 'Unknown'}
+LISTED: ${companyInfo.isListed ? `Yes (${companyInfo.stockExchange})` : 'No/Unknown'}
+
+DATA CATEGORIES FOUND IN SOURCE DOCUMENTS:
+${foundCategories.map((c) => `- ${c.category}: ${c.details}`).join('\n')}
+
+SOURCE DOCUMENTS (${extractedFiles.length} files):
 ${filesSummary.join('\n')}
 
-${instructions ? `ADDITIONAL CONTEXT FROM USER:\n${instructions}\n` : ''}
+${verifiedInfo ? `\nVERIFIED ONLINE INFORMATION:\n${verifiedInfo}\n` : ''}
 
-=== BEGIN ALL SOURCE CONTENT ===
+${instructions ? `USER'S ADDITIONAL CONTEXT:\n${instructions}\n` : ''}
+
+=== SOURCE CONTENT ===
 ${combinedContent}
-=== END ALL SOURCE CONTENT ===
+=== END SOURCE CONTENT ===
 
-CRITICAL INSTRUCTIONS:
-- Only include information explicitly stated in the source materials
-- Quote specific data points, names, and figures
-- If information for a section is not available, note "Not found in materials"
-- Be thorough but focused on the requested sections
-- For financial data, preserve exact numbers and currencies`;
+EXTRACTION INSTRUCTIONS:
+1. Extract ALL information for each data category found above
+2. For each category, extract:
+   - Specific numbers, percentages, dates
+   - Names of people, companies, products
+   - Tables and structured data
+3. If online verified info adds to source docs, include it (mark as [Verified Online])
+4. Do NOT include information for categories not found in source documents
+5. Preserve exact figures - do not round or estimate
+
+OUTPUT: Structured extraction organized by data category.`;
 
   let deepAnalysis = '';
 
@@ -1982,10 +2354,10 @@ CRITICAL INSTRUCTIONS:
     deepAnalysis = response.choices?.[0]?.message?.content || '';
   }
 
-  console.log(`[DD] Phase 2 Complete: Analysis ${deepAnalysis.length} chars`);
+  console.log(`[DD] Phase 4 Complete: Analysis ${deepAnalysis.length} chars`);
 
-  // ========== PHASE 3: GENERATE STRUCTURED REPORT ==========
-  console.log('\n[DD] === PHASE 3: REPORT GENERATION ===');
+  // ========== PHASE 5: DYNAMIC REPORT GENERATION ==========
+  console.log('\n[DD] === PHASE 5: REPORT GENERATION ===');
 
   const reportLengthGuide = {
     short: `Keep it concise: 1-2 pages, focus on key points only`,
@@ -1993,85 +2365,61 @@ CRITICAL INSTRUCTIONS:
     long: `Comprehensive: detailed coverage of all topics with subsections`,
   };
 
-  // Build section list from components
-  const sectionList = selectedComponents.map((c) => DD_COMPONENTS[c].title).join(', ');
+  const reportPrompt = `You are a professional M&A report writer creating a Due Diligence Report for ${companyInfo.name || 'the target company'}.
 
-  const reportPrompt = `You are a professional M&A report writer. Using the analysis below, generate a Due Diligence Report following the DD Report v4 template structure.
-
-=== ANALYSIS ===
+=== ANALYSIS DATA ===
 ${deepAnalysis}
 === END ANALYSIS ===
 
-${instructions ? `USER'S ADDITIONAL REQUIREMENTS:\n${instructions}\n` : ''}
+DATA CATEGORIES AVAILABLE:
+${foundCategories.map((c) => `- ${c.category}`).join('\n')}
 
-REPORT SECTIONS TO INCLUDE (in this order with numbered headers):
-${sectionList}
+${instructions ? `USER'S REQUIREMENTS:\n${instructions}\n` : ''}
+
+REPORT STRUCTURE GUIDELINES:
+Follow this general flow (but ONLY include sections where data exists):
+1. Company Overview (background, capabilities, services)
+2. Market Analysis (market size, trends, drivers)
+3. Competition (landscape, advantages, vulnerabilities)
+4. Key Metrics (operational KPIs)
+5. Key Financials (P&L, balance sheet, revenue breakdowns, customers)
+6. Future Plans & Strategy
+7. Risks & Challenges (if data available)
+8. Pre-DD Workplan (next steps for due diligence)
+
+CRITICAL RULES:
+1. ONLY generate sections for data categories that exist in the analysis
+2. If no data exists for a section, DO NOT include that section (skip it entirely)
+3. For each data breakdown found (by country, by product, by customer), create a subsection
+4. Use appropriate numbered headers (1.0, 1.1, 2.0, etc.)
+5. Every financial breakdown MUST have a table
+6. No hallucination - only facts from the analysis
 
 LENGTH: ${reportLengthGuide[reportLength] || reportLengthGuide.medium}
 
-QUALITY REQUIREMENTS:
-- Include ONLY facts from the analysis above
-- No hallucination - if data isn't available, say "Data not available in source materials"
-- Use specific numbers, names, and dates
-- Write for a sophisticated M&A audience (investment bankers, PE professionals)
-- Be direct and professional in tone
-- Only include sections that were requested
-- Use numbered section headers (1.0, 1.1, 2.0, 2.1, etc.)
+STYLE REQUIREMENTS (match template exactly):
+- Font: Calibri, sans-serif
+- Title color: #1e3a5f
+- Section header color: #2563eb with border-bottom
+- Subsection color: #1e40af
+- Table header: background-color #1e3a5f, white text
+- Table cells: border 1px solid #ddd, padding 8-10px
+- Professional M&A tone - direct, factual, no fluff
 
-TABLE FORMAT REQUIREMENTS - Generate proper HTML tables as shown:
-
-<!-- Competition Matrix Table (for 2.0 Market & Competition) -->
+HTML TABLE FORMAT:
 <table style="font-family: Calibri, sans-serif; border-collapse: collapse; width: 100%; margin: 15px 0;">
 <thead><tr style="background-color: #1e3a5f; color: white;">
-<th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Service Segment</th>
-<th style="border: 1px solid #ddd; padding: 10px; text-align: center;">Growth (CAGR %)</th>
-<th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Demand Drivers</th>
-<th style="border: 1px solid #ddd; padding: 10px; text-align: center;">Competition</th>
-<th style="border: 1px solid #ddd; padding: 10px; text-align: center;">Position</th>
+<th style="border: 1px solid #ddd; padding: 10px; text-align: left;">[Header]</th>
 </tr></thead>
 <tbody>
-<tr><td style="border: 1px solid #ddd; padding: 8px;">[Segment Name]</td>
-<td style="border: 1px solid #ddd; padding: 8px; text-align: center;">12-18%</td>
-<td style="border: 1px solid #ddd; padding: 8px;">[Key drivers]</td>
-<td style="border: 1px solid #ddd; padding: 8px; text-align: center;">High/Medium/Low</td>
-<td style="border: 1px solid #ddd; padding: 8px; text-align: center;">Strong/Growing</td></tr>
+<tr><td style="border: 1px solid #ddd; padding: 8px;">[Data]</td></tr>
 </tbody></table>
 
-<!-- Income Statement Table (for 4.0 Key Financials) -->
-<table style="font-family: Calibri, sans-serif; border-collapse: collapse; width: 100%; margin: 15px 0;">
-<thead><tr style="background-color: #1e3a5f; color: white;">
-<th style="border: 1px solid #ddd; padding: 10px; text-align: left;">SGD ('000)</th>
-<th style="border: 1px solid #ddd; padding: 10px; text-align: right;">2022</th>
-<th style="border: 1px solid #ddd; padding: 10px; text-align: right;">2023</th>
-<th style="border: 1px solid #ddd; padding: 10px; text-align: right;">2024</th>
-</tr></thead>
-<tbody>
-<tr><td style="border: 1px solid #ddd; padding: 8px;">Revenue</td>
-<td style="border: 1px solid #ddd; padding: 8px; text-align: right;">15,234</td>
-<td style="border: 1px solid #ddd; padding: 8px; text-align: right;">23,552</td>
-<td style="border: 1px solid #ddd; padding: 8px; text-align: right;">35,013</td></tr>
-</tbody></table>
+OUTPUT FORMAT:
+<h1 style="font-family: Calibri, sans-serif; color: #1e3a5f;">Due Diligence Report: ${companyInfo.name || '[Company Name]'}</h1>
+<p style="font-family: Calibri, sans-serif; color: #666; font-size: 12px;">Prepared: ${new Date().toLocaleDateString()}</p>
 
-<!-- Pre-DD Workplan Table (for 4.9 Pre-DD Workplan) -->
-<table style="font-family: Calibri, sans-serif; border-collapse: collapse; width: 100%; margin: 15px 0;">
-<thead><tr style="background-color: #1e3a5f; color: white;">
-<th style="border: 1px solid #ddd; padding: 10px; text-align: left; width: 35%;">Key Consideration</th>
-<th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Evidence to Validate</th>
-</tr></thead>
-<tbody>
-<tr><td style="border: 1px solid #ddd; padding: 8px; vertical-align: top;"><strong>Customer Analysis</strong></td>
-<td style="border: 1px solid #ddd; padding: 8px;">Top 10 customer contracts, renewal terms, churn history</td></tr>
-</tbody></table>
-
-OUTPUT FORMAT (HTML for Word document):
-- Title: <h1 style="font-family: Calibri, sans-serif; color: #1e3a5f;">Due Diligence Report: [Company Name]</h1>
-- Date: <p style="font-family: Calibri, sans-serif; color: #666; font-size: 12px;">Prepared: ${new Date().toLocaleDateString()}</p>
-- Section headers: <h2 style="font-family: Calibri, sans-serif; color: #2563eb; border-bottom: 2px solid #2563eb; padding-bottom: 5px;">1.0 Overview</h2>
-- Subsections: <h3 style="font-family: Calibri, sans-serif; color: #1e40af;">1.1 Company Background</h3>
-- Bullet points: <ul style="font-family: Calibri, sans-serif; margin: 10px 0;"><li style="margin: 5px 0;">
-- Important text: <strong>
-
-Generate CLEAN HTML only. No markdown, no code blocks. Use the table formats shown above.`;
+Generate CLEAN HTML only. No markdown, no code blocks.`;
 
   let finalReport = '';
 
