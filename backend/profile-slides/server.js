@@ -3638,38 +3638,26 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       }
 
       // Helper function to format cell text with bullet points
-      // Uses round bullet • (U+2022) at 82% size for proper point form appearance
+      // Uses BLACK SMALL SQUARE ▪ (U+25AA) - naturally smaller, same font size as text
       const formatCellText = (text) => {
         if (!text || typeof text !== 'string') return text;
 
         // Check if text has multiple lines or bullet markers
         const hasMultipleLines = text.includes('\n');
-        const hasBulletMarkers = text.includes('■') || text.includes('•') || text.includes('\n-') || text.startsWith('-');
+        const hasBulletMarkers = text.includes('■') || text.includes('•') || text.includes('▪') || text.includes('\n-') || text.startsWith('-');
 
         if (hasMultipleLines || hasBulletMarkers) {
           // Split by newline and filter out empty lines
           const lines = text.split('\n').filter(line => line.trim());
 
-          // Build text array with manual bullet insertion at smaller font
-          // 82% of 14pt = 11.5pt, use 11pt for bullet
-          const result = [];
-          lines.forEach((line, index) => {
-            const cleanLine = line.replace(/^[■▪\-•]\s*/, '').trim();
-            const isLastLine = index === lines.length - 1;
-
-            // Add round bullet character at 82% size (11pt vs 14pt text)
-            result.push({
-              text: '• ',
-              options: { fontSize: 11 }
+          // Only format as bullets if we have 2+ lines
+          if (lines.length >= 2) {
+            const formattedLines = lines.map((line) => {
+              const cleanLine = line.replace(/^[■▪\-•]\s*/, '').trim();
+              return '▪ ' + cleanLine;
             });
-
-            // Add the actual text at full size
-            result.push({
-              text: cleanLine + (isLastLine ? '' : '\n'),
-              options: { fontSize: 14 }
-            });
-          });
-          return result;
+            return formattedLines.join('\n');
+          }
         }
         return text;
       };
