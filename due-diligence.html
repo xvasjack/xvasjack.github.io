@@ -163,54 +163,41 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-2" id="componentGrid">
+          <div class="grid grid-cols-1 gap-2" id="componentGrid">
             <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
-              <input type="checkbox" name="component" value="executive_summary" checked class="rounded text-indigo-600">
-              <span class="text-sm text-slate-700">Executive Summary</span>
+              <input type="checkbox" name="component" value="overview" checked class="rounded text-indigo-600">
+              <div class="flex flex-col">
+                <span class="text-sm font-medium text-slate-700">1.0 Overview</span>
+                <span class="text-xs text-slate-500">Company Background & Capabilities</span>
+              </div>
             </label>
             <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
-              <input type="checkbox" name="component" value="company_profile" checked class="rounded text-indigo-600">
-              <span class="text-sm text-slate-700">Company Profile</span>
+              <input type="checkbox" name="component" value="market_competition" checked class="rounded text-indigo-600">
+              <div class="flex flex-col">
+                <span class="text-sm font-medium text-slate-700">2.0 Market & Competition</span>
+                <span class="text-xs text-slate-500">Competition Matrix, Advantages, Vulnerabilities</span>
+              </div>
             </label>
             <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
-              <input type="checkbox" name="component" value="business_model" checked class="rounded text-indigo-600">
-              <span class="text-sm text-slate-700">Business Model</span>
+              <input type="checkbox" name="component" value="financials" checked class="rounded text-indigo-600">
+              <div class="flex flex-col">
+                <span class="text-sm font-medium text-slate-700">4.0 Key Financials</span>
+                <span class="text-xs text-slate-500">Income Statement, Revenue Breakdown, Top Customers, Balance Sheet</span>
+              </div>
             </label>
             <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
-              <input type="checkbox" name="component" value="market_analysis" class="rounded text-indigo-600">
-              <span class="text-sm text-slate-700">Market Analysis</span>
+              <input type="checkbox" name="component" value="future_plans" checked class="rounded text-indigo-600">
+              <div class="flex flex-col">
+                <span class="text-sm font-medium text-slate-700">8.0 Future Plans</span>
+                <span class="text-xs text-slate-500">Strategic Initiatives & 5-Year Projections</span>
+              </div>
             </label>
             <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
-              <input type="checkbox" name="component" value="customers" class="rounded text-indigo-600">
-              <span class="text-sm text-slate-700">Customer Analysis</span>
-            </label>
-            <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
-              <input type="checkbox" name="component" value="competition" class="rounded text-indigo-600">
-              <span class="text-sm text-slate-700">Competition</span>
-            </label>
-            <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
-              <input type="checkbox" name="component" value="management" class="rounded text-indigo-600">
-              <span class="text-sm text-slate-700">Management Team</span>
-            </label>
-            <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
-              <input type="checkbox" name="component" value="operations" class="rounded text-indigo-600">
-              <span class="text-sm text-slate-700">Operations</span>
-            </label>
-            <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
-              <input type="checkbox" name="component" value="risks" checked class="rounded text-indigo-600">
-              <span class="text-sm text-slate-700">Risks & Red Flags</span>
-            </label>
-            <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
-              <input type="checkbox" name="component" value="opportunities" class="rounded text-indigo-600">
-              <span class="text-sm text-slate-700">Growth Opportunities</span>
-            </label>
-            <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
-              <input type="checkbox" name="component" value="gaps" checked class="rounded text-indigo-600">
-              <span class="text-sm text-slate-700">Information Gaps</span>
-            </label>
-            <label class="component-option flex items-center gap-2 p-2.5 border border-slate-200 rounded-lg cursor-pointer hover:border-indigo-300 hover:bg-slate-50 transition-all">
-              <input type="checkbox" name="component" value="meeting_notes" class="rounded text-indigo-600">
-              <span class="text-sm text-slate-700">Meeting Notes</span>
+              <input type="checkbox" name="component" value="workplan" checked class="rounded text-indigo-600">
+              <div class="flex flex-col">
+                <span class="text-sm font-medium text-slate-700">4.9 Pre-DD Workplan</span>
+                <span class="text-xs text-slate-500">Key Considerations & Evidence to Validate</span>
+              </div>
             </label>
           </div>
 
@@ -239,7 +226,7 @@
     if (cachedEmail) globalEmailInput.value = cachedEmail;
     globalEmailInput.addEventListener('input', () => localStorage.setItem('ycpUserEmail', globalEmailInput.value));
 
-    const API_BASE = 'https://xvasjackgithubio-production.up.railway.app';
+    const API_BASE = 'https://xvasjackgithubio-production-aa37.up.railway.app';
 
     // Elements
     const uploadZone = document.getElementById('uploadZone');
