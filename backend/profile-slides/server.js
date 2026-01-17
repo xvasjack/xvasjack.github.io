@@ -3638,7 +3638,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       }
 
       // Helper function to format cell text with bullet points
-      // Manually inserts BLACK SQUARE (■) at 82% size since pptxgenjs doesn't support bullet sizing
+      // Uses round bullet • (U+2022) at 82% size for proper point form appearance
       const formatCellText = (text) => {
         if (!text || typeof text !== 'string') return text;
 
@@ -3657,9 +3657,9 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
             const cleanLine = line.replace(/^[■▪\-•]\s*/, '').trim();
             const isLastLine = index === lines.length - 1;
 
-            // Add bullet character at 82% size (11pt vs 14pt text)
+            // Add round bullet character at 82% size (11pt vs 14pt text)
             result.push({
-              text: '■ ',
+              text: '• ',
               options: { fontSize: 11 }
             });
 
