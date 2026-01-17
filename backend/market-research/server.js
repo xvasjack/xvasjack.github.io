@@ -4884,9 +4884,97 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     fontFace: FONT,
   });
 
+  // ============ SLIDE 2: TABLE OF CONTENTS ============
+  const tocSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+  tocSlide.addText('Table of Contents', {
+    x: LEFT_MARGIN,
+    y: 0.15,
+    w: CONTENT_WIDTH,
+    h: 0.7,
+    fontSize: 24,
+    bold: true,
+    color: COLORS.dk2,
+    fontFace: FONT,
+  });
+  tocSlide.addShape('line', {
+    x: LEFT_MARGIN,
+    y: 0.9,
+    w: CONTENT_WIDTH,
+    h: 0,
+    line: { color: COLORS.dk2, width: 2.5 },
+  });
+
+  // TOC sections with slide numbers
+  const tocSections = [
+    {
+      section: '1. Policy & Regulations',
+      slides: 'Foundational Acts, National Policy, Investment Restrictions',
+      start: 4,
+    },
+    {
+      section: '2. Market Overview',
+      slides: 'Energy Supply, Demand, Electricity, Gas & LNG, Pricing, ESCO Market',
+      start: 8,
+    },
+    {
+      section: '3. Competitive Landscape',
+      slides: 'Japanese Players, Local Players, Foreign Players, Case Studies',
+      start: 15,
+    },
+    {
+      section: '4. Strategic Analysis',
+      slides: 'M&A Activity, Economics, Partner Assessment, Entry Strategy',
+      start: 20,
+    },
+    {
+      section: '5. Recommendations',
+      slides: 'Implementation, Timing, Go/No-Go, Opportunities & Obstacles',
+      start: 25,
+    },
+  ];
+
+  tocSections.forEach((item, idx) => {
+    const yPos = 1.4 + idx * 1.0;
+    // Section title
+    tocSlide.addText(item.section, {
+      x: LEFT_MARGIN,
+      y: yPos,
+      w: 8,
+      h: 0.4,
+      fontSize: 16,
+      bold: true,
+      color: COLORS.dk2,
+      fontFace: FONT,
+    });
+    // Section description
+    tocSlide.addText(item.slides, {
+      x: LEFT_MARGIN + 0.3,
+      y: yPos + 0.4,
+      w: 10,
+      h: 0.35,
+      fontSize: 11,
+      color: '666666',
+      fontFace: FONT,
+    });
+    // Slide number indicator
+    tocSlide.addText(`Slide ${item.start}`, {
+      x: 11,
+      y: yPos,
+      w: 1.9,
+      h: 0.4,
+      fontSize: 12,
+      color: COLORS.accent1,
+      fontFace: FONT,
+      align: 'right',
+    });
+  });
+
+  // ============ SECTION DIVIDER: POLICY & REGULATIONS ============
+  addSectionDivider(pptx, 'Policy & Regulations', 1, 5, { COLORS });
+
   // ============ SECTION 1: POLICY & REGULATIONS (3 slides) ============
 
-  // SLIDE 2: Foundational Acts
+  // SLIDE 4: Foundational Acts
   const foundationalActs = policy.foundationalActs || {};
   console.log(
     `  [PPT Debug] foundationalActs keys: ${Object.keys(foundationalActs).join(', ') || 'EMPTY'}`
@@ -5070,11 +5158,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
   }
 
+  // ============ SECTION DIVIDER: MARKET OVERVIEW ============
+  addSectionDivider(pptx, 'Market Overview', 2, 5, { COLORS });
+
   // ============ SECTION 2: MARKET DATA (6 slides with charts) ============
   const marketCitations = getCitationsForCategory('market_');
   const marketDataQuality = getDataQualityForCategory('market_');
 
-  // SLIDE 5: TPES
+  // SLIDE 8: TPES
   const tpes = market.tpes || {};
   const tpesSlide = addSlideWithTitle(
     tpes.slideTitle || `${country} - Total Primary Energy Supply`,
@@ -5082,17 +5173,29 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     { citations: marketCitations, dataQuality: marketDataQuality }
   );
   if (tpes.chartData && tpes.chartData.series) {
+    // Resize chart to make room for insights panel
     addStackedBarChart(
       tpesSlide,
       `TPES by Source (${tpes.chartData.unit || 'Mtoe'})`,
       tpes.chartData,
-      { y: 1.3, h: 5.0 }
+      { x: LEFT_MARGIN, y: 1.3, w: 8.8, h: 5.0 }
     );
+    // Add insights panel with key data points
+    const tpesInsights = [];
+    if (tpes.structuredData?.marketBreakdown?.totalPrimaryEnergySupply) {
+      const breakdown = tpes.structuredData.marketBreakdown.totalPrimaryEnergySupply;
+      if (breakdown.naturalGasPercent)
+        tpesInsights.push(`Natural Gas: ${breakdown.naturalGasPercent}`);
+      if (breakdown.renewablePercent) tpesInsights.push(`Renewable: ${breakdown.renewablePercent}`);
+    }
+    if (tpes.keyInsight) tpesInsights.push(tpes.keyInsight);
+    if (tpes.narrative) tpesInsights.push(truncate(tpes.narrative, 100));
+    addInsightsPanel(tpesSlide, tpesInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.4 });
   } else {
     addDataUnavailableMessage(tpesSlide, 'Energy supply data not available');
   }
 
-  // SLIDE 6: Final Energy Demand
+  // SLIDE 9: Final Energy Demand
   const finalDemand = market.finalDemand || {};
   const demandSlide = addSlideWithTitle(
     finalDemand.slideTitle || `${country} - Final Energy Demand`,
@@ -5100,31 +5203,46 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     { citations: marketCitations, dataQuality: marketDataQuality }
   );
   if (finalDemand.chartData && finalDemand.chartData.series) {
+    // Resize chart to make room for insights panel
     addStackedBarChart(
       demandSlide,
       `Demand by Sector (${finalDemand.chartData.unit || '%'})`,
       finalDemand.chartData,
-      { y: 1.3, h: 4.0 }
+      { x: LEFT_MARGIN, y: 1.3, w: 8.8, h: 4.0 }
     );
+    // Add insights panel
+    const demandInsights = [];
+    if (finalDemand.structuredData?.marketBreakdown?.totalFinalConsumption) {
+      const consumption = finalDemand.structuredData.marketBreakdown.totalFinalConsumption;
+      if (consumption.industryPercent)
+        demandInsights.push(`Industry: ${consumption.industryPercent}`);
+      if (consumption.transportPercent)
+        demandInsights.push(`Transport: ${consumption.transportPercent}`);
+    }
+    if (finalDemand.keyInsight) demandInsights.push(finalDemand.keyInsight);
+    // Add key drivers as insights
+    safeArray(finalDemand.keyDrivers, 2).forEach((d) => demandInsights.push(truncate(d, 80)));
+    addInsightsPanel(demandSlide, demandInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.4 });
   } else if (safeArray(finalDemand.keyDrivers, 3).length === 0) {
     addDataUnavailableMessage(demandSlide, 'Energy demand data not available');
-  }
-  // Key drivers as bullets
-  const drivers = safeArray(finalDemand.keyDrivers, 3);
-  if (drivers.length > 0) {
-    demandSlide.addText(
-      drivers.map((d) => ({ text: truncate(d, 100), options: { bullet: true } })),
-      {
-        x: LEFT_MARGIN,
-        y: 5.5,
-        w: CONTENT_WIDTH,
-        h: 1.2,
-        fontSize: 12,
-        fontFace: FONT,
-        color: COLORS.black,
-        valign: 'top',
-      }
-    );
+  } else {
+    // Key drivers as bullets when no chart data
+    const drivers = safeArray(finalDemand.keyDrivers, 4);
+    if (drivers.length > 0) {
+      demandSlide.addText(
+        drivers.map((d) => ({ text: truncate(d, 100), options: { bullet: true } })),
+        {
+          x: LEFT_MARGIN,
+          y: 1.5,
+          w: CONTENT_WIDTH,
+          h: 4.5,
+          fontSize: 12,
+          fontFace: FONT,
+          color: COLORS.black,
+          valign: 'top',
+        }
+      );
+    }
   }
 
   // SLIDE 7: Electricity & Power
@@ -5267,11 +5385,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
   }
 
+  // ============ SECTION DIVIDER: COMPETITIVE LANDSCAPE ============
+  addSectionDivider(pptx, 'Competitive Landscape', 3, 5, { COLORS });
+
   // ============ SECTION 3: COMPETITOR OVERVIEW (5 slides) ============
   const competitorCitations = getCitationsForCategory('competitors_');
   const competitorDataQuality = getDataQualityForCategory('competitors_');
 
-  // SLIDE 11: Japanese Players
+  // SLIDE 15: Japanese Players
   const japanesePlayers = competitors.japanesePlayers || {};
   const jpSlide = addSlideWithTitle(
     japanesePlayers.slideTitle || `${country} - Japanese Energy Companies`,
@@ -5434,7 +5555,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     );
   }
 
-  // SLIDE 15: M&A Activity
+  // ============ SECTION DIVIDER: STRATEGIC ANALYSIS ============
+  addSectionDivider(pptx, 'Strategic Analysis', 4, 5, { COLORS });
+
+  // SLIDE 20: M&A Activity
   const maActivity = competitors.maActivity || {};
   const maSlide = addSlideWithTitle(
     maActivity.slideTitle || `${country} - M&A Activity`,
@@ -5978,9 +6102,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     );
   }
 
+  // ============ SECTION DIVIDER: RECOMMENDATIONS ============
+  addSectionDivider(pptx, 'Recommendations', 5, 5, { COLORS });
+
   // ============ SECTION 6: SUMMARY (5 slides) ============
 
-  // SLIDE 23: Go/No-Go Decision
+  // SLIDE 25: Go/No-Go Decision
   const goNoGo = summary.goNoGo || {};
   const goNoGoSlide = addSlideWithTitle(
     `${country} - Go/No-Go Assessment`,
@@ -6059,80 +6186,30 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     );
   }
 
-  // SLIDE 24: Opportunities & Obstacles
+  // SLIDE 26: Opportunities & Obstacles (using enhanced helper)
   const ooSlide = addSlideWithTitle(
     `${country} - Opportunities & Obstacles`,
     truncateSubtitle(summary.recommendation || '', 95)
   );
-  // Two-column layout
-  const opportunities = safeArray(summary.opportunities, 4);
-  const obstacles = safeArray(summary.obstacles, 4);
 
-  // Opportunities column (left)
-  ooSlide.addText('OPPORTUNITIES', {
+  // Prepare opportunities data (handle both string and object formats)
+  const opportunitiesRaw = safeArray(summary.opportunities, 5);
+  const opportunitiesFormatted = opportunitiesRaw.map((o) =>
+    typeof o === 'string' ? o : `${o.opportunity || ''} (${o.size || ''})`
+  );
+
+  // Prepare obstacles data (handle both string and object formats)
+  const obstaclesRaw = safeArray(summary.obstacles, 5);
+  const obstaclesFormatted = obstaclesRaw.map((o) =>
+    typeof o === 'string' ? o : `${o.obstacle || ''} [${o.severity || ''}]`
+  );
+
+  // Use the enhanced two-column layout helper
+  addOpportunitiesObstaclesSummary(ooSlide, opportunitiesFormatted, obstaclesFormatted, {
     x: LEFT_MARGIN,
-    y: 1.3,
-    w: 4.5,
-    h: 0.3,
-    fontSize: 14,
-    bold: true,
-    color: COLORS.green,
-    fontFace: FONT,
+    y: 1.35,
+    colWidth: 6,
   });
-  if (opportunities.length > 0) {
-    ooSlide.addText(
-      opportunities.map((o) => ({
-        text:
-          typeof o === 'string'
-            ? truncate(o, 70)
-            : truncate(`${o.opportunity || ''} (${o.size || ''})`, 70),
-        options: { bullet: true },
-      })),
-      {
-        x: LEFT_MARGIN,
-        y: 1.7,
-        w: 4.5,
-        h: 4.5,
-        fontSize: 11,
-        fontFace: FONT,
-        color: COLORS.black,
-        valign: 'top',
-      }
-    );
-  }
-
-  // Obstacles column (right)
-  ooSlide.addText('OBSTACLES', {
-    x: 5.0,
-    y: 1.3,
-    w: 4.5,
-    h: 0.3,
-    fontSize: 14,
-    bold: true,
-    color: COLORS.orange,
-    fontFace: FONT,
-  });
-  if (obstacles.length > 0) {
-    ooSlide.addText(
-      obstacles.map((o) => ({
-        text:
-          typeof o === 'string'
-            ? truncate(o, 70)
-            : truncate(`${o.obstacle || ''} [${o.severity || ''}]`, 70),
-        options: { bullet: true },
-      })),
-      {
-        x: 5.0,
-        y: 1.7,
-        w: 4.5,
-        h: 4.5,
-        fontSize: 11,
-        fontFace: FONT,
-        color: COLORS.black,
-        valign: 'top',
-      }
-    );
-  }
 
   // Ratings at bottom
   const ratings = summary.ratings || {};
