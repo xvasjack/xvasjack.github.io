@@ -430,6 +430,34 @@ async function generateDocx(reportJson) {
           },
         },
       ],
+      characterStyles: [
+        {
+          id: 'Hyperlink',
+          name: 'Hyperlink',
+          basedOn: 'DefaultParagraphFont',
+          run: {
+            color: hexToDocx(templateStyles.fonts.heading2.color),
+            underline: { type: 'single' },
+          },
+        },
+      ],
+    },
+    defaultTabStop: 720,
+    creator: 'DD Report Generator',
+    title: 'Due Diligence Report',
+    theme: {
+      majorFont: templateStyles.fonts.heading1.family,
+      minorFont: templateStyles.fonts.body.family,
+      colors: {
+        accent1: hexToDocx(templateStyles.tables.headerRow.bgColor),
+        accent2: hexToDocx(templateStyles.fonts.heading1.color),
+        dark1: '000000',
+        dark2: hexToDocx(templateStyles.fonts.heading1.color),
+        light1: 'FFFFFF',
+        light2: hexToDocx(templateStyles.tables.bodyRow.altBgColor),
+        hyperlink: hexToDocx(templateStyles.fonts.heading2.color),
+        followedHyperlink: hexToDocx(templateStyles.fonts.heading1.color),
+      },
     },
     sections: [
       {
