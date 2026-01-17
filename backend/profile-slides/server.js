@@ -46,8 +46,13 @@ process.on('uncaughtException', (error) => {
 function ensureString(value, defaultValue = '') {
   if (typeof value === 'string') return value;
   if (value === null || value === undefined) return defaultValue;
-  // Handle arrays - join with comma
-  if (Array.isArray(value)) return value.map(v => ensureString(v)).join(', ');
+  // Handle arrays - join with newlines if items look like bullet points, else comma
+  if (Array.isArray(value)) {
+    const items = value.map(v => ensureString(v));
+    // If any item starts with "- ", it's point form - join with newlines
+    const isBulletForm = items.some(item => item.trim().startsWith('- '));
+    return items.join(isBulletForm ? '\n' : ', ');
+  }
   // Handle objects - try to extract meaningful string
   if (typeof value === 'object') {
     // Common patterns from AI responses
