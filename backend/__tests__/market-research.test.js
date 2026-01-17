@@ -836,3 +836,252 @@ describe('validateChartData', () => {
     expect(validated).toBeNull();
   });
 });
+
+// ============ MERGE HISTORICAL/PROJECTED ============
+// Re-implement for testing
+function mergeHistoricalProjected(data, options = {}) {
+  if (!data) return null;
+
+  // If data is already in unified format, return it
+  if (data.categories && data.series) {
+    return data;
+  }
+
+  // Handle historical/projected format
+  const historical = data.historical || {};
+  const projected = data.projected || {};
+  const allYears = [...Object.keys(historical), ...Object.keys(projected)].sort();
+
+  if (allYears.length === 0) return null;
+
+  // Identify all data series (e.g., coal, gas, renewable)
+  const seriesNames = new Set();
+  Object.values(historical).forEach((yearData) => {
+    if (typeof yearData === 'object') {
+      Object.keys(yearData).forEach((k) => seriesNames.add(k));
+    }
+  });
+  Object.values(projected).forEach((yearData) => {
+    if (typeof yearData === 'object') {
+      Object.keys(yearData).forEach((k) => seriesNames.add(k));
+    }
+  });
+
+  if (seriesNames.size === 0) return null;
+
+  // Build series data
+  const series = [];
+  seriesNames.forEach((seriesName) => {
+    const values = allYears.map((year) => {
+      const yearData = historical[year] || projected[year] || {};
+      return typeof yearData === 'object' ? yearData[seriesName] || 0 : 0;
+    });
+    series.push({ name: seriesName, values });
+  });
+
+  // Find where projections start
+  const projectedStartIndex = Object.keys(historical).length;
+
+  return {
+    categories: allYears,
+    series,
+    projectedStartIndex,
+    unit: data.unit || options.unit || '',
+  };
+}
+
+describe('mergeHistoricalProjected', () => {
+  test('returns null for null/undefined input', () => {
+    expect(mergeHistoricalProjected(null)).toBeNull();
+    expect(mergeHistoricalProjected(undefined)).toBeNull();
+  });
+
+  test('returns data as-is if already in unified format', () => {
+    const data = {
+      categories: ['2020', '2021'],
+      series: [{ name: 'Coal', values: [40, 38] }],
+    };
+    const result = mergeHistoricalProjected(data);
+
+    expect(result).toEqual(data);
+  });
+
+  test('merges historical and projected data', () => {
+    const data = {
+      historical: {
+        2020: { coal: 40, gas: 30 },
+        2021: { coal: 38, gas: 32 },
+      },
+      projected: {
+        2030: { coal: 20, gas: 40 },
+      },
+    };
+    const result = mergeHistoricalProjected(data);
+
+    expect(result.categories).toEqual(['2020', '2021', '2030']);
+    expect(result.projectedStartIndex).toBe(2);
+    expect(result.series).toHaveLength(2);
+  });
+
+  test('handles historical-only data', () => {
+    const data = {
+      historical: {
+        2020: { coal: 40 },
+        2021: { coal: 38 },
+      },
+    };
+    const result = mergeHistoricalProjected(data);
+
+    expect(result.categories).toEqual(['2020', '2021']);
+    expect(result.projectedStartIndex).toBe(2);
+    expect(result.series[0].values).toEqual([40, 38]);
+  });
+
+  test('handles projected-only data', () => {
+    const data = {
+      projected: {
+        2030: { renewable: 50 },
+        2040: { renewable: 70 },
+      },
+    };
+    const result = mergeHistoricalProjected(data);
+
+    expect(result.categories).toEqual(['2030', '2040']);
+    expect(result.projectedStartIndex).toBe(0);
+  });
+
+  test('returns null for empty historical/projected', () => {
+    const data = { historical: {}, projected: {} };
+    const result = mergeHistoricalProjected(data);
+
+    expect(result).toBeNull();
+  });
+
+  test('preserves unit field', () => {
+    const data = {
+      historical: { 2020: { value: 100 } },
+      unit: 'Mtoe',
+    };
+    const result = mergeHistoricalProjected(data);
+
+    expect(result.unit).toBe('Mtoe');
+  });
+
+  test('fills missing values with 0', () => {
+    const data = {
+      historical: {
+        2020: { coal: 40 },
+        2021: { gas: 32 },
+      },
+    };
+    const result = mergeHistoricalProjected(data);
+
+    // Coal series should have [40, 0], gas should have [0, 32]
+    const coalSeries = result.series.find((s) => s.name === 'coal');
+    const gasSeries = result.series.find((s) => s.name === 'gas');
+
+    expect(coalSeries.values).toEqual([40, 0]);
+    expect(gasSeries.values).toEqual([0, 32]);
+  });
+});
+
+// ============ CALCULATE COLUMN WIDTHS ============
+// Re-implement for testing
+function calculateColumnWidths(data, totalWidth = 12.5, options = {}) {
+  if (!data || !Array.isArray(data) || data.length === 0) {
+    return [];
+  }
+
+  const numCols = data[0].length;
+  if (numCols === 0) return [];
+
+  // Calculate maximum content length for each column
+  const maxLengths = [];
+  for (let colIdx = 0; colIdx < numCols; colIdx++) {
+    let maxLen = 0;
+    for (const row of data) {
+      if (row[colIdx] !== undefined) {
+        const cellText =
+          typeof row[colIdx] === 'object' ? String(row[colIdx].text || '') : String(row[colIdx]);
+        maxLen = Math.max(maxLen, cellText.length);
+      }
+    }
+    maxLengths.push(Math.max(maxLen, 5)); // Min 5 chars
+  }
+
+  // Calculate proportional widths
+  const totalLength = maxLengths.reduce((a, b) => a + b, 0);
+  let widths = maxLengths.map((len) => (len / totalLength) * totalWidth);
+
+  // Apply min/max constraints
+  const minColWidth = options.minColWidth || 0.8;
+  const maxColWidth = options.maxColWidth || totalWidth * 0.5;
+  widths = widths.map((w) => Math.min(Math.max(w, minColWidth), maxColWidth));
+
+  // Normalize to fit totalWidth
+  const currentTotal = widths.reduce((a, b) => a + b, 0);
+  if (currentTotal !== totalWidth) {
+    const scale = totalWidth / currentTotal;
+    widths = widths.map((w) => w * scale);
+  }
+
+  return widths;
+}
+
+describe('calculateColumnWidths', () => {
+  test('returns empty array for null/undefined input', () => {
+    expect(calculateColumnWidths(null)).toEqual([]);
+    expect(calculateColumnWidths(undefined)).toEqual([]);
+  });
+
+  test('returns empty array for empty data', () => {
+    expect(calculateColumnWidths([])).toEqual([]);
+  });
+
+  test('calculates proportional widths', () => {
+    const data = [
+      ['Short', 'Much Longer Column Header'],
+      ['A', 'B'],
+    ];
+    const widths = calculateColumnWidths(data, 10);
+
+    // Second column should be wider than first
+    expect(widths[1]).toBeGreaterThan(widths[0]);
+    // Total should equal totalWidth
+    expect(widths.reduce((a, b) => a + b, 0)).toBeCloseTo(10, 1);
+  });
+
+  test('handles object cells with text property', () => {
+    const data = [
+      [{ text: 'Header1' }, { text: 'Header2' }],
+      [{ text: 'A' }, { text: 'B' }],
+    ];
+    const widths = calculateColumnWidths(data, 10);
+
+    expect(widths).toHaveLength(2);
+    expect(widths.reduce((a, b) => a + b, 0)).toBeCloseTo(10, 1);
+  });
+
+  test('respects minColWidth constraint', () => {
+    const data = [['A', 'Very Long Header That Should Be Wide']];
+    const widths = calculateColumnWidths(data, 10, { minColWidth: 2 });
+
+    expect(widths[0]).toBeGreaterThanOrEqual(2);
+  });
+
+  test('handles single column', () => {
+    const data = [['Only Column'], ['Data']];
+    const widths = calculateColumnWidths(data, 10);
+
+    expect(widths).toHaveLength(1);
+    expect(widths[0]).toBeCloseTo(10, 1);
+  });
+
+  test('handles many columns', () => {
+    const data = [['A', 'B', 'C', 'D', 'E', 'F']];
+    const widths = calculateColumnWidths(data, 12);
+
+    expect(widths).toHaveLength(6);
+    expect(widths.reduce((a, b) => a + b, 0)).toBeCloseTo(12, 1);
+  });
+});
