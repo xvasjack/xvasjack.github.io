@@ -282,19 +282,25 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true) {
     }
 
     // Extract URLs from content for source citations
-    const urlRegex = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/g;
+    const urlRegex = /https?:\/\/[^\s<>"{}|\\^`[\]]+/g;
     const extractedUrls = content.match(urlRegex) || [];
     // Dedupe and clean URLs
     const citations = [...new Set(extractedUrls)]
-      .filter(url => {
+      .filter((url) => {
         // Filter out common non-source URLs
-        const skipPatterns = ['facebook.com', 'twitter.com', 'linkedin.com', 'youtube.com', 'instagram.com'];
-        return !skipPatterns.some(p => url.includes(p));
+        const skipPatterns = [
+          'facebook.com',
+          'twitter.com',
+          'linkedin.com',
+          'youtube.com',
+          'instagram.com',
+        ];
+        return !skipPatterns.some((p) => url.includes(p));
       })
       .slice(0, 10)
-      .map(url => ({
+      .map((url) => ({
         url: url.replace(/[.,;:!?)]+$/, ''), // Clean trailing punctuation
-        title: url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]
+        title: url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0],
       }));
 
     return {
@@ -1199,14 +1205,76 @@ FOCUS ON:
 - Foreign ownership percentages and exceptions
 - Tax incentives with specific values and durations
 - Recent policy changes (2023-2025)
-- Regulatory risks and enforcement gaps`;
+- Regulatory risks and enforcement gaps
+
+CRITICAL - RETURN STRUCTURED DATA:
+Your response MUST include a JSON block with policy data. Use this EXACT format:
+
+\`\`\`json
+{
+  "narrative": "Your detailed research findings here (2-3 paragraphs with specific numbers, sources)",
+  "foundationalActs": [
+    { "name": "Act Name", "year": 2024, "enforcement": "enforced/voluntary/planned", "keyRequirements": ["req1", "req2"] }
+  ],
+  "foreignOwnership": {
+    "general": "49%",
+    "boiPromoted": "100%",
+    "exceptions": "List specific exceptions for energy sector",
+    "notes": "Additional context"
+  },
+  "incentives": [
+    { "name": "Incentive Name", "benefit": "100% allowance on CAPEX for 5 years", "eligibility": "Who qualifies", "value": "specific % or amount" }
+  ],
+  "nationalTargets": [
+    { "target": "30% renewable by 2030", "status": "on-track/behind/ahead", "baseline": "15% in 2020" }
+  ],
+  "escoRegulations": {
+    "registrationRequired": true,
+    "licensingBody": "Name of agency",
+    "requirements": ["requirement 1", "requirement 2"],
+    "penalties": "Description of non-compliance penalties"
+  },
+  "keyRisks": [
+    { "risk": "Policy reversal risk", "severity": "high/medium/low", "mitigation": "How to address" }
+  ],
+  "dataQuality": "high/medium/low",
+  "sources": ["Source 1", "Source 2"]
+}
+\`\`\`
+
+REQUIREMENTS:
+- Use REAL data from official sources - do NOT fabricate information
+- Include specific percentages, years, and monetary values where available
+- Mark dataQuality as "low" if information is estimated or uncertain`;
 
       const result = await callKimiDeepResearch(queryContext, country, industry);
+
+      // Extract structured JSON from the response
+      let structuredData = null;
+      let extractionStatus = 'unknown';
+      if (result.content) {
+        const jsonMatch = result.content.match(/```json\s*([\s\S]*?)\s*```/);
+        if (jsonMatch) {
+          try {
+            structuredData = JSON.parse(jsonMatch[1]);
+            extractionStatus = 'success';
+          } catch (e) {
+            console.log(`      [Policy] Failed to parse JSON for ${topicKey}: ${e.message}`);
+            extractionStatus = 'parse_error';
+          }
+        } else {
+          extractionStatus = 'no_json_found';
+        }
+      }
+
       return {
         key: topicKey,
         content: result.content,
+        structuredData: structuredData,
+        extractionStatus: extractionStatus,
         citations: result.citations || [],
         slideTitle: framework.slideTitle?.replace('{country}', country) || '',
+        dataQuality: structuredData?.dataQuality || 'unknown',
       };
     })
   );
@@ -1244,29 +1312,55 @@ async function marketResearchAgent(country, industry, _clientContext) {
         const framework = RESEARCH_FRAMEWORK[topicKey];
         if (!framework) return null;
 
-        // Determine chart structure based on chartType
+        // Determine chart structure based on chartType - extended to support 2000-2050 projections
         const chartStructure =
           framework.chartType === 'stackedBar'
             ? `"chartData": {
-              "categories": ["2020", "2021", "2022", "2023", "2024"],
-              "series": [
-                {"name": "Category1", "values": [number, number, number, number, number]},
-                {"name": "Category2", "values": [number, number, number, number, number]}
-              ],
-              "unit": "Mtoe or TWh or bcm"
+              "historical": {
+                "categories": ["2000", "2005", "2010", "2015", "2020", "2023"],
+                "series": [
+                  {"name": "Category1", "values": [number, number, number, number, number, number]},
+                  {"name": "Category2", "values": [number, number, number, number, number, number]}
+                ]
+              },
+              "projected": {
+                "categories": ["2025", "2030", "2040", "2050"],
+                "series": [
+                  {"name": "Category1", "values": [number, number, number, number]},
+                  {"name": "Category2", "values": [number, number, number, number]}
+                ]
+              },
+              "unit": "Mtoe or TWh or bcm",
+              "projectionSource": "IEA/Government target/Industry estimate"
             }`
             : framework.chartType === 'pie'
               ? `"chartData": {
-              "categories": ["Segment1", "Segment2", "Segment3"],
-              "values": [percentage, percentage, percentage],
+              "current": {
+                "year": "2023",
+                "categories": ["Segment1", "Segment2", "Segment3"],
+                "values": [percentage, percentage, percentage]
+              },
+              "projected": {
+                "year": "2030",
+                "categories": ["Segment1", "Segment2", "Segment3"],
+                "values": [percentage, percentage, percentage]
+              },
               "unit": "%"
             }`
               : framework.chartType === 'line'
                 ? `"chartData": {
-              "categories": ["2020", "2021", "2022", "2023", "2024"],
-              "series": [
-                {"name": "Metric1", "values": [number, number, number, number, number]}
-              ],
+              "historical": {
+                "categories": ["2018", "2019", "2020", "2021", "2022", "2023", "2024"],
+                "series": [
+                  {"name": "Metric1", "values": [number, number, number, number, number, number, number]}
+                ]
+              },
+              "projected": {
+                "categories": ["2025", "2026", "2027", "2028", "2029", "2030"],
+                "series": [
+                  {"name": "Metric1", "values": [number, number, number, number, number, number]}
+                ]
+              },
               "unit": "USD/kWh or USD/mmbtu"
             }`
                 : '';
@@ -1283,6 +1377,32 @@ Your response MUST include a JSON block with chart data. Use this EXACT format:
 {
   "narrative": "Your detailed research findings here (2-3 paragraphs with specific numbers, sources, and insights)",
   ${chartStructure ? chartStructure + ',' : ''}
+  "marketBreakdown": {
+    "totalPrimaryEnergySupply": {
+      "naturalGasPercent": "X%",
+      "renewablePercent": "X%",
+      "nonRenewablePercent": "X%"
+    },
+    "totalFinalConsumption": {
+      "industryPercent": "X%",
+      "transportPercent": "X%",
+      "otherPercent": "X%"
+    },
+    "electricityGeneration": {
+      "current": "X TWh",
+      "projected2030": "X TWh"
+    }
+  },
+  "infrastructureCapacity": {
+    "lngImportCurrent": "X bcm/year",
+    "lngImportPlanned": "X bcm/year by YEAR",
+    "pipelineCapacity": "X bcm/year"
+  },
+  "priceComparison": {
+    "generationCost": "X USD/kWh",
+    "retailPrice": "X USD/kWh",
+    "industrialRate": "X USD/kWh"
+  },
   "keyInsight": "One sentence insight about the trend or implication",
   "dataQuality": "high/medium/low - indicate if data is from official sources or estimated",
   "sources": ["Source 1", "Source 2"]
@@ -1291,22 +1411,33 @@ Your response MUST include a JSON block with chart data. Use this EXACT format:
 
 REQUIREMENTS:
 - Use REAL numbers from your research - do NOT fabricate data
+- Include historical data back to 2000 where available
+- Include projections to 2030/2040/2050 based on government targets or industry forecasts
 - If exact data unavailable, use "estimated" in dataQuality and provide reasonable estimates
 - Include units (Mtoe, TWh, USD/kWh, bcm, %, etc.)
-- Market sizes should be in USD millions or billions`;
+- Market sizes should be in USD millions or billions
+- Cite projection sources (IEA, national plans, industry reports)`;
 
         const result = await callKimiDeepResearch(queryContext, country, industry);
 
-        // Try to extract structured JSON from the response
+        // Try to extract structured JSON from the response with improved error tracking
         let structuredData = null;
+        let extractionStatus = 'unknown';
+        let rawJson = null;
         if (result.content) {
           const jsonMatch = result.content.match(/```json\s*([\s\S]*?)\s*```/);
           if (jsonMatch) {
+            rawJson = jsonMatch[1];
             try {
               structuredData = JSON.parse(jsonMatch[1]);
+              extractionStatus = 'success';
             } catch (e) {
-              console.log(`      [Market] Failed to parse JSON for ${topicKey}`);
+              console.log(`      [Market] Failed to parse JSON for ${topicKey}: ${e.message}`);
+              extractionStatus = 'parse_error';
             }
+          } else {
+            extractionStatus = 'no_json_found';
+            console.log(`      [Market] No JSON block found for ${topicKey}`);
           }
         }
 
@@ -1314,6 +1445,8 @@ REQUIREMENTS:
           key: topicKey,
           content: result.content,
           structuredData: structuredData,
+          extractionStatus: extractionStatus,
+          rawJson: rawJson, // Keep for debugging/retry
           citations: result.citations || [],
           chartType: framework.chartType || null,
           slideTitle: framework.slideTitle?.replace('{country}', country) || '',
@@ -1367,10 +1500,13 @@ ${framework.queries.map((q) => '- ' + q.replace('{country}', country)).join('\n'
 ${
   isJapanese
     ? `SPECIAL FOCUS - JAPANESE COMPANIES:
-- Tokyo Gas, Osaka Gas, JERA, Mitsubishi, Mitsui presence
-- Entry mode (JV, subsidiary, partnership)
-- Specific projects and contract values
-- Success/failure assessment with reasons`
+- Tokyo Gas, Osaka Gas, JERA, Mitsubishi, Mitsui, Marubeni, Sumitomo, Itochu presence
+- Entry mode (JV, subsidiary, partnership, M&A)
+- Specific projects with contract values in USD
+- Year of entry and current status (active/exited/expanding)
+- Local partner names and ownership structures
+- Success factors or reasons for failure
+- Financial highlights if available (revenue, profit margin)`
     : ''
 }
 
@@ -1385,35 +1521,85 @@ Your response MUST include a JSON block. Use this format:
       "name": "Company Name",
       "origin": "Country",
       "entryYear": "2020",
-      "entryMode": "JV/Subsidiary/Direct",
+      "entryMode": "JV/Subsidiary/Direct/M&A",
+      "localPartner": "Partner name or N/A",
+      "ownershipPercent": "X%",
       "revenue": "$X million",
       "marketShare": "X%",
       "projects": "Key projects description",
+      "contractValue": "$X million (if known)",
       "strengths": "Specific strengths",
       "weaknesses": "Specific weaknesses",
+      "status": "active/expanding/restructuring/exited",
       "partnershipInterest": "high/medium/low"
     }
   ],
+  "japanesePlayers": [
+    {
+      "company": "Tokyo Gas/Osaka Gas/JERA/etc",
+      "entryMode": "JV/Subsidiary/Partnership",
+      "year": "2020",
+      "outcome": "Successful - $X revenue/Failed - exited in YEAR/Ongoing",
+      "keyProject": "Project name and description",
+      "localPartner": "Partner company name"
+    }
+  ],
+  "caseStudies": [
+    {
+      "company": "Company Name",
+      "entryYear": "2018",
+      "entryMode": "JV with Local Partner",
+      "initialInvestment": "$X million",
+      "outcome": "Success/Failure/Mixed",
+      "keyLearnings": "What worked or didn't work",
+      "currentStatus": "Operating/Exited/Expanded",
+      "relevanceForClient": "Why this case matters for client's entry"
+    }
+  ],
+  "escoMarketState": {
+    "registeredESCOs": "Number of registered ESCO companies",
+    "activeProjects": "Number of active ESCO projects",
+    "marketSize": "$X million",
+    "growthRate": "X% CAGR",
+    "dominantSegments": ["Industrial", "Commercial", "Residential"],
+    "averageProjectSize": "$X million",
+    "typicalContractDuration": "X years",
+    "savingsGuaranteeRange": "X-Y%"
+  },
   "marketInsight": "Key competitive insight",
+  "whiteSpaces": ["Underserved segment 1", "Opportunity area 2"],
+  "entryBarriers": ["Barrier 1", "Barrier 2"],
   "dataQuality": "high/medium/low",
   "sources": ["Source 1", "Source 2"]
 }
 \`\`\`
 
-Use REAL data from research. Mark dataQuality as "low" if information is estimated.`;
+REQUIREMENTS:
+- Use REAL data from research. Mark dataQuality as "low" if information is estimated.
+- For Japanese companies, be specific about project names, values, and outcomes
+- Include at least one case study with detailed entry/exit analysis
+- For ESCO market state, provide actual numbers where available`;
 
       const result = await callKimiDeepResearch(queryContext, country, industry);
 
-      // Extract structured JSON
+      // Extract structured JSON with improved error tracking
       let structuredData = null;
+      let extractionStatus = 'unknown';
+      let rawJson = null;
       if (result.content) {
         const jsonMatch = result.content.match(/```json\s*([\s\S]*?)\s*```/);
         if (jsonMatch) {
+          rawJson = jsonMatch[1];
           try {
             structuredData = JSON.parse(jsonMatch[1]);
+            extractionStatus = 'success';
           } catch (e) {
-            console.log(`      [Competitor] Failed to parse JSON for ${topicKey}`);
+            console.log(`      [Competitor] Failed to parse JSON for ${topicKey}: ${e.message}`);
+            extractionStatus = 'parse_error';
           }
+        } else {
+          extractionStatus = 'no_json_found';
+          console.log(`      [Competitor] No JSON block found for ${topicKey}`);
         }
       }
 
@@ -1421,6 +1607,8 @@ Use REAL data from research. Mark dataQuality as "low" if information is estimat
         key: topicKey,
         content: result.content,
         structuredData: structuredData,
+        extractionStatus: extractionStatus,
+        rawJson: rawJson, // Keep for debugging/retry
         citations: result.citations || [],
         slideTitle: framework.slideTitle?.replace('{country}', country) || '',
         dataQuality: structuredData?.dataQuality || 'unknown',
@@ -3020,7 +3208,8 @@ Focus on COMPARISONS and TRADE-OFFS, not just summaries.`;
 
 // Helper: truncate text to fit slides - end at sentence or phrase boundary
 // CRITICAL: Never cut mid-sentence. Better to be shorter than incomplete.
-function truncate(text, maxLen = 150) {
+// Adds ellipsis (...) when text is truncated to indicate continuation
+function truncate(text, maxLen = 150, addEllipsis = true) {
   if (!text) return '';
   const str = String(text).trim();
   if (str.length <= maxLen) return str;
@@ -3040,26 +3229,38 @@ function truncate(text, maxLen = 150) {
     lastSentence = Math.max(lastSentence, truncated.length - 1);
   }
 
+  // Helper to add ellipsis if text continues after this point
+  const maybeEllipsis = (result, checkPos) => {
+    // Only add ellipsis if there's more content after the cut point
+    const needsEllipsis = addEllipsis && checkPos < str.length - 1 && !result.endsWith('.');
+    return needsEllipsis ? result + '...' : result;
+  };
+
   if (lastSentence > maxLen * 0.4) {
-    return truncated.substring(0, lastSentence + 1).trim();
+    const result = truncated.substring(0, lastSentence + 1).trim();
+    // Sentence ends naturally - only add ellipsis if there's more content and it doesn't end with period
+    return maybeEllipsis(result, lastSentence + 1);
   }
 
   // Try to end at strong phrase boundary (; or :)
   const strongPhrase = Math.max(truncated.lastIndexOf('; '), truncated.lastIndexOf(': '));
   if (strongPhrase > maxLen * 0.4) {
-    return truncated.substring(0, strongPhrase + 1).trim();
+    const result = truncated.substring(0, strongPhrase + 1).trim();
+    return maybeEllipsis(result, strongPhrase + 1);
   }
 
   // Try to end at parenthetical close
   const lastParen = truncated.lastIndexOf(')');
   if (lastParen > maxLen * 0.5) {
-    return truncated.substring(0, lastParen + 1).trim();
+    const result = truncated.substring(0, lastParen + 1).trim();
+    return maybeEllipsis(result, lastParen + 1);
   }
 
   // Try to end at comma boundary (weaker)
   const lastComma = truncated.lastIndexOf(', ');
   if (lastComma > maxLen * 0.5) {
-    return truncated.substring(0, lastComma).trim();
+    const result = truncated.substring(0, lastComma).trim();
+    return addEllipsis ? result + '...' : result;
   }
 
   // Last resort: end at word boundary, but ensure we don't cut mid-word
@@ -3100,16 +3301,20 @@ function truncate(text, maxLen = 150) {
     if (badEndings.includes(lastWord) && words.length > 1) {
       // Remove the dangling preposition/article
       words.pop();
-      return words.join(' ').trim();
+      const result = words.join(' ').trim();
+      return addEllipsis ? result + '...' : result;
     }
-    return truncated.substring(0, lastSpace).trim();
+    const result = truncated.substring(0, lastSpace).trim();
+    return addEllipsis ? result + '...' : result;
   }
 
-  return truncated.trim();
+  const result = truncated.trim();
+  return addEllipsis ? result + '...' : result;
 }
 
 // Helper: truncate subtitle/message text - stricter limits per YCP spec (max ~20 words / 100 chars)
-function truncateSubtitle(text, maxLen = 100) {
+// Adds ellipsis (...) when text is truncated
+function truncateSubtitle(text, maxLen = 100, addEllipsis = true) {
   if (!text) return '';
   const str = String(text).trim();
   if (str.length <= maxLen) return str;
@@ -3120,23 +3325,94 @@ function truncateSubtitle(text, maxLen = 100) {
   // Look for sentence end
   const lastPeriod = truncated.lastIndexOf('. ');
   if (lastPeriod > maxLen * 0.4) {
-    return truncated.substring(0, lastPeriod + 1).trim();
+    const result = truncated.substring(0, lastPeriod + 1).trim();
+    // Only add ellipsis if there's more content after and doesn't end with period
+    const needsEllipsis = addEllipsis && lastPeriod + 1 < str.length - 1 && !result.endsWith('.');
+    return needsEllipsis ? result + '...' : result;
   }
 
   // Look for other clean breaks
   const lastColon = truncated.lastIndexOf(': ');
   if (lastColon > maxLen * 0.4) {
-    return truncated.substring(0, lastColon + 1).trim();
+    const result = truncated.substring(0, lastColon + 1).trim();
+    return addEllipsis && lastColon + 1 < str.length - 1 ? result + '...' : result;
   }
 
-  // Fall back to truncate function
-  return truncate(str, maxLen);
+  // Fall back to truncate function (which handles ellipsis)
+  return truncate(str, maxLen, addEllipsis);
 }
 
 // Helper: safely get array items
 function safeArray(arr, max = 5) {
   if (!Array.isArray(arr)) return [];
   return arr.slice(0, max);
+}
+
+// Helper: calculate dynamic column widths based on content length
+// Returns array of column widths in inches that sum to totalWidth
+function calculateColumnWidths(data, totalWidth = 12.5, options = {}) {
+  if (!data || data.length === 0) return [];
+
+  const minColWidth = options.minColWidth || 0.8; // Minimum column width in inches
+  const maxColWidth = options.maxColWidth || 6; // Maximum column width in inches
+  const numCols = data[0].length;
+
+  if (numCols === 0) return [];
+
+  // Calculate maximum content length for each column
+  const maxLengths = [];
+  for (let colIdx = 0; colIdx < numCols; colIdx++) {
+    let maxLen = 0;
+    for (const row of data) {
+      if (row[colIdx]) {
+        const cellText =
+          typeof row[colIdx] === 'object' ? String(row[colIdx].text || '') : String(row[colIdx]);
+        maxLen = Math.max(maxLen, cellText.length);
+      }
+    }
+    // Apply minimum length to avoid zero-width columns
+    maxLengths.push(Math.max(maxLen, 5));
+  }
+
+  // Calculate total length for proportional distribution
+  const totalLength = maxLengths.reduce((sum, len) => sum + len, 0);
+
+  // Calculate proportional widths
+  let widths = maxLengths.map((len) => (len / totalLength) * totalWidth);
+
+  // Apply min/max constraints
+  widths = widths.map((w) => Math.max(minColWidth, Math.min(maxColWidth, w)));
+
+  // Normalize to ensure widths sum to totalWidth
+  const currentTotal = widths.reduce((sum, w) => sum + w, 0);
+  if (currentTotal !== totalWidth) {
+    const scale = totalWidth / currentTotal;
+    widths = widths.map((w) => w * scale);
+  }
+
+  return widths;
+}
+
+// Helper: create table row options with proper styling
+function createTableRowOptions(isHeader = false, isAlternate = false, COLORS = {}) {
+  const options = {
+    fontFace: 'Segoe UI',
+    fontSize: 10,
+    valign: 'middle',
+  };
+
+  if (isHeader) {
+    options.bold = true;
+    options.fill = { color: COLORS.accent3 || '011AB7' }; // Navy background
+    options.color = COLORS.white || 'FFFFFF';
+  } else if (isAlternate) {
+    options.fill = { color: 'F5F5F5' }; // Light gray for alternating rows
+    options.color = COLORS.black || '000000';
+  } else {
+    options.color = COLORS.black || '000000';
+  }
+
+  return options;
 }
 
 // Helper: add source footnote to slide
@@ -3239,18 +3515,265 @@ function addCalloutBox(slide, title, content, options = {}) {
   }
 }
 
+// Helper: add insights panel to chart slides (right side of chart)
+// Displays key insights as bullet points next to charts for YCP-quality output
+function addInsightsPanel(slide, insights = [], options = {}) {
+  if (!insights || insights.length === 0) return;
+
+  const FONT = 'Segoe UI';
+  const panelX = options.x || 9.8; // Position to right of chart
+  const panelY = options.y || 1.5;
+  const panelW = options.w || 3.2;
+  const panelH = options.h || 4.5;
+
+  // Panel header
+  slide.addText('Key Insights', {
+    x: panelX,
+    y: panelY,
+    w: panelW,
+    h: 0.35,
+    fontSize: 12,
+    bold: true,
+    color: '1F497D', // Navy
+    fontFace: FONT,
+    valign: 'bottom',
+  });
+
+  // Navy underline for header
+  slide.addShape('line', {
+    x: panelX,
+    y: panelY + 0.35,
+    w: panelW,
+    h: 0,
+    line: { color: '1F497D', width: 1.5 },
+  });
+
+  // Build bullet points with navy bullets
+  const bulletPoints = insights.slice(0, 4).map((insight) => ({
+    text: truncate(String(insight), 150),
+    options: {
+      fontSize: 10,
+      color: '333333',
+      fontFace: FONT,
+      bullet: { type: 'bullet', color: '1F497D' },
+      paraSpaceBefore: 8,
+      paraSpaceAfter: 4,
+    },
+  }));
+
+  slide.addText(bulletPoints, {
+    x: panelX,
+    y: panelY + 0.45,
+    w: panelW,
+    h: panelH - 0.5,
+    valign: 'top',
+  });
+}
+
+// Helper: add section divider slide (Table of Contents style)
+// Creates a visual break between major sections with section title
+function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, options = {}) {
+  const FONT = 'Segoe UI';
+  const COLORS = options.COLORS || {
+    headerLine: '293F55',
+    accent3: '011AB7',
+    dk2: '1F497D',
+    white: 'FFFFFF',
+  };
+
+  // Use master slide if defined, otherwise create plain slide
+  const slide = options.masterName
+    ? pptx.addSlide({ masterName: options.masterName })
+    : pptx.addSlide();
+
+  // Dark navy background for section divider
+  slide.addShape('rect', {
+    x: 0,
+    y: 0,
+    w: 13.333,
+    h: 7.5,
+    fill: { color: COLORS.accent3 || '011AB7' },
+  });
+
+  // Section number (small, top left)
+  if (sectionNumber && totalSections) {
+    slide.addText(`Section ${sectionNumber} of ${totalSections}`, {
+      x: 0.5,
+      y: 0.5,
+      w: 3,
+      h: 0.3,
+      fontSize: 12,
+      color: 'FFFFFF',
+      fontFace: FONT,
+      italic: true,
+    });
+  }
+
+  // Section title (large, centered)
+  slide.addText(sectionTitle, {
+    x: 0.5,
+    y: 2.8,
+    w: 12.333,
+    h: 1.5,
+    fontSize: 44,
+    bold: true,
+    color: 'FFFFFF',
+    fontFace: FONT,
+    align: 'center',
+    valign: 'middle',
+  });
+
+  // Decorative line under title
+  slide.addShape('line', {
+    x: 4,
+    y: 4.5,
+    w: 5.333,
+    h: 0,
+    line: { color: 'FFFFFF', width: 3 },
+  });
+
+  return slide;
+}
+
+// Helper: create Opportunities & Obstacles summary slide (two-column layout)
+function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles = [], options = {}) {
+  const FONT = 'Segoe UI';
+  const LEFT_MARGIN = options.x || 0.4;
+  const contentY = options.y || 1.4;
+  const colWidth = options.colWidth || 6;
+  const COLORS = {
+    green: '2E7D32',
+    orange: 'E46C0A',
+    white: 'FFFFFF',
+    lightGreen: 'E8F5E9',
+    lightOrange: 'FFF3E0',
+  };
+
+  // Opportunities column (left)
+  // Header with green background
+  slide.addShape('rect', {
+    x: LEFT_MARGIN,
+    y: contentY,
+    w: colWidth,
+    h: 0.5,
+    fill: { color: COLORS.green },
+  });
+  slide.addText('Opportunities', {
+    x: LEFT_MARGIN + 0.1,
+    y: contentY,
+    w: colWidth - 0.2,
+    h: 0.5,
+    fontSize: 14,
+    bold: true,
+    color: COLORS.white,
+    fontFace: FONT,
+    valign: 'middle',
+  });
+
+  // Opportunities list
+  const oppBullets = (opportunities || []).slice(0, 5).map((opp) => ({
+    text: truncate(String(opp), 120),
+    options: {
+      fontSize: 11,
+      color: '333333',
+      fontFace: FONT,
+      bullet: { type: 'bullet', code: '2714', color: COLORS.green }, // Checkmark
+      paraSpaceBefore: 8,
+      paraSpaceAfter: 4,
+    },
+  }));
+
+  if (oppBullets.length > 0) {
+    slide.addText(oppBullets, {
+      x: LEFT_MARGIN,
+      y: contentY + 0.6,
+      w: colWidth,
+      h: 4,
+      valign: 'top',
+      fill: { color: COLORS.lightGreen },
+    });
+  }
+
+  // Obstacles column (right)
+  const rightColX = LEFT_MARGIN + colWidth + 0.3;
+
+  // Header with orange background
+  slide.addShape('rect', {
+    x: rightColX,
+    y: contentY,
+    w: colWidth,
+    h: 0.5,
+    fill: { color: COLORS.orange },
+  });
+  slide.addText('Obstacles & Risks', {
+    x: rightColX + 0.1,
+    y: contentY,
+    w: colWidth - 0.2,
+    h: 0.5,
+    fontSize: 14,
+    bold: true,
+    color: COLORS.white,
+    fontFace: FONT,
+    valign: 'middle',
+  });
+
+  // Obstacles list
+  const obsBullets = (obstacles || []).slice(0, 5).map((obs) => ({
+    text: truncate(String(obs), 120),
+    options: {
+      fontSize: 11,
+      color: '333333',
+      fontFace: FONT,
+      bullet: { type: 'bullet', code: '26A0', color: COLORS.orange }, // Warning sign
+      paraSpaceBefore: 8,
+      paraSpaceAfter: 4,
+    },
+  }));
+
+  if (obsBullets.length > 0) {
+    slide.addText(obsBullets, {
+      x: rightColX,
+      y: contentY + 0.6,
+      w: colWidth,
+      h: 4,
+      valign: 'top',
+      fill: { color: COLORS.lightOrange },
+    });
+  }
+}
+
 // ============ CHART GENERATION ============
-// YCP Color Palette for charts
+// YCP Color Palette for charts - WCAG 2.1 AA accessible colors
+// Colors selected for sufficient contrast and colorblind-friendly combinations
 const CHART_COLORS = [
-  '007FFF', // Blue (primary)
-  '011AB7', // Dark blue
-  'E46C0A', // Orange
-  '2E7D32', // Green
-  '1F497D', // Navy
-  'C62828', // Red
-  '9C27B0', // Purple
-  'FF9800', // Amber
+  '0066CC', // Blue (primary) - high contrast, safe for colorblind
+  'D55E00', // Orange-red - distinguishable for deuteranopia
+  '009E73', // Teal/Green - safe for protanopia
+  'CC79A7', // Muted pink - distinguishable across color blindness types
+  '1F497D', // Navy - dark contrast
+  'F0E442', // Yellow - high visibility (use with dark text)
+  '56B4E9', // Sky blue - complements orange-red
+  'E69F00', // Amber/Gold - warm contrast
 ];
+
+// Extended accessible color palette for more than 8 categories
+const CHART_COLORS_EXTENDED = [
+  ...CHART_COLORS,
+  '8B4513', // Saddle brown
+  '4B0082', // Indigo
+  '2F4F4F', // Dark slate gray
+  'B22222', // Firebrick
+];
+
+// Semantic colors for specific meanings (opportunities, risks, etc.)
+const SEMANTIC_COLORS = {
+  positive: '2E7D32', // Green - opportunities, success
+  negative: 'C62828', // Red - risks, failures
+  warning: 'E46C0A', // Orange - warnings, caution
+  neutral: '666666', // Gray - neutral information
+  primary: '0066CC', // Blue - primary actions
+  accent: '1F497D', // Navy - headers, emphasis
+};
 
 // Add a stacked bar chart to a slide
 // data format: { categories: ['2020', '2021', '2022'], series: [{ name: 'Coal', values: [40, 38, 35] }, { name: 'Gas', values: [30, 32, 35] }] }
@@ -3283,8 +3806,12 @@ function addStackedBarChart(slide, title, data, options = {}) {
     catAxisLabelFontSize: 10,
     valAxisLabelFontFace: 'Segoe UI',
     valAxisLabelFontSize: 10,
+    // Data labels enabled by default for YCP-quality output
+    showValue: options.showValues !== false, // Default to true
     dataLabelFontFace: 'Segoe UI',
-    showValue: options.showValues || false,
+    dataLabelFontSize: 9,
+    dataLabelColor: 'FFFFFF', // White text on colored bars
+    dataLabelPosition: 'ctr', // Center position
   });
 }
 
@@ -3319,6 +3846,11 @@ function addLineChart(slide, title, data, options = {}) {
     valAxisLabelFontSize: 10,
     lineDataSymbol: 'circle',
     lineDataSymbolSize: 6,
+    // Data labels for line charts
+    showValue: options.showValues !== false, // Default to true
+    dataLabelFontFace: 'Segoe UI',
+    dataLabelFontSize: 9,
+    dataLabelPosition: 't', // Position above the line points
   });
 }
 
@@ -3489,23 +4021,22 @@ Transform this research into a narrative. Return JSON:
           decision: 'CONDITIONAL_GO',
           confidence: 'MEDIUM',
           conditions: ['Further analysis required'],
-          oneLiner: 'Proceed with caution'
+          oneLiner: 'Proceed with caution',
         },
         slides: [],
-        aggregatedSources: []
+        aggregatedSources: [],
       };
     }
 
     console.log(`  [STORY ARCHITECT] Generated ${story.slides?.length || 0} slides with narrative`);
     return story;
-
   } catch (error) {
     console.error('  [STORY ARCHITECT] Error:', error.message);
     return {
       storyHook: `${countryAnalysis.country} Market Entry Analysis`,
       verdict: { decision: 'CONDITIONAL_GO', confidence: 'LOW', conditions: [], oneLiner: '' },
       slides: [],
-      aggregatedSources: []
+      aggregatedSources: [],
     };
   }
 }
@@ -3544,10 +4075,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       // Thick header line (y: 1.02")
       { line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } } },
       // Thin header line (y: 1.10")
-      { line: { x: 0, y: 1.10, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
+      { line: { x: 0, y: 1.1, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
       // Footer line (y: 7.24")
-      { line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } }
-    ]
+      { line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
+    ],
   });
 
   pptx.author = 'YCP Market Research';
@@ -3663,10 +4194,17 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const sourcesToRender = options.sources || options.citations;
     if (sourcesToRender && sourcesToRender.length > 0) {
       const sourceElements = [];
-      sourceElements.push({ text: 'Sources: ', options: { fontSize: 8, fontFace: FONT, color: '666666' } });
+      sourceElements.push({
+        text: 'Sources: ',
+        options: { fontSize: 8, fontFace: FONT, color: '666666' },
+      });
 
       sourcesToRender.slice(0, 3).forEach((source, idx) => {
-        if (idx > 0) sourceElements.push({ text: ', ', options: { fontSize: 8, fontFace: FONT, color: '666666' } });
+        if (idx > 0)
+          sourceElements.push({
+            text: ', ',
+            options: { fontSize: 8, fontFace: FONT, color: '666666' },
+          });
 
         // Handle both object format {url, title} and plain string URLs
         const sourceUrl = typeof source === 'object' ? source.url : source;
@@ -3795,32 +4333,52 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     // TITLE SLIDE
     const titleSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
     titleSlide.addText(country.toUpperCase(), {
-      x: 0.5, y: 2.2, w: 12, h: 0.8,
-      fontSize: 42, bold: true, color: COLORS.dk2, fontFace: FONT
+      x: 0.5,
+      y: 2.2,
+      w: 12,
+      h: 0.8,
+      fontSize: 42,
+      bold: true,
+      color: COLORS.dk2,
+      fontFace: FONT,
     });
     titleSlide.addText(`${scope.industry} Market Analysis`, {
-      x: 0.5, y: 3.0, w: 12, h: 0.5,
-      fontSize: 24, color: COLORS.accent1, fontFace: FONT
+      x: 0.5,
+      y: 3.0,
+      w: 12,
+      h: 0.5,
+      fontSize: 24,
+      color: COLORS.accent1,
+      fontFace: FONT,
     });
     // Story hook as subtitle
     if (story.storyHook) {
       titleSlide.addText(story.storyHook, {
-        x: 0.5, y: 3.6, w: 12, h: 0.5,
-        fontSize: 16, italic: true, color: COLORS.black, fontFace: FONT
+        x: 0.5,
+        y: 3.6,
+        w: 12,
+        h: 0.5,
+        fontSize: 16,
+        italic: true,
+        color: COLORS.black,
+        fontFace: FONT,
       });
     }
     titleSlide.addText(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' }), {
-      x: 0.5, y: 6.5, w: 9, h: 0.3,
-      fontSize: 10, color: '666666', fontFace: FONT
+      x: 0.5,
+      y: 6.5,
+      w: 9,
+      h: 0.3,
+      fontSize: 10,
+      color: '666666',
+      fontFace: FONT,
     });
 
     // DYNAMIC SLIDES FROM STORY
     for (const slideData of story.slides) {
-      const slide = addSlideWithTitle(
-        slideData.title || 'Analysis',
-        slideData.insight || '',
-        { sources: slideData.sources?.map(s => typeof s === 'string' ? { title: s } : s) || [] }
-      );
+      const slide = addSlideWithTitle(slideData.title || 'Analysis', slideData.insight || '', {
+        sources: slideData.sources?.map((s) => (typeof s === 'string' ? { title: s } : s)) || [],
+      });
 
       const content = slideData.content || {};
       const contentY = slideData.insight ? 1.55 : 1.2;
@@ -3828,40 +4386,79 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       switch (slideData.type) {
         case 'VERDICT': {
           // Verdict box
-          const verdictColor = content.decision === 'GO' ? COLORS.green :
-                              content.decision === 'NO_GO' ? COLORS.red : COLORS.orange;
+          const verdictColor =
+            content.decision === 'GO'
+              ? COLORS.green
+              : content.decision === 'NO_GO'
+                ? COLORS.red
+                : COLORS.orange;
           slide.addShape('rect', {
-            x: LEFT_MARGIN, y: contentY, w: CONTENT_WIDTH, h: 1.2,
-            fill: { color: verdictColor }, line: { color: verdictColor, pt: 0 }
+            x: LEFT_MARGIN,
+            y: contentY,
+            w: CONTENT_WIDTH,
+            h: 1.2,
+            fill: { color: verdictColor },
+            line: { color: verdictColor, pt: 0 },
           });
           slide.addText(`VERDICT: ${content.decision?.replace('_', ' ') || 'CONDITIONAL GO'}`, {
-            x: LEFT_MARGIN + 0.2, y: contentY + 0.1, w: CONTENT_WIDTH - 0.4, h: 0.5,
-            fontSize: 24, bold: true, color: COLORS.white, fontFace: FONT
+            x: LEFT_MARGIN + 0.2,
+            y: contentY + 0.1,
+            w: CONTENT_WIDTH - 0.4,
+            h: 0.5,
+            fontSize: 24,
+            bold: true,
+            color: COLORS.white,
+            fontFace: FONT,
           });
           slide.addText(content.oneLiner || '', {
-            x: LEFT_MARGIN + 0.2, y: contentY + 0.6, w: CONTENT_WIDTH - 0.4, h: 0.5,
-            fontSize: 14, color: COLORS.white, fontFace: FONT
+            x: LEFT_MARGIN + 0.2,
+            y: contentY + 0.6,
+            w: CONTENT_WIDTH - 0.4,
+            h: 0.5,
+            fontSize: 14,
+            color: COLORS.white,
+            fontFace: FONT,
           });
 
           // Conditions
           if (content.conditions && content.conditions.length > 0) {
             slide.addText('Conditions:', {
-              x: LEFT_MARGIN, y: contentY + 1.4, w: CONTENT_WIDTH, h: 0.3,
-              fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
+              x: LEFT_MARGIN,
+              y: contentY + 1.4,
+              w: CONTENT_WIDTH,
+              h: 0.3,
+              fontSize: 14,
+              bold: true,
+              color: COLORS.dk2,
+              fontFace: FONT,
             });
             const conditionText = content.conditions.map((c, i) => `${i + 1}. ${c}`).join('\n');
             slide.addText(conditionText, {
-              x: LEFT_MARGIN, y: contentY + 1.8, w: CONTENT_WIDTH, h: 2,
-              fontSize: 12, color: COLORS.black, fontFace: FONT, valign: 'top'
+              x: LEFT_MARGIN,
+              y: contentY + 1.8,
+              w: CONTENT_WIDTH,
+              h: 2,
+              fontSize: 12,
+              color: COLORS.black,
+              fontFace: FONT,
+              valign: 'top',
             });
           }
 
           // Ratings
           if (content.ratings) {
-            slide.addText(`Attractiveness: ${content.ratings.attractiveness || '?'}/10  |  Feasibility: ${content.ratings.feasibility || '?'}/10`, {
-              x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 0.4,
-              fontSize: 14, color: COLORS.accent1, fontFace: FONT
-            });
+            slide.addText(
+              `Attractiveness: ${content.ratings.attractiveness || '?'}/10  |  Feasibility: ${content.ratings.feasibility || '?'}/10`,
+              {
+                x: LEFT_MARGIN,
+                y: 5.5,
+                w: CONTENT_WIDTH,
+                h: 0.4,
+                fontSize: 14,
+                color: COLORS.accent1,
+                fontFace: FONT,
+              }
+            );
           }
           break;
         }
@@ -3871,29 +4468,52 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           const metrics = [
             { label: 'Market Size', value: content.marketSize || 'N/A' },
             { label: 'Growth', value: content.growth || 'N/A' },
-            { label: 'Timing Window', value: content.timingWindow || 'N/A' }
+            { label: 'Timing Window', value: content.timingWindow || 'N/A' },
           ];
           metrics.forEach((m, i) => {
             slide.addText(m.label, {
-              x: LEFT_MARGIN + (i * 4.2), y: contentY, w: 4, h: 0.3,
-              fontSize: 12, color: COLORS.footerText, fontFace: FONT
+              x: LEFT_MARGIN + i * 4.2,
+              y: contentY,
+              w: 4,
+              h: 0.3,
+              fontSize: 12,
+              color: COLORS.footerText,
+              fontFace: FONT,
             });
             slide.addText(m.value, {
-              x: LEFT_MARGIN + (i * 4.2), y: contentY + 0.35, w: 4, h: 0.6,
-              fontSize: 18, bold: true, color: COLORS.dk2, fontFace: FONT
+              x: LEFT_MARGIN + i * 4.2,
+              y: contentY + 0.35,
+              w: 4,
+              h: 0.6,
+              fontSize: 18,
+              bold: true,
+              color: COLORS.dk2,
+              fontFace: FONT,
             });
           });
 
           // Key drivers
           if (content.keyDrivers && content.keyDrivers.length > 0) {
             slide.addText('Key Drivers:', {
-              x: LEFT_MARGIN, y: contentY + 1.5, w: CONTENT_WIDTH, h: 0.3,
-              fontSize: 14, bold: true, color: COLORS.dk2, fontFace: FONT
+              x: LEFT_MARGIN,
+              y: contentY + 1.5,
+              w: CONTENT_WIDTH,
+              h: 0.3,
+              fontSize: 14,
+              bold: true,
+              color: COLORS.dk2,
+              fontFace: FONT,
             });
-            const driverText = content.keyDrivers.map(d => `• ${d}`).join('\n');
+            const driverText = content.keyDrivers.map((d) => `• ${d}`).join('\n');
             slide.addText(driverText, {
-              x: LEFT_MARGIN, y: contentY + 1.9, w: CONTENT_WIDTH, h: 3,
-              fontSize: 12, color: COLORS.black, fontFace: FONT, valign: 'top'
+              x: LEFT_MARGIN,
+              y: contentY + 1.9,
+              w: CONTENT_WIDTH,
+              h: 3,
+              fontSize: 12,
+              color: COLORS.black,
+              fontFace: FONT,
+              valign: 'top',
             });
           }
           break;
@@ -3903,17 +4523,35 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           // Barriers table
           if (content.barriers && content.barriers.length > 0) {
             const rows = [tableHeader(['Barrier', 'Severity', 'Mitigation'])];
-            content.barriers.forEach(b => {
+            content.barriers.forEach((b) => {
               rows.push([
-                { text: b.name || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.black } },
-                { text: b.severity || '', options: { fontFace: FONT, fontSize: 11, color: b.severity === 'High' ? COLORS.red : COLORS.orange } },
-                { text: b.mitigation || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.black } }
+                {
+                  text: b.name || '',
+                  options: { fontFace: FONT, fontSize: 11, color: COLORS.black },
+                },
+                {
+                  text: b.severity || '',
+                  options: {
+                    fontFace: FONT,
+                    fontSize: 11,
+                    color: b.severity === 'High' ? COLORS.red : COLORS.orange,
+                  },
+                },
+                {
+                  text: b.mitigation || '',
+                  options: { fontFace: FONT, fontSize: 11, color: COLORS.black },
+                },
               ]);
             });
             slide.addTable(rows, {
-              x: LEFT_MARGIN, y: contentY, w: CONTENT_WIDTH, h: 4,
-              fontFace: FONT, fontSize: 11, valign: 'middle',
-              border: { pt: 0.5, color: COLORS.gray }
+              x: LEFT_MARGIN,
+              y: contentY,
+              w: CONTENT_WIDTH,
+              h: 4,
+              fontFace: FONT,
+              fontSize: 11,
+              valign: 'middle',
+              border: { pt: 0.5, color: COLORS.gray },
             });
           }
           break;
@@ -3923,30 +4561,56 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           // Leaders table
           if (content.leaders && content.leaders.length > 0) {
             const rows = [tableHeader(['Company', 'Strength', 'Weakness'])];
-            content.leaders.forEach(l => {
+            content.leaders.forEach((l) => {
               rows.push([
-                { text: l.name || '', options: { fontFace: FONT, fontSize: 11, bold: true, color: COLORS.black } },
-                { text: l.strength || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.green } },
-                { text: l.weakness || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.red } }
+                {
+                  text: l.name || '',
+                  options: { fontFace: FONT, fontSize: 11, bold: true, color: COLORS.black },
+                },
+                {
+                  text: l.strength || '',
+                  options: { fontFace: FONT, fontSize: 11, color: COLORS.green },
+                },
+                {
+                  text: l.weakness || '',
+                  options: { fontFace: FONT, fontSize: 11, color: COLORS.red },
+                },
               ]);
             });
             slide.addTable(rows, {
-              x: LEFT_MARGIN, y: contentY, w: CONTENT_WIDTH, h: 3,
-              fontFace: FONT, fontSize: 11, valign: 'middle',
-              border: { pt: 0.5, color: COLORS.gray }
+              x: LEFT_MARGIN,
+              y: contentY,
+              w: CONTENT_WIDTH,
+              h: 3,
+              fontFace: FONT,
+              fontSize: 11,
+              valign: 'middle',
+              border: { pt: 0.5, color: COLORS.gray },
             });
           }
 
           // White spaces
           if (content.whiteSpaces && content.whiteSpaces.length > 0) {
             slide.addText('Market White Spaces:', {
-              x: LEFT_MARGIN, y: contentY + 3.3, w: CONTENT_WIDTH, h: 0.3,
-              fontSize: 14, bold: true, color: COLORS.green, fontFace: FONT
+              x: LEFT_MARGIN,
+              y: contentY + 3.3,
+              w: CONTENT_WIDTH,
+              h: 0.3,
+              fontSize: 14,
+              bold: true,
+              color: COLORS.green,
+              fontFace: FONT,
             });
-            const wsText = content.whiteSpaces.map(w => `• ${w}`).join('\n');
+            const wsText = content.whiteSpaces.map((w) => `• ${w}`).join('\n');
             slide.addText(wsText, {
-              x: LEFT_MARGIN, y: contentY + 3.7, w: CONTENT_WIDTH, h: 1.5,
-              fontSize: 12, color: COLORS.black, fontFace: FONT, valign: 'top'
+              x: LEFT_MARGIN,
+              y: contentY + 3.7,
+              w: CONTENT_WIDTH,
+              h: 1.5,
+              fontSize: 12,
+              color: COLORS.black,
+              fontFace: FONT,
+              valign: 'top',
             });
           }
           break;
@@ -3956,26 +4620,54 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           // Entry options comparison
           if (content.options && content.options.length > 0) {
             const rows = [tableHeader(['Option', 'Timeline', 'Investment', 'Key Considerations'])];
-            content.options.forEach(o => {
+            content.options.forEach((o) => {
               const isRecommended = o.name === content.recommended;
               rows.push([
-                { text: (isRecommended ? '★ ' : '') + (o.name || ''), options: { fontFace: FONT, fontSize: 11, bold: isRecommended, color: isRecommended ? COLORS.accent1 : COLORS.black } },
-                { text: o.timeline || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.black } },
-                { text: o.investment || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.black } },
-                { text: (o.pros || []).slice(0, 2).join('; '), options: { fontFace: FONT, fontSize: 10, color: COLORS.black } }
+                {
+                  text: (isRecommended ? '★ ' : '') + (o.name || ''),
+                  options: {
+                    fontFace: FONT,
+                    fontSize: 11,
+                    bold: isRecommended,
+                    color: isRecommended ? COLORS.accent1 : COLORS.black,
+                  },
+                },
+                {
+                  text: o.timeline || '',
+                  options: { fontFace: FONT, fontSize: 11, color: COLORS.black },
+                },
+                {
+                  text: o.investment || '',
+                  options: { fontFace: FONT, fontSize: 11, color: COLORS.black },
+                },
+                {
+                  text: (o.pros || []).slice(0, 2).join('; '),
+                  options: { fontFace: FONT, fontSize: 10, color: COLORS.black },
+                },
               ]);
             });
             slide.addTable(rows, {
-              x: LEFT_MARGIN, y: contentY, w: CONTENT_WIDTH, h: 4,
-              fontFace: FONT, fontSize: 11, valign: 'middle',
-              border: { pt: 0.5, color: COLORS.gray }
+              x: LEFT_MARGIN,
+              y: contentY,
+              w: CONTENT_WIDTH,
+              h: 4,
+              fontFace: FONT,
+              fontSize: 11,
+              valign: 'middle',
+              border: { pt: 0.5, color: COLORS.gray },
             });
           }
 
           if (content.recommended) {
             slide.addText(`Recommended: ${content.recommended}`, {
-              x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 0.4,
-              fontSize: 14, bold: true, color: COLORS.accent1, fontFace: FONT
+              x: LEFT_MARGIN,
+              y: 5.5,
+              w: CONTENT_WIDTH,
+              h: 0.4,
+              fontSize: 14,
+              bold: true,
+              color: COLORS.accent1,
+              fontFace: FONT,
             });
           }
           break;
@@ -3986,23 +4678,39 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           const ecoMetrics = [
             { label: 'Typical Deal Size', value: content.dealSize || 'N/A' },
             { label: 'Investment Required', value: content.investment || 'N/A' },
-            { label: 'Breakeven', value: content.breakeven || 'N/A' }
+            { label: 'Breakeven', value: content.breakeven || 'N/A' },
           ];
           ecoMetrics.forEach((m, i) => {
             slide.addText(m.label, {
-              x: LEFT_MARGIN + (i * 4.2), y: contentY, w: 4, h: 0.3,
-              fontSize: 12, color: COLORS.footerText, fontFace: FONT
+              x: LEFT_MARGIN + i * 4.2,
+              y: contentY,
+              w: 4,
+              h: 0.3,
+              fontSize: 12,
+              color: COLORS.footerText,
+              fontFace: FONT,
             });
             slide.addText(m.value, {
-              x: LEFT_MARGIN + (i * 4.2), y: contentY + 0.35, w: 4, h: 0.6,
-              fontSize: 16, bold: true, color: COLORS.dk2, fontFace: FONT
+              x: LEFT_MARGIN + i * 4.2,
+              y: contentY + 0.35,
+              w: 4,
+              h: 0.6,
+              fontSize: 16,
+              bold: true,
+              color: COLORS.dk2,
+              fontFace: FONT,
             });
           });
 
           if (content.margins) {
             slide.addText(`Expected Margins: ${content.margins}`, {
-              x: LEFT_MARGIN, y: contentY + 1.5, w: CONTENT_WIDTH, h: 0.4,
-              fontSize: 14, color: COLORS.black, fontFace: FONT
+              x: LEFT_MARGIN,
+              y: contentY + 1.5,
+              w: CONTENT_WIDTH,
+              h: 0.4,
+              fontSize: 14,
+              color: COLORS.black,
+              fontFace: FONT,
             });
           }
           break;
@@ -4012,19 +4720,41 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           // Risks table
           if (content.risks && content.risks.length > 0) {
             const rows = [tableHeader(['Risk', 'Severity', 'Likelihood', 'Mitigation'])];
-            content.risks.forEach(r => {
-              const sevColor = r.severity === 'High' ? COLORS.red : r.severity === 'Medium' ? COLORS.orange : COLORS.green;
+            content.risks.forEach((r) => {
+              const sevColor =
+                r.severity === 'High'
+                  ? COLORS.red
+                  : r.severity === 'Medium'
+                    ? COLORS.orange
+                    : COLORS.green;
               rows.push([
-                { text: r.name || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.black } },
-                { text: r.severity || '', options: { fontFace: FONT, fontSize: 11, color: sevColor } },
-                { text: r.likelihood || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.black } },
-                { text: r.mitigation || '', options: { fontFace: FONT, fontSize: 10, color: COLORS.black } }
+                {
+                  text: r.name || '',
+                  options: { fontFace: FONT, fontSize: 11, color: COLORS.black },
+                },
+                {
+                  text: r.severity || '',
+                  options: { fontFace: FONT, fontSize: 11, color: sevColor },
+                },
+                {
+                  text: r.likelihood || '',
+                  options: { fontFace: FONT, fontSize: 11, color: COLORS.black },
+                },
+                {
+                  text: r.mitigation || '',
+                  options: { fontFace: FONT, fontSize: 10, color: COLORS.black },
+                },
               ]);
             });
             slide.addTable(rows, {
-              x: LEFT_MARGIN, y: contentY, w: CONTENT_WIDTH, h: 4.5,
-              fontFace: FONT, fontSize: 11, valign: 'middle',
-              border: { pt: 0.5, color: COLORS.gray }
+              x: LEFT_MARGIN,
+              y: contentY,
+              w: CONTENT_WIDTH,
+              h: 4.5,
+              fontFace: FONT,
+              fontSize: 11,
+              valign: 'middle',
+              border: { pt: 0.5, color: COLORS.gray },
             });
           }
           break;
@@ -4036,15 +4766,29 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             const rows = [tableHeader(['Action', 'Owner', 'Timeline'])];
             content.steps.forEach((s, i) => {
               rows.push([
-                { text: `${i + 1}. ${s.action || ''}`, options: { fontFace: FONT, fontSize: 11, color: COLORS.black } },
-                { text: s.owner || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.black } },
-                { text: s.timeline || '', options: { fontFace: FONT, fontSize: 11, color: COLORS.accent1 } }
+                {
+                  text: `${i + 1}. ${s.action || ''}`,
+                  options: { fontFace: FONT, fontSize: 11, color: COLORS.black },
+                },
+                {
+                  text: s.owner || '',
+                  options: { fontFace: FONT, fontSize: 11, color: COLORS.black },
+                },
+                {
+                  text: s.timeline || '',
+                  options: { fontFace: FONT, fontSize: 11, color: COLORS.accent1 },
+                },
               ]);
             });
             slide.addTable(rows, {
-              x: LEFT_MARGIN, y: contentY, w: CONTENT_WIDTH, h: 4,
-              fontFace: FONT, fontSize: 11, valign: 'middle',
-              border: { pt: 0.5, color: COLORS.gray }
+              x: LEFT_MARGIN,
+              y: contentY,
+              w: CONTENT_WIDTH,
+              h: 4,
+              fontFace: FONT,
+              fontSize: 11,
+              valign: 'middle',
+              border: { pt: 0.5, color: COLORS.gray },
             });
           }
           break;
@@ -4052,12 +4796,21 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
         default: {
           // Generic content slide - render as bullet points
-          const textContent = typeof content === 'string' ? content :
-                             Array.isArray(content) ? content.map(c => `• ${c}`).join('\n') :
-                             JSON.stringify(content, null, 2);
+          const textContent =
+            typeof content === 'string'
+              ? content
+              : Array.isArray(content)
+                ? content.map((c) => `• ${c}`).join('\n')
+                : JSON.stringify(content, null, 2);
           slide.addText(textContent, {
-            x: LEFT_MARGIN, y: contentY, w: CONTENT_WIDTH, h: 5,
-            fontSize: 12, color: COLORS.black, fontFace: FONT, valign: 'top'
+            x: LEFT_MARGIN,
+            y: contentY,
+            w: CONTENT_WIDTH,
+            h: 5,
+            fontSize: 12,
+            color: COLORS.black,
+            fontFace: FONT,
+            valign: 'top',
           });
         }
       }
@@ -4066,15 +4819,25 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     // Sources slide
     if (story.aggregatedSources && story.aggregatedSources.length > 0) {
       const sourcesSlide = addSlideWithTitle('Sources', 'Research citations and references');
-      const sourceText = story.aggregatedSources.map((s, i) => `${i + 1}. ${s.title || s.url}`).join('\n');
+      const sourceText = story.aggregatedSources
+        .map((s, i) => `${i + 1}. ${s.title || s.url}`)
+        .join('\n');
       sourcesSlide.addText(sourceText, {
-        x: LEFT_MARGIN, y: 1.55, w: CONTENT_WIDTH, h: 5,
-        fontSize: 10, color: COLORS.black, fontFace: FONT, valign: 'top'
+        x: LEFT_MARGIN,
+        y: 1.55,
+        w: CONTENT_WIDTH,
+        h: 5,
+        fontSize: 10,
+        color: COLORS.black,
+        fontFace: FONT,
+        valign: 'top',
       });
     }
 
     const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
-    console.log(`Narrative PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB, ${story.slides.length + 2} slides`);
+    console.log(
+      `Narrative PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB, ${story.slides.length + 2} slides`
+    );
     return pptxBuffer;
   }
 
