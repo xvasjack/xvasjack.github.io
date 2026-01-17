@@ -2411,13 +2411,38 @@ ${instructions ? `USER'S REQUIREMENTS:\n${instructions}\n` : ''}
 REPORT STRUCTURE GUIDELINES:
 Follow this general flow (but ONLY include sections where data exists):
 1. Company Overview (background, capabilities, services)
-2. Market Analysis (market size, trends, drivers)
-3. Competition (landscape, advantages, vulnerabilities)
-4. Key Metrics (operational KPIs)
-5. Key Financials (P&L, balance sheet, revenue breakdowns, customers)
-6. Future Plans & Strategy
-7. Risks & Challenges (if data available)
-8. Pre-DD Workplan (next steps for due diligence)
+2. Market & Competition Analysis
+3. Key Financials (P&L, balance sheet, revenue breakdowns, customers)
+4. Future Plans & Strategy
+5. Risks & Challenges (if data available)
+6. Pre-DD Workplan (next steps for due diligence)
+
+SECTION-SPECIFIC FORMAT REQUIREMENTS:
+
+COMPETITION SECTION (2.x):
+- MUST include "Competition Landscape" table with columns: Service Segment | Market Growth | Demand Drivers | Competition Intensity | Company Position
+- Use company's ACTUAL service lines from source data for rows
+- Include "Competitive Advantages" subsection with specific evidence
+- Include "Vulnerabilities & Market Risks" subsection
+
+FINANCIAL TABLES (Income Statement):
+- Include margin % rows INLINE immediately after profit lines:
+  - Revenue
+  - Gross Profit, then Gross Margin %
+  - Operating Profit, then Operating Margin %
+  - EBITDA, then EBITDA Margin %
+  - Net Profit, then Net Margin %
+- DO NOT create separate margins section
+
+BALANCE SHEET:
+- Group items: Non-current Assets, Current Assets, Equity, Liabilities
+- Include ALL line items found in source (don't summarize to just totals)
+
+PRE-DD WORKPLAN (must be 2-column table):
+- Table format: Key Consideration | Evidence to Validate
+- Derive from ACTUAL gaps found in source data
+- Each row must be specific to THIS company's situation
+- Minimum 5 rows with actionable items
 
 CRITICAL RULES:
 1. ONLY generate sections for data categories that exist in the analysis
