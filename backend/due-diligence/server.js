@@ -111,6 +111,27 @@ const r2Client =
 
 const _R2_BUCKET = process.env.R2_BUCKET_NAME || 'dd-recordings';
 
+// ============ REPORT STORAGE (for automated testing) ============
+// In-memory store with 20-report limit to manage Railway's 450MB memory
+const reportStore = new Map();
+const REPORT_STORE_LIMIT = 20;
+
+function cleanupOldReports() {
+  if (reportStore.size > REPORT_STORE_LIMIT) {
+    // Get entries sorted by createdAt (oldest first)
+    const entries = Array.from(reportStore.entries()).sort(
+      (a, b) => new Date(a[1].createdAt) - new Date(b[1].createdAt)
+    );
+
+    // Remove oldest entries until we're under the limit
+    const toRemove = entries.slice(0, reportStore.size - REPORT_STORE_LIMIT);
+    for (const [id] of toRemove) {
+      reportStore.delete(id);
+      console.log(`[DD] Cleaned up old report: ${id}`);
+    }
+  }
+}
+
 if (!r2Client) {
   console.warn(
     'R2 not configured - recordings will only be stored in memory. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME'
@@ -2091,7 +2112,11 @@ app.post('/api/due-diligence', async (req, res) => {
     components = ['overview', 'market_competition', 'financials', 'future_plans', 'workplan'],
   } = req.body;
 
+  // Generate unique report ID for tracking
+  const reportId = `dd_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
   console.log(`\n[DD] === NEW DD REQUEST ===`);
+  console.log(`[DD] Report ID: ${reportId}`);
   console.log(`[DD] Email: ${email}`);
   console.log(`[DD] Files: ${files.length}`);
   console.log(`[DD] Components: ${components.join(', ')}`);
@@ -2106,9 +2131,20 @@ app.post('/api/due-diligence', async (req, res) => {
     return res.status(400).json({ success: false, error: 'At least one file is required' });
   }
 
-  // Respond immediately - process async
+  // Initialize report in store (status: processing)
+  reportStore.set(reportId, {
+    status: 'processing',
+    files: files.map((f) => f.name),
+    components: components,
+    email: email,
+    createdAt: new Date().toISOString(),
+  });
+  cleanupOldReports();
+
+  // Respond immediately with reportId - process async
   res.json({
     success: true,
+    reportId: reportId,
     message: `Processing ${files.length} files. DD report will be emailed to ${email}`,
   });
 
@@ -2130,6 +2166,18 @@ app.post('/api/due-diligence', async (req, res) => {
       </div>
     `;
 
+    // Update report store with completed report
+    reportStore.set(reportId, {
+      status: 'completed',
+      html: report,
+      files: files.map((f) => f.name),
+      components: components,
+      email: email,
+      createdAt: reportStore.get(reportId)?.createdAt || new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+    });
+    console.log(`[DD] Report ${reportId} saved to store (${report.length} chars)`);
+
     await sendEmail({
       to: email,
       subject: `DD Report: ${files[0]?.name || 'Due Diligence Analysis'}`,
@@ -2141,6 +2189,17 @@ app.post('/api/due-diligence', async (req, res) => {
   } catch (error) {
     console.error('[DD] Error processing DD request:', error.message);
     console.error('[DD] Stack:', error.stack);
+
+    // Update report store with error status
+    reportStore.set(reportId, {
+      status: 'error',
+      error: error.message,
+      files: files.map((f) => f.name),
+      components: components,
+      email: email,
+      createdAt: reportStore.get(reportId)?.createdAt || new Date().toISOString(),
+      errorAt: new Date().toISOString(),
+    });
 
     // Send error notification
     try {
@@ -2159,6 +2218,52 @@ app.post('/api/due-diligence', async (req, res) => {
       console.error('[DD] Failed to send error email:', emailError.message);
     }
   }
+});
+
+// ============ REPORT FETCH ENDPOINTS (for automated testing) ============
+
+// GET /api/reports/:id - Fetch a specific report by ID
+app.get('/api/reports/:id', (req, res) => {
+  const reportId = req.params.id;
+  const report = reportStore.get(reportId);
+
+  if (!report) {
+    return res.status(404).json({
+      success: false,
+      error: 'Report not found',
+      message: 'Report may have expired or never existed',
+    });
+  }
+
+  // Return report with status
+  res.json({
+    success: true,
+    reportId: reportId,
+    ...report,
+  });
+});
+
+// GET /api/reports - List all recent reports
+app.get('/api/reports', (req, res) => {
+  const reports = Array.from(reportStore.entries()).map(([id, r]) => ({
+    reportId: id,
+    status: r.status,
+    files: r.files,
+    components: r.components,
+    createdAt: r.createdAt,
+    completedAt: r.completedAt,
+    errorAt: r.errorAt,
+    // Don't include full HTML in list view
+  }));
+
+  // Sort by createdAt descending (newest first)
+  reports.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+  res.json({
+    success: true,
+    count: reports.length,
+    reports: reports,
+  });
 });
 
 // ============ HEALTH CHECK ============
