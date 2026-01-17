@@ -12,6 +12,7 @@ const JSZip = require('jszip');
 const { securityHeaders, rateLimiter, escapeHtml } = require('./shared/security');
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
+const { sendEmail } = require('./shared/email');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
@@ -74,6 +75,9 @@ if (!process.env.SERPAPI_API_KEY) {
 if (!process.env.DEEPSEEK_API_KEY) {
   console.warn('DEEPSEEK_API_KEY not set - Due Diligence reports will use GPT-4o fallback');
 }
+if (!process.env.KIMI_API_KEY) {
+  console.warn('KIMI_API_KEY not set - DD deep analysis will use Gemini 2.5 Pro instead');
+}
 if (!process.env.DEEPGRAM_API_KEY) {
   console.warn('DEEPGRAM_API_KEY not set - Real-time transcription will not work');
 }
@@ -112,6 +116,124 @@ if (!r2Client) {
     'R2 not configured - recordings will only be stored in memory. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME'
   );
 }
+
+// ============ DD REPORT V4 COMPONENTS ============
+// Report component configurations matching DD Report v4 template structure
+const DD_COMPONENTS = {
+  overview: {
+    title: '1.0 Overview',
+    analysisPrompt: `Extract comprehensive company information:
+1.1 Company Background:
+- Company name, headquarters location, founding year
+- Brief history and key milestones
+- Ownership structure (private/public, key shareholders)
+- Current leadership team
+
+1.2 Company Capabilities:
+- Core service offerings (list all with descriptions)
+- Industry certifications and accreditations
+- Customer base size and satisfaction metrics
+- Geographic coverage and operational locations
+- Technology platforms and partnerships
+- Key differentiators and unique capabilities
+
+Include specific numbers, percentages, and facts from the source materials.`,
+  },
+  market_competition: {
+    title: '2.0 Market & Competition',
+    analysisPrompt: `Extract market and competitive information:
+2.1 Competition Landscape:
+Create a competition matrix table with these columns:
+- Service Segment (e.g., Managed Security, Cloud Infrastructure)
+- Market Growth (CAGR %)
+- Demand Drivers (key factors driving growth)
+- Market Competition (competitive intensity: High/Medium/Low)
+- Company's Position (Strong/Growing/Emerging)
+
+2.2 Competitive Advantages:
+- List 3-5 key competitive advantages
+- Include specific evidence for each (certifications, partnerships, metrics)
+
+2.3 Vulnerabilities:
+- Identify weaknesses and areas of exposure
+- Market risks and competitive threats
+- Dependencies and concentration risks
+
+Include market growth rates, specific competitor names, and positioning data.`,
+  },
+  financials: {
+    title: '4.0 Key Financials',
+    analysisPrompt: `Extract ALL financial data and format as structured tables:
+
+4.1 Income Statement:
+Table with columns: Item | Year 1 | Year 2 | Year 3
+Rows: Revenue, Cost of Sales, Gross Profit, Operating Expenses, EBITDA, Net Profit
+Include gross margin % and EBITDA margin %
+
+4.2 Revenue Breakdown by Country:
+Table with columns: Country | Revenue (currency) | % of Total
+List all countries/regions mentioned
+
+4.3 Revenue Breakdown by Product/Service:
+Table with columns: Product/Service Type | Revenue | % of Total
+Categories may include: Managed Services, Professional Services, Hardware/Software Resale, Subscriptions, etc.
+
+4.4 Revenue for Key Service Lines:
+Break down major service categories further if data available
+E.g., Managed Services split by: Security, Infrastructure, Helpdesk, etc.
+
+4.5 Top Customers:
+Table with columns: Customer (name or anonymized) | Revenue | % of Total
+Include customer concentration analysis
+
+4.8 Balance Sheet:
+Table with columns: Item | Current Year | Prior Year
+Rows: Total Assets, Total Liabilities, Shareholders' Equity, Cash, Receivables, Payables
+
+Include specific currency figures (SGD/USD/etc.), percentages, and year labels. Extract all available financial metrics.`,
+  },
+  future_plans: {
+    title: '8.0 Future Plans',
+    analysisPrompt: `Extract strategic plans and projections:
+
+Strategic Initiatives:
+- Expansion plans (geographic, product, market)
+- Technology investments and roadmap
+- Partnership and M&A strategy
+- Operational improvements planned
+
+5-Year Growth Projection Table:
+Table with columns: Metric | Year 1 | Year 2 | Year 3 | Year 4 | Year 5
+Rows: Revenue, Revenue Growth %, Gross Profit, Gross Margin %, EBITDA, EBITDA Margin %, Headcount
+
+Include specific targets, timelines, and financial projections. Note any assumptions or dependencies.`,
+  },
+  workplan: {
+    title: '4.9 Pre-DD Workplan',
+    analysisPrompt: `Extract items requiring validation in due diligence:
+
+Create a Pre-DD Workplan table with two columns:
+- Key Consideration: Area to investigate
+- Evidence to Validate: Specific documents/data to request
+
+Key areas to cover:
+1. Customer Analysis - Validate top customer contracts, terms, renewal rates
+2. Pipeline Analysis - Assess sales pipeline quality and conversion rates
+3. Pricing Analysis - Review pricing models, competitiveness, margin protection
+4. Unit Economics - Understand cost structure, contribution margins by service
+5. Billing & Collections - Review AR aging, collection history, bad debt
+6. Forecast Assumptions - Test revenue projection methodology and accuracy
+7. Partner Ecosystem - Evaluate vendor relationships and dependencies
+8. Employee Analysis - Review retention, compensation, key person risk
+9. Technology & IP - Assess proprietary technology, security posture
+10. Legal & Compliance - Review contracts, litigation, regulatory status
+
+Format as actionable checklist for due diligence team.`,
+  },
+};
+
+// Content limit for chunking large files
+const DD_CONTENT_LIMIT = 400000;
 
 // Extract text from .docx files (Word documents)
 async function extractDocxText(base64Content) {
@@ -492,6 +614,81 @@ async function _callDeepSeek(prompt, maxTokens = 4000) {
     console.error('DeepSeek error:', error.message);
     return null;
   }
+}
+
+// Kimi 128k (Moonshot) - Best for large context DD analysis
+async function callKimi128k(prompt, maxTokens = 16000) {
+  if (!process.env.KIMI_API_KEY) {
+    console.log('[DD] KIMI_API_KEY not set, skipping Kimi');
+    return '';
+  }
+  try {
+    const response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${process.env.KIMI_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'moonshot-v1-128k',
+        messages: [{ role: 'user', content: prompt }],
+        max_tokens: maxTokens,
+        temperature: 0.1,
+      }),
+      timeout: 300000, // 5 min timeout for large context
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`[DD] Kimi HTTP error ${response.status}:`, errorText.substring(0, 200));
+      return '';
+    }
+
+    const data = await response.json();
+    if (data.error) {
+      console.error('[DD] Kimi API error:', data.error.message || data.error);
+      return '';
+    }
+
+    const result = data.choices?.[0]?.message?.content || '';
+    console.log(`[DD] Kimi 128k returned ${result.length} chars`);
+    return result;
+  } catch (error) {
+    console.error('[DD] Kimi error:', error.message);
+    return '';
+  }
+}
+
+// Summarize file content if too large (for chunking)
+async function summarizeFileContent(fileName, content, targetLength) {
+  if (content.length <= targetLength) {
+    return content;
+  }
+
+  console.log(`[DD] Summarizing ${fileName} from ${content.length} to ~${targetLength} chars`);
+
+  const prompt = `Summarize this document content, preserving ALL key facts, numbers, names, and data points.
+Keep financial figures, dates, percentages, company names, and specific details.
+Target length: ~${targetLength} characters.
+
+DOCUMENT: ${fileName}
+CONTENT:
+${content.substring(0, 100000)}
+
+Provide a comprehensive summary preserving all important data:`;
+
+  try {
+    const summary = await callGemini2Pro(prompt);
+    if (summary && summary.length > 100) {
+      console.log(`[DD] Summarized ${fileName}: ${content.length} -> ${summary.length} chars`);
+      return summary;
+    }
+  } catch (e) {
+    console.error(`[DD] Summary failed for ${fileName}:`, e.message);
+  }
+
+  // Fallback: truncate with notice
+  return `[TRUNCATED - original was ${content.length} chars]\n${content.substring(0, targetLength)}`;
 }
 
 // Detect domain/context from text for domain-aware translation
@@ -1612,33 +1809,34 @@ function _buildEmailHTML(companies, business, country, exclusion) {
   return html;
 }
 
-// ============ FAST ENDPOINT ============
+// ============ DUE DILIGENCE REPORT GENERATOR (DD Report v4 - 3-Phase Pipeline) ============
 
-// ============ DUE DILIGENCE REPORT GENERATOR ============
-
-async function _generateDueDiligenceReport(
+async function generateDueDiligenceReport(
   files,
   instructions,
   reportLength,
-  instructionMode = 'auto'
+  components = ['overview', 'market_competition', 'financials', 'future_plans', 'workplan']
 ) {
+  console.log(`\n${'='.repeat(60)}`);
+  console.log(`[DD] MULTI-AGENT DD REPORT GENERATION (v4)`);
   console.log(`[DD] Processing ${files.length} source files...`);
+  console.log('='.repeat(60));
 
-  // Combine all file contents with clear numbering
-  let combinedContent = '';
+  // ========== PHASE 1: EXTRACT ALL CONTENT ==========
+  console.log('\n[DD] === PHASE 1: CONTENT EXTRACTION ===');
+
   const filesSummary = [];
-  const totalFiles = files.length;
+  const extractedFiles = [];
 
-  for (let fileIndex = 0; fileIndex < files.length; fileIndex++) {
-    const file = files[fileIndex];
-    const fileNum = fileIndex + 1;
+  for (const file of files) {
     console.log(
-      `[DD] - File ${fileNum}/${totalFiles}: ${file.name} (${file.type}) - ${file.content?.length || 0} chars`
+      `[DD] Extracting: ${file.name} (${file.type}) - ${file.content?.length || 0} chars raw`
     );
-    filesSummary.push(`${fileNum}. ${file.name} (${file.type.toUpperCase()})`);
+    filesSummary.push(`- ${file.name} (${file.type.toUpperCase()})`);
 
-    // Handle base64 encoded files (binary formats) - extract actual content
-    let fileContent = '';
+    let extractedContent = '';
+
+    // Handle base64 encoded files (binary formats)
     if (file.content && file.content.startsWith('[BASE64:')) {
       const base64Match = file.content.match(/\[BASE64:(\w+)\](.+)/s);
       if (base64Match) {
@@ -1647,184 +1845,321 @@ async function _generateDueDiligenceReport(
 
         try {
           if (ext === 'docx' || ext === 'doc') {
-            fileContent = await extractDocxText(base64Data);
+            extractedContent = await extractDocxText(base64Data);
           } else if (ext === 'pptx' || ext === 'ppt') {
-            fileContent = await extractPptxText(base64Data);
+            extractedContent = await extractPptxText(base64Data);
           } else if (ext === 'xlsx' || ext === 'xls') {
-            fileContent = await extractXlsxText(base64Data);
+            extractedContent = await extractXlsxText(base64Data);
           } else {
-            fileContent = `[Binary file type .${ext} - cannot extract text]`;
+            extractedContent = `[Binary file type .${ext} - cannot extract text]`;
           }
+          console.log(`[DD]   -> Extracted ${extractedContent.length} chars from ${file.name}`);
         } catch (extractError) {
-          console.error(`[DD] Extraction error for ${file.name}:`, extractError.message);
-          fileContent = `[Error extracting ${file.name}: ${extractError.message}]`;
+          console.error(`[DD]   -> Extraction error for ${file.name}:`, extractError.message);
+          extractedContent = `[Error extracting ${file.name}: ${extractError.message}]`;
         }
-      } else {
-        fileContent = '[Could not parse binary content]';
       }
-    } else {
-      fileContent = file.content || '[Empty file]';
+    } else if (file.content) {
+      extractedContent = file.content;
     }
 
-    // Add clearly numbered section header for each file
-    const contentLength = fileContent.length;
-    combinedContent += `\n\n${'#'.repeat(60)}\n`;
-    combinedContent += `## [FILE ${fileNum} OF ${totalFiles}]: ${file.name}\n`;
-    combinedContent += `## Type: ${file.type.toUpperCase()} | Content Length: ${contentLength} characters\n`;
-    combinedContent += `${'#'.repeat(60)}\n\n`;
-    combinedContent += fileContent;
-    combinedContent += `\n\n[END OF FILE ${fileNum}: ${file.name}]\n`;
+    if (extractedContent && extractedContent.length > 0) {
+      extractedFiles.push({ name: file.name, content: extractedContent });
+    }
   }
 
-  console.log(`[DD] Total combined content: ${combinedContent.length} chars`);
+  // Calculate total content size
+  const totalChars = extractedFiles.reduce((sum, f) => sum + f.content.length, 0);
+  console.log(`[DD] Phase 1 Raw: ${extractedFiles.length} files, ${totalChars} total chars`);
 
-  // Log all file headers to verify all files are included
-  const fileHeaders = combinedContent.match(/\[FILE \d+ OF \d+\]: [^\n]+/g) || [];
-  console.log(`[DD] Files included in combined content (${fileHeaders.length}/${totalFiles}):`);
-  fileHeaders.forEach((header) => console.log(`[DD]   ${header}`));
+  // ========== PHASE 1.5: CHUNKING (if content too large) ==========
+  let combinedContent = '';
 
-  // Warn if file count mismatch
-  if (fileHeaders.length !== totalFiles) {
-    console.error(
-      `[DD] WARNING: Expected ${totalFiles} files but found ${fileHeaders.length} in combined content!`
-    );
+  if (totalChars > DD_CONTENT_LIMIT) {
+    console.log(`\n[DD] === PHASE 1.5: CHUNKING (content exceeds ${DD_CONTENT_LIMIT} chars) ===`);
+
+    // Summarize each file to fit within limits
+    const targetPerFile = Math.floor(DD_CONTENT_LIMIT / extractedFiles.length);
+
+    for (const file of extractedFiles) {
+      const processedContent = await summarizeFileContent(file.name, file.content, targetPerFile);
+      combinedContent += `\n\n${'='.repeat(50)}\nSOURCE FILE: ${file.name}\n${'='.repeat(50)}\n${processedContent}\n`;
+    }
+
+    console.log(`[DD] After chunking: ${combinedContent.length} chars (was ${totalChars})`);
+  } else {
+    // No chunking needed - use full content
+    for (const file of extractedFiles) {
+      combinedContent += `\n\n${'='.repeat(50)}\nSOURCE FILE: ${file.name}\n${'='.repeat(50)}\n${file.content}\n`;
+    }
   }
 
-  // Extract URLs from instructions and fetch them
-  // Note: scrapeWebsite function not implemented yet
-  const onlineResearchContent = '';
+  console.log(
+    `[DD] Phase 1 Complete: ${extractedFiles.length} files, ${combinedContent.length} chars for analysis`
+  );
 
-  const lengthInstructions = {
-    short: `Create a 1-PAGE summary covering:
-- Business overview (what does the company do)
-- Key facts and figures mentioned
-- Notable risks or concerns
-- Growth potential or opportunities`,
+  // ========== PHASE 2: DEEP ANALYSIS WITH THINKING MODEL ==========
+  console.log('\n[DD] === PHASE 2: DEEP ANALYSIS ===');
 
-    medium: `Create a 2-3 PAGE report with these sections (SKIP any section that has no relevant content):
-1. BUSINESS OVERVIEW - What the company does, products/services, market position
-2. KEY FACTS & FIGURES - Financial metrics, revenue, growth, any numbers mentioned
-3. RISKS & CONCERNS - Business, financial, operational issues identified
-4. OPPORTUNITIES - Growth potential, market opportunities, synergies`,
+  // Build analysis prompts from selected components
+  const selectedComponents = components.filter((c) => DD_COMPONENTS[c]);
+  const componentTitles = selectedComponents.map((c) => DD_COMPONENTS[c].title);
+  console.log(`[DD] Components: ${componentTitles.join(', ')}`);
 
-    long: `Create a COMPREHENSIVE report (SKIP any section that has no relevant content):
-1. COMPANY OVERVIEW - Business description, history, structure, management
-2. INDUSTRY & MARKET - Market context, competition, trends
-3. BUSINESS MODEL - Revenue streams, customers, competitive advantages
-4. FINANCIAL OVERVIEW - Any financial data, metrics, performance indicators
-5. OPERATIONS - How the business operates, technology, processes
-6. RISKS & CONCERNS - All identified risks and red flags
-7. OPPORTUNITIES - Growth potential, synergies, strategic options
-8. KEY QUESTIONS - What additional information would be needed`,
-  };
+  const componentPrompts = selectedComponents
+    .map((c, i) => {
+      const comp = DD_COMPONENTS[c];
+      return `${i + 1}. ${comp.title.toUpperCase()}\n   Extract: ${comp.analysisPrompt}`;
+    })
+    .join('\n\n');
 
-  // Build instruction section based on mode
-  let instructionSection = '';
-  if (instructionMode === 'manual' && instructions) {
-    instructionSection = `
-CONTEXT FROM USER:
-${instructions}
-`;
-  }
+  const analysisPrompt = `You are an M&A analyst conducting due diligence on a target company for a buy-side client.
 
-  // Build explicit file list for the prompt with numbering
-  const explicitFileList = filesSummary.join('\n');
+Analyze the source materials and extract information for these sections:
 
-  const prompt = `You are writing a factual due diligence summary. You have been provided ${totalFiles} source documents that you MUST ALL read completely.
+${componentPrompts}
 
-╔══════════════════════════════════════════════════════════════╗
-║  CRITICAL: YOU HAVE ${totalFiles} FILES - READ ALL OF THEM  ║
-╚══════════════════════════════════════════════════════════════╝
+SOURCE MATERIALS (${extractedFiles.length} files):
+${filesSummary.join('\n')}
 
-FILES TO PROCESS (ALL ${totalFiles} ARE REQUIRED):
-${explicitFileList}
+${instructions ? `ADDITIONAL CONTEXT FROM USER:\n${instructions}\n` : ''}
 
-IMPORTANT: Each file is marked with "[FILE X OF ${totalFiles}]" headers. You MUST:
-- Read EVERY file from FILE 1 to FILE ${totalFiles}
-- Extract key information from EACH file separately
-- Include facts from ALL ${totalFiles} files in your report
-- In your "Sources Referenced" section, list ALL ${totalFiles} files
-
-${instructionSection}
-
-${'='.repeat(70)}
-BEGIN ALL SOURCE CONTENT (${totalFiles} FILES TOTAL)
-${'='.repeat(70)}
+=== BEGIN ALL SOURCE CONTENT ===
 ${combinedContent}
-${'='.repeat(70)}
-END ALL SOURCE CONTENT
-${'='.repeat(70)}
+=== END ALL SOURCE CONTENT ===
 
-${
-  onlineResearchContent
-    ? `=== BEGIN ONLINE RESEARCH (from websites) ===
-${onlineResearchContent}
-=== END ONLINE RESEARCH ===`
-    : ''
-}
+CRITICAL INSTRUCTIONS:
+- Only include information explicitly stated in the source materials
+- Quote specific data points, names, and figures
+- If information for a section is not available, note "Not found in materials"
+- Be thorough but focused on the requested sections
+- For financial data, preserve exact numbers and currencies`;
 
-REPORT STRUCTURE:
-${lengthInstructions[reportLength]}
+  let deepAnalysis = '';
 
-CRITICAL RULES - FOLLOW EXACTLY:
-1. **PROCESS ALL ${totalFiles} FILES**: Each "[FILE X OF ${totalFiles}]" section contains different content. Extract information from EVERY file.
-2. **VERIFY COVERAGE**: Before finishing, mentally check that you've included information from File 1, File 2, File 3... up to File ${totalFiles}.
-3. **NO HALLUCINATION**: ONLY include facts explicitly stated in the source materials above.
-4. Quote specific names, numbers, dates, and facts directly from the materials.
-5. If a file contains meeting transcript or conversation, extract the key business facts discussed.
-${onlineResearchContent ? `6. Any information from ONLINE RESEARCH section must be prefixed with **[Online Source]**.` : ''}
+  // Try Kimi 128k first (best context window for large content)
+  if (process.env.KIMI_API_KEY) {
+    console.log('[DD] Using Kimi 128k for deep analysis...');
+    deepAnalysis = await callKimi128k(analysisPrompt, 16000);
+  }
 
-OUTPUT FORMAT:
-- Start with: <h1 style="font-family: Calibri, sans-serif;">Due Diligence: [Company Name from materials]</h1>
-- Use <h2> for section headers, <ul><li> for bullet points
-- Add style="font-family: Calibri, sans-serif;" to all elements
-- Generate CLEAN HTML only - no markdown
-- SKIP sections with no relevant content
-- At the end, add a "Sources Referenced" section that MUST list ALL ${totalFiles} source files by name`;
+  // Fallback to Gemini 2.5 Pro if Kimi unavailable
+  if (!deepAnalysis) {
+    console.log('[DD] Using Gemini 2.5 Pro for analysis...');
+    deepAnalysis = await callGemini2Pro(analysisPrompt);
+  }
 
-  try {
-    const maxTokens = reportLength === 'short' ? 3000 : reportLength === 'medium' ? 6000 : 10000;
-    console.log(`[DD] Prompt length: ${prompt.length} chars`);
-    console.log(`[DD] Starting AI generation with Gemini 2.5 Pro (max ${maxTokens} tokens)...`);
-
-    // Use Gemini 2.5 Pro for best quality DD reports
-    const geminiResult = await callGemini2Pro(prompt);
-    if (geminiResult) {
-      let result = geminiResult;
-      // Clean up any markdown artifacts
-      result = result
-        .replace(/```html/gi, '')
-        .replace(/```/g, '')
-        .trim();
-      console.log(`[DD] Report generated using Gemini 2.5 Pro (${result.length} chars)`);
-      return result;
-    }
-
-    // Fallback to GPT-4o if Gemini fails
-    console.log('[DD] Gemini unavailable, falling back to GPT-4o...');
+  // Final fallback to GPT-4o
+  if (!deepAnalysis) {
+    console.log('[DD] Using GPT-4o for analysis...');
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
-      messages: [{ role: 'user', content: prompt }],
+      messages: [{ role: 'user', content: analysisPrompt }],
+      temperature: 0.1,
+      max_tokens: 16000,
+    });
+    deepAnalysis = response.choices?.[0]?.message?.content || '';
+  }
+
+  console.log(`[DD] Phase 2 Complete: Analysis ${deepAnalysis.length} chars`);
+
+  // ========== PHASE 3: GENERATE STRUCTURED REPORT ==========
+  console.log('\n[DD] === PHASE 3: REPORT GENERATION ===');
+
+  const reportLengthGuide = {
+    short: `Keep it concise: 1-2 pages, focus on key points only`,
+    medium: `Standard length: 3-5 pages with proper sections`,
+    long: `Comprehensive: detailed coverage of all topics with subsections`,
+  };
+
+  // Build section list from components
+  const sectionList = selectedComponents.map((c) => DD_COMPONENTS[c].title).join(', ');
+
+  const reportPrompt = `You are a professional M&A report writer. Using the analysis below, generate a Due Diligence Report following the DD Report v4 template structure.
+
+=== ANALYSIS ===
+${deepAnalysis}
+=== END ANALYSIS ===
+
+${instructions ? `USER'S ADDITIONAL REQUIREMENTS:\n${instructions}\n` : ''}
+
+REPORT SECTIONS TO INCLUDE (in this order with numbered headers):
+${sectionList}
+
+LENGTH: ${reportLengthGuide[reportLength] || reportLengthGuide.medium}
+
+QUALITY REQUIREMENTS:
+- Include ONLY facts from the analysis above
+- No hallucination - if data isn't available, say "Data not available in source materials"
+- Use specific numbers, names, and dates
+- Write for a sophisticated M&A audience (investment bankers, PE professionals)
+- Be direct and professional in tone
+- Only include sections that were requested
+- Use numbered section headers (1.0, 1.1, 2.0, 2.1, etc.)
+
+TABLE FORMAT REQUIREMENTS - Generate proper HTML tables as shown:
+
+<!-- Competition Matrix Table (for 2.0 Market & Competition) -->
+<table style="font-family: Calibri, sans-serif; border-collapse: collapse; width: 100%; margin: 15px 0;">
+<thead><tr style="background-color: #1e3a5f; color: white;">
+<th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Service Segment</th>
+<th style="border: 1px solid #ddd; padding: 10px; text-align: center;">Growth (CAGR %)</th>
+<th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Demand Drivers</th>
+<th style="border: 1px solid #ddd; padding: 10px; text-align: center;">Competition</th>
+<th style="border: 1px solid #ddd; padding: 10px; text-align: center;">Position</th>
+</tr></thead>
+<tbody>
+<tr><td style="border: 1px solid #ddd; padding: 8px;">[Segment Name]</td>
+<td style="border: 1px solid #ddd; padding: 8px; text-align: center;">12-18%</td>
+<td style="border: 1px solid #ddd; padding: 8px;">[Key drivers]</td>
+<td style="border: 1px solid #ddd; padding: 8px; text-align: center;">High/Medium/Low</td>
+<td style="border: 1px solid #ddd; padding: 8px; text-align: center;">Strong/Growing</td></tr>
+</tbody></table>
+
+<!-- Income Statement Table (for 4.0 Key Financials) -->
+<table style="font-family: Calibri, sans-serif; border-collapse: collapse; width: 100%; margin: 15px 0;">
+<thead><tr style="background-color: #1e3a5f; color: white;">
+<th style="border: 1px solid #ddd; padding: 10px; text-align: left;">SGD ('000)</th>
+<th style="border: 1px solid #ddd; padding: 10px; text-align: right;">2022</th>
+<th style="border: 1px solid #ddd; padding: 10px; text-align: right;">2023</th>
+<th style="border: 1px solid #ddd; padding: 10px; text-align: right;">2024</th>
+</tr></thead>
+<tbody>
+<tr><td style="border: 1px solid #ddd; padding: 8px;">Revenue</td>
+<td style="border: 1px solid #ddd; padding: 8px; text-align: right;">15,234</td>
+<td style="border: 1px solid #ddd; padding: 8px; text-align: right;">23,552</td>
+<td style="border: 1px solid #ddd; padding: 8px; text-align: right;">35,013</td></tr>
+</tbody></table>
+
+<!-- Pre-DD Workplan Table (for 4.9 Pre-DD Workplan) -->
+<table style="font-family: Calibri, sans-serif; border-collapse: collapse; width: 100%; margin: 15px 0;">
+<thead><tr style="background-color: #1e3a5f; color: white;">
+<th style="border: 1px solid #ddd; padding: 10px; text-align: left; width: 35%;">Key Consideration</th>
+<th style="border: 1px solid #ddd; padding: 10px; text-align: left;">Evidence to Validate</th>
+</tr></thead>
+<tbody>
+<tr><td style="border: 1px solid #ddd; padding: 8px; vertical-align: top;"><strong>Customer Analysis</strong></td>
+<td style="border: 1px solid #ddd; padding: 8px;">Top 10 customer contracts, renewal terms, churn history</td></tr>
+</tbody></table>
+
+OUTPUT FORMAT (HTML for Word document):
+- Title: <h1 style="font-family: Calibri, sans-serif; color: #1e3a5f;">Due Diligence Report: [Company Name]</h1>
+- Date: <p style="font-family: Calibri, sans-serif; color: #666; font-size: 12px;">Prepared: ${new Date().toLocaleDateString()}</p>
+- Section headers: <h2 style="font-family: Calibri, sans-serif; color: #2563eb; border-bottom: 2px solid #2563eb; padding-bottom: 5px;">1.0 Overview</h2>
+- Subsections: <h3 style="font-family: Calibri, sans-serif; color: #1e40af;">1.1 Company Background</h3>
+- Bullet points: <ul style="font-family: Calibri, sans-serif; margin: 10px 0;"><li style="margin: 5px 0;">
+- Important text: <strong>
+
+Generate CLEAN HTML only. No markdown, no code blocks. Use the table formats shown above.`;
+
+  let finalReport = '';
+
+  // Use Gemini 2.5 Pro for final report writing
+  console.log('[DD] Generating final report with Gemini 2.5 Pro...');
+  finalReport = await callGemini2Pro(reportPrompt);
+
+  if (!finalReport) {
+    console.log('[DD] Gemini failed, using GPT-4o for report...');
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: reportPrompt }],
       temperature: 0.2,
-      max_tokens: maxTokens,
+      max_tokens: 16000,
+    });
+    finalReport = response.choices?.[0]?.message?.content || '';
+  }
+
+  // Clean up markdown artifacts
+  finalReport = finalReport
+    .replace(/```html/gi, '')
+    .replace(/```/g, '')
+    .trim();
+
+  console.log(`[DD] Phase 3 Complete: Report ${finalReport.length} chars`);
+  console.log(`[DD] === MULTI-AGENT DD REPORT COMPLETE ===\n`);
+
+  return finalReport;
+}
+
+// ============ DUE DILIGENCE API ENDPOINT ============
+app.post('/api/due-diligence', async (req, res) => {
+  const {
+    files = [],
+    email,
+    instructions = '',
+    reportLength = 'medium',
+    components = ['overview', 'market_competition', 'financials', 'future_plans', 'workplan'],
+  } = req.body;
+
+  console.log(`\n[DD] === NEW DD REQUEST ===`);
+  console.log(`[DD] Email: ${email}`);
+  console.log(`[DD] Files: ${files.length}`);
+  console.log(`[DD] Components: ${components.join(', ')}`);
+  console.log(`[DD] Length: ${reportLength}`);
+
+  // Validate input
+  if (!email) {
+    return res.status(400).json({ success: false, error: 'Email is required' });
+  }
+
+  if (files.length === 0) {
+    return res.status(400).json({ success: false, error: 'At least one file is required' });
+  }
+
+  // Respond immediately - process async
+  res.json({
+    success: true,
+    message: `Processing ${files.length} files. DD report will be emailed to ${email}`,
+  });
+
+  // Process in background
+  try {
+    const report = await generateDueDiligenceReport(files, instructions, reportLength, components);
+
+    // Build email HTML
+    const emailHtml = `
+      <div style="font-family: Calibri, Arial, sans-serif; max-width: 800px; margin: 0 auto;">
+        <h2 style="color: #1e3a5f; border-bottom: 2px solid #2563eb; padding-bottom: 10px;">Due Diligence Report</h2>
+        <p style="color: #666;">Generated: ${new Date().toLocaleString()}</p>
+        <p style="color: #666;">Files analyzed: ${files.map((f) => f.name).join(', ')}</p>
+        <p style="color: #666;">Components: ${components.join(', ')}</p>
+        <hr style="border: 1px solid #eee; margin: 20px 0;">
+        ${report}
+        <hr style="border: 1px solid #eee; margin: 20px 0;">
+        <p style="color: #999; font-size: 12px;">Generated by YCP Due Diligence Tool</p>
+      </div>
+    `;
+
+    await sendEmail({
+      to: email,
+      subject: `DD Report: ${files[0]?.name || 'Due Diligence Analysis'}`,
+      html: emailHtml,
+      fromName: 'YCP Due Diligence',
     });
 
-    let result = response.choices[0].message.content || '';
-
-    // Clean up any markdown artifacts
-    result = result
-      .replace(/```html/gi, '')
-      .replace(/```/g, '')
-      .trim();
-
-    console.log(`[DD] Report generated using GPT-4o (${result.length} chars)`);
-    return result;
+    console.log(`[DD] Email sent successfully to ${email}`);
   } catch (error) {
-    console.error('[DD] Error in AI report generation:', error.message);
+    console.error('[DD] Error processing DD request:', error.message);
     console.error('[DD] Stack:', error.stack);
-    throw error;
+
+    // Send error notification
+    try {
+      await sendEmail({
+        to: email,
+        subject: 'DD Report Error',
+        html: `
+          <h2>Due Diligence Report Generation Failed</h2>
+          <p>We encountered an error while processing your files:</p>
+          <pre style="background: #f5f5f5; padding: 15px; border-radius: 5px;">${escapeHtml(error.message)}</pre>
+          <p>Please try again or contact support if the issue persists.</p>
+        `,
+        fromName: 'YCP Due Diligence',
+      });
+    } catch (emailError) {
+      console.error('[DD] Failed to send error email:', emailError.message);
+    }
   }
-}
+});
 
 // ============ HEALTH CHECK ============
 app.get('/health', healthCheck('due-diligence'));
