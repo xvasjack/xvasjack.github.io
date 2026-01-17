@@ -1,36 +1,36 @@
 {
   "metadata": {
     "extractedFrom": "260114_SunCorp_Netpluz DD Report v4 (1).docx",
-    "extractedAt": "2026-01-17T11:10:37.988Z"
+    "extractedAt": "2026-01-17T12:39:21.800Z"
   },
   "fonts": {
     "heading1": {
-      "family": "Arial",
+      "family": "Calibri",
       "size": 14,
       "bold": true,
       "color": "#365F91"
     },
     "heading2": {
-      "family": "Arial",
+      "family": "Calibri",
       "size": 13,
       "bold": true,
       "color": "#4F81BD"
     },
     "heading3": {
-      "family": "Arial",
-      "size": 14,
+      "family": "Calibri",
+      "size": 12,
       "bold": true,
       "color": "#4F81BD"
     },
     "body": {
-      "family": "Arial",
+      "family": "Calibri",
       "size": 11,
       "color": "#000000"
     },
     "caption": {
-      "family": "Arial",
+      "family": "Calibri",
       "size": 9,
-      "color": "#666666",
+      "color": "#808080",
       "italic": true
     }
   },

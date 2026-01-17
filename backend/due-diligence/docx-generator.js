@@ -254,10 +254,10 @@ function buildDocumentContent(sections) {
             children: [
               new TextRun({
                 text: section.text,
-                font: templateStyles.fonts.body.family,
-                size: pointsToHalfPoints(10),
-                color: '666666',
-                italics: true,
+                font: templateStyles.fonts.caption.family,
+                size: pointsToHalfPoints(templateStyles.fonts.caption.size),
+                color: hexToDocx(templateStyles.fonts.caption.color),
+                italics: templateStyles.fonts.caption.italic,
               }),
             ],
           })
