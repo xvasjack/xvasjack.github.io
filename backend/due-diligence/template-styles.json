@@ -1,0 +1,79 @@
+{
+  "metadata": {
+    "extractedFrom": "260114_SunCorp_Netpluz DD Report v4 (1).docx",
+    "extractedAt": "2026-01-17T11:10:37.988Z"
+  },
+  "fonts": {
+    "heading1": {
+      "family": "Arial",
+      "size": 14,
+      "bold": true,
+      "color": "#365F91"
+    },
+    "heading2": {
+      "family": "Arial",
+      "size": 13,
+      "bold": true,
+      "color": "#4F81BD"
+    },
+    "heading3": {
+      "family": "Arial",
+      "size": 14,
+      "bold": true,
+      "color": "#4F81BD"
+    },
+    "body": {
+      "family": "Arial",
+      "size": 11,
+      "color": "#000000"
+    },
+    "caption": {
+      "family": "Arial",
+      "size": 9,
+      "color": "#666666",
+      "italic": true
+    }
+  },
+  "tables": {
+    "headerRow": {
+      "bgColor": "#4F81BD",
+      "textColor": "#FFFFFF",
+      "bold": true,
+      "fontSize": 11
+    },
+    "bodyRow": {
+      "bgColor": "#FFFFFF",
+      "altBgColor": "#DAE8F8",
+      "fontSize": 10
+    },
+    "borders": {
+      "color": "#4F81BD",
+      "width": 1,
+      "style": "single"
+    },
+    "cellPadding": {
+      "top": 4,
+      "right": 6,
+      "bottom": 4,
+      "left": 6
+    }
+  },
+  "paragraphs": {
+    "spacing": {
+      "before": 6,
+      "after": 6,
+      "line": 115
+    }
+  },
+  "lists": {
+    "bullet": "•",
+    "indent": 36,
+    "spacing": 3
+  },
+  "page": {
+    "marginTop": 72,
+    "marginBottom": 72,
+    "marginLeft": 72,
+    "marginRight": 72
+  }
+}

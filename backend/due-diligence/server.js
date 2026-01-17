@@ -9,6 +9,7 @@ const { createClient } = require('@deepgram/sdk');
 const { S3Client } = require('@aws-sdk/client-s3');
 const Anthropic = require('@anthropic-ai/sdk');
 const JSZip = require('jszip');
+const { generateDocx, htmlToStructuredJson } = require('./docx-generator');
 const { securityHeaders, rateLimiter, escapeHtml } = require('./shared/security');
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
@@ -140,7 +141,7 @@ if (!r2Client) {
 
 // ============ DD REPORT V4 COMPONENTS ============
 // Report component configurations matching DD Report v4 template structure
-const DD_COMPONENTS = {
+const _DD_COMPONENTS = {
   overview: {
     title: '1.0 Overview',
     analysisPrompt: `Extract comprehensive company information:
@@ -2284,7 +2285,7 @@ async function generateDueDiligenceReport(
     .filter((s) => s);
 
   // Add standard sections that should always appear if relevant data exists
-  const standardFlow = [
+  const _standardFlow = [
     'Company Overview',
     'Market',
     'Competition',
@@ -2397,57 +2398,83 @@ CRITICAL RULES:
 
 LENGTH: ${reportLengthGuide[reportLength] || reportLengthGuide.medium}
 
-STYLE REQUIREMENTS (match template exactly):
-- Font: Calibri, sans-serif
-- Title color: #1e3a5f
-- Section header color: #2563eb with border-bottom
-- Subsection color: #1e40af
-- Table header: background-color #1e3a5f, white text
-- Table cells: border 1px solid #ddd, padding 8-10px
-- Professional M&A tone - direct, factual, no fluff
+OUTPUT FORMAT - STRUCTURED JSON:
+You MUST output valid JSON in this exact format:
+{
+  "sections": [
+    { "type": "title", "text": "Due Diligence Report: ${companyInfo.name || '[Company Name]'}" },
+    { "type": "date", "text": "Prepared: ${new Date().toLocaleDateString()}" },
+    { "type": "heading1", "text": "1.0 Section Title" },
+    { "type": "heading2", "text": "1.1 Subsection Title" },
+    { "type": "paragraph", "text": "Body text content..." },
+    { "type": "bullet_list", "items": ["Item 1", "Item 2", "Item 3"] },
+    { "type": "table", "data": { "headers": ["Column 1", "Column 2"], "rows": [["A", "B"], ["C", "D"]] } }
+  ]
+}
 
-HTML TABLE FORMAT:
-<table style="font-family: Calibri, sans-serif; border-collapse: collapse; width: 100%; margin: 15px 0;">
-<thead><tr style="background-color: #1e3a5f; color: white;">
-<th style="border: 1px solid #ddd; padding: 10px; text-align: left;">[Header]</th>
-</tr></thead>
-<tbody>
-<tr><td style="border: 1px solid #ddd; padding: 8px;">[Data]</td></tr>
-</tbody></table>
+SECTION TYPES:
+- title: Main report title
+- date: Report date
+- heading1: Major section (1.0, 2.0, etc.)
+- heading2: Subsection (1.1, 1.2, etc.)
+- heading3: Sub-subsection
+- paragraph: Body text
+- bullet_list: Array of bullet points
+- table: Structured table with headers and rows arrays
 
-OUTPUT FORMAT:
-<h1 style="font-family: Calibri, sans-serif; color: #1e3a5f;">Due Diligence Report: ${companyInfo.name || '[Company Name]'}</h1>
-<p style="font-family: Calibri, sans-serif; color: #666; font-size: 12px;">Prepared: ${new Date().toLocaleDateString()}</p>
+TABLE FORMAT: For every multi-column data (financials, comparisons, breakdowns), use table type:
+{ "type": "table", "data": { "headers": ["Year", "Revenue", "Growth"], "rows": [["2023", "10M", "15%"], ["2024", "12M", "20%"]] } }
 
-Generate CLEAN HTML only. No markdown, no code blocks.`;
+CRITICAL: Output ONLY valid JSON. No markdown, no code blocks, no explanations. Professional M&A tone.`;
 
-  let finalReport = '';
+  // Add JSON mode instruction
+  const fullReportPrompt =
+    reportPrompt + '\n\nRespond with ONLY the JSON object, starting with { and ending with }.';
 
-  // Use Gemini 2.5 Pro for final report writing
-  console.log('[DD] Generating final report with Gemini 2.5 Pro...');
-  finalReport = await callGemini2Pro(reportPrompt);
+  let rawResponse = '';
 
-  if (!finalReport) {
+  // Use Gemini 2.5 Pro for final report writing (with JSON mode)
+  console.log('[DD] Generating structured JSON report with Gemini 2.5 Pro...');
+  rawResponse = await callGemini2Pro(fullReportPrompt, true); // JSON mode
+
+  if (!rawResponse) {
     console.log('[DD] Gemini failed, using GPT-4o for report...');
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
-      messages: [{ role: 'user', content: reportPrompt }],
+      messages: [{ role: 'user', content: fullReportPrompt }],
       temperature: 0.2,
       max_tokens: 16000,
+      response_format: { type: 'json_object' },
     });
-    finalReport = response.choices?.[0]?.message?.content || '';
+    rawResponse = response.choices?.[0]?.message?.content || '';
   }
 
-  // Clean up markdown artifacts
-  finalReport = finalReport
-    .replace(/```html/gi, '')
+  // Clean up and parse JSON
+  rawResponse = rawResponse
+    .replace(/```json/gi, '')
     .replace(/```/g, '')
     .trim();
 
-  console.log(`[DD] Phase 3 Complete: Report ${finalReport.length} chars`);
+  let reportJson;
+  try {
+    // Try to parse as JSON
+    reportJson = JSON.parse(rawResponse);
+    console.log(`[DD] Parsed JSON report with ${reportJson.sections?.length || 0} sections`);
+  } catch (parseError) {
+    console.warn('[DD] Failed to parse JSON, converting HTML to structured format...');
+    // Fallback: treat as HTML and convert
+    reportJson = htmlToStructuredJson(rawResponse, companyInfo.name || 'Company');
+  }
+
+  // Validate structure
+  if (!reportJson.sections || !Array.isArray(reportJson.sections)) {
+    reportJson = { sections: [] };
+  }
+
+  console.log(`[DD] Phase 5 Complete: Report has ${reportJson.sections.length} sections`);
   console.log(`[DD] === MULTI-AGENT DD REPORT COMPLETE ===\n`);
 
-  return finalReport;
+  return reportJson;
 }
 
 // ============ DUE DILIGENCE API ENDPOINT ============
@@ -2498,38 +2525,67 @@ app.post('/api/due-diligence', async (req, res) => {
 
   // Process in background
   try {
-    const report = await generateDueDiligenceReport(files, instructions, reportLength, components);
+    const reportJson = await generateDueDiligenceReport(
+      files,
+      instructions,
+      reportLength,
+      components
+    );
 
-    // Build email HTML
+    // Generate DOCX from structured JSON
+    console.log(`[DD] Generating DOCX for report ${reportId}...`);
+    const docxBuffer = await generateDocx(reportJson);
+    console.log(`[DD] DOCX generated: ${docxBuffer.length} bytes`);
+
+    // Extract company name from report for filename
+    const titleSection = reportJson.sections?.find((s) => s.type === 'title');
+    const companyName = titleSection?.text?.replace('Due Diligence Report: ', '') || 'Company';
+    const safeCompanyName = companyName.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 50);
+    const filename = `DD_Report_${safeCompanyName}_${Date.now()}.docx`;
+
+    // Build email HTML (simple notification)
     const emailHtml = `
       <div style="font-family: Calibri, Arial, sans-serif; max-width: 800px; margin: 0 auto;">
-        <h2 style="color: #1e3a5f; border-bottom: 2px solid #2563eb; padding-bottom: 10px;">Due Diligence Report</h2>
+        <h2 style="color: #365F91; border-bottom: 2px solid #4F81BD; padding-bottom: 10px;">Due Diligence Report</h2>
         <p style="color: #666;">Generated: ${new Date().toLocaleString()}</p>
         <p style="color: #666;">Files analyzed: ${files.map((f) => f.name).join(', ')}</p>
         <p style="color: #666;">Components: ${components.join(', ')}</p>
         <hr style="border: 1px solid #eee; margin: 20px 0;">
-        ${report}
+        <p style="font-size: 14px;"><strong>Your DD Report is attached as a Word document (DOCX).</strong></p>
+        <p style="color: #666;">Open the attached file in Microsoft Word or Google Docs to view the full report.</p>
         <hr style="border: 1px solid #eee; margin: 20px 0;">
         <p style="color: #999; font-size: 12px;">Generated by YCP Due Diligence Tool</p>
       </div>
     `;
 
-    // Update report store with completed report
+    // Update report store with completed report (store both JSON and DOCX buffer)
     reportStore.set(reportId, {
       status: 'completed',
-      html: report,
+      reportJson: reportJson,
+      docxBuffer: docxBuffer,
+      filename: filename,
       files: files.map((f) => f.name),
       components: components,
       email: email,
       createdAt: reportStore.get(reportId)?.createdAt || new Date().toISOString(),
       completedAt: new Date().toISOString(),
     });
-    console.log(`[DD] Report ${reportId} saved to store (${report.length} chars)`);
+    console.log(
+      `[DD] Report ${reportId} saved to store (${reportJson.sections?.length} sections, ${docxBuffer.length} bytes DOCX)`
+    );
 
+    // Send email with DOCX attachment
     await sendEmail({
       to: email,
       subject: `DD Report: ${files[0]?.name || 'Due Diligence Analysis'}`,
       html: emailHtml,
+      attachments: [
+        {
+          filename: filename,
+          content: docxBuffer.toString('base64'),
+          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        },
+      ],
       fromName: 'YCP Due Diligence',
     });
 
@@ -2583,12 +2639,50 @@ app.get('/api/reports/:id', (req, res) => {
     });
   }
 
-  // Return report with status
+  // Return report with status (exclude large binary data)
+  const { docxBuffer, ...reportData } = report;
   res.json({
     success: true,
     reportId: reportId,
-    ...report,
+    hasDocx: !!docxBuffer,
+    docxSize: docxBuffer?.length || 0,
+    ...reportData,
   });
+});
+
+// GET /api/reports/:id/download - Download DOCX file
+app.get('/api/reports/:id/download', (req, res) => {
+  const reportId = req.params.id;
+  const report = reportStore.get(reportId);
+
+  if (!report) {
+    return res.status(404).json({
+      success: false,
+      error: 'Report not found',
+      message: 'Report may have expired or never existed',
+    });
+  }
+
+  if (!report.docxBuffer) {
+    return res.status(404).json({
+      success: false,
+      error: 'DOCX not available',
+      message:
+        report.status === 'processing' ? 'Report is still processing' : 'No DOCX file generated',
+    });
+  }
+
+  // Set headers for DOCX download
+  const filename = report.filename || `DD_Report_${reportId}.docx`;
+  res.setHeader(
+    'Content-Type',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+  );
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Length', report.docxBuffer.length);
+
+  // Send the buffer
+  res.send(report.docxBuffer);
 });
 
 // GET /api/reports - List all recent reports
