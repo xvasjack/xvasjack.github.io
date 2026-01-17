@@ -1,3 +1,5 @@
+# CLI test
+
 # CLAUDE.md
 
 ## User Workflow (READ THIS FIRST)
