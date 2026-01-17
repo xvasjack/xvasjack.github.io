@@ -3638,7 +3638,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       }
 
       // Helper function to format cell text with bullet points
-      // Uses proper PPT bullet formatting with BLACK SQUARE (U+25A0) at 82% text size
+      // Manually inserts BLACK SQUARE (■) at 82% size since pptxgenjs doesn't support bullet sizing
       const formatCellText = (text) => {
         if (!text || typeof text !== 'string') return text;
 
@@ -3650,21 +3650,26 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
           // Split by newline and filter out empty lines
           const lines = text.split('\n').filter(line => line.trim());
 
-          // Return array of text objects with proper PPT bullet formatting
-          // Using hanging indent: bullet at 0.24", text at 0.48" (0.24" hanging)
-          return lines.map((line, index) => {
+          // Build text array with manual bullet insertion at smaller font
+          // 82% of 14pt = 11.5pt, use 11pt for bullet
+          const result = [];
+          lines.forEach((line, index) => {
             const cleanLine = line.replace(/^[■▪\-•]\s*/, '').trim();
             const isLastLine = index === lines.length - 1;
-            return {
-              text: cleanLine,
-              options: {
-                bullet: { code: '25A0', indent: 17, sizePercent: 82 }, // BLACK SQUARE ■ with 0.24" indent (17pt), 82% bullet size
-                fontSize: 14, // Full size text
-                indentLevel: 0,
-                breakLine: !isLastLine
-              }
-            };
+
+            // Add bullet character at 82% size (11pt vs 14pt text)
+            result.push({
+              text: '■ ',
+              options: { fontSize: 11 }
+            });
+
+            // Add the actual text at full size
+            result.push({
+              text: cleanLine + (isLastLine ? '' : '\n'),
+              options: { fontSize: 14 }
+            });
           });
+          return result;
         }
         return text;
       };
