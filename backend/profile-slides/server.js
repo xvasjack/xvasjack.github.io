@@ -3643,7 +3643,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
       }
 
       // Helper function to format cell text with bullet points
-      // Manually inserts BLACK SQUARE (■) at 82% size since pptxgenjs doesn't support bullet sizing
+      // Manually inserts round bullet (•) at 82% size since pptxgenjs doesn't support bullet sizing
       const formatCellText = (text) => {
         if (!text || typeof text !== 'string') return text;
 
@@ -3664,7 +3664,7 @@ async function generatePPTX(companies, targetDescription = '', inaccessibleWebsi
 
             // Add bullet character at 82% size (11pt vs 14pt text)
             result.push({
-              text: '■ ',
+              text: '• ',
               options: { fontSize: 11 }
             });
 

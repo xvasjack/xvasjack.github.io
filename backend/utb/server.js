@@ -1260,7 +1260,7 @@ async function generateUTBSlides(companyName, website, research, additionalConte
         .split('|')
         .filter((s) => s.trim())
         .slice(0, 2);
-      const bulletText = sentences.map((s) => '■  ' + s.trim()).join('\n');
+      const bulletText = sentences.map((s) => '•  ' + s.trim()).join('\n');
 
       slide.addText(bulletText, {
         x: tableStartX + segmentColW + 0.12,
@@ -1567,32 +1567,32 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     if (seaTargets.length > 0) {
       geoStrategies.push({
         region: 'Southeast Asia',
-        strategy: `■  Acquire regional player to establish footprint\n■  Leverage local distribution networks and customer relationships`,
-        rationale: `■  Access to high-growth ASEAN markets with favorable demographics\n■  Cost-effective manufacturing base and supply chain diversification`,
+        strategy: `•  Acquire regional player to establish footprint\n•  Leverage local distribution networks and customer relationships`,
+        rationale: `•  Access to high-growth ASEAN markets with favorable demographics\n•  Cost-effective manufacturing base and supply chain diversification`,
       });
     }
 
     if (gcTargets.length > 0) {
       geoStrategies.push({
         region: 'Greater China',
-        strategy: `■  Target local manufacturer for technology and scale expansion\n■  Build presence in world's largest manufacturing ecosystem`,
-        rationale: `■  Access to advanced manufacturing capabilities and R&D talent\n■  Strategic positioning in key supply chain hub`,
+        strategy: `•  Target local manufacturer for technology and scale expansion\n•  Build presence in world's largest manufacturing ecosystem`,
+        rationale: `•  Access to advanced manufacturing capabilities and R&D talent\n•  Strategic positioning in key supply chain hub`,
       });
     }
 
     if (neaTargets.length > 0) {
       geoStrategies.push({
         region: 'Northeast Asia',
-        strategy: `■  Partner with or acquire regional company for premium segment\n■  Strengthen technical capabilities through talent acquisition`,
-        rationale: `■  Access to high-value customer segments and premium pricing\n■  Technology transfer and quality improvement opportunities`,
+        strategy: `•  Partner with or acquire regional company for premium segment\n•  Strengthen technical capabilities through talent acquisition`,
+        rationale: `•  Access to high-value customer segments and premium pricing\n•  Technology transfer and quality improvement opportunities`,
       });
     }
 
     if (otherTargets.length > 0 && geoStrategies.length < 3) {
       geoStrategies.push({
         region: 'Other Asia',
-        strategy: `■  Evaluate regional targets for niche market entry\n■  Diversify geographic exposure beyond core markets`,
-        rationale: `■  Risk diversification across multiple markets\n■  Access to unique capabilities or customer segments`,
+        strategy: `•  Evaluate regional targets for niche market entry\n•  Diversify geographic exposure beyond core markets`,
+        rationale: `•  Risk diversification across multiple markets\n•  Access to unique capabilities or customer segments`,
       });
     }
 
@@ -1605,8 +1605,8 @@ async function generateUTBSlides(companyName, website, research, additionalConte
             : geoStrategies.length === 1
               ? 'Greater China'
               : 'Northeast Asia',
-        strategy: '■  Identify acquisition targets in region\n■  Build local market intelligence',
-        rationale: '■  Expand geographic footprint\n■  Diversify revenue streams',
+        strategy: '•  Identify acquisition targets in region\n•  Build local market intelligence',
+        rationale: '•  Expand geographic footprint\n•  Diversify revenue streams',
       });
     }
 
