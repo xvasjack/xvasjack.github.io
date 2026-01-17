@@ -3775,21 +3775,89 @@ const SEMANTIC_COLORS = {
   accent: '1F497D', // Navy - headers, emphasis
 };
 
+// Helper to merge historical and projected data into unified chart format
+// Input: { historical: { 2020: { coal: 40, gas: 30 }, 2021: { coal: 38, gas: 32 } },
+//          projected: { 2030: { coal: 20, gas: 40 }, 2040: { coal: 10, gas: 50 } } }
+// Output: { categories: ['2020', '2021', '2030', '2040'], series: [...], projectedStartIndex: 2 }
+function mergeHistoricalProjected(data, options = {}) {
+  if (!data) return null;
+
+  // If data is already in unified format, return it
+  if (data.categories && data.series) {
+    return data;
+  }
+
+  // Handle historical/projected format
+  const historical = data.historical || {};
+  const projected = data.projected || {};
+  const allYears = [...Object.keys(historical), ...Object.keys(projected)].sort();
+
+  if (allYears.length === 0) return null;
+
+  // Identify all data series (e.g., coal, gas, renewable)
+  const seriesNames = new Set();
+  Object.values(historical).forEach((yearData) => {
+    if (typeof yearData === 'object') {
+      Object.keys(yearData).forEach((k) => seriesNames.add(k));
+    }
+  });
+  Object.values(projected).forEach((yearData) => {
+    if (typeof yearData === 'object') {
+      Object.keys(yearData).forEach((k) => seriesNames.add(k));
+    }
+  });
+
+  if (seriesNames.size === 0) return null;
+
+  // Build series data
+  const series = [];
+  seriesNames.forEach((seriesName) => {
+    const values = allYears.map((year) => {
+      const yearData = historical[year] || projected[year] || {};
+      return typeof yearData === 'object' ? yearData[seriesName] || 0 : 0;
+    });
+    series.push({ name: seriesName, values });
+  });
+
+  // Find where projections start
+  const projectedStartIndex = Object.keys(historical).length;
+
+  return {
+    categories: allYears,
+    series,
+    projectedStartIndex, // For visual differentiation
+    unit: data.unit || options.unit || '',
+  };
+}
+
 // Add a stacked bar chart to a slide
 // data format: { categories: ['2020', '2021', '2022'], series: [{ name: 'Coal', values: [40, 38, 35] }, { name: 'Gas', values: [30, 32, 35] }] }
+// Also supports: { historical: {...}, projected: {...} } format which gets auto-converted
 function addStackedBarChart(slide, title, data, options = {}) {
-  if (!data || !data.categories || !data.series || data.series.length === 0) {
+  // Try to convert historical/projected format
+  let chartData = data;
+  if (data && (data.historical || data.projected) && !data.categories) {
+    chartData = mergeHistoricalProjected(data);
+  }
+
+  if (!chartData || !chartData.categories || !chartData.series || chartData.series.length === 0) {
     return; // Skip if no valid data
   }
 
-  const chartData = data.series.map((s, idx) => ({
+  // Add visual indicator for projected data in title if applicable
+  const hasProjections =
+    chartData.projectedStartIndex && chartData.projectedStartIndex < chartData.categories.length;
+  const chartTitle =
+    hasProjections && !title.includes('Projected') ? `${title} (includes projections)` : title;
+
+  const pptxChartData = chartData.series.map((s, idx) => ({
     name: s.name,
-    labels: data.categories,
+    labels: chartData.categories,
     values: s.values,
     color: CHART_COLORS[idx % CHART_COLORS.length],
   }));
 
-  slide.addChart('bar', chartData, {
+  slide.addChart('bar', pptxChartData, {
     x: options.x || 0.5,
     y: options.y || 1.5,
     w: options.w || 9,
@@ -3798,8 +3866,8 @@ function addStackedBarChart(slide, title, data, options = {}) {
     barGrouping: 'stacked',
     showLegend: true,
     legendPos: 'b',
-    showTitle: !!title,
-    title: title,
+    showTitle: !!chartTitle,
+    title: chartTitle,
     titleFontFace: 'Segoe UI',
     titleFontSize: 14,
     catAxisLabelFontFace: 'Segoe UI',
@@ -3817,27 +3885,40 @@ function addStackedBarChart(slide, title, data, options = {}) {
 
 // Add a line chart to a slide
 // data format: { categories: ['2020', '2021', '2022'], series: [{ name: 'Price', values: [10, 12, 14] }] }
+// Also supports: { historical: {...}, projected: {...} } format which gets auto-converted
 function addLineChart(slide, title, data, options = {}) {
-  if (!data || !data.categories || !data.series || data.series.length === 0) {
+  // Try to convert historical/projected format
+  let chartData = data;
+  if (data && (data.historical || data.projected) && !data.categories) {
+    chartData = mergeHistoricalProjected(data);
+  }
+
+  if (!chartData || !chartData.categories || !chartData.series || chartData.series.length === 0) {
     return; // Skip if no valid data
   }
 
-  const chartData = data.series.map((s, idx) => ({
+  // Add visual indicator for projected data in title if applicable
+  const hasProjections =
+    chartData.projectedStartIndex && chartData.projectedStartIndex < chartData.categories.length;
+  const chartTitle =
+    hasProjections && !title.includes('Projected') ? `${title} (includes projections)` : title;
+
+  const pptxChartData = chartData.series.map((s, idx) => ({
     name: s.name,
-    labels: data.categories,
+    labels: chartData.categories,
     values: s.values,
     color: CHART_COLORS[idx % CHART_COLORS.length],
   }));
 
-  slide.addChart('line', chartData, {
+  slide.addChart('line', pptxChartData, {
     x: options.x || 0.5,
     y: options.y || 1.5,
     w: options.w || 9,
     h: options.h || 4.5,
-    showLegend: data.series.length > 1,
+    showLegend: chartData.series.length > 1,
     legendPos: 'b',
-    showTitle: !!title,
-    title: title,
+    showTitle: !!chartTitle,
+    title: chartTitle,
     titleFontFace: 'Segoe UI',
     titleFontSize: 14,
     catAxisLabelFontFace: 'Segoe UI',
