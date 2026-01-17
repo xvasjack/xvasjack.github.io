@@ -237,7 +237,7 @@ function buildDocumentContent(sections) {
               new TextRun({
                 text: section.text,
                 font: templateStyles.fonts.heading1.family,
-                size: pointsToHalfPoints(20),
+                size: pointsToHalfPoints(templateStyles.fonts.heading1.size),
                 bold: true,
                 color: hexToDocx(templateStyles.fonts.heading1.color),
               }),
