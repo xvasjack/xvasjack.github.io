@@ -163,34 +163,52 @@ Include specific numbers, percentages, and facts from the source materials.`,
   },
   market_competition: {
     title: '2.0 Market & Competition',
-    analysisPrompt: `Extract market and competitive information:
-2.1 Competition Landscape:
-Create a competition matrix table with these columns:
-- Service Segment (e.g., Managed Security, Cloud Infrastructure)
-- Market Growth (CAGR %)
-- Demand Drivers (key factors driving growth)
-- Market Competition (competitive intensity: High/Medium/Low)
-- Company's Position (Strong/Growing/Emerging)
+    analysisPrompt: `Extract market and competitive information based on THIS company's actual service offerings.
+
+2.1 Competition Landscape Table:
+Columns: Service Segment | Market Growth | Demand Drivers | Competition Intensity | Company Position
+
+INSTRUCTIONS:
+- Row 1 to N: Based on THIS company's ACTUAL service lines found in source data
+- Do NOT use generic segments - extract from source what the company actually offers
+- Market Growth: Use industry data where available, or note "To be validated"
+- Competition Intensity: High/Medium/Low based on market context
+- Company Position: Strong/Growing/Emerging based on evidence in source
 
 2.2 Competitive Advantages:
-- List 3-5 key competitive advantages
-- Include specific evidence for each (certifications, partnerships, metrics)
+- Extract from source documents: certifications, partnerships, proprietary tech, metrics
+- Be specific with evidence (e.g., "ISO 27001 certified since 2022" not just "security certifications")
+- Only include advantages that have supporting evidence in source data
 
-2.3 Vulnerabilities:
-- Identify weaknesses and areas of exposure
-- Market risks and competitive threats
-- Dependencies and concentration risks
+2.3 Vulnerabilities & Market Risks:
+- Extract weaknesses/risks mentioned in source documents
+- Include: customer concentration, geographic concentration, technology dependencies
+- Note competitive threats from specific competitors if mentioned
+- Identify gaps where company lacks presence vs market expectations
 
-Include market growth rates, specific competitor names, and positioning data.`,
+IMPORTANT: Derive ALL content from source data. Do not invent market data not supported by the documents.`,
   },
   financials: {
     title: '4.0 Key Financials',
     analysisPrompt: `Extract ALL financial data and format as structured tables:
 
-4.1 Income Statement:
-Table with columns: Item | Year 1 | Year 2 | Year 3
-Rows: Revenue, Cost of Sales, Gross Profit, Operating Expenses, EBITDA, Net Profit
-Include gross margin % and EBITDA margin %
+4.1 Income Statement (P&L):
+Table with columns: Item | Year 1 | Year 2 | Year 3 (use actual year labels)
+
+CRITICAL: Include margin % rows IMMEDIATELY after their corresponding profit line:
+- Revenue
+- Cost of Sales
+- Gross Profit
+- Gross Margin % [immediately after Gross Profit, calculate as Gross Profit / Revenue × 100]
+- Operating Expenses
+- Operating Profit (EBIT)
+- Operating Margin % [immediately after Operating Profit, calculate as EBIT / Revenue × 100]
+- EBITDA
+- EBITDA Margin % [immediately after EBITDA, calculate as EBITDA / Revenue × 100]
+- Net Profit
+- Net Margin % [immediately after Net Profit, calculate as Net Profit / Revenue × 100]
+
+DO NOT create a separate margins section. Margins MUST be inline within P&L table.
 
 4.2 Revenue Breakdown by Country:
 Table with columns: Country | Revenue (currency) | % of Total
@@ -198,21 +216,25 @@ List all countries/regions mentioned
 
 4.3 Revenue Breakdown by Product/Service:
 Table with columns: Product/Service Type | Revenue | % of Total
-Categories may include: Managed Services, Professional Services, Hardware/Software Resale, Subscriptions, etc.
+Extract ALL product/service categories from source data
 
 4.4 Revenue for Key Service Lines:
 Break down major service categories further if data available
-E.g., Managed Services split by: Security, Infrastructure, Helpdesk, etc.
 
 4.5 Top Customers:
 Table with columns: Customer (name or anonymized) | Revenue | % of Total
 Include customer concentration analysis
 
-4.8 Balance Sheet:
+4.6 Balance Sheet:
 Table with columns: Item | Current Year | Prior Year
-Rows: Total Assets, Total Liabilities, Shareholders' Equity, Cash, Receivables, Payables
+Group items into categories:
+- Non-current Assets: Property, Equipment, Intangibles, Goodwill, etc.
+- Current Assets: Cash, Receivables, Inventory, etc.
+- Equity: Share capital, Retained earnings, etc.
+- Liabilities: Borrowings, Payables, etc.
+Extract ALL line items found in source - don't omit items.
 
-Include specific currency figures (SGD/USD/etc.), percentages, and year labels. Extract all available financial metrics.`,
+Include specific currency figures (SGD/USD/etc.), percentages, and year labels.`,
   },
   future_plans: {
     title: '8.0 Future Plans',
@@ -231,26 +253,35 @@ Rows: Revenue, Revenue Growth %, Gross Profit, Gross Margin %, EBITDA, EBITDA Ma
 Include specific targets, timelines, and financial projections. Note any assumptions or dependencies.`,
   },
   workplan: {
-    title: '4.9 Pre-DD Workplan',
-    analysisPrompt: `Extract items requiring validation in due diligence:
+    title: '6.0 Pre-DD Workplan',
+    analysisPrompt: `Create a Pre-DD Workplan based on gaps identified in the source documents.
 
-Create a Pre-DD Workplan table with two columns:
-- Key Consideration: Area to investigate
-- Evidence to Validate: Specific documents/data to request
+FORMAT: Two-column table
+| Key Consideration | Evidence to Validate |
+|-------------------|---------------------|
 
-Key areas to cover:
-1. Customer Analysis - Validate top customer contracts, terms, renewal rates
-2. Pipeline Analysis - Assess sales pipeline quality and conversion rates
-3. Pricing Analysis - Review pricing models, competitiveness, margin protection
-4. Unit Economics - Understand cost structure, contribution margins by service
-5. Billing & Collections - Review AR aging, collection history, bad debt
-6. Forecast Assumptions - Test revenue projection methodology and accuracy
-7. Partner Ecosystem - Evaluate vendor relationships and dependencies
-8. Employee Analysis - Review retention, compensation, key person risk
-9. Technology & IP - Assess proprietary technology, security posture
-10. Legal & Compliance - Review contracts, litigation, regulatory status
+INSTRUCTIONS:
+1. Review ALL information provided in source documents
+2. Identify what information is MISSING, vague, or needs deeper validation
+3. For each gap, specify:
+   - Column 1: What area/topic needs investigation (be specific to this company)
+   - Column 2: What specific documents, data, or metrics to request
 
-Format as actionable checklist for due diligence team.`,
+DERIVE FROM SOURCE DATA - look for:
+- Questions marked as "to discuss later" or deferred
+- Vague or incomplete answers that need specifics
+- Missing financial details (e.g., revenue breakdown, cost structure)
+- Unverified claims about customers, contracts, technology
+- Areas where only marketing info exists, no proof provided
+- Risk factors mentioned but not quantified
+- Growth plans without supporting evidence
+
+OUTPUT REQUIREMENTS:
+- Minimum 5 rows, maximum 12 rows
+- Each row must be actionable and specific to THIS company's situation
+- Column 2 should list specific deliverables (e.g., "Customer contracts for top 5 accounts", "AR aging report as of Dec 2024")
+
+DO NOT use generic/templated items. Base ALL items on actual gaps found in source data.`,
   },
 };
 
