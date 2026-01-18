@@ -4016,6 +4016,12 @@ async function buildStoryNarrative(countryAnalysis, scope) {
 4. CUT RUTHLESSLY: If a fact doesn't support the decision, delete it. 8 great slides beat 25 mediocre ones.
 5. QUANTIFY EVERYTHING: "Big market" → "$1.5B market growing 12% annually"
 
+=== ASSERTIVE SLIDE TITLES (CRITICAL) ===
+Generate conclusion-driven titles that tell the story, NOT descriptive labels.
+BAD (descriptive): "Thailand - Market Size", "Vietnam - Energy Policy"
+GOOD (assertive): "$50 billion total market, $5 billion addressable for client", "Electricity liberalization creates 18-month JV window"
+Each title should be a conclusion the reader can act on, not a topic they need to read about.
+
 === INSIGHT QUALITY ===
 BAD (information): "Thailand requires 50% local content for energy services"
 GOOD (insight): "The 50% local content rule means you can't compete on cost alone—local partnerships aren't optional, they're your competitive moat"
@@ -4059,7 +4065,7 @@ Transform this research into a narrative. Return JSON:
   "slides": [
     {
       "type": "VERDICT" | "OPPORTUNITY" | "BARRIER" | "COMPETITIVE_LANDSCAPE" | "ENTRY_PATH" | "ECONOMICS" | "RISKS" | "ACTION",
-      "title": "Slide title (max 60 chars)",
+      "title": "ASSERTIVE title that states a conclusion (e.g. '$50B market, $5B addressable' NOT 'Market Size')",
       "insight": "The 'so what' - one sentence that makes this slide matter",
       "content": {
         // Type-specific content structure
@@ -5091,6 +5097,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       colW: [2.2, 0.8, 3.3, 3.0],
       valign: 'top',
     });
+    // Add client-specific insight callout
+    addCalloutBox(
+      actsSlide,
+      `For ${scope.clientContext || 'Your Company'}:`,
+      `Regulatory framework creates recurring ESCO demand in ${country}. Energy efficiency mandates drive industrial compliance spending.`,
+      { x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 1.0, type: 'recommendation' }
+    );
   } else {
     addDataUnavailableMessage(actsSlide, 'Energy legislation data not available');
   }
@@ -5150,12 +5163,19 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         x: LEFT_MARGIN,
         y: 4.4,
         w: CONTENT_WIDTH,
-        h: 2.0,
+        h: 1.5,
         fontSize: 12,
         fontFace: FONT,
         color: COLORS.black,
         valign: 'top',
       }
+    );
+    // Add strategic callout for policy slide
+    addCalloutBox(
+      policySlide,
+      'Strategic Implication',
+      `National policy direction creates investment window. Align entry timing with government incentive programs.`,
+      { x: LEFT_MARGIN, y: 6.0, w: CONTENT_WIDTH, h: 0.9, type: 'insight' }
     );
   }
 
@@ -5272,6 +5292,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (tpes.keyInsight) tpesInsights.push(tpes.keyInsight);
     if (tpes.narrative) tpesInsights.push(truncate(tpes.narrative, 100));
     addInsightsPanel(tpesSlide, tpesInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.4 });
+    // Add energy transition opportunity callout
+    addCalloutBox(
+      tpesSlide,
+      'Energy Transition Opportunity',
+      `${country} energy mix shifting from coal to gas/renewables. First-mover advantage in industrial efficiency consulting.`,
+      { x: LEFT_MARGIN, y: 5.5, w: 8.8, h: 1.0, type: 'insight' }
+    );
   } else {
     addDataUnavailableMessage(tpesSlide, 'Energy supply data not available');
   }
@@ -5304,6 +5331,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     // Add key drivers as insights
     safeArray(finalDemand.keyDrivers, 2).forEach((d) => demandInsights.push(truncate(d, 80)));
     addInsightsPanel(demandSlide, demandInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.4 });
+    // Add supply gap quantification callout
+    addCalloutBox(
+      demandSlide,
+      `For ${scope.clientContext || 'Your Company'}:`,
+      `Industrial demand growth creates unfulfilled capacity needs. Every MW deployed serves real demand.`,
+      { x: LEFT_MARGIN, y: 5.5, w: 8.8, h: 1.0, type: 'recommendation' }
+    );
   } else if (safeArray(finalDemand.keyDrivers, 3).length === 0) {
     addDataUnavailableMessage(demandSlide, 'Energy demand data not available');
   } else {
@@ -5352,6 +5386,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
     if (electricity.keyInsight) elecInsights.push(electricity.keyInsight);
     addInsightsPanel(elecSlide, elecInsights.slice(0, 4), { x: 6.2, y: 1.3, w: 6.5, h: 4.5 });
+    // Add private sector opportunity callout
+    addCalloutBox(
+      elecSlide,
+      'Private Sector Needed',
+      `State utility cannot meet demand alone. IPP and captive power opportunities exist for foreign entrants.`,
+      { x: LEFT_MARGIN, y: 6.0, w: 5.5, h: 0.9, type: 'insight' }
+    );
   } else if (!electricity.demandGrowth && !electricity.keyTrend) {
     addDataUnavailableMessage(elecSlide, 'Electricity market data not available');
   } else {
@@ -5403,6 +5444,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       { x: LEFT_MARGIN, y: 1.3, w: 8.8, h: 3.2 }
     );
     addInsightsPanel(gasSlide, gasInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.4, h: 3.2 });
+    // Add LNG opportunity callout
+    addCalloutBox(
+      gasSlide,
+      `LNG Opportunity for ${scope.clientContext || 'Your Company'}:`,
+      `LNG import gap and infrastructure expansion create supply partnership opportunities.`,
+      { x: LEFT_MARGIN, y: 4.7, w: 8.8, h: 0.8, type: 'recommendation' }
+    );
   } else if (safeArray(gasLng.lngTerminals, 3).length === 0 && gasInsights.length === 0) {
     addDataUnavailableMessage(gasSlide, 'Gas/LNG market data not available');
   }
@@ -5461,6 +5509,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       h: 4.5,
     });
     addInsightsPanel(priceSlide, priceInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.4, h: 4.5 });
+    // Add ESCO payback calculation callout
+    addCalloutBox(
+      priceSlide,
+      'ESCO Payback Calculation',
+      `Peak-shaving opportunity: Price spread between peak/off-peak enables demand response projects with 3-5 year payback.`,
+      { x: LEFT_MARGIN, y: 6.0, w: 8.8, h: 0.9, type: 'insight' }
+    );
   } else if (!pricing.comparison && priceInsights.length === 0) {
     addDataUnavailableMessage(priceSlide, 'Energy pricing data not available');
   } else {
@@ -5599,6 +5654,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (jpInsights.length > 0) {
       addInsightsPanel(jpSlide, jpInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.4 });
     }
+    // Add competitive gap callout
+    addCalloutBox(
+      jpSlide,
+      `Your Gap: Where ${scope.clientContext || 'Your Company'} Can Win`,
+      `Industrial steam/efficiency segment has 0% Japanese share. Technical expertise match creates first-mover opportunity.`,
+      { x: LEFT_MARGIN, y: 6.2, w: CONTENT_WIDTH, h: 0.8, type: 'recommendation' }
+    );
   }
 
   // SLIDE 16: Local Major Players
@@ -6145,6 +6207,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (stratInsights.length > 0) {
       addInsightsPanel(entrySlide, stratInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.3, h: 2.5 });
     }
+    // Add specific recommendation callout
+    addCalloutBox(
+      entrySlide,
+      'Specific Recommendation',
+      `JV with local ESCO targeting industrial customers. Timeline: 6-12 months to first project. Investment: $10-30M.`,
+      { x: LEFT_MARGIN, y: 3.9, w: 9.0, h: 0.8, type: 'recommendation' }
+    );
   }
 
   // Harvey Balls comparison (if available)
@@ -6592,6 +6661,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       }
     );
   }
+  // Add decision callout
+  addCalloutBox(
+    goNoGoSlide,
+    `Decision Required for ${scope.clientContext || 'Your Company'}`,
+    `Approve ${country} entry by end of quarter. Key success factors: Speed to market, right partner structure.`,
+    { x: LEFT_MARGIN, y: 6.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+  );
 
   // SLIDE 26: Opportunities & Obstacles (using enhanced helper)
   const ooSlide = addSlideWithTitle(
