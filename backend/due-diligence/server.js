@@ -5,6 +5,7 @@ const OpenAI = require('openai');
 const fetch = require('node-fetch');
 const XLSX = require('xlsx');
 const multer = require('multer');
+const pdfParse = require('pdf-parse');
 const { createClient } = require('@deepgram/sdk');
 const { S3Client } = require('@aws-sdk/client-s3');
 const Anthropic = require('@anthropic-ai/sdk');
@@ -159,6 +160,10 @@ const _DD_COMPONENTS = {
 - Technology platforms and partnerships
 - Key differentiators and unique capabilities
 
+Organization Chart:
+- If org chart data or PDF is available, include "Figure 1 & 2: [Company Name]'s organization chart"
+- List key management positions and reporting structure
+
 Include specific numbers, percentages, and facts from the source materials.`,
   },
   market_competition: {
@@ -166,78 +171,134 @@ Include specific numbers, percentages, and facts from the source materials.`,
     analysisPrompt: `Extract market and competitive information based on THIS company's actual service offerings.
 
 2.1 Competition Landscape Table:
-Columns: Service Segment | Market Growth | Demand Drivers | Competition Intensity | Company Position
+MUST use exactly 4 columns: Service Segment | Growth (CAGR %) | Demand Driver | [Company Name]'s Market Position
 
-INSTRUCTIONS:
-- Row 1 to N: Based on THIS company's ACTUAL service lines found in source data
-- Do NOT use generic segments - extract from source what the company actually offers
-- Market Growth: Use industry data where available, or note "To be validated"
-- Competition Intensity: High/Medium/Low based on market context
-- Company Position: Strong/Growing/Emerging based on evidence in source
+COLUMN REQUIREMENTS:
+- Service Segment: Based on THIS company's ACTUAL service lines from source data
+- Growth (CAGR %): Use specific percentages like "12-18%", "10-15%", "8-12%" - NOT "High/Medium/Low"
+- Demand Driver: Specific market drivers for each segment
+- [Company Name]'s Market Position: Specific position descriptions from source evidence
 
-2.2 Competitive Advantages:
+DO NOT include a "Competition Intensity" column - the template uses only 4 columns.
+
+2.2 Competitive Advantage:
 - Extract from source documents: certifications, partnerships, proprietary tech, metrics
 - Be specific with evidence (e.g., "ISO 27001 certified since 2022" not just "security certifications")
 - Only include advantages that have supporting evidence in source data
 
-2.3 Vulnerabilities & Market Risks:
+2.3 Where [Company Name] Is Vulnerable:
+- Use company name in the subsection title (e.g., "Where Netpluz Is Vulnerable")
 - Extract weaknesses/risks mentioned in source documents
 - Include: customer concentration, geographic concentration, technology dependencies
 - Note competitive threats from specific competitors if mentioned
 - Identify gaps where company lacks presence vs market expectations
 
+Key Partners:
+- List key technology and business partners (e.g., Fortinet, Cisco, Singtel)
+- Extract from source documents - partnerships, certifications, vendor relationships
+
+Key Clients:
+- List notable client names from source documents
+- Include industry/sector if mentioned
+
 IMPORTANT: Derive ALL content from source data. Do not invent market data not supported by the documents.`,
   },
   financials: {
     title: '4.0 Key Financials',
-    analysisPrompt: `Extract ALL financial data and format as structured tables:
+    analysisPrompt: `Extract ALL financial data and format as structured tables.
+
+CRITICAL FORMATTING RULE - ALL VALUES IN THOUSANDS:
+- ALL financial values MUST be displayed in thousands (divide by 1000)
+- Use header format: "SGD ('000)" for currency columns
+- Example: If source shows 35,012,841 → display as 35,013
+- Format numbers with commas: 35,013 not 35013
+
+ANTI-SUMMARIZATION RULE (CRITICAL):
+Do NOT summarize financial line items. If source shows:
+- Property: 30M
+- Equipment: 10M
+- Intangibles: 5M
+You MUST list all three, NOT "Non-current Assets: 45M"
+Each line item in source documents MUST appear as a separate row.
 
 4.1 Income Statement (P&L):
-Table with columns: Item | Year 1 | Year 2 | Year 3 (use actual year labels)
+Table headers: SGD ('000) | FY2022 | FY2023 | FY2024 (use actual years from source)
 
-CRITICAL: Include margin % rows IMMEDIATELY after their corresponding profit line:
-- Revenue
-- Cost of Sales
-- Gross Profit
-- Gross Margin % [immediately after Gross Profit, calculate as Gross Profit / Revenue × 100]
-- Operating Expenses
-- Operating Profit (EBIT)
-- Operating Margin % [immediately after Operating Profit, calculate as EBIT / Revenue × 100]
-- EBITDA
-- EBITDA Margin % [immediately after EBITDA, calculate as EBITDA / Revenue × 100]
-- Net Profit
-- Net Margin % [immediately after Net Profit, calculate as Net Profit / Revenue × 100]
+REQUIRED ROWS (in this order, include all if data available):
+| SGD ('000) | FY20XX | FY20XX | FY20XX |
+|------------|--------|--------|--------|
+| Revenue | [value in thousands] | [value] | [value] |
+| Cost of Sales | [value] | [value] | [value] |
+| Gross Profit | [value] | [value] | [value] |
+| Gross Margin % | [calc] | [calc] | [calc] |
+| Operating Expenses | [value] | [value] | [value] |
+| Operating Profit (EBIT) | [value] | [value] | [value] |
+| Operating Margin % | [calc] | [calc] | [calc] |
+| EBITDA | [value] | [value] | [value] |
+| EBITDA Margin % | [calc] | [calc] | [calc] |
+| Net Profit | [value] | [value] | [value] |
+| Net Margin % | [calc] | [calc] | [calc] |
 
-DO NOT create a separate margins section. Margins MUST be inline within P&L table.
+If a value is not available, write "N/A" - do NOT skip the row.
+If source has 5 expense line items, list all 5 - do NOT summarize.
 
 4.2 Revenue Breakdown by Country:
-Table with columns: Country | Revenue (currency) | % of Total
-List all countries/regions mentioned
+Table headers: Country | SGD ('000) | FY2023 Revenue % (use actual year)
+List all countries/regions mentioned. MUST include absolute values in thousands.
 
 4.3 Revenue Breakdown by Product/Service:
-Table with columns: Product/Service Type | Revenue | % of Total
-Extract ALL product/service categories from source data
+Table headers: Product/Service Type | SGD ('000) | Revenue %
+Extract ALL product/service categories from source data with absolute values in thousands.
 
 4.4 Revenue for Key Service Lines:
-Break down major service categories further if data available
+Break down major service categories further if data available.
+Use format: Service Line | SGD ('000) | Revenue %
 
-4.5 Top Customers:
-Table with columns: Customer (name or anonymized) | Revenue | % of Total
-Include customer concentration analysis
+4.5 Top Customers (REQUIRED section):
+Show FY2023 and FY2024 side by side:
+| FY2023 Customer | SGD ('000) | % | FY2024 Customer | SGD ('000) | % |
+|-----------------|------------|---|-----------------|------------|---|
+List top 5-10 customers if named. If anonymized (Customer A, B, C), still list.
+Add summary row: "Top 3 customers concentration: X% of total revenue"
+If no customer data available, state "Customer breakdown not available in source documents"
 
 4.6 Balance Sheet:
-Table with columns: Item | Current Year | Prior Year
-Group items into categories:
-- Non-current Assets: Property, Equipment, Intangibles, Goodwill, etc.
-- Current Assets: Cash, Receivables, Inventory, etc.
-- Equity: Share capital, Retained earnings, etc.
-- Liabilities: Borrowings, Payables, etc.
-Extract ALL line items found in source - don't omit items.
+Table headers: SGD ('000) | FY2023 | FY2024 (use actual years)
+DO NOT summarize - show individual line items:
 
-Include specific currency figures (SGD/USD/etc.), percentages, and year labels.`,
+Non-current Assets (list each):
+- Property, Plant & Equipment
+- Intangible Assets
+- Goodwill
+- Other non-current assets
+
+Current Assets (list each):
+- Cash and Cash Equivalents
+- Trade Receivables
+- Inventory
+- Other current assets
+
+Equity (list each):
+- Share Capital
+- Retained Earnings
+- Other reserves
+
+Liabilities (list each):
+- Borrowings/Loans
+- Trade Payables
+- Other liabilities
+
+4.7 Cash Flow Summary (if available):
+Table headers: SGD ('000) | FY2023 | FY2024
+- Operating Cash Flow
+- Investing Cash Flow
+- Financing Cash Flow
+- Net Change in Cash
+
+ALL VALUES MUST BE IN THOUSANDS with "SGD ('000)" header format.`,
   },
   future_plans: {
-    title: '8.0 Future Plans',
+    title: '8. Future Plans',
     analysisPrompt: `Extract strategic plans and projections:
 
 Strategic Initiatives:
@@ -245,43 +306,60 @@ Strategic Initiatives:
 - Technology investments and roadmap
 - Partnership and M&A strategy
 - Operational improvements planned
+- New service/product launches
 
-5-Year Growth Projection Table:
-Table with columns: Metric | Year 1 | Year 2 | Year 3 | Year 4 | Year 5
-Rows: Revenue, Revenue Growth %, Gross Profit, Gross Margin %, EBITDA, EBITDA Margin %, Headcount
+5-Year Growth Projection Table (REQUIRED if projection data available):
+Table headers: SGD ('000) | FY20XX | FY20XX | FY20XX | FY20XX | FY20XX
 
-Include specific targets, timelines, and financial projections. Note any assumptions or dependencies.`,
+REQUIRED ROWS (include all 7 rows):
+| SGD ('000) | FY2025 | FY2026 | FY2027 | FY2028 | FY2029 |
+|------------|--------|--------|--------|--------|--------|
+| Revenue | [value in thousands] | [value] | [value] | [value] | [value] |
+| COS | [value] | [value] | [value] | [value] | [value] |
+| Gross Profit | [value] | [value] | [value] | [value] | [value] |
+| Gross Margin | [%] | [%] | [%] | [%] | [%] |
+| OpEx | [value] | [value] | [value] | [value] | [value] |
+| Operating Profit | [value] | [value] | [value] | [value] | [value] |
+| Operating Margin | [%] | [%] | [%] | [%] | [%] |
+
+ALL VALUES IN THOUSANDS with "SGD ('000)" header format.
+Include specific targets, timelines, and financial projections. Note any assumptions or dependencies.
+If fewer than 5 years projected, include whatever is available.`,
   },
   workplan: {
-    title: '6.0 Pre-DD Workplan',
-    analysisPrompt: `Create a Pre-DD Workplan based on gaps identified in the source documents.
+    title: '4.9 Pre-DD Workplan',
+    analysisPrompt: `Create a Pre-DD Workplan using the STANDARD template structure.
 
-FORMAT: Two-column table
+SECTION NUMBER: 4.9 (comes after financials section 4.x)
+
+FORMAT: Two-column table with STANDARD rows
 | Key Consideration | Evidence to Validate |
 |-------------------|---------------------|
 
-INSTRUCTIONS:
-1. Review ALL information provided in source documents
-2. Identify what information is MISSING, vague, or needs deeper validation
-3. For each gap, specify:
-   - Column 1: What area/topic needs investigation (be specific to this company)
-   - Column 2: What specific documents, data, or metrics to request
+USE THESE 7 STANDARD ROWS (customize the "Evidence to Validate" column based on THIS company's data):
 
-DERIVE FROM SOURCE DATA - look for:
-- Questions marked as "to discuss later" or deferred
-- Vague or incomplete answers that need specifics
-- Missing financial details (e.g., revenue breakdown, cost structure)
-- Unverified claims about customers, contracts, technology
-- Areas where only marketing info exists, no proof provided
-- Risk factors mentioned but not quantified
-- Growth plans without supporting evidence
+1. Customer analysis
+   Evidence: Revenue by customer: FY2022–FY2024 monthly revenue by service line, country and contract type. Contract register: terms, renewal dates, SLAs, termination rights, price escalation clauses.
 
-OUTPUT REQUIREMENTS:
-- Minimum 5 rows, maximum 12 rows
-- Each row must be actionable and specific to THIS company's situation
-- Column 2 should list specific deliverables (e.g., "Customer contracts for top 5 accounts", "AR aging report as of Dec 2024")
+2. Pipeline analysis
+   Evidence: CRM/pipeline export with stage, value, probability, product mix, expected close date. Historic win rates, sales cycle lengths and average deal sizes. Management interviews on pipeline quality.
 
-DO NOT use generic/templated items. Base ALL items on actual gaps found in source data.`,
+3. Pricing power and price realization
+   Evidence: Price lists, discount matrix and approvals workflow; renewal uplift history and churn by uplift band. Win/loss logs, competitive benchmarks.
+
+4. Unit economics and cost-to-serve
+   Evidence: Service-line P&L with direct vendor costs and delivery staffing allocation. Operational KPIs: tickets/incidents, MTTR, SLA breaches, utilization. Customer profitability model.
+
+5. Billing, collections and revenue-to-cash
+   Evidence: AR ageing by customer and dispute log; bad debt and credit policy. Billing cadence and payment terms. Deferred revenue / contract liabilities.
+
+6. Forecast critique and 5-year projection validation
+   Evidence: Business plan model and key assumptions; hiring plan. Segment-level pipeline coverage vs target. Sensitivity analysis on key assumptions.
+
+7. Partner ecosystem & vendor dependency
+   Evidence: Top vendor and partner list with contract terms, renewal dates. Partner program economics. Dependency risk assessment, vendor SLAs.
+
+IMPORTANT: Use these exact 7 standard rows. Do NOT create company-specific rows - the Pre-DD Workplan follows a standard template.`,
   },
 };
 
@@ -382,6 +460,21 @@ async function extractXlsxText(base64Content) {
   } catch (error) {
     console.error('[DD] XLSX extraction error:', error.message);
     return `[Error extracting Excel: ${error.message}]`;
+  }
+}
+
+// Extract text from .pdf files (PDF documents)
+async function extractPdfText(base64Content) {
+  try {
+    const buffer = Buffer.from(base64Content, 'base64');
+    const data = await pdfParse(buffer);
+
+    const text = data.text || '';
+    console.log(`[DD] Extracted ${text.length} chars from PDF (${data.numpages} pages)`);
+    return text || '[Empty PDF document]';
+  } catch (error) {
+    console.error('[DD] PDF extraction error:', error.message);
+    return `[Error extracting PDF: ${error.message}]`;
   }
 }
 
@@ -2176,7 +2269,13 @@ VERIFICATION NOTES:
     console.error('[DD] Verification error:', e.message);
   }
 
-  return { verifiedInfo, verificationNotes };
+  // Flag if verification was attempted but returned empty (failed silently)
+  const verificationFailed = !verifiedInfo && !!searchResults?.searchResults?.length;
+  if (verificationFailed) {
+    console.warn('[DD] Verification attempted but failed to produce verified info');
+  }
+
+  return { verifiedInfo, verificationNotes, verificationFailed };
 }
 
 // ============ DUE DILIGENCE REPORT GENERATOR (DD Report v5 - 5-Phase Pipeline) ============
@@ -2185,7 +2284,7 @@ async function generateDueDiligenceReport(
   files,
   instructions,
   reportLength,
-  _components = ['overview', 'market_competition', 'financials', 'future_plans', 'workplan']
+  components = ['overview', 'market_competition', 'financials', 'future_plans', 'workplan']
 ) {
   console.log(`\n${'='.repeat(60)}`);
   console.log(`[DD] INTELLIGENT DD REPORT GENERATION (v5)`);
@@ -2197,6 +2296,7 @@ async function generateDueDiligenceReport(
 
   const filesSummary = [];
   const extractedFiles = [];
+  const extractionErrors = []; // Track files that failed extraction
 
   for (const file of files) {
     console.log(
@@ -2220,13 +2320,17 @@ async function generateDueDiligenceReport(
             extractedContent = await extractPptxText(base64Data);
           } else if (ext === 'xlsx' || ext === 'xls') {
             extractedContent = await extractXlsxText(base64Data);
+          } else if (ext === 'pdf') {
+            extractedContent = await extractPdfText(base64Data);
           } else {
             extractedContent = `[Binary file type .${ext} - cannot extract text]`;
+            extractionErrors.push({ file: file.name, error: `Unsupported binary type: .${ext}` });
           }
           console.log(`[DD]   -> Extracted ${extractedContent.length} chars from ${file.name}`);
         } catch (extractError) {
           console.error(`[DD]   -> Extraction error for ${file.name}:`, extractError.message);
           extractedContent = `[Error extracting ${file.name}: ${extractError.message}]`;
+          extractionErrors.push({ file: file.name, error: extractError.message });
         }
       }
     } else if (file.content) {
@@ -2280,7 +2384,10 @@ async function generateDueDiligenceReport(
   const onlineResults = await searchCompanyOnline(companyInfo);
 
   // ========== PHASE 3.5: VERIFY ONLINE INFORMATION ==========
-  const { verifiedInfo } = await verifyOnlineInfo(onlineResults, combinedContent);
+  const { verifiedInfo, verificationFailed } = await verifyOnlineInfo(
+    onlineResults,
+    combinedContent
+  );
 
   // ========== PHASE 4: DEEP ANALYSIS WITH COMBINED DATA ==========
   console.log('\n[DD] === PHASE 4: DEEP ANALYSIS ===');
@@ -2310,8 +2417,54 @@ async function generateDueDiligenceReport(
     workplan: '9.0 Pre-DD Workplan',
   };
 
+  // Map components to section category groups
+  const componentMapping = {
+    overview: ['company_background', 'company_capabilities', 'products_services'],
+    market_competition: [
+      'market_overview',
+      'competition_analysis',
+      'competitive_advantages',
+      'vulnerabilities',
+    ],
+    financials: [
+      'key_metrics',
+      'income_statement',
+      'revenue_by_country',
+      'revenue_by_product',
+      'revenue_by_service',
+      'top_customers',
+      'balance_sheet',
+      'cash_flow',
+    ],
+    organization: ['employee_data', 'management_info'],
+    future_plans: ['growth_projections', 'future_plans', 'risks_challenges'],
+    workplan: ['workplan'],
+  };
+
+  // Filter foundCategories based on user-selected components
+  let filteredCategories = foundCategories;
+  if (
+    components &&
+    components.length > 0 &&
+    components.length < Object.keys(componentMapping).length
+  ) {
+    // Build list of allowed categories based on selected components
+    const allowedCategories = new Set();
+    for (const comp of components) {
+      const categoryList = componentMapping[comp];
+      if (categoryList) {
+        categoryList.forEach((cat) => allowedCategories.add(cat));
+      }
+    }
+    // Filter to only include categories in the allowed set
+    filteredCategories = foundCategories.filter((c) => allowedCategories.has(c.category));
+    console.log(
+      `[DD] Filtered to ${filteredCategories.length} categories based on components: ${components.join(', ')}`
+    );
+  }
+
   // Determine which sections to generate based on found data
-  const sectionsToGenerate = foundCategories
+  const sectionsToGenerate = filteredCategories
     .map((c) => sectionMapping[c.category] || c.category)
     .filter((s) => s);
 
@@ -2335,7 +2488,7 @@ INDUSTRY: ${companyInfo.industry || 'Unknown'}
 LISTED: ${companyInfo.isListed ? `Yes (${companyInfo.stockExchange})` : 'No/Unknown'}
 
 DATA CATEGORIES FOUND IN SOURCE DOCUMENTS:
-${foundCategories.map((c) => `- ${c.category}: ${c.details}`).join('\n')}
+${filteredCategories.map((c) => `- ${c.category}: ${c.details}`).join('\n')}
 
 SOURCE DOCUMENTS (${extractedFiles.length} files):
 ${filesSummary.join('\n')}
@@ -2404,53 +2557,76 @@ ${deepAnalysis}
 === END ANALYSIS ===
 
 DATA CATEGORIES AVAILABLE:
-${foundCategories.map((c) => `- ${c.category}`).join('\n')}
+${filteredCategories.map((c) => `- ${c.category}`).join('\n')}
 
 ${instructions ? `USER'S REQUIREMENTS:\n${instructions}\n` : ''}
 
-REPORT STRUCTURE GUIDELINES:
-Follow this general flow (but ONLY include sections where data exists):
-1. Company Overview (background, capabilities, services)
-2. Market & Competition Analysis
-3. Key Financials (P&L, balance sheet, revenue breakdowns, customers)
-4. Future Plans & Strategy
-5. Risks & Challenges (if data available)
-6. Pre-DD Workplan (next steps for due diligence)
+REPORT STRUCTURE - EXACT SECTION NUMBERS:
+Follow this EXACT structure (only include sections where data exists):
+
+1.0 Overview
+  1.1 Company Background (NOT "Corporate Profile")
+  1.2 Company Capabilities
+  [Organization Chart - "Figure 1 & 2: [Company Name]'s organization chart" if available]
+
+2.0 Market & Competition
+  2.1 Competition Landscape (4-column table)
+  2.2 Competitive Advantage (singular, not "Advantages")
+  2.3 Where [Company Name] Is Vulnerable (use actual company name)
+  Key Partners: [simple text list]
+  Key Clients: [simple text list]
+
+4.0 Key Financials (NOT 3.0)
+  4.1 Income Statement
+  4.2 Revenue Breakdown by Country
+  4.3 Revenue Breakdown by Product Type
+  4.4 Revenue Breakdown for Managed Services
+  4.5 Top 5 Customers Revenue Breakdown
+  4.6-4.8 Balance Sheet / Cash Flow
+  4.9 Pre-DD Workplan (STANDARD template rows)
+
+8. Future Plans (NOT 4.0 or 5.0)
+  5-Year Growth Projection table
 
 SECTION-SPECIFIC FORMAT REQUIREMENTS:
 
 COMPETITION SECTION (2.x):
-- MUST include "Competition Landscape" table with columns: Service Segment | Market Growth | Demand Drivers | Competition Intensity | Company Position
-- Use company's ACTUAL service lines from source data for rows
-- Include "Competitive Advantages" subsection with specific evidence
-- Include "Vulnerabilities & Market Risks" subsection
+- 2.1 Competition Landscape table MUST have exactly 4 columns:
+  Service Segment | Growth (CAGR %) | Demand Driver | ${companyInfo.name || '[Company Name]'}'s Market Position
+- DO NOT include "Competition Intensity" column
+- Growth values MUST be CAGR percentages like "12-18%", "10-15%" - NOT "High/Medium/Low"
+- Include "Key Partners:" section with partner names (Fortinet, Cisco, Singtel, etc.)
+- Include "Key Clients:" section with client names
 
-FINANCIAL TABLES (Income Statement):
-- Include margin % rows INLINE immediately after profit lines:
-  - Revenue
-  - Gross Profit, then Gross Margin %
-  - Operating Profit, then Operating Margin %
-  - EBITDA, then EBITDA Margin %
-  - Net Profit, then Net Margin %
-- DO NOT create separate margins section
+FINANCIAL TABLES - ALL VALUES IN THOUSANDS:
+- Use header format "SGD ('000)" for currency columns
+- Divide all values by 1000 (35,012,841 → 35,013)
+- Include margin % rows inline after profit lines
+- Top Customers: Show FY2023 and FY2024 side by side with 6 columns
 
-BALANCE SHEET:
-- Group items: Non-current Assets, Current Assets, Equity, Liabilities
-- Include ALL line items found in source (don't summarize to just totals)
+PRE-DD WORKPLAN (Section 4.9, 2-column table):
+Use these 7 STANDARD rows:
+1. Customer analysis
+2. Pipeline analysis
+3. Pricing power and price realization
+4. Unit economics and cost-to-serve
+5. Billing, collections and revenue-to-cash
+6. Forecast critique and 5-year projection validation
+7. Partner ecosystem & vendor dependency
 
-PRE-DD WORKPLAN (must be 2-column table):
-- Table format: Key Consideration | Evidence to Validate
-- Derive from ACTUAL gaps found in source data
-- Each row must be specific to THIS company's situation
-- Minimum 5 rows with actionable items
+5-YEAR PROJECTION TABLE (Section 8):
+Headers: SGD ('000) | FY2025 | FY2026 | FY2027 | FY2028 | FY2029
+Rows: Revenue, COS, Gross Profit, Gross Margin, OpEx, Operating Profit, Operating Margin
 
 CRITICAL RULES:
 1. ONLY generate sections for data categories that exist in the analysis
 2. If no data exists for a section, DO NOT include that section (skip it entirely)
-3. For each data breakdown found (by country, by product, by customer), create a subsection
-4. Use appropriate numbered headers (1.0, 1.1, 2.0, etc.)
-5. Every financial breakdown MUST have a table
-6. No hallucination - only facts from the analysis
+3. Use EXACT section numbers as specified above (4.0 for financials, 8 for future plans)
+4. Every financial breakdown MUST have a table with "SGD ('000)" header
+5. No hallucination - only facts from the analysis
+6. ALL financial values in THOUSANDS
+7. Pre-DD Workplan MUST use the 7 standard rows
+8. Competition Landscape table MUST have exactly 4 columns with CAGR %
 
 LENGTH: ${reportLengthGuide[reportLength] || reportLengthGuide.medium}
 
@@ -2458,8 +2634,7 @@ OUTPUT FORMAT - STRUCTURED JSON:
 You MUST output valid JSON in this exact format:
 {
   "sections": [
-    { "type": "title", "text": "Due Diligence Report: ${companyInfo.name || '[Company Name]'}" },
-    { "type": "date", "text": "Prepared: ${new Date().toLocaleDateString()}" },
+    { "type": "cover_page", "title": "PRE-DUE DILIGENCE REPORT", "companyName": "${companyInfo.name || '[Company Name]'}", "preparedFor": "Sun Corporation", "purpose": "Evaluation of Minority Investment with Path to Majority / Full Acquisition (5–10 Years)", "confidential": "This report is confidential and prepared solely for internal discussion.", "date": "${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}" },
     { "type": "heading1", "text": "1.0 Section Title" },
     { "type": "heading2", "text": "1.1 Subsection Title" },
     { "type": "paragraph", "text": "Body text content..." },
@@ -2469,8 +2644,7 @@ You MUST output valid JSON in this exact format:
 }
 
 SECTION TYPES:
-- title: Main report title
-- date: Report date
+- cover_page: Centered cover page with title, company name, preparedFor, purpose, confidential disclaimer, and date (MUST be first section)
 - heading1: Major section (1.0, 2.0, etc.)
 - heading2: Subsection (1.1, 1.2, etc.)
 - heading3: Sub-subsection
@@ -2527,10 +2701,199 @@ CRITICAL: Output ONLY valid JSON. No markdown, no code blocks, no explanations. 
     reportJson = { sections: [] };
   }
 
+  // Content completeness validation - errors block, warnings logged only
+  const { errors, warnings } = validateReportContent(reportJson, foundCategories, {
+    verifiedInfo,
+    verificationFailed,
+    selectedComponents: components,
+    extractionErrors,
+  });
+  if (errors.length > 0) {
+    console.error('[DD] VALIDATION ERRORS (blocking):');
+    errors.forEach((err) => console.error(`[DD]   ✗ ${err}`));
+    throw new Error(`Report validation failed: ${errors.join('; ')}`);
+  }
+  if (warnings.length > 0) {
+    console.warn('[DD] Content warnings (non-blocking):');
+    warnings.forEach((warn) => console.warn(`[DD]   ⚠ ${warn}`));
+  }
+
   console.log(`[DD] Phase 5 Complete: Report has ${reportJson.sections.length} sections`);
   console.log(`[DD] === MULTI-AGENT DD REPORT COMPLETE ===\n`);
 
   return reportJson;
+}
+
+// Validate report content completeness
+// Returns { errors: [], warnings: [] } - errors are blocking, warnings are logged only
+function validateReportContent(reportJson, foundCategories = [], options = {}) {
+  const errors = []; // BLOCKING - report not sent
+  const warnings = []; // LOGGED - report still sent
+  const { verifiedInfo, verificationFailed, selectedComponents, extractionErrors } = options;
+
+  // ========== EXTRACTION ERRORS WARNING ==========
+  if (extractionErrors && extractionErrors.length > 0) {
+    for (const err of extractionErrors) {
+      warnings.push(`File extraction issue: ${err.file} - ${err.error}`);
+    }
+  }
+
+  if (!reportJson.sections || reportJson.sections.length === 0) {
+    errors.push('Report has no sections');
+    return { errors, warnings };
+  }
+
+  // ========== MINIMUM SECTIONS CHECK ==========
+  // A valid report needs at least cover page + 1 heading + 1 content section
+  const contentSections = reportJson.sections.filter(
+    (s) => !['cover_page', 'page_break', 'spacer'].includes(s.type)
+  );
+  if (contentSections.length < 3) {
+    warnings.push('Report may be incomplete - fewer than 3 content sections');
+  }
+
+  // ========== VERIFIED ONLINE LABEL CHECK ==========
+  // Check for [Verified Online] labels if verification was attempted
+  if (verifiedInfo && verifiedInfo.length > 0) {
+    const reportText = JSON.stringify(reportJson.sections);
+    const hasVerifiedLabels =
+      reportText.includes('[Verified Online]') ||
+      reportText.includes('[Verified]') ||
+      reportText.includes('[Source:');
+    if (!hasVerifiedLabels) {
+      warnings.push(
+        'Online verification data exists but [Verified Online] labels missing in report'
+      );
+    }
+  }
+
+  // ========== VERIFICATION FAILURE WARNING ==========
+  if (verificationFailed) {
+    warnings.push('Online verification was attempted but failed - report may lack verified data');
+  }
+
+  // ========== SELECTED COMPONENTS VALIDATION ==========
+  // Check selected components exist in report (if components provided)
+  if (selectedComponents && selectedComponents.length > 0) {
+    const componentChecks = {
+      overview: ['company', 'background', 'capabilities', 'overview'],
+      market_competition: ['market', 'competition', 'competitive'],
+      financials: ['revenue', 'income', 'balance', 'financial', 'ebitda'],
+      organization: ['employee', 'management', 'team', 'headcount'],
+      future_plans: ['growth', 'projection', 'future', 'strategy'],
+      workplan: ['workplan', 'pre-dd', 'next steps', 'due diligence plan'],
+    };
+    const reportText = reportJson.sections
+      .map((s) => ((s.text || '') + ' ' + (s.title || '')).toLowerCase())
+      .join(' ');
+    for (const comp of selectedComponents) {
+      if (componentChecks[comp]) {
+        const hasComponent = componentChecks[comp].some((kw) => reportText.includes(kw));
+        if (!hasComponent) {
+          warnings.push(`Selected component "${comp}" may be missing from report`);
+        }
+      }
+    }
+  }
+
+  // Check cover page is FIRST section (ERROR - blocking)
+  if (reportJson.sections.length > 0) {
+    if (reportJson.sections[0]?.type !== 'cover_page') {
+      const hasCoverPage = reportJson.sections.some((s) => s.type === 'cover_page');
+      if (hasCoverPage) {
+        errors.push('Cover page exists but is not first section');
+      } else {
+        const hasTitle = reportJson.sections.some((s) => s.type === 'title');
+        if (!hasTitle) {
+          errors.push('Missing: Cover page or title');
+        }
+      }
+    }
+  }
+
+  // Check P&L completeness
+  const plTable = reportJson.sections.find(
+    (s) =>
+      s.type === 'table' &&
+      s.data?.headers?.some(
+        (h) => String(h).toLowerCase().includes('revenue') || String(h).toLowerCase().includes('fy')
+      )
+  );
+  if (plTable) {
+    const requiredRows = ['Gross Profit', 'EBITDA', 'Cost of Sales'];
+    for (const req of requiredRows) {
+      const hasRow = plTable.data.rows?.some((r) =>
+        r.some((cell) => String(cell).toLowerCase().includes(req.toLowerCase()))
+      );
+      if (!hasRow) {
+        warnings.push(`P&L may be missing: ${req}`);
+      }
+    }
+
+    // Check for margin % rows (WARNING)
+    const marginRows = ['Gross Margin', 'Operating Margin', 'EBITDA Margin', 'Net Margin'];
+    for (const margin of marginRows) {
+      const hasMargin = plTable.data.rows?.some((r) =>
+        r.some((cell) => String(cell).toLowerCase().includes(margin.toLowerCase()))
+      );
+      if (!hasMargin) {
+        warnings.push(`P&L missing: ${margin} %`);
+      }
+    }
+  }
+
+  // Check for Top Customers section (ERROR if customer data exists)
+  const hasCustomerSection = reportJson.sections.some(
+    (s) =>
+      (s.type === 'heading2' || s.type === 'heading3') && s.text?.toLowerCase().includes('customer')
+  );
+  const hasCustomerData = foundCategories.some((c) =>
+    c.category?.toLowerCase().includes('customer')
+  );
+  if (hasCustomerData && !hasCustomerSection) {
+    errors.push('Top Customers section (4.5) required - customer data found in source');
+  } else if (!hasCustomerSection) {
+    warnings.push('Consider adding: Top Customers section (4.5)');
+  }
+
+  // Check for Balance Sheet with line item breakdown
+  const balanceSheetHeading = reportJson.sections.find(
+    (s) =>
+      (s.type === 'heading2' || s.type === 'heading3') &&
+      s.text?.toLowerCase().includes('balance sheet')
+  );
+  if (balanceSheetHeading) {
+    // Find the table after balance sheet heading
+    const bsIndex = reportJson.sections.indexOf(balanceSheetHeading);
+    const bsTable = reportJson.sections.slice(bsIndex).find((s) => s.type === 'table');
+    if (bsTable && bsTable.data?.rows?.length < 5) {
+      warnings.push('Balance sheet may be summarized - consider detailed line items');
+    }
+
+    // Check for specific line items (not just totals)
+    if (bsTable) {
+      const requiredLineItems = [
+        'property',
+        'equipment',
+        'intangible',
+        'receivable',
+        'payable',
+        'inventory',
+        'cash',
+        'debt',
+        'equity',
+      ];
+      const bsText = bsTable.data?.rows?.flat().join(' ').toLowerCase() || '';
+      const foundItems = requiredLineItems.filter((item) => bsText.includes(item));
+      if (foundItems.length < 3) {
+        warnings.push(
+          'Balance sheet may be summarized - expected specific line items (property, receivables, etc.)'
+        );
+      }
+    }
+  }
+
+  return { errors, warnings };
 }
 
 // ============ DUE DILIGENCE API ENDPOINT ============
@@ -2594,8 +2957,12 @@ app.post('/api/due-diligence', async (req, res) => {
     console.log(`[DD] DOCX generated: ${docxBuffer.length} bytes`);
 
     // Extract company name from report for filename
+    const coverSection = reportJson.sections?.find((s) => s.type === 'cover_page');
     const titleSection = reportJson.sections?.find((s) => s.type === 'title');
-    const companyName = titleSection?.text?.replace('Due Diligence Report: ', '') || 'Company';
+    const companyName =
+      coverSection?.companyName ||
+      titleSection?.text?.replace('Due Diligence Report: ', '') ||
+      'Company';
     const safeCompanyName = companyName.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 50);
     const filename = `DD_Report_${safeCompanyName}_${Date.now()}.docx`;
 

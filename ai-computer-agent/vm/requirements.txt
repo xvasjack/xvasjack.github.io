@@ -21,6 +21,7 @@ websockets>=12.0
 # File readers
 python-pptx>=0.6.21
 openpyxl>=3.1.2
+python-docx>=0.8.11
 
 # Utilities
 python-dotenv>=1.0.0

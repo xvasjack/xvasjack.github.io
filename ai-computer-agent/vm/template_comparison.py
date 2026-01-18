@@ -180,6 +180,45 @@ class ExcelTemplate:
     no_empty_columns: List[str] = field(default_factory=lambda: ["company", "name"])
 
 
+@dataclass
+class DOCXTemplate:
+    """Template for Word document (DD Report) validation"""
+    name: str
+
+    # Cover page requirements
+    expected_title: str = "PRE-DUE DILIGENCE REPORT"
+    require_prepared_for: bool = True
+    require_purpose: bool = True
+    require_confidential: bool = True
+
+    # Section number requirements
+    expected_sections: Dict[str, str] = field(default_factory=lambda: {
+        "financials": "4",  # Should start with 4
+        "predd_workplan": "4.9",
+        "future_plans": "8"
+    })
+
+    # Competition table requirements
+    competition_table_columns: int = 5  # Service Segment, Growth (CAGR %), Demand Driver, Market Competition, Market Position
+    competition_table_headers: List[str] = field(default_factory=lambda: [
+        "Service Segment", "Growth", "CAGR", "Demand Driver"
+    ])
+
+    # Financial table requirements
+    financial_header_format: str = "SGD ('000)"
+
+    # Pre-DD Workplan requirements
+    predd_standard_rows: List[str] = field(default_factory=lambda: [
+        "customer analysis",
+        "pipeline analysis",
+        "pricing power",
+        "unit economics",
+        "billing",
+        "forecast",
+        "partner ecosystem"
+    ])
+
+
 # =============================================================================
 # PRE-DEFINED TEMPLATES FOR YOUR SERVICES
 # =============================================================================
@@ -242,6 +281,31 @@ TEMPLATES = {
             "Comparables": ["company", "ticker", "market_cap", "revenue", "ebitda"],
         },
         numeric_columns=["market_cap", "revenue", "ebitda", "ev"],
+    ),
+
+    "dd-report": DOCXTemplate(
+        name="Due Diligence Report",
+        expected_title="PRE-DUE DILIGENCE REPORT",
+        require_prepared_for=True,
+        require_purpose=True,
+        require_confidential=True,
+        expected_sections={
+            "financials": "4",
+            "predd_workplan": "4.9",
+            "future_plans": "8"
+        },
+        competition_table_columns=5,
+        competition_table_headers=["Service Segment", "Growth", "CAGR", "Demand Driver"],
+        financial_header_format="SGD ('000)",
+        predd_standard_rows=[
+            "customer analysis",
+            "pipeline analysis",
+            "pricing power",
+            "unit economics",
+            "billing",
+            "forecast",
+            "partner ecosystem"
+        ],
     ),
 }
 
@@ -485,6 +549,264 @@ def compare_xlsx_to_template(
     return result
 
 
+def compare_docx_to_template(
+    docx_analysis: Dict[str, Any],
+    template: DOCXTemplate
+) -> ComparisonResult:
+    """
+    Compare DOCX (DD Report) analysis results against a template.
+
+    Args:
+        docx_analysis: Output from docx_reader.analyze_docx().to_dict()
+        template: DOCXTemplate to compare against
+
+    Returns:
+        ComparisonResult with discrepancies
+    """
+    discrepancies = []
+    total_checks = 0
+    passed_checks = 0
+
+    cover_page = docx_analysis.get("cover_page", {})
+    sections = docx_analysis.get("sections", [])
+    tables = docx_analysis.get("tables", [])
+
+    # ========== COVER PAGE CHECKS ==========
+
+    # Check title
+    total_checks += 1
+    title = cover_page.get("title", "")
+    if not title:
+        discrepancies.append(Discrepancy(
+            severity=Severity.CRITICAL,
+            category="missing_title",
+            location="Cover Page",
+            expected=f"Title: '{template.expected_title}'",
+            actual="No title found",
+            suggestion="Add cover page title 'PRE-DUE DILIGENCE REPORT' in report generation."
+        ))
+    elif template.expected_title.upper() not in title.upper():
+        discrepancies.append(Discrepancy(
+            severity=Severity.CRITICAL,
+            category="wrong_title",
+            location="Cover Page",
+            expected=f"Title: '{template.expected_title}'",
+            actual=f"Title: '{title}'",
+            suggestion=f"Change cover page title from '{title}' to '{template.expected_title}' in report prompt."
+        ))
+    else:
+        passed_checks += 1
+
+    # Check prepared for
+    if template.require_prepared_for:
+        total_checks += 1
+        if not cover_page.get("prepared_for"):
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH,
+                category="missing_prepared_for",
+                location="Cover Page",
+                expected="'Prepared for [Client]' line",
+                actual="Not found",
+                suggestion="Add 'preparedFor' field to cover_page in report JSON."
+            ))
+        else:
+            passed_checks += 1
+
+    # Check purpose
+    if template.require_purpose:
+        total_checks += 1
+        if not cover_page.get("purpose"):
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH,
+                category="missing_purpose",
+                location="Cover Page",
+                expected="Purpose statement",
+                actual="Not found",
+                suggestion="Add 'purpose' field to cover_page in report JSON."
+            ))
+        else:
+            passed_checks += 1
+
+    # Check confidential
+    if template.require_confidential:
+        total_checks += 1
+        if not cover_page.get("confidential"):
+            discrepancies.append(Discrepancy(
+                severity=Severity.MEDIUM,
+                category="missing_confidential",
+                location="Cover Page",
+                expected="Confidential disclaimer",
+                actual="Not found",
+                suggestion="Add 'confidential' field to cover_page in report JSON."
+            ))
+        else:
+            passed_checks += 1
+
+    # ========== SECTION NUMBER CHECKS ==========
+
+    # Check financials section number
+    total_checks += 1
+    financials_section = next(
+        (s for s in sections if "financial" in s.get("title", "").lower()),
+        None
+    )
+    expected_fin = template.expected_sections.get("financials", "4")
+    if financials_section:
+        fin_num = financials_section.get("number", "")
+        if fin_num and not fin_num.startswith(expected_fin):
+            discrepancies.append(Discrepancy(
+                severity=Severity.CRITICAL,
+                category="wrong_section_number",
+                location="Financials Section",
+                expected=f"Section {expected_fin}.x (e.g., 4.0 Key Financials)",
+                actual=f"Section {fin_num}",
+                suggestion=f"Change financials section from {fin_num} to {expected_fin}.0 in report structure."
+            ))
+        else:
+            passed_checks += 1
+    else:
+        passed_checks += 1  # Section not present, not an error
+
+    # Check Pre-DD Workplan section number
+    total_checks += 1
+    workplan_section = next(
+        (s for s in sections if "workplan" in s.get("title", "").lower() or "pre-dd" in s.get("title", "").lower()),
+        None
+    )
+    expected_wp = template.expected_sections.get("predd_workplan", "4.9")
+    if workplan_section:
+        wp_num = workplan_section.get("number", "")
+        if wp_num and wp_num != expected_wp:
+            discrepancies.append(Discrepancy(
+                severity=Severity.CRITICAL,
+                category="wrong_section_number",
+                location="Pre-DD Workplan Section",
+                expected=f"Section {expected_wp}",
+                actual=f"Section {wp_num}",
+                suggestion=f"Change Pre-DD Workplan section from {wp_num} to {expected_wp} in report structure."
+            ))
+        else:
+            passed_checks += 1
+    else:
+        passed_checks += 1
+
+    # Check Future Plans section number
+    total_checks += 1
+    future_section = next(
+        (s for s in sections if "future" in s.get("title", "").lower()),
+        None
+    )
+    expected_fut = template.expected_sections.get("future_plans", "8")
+    if future_section:
+        fut_num = future_section.get("number", "")
+        if fut_num and not fut_num.startswith(expected_fut):
+            discrepancies.append(Discrepancy(
+                severity=Severity.CRITICAL,
+                category="wrong_section_number",
+                location="Future Plans Section",
+                expected=f"Section {expected_fut}",
+                actual=f"Section {fut_num}",
+                suggestion=f"Change Future Plans section from {fut_num} to {expected_fut} in report structure."
+            ))
+        else:
+            passed_checks += 1
+    else:
+        passed_checks += 1
+
+    # ========== TABLE CHECKS ==========
+
+    # Check Competition Landscape table
+    total_checks += 1
+    competition_table = next(
+        (t for t in tables if any("segment" in h.lower() for h in t.get("header_row", []))),
+        None
+    )
+    if competition_table:
+        # Check for CAGR in headers
+        headers = competition_table.get("header_row", [])
+        has_cagr = any("cagr" in h.lower() for h in headers)
+        if not has_cagr:
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH,
+                category="missing_cagr_header",
+                location="Competition Landscape Table",
+                expected="Column with 'Growth (CAGR %)' header",
+                actual=f"Headers: {headers}",
+                suggestion="Add 'Growth (CAGR %)' column to Competition Landscape table with values like '12-18%', '10-15%'."
+            ))
+        else:
+            passed_checks += 1
+    else:
+        passed_checks += 1  # Table not found is not necessarily an error
+
+    # Check financial tables for SGD ('000) format
+    financial_tables = [t for t in tables if any("sgd" in h.lower() for h in t.get("header_row", []))]
+    for ft in financial_tables:
+        total_checks += 1
+        headers = ft.get("header_row", [])
+        has_thousands = any("'000" in h or "000)" in h for h in headers)
+        if not has_thousands:
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH,
+                category="wrong_financial_format",
+                location=f"Financial Table (index {ft.get('index', '?')})",
+                expected=f"Header format: '{template.financial_header_format}'",
+                actual=f"Headers: {headers}",
+                suggestion=f"Change financial table headers to use '{template.financial_header_format}' format."
+            ))
+        else:
+            passed_checks += 1
+
+    # ========== PRE-DD WORKPLAN CHECKS ==========
+
+    total_checks += 1
+    workplan_table = next(
+        (t for t in tables if any("consideration" in h.lower() or "evidence" in h.lower() for h in t.get("header_row", []))),
+        None
+    )
+    if workplan_table:
+        # Check for standard rows
+        sample_rows = workplan_table.get("sample_rows", [])
+        all_row_text = " ".join(" ".join(row) for row in sample_rows).lower()
+
+        missing_rows = []
+        for expected_row in template.predd_standard_rows:
+            if expected_row.lower() not in all_row_text:
+                missing_rows.append(expected_row)
+
+        if missing_rows and len(missing_rows) > 3:  # Allow some flexibility
+            discrepancies.append(Discrepancy(
+                severity=Severity.MEDIUM,
+                category="non_standard_workplan",
+                location="Pre-DD Workplan Table",
+                expected=f"7 standard rows including: {', '.join(template.predd_standard_rows[:3])}...",
+                actual=f"Missing rows: {', '.join(missing_rows[:3])}...",
+                suggestion="Use standard Pre-DD Workplan rows: Customer analysis, Pipeline analysis, Pricing power, etc."
+            ))
+        else:
+            passed_checks += 1
+    else:
+        passed_checks += 1
+
+    # ========== GENERATE RESULT ==========
+
+    passed = len([d for d in discrepancies if d.severity == Severity.CRITICAL]) == 0
+
+    result = ComparisonResult(
+        output_file=docx_analysis.get("file_path", "unknown"),
+        template_name=template.name,
+        passed=passed,
+        total_checks=total_checks,
+        passed_checks=passed_checks,
+        discrepancies=discrepancies,
+    )
+
+    result.summary = f"DD Report Check: {total_checks} criteria, {passed_checks} passed. " \
+                     f"Found {len(discrepancies)} issues ({result.critical_count} critical, {result.high_count} high)."
+
+    return result
+
+
 # =============================================================================
 # MAIN COMPARISON FUNCTION
 # =============================================================================
@@ -513,6 +835,8 @@ def compare_output_to_template(
         return compare_pptx_to_template(analysis, template)
     elif isinstance(template, ExcelTemplate):
         return compare_xlsx_to_template(analysis, template)
+    elif isinstance(template, DOCXTemplate):
+        return compare_docx_to_template(analysis, template)
     else:
         raise ValueError(f"Unknown template type: {type(template)}")
 
@@ -543,6 +867,14 @@ def auto_detect_template(file_path: str, analysis: Dict[str, Any]) -> str:
             return "validation-results"
         elif "comp" in file_lower or "trading" in file_lower:
             return "trading-comps"
+
+    elif file_lower.endswith(".docx"):
+        # Check for DD report indicators
+        cover_page = analysis.get("cover_page", {})
+        title = cover_page.get("title", "").lower()
+
+        if "due diligence" in title or "dd" in file_lower:
+            return "dd-report"
 
     # Default
     return "target-search"

@@ -16,6 +16,11 @@ const {
   WidthType,
   ShadingType,
   PageBreak,
+  AlignmentType,
+  Footer,
+  PageNumber,
+  ExternalHyperlink,
+  ImageRun,
 } = require('docx');
 
 const templateStyles = require('./template-styles.json');
@@ -78,17 +83,28 @@ function createHeading(text, level = 1) {
   });
 }
 
-// Create a body paragraph
+// Create a body paragraph with support for inline formatting and hyperlinks
 function createParagraph(text, options = {}) {
   // Handle text with potential inline formatting
-  const runs = [];
+  let runs = [];
   if (typeof text === 'string') {
-    runs.push(createTextRun(text, 'body', options));
+    // Check for hyperlinks or inline formatting
+    if (text.includes('[') && text.includes('](')) {
+      runs = parseTextWithLinks(text, options);
+    } else if (text.includes('**') || text.includes('*')) {
+      runs = parseInlineFormatting(text, options);
+    } else {
+      runs.push(createTextRun(text, 'body', options));
+    }
   } else if (Array.isArray(text)) {
     // Array of text runs with different formatting
     for (const item of text) {
       if (typeof item === 'string') {
-        runs.push(createTextRun(item, 'body', options));
+        if (item.includes('**') || item.includes('*')) {
+          runs.push(...parseInlineFormatting(item, options));
+        } else {
+          runs.push(createTextRun(item, 'body', options));
+        }
       } else if (item.text) {
         runs.push(createTextRun(item.text, 'body', { ...options, ...item }));
       }
@@ -114,22 +130,103 @@ function createBulletItem(text, level = 0) {
       before: pointsToTwips(templateStyles.lists.spacing),
       after: pointsToTwips(templateStyles.lists.spacing),
     },
+    indent: { left: pointsToTwips(templateStyles.lists.indent) },
     children: [createTextRun(text, 'body')],
   });
 }
 
+// Parse inline markdown-style formatting (**bold**, *italic*, ***bold-italic***)
+function parseInlineFormatting(text, baseOptions = {}) {
+  const runs = [];
+  // Match ***bold-italic***, **bold**, *italic*, or plain text
+  const regex = /(\*\*\*(.+?)\*\*\*|\*\*(.+?)\*\*|\*(.+?)\*|([^*]+))/g;
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match[2]) {
+      // bold-italic (***text***)
+      runs.push(createTextRun(match[2], 'body', { ...baseOptions, bold: true, italic: true }));
+    } else if (match[3]) {
+      // bold (**text**)
+      runs.push(createTextRun(match[3], 'body', { ...baseOptions, bold: true }));
+    } else if (match[4]) {
+      // italic (*text*)
+      runs.push(createTextRun(match[4], 'body', { ...baseOptions, italic: true }));
+    } else if (match[5]) {
+      // plain text
+      runs.push(createTextRun(match[5], 'body', baseOptions));
+    }
+  }
+
+  return runs.length > 0 ? runs : [createTextRun(text, 'body', baseOptions)];
+}
+
+// Create a hyperlink with proper styling
+function createHyperlink(text, url) {
+  return new ExternalHyperlink({
+    children: [
+      new TextRun({
+        text: text,
+        style: 'Hyperlink',
+      }),
+    ],
+    link: url,
+  });
+}
+
+// Parse text with potential hyperlinks in markdown format [text](url)
+function parseTextWithLinks(text, baseOptions = {}) {
+  const runs = [];
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+  let lastIndex = 0;
+  let match;
+
+  while ((match = linkRegex.exec(text)) !== null) {
+    // Add text before the link
+    if (match.index > lastIndex) {
+      const beforeText = text.slice(lastIndex, match.index);
+      runs.push(...parseInlineFormatting(beforeText, baseOptions));
+    }
+    // Add the hyperlink
+    runs.push(createHyperlink(match[1], match[2]));
+    lastIndex = match.index + match[0].length;
+  }
+
+  // Add remaining text after last link
+  if (lastIndex < text.length) {
+    const afterText = text.slice(lastIndex);
+    runs.push(...parseInlineFormatting(afterText, baseOptions));
+  }
+
+  return runs.length > 0 ? runs : parseInlineFormatting(text, baseOptions);
+}
+
 // Create a table with template styling
-function createTable(data, _options = {}) {
+// options.columnWidths: Array of percentages [30, 70] or absolute values in twips
+function createTable(data, options = {}) {
   if (!data || !data.headers || !data.rows) {
     console.warn('Invalid table data:', data);
     return null;
   }
 
   const tableStyle = templateStyles.tables;
+  const { columnWidths } = options;
+
+  // Calculate column widths if provided
+  const getColumnWidth = (index) => {
+    if (!columnWidths || !columnWidths[index]) return undefined;
+    const width = columnWidths[index];
+    // If width is a percentage (<=100), convert to percentage type
+    // Otherwise treat as absolute twips
+    if (width <= 100) {
+      return { size: width, type: WidthType.PERCENTAGE };
+    }
+    return { size: width, type: WidthType.DXA };
+  };
 
   // Create header row
-  const headerCells = data.headers.map((header) => {
-    return new TableCell({
+  const headerCells = data.headers.map((header, index) => {
+    const cellConfig = {
       shading: {
         type: ShadingType.SOLID,
         color: hexToDocx(tableStyle.headerRow.bgColor),
@@ -160,7 +257,12 @@ function createTable(data, _options = {}) {
           ],
         }),
       ],
-    });
+    };
+    const colWidth = getColumnWidth(index);
+    if (colWidth) {
+      cellConfig.width = colWidth;
+    }
+    return new TableCell(cellConfig);
   });
 
   const headerRow = new TableRow({
@@ -173,8 +275,8 @@ function createTable(data, _options = {}) {
     const isAltRow = rowIndex % 2 === 1;
     const bgColor = isAltRow ? tableStyle.bodyRow.altBgColor : tableStyle.bodyRow.bgColor;
 
-    const cells = row.map((cell) => {
-      return new TableCell({
+    const cells = row.map((cell, colIndex) => {
+      const cellConfig = {
         shading: {
           type: ShadingType.SOLID,
           color: hexToDocx(bgColor),
@@ -208,7 +310,12 @@ function createTable(data, _options = {}) {
             ],
           }),
         ],
-      });
+      };
+      const colWidth = getColumnWidth(colIndex);
+      if (colWidth) {
+        cellConfig.width = colWidth;
+      }
+      return new TableCell(cellConfig);
     });
 
     return new TableRow({ children: cells });
@@ -223,9 +330,40 @@ function createTable(data, _options = {}) {
   });
 }
 
+// Valid section types whitelist
+const VALID_SECTION_TYPES = new Set([
+  'title',
+  'subtitle',
+  'date',
+  'heading1',
+  'heading2',
+  'heading3',
+  'paragraph',
+  'text',
+  'bullet_list',
+  'bullet',
+  'numbered_list',
+  'table',
+  'page_break',
+  'spacer',
+  'cover_page',
+  'quote',
+  'blockquote',
+  'divider',
+  'hr',
+  'figure', // Includes figure for org charts
+]);
+
 // Build document content from structured sections
 function buildDocumentContent(sections) {
   const children = [];
+
+  // Validate section types and warn about unsupported ones
+  for (const section of sections) {
+    if (section.type && !VALID_SECTION_TYPES.has(section.type)) {
+      console.warn(`[DOCX] Unsupported section type: "${section.type}", treating as paragraph`);
+    }
+  }
 
   for (const section of sections) {
     switch (section.type) {
@@ -293,8 +431,38 @@ function buildDocumentContent(sections) {
         children.push(createBulletItem(section.text, section.level || 0));
         break;
 
+      case 'numbered_list': {
+        // Render numbered list items with manual numbering
+        const items = section.items || [];
+        items.forEach((item, idx) => {
+          const itemText = typeof item === 'string' ? item : item.text || '';
+          children.push(
+            new Paragraph({
+              spacing: {
+                before: pointsToTwips(templateStyles.lists.spacing),
+                after: pointsToTwips(templateStyles.lists.spacing),
+              },
+              indent: { left: pointsToTwips(templateStyles.lists.indent) },
+              children: [
+                new TextRun({
+                  text: `${idx + 1}. ${itemText}`,
+                  font: templateStyles.fonts.body.family,
+                  size: pointsToHalfPoints(templateStyles.fonts.body.size),
+                  color: hexToDocx(templateStyles.fonts.body.color),
+                }),
+              ],
+            })
+          );
+        });
+        break;
+      }
+
       case 'table': {
-        const table = createTable(section.data);
+        const tableOptions = {};
+        if (section.columnWidths) {
+          tableOptions.columnWidths = section.columnWidths;
+        }
+        const table = createTable(section.data, tableOptions);
         if (table) {
           // Add spacing before table
           children.push(
@@ -325,6 +493,219 @@ function buildDocumentContent(sections) {
           })
         );
         break;
+
+      case 'cover_page': {
+        // Handle empty cover page
+        if (!section.title && !section.companyName) {
+          section.title = 'PRE-DUE DILIGENCE REPORT';
+          section.companyName = 'Company';
+        }
+
+        // Cover page configuration
+        const coverConfig = templateStyles.coverPage || {
+          titleSize: 20,
+          companyNameSize: 16,
+          verticalOffset: 200,
+        };
+
+        // Add vertical spacing to center content (~200pt from top for A4)
+        children.push(
+          new Paragraph({
+            spacing: { before: pointsToTwips(coverConfig.verticalOffset), after: 0 },
+            children: [],
+          })
+        );
+
+        // Title - centered, larger font (20pt)
+        children.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: pointsToTwips(12) },
+            children: [
+              new TextRun({
+                text: section.title || 'PRE-DUE DILIGENCE REPORT',
+                font: templateStyles.fonts.heading1.family,
+                size: pointsToHalfPoints(coverConfig.titleSize),
+                bold: true,
+                color: hexToDocx(templateStyles.fonts.heading1.color),
+              }),
+            ],
+          })
+        );
+
+        // Company name - centered, on separate line
+        if (section.companyName) {
+          children.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: pointsToTwips(24) },
+              children: [
+                new TextRun({
+                  text: section.companyName,
+                  font: templateStyles.fonts.heading1.family,
+                  size: pointsToHalfPoints(coverConfig.companyNameSize),
+                  bold: true,
+                  color: hexToDocx(templateStyles.fonts.heading2.color),
+                }),
+              ],
+            })
+          );
+        }
+
+        // Prepared for client - centered
+        if (section.preparedFor) {
+          children.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: pointsToTwips(12) },
+              children: [
+                new TextRun({
+                  text: `Prepared for ${section.preparedFor}`,
+                  font: templateStyles.fonts.body.family,
+                  size: pointsToHalfPoints(12),
+                  color: hexToDocx(templateStyles.fonts.body.color),
+                }),
+              ],
+            })
+          );
+        }
+
+        // Purpose statement - centered
+        if (section.purpose) {
+          children.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { after: pointsToTwips(24) },
+              children: [
+                new TextRun({
+                  text: section.purpose,
+                  font: templateStyles.fonts.body.family,
+                  size: pointsToHalfPoints(11),
+                  italics: true,
+                  color: hexToDocx(templateStyles.fonts.caption.color),
+                }),
+              ],
+            })
+          );
+        }
+
+        // Date - centered
+        children.push(
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: pointsToTwips(48) },
+            children: [
+              new TextRun({
+                text: section.date || `Prepared: ${new Date().toLocaleDateString()}`,
+                font: templateStyles.fonts.caption.family,
+                size: pointsToHalfPoints(templateStyles.fonts.caption.size),
+                color: hexToDocx(templateStyles.fonts.caption.color),
+                italics: templateStyles.fonts.caption.italic,
+              }),
+            ],
+          })
+        );
+
+        // Confidential disclaimer - centered, at bottom
+        if (section.confidential) {
+          children.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { before: pointsToTwips(48), after: pointsToTwips(24) },
+              children: [
+                new TextRun({
+                  text: section.confidential,
+                  font: templateStyles.fonts.caption.family,
+                  size: pointsToHalfPoints(9),
+                  italics: true,
+                  color: hexToDocx('#666666'),
+                }),
+              ],
+            })
+          );
+        }
+
+        // Page break after cover
+        children.push(new Paragraph({ children: [new PageBreak()] }));
+        break;
+      }
+
+      case 'quote':
+      case 'blockquote': {
+        children.push(
+          new Paragraph({
+            spacing: { before: pointsToTwips(12), after: pointsToTwips(12) },
+            indent: { left: pointsToTwips(36), right: pointsToTwips(36) },
+            children: [
+              new TextRun({
+                text: section.text || '',
+                font: templateStyles.fonts.body.family,
+                size: pointsToHalfPoints(templateStyles.fonts.body.size),
+                italics: true,
+                color: hexToDocx('#666666'),
+              }),
+            ],
+          })
+        );
+        break;
+      }
+
+      case 'divider':
+      case 'hr': {
+        children.push(
+          new Paragraph({
+            border: { bottom: { style: BorderStyle.SINGLE, size: 6, color: 'CCCCCC' } },
+            spacing: { before: pointsToTwips(12), after: pointsToTwips(12) },
+            children: [],
+          })
+        );
+        break;
+      }
+
+      case 'figure': {
+        // Handle figure with image (e.g., organization chart)
+        if (section.imageBase64) {
+          try {
+            const imageBuffer = Buffer.from(section.imageBase64, 'base64');
+            children.push(
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                spacing: { before: pointsToTwips(12), after: pointsToTwips(6) },
+                children: [
+                  new ImageRun({
+                    data: imageBuffer,
+                    transformation: {
+                      width: section.width || 500,
+                      height: section.height || 300,
+                    },
+                  }),
+                ],
+              })
+            );
+          } catch (imgError) {
+            console.warn('[DOCX] Failed to insert image:', imgError.message);
+          }
+        }
+        // Caption for the figure
+        if (section.caption) {
+          children.push(
+            new Paragraph({
+              alignment: AlignmentType.CENTER,
+              spacing: { before: pointsToTwips(4), after: pointsToTwips(12) },
+              children: [
+                new TextRun({
+                  text: section.caption,
+                  font: templateStyles.fonts.caption.family,
+                  size: pointsToHalfPoints(templateStyles.fonts.caption.size),
+                  italics: true,
+                  color: hexToDocx(templateStyles.fonts.caption.color),
+                }),
+              ],
+            })
+          );
+        }
+        break;
+      }
 
       default:
         console.warn(`Unknown section type: ${section.type}`);
@@ -470,6 +851,31 @@ async function generateDocx(reportJson) {
               left: pointsToTwips(templateStyles.page.marginLeft),
             },
           },
+          titlePage: true, // Different first page (no page number on cover)
+        },
+        footers: {
+          default: new Footer({
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [
+                  (() => {
+                    const pageNumStyle =
+                      templateStyles.fonts.pageNumber || templateStyles.fonts.caption;
+                    return new TextRun({
+                      children: [PageNumber.CURRENT],
+                      font: pageNumStyle.family,
+                      size: pointsToHalfPoints(pageNumStyle.size),
+                      color: hexToDocx(pageNumStyle.color),
+                    });
+                  })(),
+                ],
+              }),
+            ],
+          }),
+          first: new Footer({
+            children: [], // Empty footer for cover page (no page number)
+          }),
         },
         children: buildDocumentContent(sections),
       },
@@ -489,16 +895,16 @@ function htmlToStructuredJson(html, companyName = 'Company') {
 
   const sections = [];
 
-  // Add title
+  // Add cover page (centered title, company name, date with page break)
   sections.push({
-    type: 'title',
-    text: `Due Diligence Report: ${companyName}`,
-  });
-
-  // Add date
-  sections.push({
-    type: 'date',
-    text: `Prepared: ${new Date().toLocaleDateString()}`,
+    type: 'cover_page',
+    title: 'PRE-DUE DILIGENCE REPORT',
+    companyName: companyName,
+    preparedFor: 'Sun Corporation',
+    purpose:
+      'Evaluation of Minority Investment with Path to Majority / Full Acquisition (5–10 Years)',
+    confidential: 'This report is confidential and prepared solely for internal discussion.',
+    date: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
   });
 
   // Parse HTML content
@@ -534,8 +940,19 @@ function htmlToStructuredJson(html, companyName = 'Company') {
       if (tableData) {
         sections.push({ type: 'table', data: tableData });
       }
-    } else if (/<ul[^>]*>/i.test(trimmed) || /<ol[^>]*>/i.test(trimmed)) {
-      // Parse list
+    } else if (/<ol[^>]*>/i.test(trimmed)) {
+      // Parse ordered list as numbered_list
+      const items = [];
+      const liMatches = trimmed.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi);
+      for (const match of liMatches) {
+        const itemText = match[1].replace(/<[^>]+>/g, '').trim();
+        if (itemText) items.push(itemText);
+      }
+      if (items.length > 0) {
+        sections.push({ type: 'numbered_list', items });
+      }
+    } else if (/<ul[^>]*>/i.test(trimmed)) {
+      // Parse unordered list as bullet_list
       const items = [];
       const liMatches = trimmed.matchAll(/<li[^>]*>([\s\S]*?)<\/li>/gi);
       for (const match of liMatches) {
@@ -618,5 +1035,9 @@ module.exports = {
   createParagraph,
   createBulletItem,
   createTable,
+  parseInlineFormatting,
+  createHyperlink,
+  parseTextWithLinks,
   templateStyles,
+  VALID_SECTION_TYPES,
 };
