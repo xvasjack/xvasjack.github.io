@@ -7,6 +7,7 @@ const { securityHeaders, rateLimiter, escapeHtml } = require('./shared/security'
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { sendEmailLegacy: sendEmail } = require('./shared/email');
+const { createTracker } = require('./shared/tracking');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
@@ -1789,6 +1790,9 @@ app.post('/api/find-target-v6', async (req, res) => {
     message: 'Request received. Results will be emailed in ~12-15 minutes.',
   });
 
+  // Initialize tracker for cost tracking
+  const tracker = createTracker('target-v6', Email, { Business, Country, Exclusion });
+
   try {
     const totalStart = Date.now();
     const searchLog = [];
@@ -1820,10 +1824,10 @@ app.post('/api/find-target-v6', async (req, res) => {
 
     // ========== STEP 2: Iterative Parallel Search (10 rounds) ==========
     console.log('\n' + '='.repeat(50));
-    console.log('STEP 2: ITERATIVE PARALLEL SEARCH (10 rounds)');
+    console.log('STEP 2: ITERATIVE PARALLEL SEARCH (7 rounds)');
     console.log('='.repeat(50));
 
-    const NUM_ROUNDS = 10;
+    const NUM_ROUNDS = 7; // Reduced from 10 - rounds 8-10 had diminishing returns
     const allCompanies = [];
     const seenWebsites = new Set();
 
@@ -1872,29 +1876,6 @@ app.post('/api/find-target-v6', async (req, res) => {
 
         // Round 7: Regional players by city
         `Find regional and local ${business} companies in ${country}. Search by specific cities and provinces.${citiesHint}${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
-
-        // Round 8: Emerging and newer companies
-        `Find emerging and newer ${business} companies in ${country}. Look for companies founded in recent years.${termHint}${findMoreClause}\nReturn company name, website, HQ location. Exclude: ${exclusion}`,
-
-        // Round 9: Gap-filling - what's missing from our list?
-        `Here are ${business} companies in ${country} that we've already found: ${alreadyFoundList || 'none yet'}
-
-What OTHER ${business} companies exist in ${country} that are NOT on this list? Think about:
-- Lesser-known local players
-- Companies using different business names or trading names
-- Companies that might be categorized differently but do the same business
-
-Only return companies with real, working websites. Return company name, website, HQ location. Exclude: ${exclusion}`,
-
-        // Round 10: Final gap-filling with knowledge recall
-        `We are researching ${business} companies in ${country}. We have found these companies so far: ${alreadyFoundList || 'none yet'}
-
-Based on your knowledge, what other ${business} companies in ${country} are we missing? Consider:
-- Companies you know exist in this industry
-- Regional players that might not rank high in search results
-- Companies with alternative names or subsidiaries
-
-Only include companies you are confident exist and have websites. Return company name, website, HQ location. Exclude: ${exclusion}`,
       ];
 
       return prompts[round % prompts.length];
@@ -1908,17 +1889,13 @@ Only include companies you are confident exist and have websites. Return company
       'associations',
       'alt terminology',
       'regional/city',
-      'emerging',
-      'gap-filling',
-      'knowledge recall',
     ];
 
     for (let round = 0; round < NUM_ROUNDS; round++) {
       const roundStart = Date.now();
 
       // Build "already found" list (company names only to save tokens)
-      // Use more names for gap-filling rounds (8, 9) to give AI better context
-      const alreadyFoundLimit = round >= 8 ? 200 : 100;
+      const alreadyFoundLimit = 100;
       const alreadyFound = allCompanies
         .slice(0, alreadyFoundLimit)
         .map((c) => c.company_name)
@@ -1984,6 +1961,12 @@ Only include companies you are confident exist and have websites. Return company
       console.log(
         `    New companies: ${preFiltered.length} | Total: ${allCompanies.length} | Time: ${roundDuration}s`
       );
+
+      // Early termination: if <3 new companies found after round 3, stop searching
+      if (round >= 3 && preFiltered.length < 3) {
+        console.log(`    Early termination: diminishing returns (<3 new companies)`);
+        break;
+      }
     }
 
     console.log(`\n  Search complete. Total unique companies: ${allCompanies.length}`);
@@ -2042,6 +2025,38 @@ Only include companies you are confident exist and have websites. Return company
     );
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(70));
+
+    // Track usage - estimate costs based on search activity
+    // Planning: 1 GPT-4o call (~3K input, ~1K output)
+    tracker.addModelCall('gpt-4o', 'x'.repeat(3000), 'x'.repeat(1000));
+    // Search rounds: estimate based on searchLog
+    for (const log of searchLog) {
+      if (log.model === 'perplexity-sonar-pro') {
+        tracker.addModelCall('sonar-pro', 'x'.repeat(500), 'x'.repeat(log.responseLength || 2000));
+      } else if (log.model === 'chatgpt-search') {
+        tracker.addModelCall('gpt-4o-search-preview', 'x'.repeat(1000), 'x'.repeat(log.responseLength || 2000));
+      } else {
+        tracker.addModelCall('gemini-2.5-flash', 'x'.repeat(1000), 'x'.repeat(log.responseLength || 2000));
+      }
+    }
+    // Extraction: ~30 Gemini calls
+    for (let i = 0; i < searchLog.length; i++) {
+      tracker.addModelCall('gemini-2.5-flash', 'x'.repeat(4000), 'x'.repeat(500));
+    }
+    // Validation: 1 GPT-4o call per company validated
+    const totalValidated = allCompanies.length;
+    for (let i = 0; i < totalValidated; i++) {
+      tracker.addModelCall('gpt-4o', 'x'.repeat(8000), 'x'.repeat(200));
+    }
+
+    // Finalize tracking
+    await tracker.finish({
+      searchRounds: searchLog.length,
+      companiesFound: allCompanies.length,
+      validated: validated.length,
+      flagged: flagged.length,
+      rejected: rejected.length,
+    });
   } catch (error) {
     console.error('V6 Processing error:', error);
     // Try to send error email
