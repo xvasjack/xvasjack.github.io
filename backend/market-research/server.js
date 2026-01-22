@@ -6,6 +6,7 @@ const pptxgen = require('pptxgenjs');
 const { securityHeaders, rateLimiter } = require('./shared/security');
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
+const { createTracker } = require('./shared/tracking');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers({ logMemory: false });
@@ -7684,6 +7685,8 @@ async function runMarketResearch(userPrompt, email) {
   costTracker.totalCost = 0;
   costTracker.calls = [];
 
+  const tracker = createTracker('market-research', email, { prompt: userPrompt.substring(0, 200) });
+
   try {
     // Stage 1: Parse scope
     const scope = await parseScope(userPrompt);
@@ -7736,6 +7739,12 @@ async function runMarketResearch(userPrompt, email) {
     );
     console.log(`Total cost: $${costTracker.totalCost.toFixed(2)}`);
     console.log(`Countries analyzed: ${countryAnalyses.length}`);
+
+    // Track usage
+    await tracker.finish({
+      countriesAnalyzed: countryAnalyses.length,
+      industry: scope.industry,
+    });
 
     return {
       success: true,

@@ -7,6 +7,7 @@ const { securityHeaders, rateLimiter } = require('./shared/security');
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { sendEmailLegacy: sendEmail } = require('./shared/email');
+const { createTracker } = require('./shared/tracking');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
@@ -1788,6 +1789,8 @@ app.post('/api/find-target-v5', async (req, res) => {
     }
   }, 30000);
 
+  const tracker = createTracker('target-v5', Email, { Business, Country, Exclusion });
+
   try {
     const totalStart = Date.now();
     const searchLog = [];
@@ -1883,6 +1886,14 @@ app.post('/api/find-target-v5', async (req, res) => {
     );
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(70));
+
+    // Track usage
+    await tracker.finish({
+      searchRounds: searchLog.length,
+      validated: finalValidated.length,
+      flagged: finalFlagged.length,
+      rejected: finalRejected.length,
+    });
   } catch (error) {
     console.error('V5 Processing error:', error);
     try {

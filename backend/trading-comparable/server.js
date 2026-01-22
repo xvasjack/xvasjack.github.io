@@ -15,6 +15,7 @@ const { securityHeaders, rateLimiter, escapeHtml } = require('./shared/security'
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { sendEmailLegacy: sendEmail } = require('./shared/email');
+const { createTracker } = require('./shared/tracking');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
@@ -2497,6 +2498,8 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     message: 'Request received. Results will be emailed shortly.',
   });
 
+  const tracker = createTracker('trading-comparable', Email, { TargetCompanyOrIndustry, IsProfitable });
+
   try {
     const workbook = XLSX.read(excelFile.buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
@@ -3911,6 +3914,12 @@ Source: Speeda
       `Median EV/EBITDA: ${medians.evEbitda}, P/E TTM: ${medians.peTTM}, P/B: ${medians.pb}`
     );
     console.log('='.repeat(50));
+
+    // Track usage
+    await tracker.finish({
+      companiesProcessed: allCompanies.length,
+      finalCompanies: finalCompanies.length,
+    });
   } catch (error) {
     console.error('Trading comparable error:', error);
     try {

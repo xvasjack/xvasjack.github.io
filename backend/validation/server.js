@@ -8,6 +8,7 @@ const { securityHeaders, rateLimiter } = require('./shared/security');
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { sendEmailLegacy: sendEmail } = require('./shared/email');
+const { createTracker } = require('./shared/tracking');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
@@ -901,6 +902,8 @@ app.post('/api/validation', async (req, res) => {
     message: 'Validation request received. Results will be emailed within 10 minutes.',
   });
 
+  const tracker = createTracker('validation', Email, { TargetBusiness, Countries, OutputOption });
+
   try {
     const totalStart = Date.now();
 
@@ -1037,6 +1040,12 @@ app.post('/api/validation', async (req, res) => {
     console.log(`Total companies: ${results.length}, In-scope: ${inScopeCount}`);
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(50));
+
+    // Track usage
+    await tracker.finish({
+      companiesProcessed: results.length,
+      inScope: inScopeCount,
+    });
   } catch (error) {
     console.error('Validation error:', error);
     try {
