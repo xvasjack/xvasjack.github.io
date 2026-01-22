@@ -13,6 +13,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const JSZip = require('jszip');
 const { securityHeaders, rateLimiter, escapeHtml } = require('./shared/security');
 const { requestLogger, healthCheck } = require('./shared/middleware');
+const { createTracker } = require('./shared/tracking');
 
 // ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
 // Memory logging helper for debugging Railway OOM issues
@@ -8915,6 +8916,8 @@ app.post('/api/profile-slides', async (req, res) => {
     total: websites.length
   });
 
+  const tracker = createTracker('profile-slides', email, { targetDescription, websiteCount: websites.length });
+
   // Process in background using parallel batch processing
   try {
     // Process websites in parallel batches of 4 for ~3x faster processing
@@ -8964,6 +8967,13 @@ app.post('/api/profile-slides', async (req, res) => {
 
     console.log(`Email sent to ${email}${attachment ? ' with PPTX attachment' : ''}`);
     console.log('='.repeat(50));
+
+    // Track usage
+    await tracker.finish({
+      websitesProcessed: websites.length,
+      companiesExtracted: companies.length,
+      errors: errors.length,
+    });
 
     // Memory cleanup after email sent
     if (pptxResult) pptxResult.content = null;

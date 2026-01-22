@@ -7,6 +7,7 @@ const { securityHeaders, rateLimiter, escapeHtml } = require('./shared/security'
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { sendEmailLegacy: sendEmail } = require('./shared/email');
+const { createTracker } = require('./shared/tracking');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
@@ -1516,6 +1517,8 @@ app.post('/api/find-target', async (req, res) => {
     message: 'Request received. Results will be emailed within 5-10 minutes.',
   });
 
+  const tracker = createTracker('target-v3', Email, { Business, Country, Exclusion });
+
   try {
     const totalStart = Date.now();
 
@@ -1550,6 +1553,12 @@ app.post('/api/find-target', async (req, res) => {
     console.log(`Total companies: ${validCompanies.length}`);
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(50));
+
+    // Track usage
+    await tracker.finish({
+      companiesFound: companies.length,
+      validated: validCompanies.length,
+    });
   } catch (error) {
     console.error('Processing error:', error);
     try {
@@ -1581,6 +1590,8 @@ app.post('/api/find-target-slow', async (req, res) => {
     success: true,
     message: 'Request received. Results will be emailed within 15-45 minutes.',
   });
+
+  const tracker = createTracker('target-v3-slow', Email, { Business, Country, Exclusion });
 
   try {
     const totalStart = Date.now();
@@ -1622,6 +1633,12 @@ app.post('/api/find-target-slow', async (req, res) => {
     console.log(`Total companies: ${validCompanies.length}`);
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(50));
+
+    // Track usage
+    await tracker.finish({
+      companiesFound: uniqueCompanies.length,
+      validated: validCompanies.length,
+    });
   } catch (error) {
     console.error('Processing error:', error);
     try {

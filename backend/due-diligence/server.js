@@ -15,6 +15,7 @@ const { securityHeaders, rateLimiter, escapeHtml } = require('./shared/security'
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { sendEmail } = require('./shared/email');
+const { createTracker } = require('./shared/tracking');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
@@ -2942,6 +2943,8 @@ app.post('/api/due-diligence', async (req, res) => {
     message: `Processing ${files.length} files. DD report will be emailed to ${email}`,
   });
 
+  const tracker = createTracker('due-diligence', email, { fileCount: files.length, components, reportLength });
+
   // Process in background
   try {
     const reportJson = await generateDueDiligenceReport(
@@ -3013,6 +3016,12 @@ app.post('/api/due-diligence', async (req, res) => {
     });
 
     console.log(`[DD] Email sent successfully to ${email}`);
+
+    // Track usage
+    await tracker.finish({
+      filesProcessed: files.length,
+      sectionsGenerated: reportJson?.sections?.length || 0,
+    });
   } catch (error) {
     console.error('[DD] Error processing DD request:', error.message);
     console.error('[DD] Stack:', error.stack);
