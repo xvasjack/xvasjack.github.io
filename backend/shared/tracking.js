@@ -1,23 +1,26 @@
 /**
  * Google Sheets tracking for API usage and costs
+ * Uses Service Account authentication
  * Tracks per-request: service, timestamp, email, inputs, estimated cost
  */
 
 const fetch = require('node-fetch');
+const crypto = require('crypto');
 
 // Google Sheets API configuration
 const SHEETS_API_URL = 'https://sheets.googleapis.com/v4/spreadsheets';
+const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
 // Cost estimates per model (USD per 1K tokens)
 const MODEL_COSTS = {
   // OpenAI
-  'gpt-4o': { input: 0.0025, output: 0.01 },
+  'gpt-4o': { input: 0.005, output: 0.015 },
   'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
-  'gpt-4o-search-preview': { input: 0.0025, output: 0.01 },
+  'gpt-4o-search-preview': { input: 0.005, output: 0.015 },
   // Perplexity
   'sonar-pro': { input: 0.003, output: 0.015 },
   sonar: { input: 0.001, output: 0.001 },
-  // Gemini (per 1K chars ≈ 250 tokens, converted to per 1K tokens)
+  // Gemini
   'gemini-2.5-flash': { input: 0.00015, output: 0.0006 },
   'gemini-3-flash': { input: 0.00015, output: 0.0006 },
   // Anthropic
@@ -27,6 +30,86 @@ const MODEL_COSTS = {
   // DeepSeek
   deepseek: { input: 0.00014, output: 0.00028 },
 };
+
+// Cache access token
+let cachedToken = null;
+let tokenExpiry = 0;
+
+/**
+ * Base64URL encode (no padding, URL-safe)
+ */
+function base64url(data) {
+  return Buffer.from(data)
+    .toString('base64')
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+}
+
+/**
+ * Create JWT for Google Service Account
+ */
+function createJWT(serviceAccount) {
+  const now = Math.floor(Date.now() / 1000);
+  const expiry = now + 3600; // 1 hour
+
+  const header = {
+    alg: 'RS256',
+    typ: 'JWT',
+  };
+
+  const payload = {
+    iss: serviceAccount.client_email,
+    scope: 'https://www.googleapis.com/auth/spreadsheets',
+    aud: GOOGLE_TOKEN_URL,
+    iat: now,
+    exp: expiry,
+  };
+
+  const headerB64 = base64url(JSON.stringify(header));
+  const payloadB64 = base64url(JSON.stringify(payload));
+  const signInput = `${headerB64}.${payloadB64}`;
+
+  // Sign with RSA-SHA256
+  const sign = crypto.createSign('RSA-SHA256');
+  sign.update(signInput);
+  const signature = sign
+    .sign(serviceAccount.private_key, 'base64')
+    .replace(/=/g, '')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_');
+
+  return `${signInput}.${signature}`;
+}
+
+/**
+ * Get access token from Google (with caching)
+ */
+async function getAccessToken(serviceAccount) {
+  // Return cached token if still valid (with 5 min buffer)
+  if (cachedToken && Date.now() < tokenExpiry - 300000) {
+    return cachedToken;
+  }
+
+  const jwt = createJWT(serviceAccount);
+
+  const response = await fetch(GOOGLE_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: `grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer&assertion=${jwt}`,
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Token exchange failed: ${error}`);
+  }
+
+  const data = await response.json();
+  cachedToken = data.access_token;
+  tokenExpiry = Date.now() + data.expires_in * 1000;
+
+  return cachedToken;
+}
 
 /**
  * Estimate token count from text (rough: 1 token ≈ 4 chars)
@@ -52,20 +135,21 @@ function calculateCost(model, inputText, outputText) {
 
 /**
  * Track a request to Google Sheets
- * @param {Object} data - Request data to track
- * @param {string} data.service - Service name (e.g., 'target-v6')
- * @param {string} data.email - User email
- * @param {Object} data.inputs - Input parameters
- * @param {number} data.estimatedCost - Estimated cost in USD
- * @param {number} data.duration - Duration in seconds
- * @param {Object} data.results - Result counts
  */
 async function trackRequest(data) {
   const spreadsheetId = process.env.TRACKING_SHEET_ID;
-  const apiKey = process.env.GOOGLE_SHEETS_API_KEY;
+  const serviceAccountJson = process.env.GOOGLE_SERVICE_ACCOUNT;
 
-  if (!spreadsheetId || !apiKey) {
-    console.log('[Tracking] Skipped - TRACKING_SHEET_ID or GOOGLE_SHEETS_API_KEY not set');
+  if (!spreadsheetId || !serviceAccountJson) {
+    console.log('[Tracking] Skipped - TRACKING_SHEET_ID or GOOGLE_SERVICE_ACCOUNT not set');
+    return false;
+  }
+
+  let serviceAccount;
+  try {
+    serviceAccount = JSON.parse(serviceAccountJson);
+  } catch (e) {
+    console.error('[Tracking] Invalid GOOGLE_SERVICE_ACCOUNT JSON:', e.message);
     return false;
   }
 
@@ -82,12 +166,16 @@ async function trackRequest(data) {
   ];
 
   try {
-    // Append row to Sheet1
-    const url = `${SHEETS_API_URL}/${spreadsheetId}/values/Sheet1!A:H:append?valueInputOption=USER_ENTERED&key=${apiKey}`;
+    const accessToken = await getAccessToken(serviceAccount);
+
+    const url = `${SHEETS_API_URL}/${spreadsheetId}/values/Sheet1!A:H:append?valueInputOption=USER_ENTERED`;
 
     const response = await fetch(url, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      },
       body: JSON.stringify({
         values: [row],
       }),
