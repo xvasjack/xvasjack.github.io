@@ -7740,6 +7740,20 @@ async function runMarketResearch(userPrompt, email) {
     console.log(`Total cost: $${costTracker.totalCost.toFixed(2)}`);
     console.log(`Countries analyzed: ${countryAnalyses.length}`);
 
+    // Estimate costs from internal costTracker by aggregating per model
+    const modelTokens = {};
+    for (const call of costTracker.calls) {
+      if (!modelTokens[call.model]) {
+        modelTokens[call.model] = { input: 0, output: 0 };
+      }
+      modelTokens[call.model].input += call.inputTokens || 0;
+      modelTokens[call.model].output += call.outputTokens || 0;
+    }
+    // Add model calls to shared tracker (convert tokens to char estimate: 4 chars per token)
+    for (const [model, tokens] of Object.entries(modelTokens)) {
+      tracker.addModelCall(model, 'x'.repeat(tokens.input * 4), 'x'.repeat(tokens.output * 4));
+    }
+
     // Track usage
     await tracker.finish({
       countriesAnalyzed: countryAnalyses.length,

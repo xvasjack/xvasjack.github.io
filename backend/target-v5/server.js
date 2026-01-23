@@ -1887,6 +1887,18 @@ app.post('/api/find-target-v5', async (req, res) => {
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(70));
 
+    // Estimate costs based on search log
+    // Phase 1: Perplexity batched searches
+    tracker.addModelCall('sonar-pro', 'x'.repeat(500 * perplexityTasks), 'x'.repeat(2000 * perplexityTasks));
+    // Phase 2: Gemini iterative searches (with search grounding)
+    tracker.addModelCall('gemini-2.5-flash', 'x'.repeat(1000 * geminiTasks), 'x'.repeat(2000 * geminiTasks));
+    // Phase 2: ChatGPT iterative searches
+    tracker.addModelCall('gpt-4o-search-preview', 'x'.repeat(1000 * chatgptTasks), 'x'.repeat(2000 * chatgptTasks));
+    // Validation: GPT-4o-mini for extraction + GPT-4o for final validation
+    const totalCompaniesProcessed = finalValidated.length + finalFlagged.length + finalRejected.length;
+    tracker.addModelCall('gpt-4o-mini', 'x'.repeat(8000 * totalCompaniesProcessed), 'x'.repeat(200 * totalCompaniesProcessed));
+    tracker.addModelCall('gpt-4o', 'x'.repeat(10000 * finalValidated.length), 'x'.repeat(200 * finalValidated.length));
+
     // Track usage
     await tracker.finish({
       searchRounds: searchLog.length,

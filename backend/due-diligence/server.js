@@ -3017,6 +3017,17 @@ app.post('/api/due-diligence', async (req, res) => {
 
     console.log(`[DD] Email sent successfully to ${email}`);
 
+    // Estimate costs based on processing
+    // Per file: extraction + initial analysis (~15K input, 2K output per file)
+    const fileCount = files.length;
+    tracker.addModelCall('gpt-4o', 'x'.repeat(15000 * fileCount), 'x'.repeat(2000 * fileCount));
+    // Per section: detailed analysis with GPT-4o (~20K input, 5K output per section)
+    const sectionCount = reportJson?.sections?.length || 0;
+    tracker.addModelCall('gpt-4o', 'x'.repeat(20000 * sectionCount), 'x'.repeat(5000 * sectionCount));
+    // Some sections use Gemini 2.5 Pro for validation (~10K input, 2K output)
+    const geminiSections = Math.ceil(sectionCount * 0.3); // ~30% use Gemini Pro
+    tracker.addModelCall('gemini-2.5-pro', 'x'.repeat(10000 * geminiSections), 'x'.repeat(2000 * geminiSections));
+
     // Track usage
     await tracker.finish({
       filesProcessed: files.length,
