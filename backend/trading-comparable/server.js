@@ -16,6 +16,8 @@ const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { sendEmailLegacy: sendEmail } = require('./shared/email');
 const { createTracker, trackingContext, recordTokens } = require('./shared/tracking');
+const { discoverAnnualReports } = require('./annualReportDiscovery');
+const { extractBusinessProfiles, formatProfileForPrompt } = require('./pdfExtractor');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
@@ -248,7 +250,11 @@ async function _callGemini(prompt) {
 
     const usage = data.usageMetadata;
     if (usage) {
-      recordTokens('gemini-2.5-flash-lite', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+      recordTokens(
+        'gemini-2.5-flash-lite',
+        usage.promptTokenCount || 0,
+        usage.candidatesTokenCount || 0
+      );
     }
 
     if (data.error) {
@@ -331,7 +337,11 @@ async function _callClaude(prompt, systemPrompt = null, _jsonMode = false) {
 
     const response = await anthropic.messages.create(requestParams);
     if (response.usage) {
-      recordTokens('claude-sonnet-4', response.usage.input_tokens || 0, response.usage.output_tokens || 0);
+      recordTokens(
+        'claude-sonnet-4',
+        response.usage.input_tokens || 0,
+        response.usage.output_tokens || 0
+      );
     }
     const text = response.content?.[0]?.text || '';
 
@@ -393,7 +403,11 @@ async function callChatGPT(prompt) {
       temperature: 0.2,
     });
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -415,7 +429,11 @@ async function _callOpenAISearch(prompt) {
       messages: [{ role: 'user', content: prompt }],
     });
     if (response.usage) {
-      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o-search-preview',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -488,7 +506,11 @@ async function _callDeepSeek(prompt, maxTokens = 4000) {
     });
     const data = await response.json();
     if (data.usage) {
-      recordTokens('deepseek-chat', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
+      recordTokens(
+        'deepseek-chat',
+        data.usage.prompt_tokens || 0,
+        data.usage.completion_tokens || 0
+      );
     }
     if (data.error) {
       console.error('DeepSeek API error:', data.error);
@@ -967,7 +989,11 @@ RULES:
       response_format: { type: 'json_object' },
     });
     if (extraction.usage) {
-      recordTokens('gpt-4o-mini', extraction.usage.prompt_tokens || 0, extraction.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o-mini',
+        extraction.usage.prompt_tokens || 0,
+        extraction.usage.completion_tokens || 0
+      );
     }
     const parsed = JSON.parse(extraction.choices[0].message.content);
     return Array.isArray(parsed.companies) ? parsed.companies : [];
@@ -1398,7 +1424,11 @@ ${contentToValidate.substring(0, 10000)}`,
     });
 
     if (validation.usage) {
-      recordTokens('gpt-4o', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o',
+        validation.usage.prompt_tokens || 0,
+        validation.usage.completion_tokens || 0
+      );
     }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
@@ -1539,7 +1569,11 @@ ${typeof pageText === 'string' && pageText ? pageText.substring(0, 8000) : 'Coul
     });
 
     if (validation.usage) {
-      recordTokens('gpt-4o-mini', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o-mini',
+        validation.usage.prompt_tokens || 0,
+        validation.usage.completion_tokens || 0
+      );
     }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
@@ -1697,7 +1731,11 @@ async function checkRelevanceWithOpenAI(companies, filterCriteria) {
     const data = await response.json();
     const geminiUsage = data.usageMetadata;
     if (geminiUsage) {
-      recordTokens('gemini-2.5-flash', geminiUsage.promptTokenCount || 0, geminiUsage.candidatesTokenCount || 0);
+      recordTokens(
+        'gemini-2.5-flash',
+        geminiUsage.promptTokenCount || 0,
+        geminiUsage.candidatesTokenCount || 0
+      );
     }
     if (data.error) throw new Error(data.error.message);
     const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -1718,7 +1756,11 @@ async function checkRelevanceWithOpenAI(companies, filterCriteria) {
         temperature: 0.2,
       });
       if (response.usage) {
-        recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+        recordTokens(
+          'gpt-4o',
+          response.usage.prompt_tokens || 0,
+          response.usage.completion_tokens || 0
+        );
       }
       const content = response.choices[0].message.content;
       const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -1754,7 +1796,11 @@ async function checkRelevanceWithGemini(companies, filterCriteria) {
     const data = await response.json();
     const liteUsage = data.usageMetadata;
     if (liteUsage) {
-      recordTokens('gemini-2.5-flash-lite', liteUsage.promptTokenCount || 0, liteUsage.candidatesTokenCount || 0);
+      recordTokens(
+        'gemini-2.5-flash-lite',
+        liteUsage.promptTokenCount || 0,
+        liteUsage.candidatesTokenCount || 0
+      );
     }
     if (data.error) throw new Error(data.error.message);
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -1883,14 +1929,29 @@ async function phase1DeepAnalysis(companies, targetDescription) {
   console.log('='.repeat(60));
 
   const companyList = companies
-    .map((c, i) => `${i + 1}. ${c.name} (${c.country || 'Unknown'})`)
+    .map((c, i) => {
+      let line = `${i + 1}. ${c.name} (${c.country || 'Unknown'})`;
+      if (c.businessProfile) {
+        const p = c.businessProfile;
+        if (p.businessDescription) line += `\n   Business: ${p.businessDescription}`;
+        if (p.revenueSegments && p.revenueSegments.length > 0) {
+          line += `\n   Revenue Segments: ${p.revenueSegments.map((s) => `${s.segment} (${s.revenueShare || 'N/A'})`).join(', ')}`;
+        }
+        if (p.businessModel) line += `\n   Business Model: ${p.businessModel}`;
+        if (p.geographicBreakdown && p.geographicBreakdown.length > 0) {
+          line += `\n   Geography: ${p.geographicBreakdown.map((g) => `${g.region} (${g.revenueShare || 'N/A'})`).join(', ')}`;
+        }
+        line += `\n   Source: ${p.dataSource === 'web_search' ? 'Web Search' : 'Annual Report'}`;
+      }
+      return line;
+    })
     .join('\n');
 
   const prompt = `You are a senior investment banking analyst preparing a trading comparable analysis.
 
 TARGET PEER GROUP: "${targetDescription}"
 
-COMPANY LIST (${companies.length} companies from Speeda database):
+COMPANY LIST (${companies.length} companies from Speeda database, enriched with annual report data where available):
 ${companyList}
 
 TASK: Analyze this company list deeply before any filtering.
@@ -1947,7 +2008,11 @@ OUTPUT FORMAT (JSON):
       response_format: { type: 'json_object' },
     });
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     analysisResult = response.choices[0].message.content;
   } catch (error) {
@@ -1997,7 +2062,11 @@ async function dualModelEvaluateCompanies(evaluationPrompt, companies) {
           response_format: { type: 'json_object' },
         });
         if (response.usage) {
-          recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+          recordTokens(
+            'gpt-4o',
+            response.usage.prompt_tokens || 0,
+            response.usage.completion_tokens || 0
+          );
         }
         return response.choices[0].message.content;
       } catch (error) {
@@ -2213,15 +2282,23 @@ BUSINESS DEFINITION: "${targetDef}"
 CURRENT FILTER CRITERION: "${step.criteria}"
 RATIONALE: "${step.rationale}"
 
-Companies to evaluate:
-${currentCompanies.map((c, i) => `${i + 1}. ${c.name} (${c.country || 'Unknown'})`).join('\n')}
+Companies to evaluate (with verified business data where available):
+${currentCompanies
+  .map((c, i) => {
+    let line = `${i + 1}. ${c.name} (${c.country || 'Unknown'})`;
+    if (c.businessProfile) {
+      line += `\n         ${formatProfileForPrompt(c.businessProfile)}`;
+    }
+    return line;
+  })
+  .join('\n')}
 
-For EACH company, evaluate against the criterion "${step.criteria}":
+For EACH company, evaluate against the criterion "${step.criteria}" using the EVIDENCE provided above:
 
 THINK CAREFULLY for each company:
-1. What is this company's actual primary business?
-2. Does it meet the criterion "${step.criteria}"?
-3. How confident are you? (0-100%)
+1. What is this company's actual primary business? (Use the annual report evidence above if available — do NOT guess)
+2. Based on the VERIFIED revenue segments, geography, and business model, does it meet the criterion "${step.criteria}"?
+3. How confident are you? (0-100%) — higher confidence when annual report data is available
 
 OUTPUT JSON:
 {
@@ -2325,7 +2402,17 @@ async function phase3Validation(companies, targetDescription, _analysis) {
 TARGET: "${targetDescription}"
 
 FINAL PEER SET (${companies.length} companies):
-${companies.map((c, i) => `${i + 1}. ${c.name} (${c.country || 'Unknown'})${c.businessDescription ? ' - ' + c.businessDescription : ''}`).join('\n')}
+${companies
+  .map((c, i) => {
+    let line = `${i + 1}. ${c.name} (${c.country || 'Unknown'})`;
+    if (c.businessProfile) {
+      line += `\n         ${formatProfileForPrompt(c.businessProfile)}`;
+    } else if (c.businessDescription) {
+      line += ` - ${c.businessDescription}`;
+    }
+    return line;
+  })
+  .join('\n')}
 
 VALIDATION CHECKLIST:
 1. COHERENCE: Do all these companies belong together as peers?
@@ -2365,7 +2452,11 @@ OUTPUT JSON:
       response_format: { type: 'json_object' },
     });
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     validationResult = response.choices[0].message.content;
   } catch (error) {
@@ -2445,6 +2536,161 @@ async function applyThreePhaseFiltering(
   };
 }
 
+// ============ TIER 2: ANNUAL REPORT ENRICHMENT ============
+
+/**
+ * Enrich companies with annual report data (Tier 2).
+ * Discovers annual reports, extracts business profiles, attaches to company objects.
+ *
+ * @param {Array} companies - Companies that passed quantitative filters
+ * @param {string} targetDescription - Target peer group description
+ * @returns {Array} Companies with .businessProfile attached
+ */
+async function enrichWithAnnualReports(companies, targetDescription) {
+  console.log('\n' + '='.repeat(60));
+  console.log('TIER 2: ANNUAL REPORT DEEP READ');
+  console.log('='.repeat(60));
+  console.log(`Enriching ${companies.length} companies with annual report data...`);
+
+  try {
+    // Step 1: Discover annual report PDFs
+    const discoveryResults = await discoverAnnualReports(companies);
+
+    // Step 2: Extract business profiles from PDFs (+ web fallbacks)
+    const profiles = await extractBusinessProfiles(discoveryResults);
+
+    // Step 3: Attach profiles to company objects
+    let enrichedCount = 0;
+    for (const company of companies) {
+      const profile = profiles.get(company.name);
+      if (profile) {
+        company.businessProfile = profile;
+        enrichedCount++;
+      }
+    }
+
+    console.log(
+      `Enrichment complete: ${enrichedCount}/${companies.length} companies have business profiles`
+    );
+    return companies;
+  } catch (error) {
+    console.error('Annual report enrichment failed:', error.message);
+    console.log('Continuing without enrichment data...');
+    return companies;
+  }
+}
+
+/**
+ * Generate Peer Selection Justification sheet data.
+ * Documents why each company was included/excluded with evidence from annual reports.
+ *
+ * @param {Array} includedCompanies - Final peer set
+ * @param {Array} allCompanies - All companies that entered qualitative filtering
+ * @param {string} targetDescription - Target description
+ * @param {object} analysis - Phase 1 analysis result
+ * @returns {Array} Sheet data (array of arrays) for the justification sheet
+ */
+function generateJustificationSheet(includedCompanies, allCompanies, targetDescription, analysis) {
+  const data = [];
+
+  data.push(['PEER SELECTION JUSTIFICATION']);
+  data.push([`Target: ${targetDescription}`]);
+  data.push([
+    `Generated: ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`,
+  ]);
+  data.push([]);
+
+  // Peer set quality metrics
+  const evEbitdaValues = includedCompanies.map((c) => c.evEbitda).filter((v) => v != null && v > 0);
+  let evEbitdaStdDev = null;
+  if (evEbitdaValues.length >= 2) {
+    const mean = evEbitdaValues.reduce((a, b) => a + b, 0) / evEbitdaValues.length;
+    const variance =
+      evEbitdaValues.reduce((a, b) => a + (b - mean) ** 2, 0) / evEbitdaValues.length;
+    evEbitdaStdDev = Math.sqrt(variance);
+  }
+
+  const profiledCount = includedCompanies.filter((c) => c.businessProfile).length;
+
+  data.push(['PEER SET QUALITY METRICS']);
+  data.push(['Metric', 'Value']);
+  data.push(['Total peers selected', includedCompanies.length]);
+  data.push([
+    'EV/EBITDA std dev (lower = tighter peers)',
+    evEbitdaStdDev != null ? evEbitdaStdDev.toFixed(2) : 'N/A',
+  ]);
+  data.push([
+    'Data coverage (annual report verified)',
+    `${profiledCount}/${includedCompanies.length}`,
+  ]);
+  data.push([]);
+
+  // Included peers section
+  data.push(['INCLUDED PEERS']);
+  data.push([
+    'Company',
+    'Country',
+    'Data Source',
+    'Revenue Segments',
+    'Geography',
+    'Business Model',
+    'Justification',
+  ]);
+
+  for (const c of includedCompanies) {
+    const profile = c.businessProfile;
+    const segments = profile?.revenueSegments
+      ? profile.revenueSegments.map((s) => `${s.segment} (${s.revenueShare || 'N/A'})`).join('; ')
+      : 'N/A';
+    const geography = profile?.geographicBreakdown
+      ? profile.geographicBreakdown
+          .map((g) => `${g.region} (${g.revenueShare || 'N/A'})`)
+          .join('; ')
+      : c.country || 'N/A';
+    const businessModel = profile?.businessModel || 'N/A';
+    const source =
+      profile?.dataSource === 'web_search'
+        ? 'Web Search'
+        : profile?.dataSource
+          ? 'Annual Report'
+          : 'Name Only';
+
+    data.push([
+      c.name,
+      c.country || '-',
+      source,
+      segments,
+      geography,
+      businessModel,
+      profile?.businessDescription || c.businessDescription || 'Included based on AI evaluation',
+    ]);
+  }
+
+  data.push([]);
+
+  // Excluded peers section (top 20 most relevant)
+  const excludedCompanies = allCompanies
+    .filter((c) => !includedCompanies.some((inc) => inc.name === c.name))
+    .slice(0, 20);
+
+  if (excludedCompanies.length > 0) {
+    data.push(['TOP EXCLUDED COMPANIES (with reasons)']);
+    data.push(['Company', 'Country', 'Primary Reason', 'Evidence']);
+
+    for (const c of excludedCompanies) {
+      const profile = c.businessProfile;
+      const reason = c.filterReason || 'Removed during qualitative filtering';
+      const evidence = profile?.businessDescription
+        ? `Per ${profile.dataSource === 'web_search' ? 'web research' : 'annual report'}: ${profile.businessDescription}`
+        : 'No annual report data available';
+
+      data.push([c.name, c.country || '-', reason, evidence]);
+    }
+  }
+
+  return data;
+}
+
 // ============ END 3-PHASE FILTERING SYSTEM ============
 
 // Helper: Generate filtering steps based on target description
@@ -2475,7 +2721,11 @@ Make each step progressively more selective. First step should be broad, last st
       response_format: { type: 'json_object' },
     });
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const parsed = JSON.parse(response.choices[0].message.content);
     return parsed.steps || [`Companies related to ${targetDescription}`];
@@ -2559,989 +2809,1029 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
     message: 'Request received. Results will be emailed shortly.',
   });
 
-  const tracker = createTracker('trading-comparable', Email, { TargetCompanyOrIndustry, IsProfitable });
+  const tracker = createTracker('trading-comparable', Email, {
+    TargetCompanyOrIndustry,
+    IsProfitable,
+  });
 
   trackingContext.run(tracker, async () => {
-  try {
-    const workbook = XLSX.read(excelFile.buffer, { type: 'buffer' });
-    const sheetName = workbook.SheetNames[0];
-    const sheet = workbook.Sheets[sheetName];
-    const allRows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+    try {
+      const workbook = XLSX.read(excelFile.buffer, { type: 'buffer' });
+      const sheetName = workbook.SheetNames[0];
+      const sheet = workbook.Sheets[sheetName];
+      const allRows = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-    // Read Filter List sheet to extract criteria for slide title
-    let slideTitle = TargetCompanyOrIndustry; // Default fallback
-    const filterListSheet = workbook.Sheets['Filter List'];
-    if (filterListSheet) {
-      const filterRows = XLSX.utils.sheet_to_json(filterListSheet, { header: 1 });
-      let region = '';
-      let industry = '';
-      let status = '';
+      // Read Filter List sheet to extract criteria for slide title
+      let slideTitle = TargetCompanyOrIndustry; // Default fallback
+      const filterListSheet = workbook.Sheets['Filter List'];
+      if (filterListSheet) {
+        const filterRows = XLSX.utils.sheet_to_json(filterListSheet, { header: 1 });
+        let region = '';
+        let industry = '';
+        let status = '';
 
-      // Parse the Filter List sheet to find Region, Industry, Status
-      for (const row of filterRows) {
-        if (!row || row.length < 2) continue;
-        const label = String(row[0] || '').toLowerCase();
-        const value = String(row[1] || '');
+        // Parse the Filter List sheet to find Region, Industry, Status
+        for (const row of filterRows) {
+          if (!row || row.length < 2) continue;
+          const label = String(row[0] || '').toLowerCase();
+          const value = String(row[1] || '');
 
-        if (label.includes('region')) {
-          region = value;
-        } else if (label.includes('industry')) {
-          industry = value;
-        } else if (label.includes('status')) {
-          status = value;
+          if (label.includes('region')) {
+            region = value;
+          } else if (label.includes('industry')) {
+            industry = value;
+          } else if (label.includes('status')) {
+            status = value;
+          }
+        }
+
+        // Build dynamic title: "Listed Cosmetics Companies in Southeast Asia"
+        if (industry || region) {
+          const statusText = status.toLowerCase() === 'listed' ? 'Listed ' : '';
+          const industryText = industry || '';
+
+          // Check if all countries are Southeast Asian - if so, use "Southeast Asia"
+          const seaCountries = [
+            'singapore',
+            'malaysia',
+            'indonesia',
+            'thailand',
+            'philippines',
+            'vietnam',
+          ];
+          const regionCountries = region
+            ? region.split(',').map((r) => r.trim().toLowerCase())
+            : [];
+          const allAreSEA =
+            regionCountries.length > 0 &&
+            regionCountries.every((c) => seaCountries.some((sea) => c.includes(sea)));
+
+          let regionText;
+          if (allAreSEA && regionCountries.length >= 3) {
+            regionText = 'Southeast Asia';
+          } else {
+            regionText = region
+              ? region
+                  .split(',')
+                  .map((r) => r.trim())
+                  .join(', ')
+                  .replace(/, ([^,]*)$/, ' and $1')
+              : '';
+          }
+
+          slideTitle = `${statusText}${industryText} Companies in ${regionText}`.trim();
+          console.log(`Dynamic slide title from Filter List: ${slideTitle}`);
         }
       }
 
-      // Build dynamic title: "Listed Cosmetics Companies in Southeast Asia"
-      if (industry || region) {
-        const statusText = status.toLowerCase() === 'listed' ? 'Listed ' : '';
-        const industryText = industry || '';
+      console.log(`Total rows in file: ${allRows.length}`);
 
-        // Check if all countries are Southeast Asian - if so, use "Southeast Asia"
-        const seaCountries = [
-          'singapore',
-          'malaysia',
-          'indonesia',
-          'thailand',
-          'philippines',
-          'vietnam',
-        ];
-        const regionCountries = region ? region.split(',').map((r) => r.trim().toLowerCase()) : [];
-        const allAreSEA =
-          regionCountries.length > 0 &&
-          regionCountries.every((c) => seaCountries.some((sea) => c.includes(sea)));
+      // Find the header row - look for row containing company-related headers
+      let headerRowIndex = -1;
+      let headers = [];
 
-        let regionText;
-        if (allAreSEA && regionCountries.length >= 3) {
-          regionText = 'Southeast Asia';
-        } else {
-          regionText = region
-            ? region
-                .split(',')
-                .map((r) => r.trim())
-                .join(', ')
-                .replace(/, ([^,]*)$/, ' and $1')
-            : '';
-        }
-
-        slideTitle = `${statusText}${industryText} Companies in ${regionText}`.trim();
-        console.log(`Dynamic slide title from Filter List: ${slideTitle}`);
-      }
-    }
-
-    console.log(`Total rows in file: ${allRows.length}`);
-
-    // Find the header row - look for row containing company-related headers
-    let headerRowIndex = -1;
-    let headers = [];
-
-    for (let i = 0; i < Math.min(20, allRows.length); i++) {
-      const row = allRows[i];
-      if (!row) continue;
-      const rowStr = row.join(' ').toLowerCase();
-      // Look for row with "company" AND any financial column (sales, revenue, market, ebitda, etc.)
-      if (
-        (rowStr.includes('company') || rowStr.includes('name')) &&
-        (rowStr.includes('sales') ||
-          rowStr.includes('revenue') ||
-          rowStr.includes('market') ||
-          rowStr.includes('ebitda') ||
-          rowStr.includes('p/e') ||
-          rowStr.includes('ev/') ||
-          rowStr.includes('ev '))
-      ) {
-        headerRowIndex = i;
-        headers = row;
-        console.log(`Found header row at index ${i}: ${row.slice(0, 10).join(', ')}`);
-        break;
-      }
-    }
-
-    if (headerRowIndex === -1) {
-      // Fallback: find first row with "company" in it
       for (let i = 0; i < Math.min(20, allRows.length); i++) {
         const row = allRows[i];
         if (!row) continue;
         const rowStr = row.join(' ').toLowerCase();
-        if (rowStr.includes('company name') || rowStr.includes('company')) {
+        // Look for row with "company" AND any financial column (sales, revenue, market, ebitda, etc.)
+        if (
+          (rowStr.includes('company') || rowStr.includes('name')) &&
+          (rowStr.includes('sales') ||
+            rowStr.includes('revenue') ||
+            rowStr.includes('market') ||
+            rowStr.includes('ebitda') ||
+            rowStr.includes('p/e') ||
+            rowStr.includes('ev/') ||
+            rowStr.includes('ev '))
+        ) {
           headerRowIndex = i;
           headers = row;
-          console.log(`Fallback header row at index ${i}: ${row.slice(0, 10).join(', ')}`);
+          console.log(`Found header row at index ${i}: ${row.slice(0, 10).join(', ')}`);
           break;
         }
       }
-    }
 
-    if (headerRowIndex === -1) {
-      headerRowIndex = 0;
-      headers = allRows[0] || [];
-      console.log(`Using first row as header: ${headers.slice(0, 10).join(', ')}`);
-    }
-
-    console.log(`Header row index: ${headerRowIndex}`);
-
-    // ========== COMPREHENSIVE RAW DATA DUMP ==========
-    // Show EVERY column with header and first 3 sample values
-    console.log(`\n${'='.repeat(60)}`);
-    console.log(`RAW EXCEL DATA INSPECTION (${headers.length} columns)`);
-    console.log(`${'='.repeat(60)}`);
-
-    const dataRowsPreview = allRows.slice(headerRowIndex + 1, headerRowIndex + 6); // First 5 data rows
-
-    for (let colIdx = 0; colIdx < headers.length; colIdx++) {
-      const header = headers[colIdx];
-      if (!header) continue;
-
-      // Get sample values from this column
-      const samples = [];
-      for (const row of dataRowsPreview) {
-        if (row && row[colIdx] !== undefined && row[colIdx] !== null && row[colIdx] !== '') {
-          samples.push(row[colIdx]);
-        }
-      }
-
-      console.log(`  Col ${colIdx}: "${header}"`);
-      console.log(`    Sample values: [${samples.slice(0, 3).join(', ')}]`);
-    }
-
-    console.log(`${'='.repeat(60)}\n`);
-
-    // Also log first 3 complete data rows for reference
-    console.log(`FIRST 3 COMPLETE DATA ROWS:`);
-    for (let i = headerRowIndex + 1; i < Math.min(headerRowIndex + 4, allRows.length); i++) {
-      const row = allRows[i];
-      if (row) {
-        console.log(
-          `  Row ${i}: ${row
-            .slice(0, 15)
-            .map((v, idx) => `[${idx}]${v}`)
-            .join(' | ')}`
-        );
-      }
-    }
-
-    // Find column indices - enhanced to detect TTM vs FY columns
-    const findCol = (patterns, excludePatterns = []) => {
-      for (const pattern of patterns) {
-        const idx = headers.findIndex((h) => {
-          if (!h) return false;
-          const hLower = h.toString().toLowerCase();
-          // Check if header matches pattern
-          if (!hLower.includes(pattern.toLowerCase())) return false;
-          // Check if header contains any exclude patterns
-          for (const exclude of excludePatterns) {
-            if (hLower.includes(exclude.toLowerCase())) return false;
-          }
-          return true;
-        });
-        if (idx !== -1) return idx;
-      }
-      return -1;
-    };
-
-    // Find Sales/Revenue column - with DATA VALIDATION to ensure correct column
-    const findSalesCol = () => {
-      const salesPatterns = [
-        'net sales',
-        'total sales',
-        'total revenue',
-        'net revenue',
-        'sales',
-        'revenue',
-        'turnover',
-        'revenues',
-      ];
-      const excludePatterns = [
-        'growth',
-        'margin',
-        'rank',
-        'yoy',
-        'change',
-        '%',
-        'per ',
-        'ratio',
-        'count',
-        '#',
-        'cagr',
-        'number',
-      ];
-
-      // Find ALL candidate columns matching sales/revenue patterns
-      const candidates = [];
-      for (let idx = 0; idx < headers.length; idx++) {
-        const h = headers[idx];
-        if (!h) continue;
-        const hLower = h.toString().toLowerCase();
-
-        // Check if header matches any sales pattern
-        let matchesPattern = false;
-        for (const pattern of salesPatterns) {
-          if (hLower.includes(pattern.toLowerCase())) {
-            matchesPattern = true;
+      if (headerRowIndex === -1) {
+        // Fallback: find first row with "company" in it
+        for (let i = 0; i < Math.min(20, allRows.length); i++) {
+          const row = allRows[i];
+          if (!row) continue;
+          const rowStr = row.join(' ').toLowerCase();
+          if (rowStr.includes('company name') || rowStr.includes('company')) {
+            headerRowIndex = i;
+            headers = row;
+            console.log(`Fallback header row at index ${i}: ${row.slice(0, 10).join(', ')}`);
             break;
           }
         }
-        if (!matchesPattern) continue;
-
-        // Check for exclude patterns
-        let excluded = false;
-        for (const exclude of excludePatterns) {
-          if (hLower.includes(exclude.toLowerCase())) {
-            excluded = true;
-            console.log(`  Excluding col ${idx} "${h}" - contains "${exclude}"`);
-            break;
-          }
-        }
-        if (excluded) continue;
-
-        candidates.push({ idx, header: h });
       }
 
-      console.log(`\n=== SALES COLUMN CANDIDATES ===`);
-      if (candidates.length === 0) {
-        console.log('  No candidate columns found!');
-        return -1;
+      if (headerRowIndex === -1) {
+        headerRowIndex = 0;
+        headers = allRows[0] || [];
+        console.log(`Using first row as header: ${headers.slice(0, 10).join(', ')}`);
       }
 
-      // Get data rows for validation
-      const dataRows = allRows.slice(headerRowIndex + 1);
+      console.log(`Header row index: ${headerRowIndex}`);
 
-      // Validate each candidate by sampling actual data values
-      for (const candidate of candidates) {
-        console.log(`\n  Checking candidate: col ${candidate.idx} = "${candidate.header}"`);
+      // ========== COMPREHENSIVE RAW DATA DUMP ==========
+      // Show EVERY column with header and first 3 sample values
+      console.log(`\n${'='.repeat(60)}`);
+      console.log(`RAW EXCEL DATA INSPECTION (${headers.length} columns)`);
+      console.log(`${'='.repeat(60)}`);
 
-        // Sample first 10 non-empty values from this column
-        const sampleValues = [];
-        let rowsSampled = 0;
-        for (const row of dataRows) {
-          if (rowsSampled >= 10) break;
-          if (!row || row.length === 0) continue;
+      const dataRowsPreview = allRows.slice(headerRowIndex + 1, headerRowIndex + 6); // First 5 data rows
 
-          const cellValue = row[candidate.idx];
-          if (cellValue === undefined || cellValue === null || cellValue === '') continue;
+      for (let colIdx = 0; colIdx < headers.length; colIdx++) {
+        const header = headers[colIdx];
+        if (!header) continue;
 
-          const numVal = parseFloat(String(cellValue).replace(/[,%]/g, ''));
-          if (!isNaN(numVal)) {
-            sampleValues.push(numVal);
-            rowsSampled++;
+        // Get sample values from this column
+        const samples = [];
+        for (const row of dataRowsPreview) {
+          if (row && row[colIdx] !== undefined && row[colIdx] !== null && row[colIdx] !== '') {
+            samples.push(row[colIdx]);
           }
         }
 
-        console.log(
-          `    Sample values (first ${sampleValues.length}): [${sampleValues.slice(0, 5).join(', ')}${sampleValues.length > 5 ? '...' : ''}]`
-        );
-
-        if (sampleValues.length === 0) {
-          console.log(`    SKIP: No numeric values found`);
-          continue;
-        }
-
-        // Validate: Sales values should NOT be small sequential integers (ranks)
-        const allSmallIntegers = sampleValues.every(
-          (v) => v >= 1 && v <= 20 && Number.isInteger(v)
-        );
-        if (allSmallIntegers && sampleValues.length >= 3) {
-          // Check if they look sequential (like ranks: 1,2,3,4...)
-          const sorted = [...sampleValues].sort((a, b) => a - b);
-          const looksLikeRank = sorted.every((v, _i) => v >= 1 && v <= 20);
-          if (looksLikeRank) {
-            console.log(`    SKIP: Values look like ranking (small integers 1-20)`);
-            continue;
-          }
-        }
-
-        // Validate: Sales values should NOT all be percentages (0-100 range with decimals)
-        const avgValue = sampleValues.reduce((a, b) => a + b, 0) / sampleValues.length;
-        const maxValue = Math.max(...sampleValues);
-
-        if (maxValue < 100 && sampleValues.every((v) => v >= -100 && v <= 100)) {
-          // Check if this looks like margin percentages
-          if (sampleValues.some((v) => v < 0) || sampleValues.every((v) => Math.abs(v) < 50)) {
-            console.log(
-              `    SKIP: Values look like percentages/margins (avg: ${avgValue.toFixed(1)})`
-            );
-            continue;
-          }
-        }
-
-        // Validate: At least some values should be substantial (>50 for typical sales in millions)
-        if (maxValue < 50) {
-          console.log(`    SKIP: All values too small for revenue (max: ${maxValue})`);
-          continue;
-        }
-
-        // This candidate passes validation
-        console.log(
-          `    ACCEPTED: Values look like revenue (avg: ${avgValue.toFixed(0)}, max: ${maxValue.toFixed(0)})`
-        );
-        return candidate.idx;
+        console.log(`  Col ${colIdx}: "${header}"`);
+        console.log(`    Sample values: [${samples.slice(0, 3).join(', ')}]`);
       }
 
-      // If no validated candidate, fall back to first candidate with a warning
-      if (candidates.length > 0) {
-        console.log(
-          `\n  WARNING: No validated sales column found, using first candidate: col ${candidates[0].idx}`
-        );
-        return candidates[0].idx;
+      console.log(`${'='.repeat(60)}\n`);
+
+      // Also log first 3 complete data rows for reference
+      console.log(`FIRST 3 COMPLETE DATA ROWS:`);
+      for (let i = headerRowIndex + 1; i < Math.min(headerRowIndex + 4, allRows.length); i++) {
+        const row = allRows[i];
+        if (row) {
+          console.log(
+            `  Row ${i}: ${row
+              .slice(0, 15)
+              .map((v, idx) => `[${idx}]${v}`)
+              .join(' | ')}`
+          );
+        }
       }
 
-      return -1;
-    };
-
-    // Find all columns matching a pattern (for TTM/FY detection)
-    const findAllCols = (patterns) => {
-      const found = [];
-      for (let idx = 0; idx < headers.length; idx++) {
-        const h = headers[idx];
-        if (!h) continue;
-        const hLower = h.toString().toLowerCase();
+      // Find column indices - enhanced to detect TTM vs FY columns
+      const findCol = (patterns, excludePatterns = []) => {
         for (const pattern of patterns) {
-          if (hLower.includes(pattern.toLowerCase())) {
-            found.push({ idx, header: h });
-            break;
+          const idx = headers.findIndex((h) => {
+            if (!h) return false;
+            const hLower = h.toString().toLowerCase();
+            // Check if header matches pattern
+            if (!hLower.includes(pattern.toLowerCase())) return false;
+            // Check if header contains any exclude patterns
+            for (const exclude of excludePatterns) {
+              if (hLower.includes(exclude.toLowerCase())) return false;
+            }
+            return true;
+          });
+          if (idx !== -1) return idx;
+        }
+        return -1;
+      };
+
+      // Find Sales/Revenue column - with DATA VALIDATION to ensure correct column
+      const findSalesCol = () => {
+        const salesPatterns = [
+          'net sales',
+          'total sales',
+          'total revenue',
+          'net revenue',
+          'sales',
+          'revenue',
+          'turnover',
+          'revenues',
+        ];
+        const excludePatterns = [
+          'growth',
+          'margin',
+          'rank',
+          'yoy',
+          'change',
+          '%',
+          'per ',
+          'ratio',
+          'count',
+          '#',
+          'cagr',
+          'number',
+        ];
+
+        // Find ALL candidate columns matching sales/revenue patterns
+        const candidates = [];
+        for (let idx = 0; idx < headers.length; idx++) {
+          const h = headers[idx];
+          if (!h) continue;
+          const hLower = h.toString().toLowerCase();
+
+          // Check if header matches any sales pattern
+          let matchesPattern = false;
+          for (const pattern of salesPatterns) {
+            if (hLower.includes(pattern.toLowerCase())) {
+              matchesPattern = true;
+              break;
+            }
+          }
+          if (!matchesPattern) continue;
+
+          // Check for exclude patterns
+          let excluded = false;
+          for (const exclude of excludePatterns) {
+            if (hLower.includes(exclude.toLowerCase())) {
+              excluded = true;
+              console.log(`  Excluding col ${idx} "${h}" - contains "${exclude}"`);
+              break;
+            }
+          }
+          if (excluded) continue;
+
+          candidates.push({ idx, header: h });
+        }
+
+        console.log(`\n=== SALES COLUMN CANDIDATES ===`);
+        if (candidates.length === 0) {
+          console.log('  No candidate columns found!');
+          return -1;
+        }
+
+        // Get data rows for validation
+        const dataRows = allRows.slice(headerRowIndex + 1);
+
+        // Validate each candidate by sampling actual data values
+        for (const candidate of candidates) {
+          console.log(`\n  Checking candidate: col ${candidate.idx} = "${candidate.header}"`);
+
+          // Sample first 10 non-empty values from this column
+          const sampleValues = [];
+          let rowsSampled = 0;
+          for (const row of dataRows) {
+            if (rowsSampled >= 10) break;
+            if (!row || row.length === 0) continue;
+
+            const cellValue = row[candidate.idx];
+            if (cellValue === undefined || cellValue === null || cellValue === '') continue;
+
+            const numVal = parseFloat(String(cellValue).replace(/[,%]/g, ''));
+            if (!isNaN(numVal)) {
+              sampleValues.push(numVal);
+              rowsSampled++;
+            }
+          }
+
+          console.log(
+            `    Sample values (first ${sampleValues.length}): [${sampleValues.slice(0, 5).join(', ')}${sampleValues.length > 5 ? '...' : ''}]`
+          );
+
+          if (sampleValues.length === 0) {
+            console.log(`    SKIP: No numeric values found`);
+            continue;
+          }
+
+          // Validate: Sales values should NOT be small sequential integers (ranks)
+          const allSmallIntegers = sampleValues.every(
+            (v) => v >= 1 && v <= 20 && Number.isInteger(v)
+          );
+          if (allSmallIntegers && sampleValues.length >= 3) {
+            // Check if they look sequential (like ranks: 1,2,3,4...)
+            const sorted = [...sampleValues].sort((a, b) => a - b);
+            const looksLikeRank = sorted.every((v, _i) => v >= 1 && v <= 20);
+            if (looksLikeRank) {
+              console.log(`    SKIP: Values look like ranking (small integers 1-20)`);
+              continue;
+            }
+          }
+
+          // Validate: Sales values should NOT all be percentages (0-100 range with decimals)
+          const avgValue = sampleValues.reduce((a, b) => a + b, 0) / sampleValues.length;
+          const maxValue = Math.max(...sampleValues);
+
+          if (maxValue < 100 && sampleValues.every((v) => v >= -100 && v <= 100)) {
+            // Check if this looks like margin percentages
+            if (sampleValues.some((v) => v < 0) || sampleValues.every((v) => Math.abs(v) < 50)) {
+              console.log(
+                `    SKIP: Values look like percentages/margins (avg: ${avgValue.toFixed(1)})`
+              );
+              continue;
+            }
+          }
+
+          // Validate: At least some values should be substantial (>50 for typical sales in millions)
+          if (maxValue < 50) {
+            console.log(`    SKIP: All values too small for revenue (max: ${maxValue})`);
+            continue;
+          }
+
+          // This candidate passes validation
+          console.log(
+            `    ACCEPTED: Values look like revenue (avg: ${avgValue.toFixed(0)}, max: ${maxValue.toFixed(0)})`
+          );
+          return candidate.idx;
+        }
+
+        // If no validated candidate, fall back to first candidate with a warning
+        if (candidates.length > 0) {
+          console.log(
+            `\n  WARNING: No validated sales column found, using first candidate: col ${candidates[0].idx}`
+          );
+          return candidates[0].idx;
+        }
+
+        return -1;
+      };
+
+      // Find all columns matching a pattern (for TTM/FY detection)
+      const findAllCols = (patterns) => {
+        const found = [];
+        for (let idx = 0; idx < headers.length; idx++) {
+          const h = headers[idx];
+          if (!h) continue;
+          const hLower = h.toString().toLowerCase();
+          for (const pattern of patterns) {
+            if (hLower.includes(pattern.toLowerCase())) {
+              found.push({ idx, header: h });
+              break;
+            }
           }
         }
-      }
-      return found;
-    };
-
-    // Find P/E columns - prefer TTM over FY
-    const peCols = findAllCols(['p/e', 'pe ', 'per ', 'price/earnings', 'price-earnings']);
-    let peTTMCol = -1;
-    let peFYCol = -1;
-
-    for (const col of peCols) {
-      const hLower = col.header.toLowerCase();
-      if (hLower.includes('ttm') || hLower.includes('trailing') || hLower.includes('ltm')) {
-        peTTMCol = col.idx;
-      } else if (hLower.includes('fy') || hLower.includes('annual') || hLower.includes('year')) {
-        peFYCol = col.idx;
-      }
-    }
-    // If no specific TTM/FY found, use first P/E column as FY
-    if (peTTMCol === -1 && peFYCol === -1 && peCols.length > 0) {
-      peFYCol = peCols[0].idx;
-    }
-
-    const cols = {
-      company: findCol(['company name', 'company', 'name']),
-      country: findCol(['country', 'region', 'location', 'hq']),
-      sales: findSalesCol(),
-      marketCap: findCol([
-        'market cap',
-        'mcap',
-        'market capitalization',
-        'mkt cap',
-        'marketcap',
-        'market value',
-      ]),
-      ev: findCol(['enterprise value', 'total ev', 'ev ', ' ev', 'ev(', 'ev/']),
-      ebitda: findCol(['ebitda'], ['margin', '%']), // Exclude EBITDA Margin
-      // Net Margin: exclude operating/op to avoid confusion with Op Margin
-      netMargin: findCol(
-        ['net margin', 'net income margin', 'net profit margin', 'npm', 'net mgn', 'profit margin'],
-        ['operating', 'op ', 'oper', 'ebitda', 'gross']
-      ),
-      // Op Margin: must contain operating/op
-      opMargin: findCol([
-        'operating margin',
-        'op margin',
-        'oper margin',
-        'opm',
-        'op mgn',
-        'oper mgn',
-        'operating profit margin',
-      ]),
-      ebitdaMargin: findCol(['ebitda margin', 'ebitda %', 'ebitda/sales', 'ebitda mgn']),
-      evEbitda: findCol(['ev/ebitda', 'ev / ebitda', 'ev-ebitda', 'ev to ebitda']),
-      peTTM: peTTMCol,
-      peFY: peFYCol,
-      pb: findCol(['p/b', 'pb ', 'p/bv', 'pbv', 'price/book', 'price to book', 'p-b']),
-    };
-
-    if (cols.company === -1) cols.company = 0;
-
-    console.log(`\n=== COLUMN MAPPING ===`);
-    console.log(`  Company: col ${cols.company} = "${headers[cols.company] || 'N/A'}"`);
-    console.log(`  Country: col ${cols.country} = "${headers[cols.country] || 'N/A'}"`);
-    console.log(`  Sales/Revenue: col ${cols.sales} = "${headers[cols.sales] || 'NOT FOUND'}"`);
-    console.log(`  Market Cap: col ${cols.marketCap} = "${headers[cols.marketCap] || 'N/A'}"`);
-    console.log(`  EV: col ${cols.ev} = "${headers[cols.ev] || 'N/A'}"`);
-    console.log(`  EBITDA: col ${cols.ebitda} = "${headers[cols.ebitda] || 'N/A'}"`);
-    console.log(`  Net Margin: col ${cols.netMargin} = "${headers[cols.netMargin] || 'N/A'}"`);
-    console.log(`  Op Margin: col ${cols.opMargin} = "${headers[cols.opMargin] || 'N/A'}"`);
-    console.log(
-      `  EBITDA Margin: col ${cols.ebitdaMargin} = "${headers[cols.ebitdaMargin] || 'N/A'}"`
-    );
-    console.log(`  EV/EBITDA: col ${cols.evEbitda} = "${headers[cols.evEbitda] || 'N/A'}"`);
-    console.log(`  P/E TTM: col ${cols.peTTM} = "${headers[cols.peTTM] || 'N/A'}"`);
-    console.log(`  P/E FY: col ${cols.peFY} = "${headers[cols.peFY] || 'N/A'}"`);
-    console.log(`  P/B: col ${cols.pb} = "${headers[cols.pb] || 'N/A'}"`);
-
-    if (cols.sales < 0) {
-      console.log(`\n*** WARNING: Sales/Revenue column NOT FOUND! Available headers:`);
-      headers.forEach((h, i) => console.log(`    [${i}] ${h}`));
-    }
-
-    // Extract data rows
-    const dataRows = allRows.slice(headerRowIndex + 1);
-    const allCompanies = [];
-    let loggedCount = 0;
-
-    for (const row of dataRows) {
-      if (!row || row.length === 0) continue;
-
-      const companyName = cols.company >= 0 ? row[cols.company] : null;
-      if (!companyName) continue;
-
-      const nameStr = String(companyName).toLowerCase().trim();
-
-      // Skip rows that are clearly NOT company names
-      if (
-        nameStr.includes('total') ||
-        nameStr.includes('median') ||
-        nameStr.includes('average') ||
-        nameStr.includes('note:') ||
-        nameStr.includes('source:') ||
-        nameStr.includes('unit') ||
-        nameStr.startsWith('*') ||
-        nameStr.length < 2
-      )
-        continue;
-      if (nameStr.startsWith('spd') && nameStr.length > 10) continue;
-
-      // Skip sub-header rows (period indicators, unit indicators, etc.)
-      if (
-        nameStr.includes('latest') ||
-        nameStr.includes('fiscal') ||
-        nameStr.includes('period') ||
-        nameStr === 'fy' ||
-        nameStr === 'ttm' ||
-        nameStr === 'ltm' ||
-        nameStr.includes('million') ||
-        nameStr.includes('billion') ||
-        nameStr.includes('usd') ||
-        nameStr.includes('currency') ||
-        nameStr.includes('local')
-      )
-        continue;
-
-      const parseNum = (idx) => {
-        if (idx < 0 || row[idx] === undefined || row[idx] === null || row[idx] === '') return null;
-        const rawVal = row[idx];
-        const val = parseFloat(String(rawVal).replace(/[,%]/g, ''));
-        return isNaN(val) ? null : val;
+        return found;
       };
 
-      // Get raw cell values for debugging
-      const rawSales = cols.sales >= 0 ? row[cols.sales] : 'N/A';
-      const rawMarketCap = cols.marketCap >= 0 ? row[cols.marketCap] : 'N/A';
-      const rawEV = cols.ev >= 0 ? row[cols.ev] : 'N/A';
+      // Find P/E columns - prefer TTM over FY
+      const peCols = findAllCols(['p/e', 'pe ', 'per ', 'price/earnings', 'price-earnings']);
+      let peTTMCol = -1;
+      let peFYCol = -1;
 
-      const company = {
-        name: companyName,
-        country: cols.country >= 0 ? row[cols.country] || '-' : '-',
-        sales: parseNum(cols.sales),
-        marketCap: parseNum(cols.marketCap),
-        ev: parseNum(cols.ev),
-        ebitda: parseNum(cols.ebitda),
-        netMargin: parseNum(cols.netMargin),
-        opMargin: parseNum(cols.opMargin),
-        ebitdaMargin: parseNum(cols.ebitdaMargin),
-        evEbitda: parseNum(cols.evEbitda),
-        peTTM: parseNum(cols.peTTM),
-        peFY: parseNum(cols.peFY),
-        pb: parseNum(cols.pb),
-        filterReason: '',
-        dataWarnings: [],
-        // Store raw row data for AI validation
-        _rawRow: row.slice(0, 20), // First 20 columns
-        _colMapping: { ...cols },
+      for (const col of peCols) {
+        const hLower = col.header.toLowerCase();
+        if (hLower.includes('ttm') || hLower.includes('trailing') || hLower.includes('ltm')) {
+          peTTMCol = col.idx;
+        } else if (hLower.includes('fy') || hLower.includes('annual') || hLower.includes('year')) {
+          peFYCol = col.idx;
+        }
+      }
+      // If no specific TTM/FY found, use first P/E column as FY
+      if (peTTMCol === -1 && peFYCol === -1 && peCols.length > 0) {
+        peFYCol = peCols[0].idx;
+      }
+
+      const cols = {
+        company: findCol(['company name', 'company', 'name']),
+        country: findCol(['country', 'region', 'location', 'hq']),
+        sales: findSalesCol(),
+        marketCap: findCol([
+          'market cap',
+          'mcap',
+          'market capitalization',
+          'mkt cap',
+          'marketcap',
+          'market value',
+        ]),
+        ev: findCol(['enterprise value', 'total ev', 'ev ', ' ev', 'ev(', 'ev/']),
+        ebitda: findCol(['ebitda'], ['margin', '%']), // Exclude EBITDA Margin
+        // Net Margin: exclude operating/op to avoid confusion with Op Margin
+        netMargin: findCol(
+          [
+            'net margin',
+            'net income margin',
+            'net profit margin',
+            'npm',
+            'net mgn',
+            'profit margin',
+          ],
+          ['operating', 'op ', 'oper', 'ebitda', 'gross']
+        ),
+        // Op Margin: must contain operating/op
+        opMargin: findCol([
+          'operating margin',
+          'op margin',
+          'oper margin',
+          'opm',
+          'op mgn',
+          'oper mgn',
+          'operating profit margin',
+        ]),
+        ebitdaMargin: findCol(['ebitda margin', 'ebitda %', 'ebitda/sales', 'ebitda mgn']),
+        evEbitda: findCol(['ev/ebitda', 'ev / ebitda', 'ev-ebitda', 'ev to ebitda']),
+        peTTM: peTTMCol,
+        peFY: peFYCol,
+        pb: findCol(['p/b', 'pb ', 'p/bv', 'pbv', 'price/book', 'price to book', 'p-b']),
       };
 
-      // Log first 5 companies with their raw and parsed values
-      if (loggedCount < 5) {
-        console.log(`\n--- ${company.name} ---`);
-        console.log(
-          `  RAW: Sales[col ${cols.sales}]="${rawSales}" | MCap[col ${cols.marketCap}]="${rawMarketCap}" | EV[col ${cols.ev}]="${rawEV}"`
-        );
-        console.log(
-          `  PARSED: Sales=${company.sales} | MCap=${company.marketCap} | EV=${company.ev} | EBITDA=${company.ebitda}`
-        );
-        loggedCount++;
+      if (cols.company === -1) cols.company = 0;
+
+      console.log(`\n=== COLUMN MAPPING ===`);
+      console.log(`  Company: col ${cols.company} = "${headers[cols.company] || 'N/A'}"`);
+      console.log(`  Country: col ${cols.country} = "${headers[cols.country] || 'N/A'}"`);
+      console.log(`  Sales/Revenue: col ${cols.sales} = "${headers[cols.sales] || 'NOT FOUND'}"`);
+      console.log(`  Market Cap: col ${cols.marketCap} = "${headers[cols.marketCap] || 'N/A'}"`);
+      console.log(`  EV: col ${cols.ev} = "${headers[cols.ev] || 'N/A'}"`);
+      console.log(`  EBITDA: col ${cols.ebitda} = "${headers[cols.ebitda] || 'N/A'}"`);
+      console.log(`  Net Margin: col ${cols.netMargin} = "${headers[cols.netMargin] || 'N/A'}"`);
+      console.log(`  Op Margin: col ${cols.opMargin} = "${headers[cols.opMargin] || 'N/A'}"`);
+      console.log(
+        `  EBITDA Margin: col ${cols.ebitdaMargin} = "${headers[cols.ebitdaMargin] || 'N/A'}"`
+      );
+      console.log(`  EV/EBITDA: col ${cols.evEbitda} = "${headers[cols.evEbitda] || 'N/A'}"`);
+      console.log(`  P/E TTM: col ${cols.peTTM} = "${headers[cols.peTTM] || 'N/A'}"`);
+      console.log(`  P/E FY: col ${cols.peFY} = "${headers[cols.peFY] || 'N/A'}"`);
+      console.log(`  P/B: col ${cols.pb} = "${headers[cols.pb] || 'N/A'}"`);
+
+      if (cols.sales < 0) {
+        console.log(`\n*** WARNING: Sales/Revenue column NOT FOUND! Available headers:`);
+        headers.forEach((h, i) => console.log(`    [${i}] ${h}`));
       }
 
-      // DATA VALIDATION: Check for suspicious/inconsistent financial data
-      const warnings = [];
+      // Extract data rows
+      const dataRows = allRows.slice(headerRowIndex + 1);
+      const allCompanies = [];
+      let loggedCount = 0;
 
-      // Check 1: EBITDA should be less than Sales (EBITDA margin > 100% is very suspicious)
-      if (company.sales && company.ebitda && company.ebitda > company.sales) {
-        warnings.push(
-          `EBITDA (${company.ebitda}) > Sales (${company.sales}) - possible unit mismatch`
-        );
-      }
+      for (const row of dataRows) {
+        if (!row || row.length === 0) continue;
 
-      // Check 2: Sales should be reasonable compared to Market Cap (PSR typically 0.1x - 50x)
-      if (company.sales && company.marketCap) {
-        const psr = company.marketCap / company.sales;
-        if (psr > 100) {
-          warnings.push(`PSR ${psr.toFixed(1)}x is extremely high - check Sales units`);
-        } else if (psr < 0.01) {
-          warnings.push(`PSR ${psr.toFixed(3)}x is extremely low - check Market Cap units`);
-        }
-      }
+        const companyName = cols.company >= 0 ? row[cols.company] : null;
+        if (!companyName) continue;
 
-      // Check 3: EV should be in similar ballpark as Market Cap (typically 0.5x - 3x)
-      if (company.ev && company.marketCap) {
-        const evToMcap = company.ev / company.marketCap;
-        if (evToMcap > 10) {
-          warnings.push(`EV/Market Cap ratio ${evToMcap.toFixed(1)}x is unusual - verify data`);
-        } else if (evToMcap < 0.1) {
-          warnings.push(`EV/Market Cap ratio ${evToMcap.toFixed(2)}x is unusual - verify data`);
-        }
-      }
+        const nameStr = String(companyName).toLowerCase().trim();
 
-      // Check 4: If EV/EBITDA is provided, verify it roughly matches EV / EBITDA calculation
-      if (company.evEbitda && company.ev && company.ebitda && company.ebitda > 0) {
-        const calculatedEvEbitda = company.ev / company.ebitda;
-        const diff = Math.abs(calculatedEvEbitda - company.evEbitda) / company.evEbitda;
-        if (diff > 0.5) {
-          // More than 50% difference
-          warnings.push(
-            `EV/EBITDA mismatch: provided ${company.evEbitda.toFixed(1)}x vs calculated ${calculatedEvEbitda.toFixed(1)}x`
-          );
-        }
-      }
-
-      // Check 5: Very small Sales compared to other metrics (possible unit issue - e.g., Sales in billions but others in millions)
-      if (company.sales && company.sales < 100) {
+        // Skip rows that are clearly NOT company names
         if (
-          (company.marketCap && company.marketCap > 1000) ||
-          (company.ev && company.ev > 1000) ||
-          (company.ebitda && company.ebitda > 100)
-        ) {
+          nameStr.includes('total') ||
+          nameStr.includes('median') ||
+          nameStr.includes('average') ||
+          nameStr.includes('note:') ||
+          nameStr.includes('source:') ||
+          nameStr.includes('unit') ||
+          nameStr.startsWith('*') ||
+          nameStr.length < 2
+        )
+          continue;
+        if (nameStr.startsWith('spd') && nameStr.length > 10) continue;
+
+        // Skip sub-header rows (period indicators, unit indicators, etc.)
+        if (
+          nameStr.includes('latest') ||
+          nameStr.includes('fiscal') ||
+          nameStr.includes('period') ||
+          nameStr === 'fy' ||
+          nameStr === 'ttm' ||
+          nameStr === 'ltm' ||
+          nameStr.includes('million') ||
+          nameStr.includes('billion') ||
+          nameStr.includes('usd') ||
+          nameStr.includes('currency') ||
+          nameStr.includes('local')
+        )
+          continue;
+
+        const parseNum = (idx) => {
+          if (idx < 0 || row[idx] === undefined || row[idx] === null || row[idx] === '')
+            return null;
+          const rawVal = row[idx];
+          const val = parseFloat(String(rawVal).replace(/[,%]/g, ''));
+          return isNaN(val) ? null : val;
+        };
+
+        // Get raw cell values for debugging
+        const rawSales = cols.sales >= 0 ? row[cols.sales] : 'N/A';
+        const rawMarketCap = cols.marketCap >= 0 ? row[cols.marketCap] : 'N/A';
+        const rawEV = cols.ev >= 0 ? row[cols.ev] : 'N/A';
+
+        const company = {
+          name: companyName,
+          country: cols.country >= 0 ? row[cols.country] || '-' : '-',
+          sales: parseNum(cols.sales),
+          marketCap: parseNum(cols.marketCap),
+          ev: parseNum(cols.ev),
+          ebitda: parseNum(cols.ebitda),
+          netMargin: parseNum(cols.netMargin),
+          opMargin: parseNum(cols.opMargin),
+          ebitdaMargin: parseNum(cols.ebitdaMargin),
+          evEbitda: parseNum(cols.evEbitda),
+          peTTM: parseNum(cols.peTTM),
+          peFY: parseNum(cols.peFY),
+          pb: parseNum(cols.pb),
+          filterReason: '',
+          dataWarnings: [],
+          // Store raw row data for AI validation
+          _rawRow: row.slice(0, 20), // First 20 columns
+          _colMapping: { ...cols },
+        };
+
+        // Log first 5 companies with their raw and parsed values
+        if (loggedCount < 5) {
+          console.log(`\n--- ${company.name} ---`);
+          console.log(
+            `  RAW: Sales[col ${cols.sales}]="${rawSales}" | MCap[col ${cols.marketCap}]="${rawMarketCap}" | EV[col ${cols.ev}]="${rawEV}"`
+          );
+          console.log(
+            `  PARSED: Sales=${company.sales} | MCap=${company.marketCap} | EV=${company.ev} | EBITDA=${company.ebitda}`
+          );
+          loggedCount++;
+        }
+
+        // DATA VALIDATION: Check for suspicious/inconsistent financial data
+        const warnings = [];
+
+        // Check 1: EBITDA should be less than Sales (EBITDA margin > 100% is very suspicious)
+        if (company.sales && company.ebitda && company.ebitda > company.sales) {
           warnings.push(
-            `Sales (${company.sales}) seems too small relative to other metrics - possible unit mismatch`
+            `EBITDA (${company.ebitda}) > Sales (${company.sales}) - possible unit mismatch`
           );
         }
-      }
 
-      company.dataWarnings = warnings;
-      if (warnings.length > 0) {
-        console.log(`Data warning for ${companyName}: ${warnings.join('; ')}`);
-      }
-
-      // Only include if it has at least some financial data
-      const hasData =
-        company.sales ||
-        company.marketCap ||
-        company.evEbitda ||
-        company.peTTM ||
-        company.peFY ||
-        company.pb;
-      if (hasData) {
-        allCompanies.push(company);
-      }
-    }
-
-    console.log(`Extracted ${allCompanies.length} companies with data`);
-
-    if (allCompanies.length === 0) {
-      await sendEmail(
-        Email,
-        'Trading Comparable - No Data Found',
-        '<p>No valid company data was found in your Excel file. Please ensure the file has company names and financial metrics.</p>'
-      );
-      return;
-    }
-
-    // Create output workbook
-    const outputWorkbook = XLSX.utils.book_new();
-    const sheetHeaders = [
-      'Company',
-      'Country',
-      'Sales',
-      'Market Cap',
-      'EV',
-      'EBITDA',
-      'Net Margin %',
-      'Op Margin %',
-      'EBITDA Margin %',
-      'EV/EBITDA',
-      'P/E (TTM)',
-      'P/E (FY)',
-      'P/BV',
-      'Filter Reason',
-      'Data Warnings',
-    ];
-
-    // Sheet 1: All Original Companies
-    const sheet1Data = createSheetData(
-      allCompanies,
-      sheetHeaders,
-      `Original Data - ${allCompanies.length} companies`
-    );
-    const sheet1 = XLSX.utils.aoa_to_sheet(sheet1Data);
-    XLSX.utils.book_append_sheet(outputWorkbook, sheet1, '1. Original');
-
-    const isProfitable = IsProfitable === 'yes';
-    let currentCompanies = [...allCompanies];
-    let sheetNumber = 2;
-    const filterLog = [];
-
-    // FILTER 0: Always remove companies with negative EV (regardless of profitable toggle)
-    const removedByNegEV = [];
-    currentCompanies = currentCompanies.filter((c) => {
-      if (c.ev !== null && c.ev < 0) {
-        c.filterReason = 'Negative enterprise value';
-        removedByNegEV.push(c);
-        return false;
-      }
-      return true;
-    });
-
-    if (removedByNegEV.length > 0) {
-      filterLog.push(
-        `Filter (EV): Removed ${removedByNegEV.length} companies with negative enterprise value`
-      );
-      console.log(filterLog[filterLog.length - 1]);
-
-      const sheetEVData = createSheetData(
-        currentCompanies,
-        sheetHeaders,
-        `After Negative EV Filter - ${currentCompanies.length} companies (removed ${removedByNegEV.length})`
-      );
-      const sheetEV = XLSX.utils.aoa_to_sheet(sheetEVData);
-      XLSX.utils.book_append_sheet(outputWorkbook, sheetEV, `${sheetNumber}. After EV Filter`);
-      sheetNumber++;
-    }
-
-    if (isProfitable) {
-      // FILTER 1: Remove companies without P/E OR with negative net margin (loss-making)
-      const removedByPE = [];
-      currentCompanies = currentCompanies.filter((c) => {
-        // Check for valid P/E ratio
-        const hasPE = (c.peTTM !== null && c.peTTM > 0) || (c.peFY !== null && c.peFY > 0);
-        // Check for negative net margin (loss-making company)
-        const hasNegativeMargin = c.netMargin !== null && c.netMargin < 0;
-
-        if (!hasPE) {
-          c.filterReason = 'No P/E ratio';
-          removedByPE.push(c);
-          return false;
+        // Check 2: Sales should be reasonable compared to Market Cap (PSR typically 0.1x - 50x)
+        if (company.sales && company.marketCap) {
+          const psr = company.marketCap / company.sales;
+          if (psr > 100) {
+            warnings.push(`PSR ${psr.toFixed(1)}x is extremely high - check Sales units`);
+          } else if (psr < 0.01) {
+            warnings.push(`PSR ${psr.toFixed(3)}x is extremely low - check Market Cap units`);
+          }
         }
-        if (hasNegativeMargin) {
-          c.filterReason = 'Negative net margin (loss-making)';
-          removedByPE.push(c);
+
+        // Check 3: EV should be in similar ballpark as Market Cap (typically 0.5x - 3x)
+        if (company.ev && company.marketCap) {
+          const evToMcap = company.ev / company.marketCap;
+          if (evToMcap > 10) {
+            warnings.push(`EV/Market Cap ratio ${evToMcap.toFixed(1)}x is unusual - verify data`);
+          } else if (evToMcap < 0.1) {
+            warnings.push(`EV/Market Cap ratio ${evToMcap.toFixed(2)}x is unusual - verify data`);
+          }
+        }
+
+        // Check 4: If EV/EBITDA is provided, verify it roughly matches EV / EBITDA calculation
+        if (company.evEbitda && company.ev && company.ebitda && company.ebitda > 0) {
+          const calculatedEvEbitda = company.ev / company.ebitda;
+          const diff = Math.abs(calculatedEvEbitda - company.evEbitda) / company.evEbitda;
+          if (diff > 0.5) {
+            // More than 50% difference
+            warnings.push(
+              `EV/EBITDA mismatch: provided ${company.evEbitda.toFixed(1)}x vs calculated ${calculatedEvEbitda.toFixed(1)}x`
+            );
+          }
+        }
+
+        // Check 5: Very small Sales compared to other metrics (possible unit issue - e.g., Sales in billions but others in millions)
+        if (company.sales && company.sales < 100) {
+          if (
+            (company.marketCap && company.marketCap > 1000) ||
+            (company.ev && company.ev > 1000) ||
+            (company.ebitda && company.ebitda > 100)
+          ) {
+            warnings.push(
+              `Sales (${company.sales}) seems too small relative to other metrics - possible unit mismatch`
+            );
+          }
+        }
+
+        company.dataWarnings = warnings;
+        if (warnings.length > 0) {
+          console.log(`Data warning for ${companyName}: ${warnings.join('; ')}`);
+        }
+
+        // Only include if it has at least some financial data
+        const hasData =
+          company.sales ||
+          company.marketCap ||
+          company.evEbitda ||
+          company.peTTM ||
+          company.peFY ||
+          company.pb;
+        if (hasData) {
+          allCompanies.push(company);
+        }
+      }
+
+      console.log(`Extracted ${allCompanies.length} companies with data`);
+
+      if (allCompanies.length === 0) {
+        await sendEmail(
+          Email,
+          'Trading Comparable - No Data Found',
+          '<p>No valid company data was found in your Excel file. Please ensure the file has company names and financial metrics.</p>'
+        );
+        return;
+      }
+
+      // Create output workbook
+      const outputWorkbook = XLSX.utils.book_new();
+      const sheetHeaders = [
+        'Company',
+        'Country',
+        'Sales',
+        'Market Cap',
+        'EV',
+        'EBITDA',
+        'Net Margin %',
+        'Op Margin %',
+        'EBITDA Margin %',
+        'EV/EBITDA',
+        'P/E (TTM)',
+        'P/E (FY)',
+        'P/BV',
+        'Filter Reason',
+        'Data Warnings',
+      ];
+
+      // Sheet 1: All Original Companies
+      const sheet1Data = createSheetData(
+        allCompanies,
+        sheetHeaders,
+        `Original Data - ${allCompanies.length} companies`
+      );
+      const sheet1 = XLSX.utils.aoa_to_sheet(sheet1Data);
+      XLSX.utils.book_append_sheet(outputWorkbook, sheet1, '1. Original');
+
+      const isProfitable = IsProfitable === 'yes';
+      let currentCompanies = [...allCompanies];
+      let sheetNumber = 2;
+      const filterLog = [];
+
+      // FILTER 0: Always remove companies with negative EV (regardless of profitable toggle)
+      const removedByNegEV = [];
+      currentCompanies = currentCompanies.filter((c) => {
+        if (c.ev !== null && c.ev < 0) {
+          c.filterReason = 'Negative enterprise value';
+          removedByNegEV.push(c);
           return false;
         }
         return true;
       });
 
-      filterLog.push(
-        `Filter (P/E + Margin): Removed ${removedByPE.length} companies without P/E or with negative margin`
-      );
-      console.log(filterLog[filterLog.length - 1]);
+      if (removedByNegEV.length > 0) {
+        filterLog.push(
+          `Filter (EV): Removed ${removedByNegEV.length} companies with negative enterprise value`
+        );
+        console.log(filterLog[filterLog.length - 1]);
 
-      // Sheet: After P/E filter
-      const sheetPEData = createSheetData(
-        currentCompanies,
-        sheetHeaders,
-        `After P/E & Margin Filter - ${currentCompanies.length} companies (removed ${removedByPE.length})`
-      );
-      const sheetPE = XLSX.utils.aoa_to_sheet(sheetPEData);
-      XLSX.utils.book_append_sheet(outputWorkbook, sheetPE, `${sheetNumber}. After PE Filter`);
-      sheetNumber++;
-    }
-
-    // QUALITATIVE FILTER: Apply 3-phase filtering pipeline (DeepSeek-powered)
-    // Phase 1: Deep Analysis - understand companies and create strategy
-    // Phase 2: Deliberate Filtering - evaluate each company carefully
-    // Phase 3: Self-Validation - review final peer set
-    console.log(`\nStarting 3-phase filtering with ${currentCompanies.length} companies...`);
-    const qualResult = await applyThreePhaseFiltering(
-      currentCompanies,
-      TargetCompanyOrIndustry,
-      outputWorkbook,
-      sheetHeaders,
-      sheetNumber
-    );
-
-    currentCompanies = qualResult.companies;
-    filterLog.push(...qualResult.filterLog);
-    sheetNumber = qualResult.sheetNumber;
-
-    // Store analysis and validation results for potential use in email/output
-    const _analysisResult = qualResult.analysis;
-    const validationResult = qualResult.validation;
-
-    // FINAL SHEET: Summary with medians
-    const finalCompanies = currentCompanies;
-    const medians = {
-      sales: calculateMedian(finalCompanies.map((c) => c.sales)),
-      marketCap: calculateMedian(finalCompanies.map((c) => c.marketCap)),
-      ev: calculateMedian(finalCompanies.map((c) => c.ev)),
-      ebitda: calculateMedian(finalCompanies.map((c) => c.ebitda)),
-      netMargin: calculateMedian(finalCompanies.map((c) => c.netMargin)),
-      opMargin: calculateMedian(finalCompanies.map((c) => c.opMargin)),
-      ebitdaMargin: calculateMedian(finalCompanies.map((c) => c.ebitdaMargin)),
-      evEbitda: calculateMedian(finalCompanies.map((c) => c.evEbitda)),
-      peTTM: calculateMedian(finalCompanies.map((c) => c.peTTM)),
-      peFY: calculateMedian(finalCompanies.map((c) => c.peFY)),
-      pb: calculateMedian(finalCompanies.map((c) => c.pb)),
-    };
-
-    // Create final summary sheet
-    const summaryData = [
-      [`Trading Comparable Analysis: ${TargetCompanyOrIndustry}`],
-      [
-        `Generated: ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`,
-      ],
-      [],
-      ['FILTER SUMMARY'],
-      [`Started with ${allCompanies.length} companies`],
-      ...filterLog.map((f) => [f]),
-      [`Final shortlist: ${finalCompanies.length} companies`],
-      [],
-      ['FINAL COMPARABLE COMPANIES'],
-      sheetHeaders,
-    ];
-
-    for (const c of finalCompanies) {
-      summaryData.push([
-        c.name,
-        c.country || '-',
-        c.sales,
-        c.marketCap,
-        c.ev,
-        c.ebitda,
-        c.netMargin,
-        c.opMargin,
-        c.ebitdaMargin,
-        c.evEbitda,
-        c.peTTM,
-        c.peFY,
-        c.pb,
-        '',
-      ]);
-    }
-
-    summaryData.push([]);
-    summaryData.push([
-      'MEDIAN',
-      '',
-      medians.sales,
-      medians.marketCap,
-      medians.ev,
-      medians.ebitda,
-      medians.netMargin,
-      medians.opMargin,
-      medians.ebitdaMargin,
-      medians.evEbitda,
-      medians.peTTM,
-      medians.peFY,
-      medians.pb,
-      '',
-    ]);
-
-    const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-    XLSX.utils.book_append_sheet(outputWorkbook, summarySheet, 'Summary');
-
-    // Generate Excel buffer
-    const excelBuffer = XLSX.write(outputWorkbook, { type: 'base64', bookType: 'xlsx' });
-
-    // Generate PPT slide - matching trading comps template EXACTLY
-    // Using proper TABLE structure:
-    // - Row 1: DARK BLUE (#003399) - merged cells for "Financial Information" and "Multiples"
-    // - Row 2: LIGHT BLUE (#B4C6E7) - column headers
-    // - Data rows: white with dotted line borders
-    // - Median row: last 4 cells dark blue
-
-    const pptx = new pptxgen();
-    pptx.author = 'YCP';
-    pptx.title = 'Trading Comparable';
-
-    // Set exact slide size (16:9 widescreen)
-    pptx.defineLayout({ name: 'TRADING', width: 13.333, height: 7.5 });
-    pptx.layout = 'TRADING';
-
-    // Template colors (extracted from reference PPTX theme1.xml)
-    const COLORS = {
-      darkBlue: '011AB7', // Row 1 (Financial Information, Multiples) - accent3
-      lightBlue: '007FFF', // Row 2 column headers AND median cell - accent1
-      navyLine: '293F55', // Header/footer lines from slideLayout1
-      white: 'FFFFFF',
-      black: '000000',
-      gray: '808080',
-      lineGray: 'A0A0A0',
-    };
-
-    // ===== DEFINE MASTER SLIDE WITH FIXED LINES (CANNOT BE MOVED) =====
-    pptx.defineSlideMaster({
-      title: 'YCP_TRADING_MASTER',
-      background: { color: 'FFFFFF' },
-      objects: [
-        { line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.navyLine, width: 4.5 } } },
-        { line: { x: 0, y: 1.1, w: 13.333, h: 0, line: { color: COLORS.navyLine, width: 2.25 } } },
-        { line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.navyLine, width: 2.25 } } },
-      ],
-    });
-
-    // Use master slide - lines are fixed in background and cannot be moved
-    const slide = pptx.addSlide({ masterName: 'YCP_TRADING_MASTER' });
-
-    // ===== TITLE + SUBTITLE (positioned per slideLayout1: x=0.38", y=0.05") =====
-    // Title at top (font 24), subtitle below (font 16), combined text box
-    slide.addText(
-      [
-        {
-          text: `Trading Comparable – ${slideTitle}`,
-          options: { fontSize: 24, fontFace: 'Segoe UI', color: COLORS.black, breakLine: true },
-        },
-        {
-          text: `Considering financial data availability, profitability and business relevance, ${finalCompanies.length} companies are considered as peers`,
-          options: { fontSize: 16, fontFace: 'Segoe UI', color: COLORS.black },
-        },
-      ],
-      {
-        x: 0.38,
-        y: 0.05,
-        w: 12.5,
-        h: 0.91,
-        valign: 'bottom',
+        const sheetEVData = createSheetData(
+          currentCompanies,
+          sheetHeaders,
+          `After Negative EV Filter - ${currentCompanies.length} companies (removed ${removedByNegEV.length})`
+        );
+        const sheetEV = XLSX.utils.aoa_to_sheet(sheetEVData);
+        XLSX.utils.book_append_sheet(outputWorkbook, sheetEV, `${sheetNumber}. After EV Filter`);
+        sheetNumber++;
       }
-    );
 
-    // Helper function to clean company name
-    const cleanCompanyName = (name) => {
-      if (!name) return '-';
+      if (isProfitable) {
+        // FILTER 1: Remove companies without P/E OR with negative net margin (loss-making)
+        const removedByPE = [];
+        currentCompanies = currentCompanies.filter((c) => {
+          // Check for valid P/E ratio
+          const hasPE = (c.peTTM !== null && c.peTTM > 0) || (c.peFY !== null && c.peFY > 0);
+          // Check for negative net margin (loss-making company)
+          const hasNegativeMargin = c.netMargin !== null && c.netMargin < 0;
 
-      // First remove prefixes (PT for Indonesian companies, etc.)
-      const prefixes = [
-        /^PT\s+/i, // Indonesian: PT Mitra Keluarga -> Mitra Keluarga
-        /^CV\s+/i, // Indonesian: CV Company Name
-        /^P\.?T\.?\s+/i, // Variations: P.T. or P T
-      ];
+          if (!hasPE) {
+            c.filterReason = 'No P/E ratio';
+            removedByPE.push(c);
+            return false;
+          }
+          if (hasNegativeMargin) {
+            c.filterReason = 'Negative net margin (loss-making)';
+            removedByPE.push(c);
+            return false;
+          }
+          return true;
+        });
 
-      const suffixes = [
-        /\s+(Bhd|BHD|Berhad|BERHAD)\.?$/i,
-        /\s+(PCL|Pcl|P\.C\.L\.)\.?$/i,
-        /\s+(JSC|Jsc|J\.S\.C\.)\.?$/i,
-        /\s+(Ltd|LTD|Limited|LIMITED)\.?$/i,
-        /\s+(Inc|INC|Incorporated|INCORPORATED)\.?$/i,
-        /\s+(Corp|CORP|Corporation|CORPORATION)\.?$/i,
-        /\s+(Co|CO|Company|COMPANY)\.?,?\s*(Ltd|LTD|Limited)?\.?$/i,
-        /\s+(PLC|Plc|P\.L\.C\.)\.?$/i,
-        /\s+(AG|A\.G\.)\.?$/i,
-        /\s+(SA|S\.A\.|S\.A)\.?$/i,
-        /\s+(NV|N\.V\.)\.?$/i,
-        /\s+(GmbH|GMBH)\.?$/i,
-        /\s+(Tbk|TBK)\.?$/i, // Indonesian suffix (removed PT from here since it's a prefix)
-        /\s+(Oyj|OYJ|AB)\.?$/i,
-        /\s+(SE)\.?$/i,
-        /\s+(SpA|SPA|S\.p\.A\.)\.?$/i,
-        /\s+(Pte|PTE)\.?\s*(Ltd|LTD)?\.?$/i,
-        /\s+(Sdn|SDN)\.?\s*(Bhd|BHD)?\.?$/i,
-        /,\s*(Inc|Ltd|LLC|Corp)\.?$/i,
-        /\s+Holdings?$/i,
-        /\s+Group$/i,
-        /\s+International$/i,
-        /\s+Healthcare$/i,
-        /\s+Hospitals?$/i,
-        /\s+Medical$/i,
-        /\s+Services?$/i,
-        /\s+Systems?$/i,
-        /\s+Center$/i,
-        /\s+Centre$/i,
-        /\s+Business$/i,
-      ];
+        filterLog.push(
+          `Filter (P/E + Margin): Removed ${removedByPE.length} companies without P/E or with negative margin`
+        );
+        console.log(filterLog[filterLog.length - 1]);
 
-      // Abbreviations for common words (applied after suffix removal)
-      const abbreviations = {
-        International: 'Intl',
-        Holdings: 'Hldgs',
-        Hospital: 'Hosp',
-        Hospitals: 'Hosp',
-        Medical: 'Med',
-        Healthcare: 'HC',
-        Metropolitan: 'Metro',
-        Management: 'Mgmt',
-        Corporation: 'Corp',
-        Services: 'Svc',
-        Technology: 'Tech',
-        Development: 'Dev',
-        Investment: 'Inv',
-        Pharmaceutical: 'Pharma',
-        Manufacturing: 'Mfg',
+        // Sheet: After P/E filter
+        const sheetPEData = createSheetData(
+          currentCompanies,
+          sheetHeaders,
+          `After P/E & Margin Filter - ${currentCompanies.length} companies (removed ${removedByPE.length})`
+        );
+        const sheetPE = XLSX.utils.aoa_to_sheet(sheetPEData);
+        XLSX.utils.book_append_sheet(outputWorkbook, sheetPE, `${sheetNumber}. After PE Filter`);
+        sheetNumber++;
+      }
+
+      // TIER 2: Annual Report Enrichment - read annual reports to get verified business profiles
+      console.log(
+        `\nStarting annual report enrichment for ${currentCompanies.length} companies...`
+      );
+      await enrichWithAnnualReports(currentCompanies, TargetCompanyOrIndustry);
+
+      // QUALITATIVE FILTER: Apply 3-phase filtering pipeline (DeepSeek-powered)
+      // Phase 1: Deep Analysis - understand companies and create strategy
+      // Phase 2: Deliberate Filtering - evaluate each company carefully (now with annual report evidence)
+      // Phase 3: Self-Validation - review final peer set
+      console.log(`\nStarting 3-phase filtering with ${currentCompanies.length} companies...`);
+      const qualResult = await applyThreePhaseFiltering(
+        currentCompanies,
+        TargetCompanyOrIndustry,
+        outputWorkbook,
+        sheetHeaders,
+        sheetNumber
+      );
+
+      currentCompanies = qualResult.companies;
+      filterLog.push(...qualResult.filterLog);
+      sheetNumber = qualResult.sheetNumber;
+
+      // Store analysis and validation results for potential use in email/output
+      const _analysisResult = qualResult.analysis;
+      const validationResult = qualResult.validation;
+
+      // FINAL SHEET: Summary with medians
+      const finalCompanies = currentCompanies;
+      const medians = {
+        sales: calculateMedian(finalCompanies.map((c) => c.sales)),
+        marketCap: calculateMedian(finalCompanies.map((c) => c.marketCap)),
+        ev: calculateMedian(finalCompanies.map((c) => c.ev)),
+        ebitda: calculateMedian(finalCompanies.map((c) => c.ebitda)),
+        netMargin: calculateMedian(finalCompanies.map((c) => c.netMargin)),
+        opMargin: calculateMedian(finalCompanies.map((c) => c.opMargin)),
+        ebitdaMargin: calculateMedian(finalCompanies.map((c) => c.ebitdaMargin)),
+        evEbitda: calculateMedian(finalCompanies.map((c) => c.evEbitda)),
+        peTTM: calculateMedian(finalCompanies.map((c) => c.peTTM)),
+        peFY: calculateMedian(finalCompanies.map((c) => c.peFY)),
+        pb: calculateMedian(finalCompanies.map((c) => c.pb)),
       };
 
-      let cleaned = String(name).trim();
+      // Create final summary sheet
+      const summaryData = [
+        [`Trading Comparable Analysis: ${TargetCompanyOrIndustry}`],
+        [
+          `Generated: ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}`,
+        ],
+        [],
+        ['FILTER SUMMARY'],
+        [`Started with ${allCompanies.length} companies`],
+        ...filterLog.map((f) => [f]),
+        [`Final shortlist: ${finalCompanies.length} companies`],
+        [],
+        ['FINAL COMPARABLE COMPANIES'],
+        sheetHeaders,
+      ];
 
-      // Remove prefixes first
-      for (const prefix of prefixes) {
-        cleaned = cleaned.replace(prefix, '');
+      for (const c of finalCompanies) {
+        summaryData.push([
+          c.name,
+          c.country || '-',
+          c.sales,
+          c.marketCap,
+          c.ev,
+          c.ebitda,
+          c.netMargin,
+          c.opMargin,
+          c.ebitdaMargin,
+          c.evEbitda,
+          c.peTTM,
+          c.peFY,
+          c.pb,
+          '',
+        ]);
       }
 
-      // Remove suffixes (run multiple passes to catch compound suffixes)
-      for (let i = 0; i < 3; i++) {
-        for (const suffix of suffixes) {
-          cleaned = cleaned.replace(suffix, '');
+      summaryData.push([]);
+      summaryData.push([
+        'MEDIAN',
+        '',
+        medians.sales,
+        medians.marketCap,
+        medians.ev,
+        medians.ebitda,
+        medians.netMargin,
+        medians.opMargin,
+        medians.ebitdaMargin,
+        medians.evEbitda,
+        medians.peTTM,
+        medians.peFY,
+        medians.pb,
+        '',
+      ]);
+
+      const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(outputWorkbook, summarySheet, 'Summary');
+
+      // JUSTIFICATION SHEET: Evidence-based peer selection documentation
+      try {
+        const justificationData = generateJustificationSheet(
+          finalCompanies,
+          allCompanies,
+          TargetCompanyOrIndustry,
+          qualResult.analysis
+        );
+        const justificationSheet = XLSX.utils.aoa_to_sheet(justificationData);
+        XLSX.utils.book_append_sheet(outputWorkbook, justificationSheet, 'Justification');
+        console.log('Added Justification sheet to workbook');
+      } catch (justErr) {
+        console.error('Failed to generate justification sheet:', justErr.message);
+      }
+
+      // Generate Excel buffer
+      const excelBuffer = XLSX.write(outputWorkbook, { type: 'base64', bookType: 'xlsx' });
+
+      // Generate PPT slide - matching trading comps template EXACTLY
+      // Using proper TABLE structure:
+      // - Row 1: DARK BLUE (#003399) - merged cells for "Financial Information" and "Multiples"
+      // - Row 2: LIGHT BLUE (#B4C6E7) - column headers
+      // - Data rows: white with dotted line borders
+      // - Median row: last 4 cells dark blue
+
+      const pptx = new pptxgen();
+      pptx.author = 'YCP';
+      pptx.title = 'Trading Comparable';
+
+      // Set exact slide size (16:9 widescreen)
+      pptx.defineLayout({ name: 'TRADING', width: 13.333, height: 7.5 });
+      pptx.layout = 'TRADING';
+
+      // Template colors (extracted from reference PPTX theme1.xml)
+      const COLORS = {
+        darkBlue: '011AB7', // Row 1 (Financial Information, Multiples) - accent3
+        lightBlue: '007FFF', // Row 2 column headers AND median cell - accent1
+        navyLine: '293F55', // Header/footer lines from slideLayout1
+        white: 'FFFFFF',
+        black: '000000',
+        gray: '808080',
+        lineGray: 'A0A0A0',
+      };
+
+      // ===== DEFINE MASTER SLIDE WITH FIXED LINES (CANNOT BE MOVED) =====
+      pptx.defineSlideMaster({
+        title: 'YCP_TRADING_MASTER',
+        background: { color: 'FFFFFF' },
+        objects: [
+          {
+            line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.navyLine, width: 4.5 } },
+          },
+          {
+            line: { x: 0, y: 1.1, w: 13.333, h: 0, line: { color: COLORS.navyLine, width: 2.25 } },
+          },
+          {
+            line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.navyLine, width: 2.25 } },
+          },
+        ],
+      });
+
+      // Use master slide - lines are fixed in background and cannot be moved
+      const slide = pptx.addSlide({ masterName: 'YCP_TRADING_MASTER' });
+
+      // ===== TITLE + SUBTITLE (positioned per slideLayout1: x=0.38", y=0.05") =====
+      // Title at top (font 24), subtitle below (font 16), combined text box
+      slide.addText(
+        [
+          {
+            text: `Trading Comparable – ${slideTitle}`,
+            options: { fontSize: 24, fontFace: 'Segoe UI', color: COLORS.black, breakLine: true },
+          },
+          {
+            text: `Considering financial data availability, profitability and business relevance, ${finalCompanies.length} companies are considered as peers`,
+            options: { fontSize: 16, fontFace: 'Segoe UI', color: COLORS.black },
+          },
+        ],
+        {
+          x: 0.38,
+          y: 0.05,
+          w: 12.5,
+          h: 0.91,
+          valign: 'bottom',
         }
-      }
+      );
 
-      cleaned = cleaned.trim();
+      // Helper function to clean company name
+      const cleanCompanyName = (name) => {
+        if (!name) return '-';
 
-      // Apply abbreviations if name is still long
-      const MAX_LENGTH = 22; // Max chars to fit single line at font 12 in 2.42" column
-      if (cleaned.length > MAX_LENGTH) {
-        for (const [full, abbr] of Object.entries(abbreviations)) {
-          cleaned = cleaned.replace(new RegExp(full, 'gi'), abbr);
+        // First remove prefixes (PT for Indonesian companies, etc.)
+        const prefixes = [
+          /^PT\s+/i, // Indonesian: PT Mitra Keluarga -> Mitra Keluarga
+          /^CV\s+/i, // Indonesian: CV Company Name
+          /^P\.?T\.?\s+/i, // Variations: P.T. or P T
+        ];
+
+        const suffixes = [
+          /\s+(Bhd|BHD|Berhad|BERHAD)\.?$/i,
+          /\s+(PCL|Pcl|P\.C\.L\.)\.?$/i,
+          /\s+(JSC|Jsc|J\.S\.C\.)\.?$/i,
+          /\s+(Ltd|LTD|Limited|LIMITED)\.?$/i,
+          /\s+(Inc|INC|Incorporated|INCORPORATED)\.?$/i,
+          /\s+(Corp|CORP|Corporation|CORPORATION)\.?$/i,
+          /\s+(Co|CO|Company|COMPANY)\.?,?\s*(Ltd|LTD|Limited)?\.?$/i,
+          /\s+(PLC|Plc|P\.L\.C\.)\.?$/i,
+          /\s+(AG|A\.G\.)\.?$/i,
+          /\s+(SA|S\.A\.|S\.A)\.?$/i,
+          /\s+(NV|N\.V\.)\.?$/i,
+          /\s+(GmbH|GMBH)\.?$/i,
+          /\s+(Tbk|TBK)\.?$/i, // Indonesian suffix (removed PT from here since it's a prefix)
+          /\s+(Oyj|OYJ|AB)\.?$/i,
+          /\s+(SE)\.?$/i,
+          /\s+(SpA|SPA|S\.p\.A\.)\.?$/i,
+          /\s+(Pte|PTE)\.?\s*(Ltd|LTD)?\.?$/i,
+          /\s+(Sdn|SDN)\.?\s*(Bhd|BHD)?\.?$/i,
+          /,\s*(Inc|Ltd|LLC|Corp)\.?$/i,
+          /\s+Holdings?$/i,
+          /\s+Group$/i,
+          /\s+International$/i,
+          /\s+Healthcare$/i,
+          /\s+Hospitals?$/i,
+          /\s+Medical$/i,
+          /\s+Services?$/i,
+          /\s+Systems?$/i,
+          /\s+Center$/i,
+          /\s+Centre$/i,
+          /\s+Business$/i,
+        ];
+
+        // Abbreviations for common words (applied after suffix removal)
+        const abbreviations = {
+          International: 'Intl',
+          Holdings: 'Hldgs',
+          Hospital: 'Hosp',
+          Hospitals: 'Hosp',
+          Medical: 'Med',
+          Healthcare: 'HC',
+          Metropolitan: 'Metro',
+          Management: 'Mgmt',
+          Corporation: 'Corp',
+          Services: 'Svc',
+          Technology: 'Tech',
+          Development: 'Dev',
+          Investment: 'Inv',
+          Pharmaceutical: 'Pharma',
+          Manufacturing: 'Mfg',
+        };
+
+        let cleaned = String(name).trim();
+
+        // Remove prefixes first
+        for (const prefix of prefixes) {
+          cleaned = cleaned.replace(prefix, '');
         }
-      }
 
-      // If still too long, remove words from the end until it fits
-      while (cleaned.length > MAX_LENGTH && cleaned.includes(' ')) {
-        const words = cleaned.split(' ');
-        words.pop(); // Remove last word
-        cleaned = words.join(' ');
-      }
+        // Remove suffixes (run multiple passes to catch compound suffixes)
+        for (let i = 0; i < 3; i++) {
+          for (const suffix of suffixes) {
+            cleaned = cleaned.replace(suffix, '');
+          }
+        }
 
-      return cleaned.trim();
-    };
+        cleaned = cleaned.trim();
 
-    // Helper functions
-    const formatFinNum = (val) => {
-      if (val === null || val === undefined) return '-';
-      if (typeof val === 'number') return Math.round(val).toLocaleString('en-US');
-      return String(val);
-    };
+        // Apply abbreviations if name is still long
+        const MAX_LENGTH = 22; // Max chars to fit single line at font 12 in 2.42" column
+        if (cleaned.length > MAX_LENGTH) {
+          for (const [full, abbr] of Object.entries(abbreviations)) {
+            cleaned = cleaned.replace(new RegExp(full, 'gi'), abbr);
+          }
+        }
 
-    const formatMultipleX = (val) => {
-      if (val === null || val === undefined) return '-';
-      if (typeof val === 'number') return val.toFixed(1) + 'x';
-      return String(val);
-    };
+        // If still too long, remove words from the end until it fits
+        while (cleaned.length > MAX_LENGTH && cleaned.includes(' ')) {
+          const words = cleaned.split(' ');
+          words.pop(); // Remove last word
+          cleaned = words.join(' ');
+        }
 
-    const formatPct = (val) => {
-      if (val === null || val === undefined) return '-';
-      if (typeof val === 'number') return val.toFixed(1) + '%';
-      return String(val);
-    };
+        return cleaned.trim();
+      };
 
-    // ===== BUILD TABLE =====
-    // Sort companies by sales (highest to lowest), then take top 30
-    const sortedCompanies = [...finalCompanies].sort((a, b) => {
-      const salesA = a.sales !== null && a.sales !== undefined ? a.sales : 0;
-      const salesB = b.sales !== null && b.sales !== undefined ? b.sales : 0;
-      return salesB - salesA;
-    });
-    const displayCompanies = sortedCompanies.slice(0, 30);
+      // Helper functions
+      const formatFinNum = (val) => {
+        if (val === null || val === undefined) return '-';
+        if (typeof val === 'number') return Math.round(val).toLocaleString('en-US');
+        return String(val);
+      };
 
-    // ===== AI DATA VALIDATION using Gemini 2.5 Pro =====
-    // Critical validation step to ensure data accuracy before PowerPoint generation
-    console.log('Running Gemini 2.5 Pro validation for top 30 companies...');
+      const formatMultipleX = (val) => {
+        if (val === null || val === undefined) return '-';
+        if (typeof val === 'number') return val.toFixed(1) + 'x';
+        return String(val);
+      };
 
-    const validationPrompt = `You are a financial data validation expert. Verify the accuracy of these parsed company financial metrics.
+      const formatPct = (val) => {
+        if (val === null || val === undefined) return '-';
+        if (typeof val === 'number') return val.toFixed(1) + '%';
+        return String(val);
+      };
+
+      // ===== BUILD TABLE =====
+      // Sort companies by sales (highest to lowest), then take top 30
+      const sortedCompanies = [...finalCompanies].sort((a, b) => {
+        const salesA = a.sales !== null && a.sales !== undefined ? a.sales : 0;
+        const salesB = b.sales !== null && b.sales !== undefined ? b.sales : 0;
+        return salesB - salesA;
+      });
+      const displayCompanies = sortedCompanies.slice(0, 30);
+
+      // ===== AI DATA VALIDATION using Gemini 2.5 Pro =====
+      // Critical validation step to ensure data accuracy before PowerPoint generation
+      console.log('Running Gemini 2.5 Pro validation for top 30 companies...');
+
+      const validationPrompt = `You are a financial data validation expert. Verify the accuracy of these parsed company financial metrics.
 
 HEADER ROW FROM EXCEL (for reference):
 ${headers.slice(0, 15).join(' | ')}
@@ -3580,322 +3870,325 @@ Return JSON with this exact format:
   ]
 }`;
 
-    try {
-      const validationResult = await callGemini2Pro(validationPrompt, true);
-      if (validationResult) {
-        const validation = JSON.parse(validationResult);
-        console.log('Gemini 2.5 Pro validation result:', JSON.stringify(validation, null, 2));
+      try {
+        const validationResult = await callGemini2Pro(validationPrompt, true);
+        if (validationResult) {
+          const validation = JSON.parse(validationResult);
+          console.log('Gemini 2.5 Pro validation result:', JSON.stringify(validation, null, 2));
 
-        // Apply corrections if any
-        if (validation.corrections && validation.corrections.length > 0) {
-          console.log(
-            `Applying ${validation.corrections.length} data corrections from AI validation...`
-          );
-          for (const correction of validation.corrections) {
-            const company = displayCompanies.find((c) =>
-              c.name.toLowerCase().includes(correction.company.toLowerCase())
+          // Apply corrections if any
+          if (validation.corrections && validation.corrections.length > 0) {
+            console.log(
+              `Applying ${validation.corrections.length} data corrections from AI validation...`
             );
-            if (company && correction.field && correction.correctedValue !== undefined) {
-              const oldValue = company[correction.field];
-              company[correction.field] = correction.correctedValue;
-              console.log(
-                `  Corrected ${company.name}: ${correction.field} from ${oldValue} to ${correction.correctedValue}`
+            for (const correction of validation.corrections) {
+              const company = displayCompanies.find((c) =>
+                c.name.toLowerCase().includes(correction.company.toLowerCase())
               );
+              if (company && correction.field && correction.correctedValue !== undefined) {
+                const oldValue = company[correction.field];
+                company[correction.field] = correction.correctedValue;
+                console.log(
+                  `  Corrected ${company.name}: ${correction.field} from ${oldValue} to ${correction.correctedValue}`
+                );
+              }
             }
           }
-        }
 
-        // Log issues for review
-        if (validation.issues && validation.issues.length > 0) {
-          console.log('AI detected potential data issues:');
-          validation.issues.forEach((issue) => {
-            console.log(
-              `  - ${issue.company}: ${issue.field} = ${issue.parsedValue}, expected ${issue.expectedValue}. ${issue.issue}`
-            );
+          // Log issues for review
+          if (validation.issues && validation.issues.length > 0) {
+            console.log('AI detected potential data issues:');
+            validation.issues.forEach((issue) => {
+              console.log(
+                `  - ${issue.company}: ${issue.field} = ${issue.parsedValue}, expected ${issue.expectedValue}. ${issue.issue}`
+              );
+            });
+          }
+        }
+      } catch (validationError) {
+        console.error(
+          'AI validation error (non-fatal, continuing with original data):',
+          validationError.message
+        );
+      }
+
+      const tableRows = [];
+
+      // Cell margin
+      const cellMargin = [0, 0.04, 0, 0.04];
+
+      // Border styles (3pt white solid for header rows)
+      const solidWhiteBorder = { type: 'solid', pt: 3, color: COLORS.white };
+      // Dashed border for horizontal lines between data rows
+      const dashBorder = { type: 'dash', pt: 1, color: 'BFBFBF' };
+      // 2.5pt white solid for data row vertical borders (visually hidden against white background)
+      const dataVerticalBorder = { type: 'solid', pt: 2.5, color: COLORS.white };
+      const noBorder = { type: 'none' };
+
+      // Row 1 style: DARK BLUE with solid white borders - font 12
+      const row1DarkStyle = {
+        fill: COLORS.darkBlue,
+        color: COLORS.white,
+        fontFace: 'Segoe UI',
+        fontSize: 12,
+        bold: false,
+        valign: 'middle',
+        align: 'center',
+        margin: cellMargin,
+        border: solidWhiteBorder,
+      };
+
+      // Row 1 empty cells (white background) with solid white borders - font 12
+      const row1EmptyStyle = {
+        fill: COLORS.white,
+        color: COLORS.black,
+        fontFace: 'Segoe UI',
+        fontSize: 12,
+        valign: 'middle',
+        margin: cellMargin,
+        border: solidWhiteBorder,
+      };
+
+      // Row 2 style: LIGHT BLUE with WHITE text, font 12, center aligned, solid white borders
+      const row2Style = {
+        fill: COLORS.lightBlue,
+        color: COLORS.white,
+        fontFace: 'Segoe UI',
+        fontSize: 12,
+        bold: false,
+        valign: 'middle',
+        align: 'center',
+        margin: cellMargin,
+        border: solidWhiteBorder,
+      };
+
+      // Data row style - sysDash horizontal borders, white solid vertical borders (from YCP template)
+      // Border order: [top, right, bottom, left]
+      const dataStyle = {
+        fill: COLORS.white,
+        color: COLORS.black,
+        fontFace: 'Segoe UI',
+        fontSize: 12,
+        valign: 'middle',
+        margin: cellMargin,
+        border: [dashBorder, dataVerticalBorder, dashBorder, dataVerticalBorder],
+      };
+
+      // Median "Median" label style - light blue with dash top and bottom borders
+      const medianLabelStyle = {
+        fill: COLORS.lightBlue,
+        color: COLORS.white,
+        fontFace: 'Segoe UI',
+        fontSize: 12,
+        bold: true,
+        valign: 'middle',
+        margin: cellMargin,
+        border: [dashBorder, solidWhiteBorder, dashBorder, solidWhiteBorder],
+      };
+
+      // Median value cells - white background with dash top and bottom borders
+      const medianValueStyle = {
+        fill: COLORS.white,
+        color: COLORS.black,
+        fontFace: 'Segoe UI',
+        fontSize: 12,
+        bold: true,
+        valign: 'middle',
+        margin: cellMargin,
+        border: [dashBorder, solidWhiteBorder, dashBorder, solidWhiteBorder],
+      };
+
+      // Median empty cells - NO borders (no lines from last company to Median)
+      const medianEmptyStyle = {
+        fill: COLORS.white,
+        color: COLORS.black,
+        fontFace: 'Segoe UI',
+        fontSize: 12,
+        valign: 'middle',
+        margin: cellMargin,
+        border: [noBorder, noBorder, noBorder, noBorder],
+      };
+
+      // Last data row style - sysDash border at bottom (line below last company), white solid vertical borders
+      const lastDataStyle = {
+        fill: COLORS.white,
+        color: COLORS.black,
+        fontFace: 'Segoe UI',
+        fontSize: 12,
+        valign: 'middle',
+        margin: cellMargin,
+        border: [dashBorder, dataVerticalBorder, dashBorder, dataVerticalBorder],
+      };
+
+      // === ROW 1: Dark blue merged headers ===
+      tableRows.push([
+        { text: '', options: { ...row1EmptyStyle } },
+        { text: '', options: { ...row1EmptyStyle } },
+        { text: 'Financial Information (USD M)', options: { ...row1DarkStyle, colspan: 5 } },
+        { text: 'Multiples', options: { ...row1DarkStyle, colspan: 3 } },
+      ]);
+
+      // === ROW 2: Light blue column headers (all center aligned) ===
+      tableRows.push([
+        { text: 'Company Name', options: { ...row2Style } },
+        { text: 'Country', options: { ...row2Style } },
+        { text: 'Sales', options: { ...row2Style } },
+        { text: 'Market Cap', options: { ...row2Style } },
+        { text: 'EV', options: { ...row2Style } },
+        { text: 'EBITDA', options: { ...row2Style } },
+        { text: 'Net Margin', options: { ...row2Style } },
+        { text: 'EV/ EBITDA', options: { ...row2Style } },
+        { text: 'PER', options: { ...row2Style } },
+        { text: 'PBR', options: { ...row2Style } },
+      ]);
+
+      // === DATA ROWS ===
+      displayCompanies.forEach((c, idx) => {
+        const peValue = c.peTTM !== null ? c.peTTM : c.peFY;
+        const companyName = `${idx + 1}. ${cleanCompanyName(c.name)}`;
+        const isLastRow = idx === displayCompanies.length - 1;
+        const rowStyle = isLastRow ? lastDataStyle : dataStyle;
+
+        tableRows.push([
+          { text: companyName, options: { ...rowStyle, align: 'left' } },
+          { text: String(c.country || '-'), options: { ...rowStyle, align: 'left' } },
+          { text: formatFinNum(c.sales), options: { ...rowStyle, align: 'right' } },
+          { text: formatFinNum(c.marketCap), options: { ...rowStyle, align: 'right' } },
+          { text: formatFinNum(c.ev), options: { ...rowStyle, align: 'right' } },
+          { text: formatFinNum(c.ebitda), options: { ...rowStyle, align: 'right' } },
+          { text: formatPct(c.netMargin), options: { ...rowStyle, align: 'right' } },
+          { text: formatMultipleX(c.evEbitda), options: { ...rowStyle, align: 'right' } },
+          { text: formatMultipleX(peValue), options: { ...rowStyle, align: 'right' } },
+          { text: formatMultipleX(c.pb), options: { ...rowStyle, align: 'right' } },
+        ]);
+      });
+
+      // === MEDIAN ROW ===
+      // Only the "Median" cell has light blue fill; values have white background
+      const medianPE = medians.peTTM !== null ? medians.peTTM : medians.peFY;
+      tableRows.push([
+        { text: '', options: { ...medianEmptyStyle } },
+        { text: '', options: { ...medianEmptyStyle } },
+        { text: '', options: { ...medianEmptyStyle } },
+        { text: '', options: { ...medianEmptyStyle } },
+        { text: '', options: { ...medianEmptyStyle } },
+        { text: '', options: { ...medianEmptyStyle } },
+        { text: 'Median', options: { ...medianLabelStyle, align: 'center' } },
+        {
+          text: formatMultipleX(medians.evEbitda),
+          options: { ...medianValueStyle, align: 'right' },
+        },
+        { text: formatMultipleX(medianPE), options: { ...medianValueStyle, align: 'right' } },
+        { text: formatMultipleX(medians.pb), options: { ...medianValueStyle, align: 'right' } },
+      ]);
+
+      // Calculate dimensions (from reference PPTX)
+      const numRows = displayCompanies.length + 3;
+      const availableHeight = 5.2;
+      const rowHeight = Math.min(0.179, availableHeight / numRows); // Reference: 0.179" per row
+
+      // Column widths from reference PPTX (total: 12.59")
+      // Col 1: 2.42", Col 2: 1.31", Cols 3-10: 1.11" each
+      const colWidths = [2.42, 1.31, 1.11, 1.11, 1.11, 1.11, 1.11, 1.11, 1.11, 1.11];
+      const tableWidth = colWidths.reduce((a, b) => a + b, 0); // 12.59"
+
+      // Add TABLE to slide (position from reference: x=0.38", y=1.47")
+      // Cell-level borders are set in each cell style
+      slide.addTable(tableRows, {
+        x: 0.38,
+        y: 1.47,
+        w: tableWidth,
+        fontSize: 12,
+        fontFace: 'Segoe UI',
+        colW: colWidths,
+        rowH: rowHeight,
+      });
+
+      // ===== FOOTER =====
+      const footerY = 6.66;
+      slide.addText('Note: EV (Enterprise Value)', {
+        x: 0.38,
+        y: footerY,
+        w: 4,
+        h: 0.18,
+        fontSize: 9,
+        fontFace: 'Segoe UI',
+        color: COLORS.black,
+      });
+      const dataDate = new Date().toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+      slide.addText(`Data as of ${dataDate}`, {
+        x: 0.38,
+        y: footerY + 0.18,
+        w: 4,
+        h: 0.18,
+        fontSize: 9,
+        fontFace: 'Segoe UI',
+        color: COLORS.black,
+      });
+      slide.addText('Source: Speeda', {
+        x: 0.38,
+        y: footerY + 0.36,
+        w: 4,
+        h: 0.18,
+        fontSize: 9,
+        fontFace: 'Segoe UI',
+        color: COLORS.black,
+      });
+
+      // Footer line is now in master slide (cannot be moved)
+
+      // ===== YCP LOGO (from slideLayout1: x=0.38", y=7.30") =====
+      // Logo image stored in backend folder
+      try {
+        const logoPath = path.join(__dirname, 'ycp-logo.png');
+        const logoExists = require('fs').existsSync(logoPath);
+        if (logoExists) {
+          slide.addImage({
+            path: logoPath,
+            x: 0.38,
+            y: 7.3,
+            w: 0.47,
+            h: 0.17,
           });
         }
+      } catch (e) {
+        console.log('Logo not found, skipping');
       }
-    } catch (validationError) {
-      console.error(
-        'AI validation error (non-fatal, continuing with original data):',
-        validationError.message
-      );
-    }
 
-    const tableRows = [];
+      // ===== FOOTER COPYRIGHT (from slideLayout1: center, y=7.26") =====
+      slide.addText('(C) YCP 2025 all rights reserved', {
+        x: 4.1,
+        y: 7.26,
+        w: 5.1,
+        h: 0.2,
+        fontSize: 8,
+        fontFace: 'Segoe UI',
+        color: COLORS.gray,
+        align: 'center',
+      });
 
-    // Cell margin
-    const cellMargin = [0, 0.04, 0, 0.04];
+      // ===== PAGE NUMBER =====
+      slide.addText('1', {
+        x: 12.5,
+        y: 7.26,
+        w: 0.5,
+        h: 0.2,
+        fontSize: 10,
+        fontFace: 'Segoe UI',
+        color: COLORS.black,
+        align: 'right',
+      });
 
-    // Border styles (3pt white solid for header rows)
-    const solidWhiteBorder = { type: 'solid', pt: 3, color: COLORS.white };
-    // Dashed border for horizontal lines between data rows
-    const dashBorder = { type: 'dash', pt: 1, color: 'BFBFBF' };
-    // 2.5pt white solid for data row vertical borders (visually hidden against white background)
-    const dataVerticalBorder = { type: 'solid', pt: 2.5, color: COLORS.white };
-    const noBorder = { type: 'none' };
+      // Generate PPT buffer
+      const pptBuffer = await pptx.write({ outputType: 'base64' });
 
-    // Row 1 style: DARK BLUE with solid white borders - font 12
-    const row1DarkStyle = {
-      fill: COLORS.darkBlue,
-      color: COLORS.white,
-      fontFace: 'Segoe UI',
-      fontSize: 12,
-      bold: false,
-      valign: 'middle',
-      align: 'center',
-      margin: cellMargin,
-      border: solidWhiteBorder,
-    };
-
-    // Row 1 empty cells (white background) with solid white borders - font 12
-    const row1EmptyStyle = {
-      fill: COLORS.white,
-      color: COLORS.black,
-      fontFace: 'Segoe UI',
-      fontSize: 12,
-      valign: 'middle',
-      margin: cellMargin,
-      border: solidWhiteBorder,
-    };
-
-    // Row 2 style: LIGHT BLUE with WHITE text, font 12, center aligned, solid white borders
-    const row2Style = {
-      fill: COLORS.lightBlue,
-      color: COLORS.white,
-      fontFace: 'Segoe UI',
-      fontSize: 12,
-      bold: false,
-      valign: 'middle',
-      align: 'center',
-      margin: cellMargin,
-      border: solidWhiteBorder,
-    };
-
-    // Data row style - sysDash horizontal borders, white solid vertical borders (from YCP template)
-    // Border order: [top, right, bottom, left]
-    const dataStyle = {
-      fill: COLORS.white,
-      color: COLORS.black,
-      fontFace: 'Segoe UI',
-      fontSize: 12,
-      valign: 'middle',
-      margin: cellMargin,
-      border: [dashBorder, dataVerticalBorder, dashBorder, dataVerticalBorder],
-    };
-
-    // Median "Median" label style - light blue with dash top and bottom borders
-    const medianLabelStyle = {
-      fill: COLORS.lightBlue,
-      color: COLORS.white,
-      fontFace: 'Segoe UI',
-      fontSize: 12,
-      bold: true,
-      valign: 'middle',
-      margin: cellMargin,
-      border: [dashBorder, solidWhiteBorder, dashBorder, solidWhiteBorder],
-    };
-
-    // Median value cells - white background with dash top and bottom borders
-    const medianValueStyle = {
-      fill: COLORS.white,
-      color: COLORS.black,
-      fontFace: 'Segoe UI',
-      fontSize: 12,
-      bold: true,
-      valign: 'middle',
-      margin: cellMargin,
-      border: [dashBorder, solidWhiteBorder, dashBorder, solidWhiteBorder],
-    };
-
-    // Median empty cells - NO borders (no lines from last company to Median)
-    const medianEmptyStyle = {
-      fill: COLORS.white,
-      color: COLORS.black,
-      fontFace: 'Segoe UI',
-      fontSize: 12,
-      valign: 'middle',
-      margin: cellMargin,
-      border: [noBorder, noBorder, noBorder, noBorder],
-    };
-
-    // Last data row style - sysDash border at bottom (line below last company), white solid vertical borders
-    const lastDataStyle = {
-      fill: COLORS.white,
-      color: COLORS.black,
-      fontFace: 'Segoe UI',
-      fontSize: 12,
-      valign: 'middle',
-      margin: cellMargin,
-      border: [dashBorder, dataVerticalBorder, dashBorder, dataVerticalBorder],
-    };
-
-    // === ROW 1: Dark blue merged headers ===
-    tableRows.push([
-      { text: '', options: { ...row1EmptyStyle } },
-      { text: '', options: { ...row1EmptyStyle } },
-      { text: 'Financial Information (USD M)', options: { ...row1DarkStyle, colspan: 5 } },
-      { text: 'Multiples', options: { ...row1DarkStyle, colspan: 3 } },
-    ]);
-
-    // === ROW 2: Light blue column headers (all center aligned) ===
-    tableRows.push([
-      { text: 'Company Name', options: { ...row2Style } },
-      { text: 'Country', options: { ...row2Style } },
-      { text: 'Sales', options: { ...row2Style } },
-      { text: 'Market Cap', options: { ...row2Style } },
-      { text: 'EV', options: { ...row2Style } },
-      { text: 'EBITDA', options: { ...row2Style } },
-      { text: 'Net Margin', options: { ...row2Style } },
-      { text: 'EV/ EBITDA', options: { ...row2Style } },
-      { text: 'PER', options: { ...row2Style } },
-      { text: 'PBR', options: { ...row2Style } },
-    ]);
-
-    // === DATA ROWS ===
-    displayCompanies.forEach((c, idx) => {
-      const peValue = c.peTTM !== null ? c.peTTM : c.peFY;
-      const companyName = `${idx + 1}. ${cleanCompanyName(c.name)}`;
-      const isLastRow = idx === displayCompanies.length - 1;
-      const rowStyle = isLastRow ? lastDataStyle : dataStyle;
-
-      tableRows.push([
-        { text: companyName, options: { ...rowStyle, align: 'left' } },
-        { text: String(c.country || '-'), options: { ...rowStyle, align: 'left' } },
-        { text: formatFinNum(c.sales), options: { ...rowStyle, align: 'right' } },
-        { text: formatFinNum(c.marketCap), options: { ...rowStyle, align: 'right' } },
-        { text: formatFinNum(c.ev), options: { ...rowStyle, align: 'right' } },
-        { text: formatFinNum(c.ebitda), options: { ...rowStyle, align: 'right' } },
-        { text: formatPct(c.netMargin), options: { ...rowStyle, align: 'right' } },
-        { text: formatMultipleX(c.evEbitda), options: { ...rowStyle, align: 'right' } },
-        { text: formatMultipleX(peValue), options: { ...rowStyle, align: 'right' } },
-        { text: formatMultipleX(c.pb), options: { ...rowStyle, align: 'right' } },
-      ]);
-    });
-
-    // === MEDIAN ROW ===
-    // Only the "Median" cell has light blue fill; values have white background
-    const medianPE = medians.peTTM !== null ? medians.peTTM : medians.peFY;
-    tableRows.push([
-      { text: '', options: { ...medianEmptyStyle } },
-      { text: '', options: { ...medianEmptyStyle } },
-      { text: '', options: { ...medianEmptyStyle } },
-      { text: '', options: { ...medianEmptyStyle } },
-      { text: '', options: { ...medianEmptyStyle } },
-      { text: '', options: { ...medianEmptyStyle } },
-      { text: 'Median', options: { ...medianLabelStyle, align: 'center' } },
-      { text: formatMultipleX(medians.evEbitda), options: { ...medianValueStyle, align: 'right' } },
-      { text: formatMultipleX(medianPE), options: { ...medianValueStyle, align: 'right' } },
-      { text: formatMultipleX(medians.pb), options: { ...medianValueStyle, align: 'right' } },
-    ]);
-
-    // Calculate dimensions (from reference PPTX)
-    const numRows = displayCompanies.length + 3;
-    const availableHeight = 5.2;
-    const rowHeight = Math.min(0.179, availableHeight / numRows); // Reference: 0.179" per row
-
-    // Column widths from reference PPTX (total: 12.59")
-    // Col 1: 2.42", Col 2: 1.31", Cols 3-10: 1.11" each
-    const colWidths = [2.42, 1.31, 1.11, 1.11, 1.11, 1.11, 1.11, 1.11, 1.11, 1.11];
-    const tableWidth = colWidths.reduce((a, b) => a + b, 0); // 12.59"
-
-    // Add TABLE to slide (position from reference: x=0.38", y=1.47")
-    // Cell-level borders are set in each cell style
-    slide.addTable(tableRows, {
-      x: 0.38,
-      y: 1.47,
-      w: tableWidth,
-      fontSize: 12,
-      fontFace: 'Segoe UI',
-      colW: colWidths,
-      rowH: rowHeight,
-    });
-
-    // ===== FOOTER =====
-    const footerY = 6.66;
-    slide.addText('Note: EV (Enterprise Value)', {
-      x: 0.38,
-      y: footerY,
-      w: 4,
-      h: 0.18,
-      fontSize: 9,
-      fontFace: 'Segoe UI',
-      color: COLORS.black,
-    });
-    const dataDate = new Date().toLocaleDateString('en-GB', {
-      day: 'numeric',
-      month: 'long',
-      year: 'numeric',
-    });
-    slide.addText(`Data as of ${dataDate}`, {
-      x: 0.38,
-      y: footerY + 0.18,
-      w: 4,
-      h: 0.18,
-      fontSize: 9,
-      fontFace: 'Segoe UI',
-      color: COLORS.black,
-    });
-    slide.addText('Source: Speeda', {
-      x: 0.38,
-      y: footerY + 0.36,
-      w: 4,
-      h: 0.18,
-      fontSize: 9,
-      fontFace: 'Segoe UI',
-      color: COLORS.black,
-    });
-
-    // Footer line is now in master slide (cannot be moved)
-
-    // ===== YCP LOGO (from slideLayout1: x=0.38", y=7.30") =====
-    // Logo image stored in backend folder
-    try {
-      const logoPath = path.join(__dirname, 'ycp-logo.png');
-      const logoExists = require('fs').existsSync(logoPath);
-      if (logoExists) {
-        slide.addImage({
-          path: logoPath,
-          x: 0.38,
-          y: 7.3,
-          w: 0.47,
-          h: 0.17,
-        });
-      }
-    } catch (e) {
-      console.log('Logo not found, skipping');
-    }
-
-    // ===== FOOTER COPYRIGHT (from slideLayout1: center, y=7.26") =====
-    slide.addText('(C) YCP 2025 all rights reserved', {
-      x: 4.1,
-      y: 7.26,
-      w: 5.1,
-      h: 0.2,
-      fontSize: 8,
-      fontFace: 'Segoe UI',
-      color: COLORS.gray,
-      align: 'center',
-    });
-
-    // ===== PAGE NUMBER =====
-    slide.addText('1', {
-      x: 12.5,
-      y: 7.26,
-      w: 0.5,
-      h: 0.2,
-      fontSize: 10,
-      fontFace: 'Segoe UI',
-      color: COLORS.black,
-      align: 'right',
-    });
-
-    // Generate PPT buffer
-    const pptBuffer = await pptx.write({ outputType: 'base64' });
-
-    // Send email with Excel and PPT attachments
-    const validationSection = validationResult
-      ? `
+      // Send email with Excel and PPT attachments
+      const validationSection = validationResult
+        ? `
 <h3 style="color: #1e3a5f;">AI Validation</h3>
 <p style="color: #374151;">
   <strong>Assessment:</strong> ${validationResult.overallAssessment || 'N/A'}
@@ -3911,9 +4204,9 @@ ${
     : ''
 }
 `
-      : '';
+        : '';
 
-    const emailHTML = `
+      const emailHTML = `
 <h2 style="color: #1e3a5f;">Trading Comparable Analysis – ${TargetCompanyOrIndustry}</h2>
 <p style="color: #374151;">Please find attached the Excel file and PowerPoint slide with your trading comparable analysis.</p>
 
@@ -3952,49 +4245,49 @@ Source: Speeda
 </p>
 `;
 
-    const sanitizedName = TargetCompanyOrIndustry.replace(/[^a-zA-Z0-9]/g, '_');
-    await sendEmail(
-      Email,
-      `Trading Comps: ${TargetCompanyOrIndustry} - ${finalCompanies.length} peers`,
-      emailHTML,
-      [
-        {
-          content: excelBuffer,
-          name: `Trading_Comparable_${sanitizedName}.xlsx`,
-        },
-        {
-          content: pptBuffer,
-          name: `Trading_Comparable_${sanitizedName}.pptx`,
-        },
-      ]
-    );
-
-    console.log(`\n${'='.repeat(50)}`);
-    console.log(`TRADING COMPARABLE COMPLETE! Email sent to ${Email}`);
-    console.log(`Original: ${allCompanies.length} → Final: ${finalCompanies.length} companies`);
-    console.log(
-      `Median EV/EBITDA: ${medians.evEbitda}, P/E TTM: ${medians.peTTM}, P/B: ${medians.pb}`
-    );
-    console.log('='.repeat(50));
-
-    // Finalize tracking (real token counts recorded via recordTokens in wrappers)
-    await tracker.finish({
-      companiesProcessed: allCompanies.length,
-      finalCompanies: finalCompanies.length,
-    });
-  } catch (error) {
-    console.error('Trading comparable error:', error);
-    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
-    try {
+      const sanitizedName = TargetCompanyOrIndustry.replace(/[^a-zA-Z0-9]/g, '_');
       await sendEmail(
         Email,
-        'Trading Comparable - Error',
-        `<p>Error processing your request: ${error.message}</p>`
+        `Trading Comps: ${TargetCompanyOrIndustry} - ${finalCompanies.length} peers`,
+        emailHTML,
+        [
+          {
+            content: excelBuffer,
+            name: `Trading_Comparable_${sanitizedName}.xlsx`,
+          },
+          {
+            content: pptBuffer,
+            name: `Trading_Comparable_${sanitizedName}.pptx`,
+          },
+        ]
       );
-    } catch (e) {
-      console.error('Failed to send error email:', e);
+
+      console.log(`\n${'='.repeat(50)}`);
+      console.log(`TRADING COMPARABLE COMPLETE! Email sent to ${Email}`);
+      console.log(`Original: ${allCompanies.length} → Final: ${finalCompanies.length} companies`);
+      console.log(
+        `Median EV/EBITDA: ${medians.evEbitda}, P/E TTM: ${medians.peTTM}, P/B: ${medians.pb}`
+      );
+      console.log('='.repeat(50));
+
+      // Finalize tracking (real token counts recorded via recordTokens in wrappers)
+      await tracker.finish({
+        companiesProcessed: allCompanies.length,
+        finalCompanies: finalCompanies.length,
+      });
+    } catch (error) {
+      console.error('Trading comparable error:', error);
+      await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
+      try {
+        await sendEmail(
+          Email,
+          'Trading Comparable - Error',
+          `<p>Error processing your request: ${error.message}</p>`
+        );
+      } catch (e) {
+        console.error('Failed to send error email:', e);
+      }
     }
-  }
   }); // end trackingContext.run
 });
 
