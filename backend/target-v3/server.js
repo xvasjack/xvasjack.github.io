@@ -1554,6 +1554,19 @@ app.post('/api/find-target', async (req, res) => {
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(50));
 
+    // Estimate costs based on search activity
+    // exhaustiveSearch: ~40 Perplexity, ~15 OpenAI Search, 3 Gemini, extraction per company
+    const perpQueryCount = 40; // Approximate from all strategy functions
+    const openaiSearchCount = 15;
+    const geminiCount = 3;
+    tracker.addModelCall('sonar-pro', 'x'.repeat(500 * perpQueryCount), 'x'.repeat(2000 * perpQueryCount));
+    tracker.addModelCall('gpt-4o-search-preview', 'x'.repeat(1000 * openaiSearchCount), 'x'.repeat(2000 * openaiSearchCount));
+    tracker.addModelCall('gemini-2.5-flash-lite', 'x'.repeat(500 * geminiCount), 'x'.repeat(2000 * geminiCount));
+    // Extraction: GPT-4o-mini for each batch of results
+    tracker.addModelCall('gpt-4o-mini', 'x'.repeat(15000 * Math.ceil(companies.length / 10)), 'x'.repeat(500 * companies.length));
+    // Validation: GPT-4o for each verified company
+    tracker.addModelCall('gpt-4o', 'x'.repeat(10000 * verifiedCompanies.length), 'x'.repeat(200 * verifiedCompanies.length));
+
     // Track usage
     await tracker.finish({
       companiesFound: companies.length,
@@ -1633,6 +1646,19 @@ app.post('/api/find-target-slow', async (req, res) => {
     console.log(`Total companies: ${validCompanies.length}`);
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(50));
+
+    // Estimate costs based on search activity (3x searches for slow mode)
+    const searchMultiplier = 3;
+    const perpQueryCount = 40 * searchMultiplier;
+    const openaiSearchCount = 15 * searchMultiplier;
+    const geminiCount = 3 * searchMultiplier;
+    tracker.addModelCall('sonar-pro', 'x'.repeat(500 * perpQueryCount), 'x'.repeat(2000 * perpQueryCount));
+    tracker.addModelCall('gpt-4o-search-preview', 'x'.repeat(1000 * openaiSearchCount), 'x'.repeat(2000 * openaiSearchCount));
+    tracker.addModelCall('gemini-2.5-flash-lite', 'x'.repeat(500 * geminiCount), 'x'.repeat(2000 * geminiCount));
+    // Extraction: GPT-4o-mini for each batch of results
+    tracker.addModelCall('gpt-4o-mini', 'x'.repeat(15000 * Math.ceil(uniqueCompanies.length / 10)), 'x'.repeat(500 * uniqueCompanies.length));
+    // Validation: GPT-4o-mini for each company (slow mode uses gpt-4o-mini)
+    tracker.addModelCall('gpt-4o-mini', 'x'.repeat(8000 * preFiltered.length), 'x'.repeat(200 * preFiltered.length));
 
     // Track usage
     await tracker.finish({

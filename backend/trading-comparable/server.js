@@ -3915,6 +3915,14 @@ Source: Speeda
     );
     console.log('='.repeat(50));
 
+    // Estimate costs based on processing
+    // Per company: GPT-4o for financial data extraction (~10K input, 2K output)
+    const companyCount = allCompanies.length;
+    tracker.addModelCall('gpt-4o', 'x'.repeat(10000 * companyCount), 'x'.repeat(2000 * companyCount));
+    // Validation pass: Gemini 2.5 Pro for ~50% of companies (~8K input, 1K output)
+    const validatedCount = Math.ceil(companyCount * 0.5);
+    tracker.addModelCall('gemini-2.5-pro', 'x'.repeat(8000 * validatedCount), 'x'.repeat(1000 * validatedCount));
+
     // Track usage
     await tracker.finish({
       companiesProcessed: allCompanies.length,

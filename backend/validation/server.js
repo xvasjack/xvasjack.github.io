@@ -1041,6 +1041,17 @@ app.post('/api/validation', async (req, res) => {
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(50));
 
+    // Estimate costs based on companies processed
+    // Website finder: 4 AI calls per company (Perplexity, OpenAI Search, Gemini, + extraction)
+    const companyCount = results.length;
+    tracker.addModelCall('sonar-pro', 'x'.repeat(300 * companyCount), 'x'.repeat(500 * companyCount));
+    tracker.addModelCall('gpt-4o-search-preview', 'x'.repeat(300 * companyCount), 'x'.repeat(500 * companyCount));
+    tracker.addModelCall('gemini-2.5-flash-lite', 'x'.repeat(300 * companyCount), 'x'.repeat(500 * companyCount));
+    // Business validation: gpt-4o-mini first pass for all, ~30% escalate to gpt-4o
+    tracker.addModelCall('gpt-4o-mini', 'x'.repeat(8000 * companyCount), 'x'.repeat(200 * companyCount));
+    const escalatedCount = Math.ceil(companyCount * 0.3);
+    tracker.addModelCall('gpt-4o', 'x'.repeat(10000 * escalatedCount), 'x'.repeat(200 * escalatedCount));
+
     // Track usage
     await tracker.finish({
       companiesProcessed: results.length,

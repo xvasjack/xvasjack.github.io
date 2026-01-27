@@ -8968,6 +8968,14 @@ app.post('/api/profile-slides', async (req, res) => {
     console.log(`Email sent to ${email}${attachment ? ' with PPTX attachment' : ''}`);
     console.log('='.repeat(50));
 
+    // Estimate costs based on processing activity
+    // Per website: ~2-3 GPT-4o calls for research + extraction (~20K input, 3K output)
+    const websiteCount = websites.length;
+    tracker.addModelCall('gpt-4o', 'x'.repeat(20000 * websiteCount), 'x'.repeat(3000 * websiteCount));
+    // Per company: additional validation/verification (~5K input, 500 output)
+    const companyCount = companies.length;
+    tracker.addModelCall('gpt-4o', 'x'.repeat(5000 * companyCount), 'x'.repeat(500 * companyCount));
+
     // Track usage
     await tracker.finish({
       websitesProcessed: websites.length,
