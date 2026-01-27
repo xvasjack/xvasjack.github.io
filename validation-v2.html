@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Validation V2</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 1s linear infinite; }
+  </style>
+</head>
+<body class="font-sans bg-slate-100 text-slate-900 h-screen flex overflow-hidden">
+  <!-- Sidebar -->
+  <aside class="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm">
+    <div class="p-5 border-b border-slate-200">
+      <a href="find-target.html" class="flex items-center gap-3 text-slate-900 no-underline">
+        <span class="w-9 h-9 bg-indigo-600 rounded-lg flex items-center justify-center">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+          </svg>
+        </span>
+        <span class="font-semibold text-lg">YCP Tools</span>
+      </a>
+    </div>
+
+    <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+      <div class="mb-4">
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Search</p>
+        <a href="find-target.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v3 Search
+        </a>
+        <a href="find-target-v5.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v5 Search
+        </a>
+        <a href="find-target-v6.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v6 Search
+        </a>
+      </div>
+
+      <div class="mb-4">
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Tools</p>
+        <a href="validation.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Validation
+        </a>
+        <a href="trading-comparable.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          Trading Comp
+        </a>
+        <a href="profile-slides.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Profile Slides
+        </a>
+        <a href="utb.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+          UTB
+        </a>
+        <a href="market-research.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          Market Research
+        </a>
+      </div>
+
+      <div>
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Other</p>
+        <a href="due-diligence.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+          Due Diligence
+        </a>
+        <a href="find-target-slow.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          v3 Slow
+        </a>
+        <a href="validation-v2.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium bg-indigo-50 text-indigo-700 rounded-lg">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Validation V2
+        </a>
+      </div>
+    </nav>
+
+    <div class="p-4 border-t border-slate-200 bg-slate-50">
+      <label class="block text-xs font-medium text-slate-500 mb-1.5">Your Email</label>
+      <input type="email" id="globalEmail" placeholder="your@company.com"
+        class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow">
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="flex-1 flex flex-col overflow-hidden">
+    <header class="bg-white border-b border-slate-200 px-8 py-5">
+      <div class="flex items-center gap-3 mb-1">
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
+          <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+          Online
+        </span>
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-100 text-blue-700 text-xs font-semibold rounded-full">
+          V2 — 60% cheaper
+        </span>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900">Validation V2</h1>
+      <p class="text-slate-600 mt-1">Upload a Speeda list and validate against an industry. 2-source URL consensus + Gemini 3 Flash + GPT-4o escalation. Results in ~3 mins.</p>
+    </header>
+
+    <div class="flex-1 overflow-y-auto p-8">
+      <div class="max-w-xl mx-auto">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+          <form id="validationForm">
+            <div class="flex gap-2 mb-5">
+              <button type="button" class="tab-btn flex-1 py-2.5 px-4 text-sm font-medium rounded-lg border-2 border-indigo-600 bg-indigo-600 text-white" data-tab="file">Upload Speeda List</button>
+              <button type="button" class="tab-btn flex-1 py-2.5 px-4 text-sm font-medium rounded-lg border-2 border-slate-300 bg-white text-slate-600 hover:border-slate-400" data-tab="manual">Manual Entry</button>
+            </div>
+
+            <div class="tab-content" id="fileTab">
+              <div id="uploadZone" class="border-2 border-dashed border-slate-300 rounded-lg p-6 text-center cursor-pointer hover:border-indigo-500 hover:bg-indigo-50 transition-colors relative">
+                <input type="file" id="excelFile" accept=".xlsx,.xls" class="absolute inset-0 opacity-0 cursor-pointer">
+                <svg class="w-10 h-10 mx-auto text-slate-400 mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                <p class="text-sm text-slate-500"><span class="text-indigo-600 font-medium">Click to upload</span> or drag and drop</p>
+              </div>
+
+              <div id="fileStatus" class="hidden mt-4 p-4 bg-slate-50 border border-slate-200 rounded-lg">
+                <div class="flex items-center justify-between">
+                  <div class="flex items-center gap-2">
+                    <svg class="w-5 h-5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    <span id="fileStatusName" class="font-medium text-slate-700"></span>
+                    <span id="fileStatusSize" class="text-sm text-slate-400"></span>
+                  </div>
+                  <button type="button" id="fileRemoveBtn" class="text-sm text-red-600 hover:text-red-700">Remove</button>
+                </div>
+                <div class="mt-3 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+                  <div id="progressFill" class="h-full bg-indigo-600 rounded-full transition-all duration-300" style="width: 0%"></div>
+                </div>
+                <p id="progressText" class="text-xs text-slate-500 mt-2">Analyzing...</p>
+                <div id="detectionResults" class="hidden grid grid-cols-2 gap-3 mt-3">
+                  <div class="text-center p-3 bg-white rounded-lg border border-slate-200">
+                    <p id="companyCount" class="text-2xl font-bold text-indigo-600">0</p>
+                    <p class="text-xs text-slate-500">Companies</p>
+                  </div>
+                  <div class="text-center p-3 bg-white rounded-lg border border-slate-200">
+                    <p id="countryCount" class="text-2xl font-bold text-indigo-600">0</p>
+                    <p class="text-xs text-slate-500">Countries</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tab-content hidden" id="manualTab">
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-slate-700 mb-1.5">Company Names</label>
+                  <textarea id="companies" name="Companies" rows="5" placeholder="One company per line (up to 200)"
+                    class="w-full px-4 py-3 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow resize-none"></textarea>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-slate-700 mb-1.5">Countries</label>
+                  <textarea id="countries" name="Countries" rows="5" placeholder="One country per line"
+                    class="w-full px-4 py-3 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow resize-none"></textarea>
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-5">
+              <label for="targetBusiness" class="block text-sm font-medium text-slate-700 mb-1.5">Target Should Be</label>
+              <input type="text" id="targetBusiness" name="TargetBusiness" required placeholder="e.g. Semiconductor distributor"
+                class="w-full px-4 py-3 text-base bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow">
+            </div>
+
+            <button type="submit" id="submitBtn"
+              class="w-full mt-5 flex items-center justify-center gap-2 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+              Submit
+            </button>
+
+            <div id="successMessage" class="hidden mt-5 flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg">
+              <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              <span>Request submitted! Results in ~3 minutes.</span>
+            </div>
+
+            <div id="errorMessage" class="hidden mt-5 flex items-center gap-3 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+              <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              <span>Error submitting request. Please try again.</span>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    const globalEmailInput = document.getElementById('globalEmail');
+    const cachedEmail = localStorage.getItem('ycpUserEmail');
+    if (cachedEmail) globalEmailInput.value = cachedEmail;
+    globalEmailInput.addEventListener('input', () => localStorage.setItem('ycpUserEmail', globalEmailInput.value));
+
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const fileTab = document.getElementById('fileTab');
+    const manualTab = document.getElementById('manualTab');
+    let currentMode = 'file';
+
+    tabBtns.forEach(btn => {
+      btn.addEventListener('click', () => {
+        currentMode = btn.dataset.tab;
+        tabBtns.forEach(b => {
+          if (b.dataset.tab === currentMode) {
+            b.classList.add('border-indigo-600', 'bg-indigo-600', 'text-white');
+            b.classList.remove('border-slate-300', 'bg-white', 'text-slate-600');
+          } else {
+            b.classList.remove('border-indigo-600', 'bg-indigo-600', 'text-white');
+            b.classList.add('border-slate-300', 'bg-white', 'text-slate-600');
+          }
+        });
+        fileTab.classList.toggle('hidden', currentMode !== 'file');
+        manualTab.classList.toggle('hidden', currentMode !== 'manual');
+      });
+    });
+
+    const uploadZone = document.getElementById('uploadZone');
+    const fileInput = document.getElementById('excelFile');
+    const fileStatus = document.getElementById('fileStatus');
+    const progressFill = document.getElementById('progressFill');
+    const progressText = document.getElementById('progressText');
+    const detectionResults = document.getElementById('detectionResults');
+    let extractedData = null;
+
+    uploadZone.addEventListener('dragover', e => { e.preventDefault(); uploadZone.classList.add('border-indigo-500', 'bg-indigo-50'); });
+    uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('border-indigo-500', 'bg-indigo-50'));
+    uploadZone.addEventListener('drop', e => { e.preventDefault(); uploadZone.classList.remove('border-indigo-500', 'bg-indigo-50'); if (e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); });
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) processFile(e.target.files[0]); });
+    document.getElementById('fileRemoveBtn').addEventListener('click', resetFileUpload);
+
+    function resetFileUpload() {
+      extractedData = null;
+      fileInput.value = '';
+      uploadZone.classList.remove('hidden');
+      fileStatus.classList.add('hidden');
+      progressFill.style.width = '0%';
+      detectionResults.classList.add('hidden');
+      progressText.classList.remove('hidden');
+    }
+
+    async function processFile(file) {
+      if (!file.name.match(/\.(xlsx|xls)$/i)) { alert('Please upload an Excel file'); return; }
+      uploadZone.classList.add('hidden');
+      fileStatus.classList.remove('hidden');
+      document.getElementById('fileStatusName').textContent = file.name;
+      document.getElementById('fileStatusSize').textContent = '(' + (file.size/1024).toFixed(1) + ' KB)';
+      progressFill.style.width = '30%';
+      progressText.textContent = 'Reading...';
+
+      const reader = new FileReader();
+      reader.onload = async e => {
+        try {
+          progressFill.style.width = '60%';
+          progressText.textContent = 'Analyzing...';
+          const data = new Uint8Array(e.target.result);
+          const wb = XLSX.read(data, { type: 'array' });
+          const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 });
+          extractedData = analyzeData(json);
+          progressFill.style.width = '100%';
+          progressFill.classList.add('bg-emerald-500');
+          progressText.textContent = 'Done!';
+          setTimeout(() => {
+            progressText.classList.add('hidden');
+            detectionResults.classList.remove('hidden');
+            document.getElementById('companyCount').textContent = extractedData.companies.length;
+            document.getElementById('countryCount').textContent = extractedData.countries.length;
+          }, 300);
+        } catch (err) { progressText.textContent = 'Error: ' + err.message; }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    function analyzeData(json) {
+      const companies = [], countries = new Set();
+      const knownCountries = ['malaysia','singapore','thailand','indonesia','vietnam','philippines','china','japan','korea','south korea','taiwan','hong kong','india','australia','usa','united states','uk','united kingdom','germany','france','italy','spain','netherlands','belgium','cambodia','myanmar'];
+      const cols = [];
+      const maxCols = Math.max(...json.slice(0,20).map(r => r?.length || 0));
+
+      for (let c = 0; c < maxCols; c++) {
+        const col = { idx: c, compScore: 0, countryScore: 0 };
+        for (let r = 0; r < Math.min(json.length, 30); r++) {
+          const val = json[r]?.[c] ? String(json[r][c]).trim() : '';
+          if (!val) continue;
+          const low = val.toLowerCase();
+          if (r < 5 && /company|name|firm|corp/i.test(val)) col.compScore += 10;
+          if (r < 5 && /country|location|region/i.test(val)) col.countryScore += 10;
+          if (knownCountries.some(x => low === x)) col.countryScore += 2;
+          if (/\b(ltd|inc|corp|sdn|bhd|pte|llc|gmbh)\b/i.test(val)) col.compScore += 3;
+        }
+        cols.push(col);
+      }
+
+      const compCol = cols.reduce((a,b) => b.compScore > a.compScore ? b : a, {compScore:-1,idx:0});
+      const countryCol = cols.reduce((a,b) => b.countryScore > a.countryScore && b.idx !== compCol.idx ? b : a, {countryScore:-1,idx:-1});
+
+      for (let i = 1; i < json.length; i++) {
+        const row = json[i];
+        if (!row) continue;
+        const comp = row[compCol.idx] ? String(row[compCol.idx]).trim() : '';
+        if (comp.length > 1 && comp.length < 200 && !knownCountries.includes(comp.toLowerCase())) companies.push(comp);
+        for (let j = 0; j < row.length; j++) {
+          const cell = row[j] ? String(row[j]).toLowerCase().trim() : '';
+          const match = knownCountries.find(x => cell === x);
+          if (match) countries.add(match.charAt(0).toUpperCase() + match.slice(1));
+        }
+      }
+      return { companies: companies.slice(0, 200), countries: Array.from(countries) };
+    }
+
+    // TODO: Replace this URL with your Railway deployment URL for validation-v2
+    const BACKEND_URL = 'https://xvasjackgithubio-production-b1d3.up.railway.app/api/validation';
+
+    document.getElementById('validationForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      const success = document.getElementById('successMessage');
+      const error = document.getElementById('errorMessage');
+      success.classList.add('hidden'); error.classList.add('hidden');
+
+      let companiesData, countriesData;
+      if (currentMode === 'file') {
+        if (!extractedData?.companies.length) { alert('Please upload an Excel file first'); return; }
+        companiesData = extractedData.companies.join('\n');
+        countriesData = extractedData.countries.join('\n');
+      } else {
+        companiesData = document.getElementById('companies').value;
+        countriesData = document.getElementById('countries').value;
+        if (!companiesData.trim()) { alert('Please enter company names'); return; }
+        if (!countriesData.trim()) { alert('Please enter countries'); return; }
+      }
+
+      const email = globalEmailInput.value || localStorage.getItem('ycpUserEmail');
+      if (!email) { alert('Please enter your email in the sidebar'); return; }
+
+      btn.disabled = true;
+      btn.innerHTML = '<svg class="spinner w-5 h-5" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Submitting...';
+
+      try {
+        const res = await fetch(BACKEND_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            Companies: companiesData,
+            Countries: countriesData,
+            TargetBusiness: document.getElementById('targetBusiness').value,
+            OutputOption: 'both_sheets',
+            Email: email
+          })
+        });
+        if (res.ok) { success.classList.remove('hidden'); this.reset(); resetFileUpload(); }
+        else throw new Error();
+      } catch { error.classList.remove('hidden'); }
+      finally { btn.disabled = false; btn.innerHTML = 'Submit'; }
+    });
+  </script>
+</body>
+</html>
