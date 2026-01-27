@@ -246,6 +246,11 @@ async function _callGemini(prompt) {
 
     const data = await response.json();
 
+    const usage = data.usageMetadata;
+    if (usage) {
+      recordTokens('gemini-2.5-flash-lite', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+    }
+
     if (data.error) {
       console.error('Gemini 2.5 Flash-Lite API error:', data.error.message);
       return '';
@@ -325,6 +330,9 @@ async function _callClaude(prompt, systemPrompt = null, _jsonMode = false) {
     }
 
     const response = await anthropic.messages.create(requestParams);
+    if (response.usage) {
+      recordTokens('claude-sonnet-4', response.usage.input_tokens || 0, response.usage.output_tokens || 0);
+    }
     const text = response.content?.[0]?.text || '';
 
     return text;
@@ -356,6 +364,10 @@ async function _callPerplexity(prompt) {
     }
 
     const data = await response.json();
+
+    if (data.usage) {
+      recordTokens('sonar-pro', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
+    }
 
     if (data.error) {
       console.error('Perplexity API error:', data.error.message || data.error);
@@ -402,6 +414,9 @@ async function _callOpenAISearch(prompt) {
       model: 'gpt-4o-search-preview',
       messages: [{ role: 'user', content: prompt }],
     });
+    if (response.usage) {
+      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices[0].message.content || '';
     if (!result) {
       console.warn('OpenAI Search returned empty response, falling back to ChatGPT');
@@ -472,6 +487,9 @@ async function _callDeepSeek(prompt, maxTokens = 4000) {
       timeout: 120000,
     });
     const data = await response.json();
+    if (data.usage) {
+      recordTokens('deepseek-chat', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
+    }
     if (data.error) {
       console.error('DeepSeek API error:', data.error);
       return null;
@@ -948,6 +966,9 @@ RULES:
       ],
       response_format: { type: 'json_object' },
     });
+    if (extraction.usage) {
+      recordTokens('gpt-4o-mini', extraction.usage.prompt_tokens || 0, extraction.usage.completion_tokens || 0);
+    }
     const parsed = JSON.parse(extraction.choices[0].message.content);
     return Array.isArray(parsed.companies) ? parsed.companies : [];
   } catch (e) {
@@ -1376,6 +1397,9 @@ ${contentToValidate.substring(0, 10000)}`,
       response_format: { type: 'json_object' },
     });
 
+    if (validation.usage) {
+      recordTokens('gpt-4o', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
+    }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
       return { valid: true, corrected_hq: company.hq };
@@ -1514,6 +1538,9 @@ ${typeof pageText === 'string' && pageText ? pageText.substring(0, 8000) : 'Coul
       response_format: { type: 'json_object' },
     });
 
+    if (validation.usage) {
+      recordTokens('gpt-4o-mini', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
+    }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
       return { valid: true, corrected_hq: result.corrected_hq || company.hq };
@@ -1668,6 +1695,10 @@ async function checkRelevanceWithOpenAI(companies, filterCriteria) {
     }
 
     const data = await response.json();
+    const geminiUsage = data.usageMetadata;
+    if (geminiUsage) {
+      recordTokens('gemini-2.5-flash', geminiUsage.promptTokenCount || 0, geminiUsage.candidatesTokenCount || 0);
+    }
     if (data.error) throw new Error(data.error.message);
     const content = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -1686,6 +1717,9 @@ async function checkRelevanceWithOpenAI(companies, filterCriteria) {
         response_format: { type: 'json_object' },
         temperature: 0.2,
       });
+      if (response.usage) {
+        recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      }
       const content = response.choices[0].message.content;
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
@@ -1718,6 +1752,10 @@ async function checkRelevanceWithGemini(companies, filterCriteria) {
       }
     );
     const data = await response.json();
+    const liteUsage = data.usageMetadata;
+    if (liteUsage) {
+      recordTokens('gemini-2.5-flash-lite', liteUsage.promptTokenCount || 0, liteUsage.candidatesTokenCount || 0);
+    }
     if (data.error) throw new Error(data.error.message);
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     const jsonMatch = text.match(/\{[\s\S]*\}/);
@@ -1753,6 +1791,9 @@ async function checkRelevanceWithPerplexity(companies, filterCriteria) {
       }),
     });
     const data = await response.json();
+    if (data.usage) {
+      recordTokens('sonar', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
+    }
     const content = data.choices?.[0]?.message?.content || '';
     const jsonMatch = content.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
@@ -1905,6 +1946,9 @@ OUTPUT FORMAT (JSON):
       temperature: 0.2,
       response_format: { type: 'json_object' },
     });
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     analysisResult = response.choices[0].message.content;
   } catch (error) {
     console.error('GPT-4o analysis error:', error.message);
@@ -1952,6 +1996,9 @@ async function dualModelEvaluateCompanies(evaluationPrompt, companies) {
           temperature: 0.2,
           response_format: { type: 'json_object' },
         });
+        if (response.usage) {
+          recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+        }
         return response.choices[0].message.content;
       } catch (error) {
         console.error('  GPT-4o evaluation error:', error.message);
@@ -2317,6 +2364,9 @@ OUTPUT JSON:
       temperature: 0.2,
       response_format: { type: 'json_object' },
     });
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     validationResult = response.choices[0].message.content;
   } catch (error) {
     console.error('Validation error:', error.message);
@@ -2424,6 +2474,9 @@ Make each step progressively more selective. First step should be broad, last st
       temperature: 0.3,
       response_format: { type: 'json_object' },
     });
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const parsed = JSON.parse(response.choices[0].message.content);
     return parsed.steps || [`Companies related to ${targetDescription}`];
   } catch (error) {

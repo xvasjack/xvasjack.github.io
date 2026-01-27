@@ -693,6 +693,11 @@ async function callGemini2FlashWithSearch(prompt, maxRetries = 2) {
 
       const data = await response.json();
 
+      const usage = data.usageMetadata;
+      if (usage) {
+        recordTokens('gemini-2.5-flash', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+      }
+
       if (data.error) {
         console.error(
           `Gemini 2.5 Flash Search API error (attempt ${attempt + 1}):`,

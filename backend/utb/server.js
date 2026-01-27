@@ -11,6 +11,7 @@ const { securityHeaders, rateLimiter } = require(`${sharedPath}/security`);
 const { requestLogger, healthCheck } = require(`${sharedPath}/middleware`);
 const { setupGlobalErrorHandlers } = require(`${sharedPath}/logging`);
 const { sendEmailLegacy: sendEmail } = require(`${sharedPath}/email`);
+const { createTracker, trackingContext, recordTokens } = require(`${sharedPath}/tracking`);
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
@@ -93,6 +94,10 @@ async function callPerplexity(prompt) {
 
     const data = await response.json();
 
+    if (data.usage) {
+      recordTokens('sonar-pro', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
+    }
+
     if (data.error) {
       console.error('Perplexity API error:', data.error.message || data.error);
       return '';
@@ -116,6 +121,9 @@ async function callChatGPT(prompt) {
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
     });
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices[0].message.content || '';
     if (!result) {
       console.warn('ChatGPT returned empty response for prompt:', prompt.substring(0, 100));
@@ -1776,6 +1784,9 @@ app.post('/api/utb', async (req, res) => {
     message: `UTB report for ${companyName} will be emailed in 10-15 minutes.`,
   });
 
+  const tracker = createTracker('utb', email, { companyName, website });
+
+  trackingContext.run(tracker, async () => {
   try {
     // Conduct comprehensive research
     const research = await conductUTBResearch(companyName, website, context);
@@ -1800,12 +1811,16 @@ app.post('/api/utb', async (req, res) => {
     );
 
     console.log(`[UTB] Slides report sent successfully to ${email}`);
+
+    await tracker.finish({ status: 'success', companyName });
   } catch (error) {
     console.error('[UTB] Error:', error);
+    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
     await sendEmail(email, `UTB Error - ${companyName}`, `<p>Error: ${error.message}</p>`).catch(
       () => {}
     );
   }
+  }); // end trackingContext.run
 });
 
 // ============ HEALTH CHECK ============

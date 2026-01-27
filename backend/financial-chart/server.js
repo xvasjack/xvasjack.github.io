@@ -14,6 +14,7 @@ const { securityHeaders, rateLimiter, escapeHtml } = require('./shared/security'
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { sendEmailLegacy: sendEmail } = require('./shared/email');
+const { createTracker, trackingContext, recordTokens } = require('./shared/tracking');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
@@ -238,6 +239,11 @@ async function _callGemini(prompt) {
 
     const data = await response.json();
 
+    const usage = data.usageMetadata;
+    if (usage) {
+      recordTokens('gemini-2.5-flash-lite', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+    }
+
     if (data.error) {
       console.error('Gemini 2.5 Flash-Lite API error:', data.error.message);
       return '';
@@ -271,6 +277,9 @@ async function _callGPT4oFallback(prompt, jsonMode = false, reason = '') {
     }
 
     const response = await openai.chat.completions.create(requestOptions);
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices?.[0]?.message?.content || '';
 
     if (result) {
@@ -310,6 +319,11 @@ async function _callGemini2Pro(prompt, jsonMode = false) {
     );
     const data = await response.json();
 
+    const proUsage = data.usageMetadata;
+    if (proUsage) {
+      recordTokens('gemini-2.5-pro', proUsage.promptTokenCount || 0, proUsage.candidatesTokenCount || 0);
+    }
+
     if (data.error) {
       console.error('Gemini 2.5 Pro API error:', data.error.message);
       return '';
@@ -341,6 +355,9 @@ async function _callClaude(prompt, systemPrompt = null, _jsonMode = false) {
     }
 
     const response = await anthropic.messages.create(requestParams);
+    if (response.usage) {
+      recordTokens('claude-sonnet-4', response.usage.input_tokens || 0, response.usage.output_tokens || 0);
+    }
     const text = response.content?.[0]?.text || '';
 
     return text;
@@ -373,6 +390,10 @@ async function _callPerplexity(prompt) {
 
     const data = await response.json();
 
+    if (data.usage) {
+      recordTokens('sonar-pro', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
+    }
+
     if (data.error) {
       console.error('Perplexity API error:', data.error.message || data.error);
       return '';
@@ -396,6 +417,9 @@ async function callChatGPT(prompt) {
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
     });
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices[0].message.content || '';
     if (!result) {
       console.warn('ChatGPT returned empty response for prompt:', prompt.substring(0, 100));
@@ -415,6 +439,9 @@ async function _callOpenAISearch(prompt) {
       model: 'gpt-4o-search-preview',
       messages: [{ role: 'user', content: prompt }],
     });
+    if (response.usage) {
+      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices[0].message.content || '';
     if (!result) {
       console.warn('OpenAI Search returned empty response, falling back to ChatGPT');
@@ -485,6 +512,9 @@ async function _callDeepSeek(prompt, maxTokens = 4000) {
       timeout: 120000,
     });
     const data = await response.json();
+    if (data.usage) {
+      recordTokens('deepseek-chat', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
+    }
     if (data.error) {
       console.error('DeepSeek API error:', data.error);
       return null;
@@ -920,6 +950,9 @@ RULES:
       ],
       response_format: { type: 'json_object' },
     });
+    if (extraction.usage) {
+      recordTokens('gpt-4o-mini', extraction.usage.prompt_tokens || 0, extraction.usage.completion_tokens || 0);
+    }
     const parsed = JSON.parse(extraction.choices[0].message.content);
     return Array.isArray(parsed.companies) ? parsed.companies : [];
   } catch (e) {
@@ -1348,6 +1381,9 @@ ${contentToValidate.substring(0, 10000)}`,
       response_format: { type: 'json_object' },
     });
 
+    if (validation.usage) {
+      recordTokens('gpt-4o', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
+    }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
       return { valid: true, corrected_hq: company.hq };
@@ -1486,6 +1522,9 @@ ${typeof pageText === 'string' && pageText ? pageText.substring(0, 8000) : 'Coul
       response_format: { type: 'json_object' },
     });
 
+    if (validation.usage) {
+      recordTokens('gpt-4o-mini', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
+    }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
       return { valid: true, corrected_hq: result.corrected_hq || company.hq };
@@ -1641,6 +1680,9 @@ RULES:
       temperature: 0.2,
     });
 
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
     console.error('Financial analysis error:', e.message);
@@ -2004,6 +2046,9 @@ app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res
     fileCount: excelFiles.length,
   });
 
+  const tracker = createTracker('financial-chart', email, { fileCount: excelFiles.length });
+
+  trackingContext.run(tracker, async () => {
   try {
     const allFinancialData = [];
     const errors = [];
@@ -2119,8 +2164,14 @@ app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res
 
     console.log(`Financial chart PPTX sent to ${email}`);
     console.log('='.repeat(50));
+
+    await tracker.finish({
+      status: 'success',
+      filesProcessed: allFinancialData.length,
+    });
   } catch (error) {
     console.error('Financial chart error:', error);
+    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
     try {
       await sendEmail(
         email,
@@ -2131,6 +2182,7 @@ app.post('/api/financial-chart', upload.array('excelFiles', 20), async (req, res
       console.error('Failed to send error email:', e);
     }
   }
+  }); // end trackingContext.run
 });
 
 // ============ HEALTH CHECK ============

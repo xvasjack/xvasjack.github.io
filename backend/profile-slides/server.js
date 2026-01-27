@@ -847,6 +847,10 @@ ${contentToScan}`;
     );
 
     const data = await response.json();
+    const usage = data.usageMetadata;
+    if (usage) {
+      recordTokens('gemini-2.0-flash', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+    }
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
 
     if (!text) {
@@ -1810,6 +1814,9 @@ RULES:
       ],
       response_format: { type: 'json_object' }
     });
+    if (extraction.usage) {
+      recordTokens('gpt-4o-mini', extraction.usage.prompt_tokens || 0, extraction.usage.completion_tokens || 0);
+    }
     const parsed = JSON.parse(extraction.choices[0].message.content);
     return Array.isArray(parsed.companies) ? parsed.companies : [];
   } catch (e) {
@@ -2214,6 +2221,9 @@ ${contentToValidate.substring(0, 10000)}`
       response_format: { type: 'json_object' }
     });
 
+    if (validation.usage) {
+      recordTokens('gpt-4o', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
+    }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
       return { valid: true, corrected_hq: company.hq };
@@ -2341,6 +2351,9 @@ ${(typeof pageText === 'string' && pageText) ? pageText.substring(0, 8000) : 'Co
       response_format: { type: 'json_object' }
     });
 
+    if (validation.usage) {
+      recordTokens('gpt-4o-mini', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
+    }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
       return { valid: true, corrected_hq: result.corrected_hq || company.hq };
@@ -5745,6 +5758,9 @@ If you cannot find more details, return: { "location": "" }`
       temperature: 0.1
     }));
 
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = JSON.parse(response.choices[0].message.content);
     if (result.location && result.location !== currentLocation) {
       const newParts = result.location.split(',').map(p => p.trim()).filter(p => p);
@@ -5916,6 +5932,9 @@ Rules:
       });
     }, 2, 3000);
 
+    if (visionResponse.usage) {
+      recordTokens('gpt-4o', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
+    }
     const responseText = visionResponse.choices[0]?.message?.content || '[]';
 
     // Parse response
@@ -6528,6 +6547,9 @@ Rules:
       });
     }, 2, 3000); // 2 retries, 3s base delay for rate limits
 
+    if (visionResponse.usage) {
+      recordTokens('gpt-4o', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
+    }
     const responseText = visionResponse.choices[0]?.message?.content || '{}';
 
     // Parse JSON response
@@ -6679,6 +6701,9 @@ Rules:
       });
     }, 2, 3000);
 
+    if (visionResponse.usage) {
+      recordTokens('gpt-4o', visionResponse.usage.prompt_tokens || 0, visionResponse.usage.completion_tokens || 0);
+    }
     const responseText = visionResponse.choices[0]?.message?.content || '{}';
 
     // Parse JSON response
@@ -6744,6 +6769,9 @@ Rules:
       temperature: 0.1
     });
 
+    if (response.usage) {
+      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const responseText = response.choices[0]?.message?.content || '{}';
     const jsonMatch = responseText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
@@ -7087,6 +7115,9 @@ Content: ${scrapedContent.substring(0, 25000)}`
       temperature: 0.2
     }));
 
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
     console.error('Agent 1 error:', e.message);
@@ -7266,6 +7297,9 @@ ${scrapedContent.substring(0, 25000)}`
       temperature: 0.2
     }));
 
+    if (response.usage) {
+      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
     console.error('Agent 2 error:', e.message);
@@ -7468,6 +7502,9 @@ ${scrapedContent.substring(0, 35000)}`
       temperature: 0.3
     }));
 
+    if (response.usage) {
+      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
     console.error('Agent 3 error:', e.message);
@@ -7526,6 +7563,9 @@ ${scrapedContent.substring(0, 30000)}`
       temperature: 0.2
     }));
 
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
     console.error('Focused extraction error:', e.message);
@@ -7637,6 +7677,9 @@ ${scrapedContent.substring(0, 35000)}`
       temperature: 0.3
     }));
 
+    if (response.usage) {
+      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = JSON.parse(response.choices[0].message.content);
 
     // Validate based on business type
@@ -7734,6 +7777,9 @@ ${scrapedContent.substring(0, 15000)}`
       temperature: 0.2
     }));
 
+    if (response.usage) {
+      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     return JSON.parse(response.choices[0].message.content);
   } catch (e) {
     console.error('Agent 3b error:', e.message);
@@ -7776,6 +7822,9 @@ Return ONLY valid JSON, no explanations.`
       ]
     }));
 
+    if (response.usage) {
+      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const content = response.choices[0].message.content || '';
 
     // Try to parse JSON from response
@@ -7872,6 +7921,9 @@ Return ONLY valid JSON.`
       ]
     });
 
+    if (response.usage) {
+      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const content = response.choices[0].message.content || '';
 
     const jsonMatch = content.match(/\{[\s\S]*\}/);
@@ -7968,6 +8020,9 @@ Create segments for these ${targetDescription} companies. Ensure EVERY company h
       temperature: 0.3
     });
 
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = JSON.parse(response.choices[0].message.content);
     console.log(`Generated ${result.segments?.length || 0} MECE segments`);
 
@@ -8120,6 +8175,9 @@ Generate M&A strategies for each region WITHOUT mentioning specific company name
       temperature: 0.4
     });
 
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = JSON.parse(response.choices[0].message.content);
     console.log(`Generated ${result.strategies?.length || 0} regional M&A strategies`);
     return result;
@@ -8254,6 +8312,9 @@ Return ONLY valid JSON.`;
       temperature: 0.2
     }));
 
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices[0].message.content;
 
     if (!result) {

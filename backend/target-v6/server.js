@@ -365,6 +365,9 @@ RULES:
       ],
       response_format: { type: 'json_object' },
     });
+    if (extraction.usage) {
+      recordTokens('gpt-4o-mini', extraction.usage.prompt_tokens || 0, extraction.usage.completion_tokens || 0);
+    }
     const parsed = JSON.parse(extraction.choices[0].message.content);
     return Array.isArray(parsed.companies) ? parsed.companies : [];
   } catch (e) {
@@ -804,6 +807,9 @@ ${contentToValidate.substring(0, 10000)}`,
       response_format: { type: 'json_object' },
     });
 
+    if (validation.usage) {
+      recordTokens('gpt-4o', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
+    }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
       return { valid: true, corrected_hq: company.hq };
@@ -942,6 +948,9 @@ ${typeof pageText === 'string' && pageText ? pageText.substring(0, 8000) : 'Coul
       response_format: { type: 'json_object' },
     });
 
+    if (validation.usage) {
+      recordTokens('gpt-4o-mini', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
+    }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
       return { valid: true, corrected_hq: result.corrected_hq || company.hq };
@@ -1398,6 +1407,9 @@ Return ONLY valid JSON, no explanation:
       temperature: 0.3,
     });
 
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices[0].message.content;
     const plan = JSON.parse(result);
 
@@ -1529,6 +1541,9 @@ Return JSON only: {"valid": true/false, "reason": "one sentence explanation", "c
             temperature: 0.1,
           });
 
+          if (response.usage) {
+            recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+          }
           const result = JSON.parse(response.choices[0].message.content);
           return {
             company,

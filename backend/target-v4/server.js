@@ -7,6 +7,7 @@ const { securityHeaders, rateLimiter, escapeHtml } = require('./shared/security'
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { sendEmailLegacy: sendEmail } = require('./shared/email');
+const { createTracker, trackingContext, recordTokens } = require('./shared/tracking');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
@@ -73,6 +74,11 @@ async function callGemini(prompt) {
 
     const data = await response.json();
 
+    const usage = data.usageMetadata;
+    if (usage) {
+      recordTokens('gemini-2.5-flash-lite', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+    }
+
     if (data.error) {
       console.error('Gemini 2.5 Flash-Lite API error:', data.error.message);
       return '';
@@ -116,6 +122,10 @@ async function callPerplexity(prompt) {
 
     const data = await response.json();
 
+    if (data.usage) {
+      recordTokens('sonar-pro', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
+    }
+
     if (data.error) {
       console.error('Perplexity API error:', data.error.message || data.error);
       return '';
@@ -139,6 +149,9 @@ async function callChatGPT(prompt) {
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
     });
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices[0].message.content || '';
     if (!result) {
       console.warn('ChatGPT returned empty response for prompt:', prompt.substring(0, 100));
@@ -158,6 +171,9 @@ async function callOpenAISearch(prompt) {
       model: 'gpt-4o-search-preview',
       messages: [{ role: 'user', content: prompt }],
     });
+    if (response.usage) {
+      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices[0].message.content || '';
     if (!result) {
       console.warn('OpenAI Search returned empty response, falling back to ChatGPT');
@@ -634,6 +650,9 @@ RULES:
       ],
       response_format: { type: 'json_object' },
     });
+    if (extraction.usage) {
+      recordTokens('gpt-4o-mini', extraction.usage.prompt_tokens || 0, extraction.usage.completion_tokens || 0);
+    }
     const parsed = JSON.parse(extraction.choices[0].message.content);
     return Array.isArray(parsed.companies) ? parsed.companies : [];
   } catch (e) {
@@ -1181,6 +1200,9 @@ ${contentToValidate.substring(0, 10000)}`,
       response_format: { type: 'json_object' },
     });
 
+    if (validation.usage) {
+      recordTokens('gpt-4o', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
+    }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
       return { valid: true, corrected_hq: company.hq };
@@ -1322,6 +1344,9 @@ Example: ["Malaysia", "Thailand", "Indonesia"]`,
       response_format: { type: 'json_object' },
     });
 
+    if (response.usage) {
+      recordTokens('gpt-4o-mini', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = JSON.parse(response.choices[0].message.content);
     const countries = result.countries || result;
 
@@ -1792,6 +1817,9 @@ app.post('/api/find-target-v4', async (req, res) => {
       'Request received. Exhaustive search running. Results will be emailed in ~30-45 minutes.',
   });
 
+  const tracker = createTracker('target-v4', Email, { Business, Country, Exclusion });
+
+  trackingContext.run(tracker, async () => {
   try {
     const totalStart = Date.now();
 
@@ -2021,14 +2049,21 @@ Find as many as possible - be exhaustive. Search using ALL the terminology varia
     console.log(`Final companies: ${finalCompanies.length}`);
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(70));
+
+    await tracker.finish({
+      status: 'success',
+      companiesFound: finalCompanies.length,
+    });
   } catch (error) {
     console.error('V4 Processing error:', error);
+    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
     try {
       await sendEmail(Email, `Find Target V4 - Error`, `<p>Error: ${error.message}</p>`);
     } catch (e) {
       console.error('Failed to send error email:', e);
     }
   }
+  }); // end trackingContext.run
 });
 
 // ============ HEALTH CHECK ============

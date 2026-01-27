@@ -9,6 +9,7 @@ const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/clien
 const { securityHeaders, rateLimiter, sanitizePath } = require('./shared/security');
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
+const { createTracker, trackingContext, recordTokens } = require('./shared/tracking');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
@@ -242,6 +243,9 @@ Output only the translation, nothing else.`,
       ],
       temperature: 0.3, // Balanced temperature for fluency while maintaining consistency
     });
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     return response.choices[0].message.content || text;
   } catch (error) {
     console.error('Translation error:', error.message);
@@ -342,6 +346,9 @@ wss.on('connection', (ws, _req) => {
     return;
   }
 
+  const sessionTracker = createTracker('transcription', 'websocket-session', {});
+
+  trackingContext.run(sessionTracker, () => {
   let deepgramConnection = null;
   const sessionId = Date.now().toString();
   const audioChunks = [];
@@ -833,6 +840,7 @@ wss.on('connection', (ws, _req) => {
     if (deepgramConnection) {
       deepgramConnection.finish();
     }
+    sessionTracker.finish({ status: 'completed', sessionId }).catch(() => {});
     // Keep session data for 30 minutes for retrieval (reduced from 1 hour to save memory)
     // Clear audio chunks immediately to free memory, keep only transcript
     const closingSession = activeSessions.get(sessionId);
@@ -848,6 +856,7 @@ wss.on('connection', (ws, _req) => {
   ws.on('error', (error) => {
     console.error(`[WS] WebSocket error for session ${sessionId}:`, error);
   });
+  }); // end trackingContext.run
 });
 
 // Endpoint to get session data (for generating reports after recording)

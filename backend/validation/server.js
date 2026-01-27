@@ -779,6 +779,10 @@ ${pageText.substring(0, 10000)}`;
       response_format: { type: 'json_object' },
     });
 
+    if (firstPass.usage) {
+      recordTokens('gpt-4o-mini', firstPass.usage.prompt_tokens || 0, firstPass.usage.completion_tokens || 0);
+    }
+
     const result = JSON.parse(firstPass.choices[0].message.content);
 
     // Check if we need a second pass with gpt-4o
@@ -804,6 +808,10 @@ ${pageText.substring(0, 10000)}`;
         ],
         response_format: { type: 'json_object' },
       });
+
+      if (secondPass.usage) {
+        recordTokens('gpt-4o', secondPass.usage.prompt_tokens || 0, secondPass.usage.completion_tokens || 0);
+      }
 
       const finalResult = JSON.parse(secondPass.choices[0].message.content);
       return {
