@@ -15,7 +15,7 @@ const { securityHeaders, rateLimiter, escapeHtml } = require('./shared/security'
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { sendEmail } = require('./shared/email');
-const { createTracker } = require('./shared/tracking');
+const { createTracker, trackingContext, recordTokens } = require('./shared/tracking');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
@@ -577,6 +577,11 @@ async function callGemini2Pro(prompt, jsonMode = false) {
     );
     const data = await response.json();
 
+    const usage = data.usageMetadata;
+    if (usage) {
+      recordTokens('gemini-2.5-pro', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+    }
+
     if (data.error) {
       console.error('Gemini 2.5 Pro API error:', data.error.message);
       return '';
@@ -663,6 +668,9 @@ async function callChatGPT(prompt) {
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
     });
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices[0].message.content || '';
     if (!result) {
       console.warn('ChatGPT returned empty response for prompt:', prompt.substring(0, 100));
@@ -792,6 +800,9 @@ async function callKimi128k(prompt, maxTokens = 16000) {
     }
 
     const data = await response.json();
+    if (data.usage) {
+      recordTokens('moonshot-v1-128k', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
+    }
     if (data.error) {
       console.error('[DD] Kimi API error:', data.error.message || data.error);
       return '';
@@ -2945,6 +2956,7 @@ app.post('/api/due-diligence', async (req, res) => {
 
   const tracker = createTracker('due-diligence', email, { fileCount: files.length, components, reportLength });
 
+  trackingContext.run(tracker, async () => {
   // Process in background
   try {
     const reportJson = await generateDueDiligenceReport(
@@ -3017,21 +3029,7 @@ app.post('/api/due-diligence', async (req, res) => {
 
     console.log(`[DD] Email sent successfully to ${email}`);
 
-    // Estimate costs based on processing
-    // Per file: extraction + initial analysis (~15K input, 2K output per file)
-    const fileCount = files.length;
-    tracker.addModelCall('gpt-4o', 'x'.repeat(15000 * fileCount), 'x'.repeat(2000 * fileCount));
-    // Per section: detailed analysis with GPT-4o (~20K input, 5K output per section)
-    const sectionCount = reportJson?.sections?.length || 0;
-    tracker.addModelCall('gpt-4o', 'x'.repeat(20000 * sectionCount), 'x'.repeat(5000 * sectionCount));
-    // Some sections use Gemini 2.5 Pro for validation (~10K input, 2K output)
-    const geminiSections = Math.ceil(sectionCount * 0.3); // ~30% use Gemini Pro
-    tracker.addModelCall('gemini-2.5-pro', 'x'.repeat(10000 * geminiSections), 'x'.repeat(2000 * geminiSections));
-    // Kimi 128k for deep analysis (~20K input, 8K output per section, ~50% of sections)
-    const kimiSections = Math.ceil(sectionCount * 0.5);
-    tracker.addModelCall('moonshot-v1-128k', 'x'.repeat(20000 * kimiSections), 'x'.repeat(8000 * kimiSections));
-
-    // Track usage
+    // Finalize tracking (real token counts recorded via recordTokens in wrappers)
     await tracker.finish({
       filesProcessed: files.length,
       sectionsGenerated: reportJson?.sections?.length || 0,
@@ -3069,6 +3067,7 @@ app.post('/api/due-diligence', async (req, res) => {
       console.error('[DD] Failed to send error email:', emailError.message);
     }
   }
+  }); // end trackingContext.run
 });
 
 // ============ REPORT FETCH ENDPOINTS (for automated testing) ============

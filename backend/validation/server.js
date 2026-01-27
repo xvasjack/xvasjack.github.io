@@ -8,7 +8,7 @@ const { securityHeaders, rateLimiter } = require('./shared/security');
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { sendEmailLegacy: sendEmail } = require('./shared/email');
-const { createTracker } = require('./shared/tracking');
+const { createTracker, trackingContext, recordTokens } = require('./shared/tracking');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
@@ -65,6 +65,11 @@ async function callGemini(prompt) {
 
     const data = await response.json();
 
+    const usage = data.usageMetadata;
+    if (usage) {
+      recordTokens('gemini-2.5-flash-lite', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+    }
+
     if (data.error) {
       console.error('Gemini 2.5 Flash-Lite API error:', data.error.message);
       return '';
@@ -104,6 +109,10 @@ async function callPerplexity(prompt) {
 
     const data = await response.json();
 
+    if (data.usage) {
+      recordTokens('sonar-pro', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
+    }
+
     if (data.error) {
       console.error('Perplexity API error:', data.error.message || data.error);
       return '';
@@ -127,6 +136,9 @@ async function callChatGPT(prompt) {
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
     });
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices[0].message.content || '';
     if (!result) {
       console.warn('ChatGPT returned empty response for prompt:', prompt.substring(0, 100));
@@ -146,6 +158,9 @@ async function callOpenAISearch(prompt) {
       model: 'gpt-4o-search-preview',
       messages: [{ role: 'user', content: prompt }],
     });
+    if (response.usage) {
+      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices[0].message.content || '';
     if (!result) {
       console.warn('OpenAI Search returned empty response, falling back to ChatGPT');
@@ -904,6 +919,7 @@ app.post('/api/validation', async (req, res) => {
 
   const tracker = createTracker('validation', Email, { TargetBusiness, Countries, OutputOption });
 
+  trackingContext.run(tracker, async () => {
   try {
     const totalStart = Date.now();
 
@@ -1041,18 +1057,7 @@ app.post('/api/validation', async (req, res) => {
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(50));
 
-    // Estimate costs based on companies processed
-    // Website finder: 4 AI calls per company (Perplexity, OpenAI Search, Gemini, + extraction)
-    const companyCount = results.length;
-    tracker.addModelCall('sonar-pro', 'x'.repeat(300 * companyCount), 'x'.repeat(500 * companyCount));
-    tracker.addModelCall('gpt-4o-search-preview', 'x'.repeat(300 * companyCount), 'x'.repeat(500 * companyCount));
-    tracker.addModelCall('gemini-2.5-flash-lite', 'x'.repeat(300 * companyCount), 'x'.repeat(500 * companyCount));
-    // Business validation: gpt-4o-mini first pass for all, ~30% escalate to gpt-4o
-    tracker.addModelCall('gpt-4o-mini', 'x'.repeat(8000 * companyCount), 'x'.repeat(200 * companyCount));
-    const escalatedCount = Math.ceil(companyCount * 0.3);
-    tracker.addModelCall('gpt-4o', 'x'.repeat(10000 * escalatedCount), 'x'.repeat(200 * escalatedCount));
-
-    // Track usage
+    // Finalize tracking (real token counts recorded via recordTokens in wrappers)
     await tracker.finish({
       companiesProcessed: results.length,
       inScope: inScopeCount,
@@ -1066,6 +1071,7 @@ app.post('/api/validation', async (req, res) => {
       console.error('Failed to send error email:', e);
     }
   }
+  }); // end trackingContext.run
 });
 
 // ============ HEALTH CHECK ============

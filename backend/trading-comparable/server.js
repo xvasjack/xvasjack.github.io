@@ -15,7 +15,7 @@ const { securityHeaders, rateLimiter, escapeHtml } = require('./shared/security'
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { sendEmailLegacy: sendEmail } = require('./shared/email');
-const { createTracker } = require('./shared/tracking');
+const { createTracker, trackingContext, recordTokens } = require('./shared/tracking');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
@@ -289,6 +289,11 @@ async function callGemini2Pro(prompt, jsonMode = false) {
     );
     const data = await response.json();
 
+    const usage = data.usageMetadata;
+    if (usage) {
+      recordTokens('gemini-2.5-pro', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+    }
+
     if (data.error) {
       console.error('Gemini 2.5 Pro API error:', data.error.message);
       return '';
@@ -375,6 +380,9 @@ async function callChatGPT(prompt) {
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
     });
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices[0].message.content || '';
     if (!result) {
       console.warn('ChatGPT returned empty response for prompt:', prompt.substring(0, 100));
@@ -2500,6 +2508,7 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
 
   const tracker = createTracker('trading-comparable', Email, { TargetCompanyOrIndustry, IsProfitable });
 
+  trackingContext.run(tracker, async () => {
   try {
     const workbook = XLSX.read(excelFile.buffer, { type: 'buffer' });
     const sheetName = workbook.SheetNames[0];
@@ -3915,15 +3924,7 @@ Source: Speeda
     );
     console.log('='.repeat(50));
 
-    // Estimate costs based on processing
-    // Per company: GPT-4o for financial data extraction (~10K input, 2K output)
-    const companyCount = allCompanies.length;
-    tracker.addModelCall('gpt-4o', 'x'.repeat(10000 * companyCount), 'x'.repeat(2000 * companyCount));
-    // Validation pass: Gemini 2.5 Pro for ~50% of companies (~8K input, 1K output)
-    const validatedCount = Math.ceil(companyCount * 0.5);
-    tracker.addModelCall('gemini-2.5-pro', 'x'.repeat(8000 * validatedCount), 'x'.repeat(1000 * validatedCount));
-
-    // Track usage
+    // Finalize tracking (real token counts recorded via recordTokens in wrappers)
     await tracker.finish({
       companiesProcessed: allCompanies.length,
       finalCompanies: finalCompanies.length,
@@ -3941,6 +3942,7 @@ Source: Speeda
       console.error('Failed to send error email:', e);
     }
   }
+  }); // end trackingContext.run
 });
 
 // ============ HEALTH CHECK ============

@@ -13,7 +13,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const JSZip = require('jszip');
 const { securityHeaders, rateLimiter, escapeHtml } = require('./shared/security');
 const { requestLogger, healthCheck } = require('./shared/middleware');
-const { createTracker } = require('./shared/tracking');
+const { createTracker, trackingContext, recordTokens } = require('./shared/tracking');
 
 // ============ GLOBAL ERROR HANDLERS - PREVENT CRASHES ============
 // Memory logging helper for debugging Railway OOM issues
@@ -1110,6 +1110,11 @@ async function callGemini(prompt) {
 
     const data = await response.json();
 
+    const usage = data.usageMetadata;
+    if (usage) {
+      recordTokens('gemini-2.5-flash-lite', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+    }
+
     if (data.error) {
       console.error('Gemini 2.5 Flash-Lite API error:', data.error.message);
       return '';
@@ -1159,6 +1164,11 @@ async function callGemini3Flash(prompt, jsonMode = false) {
 
     const data = await response.json();
 
+    const usage = data.usageMetadata;
+    if (usage) {
+      recordTokens('gemini-2.5-flash', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+    }
+
     if (data.error) {
       console.error('Gemini 3 Flash API error:', data.error.message);
       // Fallback to GPT-4o
@@ -1195,6 +1205,9 @@ async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
     }
 
     const response = await openai.chat.completions.create(requestOptions);
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices?.[0]?.message?.content || '';
 
     if (result) {
@@ -1231,6 +1244,11 @@ async function callGemini2Pro(prompt, jsonMode = false) {
     });
     const data = await response.json();
 
+    const usage = data.usageMetadata;
+    if (usage) {
+      recordTokens('gemini-2.5-pro', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+    }
+
     if (data.error) {
       console.error('Gemini 2.5 Pro API error:', data.error.message);
       return '';
@@ -1262,6 +1280,9 @@ async function callClaude(prompt, systemPrompt = null, jsonMode = false) {
     }
 
     const response = await anthropic.messages.create(requestParams);
+    if (response.usage) {
+      recordTokens('claude-sonnet-4', response.usage.input_tokens || 0, response.usage.output_tokens || 0);
+    }
     const text = response.content?.[0]?.text || '';
 
     return text;
@@ -1295,6 +1316,10 @@ async function callPerplexity(prompt) {
 
     const data = await response.json();
 
+    if (data.usage) {
+      recordTokens('sonar-pro', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
+    }
+
     if (data.error) {
       console.error('Perplexity API error:', data.error.message || data.error);
       return '';
@@ -1318,6 +1343,9 @@ async function callChatGPT(prompt) {
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2
     });
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices[0].message.content || '';
     if (!result) {
       console.warn('ChatGPT returned empty response for prompt:', prompt.substring(0, 100));
@@ -1337,6 +1365,9 @@ async function callOpenAISearch(prompt) {
       model: 'gpt-4o-search-preview',
       messages: [{ role: 'user', content: prompt }]
     });
+    if (response.usage) {
+      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices[0].message.content || '';
     if (!result) {
       console.warn('OpenAI Search returned empty response, falling back to ChatGPT');
@@ -1408,6 +1439,9 @@ async function callDeepSeek(prompt, maxTokens = 4000) {
       timeout: 120000
     });
     const data = await response.json();
+    if (data.usage) {
+      recordTokens('deepseek-chat', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
+    }
     if (data.error) {
       console.error('DeepSeek API error:', data.error);
       return null;
@@ -8918,6 +8952,7 @@ app.post('/api/profile-slides', async (req, res) => {
 
   const tracker = createTracker('profile-slides', email, { targetDescription, websiteCount: websites.length });
 
+  trackingContext.run(tracker, async () => {
   // Process in background using parallel batch processing
   try {
     // Process websites in parallel batches of 4 for ~3x faster processing
@@ -8968,28 +9003,7 @@ app.post('/api/profile-slides', async (req, res) => {
     console.log(`Email sent to ${email}${attachment ? ' with PPTX attachment' : ''}`);
     console.log('='.repeat(50));
 
-    // Estimate costs based on processing activity
-    const websiteCount = websites.length;
-    const companyCount = companies.length;
-    // Per website: GPT-4o for research + extraction (~20K input, 3K output)
-    tracker.addModelCall('gpt-4o', 'x'.repeat(20000 * websiteCount), 'x'.repeat(3000 * websiteCount));
-    // Per company: GPT-4o for validation/verification (~5K input, 500 output)
-    tracker.addModelCall('gpt-4o', 'x'.repeat(5000 * companyCount), 'x'.repeat(500 * companyCount));
-    // Per website: Gemini 2.5 Flash-Lite for initial parsing (~8K input, 1K output)
-    tracker.addModelCall('gemini-2.5-flash-lite', 'x'.repeat(8000 * websiteCount), 'x'.repeat(1000 * websiteCount));
-    // Per website: Gemini 2.5 Flash for structured extraction (~10K input, 2K output)
-    tracker.addModelCall('gemini-2.5-flash', 'x'.repeat(10000 * websiteCount), 'x'.repeat(2000 * websiteCount));
-    // Per company: Gemini 2.5 Pro for quality validation (~8K input, 1K output, ~30% of companies)
-    const proValidated = Math.ceil(companyCount * 0.3);
-    tracker.addModelCall('gemini-2.5-pro', 'x'.repeat(8000 * proValidated), 'x'.repeat(1000 * proValidated));
-    // Per company: Claude Sonnet for cross-validation (~6K input, 1K output, ~20% of companies)
-    const claudeValidated = Math.ceil(companyCount * 0.2);
-    tracker.addModelCall('claude-sonnet-4', 'x'.repeat(6000 * claudeValidated), 'x'.repeat(1000 * claudeValidated));
-    // Per company: DeepSeek for cost-effective analysis (~5K input, 1K output, ~30% of companies)
-    const deepseekCalls = Math.ceil(companyCount * 0.3);
-    tracker.addModelCall('deepseek-chat', 'x'.repeat(5000 * deepseekCalls), 'x'.repeat(1000 * deepseekCalls));
-
-    // Track usage
+    // Finalize tracking (real token counts recorded via recordTokens in wrappers)
     await tracker.finish({
       websitesProcessed: websites.length,
       companiesExtracted: companies.length,
@@ -9009,6 +9023,7 @@ app.post('/api/profile-slides', async (req, res) => {
       console.error('Failed to send error email:', e);
     }
   }
+  }); // end trackingContext.run
 });
 
 

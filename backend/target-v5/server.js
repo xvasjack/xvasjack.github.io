@@ -7,7 +7,7 @@ const { securityHeaders, rateLimiter } = require('./shared/security');
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { sendEmailLegacy: sendEmail } = require('./shared/email');
-const { createTracker } = require('./shared/tracking');
+const { createTracker, trackingContext, recordTokens } = require('./shared/tracking');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
@@ -86,6 +86,11 @@ async function callGemini3Flash(prompt, jsonMode = false) {
 
     const data = await response.json();
 
+    const usage = data.usageMetadata;
+    if (usage) {
+      recordTokens('gemini-2.5-flash', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+    }
+
     if (data.error) {
       console.error('Gemini 3 Flash API error:', data.error.message);
       // Fallback to GPT-4o
@@ -122,6 +127,9 @@ async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
     }
 
     const response = await openai.chat.completions.create(requestOptions);
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices?.[0]?.message?.content || '';
 
     if (result) {
@@ -157,6 +165,10 @@ async function callPerplexity(prompt) {
 
     const data = await response.json();
 
+    if (data.usage) {
+      recordTokens('sonar-pro', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
+    }
+
     if (data.error) {
       console.error('Perplexity API error:', data.error.message || data.error);
       return '';
@@ -180,6 +192,9 @@ async function callChatGPT(prompt) {
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
     });
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices[0].message.content || '';
     if (!result) {
       console.warn('ChatGPT returned empty response for prompt:', prompt.substring(0, 100));
@@ -199,6 +214,9 @@ async function callOpenAISearch(prompt) {
       model: 'gpt-4o-search-preview',
       messages: [{ role: 'user', content: prompt }],
     });
+    if (response.usage) {
+      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices[0].message.content || '';
     if (!result) {
       console.warn('OpenAI Search returned empty response, falling back to ChatGPT');
@@ -1791,6 +1809,7 @@ app.post('/api/find-target-v5', async (req, res) => {
 
   const tracker = createTracker('target-v5', Email, { Business, Country, Exclusion });
 
+  trackingContext.run(tracker, async () => {
   try {
     const totalStart = Date.now();
     const searchLog = [];
@@ -1887,19 +1906,7 @@ app.post('/api/find-target-v5', async (req, res) => {
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(70));
 
-    // Estimate costs based on search log
-    // Phase 1: Perplexity batched searches
-    tracker.addModelCall('sonar-pro', 'x'.repeat(500 * perplexityTasks), 'x'.repeat(2000 * perplexityTasks));
-    // Phase 2: Gemini iterative searches (with search grounding)
-    tracker.addModelCall('gemini-2.5-flash', 'x'.repeat(1000 * geminiTasks), 'x'.repeat(2000 * geminiTasks));
-    // Phase 2: ChatGPT iterative searches
-    tracker.addModelCall('gpt-4o-search-preview', 'x'.repeat(1000 * chatgptTasks), 'x'.repeat(2000 * chatgptTasks));
-    // Validation: GPT-4o-mini for extraction + GPT-4o for final validation
-    const totalCompaniesProcessed = finalValidated.length + finalFlagged.length + finalRejected.length;
-    tracker.addModelCall('gpt-4o-mini', 'x'.repeat(8000 * totalCompaniesProcessed), 'x'.repeat(200 * totalCompaniesProcessed));
-    tracker.addModelCall('gpt-4o', 'x'.repeat(10000 * finalValidated.length), 'x'.repeat(200 * finalValidated.length));
-
-    // Track usage
+    // Finalize tracking (real token counts recorded via recordTokens in wrappers)
     await tracker.finish({
       searchRounds: searchLog.length,
       validated: finalValidated.length,
@@ -1924,6 +1931,7 @@ app.post('/api/find-target-v5', async (req, res) => {
       // Connection might already be closed
     }
   }
+  }); // end trackingContext.run
 });
 
 // ============ HEALTH CHECK ============

@@ -7,7 +7,7 @@ const { securityHeaders, rateLimiter, escapeHtml } = require('./shared/security'
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { sendEmailLegacy: sendEmail } = require('./shared/email');
-const { createTracker } = require('./shared/tracking');
+const { createTracker, trackingContext, recordTokens } = require('./shared/tracking');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers();
@@ -86,6 +86,11 @@ async function callGemini3Flash(prompt, jsonMode = false) {
 
     const data = await response.json();
 
+    const usage = data.usageMetadata;
+    if (usage) {
+      recordTokens('gemini-2.5-flash', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+    }
+
     if (data.error) {
       console.error('Gemini 3 Flash API error:', data.error.message);
       // Fallback to GPT-4o
@@ -122,6 +127,9 @@ async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
     }
 
     const response = await openai.chat.completions.create(requestOptions);
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices?.[0]?.message?.content || '';
 
     if (result) {
@@ -157,6 +165,10 @@ async function callPerplexity(prompt) {
 
     const data = await response.json();
 
+    if (data.usage) {
+      recordTokens('sonar-pro', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
+    }
+
     if (data.error) {
       console.error('Perplexity API error:', data.error.message || data.error);
       return '';
@@ -180,6 +192,9 @@ async function callChatGPT(prompt) {
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.2,
     });
+    if (response.usage) {
+      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices[0].message.content || '';
     if (!result) {
       console.warn('ChatGPT returned empty response for prompt:', prompt.substring(0, 100));
@@ -199,6 +214,9 @@ async function callOpenAISearch(prompt) {
       model: 'gpt-4o-search-preview',
       messages: [{ role: 'user', content: prompt }],
     });
+    if (response.usage) {
+      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+    }
     const result = response.choices[0].message.content || '';
     if (!result) {
       console.warn('OpenAI Search returned empty response, falling back to ChatGPT');
@@ -1050,6 +1068,11 @@ async function callGemini2FlashWithSearch(prompt, maxRetries = 2) {
 
       const data = await response.json();
 
+      const usage = data.usageMetadata;
+      if (usage) {
+        recordTokens('gemini-2.5-flash', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+      }
+
       if (data.error) {
         console.error(
           `Gemini 2.5 Flash Search API error (attempt ${attempt + 1}):`,
@@ -1793,6 +1816,7 @@ app.post('/api/find-target-v6', async (req, res) => {
   // Initialize tracker for cost tracking
   const tracker = createTracker('target-v6', Email, { Business, Country, Exclusion });
 
+  trackingContext.run(tracker, async () => {
   try {
     const totalStart = Date.now();
     const searchLog = [];
@@ -2026,30 +2050,7 @@ app.post('/api/find-target-v6', async (req, res) => {
     console.log(`Total time: ${totalTime} minutes`);
     console.log('='.repeat(70));
 
-    // Track usage - estimate costs based on search activity
-    // Planning: 1 GPT-4o call (~3K input, ~1K output)
-    tracker.addModelCall('gpt-4o', 'x'.repeat(3000), 'x'.repeat(1000));
-    // Search rounds: estimate based on searchLog
-    for (const log of searchLog) {
-      if (log.model === 'perplexity-sonar-pro') {
-        tracker.addModelCall('sonar-pro', 'x'.repeat(500), 'x'.repeat(log.responseLength || 2000));
-      } else if (log.model === 'chatgpt-search') {
-        tracker.addModelCall('gpt-4o-search-preview', 'x'.repeat(1000), 'x'.repeat(log.responseLength || 2000));
-      } else {
-        tracker.addModelCall('gemini-2.5-flash', 'x'.repeat(1000), 'x'.repeat(log.responseLength || 2000));
-      }
-    }
-    // Extraction: ~30 Gemini calls
-    for (let i = 0; i < searchLog.length; i++) {
-      tracker.addModelCall('gemini-2.5-flash', 'x'.repeat(4000), 'x'.repeat(500));
-    }
-    // Validation: 1 GPT-4o call per company validated
-    const totalValidated = allCompanies.length;
-    for (let i = 0; i < totalValidated; i++) {
-      tracker.addModelCall('gpt-4o', 'x'.repeat(8000), 'x'.repeat(200));
-    }
-
-    // Finalize tracking
+    // Finalize tracking (real token counts recorded via recordTokens in wrappers)
     await tracker.finish({
       searchRounds: searchLog.length,
       companiesFound: allCompanies.length,
@@ -2065,6 +2066,7 @@ app.post('/api/find-target-v6', async (req, res) => {
       console.error('Failed to send error email:', e)
     );
   }
+  }); // end trackingContext.run
 });
 
 // ============ HEALTH CHECK ============

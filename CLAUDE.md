@@ -203,3 +203,4 @@ SCREENSHOT_API_URL  # Custom screenshot API URL (optional)
 - Feature branches: `claude/{feature}-{suffix}`
 - Commit style: `Type: Description` (Add, Fix, Improve, Update)
 - Run `npm test` before pushing
+- **All code changes must be committed and pushed immediately after being made — never leave uncommitted local changes**

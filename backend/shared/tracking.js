@@ -6,6 +6,22 @@
 
 const fetch = require('node-fetch');
 const crypto = require('crypto');
+const { AsyncLocalStorage } = require('async_hooks');
+
+// AsyncLocalStorage for per-request token tracking isolation
+const trackingContext = new AsyncLocalStorage();
+
+/**
+ * Record real token usage from an API response into the current request's tracker.
+ * Called inside AI wrapper functions after receiving the API response.
+ * No-op if called outside a trackingContext.run() scope.
+ */
+function recordTokens(model, inputTokens, outputTokens) {
+  const tracker = trackingContext.getStore();
+  if (tracker) {
+    tracker.addModelCall(model, inputTokens || 0, outputTokens || 0);
+  }
+}
 
 // Google Sheets API configuration
 const SHEETS_API_URL = 'https://sheets.googleapis.com/v4/spreadsheets';
@@ -288,4 +304,6 @@ module.exports = {
   calculateCostFromTokens,
   estimateTokens,
   MODEL_COSTS,
+  trackingContext,
+  recordTokens,
 };
