@@ -199,6 +199,24 @@ SCREENSHOT_API_URL  # Custom screenshot API URL (optional)
 - `getDomainInstructions()` - Domain-specific prompts
 - `ensureString()` - Handle AI returning objects instead of strings
 
+## Exhaustive Verification Rule (APPLIES TO ALL TASKS)
+**This rule applies to EVERY task — not just API tracking. Any code change, any feature, any fix.**
+
+1. **Never assume you found everything.** After implementing any change, do a full grep/search across the ENTIRE codebase for related patterns. If you're changing how X works, search for every place X is used — not just the obvious ones.
+
+2. **Search for the underlying thing, not the wrapper.** If something is wrapped in a helper function, also search for direct usage that skips the helper. If you're fixing a pattern, search for the raw pattern AND all abstractions over it.
+
+3. **Triple-check completeness.** After you think you're done:
+   - Search again with different keywords/patterns
+   - Check edge cases (error paths, fallback logic, conditional branches)
+   - If you find even ONE miss, assume there are more and re-scan everything
+
+4. **Document what you verified.** List every file and location you checked. If you can't list them, you didn't check thoroughly enough.
+
+5. **No partial work.** Shipping 90% complete is the same as shipping broken. If a change needs to apply to 10 places and you only hit 9, it's a bug.
+
+6. **Question your own assumptions.** If you think "this is probably the only place" — prove it. Grep. Don't guess.
+
 ## Git Workflow
 - Feature branches: `claude/{feature}-{suffix}`
 - Commit style: `Type: Description` (Add, Fix, Improve, Update)
