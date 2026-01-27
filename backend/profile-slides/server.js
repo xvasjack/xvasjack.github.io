@@ -8969,12 +8969,25 @@ app.post('/api/profile-slides', async (req, res) => {
     console.log('='.repeat(50));
 
     // Estimate costs based on processing activity
-    // Per website: ~2-3 GPT-4o calls for research + extraction (~20K input, 3K output)
     const websiteCount = websites.length;
-    tracker.addModelCall('gpt-4o', 'x'.repeat(20000 * websiteCount), 'x'.repeat(3000 * websiteCount));
-    // Per company: additional validation/verification (~5K input, 500 output)
     const companyCount = companies.length;
+    // Per website: GPT-4o for research + extraction (~20K input, 3K output)
+    tracker.addModelCall('gpt-4o', 'x'.repeat(20000 * websiteCount), 'x'.repeat(3000 * websiteCount));
+    // Per company: GPT-4o for validation/verification (~5K input, 500 output)
     tracker.addModelCall('gpt-4o', 'x'.repeat(5000 * companyCount), 'x'.repeat(500 * companyCount));
+    // Per website: Gemini 2.5 Flash-Lite for initial parsing (~8K input, 1K output)
+    tracker.addModelCall('gemini-2.5-flash-lite', 'x'.repeat(8000 * websiteCount), 'x'.repeat(1000 * websiteCount));
+    // Per website: Gemini 2.5 Flash for structured extraction (~10K input, 2K output)
+    tracker.addModelCall('gemini-2.5-flash', 'x'.repeat(10000 * websiteCount), 'x'.repeat(2000 * websiteCount));
+    // Per company: Gemini 2.5 Pro for quality validation (~8K input, 1K output, ~30% of companies)
+    const proValidated = Math.ceil(companyCount * 0.3);
+    tracker.addModelCall('gemini-2.5-pro', 'x'.repeat(8000 * proValidated), 'x'.repeat(1000 * proValidated));
+    // Per company: Claude Sonnet for cross-validation (~6K input, 1K output, ~20% of companies)
+    const claudeValidated = Math.ceil(companyCount * 0.2);
+    tracker.addModelCall('claude-sonnet-4', 'x'.repeat(6000 * claudeValidated), 'x'.repeat(1000 * claudeValidated));
+    // Per company: DeepSeek for cost-effective analysis (~5K input, 1K output, ~30% of companies)
+    const deepseekCalls = Math.ceil(companyCount * 0.3);
+    tracker.addModelCall('deepseek-chat', 'x'.repeat(5000 * deepseekCalls), 'x'.repeat(1000 * deepseekCalls));
 
     // Track usage
     await tracker.finish({
@@ -8989,6 +9002,7 @@ app.post('/api/profile-slides', async (req, res) => {
 
   } catch (error) {
     console.error('Profile slides error:', error);
+    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
     try {
       await sendEmail(email, 'Profile Slides - Error', `<p>Error processing your request: ${error.message}</p>`);
     } catch (e) {

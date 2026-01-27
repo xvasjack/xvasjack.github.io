@@ -1059,6 +1059,7 @@ app.post('/api/validation', async (req, res) => {
     });
   } catch (error) {
     console.error('Validation error:', error);
+    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
     try {
       await sendEmail(Email, `Speeda List Validation - Error`, `<p>Error: ${error.message}</p>`);
     } catch (e) {

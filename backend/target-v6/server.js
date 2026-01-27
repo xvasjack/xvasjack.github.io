@@ -2059,6 +2059,7 @@ app.post('/api/find-target-v6', async (req, res) => {
     });
   } catch (error) {
     console.error('V6 Processing error:', error);
+    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
     // Try to send error email
     sendEmail(Email, `Find Target V6 - Error`, `<p>Error: ${error.message}</p>`).catch((e) =>
       console.error('Failed to send error email:', e)

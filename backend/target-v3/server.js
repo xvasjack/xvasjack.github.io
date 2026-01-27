@@ -1574,6 +1574,7 @@ app.post('/api/find-target', async (req, res) => {
     });
   } catch (error) {
     console.error('Processing error:', error);
+    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
     try {
       await sendEmail(Email, `Find Target - Error`, `<p>Error: ${error.message}</p>`);
     } catch (e) {
@@ -1667,6 +1668,7 @@ app.post('/api/find-target-slow', async (req, res) => {
     });
   } catch (error) {
     console.error('Processing error:', error);
+    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
     try {
       await sendEmail(Email, `Find Target Slow - Error`, `<p>Error: ${error.message}</p>`);
     } catch (e) {

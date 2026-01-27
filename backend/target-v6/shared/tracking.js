@@ -22,13 +22,21 @@ const MODEL_COSTS = {
   sonar: { input: 0.001, output: 0.001 },
   // Gemini
   'gemini-2.5-flash': { input: 0.00015, output: 0.0006 },
+  'gemini-2.5-flash-lite': { input: 0.0001, output: 0.0004 },
+  'gemini-2.5-pro': { input: 0.00125, output: 0.005 },
   'gemini-3-flash': { input: 0.00015, output: 0.0006 },
   // Anthropic
   'claude-3-opus': { input: 0.015, output: 0.075 },
   'claude-3-sonnet': { input: 0.003, output: 0.015 },
+  'claude-sonnet-4': { input: 0.003, output: 0.015 },
   'claude-3-haiku': { input: 0.00025, output: 0.00125 },
   // DeepSeek
   deepseek: { input: 0.00014, output: 0.00028 },
+  'deepseek-chat': { input: 0.00028, output: 0.00042 },
+  'deepseek-reasoner': { input: 0.00028, output: 0.00042 },
+  // Kimi (Moonshot)
+  'moonshot-v1-128k': { input: 0.00084, output: 0.00084 },
+  'kimi-128k': { input: 0.00084, output: 0.00084 },
 };
 
 // Cache access token
@@ -120,17 +128,35 @@ function estimateTokens(text) {
 }
 
 /**
+ * Calculate estimated cost from token counts
+ */
+function calculateCostFromTokens(model, inputTokens, outputTokens) {
+  const m = model?.toLowerCase();
+  if (!m) return 0;
+
+  // Exact match first
+  let costs = MODEL_COSTS[m];
+  if (!costs) {
+    // Longest key match (prevents gpt-4o matching before gpt-4o-mini)
+    const sorted = Object.keys(MODEL_COSTS).sort((a, b) => b.length - a.length);
+    const key = sorted.find((k) => m.includes(k));
+    costs = key ? MODEL_COSTS[key] : null;
+  }
+  if (!costs) {
+    console.warn(`[Tracking] Unknown model: ${model}`);
+    return 0;
+  }
+
+  return (inputTokens / 1000) * costs.input + (outputTokens / 1000) * costs.output;
+}
+
+/**
  * Calculate estimated cost for a model call
  */
 function calculateCost(model, inputText, outputText) {
-  const modelKey = Object.keys(MODEL_COSTS).find((k) => model?.toLowerCase().includes(k));
-  if (!modelKey) return 0;
-
-  const costs = MODEL_COSTS[modelKey];
   const inputTokens = estimateTokens(inputText);
   const outputTokens = estimateTokens(outputText);
-
-  return (inputTokens / 1000) * costs.input + (outputTokens / 1000) * costs.output;
+  return calculateCostFromTokens(model, inputTokens, outputTokens);
 }
 
 /**
@@ -211,8 +237,14 @@ class RequestTracker {
   /**
    * Track a model call
    */
-  addModelCall(model, inputText, outputText) {
-    const cost = calculateCost(model, inputText, outputText);
+  addModelCall(model, inputTextOrTokens, outputTextOrTokens) {
+    const inputTokens =
+      typeof inputTextOrTokens === 'number' ? inputTextOrTokens : estimateTokens(inputTextOrTokens);
+    const outputTokens =
+      typeof outputTextOrTokens === 'number'
+        ? outputTextOrTokens
+        : estimateTokens(outputTextOrTokens);
+    const cost = calculateCostFromTokens(model, inputTokens, outputTokens);
     this.totalCost += cost;
 
     if (!this.modelCalls[model]) {
@@ -253,6 +285,7 @@ module.exports = {
   trackRequest,
   createTracker,
   calculateCost,
+  calculateCostFromTokens,
   estimateTokens,
   MODEL_COSTS,
 };

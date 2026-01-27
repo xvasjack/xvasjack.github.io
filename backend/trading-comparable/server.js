@@ -3930,6 +3930,7 @@ Source: Speeda
     });
   } catch (error) {
     console.error('Trading comparable error:', error);
+    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
     try {
       await sendEmail(
         Email,

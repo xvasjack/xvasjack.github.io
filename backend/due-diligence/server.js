@@ -3027,6 +3027,9 @@ app.post('/api/due-diligence', async (req, res) => {
     // Some sections use Gemini 2.5 Pro for validation (~10K input, 2K output)
     const geminiSections = Math.ceil(sectionCount * 0.3); // ~30% use Gemini Pro
     tracker.addModelCall('gemini-2.5-pro', 'x'.repeat(10000 * geminiSections), 'x'.repeat(2000 * geminiSections));
+    // Kimi 128k for deep analysis (~20K input, 8K output per section, ~50% of sections)
+    const kimiSections = Math.ceil(sectionCount * 0.5);
+    tracker.addModelCall('moonshot-v1-128k', 'x'.repeat(20000 * kimiSections), 'x'.repeat(8000 * kimiSections));
 
     // Track usage
     await tracker.finish({
@@ -3036,6 +3039,7 @@ app.post('/api/due-diligence', async (req, res) => {
   } catch (error) {
     console.error('[DD] Error processing DD request:', error.message);
     console.error('[DD] Stack:', error.stack);
+    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
 
     // Update report store with error status
     reportStore.set(reportId, {

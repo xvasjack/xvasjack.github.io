@@ -1908,6 +1908,7 @@ app.post('/api/find-target-v5', async (req, res) => {
     });
   } catch (error) {
     console.error('V5 Processing error:', error);
+    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
     try {
       await sendEmail(Email, `Find Target V5 - Error`, `<p>Error: ${error.message}</p>`);
     } catch (e) {

@@ -7749,9 +7749,9 @@ async function runMarketResearch(userPrompt, email) {
       modelTokens[call.model].input += call.inputTokens || 0;
       modelTokens[call.model].output += call.outputTokens || 0;
     }
-    // Add model calls to shared tracker (convert tokens to char estimate: 4 chars per token)
+    // Add model calls to shared tracker (pass numeric token counts directly)
     for (const [model, tokens] of Object.entries(modelTokens)) {
-      tracker.addModelCall(model, 'x'.repeat(tokens.input * 4), 'x'.repeat(tokens.output * 4));
+      tracker.addModelCall(model, tokens.input, tokens.output);
     }
 
     // Track usage
@@ -7769,6 +7769,7 @@ async function runMarketResearch(userPrompt, email) {
     };
   } catch (error) {
     console.error('Market research failed:', error);
+    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
 
     // Try to send error email
     try {
