@@ -40,61 +40,8 @@ class BlockReason(Enum):
     UNAUTHORIZED_FOLDER = "Access to this folder is not authorized"
 
 
-@dataclass
-class GuardrailConfig:
-    """Configuration for guardrails - loaded from config file"""
-
-    # Allowed email senders (emails containing output from your AI automation)
-    allowed_email_senders: List[str] = None
-
-    # Allowed email subject patterns
-    allowed_email_subjects: List[str] = None
-
-    # Your GitHub username/org
-    github_allowed_repos: List[str] = None
-
-    # Your frontend URL
-    frontend_url: str = ""
-
-    # Railway project URLs
-    railway_urls: List[str] = None
-
-    # Allowed folders for file operations
-    allowed_folders: List[str] = None
-
-    def __post_init__(self):
-        if self.allowed_email_senders is None:
-            self.allowed_email_senders = [
-                # Add your automation email senders here
-                "noreply@github.com",
-                "notifications@github.com",
-                # Your SendGrid sender email
-            ]
-        if self.allowed_email_subjects is None:
-            self.allowed_email_subjects = [
-                r"target.*search",
-                r"market.*research",
-                r"profile.*slides",
-                r"trading.*comp",
-                r"validation.*result",
-                r"due.*diligence",
-                r"PR.*merged",
-                r"GitHub",
-            ]
-        if self.github_allowed_repos is None:
-            self.github_allowed_repos = [
-                "xvasjack",  # Your GitHub username
-            ]
-        if self.railway_urls is None:
-            self.railway_urls = [
-                "railway.app",
-            ]
-        if self.allowed_folders is None:
-            self.allowed_folders = [
-                r"C:\\Users\\.*\\Downloads",
-                r"C:\\agent-shared",
-                r"Z:\\",  # Mapped shared folder
-            ]
+# M4: Import GuardrailConfig from config.py (single source of truth)
+from config import GuardrailConfig
 
 
 # Global config instance
@@ -139,24 +86,26 @@ BLOCKED_WINDOW_TITLES = [
 ]
 
 # URLs that are ALWAYS blocked
+# Issue 5/15 fix: Use non-greedy .*? to prevent ReDoS exponential backtracking
 BLOCKED_URLS = [
     r"teams\.microsoft\.com",
     r"teams\.live\.com",
-    r".*\.slack\.com",
+    r".*?\.slack\.com",
     r"discord\.com",
     r"web\.whatsapp\.com",
     r"web\.telegram\.org",
-    # Billing pages
-    r".*billing.*",
-    r".*payment.*",
-    r".*checkout.*",
+    # L3: More specific billing URL patterns (avoid blocking unrelated URLs)
+    # Issue 5 fix: Use non-greedy quantifiers to prevent ReDoS
+    r".*?[/.]billing[/.].*?",
+    r".*?[/.]payment[/.].*?",
+    r".*?[/.]checkout[/.].*?",
     r"platform\.openai\.com/account",
     r"console\.anthropic\.com/settings/billing",
-    # Email compose
-    r"outlook.*\?compose",
-    r"outlook.*/mail/compose",
-    r"mail\.google\.com.*compose",
-    r"outlook.*/owa/.*action=compose",
+    # Email compose - Issue 5 fix: Use non-greedy quantifiers
+    r"outlook.*?\?compose",
+    r"outlook.*?/mail/compose",
+    r"mail\.google\.com.*?compose",
+    r"outlook.*?/owa/.*?action=compose",
 ]
 
 # Text patterns that indicate email composition (block these actions)
@@ -222,10 +171,12 @@ def check_url(url: str) -> Tuple[bool, Optional[BlockReason]]:
 def check_email_allowed(sender: str, subject: str) -> Tuple[bool, Optional[BlockReason]]:
     """Check if an email is from an allowed sender with allowed subject"""
 
-    # Check sender
+    # M6: Check sender with exact match (not substring) to prevent bypass
     sender_allowed = False
+    sender_lower = sender.lower().strip()
     for allowed_sender in CONFIG.allowed_email_senders:
-        if allowed_sender.lower() in sender.lower():
+        pattern = re.escape(allowed_sender.lower())
+        if re.search(r'(^|<)' + pattern + r'(>|$)', sender_lower):
             sender_allowed = True
             break
 
@@ -283,10 +234,17 @@ def check_folder_access(path: str) -> Tuple[bool, Optional[BlockReason]]:
 
 
 def check_github_repo(repo_url: str) -> Tuple[bool, Optional[BlockReason]]:
-    """Check if GitHub repo access is allowed"""
+    """M7: Check if GitHub repo access is allowed using URL parsing, not substring."""
+    from urllib.parse import urlparse
+
+    parsed = urlparse(repo_url)
+    path_parts = [p for p in parsed.path.strip("/").split("/") if p]
 
     for allowed_repo in CONFIG.github_allowed_repos:
-        if allowed_repo.lower() in repo_url.lower():
+        # Check if the owner or repo name matches (first or second path component)
+        if path_parts and path_parts[0].lower() == allowed_repo.lower():
+            return True, None
+        if len(path_parts) > 1 and path_parts[1].lower() == allowed_repo.lower():
             return True, None
 
     logger.warning(f"BLOCKED: GitHub repo not in allowed list: {repo_url}")
@@ -396,8 +354,12 @@ class GuardrailLogger:
             "message": result.message,
         }
 
-        with open(self.log_file, "a") as f:
-            f.write(json.dumps(entry) + "\n")
+        # Category 8 fix: Add try/except for file I/O to prevent crashes
+        try:
+            with open(self.log_file, "a") as f:
+                f.write(json.dumps(entry) + "\n")
+        except (OSError, IOError) as e:
+            logger.warning(f"Could not write to guardrail audit log: {e}")
 
     def log_blocked(self, action: dict, result: GuardrailResult):
         """Special logging for blocked actions"""

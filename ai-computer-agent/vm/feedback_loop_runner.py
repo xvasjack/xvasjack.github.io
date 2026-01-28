@@ -1,37 +1,63 @@
 """
-Feedback Loop Runner - Integrates the feedback loop with action modules.
+Feedback Loop Runner
 
-This is the glue layer that:
-1. Creates a FeedbackLoopManager
-2. Wires up callbacks to actual action implementations
-3. Runs the autonomous loop
+Connects the FeedbackLoop orchestrator to concrete implementations:
+- Frontend form submission via PyAutoGUI
+- Gmail email checking via browser automation
+- Output analysis via file readers
+- Fix generation via Claude Code CLI
+- PR operations via gh CLI
+- Log checking via Railway CLI or health endpoints
 """
 
 import asyncio
 import os
 import sys
-from typing import Dict, Any, Optional
-from datetime import datetime
+import time
+from typing import Callable, Dict, List, Optional, Any
 import logging
 
-# Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from feedback_loop import FeedbackLoopManager, LoopConfig, create_loop_config
-from template_comparison import compare_output_to_template, TEMPLATES
-from file_readers.pptx_reader import analyze_pptx
-from file_readers.xlsx_reader import analyze_xlsx
-from actions.claude_code import run_claude_code, fix_pptx_output, ClaudeCodeResult
-# Use Gmail instead of Outlook (user's personal Gmail)
+from feedback_loop import FeedbackLoop, LoopConfig, LoopResult
+from actions.frontend import submit_form as frontend_submit_form
+from actions.frontend_api import submit_form_api
 from actions.gmail import (
     open_gmail, search_emails, open_first_email,
-    download_attachment, DOWNLOAD_PATH, get_recent_downloads
+    download_attachment, wait_for_download, get_recent_downloads,
 )
-from actions.frontend import submit_form, wait_for_form_submission
-from actions.github import merge_pr, get_pr_status, wait_for_ci
+from actions.gmail_api import wait_for_email_api, HAS_GMAIL_API
+from actions.claude_code import run_claude_code, improve_output
+from actions.github import merge_pr, wait_for_ci, get_ci_error_logs
+from template_comparison import compare_output_to_template as compare_output, auto_detect_template
+from file_readers.pptx_reader import analyze_pptx
+from file_readers.xlsx_reader import analyze_xlsx
+from file_readers.docx_reader import analyze_docx
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("feedback_loop_runner")
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://xvasjack.github.io")
+
+# Issue 5: Map service names to template names in template_comparison.TEMPLATES
+SERVICE_TO_TEMPLATE = {
+    "target-v3": "target-search",
+    "target-v4": "target-search",
+    "target-v5": "target-search",
+    "target-v6": "target-search",
+    "market-research": "market-research",
+    "profile-slides": "profile-slides",
+    "trading-comparable": "trading-comps",
+    "validation": "validation-results",
+    "due-diligence": "dd-report",
+    "utb": None,  # needs template
+}
 
 
 # =============================================================================
@@ -39,287 +65,355 @@ logger = logging.getLogger("feedback_loop_runner")
 # =============================================================================
 
 
-async def test_frontend_callback(
+async def submit_form_callback(
     service_name: str,
-    test_input: Dict[str, Any]
+    form_data: Dict[str, str],
 ) -> Dict[str, Any]:
     """
-    Test a service via the frontend.
-
-    Args:
-        service_name: Name of the service (e.g., "target-v6")
-        test_input: Form data to submit
-
-    Returns:
-        {success: bool, error: str}
+    Submit form — API POST first, browser fallback.
+    Issue 2: Direct HTTP POST to Railway backend.
+    Issue 7: Fallback to browser automation if API fails.
     """
-    logger.info(f"Testing {service_name} with input: {test_input}")
-
-    # Map service to frontend URL
-    frontend_urls = {
-        "target-v3": "https://xvasjack.github.io/find-target.html",
-        "target-v4": "https://xvasjack.github.io/find-target-v4.html",
-        "target-v5": "https://xvasjack.github.io/find-target-v5.html",
-        "target-v6": "https://xvasjack.github.io/find-target-v6.html",
-        "profile-slides": "https://xvasjack.github.io/profile-slides.html",
-        "market-research": "https://xvasjack.github.io/market-research.html",
-        "validation": "https://xvasjack.github.io/validation.html",
-        "trading-comparable": "https://xvasjack.github.io/trading-comparable.html",
-        "utb": "https://xvasjack.github.io/utb.html",
-        "due-diligence": "https://xvasjack.github.io/due-diligence.html",
-    }
-
-    url = frontend_urls.get(service_name)
-    if not url:
-        return {"success": False, "error": f"Unknown service: {service_name}"}
-
+    # Primary: Direct API POST
     try:
-        result = await submit_form(url, test_input)
-        return {"success": result.get("success", False)}
+        result = await submit_form_api(service_name, form_data)
+        if result.get("success"):
+            logger.info(f"API POST succeeded for {service_name}")
+            return result
+        logger.warning(f"API POST failed: {result.get('error')} — falling back to browser")
     except Exception as e:
-        logger.error(f"Frontend test failed: {e}")
-        return {"success": False, "error": str(e)}
+        logger.warning(f"API POST error: {e} — falling back to browser")
 
-
-async def download_email_callback(
-    service_name: str,
-    timeout_minutes: int
-) -> Dict[str, Any]:
-    """
-    Wait for and download output email.
-
-    Args:
-        service_name: Service name to filter emails
-        timeout_minutes: Max time to wait
-
-    Returns:
-        {success: bool, file_path: str}
-    """
-    logger.info(f"Waiting for email from {service_name} (timeout: {timeout_minutes}m)")
-
-    # Subject patterns by service
-    subject_patterns = {
-        "target-v3": "target search result",
-        "target-v4": "target search result",
-        "target-v5": "target search result",
-        "target-v6": "target search result",
-        "profile-slides": "profile slides",
-        "market-research": "market research",
-        "validation": "validation result",
-        "trading-comparable": "trading comp",
-        "utb": "utb analysis",
-        "due-diligence": "due diligence",
+    # Fallback: Browser automation
+    url_map = {
+        "target-v3": "find-target.html",
+        "target-v4": "find-target-v4.html",
+        "target-v5": "find-target-v5.html",
+        "target-v6": "find-target-v6.html",
+        "market-research": "market-research.html",
+        "profile-slides": "profile-slides.html",
+        "trading-comparable": "trading-comparable.html",
+        "validation": "validation.html",
+        "due-diligence": "due-diligence.html",
+        "utb": "utb.html",
     }
 
-    subject = subject_patterns.get(service_name, service_name)
+    page = url_map.get(service_name, f"{service_name}.html")
+    url = f"{FRONTEND_URL}/{page}"
 
-    start_time = asyncio.get_event_loop().time()
-    timeout_seconds = timeout_minutes * 60
+    return await frontend_submit_form(url, form_data)
 
-    while True:
-        elapsed = asyncio.get_event_loop().time() - start_time
-        if elapsed > timeout_seconds:
-            return {"success": False, "error": "Timeout waiting for email"}
 
+async def wait_for_email_callback(
+    service_name: str,
+    timeout_minutes: int = 15,
+) -> Dict[str, Any]:
+    """
+    Wait for automation output email.
+    Issue 3: Gmail API first, browser fallback.
+    Issue 7: Fallback to checking Downloads folder.
+    """
+    logger.info(f"Waiting for {service_name} email (timeout: {timeout_minutes}m)")
+
+    download_dir = os.path.expanduser("~/Downloads")
+
+    # Primary: Gmail API
+    if HAS_GMAIL_API:
         try:
-            # Open Gmail and search
+            query = f"subject:{service_name} has:attachment newer_than:1h"
+            result = await wait_for_email_api(
+                query=query,
+                download_dir=download_dir,
+                timeout_minutes=timeout_minutes,
+                poll_interval=30,
+            )
+            if result.get("success"):
+                logger.info(f"Gmail API downloaded: {result.get('file_path')}")
+                return result
+            logger.warning(f"Gmail API failed: {result.get('error')} — falling back to browser")
+        except Exception as e:
+            logger.warning(f"Gmail API error: {e} — falling back to browser")
+
+    # Fallback: Browser automation
+    deadline = time.time() + (timeout_minutes * 60)
+    poll_interval = 30
+
+    while time.time() < deadline:
+        try:
             await open_gmail()
-            await search_emails(f"subject:{subject} has:attachment newer_than:1d")
             await asyncio.sleep(2)
 
-            # Open first email in results
+            query = f"subject:{service_name} has:attachment newer_than:1h is:unread"
+            await search_emails(query)
+            await asyncio.sleep(2)
+
             await open_first_email()
             await asyncio.sleep(1)
 
-            # Download attachment
-            result = await download_attachment()
-            await asyncio.sleep(3)
+            await download_attachment()
+            await asyncio.sleep(1)
 
-            # Check for recently downloaded files
-            recent_files = get_recent_downloads(max_age_minutes=2)
-            if recent_files:
-                return {"success": True, "file_path": recent_files[0]}
+            downloaded = await wait_for_download(timeout_seconds=60)
+
+            if downloaded:
+                files = get_recent_downloads(max_age_minutes=2)
+                if files:
+                    logger.info(f"Downloaded: {files[0]}")
+                    return {
+                        "success": True,
+                        "file_path": files[0],
+                        "all_files": files,
+                    }
 
         except Exception as e:
             logger.warning(f"Email check failed: {e}")
 
-        # Wait before next check
-        logger.info(f"No email yet. Checking again in 30s... ({int(elapsed)}s elapsed)")
-        await asyncio.sleep(30)
+        # Issue 7: Also check Downloads folder for recent files
+        try:
+            if os.path.exists(download_dir):
+                import glob
+                patterns = [f"{download_dir}/*.pptx", f"{download_dir}/*.xlsx", f"{download_dir}/*.docx"]
+                for pattern in patterns:
+                    for f in sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True):
+                        age = time.time() - os.path.getmtime(f)
+                        # Category 8 fix: Use more precise filename matching
+                        fname_lower = os.path.basename(f).lower().replace("-", "").replace("_", "")
+                        # Issue 100/24/32 fix: Check service_name is not None before string ops
+                        if not service_name:
+                            continue
+                        svc_lower = service_name.replace("-", "").replace("_", "")
+                        # Require the service name to appear as a distinct part, not just substring
+                        if age < 120 and (svc_lower in fname_lower or fname_lower.startswith(svc_lower)):
+                            logger.info(f"Found in Downloads: {f}")
+                            return {"success": True, "file_path": f}
+        except Exception as e:
+            # Category 8 fix: Log download check errors instead of silently swallowing
+            logger.debug(f"Download folder check failed: {e}")
+
+        logger.info(f"No email yet, waiting {poll_interval}s...")
+        await asyncio.sleep(poll_interval)
+
+    return {
+        "success": False,
+        "error": f"Email not received within {timeout_minutes} minutes",
+    }
 
 
 async def analyze_output_callback(
     file_path: str,
-    template_name: str
+    service_name: str,
+    template_name: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Analyze output file against template.
+    """Analyze downloaded output file against template"""
+    logger.info(f"Analyzing output: {file_path}")
 
-    Args:
-        file_path: Path to the output file
-        template_name: Name of template to compare against
-
-    Returns:
-        ComparisonResult as dict
-    """
-    logger.info(f"Analyzing {file_path} against template {template_name}")
+    if not os.path.exists(file_path):
+        return {
+            "issues": [f"File not found: {file_path}"],
+            "analysis": None,
+        }
 
     try:
-        # Analyze based on file type
-        if file_path.lower().endswith(".pptx"):
-            analysis = analyze_pptx(file_path)
-        elif file_path.lower().endswith(".xlsx"):
-            analysis = analyze_xlsx(file_path)
+        # Read file based on extension
+        ext = os.path.splitext(file_path)[1].lower()
+
+        if ext == ".pptx":
+            raw = analyze_pptx(file_path)
+            analysis = raw.to_dict() if hasattr(raw, 'to_dict') else raw
+        elif ext in (".xlsx", ".xls"):
+            raw = analyze_xlsx(file_path)
+            analysis = raw.to_dict() if hasattr(raw, 'to_dict') else raw
+        elif ext == ".docx":
+            raw = analyze_docx(file_path)
+            analysis = raw.to_dict() if hasattr(raw, 'to_dict') else raw
         else:
             return {
-                "passed": False,
-                "discrepancies": [{
-                    "severity": "critical",
-                    "category": "unsupported_format",
-                    "suggestion": f"Unsupported file format: {file_path}"
-                }]
+                "issues": [f"Unsupported file type: {ext}"],
+                "analysis": None,
             }
 
-        # Compare to template
-        result = compare_output_to_template(analysis, template_name)
-        return result.to_dict()
+        # Ensure analysis is a plain dict
+        if not isinstance(analysis, dict):
+            analysis = analysis.to_dict() if hasattr(analysis, 'to_dict') else vars(analysis)
+
+        # Issue 5: Map service name to template name
+        template = template_name or SERVICE_TO_TEMPLATE.get(service_name)
+        if template is None:
+            # Try auto-detection
+            template = auto_detect_template(file_path, analysis)
+        if template is None:
+            return {
+                "issues": ["No template available for this service — manual review needed"],
+                "analysis": analysis,
+            }
+
+        # Issue 10: compare_output returns ComparisonResult object, not dict
+        comparison_result = compare_output(analysis, template)
+
+        # Use ComparisonResult's structured output
+        issues = [d.to_comment() for d in comparison_result.discrepancies]
+
+        return {
+            "issues": issues,
+            "analysis": analysis,
+            "comparison": comparison_result.to_dict(),
+            "fix_prompt": comparison_result.generate_claude_code_prompt(),
+        }
 
     except Exception as e:
         logger.error(f"Analysis failed: {e}")
         return {
-            "passed": False,
-            "discrepancies": [{
-                "severity": "critical",
-                "category": "analysis_error",
-                "suggestion": f"Analysis failed: {str(e)}"
-            }]
+            "issues": [f"Analysis error: {str(e)}"],
+            "analysis": None,
         }
 
 
-async def send_to_claude_code_callback(prompt: str) -> Dict[str, Any]:
+async def generate_fix_callback(
+    issues: List[str],
+    analysis: Dict[str, Any],
+    service_name: str,
+    iteration: int = 0,
+) -> Dict[str, Any]:
+    """Generate fix using Claude Code CLI"""
+    logger.info(f"Generating fix for {len(issues)} issues")
+
+    # Issue 11: Use structured fix_prompt from ComparisonResult if available
+    fix_prompt = analysis.get("fix_prompt") if analysis else None
+
+    if fix_prompt and fix_prompt != "No issues found. Output matches template.":
+        # Use the ComparisonResult's built-in prompt (has severity grouping, locations, suggestions)
+        iteration_context = ""
+        if iteration > 1:
+            iteration_context = (
+                f"\n\nThis is fix attempt #{iteration}. "
+                f"Previous attempts fixed some issues but these remain — "
+                f"the root cause may be deeper than a surface-level fix."
+            )
+        result = await run_claude_code(
+            fix_prompt + iteration_context,
+            service_name=service_name,
+            iteration=iteration,
+            previous_issues="\n".join(issues) if issues else None,
+        )
+    else:
+        # Fallback to improve_output with generic prompt
+        iteration_context = ""
+        if iteration > 1:
+            iteration_context = (
+                f" This is fix attempt #{iteration}. "
+                f"Previous attempts fixed some issues but these remain — "
+                f"the root cause may be deeper than a surface-level fix."
+            )
+
+        expected_outcome = (
+            f"Output from {service_name} must match the reference template in both "
+            f"content quality (depth, specificity, actionable insights) and visual formatting "
+            f"(layout, fonts, spacing, data tables). No critical or major discrepancies.{iteration_context}"
+        )
+
+        result = await improve_output(
+            service_name=service_name,
+            current_issues=issues,
+            expected_outcome=expected_outcome,
+            iteration=iteration,
+            previous_issues="\n".join(issues) if issues else None,
+        )
+
+    # Category 1 fix: Check result.output not None before slice
+    output_desc = ""
+    if result is not None and result.output is not None:
+        output_desc = result.output[:500]
+
+    return {
+        "success": result.success if result else False,
+        "pr_number": result.pr_number if result else None,
+        "description": output_desc,
+        "error": result.error if result else "No result returned",
+    }
+
+
+async def get_logs_callback(
+    service_name: str,
+    railway_service_url: Optional[str] = None,
+) -> Dict[str, Any]:
     """
-    Send a fix prompt to Claude Code CLI.
+    Check logs for errors after deployment.
 
-    Args:
-        prompt: The prompt describing what to fix
-
-    Returns:
-        {success: bool, pr_number: int, output: str}
+    Uses Claude Code CLI to run `railway logs` if Railway CLI is available,
+    otherwise checks the health endpoint for error indicators.
     """
-    logger.info(f"Sending to Claude Code: {prompt[:100]}...")
+    logger.info(f"Checking logs for {service_name}")
 
+    # Method 1: Try Railway CLI via Claude Code
     try:
-        result: ClaudeCodeResult = await run_claude_code(prompt)
+        result = await run_claude_code(
+            f"Check Railway logs for the {service_name} service.\n\n"
+            f"STEPS:\n"
+            f"1. Run: railway logs --latest 100\n"
+            f"2. Analyze output for ERRORS (not just warnings)\n\n"
+            f"CRITICAL ERROR TYPES TO LOOK FOR:\n"
+            f"- Crashes: segfault, unhandled exception, OOM kill, SIGTERM\n"
+            f"- Deployment: failed to start, port conflict, missing env vars\n"
+            f"- Runtime: repeated errors, timeouts, connection failures, ECONNREFUSED\n\n"
+            f"REPORT FORMAT:\n"
+            f"For each critical error found, report:\n"
+            f"- Error type (crash/deployment/runtime)\n"
+            f"- Error message (exact text)\n"
+            f"- Frequency (how many times in the logs?)\n"
+            f"- Root cause hypothesis (one sentence)\n\n"
+            f"If no critical errors: report 'No critical errors found' with a brief summary of log activity.\n"
+            f"Focus on errors from the CURRENT deployment, not old entries.\n\n"
+            f"Do NOT make any code changes.",
+            service_name=service_name,
+            timeout_seconds=60,
+        )
 
-        return {
-            "success": result.success,
-            "pr_number": result.pr_number,
-            "output": result.output,
-            "error": result.error,
-        }
-    except Exception as e:
-        logger.error(f"Claude Code failed: {e}")
-        return {"success": False, "error": str(e)}
-
-
-async def merge_pr_callback(pr_number: int) -> Dict[str, Any]:
-    """
-    Wait for CI and merge a PR.
-
-    Args:
-        pr_number: The PR number to merge
-
-    Returns:
-        {success: bool, merge_error: bool, error_type: str, error_message: str}
-    """
-    logger.info(f"Handling PR #{pr_number}")
-
-    try:
-        # Wait for CI to pass
-        ci_result = await wait_for_ci(pr_number, timeout_minutes=10)
-
-        if not ci_result.get("passed"):
+        if result.success and result.output:
+            has_errors = any(
+                keyword in result.output.lower()
+                for keyword in ["error", "crash", "oom", "fatal", "unhandled", "sigterm"]
+            )
             return {
-                "success": False,
-                "merge_error": True,
-                "error_type": "ci_failure",
-                "error_message": ci_result.get("error", "CI failed"),
+                "has_errors": has_errors,
+                "logs": result.output[:2000],
+                "errors": [result.output[:500]] if has_errors else [],
             }
+    except Exception as e:
+        logger.warning(f"Railway log check failed: {e}")
 
-        # Merge the PR
-        merge_result = await merge_pr(pr_number)
+    # Method 2: Check health endpoint
+    if railway_service_url:
+        health_url = railway_service_url.rstrip("/") + "/health"
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "curl", "-sf", "--max-time", "10", health_url,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
 
-        if not merge_result.get("success"):
+            if proc.returncode != 0:
+                return {
+                    "has_errors": True,
+                    "logs": f"Health check failed: {stderr.decode()[:500]}",
+                    "errors": ["Health endpoint not responding"],
+                }
+
             return {
-                "success": False,
-                "merge_error": True,
-                "error_type": merge_result.get("error_type", "merge_failure"),
-                "error_message": merge_result.get("error", "Merge failed"),
+                "has_errors": False,
+                "logs": stdout.decode()[:500],
+                "errors": [],
             }
+        except Exception as e:
+            logger.warning(f"Health check failed: {e}")
 
-        return {"success": True}
-
-    except Exception as e:
-        logger.error(f"PR handling failed: {e}")
-        return {
-            "success": False,
-            "merge_error": True,
-            "error_type": "exception",
-            "error_message": str(e),
-        }
-
-
-async def get_logs_callback() -> Dict[str, Any]:
-    """
-    Get Railway logs for the current service.
-
-    Returns:
-        {has_errors: bool, logs: str, error_summary: str}
-    """
-    # This would use the railway CLI or API
-    # For now, return empty logs
-    logger.info("Checking Railway logs...")
-    return {"has_errors": False, "logs": ""}
-
-
-async def research_callback(prompt: str) -> Dict[str, Any]:
-    """
-    Research a stuck issue using web search and docs.
-
-    Args:
-        prompt: Research question
-
-    Returns:
-        {new_approach: str}
-    """
-    logger.info(f"Researching: {prompt[:100]}...")
-
-    # Use Claude Code for research
-    research_prompt = f"""Research this issue and suggest a new approach:
-
-{prompt}
-
-Search the codebase and suggest a foundational fix, not just a patch.
-"""
-
-    try:
-        result = await run_claude_code(research_prompt)
-        if result.success:
-            return {"new_approach": result.output}
-        return {"new_approach": None}
-    except Exception as e:
-        return {"new_approach": None, "error": str(e)}
-
-
-async def status_update_callback(status: Dict[str, Any]):
-    """
-    Handle status updates (send to host).
-
-    Args:
-        status: Status dict with state, iteration, issues
-    """
-    logger.info(f"Status: {status}")
-    # In full implementation, this would send to the WebSocket host
+    # Method 3: No log checking available
+    logger.info("No log checking method available")
+    return {
+        "has_errors": False,
+        "logs": "",
+        "errors": [],
+    }
 
 
 # =============================================================================
@@ -329,108 +423,134 @@ async def status_update_callback(status: Dict[str, Any]):
 
 async def run_feedback_loop(
     service_name: str,
-    business: str,
-    country: str,
-    email: str,
-    exclusion: str = "",
+    form_data: Dict[str, str],
     max_iterations: int = 10,
-    max_duration_minutes: int = 180,
-) -> Dict[str, Any]:
+    health_check_url: Optional[str] = None,
+    railway_service_url: Optional[str] = None,
+    on_progress: Optional[Callable] = None,
+) -> LoopResult:
     """
-    Run a complete feedback loop for a service.
+    Run the complete feedback loop for a service.
 
     Args:
-        service_name: Service to test (e.g., "target-v6")
-        business: Business description
-        country: Target country
-        email: Email to receive results
-        exclusion: Companies to exclude
+        service_name: Service to test/fix
+        form_data: Form fields to submit
         max_iterations: Max fix iterations
-        max_duration_minutes: Max total time
+        health_check_url: URL to poll after deployment
+        railway_service_url: Railway service base URL
+        on_progress: Callback for progress updates
 
     Returns:
-        Final result dict
+        LoopResult with success status and stats
     """
-    logger.info(f"Starting feedback loop for {service_name}")
-    logger.info(f"Business: {business}, Country: {country}")
-
-    # Create config
-    config = create_loop_config(
+    # Issue 6: Pass research config
+    config = LoopConfig(
         service_name=service_name,
-        business=business,
-        country=country,
-        exclusion=exclusion,
-        email=email,
         max_iterations=max_iterations,
-        max_duration_minutes=max_duration_minutes,
+        health_check_url=health_check_url,
+        railway_service_url=railway_service_url,
+        anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY"),
+        max_research_attempts=2,
     )
 
-    # Create manager
-    manager = FeedbackLoopManager(config)
+    # Issue 8: Check for interrupted loop state
+    resume_from = 0
+    try:
+        from loop_state import load_loop_state
+        saved = load_loop_state()
+        if saved and saved.service_name == service_name:
+            logger.info(f"Found interrupted loop state: iteration={saved.iteration}")
+            resume_from = max(0, saved.iteration - 1)  # Re-run the interrupted iteration
+    except Exception as e:
+        logger.warning(f"Failed to check loop state: {e}")
 
-    # Wire up callbacks
-    manager.on_test_frontend = test_frontend_callback
-    manager.on_download_email = download_email_callback
-    manager.on_analyze_output = analyze_output_callback
-    manager.on_send_to_claude_code = send_to_claude_code_callback
-    manager.on_merge_pr = merge_pr_callback
-    manager.on_get_logs = get_logs_callback
-    manager.on_research = research_callback
-    manager.on_status_update = status_update_callback
+    iteration_counter = [resume_from]
 
-    # Run the loop
-    result = await manager.run()
+    async def submit():
+        return await submit_form_callback(service_name, form_data)
 
-    logger.info(f"Feedback loop completed: {result['status']}")
-    logger.info(f"Iterations: {result['iterations']}, PRs: {result.get('prs_merged', 0)}")
+    async def wait_email():
+        return await wait_for_email_callback(service_name)
+
+    async def analyze(file_path):
+        # Issue 9: Try learned template first
+        analysis_result = await analyze_output_callback(file_path, service_name)
+
+        # Category 5 fix: Wrap callback in try/except
+        try:
+            from template_learner import TemplateManager, compare_with_learned_template
+            manager = TemplateManager()
+            learned = manager.get_template(f"{service_name}-learned")
+            if learned and analysis_result and analysis_result.get("analysis"):
+                learned_comparison = compare_with_learned_template(
+                    analysis_result["analysis"] if isinstance(analysis_result["analysis"], dict)
+                    else analysis_result["analysis"].to_dict()
+                    if hasattr(analysis_result["analysis"], "to_dict")
+                    else analysis_result["analysis"],
+                    learned,
+                )
+                # Merge learned template issues
+                if learned_comparison and learned_comparison.get("issues"):
+                    analysis_result.setdefault("issues", []).extend(
+                        [i.get("message", str(i)) for i in learned_comparison["issues"] if i]
+                    )
+                logger.info(f"Learned template score: {learned_comparison.get('score') if learned_comparison else 'N/A'}")
+        except Exception as e:
+            logger.warning(f"Learned template comparison failed: {e}")
+
+        return analysis_result
+
+    async def fix(issues, analysis):
+        # Category 10 fix: Increment counter after validation, not before
+        # First validate inputs
+        if not issues and not (analysis and analysis.get("fix_prompt")):
+            logger.warning("fix called with no issues and no fix_prompt")
+            return {"success": False, "error": "No issues to fix"}
+
+        iteration_counter[0] += 1
+        return await generate_fix_callback(
+            issues, analysis, service_name, iteration_counter[0]
+        )
+
+    async def merge(pr_number):
+        return await merge_pr(pr_number)
+
+    async def ci(pr_number):
+        return await wait_for_ci(pr_number)
+
+    async def logs():
+        return await get_logs_callback(service_name, railway_service_url)
+
+    loop = FeedbackLoop(
+        config=config,
+        submit_form=submit,
+        wait_for_email=wait_email,
+        analyze_output=analyze,
+        generate_fix=fix,
+        merge_pr=merge,
+        wait_for_ci=ci,
+        check_logs=logs,
+        on_progress=on_progress,
+    )
+
+    result = await loop.run(resume_from=resume_from)
+
+    # Issue 9: Learn from successful output
+    if result.success and loop.iterations:
+        last_iter = loop.iterations[-1]
+        if last_iter.output_file:
+            try:
+                api_key = os.environ.get("ANTHROPIC_API_KEY")
+                if api_key:
+                    from template_learner import TemplateLearner
+                    learner = TemplateLearner(api_key)
+                    await learner.learn_from_file(
+                        last_iter.output_file,
+                        f"{service_name}-learned",
+                        description=f"Learned from successful {service_name} output",
+                    )
+                    logger.info(f"Learned template saved for {service_name}")
+            except Exception as e:
+                logger.warning(f"Failed to learn template: {e}")
 
     return result
-
-
-# =============================================================================
-# CLI INTERFACE
-# =============================================================================
-
-
-async def main():
-    """CLI entry point"""
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Run automated feedback loop")
-    parser.add_argument("--service", required=True, help="Service name (e.g., target-v6)")
-    parser.add_argument("--business", required=True, help="Business description")
-    parser.add_argument("--country", required=True, help="Target country")
-    parser.add_argument("--email", required=True, help="Email for results")
-    parser.add_argument("--exclusion", default="", help="Companies to exclude")
-    parser.add_argument("--max-iterations", type=int, default=10, help="Max fix iterations")
-    parser.add_argument("--max-duration", type=int, default=180, help="Max duration in minutes")
-
-    args = parser.parse_args()
-
-    result = await run_feedback_loop(
-        service_name=args.service,
-        business=args.business,
-        country=args.country,
-        email=args.email,
-        exclusion=args.exclusion,
-        max_iterations=args.max_iterations,
-        max_duration_minutes=args.max_duration,
-    )
-
-    print("\n" + "=" * 60)
-    print("FEEDBACK LOOP RESULT")
-    print("=" * 60)
-    print(f"Status: {result['status']}")
-    print(f"Iterations: {result['iterations']}")
-    print(f"Duration: {result.get('duration_minutes', 0):.1f} minutes")
-    print(f"Issues found: {result.get('issues_found', 0)}")
-    print(f"Issues resolved: {result.get('issues_resolved', 0)}")
-
-    if result.get('recurring_issues'):
-        print("\nRecurring Issues:")
-        for issue in result['recurring_issues']:
-            print(f"  - {issue['description']} ({issue['occurrences']} times)")
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

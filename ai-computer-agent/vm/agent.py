@@ -7,6 +7,8 @@ Architecture:
 3. Agent executes steps sequentially - NO further Claude calls
 4. Reports completion
 
+Feedback loop tasks are dispatched to feedback_loop_runner.
+
 This avoids the "conversational Claude" problem by only asking once.
 """
 
@@ -15,7 +17,6 @@ import json
 import time
 import os
 import sys
-import subprocess
 import re
 from typing import Optional, List
 from dataclasses import dataclass
@@ -28,80 +29,82 @@ from shared.protocol import (
     Task, TaskStatus, TaskUpdate, TaskResult,
     MESSAGE_TYPES, encode_message, decode_message
 )
-from computer_use import execute_action, get_screen_context
+from computer_use import execute_action, get_screen_context, screenshot
 from guardrails import check_action
+from config import CLAUDE_MODEL
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("agent")
 
 
-@dataclass
-class AgentConfig:
-    host_ws_url: str = "ws://192.168.1.100:3000/agent"
-    claude_code_path: str = "claude"
-    working_dir: str = ""
+# Feedback-loop keywords — if task description matches, dispatch to feedback loop
+FEEDBACK_LOOP_KEYWORDS = [
+    "target-v3", "target-v4", "target-v5", "target-v6",
+    "market-research", "profile-slides", "trading-comparable",
+    "validation", "due-diligence", "utb", "feedback loop", "feedback-loop",
+]
 
 
-def load_config() -> AgentConfig:
-    return AgentConfig(
-        host_ws_url=os.environ.get("HOST_WS_URL", "ws://192.168.1.100:3000/agent"),
-        claude_code_path=os.environ.get("CLAUDE_CODE_PATH", "claude"),
-        working_dir=os.environ.get("WORKING_DIR", os.getcwd()),
+def load_config():
+    from config import AgentConfig as CfgAgentConfig
+    return CfgAgentConfig(
+        host_ws_url=os.environ.get("HOST_WS_URL", "ws://localhost:3000/agent"),
     )
 
 
-def get_plan_from_claude(config: AgentConfig, task_description: str) -> List[dict]:
+def _is_feedback_loop_task(description: str) -> bool:
+    """Detect whether a task should be handled by the feedback loop runner."""
+    desc_lower = description.lower()
+    return any(kw in desc_lower for kw in FEEDBACK_LOOP_KEYWORDS)
+
+
+def get_plan_from_claude(config, task_description: str) -> List[dict]:
     """
     Call Claude Code ONCE to get a complete plan.
     Returns list of action dicts.
     """
 
-    prompt = f"""I need to automate this Windows task: {task_description}
+    prompt = f"""WINDOWS DESKTOP AUTOMATION PLAN
 
-Write a JSON array of steps. Each step is an object with:
-- "action": one of "open_app", "type", "press", "hotkey", "wait", "done"
-- "params": parameters for the action
+TASK: {task_description}
 
-Examples:
-- {{"action": "open_app", "params": {{"name": "notepad"}}}}
-- {{"action": "type", "params": {{"text": "Hello World"}}}}
-- {{"action": "press", "params": {{"key": "enter"}}}}
-- {{"action": "hotkey", "params": {{"keys": ["ctrl", "s"]}}}}
-- {{"action": "wait", "params": {{"seconds": 1}}}}
-- {{"action": "done", "params": {{}}}}
+Plan the exact sequence of mouse/keyboard interactions to complete this task on a Windows desktop.
 
-Return ONLY the JSON array, nothing else. Example:
-[{{"action":"open_app","params":{{"name":"notepad"}}}},{{"action":"type","params":{{"text":"Hello"}}}},{{"action":"done","params":{{}}}}]
+CURRENT STATE: Desktop is visible. No apps are open unless specified in the task.
+
+ACTION TYPES (use ONLY these):
+- open_app: {{"action": "open_app", "params": {{"name": "notepad"}}}} — name = exact app name (notepad, brave, explorer, cmd)
+- open_url: {{"action": "open_url", "params": {{"url": "https://example.com"}}}}
+- type: {{"action": "type", "params": {{"text": "Hello World"}}}} — types text into focused field
+- click: {{"action": "click", "params": {{"x": 500, "y": 300}}}} — pixel coordinates from screenshot
+- press: {{"action": "press", "params": {{"key": "enter"}}}} — single key: enter, escape, tab, delete, f5
+- hotkey: {{"action": "hotkey", "params": {{"keys": ["ctrl", "s"]}}}} — keyboard shortcut
+- scroll: {{"action": "scroll", "params": {{"clicks": -3}}}} — negative=down, positive=up
+- wait: {{"action": "wait", "params": {{"seconds": 2}}}} — pause for UI to load
+- done: {{"action": "done", "params": {{}}}} — task complete (MUST be last step)
+
+RULES:
+1. Always add "wait" (1-3 seconds) after: opening apps, loading pages, submitting forms
+2. Use "click" with approximate coordinates when UI element positions are predictable
+3. Include "done" as the final step
+4. If task is unclear or impossible, return: [{{"action": "done", "params": {{"error": "reason"}}}}]
+5. Keep plans concise — minimum steps needed
+
+Return ONLY a JSON array, nothing else:
+[{{"action":"open_app","params":{{"name":"notepad"}}}},{{"action":"wait","params":{{"seconds":2}}}},{{"action":"type","params":{{"text":"Hello"}}}},{{"action":"done","params":{{}}}}]
 
 JSON array:"""
 
     try:
-        result = subprocess.run(
-            [
-                config.claude_code_path,
-                "--print",
-                "--output-format", "json",
-                "--dangerously-skip-permissions",
-                "-p", prompt,
-            ],
-            capture_output=True,
-            text=True,
-            timeout=60,
-            cwd=config.working_dir,
-        )
+        # B7/A2: Use asyncio.run() to create a new event loop in the executor thread
+        # This avoids deadlock when called via run_in_executor from async context
+        output = asyncio.run(_run_claude_subprocess(config, prompt))
 
-        output = result.stdout.strip()
         print(f"=== Claude Response ({len(output)} chars) ===")
         print(output[:2000])
         print("=== End Response ===")
 
-        # Parse Claude Code's JSON wrapper
-        try:
-            cli_response = json.loads(output)
-            if isinstance(cli_response, dict) and 'result' in cli_response:
-                output = cli_response['result']
-        except json.JSONDecodeError:
-            pass
+        # Output is plain text from --message mode (no JSON wrapper)
 
         # Extract JSON array from response
         steps = extract_steps_from_response(output)
@@ -116,6 +119,25 @@ JSON array:"""
     except Exception as e:
         logger.error(f"Claude call failed: {e}")
         return create_fallback_plan(task_description)
+
+
+async def _run_claude_subprocess(config, prompt: str) -> str:
+    """Run Claude Code CLI as an async subprocess (B7 fix)."""
+    claude_path = config.claude_code_path if hasattr(config, 'claude_code_path') else "claude"
+    cwd = config.repo_path if hasattr(config, 'repo_path') else os.getcwd()
+
+    proc = await asyncio.create_subprocess_exec(
+        claude_path,
+        "--print",
+        "--model", CLAUDE_MODEL,
+        "--message", prompt,
+        "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash",
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+        cwd=cwd,
+    )
+    stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=120)
+    return stdout.decode().strip()
 
 
 def extract_balanced(text: str, open_char: str, close_char: str) -> Optional[str]:
@@ -201,8 +223,8 @@ def extract_steps_from_response(response: str) -> List[dict]:
     response_lower = response.lower()
     if 'notepad' in response_lower:
         steps.append({"action": "open_app", "params": {"name": "notepad"}})
-    elif 'chrome' in response_lower:
-        steps.append({"action": "open_app", "params": {"name": "chrome"}})
+    elif 'chrome' in response_lower or 'browser' in response_lower or 'brave' in response_lower:
+        steps.append({"action": "open_app", "params": {"name": "brave"}})
 
     # Look for text to type in quotes
     text_match = re.search(r'["\']([^"\']+)["\']', response)
@@ -212,29 +234,47 @@ def extract_steps_from_response(response: str) -> List[dict]:
     return steps
 
 
+# Valid action types the agent can execute
+VALID_ACTIONS = {
+    "open_app", "open_url", "type", "click", "double_click", "right_click",
+    "press", "hotkey", "scroll", "wait", "focus_window", "done",
+}
+
+
 def normalize_action(action: dict) -> dict:
-    """Normalize action format"""
+    """Normalize action format and validate action type"""
+    action_name = action.get("action", "")
     result = {
-        "action": action.get("action", ""),
+        "action": action_name,
         "params": action.get("params", {}),
     }
 
-    # Handle nested coordinates
+    # Handle nested coordinates (L5: handle both dict and list formats)
     if "coordinates" in result["params"]:
         coords = result["params"]["coordinates"]
-        result["params"]["x"] = coords.get("x", 0)
-        result["params"]["y"] = coords.get("y", 0)
+        if isinstance(coords, dict):
+            result["params"]["x"] = coords.get("x", 0)
+            result["params"]["y"] = coords.get("y", 0)
+        elif isinstance(coords, (list, tuple)) and len(coords) >= 2:
+            result["params"]["x"] = coords[0]
+            result["params"]["y"] = coords[1]
         del result["params"]["coordinates"]
 
     # Handle target -> name mapping for open_app
     if "target" in result["params"] and "name" not in result["params"]:
         result["params"]["name"] = result["params"]["target"]
 
+    # Validate action type
+    if action_name not in VALID_ACTIONS:
+        logger.warning(f"Unknown action type: {action_name}, skipping")
+        result["action"] = "wait"
+        result["params"] = {"seconds": 0.5}
+
     return result
 
 
 def create_fallback_plan(task_description: str) -> List[dict]:
-    """Create a simple fallback plan based on keywords"""
+    """Create a simple fallback plan based on keywords (H7: report failure for unknown tasks)"""
 
     steps = []
     task_lower = task_description.lower()
@@ -244,8 +284,14 @@ def create_fallback_plan(task_description: str) -> List[dict]:
         steps.append({"action": "open_app", "params": {"name": "notepad"}})
         steps.append({"action": "wait", "params": {"seconds": 2}})
 
-    if "chrome" in task_lower or "browser" in task_lower:
-        steps.append({"action": "open_app", "params": {"name": "chrome"}})
+    if "chrome" in task_lower or "browser" in task_lower or "brave" in task_lower:
+        steps.append({"action": "open_app", "params": {"name": "brave"}})
+        steps.append({"action": "wait", "params": {"seconds": 2}})
+
+    # L6: Extract URL before lowercasing to preserve case-sensitive paths
+    url_match = re.search(r'https?://\S+', task_description)
+    if url_match:
+        steps.append({"action": "open_url", "params": {"url": url_match.group(0)}})
         steps.append({"action": "wait", "params": {"seconds": 2}})
 
     # Check for text to type
@@ -256,54 +302,254 @@ def create_fallback_plan(task_description: str) -> List[dict]:
     elif "hello world" in task_lower:
         steps.append({"action": "type", "params": {"text": "Hello World"}})
 
+    if not steps:
+        # H7: Return error instead of silently doing nothing
+        logger.error(f"Could not create fallback plan for: {task_description[:100]}")
+        return [{"action": "done", "params": {"error": f"Unrecognized task: {task_description[:200]}"}}]
+
     steps.append({"action": "done", "params": {}})
 
     return steps
 
 
 class Agent:
-    def __init__(self, config: AgentConfig):
+    # Issue 26 fix: Max queue size to prevent memory leak during disconnection
+    MAX_SEND_QUEUE_SIZE = 1000
+
+    def __init__(self, config):
         self.config = config
         self.ws: Optional[websockets.WebSocketClientProtocol] = None
         self.current_task: Optional[Task] = None
+        # Issue 24/40 fix: Use asyncio.Event for thread-safe cancellation
+        self._cancelled_event = asyncio.Event()
+        self._current_task_handle: Optional[asyncio.Task] = None  # B10: task handle
+        self._send_queue: List[str] = []  # H18: queue for retry
+        # Issue 17/22 fix: Add asyncio.Lock for _send_queue synchronization
+        self._send_queue_lock = asyncio.Lock()
+        self._needs_reconnect = False
+        # Issue 23 fix: Lock for reconnect flag
+        self._reconnect_lock = asyncio.Lock()
+
+    @property
+    def _cancelled(self) -> bool:
+        """Property accessor for backwards compatibility"""
+        return self._cancelled_event.is_set()
+
+    @_cancelled.setter
+    def _cancelled(self, value: bool):
+        """Property setter for backwards compatibility"""
+        if value:
+            self._cancelled_event.set()
+        else:
+            self._cancelled_event.clear()
+
+    async def close(self):
+        """Issue 16 fix: Properly close WebSocket connection on shutdown"""
+        if self.ws:
+            try:
+                await self.ws.close()
+                logger.info("WebSocket connection closed")
+            except Exception as e:
+                logger.warning(f"Error closing WebSocket: {e}")
+            finally:
+                self.ws = None
 
     async def connect_to_host(self):
+        """Connect to host with exponential backoff."""
+        backoff = 2
+        max_backoff = 60
         while True:
             try:
-                self.ws = await websockets.connect(self.config.host_ws_url)
+                # H17: add connect timeout
+                self.ws = await websockets.connect(
+                    self.config.host_ws_url,
+                    open_timeout=10,
+                )
                 logger.info(f"Connected to host at {self.config.host_ws_url}")
+                # Flush queued messages on reconnect
+                await self._flush_send_queue()
                 return
             except Exception as e:
-                logger.warning(f"Connection failed: {e}. Retrying in 5s...")
-                await asyncio.sleep(5)
+                logger.warning(f"Connection failed: {e}. Retrying in {backoff}s...")
+                await asyncio.sleep(backoff)
+                backoff = min(backoff * 2, max_backoff)
+
+    async def _flush_send_queue(self):
+        """Send any queued messages after reconnect. Issue 17/22 fix: Uses lock."""
+        async with self._send_queue_lock:
+            while self._send_queue and self.ws:
+                msg = self._send_queue.pop(0)
+                try:
+                    await self.ws.send(msg)
+                except Exception as e:
+                    logger.error(f"Failed to flush queued message: {e}")
+                    self._send_queue.insert(0, msg)
+                    break
+
+    async def _safe_send(self, msg: str):
+        """H18: Send with error handling — queue on failure. Issue 17/22/26 fix: Uses lock and bounds queue."""
+        try:
+            if self.ws:
+                await self.ws.send(msg)
+            else:
+                async with self._send_queue_lock:
+                    # Issue 26 fix: Bound queue size to prevent memory leak
+                    if len(self._send_queue) >= self.MAX_SEND_QUEUE_SIZE:
+                        logger.warning(f"Send queue full ({self.MAX_SEND_QUEUE_SIZE}), dropping oldest message")
+                        self._send_queue.pop(0)
+                    self._send_queue.append(msg)
+                async with self._reconnect_lock:
+                    self._needs_reconnect = True
+        except Exception as e:
+            logger.error(f"Send failed, queuing: {e}")
+            async with self._send_queue_lock:
+                if len(self._send_queue) >= self.MAX_SEND_QUEUE_SIZE:
+                    self._send_queue.pop(0)
+                self._send_queue.append(msg)
+            async with self._reconnect_lock:
+                self._needs_reconnect = True
 
     async def send_update(self, update: TaskUpdate):
-        if self.ws:
-            try:
-                msg = encode_message(MESSAGE_TYPES["TASK_UPDATE"], update.to_dict())
-                await self.ws.send(msg)
-            except Exception as e:
-                logger.error(f"Failed to send update: {e}")
+        msg = encode_message(MESSAGE_TYPES["TASK_UPDATE"], update.to_dict())
+        await self._safe_send(msg)
 
     async def send_result(self, result: TaskResult):
-        if self.ws:
-            try:
-                msg = encode_message(MESSAGE_TYPES["TASK_RESULT"], result.to_dict())
-                await self.ws.send(msg)
-            except Exception as e:
-                logger.error(f"Failed to send result: {e}")
+        msg = encode_message(MESSAGE_TYPES["TASK_RESULT"], result.to_dict())
+        await self._safe_send(msg)
 
     async def run_task(self, task: Task) -> TaskResult:
-        """Execute task with plan-based approach"""
+        """Execute task — dispatches to feedback loop or plan-based execution."""
 
         self.current_task = task
+        self._cancelled = False
         start_time = time.time()
 
         logger.info(f"=== Starting task: {task.description} ===")
 
+        # B1: Dispatch feedback-loop tasks to feedback_loop_runner
+        if _is_feedback_loop_task(task.description):
+            return await self._run_feedback_loop_task(task, start_time)
+
+        # Regular plan-based execution
+        return await self._run_plan_task(task, start_time)
+
+    async def _run_feedback_loop_task(self, task: Task, start_time: float) -> TaskResult:
+        """B1: Run a feedback-loop task."""
+        logger.info("Dispatching to feedback loop runner")
+
+        try:
+            from feedback_loop_runner import run_feedback_loop
+
+            # Extract service name and form data from task description
+            desc_lower = task.description.lower()
+            service_name = None
+            for kw in FEEDBACK_LOOP_KEYWORDS:
+                if kw in desc_lower and kw not in ("feedback loop", "feedback-loop"):
+                    service_name = kw
+                    break
+            if not service_name:
+                service_name = "target-v6"  # default
+
+            # Issue 12: Parse and validate task context
+            form_data = {}
+            if task.context:
+                try:
+                    form_data = json.loads(task.context) if isinstance(task.context, str) else task.context
+                except (json.JSONDecodeError, TypeError):
+                    form_data = {"business": task.description}
+
+            # Validate required fields for form submission
+            required_fields = ["email"]
+            missing = [f for f in required_fields if not form_data.get(f) and not form_data.get(f.capitalize())]
+            if missing:
+                logger.warning(
+                    f"Task context missing required fields: {missing}. "
+                    f"Form submission may fail. Context: {form_data}"
+                )
+
+            async def on_progress(state, message, iteration=0, prs_merged=0):
+                await self.send_update(TaskUpdate(
+                    task_id=task.id,
+                    status=TaskStatus.RUNNING,
+                    message=f"[{state}] {message}",
+                    iteration=iteration,
+                    prs_merged=prs_merged,
+                    elapsed_seconds=int(time.time() - start_time),
+                ))
+
+            from actions.frontend_api import RAILWAY_URLS
+            railway_url = RAILWAY_URLS.get(service_name)
+
+            result = await run_feedback_loop(
+                service_name=service_name,
+                form_data=form_data,
+                railway_service_url=railway_url,
+                health_check_url=railway_url,
+                on_progress=on_progress,
+            )
+
+            # A5: Normalize result — handle both object attrs and dict access
+            if hasattr(result, 'success'):
+                _success = result.success
+                _summary = result.summary
+                _iterations = result.iterations
+                _prs_merged = result.prs_merged
+            elif isinstance(result, dict):
+                _success = result.get("success", False)
+                _summary = result.get("summary", "")
+                _iterations = result.get("iterations", 0)
+                _prs_merged = result.get("prs_merged", 0)
+            else:
+                _success = False
+                _summary = f"Unexpected result type: {type(result)}"
+                _iterations = 0
+                _prs_merged = 0
+
+            elapsed = int(time.time() - start_time)
+            return TaskResult(
+                task_id=task.id,
+                status=TaskStatus.COMPLETED if _success else TaskStatus.FAILED,
+                summary=_summary,
+                iterations=_iterations,
+                prs_merged=_prs_merged,
+                elapsed_seconds=elapsed,
+            )
+
+        except Exception as e:
+            logger.error(f"Feedback loop failed: {e}")
+            elapsed = int(time.time() - start_time)
+            return TaskResult(
+                task_id=task.id,
+                status=TaskStatus.FAILED,
+                summary=f"Feedback loop error: {e}",
+                iterations=0,
+                prs_merged=0,
+                elapsed_seconds=elapsed,
+            )
+
+    async def _run_plan_task(self, task: Task, start_time: float) -> TaskResult:
+        """Run a plan-based task."""
+
         # Step 1: Get complete plan from Claude (ONE call)
         print("\n>>> Getting plan from Claude...")
-        steps = get_plan_from_claude(self.config, task.description)
+        # Issue 19 fix: Add timeout to run_in_executor to prevent indefinite hang
+        try:
+            steps = await asyncio.wait_for(
+                asyncio.get_running_loop().run_in_executor(
+                    None, get_plan_from_claude, self.config, task.description
+                ),
+                timeout=180  # 3 minute timeout for plan generation
+            )
+        except asyncio.TimeoutError:
+            logger.error("Plan generation timed out after 180 seconds")
+            return TaskResult(
+                task_id=task.id,
+                status=TaskStatus.FAILED,
+                summary="Plan generation timed out",
+                iterations=0,
+                prs_merged=0,
+                elapsed_seconds=int(time.time() - start_time),
+            )
 
         if not steps:
             return TaskResult(
@@ -315,12 +561,29 @@ class Agent:
                 elapsed_seconds=int(time.time() - start_time),
             )
 
+        # L4: flag if fallback
+        is_fallback = (len(steps) == 1 and steps[0].get("params", {}).get("error"))
+        if is_fallback:
+            logger.warning(f"Using fallback plan: {steps[0]['params'].get('error', '')}")
+
         print(f"\n>>> Plan has {len(steps)} steps:")
         for i, step in enumerate(steps):
             print(f"  {i+1}. {step['action']}: {step.get('params', {})}")
 
         # Step 2: Execute each step
         for i, step in enumerate(steps):
+            # B9: Check cancellation between steps
+            if self._cancelled:
+                elapsed = int(time.time() - start_time)
+                return TaskResult(
+                    task_id=task.id,
+                    status=TaskStatus.FAILED,
+                    summary="Task cancelled by user",
+                    iterations=i,
+                    prs_merged=0,
+                    elapsed_seconds=elapsed,
+                )
+
             elapsed = int(time.time() - start_time)
             action_name = step.get('action', 'unknown')
 
@@ -339,6 +602,16 @@ class Agent:
 
             # Check if done
             if action_name == "done":
+                error_msg = step.get("params", {}).get("error")
+                if error_msg:
+                    return TaskResult(
+                        task_id=task.id,
+                        status=TaskStatus.FAILED,
+                        summary=f"Fallback plan error: {error_msg}",
+                        iterations=i+1,
+                        prs_merged=0,
+                        elapsed_seconds=elapsed,
+                    )
                 return TaskResult(
                     task_id=task.id,
                     status=TaskStatus.COMPLETED,
@@ -384,23 +657,66 @@ class Agent:
             elapsed_seconds=elapsed,
         )
 
+    async def _handle_screenshot_request(self):
+        """B8: Handle screenshot_request message."""
+        try:
+            screen = await screenshot()
+            msg = encode_message(MESSAGE_TYPES.get("SCREENSHOT_RESPONSE", "screenshot_response"), {
+                "screenshot": screen,
+            })
+            await self._safe_send(msg)
+        except Exception as e:
+            logger.error(f"Screenshot request failed: {e}")
+
     async def listen_for_tasks(self):
         await self.connect_to_host()
         print("Agent listening for tasks...")
 
         while True:
             try:
-                message = await self.ws.recv()
+                # H16: add recv timeout with reconnect
+                try:
+                    message = await asyncio.wait_for(self.ws.recv(), timeout=120)
+                except asyncio.TimeoutError:
+                    # Send a ping to check connection liveness
+                    try:
+                        pong = await self.ws.ping()
+                        await asyncio.wait_for(pong, timeout=10)
+                    except Exception:
+                        logger.warning("Connection stale (recv timeout). Reconnecting...")
+                        await self.connect_to_host()
+                    continue
+
                 msg_type, payload = decode_message(message)
 
-                if msg_type == MESSAGE_TYPES["NEW_TASK"]:
+                if msg_type == MESSAGE_TYPES.get("NEW_TASK", "new_task"):
                     task = Task.from_dict(payload)
                     logger.info(f"Received task: {task.id}")
-                    result = await self.run_task(task)
-                    await self.send_result(result)
+                    # B10: Run task in separate asyncio.Task so message loop continues
+                    self._current_task_handle = asyncio.create_task(
+                        self._execute_and_report(task)
+                    )
 
-                elif msg_type == MESSAGE_TYPES["CANCEL_TASK"]:
-                    logger.info("Task cancelled")
+                elif msg_type == MESSAGE_TYPES.get("CANCEL_TASK", "cancel_task"):
+                    # B9: Set cancellation flag
+                    logger.info("Task cancellation requested")
+                    self._cancelled = True
+                    if self._current_task_handle and not self._current_task_handle.done():
+                        self._current_task_handle.cancel()
+
+                # B8: Handle additional message types
+                elif msg_type == MESSAGE_TYPES.get("PLAN_APPROVED", "plan_approved"):
+                    logger.info("Plan approved by host")
+
+                elif msg_type == MESSAGE_TYPES.get("PLAN_REJECTED", "plan_rejected"):
+                    logger.info(f"Plan rejected: {payload.get('feedback', '')}")
+                    self._cancelled = True
+
+                elif msg_type == MESSAGE_TYPES.get("USER_INPUT", "user_input"):
+                    logger.info(f"User input received: {payload.get('input', '')[:100]}")
+
+                elif msg_type == MESSAGE_TYPES.get("SCREENSHOT_REQUEST", "screenshot_request"):
+                    await self._handle_screenshot_request()
 
             except websockets.ConnectionClosed:
                 logger.warning("Connection lost. Reconnecting...")
@@ -409,21 +725,51 @@ class Agent:
                 logger.error(f"Error: {e}")
                 await asyncio.sleep(1)
 
+    async def _execute_and_report(self, task: Task):
+        """B10: Execute task and send result without blocking message loop."""
+        try:
+            result = await self.run_task(task)
+            await self.send_result(result)
+        except asyncio.CancelledError:
+            logger.info("Task was cancelled")
+            await self.send_result(TaskResult(
+                task_id=task.id,
+                status=TaskStatus.FAILED,
+                summary="Task cancelled",
+                iterations=0,
+                prs_merged=0,
+                elapsed_seconds=0,
+            ))
+        except Exception as e:
+            logger.error(f"Task execution error: {e}")
+            await self.send_result(TaskResult(
+                task_id=task.id,
+                status=TaskStatus.FAILED,
+                summary=f"Error: {e}",
+                iterations=0,
+                prs_merged=0,
+                elapsed_seconds=0,
+            ))
+
 
 async def main():
     config = load_config()
 
-    # Verify Claude Code CLI
+    # Verify Claude Code CLI (async)
     try:
-        result = subprocess.run(
-            [config.claude_code_path, "--version"],
-            capture_output=True,
-            text=True,
-            timeout=10
+        proc = await asyncio.create_subprocess_exec(
+            "claude", "--version",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
         )
-        print(f"Claude Code CLI: {result.stdout.strip()}")
+        stdout, _ = await proc.communicate()
+        print(f"Claude Code CLI: {stdout.decode().strip()}")
     except Exception as e:
         print(f"WARNING: Claude Code CLI check failed: {e}")
+        print(f"  Make sure Claude Code is installed: npm install -g @anthropic-ai/claude-code")
+
+    print(f"Host WebSocket URL: {config.host_ws_url}")
+    print(f"ABORT: Move mouse to TOP-LEFT corner")
 
     agent = Agent(config)
     await agent.listen_for_tasks()

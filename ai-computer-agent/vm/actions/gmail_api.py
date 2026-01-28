@@ -119,10 +119,32 @@ def _get_gmail_service():
 
 def _check_sender_allowed(sender: str) -> bool:
     """Check if sender is in the allowed list."""
+    if not sender:
+        return False
     sender_lower = sender.lower()
-    # Allow any sender for now since automation emails come from SendGrid
-    # TODO: Add SendGrid sender to allowed list once known
-    return True
+
+    # Check against allowed senders list
+    for allowed in ALLOWED_SENDERS:
+        if allowed.lower() in sender_lower:
+            return True
+
+    # Also allow SendGrid emails (common automation sender)
+    # SendGrid uses various subdomains, so check domain pattern
+    sendgrid_patterns = [
+        "sendgrid.net",
+        "sendgrid.com",
+        "em.sendgrid.net",
+    ]
+    for pattern in sendgrid_patterns:
+        if pattern in sender_lower:
+            return True
+
+    # Allow emails from the configured sender (for internal automation)
+    sender_email = os.environ.get("SENDER_EMAIL", "")
+    if sender_email and sender_email.lower() in sender_lower:
+        return True
+
+    return False
 
 
 def _check_subject_allowed(subject: str) -> bool:
@@ -140,13 +162,21 @@ def _check_subject_allowed(subject: str) -> bool:
 # =============================================================================
 
 
-def _get_all_parts(payload):
-    """Recursively walk MIME parts to find nested attachments."""
-    parts = payload.get("parts", [])
+def _get_all_parts(payload, max_depth=10, _current_depth=0):
+    """Recursively walk MIME parts to find nested attachments.
+
+    Category 2 fix: Add max_depth to prevent infinite recursion on nested emails.
+    """
+    if _current_depth >= max_depth:
+        logger.warning(f"MIME recursion depth limit ({max_depth}) reached")
+        return []
+
+    parts = payload.get("parts", []) if payload else []
     all_parts = []
     for part in parts:
-        all_parts.append(part)
-        all_parts.extend(_get_all_parts(part))
+        if part:
+            all_parts.append(part)
+            all_parts.extend(_get_all_parts(part, max_depth, _current_depth + 1))
     return all_parts
 
 
@@ -191,7 +221,12 @@ async def search_emails_api(
                 metadataHeaders=["Subject", "From", "Date"],
             ).execute()
 
-            headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
+            # Category 1 fix: Handle malformed headers missing "name"/"value"
+            raw_headers = msg.get("payload", {}).get("headers", [])
+            headers = {}
+            for h in raw_headers:
+                if isinstance(h, dict) and "name" in h and "value" in h:
+                    headers[h["name"]] = h["value"]
             has_attachment = any(
                 part.get("filename")
                 for part in _get_all_parts(msg.get("payload", {}))
@@ -246,7 +281,11 @@ async def download_attachment_api(
             if ext not in (".pptx", ".xlsx", ".xls", ".docx", ".pdf", ".csv"):
                 continue
 
-            attachment_id = part.get("body", {}).get("attachmentId")
+            # Category 1 fix: part.get("body", {}) may return None
+            body = part.get("body")
+            if not body or not isinstance(body, dict):
+                continue
+            attachment_id = body.get("attachmentId")
             if not attachment_id:
                 continue
 
@@ -256,10 +295,22 @@ async def download_attachment_api(
                 id=attachment_id,
             ).execute()
 
+            # Category 1 fix: attachment["data"] may be missing
+            if not attachment or "data" not in attachment:
+                logger.warning(f"Attachment {attachment_id} has no data")
+                continue
+
             data = base64.urlsafe_b64decode(attachment["data"])
 
             os.makedirs(download_dir, exist_ok=True)
-            file_path = os.path.join(download_dir, filename)
+
+            # Category 4 fix: Path traversal security - sanitize filename
+            # Prevent ../../etc/passwd attacks
+            safe_filename = os.path.basename(filename)  # Strip any path components
+            safe_filename = re.sub(r'[<>:"/\\|?*]', '_', safe_filename)  # Remove unsafe chars
+            if not safe_filename or safe_filename.startswith('.'):
+                safe_filename = f"attachment_{attachment_id[:8]}{ext}"
+            file_path = os.path.join(download_dir, safe_filename)
 
             with open(file_path, "wb") as f:
                 f.write(data)

@@ -75,6 +75,10 @@ def _load_mandate() -> str:
     return ""
 
 
+# Issue 3 fix: Maximum prompt length to prevent unbounded memory usage
+MAX_PROMPT_LENGTH = 100000  # ~25K tokens
+
+
 def _build_prompt(
     task_prompt: str,
     service_name: Optional[str] = None,
@@ -85,6 +89,11 @@ def _build_prompt(
 ) -> str:
     """Build a full prompt with mandate + task context."""
     parts = []
+
+    # Issue 3 fix: Truncate inputs to prevent unbounded prompt length
+    task_prompt = task_prompt[:MAX_PROMPT_LENGTH // 2] if task_prompt else ""
+    previous_issues = previous_issues[:10000] if previous_issues else None
+    original_task = original_task[:5000] if original_task else None
 
     # Load mandate
     mandate = _load_mandate()
@@ -183,7 +192,12 @@ async def run_claude_code(
                 timeout=timeout_seconds
             )
         except asyncio.TimeoutError:
+            # Issue 20/21 fix: Call communicate() after kill() to properly reap the process
             process.kill()
+            try:
+                await asyncio.wait_for(process.communicate(), timeout=5)
+            except asyncio.TimeoutError:
+                pass  # Process already killed, just ignore
             return ClaudeCodeResult(
                 success=False,
                 output="",

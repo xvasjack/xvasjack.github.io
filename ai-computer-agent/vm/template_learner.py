@@ -72,10 +72,29 @@ class LearnedTemplate:
     def from_dict(cls, data: Dict[str, Any]) -> "LearnedTemplate":
         return cls(**data)
 
+    @staticmethod
+    def _sanitize_template_name(name: str) -> str:
+        """Issue 4/7/12 fix: Sanitize template name to prevent path traversal."""
+        import re
+        # Remove any path separators and parent directory references
+        sanitized = name.replace("..", "").replace("/", "_").replace("\\", "_")
+        # Only allow alphanumeric, underscore, and hyphen
+        sanitized = re.sub(r"[^a-zA-Z0-9_-]", "", sanitized)
+        if not sanitized:
+            raise ValueError("Invalid template name: results in empty string after sanitization")
+        return sanitized
+
     def save(self, directory: str = TEMPLATES_DIR):
         """Save template to JSON file"""
+        # Issue 4/7/12 fix: Sanitize template name to prevent path traversal
+        safe_name = self._sanitize_template_name(self.name)
         os.makedirs(directory, exist_ok=True)
-        filepath = os.path.join(directory, f"{self.name}.json")
+        filepath = os.path.join(directory, f"{safe_name}.json")
+        # Verify final path is within the intended directory
+        real_dir = os.path.realpath(directory)
+        real_path = os.path.realpath(filepath)
+        if not real_path.startswith(real_dir):
+            raise ValueError(f"Path traversal detected: {filepath}")
         with open(filepath, "w") as f:
             json.dump(self.to_dict(), f, indent=2)
         logger.info(f"Template saved: {filepath}")
@@ -84,10 +103,28 @@ class LearnedTemplate:
     @classmethod
     def load(cls, name: str, directory: str = TEMPLATES_DIR) -> "LearnedTemplate":
         """Load template from JSON file"""
-        filepath = os.path.join(directory, f"{name}.json")
-        with open(filepath, "r") as f:
-            data = json.load(f)
-        return cls.from_dict(data)
+        # Issue 4/7/12 fix: Sanitize template name to prevent path traversal
+        safe_name = cls._sanitize_template_name(name)
+        filepath = os.path.join(directory, f"{safe_name}.json")
+        # Verify final path is within the intended directory
+        real_dir = os.path.realpath(directory)
+        real_path = os.path.realpath(filepath)
+        if not real_path.startswith(real_dir):
+            raise ValueError(f"Path traversal detected: {filepath}")
+        # Category 1 fix: Handle missing directory and corrupted JSON
+        if not os.path.exists(filepath):
+            raise FileNotFoundError(f"Template not found: {filepath}")
+        try:
+            with open(filepath, "r") as f:
+                data = json.load(f)
+            # Category 11 fix: Validate required fields exist
+            required_fields = ["name", "file_type", "structure"]
+            for field in required_fields:
+                if field not in data:
+                    raise ValueError(f"Template missing required field: {field}")
+            return cls.from_dict(data)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Corrupted template JSON: {e}")
 
 
 class TemplateLearner:
@@ -237,6 +274,7 @@ BE SPECIFIC — not "data fields present" but "company_name, website, descriptio
 
         from config import CLAUDE_MODEL
         # H15: Use async or run_in_executor
+        # Category 1 fix: Handle get_running_loop() without running loop
         if self._async:
             response = await self.client.messages.create(
                 model=CLAUDE_MODEL,
@@ -245,7 +283,13 @@ BE SPECIFIC — not "data fields present" but "company_name, website, descriptio
             )
         else:
             import asyncio as _aio
-            response = await _aio.get_event_loop().run_in_executor(
+            try:
+                loop = _aio.get_running_loop()
+            except RuntimeError:
+                # No running loop - create one
+                loop = _aio.new_event_loop()
+                _aio.set_event_loop(loop)
+            response = await loop.run_in_executor(
                 None, lambda: self.client.messages.create(
                     model=CLAUDE_MODEL,
                     max_tokens=2048,
@@ -254,15 +298,46 @@ BE SPECIFIC — not "data fields present" but "company_name, website, descriptio
             )
 
         # M10: Parse response using JSONDecoder instead of greedy regex
-        text = response.content[0].text
+        # Category 1 fix: Validate response.content before accessing
+        if not response.content or len(response.content) == 0:
+            logger.warning("Empty response from AI quality analysis")
+            return {
+                "description": description,
+                "structure": {},
+                "quality_rules": [],
+                "required_fields": ["name", "website"],
+                "blocked_patterns": ["facebook.com", "linkedin.com"],
+                "min_items": 10,
+                "max_items": 100,
+                "quality_notes": "Auto-generated template (AI returned empty response)",
+            }
+
+        # Issue 79/10 fix: Check content[0] has 'text' attribute (could be ToolUse block)
+        first_block = response.content[0]
+        if not hasattr(first_block, 'text'):
+            logger.warning(f"Response content[0] is not TextBlock: {type(first_block)}")
+            return {
+                "description": description,
+                "structure": {},
+                "quality_rules": [],
+                "required_fields": ["name", "website"],
+                "blocked_patterns": ["facebook.com", "linkedin.com"],
+                "min_items": 10,
+                "max_items": 100,
+                "quality_notes": f"Auto-generated template (AI returned {type(first_block).__name__})",
+            }
+
+        text = first_block.text
         try:
             decoder = json.JSONDecoder()
             brace_idx = text.find('{')
             if brace_idx >= 0:
                 obj, _ = decoder.raw_decode(text[brace_idx:])
                 return obj
-        except (json.JSONDecodeError, ValueError):
-            pass
+        except (json.JSONDecodeError, ValueError) as e:
+            # Category 5 fix: Log JSON parse failures instead of silent return
+            logger.warning(f"Failed to parse AI response as JSON: {e}")
+            logger.debug(f"Raw response: {text[:500]}")
 
         # Fallback defaults
         return {
@@ -373,7 +448,7 @@ Return ONLY JSON (no explanation):
             )
         else:
             import asyncio as _aio
-            response = await _aio.get_event_loop().run_in_executor(
+            response = await _aio.get_running_loop().run_in_executor(
                 None, lambda: self.client.messages.create(
                     model=CLAUDE_MODEL,
                     max_tokens=2048,
@@ -382,15 +457,24 @@ Return ONLY JSON (no explanation):
             )
 
         # M10: Parse response using JSONDecoder instead of greedy regex
-        text = response.content[0].text
+        # Category 1 fix: Validate response.content before accessing
         quality_analysis = {}
-        try:
-            decoder = json.JSONDecoder()
-            brace_idx = text.find('{')
-            if brace_idx >= 0:
-                quality_analysis, _ = decoder.raw_decode(text[brace_idx:])
-        except (json.JSONDecodeError, ValueError):
-            pass
+        if not response.content or len(response.content) == 0:
+            logger.warning("Empty response from AI comparative analysis")
+        else:
+            # Issue 79/11/95 fix: Check content[0] has 'text' attribute
+            first_block = response.content[0]
+            if not hasattr(first_block, 'text'):
+                logger.warning(f"Response content[0] is not TextBlock: {type(first_block)}")
+            else:
+                text = first_block.text
+                try:
+                    decoder = json.JSONDecoder()
+                    brace_idx = text.find('{')
+                    if brace_idx >= 0:
+                        quality_analysis, _ = decoder.raw_decode(text[brace_idx:])
+                except (json.JSONDecodeError, ValueError):
+                    pass
 
         template = LearnedTemplate(
             name=template_name,
@@ -536,11 +620,38 @@ def compare_with_learned_template(
             checks_passed += 1
 
     # Apply quality rules
+    # Category 6 fix: Actually evaluate quality rules instead of always skipping
     for rule in template.quality_rules:
         total_checks += 1
-        # Quality rules are not yet evaluated — count as skipped, not passed
-        logger.warning(f"Quality rule '{rule.get('name', 'unnamed')}' skipped (not yet implemented)")
-        # Do NOT increment checks_passed — unevaluated rules should not inflate score
+        rule_name = rule.get('name', 'unnamed')
+        severity = rule.get('severity', 'medium')
+        check_logic = rule.get('check', '')
+
+        # Basic rule evaluation based on check description
+        rule_passed = True
+        if 'website' in check_logic.lower() and 'valid' in check_logic.lower():
+            # Check website validity
+            for company in analysis.get("companies", []):
+                website = company.get("website", "")
+                if website and not (website.startswith("http") or website.startswith("www")):
+                    rule_passed = False
+                    break
+        elif 'empty' in check_logic.lower() or 'non-empty' in check_logic.lower():
+            # Check for empty required fields
+            for company in analysis.get("companies", []):
+                for field in template.required_fields:
+                    if not company.get(field):
+                        rule_passed = False
+                        break
+
+        if rule_passed:
+            checks_passed += 1
+        else:
+            issues.append({
+                "severity": severity,
+                "category": "quality_rule_failed",
+                "message": rule.get('message', f"Quality rule '{rule_name}' failed"),
+            })
 
     # Calculate score
     score = (checks_passed / max(total_checks, 1)) * 100

@@ -75,6 +75,23 @@ class LoopConfig:
     anthropic_api_key: Optional[str] = None
     max_research_attempts: int = 2
 
+    def __post_init__(self):
+        """Category 10 fix: Validate config values are positive"""
+        if not self.service_name or not self.service_name.strip():
+            raise ValueError("service_name is required")
+        if self.max_iterations < 1:
+            raise ValueError(f"max_iterations must be >= 1, got {self.max_iterations}")
+        if self.max_same_issue_attempts < 1:
+            raise ValueError(f"max_same_issue_attempts must be >= 1, got {self.max_same_issue_attempts}")
+        if self.email_wait_timeout_minutes < 1:
+            raise ValueError(f"email_wait_timeout_minutes must be >= 1, got {self.email_wait_timeout_minutes}")
+        if self.deploy_wait_timeout_minutes < 1:
+            raise ValueError(f"deploy_wait_timeout_minutes must be >= 1, got {self.deploy_wait_timeout_minutes}")
+        if self.ci_wait_timeout_minutes < 1:
+            raise ValueError(f"ci_wait_timeout_minutes must be >= 1, got {self.ci_wait_timeout_minutes}")
+        if self.max_research_attempts < 0:
+            raise ValueError(f"max_research_attempts must be >= 0, got {self.max_research_attempts}")
+
 
 @dataclass
 class LoopIteration:
@@ -218,7 +235,9 @@ class FeedbackLoop:
 
             try:
                 result = await self._run_iteration(iteration)
-                assert result in ("pass", "continue", "stuck"), f"Invalid iteration result: {result}"
+                # Category 5 fix: Replace assert with proper exception (assertions disabled with -O flag)
+                if result not in ("pass", "continue", "stuck"):
+                    raise ValueError(f"Invalid iteration result: {result}")
                 consecutive_failures = 0
                 iteration.completed_at = time.time()
 
@@ -256,13 +275,17 @@ class FeedbackLoop:
 
         self._clear_state()
         elapsed = int(time.time() - self.start_time)
+        # Issue 104 fix: Check iterations length before [-1] access
+        final_issues = []
+        if self.iterations and len(self.iterations) > 0:
+            final_issues = self.iterations[-1].issues_found
         return LoopResult(
             success=False,
             iterations=self.config.max_iterations,
             prs_merged=self.prs_merged,
             summary=f"Max iterations ({self.config.max_iterations}) reached",
             elapsed_seconds=elapsed,
-            final_issues=self.iterations[-1].issues_found if self.iterations else [],
+            final_issues=final_issues,
         )
 
     async def _run_iteration(self, iteration: LoopIteration) -> str:
@@ -334,9 +357,31 @@ class FeedbackLoop:
         iteration.state = LoopState.ANALYZING_OUTPUT
         await self._report_progress("Analyzing output")
 
-        analysis = await self.analyze_output(iteration.output_file)
+        # Category 3 fix: Add timeout to analyze_output (can hang on corrupted files)
+        # Category 5 fix: Add error handling around analyze_output call
+        try:
+            analysis = await asyncio.wait_for(
+                self.analyze_output(iteration.output_file),
+                timeout=300  # 5 minute timeout for analysis
+            )
+        except asyncio.TimeoutError:
+            iteration.issues_found.append("Output analysis timed out after 5 minutes")
+            return "continue"
+        except Exception as e:
+            iteration.issues_found.append(f"Output analysis failed: {e}")
+            return "continue"
+
+        if analysis is None:
+            iteration.issues_found.append("Output analysis returned None")
+            return "continue"
+
+        # Category 4 fix: Validate analysis is a dict before calling .get()
+        if not isinstance(analysis, dict):
+            iteration.issues_found.append(f"Output analysis returned non-dict type: {type(analysis).__name__}")
+            return "continue"
+
         issues = analysis.get("issues", [])
-        iteration.issues_found = issues
+        iteration.issues_found = issues if isinstance(issues, list) else [str(issues)]
 
         if not issues:
             await self._report_progress("No issues found — output matches template!")
@@ -345,8 +390,19 @@ class FeedbackLoop:
         await self._report_progress(f"Found {len(issues)} issues: {issues[:3]}")
 
         # Check if stuck on same issues
-        issue_key = ";".join(sorted(issues[:3]))
+        # Issue 71 fix: Hash ALL issues, not just first 3, to prevent missing later issues
+        import hashlib
+        all_issues_str = ";".join(sorted(issues))
+        issue_key = hashlib.sha256(all_issues_str.encode()).hexdigest()[:16]
         self.issue_tracker[issue_key] = self.issue_tracker.get(issue_key, 0) + 1
+
+        # Issue 44/72 fix: Bound issue_tracker to prevent memory leak
+        MAX_ISSUE_TRACKER_ENTRIES = 100
+        if len(self.issue_tracker) > MAX_ISSUE_TRACKER_ENTRIES:
+            # Keep only the most recent entries
+            oldest_keys = list(self.issue_tracker.keys())[:-MAX_ISSUE_TRACKER_ENTRIES//2]
+            for k in oldest_keys:
+                del self.issue_tracker[k]
 
         if self.issue_tracker[issue_key] >= self.config.max_same_issue_attempts:
             await self._report_progress(f"Stuck: same issues found {self.issue_tracker[issue_key]} times")
@@ -371,6 +427,11 @@ class FeedbackLoop:
             iteration.issues_found.append(f"Fix generation failed after retries: {e}")
             return "continue"
 
+        # Category 1 fix: null check before .get() on fix_result
+        if fix_result is None:
+            iteration.issues_found.append("Fix generation returned None")
+            return "continue"
+
         iteration.fix_applied = fix_result.get("description", "")
         iteration.pr_number = fix_result.get("pr_number")
 
@@ -383,22 +444,25 @@ class FeedbackLoop:
             logger.warning("Fix succeeded but no PR created — attempting explicit PR creation")
             await self._report_progress("No PR detected — creating PR via gh CLI")
             try:
-                import subprocess
-                gh_result = subprocess.run(
-                    ["gh", "pr", "create", "--fill", "--head", f"claude/{self.config.service_name}-fix"],
-                    capture_output=True, text=True, timeout=60,
+                import re
+                gh_proc = await asyncio.create_subprocess_exec(
+                    "gh", "pr", "create", "--fill", "--head", f"claude/{self.config.service_name}-fix",
                     cwd=os.path.expanduser("~/xvasjack.github.io"),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
                 )
-                if gh_result.returncode == 0:
-                    import re
-                    pr_match = re.search(r'/pull/(\d+)', gh_result.stdout)
+                stdout, stderr = await asyncio.wait_for(gh_proc.communicate(), timeout=60)
+                gh_result_stdout = stdout.decode() if stdout else ""
+                gh_result_stderr = stderr.decode() if stderr else ""
+                if gh_proc.returncode == 0:
+                    pr_match = re.search(r'/pull/(\d+)', gh_result_stdout)
                     if pr_match:
                         iteration.pr_number = int(pr_match.group(1))
                         logger.info(f"Created PR #{iteration.pr_number} via gh CLI fallback")
                     else:
-                        logger.warning(f"gh pr create output didn't contain PR number: {gh_result.stdout}")
+                        logger.warning(f"gh pr create output didn't contain PR number: {gh_result_stdout}")
                 else:
-                    logger.warning(f"gh pr create failed: {gh_result.stderr}")
+                    logger.warning(f"gh pr create failed: {gh_result_stderr}")
             except Exception as e:
                 logger.warning(f"Explicit PR creation failed: {e}")
 
@@ -419,6 +483,11 @@ class FeedbackLoop:
                 ci_result = await self.wait_for_ci_fn(iteration.pr_number)
             except Exception as e:
                 iteration.issues_found.append(f"CI wait failed: {e}")
+                return "continue"
+
+            # Category 1 fix: null check before .get() on ci_result
+            if ci_result is None:
+                iteration.issues_found.append("CI check returned None")
                 return "continue"
 
             if not ci_result.get("passed"):
@@ -445,7 +514,8 @@ class FeedbackLoop:
                     await self._report_progress(f"Merge conflict on PR #{iteration.pr_number} — invoking fix")
                     try:
                         from actions.claude_code import fix_merge_conflict
-                        conflict_files = merge_result.get("conflict_files", [])
+                        # Category 1 fix: null check before .get() on merge_result
+                        conflict_files = merge_result.get("conflict_files", []) if merge_result else []
                         await fix_merge_conflict(iteration.pr_number, conflict_files, service_name=self.config.service_name)
                         # Retry merge after conflict resolution
                         merge_result = await self.merge_pr_fn(iteration.pr_number)
@@ -618,10 +688,13 @@ class FeedbackLoop:
         timeout = self.config.deploy_wait_timeout_minutes * 60
         start = time.time()
         poll_interval = 15
+        max_poll_interval = 60  # Category 3 fix: Add exponential backoff with max
 
         logger.info(f"Polling health endpoint: {health_url}")
 
+        attempts = 0
         while time.time() - start < timeout:
+            attempts += 1
             try:
                 proc = await asyncio.create_subprocess_exec(
                     "curl", "-sf", "--max-time", "10", health_url,
@@ -642,7 +715,9 @@ class FeedbackLoop:
             except Exception as e:
                 logger.warning(f"Health check error: {e}")
 
-            await asyncio.sleep(poll_interval)
+            # Category 3 fix: Exponential backoff in health check loop
+            current_interval = min(poll_interval * (1.5 ** (attempts - 1)), max_poll_interval)
+            await asyncio.sleep(current_interval)
 
         logger.warning(f"Health check timed out after {timeout}s")
         return False

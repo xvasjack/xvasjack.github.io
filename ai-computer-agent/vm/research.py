@@ -54,7 +54,14 @@ class ResearchAgent:
     """
 
     def __init__(self, anthropic_api_key: str):
-        self.client = Anthropic(api_key=anthropic_api_key)
+        # H15: Use AsyncAnthropic for use in async functions
+        try:
+            from anthropic import AsyncAnthropic
+            self.client = AsyncAnthropic(api_key=anthropic_api_key)
+            self._async = True
+        except ImportError:
+            self.client = Anthropic(api_key=anthropic_api_key)
+            self._async = False
 
     async def research_issue(
         self,
@@ -68,66 +75,142 @@ class ResearchAgent:
         # Build research prompt
         prompt = self._build_research_prompt(context)
 
-        # Ask Claude to research
-        response = self.client.messages.create(
-            model="claude-opus-4-5-20250514",
-            max_tokens=4096,
-            system="""You are a senior software architect debugging a recurring issue.
+        # H15: Use async client if available
+        from config import CLAUDE_MODEL
+        if self._async:
+            response = await self.client.messages.create(
+                model=CLAUDE_MODEL,
+                max_tokens=4096,
+                system="""You are a senior software architect debugging a RECURRING production issue.
 
-Your task is to:
-1. Analyze WHY the issue keeps recurring despite fixes
-2. Identify if the fundamental approach is wrong
-3. Research alternative solutions
-4. Propose a fix that addresses the ROOT CAUSE, not symptoms
+Your task is CRITICAL ROOT-CAUSE ANALYSIS:
+1. Analyze the PATTERN of failures — what's consistent across occurrences?
+2. Identify the ROOT CAUSE — not symptoms, but the underlying architectural or code flaw
+3. Assess whether the current approach is fundamentally wrong
+4. Generate 2-3 alternative solutions with honest trade-offs
+5. Recommend ONE approach with step-by-step implementation and risk assessment
 
-Be critical and honest. If the current approach is fundamentally flawed, say so.
-If a complete rewrite of a component is needed, recommend it.
+RULES:
+- Be critical and honest. If the approach is fundamentally flawed, say so.
+- If a complete rewrite is needed, recommend it with migration plan.
+- Don't recommend band-aids that mask deeper issues.
+- Consider: could this fix break something else? Assess collateral risk.
 
 Consider:
-- Are we using the right libraries/APIs?
-- Is the architecture appropriate?
-- Should we add validation/retry logic?
-- Would an iterative AI approach help?
-- Are there race conditions or timing issues?
+- Are we using the right libraries/APIs for this problem?
+- Is the architecture appropriate, or does it need redesign?
+- Are there race conditions, timing issues, or resource contention?
+- Would validation/retry logic help, or does it hide the real problem?
 
 Output JSON:
 {
-    "root_cause_analysis": "why this keeps happening",
+    "root_cause_analysis": "specific concrete reason this keeps failing, with evidence",
+    "pattern": "when/how it fails — what's consistent across failures",
     "is_fundamental_flaw": true/false,
     "alternative_approaches": [
-        {"name": "approach name", "description": "...", "pros": "...", "cons": "..."}
+        {"name": "approach name", "description": "...", "pros": "...", "cons": "...", "effort": "low/medium/high"}
     ],
-    "recommended_approach": {"name": "...", "implementation": "step by step"},
+    "recommended_approach": {"name": "...", "implementation": "step by step", "risk": "what could go wrong", "mitigation": "how to reduce risk"},
     "code_changes": ["specific change 1", "specific change 2"],
-    "confidence": 0.8
+    "confidence": 0.8,
+    "confidence_reason": "why this confidence level"
+}""",
+                messages=[{"role": "user", "content": prompt}]
+            )
+        else:
+            import asyncio
+            response = await asyncio.get_running_loop().run_in_executor(
+                None, lambda: self.client.messages.create(
+                    model=CLAUDE_MODEL,
+                    max_tokens=4096,
+                    system="""You are a senior software architect debugging a RECURRING production issue.
+
+Your task is CRITICAL ROOT-CAUSE ANALYSIS:
+1. Analyze the PATTERN of failures — what's consistent across occurrences?
+2. Identify the ROOT CAUSE — not symptoms, but the underlying architectural or code flaw
+3. Assess whether the current approach is fundamentally wrong
+4. Generate 2-3 alternative solutions with honest trade-offs
+5. Recommend ONE approach with step-by-step implementation and risk assessment
+
+RULES:
+- Be critical and honest. If the approach is fundamentally flawed, say so.
+- If a complete rewrite is needed, recommend it with migration plan.
+- Don't recommend band-aids that mask deeper issues.
+- Consider: could this fix break something else? Assess collateral risk.
+
+Consider:
+- Are we using the right libraries/APIs for this problem?
+- Is the architecture appropriate, or does it need redesign?
+- Are there race conditions, timing issues, or resource contention?
+- Would validation/retry logic help, or does it hide the real problem?
+
+Output JSON:
+{
+    "root_cause_analysis": "specific concrete reason this keeps failing, with evidence",
+    "pattern": "when/how it fails — what's consistent across failures",
+    "is_fundamental_flaw": true/false,
+    "alternative_approaches": [
+        {"name": "approach name", "description": "...", "pros": "...", "cons": "...", "effort": "low/medium/high"}
+    ],
+    "recommended_approach": {"name": "...", "implementation": "step by step", "risk": "what could go wrong", "mitigation": "how to reduce risk"},
+    "code_changes": ["specific change 1", "specific change 2"],
+    "confidence": 0.8,
+    "confidence_reason": "why this confidence level"
 }
 """,
-            messages=[{"role": "user", "content": prompt}]
-        )
+                    messages=[{"role": "user", "content": prompt}]
+                )
+            )
 
-        # Parse response
-        result = self._parse_research_response(response.content[0].text)
+        # Parse response - validate content exists before accessing
+        # Issue 9/94 fix: Check response.content is non-empty list
+        if not response.content or len(response.content) == 0:
+            logger.warning("Empty response from AI research")
+            return ResearchResult(
+                root_cause_analysis="AI returned empty response",
+                alternative_approaches=[],
+                recommended_approach=None,
+                code_changes_suggested=[],
+                needs_foundational_change=False,
+                confidence=0.0,
+            )
+
+        # Issue 79 fix: Check content[0] has 'text' attribute (could be ToolUse block)
+        first_block = response.content[0]
+        if not hasattr(first_block, 'text'):
+            logger.warning(f"Response content[0] is not TextBlock: {type(first_block)}")
+            return ResearchResult(
+                root_cause_analysis=f"AI returned non-text response: {type(first_block).__name__}",
+                alternative_approaches=[],
+                recommended_approach=None,
+                code_changes_suggested=[],
+                needs_foundational_change=False,
+                confidence=0.0,
+            )
+
+        result = self._parse_research_response(first_block.text)
 
         return result
 
     def _build_research_prompt(self, context: ResearchContext) -> str:
         """Build the research prompt"""
         prompt = f"""
-## Recurring Issue Analysis
+RECURRING ISSUE INVESTIGATION
+=============================
 
-**Issue:** {context.issue_description}
-**Category:** {context.issue_category}
-**Times occurred:** {context.occurrences}
-**Service:** {context.service_name or 'Unknown'}
+**Issue**: {context.issue_description}
+**Service**: {context.service_name or 'Unknown'}
+**Occurrences**: {context.occurrences} times
+**Category**: {context.issue_category}
 
-### Previous Fix Attempts
-{chr(10).join(f'- {attempt}' for attempt in context.previous_attempts) if context.previous_attempts else 'None recorded'}
+FAILURE HISTORY (previous fix attempts that did NOT prevent recurrence):
+{chr(10).join(f'- {attempt}' for attempt in context.previous_attempts) if context.previous_attempts else 'No previous attempts recorded — this is the first investigation'}
 
 """
 
         if context.code_context:
             prompt += f"""
-### Relevant Code
+RELEVANT CODE:
 ```
 {context.code_context[:3000]}
 ```
@@ -136,7 +219,7 @@ Output JSON:
 
         if context.error_logs:
             prompt += f"""
-### Error Logs
+ERROR LOGS:
 ```
 {context.error_logs[:2000]}
 ```
@@ -144,24 +227,35 @@ Output JSON:
 """
 
         prompt += """
-### Questions to Answer
+YOUR ANALYSIS (answer ALL — be specific, not generic):
 
-1. **Root Cause**: Why does this issue keep recurring? What's the underlying problem?
+1. PATTERN ANALYSIS:
+   - WHEN does it fail? After specific actions? Under specific conditions?
+   - WHAT data/conditions trigger it? What's the common factor across failures?
+   - WHY did previous fixes not prevent recurrence? What did they miss?
 
-2. **Pattern Analysis**: Is there a pattern in the failures? (timing, data, conditions)
+2. ROOT CAUSE (go deep):
+   - What is the UNDERLYING problem, not just the symptom?
+   - Is it a design flaw, wrong library choice, timing issue, or missing validation?
+   - Could this be a cascade from an earlier unrelated problem?
 
-3. **Approach Review**: Is the current implementation approach fundamentally correct?
+3. APPROACH ASSESSMENT:
+   - Is the current architecture fundamentally suitable for this problem?
+   - Would retry logic SOLVE the problem or just HIDE it?
+   - Is there a simpler approach that eliminates this class of failure entirely?
 
-4. **Alternative Solutions**: What other ways could we solve this?
-   - Different libraries?
-   - Different architecture?
-   - Iterative AI processing?
-   - Pre-validation?
-   - Retry logic?
+4. ALTERNATIVE SOLUTIONS (evaluate 2-3):
+   - For each: pros, cons, implementation effort (low/medium/high), and risk level
+   - Which approach actually prevents recurrence vs just masking it?
 
-5. **Recommendation**: What specific change would fix this permanently?
+5. RECOMMENDED FIX:
+   - What specific, concrete change eliminates this permanently?
+   - Where in the code does this change need to happen? (file/function)
+   - How would you TEST that the fix works and prevents recurrence?
+   - What's the risk of this change? How to mitigate?
 
-Please analyze deeply and provide actionable recommendations.
+CRITICAL: Do NOT recommend quick band-aid fixes. Address the UNDERLYING issue.
+If the architecture needs redesign, say so clearly with migration steps.
 """
 
         return prompt
@@ -173,7 +267,16 @@ Please analyze deeply and provide actionable recommendations.
 
         try:
             # Find JSON in response
-            json_match = re.search(r'\{[\s\S]*\}', response)
+            # M10: Use json.JSONDecoder for safe extraction instead of greedy regex
+            decoder = json.JSONDecoder()
+            brace_idx = response.find('{')
+            json_match = None
+            if brace_idx >= 0:
+                try:
+                    obj, _ = decoder.raw_decode(response[brace_idx:])
+                    json_match = type('Match', (), {'group': lambda self: json.dumps(obj)})()
+                except json.JSONDecodeError:
+                    json_match = re.search(r'\{[\s\S]*?\}', response)
             if json_match:
                 data = json.loads(json_match.group())
 
@@ -214,27 +317,53 @@ Please analyze deeply and provide actionable recommendations.
 
         approach = research.recommended_approach
         prompt = f"""
-## Implementing New Approach
+IMPLEMENT ARCHITECTURAL FIX
+============================
 
-Based on analysis, we're changing how we handle: {context.issue_description}
+ISSUE: {context.issue_description}
+SERVICE: {context.service_name}
+OCCURRENCES: {context.occurrences} times (previous fixes failed to prevent recurrence)
 
-### Root Cause
+ROOT CAUSE (from analysis):
 {research.root_cause_analysis}
 
-### New Approach: {approach.get('name', 'Revised Implementation')}
+NEW APPROACH: {approach.get('name', 'Revised Implementation')}
 {approach.get('implementation', approach.get('description', ''))}
 
-### Specific Changes Needed
+SPECIFIC CHANGES REQUIRED:
 {chr(10).join(f'- {change}' for change in research.code_changes_suggested)}
 
-### Instructions
-1. This is a FOUNDATIONAL change, not a patch
-2. Review the existing code and understand current approach
-3. Implement the new approach described above
-4. Add appropriate tests
-5. Commit with message explaining the architectural change
+IMPLEMENTATION STEPS:
+1. UNDERSTAND current code:
+   - Read how {context.issue_description} is currently handled in backend/{context.service_name}/
+   - Identify ALL places that need changes (grep for related patterns — don't miss any)
 
-Service: {context.service_name}
+2. IMPLEMENT the new approach:
+   - Make changes incrementally — each logical change as a small commit
+   - Test after each change to catch regressions early
+
+3. ADD TESTS:
+   - Add a regression test that specifically reproduces the original failure
+   - Add unit tests for new logic
+   - Run full test suite: npm test
+
+4. VALIDATE no regressions:
+   - All existing tests must still pass
+   - The specific failure scenario must now succeed
+
+5. COMMIT AND PR:
+   - Branch: claude/{context.service_name}-fix-[issue-type]
+   - Commit message format:
+     Fix: {context.service_name} - [brief root cause description]
+
+     Root cause: [1-2 sentences]
+     Change: [what changed and why]
+   - Create PR with clear description
+
+CRITICAL:
+- This is a FOUNDATIONAL change, not a patch. Don't cut corners.
+- If you discover the research was wrong during implementation, stop and explain why.
+- Do NOT merge to main if tests fail.
 """
         return prompt
 
