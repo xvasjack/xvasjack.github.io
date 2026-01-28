@@ -3,7 +3,7 @@ Frontend Actions - Interact with your GitHub Pages frontend.
 
 This module handles:
 - Navigating to your frontend
-- Filling out search forms
+- Filling out search forms (vision-based clicking)
 - Submitting requests
 - Waiting for processing
 """
@@ -17,10 +17,17 @@ import os
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from computer_use import (
-    open_url_in_browser, screenshot, click, type_text,
-    press_key, hotkey, scroll, wait, focus_window
-)
+try:
+    from computer_use import (
+        open_url_in_browser, screenshot, click, type_text,
+        press_key, hotkey, scroll, wait, focus_window,
+        type_text_unicode,
+    )
+    HAS_FRONTEND = True
+except ImportError as e:
+    HAS_FRONTEND = False
+    _FRONTEND_IMPORT_ERROR = str(e)
+    logger.warning(f"computer_use not available: {e}")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("frontend_actions")
@@ -31,23 +38,22 @@ logger = logging.getLogger("frontend_actions")
 # =============================================================================
 
 
-# Your frontend URL - update this to your GitHub Pages URL
 FRONTEND_URL = os.environ.get(
     "FRONTEND_URL",
     "https://xvasjack.github.io"
 )
 
-# Service endpoints (relative paths on your frontend)
 SERVICE_PAGES = {
-    "target-v3": "/target-v3.html",
-    "target-v4": "/target-v4.html",
-    "target-v5": "/target-v5.html",
-    "target-v6": "/target-v6.html",
+    "target-v3": "/find-target.html",
+    "target-v4": "/find-target-v4.html",
+    "target-v5": "/find-target-v5.html",
+    "target-v6": "/find-target-v6.html",
     "validation": "/validation.html",
     "market-research": "/market-research.html",
     "profile-slides": "/profile-slides.html",
     "trading-comparable": "/trading-comparable.html",
     "due-diligence": "/due-diligence.html",
+    "utb": "/utb.html",
 }
 
 
@@ -72,7 +78,7 @@ async def open_service_page(service: str):
     url = FRONTEND_URL + SERVICE_PAGES[service]
     logger.info(f"Opening service page: {url}")
     await open_url_in_browser(url)
-    await wait(2)
+    await wait(3)
     return True
 
 
@@ -90,63 +96,11 @@ class SearchFormData:
     email: Optional[str] = None
 
 
-async def fill_search_form(data: SearchFormData):
-    """
-    Fill out a standard search form.
-
-    Your forms typically have:
-    - Business input
-    - Country input
-    - Exclusion input (optional)
-    - Email input
-
-    Claude will identify the actual field positions from screenshots.
-    """
-    logger.info(f"Filling search form: {data.business} in {data.country}")
-
-    # Take screenshot to identify form fields
-    screen = await screenshot()
-
-    # The main agent will use Claude to:
-    # 1. Identify form field locations
-    # 2. Click each field
-    # 3. Type the values
-    # 4. Submit
-
-    return {
-        "screenshot": screen,
-        "form_data": {
-            "business": data.business,
-            "country": data.country,
-            "exclusion": data.exclusion,
-            "email": data.email,
-        },
-        "action_needed": "fill_form_fields"
-    }
-
-
-async def fill_field_by_label(label: str, value: str):
-    """
-    Fill a form field identified by its label.
-    Claude will find the field near the label and fill it.
-    """
-    logger.info(f"Filling field '{label}' with '{value}'")
-
-    # Take screenshot
-    screen = await screenshot()
-
-    return {
-        "screenshot": screen,
-        "label": label,
-        "value": value,
-        "action_needed": "find_label_and_fill"
-    }
-
-
-async def click_field_and_type(field_name: str, value: str):
-    """Generic: click a field and type value"""
-    # Claude identifies field, we just type after click
-    await type_text(value)
+async def clear_and_type(text: str):
+    """Select all text in current field and replace with new text."""
+    await hotkey("ctrl", "a")
+    await wait(0.1)
+    await type_text_unicode(text)
     await wait(0.2)
 
 
@@ -163,57 +117,59 @@ async def tab_to_next_field():
     await wait(0.1)
 
 
-# =============================================================================
-# FORM SUBMISSION
-# =============================================================================
-
-
-async def submit_form():
+async def fill_search_form(data: SearchFormData):
     """
-    Submit the form.
-    Usually clicks a Submit/Search button or presses Enter.
+    B6/H1: Fill out a search form using vision-based clicking.
+    Clicks each field by label, then types the value.
     """
-    logger.info("Submitting form")
+    logger.info(f"Filling search form: {data.business} in {data.country}")
 
-    # Take screenshot to find submit button
+    from vision import find_element
+
     screen = await screenshot()
 
-    # Claude will find and click the submit button
-    return {
-        "screenshot": screen,
-        "action_needed": "click_submit_button"
-    }
+    # Fill business field
+    coords = await find_element(
+        "Find the 'Business Type' or 'Industry' input field text box", screen
+    )
+    if coords:
+        await click(coords[0], coords[1])
+        await wait(0.2)
+        await clear_and_type(data.business)
+    else:
+        logger.warning("Could not find business field, using tab navigation")
+        await press_key("tab")
+        await wait(0.2)
+        await clear_and_type(data.business)
 
+    # Fill country field
+    screen = await screenshot()
+    coords = await find_element(
+        "Find the 'Country' or 'Region' input field text box", screen
+    )
+    if coords:
+        await click(coords[0], coords[1])
+        await wait(0.2)
+        await clear_and_type(data.country)
+    else:
+        await tab_to_next_field()
+        await clear_and_type(data.country)
 
-async def click_submit_button():
-    """Click the submit button (Claude finds it)"""
-    # Placeholder - Claude handles this
-    pass
-
-
-async def wait_for_submission_confirmation(timeout_seconds: int = 30) -> bool:
-    """
-    Wait for form submission to complete.
-    Looks for success message or loading indicator.
-    """
-    logger.info("Waiting for submission confirmation")
-
-    start_time = asyncio.get_event_loop().time()
-
-    while True:
-        elapsed = asyncio.get_event_loop().time() - start_time
-        if elapsed > timeout_seconds:
-            return False
-
-        # Take screenshot
+    # Fill exclusion field if provided
+    if data.exclusion:
         screen = await screenshot()
+        coords = await find_element(
+            "Find the 'Exclusion' or 'Exclude' input field text box", screen
+        )
+        if coords:
+            await click(coords[0], coords[1])
+            await wait(0.2)
+            await clear_and_type(data.exclusion)
+        else:
+            await tab_to_next_field()
+            await clear_and_type(data.exclusion)
 
-        # Claude analyzes for success/error message
-        # Return screenshot for interpretation
-        await wait(1)
-
-        # In practice, main loop handles this
-        return True
+    return {"success": True}
 
 
 # =============================================================================
@@ -223,51 +179,140 @@ async def wait_for_submission_confirmation(timeout_seconds: int = 30) -> bool:
 
 async def set_email_in_localStorage(email: str):
     """
-    Your frontend stores email in localStorage as 'ycpUserEmail'.
-    This opens browser console and sets it.
+    Set email in localStorage as 'ycpUserEmail'.
+    H19: Uses Ctrl+Shift+J to go directly to console (avoids F12 toggle issue).
     """
     logger.info(f"Setting email in localStorage: {email}")
 
-    # Open DevTools console
-    await press_key("f12")
+    # Open DevTools console directly (Ctrl+Shift+J avoids F12 toggle problem)
+    await hotkey("ctrl", "shift", "j")
     await wait(1)
 
-    # Focus console
-    await hotkey("ctrl", "shift", "j")
-    await wait(0.5)
-
-    # Set localStorage
-    js_command = f"localStorage.setItem('ycpUserEmail', '{email}')"
+    # Set localStorage (escape quotes to prevent JS injection)
+    safe_email = email.replace("\\", "\\\\").replace("'", "\\'")
+    js_command = f"localStorage.setItem('ycpUserEmail', '{safe_email}')"
     await type_text(js_command)
     await press_key("enter")
     await wait(0.3)
 
     # Close DevTools
-    await press_key("f12")
-    await wait(0.5)
-
-
-async def get_stored_email() -> str:
-    """Get the email from localStorage"""
-    # Open console
-    await press_key("f12")
-    await wait(1)
     await hotkey("ctrl", "shift", "j")
     await wait(0.5)
 
-    # Get value
-    await type_text("localStorage.getItem('ycpUserEmail')")
-    await press_key("enter")
-    await wait(0.3)
 
-    # Take screenshot to read the value
-    screen = await screenshot()
+# =============================================================================
+# COMPLETE FORM SUBMISSION WORKFLOW
+# =============================================================================
 
-    # Close DevTools
-    await press_key("f12")
-    await wait(0.5)
 
-    return screen  # Claude interprets
+async def submit_form(url: str, form_data: Dict) -> Dict:
+    """
+    Submit a form on a given URL.
+    H1: Uses vision-based clicking to find each field.
+
+    Args:
+        url: Full URL of the form page
+        form_data: Dict with form field values
+
+    Returns:
+        {success: bool, error: str}
+    """
+    logger.info(f"Submitting form at {url}")
+
+    if not HAS_FRONTEND:
+        return {"success": False, "error": f"Frontend not available: {_FRONTEND_IMPORT_ERROR}"}
+
+    try:
+        # Open the URL
+        await open_url_in_browser(url)
+        await wait(3)
+
+        # Set email if provided
+        if form_data.get("email"):
+            await set_email_in_localStorage(form_data["email"])
+            await wait(0.5)
+
+            # Refresh to pick up localStorage email
+            await press_key("f5")
+            await wait(2)
+
+        # H1: Use vision-based clicking to fill form fields
+        from vision import find_element
+
+        fields_to_fill = [
+            ("Business Type", "business", form_data.get("business", "")),
+            ("Country", "country", form_data.get("country", "")),
+            ("Exclusion", "exclusion", form_data.get("exclusion", "")),
+        ]
+
+        for label, key, value in fields_to_fill:
+            if value:
+                screen = await screenshot()
+                coords = await find_element(
+                    f"Find the '{label}' input field or text box on this form", screen
+                )
+                if coords:
+                    await click(coords[0], coords[1])
+                    await wait(0.2)
+                    await clear_and_type(value)
+                else:
+                    # Fallback to tab navigation
+                    await press_key("tab")
+                    await wait(0.2)
+                    await clear_and_type(value)
+                await wait(0.3)
+
+        # Submit - try finding submit button first
+        screen = await screenshot()
+        coords = await find_element(
+            "Find the Submit or Search button on this form", screen
+        )
+        if coords:
+            await click(coords[0], coords[1])
+        else:
+            await press_key("enter")
+        await wait(2)
+
+        # Check for success via vision confirmation
+        confirmed = await wait_for_submission_confirmation(timeout_seconds=30)
+        if not confirmed:
+            return {"success": False, "error": "Form submission not confirmed by vision check"}
+
+        screen = await screenshot()
+        return {"success": True, "screenshot": screen}
+
+    except Exception as e:
+        logger.error(f"Form submission failed: {e}")
+        return {"success": False, "error": str(e)}
+
+
+async def wait_for_submission_confirmation(timeout_seconds: int = 30) -> bool:
+    """H2: Wait for form submission confirmation using vision to detect state."""
+    logger.info("Waiting for submission confirmation")
+
+    from vision import ask_about_screen
+
+    start_time = asyncio.get_event_loop().time()
+
+    while True:
+        elapsed = asyncio.get_event_loop().time() - start_time
+        if elapsed > timeout_seconds:
+            logger.warning("Submission confirmation timed out")
+            return False
+
+        screen = await screenshot()
+        answer = await ask_about_screen(
+            "Does this show a successful form submission? Answer SUCCESS, ERROR, or LOADING",
+            screen,
+        )
+
+        if "SUCCESS" in answer.upper():
+            return True
+        elif "ERROR" in answer.upper():
+            logger.error(f"Form submission error detected: {answer}")
+            return False
+        # LOADING — poll again
+        await wait(3)
 
 
 # =============================================================================
@@ -285,160 +330,35 @@ async def run_target_search(
     """
     Complete workflow to run a target search.
 
-    1. Open service page
-    2. Set email if provided
-    3. Fill form
-    4. Submit
-    5. Return confirmation
-
     Args:
         version: target-v3, target-v4, target-v5, or target-v6
         business: Business/industry to search
         country: Country to search in
         exclusion: Companies to exclude
-        email: Email for results (uses localStorage if not provided)
+        email: Email for results
 
     Returns:
         Result dict with status
     """
     logger.info(f"Running {version} search: {business} in {country}")
 
-    # Open service page
     service = f"target-{version}" if not version.startswith("target-") else version
-    await open_service_page(service)
 
-    # Set email if provided
-    if email:
-        await set_email_in_localStorage(email)
+    # Build URL
+    url_map = {
+        "target-v3": "find-target.html",
+        "target-v4": "find-target-v4.html",
+        "target-v5": "find-target-v5.html",
+        "target-v6": "find-target-v6.html",
+    }
+    page = url_map.get(service, f"{service}.html")
+    url = f"{FRONTEND_URL}/{page}"
 
-    # Fill form
-    form_data = SearchFormData(
-        business=business,
-        country=country,
-        exclusion=exclusion,
-        email=email,
-    )
-    await fill_search_form(form_data)
-
-    # Submit
-    await submit_form()
-
-    # Wait for confirmation
-    success = await wait_for_submission_confirmation()
-
-    return {
-        "success": success,
-        "service": service,
+    form_data = {
         "business": business,
         "country": country,
+        "exclusion": exclusion or "",
+        "email": email or "",
     }
 
-
-async def run_validation(file_path: str, email: Optional[str] = None) -> dict:
-    """
-    Run validation service with a file upload.
-
-    Args:
-        file_path: Path to Excel/CSV file
-        email: Email for results
-
-    Returns:
-        Result dict with status
-    """
-    logger.info(f"Running validation with file: {file_path}")
-
-    # Open validation page
-    await open_service_page("validation")
-
-    # Set email if provided
-    if email:
-        await set_email_in_localStorage(email)
-
-    # File upload requires Claude to:
-    # 1. Find the file input
-    # 2. Click to open file dialog
-    # 3. Navigate to file
-    # 4. Select and upload
-
-    return {
-        "file_path": file_path,
-        "action_needed": "file_upload",
-        "screenshot": await screenshot(),
-    }
-
-
-# =============================================================================
-# WRAPPER FUNCTIONS FOR FEEDBACK LOOP
-# =============================================================================
-
-
-async def submit_form(url: str, form_data: Dict) -> Dict:
-    """
-    High-level wrapper to submit a form on a given URL.
-    Used by feedback_loop_runner.
-
-    Args:
-        url: Full URL of the form page
-        form_data: Dict with form field values
-
-    Returns:
-        {success: bool, error: str}
-    """
-    logger.info(f"Submitting form at {url}")
-
-    try:
-        # Open the URL
-        await open_url_in_browser(url)
-        await wait(3)
-
-        # Set email if provided
-        if form_data.get("email"):
-            await set_email_in_localStorage(form_data["email"])
-            await wait(0.5)
-
-        # Refresh to pick up localStorage email
-        await press_key("f5")
-        await wait(2)
-
-        # Fill the form - this uses Claude's visual interpretation
-        # For now, we do a simplified keyboard-based approach
-        # Tab through fields and fill them
-
-        fields_to_fill = [
-            ("business", form_data.get("business", "")),
-            ("country", form_data.get("country", "")),
-            ("exclusion", form_data.get("exclusion", "")),
-        ]
-
-        for field_name, value in fields_to_fill:
-            if value:
-                # Type the value (Claude will handle field focus)
-                await type_text(value)
-                await tab_to_next_field()
-
-        # Submit - press Enter or click button
-        await press_key("enter")
-        await wait(2)
-
-        # Check for success message
-        screen = await screenshot()
-
-        return {"success": True, "screenshot": screen}
-
-    except Exception as e:
-        logger.error(f"Form submission failed: {e}")
-        return {"success": False, "error": str(e)}
-
-
-async def wait_for_form_submission(timeout_seconds: int = 30) -> bool:
-    """
-    Wait for form submission to complete.
-    Used by feedback_loop_runner.
-
-    Args:
-        timeout_seconds: Max time to wait
-
-    Returns:
-        True if submission succeeded
-    """
-    return await wait_for_submission_confirmation(timeout_seconds)
+    return await submit_form(url, form_data)

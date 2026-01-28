@@ -23,6 +23,10 @@ import logging
 
 from anthropic import Anthropic
 
+# M11: Ensure parent directory is on path for bare imports
+import sys as _sys
+_sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 # Import file readers
 from file_readers.pptx_reader import analyze_pptx
 from file_readers.xlsx_reader import analyze_xlsx
@@ -92,7 +96,14 @@ class TemplateLearner:
     """
 
     def __init__(self, anthropic_api_key: str):
-        self.client = Anthropic(api_key=anthropic_api_key)
+        # H15: Use AsyncAnthropic for use in async functions
+        try:
+            from anthropic import AsyncAnthropic
+            self.client = AsyncAnthropic(api_key=anthropic_api_key)
+            self._async = True
+        except ImportError:
+            self.client = Anthropic(api_key=anthropic_api_key)
+            self._async = False
 
     async def learn_from_file(
         self,
@@ -165,73 +176,93 @@ class TemplateLearner:
         """Use AI to analyze what makes this output good"""
 
         prompt = f"""
-Analyze this {file_type.upper()} file and create a quality template.
+You are creating a QUALITY TEMPLATE from an example of a "good" output file.
+This template will be used to automatically validate future outputs.
 
-## File Analysis
+FILE TYPE: {file_type.upper()}
+
+FILE ANALYSIS:
 ```json
 {json.dumps(analysis, indent=2, default=str)[:4000]}
 ```
 
-## Context
-{description or "This is an example of a good output file."}
+CONTEXT: {description or "This is an example of high-quality output that future outputs should match."}
 
-## Additional Rules to Include
+ADDITIONAL RULES TO ENFORCE:
 {chr(10).join(f'- {rule}' for rule in (additional_rules or [])) or 'None specified'}
 
-## Your Task
+YOUR TASK: Extract the QUALITY RULES that make this output "good".
 
-Create a template that captures what makes this output "good" so we can
-validate future outputs against it.
+Analyze what makes this output high-quality:
+- Completeness: what fields are always present and populated?
+- Data quality: what patterns indicate real data vs placeholder/spam?
+- Structure: how is it organized? Required sections/slides/sheets?
+- Validation: what should be rejected (spam URLs, empty fields, generic text)?
 
-Return JSON with:
+Return ONLY JSON (no explanation):
 ```json
 {{
-    "description": "what this template validates",
+    "description": "What this template validates and what service/use-case it's for",
     "structure": {{
-        "expected_sections": ["list", "of", "sections"],
-        "expected_columns": ["for", "excel"],
-        "expected_slide_types": ["for", "pptx"]
+        "expected_sections": ["section_name_1", "section_name_2"],
+        "expected_columns": ["column_1", "column_2"],
+        "expected_slide_types": ["title", "data", "summary"]
     }},
     "quality_rules": [
         {{
             "name": "rule_name",
-            "check": "what to check",
+            "check": "Specific validation logic (e.g., 'website field must contain a valid domain')",
             "severity": "critical|high|medium|low",
-            "message": "error message if fails"
+            "message": "Error message shown when this rule fails",
+            "example_pass": "Example data that passes this rule",
+            "example_fail": "Example data that fails this rule"
         }}
     ],
-    "required_fields": ["company", "website", "description"],
-    "blocked_patterns": ["facebook.com", "linkedin.com", "wikipedia"],
+    "required_fields": ["field_1", "field_2"],
+    "blocked_patterns": ["facebook.com", "linkedin.com", "wikipedia.org", "placeholder"],
     "min_items": 20,
     "max_items": 100,
-    "quality_notes": "human-readable notes about quality standards"
+    "quality_notes": "Human-readable summary of what makes this output 'good' — completeness, depth, structure, data accuracy, professional appearance"
 }}
 ```
 
-Be specific about:
-1. What fields/columns must be present
-2. What data patterns are acceptable
-3. What should be blocked (spam URLs, placeholder text)
-4. Minimum/maximum counts
-5. Any format requirements
+SEVERITY DEFINITIONS:
+- critical: blocks success entirely (empty data, wrong format, missing required sections)
+- high: major quality gap (missing important fields, spam data present)
+- medium: noticeable issue (inconsistent formatting, minor data gaps)
+- low: cosmetic (style inconsistencies, non-essential fields missing)
+
+BE SPECIFIC — not "data fields present" but "company_name, website, description fields present and non-empty".
 """
 
-        response = self.client.messages.create(
-            model="claude-opus-4-5-20250514",
-            max_tokens=2048,
-            messages=[{"role": "user", "content": prompt}]
-        )
+        from config import CLAUDE_MODEL
+        # H15: Use async or run_in_executor
+        if self._async:
+            response = await self.client.messages.create(
+                model=CLAUDE_MODEL,
+                max_tokens=2048,
+                messages=[{"role": "user", "content": prompt}]
+            )
+        else:
+            import asyncio as _aio
+            response = await _aio.get_event_loop().run_in_executor(
+                None, lambda: self.client.messages.create(
+                    model=CLAUDE_MODEL,
+                    max_tokens=2048,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+            )
 
-        # Parse response
-        import re
+        # M10: Parse response using JSONDecoder instead of greedy regex
         text = response.content[0].text
-        json_match = re.search(r'\{[\s\S]*\}', text)
-
-        if json_match:
-            try:
-                return json.loads(json_match.group())
-            except json.JSONDecodeError:
-                pass
+        try:
+            decoder = json.JSONDecoder()
+            brace_idx = text.find('{')
+            if brace_idx >= 0:
+                obj, _ = decoder.raw_decode(text[brace_idx:])
+                return obj
+        except (json.JSONDecodeError, ValueError):
+            pass
 
         # Fallback defaults
         return {
@@ -258,55 +289,108 @@ Be specific about:
         logger.info(f"Learning from comparison: {good_file} vs {bad_file}")
 
         # Analyze both
-        file_type = "pptx" if good_file.lower().endswith(".pptx") else "xlsx"
+        if good_file.lower().endswith(".pptx"):
+            file_type = "pptx"
+        elif good_file.lower().endswith(".docx"):
+            file_type = "docx"
+        else:
+            file_type = "xlsx"
 
         if file_type == "pptx":
             good_analysis = analyze_pptx(good_file)
             bad_analysis = analyze_pptx(bad_file)
+        elif file_type == "docx":
+            from file_readers.docx_reader import analyze_docx
+            good_analysis = analyze_docx(good_file)
+            bad_analysis = analyze_docx(bad_file)
         else:
             good_analysis = analyze_xlsx(good_file)
             bad_analysis = analyze_xlsx(bad_file)
 
         # Ask AI to find the differences
         prompt = f"""
-Compare these two {file_type.upper()} files and identify what makes
-the GOOD one better than the BAD one.
+COMPARATIVE QUALITY ANALYSIS: Good vs Bad {file_type.upper()} Output
 
-## GOOD Output
+GOOD OUTPUT (reference for high quality):
 ```json
 {json.dumps(good_analysis.to_dict() if hasattr(good_analysis, 'to_dict') else good_analysis, indent=2, default=str)[:3000]}
 ```
 
-## BAD Output
+BAD OUTPUT (what to avoid):
 ```json
 {json.dumps(bad_analysis.to_dict() if hasattr(bad_analysis, 'to_dict') else bad_analysis, indent=2, default=str)[:3000]}
 ```
 
-## Your Task
+YOUR TASK: Identify EVERY difference that makes the GOOD output better.
 
-Identify the specific differences that make the good output better.
-Create validation rules that would catch the issues in the bad output.
+Analyze:
+1. What's present in GOOD but missing in BAD?
+2. What's more complete/thorough in GOOD?
+3. What data quality patterns differ (specific vs generic, real vs placeholder)?
+4. What structural differences exist?
+5. What's the key quality gap between them?
 
-Return JSON with quality rules that distinguish good from bad outputs.
+Return ONLY JSON (no explanation):
+{{
+    "quality_differences": [
+        {{
+            "aspect": "What dimension is different (completeness, accuracy, depth, structure, etc.)",
+            "good_example": "What the good output does",
+            "bad_example": "What the bad output does or lacks",
+            "impact": "critical|high|medium|low",
+            "rule_to_enforce": "Specific validation rule to catch bad outputs"
+        }}
+    ],
+    "structure": {{
+        "expected_sections": ["sections from good output"],
+        "expected_columns": ["columns from good output"],
+        "expected_slide_types": ["slide types from good output"]
+    }},
+    "quality_rules": [
+        {{
+            "name": "rule_name",
+            "check": "How to validate this (specific logic)",
+            "severity": "critical|high|medium|low",
+            "message": "Error message when this rule fails",
+            "would_catch_bad_output": true
+        }}
+    ],
+    "required_fields": ["fields that good output has and bad output lacks"],
+    "blocked_patterns": ["patterns found in bad output that should be rejected"],
+    "min_items": 0,
+    "max_items": 100,
+    "quality_notes": "Summary: what makes good good, what makes bad bad, and minimum quality threshold"
+}}
 """
 
-        response = self.client.messages.create(
-            model="claude-opus-4-5-20250514",
-            max_tokens=2048,
-            messages=[{"role": "user", "content": prompt}]
-        )
+        from config import CLAUDE_MODEL
+        # H15: Use async or run_in_executor
+        if self._async:
+            response = await self.client.messages.create(
+                model=CLAUDE_MODEL,
+                max_tokens=2048,
+                messages=[{"role": "user", "content": prompt}]
+            )
+        else:
+            import asyncio as _aio
+            response = await _aio.get_event_loop().run_in_executor(
+                None, lambda: self.client.messages.create(
+                    model=CLAUDE_MODEL,
+                    max_tokens=2048,
+                    messages=[{"role": "user", "content": prompt}]
+                )
+            )
 
-        # Parse and create template
-        import re
+        # M10: Parse response using JSONDecoder instead of greedy regex
         text = response.content[0].text
-        json_match = re.search(r'\{[\s\S]*\}', text)
-
         quality_analysis = {}
-        if json_match:
-            try:
-                quality_analysis = json.loads(json_match.group())
-            except json.JSONDecodeError:
-                pass
+        try:
+            decoder = json.JSONDecoder()
+            brace_idx = text.find('{')
+            if brace_idx >= 0:
+                quality_analysis, _ = decoder.raw_decode(text[brace_idx:])
+        except (json.JSONDecodeError, ValueError):
+            pass
 
         template = LearnedTemplate(
             name=template_name,
@@ -454,9 +538,9 @@ def compare_with_learned_template(
     # Apply quality rules
     for rule in template.quality_rules:
         total_checks += 1
-        # This would need custom logic per rule type
-        # For now, just count them
-        checks_passed += 1
+        # Quality rules are not yet evaluated — count as skipped, not passed
+        logger.warning(f"Quality rule '{rule.get('name', 'unnamed')}' skipped (not yet implemented)")
+        # Do NOT increment checks_passed — unevaluated rules should not inflate score
 
     # Calculate score
     score = (checks_passed / max(total_checks, 1)) * 100

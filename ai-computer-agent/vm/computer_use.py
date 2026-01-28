@@ -18,6 +18,8 @@ from typing import Optional, Tuple, List
 import logging
 
 # Windows-specific imports
+HAS_COMPUTER_USE = False
+_IMPORT_ERROR = ""
 try:
     import pyautogui
     import pygetwindow as gw
@@ -26,16 +28,24 @@ try:
     import win32gui
     import win32process
     import psutil
+
+    # B13: Safety settings inside try block so they don't crash if imports fail
+    pyautogui.FAILSAFE = True  # Move mouse to corner to abort
+    pyautogui.PAUSE = 0.1  # Small pause between actions
+    HAS_COMPUTER_USE = True
 except ImportError as e:
+    _IMPORT_ERROR = str(e)
     print(f"Missing dependency: {e}")
     print("Run: pip install pyautogui pygetwindow mss pillow pywin32 psutil")
 
+
+def _require_computer_use():
+    """Raise RuntimeError if computer_use dependencies are not available."""
+    if not HAS_COMPUTER_USE:
+        raise RuntimeError(f"computer_use not available: {_IMPORT_ERROR}")
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("computer_use")
-
-# Safety settings for pyautogui
-pyautogui.FAILSAFE = True  # Move mouse to corner to abort
-pyautogui.PAUSE = 0.1  # Small pause between actions
 
 
 @dataclass
@@ -80,6 +90,7 @@ async def screenshot(
     Returns:
         Base64 encoded PNG image
     """
+    _require_computer_use()
     with mss.mss() as sct:
         if region:
             monitor = {"left": region[0], "top": region[1], "width": region[2], "height": region[3]}
@@ -106,6 +117,7 @@ async def screenshot(
 
 async def get_screen_context() -> ScreenContext:
     """Get full context about current screen state"""
+    _require_computer_use()
 
     # Get screenshot
     screen_b64 = await screenshot(scale=0.75)  # Scale down to reduce tokens
@@ -176,6 +188,7 @@ async def get_browser_url(window_title: str) -> str:
 
 async def click(x: int, y: int, button: str = "left", clicks: int = 1):
     """Click at specified coordinates"""
+    _require_computer_use()
     logger.info(f"Clicking at ({x}, {y}) with {button} button, {clicks} times")
     pyautogui.click(x=x, y=y, button=button, clicks=clicks)
     await asyncio.sleep(0.1)
@@ -183,6 +196,7 @@ async def click(x: int, y: int, button: str = "left", clicks: int = 1):
 
 async def double_click(x: int, y: int):
     """Double click at specified coordinates"""
+    _require_computer_use()
     logger.info(f"Double clicking at ({x}, {y})")
     pyautogui.doubleClick(x=x, y=y)
     await asyncio.sleep(0.1)
@@ -190,6 +204,7 @@ async def double_click(x: int, y: int):
 
 async def right_click(x: int, y: int):
     """Right click at specified coordinates"""
+    _require_computer_use()
     logger.info(f"Right clicking at ({x}, {y})")
     pyautogui.rightClick(x=x, y=y)
     await asyncio.sleep(0.1)
@@ -197,6 +212,7 @@ async def right_click(x: int, y: int):
 
 async def move_to(x: int, y: int, duration: float = 0.2):
     """Move mouse to specified coordinates"""
+    _require_computer_use()
     pyautogui.moveTo(x=x, y=y, duration=duration)
     await asyncio.sleep(0.05)
 
@@ -206,6 +222,7 @@ async def scroll(clicks: int, x: Optional[int] = None, y: Optional[int] = None):
     Scroll the mouse wheel.
     Positive clicks = scroll up, negative = scroll down.
     """
+    _require_computer_use()
     logger.info(f"Scrolling {clicks} clicks at ({x}, {y})")
     if x is not None and y is not None:
         pyautogui.scroll(clicks, x=x, y=y)
@@ -216,6 +233,7 @@ async def scroll(clicks: int, x: Optional[int] = None, y: Optional[int] = None):
 
 async def drag(start_x: int, start_y: int, end_x: int, end_y: int, duration: float = 0.5):
     """Drag from start to end coordinates"""
+    _require_computer_use()
     logger.info(f"Dragging from ({start_x}, {start_y}) to ({end_x}, {end_y})")
     pyautogui.moveTo(start_x, start_y)
     pyautogui.drag(end_x - start_x, end_y - start_y, duration=duration)
@@ -230,15 +248,40 @@ async def drag(start_x: int, start_y: int, end_x: int, end_y: int, duration: flo
 async def type_text(text: str, interval: float = 0.02):
     """
     Type text character by character.
-    Uses interval between keystrokes to appear more natural.
+    M3: Auto-detects non-ASCII and uses clipboard paste for Unicode.
     """
+    _require_computer_use()
     logger.info(f"Typing text: {text[:50]}...")
+    # M3: If text contains non-ASCII, use clipboard paste
+    if any(ord(c) > 127 for c in text):
+        await type_text_unicode(text)
+        return
     pyautogui.write(text, interval=interval)
     await asyncio.sleep(0.1)
 
 
+async def type_text_unicode(text: str):
+    """
+    Type text that may contain Unicode characters.
+    Uses clipboard paste (Ctrl+V) which supports all characters.
+    """
+    _require_computer_use()
+    logger.info(f"Typing (unicode): {text[:50]}...")
+    try:
+        import pyperclip
+        pyperclip.copy(text)
+        pyautogui.hotkey('ctrl', 'v')
+        await asyncio.sleep(0.1)
+    except ImportError:
+        # Fallback to regular typing (will drop non-ASCII)
+        logger.warning("pyperclip not installed, falling back to pyautogui.write()")
+        pyautogui.write(text, interval=0.02)
+        await asyncio.sleep(0.1)
+
+
 async def press_key(key: str):
     """Press a single key (e.g., 'enter', 'tab', 'escape')"""
+    _require_computer_use()
     logger.info(f"Pressing key: {key}")
     pyautogui.press(key)
     await asyncio.sleep(0.05)
@@ -246,6 +289,7 @@ async def press_key(key: str):
 
 async def hotkey(*keys: str):
     """Press a keyboard shortcut (e.g., 'ctrl', 'c' for Ctrl+C)"""
+    _require_computer_use()
     logger.info(f"Pressing hotkey: {'+'.join(keys)}")
     pyautogui.hotkey(*keys)
     await asyncio.sleep(0.1)
@@ -258,6 +302,7 @@ async def hotkey(*keys: str):
 
 def get_all_windows() -> List[WindowInfo]:
     """Get list of all visible windows"""
+    _require_computer_use()
     windows = []
 
     def callback(hwnd, _):
@@ -414,30 +459,49 @@ async def execute_action(action: dict) -> dict:
     params = action.get("params", {})
 
     try:
+        # M8: Validate required keys before dispatch
         if action_type == "click":
-            await click(params["x"], params["y"], params.get("button", "left"))
+            await click(params.get("x", 0), params.get("y", 0), params.get("button", "left"))
         elif action_type == "double_click":
-            await double_click(params["x"], params["y"])
+            await double_click(params.get("x", 0), params.get("y", 0))
         elif action_type == "right_click":
-            await right_click(params["x"], params["y"])
+            await right_click(params.get("x", 0), params.get("y", 0))
         elif action_type == "type":
-            await type_text(params["text"])
+            text = params.get("text", "")
+            if not text:
+                return {"success": False, "error": "Missing 'text' parameter"}
+            await type_text(text)
         elif action_type == "press":
-            await press_key(params["key"])
+            key = params.get("key", "")
+            if not key:
+                return {"success": False, "error": "Missing 'key' parameter"}
+            await press_key(key)
         elif action_type == "hotkey":
-            await hotkey(*params["keys"])
+            keys = params.get("keys", [])
+            if not keys:
+                return {"success": False, "error": "Missing 'keys' parameter"}
+            await hotkey(*keys)
         elif action_type == "scroll":
-            await scroll(params["clicks"], params.get("x"), params.get("y"))
+            await scroll(params.get("clicks", 0), params.get("x"), params.get("y"))
         elif action_type == "wait":
             await wait(params.get("seconds", 1))
         elif action_type == "open_url":
-            await open_url_in_browser(params["url"])
+            url = params.get("url", "")
+            if not url:
+                return {"success": False, "error": "Missing 'url' parameter"}
+            await open_url_in_browser(url)
         elif action_type == "focus_window":
-            success = await focus_window(params["title"])
+            title = params.get("title", "")
+            if not title:
+                return {"success": False, "error": "Missing 'title' parameter"}
+            success = await focus_window(title)
             if not success:
-                return {"success": False, "error": f"Window not found: {params['title']}"}
+                return {"success": False, "error": f"Window not found: {title}"}
         elif action_type == "open_app":
-            await open_application(params["name"])
+            name = params.get("name", "")
+            if not name:
+                return {"success": False, "error": "Missing 'name' parameter"}
+            await open_application(name)
         else:
             return {"success": False, "error": f"Unknown action type: {action_type}"}
 

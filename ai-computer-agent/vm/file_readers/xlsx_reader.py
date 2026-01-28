@@ -17,7 +17,9 @@ import logging
 try:
     import openpyxl
     from openpyxl.utils import get_column_letter
+    HAS_OPENPYXL = True
 except ImportError:
+    HAS_OPENPYXL = False
     print("Missing openpyxl. Run: pip install openpyxl")
 
 logging.basicConfig(level=logging.INFO)
@@ -90,6 +92,14 @@ def analyze_xlsx(file_path: str) -> XLSXAnalysis:
         XLSXAnalysis with extracted information
     """
     logger.info(f"Analyzing XLSX: {file_path}")
+
+    if not HAS_OPENPYXL:
+        return XLSXAnalysis(
+            file_path=file_path,
+            sheet_count=0,
+            issues=[DataIssue("", 0, "", "openpyxl not installed", None)],
+            summary="Error: openpyxl not installed"
+        )
 
     if not os.path.exists(file_path):
         return XLSXAnalysis(
@@ -328,6 +338,10 @@ def extract_companies_from_xlsx(file_path: str) -> List[Dict[str, Any]]:
     Returns list of company dictionaries.
     """
     logger.info(f"Extracting companies from: {file_path}")
+
+    if not HAS_OPENPYXL:
+        logger.error("openpyxl not installed")
+        return []
 
     try:
         wb = openpyxl.load_workbook(file_path, data_only=True)

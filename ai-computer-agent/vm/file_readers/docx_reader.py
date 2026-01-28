@@ -19,7 +19,9 @@ try:
     from docx import Document
     from docx.shared import Inches, Pt
     from docx.oxml.ns import qn
+    HAS_DOCX = True
 except ImportError:
+    HAS_DOCX = False
     print("Missing python-docx. Run: pip install python-docx")
 
 logging.basicConfig(level=logging.INFO)
@@ -124,6 +126,13 @@ def analyze_docx(file_path: str) -> DOCXAnalysis:
         DOCXAnalysis with extracted information
     """
     logger.info(f"Analyzing DOCX: {file_path}")
+
+    if not HAS_DOCX:
+        return DOCXAnalysis(
+            file_path=file_path,
+            issues=["python-docx not installed"],
+            summary="Error: python-docx not installed"
+        )
 
     if not os.path.exists(file_path):
         return DOCXAnalysis(
@@ -311,7 +320,7 @@ def count_images(doc) -> int:
         for rel in doc.part.rels.values():
             if "image" in rel.target_ref:
                 image_count += 1
-    except:
+    except Exception:
         pass
 
     return image_count
@@ -522,7 +531,8 @@ def check_dd_report_compliance(analysis: DOCXAnalysis) -> Dict[str, Any]:
         results["sections"]["workplan_correct"],
         results["sections"]["future_correct"],
     ]
-    results["passed"] = all(c for c in critical_checks if c is not None)
+    non_none = [c for c in critical_checks if c is not None]
+    results["passed"] = bool(non_none) and all(non_none)
     results["issues"] = analysis.issues
 
     return results
