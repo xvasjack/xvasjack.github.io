@@ -20,6 +20,18 @@ _logger = logging.getLogger("config")
 CLAUDE_MODEL = "claude-opus-4-5-20250514"
 
 
+# F1: Centralized timeout configuration
+TIMEOUTS = {
+    "http_request": int(os.environ.get("TIMEOUT_HTTP_REQUEST", "60")),
+    "websocket_recv": int(os.environ.get("TIMEOUT_WEBSOCKET_RECV", "120")),
+    "subprocess": int(os.environ.get("TIMEOUT_SUBPROCESS", "600")),
+    "email_wait": int(os.environ.get("TIMEOUT_EMAIL_WAIT", "300")),
+    "ci_wait": int(os.environ.get("TIMEOUT_CI_WAIT", "1800")),
+    "health_check": int(os.environ.get("TIMEOUT_HEALTH_CHECK", "10")),
+    "plan_generation": int(os.environ.get("TIMEOUT_PLAN_GENERATION", "180")),
+}
+
+
 # Issue 30/34 fix: Allowed hosts for WebSocket connections
 ALLOWED_WS_HOSTS = {
     "localhost",

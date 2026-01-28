@@ -4,7 +4,6 @@
 
 # Computer control
 pyautogui>=0.9.54
-pygetwindow>=0.0.9
 mss>=9.0.1
 Pillow>=10.0.0
 
@@ -23,5 +22,13 @@ python-pptx>=0.6.21
 openpyxl>=3.1.2
 python-docx>=0.8.11
 
-# Utilities
-python-dotenv>=1.0.0
+# B12: Anthropic SDK (used by research.py and template_learner.py)
+anthropic>=0.39.0
+
+# Issue 2: Direct HTTP POST to Railway backends
+aiohttp>=3.9.0
+
+# Issue 3: Gmail API for email access
+google-api-python-client>=2.100.0
+google-auth-oauthlib>=1.1.0
+google-auth-httplib2>=0.2.0

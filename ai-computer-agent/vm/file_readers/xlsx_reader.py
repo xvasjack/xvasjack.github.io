@@ -119,29 +119,30 @@ def analyze_xlsx(file_path: str) -> XLSXAnalysis:
             summary=f"Error opening file: {e}"
         )
 
-    analysis = XLSXAnalysis(
-        file_path=file_path,
-        sheet_count=len(wb.sheetnames),
-    )
+    try:
+        analysis = XLSXAnalysis(
+            file_path=file_path,
+            sheet_count=len(wb.sheetnames),
+        )
 
-    total_rows = 0
+        total_rows = 0
 
-    for sheet_name in wb.sheetnames:
-        ws = wb[sheet_name]
-        sheet_info = extract_sheet_info(ws, sheet_name)
-        analysis.sheets.append(sheet_info)
-        total_rows += sheet_info.row_count
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
+            sheet_info = extract_sheet_info(ws, sheet_name)
+            analysis.sheets.append(sheet_info)
+            total_rows += sheet_info.row_count
 
-        # Check for issues in this sheet
-        sheet_issues = check_sheet_issues(ws, sheet_name, sheet_info.headers)
-        analysis.issues.extend(sheet_issues)
+            # Check for issues in this sheet
+            sheet_issues = check_sheet_issues(ws, sheet_name, sheet_info.headers)
+            analysis.issues.extend(sheet_issues)
 
-    analysis.total_rows = total_rows
-    analysis.summary = generate_summary(analysis)
+        analysis.total_rows = total_rows
+        analysis.summary = generate_summary(analysis)
 
-    wb.close()
-
-    return analysis
+        return analysis
+    finally:
+        wb.close()
 
 
 def extract_sheet_info(ws, sheet_name: str) -> SheetInfo:
@@ -150,6 +151,17 @@ def extract_sheet_info(ws, sheet_name: str) -> SheetInfo:
     # Get dimensions
     max_row = ws.max_row or 0
     max_col = ws.max_column or 0
+
+    # Category 6 fix: Empty sheets should be flagged, not pass silently
+    if max_row == 0 or max_col == 0:
+        logger.warning(f"Sheet '{sheet_name}' appears to be empty (rows={max_row}, cols={max_col})")
+        return SheetInfo(
+            name=sheet_name,
+            row_count=0,
+            column_count=0,
+            headers=[],
+            sample_rows=[],
+        )
 
     # Get headers from first row
     headers = []
@@ -223,7 +235,10 @@ def check_sheet_issues(ws, sheet_name: str, headers: List[str]) -> List[DataIssu
             continue
 
         # Check each cell
-        for col_idx, (header, value) in enumerate(zip(headers, row_values), 1):
+        # Category 11 fix: Extra columns silently dropped by zip() - iterate all columns
+        for col_idx in range(1, max(len(headers), len(row_values)) + 1):
+            header = headers[col_idx - 1] if col_idx <= len(headers) else f"Column_{col_idx}"
+            value = row_values[col_idx - 1] if col_idx <= len(row_values) else None
             header_lower = header.lower()
 
             # Check for empty required fields
@@ -349,50 +364,51 @@ def extract_companies_from_xlsx(file_path: str) -> List[Dict[str, Any]]:
         logger.error(f"Could not open file: {e}")
         return []
 
-    companies = []
+    try:
+        companies = []
 
-    for sheet_name in wb.sheetnames:
-        ws = wb[sheet_name]
+        for sheet_name in wb.sheetnames:
+            ws = wb[sheet_name]
 
-        # Get headers
-        headers = []
-        max_col = ws.max_column or 0
-        for col in range(1, max_col + 1):
-            cell_value = ws.cell(row=1, column=col).value
-            headers.append(str(cell_value).lower().strip() if cell_value else f"col_{col}")
+            # Get headers
+            headers = []
+            max_col = ws.max_column or 0
+            for col in range(1, max_col + 1):
+                cell_value = ws.cell(row=1, column=col).value
+                headers.append(str(cell_value).lower().strip() if cell_value else f"col_{col}")
 
-        # Map headers to standard fields
-        field_mapping = {}
-        for idx, header in enumerate(headers):
-            if any(p in header for p in ["company", "name"]):
-                field_mapping["name"] = idx
-            elif any(p in header for p in ["website", "url", "web"]):
-                field_mapping["website"] = idx
-            elif any(p in header for p in ["country", "location"]):
-                field_mapping["country"] = idx
-            elif any(p in header for p in ["industry", "sector"]):
-                field_mapping["industry"] = idx
-            elif any(p in header for p in ["description", "desc", "about"]):
-                field_mapping["description"] = idx
+            # Map headers to standard fields
+            field_mapping = {}
+            for idx, header in enumerate(headers):
+                if any(p in header for p in ["company", "name"]):
+                    field_mapping["name"] = idx
+                elif any(p in header for p in ["website", "url", "web"]):
+                    field_mapping["website"] = idx
+                elif any(p in header for p in ["country", "location"]):
+                    field_mapping["country"] = idx
+                elif any(p in header for p in ["industry", "sector"]):
+                    field_mapping["industry"] = idx
+                elif any(p in header for p in ["description", "desc", "about"]):
+                    field_mapping["description"] = idx
 
-        # Extract rows
-        max_row = ws.max_row or 0
-        for row in range(2, max_row + 1):
-            company = {}
+            # Extract rows
+            max_row = ws.max_row or 0
+            for row in range(2, max_row + 1):
+                company = {}
 
-            for field, col_idx in field_mapping.items():
-                value = ws.cell(row=row, column=col_idx + 1).value
-                company[field] = value
+                for field, col_idx in field_mapping.items():
+                    value = ws.cell(row=row, column=col_idx + 1).value
+                    company[field] = value
 
-            # Only add if has a name
-            if company.get("name"):
-                company["source_sheet"] = sheet_name
-                company["source_row"] = row
-                companies.append(company)
+                # Only add if has a name
+                if company.get("name"):
+                    company["source_sheet"] = sheet_name
+                    company["source_row"] = row
+                    companies.append(company)
 
-    wb.close()
-
-    return companies
+        return companies
+    finally:
+        wb.close()
 
 
 # =============================================================================

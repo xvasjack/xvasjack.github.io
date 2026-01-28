@@ -19,10 +19,24 @@ import os
 import re
 import time
 import logging
+import email.utils
+from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("gmail_api")
+
+
+# E4: Parse email date to UTC
+def _parse_email_date(date_str: str) -> Optional[datetime]:
+    """Parse email date string to UTC datetime."""
+    if not date_str:
+        return None
+    try:
+        parsed = email.utils.parsedate_to_datetime(date_str)
+        return parsed.astimezone(timezone.utc)
+    except Exception:
+        return None
 
 try:
     from google.oauth2.credentials import Credentials
@@ -117,32 +131,47 @@ def _get_gmail_service():
 # =============================================================================
 
 
+def _extract_email_domain(sender: str) -> str:
+    """B2: Extract domain from email address for validation."""
+    if not sender:
+        return ""
+    # Extract email address from "Name <email@domain.com>" format
+    match = re.search(r'[\w.+-]+@([\w.-]+)', sender)
+    return match.group(1).lower() if match else ""
+
+
 def _check_sender_allowed(sender: str) -> bool:
-    """Check if sender is in the allowed list."""
+    """Check if sender is in the allowed list. B2: Use domain matching instead of substring."""
     if not sender:
         return False
-    sender_lower = sender.lower()
 
-    # Check against allowed senders list
+    sender_domain = _extract_email_domain(sender)
+    if not sender_domain:
+        return False
+
+    # Check against allowed senders list (extract domains from allowed addresses)
     for allowed in ALLOWED_SENDERS:
-        if allowed.lower() in sender_lower:
+        allowed_domain = _extract_email_domain(allowed) or allowed.lower()
+        # B2: Exact domain match instead of substring match
+        if sender_domain == allowed_domain or sender_domain.endswith("." + allowed_domain):
             return True
 
     # Also allow SendGrid emails (common automation sender)
     # SendGrid uses various subdomains, so check domain pattern
-    sendgrid_patterns = [
+    sendgrid_domains = [
         "sendgrid.net",
         "sendgrid.com",
-        "em.sendgrid.net",
     ]
-    for pattern in sendgrid_patterns:
-        if pattern in sender_lower:
+    for domain in sendgrid_domains:
+        if sender_domain == domain or sender_domain.endswith("." + domain):
             return True
 
     # Allow emails from the configured sender (for internal automation)
     sender_email = os.environ.get("SENDER_EMAIL", "")
-    if sender_email and sender_email.lower() in sender_lower:
-        return True
+    if sender_email:
+        config_domain = _extract_email_domain(sender_email)
+        if config_domain and sender_domain == config_domain:
+            return True
 
     return False
 
@@ -155,6 +184,37 @@ def _check_subject_allowed(subject: str) -> bool:
     # Allow subjects containing service names
     service_keywords = ["target", "market", "profile", "trading", "validation", "diligence", "utb"]
     return any(kw in subject.lower() for kw in service_keywords)
+
+
+# =============================================================================
+# SECURITY HELPERS
+# =============================================================================
+
+
+# B3: Allowed download directories
+ALLOWED_DOWNLOAD_DIRS = [
+    "/tmp",
+    os.path.expanduser("~/Downloads"),
+    os.path.expanduser("~/downloads"),
+    os.path.join(os.path.expanduser("~"), "Downloads"),
+]
+
+
+def _validate_download_dir(download_dir: str) -> bool:
+    """B3: Validate download directory is in allowed list."""
+    if not download_dir:
+        return False
+    abs_dir = os.path.abspath(os.path.expanduser(download_dir))
+    # Check if the directory is under an allowed path
+    for allowed in ALLOWED_DOWNLOAD_DIRS:
+        allowed_abs = os.path.abspath(os.path.expanduser(allowed))
+        if abs_dir == allowed_abs or abs_dir.startswith(allowed_abs + os.sep):
+            return True
+    # Also allow any directory under user's home
+    home_dir = os.path.expanduser("~")
+    if abs_dir.startswith(home_dir + os.sep):
+        return True
+    return False
 
 
 # =============================================================================
@@ -260,6 +320,11 @@ async def download_attachment_api(
         File path of downloaded attachment, or None
     """
     if not HAS_GMAIL_API:
+        return None
+
+    # B3: Validate download directory
+    if not _validate_download_dir(download_dir):
+        logger.error(f"Download directory not allowed: {download_dir}")
         return None
 
     def _download():

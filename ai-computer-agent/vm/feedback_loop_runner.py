@@ -443,6 +443,17 @@ async def run_feedback_loop(
     Returns:
         LoopResult with success status and stats
     """
+    # A6: Validate service_name is not None or empty
+    if not service_name or not service_name.strip():
+        logger.error("service_name is required but was None or empty")
+        return LoopResult(
+            success=False,
+            iterations=0,
+            prs_merged=0,
+            summary="Error: Missing required service_name",
+            elapsed_seconds=0,
+        )
+
     # Issue 6: Pass research config
     config = LoopConfig(
         service_name=service_name,
@@ -455,12 +466,17 @@ async def run_feedback_loop(
 
     # Issue 8: Check for interrupted loop state
     resume_from = 0
+    saved_issue_tracker = None
+    saved_prs_merged = 0
     try:
         from loop_state import load_loop_state
         saved = load_loop_state()
         if saved and saved.service_name == service_name:
             logger.info(f"Found interrupted loop state: iteration={saved.iteration}")
             resume_from = max(0, saved.iteration - 1)  # Re-run the interrupted iteration
+            # C8: Restore issue_tracker from saved state
+            saved_issue_tracker = saved.issue_tracker
+            saved_prs_merged = saved.prs_merged
     except Exception as e:
         logger.warning(f"Failed to check loop state: {e}")
 
@@ -533,12 +549,19 @@ async def run_feedback_loop(
         on_progress=on_progress,
     )
 
+    # C8: Restore state from saved loop if resuming
+    if saved_issue_tracker:
+        loop.issue_tracker.update(saved_issue_tracker)
+    if saved_prs_merged:
+        loop.prs_merged = saved_prs_merged
+
     result = await loop.run(resume_from=resume_from)
 
     # Issue 9: Learn from successful output
-    if result.success and loop.iterations:
+    # A8: Guard against empty iterations list before accessing [-1]
+    if result.success and loop.iterations and len(loop.iterations) > 0:
         last_iter = loop.iterations[-1]
-        if last_iter.output_file:
+        if last_iter and last_iter.output_file:
             try:
                 api_key = os.environ.get("ANTHROPIC_API_KEY")
                 if api_key:

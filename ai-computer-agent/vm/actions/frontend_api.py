@@ -62,6 +62,13 @@ def _validate_email(email: str) -> bool:
         return False
     return bool(EMAIL_REGEX.match(email))
 
+
+def _mask_pii(text: str) -> str:
+    """C1: Mask PII (email addresses) in log messages."""
+    if not text:
+        return text
+    return re.sub(r'[\w.+-]+@[\w.-]+', '[EMAIL]', str(text))
+
 try:
     import aiohttp
 except ImportError:
@@ -133,9 +140,11 @@ async def submit_form_api(
     api_path = SERVICE_API_PATHS.get(service_name)
 
     if not base_url or not api_path:
+        # C5: Don't expose available services in error message
+        logger.warning(f"Unknown service requested: {service_name}. Available: {list(RAILWAY_URLS.keys())}")
         return {
             "success": False,
-            "error": f"Unknown service: {service_name}. Available: {list(RAILWAY_URLS.keys())}",
+            "error": f"Unknown service: {service_name}",
         }
 
     # Issue 2/58 fix: Validate URL domain to prevent SSRF
@@ -164,7 +173,8 @@ async def submit_form_api(
         "Email": email,
     }
 
-    logger.info(f"POST {url} — Business={body['Business']}, Country={body['Country']}")
+    # C1: Mask PII in log messages
+    logger.info(f"POST {url} — Business={_mask_pii(body['Business'])}, Country={body['Country']}")
 
     # Try aiohttp first, then httpx, then fall back
     if aiohttp:
@@ -208,10 +218,13 @@ async def _submit_aiohttp(
                     }
                 else:
                     logger.warning(f"API POST failed: {status} — {response_data}")
+                    # D1: Distinguish server errors from client errors
+                    retryable = status >= 500 or status == 429
                     return {
                         "success": False,
                         "error": f"HTTP {status}: {response_data}",
                         "status_code": status,
+                        "retryable": retryable,
                     }
 
     except asyncio.TimeoutError:
@@ -250,10 +263,13 @@ async def _submit_httpx(
                 }
             else:
                 logger.warning(f"API POST failed: {resp.status_code}")
+                # D1: Distinguish server errors from client errors
+                retryable = resp.status_code >= 500 or resp.status_code == 429
                 return {
                     "success": False,
                     "error": f"HTTP {resp.status_code}: {response_data}",
                     "status_code": resp.status_code,
+                    "retryable": retryable,
                 }
 
     except Exception as e:

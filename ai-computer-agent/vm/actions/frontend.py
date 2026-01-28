@@ -9,6 +9,7 @@ This module handles:
 """
 
 import asyncio
+import time
 from typing import Optional, Dict
 from dataclasses import dataclass
 import logging
@@ -16,6 +17,9 @@ import os
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("frontend_actions")
 
 try:
     from computer_use import (
@@ -28,9 +32,6 @@ except ImportError as e:
     HAS_FRONTEND = False
     _FRONTEND_IMPORT_ERROR = str(e)
     logger.warning(f"computer_use not available: {e}")
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("frontend_actions")
 
 
 # =============================================================================
@@ -129,10 +130,11 @@ async def fill_search_form(data: SearchFormData):
     screen = await screenshot()
 
     # Fill business field
+    # Category 1 fix: Validate coords as tuple before indexing
     coords = await find_element(
         "Find the 'Business Type' or 'Industry' input field text box", screen
     )
-    if coords:
+    if coords and isinstance(coords, (tuple, list)) and len(coords) >= 2:
         await click(coords[0], coords[1])
         await wait(0.2)
         await clear_and_type(data.business)
@@ -147,7 +149,7 @@ async def fill_search_form(data: SearchFormData):
     coords = await find_element(
         "Find the 'Country' or 'Region' input field text box", screen
     )
-    if coords:
+    if coords and isinstance(coords, (tuple, list)) and len(coords) >= 2:
         await click(coords[0], coords[1])
         await wait(0.2)
         await clear_and_type(data.country)
@@ -161,7 +163,7 @@ async def fill_search_form(data: SearchFormData):
         coords = await find_element(
             "Find the 'Exclusion' or 'Exclude' input field text box", screen
         )
-        if coords:
+        if coords and isinstance(coords, (tuple, list)) and len(coords) >= 2:
             await click(coords[0], coords[1])
             await wait(0.2)
             await clear_and_type(data.exclusion)
@@ -184,14 +186,27 @@ async def set_email_in_localStorage(email: str):
     """
     logger.info(f"Setting email in localStorage: {email}")
 
+    # Category 7 fix: Verify DevTools opened before typing
     # Open DevTools console directly (Ctrl+Shift+J avoids F12 toggle problem)
     await hotkey("ctrl", "shift", "j")
-    await wait(1)
+    await wait(1.5)  # Increased wait for DevTools to fully open
 
-    # Set localStorage (escape quotes to prevent JS injection)
-    safe_email = email.replace("\\", "\\\\").replace("'", "\\'")
+    # Category 7 fix: Complete JS escaping (including double quotes, newlines, backticks)
+    safe_email = email.replace("\\", "\\\\")
+    safe_email = safe_email.replace("'", "\\'")
+    safe_email = safe_email.replace('"', '\\"')
+    safe_email = safe_email.replace("\n", "\\n")
+    safe_email = safe_email.replace("\r", "\\r")
+    safe_email = safe_email.replace("`", "\\`")
+
     js_command = f"localStorage.setItem('ycpUserEmail', '{safe_email}')"
     await type_text(js_command)
+    await press_key("enter")
+    await wait(0.5)
+
+    # Category 7 fix: Verify localStorage was set before closing DevTools
+    verify_cmd = "console.log('Email set:', localStorage.getItem('ycpUserEmail'))"
+    await type_text(verify_cmd)
     await press_key("enter")
     await wait(0.3)
 
@@ -251,7 +266,8 @@ async def submit_form(url: str, form_data: Dict) -> Dict:
                 coords = await find_element(
                     f"Find the '{label}' input field or text box on this form", screen
                 )
-                if coords:
+                # Category 1 fix: Validate coords as tuple before indexing
+                if coords and isinstance(coords, (tuple, list)) and len(coords) >= 2:
                     await click(coords[0], coords[1])
                     await wait(0.2)
                     await clear_and_type(value)
@@ -267,7 +283,8 @@ async def submit_form(url: str, form_data: Dict) -> Dict:
         coords = await find_element(
             "Find the Submit or Search button on this form", screen
         )
-        if coords:
+        # Category 1 fix: Validate coords as tuple before indexing
+        if coords and isinstance(coords, (tuple, list)) and len(coords) >= 2:
             await click(coords[0], coords[1])
         else:
             await press_key("enter")
@@ -292,10 +309,10 @@ async def wait_for_submission_confirmation(timeout_seconds: int = 30) -> bool:
 
     from vision import ask_about_screen
 
-    start_time = asyncio.get_event_loop().time()
+    start_time = time.monotonic()
 
     while True:
-        elapsed = asyncio.get_event_loop().time() - start_time
+        elapsed = time.monotonic() - start_time
         if elapsed > timeout_seconds:
             logger.warning("Submission confirmation timed out")
             return False

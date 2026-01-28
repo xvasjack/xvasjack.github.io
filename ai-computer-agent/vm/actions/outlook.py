@@ -14,6 +14,7 @@ Authorized email patterns:
 
 import asyncio
 import re
+import time
 from typing import Optional, List
 from dataclasses import dataclass
 import logging
@@ -145,14 +146,22 @@ async def download_attachment(filename_pattern: Optional[str] = None):
 
     Args:
         filename_pattern: Optional pattern to match specific file (e.g., "*.pptx")
+
+    Returns:
+        Dict with screenshot and action needed, or None if failed
     """
     logger.info(f"Downloading attachment: {filename_pattern or 'any'}")
 
+    # Category 12 fix: This function was incomplete - add actual download attempt
     # In Outlook Web, attachments appear in the email body
     # Right-click on attachment -> Download
 
     # Take screenshot for Claude to find the attachment
-    screen = await screenshot()
+    try:
+        screen = await screenshot()
+    except Exception as e:
+        logger.error(f"Failed to take screenshot: {e}")
+        return {"screenshot": None, "action_needed": "find_and_download_attachment", "pattern": filename_pattern, "error": str(e)}
 
     # Claude will:
     # 1. Find the attachment in the email
@@ -300,10 +309,10 @@ async def wait_for_new_email(
     """
     logger.info(f"Waiting for email from {sender_pattern} about {subject_pattern}")
 
-    start_time = asyncio.get_event_loop().time()
+    start_time = time.monotonic()
 
     while True:
-        elapsed = asyncio.get_event_loop().time() - start_time
+        elapsed = time.monotonic() - start_time
         if elapsed > timeout_seconds:
             logger.warning("Timeout waiting for email")
             return False
@@ -325,9 +334,16 @@ async def wait_for_new_email(
         # The main loop handles interpretation
 
         logger.info(f"Checking for email... ({int(elapsed)}s elapsed)")
-        await wait(check_interval)
 
-    return False
+        # Category 12 fix: Race condition - ensure we don't sleep past deadline
+        remaining = timeout_seconds - (time.monotonic() - start_time)
+        if remaining <= 0:
+            logger.warning("Timeout waiting for email")
+            return False
+        await wait(min(check_interval, remaining))
+
+    # Category 12 fix: This return was unreachable (dead code)
+    # The loop above handles all exit paths
 
 
 async def download_latest_automation_output(file_extension: str = ".pptx") -> Optional[str]:

@@ -315,6 +315,8 @@ def create_fallback_plan(task_description: str) -> List[dict]:
 class Agent:
     # Issue 26 fix: Max queue size to prevent memory leak during disconnection
     MAX_SEND_QUEUE_SIZE = 1000
+    # A2: Max connection retries before giving up
+    MAX_CONNECT_RETRIES = 10
 
     def __init__(self, config):
         self.config = config
@@ -329,6 +331,10 @@ class Agent:
         self._needs_reconnect = False
         # Issue 23 fix: Lock for reconnect flag
         self._reconnect_lock = asyncio.Lock()
+        # A1: Shutdown event for graceful termination
+        self._shutdown_event = asyncio.Event()
+        # D9: Task lock for concurrent task handling
+        self._task_lock = asyncio.Lock()
 
     @property
     def _cancelled(self) -> bool:
@@ -355,10 +361,14 @@ class Agent:
                 self.ws = None
 
     async def connect_to_host(self):
-        """Connect to host with exponential backoff."""
+        """Connect to host with exponential backoff. A2: Add max retries and shutdown check."""
         backoff = 2
         max_backoff = 60
-        while True:
+        retries = 0
+        while retries < self.MAX_CONNECT_RETRIES:
+            # A2: Check for shutdown signal
+            if self._shutdown_event.is_set():
+                raise asyncio.CancelledError("Shutdown requested during connect")
             try:
                 # H17: add connect timeout
                 self.ws = await websockets.connect(
@@ -369,8 +379,13 @@ class Agent:
                 # Flush queued messages on reconnect
                 await self._flush_send_queue()
                 return
+            except asyncio.CancelledError:
+                raise  # Don't retry on cancellation
             except Exception as e:
-                logger.warning(f"Connection failed: {e}. Retrying in {backoff}s...")
+                retries += 1
+                if retries >= self.MAX_CONNECT_RETRIES:
+                    raise ConnectionError(f"Failed to connect after {retries} retries: {e}")
+                logger.warning(f"Connection failed ({retries}/{self.MAX_CONNECT_RETRIES}): {e}. Retrying in {backoff}s...")
                 await asyncio.sleep(backoff)
                 backoff = min(backoff * 2, max_backoff)
 
@@ -387,10 +402,12 @@ class Agent:
                     break
 
     async def _safe_send(self, msg: str):
-        """H18: Send with error handling — queue on failure. Issue 17/22/26 fix: Uses lock and bounds queue."""
+        """H18: Send with error handling — queue on failure. A4: Fix TOCTOU race with local reference."""
+        # A4: Capture local reference to prevent race condition
+        ws = self.ws
         try:
-            if self.ws:
-                await self.ws.send(msg)
+            if ws:
+                await ws.send(msg)
             else:
                 async with self._send_queue_lock:
                     # Issue 26 fix: Bound queue size to prevent memory leak
@@ -400,6 +417,15 @@ class Agent:
                     self._send_queue.append(msg)
                 async with self._reconnect_lock:
                     self._needs_reconnect = True
+        except (AttributeError, websockets.ConnectionClosed) as e:
+            # A4: Handle case where ws becomes None or closed during send
+            logger.warning(f"WebSocket unavailable during send: {e}")
+            async with self._send_queue_lock:
+                if len(self._send_queue) >= self.MAX_SEND_QUEUE_SIZE:
+                    self._send_queue.pop(0)
+                self._send_queue.append(msg)
+            async with self._reconnect_lock:
+                self._needs_reconnect = True
         except Exception as e:
             logger.error(f"Send failed, queuing: {e}")
             async with self._send_queue_lock:
@@ -669,22 +695,32 @@ class Agent:
             logger.error(f"Screenshot request failed: {e}")
 
     async def listen_for_tasks(self):
+        """A1: Listen loop with shutdown event check."""
         await self.connect_to_host()
         print("Agent listening for tasks...")
 
-        while True:
+        # A1: Check shutdown event in loop condition
+        while not self._shutdown_event.is_set():
             try:
-                # H16: add recv timeout with reconnect
+                # H16: add recv timeout with reconnect (A1: shorter timeout to check shutdown)
                 try:
-                    message = await asyncio.wait_for(self.ws.recv(), timeout=120)
+                    message = await asyncio.wait_for(self.ws.recv(), timeout=5)
                 except asyncio.TimeoutError:
-                    # Send a ping to check connection liveness
-                    try:
-                        pong = await self.ws.ping()
-                        await asyncio.wait_for(pong, timeout=10)
-                    except Exception:
-                        logger.warning("Connection stale (recv timeout). Reconnecting...")
-                        await self.connect_to_host()
+                    # A1: Check shutdown on timeout
+                    if self._shutdown_event.is_set():
+                        break
+                    # Send a ping to check connection liveness (only every ~24 timeouts = ~2min)
+                    if not hasattr(self, '_ping_counter'):
+                        self._ping_counter = 0
+                    self._ping_counter += 1
+                    if self._ping_counter >= 24:
+                        self._ping_counter = 0
+                        try:
+                            pong = await self.ws.ping()
+                            await asyncio.wait_for(pong, timeout=10)
+                        except Exception:
+                            logger.warning("Connection stale (recv timeout). Reconnecting...")
+                            await self.connect_to_host()
                     continue
 
                 msg_type, payload = decode_message(message)
@@ -692,10 +728,14 @@ class Agent:
                 if msg_type == MESSAGE_TYPES.get("NEW_TASK", "new_task"):
                     task = Task.from_dict(payload)
                     logger.info(f"Received task: {task.id}")
-                    # B10: Run task in separate asyncio.Task so message loop continues
-                    self._current_task_handle = asyncio.create_task(
-                        self._execute_and_report(task)
-                    )
+                    # D9: Use lock for concurrent task handling
+                    async with self._task_lock:
+                        if self._current_task_handle and not self._current_task_handle.done():
+                            logger.warning("Already processing a task, queueing new task")
+                            # B10: Run task in separate asyncio.Task so message loop continues
+                        self._current_task_handle = asyncio.create_task(
+                            self._execute_and_report(task)
+                        )
 
                 elif msg_type == MESSAGE_TYPES.get("CANCEL_TASK", "cancel_task"):
                     # B9: Set cancellation flag
@@ -718,12 +758,32 @@ class Agent:
                 elif msg_type == MESSAGE_TYPES.get("SCREENSHOT_REQUEST", "screenshot_request"):
                     await self._handle_screenshot_request()
 
+                elif msg_type == MESSAGE_TYPES.get("SHUTDOWN", "shutdown"):
+                    logger.info("Shutdown requested by host")
+                    self._shutdown_event.set()
+                    break
+
             except websockets.ConnectionClosed:
                 logger.warning("Connection lost. Reconnecting...")
+                if self._shutdown_event.is_set():
+                    break
                 await self.connect_to_host()
             except Exception as e:
                 logger.error(f"Error: {e}")
+                # B1: Close WebSocket on exception before retry
+                await self.close()
+                if self._shutdown_event.is_set():
+                    break
                 await asyncio.sleep(1)
+                try:
+                    await self.connect_to_host()
+                except ConnectionError:
+                    logger.error("Failed to reconnect, shutting down")
+                    break
+
+        # A1: Cleanup on shutdown
+        logger.info("Listen loop terminated, cleaning up...")
+        await self.close()
 
     async def _execute_and_report(self, task: Task):
         """B10: Execute task and send result without blocking message loop."""
@@ -772,7 +832,29 @@ async def main():
     print(f"ABORT: Move mouse to TOP-LEFT corner")
 
     agent = Agent(config)
-    await agent.listen_for_tasks()
+
+    # A1: Setup signal handlers for graceful shutdown
+    import signal
+
+    def signal_handler(sig, frame):
+        logger.info(f"Received signal {sig}, initiating shutdown...")
+        agent._shutdown_event.set()
+
+    # Register signal handlers (works on Unix, limited on Windows)
+    try:
+        signal.signal(signal.SIGINT, signal_handler)
+        signal.signal(signal.SIGTERM, signal_handler)
+    except (AttributeError, ValueError):
+        pass  # Windows may not support all signals
+
+    try:
+        await agent.listen_for_tasks()
+    except asyncio.CancelledError:
+        logger.info("Main task cancelled")
+    except ConnectionError as e:
+        logger.error(f"Connection error: {e}")
+    finally:
+        await agent.close()
 
 
 if __name__ == "__main__":

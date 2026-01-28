@@ -21,6 +21,7 @@ import asyncio
 import os
 import time
 import json
+from collections import OrderedDict
 from typing import Optional, Dict, Any, List, Callable
 from dataclasses import dataclass, field
 from enum import Enum
@@ -28,6 +29,27 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("feedback_loop")
+
+
+# C2: LRU Dict for bounded issue tracking
+class LRUDict(OrderedDict):
+    """LRU-evicting dictionary to prevent unbounded memory growth."""
+
+    def __init__(self, max_size: int = 100):
+        super().__init__()
+        self.max_size = max_size
+
+    def __setitem__(self, key, value):
+        if key in self:
+            self.move_to_end(key)
+        super().__setitem__(key, value)
+        if len(self) > self.max_size:
+            self.popitem(last=False)
+
+    def get(self, key, default=None):
+        if key in self:
+            self.move_to_end(key)
+        return super().get(key, default)
 
 
 # =============================================================================
@@ -59,6 +81,11 @@ class IssueCategory(Enum):
     API_ERROR = "api_error"
     TIMEOUT = "timeout"
     UNKNOWN = "unknown"
+
+
+# E2: Maximum lengths for user input
+MAX_COMPANY_NAME_LENGTH = 200
+MAX_ISSUE_LENGTH = 500
 
 
 @dataclass
@@ -159,7 +186,8 @@ class FeedbackLoop:
         self.state = LoopState.IDLE
         self.iterations: List[LoopIteration] = []
         self.prs_merged = 0
-        self.issue_tracker: Dict[str, int] = {}
+        # C2: Use LRU dict to prevent unbounded memory growth
+        self.issue_tracker: LRUDict = LRUDict(max_size=100)
         self.start_time = 0
         self._research_attempts = 0
 
@@ -391,18 +419,12 @@ class FeedbackLoop:
 
         # Check if stuck on same issues
         # Issue 71 fix: Hash ALL issues, not just first 3, to prevent missing later issues
+        # C3: Use 32 chars (128 bits) instead of 16 to reduce collision probability
         import hashlib
         all_issues_str = ";".join(sorted(issues))
-        issue_key = hashlib.sha256(all_issues_str.encode()).hexdigest()[:16]
+        issue_key = hashlib.sha256(all_issues_str.encode()).hexdigest()[:32]
+        # C2: LRUDict handles bounding automatically
         self.issue_tracker[issue_key] = self.issue_tracker.get(issue_key, 0) + 1
-
-        # Issue 44/72 fix: Bound issue_tracker to prevent memory leak
-        MAX_ISSUE_TRACKER_ENTRIES = 100
-        if len(self.issue_tracker) > MAX_ISSUE_TRACKER_ENTRIES:
-            # Keep only the most recent entries
-            oldest_keys = list(self.issue_tracker.keys())[:-MAX_ISSUE_TRACKER_ENTRIES//2]
-            for k in oldest_keys:
-                del self.issue_tracker[k]
 
         if self.issue_tracker[issue_key] >= self.config.max_same_issue_attempts:
             await self._report_progress(f"Stuck: same issues found {self.issue_tracker[issue_key]} times")

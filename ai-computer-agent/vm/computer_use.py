@@ -323,8 +323,12 @@ def get_all_windows() -> List[WindowInfo]:
                         width=rect[2] - rect[0],
                         height=rect[3] - rect[1],
                     ))
-                except Exception:
-                    pass
+                except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+                    # Expected errors - process terminated or access denied
+                    logger.debug(f"Could not get process info for window '{title}': {e}")
+                except Exception as e:
+                    # Unexpected errors - log but continue enumeration
+                    logger.warning(f"Error getting window info for '{title}': {e}")
         return True
 
     win32gui.EnumWindows(callback, None)
@@ -415,7 +419,12 @@ async def get_current_tab_url() -> str:
         # Press Escape to deselect
         await press_key("escape")
         return url
-    except Exception:
+    except ImportError:
+        logger.warning("pyperclip not installed - cannot read clipboard")
+        await press_key("escape")
+        return ""
+    except Exception as e:
+        logger.warning(f"Failed to read URL from clipboard: {e}")
         await press_key("escape")
         return ""
 

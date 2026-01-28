@@ -13,6 +13,7 @@ This module uses browser automation to interact with Gmail web interface.
 import asyncio
 import os
 import re
+import time
 from typing import Optional, List, Dict, Any
 from dataclasses import dataclass
 import logging
@@ -22,7 +23,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from computer_use import (
     open_url_in_browser, screenshot, click, type_text,
-    press_key, hotkey, scroll, wait, focus_window
+    press_key, hotkey, scroll, wait, focus_window, move_to,
+    type_text_unicode,
 )
 
 logging.basicConfig(level=logging.INFO)
@@ -35,7 +37,12 @@ logger = logging.getLogger("gmail_actions")
 
 
 GMAIL_URL = "https://mail.google.com"
-DOWNLOAD_PATH = os.environ.get("AGENT_DOWNLOAD_PATH", r"C:\agent-shared\downloads")
+
+# Use actual browser download folder, not a custom one
+DOWNLOAD_PATH = os.environ.get(
+    "AGENT_DOWNLOAD_PATH",
+    os.path.join(os.path.expanduser("~"), "Downloads")
+)
 
 
 # =============================================================================
@@ -44,20 +51,13 @@ DOWNLOAD_PATH = os.environ.get("AGENT_DOWNLOAD_PATH", r"C:\agent-shared\download
 
 
 ALLOWED_SENDER_PATTERNS = [
-    # GitHub notifications
     r"noreply@github\.com",
     r"notifications@github\.com",
-
-    # Your automation sender (SendGrid)
-    # Add your actual sender email pattern here
     r".*@.*\.sendgrid\.net",
-
-    # Railway notifications
     r".*@railway\.app",
 ]
 
 ALLOWED_SUBJECT_PATTERNS = [
-    # Your automation outputs
     r"target.*search.*result",
     r"target.*v\d+.*result",
     r"market.*research.*complete",
@@ -66,8 +66,6 @@ ALLOWED_SUBJECT_PATTERNS = [
     r"validation.*complete",
     r"due.*diligence.*report",
     r"transcription.*complete",
-
-    # GitHub
     r"\[GitHub\]",
     r"PR.*merged",
     r"Pull request",
@@ -95,30 +93,43 @@ def is_email_allowed(sender: str, subject: str) -> bool:
 
 
 async def open_gmail():
-    """Open Gmail in browser"""
+    """Open Gmail in browser and verify we reach the inbox (not a login page)."""
     logger.info("Opening Gmail")
     await open_url_in_browser(GMAIL_URL)
     await wait(3)
 
-    # Check if we need to sign in
     screen = await screenshot()
-    return {
-        "screenshot": screen,
-        "action": "check_login_status"
-    }
+
+    # Use vision to detect login page vs inbox
+    from vision import ask_about_screen
+    answer = await ask_about_screen(
+        "Is this a Gmail inbox or a Google login page? Answer INBOX or LOGIN",
+        screen,
+    )
+    if "LOGIN" in answer.upper():
+        raise RuntimeError(
+            "Gmail shows a login page instead of the inbox. "
+            "Please log into Gmail manually before running the agent."
+        )
+
+    return {"screenshot": screen, "status": "inbox"}
 
 
 async def search_emails(query: str):
     """
     Search for emails in Gmail.
-
-    Args:
-        query: Gmail search query (e.g., "from:noreply@github.com has:attachment")
+    Uses vision to click search bar (keyboard shortcuts may be disabled).
     """
     logger.info(f"Searching Gmail: {query}")
 
-    # Click search box (usually has "/" shortcut)
-    await press_key("/")
+    # Try clicking the search bar via vision first, fall back to "/" shortcut
+    from vision import find_element
+    screen = await screenshot()
+    coords = await find_element("Find the Gmail search bar / search input field", screen)
+    if coords:
+        await click(coords[0], coords[1])
+    else:
+        await press_key("/")
     await wait(0.3)
 
     # Clear existing search
@@ -126,83 +137,39 @@ async def search_emails(query: str):
     await wait(0.1)
 
     # Type search query
-    await type_text(query)
+    await type_text_unicode(query)
     await press_key("enter")
     await wait(2)
 
 
 async def search_automation_emails():
     """Search specifically for automation output emails with attachments"""
-    # Search for emails with attachments from automation senders
     query = "has:attachment newer_than:7d"
     await search_emails(query)
     await wait(2)
 
 
 async def open_first_email():
-    """Open the first email in the list"""
-    # Press 'o' to open (Gmail keyboard shortcut)
-    await press_key("o")
+    """Open the first email in the list (uses vision click, not keyboard shortcut)."""
+    from vision import find_element
+    screen = await screenshot()
+    coords = await find_element(
+        "Find the first email row/item in the Gmail email list to click on it", screen
+    )
+    if coords:
+        await click(coords[0], coords[1])
+    else:
+        # Fallback to keyboard shortcut
+        await press_key("o")
     await wait(1)
 
 
 async def go_to_inbox():
     """Navigate to inbox"""
-    # Press 'g' then 'i' for Go to Inbox
     await press_key("g")
     await wait(0.2)
     await press_key("i")
     await wait(1)
-
-
-# =============================================================================
-# EMAIL READING
-# =============================================================================
-
-
-@dataclass
-class EmailInfo:
-    """Information extracted from an email"""
-    sender: str
-    subject: str
-    has_attachment: bool
-    attachment_names: List[str]
-    is_allowed: bool
-    screenshot: str
-
-
-async def get_current_email_info() -> Dict[str, Any]:
-    """
-    Take screenshot of current email and return info for Claude to analyze.
-    Claude will extract sender, subject, and attachment info.
-    """
-    screen = await screenshot()
-
-    return {
-        "screenshot": screen,
-        "action": "extract_email_info",
-        "instructions": """
-            Extract from this email:
-            1. Sender email address
-            2. Subject line
-            3. Whether it has attachments
-            4. Attachment filenames if visible
-
-            Then verify against allowed patterns:
-            - Allowed senders: GitHub, SendGrid, Railway
-            - Allowed subjects: target search, market research, profile slides, trading comp, validation, due diligence, GitHub PR
-
-            Return JSON:
-            {
-                "sender": "...",
-                "subject": "...",
-                "has_attachment": true/false,
-                "attachment_names": ["..."],
-                "is_allowed": true/false,
-                "reason": "why allowed or not"
-            }
-        """
-    }
 
 
 # =============================================================================
@@ -213,59 +180,106 @@ async def get_current_email_info() -> Dict[str, Any]:
 async def download_attachment(filename_hint: Optional[str] = None):
     """
     Download attachment from currently open email.
-
-    Gmail shows attachments at bottom of email or as chips.
+    Uses vision to find and click the download button.
     """
     logger.info(f"Downloading attachment: {filename_hint or 'any'}")
 
-    # Take screenshot for Claude to find attachment
+    # Scroll down to see attachments (usually at bottom of email)
+    await scroll(-5)
+    await wait(1)
+
     screen = await screenshot()
 
-    return {
-        "screenshot": screen,
-        "action": "download_attachment",
-        "filename_hint": filename_hint,
-        "instructions": """
-            Find the attachment in this email and download it:
-            1. Look for attachment preview at bottom of email
-            2. Hover over attachment to show download button
-            3. Click download icon (down arrow)
+    from vision import find_element
+    desc = "Find the download icon/button for the email attachment"
+    if filename_hint:
+        desc += f" (filename hint: {filename_hint})"
+    coords = await find_element(desc, screen)
 
-            For multiple attachments, download all of them.
+    if coords:
+        await click(coords[0], coords[1])
+        await wait(2)
+        logger.info(f"Clicked download at ({coords[0]}, {coords[1]})")
+        return {"success": True}
 
-            If filename_hint provided, prioritize that file.
-            Common files: .pptx, .xlsx, .pdf
-        """
-    }
+    # Fallback: try clicking on attachment chip itself to trigger download
+    coords2 = await find_element(
+        "Find the attachment chip or attachment preview card in the email", screen
+    )
+    if coords2:
+        await click(coords2[0], coords2[1])
+        await wait(2)
+        logger.info(f"Clicked attachment chip at ({coords2[0]}, {coords2[1]})")
+        return {"success": True}
+
+    logger.warning("Could not find download button or attachment")
+    return {"success": False, "error": "Attachment not found on screen"}
 
 
 async def download_all_attachments():
-    """Download all attachments from current email"""
+    """Download all attachments from current email using vision."""
     logger.info("Downloading all attachments")
 
-    # Gmail shortcut: hover attachment, click download
-    # Or use "Download all" if available
+    await scroll(-5)
+    await wait(1)
 
     screen = await screenshot()
 
-    return {
-        "screenshot": screen,
-        "action": "download_all_attachments",
-        "instructions": """
-            Download all attachments from this email:
-            1. Scroll down to see all attachments if needed
-            2. Look for "Download all" button or download each individually
-            3. Each attachment should be downloaded to Downloads folder
-        """
-    }
+    from vision import find_element
+    # Look for "Download all" button first
+    coords = await find_element(
+        "Find the 'Download all attachments' button or icon in Gmail", screen
+    )
+    if coords:
+        await click(coords[0], coords[1])
+        await wait(2)
+        logger.info(f"Clicked download-all at ({coords[0]}, {coords[1]})")
+        return {"success": True}
+
+    # Fallback: download individual attachment
+    return await download_attachment()
 
 
-async def wait_for_download(timeout_seconds: int = 30) -> bool:
-    """Wait for download to complete"""
-    # Check Downloads folder for new files
-    # This is handled by monitoring the download folder
-    await wait(5)  # Give it time
-    return True
+async def wait_for_download(timeout_seconds: int = 60) -> bool:
+    """
+    Wait for a download to complete by polling the downloads folder.
+
+    Returns True if a new file appeared, False on timeout.
+    """
+    logger.info(f"Waiting for download (timeout: {timeout_seconds}s)")
+
+    # Record files before download
+    before = set(_list_download_files())
+
+    for _ in range(timeout_seconds // 5):
+        await wait(5)
+        after = set(_list_download_files())
+        new_files = after - before
+
+        # Filter out temp/partial downloads
+        real_files = [
+            f for f in new_files
+            if not f.endswith(".crdownload")
+            and not f.endswith(".tmp")
+            and not f.endswith(".part")
+        ]
+
+        if real_files:
+            logger.info(f"Download complete: {real_files}")
+            return True
+
+    logger.warning("Download timed out")
+    return False
+
+
+def _list_download_files() -> List[str]:
+    """List files in download folder."""
+    if not os.path.exists(DOWNLOAD_PATH):
+        return []
+    return [
+        os.path.join(DOWNLOAD_PATH, f)
+        for f in os.listdir(DOWNLOAD_PATH)
+    ]
 
 
 # =============================================================================
@@ -317,37 +331,79 @@ async def archive_email(*args, **kwargs):
 
 async def next_email():
     """Go to next email in list"""
-    await press_key("j")  # Gmail shortcut
+    await press_key("j")
     await wait(0.5)
 
 
 async def previous_email():
     """Go to previous email in list"""
-    await press_key("k")  # Gmail shortcut
+    await press_key("k")
     await wait(0.5)
 
 
 async def back_to_list():
     """Go back to email list from email view"""
-    await press_key("u")  # Gmail shortcut
+    await press_key("u")
     await wait(0.5)
 
 
 async def refresh_inbox():
     """Refresh the inbox"""
-    # Shift + N or just reload
     await press_key("f5")
     await wait(2)
 
 
-async def enable_keyboard_shortcuts():
+# =============================================================================
+# FILE MONITORING
+# =============================================================================
+
+
+def get_recent_downloads(
+    folder: Optional[str] = None,
+    extensions: List[str] = None,
+    max_age_minutes: int = 5
+) -> List[str]:
     """
-    Ensure Gmail keyboard shortcuts are enabled.
-    Go to Settings > See all settings > General > Keyboard shortcuts > ON
+    Get list of recently downloaded files.
+
+    Args:
+        folder: Download folder path (defaults to DOWNLOAD_PATH)
+        extensions: File extensions to look for
+        max_age_minutes: Only files modified in last N minutes
+
+    Returns:
+        List of file paths, newest first
     """
-    # This would need to be done once manually
-    # Or we can navigate programmatically
-    pass
+    if extensions is None:
+        extensions = [".pptx", ".xlsx", ".pdf", ".docx", ".csv"]
+
+    folder = folder or DOWNLOAD_PATH
+
+    if not os.path.exists(folder):
+        return []
+
+    recent_files = []
+    cutoff_time = time.time() - (max_age_minutes * 60)
+
+    for filename in os.listdir(folder):
+        filepath = os.path.join(folder, filename)
+
+        # Skip temp/partial downloads
+        if filename.endswith((".crdownload", ".tmp", ".part")):
+            continue
+
+        # Check extension
+        if not any(filename.lower().endswith(ext) for ext in extensions):
+            continue
+
+        # Check modification time
+        try:
+            if os.path.getmtime(filepath) > cutoff_time:
+                recent_files.append(filepath)
+        except OSError:
+            continue
+
+    return sorted(recent_files, key=os.path.getmtime, reverse=True)
 
 
 # =============================================================================
@@ -364,13 +420,13 @@ async def find_and_download_automation_output(
 
     1. Open Gmail
     2. Search for recent automation emails
-    3. Find email matching service
-    4. Verify it's from allowed sender
-    5. Download attachments
+    3. Open first matching email
+    4. Download attachments
+    5. Wait for download to complete
     6. Return file paths
 
     Args:
-        service_name: e.g., "target-v6", "market-research", "profile-slides"
+        service_name: e.g., "target-v6", "market-research"
         max_age_days: Only look at emails from last N days
 
     Returns:
@@ -378,116 +434,32 @@ async def find_and_download_automation_output(
     """
     logger.info(f"Looking for {service_name} output email")
 
-    # Open Gmail
     await open_gmail()
 
-    # Search for the specific service output
-    query = f"subject:{service_name} has:attachment newer_than:{max_age_days}d"
+    query = f"subject:{service_name} has:attachment newer_than:{max_age_days}d is:unread"
     await search_emails(query)
 
-    # Take screenshot to verify results
-    screen = await screenshot()
+    # Open first result
+    await open_first_email()
+    await wait(1)
 
-    return {
-        "screenshot": screen,
-        "action": "find_and_open_email",
-        "service_name": service_name,
-        "next_steps": [
-            "1. Verify email is from allowed sender",
-            "2. Open the email",
-            "3. Download all attachments",
-            "4. Return file paths"
-        ]
-    }
+    # Download attachment
+    await download_attachment()
+    await wait(1)
 
+    # Wait for download to complete
+    downloaded = await wait_for_download(timeout_seconds=60)
 
-async def wait_for_automation_email(
-    service_name: str,
-    timeout_minutes: int = 30,
-    check_interval_seconds: int = 60
-) -> Dict[str, Any]:
-    """
-    Wait for an automation email to arrive.
-
-    Args:
-        service_name: Service to wait for (e.g., "target-v6")
-        timeout_minutes: Max time to wait
-        check_interval_seconds: How often to check
-
-    Returns:
-        Dict with status and email info when found
-    """
-    logger.info(f"Waiting for {service_name} email (timeout: {timeout_minutes}min)")
-
-    start_time = asyncio.get_event_loop().time()
-    timeout_seconds = timeout_minutes * 60
-
-    while True:
-        elapsed = asyncio.get_event_loop().time() - start_time
-        if elapsed > timeout_seconds:
+    if downloaded:
+        files = get_recent_downloads(max_age_minutes=2)
+        if files:
             return {
-                "status": "timeout",
-                "message": f"No email found after {timeout_minutes} minutes"
+                "success": True,
+                "file_path": files[0],
+                "all_files": files,
             }
 
-        # Check for new email
-        await open_gmail()
-        query = f"subject:{service_name} has:attachment newer_than:1h is:unread"
-        await search_emails(query)
-
-        # Take screenshot for analysis
-        screen = await screenshot()
-
-        # Return for Claude to check if email found
-        yield {
-            "screenshot": screen,
-            "action": "check_for_email",
-            "elapsed_minutes": int(elapsed / 60),
-            "remaining_minutes": int((timeout_seconds - elapsed) / 60),
-        }
-
-        # Wait before next check
-        await wait(check_interval_seconds)
-
-
-# =============================================================================
-# FILE MONITORING
-# =============================================================================
-
-
-def get_recent_downloads(
-    folder: str = DOWNLOAD_PATH,
-    extensions: List[str] = [".pptx", ".xlsx", ".pdf"],
-    max_age_minutes: int = 5
-) -> List[str]:
-    """
-    Get list of recently downloaded files.
-
-    Args:
-        folder: Download folder path
-        extensions: File extensions to look for
-        max_age_minutes: Only files modified in last N minutes
-
-    Returns:
-        List of file paths
-    """
-    import time
-
-    if not os.path.exists(folder):
-        return []
-
-    recent_files = []
-    cutoff_time = time.time() - (max_age_minutes * 60)
-
-    for filename in os.listdir(folder):
-        filepath = os.path.join(folder, filename)
-
-        # Check extension
-        if not any(filename.lower().endswith(ext) for ext in extensions):
-            continue
-
-        # Check modification time
-        if os.path.getmtime(filepath) > cutoff_time:
-            recent_files.append(filepath)
-
-    return sorted(recent_files, key=os.path.getmtime, reverse=True)
+    return {
+        "success": False,
+        "error": "Download failed or no file found",
+    }

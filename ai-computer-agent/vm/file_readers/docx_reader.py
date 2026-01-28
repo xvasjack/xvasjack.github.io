@@ -18,7 +18,6 @@ import logging
 try:
     from docx import Document
     from docx.shared import Inches, Pt
-    from docx.oxml.ns import qn
     HAS_DOCX = True
 except ImportError:
     HAS_DOCX = False
@@ -150,38 +149,44 @@ def analyze_docx(file_path: str) -> DOCXAnalysis:
             summary=f"Error opening file: {e}"
         )
 
-    analysis = DOCXAnalysis(file_path=file_path)
+    # Category 2 fix: Wrap in try/finally to ensure document cleanup
+    try:
+        analysis = DOCXAnalysis(file_path=file_path)
 
-    # Extract all text from paragraphs
-    all_paragraphs = []
-    for para in doc.paragraphs:
-        text = para.text.strip()
-        if text:
-            all_paragraphs.append(text)
-            analysis.all_text.append(text)
+        # Extract all text from paragraphs
+        all_paragraphs = []
+        for para in doc.paragraphs:
+            text = para.text.strip()
+            if text:
+                all_paragraphs.append(text)
+                analysis.all_text.append(text)
 
-    analysis.paragraph_count = len(all_paragraphs)
+        analysis.paragraph_count = len(all_paragraphs)
 
-    # Extract cover page info (first few paragraphs before section 1.0)
-    analysis.cover_page = extract_cover_page(all_paragraphs)
+        # Extract cover page info (first few paragraphs before section 1.0)
+        analysis.cover_page = extract_cover_page(all_paragraphs)
 
-    # Extract sections
-    analysis.sections = extract_sections(doc)
+        # Extract sections
+        analysis.sections = extract_sections(doc)
 
-    # Extract tables
-    analysis.tables = extract_tables(doc, analysis.sections)
-    analysis.table_count = len(analysis.tables)
+        # Extract tables
+        analysis.tables = extract_tables(doc, analysis.sections)
+        analysis.table_count = len(analysis.tables)
 
-    # Count images
-    analysis.image_count = count_images(doc)
+        # Count images
+        analysis.image_count = count_images(doc)
 
-    # Check for issues
-    analysis.issues = check_quality_issues(analysis)
+        # Check for issues
+        analysis.issues = check_quality_issues(analysis)
 
-    # Generate summary
-    analysis.summary = generate_summary(analysis)
+        # Generate summary
+        analysis.summary = generate_summary(analysis)
 
-    return analysis
+        return analysis
+    finally:
+        # Category 2 fix: Document cleanup - python-docx doesn't have explicit close
+        # but we ensure any internal resources are released
+        del doc
 
 
 def extract_cover_page(paragraphs: List[str]) -> CoverPageInfo:
@@ -212,13 +217,15 @@ def extract_cover_page(paragraphs: List[str]) -> CoverPageInfo:
 
         # Company name is usually between title and "Prepared for"
         # Look for company name patterns
+        # Category 12 fix: Company name extraction - be more permissive
         elif cover.title and not cover.prepared_for:
             # Likely company name if it's after title but before prepared for
-            if "pte" in text_lower or "ltd" in text_lower or "inc" in text_lower or "corp" in text_lower:
+            company_suffixes = ["pte", "ltd", "inc", "corp", "llc", "gmbh", "co.", "company", "limited"]
+            if any(suffix in text_lower for suffix in company_suffixes):
                 cover.company_name = text
-            elif len(text) > 3 and not text.startswith("1."):
+            elif len(text) > 3 and not text.startswith("1.") and not text.startswith("2."):
                 # Could be company name if short and not a section header
-                if not cover.company_name:
+                if not cover.company_name and not any(kw in text_lower for kw in ["confidential", "prepared", "purpose", "evaluation"]):
                     cover.company_name = text
 
     return cover
@@ -237,8 +244,10 @@ def extract_sections(doc) -> List[SectionInfo]:
             continue
 
         # Check if this is a heading style
+        # Category 12 fix: Heading style detection should be case-insensitive
         style_name = para.style.name if para.style else ""
-        is_heading = "Heading" in style_name or "heading" in style_name.lower()
+        style_lower = style_name.lower()
+        is_heading = "heading" in style_lower
 
         # Also check for section number pattern
         match = section_pattern.match(text)
@@ -280,13 +289,17 @@ def extract_tables(doc, sections: List[SectionInfo]) -> List[TableInfo]:
     for table_idx, table in enumerate(doc.tables):
         # Get header row
         header_row = []
-        if len(table.rows) > 0:
+        num_rows = len(table.rows)
+        if num_rows > 0:
             for cell in table.rows[0].cells:
                 header_row.append(cell.text.strip())
 
-        # Get sample rows
+        # Get sample rows - safely slice within bounds
         sample_rows = []
-        for row_idx, row in enumerate(table.rows[1:4]):  # First 3 data rows
+        # Category 4 fix: Explicit bounds check for table row slicing
+        end_row = min(4, num_rows)  # Don't exceed actual row count
+        for row_idx in range(1, end_row):  # Start from row 1 (skip header)
+            row = table.rows[row_idx]
             row_data = [cell.text.strip() for cell in row.cells]
             sample_rows.append(row_data)
 
@@ -312,16 +325,20 @@ def count_images(doc) -> int:
     # Check inline shapes
     for para in doc.paragraphs:
         for run in para.runs:
-            if run._element.xpath('.//a:blip'):
-                image_count += 1
+            # Category 5 fix: Image counting errors should be logged, not silently swallowed
+            try:
+                if run._element.xpath('.//a:blip'):
+                    image_count += 1
+            except Exception as e:
+                logger.debug(f"Error checking image in run: {e}")
 
     # Check shapes in document
     try:
         for rel in doc.part.rels.values():
             if "image" in rel.target_ref:
                 image_count += 1
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Error counting document images: {e}")
 
     return image_count
 
@@ -363,7 +380,11 @@ def check_quality_issues(analysis: DOCXAnalysis) -> List[str]:
             issues.append(f"Pre-DD Workplan should be section 4.9, got: {workplan_section.number}")
 
     # Check for Future Plans section number (should be 8)
-    future_section = next((s for s in analysis.sections if "future" in s.title.lower()), None)
+    # Category 6 fix: "Future" section detection too broad - be more specific
+    future_section = next(
+        (s for s in analysis.sections if "future" in s.title.lower() and ("plan" in s.title.lower() or "growth" in s.title.lower() or "outlook" in s.title.lower())),
+        None
+    )
     if future_section and future_section.number:
         if not future_section.number.startswith("8"):
             issues.append(f"Future Plans should be section 8, got: {future_section.number}")

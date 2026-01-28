@@ -373,22 +373,33 @@ def compare_pptx_to_template(
         passed_checks += 1
 
     # Check logos
+    # Category 6 fix: Zero companies should not pass logo validation
     if template.require_logos:
         total_checks += 1
-        companies_without_logos = [c for c in companies if not c.get("has_logo")]
-        if companies_without_logos:
-            missing_pct = len(companies_without_logos) / max(len(companies), 1) * 100
-            severity = Severity.CRITICAL if missing_pct > 50 else Severity.HIGH if missing_pct > 20 else Severity.MEDIUM
+        if not companies:
             discrepancies.append(Discrepancy(
-                severity=severity,
-                category="missing_logos",
-                location="Multiple slides",
-                expected="All companies should have logos",
-                actual=f"{len(companies_without_logos)} companies without logos ({missing_pct:.0f}%)",
-                suggestion="Check logo fetching logic. Ensure fallback to placeholder if logo not found."
+                severity=Severity.CRITICAL,
+                category="no_companies_for_logo_check",
+                location="Presentation",
+                expected="Companies to validate logos",
+                actual="0 companies found",
+                suggestion="Cannot validate logos when no companies are present"
             ))
         else:
-            passed_checks += 1
+            companies_without_logos = [c for c in companies if not c.get("has_logo")]
+            if companies_without_logos:
+                missing_pct = len(companies_without_logos) / max(len(companies), 1) * 100
+                severity = Severity.CRITICAL if missing_pct > 50 else Severity.HIGH if missing_pct > 20 else Severity.MEDIUM
+                discrepancies.append(Discrepancy(
+                    severity=severity,
+                    category="missing_logos",
+                    location="Multiple slides",
+                    expected="All companies should have logos",
+                    actual=f"{len(companies_without_logos)} companies without logos ({missing_pct:.0f}%)",
+                    suggestion="Check logo fetching logic. Ensure fallback to placeholder if logo not found."
+                ))
+            else:
+                passed_checks += 1
 
     # Check websites
     if template.require_websites:
@@ -433,9 +444,11 @@ def compare_pptx_to_template(
         passed_checks += 1
 
     # Check for duplicate companies
+    # Category 11 fix: Duplicate names should preserve original case for reporting
     total_checks += 1
-    names = [c.get("name", "").lower().strip() for c in companies]
-    duplicates = [name for name in set(names) if names.count(name) > 1]
+    names_lower = [c.get("name", "").lower().strip() for c in companies]
+    names_original = {c.get("name", "").lower().strip(): c.get("name", "") for c in companies}
+    duplicates = [names_original.get(name, name) for name in set(names_lower) if names_lower.count(name) > 1]
     if duplicates:
         discrepancies.append(Discrepancy(
             severity=Severity.HIGH,
@@ -478,7 +491,8 @@ def compare_xlsx_to_template(
     passed_checks = 0
 
     sheets = xlsx_analysis.get("sheets", [])
-    sheet_names = [s.get("name") for s in sheets]
+    # Category 6 fix: None values in sheet_names should be filtered out
+    sheet_names = [s.get("name") for s in sheets if s and s.get("name") is not None]
 
     # Check required sheets
     for required_sheet in template.required_sheets:
@@ -876,5 +890,5 @@ def auto_detect_template(file_path: str, analysis: Dict[str, Any]) -> str:
         if "due diligence" in title or "dd" in file_lower:
             return "dd-report"
 
-    # Default
-    return "target-search"
+    # M9: Return None for unrecognized files instead of wrong default
+    return None

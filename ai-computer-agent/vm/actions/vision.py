@@ -4,13 +4,16 @@ import asyncio
 import base64
 import os
 import re
+import sys
 import tempfile
 import logging
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import CLAUDE_MODEL
 
 logger = logging.getLogger("vision")
 
 CLAUDE_CODE_PATH = os.environ.get("CLAUDE_CODE_PATH", "claude")
-CLAUDE_MODEL = "claude-opus-4-5-20250514"
 
 
 async def find_element(description: str, screenshot_b64: str = None) -> tuple:
@@ -26,8 +29,17 @@ async def find_element(description: str, screenshot_b64: str = None) -> tuple:
 
     fd, tmp_path = tempfile.mkstemp(suffix=".png", prefix="agent_vision_")
     try:
+        # Category 1 fix: Catch base64 decode errors
+        # Category 2 fix: Ensure file descriptor is closed even on decode failure
+        try:
+            decoded_data = base64.b64decode(screenshot_b64)
+        except Exception as e:
+            os.close(fd)  # Close fd before cleanup
+            logger.error(f"Failed to decode screenshot: {e}")
+            return None
+
         with os.fdopen(fd, "wb") as f:
-            f.write(base64.b64decode(screenshot_b64))
+            f.write(decoded_data)
 
         prompt = (
             f"Read the file at {tmp_path} — it is a screenshot of a desktop application or browser window. "
@@ -43,6 +55,7 @@ async def find_element(description: str, screenshot_b64: str = None) -> tuple:
             f"If multiple matches exist, return the most prominent or first visible one."
         )
 
+        proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
                 CLAUDE_CODE_PATH, "--print",
@@ -52,15 +65,32 @@ async def find_element(description: str, screenshot_b64: str = None) -> tuple:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=45)
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=45)
             output = stdout.decode().strip()
+
+            # Category 5 fix: Log stderr for diagnostics
+            if stderr:
+                stderr_text = stderr.decode().strip()
+                if stderr_text:
+                    logger.debug(f"Vision stderr: {stderr_text}")
 
             if "NONE" in output.upper():
                 return None
 
-            match = re.search(r'(\d{2,4})\s*,\s*(\d{2,4})', output)
+            # Category 8 fix: Regex should accept single-digit coordinates
+            match = re.search(r'(\d{1,4})\s*,\s*(\d{1,4})', output)
             if match:
                 return (int(match.group(1)), int(match.group(2)))
+            return None
+        except asyncio.TimeoutError:
+            # Category 2 fix: Kill subprocess on timeout
+            if proc and proc.returncode is None:
+                try:
+                    proc.kill()
+                    await proc.wait()
+                except Exception:
+                    pass
+            logger.error("Vision subprocess timed out")
             return None
         except Exception as e:
             logger.error(f"Vision failed: {e}")
@@ -85,8 +115,16 @@ async def ask_about_screen(question: str, screenshot_b64: str = None) -> str:
 
     fd, tmp_path = tempfile.mkstemp(suffix=".png", prefix="agent_vision_")
     try:
+        # Category 1 fix: Catch base64 decode errors
+        try:
+            decoded_data = base64.b64decode(screenshot_b64)
+        except Exception as e:
+            os.close(fd)
+            logger.error(f"Failed to decode screenshot: {e}")
+            return ""
+
         with os.fdopen(fd, "wb") as f:
-            f.write(base64.b64decode(screenshot_b64))
+            f.write(decoded_data)
 
         prompt = (
             f"Read the file at {tmp_path} — it is a screenshot of a desktop application or browser window.\n\n"
@@ -100,6 +138,7 @@ async def ask_about_screen(question: str, screenshot_b64: str = None) -> str:
             f"- Do NOT guess. Only report what is visibly on screen."
         )
 
+        proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
                 CLAUDE_CODE_PATH, "--print",
@@ -111,6 +150,16 @@ async def ask_about_screen(question: str, screenshot_b64: str = None) -> str:
             )
             stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
             return stdout.decode().strip()
+        except asyncio.TimeoutError:
+            # Category 2 fix: Kill subprocess on timeout
+            if proc and proc.returncode is None:
+                try:
+                    proc.kill()
+                    await proc.wait()
+                except Exception:
+                    pass
+            logger.error("Vision question subprocess timed out")
+            return ""
         except Exception as e:
             logger.error(f"Vision question failed: {e}")
             return ""

@@ -72,24 +72,38 @@ async def verify_email_downloaded(file_path: Optional[str]) -> Dict[str, Any]:
         return {"verified": False, "error": f"Unexpected file extension: {ext}"}
 
     # Try to validate file isn't corrupted
+    # Category 6 fix: Consistent .issues check across all file types
     try:
         if ext == ".pptx":
             from file_readers.pptx_reader import analyze_pptx
             analysis = analyze_pptx(file_path)
-            if any("Could not open" in str(i) for i in getattr(analysis, 'issues', [])):
+            issues_list = getattr(analysis, 'issues', []) or []
+            if any("Could not open" in str(i) for i in issues_list):
                 return {"verified": False, "error": "PPTX file could not be parsed"}
+            # Check for critical issues - validate list is non-empty before accessing [0]
+            not_installed_issues = [i for i in issues_list if 'not installed' in str(i).lower()]
+            if not_installed_issues:
+                return {"verified": False, "error": f"PPTX parsing failed: {not_installed_issues[0]}"}
         elif ext in (".xlsx", ".xls"):
             from file_readers.xlsx_reader import analyze_xlsx
             analysis = analyze_xlsx(file_path)
-            issues = getattr(analysis, 'issues', [])
-            if any("Could not open" in str(getattr(i, 'issue', i)) for i in issues):
-                return {"verified": False, "error": "XLSX file could not be parsed"}
+            issues = getattr(analysis, 'issues', []) or []
+            # Handle both DataIssue objects and plain strings
+            for i in issues:
+                issue_str = str(getattr(i, 'issue', i))
+                if "Could not open" in issue_str or "not installed" in issue_str.lower():
+                    return {"verified": False, "error": f"XLSX file could not be parsed: {issue_str}"}
         elif ext == ".docx":
             from file_readers.docx_reader import analyze_docx
             analysis = analyze_docx(file_path)
-            if any("Could not open" in str(i) for i in analysis.issues):
-                return {"verified": False, "error": "DOCX file could not be parsed"}
+            issues_list = getattr(analysis, 'issues', []) or []
+            # Find first matching issue for error message
+            matching_issues = [str(i) for i in issues_list if "Could not open" in str(i) or "not installed" in str(i).lower()]
+            if matching_issues:
+                return {"verified": False, "error": f"DOCX file could not be parsed: {matching_issues[0]}"}
     except Exception as e:
+        # Category 5 fix: Log the full exception, not just a generic message
+        logger.error(f"File validation failed for {file_path}: {e}", exc_info=True)
         return {"verified": False, "error": f"File validation failed: {e}"}
 
     logger.info(f"File verified: {file_path} ({file_size} bytes)")
@@ -121,7 +135,12 @@ async def verify_pr_created(pr_number: Optional[int]) -> Dict[str, Any]:
             return {"verified": False, "error": f"gh pr view failed: {stderr.decode()[:200]}"}
 
         import json
-        pr_data = json.loads(stdout.decode())
+        # B4: Add try/except for JSON parse
+        try:
+            pr_data = json.loads(stdout.decode())
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse PR data: {e}")
+            return {"verified": False, "error": f"Invalid PR data format: {e}"}
 
         state = pr_data.get("state", "")
         commits = pr_data.get("commits", [])

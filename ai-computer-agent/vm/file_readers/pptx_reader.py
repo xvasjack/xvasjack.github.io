@@ -19,11 +19,16 @@ try:
     from pptx import Presentation
     from pptx.util import Inches, Pt
     from pptx.enum.shapes import MSO_SHAPE_TYPE
+    HAS_PPTX = True
 except ImportError:
+    HAS_PPTX = False
     print("Missing python-pptx. Run: pip install python-pptx")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("pptx_reader")
+
+# C7: Maximum PPTX file size to prevent OOM
+MAX_PPTX_SIZE = 50 * 1024 * 1024  # 50MB
 
 
 @dataclass
@@ -88,6 +93,14 @@ def analyze_pptx(file_path: str) -> PPTXAnalysis:
     """
     logger.info(f"Analyzing PPTX: {file_path}")
 
+    if not HAS_PPTX:
+        return PPTXAnalysis(
+            file_path=file_path,
+            slide_count=0,
+            issues=["python-pptx not installed"],
+            summary="Error: python-pptx not installed"
+        )
+
     if not os.path.exists(file_path):
         return PPTXAnalysis(
             file_path=file_path,
@@ -95,6 +108,21 @@ def analyze_pptx(file_path: str) -> PPTXAnalysis:
             issues=["File not found"],
             summary="Error: File not found"
         )
+
+    # C7: Check file size to prevent OOM
+    try:
+        file_size = os.path.getsize(file_path)
+        if file_size > MAX_PPTX_SIZE:
+            size_mb = file_size / 1024 / 1024
+            limit_mb = MAX_PPTX_SIZE / 1024 / 1024
+            return PPTXAnalysis(
+                file_path=file_path,
+                slide_count=0,
+                issues=[f"File too large: {size_mb:.1f}MB > {limit_mb:.0f}MB limit"],
+                summary=f"Error: File too large ({size_mb:.1f}MB)"
+            )
+    except OSError as e:
+        logger.warning(f"Could not check file size: {e}")
 
     try:
         prs = Presentation(file_path)
@@ -163,9 +191,15 @@ def extract_slide_info(slide, slide_number: int) -> SlideInfo:
                     text_content.append(text)
 
                 # Check for hyperlinks
+                # Category 1 fix: run.hyperlink.address may be None
                 for run in paragraph.runs:
-                    if run.hyperlink and run.hyperlink.address:
-                        links.append(run.hyperlink.address)
+                    try:
+                        if run.hyperlink and run.hyperlink.address:
+                            links.append(run.hyperlink.address)
+                    except AttributeError:
+                        pass  # Expected: some runs don't have hyperlinks
+                    except Exception as e:
+                        logger.debug(f"Error reading hyperlink on slide {slide_number}: {e}")
 
         # Check for images
         if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
@@ -199,9 +233,15 @@ def extract_company_from_slide(slide, slide_number: int) -> Optional[CompanyInfo
                 if text:
                     texts.append(text)
 
+                # Category 1 fix: run.hyperlink.address may be None
                 for run in paragraph.runs:
-                    if run.hyperlink and run.hyperlink.address:
-                        links.append(run.hyperlink.address)
+                    try:
+                        if run.hyperlink and run.hyperlink.address:
+                            links.append(run.hyperlink.address)
+                    except AttributeError:
+                        pass  # Expected: some runs don't have hyperlinks
+                    except Exception as e:
+                        logger.debug(f"Error reading hyperlink in company extraction: {e}")
 
         if shape.shape_type == MSO_SHAPE_TYPE.PICTURE:
             has_image = True
@@ -223,16 +263,17 @@ def extract_company_from_slide(slide, slide_number: int) -> Optional[CompanyInfo
             break
 
     # Look for website in text
+    # Category 6 fix: URL regex captures trailing punctuation - fix the pattern
     if not website:
         for text in texts:
-            url_match = re.search(r'https?://[^\s]+', text)
+            url_match = re.search(r'https?://[^\s<>"\')]+', text)
             if url_match:
-                website = url_match.group()
+                website = url_match.group().rstrip('.,;:!?')
                 break
             # Check for domain pattern
-            domain_match = re.search(r'www\.[^\s]+\.[^\s]+', text)
+            domain_match = re.search(r'www\.[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}[^\s<>"\']*', text)
             if domain_match:
-                website = "https://" + domain_match.group()
+                website = "https://" + domain_match.group().rstrip('.,;:!?')
                 break
 
     # Description is usually second text block
@@ -309,12 +350,60 @@ Top companies:
     return summary
 
 
+def _is_safe_url(url: str) -> bool:
+    """
+    Check if a URL is safe to fetch (prevents SSRF attacks).
+    Blocks internal/private IPs and non-HTTP(S) protocols.
+    """
+    from urllib.parse import urlparse
+    import socket
+    import ipaddress
+
+    try:
+        parsed = urlparse(url)
+
+        # Only allow HTTP and HTTPS protocols
+        if parsed.scheme.lower() not in ('http', 'https'):
+            return False
+
+        # Must have a hostname
+        if not parsed.hostname:
+            return False
+
+        hostname = parsed.hostname.lower()
+
+        # Block localhost and common internal hostnames
+        blocked_hostnames = ['localhost', '127.0.0.1', '0.0.0.0', '[::1]', 'internal', 'intranet']
+        if hostname in blocked_hostnames:
+            return False
+
+        # Block .local and .internal domains
+        if hostname.endswith('.local') or hostname.endswith('.internal'):
+            return False
+
+        # Resolve hostname and check if it's a private IP
+        try:
+            ip_str = socket.gethostbyname(hostname)
+            ip = ipaddress.ip_address(ip_str)
+            if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local:
+                return False
+        except (socket.gaierror, ValueError):
+            # If we can't resolve, allow it (external DNS will handle it)
+            pass
+
+        return True
+
+    except Exception:
+        return False
+
+
 def validate_company_links(analysis: PPTXAnalysis) -> Dict[str, bool]:
     """
     Validate that company website links are accessible.
     Returns dict of {company_name: is_valid}
 
     Note: This does actual HTTP requests, use sparingly.
+    Security: URLs are validated to prevent SSRF attacks.
     """
     import urllib.request
     import urllib.error
@@ -326,13 +415,24 @@ def validate_company_links(analysis: PPTXAnalysis) -> Dict[str, bool]:
             results[company.name] = False
             continue
 
+        # SSRF protection: validate URL before making request
+        if not _is_safe_url(company.website):
+            logger.warning(f"Blocked unsafe URL for {company.name}: {company.website}")
+            results[company.name] = False
+            continue
+
         try:
             req = urllib.request.Request(
                 company.website,
                 headers={'User-Agent': 'Mozilla/5.0'}
             )
             response = urllib.request.urlopen(req, timeout=10)
-            results[company.name] = response.status == 200
+            # Close connection properly to avoid resource leak
+            try:
+                status = response.getcode()
+                results[company.name] = status == 200
+            finally:
+                response.close()
         except (urllib.error.URLError, urllib.error.HTTPError, Exception):
             results[company.name] = False
 
