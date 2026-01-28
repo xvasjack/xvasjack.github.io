@@ -1930,7 +1930,7 @@ async function phase1DeepAnalysis(companies, targetDescription) {
 
   const companyList = companies
     .map((c, i) => {
-      let line = `${i + 1}. ${c.name} (${c.country || 'Unknown'})`;
+      let line = `${i}. ${c.name} (${c.country || 'Unknown'})`;
       if (c.businessProfile) {
         const p = c.businessProfile;
         if (p.businessDescription) line += `\n   Business: ${p.businessDescription}`;
@@ -1951,7 +1951,7 @@ async function phase1DeepAnalysis(companies, targetDescription) {
 
 TARGET PEER GROUP: "${targetDescription}"
 
-COMPANY LIST (${companies.length} companies from Speeda database, enriched with annual report data where available):
+COMPANY LIST (${companies.length} companies from Speeda database):
 ${companyList}
 
 TASK: Analyze this company list deeply before any filtering.
@@ -2020,6 +2020,7 @@ OUTPUT FORMAT (JSON):
   }
 
   // Parse the result
+  if (!analysisResult) return null;
   try {
     const jsonMatch = analysisResult.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
@@ -2282,10 +2283,10 @@ BUSINESS DEFINITION: "${targetDef}"
 CURRENT FILTER CRITERION: "${step.criteria}"
 RATIONALE: "${step.rationale}"
 
-Companies to evaluate (with verified business data where available):
+Companies to evaluate:
 ${currentCompanies
   .map((c, i) => {
-    let line = `${i + 1}. ${c.name} (${c.country || 'Unknown'})`;
+    let line = `${i}. ${c.name} (${c.country || 'Unknown'})`;
     if (c.businessProfile) {
       line += `\n         ${formatProfileForPrompt(c.businessProfile)}`;
     }
@@ -2296,9 +2297,9 @@ ${currentCompanies
 For EACH company, evaluate against the criterion "${step.criteria}" using the EVIDENCE provided above:
 
 THINK CAREFULLY for each company:
-1. What is this company's actual primary business? (Use the annual report evidence above if available — do NOT guess)
-2. Based on the VERIFIED revenue segments, geography, and business model, does it meet the criterion "${step.criteria}"?
-3. How confident are you? (0-100%) — higher confidence when annual report data is available
+1. What is this company's actual primary business? (Use the business profile data above if available — do NOT guess)
+2. Based on the available revenue segments, geography, and business model, does it meet the criterion "${step.criteria}"?
+3. How confident are you? (0-100%) — higher confidence when detailed profile data is available
 
 OUTPUT JSON:
 {
@@ -2499,7 +2500,39 @@ async function applyThreePhaseFiltering(
   console.log(`Target: ${targetDescription}`);
 
   // Phase 1: Deep Analysis
-  const analysis = await phase1DeepAnalysis(companies, targetDescription);
+  let analysis = await phase1DeepAnalysis(companies, targetDescription);
+
+  // Phase 1 fallback: if deep analysis failed, generate minimal filtering steps
+  if (!analysis) {
+    console.log('Phase 1 returned null — generating fallback filtering steps...');
+    const fallbackSteps = await _generateFilteringSteps(targetDescription, companies.length);
+    analysis = {
+      targetAnalysis: {
+        businessDefinition: targetDescription,
+        keyCharacteristics: [],
+        mustHave: [],
+        mustNotHave: [],
+      },
+      companyCategories: {
+        obviouslyRelevant: [],
+        obviouslyIrrelevant: [],
+        needsEvaluation: companies.map((c, i) => ({
+          index: i,
+          name: c.name,
+          concern: 'Phase 1 analysis unavailable',
+        })),
+      },
+      filteringStrategy: {
+        approach: 'Fallback: generated filtering steps without deep analysis',
+        steps: fallbackSteps.map((s, i) => ({
+          step: i + 1,
+          criteria: s,
+          rationale: 'Auto-generated fallback step',
+        })),
+      },
+      warnings: ['Phase 1 deep analysis failed — using fallback filtering steps'],
+    };
+  }
 
   // Phase 2: Deliberate Filtering
   const filterResult = await phase2DeliberateFiltering(
@@ -2543,10 +2576,9 @@ async function applyThreePhaseFiltering(
  * Discovers annual reports, extracts business profiles, attaches to company objects.
  *
  * @param {Array} companies - Companies that passed quantitative filters
- * @param {string} targetDescription - Target peer group description
  * @returns {Array} Companies with .businessProfile attached
  */
-async function enrichWithAnnualReports(companies, targetDescription) {
+async function enrichWithAnnualReports(companies) {
   console.log('\n' + '='.repeat(60));
   console.log('TIER 2: ANNUAL REPORT DEEP READ');
   console.log('='.repeat(60));
@@ -2577,6 +2609,298 @@ async function enrichWithAnnualReports(companies, targetDescription) {
     console.error('Annual report enrichment failed:', error.message);
     console.log('Continuing without enrichment data...');
     return companies;
+  }
+}
+
+// ============ TIER 3: WATERFALL FILTERS (Annual Report Based) ============
+
+/**
+ * Generate deterministic waterfall filter rules using GPT-4o.
+ * Analyzes available business profiles and creates 2-4 rules for filtering.
+ *
+ * @param {Array} companies - Companies with .businessProfile attached
+ * @param {string} targetDescription - Target peer group description
+ * @returns {Array|null} Array of rule objects or null if generation fails
+ */
+async function generateWaterfallRules(companies, targetDescription) {
+  console.log('\n' + '='.repeat(60));
+  console.log('GENERATING WATERFALL FILTER RULES');
+  console.log('='.repeat(60));
+
+  const profiledCompanies = companies.filter((c) => c.businessProfile);
+  if (profiledCompanies.length === 0) {
+    console.log('No business profiles available, cannot generate rules.');
+    return null;
+  }
+
+  // Summarize available data fields from profiles
+  const sampleProfile = profiledCompanies[0].businessProfile;
+  const availableFields = Object.keys(sampleProfile).filter(
+    (k) => sampleProfile[k] !== null && sampleProfile[k] !== undefined
+  );
+
+  const companySummary = profiledCompanies
+    .slice(0, 10) // Show up to 10 examples
+    .map((c) => {
+      const p = c.businessProfile;
+      let summary = `- ${c.name}:`;
+      if (p.businessDescription) summary += ` ${p.businessDescription}`;
+      if (p.revenueSegments?.length > 0) {
+        summary += ` | Segments: ${p.revenueSegments.map((s) => `${s.segment} (${s.revenueShare || '?'})`).join(', ')}`;
+      }
+      if (p.businessModel) summary += ` | Model: ${p.businessModel}`;
+      if (p.geographicBreakdown?.length > 0) {
+        summary += ` | Geo: ${p.geographicBreakdown.map((g) => `${g.region} (${g.revenueShare || '?'})`).join(', ')}`;
+      }
+      return summary;
+    })
+    .join('\n');
+
+  const prompt = `You are a senior investment banking analyst. You have a set of ~${companies.length} companies being evaluated as trading comparables for: "${targetDescription}"
+
+These companies have already passed AI-based qualitative filtering. Now you need to create deterministic filter rules based on their annual report business profiles to further narrow the peer set.
+
+AVAILABLE DATA FIELDS per company: ${availableFields.join(', ')}
+
+SAMPLE COMPANY PROFILES (${profiledCompanies.length} total have profiles):
+${companySummary}
+
+TASK: Generate 2-4 deterministic filter rules that can be applied uniformly to all companies.
+Each rule should test a specific aspect of business relevance to "${targetDescription}".
+
+Rules should be ordered from most important to least important.
+Rules should be specific enough that a junior analyst (or AI) can evaluate pass/fail for each company.
+
+OUTPUT FORMAT (JSON):
+{
+  "rules": [
+    {
+      "name": "Short rule name (max 30 chars)",
+      "description": "What this rule checks",
+      "field": "which profile field to check (e.g. revenueSegments, businessModel, geographicBreakdown, businessDescription)",
+      "logic": "Specific pass/fail logic description",
+      "removeIfFails": true
+    }
+  ]
+}
+
+IMPORTANT:
+- Only create rules that make sense for "${targetDescription}"
+- Each rule must be evaluable from the available profile data
+- removeIfFails=true means companies failing this rule are removed
+- removeIfFails=false means it's a soft preference (noted but not removed)
+- Be conservative: it's better to keep a borderline company than remove a valid peer`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2,
+      response_format: { type: 'json_object' },
+    });
+    if (response.usage) {
+      recordTokens(
+        'gpt-4o',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
+    }
+
+    const parsed = JSON.parse(response.choices[0].message.content);
+    const rules = parsed.rules || [];
+    console.log(`Generated ${rules.length} waterfall rules:`);
+    rules.forEach((r, i) => console.log(`  ${i + 1}. ${r.name}: ${r.description}`));
+    return rules;
+  } catch (error) {
+    console.error('Failed to generate waterfall rules:', error.message);
+    return null;
+  }
+}
+
+/**
+ * Apply waterfall filter rules deterministically using GPT-4o-mini for evaluation.
+ * Each rule is applied uniformly to all companies. Creates an Excel sheet per rule.
+ *
+ * @param {Array} companies - Companies with .businessProfile attached
+ * @param {Array} rules - Waterfall rules from generateWaterfallRules
+ * @param {object} outputWorkbook - XLSX workbook to add sheets to
+ * @param {Array} sheetHeaders - Column headers for Excel sheets
+ * @param {number} startSheetNumber - Starting sheet number
+ * @returns {object} { companies, filterLog, sheetNumber }
+ */
+async function applyWaterfallFilters(
+  companies,
+  rules,
+  outputWorkbook,
+  sheetHeaders,
+  startSheetNumber
+) {
+  console.log('\n' + '='.repeat(60));
+  console.log('APPLYING WATERFALL FILTERS');
+  console.log('='.repeat(60));
+
+  let currentCompanies = [...companies];
+  let sheetNumber = startSheetNumber;
+  const filterLog = [];
+  const MIN_COMPANIES = 5;
+
+  for (let ruleIdx = 0; ruleIdx < rules.length; ruleIdx++) {
+    const rule = rules[ruleIdx];
+    console.log(`\nWaterfall Rule ${ruleIdx + 1}/${rules.length}: ${rule.name}`);
+    console.log(`  Logic: ${rule.logic}`);
+    console.log(`  Remove if fails: ${rule.removeIfFails}`);
+
+    if (currentCompanies.length <= MIN_COMPANIES) {
+      console.log(`  Skipping - already at minimum (${MIN_COMPANIES}) companies`);
+      break;
+    }
+
+    // Evaluate each company against this rule using GPT-4o-mini
+    const evaluations = await evaluateWaterfallRule(currentCompanies, rule);
+
+    if (!evaluations) {
+      console.log('  Evaluation failed, skipping rule.');
+      continue;
+    }
+
+    // Apply rule
+    const passing = [];
+    const failing = [];
+
+    for (let i = 0; i < currentCompanies.length; i++) {
+      const company = currentCompanies[i];
+      const evaluation = evaluations[i];
+
+      if (evaluation && !evaluation.passes) {
+        company.filterReason = `${rule.name}: ${evaluation.reasoning || 'Failed rule'}`;
+        failing.push(company);
+      } else {
+        passing.push(company);
+      }
+    }
+
+    // Guard: never go below MIN_COMPANIES
+    if (rule.removeIfFails && failing.length > 0) {
+      if (passing.length >= MIN_COMPANIES) {
+        currentCompanies = passing;
+        const logEntry = `Waterfall [${rule.name}]: Removed ${failing.length} companies (${currentCompanies.length} remaining)`;
+        filterLog.push(logEntry);
+        console.log(`  ${logEntry}`);
+      } else {
+        // Would go below minimum - keep all but log it
+        const logEntry = `Waterfall [${rule.name}]: ${failing.length} failed but kept to maintain minimum ${MIN_COMPANIES} companies`;
+        filterLog.push(logEntry);
+        console.log(`  ${logEntry}`);
+        // Reset filterReason on failing companies since we're keeping them
+        failing.forEach((c) => {
+          c.filterReason = '';
+        });
+      }
+    } else if (!rule.removeIfFails && failing.length > 0) {
+      const logEntry = `Waterfall [${rule.name}] (soft): ${failing.length} companies noted as not matching (not removed)`;
+      filterLog.push(logEntry);
+      console.log(`  ${logEntry}`);
+      // Reset filterReason since this is a soft rule
+      failing.forEach((c) => {
+        c.filterReason = '';
+      });
+    } else {
+      const logEntry = `Waterfall [${rule.name}]: All companies passed`;
+      filterLog.push(logEntry);
+      console.log(`  ${logEntry}`);
+    }
+
+    // Create Excel sheet for this rule
+    const sheetData = createSheetData(
+      currentCompanies,
+      sheetHeaders,
+      `After ${rule.name} - ${currentCompanies.length} companies`
+    );
+
+    if (rule.removeIfFails && failing.length > 0 && passing.length >= MIN_COMPANIES) {
+      sheetData.push([], [], [`REMOVED - ${rule.name}`], ['Company', 'Reason']);
+      failing.forEach((c) => sheetData.push([c.name, c.filterReason || rule.description]));
+    }
+
+    const sheet = XLSX.utils.aoa_to_sheet(sheetData);
+    const sheetName = `${sheetNumber}. AR${ruleIdx + 1}: ${rule.name}`.substring(0, 31); // Excel 31-char limit
+    XLSX.utils.book_append_sheet(outputWorkbook, sheet, sheetName);
+    sheetNumber++;
+  }
+
+  return { companies: currentCompanies, filterLog, sheetNumber };
+}
+
+/**
+ * Evaluate all companies against a single waterfall rule using GPT-4o-mini.
+ *
+ * @param {Array} companies - Companies to evaluate
+ * @param {object} rule - The waterfall rule
+ * @returns {Array|null} Array of { passes, reasoning } per company, or null on failure
+ */
+async function evaluateWaterfallRule(companies, rule) {
+  const companyDescriptions = companies
+    .map((c, i) => {
+      let desc = `${i}. ${c.name}`;
+      if (c.businessProfile) {
+        desc += `: ${formatProfileForPrompt(c.businessProfile)}`;
+      } else {
+        desc += ': No business profile available';
+      }
+      return desc;
+    })
+    .join('\n');
+
+  const prompt = `Evaluate each company against this filter rule.
+
+RULE: ${rule.name}
+DESCRIPTION: ${rule.description}
+LOGIC: ${rule.logic}
+FIELD TO CHECK: ${rule.field}
+
+COMPANIES:
+${companyDescriptions}
+
+For EACH company, determine if it PASSES or FAILS this rule based on its business profile data.
+If a company has no profile data, it PASSES by default (benefit of the doubt).
+
+OUTPUT JSON:
+{
+  "evaluations": [
+    {"index": 0, "name": "Company Name", "passes": true, "reasoning": "brief reason"}
+  ]
+}
+
+Be consistent and fair. Apply the same standard to all companies.`;
+
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.1,
+      response_format: { type: 'json_object' },
+    });
+    if (response.usage) {
+      recordTokens(
+        'gpt-4o-mini',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
+    }
+
+    const parsed = JSON.parse(response.choices[0].message.content);
+    const evals = parsed.evaluations || [];
+
+    // Map evaluations back by index
+    const result = companies.map((_, i) => {
+      const found = evals.find((e) => e.index === i);
+      return found || { passes: true, reasoning: 'No evaluation returned' };
+    });
+
+    return result;
+  } catch (error) {
+    console.error('Waterfall rule evaluation failed:', error.message);
+    return null;
   }
 }
 
@@ -3517,15 +3841,9 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
         sheetNumber++;
       }
 
-      // TIER 2: Annual Report Enrichment - read annual reports to get verified business profiles
-      console.log(
-        `\nStarting annual report enrichment for ${currentCompanies.length} companies...`
-      );
-      await enrichWithAnnualReports(currentCompanies, TargetCompanyOrIndustry);
-
-      // QUALITATIVE FILTER: Apply 3-phase filtering pipeline (DeepSeek-powered)
+      // QUALITATIVE FILTER: Apply 3-phase filtering pipeline (AI-powered)
       // Phase 1: Deep Analysis - understand companies and create strategy
-      // Phase 2: Deliberate Filtering - evaluate each company carefully (now with annual report evidence)
+      // Phase 2: Deliberate Filtering - evaluate each company carefully
       // Phase 3: Self-Validation - review final peer set
       console.log(`\nStarting 3-phase filtering with ${currentCompanies.length} companies...`);
       const qualResult = await applyThreePhaseFiltering(
@@ -3539,6 +3857,39 @@ app.post('/api/trading-comparable', upload.single('ExcelFile'), async (req, res)
       currentCompanies = qualResult.companies;
       filterLog.push(...qualResult.filterLog);
       sheetNumber = qualResult.sheetNumber;
+
+      // TIER 2: Annual Report Enrichment - enrich only the ~30 remaining companies
+      console.log(
+        `\nStarting annual report enrichment for ${currentCompanies.length} companies...`
+      );
+      await enrichWithAnnualReports(currentCompanies);
+
+      // TIER 3: Waterfall Filters - deterministic rules based on annual report data
+      if (currentCompanies.some((c) => c.businessProfile)) {
+        console.log(`\nGenerating waterfall filter rules...`);
+        const waterfallRules = await generateWaterfallRules(
+          currentCompanies,
+          TargetCompanyOrIndustry
+        );
+
+        if (waterfallRules && waterfallRules.length > 0) {
+          console.log(`Applying ${waterfallRules.length} waterfall filter rules...`);
+          const waterfallResult = await applyWaterfallFilters(
+            currentCompanies,
+            waterfallRules,
+            outputWorkbook,
+            sheetHeaders,
+            sheetNumber
+          );
+          currentCompanies = waterfallResult.companies;
+          filterLog.push(...waterfallResult.filterLog);
+          sheetNumber = waterfallResult.sheetNumber;
+        } else {
+          console.log('No waterfall rules generated, skipping waterfall filtering.');
+        }
+      } else {
+        console.log('No business profiles available, skipping waterfall filtering.');
+      }
 
       // Store analysis and validation results for potential use in email/output
       const _analysisResult = qualResult.analysis;
