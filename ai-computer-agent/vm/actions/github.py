@@ -58,6 +58,19 @@ def _repo_flag() -> str:
 # =============================================================================
 
 
+def _sanitize_for_logging(args: List[str]) -> str:
+    """C4: Sanitize command arguments for safe logging."""
+    # Truncate very long arguments and escape special characters
+    sanitized = []
+    for arg in args:
+        if len(arg) > 200:
+            arg = arg[:200] + "..."
+        # Remove potential log injection characters
+        arg = arg.replace("\n", "\\n").replace("\r", "\\r")
+        sanitized.append(arg)
+    return " ".join(sanitized)
+
+
 async def _run_gh(args: List[str], timeout_seconds: int = 60) -> dict:
     """
     Run a gh CLI command and return parsed result.
@@ -66,7 +79,8 @@ async def _run_gh(args: List[str], timeout_seconds: int = 60) -> dict:
         {"success": bool, "stdout": str, "stderr": str, "returncode": int}
     """
     cmd = ["gh"] + args
-    logger.info(f"Running: {' '.join(cmd)}")
+    # C4: Sanitize args for logging to prevent log injection
+    logger.info(f"Running: {_sanitize_for_logging(cmd)}")
 
     try:
         process = await asyncio.create_subprocess_exec(
@@ -86,7 +100,8 @@ async def _run_gh(args: List[str], timeout_seconds: int = 60) -> dict:
             try:
                 await asyncio.wait_for(process.communicate(), timeout=5)
             except asyncio.TimeoutError:
-                pass  # Process killed, ignore timeout
+                # B4: Explicitly wait for process to prevent zombie
+                await process.wait()
             return {
                 "success": False,
                 "stdout": "",

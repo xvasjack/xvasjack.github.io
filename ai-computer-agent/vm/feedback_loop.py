@@ -26,9 +26,17 @@ from typing import Optional, Dict, Any, List, Callable
 from dataclasses import dataclass, field
 from enum import Enum
 import logging
+import hashlib
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("feedback_loop")
+
+
+# A2: Consistent issue key generation to fix research reset mismatch
+def _get_issue_key(issues: List[str]) -> str:
+    """Generate consistent hash key for issue tracking."""
+    all_issues_str = ";".join(sorted(issues))
+    return hashlib.sha256(all_issues_str.encode()).hexdigest()[:32]
 
 
 # C2: LRU Dict for bounded issue tracking
@@ -254,6 +262,10 @@ class FeedbackLoop:
                 await self._report_progress("Feedback loop cancelled by user")
                 break
             iteration = LoopIteration(number=i + 1, state=LoopState.IDLE, started_at=time.time())
+            # C8: Bound iterations list to prevent unbounded memory growth
+            MAX_ITERATIONS_HISTORY = 100
+            if len(self.iterations) >= MAX_ITERATIONS_HISTORY:
+                self.iterations = self.iterations[-(MAX_ITERATIONS_HISTORY - 1):]
             self.iterations.append(iteration)
 
             # Issue 8: Save state at start of each iteration
@@ -419,10 +431,8 @@ class FeedbackLoop:
 
         # Check if stuck on same issues
         # Issue 71 fix: Hash ALL issues, not just first 3, to prevent missing later issues
-        # C3: Use 32 chars (128 bits) instead of 16 to reduce collision probability
-        import hashlib
-        all_issues_str = ";".join(sorted(issues))
-        issue_key = hashlib.sha256(all_issues_str.encode()).hexdigest()[:32]
+        # A2: Use consistent key generation function
+        issue_key = _get_issue_key(issues)
         # C2: LRUDict handles bounding automatically
         self.issue_tracker[issue_key] = self.issue_tracker.get(issue_key, 0) + 1
 
@@ -500,9 +510,16 @@ class FeedbackLoop:
             iteration.state = LoopState.MERGING_PR
 
             # Wait for CI
+            # C7: Add timeout to CI wait to prevent indefinite blocking
             await self._report_progress(f"Waiting for CI on PR #{iteration.pr_number}")
             try:
-                ci_result = await self.wait_for_ci_fn(iteration.pr_number)
+                ci_result = await asyncio.wait_for(
+                    self.wait_for_ci_fn(iteration.pr_number),
+                    timeout=self.config.ci_wait_timeout_minutes * 60
+                )
+            except asyncio.TimeoutError:
+                iteration.issues_found.append(f"CI wait timed out after {self.config.ci_wait_timeout_minutes} minutes")
+                return "continue"
             except Exception as e:
                 iteration.issues_found.append(f"CI wait failed: {e}")
                 return "continue"
@@ -527,6 +544,11 @@ class FeedbackLoop:
                 iteration.issues_found.append(f"Merge failed after retries: {e}")
                 return "continue"
 
+            # A3: Validate merge_result is dict before calling .get()
+            if not isinstance(merge_result, dict):
+                iteration.issues_found.append(f"Invalid merge_result type: {type(merge_result)}")
+                return "continue"
+
             if merge_result.get("success"):
                 iteration.pr_merged = True
                 self.prs_merged += 1
@@ -541,13 +563,17 @@ class FeedbackLoop:
                         await fix_merge_conflict(iteration.pr_number, conflict_files, service_name=self.config.service_name)
                         # Retry merge after conflict resolution
                         merge_result = await self.merge_pr_fn(iteration.pr_number)
-                        if merge_result.get("success"):
+                        if merge_result and merge_result.get("success"):
                             iteration.pr_merged = True
                             self.prs_merged += 1
                         else:
-                            iteration.issues_found.append(f"Merge still failed after conflict fix: {merge_result.get('error')}")
+                            # B5: Report progress on merge conflict failure
+                            await self._report_progress(f"Merge still failed after conflict fix: {merge_result.get('error') if merge_result else 'Unknown'}")
+                            iteration.issues_found.append(f"Merge still failed after conflict fix: {merge_result.get('error') if merge_result else 'Unknown'}")
                             return "continue"
                     except Exception as e:
+                        # B5: Report progress on exception
+                        await self._report_progress(f"Merge conflict fix failed: {e}")
                         iteration.issues_found.append(f"Merge conflict fix failed: {e}")
                         return "continue"
                 elif error_type == "not_mergeable":
@@ -556,31 +582,43 @@ class FeedbackLoop:
                         from actions.claude_code import fix_ci_failure
                         from actions.github import get_ci_error_logs
                         ci_logs = await get_ci_error_logs(iteration.pr_number)
-                        error_logs = ci_logs.get("logs", "") if ci_logs.get("success") else ""
+                        # A8: Check ci_logs is not None before calling .get()
+                        if ci_logs and ci_logs.get("success"):
+                            error_logs = ci_logs.get("logs", "")
+                        else:
+                            error_logs = ""
                         await fix_ci_failure(iteration.pr_number, error_logs, self.config.service_name)
                         # Wait for CI to re-run then retry merge
                         await asyncio.sleep(30)
                         merge_result = await self.merge_pr_fn(iteration.pr_number)
-                        if merge_result.get("success"):
+                        if merge_result and merge_result.get("success"):
                             iteration.pr_merged = True
                             self.prs_merged += 1
                         else:
-                            iteration.issues_found.append(f"Merge still failed after CI fix: {merge_result.get('error')}")
+                            # B5: Report progress on CI fix failure
+                            await self._report_progress(f"Merge still failed after CI fix: {merge_result.get('error') if merge_result else 'Unknown'}")
+                            iteration.issues_found.append(f"Merge still failed after CI fix: {merge_result.get('error') if merge_result else 'Unknown'}")
                             return "continue"
                     except Exception as e:
+                        # B5: Report progress on exception
+                        await self._report_progress(f"CI failure fix failed: {e}")
                         iteration.issues_found.append(f"CI failure fix failed: {e}")
                         return "continue"
                 elif error_type == "review_required":
                     await self._report_progress("Review/CI pending — waiting 30s before retry")
                     await asyncio.sleep(30)
                     merge_result = await self.merge_pr_fn(iteration.pr_number)
-                    if merge_result.get("success"):
+                    if merge_result and merge_result.get("success"):
                         iteration.pr_merged = True
                         self.prs_merged += 1
                     else:
-                        iteration.issues_found.append(f"Merge failed after wait: {merge_result.get('error')}")
+                        # B5: Report progress on review wait failure
+                        await self._report_progress(f"Merge failed after wait: {merge_result.get('error') if merge_result else 'Unknown'}")
+                        iteration.issues_found.append(f"Merge failed after wait: {merge_result.get('error') if merge_result else 'Unknown'}")
                         return "continue"
                 else:
+                    # B5: Report progress on generic merge failure
+                    await self._report_progress(f"Merge failed: {merge_result.get('error')}")
                     iteration.issues_found.append(f"Merge failed: {merge_result.get('error')}")
                     return "continue"
 
@@ -656,7 +694,9 @@ class FeedbackLoop:
             )
 
             research_result = await agent.research_issue(context)
-            iteration.research_result = research_result.root_cause_analysis[:500]
+            # C10: Guard against None root_cause_analysis
+            rca = research_result.root_cause_analysis or ""
+            iteration.research_result = rca[:500]
 
             logger.info(
                 f"Research result: confidence={research_result.confidence}, "
@@ -674,8 +714,8 @@ class FeedbackLoop:
                 )
 
                 if fix_result.get("success"):
-                    # Reset issue tracker for this issue to give fresh attempts
-                    issue_key = ";".join(sorted(issues[:3]))
+                    # A2: Reset issue tracker using consistent key generation
+                    issue_key = _get_issue_key(issues)
                     self.issue_tracker[issue_key] = 0
                     await self._report_progress("Research fix applied — resetting attempt counter")
                     return "continue"

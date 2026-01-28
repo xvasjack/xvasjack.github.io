@@ -122,6 +122,8 @@ def _get_gmail_service():
         os.makedirs(os.path.dirname(GMAIL_TOKEN_PATH), exist_ok=True)
         with open(GMAIL_TOKEN_PATH, "w") as token_file:
             token_file.write(creds.to_json())
+        # A5: Set secure file permissions (owner read/write only)
+        os.chmod(GMAIL_TOKEN_PATH, 0o600)
 
     return build("gmail", "v1", credentials=creds)
 
@@ -222,21 +224,37 @@ def _validate_download_dir(download_dir: str) -> bool:
 # =============================================================================
 
 
-def _get_all_parts(payload, max_depth=10, _current_depth=0):
+# C6: Maximum total MIME parts to prevent DoS
+MAX_MIME_PARTS_TOTAL = 100
+
+
+def _get_all_parts(payload, max_depth=10, _current_depth=0, _total_parts=None):
     """Recursively walk MIME parts to find nested attachments.
 
     Category 2 fix: Add max_depth to prevent infinite recursion on nested emails.
+    C6: Add total parts limit to prevent DoS on emails with many parts.
     """
+    if _total_parts is None:
+        _total_parts = [0]  # Mutable container for tracking across recursion
+
     if _current_depth >= max_depth:
         logger.warning(f"MIME recursion depth limit ({max_depth}) reached")
+        return []
+
+    if _total_parts[0] >= MAX_MIME_PARTS_TOTAL:
+        logger.warning(f"MIME total parts limit ({MAX_MIME_PARTS_TOTAL}) reached")
         return []
 
     parts = payload.get("parts", []) if payload else []
     all_parts = []
     for part in parts:
         if part:
+            _total_parts[0] += 1
+            if _total_parts[0] > MAX_MIME_PARTS_TOTAL:
+                logger.warning(f"MIME total parts limit ({MAX_MIME_PARTS_TOTAL}) exceeded")
+                break
             all_parts.append(part)
-            all_parts.extend(_get_all_parts(part, max_depth, _current_depth + 1))
+            all_parts.extend(_get_all_parts(part, max_depth, _current_depth + 1, _total_parts))
     return all_parts
 
 
@@ -376,6 +394,12 @@ async def download_attachment_api(
             if not safe_filename or safe_filename.startswith('.'):
                 safe_filename = f"attachment_{attachment_id[:8]}{ext}"
             file_path = os.path.join(download_dir, safe_filename)
+
+            # B2: Complete path traversal fix - verify final path is within download_dir
+            real_path = os.path.realpath(file_path)
+            if not real_path.startswith(os.path.realpath(download_dir) + os.sep):
+                logger.error(f"Path traversal detected: {file_path} -> {real_path}")
+                return None
 
             with open(file_path, "wb") as f:
                 f.write(data)

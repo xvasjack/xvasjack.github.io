@@ -122,7 +122,7 @@ JSON array:"""
 
 
 async def _run_claude_subprocess(config, prompt: str) -> str:
-    """Run Claude Code CLI as an async subprocess (B7 fix)."""
+    """Run Claude Code CLI as an async subprocess (B7 fix). A6: Kill subprocess on timeout."""
     claude_path = config.claude_code_path if hasattr(config, 'claude_code_path') else "claude"
     cwd = config.repo_path if hasattr(config, 'repo_path') else os.getcwd()
 
@@ -136,8 +136,14 @@ async def _run_claude_subprocess(config, prompt: str) -> str:
         stderr=asyncio.subprocess.PIPE,
         cwd=cwd,
     )
-    stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=120)
-    return stdout.decode().strip()
+    try:
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+        return stdout.decode().strip()
+    except asyncio.TimeoutError:
+        # A6: Kill subprocess on timeout to prevent orphaned processes
+        proc.kill()
+        await proc.wait()  # Properly reap the process
+        raise TimeoutError("Claude subprocess timed out after 120 seconds")
 
 
 def extract_balanced(text: str, open_char: str, close_char: str) -> Optional[str]:
@@ -197,12 +203,17 @@ def extract_steps_from_response(response: str) -> List[dict]:
                         steps.append(normalize_action(item))
                 if steps:
                     return steps
-        except json.JSONDecodeError:
-            pass
+        except json.JSONDecodeError as e:
+            # C1: Log JSON parse failures instead of silent pass
+            logger.debug(f"JSON array parse failed: {e}")
 
     # Method 2: Find individual JSON objects with "action" field
+    # C2: Add iteration limit to prevent CPU hang on malformed input
+    MAX_EXTRACTION_ITERATIONS = 100
     remaining = response
-    while '"action"' in remaining:
+    iterations = 0
+    while '"action"' in remaining and iterations < MAX_EXTRACTION_ITERATIONS:
+        iterations += 1
         idx = remaining.find('{')
         if idx == -1:
             break
@@ -212,9 +223,12 @@ def extract_steps_from_response(response: str) -> List[dict]:
                 obj = json.loads(obj_str)
                 if 'action' in obj:
                     steps.append(normalize_action(obj))
-            except json.JSONDecodeError:
-                pass
+            except json.JSONDecodeError as e:
+                # C1: Log JSON parse failures instead of silent pass
+                logger.debug(f"JSON object parse failed: {e}")
         remaining = remaining[idx + 1:]
+    if iterations >= MAX_EXTRACTION_ITERATIONS:
+        logger.warning(f"JSON extraction hit iteration limit ({MAX_EXTRACTION_ITERATIONS})")
 
     if steps:
         return steps
@@ -335,6 +349,9 @@ class Agent:
         self._shutdown_event = asyncio.Event()
         # D9: Task lock for concurrent task handling
         self._task_lock = asyncio.Lock()
+        # A1: Initialize _ping_counter to avoid hasattr race condition
+        self._ping_counter = 0
+        self._ping_counter_lock = asyncio.Lock()
 
     @property
     def _cancelled(self) -> bool:
@@ -390,12 +407,14 @@ class Agent:
                 backoff = min(backoff * 2, max_backoff)
 
     async def _flush_send_queue(self):
-        """Send any queued messages after reconnect. Issue 17/22 fix: Uses lock."""
+        """Send any queued messages after reconnect. Issue 17/22 fix: Uses lock. B1: Fix TOCTOU race."""
         async with self._send_queue_lock:
-            while self._send_queue and self.ws:
+            # B1: Capture local reference to prevent race condition if ws becomes None
+            ws = self.ws
+            while self._send_queue and ws:
                 msg = self._send_queue.pop(0)
                 try:
-                    await self.ws.send(msg)
+                    await ws.send(msg)
                 except Exception as e:
                     logger.error(f"Failed to flush queued message: {e}")
                     self._send_queue.insert(0, msg)
@@ -710,11 +729,13 @@ class Agent:
                     if self._shutdown_event.is_set():
                         break
                     # Send a ping to check connection liveness (only every ~24 timeouts = ~2min)
-                    if not hasattr(self, '_ping_counter'):
-                        self._ping_counter = 0
-                    self._ping_counter += 1
-                    if self._ping_counter >= 24:
-                        self._ping_counter = 0
+                    # A1: Use lock-protected increment instead of hasattr check
+                    async with self._ping_counter_lock:
+                        self._ping_counter += 1
+                        should_ping = self._ping_counter >= 24
+                        if should_ping:
+                            self._ping_counter = 0
+                    if should_ping:
                         try:
                             pong = await self.ws.ping()
                             await asyncio.wait_for(pong, timeout=10)
@@ -730,9 +751,15 @@ class Agent:
                     logger.info(f"Received task: {task.id}")
                     # D9: Use lock for concurrent task handling
                     async with self._task_lock:
+                        # A4: Cancel previous task before replacing to prevent memory leak
                         if self._current_task_handle and not self._current_task_handle.done():
-                            logger.warning("Already processing a task, queueing new task")
-                            # B10: Run task in separate asyncio.Task so message loop continues
+                            logger.warning("Already processing a task, cancelling previous task")
+                            self._current_task_handle.cancel()
+                            try:
+                                await asyncio.wait_for(self._current_task_handle, timeout=2)
+                            except (asyncio.TimeoutError, asyncio.CancelledError):
+                                pass  # Task cancelled or timed out, proceed
+                        # B10: Run task in separate asyncio.Task so message loop continues
                         self._current_task_handle = asyncio.create_task(
                             self._execute_and_report(task)
                         )
@@ -850,7 +877,9 @@ async def main():
     try:
         await agent.listen_for_tasks()
     except asyncio.CancelledError:
+        # C3: Re-raise CancelledError after cleanup to allow proper cancellation propagation
         logger.info("Main task cancelled")
+        raise
     except ConnectionError as e:
         logger.error(f"Connection error: {e}")
     finally:

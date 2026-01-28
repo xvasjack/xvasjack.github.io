@@ -197,7 +197,8 @@ async def run_claude_code(
             try:
                 await asyncio.wait_for(process.communicate(), timeout=5)
             except asyncio.TimeoutError:
-                pass  # Process already killed, just ignore
+                # B4: Explicitly wait for process to prevent zombie
+                await process.wait()
             return ClaudeCodeResult(
                 success=False,
                 output="",

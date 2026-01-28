@@ -223,36 +223,36 @@ async def scroll_email_list(direction: str = "down"):
 # =============================================================================
 
 
-async def _blocked_action(action_name: str):
-    """Raise error for blocked actions"""
+def _blocked_action(action_name: str):
+    """B8: Raise error for blocked actions (synchronous to ensure immediate error)"""
     error_msg = f"BLOCKED: {action_name} is not allowed by guardrails"
     logger.error(error_msg)
     raise PermissionError(error_msg)
 
 
-async def compose_email(*args, **kwargs):
-    """BLOCKED: Cannot compose emails"""
-    await _blocked_action("compose_email")
+def compose_email(*args, **kwargs):
+    """BLOCKED: Cannot compose emails. B8: Synchronous to ensure error raised immediately."""
+    _blocked_action("compose_email")
 
 
-async def reply_to_email(*args, **kwargs):
-    """BLOCKED: Cannot reply to emails"""
-    await _blocked_action("reply_to_email")
+def reply_to_email(*args, **kwargs):
+    """BLOCKED: Cannot reply to emails. B8: Synchronous to ensure error raised immediately."""
+    _blocked_action("reply_to_email")
 
 
-async def forward_email(*args, **kwargs):
-    """BLOCKED: Cannot forward emails"""
-    await _blocked_action("forward_email")
+def forward_email(*args, **kwargs):
+    """BLOCKED: Cannot forward emails. B8: Synchronous to ensure error raised immediately."""
+    _blocked_action("forward_email")
 
 
-async def send_email(*args, **kwargs):
-    """BLOCKED: Cannot send emails"""
-    await _blocked_action("send_email")
+def send_email(*args, **kwargs):
+    """BLOCKED: Cannot send emails. B8: Synchronous to ensure error raised immediately."""
+    _blocked_action("send_email")
 
 
-async def delete_email(*args, **kwargs):
-    """BLOCKED: Cannot delete emails"""
-    await _blocked_action("delete_email")
+def delete_email(*args, **kwargs):
+    """BLOCKED: Cannot delete emails. B8: Synchronous to ensure error raised immediately."""
+    _blocked_action("delete_email")
 
 
 # =============================================================================
@@ -329,9 +329,22 @@ async def wait_for_new_email(
         # Take screenshot for Claude to analyze
         screen = await screenshot()
 
-        # Claude will determine if matching email exists
-        # For now, return the screenshot
-        # The main loop handles interpretation
+        # A7: Actually check if email was found by analyzing the screen
+        # Import the vision helper to ask about the screen content
+        try:
+            from actions.vision import ask_about_screen
+            email_found_response = await ask_about_screen(
+                "Is there an email in the search results that matches the search criteria? Reply YES or NO only.",
+                screen
+            )
+            if email_found_response and "YES" in email_found_response.upper():
+                logger.info("Matching email found!")
+                return True
+        except ImportError:
+            # Vision module not available, just log progress
+            pass
+        except Exception as e:
+            logger.warning(f"Email detection check failed: {e}")
 
         logger.info(f"Checking for email... ({int(elapsed)}s elapsed)")
 
@@ -341,9 +354,6 @@ async def wait_for_new_email(
             logger.warning("Timeout waiting for email")
             return False
         await wait(min(check_interval, remaining))
-
-    # Category 12 fix: This return was unreachable (dead code)
-    # The loop above handles all exit paths
 
 
 async def download_latest_automation_output(file_extension: str = ".pptx") -> Optional[str]:

@@ -233,8 +233,16 @@ async def analyze_output_callback(
             }
 
         # Ensure analysis is a plain dict
+        # B6: Use dataclasses.asdict() as fallback since vars() fails on dataclasses
         if not isinstance(analysis, dict):
-            analysis = analysis.to_dict() if hasattr(analysis, 'to_dict') else vars(analysis)
+            if hasattr(analysis, 'to_dict'):
+                analysis = analysis.to_dict()
+            else:
+                import dataclasses
+                if dataclasses.is_dataclass(analysis):
+                    analysis = dataclasses.asdict(analysis)
+                else:
+                    analysis = vars(analysis)
 
         # Issue 5: Map service name to template name
         template = template_name or SERVICE_TO_TEMPLATE.get(service_name)

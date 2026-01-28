@@ -35,6 +35,11 @@ def _validate_url_domain(url: str) -> bool:
         parsed = urlparse(url)
         hostname = parsed.hostname or ""
 
+        # B3: Validate URL scheme to prevent file:// and other dangerous protocols
+        if parsed.scheme not in ("http", "https"):
+            logger.warning(f"URL scheme not allowed: {parsed.scheme}")
+            return False
+
         # Check if domain or any subdomain is in allowed list
         for allowed in ALLOWED_URL_DOMAINS:
             if hostname == allowed or hostname.endswith("." + allowed):
@@ -118,6 +123,10 @@ SERVICE_API_PATHS = {
 # =============================================================================
 
 
+# C5: Maximum field length to prevent DoS via large inputs
+MAX_FIELD_LENGTH = 2000
+
+
 async def submit_form_api(
     service_name: str,
     form_data: Dict[str, str],
@@ -136,6 +145,14 @@ async def submit_form_api(
     Returns:
         {"success": True/False, "response": ..., "error": ...}
     """
+    # C5: Validate field lengths to prevent DoS
+    for key, value in form_data.items():
+        if isinstance(value, str) and len(value) > MAX_FIELD_LENGTH:
+            return {
+                "success": False,
+                "error": f"Field '{key}' exceeds maximum length ({len(value)} > {MAX_FIELD_LENGTH})",
+            }
+
     base_url = RAILWAY_URLS.get(service_name)
     api_path = SERVICE_API_PATHS.get(service_name)
 
