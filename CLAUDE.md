@@ -68,6 +68,12 @@ When comparing outputs, use these as visual/structural reference.
 
 ---
 
+## Bug Fixing Process
+- **Test-first**: When fixing a production bug, write a failing test that reproduces the bug BEFORE writing the fix. Commit the failing test, then fix the code and confirm the test passes.
+
+## Planning
+- When exiting plan mode, state whether the plan is **overengineered**, **underengineered**, or **just right** — with a one-line reason.
+
 ## Communication Style
 - Sacrifice grammar for brevity. Skip filler words
 - No fluff, no emojis unless asked
