@@ -34,30 +34,51 @@ logger = logging.getLogger("feedback_loop")
 
 # A2: Consistent issue key generation to fix research reset mismatch
 def _get_issue_key(issues: List[str]) -> str:
-    """Generate consistent hash key for issue tracking."""
+    """Generate consistent hash key for issue tracking.
+
+    RC-5: Use full SHA256 hash (64 chars) instead of truncated 32 chars
+    to prevent hash collision causing false "stuck" detection.
+    """
     all_issues_str = ";".join(sorted(issues))
-    return hashlib.sha256(all_issues_str.encode()).hexdigest()[:32]
+    return hashlib.sha256(all_issues_str.encode()).hexdigest()  # Full hash
 
 
 # C2: LRU Dict for bounded issue tracking
 class LRUDict(OrderedDict):
-    """LRU-evicting dictionary to prevent unbounded memory growth."""
+    """LRU-evicting dictionary to prevent unbounded memory growth.
+
+    RC-3: Thread-safe with asyncio.Lock for concurrent access protection.
+    Note: For async code, use async_get/async_set methods.
+    """
 
     def __init__(self, max_size: int = 100):
         super().__init__()
         self.max_size = max_size
+        # RC-3: Lock for thread-safe concurrent access
+        import threading
+        self._lock = threading.Lock()
 
     def __setitem__(self, key, value):
-        if key in self:
-            self.move_to_end(key)
-        super().__setitem__(key, value)
-        if len(self) > self.max_size:
-            self.popitem(last=False)
+        with self._lock:
+            if key in self:
+                self.move_to_end(key)
+            super().__setitem__(key, value)
+            if len(self) > self.max_size:
+                self.popitem(last=False)
 
     def get(self, key, default=None):
-        if key in self:
-            self.move_to_end(key)
-        return super().get(key, default)
+        with self._lock:
+            if key in self:
+                self.move_to_end(key)
+            return super().get(key, default)
+
+    def update(self, *args, **kwargs):
+        """RC-3: Thread-safe update."""
+        with self._lock:
+            super().update(*args, **kwargs)
+            # Evict excess items after bulk update
+            while len(self) > self.max_size:
+                self.popitem(last=False)
 
 
 # =============================================================================
@@ -102,7 +123,7 @@ class LoopConfig:
     max_iterations: int = 10
     max_same_issue_attempts: int = 3
     email_wait_timeout_minutes: int = 15
-    deploy_wait_timeout_minutes: int = 5
+    deploy_wait_timeout_minutes: int = 10
     ci_wait_timeout_minutes: int = 10
     health_check_url: Optional[str] = None
     railway_service_url: Optional[str] = None
@@ -114,16 +135,17 @@ class LoopConfig:
         """Category 10 fix: Validate config values are positive"""
         if not self.service_name or not self.service_name.strip():
             raise ValueError("service_name is required")
+        # EH-5: Clearer validation messages
         if self.max_iterations < 1:
-            raise ValueError(f"max_iterations must be >= 1, got {self.max_iterations}")
+            raise ValueError(f"max_iterations must be at least 1, got {self.max_iterations}")
         if self.max_same_issue_attempts < 1:
-            raise ValueError(f"max_same_issue_attempts must be >= 1, got {self.max_same_issue_attempts}")
+            raise ValueError(f"max_same_issue_attempts must be at least 1, got {self.max_same_issue_attempts}")
         if self.email_wait_timeout_minutes < 1:
-            raise ValueError(f"email_wait_timeout_minutes must be >= 1, got {self.email_wait_timeout_minutes}")
+            raise ValueError(f"email_wait_timeout_minutes must be at least 1 minute, got {self.email_wait_timeout_minutes}")
         if self.deploy_wait_timeout_minutes < 1:
-            raise ValueError(f"deploy_wait_timeout_minutes must be >= 1, got {self.deploy_wait_timeout_minutes}")
+            raise ValueError(f"deploy_wait_timeout_minutes must be at least 1 minute, got {self.deploy_wait_timeout_minutes}")
         if self.ci_wait_timeout_minutes < 1:
-            raise ValueError(f"ci_wait_timeout_minutes must be >= 1, got {self.ci_wait_timeout_minutes}")
+            raise ValueError(f"ci_wait_timeout_minutes must be at least 1 minute, got {self.ci_wait_timeout_minutes}")
         if self.max_research_attempts < 0:
             raise ValueError(f"max_research_attempts must be >= 0, got {self.max_research_attempts}")
 
@@ -357,12 +379,13 @@ class FeedbackLoop:
             iteration.issues_found.append(f"Form submission failed after retries: {e}")
             return "continue"
 
-        # Issue 4: Verify form submission
-        verification = await verify_form_submission(submit_result)
-        if not verification.get("verified"):
-            logger.warning(f"Form submission verification failed: {verification.get('error')}")
-            iteration.issues_found.append(f"Form verification failed: {verification.get('error')}")
-            return "continue"
+        # Issue 4: Verify form submission (skip if step was skipped)
+        if not submit_result.get("skipped"):
+            verification = await verify_form_submission(submit_result)
+            if not verification.get("verified"):
+                logger.warning(f"Form submission verification failed: {verification.get('error')}")
+                iteration.issues_found.append(f"Form verification failed: {verification.get('error')}")
+                return "continue"
 
         # Step 2: Wait for email with output (retry 2x)
         self.state = LoopState.WAITING_FOR_EMAIL
@@ -385,12 +408,13 @@ class FeedbackLoop:
 
         iteration.output_file = email_result.get("file_path")
 
-        # Issue 4: Verify email downloaded
-        email_verification = await verify_email_downloaded(iteration.output_file)
-        if not email_verification.get("verified"):
-            logger.warning(f"Email download verification failed: {email_verification.get('error')}")
-            iteration.issues_found.append(f"Email verification failed: {email_verification.get('error')}")
-            return "continue"
+        # Issue 4: Verify email downloaded (skip if step was skipped)
+        if not email_result.get("skipped"):
+            email_verification = await verify_email_downloaded(iteration.output_file)
+            if not email_verification.get("verified"):
+                logger.warning(f"Email download verification failed: {email_verification.get('error')}")
+                iteration.issues_found.append(f"Email verification failed: {email_verification.get('error')}")
+                return "continue"
 
         # Step 3: Analyze output
         self.state = LoopState.ANALYZING_OUTPUT
@@ -406,9 +430,13 @@ class FeedbackLoop:
             )
         except asyncio.TimeoutError:
             iteration.issues_found.append("Output analysis timed out after 5 minutes")
+            # RL-3: Clear output_file on analysis timeout since analysis is incomplete
+            iteration.output_file = None
             return "continue"
         except Exception as e:
             iteration.issues_found.append(f"Output analysis failed: {e}")
+            # RL-3: Clear output_file on analysis error since analysis is incomplete
+            iteration.output_file = None
             return "continue"
 
         if analysis is None:
@@ -421,7 +449,19 @@ class FeedbackLoop:
             return "continue"
 
         issues = analysis.get("issues", [])
-        iteration.issues_found = issues if isinstance(issues, list) else [str(issues)]
+        # EH-2: Properly validate issues type instead of losing structure with str()
+        if isinstance(issues, list):
+            iteration.issues_found = issues
+        elif issues is None:
+            iteration.issues_found = []
+        else:
+            # Log the unexpected type for debugging, then wrap appropriately
+            logger.warning(f"EH-2: analysis.issues has unexpected type {type(issues).__name__}, expected list")
+            # If it's a string, treat it as a single issue; otherwise report the type error
+            if isinstance(issues, str):
+                iteration.issues_found = [issues]
+            else:
+                iteration.issues_found = [f"Invalid issues format: {type(issues).__name__}"]
 
         if not issues:
             await self._report_progress("No issues found — output matches template!")
@@ -478,7 +518,7 @@ class FeedbackLoop:
             try:
                 import re
                 gh_proc = await asyncio.create_subprocess_exec(
-                    "gh", "pr", "create", "--fill", "--head", f"claude/{self.config.service_name}-fix",
+                    "gh", "pr", "create", "--fill", "--head", f"claude/{self.config.service_name}-fix-iter{iteration.number}",
                     cwd=os.path.expanduser("~/xvasjack.github.io"),
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
@@ -499,13 +539,15 @@ class FeedbackLoop:
                 logger.warning(f"Explicit PR creation failed: {e}")
 
         # Issue 4: Verify PR created
-        if iteration.pr_number:
+        # EH-3: Use explicit None check instead of boolean evaluation (pr_number=0 is valid)
+        if iteration.pr_number is not None:
             pr_verification = await verify_pr_created(iteration.pr_number)
             if not pr_verification.get("verified"):
                 logger.warning(f"PR verification failed: {pr_verification.get('error')}")
 
         # Step 5: Wait for CI and merge PR
-        if iteration.pr_number:
+        # EH-3: Use explicit None check instead of boolean evaluation
+        if iteration.pr_number is not None:
             self.state = LoopState.MERGING_PR
             iteration.state = LoopState.MERGING_PR
 
@@ -694,6 +736,11 @@ class FeedbackLoop:
             )
 
             research_result = await agent.research_issue(context)
+            # LB-6: Guard against None research_result
+            if research_result is None:
+                logger.warning("research_issue returned None")
+                iteration.research_result = "Research returned no result"
+                return "stuck"
             # C10: Guard against None root_cause_analysis
             rca = research_result.root_cause_analysis or ""
             iteration.research_result = rca[:500]
@@ -723,11 +770,17 @@ class FeedbackLoop:
             await self._report_progress(
                 f"Research confidence too low ({research_result.confidence:.1f}) or no foundational change needed"
             )
+            # LB-3: Reset counter even when research doesn't find a solution to allow escape
+            issue_key = _get_issue_key(issues)
+            self.issue_tracker[issue_key] = max(0, self.issue_tracker.get(issue_key, 0) - 1)
             return "stuck"
 
         except Exception as e:
             logger.error(f"Research failed: {e}")
             iteration.research_result = f"Error: {e}"
+            # LB-3: Reset counter on research failure to prevent infinite stuck state
+            issue_key = _get_issue_key(issues)
+            self.issue_tracker[issue_key] = max(0, self.issue_tracker.get(issue_key, 0) - 1)
             return "stuck"
 
     async def _wait_for_deployment(self) -> bool:

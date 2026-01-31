@@ -6,10 +6,14 @@ This module extracts:
 - Company data from tables
 - Data validation
 - Missing/invalid fields
+
+Security:
+- SEC-2: ZIP bomb protection via size ratio check
 """
 
 import os
 import re
+import zipfile
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 import logging
@@ -20,10 +24,57 @@ try:
     HAS_OPENPYXL = True
 except ImportError:
     HAS_OPENPYXL = False
-    print("Missing openpyxl. Run: pip install openpyxl")
+    logging.getLogger("xlsx_reader").warning("Missing openpyxl. Run: pip install openpyxl")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("xlsx_reader")
+
+# SEC-2: ZIP bomb protection constants
+MAX_XLSX_SIZE = 50 * 1024 * 1024  # 50MB compressed
+MAX_DECOMPRESSED_SIZE = 500 * 1024 * 1024  # 500MB max decompressed
+MAX_COMPRESSION_RATIO = 100  # Max 100:1 compression ratio
+MAX_ZIP_ENTRIES = 10000  # Max number of files in archive
+
+# IV-6: Maximum field length to prevent memory exhaustion
+MAX_FIELD_LENGTH = 10000
+
+
+def _check_zip_bomb(file_path: str) -> tuple:
+    """
+    SEC-2: Check for ZIP bomb before processing.
+    Returns (is_safe, error_message).
+    """
+    try:
+        compressed_size = os.path.getsize(file_path)
+        if compressed_size == 0:
+            return False, "Empty file"
+
+        # Check file size limit
+        if compressed_size > MAX_XLSX_SIZE:
+            return False, f"File too large: {compressed_size / 1024 / 1024:.1f}MB > {MAX_XLSX_SIZE / 1024 / 1024:.0f}MB"
+
+        with zipfile.ZipFile(file_path, 'r') as zf:
+            # Check number of entries
+            if len(zf.namelist()) > MAX_ZIP_ENTRIES:
+                return False, f"Too many files in archive: {len(zf.namelist())} > {MAX_ZIP_ENTRIES}"
+
+            # Calculate total decompressed size
+            total_uncompressed = sum(info.file_size for info in zf.infolist())
+
+            # Check absolute size limit
+            if total_uncompressed > MAX_DECOMPRESSED_SIZE:
+                return False, f"Decompressed size too large: {total_uncompressed / 1024 / 1024:.1f}MB > {MAX_DECOMPRESSED_SIZE / 1024 / 1024:.0f}MB"
+
+            # Check compression ratio
+            ratio = total_uncompressed / compressed_size if compressed_size > 0 else 0
+            if ratio > MAX_COMPRESSION_RATIO:
+                return False, f"Suspicious compression ratio: {ratio:.1f}:1 > {MAX_COMPRESSION_RATIO}:1"
+
+            return True, None
+    except zipfile.BadZipFile:
+        return False, "Invalid or corrupted ZIP file"
+    except Exception as e:
+        return False, f"ZIP validation error: {e}"
 
 
 @dataclass
@@ -109,6 +160,17 @@ def analyze_xlsx(file_path: str) -> XLSXAnalysis:
             summary="Error: File not found"
         )
 
+    # SEC-2: Check for ZIP bomb before processing
+    is_safe, bomb_error = _check_zip_bomb(file_path)
+    if not is_safe:
+        logger.warning(f"ZIP bomb protection triggered: {bomb_error}")
+        return XLSXAnalysis(
+            file_path=file_path,
+            sheet_count=0,
+            issues=[DataIssue("", 0, "", f"Security: {bomb_error}", None)],
+            summary=f"Security error: {bomb_error}"
+        )
+
     try:
         wb = openpyxl.load_workbook(file_path, data_only=True)
     except Exception as e:
@@ -168,15 +230,23 @@ def extract_sheet_info(ws, sheet_name: str) -> SheetInfo:
     if max_row > 0:
         for col in range(1, max_col + 1):
             cell_value = ws.cell(row=1, column=col).value
-            headers.append(str(cell_value) if cell_value else f"Column_{col}")
+            # IV-6: Truncate field value to prevent memory exhaustion
+            header_str = str(cell_value)[:MAX_FIELD_LENGTH] if cell_value else f"Column_{col}"
+            headers.append(header_str)
 
     # Get sample rows (first 5 data rows)
     sample_rows = []
     for row in range(2, min(7, max_row + 1)):
         row_data = {}
-        for col in range(1, max_col + 1):
+        # IV-9: Use min() to prevent off-by-one column access
+        for col in range(1, min(max_col + 1, len(headers) + 1)):
             header = headers[col - 1] if col <= len(headers) else f"Column_{col}"
-            row_data[header] = ws.cell(row=row, column=col).value
+            cell_val = ws.cell(row=row, column=col).value
+            # IV-6: Truncate field value to prevent memory exhaustion
+            if cell_val is not None:
+                row_data[header] = str(cell_val)[:MAX_FIELD_LENGTH] if len(str(cell_val)) > MAX_FIELD_LENGTH else cell_val
+            else:
+                row_data[header] = cell_val
         sample_rows.append(row_data)
 
     return SheetInfo(

@@ -7,10 +7,15 @@ This module extracts:
 - Logo presence
 - Website links
 - Text content for analysis
+
+Security:
+- SEC-1: XXE protection via defusedxml
+- SEC-2: ZIP bomb protection via size ratio check
 """
 
 import os
 import re
+import zipfile
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 import logging
@@ -22,13 +27,55 @@ try:
     HAS_PPTX = True
 except ImportError:
     HAS_PPTX = False
-    print("Missing python-pptx. Run: pip install python-pptx")
+    logging.getLogger("pptx_reader").warning("Missing python-pptx. Run: pip install python-pptx")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("pptx_reader")
 
 # C7: Maximum PPTX file size to prevent OOM
 MAX_PPTX_SIZE = 50 * 1024 * 1024  # 50MB
+
+# SEC-2: ZIP bomb protection constants
+MAX_DECOMPRESSED_SIZE = 500 * 1024 * 1024  # 500MB max decompressed
+MAX_COMPRESSION_RATIO = 100  # Max 100:1 compression ratio
+MAX_ZIP_ENTRIES = 10000  # Max number of files in archive
+
+# IV-6: Maximum field length to prevent memory exhaustion
+MAX_FIELD_LENGTH = 10000
+
+
+def _check_zip_bomb(file_path: str) -> tuple:
+    """
+    SEC-2: Check for ZIP bomb before processing.
+    Returns (is_safe, error_message).
+    """
+    try:
+        compressed_size = os.path.getsize(file_path)
+        if compressed_size == 0:
+            return False, "Empty file"
+
+        with zipfile.ZipFile(file_path, 'r') as zf:
+            # Check number of entries
+            if len(zf.namelist()) > MAX_ZIP_ENTRIES:
+                return False, f"Too many files in archive: {len(zf.namelist())} > {MAX_ZIP_ENTRIES}"
+
+            # Calculate total decompressed size
+            total_uncompressed = sum(info.file_size for info in zf.infolist())
+
+            # Check absolute size limit
+            if total_uncompressed > MAX_DECOMPRESSED_SIZE:
+                return False, f"Decompressed size too large: {total_uncompressed / 1024 / 1024:.1f}MB > {MAX_DECOMPRESSED_SIZE / 1024 / 1024:.0f}MB"
+
+            # Check compression ratio
+            ratio = total_uncompressed / compressed_size if compressed_size > 0 else 0
+            if ratio > MAX_COMPRESSION_RATIO:
+                return False, f"Suspicious compression ratio: {ratio:.1f}:1 > {MAX_COMPRESSION_RATIO}:1"
+
+            return True, None
+    except zipfile.BadZipFile:
+        return False, "Invalid or corrupted ZIP file"
+    except Exception as e:
+        return False, f"ZIP validation error: {e}"
 
 
 @dataclass
@@ -123,6 +170,17 @@ def analyze_pptx(file_path: str) -> PPTXAnalysis:
             )
     except OSError as e:
         logger.warning(f"Could not check file size: {e}")
+
+    # SEC-2: Check for ZIP bomb before processing
+    is_safe, bomb_error = _check_zip_bomb(file_path)
+    if not is_safe:
+        logger.warning(f"ZIP bomb protection triggered: {bomb_error}")
+        return PPTXAnalysis(
+            file_path=file_path,
+            slide_count=0,
+            issues=[f"Security: {bomb_error}"],
+            summary=f"Security error: {bomb_error}"
+        )
 
     try:
         prs = Presentation(file_path)
@@ -382,12 +440,18 @@ def _is_safe_url(url: str) -> bool:
             return False
 
         # Resolve hostname and check if it's a private IP
+        # SEC-4: Set socket timeout to prevent hanging on slow DNS
         try:
-            ip_str = socket.gethostbyname(hostname)
-            ip = ipaddress.ip_address(ip_str)
-            if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local:
-                return False
-        except (socket.gaierror, ValueError):
+            old_timeout = socket.getdefaulttimeout()
+            socket.setdefaulttimeout(3)  # 3 second timeout for DNS
+            try:
+                ip_str = socket.gethostbyname(hostname)
+                ip = ipaddress.ip_address(ip_str)
+                if ip.is_private or ip.is_loopback or ip.is_reserved or ip.is_link_local:
+                    return False
+            finally:
+                socket.setdefaulttimeout(old_timeout)  # Restore original timeout
+        except (socket.gaierror, ValueError, socket.timeout):
             # If we can't resolve, allow it (external DNS will handle it)
             pass
 

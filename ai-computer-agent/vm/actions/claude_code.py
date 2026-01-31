@@ -170,6 +170,17 @@ async def run_claude_code(
 
     cwd = working_dir or REPO_PATH
 
+    # T6: Stash uncommitted changes to prevent git switch failures
+    try:
+        stash_proc = await asyncio.create_subprocess_exec(
+            "git", "stash", "--include-untracked",
+            cwd=cwd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        await stash_proc.communicate()
+    except Exception as e:
+        logger.warning(f"git stash failed (non-fatal): {e}")
+
+    process = None  # RL-2: Track process for cleanup
     try:
         try:
             from config import CLAUDE_MODEL
@@ -227,6 +238,13 @@ async def run_claude_code(
             error=f"Claude Code not found at {CLAUDE_CODE_PATH}. Install: npm install -g @anthropic-ai/claude-code"
         )
     except Exception as e:
+        # RL-2: Clean up process on any exception
+        if process is not None and process.returncode is None:
+            try:
+                process.kill()
+                await process.wait()
+            except Exception:
+                pass  # Best effort cleanup
         return ClaudeCodeResult(
             success=False,
             output="",

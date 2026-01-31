@@ -54,7 +54,7 @@ def load_config():
 
 def _is_feedback_loop_task(description: str) -> bool:
     """Detect whether a task should be handled by the feedback loop runner."""
-    desc_lower = description.lower()
+    desc_lower = description.lower().replace(" ", "-")
     return any(kw in desc_lower for kw in FEEDBACK_LOOP_KEYWORDS)
 
 
@@ -144,6 +144,15 @@ async def _run_claude_subprocess(config, prompt: str) -> str:
         proc.kill()
         await proc.wait()  # Properly reap the process
         raise TimeoutError("Claude subprocess timed out after 120 seconds")
+    except Exception:
+        # RL-1: Ensure subprocess is reaped on ANY exception to prevent zombies
+        if proc.returncode is None:
+            try:
+                proc.kill()
+                await proc.wait()
+            except Exception:
+                pass  # Best effort cleanup
+        raise
 
 
 def extract_balanced(text: str, open_char: str, close_char: str) -> Optional[str]:
@@ -189,6 +198,12 @@ def extract_json_object(text: str) -> Optional[str]:
 
 def extract_steps_from_response(response: str) -> List[dict]:
     """Extract action steps from Claude's response (handles various formats)"""
+
+    # SEC-5: Limit response size to prevent memory exhaustion
+    MAX_RESPONSE_SIZE = 1_000_000  # 1MB max
+    if len(response) > MAX_RESPONSE_SIZE:
+        logger.warning(f"Response too large ({len(response)} bytes), truncating to {MAX_RESPONSE_SIZE}")
+        response = response[:MAX_RESPONSE_SIZE]
 
     steps = []
 
@@ -290,6 +305,11 @@ def normalize_action(action: dict) -> dict:
 def create_fallback_plan(task_description: str) -> List[dict]:
     """Create a simple fallback plan based on keywords (H7: report failure for unknown tasks)"""
 
+    # SEC-3: Maximum URL length to prevent memory issues
+    MAX_URL_LENGTH = 2048
+    # SEC-3: Maximum text extraction length
+    MAX_TEXT_LENGTH = 1000
+
     steps = []
     task_lower = task_description.lower()
 
@@ -303,23 +323,30 @@ def create_fallback_plan(task_description: str) -> List[dict]:
         steps.append({"action": "wait", "params": {"seconds": 2}})
 
     # L6: Extract URL before lowercasing to preserve case-sensitive paths
-    url_match = re.search(r'https?://\S+', task_description)
+    # SEC-3: Use safer regex that stops at whitespace/common delimiters and limit length
+    url_match = re.search(r'https?://[^\s<>"\')\]]+', task_description[:10000])
     if url_match:
-        steps.append({"action": "open_url", "params": {"url": url_match.group(0)}})
-        steps.append({"action": "wait", "params": {"seconds": 2}})
+        url = url_match.group(0).rstrip('.,;:!?')  # Strip trailing punctuation
+        if len(url) <= MAX_URL_LENGTH:
+            steps.append({"action": "open_url", "params": {"url": url}})
+            steps.append({"action": "wait", "params": {"seconds": 2}})
 
     # Check for text to type
-    type_match = re.search(r'type\s+["\']?([^"\']+)["\']?|["\']([^"\']+)["\']', task_lower)
+    # SEC-3: Limit search scope and text length
+    type_match = re.search(r'type\s+["\']?([^"\']{1,1000})["\']?|["\']([^"\']{1,1000})["\']', task_lower[:5000])
     if type_match:
         text = type_match.group(1) or type_match.group(2)
-        steps.append({"action": "type", "params": {"text": text}})
+        if text and len(text) <= MAX_TEXT_LENGTH:
+            steps.append({"action": "type", "params": {"text": text}})
     elif "hello world" in task_lower:
         steps.append({"action": "type", "params": {"text": "Hello World"}})
 
     if not steps:
         # H7: Return error instead of silently doing nothing
         logger.error(f"Could not create fallback plan for: {task_description[:100]}")
-        return [{"action": "done", "params": {"error": f"Unrecognized task: {task_description[:200]}"}}]
+        # SEC-1: Sanitize task description to prevent log injection
+        sanitized_desc = task_description[:200].replace('\n', ' ').replace('\r', ' ')
+        return [{"action": "done", "params": {"error": f"Unrecognized task: {sanitized_desc}"}}]
 
     steps.append({"action": "done", "params": {}})
 
@@ -352,6 +379,9 @@ class Agent:
         # A1: Initialize _ping_counter to avoid hasattr race condition
         self._ping_counter = 0
         self._ping_counter_lock = asyncio.Lock()
+        # Plan approval flow
+        self._plan_event = asyncio.Event()
+        self._plan_approved = False
 
     @property
     def _cancelled(self) -> bool:
@@ -408,6 +438,8 @@ class Agent:
 
     async def _flush_send_queue(self):
         """Send any queued messages after reconnect. Issue 17/22 fix: Uses lock. B1: Fix TOCTOU race."""
+        # RC-4: Avoid nested locks by tracking need_reconnect outside the queue lock
+        need_reconnect = False
         async with self._send_queue_lock:
             # B1: Capture local reference to prevent race condition if ws becomes None
             ws = self.ws
@@ -415,27 +447,44 @@ class Agent:
                 msg = self._send_queue.pop(0)
                 try:
                     await ws.send(msg)
+                except asyncio.CancelledError:
+                    # EH-1: CancelledError must be propagated, not swallowed
+                    self._send_queue.insert(0, msg)  # Put message back before re-raising
+                    raise
                 except Exception as e:
                     logger.error(f"Failed to flush queued message: {e}")
                     self._send_queue.insert(0, msg)
+                    # DL-1: Mark for reconnect and exit loop
+                    need_reconnect = True
                     break
+        # RC-4: Acquire reconnect lock after releasing queue lock to avoid nested locking
+        if need_reconnect:
+            async with self._reconnect_lock:
+                self._needs_reconnect = True
 
     async def _safe_send(self, msg: str):
         """H18: Send with error handling — queue on failure. A4: Fix TOCTOU race with local reference."""
         # A4: Capture local reference to prevent race condition
         ws = self.ws
         try:
-            if ws:
-                await ws.send(msg)
-            else:
-                async with self._send_queue_lock:
-                    # Issue 26 fix: Bound queue size to prevent memory leak
-                    if len(self._send_queue) >= self.MAX_SEND_QUEUE_SIZE:
-                        logger.warning(f"Send queue full ({self.MAX_SEND_QUEUE_SIZE}), dropping oldest message")
-                        self._send_queue.pop(0)
-                    self._send_queue.append(msg)
-                async with self._reconnect_lock:
-                    self._needs_reconnect = True
+            # RC-1: Wrap send in try/except to handle TOCTOU race where ws closes between check and send
+            if ws and not getattr(ws, 'closed', True):
+                try:
+                    await ws.send(msg)
+                    return  # Success, no need to queue
+                except websockets.ConnectionClosed:
+                    # RC-1: Connection closed during send - fall through to queue
+                    logger.debug("WebSocket closed during send, queuing message")
+            # Queue message for retry
+            async with self._send_queue_lock:
+                # Issue 26 fix: Bound queue size to prevent memory leak
+                if len(self._send_queue) >= self.MAX_SEND_QUEUE_SIZE:
+                    logger.warning(f"Send queue full ({self.MAX_SEND_QUEUE_SIZE}), dropping oldest message")
+                    self._send_queue.pop(0)
+                self._send_queue.append(msg)
+            # RC-2: Always use lock when accessing _needs_reconnect
+            async with self._reconnect_lock:
+                self._needs_reconnect = True
         except (AttributeError, websockets.ConnectionClosed) as e:
             # A4: Handle case where ws becomes None or closed during send
             logger.warning(f"WebSocket unavailable during send: {e}")
@@ -443,16 +492,26 @@ class Agent:
                 if len(self._send_queue) >= self.MAX_SEND_QUEUE_SIZE:
                     self._send_queue.pop(0)
                 self._send_queue.append(msg)
+            # RC-2: Always use lock when accessing _needs_reconnect
             async with self._reconnect_lock:
                 self._needs_reconnect = True
-        except Exception as e:
-            logger.error(f"Send failed, queuing: {e}")
+        except asyncio.CancelledError:
+            # EH-1: CancelledError must be propagated, not swallowed
+            raise
+        except (OSError, IOError, ConnectionError) as e:
+            # Expected network errors - handle gracefully by queuing
+            logger.error(f"Send failed (network error), queuing: {e}")
             async with self._send_queue_lock:
                 if len(self._send_queue) >= self.MAX_SEND_QUEUE_SIZE:
                     self._send_queue.pop(0)
                 self._send_queue.append(msg)
+            # RC-2: Always use lock when accessing _needs_reconnect
             async with self._reconnect_lock:
                 self._needs_reconnect = True
+        except Exception as e:
+            # LB-11: Log unexpected exceptions but re-raise to avoid masking bugs
+            logger.error(f"Unexpected error in send: {e}", exc_info=True)
+            raise
 
     async def send_update(self, update: TaskUpdate):
         msg = encode_message(MESSAGE_TYPES["TASK_UPDATE"], update.to_dict())
@@ -462,11 +521,64 @@ class Agent:
         msg = encode_message(MESSAGE_TYPES["TASK_RESULT"], result.to_dict())
         await self._safe_send(msg)
 
+    async def _wait_for_plan_approval(self, task: Task, plan_summary: str, start_time: float) -> Optional[TaskResult]:
+        """Send plan proposal and wait for user approval/rejection.
+        Returns None if approved, TaskResult if rejected/timed out/cancelled."""
+        # Send plan proposal to host
+        msg = encode_message(MESSAGE_TYPES.get("PLAN_PROPOSAL", "plan_proposal"), {
+            "task_id": task.id,
+            "plan": plan_summary,
+        })
+        await self._safe_send(msg)
+
+        # Wait for approval/rejection
+        self._plan_event.clear()
+        self._plan_approved = False
+
+        try:
+            await asyncio.wait_for(self._plan_event.wait(), timeout=300)
+        except asyncio.TimeoutError:
+            elapsed = int(time.time() - start_time)
+            return TaskResult(
+                task_id=task.id,
+                status=TaskStatus.FAILED,
+                summary="Plan approval timed out after 300 seconds",
+                iterations=0,
+                prs_merged=0,
+                elapsed_seconds=elapsed,
+            )
+
+        if self._cancelled:
+            elapsed = int(time.time() - start_time)
+            return TaskResult(
+                task_id=task.id,
+                status=TaskStatus.FAILED,
+                summary="Cancelled during plan approval",
+                iterations=0,
+                prs_merged=0,
+                elapsed_seconds=elapsed,
+            )
+
+        if not self._plan_approved:
+            elapsed = int(time.time() - start_time)
+            return TaskResult(
+                task_id=task.id,
+                status=TaskStatus.FAILED,
+                summary="Plan rejected by user",
+                iterations=0,
+                prs_merged=0,
+                elapsed_seconds=elapsed,
+            )
+
+        return None  # Approved, continue execution
+
     async def run_task(self, task: Task) -> TaskResult:
         """Execute task — dispatches to feedback loop or plan-based execution."""
 
         self.current_task = task
         self._cancelled = False
+        self._plan_event.clear()
+        self._plan_approved = False
         start_time = time.time()
 
         logger.info(f"=== Starting task: {task.description} ===")
@@ -486,14 +598,19 @@ class Agent:
             from feedback_loop_runner import run_feedback_loop
 
             # Extract service name and form data from task description
-            desc_lower = task.description.lower()
+            desc_lower = task.description.lower().replace(" ", "-")
             service_name = None
             for kw in FEEDBACK_LOOP_KEYWORDS:
                 if kw in desc_lower and kw not in ("feedback loop", "feedback-loop"):
                     service_name = kw
                     break
             if not service_name:
-                service_name = "target-v6"  # default
+                elapsed = int(time.time() - start_time)
+                return TaskResult(
+                    task_id=task.id, status=TaskStatus.FAILED,
+                    summary=f"Could not detect service name from description. Include a service keyword: {', '.join(FEEDBACK_LOOP_KEYWORDS)}",
+                    iterations=0, prs_merged=0, elapsed_seconds=elapsed,
+                )
 
             # Issue 12: Parse and validate task context
             form_data = {}
@@ -504,12 +621,12 @@ class Agent:
                     form_data = {"business": task.description}
 
             # Validate required fields for form submission
-            required_fields = ["email"]
-            missing = [f for f in required_fields if not form_data.get(f) and not form_data.get(f.capitalize())]
-            if missing:
-                logger.warning(
-                    f"Task context missing required fields: {missing}. "
-                    f"Form submission may fail. Context: {form_data}"
+            if not form_data.get("Email") and not form_data.get("email"):
+                elapsed = int(time.time() - start_time)
+                return TaskResult(
+                    task_id=task.id, status=TaskStatus.FAILED,
+                    summary="Missing required 'Email' in form_data. Provide task context as JSON with Email, Business, Country fields.",
+                    iterations=0, prs_merged=0, elapsed_seconds=elapsed,
                 )
 
             async def on_progress(state, message, iteration=0, prs_merged=0):
@@ -525,13 +642,62 @@ class Agent:
             from actions.frontend_api import RAILWAY_URLS
             railway_url = RAILWAY_URLS.get(service_name)
 
-            result = await run_feedback_loop(
-                service_name=service_name,
-                form_data=form_data,
-                railway_service_url=railway_url,
-                health_check_url=railway_url,
-                on_progress=on_progress,
+            # Build readable plan summary for user approval
+            form_summary = ", ".join(f"{k}={v}" for k, v in form_data.items()
+                                     if k not in ("start_from", "existing_file_path"))
+            plan_summary = (
+                f"Feedback Loop: {service_name}\n"
+                f"Form: {form_summary}\n"
+                f"Railway: {railway_url or 'browser fallback'}\n"
+                f"Steps per iteration:\n"
+                f"  1. Submit form\n"
+                f"  2. Wait for email output\n"
+                f"  3. Analyze against template\n"
+                f"  4. Generate code fix (Claude Code)\n"
+                f"  5. Create PR, CI, merge\n"
+                f"  6. Wait for deploy\n"
+                f"  7. Repeat until pass\n"
+                f"Max iterations: 10"
             )
+            approval_result = await self._wait_for_plan_approval(task, plan_summary, start_time)
+            if approval_result is not None:
+                return approval_result
+
+            # Extract skip params
+            start_from = form_data.pop("start_from", None)
+            existing_file_path = form_data.pop("existing_file_path", None)
+
+            # T1: Create cancel_token linked to agent's cancellation state
+            cancel_token = {"cancelled": False}
+
+            # Monitor cancellation in background
+            async def _monitor_cancel():
+                while not cancel_token["cancelled"]:
+                    if self._cancelled:
+                        cancel_token["cancelled"] = True
+                        break
+                    await asyncio.sleep(0.5)
+
+            cancel_monitor = asyncio.create_task(_monitor_cancel())
+
+            try:
+                result = await run_feedback_loop(
+                    service_name=service_name,
+                    form_data=form_data,
+                    railway_service_url=railway_url,
+                    health_check_url=railway_url,
+                    on_progress=on_progress,
+                    start_from=start_from,
+                    existing_file_path=existing_file_path,
+                    cancel_token=cancel_token,
+                )
+            finally:
+                cancel_token["cancelled"] = True
+                cancel_monitor.cancel()
+                try:
+                    await cancel_monitor
+                except asyncio.CancelledError:
+                    pass
 
             # A5: Normalize result — handle both object attrs and dict access
             if hasattr(result, 'success'):
@@ -614,6 +780,17 @@ class Agent:
         print(f"\n>>> Plan has {len(steps)} steps:")
         for i, step in enumerate(steps):
             print(f"  {i+1}. {step['action']}: {step.get('params', {})}")
+
+        # Plan approval: format steps and wait for user
+        plan_lines = []
+        for i, step in enumerate(steps):
+            params = step.get('params', {})
+            param_summary = ", ".join(f"{k}={v}" for k, v in params.items()) if params else ""
+            plan_lines.append(f"Step {i+1}: {step['action']} - {param_summary}")
+        plan_summary = "\n".join(plan_lines)
+        approval_result = await self._wait_for_plan_approval(task, plan_summary, start_time)
+        if approval_result is not None:
+            return approval_result
 
         # Step 2: Execute each step
         for i, step in enumerate(steps):
@@ -774,10 +951,13 @@ class Agent:
                 # B8: Handle additional message types
                 elif msg_type == MESSAGE_TYPES.get("PLAN_APPROVED", "plan_approved"):
                     logger.info("Plan approved by host")
+                    self._plan_approved = True
+                    self._plan_event.set()
 
                 elif msg_type == MESSAGE_TYPES.get("PLAN_REJECTED", "plan_rejected"):
                     logger.info(f"Plan rejected: {payload.get('feedback', '')}")
-                    self._cancelled = True
+                    self._plan_approved = False
+                    self._plan_event.set()
 
                 elif msg_type == MESSAGE_TYPES.get("USER_INPUT", "user_input"):
                     logger.info(f"User input received: {payload.get('input', '')[:100]}")
@@ -792,6 +972,9 @@ class Agent:
 
             except websockets.ConnectionClosed:
                 logger.warning("Connection lost. Reconnecting...")
+                # T3: Unblock any pending plan approval to prevent 300s hang
+                self._plan_approved = False
+                self._plan_event.set()
                 if self._shutdown_event.is_set():
                     break
                 await self.connect_to_host()
@@ -814,6 +997,7 @@ class Agent:
 
     async def _execute_and_report(self, task: Task):
         """B10: Execute task and send result without blocking message loop."""
+        _start = time.time()
         try:
             result = await self.run_task(task)
             await self.send_result(result)
@@ -825,7 +1009,7 @@ class Agent:
                 summary="Task cancelled",
                 iterations=0,
                 prs_merged=0,
-                elapsed_seconds=0,
+                elapsed_seconds=int(time.time() - _start),
             ))
         except Exception as e:
             logger.error(f"Task execution error: {e}")
@@ -835,7 +1019,7 @@ class Agent:
                 summary=f"Error: {e}",
                 iterations=0,
                 prs_merged=0,
-                elapsed_seconds=0,
+                elapsed_seconds=int(time.time() - _start),
             ))
 
 

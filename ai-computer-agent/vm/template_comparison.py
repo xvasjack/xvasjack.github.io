@@ -389,7 +389,8 @@ def compare_pptx_to_template(
             companies_without_logos = [c for c in companies if not c.get("has_logo")]
             if companies_without_logos:
                 missing_pct = len(companies_without_logos) / max(len(companies), 1) * 100
-                severity = Severity.CRITICAL if missing_pct > 50 else Severity.HIGH if missing_pct > 20 else Severity.MEDIUM
+                # LB-8: Use >= for consistent threshold comparison
+                severity = Severity.CRITICAL if missing_pct >= 50 else Severity.HIGH if missing_pct >= 20 else Severity.MEDIUM
                 discrepancies.append(Discrepancy(
                     severity=severity,
                     category="missing_logos",
@@ -445,10 +446,13 @@ def compare_pptx_to_template(
 
     # Check for duplicate companies
     # Category 11 fix: Duplicate names should preserve original case for reporting
+    # LB-7: Use Counter instead of list.count() to avoid O(n^2) complexity
+    from collections import Counter
     total_checks += 1
     names_lower = [c.get("name", "").lower().strip() for c in companies]
     names_original = {c.get("name", "").lower().strip(): c.get("name", "") for c in companies}
-    duplicates = [names_original.get(name, name) for name in set(names_lower) if names_lower.count(name) > 1]
+    name_counts = Counter(names_lower)
+    duplicates = [names_original.get(name, name) for name, count in name_counts.items() if count > 1]
     if duplicates:
         discrepancies.append(Discrepancy(
             severity=Severity.HIGH,
@@ -841,7 +845,21 @@ def compare_output_to_template(
         ComparisonResult
     """
     if template_name not in TEMPLATES:
-        raise ValueError(f"Unknown template: {template_name}. Available: {list(TEMPLATES.keys())}")
+        return ComparisonResult(
+            output_file=analysis.get("file_path", "unknown"),
+            template_name=template_name,
+            passed=False,
+            total_checks=0,
+            passed_checks=0,
+            discrepancies=[Discrepancy(
+                severity=Severity.CRITICAL,
+                category="template",
+                location="N/A",
+                expected="Valid template name",
+                actual=template_name,
+                suggestion=f"Unknown template: {template_name}. Available: {list(TEMPLATES.keys())}",
+            )],
+        )
 
     template = TEMPLATES[template_name]
 
@@ -855,7 +873,7 @@ def compare_output_to_template(
         raise ValueError(f"Unknown template type: {type(template)}")
 
 
-def auto_detect_template(file_path: str, analysis: Dict[str, Any]) -> str:
+def auto_detect_template(file_path: str, analysis: Dict[str, Any]) -> Optional[str]:
     """
     Auto-detect which template to use based on file and content.
     """

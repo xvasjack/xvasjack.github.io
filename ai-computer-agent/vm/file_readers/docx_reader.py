@@ -7,10 +7,14 @@ This module extracts:
 - Tables (headers, rows, column counts)
 - Images/figures
 - Text content for analysis
+
+Security:
+- SEC-2: ZIP bomb protection via size ratio check
 """
 
 import os
 import re
+import zipfile
 from typing import List, Optional, Dict, Any
 from dataclasses import dataclass, field
 import logging
@@ -21,10 +25,54 @@ try:
     HAS_DOCX = True
 except ImportError:
     HAS_DOCX = False
-    print("Missing python-docx. Run: pip install python-docx")
+    logging.getLogger("docx_reader").warning("Missing python-docx. Run: pip install python-docx")
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("docx_reader")
+
+# SEC-2: ZIP bomb protection constants
+MAX_DOCX_SIZE = 50 * 1024 * 1024  # 50MB compressed
+MAX_DECOMPRESSED_SIZE = 500 * 1024 * 1024  # 500MB max decompressed
+MAX_COMPRESSION_RATIO = 100  # Max 100:1 compression ratio
+MAX_ZIP_ENTRIES = 10000  # Max number of files in archive
+
+
+def _check_zip_bomb(file_path: str) -> tuple:
+    """
+    SEC-2: Check for ZIP bomb before processing.
+    Returns (is_safe, error_message).
+    """
+    try:
+        compressed_size = os.path.getsize(file_path)
+        if compressed_size == 0:
+            return False, "Empty file"
+
+        # Check file size limit
+        if compressed_size > MAX_DOCX_SIZE:
+            return False, f"File too large: {compressed_size / 1024 / 1024:.1f}MB > {MAX_DOCX_SIZE / 1024 / 1024:.0f}MB"
+
+        with zipfile.ZipFile(file_path, 'r') as zf:
+            # Check number of entries
+            if len(zf.namelist()) > MAX_ZIP_ENTRIES:
+                return False, f"Too many files in archive: {len(zf.namelist())} > {MAX_ZIP_ENTRIES}"
+
+            # Calculate total decompressed size
+            total_uncompressed = sum(info.file_size for info in zf.infolist())
+
+            # Check absolute size limit
+            if total_uncompressed > MAX_DECOMPRESSED_SIZE:
+                return False, f"Decompressed size too large: {total_uncompressed / 1024 / 1024:.1f}MB > {MAX_DECOMPRESSED_SIZE / 1024 / 1024:.0f}MB"
+
+            # Check compression ratio
+            ratio = total_uncompressed / compressed_size if compressed_size > 0 else 0
+            if ratio > MAX_COMPRESSION_RATIO:
+                return False, f"Suspicious compression ratio: {ratio:.1f}:1 > {MAX_COMPRESSION_RATIO}:1"
+
+            return True, None
+    except zipfile.BadZipFile:
+        return False, "Invalid or corrupted ZIP file"
+    except Exception as e:
+        return False, f"ZIP validation error: {e}"
 
 
 @dataclass
@@ -138,6 +186,16 @@ def analyze_docx(file_path: str) -> DOCXAnalysis:
             file_path=file_path,
             issues=["File not found"],
             summary="Error: File not found"
+        )
+
+    # SEC-2: Check for ZIP bomb before processing
+    is_safe, bomb_error = _check_zip_bomb(file_path)
+    if not is_safe:
+        logger.warning(f"ZIP bomb protection triggered: {bomb_error}")
+        return DOCXAnalysis(
+            file_path=file_path,
+            issues=[f"Security: {bomb_error}"],
+            summary=f"Security error: {bomb_error}"
         )
 
     try:

@@ -90,18 +90,8 @@ except ImportError:
 # RAILWAY URL CONFIGURATION
 # =============================================================================
 
-RAILWAY_URLS = {
-    "target-v3": os.environ.get("TARGET_V3_URL", "https://target-v3.up.railway.app"),
-    "target-v4": os.environ.get("TARGET_V4_URL", "https://target-v4.up.railway.app"),
-    "target-v5": os.environ.get("TARGET_V5_URL", "https://target-v5.up.railway.app"),
-    "target-v6": os.environ.get("TARGET_V6_URL", "https://target-v6.up.railway.app"),
-    "market-research": os.environ.get("MARKET_RESEARCH_URL", "https://market-research.up.railway.app"),
-    "profile-slides": os.environ.get("PROFILE_SLIDES_URL", "https://profile-slides.up.railway.app"),
-    "trading-comparable": os.environ.get("TRADING_COMPARABLE_URL", "https://trading-comparable.up.railway.app"),
-    "validation": os.environ.get("VALIDATION_URL", "https://validation.up.railway.app"),
-    "due-diligence": os.environ.get("DUE_DILIGENCE_URL", "https://due-diligence.up.railway.app"),
-    "utb": os.environ.get("UTB_URL", "https://utb.up.railway.app"),
-}
+# T2: Import from config.py (single source of truth) instead of duplicating
+from config import RAILWAY_URLS
 
 # Service name -> API path mapping
 SERVICE_API_PATHS = {

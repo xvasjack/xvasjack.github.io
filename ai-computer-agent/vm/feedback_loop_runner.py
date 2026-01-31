@@ -45,6 +45,20 @@ logger = logging.getLogger("feedback_loop_runner")
 
 FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://xvasjack.github.io")
 
+# S2: Map service names to email subject search hints (backend emails use human-readable subjects)
+SERVICE_EMAIL_SUBJECTS = {
+    "target-v3": "target search",
+    "target-v4": "target search",
+    "target-v5": "target search",
+    "target-v6": "target search",
+    "market-research": "market research",
+    "profile-slides": "profile slide",
+    "trading-comparable": "trading comp",
+    "validation": "validation result",
+    "due-diligence": "due diligence",
+    "utb": "utb",
+}
+
 # Issue 5: Map service names to template names in template_comparison.TEMPLATES
 SERVICE_TO_TEMPLATE = {
     "target-v3": "target-search",
@@ -120,7 +134,8 @@ async def wait_for_email_callback(
     # Primary: Gmail API
     if HAS_GMAIL_API:
         try:
-            query = f"subject:{service_name} has:attachment newer_than:1h"
+            subject_hint = SERVICE_EMAIL_SUBJECTS.get(service_name, service_name)
+            query = f"subject:({subject_hint}) has:attachment newer_than:1h"
             result = await wait_for_email_api(
                 query=query,
                 download_dir=download_dir,
@@ -143,7 +158,8 @@ async def wait_for_email_callback(
             await open_gmail()
             await asyncio.sleep(2)
 
-            query = f"subject:{service_name} has:attachment newer_than:1h is:unread"
+            subject_hint = SERVICE_EMAIL_SUBJECTS.get(service_name, service_name)
+            query = f"subject:({subject_hint}) has:attachment newer_than:1h is:unread"
             await search_emails(query)
             await asyncio.sleep(2)
 
@@ -185,6 +201,14 @@ async def wait_for_email_callback(
                         # Require the service name to appear as a distinct part, not just substring
                         if age < 120 and (svc_lower in fname_lower or fname_lower.startswith(svc_lower)):
                             logger.info(f"Found in Downloads: {f}")
+                            return {"success": True, "file_path": f}
+
+                # S3: Recency-only fallback — newest file < 120s old with expected extension
+                for pattern in patterns:
+                    for f in sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True):
+                        age = time.time() - os.path.getmtime(f)
+                        if age < 120:
+                            logger.info(f"Found recent file in Downloads (no name match): {f}")
                             return {"success": True, "file_path": f}
         except Exception as e:
             # Category 8 fix: Log download check errors instead of silently swallowing
@@ -436,6 +460,9 @@ async def run_feedback_loop(
     health_check_url: Optional[str] = None,
     railway_service_url: Optional[str] = None,
     on_progress: Optional[Callable] = None,
+    start_from: Optional[str] = None,
+    existing_file_path: Optional[str] = None,
+    cancel_token: Optional[dict] = None,
 ) -> LoopResult:
     """
     Run the complete feedback loop for a service.
@@ -545,6 +572,29 @@ async def run_feedback_loop(
     async def logs():
         return await get_logs_callback(service_name, railway_service_url)
 
+    # Skip-to mode: wrap callbacks to skip steps on first iteration
+    _first_iteration_done = [False]
+
+    if start_from in ("email_check", "analyze"):
+        real_submit = submit
+        async def submit():
+            if not _first_iteration_done[0]:
+                return {"success": True, "skipped": True}
+            return await real_submit()
+
+    if start_from == "analyze" and existing_file_path:
+        real_wait = wait_email
+        async def wait_email():
+            if not _first_iteration_done[0]:
+                return {"success": True, "file_path": existing_file_path, "skipped": True}
+            return await real_wait()
+
+    # Mark first iteration done inside fix callback
+    real_fix = fix
+    async def fix(issues, analysis):
+        _first_iteration_done[0] = True
+        return await real_fix(issues, analysis)
+
     loop = FeedbackLoop(
         config=config,
         submit_form=submit,
@@ -563,7 +613,7 @@ async def run_feedback_loop(
     if saved_prs_merged:
         loop.prs_merged = saved_prs_merged
 
-    result = await loop.run(resume_from=resume_from)
+    result = await loop.run(cancel_token=cancel_token, resume_from=resume_from)
 
     # Issue 9: Learn from successful output
     # A8: Guard against empty iterations list before accessing [-1]
