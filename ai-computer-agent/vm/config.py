@@ -189,12 +189,15 @@ def load_config():
     raw_ws_url = os.environ.get("HOST_WS_URL", "ws://localhost:3000/agent")
     validated_ws_url = _validate_ws_url(raw_ws_url)
 
+    claude_path = os.environ.get("CLAUDE_CODE_PATH", "claude")
     agent = AgentConfig(
         host_ws_url=validated_ws_url,
+        claude_code_path=claude_path,
     )
 
     guardrails = GuardrailConfig()
     paths = PathConfig(
+        claude_code_path=claude_path,
         repo_path=os.environ.get("REPO_PATH", os.path.expanduser("~/xvasjack.github.io")),
         download_folder=os.environ.get(
             "AGENT_DOWNLOAD_PATH",

@@ -18,6 +18,8 @@ import time
 import os
 import sys
 import re
+import platform
+import shutil
 from typing import Optional, List
 from dataclasses import dataclass
 import logging
@@ -45,10 +47,38 @@ FEEDBACK_LOOP_KEYWORDS = [
 ]
 
 
+def _find_claude_cli() -> str:
+    """Auto-detect claude CLI path. Falls back to 'claude'."""
+    if shutil.which("claude"):
+        return "claude"
+    if platform.system() == "Windows":
+        appdata = os.environ.get("APPDATA", "")
+        if appdata:
+            candidate = os.path.join(appdata, "npm", "claude.cmd")
+            if os.path.isfile(candidate):
+                return candidate
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["npm", "root", "-g"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0:
+                npm_bin = os.path.dirname(result.stdout.strip())
+                candidate = os.path.join(npm_bin, "claude.cmd")
+                if os.path.isfile(candidate):
+                    return candidate
+        except Exception:
+            pass
+    return "claude"
+
+
 def load_config():
     from config import AgentConfig as CfgAgentConfig
+    claude_path = os.environ.get("CLAUDE_CODE_PATH") or _find_claude_cli()
     return CfgAgentConfig(
         host_ws_url=os.environ.get("HOST_WS_URL", "ws://localhost:3000/agent"),
+        claude_code_path=claude_path,
     )
 
 
@@ -1138,14 +1168,15 @@ async def main():
     # Verify Claude Code CLI (async)
     try:
         proc = await asyncio.create_subprocess_exec(
-            "claude", "--version",
+            config.claude_code_path, "--version",
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
         stdout, _ = await proc.communicate()
-        print(f"Claude Code CLI: {stdout.decode().strip()}")
+        print(f"Claude Code CLI: {stdout.decode().strip()} (path: {config.claude_code_path})")
     except Exception as e:
         print(f"WARNING: Claude Code CLI check failed: {e}")
+        print(f"  Tried path: {config.claude_code_path}")
         print(f"  Make sure Claude Code is installed: npm install -g @anthropic-ai/claude-code")
 
     print(f"Host WebSocket URL: {config.host_ws_url}")
