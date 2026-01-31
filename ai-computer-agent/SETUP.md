@@ -58,7 +58,7 @@ New-Item -ItemType Directory -Force -Path $agentPath | Out-Null
 
 Write-Host "Syncing agent files from WSL..."
 if (-not (Test-Path $wslBase)) {
-    Write-Error "Cannot access WSL: $wslBase — is Ubuntu running? Try: wsl -d Ubuntu echo ok"
+    Write-Error "Cannot access WSL: $wslBase -- is Ubuntu running? Try: wsl -d Ubuntu echo ok"
     exit 1
 }
 Copy-Item -Path "$wslBase\vm\*" -Destination $agentPath -Recurse -Force -ErrorAction Stop
