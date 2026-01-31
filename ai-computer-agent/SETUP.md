@@ -46,7 +46,6 @@ Save this as `C:\agent\start.ps1`:
 
 ```powershell
 # AI Computer Agent - Windows Startup
-$ErrorActionPreference = "Stop"
 $env:HOST_WS_URL = "ws://localhost:3000/agent"
 $env:AGENT_DOWNLOAD_PATH = "$env:USERPROFILE\Downloads"
 
@@ -58,7 +57,11 @@ $agentPath = "C:\agent\windows"
 New-Item -ItemType Directory -Force -Path $agentPath | Out-Null
 
 Write-Host "Syncing agent files from WSL..."
-Copy-Item -Path "$wslBase\vm\*" -Destination $agentPath -Recurse -Force
+if (-not (Test-Path $wslBase)) {
+    Write-Error "Cannot access WSL: $wslBase — is Ubuntu running? Try: wsl -d Ubuntu echo ok"
+    exit 1
+}
+Copy-Item -Path "$wslBase\vm\*" -Destination $agentPath -Recurse -Force -ErrorAction Stop
 if (Test-Path "$wslBase\windows") {
     Copy-Item -Path "$wslBase\windows\*" -Destination $agentPath -Recurse -Force
 }
@@ -90,6 +93,7 @@ try {
     Start-Sleep -Seconds 1
     # Ensure node_modules exist before launching server
     wsl -e bash -c "cd /home/xvasjack/xvasjack.github.io/ai-computer-agent/host && [ -d node_modules ] || npm install"
+    if ($LASTEXITCODE -ne 0) { Write-Error "npm install failed in WSL"; exit 1 }
     # Start server fully detached (survives PowerShell exit)
     wsl -e bash -c 'cd /home/xvasjack/xvasjack.github.io/ai-computer-agent/host && nohup node server.js > /tmp/host-server.log 2>&1 & disown'
     $waited = 0
@@ -119,6 +123,7 @@ if (-not (Test-Path "venv")) {
 }
 .\venv\Scripts\Activate.ps1
 pip install -q -r requirements.txt
+if ($LASTEXITCODE -ne 0) { Write-Error "pip install failed"; exit 1 }
 
 # --- Run ---
 $logFile = "C:\agent\logs\$(Get-Date -Format 'yyyy-MM-dd-HHmm').log"

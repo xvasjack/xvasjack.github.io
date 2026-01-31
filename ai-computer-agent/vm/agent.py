@@ -252,6 +252,10 @@ async def _run_claude_subprocess(config, prompt: str) -> str:
     )
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+        if stderr:
+            stderr_text = stderr.decode().strip()
+            if stderr_text:
+                logger.warning("Claude CLI stderr: %s", stderr_text[:500])
         return stdout.decode().strip()
     except asyncio.TimeoutError:
         # A6: Kill subprocess on timeout to prevent orphaned processes
@@ -1077,6 +1081,9 @@ class Agent:
                     continue
 
                 msg_type, payload = decode_message(message)
+                if msg_type is None:
+                    logger.warning("Malformed WebSocket message, ignoring: %s", str(message)[:200])
+                    continue
 
                 if msg_type == MESSAGE_TYPES.get("NEW_TASK", "new_task"):
                     task = Task.from_dict(payload)
@@ -1132,6 +1139,7 @@ class Agent:
                 self._plan_event.set()
                 if self._shutdown_event.is_set():
                     break
+                await self.close()  # Close old ws before reconnecting
                 await self.connect_to_host()
             except Exception as e:
                 logger.error(f"Error: {e}")
