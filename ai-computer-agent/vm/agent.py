@@ -47,6 +47,13 @@ FEEDBACK_LOOP_KEYWORDS = [
 ]
 
 
+def _build_claude_cmd(claude_path: str, *args) -> list:
+    """Build command list for claude CLI. Handles 'wsl:' prefix."""
+    if claude_path.startswith("wsl:"):
+        return ["wsl", "-e", claude_path[4:]] + list(args)
+    return [claude_path] + list(args)
+
+
 def _find_claude_cli() -> str:
     """Auto-detect claude CLI path. Falls back to 'claude'."""
     if shutil.which("claude"):
@@ -68,6 +75,17 @@ def _find_claude_cli() -> str:
                 candidate = os.path.join(npm_bin, "claude.cmd")
                 if os.path.isfile(candidate):
                     return candidate
+        except Exception:
+            pass
+        # WSL fallback: claude installed in WSL, not Windows
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["wsl", "-e", "which", "claude"],
+                capture_output=True, text=True, timeout=10,
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                return "wsl:claude"
         except Exception:
             pass
     return "claude"
@@ -222,14 +240,18 @@ JSON array:"""
 async def _run_claude_subprocess(config, prompt: str) -> str:
     """Run Claude Code CLI as an async subprocess (B7 fix). A6: Kill subprocess on timeout."""
     claude_path = config.claude_code_path if hasattr(config, 'claude_code_path') else "claude"
-    cwd = config.repo_path if hasattr(config, 'repo_path') else os.getcwd()
+    is_wsl = claude_path.startswith("wsl:")
+    cwd = None if is_wsl else (config.repo_path if hasattr(config, 'repo_path') else os.getcwd())
 
-    proc = await asyncio.create_subprocess_exec(
+    cmd = _build_claude_cmd(
         claude_path,
-        "--print",
-        "--model", CLAUDE_MODEL,
+        "--print", "--model", CLAUDE_MODEL,
         "--message", prompt,
         "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash",
+    )
+
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         cwd=cwd,
@@ -1167,8 +1189,9 @@ async def main():
 
     # Verify Claude Code CLI (async)
     try:
+        cmd = _build_claude_cmd(config.claude_code_path, "--version")
         proc = await asyncio.create_subprocess_exec(
-            config.claude_code_path, "--version",
+            *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

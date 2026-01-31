@@ -46,38 +46,79 @@ Save this as `C:\agent\start.ps1`:
 
 ```powershell
 # AI Computer Agent - Windows Startup
+$ErrorActionPreference = "Stop"
 $env:HOST_WS_URL = "ws://localhost:3000/agent"
 $env:AGENT_DOWNLOAD_PATH = "$env:USERPROFILE\Downloads"
 
-$logFolder = "C:\agent\logs"
-New-Item -ItemType Directory -Force -Path $logFolder | Out-Null
+New-Item -ItemType Directory -Force -Path "C:\agent\logs" | Out-Null
 
-# Copy files from WSL if needed
-$wslPath = "\\wsl$\Ubuntu\home\xvasjack\xvasjack.github.io\ai-computer-agent\windows"
+# --- Sync latest code from WSL on every start ---
+$wslBase = "\\wsl$\Ubuntu\home\xvasjack\xvasjack.github.io\ai-computer-agent"
 $agentPath = "C:\agent\windows"
+New-Item -ItemType Directory -Force -Path $agentPath | Out-Null
 
-if (-not (Test-Path "$agentPath\agent.py")) {
-    Write-Host "Copying agent files from WSL..."
-    Copy-Item -Recurse "$wslPath\*" $agentPath -Force
+Write-Host "Syncing agent files from WSL..."
+Copy-Item -Path "$wslBase\vm\*" -Destination $agentPath -Recurse -Force
+if (Test-Path "$wslBase\windows") {
+    Copy-Item -Path "$wslBase\windows\*" -Destination $agentPath -Recurse -Force
+}
+$sharedDest = "C:\agent\shared"
+if (Test-Path "$wslBase\shared") {
+    New-Item -ItemType Directory -Force -Path $sharedDest | Out-Null
+    Copy-Item -Path "$wslBase\shared\*" -Destination $sharedDest -Recurse -Force
 }
 
-# Install dependencies if needed
-if (-not (Test-Path "$agentPath\venv")) {
-    Write-Host "Creating virtual environment..."
-    cd $agentPath
+# --- Claude CLI: use WSL (claude is at /usr/bin/claude in WSL) ---
+$env:CLAUDE_CODE_PATH = "wsl:claude"
+try {
+    $ver = wsl -e claude --version 2>&1
+    Write-Host "Claude CLI (WSL): $ver"
+} catch {
+    Write-Warning "wsl -e claude --version failed. Check WSL + claude installation."
+}
+
+# --- Host auto-start ---
+$hostRunning = $false
+try {
+    $tcp = New-Object System.Net.Sockets.TcpClient
+    $tcp.Connect("localhost", 3000)
+    $tcp.Close()
+    $hostRunning = $true
+    Write-Host "Host server: running"
+} catch {
+    Write-Host "Starting host server in WSL..."
+    wsl -e bash -c "cd /home/xvasjack/xvasjack.github.io/ai-computer-agent/host && nohup node server.js > /tmp/host-server.log 2>&1 &"
+    $waited = 0
+    while ($waited -lt 10) {
+        Start-Sleep -Seconds 1
+        $waited++
+        try {
+            $tcp = New-Object System.Net.Sockets.TcpClient
+            $tcp.Connect("localhost", 3000)
+            $tcp.Close()
+            $hostRunning = $true
+            Write-Host "Host server started (${waited}s)"
+            break
+        } catch {}
+    }
+    if (-not $hostRunning) {
+        Write-Error "Host server failed to start within 10s"
+        exit 1
+    }
+}
+
+# --- Venv + deps ---
+cd $agentPath
+if (-not (Test-Path "venv")) {
     python -m venv venv
-    .\venv\Scripts\Activate.ps1
-    pip install -r requirements.txt
 }
+.\venv\Scripts\Activate.ps1
+pip install -q -r requirements.txt
 
-# Start agent
-$logFile = "$logFolder\$(Get-Date -Format 'yyyy-MM-dd-HHmm').log"
+# --- Run ---
+$logFile = "C:\agent\logs\$(Get-Date -Format 'yyyy-MM-dd-HHmm').log"
 Write-Host "Starting agent... Log: $logFile"
 Write-Host "ABORT: Move mouse to TOP-LEFT corner"
-Write-Host ""
-
-cd $agentPath
-.\venv\Scripts\Activate.ps1
 python agent.py 2>&1 | Tee-Object -FilePath $logFile
 ```
 
