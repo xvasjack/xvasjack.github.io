@@ -1,6 +1,31 @@
-# CLI test
-
 # CLAUDE.md
+
+## HARD RULES — DO NOT ASK, JUST DO
+
+These override any instinct to "check with user first." Violating these is a bug.
+
+1. **Commit + push immediately after code changes.** No asking "want me to commit?" — the answer is always yes. `git add`, `git commit`, `git push` as part of the same action that wrote the code. Zero uncommitted changes ever.
+2. **Read this file AND `ai-computer-agent/PROJECT_KNOWLEDGE.md` at session start.** Before touching any code.
+3. **Update `ai-computer-agent/PROJECT_KNOWLEDGE.md` at session end** if you changed anything significant.
+4. **Run `npm test` before pushing** (backend changes only). If tests fail, fix them before pushing.
+5. **Never ask permission for things this file already decided.** If CLAUDE.md says to do X, do X. Don't ask "should I do X?"
+
+---
+
+## Session Knowledge (READ FIRST, UPDATE LAST)
+
+**Before starting work**, read `ai-computer-agent/PROJECT_KNOWLEDGE.md` for full project context — architecture, how AI is used, feedback loop internals, environment setup, known issues, file map. This avoids repeating background questions.
+
+**Before ending a session** where you made significant changes, update `ai-computer-agent/PROJECT_KNOWLEDGE.md` with:
+- New files created or deleted
+- Architecture changes
+- New known issues or resolved ones
+- Changed env vars or config
+- Anything a future session would waste time rediscovering
+
+This is the project's persistent memory. Keep it accurate.
+
+---
 
 ## User Workflow (READ THIS FIRST)
 
@@ -246,5 +271,5 @@ SCREENSHOT_API_URL  # Custom screenshot API URL (optional)
 ## Git Workflow
 - Feature branches: `claude/{feature}-{suffix}`
 - Commit style: `Type: Description` (Add, Fix, Improve, Update)
-- Run `npm test` before pushing
-- **All code changes must be committed and pushed immediately after being made — never leave uncommitted local changes**
+- Run `npm test` before pushing (backend changes only)
+- **Commit + push is part of the task, not a separate step. See HARD RULES at top of file.**
