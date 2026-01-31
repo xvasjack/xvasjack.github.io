@@ -68,6 +68,12 @@ When comparing outputs, use these as visual/structural reference.
 
 ---
 
+## Bug Fixing Process
+- **Test-first**: When fixing a production bug, write a failing test that reproduces the bug BEFORE writing the fix. Commit the failing test, then fix the code and confirm the test passes.
+
+## Planning
+- When exiting plan mode, state whether the plan is **overengineered**, **underengineered**, or **just right** — with a one-line reason.
+
 ## Communication Style
 - Sacrifice grammar for brevity. Skip filler words
 - No fluff, no emojis unless asked
@@ -216,6 +222,18 @@ SCREENSHOT_API_URL  # Custom screenshot API URL (optional)
 5. **No partial work.** Shipping 90% complete is the same as shipping broken. If a change needs to apply to 10 places and you only hit 9, it's a bug.
 
 6. **Question your own assumptions.** If you think "this is probably the only place" — prove it. Grep. Don't guess.
+
+## Bash Guidelines
+### IMPORTANT: Avoid commands that cause output buffering issues
+- DO NOT pipe output through `head`, `tail`, `less`, or `more` when monitoring or checking command output
+- DO NOT use `| head -n X` or `| tail -n X` to truncate output - these cause buffering problems
+- Instead, let commands complete fully, or use `--max-lines` flags if the command supports them
+- For log monitoring, prefer reading files directly rather than piping through filters
+
+### When checking command output:
+- Run commands directly without pipes when possible
+- If you need to limit output, use command-specific flags (e.g., `git log -n 10` instead of `git log | head -10`)
+- Avoid chained pipes that can cause output to buffer indefinitely
 
 ## Git Workflow
 - Feature branches: `claude/{feature}-{suffix}`
