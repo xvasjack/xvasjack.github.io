@@ -58,6 +58,74 @@ def _is_feedback_loop_task(description: str) -> bool:
     return any(kw in desc_lower for kw in FEEDBACK_LOOP_KEYWORDS)
 
 
+async def _parse_task_intent(config, description: str) -> dict:
+    """Parse user intent from description using Claude Code CLI (Max subscription).
+    Falls back to keyword matching if CLI call fails.
+
+    Returns dict with optional keys:
+        start_from: "email_check" | "analyze" | None
+        existing_file_path: str | None
+        email_address: str | None
+    """
+    # Layer 1: Use Claude Code CLI for smart parsing (uses Max subscription, no API key)
+    try:
+        prompt = (
+            f"Parse this task description and return ONLY a JSON object.\n\n"
+            f"TASK: {description}\n\n"
+            f"Extract these fields (omit if not mentioned):\n"
+            f'- "start_from": "email_check" if user says results already emailed/received/sent '
+            f'and wants to start from checking email. "analyze" if user says file already downloaded. '
+            f"null if full loop from form submission.\n"
+            f'- "existing_file_path": exact file path if user specifies one, null otherwise\n'
+            f'- "email_address": email address if user mentions one, null otherwise\n\n'
+            f'Return ONLY valid JSON, nothing else. '
+            f'Example: {{"start_from": "email_check", "email_address": "user@gmail.com"}}'
+        )
+
+        output = await _run_claude_subprocess(config, prompt)
+        import json as _json
+        text = output.strip()
+        start = text.find('{')
+        end = text.rfind('}')
+        if start >= 0 and end > start:
+            parsed = _json.loads(text[start:end + 1])
+            if parsed.get("start_from") not in (None, "email_check", "analyze"):
+                parsed.pop("start_from", None)
+            result = {k: v for k, v in parsed.items() if v is not None}
+            logger.info(f"Claude intent parse: {result}")
+            return result
+    except Exception as e:
+        logger.warning(f"Claude intent parsing failed, using keyword fallback: {e}")
+
+    # Layer 2: Keyword fallback (always works, no external calls)
+    desc_lower = description.lower()
+    intent = {}
+
+    email_skip = [
+        "already been emailed", "already emailed", "already received",
+        "result have already", "results have already",
+        "start by opening the email", "start from email",
+        "open the email", "check email first", "download the file",
+        "start from download", "find the latest", "find the email",
+    ]
+    if any(phrase in desc_lower for phrase in email_skip):
+        intent["start_from"] = "email_check"
+
+    analyze_skip = [
+        "already downloaded", "file is at", "file is in",
+        "start from analy", "i have the file",
+    ]
+    if any(phrase in desc_lower for phrase in analyze_skip):
+        if "start_from" not in intent:
+            intent["start_from"] = "analyze"
+
+    email_match = re.search(r'[\w.+-]+@[\w.-]+\.\w+', description)
+    if email_match:
+        intent["email_address"] = email_match.group()
+
+    return intent
+
+
 def get_plan_from_claude(config, task_description: str) -> List[dict]:
     """
     Call Claude Code ONCE to get a complete plan.
@@ -620,6 +688,17 @@ class Agent:
                 except (json.JSONDecodeError, TypeError):
                     form_data = {"business": task.description}
 
+            # Parse user intent from description (uses Claude Code CLI or keyword fallback)
+            user_intent = await _parse_task_intent(self.config, task.description)
+            logger.info(f"Parsed task intent: {user_intent}")
+
+            # Apply intent: fill gaps in form_data (don't override explicit JSON context)
+            if "start_from" not in form_data and "start_from" in user_intent:
+                form_data["start_from"] = user_intent["start_from"]
+            if "email_address" in user_intent:
+                if not form_data.get("Email") and not form_data.get("email"):
+                    form_data["Email"] = user_intent["email_address"]
+
             # Validate required fields for form submission
             if not form_data.get("Email") and not form_data.get("email"):
                 elapsed = int(time.time() - start_time)
@@ -645,19 +724,49 @@ class Agent:
             # Build readable plan summary for user approval
             form_summary = ", ".join(f"{k}={v}" for k, v in form_data.items()
                                      if k not in ("start_from", "existing_file_path"))
+
+            start_from_mode = form_data.get("start_from")
+            if start_from_mode == "email_check":
+                steps_list = [
+                    "1. Skip form submission (results already sent)",
+                    "2. Check email for output attachment",
+                    "3. Download and analyze against template",
+                    "4. Generate code fix via Claude Code",
+                    "5. Create PR, CI, merge",
+                    "6. Wait for deploy",
+                    "7. Re-submit form, repeat until output matches template",
+                ]
+                mode_label = "Start from email"
+            elif start_from_mode == "analyze":
+                steps_list = [
+                    "1. Skip form + email (file already available)",
+                    "2. Analyze file against template",
+                    "3. Generate code fix via Claude Code",
+                    "4. Create PR, CI, merge",
+                    "5. Wait for deploy",
+                    "6. Re-submit form, repeat until output matches template",
+                ]
+                mode_label = "Start from analysis"
+            else:
+                steps_list = [
+                    "1. Submit form on frontend",
+                    "2. Wait for email output",
+                    "3. Analyze against template",
+                    "4. Generate code fix via Claude Code",
+                    "5. Create PR, CI, merge",
+                    "6. Wait for deploy",
+                    "7. Repeat until output matches template",
+                ]
+                mode_label = "Full loop"
+
             plan_summary = (
                 f"Feedback Loop: {service_name}\n"
+                f"Mode: {mode_label}\n"
                 f"Form: {form_summary}\n"
                 f"Railway: {railway_url or 'browser fallback'}\n"
-                f"Steps per iteration:\n"
-                f"  1. Submit form\n"
-                f"  2. Wait for email output\n"
-                f"  3. Analyze against template\n"
-                f"  4. Generate code fix (Claude Code)\n"
-                f"  5. Create PR, CI, merge\n"
-                f"  6. Wait for deploy\n"
-                f"  7. Repeat until pass\n"
-                f"Max iterations: 10"
+                f"Steps:\n"
+                + "\n".join(f"  {s}" for s in steps_list)
+                + f"\nMax iterations: 10"
             )
             approval_result = await self._wait_for_plan_approval(task, plan_summary, start_time)
             if approval_result is not None:
