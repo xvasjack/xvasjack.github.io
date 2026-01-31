@@ -92,7 +92,7 @@ try {
     wsl -e bash -c 'fuser -k 3000/tcp 2>/dev/null; true'
     Start-Sleep -Seconds 1
     # Ensure node_modules exist before launching server
-    wsl -e bash -c "cd /home/xvasjack/xvasjack.github.io/ai-computer-agent/host && [ -d node_modules ] || npm install"
+    wsl -e bash -c 'cd /home/xvasjack/xvasjack.github.io/ai-computer-agent/host && [ -d node_modules ] || npm install'
     if ($LASTEXITCODE -ne 0) { Write-Error "npm install failed in WSL"; exit 1 }
     # Start server fully detached (survives PowerShell exit)
     wsl -e bash -c 'cd /home/xvasjack/xvasjack.github.io/ai-computer-agent/host && nohup node server.js > /tmp/host-server.log 2>&1 & disown'
