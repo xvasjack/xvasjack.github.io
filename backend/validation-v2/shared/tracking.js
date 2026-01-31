@@ -53,6 +53,8 @@ const MODEL_COSTS = {
   // Kimi (Moonshot)
   'moonshot-v1-128k': { input: 0.00084, output: 0.00084 },
   'kimi-128k': { input: 0.00084, output: 0.00084 },
+  'kimi-32k': { input: 0.00035, output: 0.00035 },
+  'gemini-2.0-flash': { input: 0.0001, output: 0.0004 },
 };
 
 // Cache access token

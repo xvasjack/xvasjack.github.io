@@ -320,7 +320,11 @@ async def search_emails_api(
 
         return email_list
 
-    return await asyncio.get_running_loop().run_in_executor(None, _search)
+    # RC-3: Wrap blocking executor call with timeout to prevent indefinite hangs
+    return await asyncio.wait_for(
+        asyncio.get_running_loop().run_in_executor(None, _search),
+        timeout=30  # 30 second timeout for email search
+    )
 
 
 async def download_attachment_api(
@@ -409,7 +413,11 @@ async def download_attachment_api(
 
         return None
 
-    return await asyncio.get_running_loop().run_in_executor(None, _download)
+    # RC-3: Wrap blocking executor call with timeout to prevent indefinite hangs
+    return await asyncio.wait_for(
+        asyncio.get_running_loop().run_in_executor(None, _download),
+        timeout=60  # 60 second timeout for attachment download
+    )
 
 
 async def wait_for_email_api(

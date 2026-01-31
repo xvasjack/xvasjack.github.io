@@ -11,6 +11,7 @@ const { recordTokens } = require('./shared/tracking');
 
 const BATCH_SIZE = 5; // Companies per Perplexity query
 const PERPLEXITY_TIMEOUT = 90000;
+const PARALLEL_BATCHES = 3; // Max concurrent Perplexity batches per discovery step
 
 /**
  * Call Perplexity sonar-pro API
@@ -199,18 +200,20 @@ async function discoverAnnualReports(companies) {
 
   const results = new Map(); // companyName -> discovery result
 
-  // Step 1: Search for annual report PDFs in batches
+  // Step 1: Search for annual report PDFs in batches (up to PARALLEL_BATCHES concurrent)
   console.log('Step 1: Searching for annual report PDFs...');
   const batches = [];
   for (let i = 0; i < companies.length; i += BATCH_SIZE) {
     batches.push(companies.slice(i, i + BATCH_SIZE));
   }
 
-  for (let i = 0; i < batches.length; i++) {
-    const batch = batches[i];
-    console.log(`  Batch ${i + 1}/${batches.length}: ${batch.map((c) => c.name).join(', ')}`);
-    const batchResults = await searchAnnualReportBatch(batch);
-    batchResults.forEach((r) => results.set(r.companyName, r));
+  for (let i = 0; i < batches.length; i += PARALLEL_BATCHES) {
+    const chunk = batches.slice(i, i + PARALLEL_BATCHES);
+    console.log(
+      `  Running batches ${i + 1}-${Math.min(i + PARALLEL_BATCHES, batches.length)}/${batches.length} in parallel...`
+    );
+    const chunkResults = await Promise.all(chunk.map((batch) => searchAnnualReportBatch(batch)));
+    chunkResults.flat().forEach((r) => results.set(r.companyName, r));
   }
 
   // Step 2: For companies without PDF, search investor presentations
@@ -228,10 +231,12 @@ async function discoverAnnualReports(companies) {
       ipBatches.push(noPdfCompanies.slice(i, i + BATCH_SIZE));
     }
 
-    for (let i = 0; i < ipBatches.length; i++) {
-      const batch = ipBatches[i];
-      const batchResults = await searchInvestorPresentationBatch(batch);
-      batchResults.forEach((r) => {
+    for (let i = 0; i < ipBatches.length; i += PARALLEL_BATCHES) {
+      const chunk = ipBatches.slice(i, i + PARALLEL_BATCHES);
+      const chunkResults = await Promise.all(
+        chunk.map((batch) => searchInvestorPresentationBatch(batch))
+      );
+      chunkResults.flat().forEach((r) => {
         if (r.pdfUrl) {
           results.set(r.companyName, r);
         }
@@ -252,10 +257,12 @@ async function discoverAnnualReports(companies) {
       webBatches.push(stillNoPdfCompanies.slice(i, i + BATCH_SIZE));
     }
 
-    for (let i = 0; i < webBatches.length; i++) {
-      const batch = webBatches[i];
-      const batchResults = await searchWebDescriptionBatch(batch);
-      batchResults.forEach((r) => results.set(r.companyName, r));
+    for (let i = 0; i < webBatches.length; i += PARALLEL_BATCHES) {
+      const chunk = webBatches.slice(i, i + PARALLEL_BATCHES);
+      const chunkResults = await Promise.all(
+        chunk.map((batch) => searchWebDescriptionBatch(batch))
+      );
+      chunkResults.flat().forEach((r) => results.set(r.companyName, r));
     }
   }
 

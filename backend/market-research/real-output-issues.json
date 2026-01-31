@@ -1,0 +1,41 @@
+{
+  "timestamp": "2026-01-17T16:32:41.252Z",
+  "file": "vietnam-output.pptx",
+  "valid": false,
+  "summary": {
+    "passed": 24,
+    "failed": 1,
+    "warnings": 2
+  },
+  "failed": [
+    {
+      "check": "Slide 2 length",
+      "expected": ">= 100",
+      "actual": 99
+    }
+  ],
+  "warnings": [
+    {
+      "check": "Empty slides",
+      "message": "Slides with <50 chars: 30"
+    },
+    {
+      "check": "Empty slides",
+      "message": "6 slides with <100 chars"
+    }
+  ],
+  "structure": {
+    "slides": 33,
+    "charts": 4,
+    "tables": 63,
+    "text": 12632
+  },
+  "sections": {
+    "Total Primary Energy Supply Coal dominat": 1,
+    "Electricity Consumption vs Capacity Dema": 1,
+    "Electricity Price Electricity prices fro": 1,
+    "Gas &amp; LNG Market Domestic gas produc": 1,
+    "Entry Strategy Options JV with local ind": 1,
+    "Opportunities &amp; Obstacles Summary of": 1
+  }
+}

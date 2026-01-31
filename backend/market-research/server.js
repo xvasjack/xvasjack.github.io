@@ -6,7 +6,7 @@ const pptxgen = require('pptxgenjs');
 const { securityHeaders, rateLimiter } = require('./shared/security');
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
-const { createTracker } = require('./shared/tracking');
+const { createTracker, trackingContext, recordTokens } = require('./shared/tracking');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers({ logMemory: false });
@@ -128,6 +128,7 @@ async function callDeepSeekChat(prompt, systemPrompt = '', maxTokens = 4096) {
     const inputTokens = data.usage?.prompt_tokens || 0;
     const outputTokens = data.usage?.completion_tokens || 0;
     trackCost('deepseek-chat', inputTokens, outputTokens);
+    recordTokens('deepseek-chat', inputTokens, outputTokens);
 
     return {
       content: data.choices?.[0]?.message?.content || '',
@@ -176,6 +177,7 @@ async function callDeepSeek(prompt, systemPrompt = '', maxTokens = 16384) {
     const inputTokens = data.usage?.prompt_tokens || 0;
     const outputTokens = data.usage?.completion_tokens || 0;
     trackCost('deepseek-reasoner', inputTokens, outputTokens);
+    recordTokens('deepseek-reasoner', inputTokens, outputTokens);
 
     // R1 returns reasoning_content + content
     const content = data.choices?.[0]?.message?.content || '';
@@ -262,6 +264,7 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true) {
     const inputTokens = data.usage?.prompt_tokens || 0;
     const outputTokens = data.usage?.completion_tokens || 0;
     trackCost('kimi-128k', inputTokens, outputTokens);
+    recordTokens('kimi-128k', inputTokens, outputTokens);
 
     // Debug: log if response has tool calls or empty content
     const content = data.choices?.[0]?.message?.content || '';
@@ -7687,112 +7690,116 @@ async function runMarketResearch(userPrompt, email) {
 
   const tracker = createTracker('market-research', email, { prompt: userPrompt.substring(0, 200) });
 
-  try {
-    // Stage 1: Parse scope
-    const scope = await parseScope(userPrompt);
+  return trackingContext.run(tracker, async () => {
+    try {
+      // Stage 1: Parse scope
+      const scope = await parseScope(userPrompt);
 
-    // Stage 2: Research each country (in parallel with limit)
-    console.log('\n=== STAGE 2: COUNTRY RESEARCH ===');
-    console.log(`Researching ${scope.targetMarkets.length} countries...`);
+      // Stage 2: Research each country (in parallel with limit)
+      console.log('\n=== STAGE 2: COUNTRY RESEARCH ===');
+      console.log(`Researching ${scope.targetMarkets.length} countries...`);
 
-    const countryAnalyses = [];
+      const countryAnalyses = [];
 
-    // Process countries in batches of 2 to manage API rate limits
-    for (let i = 0; i < scope.targetMarkets.length; i += 2) {
-      const batch = scope.targetMarkets.slice(i, i + 2);
-      const batchResults = await Promise.all(
-        batch.map((country) => researchCountry(country, scope.industry, scope.clientContext, scope))
-      );
-      countryAnalyses.push(...batchResults);
-    }
+      // Process countries in batches of 2 to manage API rate limits
+      for (let i = 0; i < scope.targetMarkets.length; i += 2) {
+        const batch = scope.targetMarkets.slice(i, i + 2);
+        const batchResults = await Promise.all(
+          batch.map((country) =>
+            researchCountry(country, scope.industry, scope.clientContext, scope)
+          )
+        );
+        countryAnalyses.push(...batchResults);
+      }
 
-    // Stage 3: Synthesize findings
-    const synthesis = await synthesizeFindings(countryAnalyses, scope);
+      // Stage 3: Synthesize findings
+      const synthesis = await synthesizeFindings(countryAnalyses, scope);
 
-    // Stage 4: Generate PPT
-    const pptBuffer = await generatePPT(synthesis, countryAnalyses, scope);
+      // Stage 4: Generate PPT
+      const pptBuffer = await generatePPT(synthesis, countryAnalyses, scope);
 
-    // Stage 5: Send email
-    const filename = `Market_Research_${scope.industry.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pptx`;
+      // Stage 5: Send email
+      const filename = `Market_Research_${scope.industry.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pptx`;
 
-    const emailHtml = `
+      const emailHtml = `
       <p>Your market research report is attached.</p>
       <p style="color: #666; font-size: 12px;">${scope.industry} - ${scope.targetMarkets.join(', ')}</p>
     `;
 
-    await sendEmail(
-      email,
-      `Market Research: ${scope.industry} - ${scope.targetMarkets.join(', ')}`,
-      emailHtml,
-      {
-        filename,
-        content: pptBuffer.toString('base64'),
-      }
-    );
-
-    const totalTime = (Date.now() - startTime) / 1000;
-    console.log('\n========================================');
-    console.log('MARKET RESEARCH - COMPLETE');
-    console.log('========================================');
-    console.log(
-      `Total time: ${totalTime.toFixed(0)} seconds (${(totalTime / 60).toFixed(1)} minutes)`
-    );
-    console.log(`Total cost: $${costTracker.totalCost.toFixed(2)}`);
-    console.log(`Countries analyzed: ${countryAnalyses.length}`);
-
-    // Estimate costs from internal costTracker by aggregating per model
-    const modelTokens = {};
-    for (const call of costTracker.calls) {
-      if (!modelTokens[call.model]) {
-        modelTokens[call.model] = { input: 0, output: 0 };
-      }
-      modelTokens[call.model].input += call.inputTokens || 0;
-      modelTokens[call.model].output += call.outputTokens || 0;
-    }
-    // Add model calls to shared tracker (pass numeric token counts directly)
-    for (const [model, tokens] of Object.entries(modelTokens)) {
-      tracker.addModelCall(model, tokens.input, tokens.output);
-    }
-
-    // Track usage
-    await tracker.finish({
-      countriesAnalyzed: countryAnalyses.length,
-      industry: scope.industry,
-    });
-
-    return {
-      success: true,
-      scope,
-      countriesAnalyzed: countryAnalyses.length,
-      totalCost: costTracker.totalCost,
-      totalTimeSeconds: totalTime,
-    };
-  } catch (error) {
-    console.error('Market research failed:', error);
-    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
-
-    // Try to send error email
-    try {
       await sendEmail(
         email,
-        'Market Research Failed',
-        `
+        `Market Research: ${scope.industry} - ${scope.targetMarkets.join(', ')}`,
+        emailHtml,
+        {
+          filename,
+          content: pptBuffer.toString('base64'),
+        }
+      );
+
+      const totalTime = (Date.now() - startTime) / 1000;
+      console.log('\n========================================');
+      console.log('MARKET RESEARCH - COMPLETE');
+      console.log('========================================');
+      console.log(
+        `Total time: ${totalTime.toFixed(0)} seconds (${(totalTime / 60).toFixed(1)} minutes)`
+      );
+      console.log(`Total cost: $${costTracker.totalCost.toFixed(2)}`);
+      console.log(`Countries analyzed: ${countryAnalyses.length}`);
+
+      // Estimate costs from internal costTracker by aggregating per model
+      const modelTokens = {};
+      for (const call of costTracker.calls) {
+        if (!modelTokens[call.model]) {
+          modelTokens[call.model] = { input: 0, output: 0 };
+        }
+        modelTokens[call.model].input += call.inputTokens || 0;
+        modelTokens[call.model].output += call.outputTokens || 0;
+      }
+      // Add model calls to shared tracker (pass numeric token counts directly)
+      for (const [model, tokens] of Object.entries(modelTokens)) {
+        tracker.addModelCall(model, tokens.input, tokens.output);
+      }
+
+      // Track usage
+      await tracker.finish({
+        countriesAnalyzed: countryAnalyses.length,
+        industry: scope.industry,
+      });
+
+      return {
+        success: true,
+        scope,
+        countriesAnalyzed: countryAnalyses.length,
+        totalCost: costTracker.totalCost,
+        totalTimeSeconds: totalTime,
+      };
+    } catch (error) {
+      console.error('Market research failed:', error);
+      await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
+
+      // Try to send error email
+      try {
+        await sendEmail(
+          email,
+          'Market Research Failed',
+          `
         <h2>Market Research Error</h2>
         <p>Your market research request encountered an error:</p>
         <pre>${error.message}</pre>
         <p>Please try again or contact support.</p>
       `,
-        {
-          filename: 'error.txt',
-          content: Buffer.from(error.stack || error.message).toString('base64'),
-        }
-      );
-    } catch (emailError) {
-      console.error('Failed to send error email:', emailError);
-    }
+          {
+            filename: 'error.txt',
+            content: Buffer.from(error.stack || error.message).toString('base64'),
+          }
+        );
+      } catch (emailError) {
+        console.error('Failed to send error email:', emailError);
+      }
 
-    throw error;
-  }
+      throw error;
+    }
+  }); // end trackingContext.run
 }
 
 // ============ API ENDPOINTS ============

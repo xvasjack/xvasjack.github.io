@@ -1,269 +1,128 @@
 # AI Computer Agent
 
-An autonomous agent that controls a Windows VM to complete development feedback loops. It can:
+An autonomous agent that controls your Windows desktop to complete development feedback loops. It can:
 
-- Merge GitHub PRs from Claude Code
-- Check output files (PPT, Excel) from email attachments
-- Compare outputs against requirements
-- Request fixes from Claude Code
-- Run your frontend to test services
-- Read Railway logs for debugging
+- Submit test inputs via your frontend (GitHub Pages)
+- Wait for email results (Gmail, browser-based)
+- Download and analyze output files (PPTX, Excel)
+- Compare outputs against template requirements
+- Request code fixes from Claude Code CLI
+- Merge PRs via `gh` CLI
+- Verify deployments via health checks
+- Repeat until output matches template
 
-## Architecture
+## Architecture (No VM Required)
+
+The agent runs natively on your Windows desktop + WSL. No Hyper-V VM needed.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  Your PC (Host)                                             │
-│  ┌────────────────────────────────────────────────────────┐ │
-│  │  Host Controller (localhost:3000)                      │ │
-│  │  - Web UI for task input                               │ │
-│  │  - WebSocket server for VM communication               │ │
-│  └────────────────────────────────────────────────────────┘ │
-│         │                                                   │
-│         │ WebSocket                                         │
-│         ▼                                                   │
-│  ┌────────────────────────────────────────────────────────┐ │
-│  │  Windows VM (Hyper-V)                                  │ │
-│  │  ┌──────────────────────────────────────────────────┐  │ │
-│  │  │  Agent Daemon                                    │  │ │
-│  │  │  - Takes screenshots → Claude Opus               │  │ │
-│  │  │  - Executes actions (click, type, etc.)          │  │ │
-│  │  │  - Checks guardrails before every action         │  │ │
-│  │  ├──────────────────────────────────────────────────┤  │ │
-│  │  │  Chrome | Outlook | Claude Code | File Explorer  │  │ │
-│  │  └──────────────────────────────────────────────────┘  │ │
-│  └────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
+Windows 11 Machine
+├── WSL (Ubuntu)
+│   ├── host/server.js    ← Node server on :3000 (web UI + WebSocket)
+│   ├── Claude Code CLI   ← Generates fixes (Max plan, no API key)
+│   └── ppt_analyzer.py   ← Vision analysis
+│
+└── Windows (PowerShell)
+    ├── vm/agent.py       ← PyAutoGUI automation agent
+    ├── Screenshots       ← Screen capture via mss
+    └── Brave browser     ← Gmail, frontend, GitHub
 ```
 
-## Strict Guardrails
+## How It Works
 
-The agent CANNOT:
-- Access Microsoft Teams (strictly blocked)
-- Compose, reply, forward, or send any emails
-- Access billing or payment pages
-- Access Slack, Discord, WhatsApp, or other chat apps
-- Read emails not from authorized automation senders
+1. **User submits task** via web UI at localhost:3000
+2. **Agent generates plan** using Claude Code CLI (one call)
+3. **Agent executes steps** via PyAutoGUI (click, type, navigate)
+4. **For feedback loops**: submits form → waits for email → downloads output → analyzes → generates fix → merges PR → verifies deployment → repeats
 
-The agent CAN ONLY:
-- Read emails from GitHub and your automation sender
-- Download attachments from those emails
-- Access GitHub (your repos only)
-- Access your frontend
-- Access Railway logs
-- Use Claude Code CLI
-- Access Downloads folder and shared folder
+## Guardrails
 
-## Setup
+The agent has strict safety boundaries:
 
-### Step 1: Enable Hyper-V (Windows Pro/Enterprise)
+**BLOCKED:**
+- Microsoft Teams, Slack, Discord, WhatsApp
+- Email composition/sending (read-only access)
+- Billing/payment pages
+- Modifying protected files (.env, CI/CD, agent code)
+- Destructive git commands (push --force, reset --hard)
 
-```powershell
-# Run PowerShell as Admin
-Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V -All
-# Restart when prompted
-```
+**ALLOWED:**
+- GitHub (your repos only, via `gh` CLI)
+- Gmail (read emails, download attachments)
+- Your frontend (form submission)
+- Claude Code CLI (with mandate restrictions)
+- Downloads folder
 
-### Step 2: Create Windows VM
+## Claude Code CLI Integration
 
-1. Open Hyper-V Manager
-2. Create new VM:
-   - Name: `AI-Agent`
-   - Generation: 2
-   - RAM: 8192 MB (minimum 4096)
-   - CPU: 4 cores
-   - Disk: 60 GB
-   - Network: Default Switch
-3. Install Windows 11
-4. Enable Enhanced Session Mode for clipboard sharing
+The agent uses Claude Code CLI (`claude --print`) as its "brain":
+- **No API key needed** — uses your Anthropic Max subscription ($200/month)
+- **Each call is stateless** — context provided in the prompt
+- **Mandate system** — every invocation includes rules about what files can be modified
+- **PreToolUse hook** — blocks modifications to protected files
 
-### Step 3: Install Software in VM
+## Quick Start
 
-```powershell
-# Install Chocolatey (package manager)
-Set-ExecutionPolicy Bypass -Scope Process -Force
-[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
-iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+See [SETUP.md](SETUP.md) for detailed instructions.
 
-# Install required software
-choco install -y python311 nodejs git googlechrome vscode
-
-# Install Claude Code
-npm install -g @anthropic-ai/claude-code
-```
-
-### Step 4: Setup Shared Folder
-
-On your host PC:
-```powershell
-mkdir C:\agent-shared
-mkdir C:\agent-shared\downloads
-mkdir C:\agent-shared\uploads
-mkdir C:\agent-shared\logs
-```
-
-In Hyper-V, share this folder with the VM.
-
-### Step 5: Install Agent in VM
-
-```powershell
-# Clone repo (or copy from shared folder)
-git clone https://github.com/xvasjack/xvasjack.github.io.git
-cd xvasjack.github.io/ai-computer-agent/vm
-
-# Create virtual environment
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-
-# Install dependencies
-pip install -r requirements.txt
-```
-
-### Step 6: Configure Agent
-
-Create `vm/config_local.py`:
-
-```python
-from config import AgentConfig, GuardrailConfig, PathConfig
-
-agent_config = AgentConfig(
-    anthropic_api_key="sk-ant-...",  # Your API key
-    host_ws_url="ws://192.168.1.100:3000/agent",  # Your host PC IP
-)
-
-guardrail_config = GuardrailConfig(
-    allowed_email_senders=[
-        "noreply@github.com",
-        "your-automation@yourdomain.com",  # Your SendGrid sender
-    ],
-    github_allowed_repos=[
-        "xvasjack",
-    ],
-    frontend_url="https://xvasjack.github.io",
-)
-
-path_config = PathConfig(
-    repo_path=r"C:\Users\Agent\Projects\xvasjack.github.io",
-    shared_folder=r"Z:\",  # Mapped shared folder
-    download_folder=r"Z:\downloads",
-)
-```
-
-### Step 7: Setup Host Controller
-
-On your main PC:
-
+### Terminal 1 (WSL)
 ```bash
-cd ai-computer-agent/host
+cd ~/xvasjack.github.io/ai-computer-agent/host
 npm install
-npm start
+node server.js
 ```
 
-Open http://localhost:3000 in your browser.
-
-### Step 8: Start Agent in VM
-
+### Terminal 2 (Windows PowerShell)
 ```powershell
-cd ai-computer-agent/vm
-.\venv\Scripts\Activate.ps1
-python agent.py
+C:\agent\start.ps1
 ```
 
-## Usage
-
-1. Open the Chat UI at http://localhost:3000
-2. Enter a task description:
-   ```
-   Run target-v6 search for "logistics companies in Vietnam".
-   Check the PPT output has at least 20 companies with valid logos.
-   Fix any issues found.
-   ```
-3. Set the max duration (default: 2 hours)
-4. Click "Start Task"
-5. Review and approve the plan
-6. Watch the agent work in the VM preview
-7. Agent will iterate until satisfied or time runs out
-
-## Task Examples
-
-### Run a Search and Validate Output
-```
-Run target-v6 search for "packaging companies in Thailand".
-Wait for the email with results.
-Download the PPT and check:
-- At least 20 companies
-- All companies have logos
-- All website links are valid
-If issues found, tell Claude Code to fix and repeat.
-```
-
-### Check a Specific PR
-```
-Check PR #432 on xvasjack/xvasjack.github.io.
-If CI passes, merge it.
-If CI fails, copy the error logs and ask Claude Code to fix.
-```
-
-### Monitor Railway Logs
-```
-Open Railway dashboard for target-v6 service.
-Check for any errors in the last hour.
-If errors found, create a summary and ask Claude Code to investigate.
-```
+### Browser
+Open http://localhost:3000 → Green dot = agent connected → Submit task
 
 ## File Structure
 
 ```
 ai-computer-agent/
-├── host/                    # Runs on your main PC
+├── host/                    # Runs in WSL
 │   ├── server.js            # Express + WebSocket server
-│   ├── public/
-│   │   └── index.html       # Chat UI
+│   ├── public/index.html    # Web UI
 │   └── package.json
 │
-├── vm/                      # Runs inside the VM
+├── vm/                      # Runs on Windows (NOT in a VM)
 │   ├── agent.py             # Main agent loop
-│   ├── computer_use.py      # Screenshot + input control
+│   ├── computer_use.py      # Screenshot + PyAutoGUI input
 │   ├── guardrails.py        # Security guardrails
+│   ├── feedback_loop.py     # Feedback loop orchestration
+│   ├── feedback_loop_runner.py  # Connects loop to implementations
+│   ├── template_comparison.py   # Output vs template comparison
 │   ├── config.py            # Configuration
+│   ├── claude_mandate.md    # Rules prepended to Claude Code calls
 │   ├── actions/
-│   │   ├── github.py        # GitHub operations
-│   │   ├── outlook.py       # Email operations
-│   │   ├── frontend.py      # Your frontend
-│   │   └── claude_code.py   # Claude Code CLI
+│   │   ├── github.py        # GitHub operations (gh CLI)
+│   │   ├── gmail.py         # Gmail (browser automation)
+│   │   ├── frontend.py      # Frontend form submission
+│   │   └── claude_code.py   # Claude Code CLI integration
 │   ├── file_readers/
 │   │   ├── pptx_reader.py   # PowerPoint analysis
-│   │   └── xlsx_reader.py   # Excel analysis
+│   │   ├── xlsx_reader.py   # Excel analysis
+│   │   └── docx_reader.py   # Word analysis
 │   └── requirements.txt
 │
-└── shared/
-    └── protocol.py          # Message format
+├── shared/
+│   └── protocol.py          # WebSocket message format
+│
+├── .claude/hooks/
+│   └── agent_guard.py       # PreToolUse hook for protected files
+│
+├── SETUP.md                 # Setup instructions
+└── ARCHITECTURE.md          # Technical architecture
 ```
 
-## Troubleshooting
+## Security
 
-### VM can't connect to host
-- Check your host PC's IP address
-- Ensure Windows Firewall allows port 3000
-- Verify the VM is on the same network (Default Switch)
-
-### Agent clicks wrong things
-- Increase `screenshot_scale` for higher resolution
-- Add wait times between actions
-- Check if UI has changed
-
-### Guardrail blocks legitimate action
-- Update `allowed_email_senders` in config
-- Check `guardrails.py` patterns
-
-### Claude Code not found
-- Ensure Claude Code is installed: `npm install -g @anthropic-ai/claude-code`
-- Add to PATH or update `claude_code_path` in config
-
-## Security Notes
-
-- API keys are stored only in `config_local.py` (gitignored)
-- All actions are logged in `guardrail_audit.log`
-- The agent runs in an isolated VM
-- Guardrails are enforced before every action
-- Teams and email composition are hard-blocked in code
+- No API keys stored — Claude Code CLI uses Max subscription
+- All actions logged in `guardrail_audit.log`
+- PreToolUse hook blocks modifications to protected files
+- Agent runs with PyAutoGUI failsafe (mouse to top-left corner = abort)
+- Mandate system scopes Claude Code to relevant service directories

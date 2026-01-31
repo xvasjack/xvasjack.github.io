@@ -119,11 +119,13 @@ Output JSON:
             )
         else:
             import asyncio
-            response = await asyncio.get_running_loop().run_in_executor(
-                None, lambda: self.client.messages.create(
-                    model=CLAUDE_MODEL,
-                    max_tokens=4096,
-                    system="""You are a senior software architect debugging a RECURRING production issue.
+            # RC-3: Wrap blocking executor call with timeout to prevent indefinite hangs
+            response = await asyncio.wait_for(
+                asyncio.get_running_loop().run_in_executor(
+                    None, lambda: self.client.messages.create(
+                        model=CLAUDE_MODEL,
+                        max_tokens=4096,
+                        system="""You are a senior software architect debugging a RECURRING production issue.
 
 Your task is CRITICAL ROOT-CAUSE ANALYSIS:
 1. Analyze the PATTERN of failures — what's consistent across occurrences?
@@ -158,13 +160,16 @@ Output JSON:
     "confidence_reason": "why this confidence level"
 }
 """,
-                    messages=[{"role": "user", "content": prompt}]
-                )
+                        messages=[{"role": "user", "content": prompt}]
+                    )
+                ),
+                timeout=120  # RC-3: 2-minute timeout for API call
             )
 
         # Parse response - validate content exists before accessing
         # Issue 9/94 fix: Check response.content is non-empty list
-        if not response.content or len(response.content) == 0:
+        # EH-4: Simplified redundant check - `not x` already handles empty sequences
+        if not response.content:
             logger.warning("Empty response from AI research")
             return ResearchResult(
                 root_cause_analysis="AI returned empty response",

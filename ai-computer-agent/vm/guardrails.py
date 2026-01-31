@@ -152,6 +152,13 @@ def check_url(url: str) -> Tuple[bool, Optional[BlockReason]]:
     """Check if a URL is allowed"""
     url_lower = url.lower()
 
+    # SEC-6: Validate URL scheme to block dangerous protocols
+    ALLOWED_SCHEMES = ('http://', 'https://', 'ws://', 'wss://')
+    if url_lower and not any(url_lower.startswith(scheme) for scheme in ALLOWED_SCHEMES):
+        # Block javascript:, data:, file://, and other dangerous schemes
+        logger.warning(f"BLOCKED: URL has disallowed scheme: {url[:50]}")
+        return False, BlockReason.UNAUTHORIZED_APP
+
     for pattern in BLOCKED_URLS:
         if re.search(pattern, url, re.IGNORECASE):
             logger.warning(f"BLOCKED: URL matches blocked pattern: {pattern}")
@@ -171,6 +178,12 @@ def check_url(url: str) -> Tuple[bool, Optional[BlockReason]]:
 def check_email_allowed(sender: str, subject: str) -> Tuple[bool, Optional[BlockReason]]:
     """Check if an email is from an allowed sender with allowed subject"""
 
+    # SEC-9: Limit input length to mitigate ReDoS risk
+    MAX_SENDER_LENGTH = 500
+    MAX_SUBJECT_LENGTH = 1000
+    sender = sender[:MAX_SENDER_LENGTH] if sender else ""
+    subject = subject[:MAX_SUBJECT_LENGTH] if subject else ""
+
     # M6: Check sender with exact match (not substring) to prevent bypass
     sender_allowed = False
     sender_lower = sender.lower().strip()
@@ -185,11 +198,16 @@ def check_email_allowed(sender: str, subject: str) -> Tuple[bool, Optional[Block
         return False, BlockReason.UNAUTHORIZED_EMAIL
 
     # Check subject matches expected patterns
+    # SEC-9: Subject already truncated above to prevent ReDoS
     subject_allowed = False
     for pattern in CONFIG.allowed_email_subjects:
-        if re.search(pattern, subject, re.IGNORECASE):
-            subject_allowed = True
-            break
+        try:
+            if re.search(pattern, subject, re.IGNORECASE):
+                subject_allowed = True
+                break
+        except re.error as e:
+            logger.warning(f"Invalid regex pattern in config: {pattern} - {e}")
+            continue
 
     if not subject_allowed:
         logger.warning(f"BLOCKED: Email subject doesn't match allowed patterns: {subject}")

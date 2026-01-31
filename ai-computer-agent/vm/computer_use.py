@@ -95,7 +95,12 @@ async def screenshot(
         if region:
             monitor = {"left": region[0], "top": region[1], "width": region[2], "height": region[3]}
         else:
-            monitor = sct.monitors[1]  # Primary monitor
+            # DL-3: Check monitor bounds before accessing
+            if len(sct.monitors) < 2:
+                # Fallback to monitors[0] which is the "all monitors" combined view
+                monitor = sct.monitors[0] if sct.monitors else {"left": 0, "top": 0, "width": 1920, "height": 1080}
+            else:
+                monitor = sct.monitors[1]  # Primary monitor
 
         screenshot = sct.grab(monitor)
 

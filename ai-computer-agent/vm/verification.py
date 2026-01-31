@@ -43,7 +43,8 @@ async def verify_form_submission(response: Dict[str, Any]) -> Dict[str, Any]:
         if resp_data.get("error"):
             return {"verified": False, "error": f"Response contains error: {resp_data['error']}"}
 
-    return {"verified": True}
+    # LB-10: Include error key for consistent response format
+    return {"verified": True, "error": None}
 
 
 async def verify_email_downloaded(file_path: Optional[str]) -> Dict[str, Any]:
@@ -157,6 +158,12 @@ async def verify_pr_created(pr_number: Optional[int]) -> Dict[str, Any]:
     except FileNotFoundError:
         return {"verified": False, "error": "gh CLI not found"}
     except asyncio.TimeoutError:
+        # DL-15: Kill the subprocess on timeout to prevent zombie processes
+        try:
+            proc.kill()
+            await proc.wait()
+        except Exception:
+            pass
         return {"verified": False, "error": "gh pr view timed out"}
     except Exception as e:
         return {"verified": False, "error": f"PR verification failed: {e}"}

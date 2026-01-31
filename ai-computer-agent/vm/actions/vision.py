@@ -80,7 +80,17 @@ async def find_element(description: str, screenshot_b64: str = None) -> tuple:
             # Category 8 fix: Regex should accept single-digit coordinates
             match = re.search(r'(\d{1,4})\s*,\s*(\d{1,4})', output)
             if match:
-                return (int(match.group(1)), int(match.group(2)))
+                x, y = int(match.group(1)), int(match.group(2))
+                # IV-7: Validate coordinates are positive (0,0 is usually invalid UI coordinate)
+                if x <= 0 or y <= 0:
+                    logger.warning(f"Vision returned invalid zero/negative coordinates: ({x}, {y})")
+                    return None
+                # IV-2: Validate coordinates are within reasonable screen bounds
+                MAX_X, MAX_Y = 3840, 2160  # Support up to 4K displays
+                if x > MAX_X or y > MAX_Y:
+                    logger.warning(f"Vision returned out-of-bounds coordinates: ({x}, {y})")
+                    return None
+                return (x, y)
             return None
         except asyncio.TimeoutError:
             # Category 2 fix: Kill subprocess on timeout
@@ -148,7 +158,14 @@ async def ask_about_screen(question: str, screenshot_b64: str = None) -> str:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=30)
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+
+            # RL-6: Log stderr for diagnostics (symmetry with find_element)
+            if stderr:
+                stderr_text = stderr.decode().strip()
+                if stderr_text:
+                    logger.debug(f"Vision question stderr: {stderr_text}")
+
             return stdout.decode().strip()
         except asyncio.TimeoutError:
             # Category 2 fix: Kill subprocess on timeout

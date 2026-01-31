@@ -76,7 +76,11 @@ async function callGemini(prompt) {
 
     const usage = data.usageMetadata;
     if (usage) {
-      recordTokens('gemini-2.5-flash-lite', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+      recordTokens(
+        'gemini-2.5-flash-lite',
+        usage.promptTokenCount || 0,
+        usage.candidatesTokenCount || 0
+      );
     }
 
     if (data.error) {
@@ -146,7 +150,11 @@ async function callChatGPT(prompt) {
       temperature: 0.2,
     });
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -168,7 +176,11 @@ async function callOpenAISearch(prompt) {
       messages: [{ role: 'user', content: prompt }],
     });
     if (response.usage) {
-      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o-search-preview',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -643,6 +655,13 @@ RULES:
       ],
       response_format: { type: 'json_object' },
     });
+    if (extraction.usage) {
+      recordTokens(
+        'gpt-4o-mini',
+        extraction.usage.prompt_tokens || 0,
+        extraction.usage.completion_tokens || 0
+      );
+    }
     const parsed = JSON.parse(extraction.choices[0].message.content);
     return Array.isArray(parsed.companies) ? parsed.companies : [];
   } catch (e) {
@@ -1285,6 +1304,13 @@ ${contentToValidate.substring(0, 10000)}`,
       response_format: { type: 'json_object' },
     });
 
+    if (validation.usage) {
+      recordTokens(
+        'gpt-4o',
+        validation.usage.prompt_tokens || 0,
+        validation.usage.completion_tokens || 0
+      );
+    }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
       return { valid: true, corrected_hq: company.hq };
@@ -1424,6 +1450,13 @@ ${typeof pageText === 'string' && pageText ? pageText.substring(0, 8000) : 'Coul
       response_format: { type: 'json_object' },
     });
 
+    if (validation.usage) {
+      recordTokens(
+        'gpt-4o-mini',
+        validation.usage.prompt_tokens || 0,
+        validation.usage.completion_tokens || 0
+      );
+    }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
       return { valid: true, corrected_hq: result.corrected_hq || company.hq };
@@ -1535,55 +1568,55 @@ app.post('/api/find-target', async (req, res) => {
   const tracker = createTracker('target-v3', Email, { Business, Country, Exclusion });
 
   trackingContext.run(tracker, async () => {
-  try {
-    const totalStart = Date.now();
-
-    const companies = await exhaustiveSearch(Business, Country, Exclusion);
-    console.log(`\nFound ${companies.length} unique companies`);
-
-    // Pre-filter obvious spam/directories before expensive verification
-    const preFiltered = preFilterCompanies(companies);
-    console.log(`After pre-filter: ${preFiltered.length} companies`);
-
-    // Filter out fake/dead websites before expensive validation
-    const verifiedCompanies = await filterVerifiedWebsites(preFiltered);
-    console.log(`\nCompanies with working websites: ${verifiedCompanies.length}`);
-
-    const validCompanies = await parallelValidationStrict(
-      verifiedCompanies,
-      Business,
-      Country,
-      Exclusion
-    );
-
-    const htmlContent = buildEmailHTML(validCompanies, Business, Country, Exclusion);
-    await sendEmail(
-      Email,
-      `${Business} in ${Country} exclude ${Exclusion} (${validCompanies.length} companies)`,
-      htmlContent
-    );
-
-    const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
-    console.log(`\n${'='.repeat(50)}`);
-    console.log(`FAST COMPLETE! Email sent to ${Email}`);
-    console.log(`Total companies: ${validCompanies.length}`);
-    console.log(`Total time: ${totalTime} minutes`);
-    console.log('='.repeat(50));
-
-    // Finalize tracking (real token counts recorded via recordTokens in wrappers)
-    await tracker.finish({
-      companiesFound: companies.length,
-      validated: validCompanies.length,
-    });
-  } catch (error) {
-    console.error('Processing error:', error);
-    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
     try {
-      await sendEmail(Email, `Find Target - Error`, `<p>Error: ${error.message}</p>`);
-    } catch (e) {
-      console.error('Failed to send error email:', e);
+      const totalStart = Date.now();
+
+      const companies = await exhaustiveSearch(Business, Country, Exclusion);
+      console.log(`\nFound ${companies.length} unique companies`);
+
+      // Pre-filter obvious spam/directories before expensive verification
+      const preFiltered = preFilterCompanies(companies);
+      console.log(`After pre-filter: ${preFiltered.length} companies`);
+
+      // Filter out fake/dead websites before expensive validation
+      const verifiedCompanies = await filterVerifiedWebsites(preFiltered);
+      console.log(`\nCompanies with working websites: ${verifiedCompanies.length}`);
+
+      const validCompanies = await parallelValidationStrict(
+        verifiedCompanies,
+        Business,
+        Country,
+        Exclusion
+      );
+
+      const htmlContent = buildEmailHTML(validCompanies, Business, Country, Exclusion);
+      await sendEmail(
+        Email,
+        `${Business} in ${Country} exclude ${Exclusion} (${validCompanies.length} companies)`,
+        htmlContent
+      );
+
+      const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
+      console.log(`\n${'='.repeat(50)}`);
+      console.log(`FAST COMPLETE! Email sent to ${Email}`);
+      console.log(`Total companies: ${validCompanies.length}`);
+      console.log(`Total time: ${totalTime} minutes`);
+      console.log('='.repeat(50));
+
+      // Finalize tracking (real token counts recorded via recordTokens in wrappers)
+      await tracker.finish({
+        companiesFound: companies.length,
+        validated: validCompanies.length,
+      });
+    } catch (error) {
+      console.error('Processing error:', error);
+      await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
+      try {
+        await sendEmail(Email, `Find Target - Error`, `<p>Error: ${error.message}</p>`);
+      } catch (e) {
+        console.error('Failed to send error email:', e);
+      }
     }
-  }
   }); // end trackingContext.run
 });
 
@@ -1612,61 +1645,61 @@ app.post('/api/find-target-slow', async (req, res) => {
   const tracker = createTracker('target-v3-slow', Email, { Business, Country, Exclusion });
 
   trackingContext.run(tracker, async () => {
-  try {
-    const totalStart = Date.now();
-
-    // Run 3 searches with different phrasings
-    console.log('\n--- Search 1: Primary ---');
-    const companies1 = await exhaustiveSearch(Business, Country, Exclusion);
-
-    console.log('\n--- Search 2: Supplier/Vendor variation ---');
-    const companies2 = await exhaustiveSearch(`${Business} supplier vendor`, Country, Exclusion);
-
-    console.log('\n--- Search 3: Manufacturer/Producer variation ---');
-    const companies3 = await exhaustiveSearch(
-      `${Business} manufacturer producer`,
-      Country,
-      Exclusion
-    );
-
-    const allCompanies = [...companies1, ...companies2, ...companies3];
-    const uniqueCompanies = dedupeCompanies(allCompanies);
-    console.log(`\nTotal unique from 3 searches: ${uniqueCompanies.length}`);
-
-    // Pre-filter obvious spam/directories
-    const preFiltered = preFilterCompanies(uniqueCompanies);
-    console.log(`After pre-filter: ${preFiltered.length} companies`);
-
-    const validCompanies = await parallelValidation(preFiltered, Business, Country, Exclusion);
-
-    const htmlContent = buildEmailHTML(validCompanies, Business, Country, Exclusion);
-    await sendEmail(
-      Email,
-      `[SLOW] ${Business} in ${Country} exclude ${Exclusion} (${validCompanies.length} companies)`,
-      htmlContent
-    );
-
-    const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
-    console.log(`\n${'='.repeat(50)}`);
-    console.log(`SLOW COMPLETE! Email sent to ${Email}`);
-    console.log(`Total companies: ${validCompanies.length}`);
-    console.log(`Total time: ${totalTime} minutes`);
-    console.log('='.repeat(50));
-
-    // Finalize tracking (real token counts recorded via recordTokens in wrappers)
-    await tracker.finish({
-      companiesFound: uniqueCompanies.length,
-      validated: validCompanies.length,
-    });
-  } catch (error) {
-    console.error('Processing error:', error);
-    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
     try {
-      await sendEmail(Email, `Find Target Slow - Error`, `<p>Error: ${error.message}</p>`);
-    } catch (e) {
-      console.error('Failed to send error email:', e);
+      const totalStart = Date.now();
+
+      // Run 3 searches with different phrasings
+      console.log('\n--- Search 1: Primary ---');
+      const companies1 = await exhaustiveSearch(Business, Country, Exclusion);
+
+      console.log('\n--- Search 2: Supplier/Vendor variation ---');
+      const companies2 = await exhaustiveSearch(`${Business} supplier vendor`, Country, Exclusion);
+
+      console.log('\n--- Search 3: Manufacturer/Producer variation ---');
+      const companies3 = await exhaustiveSearch(
+        `${Business} manufacturer producer`,
+        Country,
+        Exclusion
+      );
+
+      const allCompanies = [...companies1, ...companies2, ...companies3];
+      const uniqueCompanies = dedupeCompanies(allCompanies);
+      console.log(`\nTotal unique from 3 searches: ${uniqueCompanies.length}`);
+
+      // Pre-filter obvious spam/directories
+      const preFiltered = preFilterCompanies(uniqueCompanies);
+      console.log(`After pre-filter: ${preFiltered.length} companies`);
+
+      const validCompanies = await parallelValidation(preFiltered, Business, Country, Exclusion);
+
+      const htmlContent = buildEmailHTML(validCompanies, Business, Country, Exclusion);
+      await sendEmail(
+        Email,
+        `[SLOW] ${Business} in ${Country} exclude ${Exclusion} (${validCompanies.length} companies)`,
+        htmlContent
+      );
+
+      const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
+      console.log(`\n${'='.repeat(50)}`);
+      console.log(`SLOW COMPLETE! Email sent to ${Email}`);
+      console.log(`Total companies: ${validCompanies.length}`);
+      console.log(`Total time: ${totalTime} minutes`);
+      console.log('='.repeat(50));
+
+      // Finalize tracking (real token counts recorded via recordTokens in wrappers)
+      await tracker.finish({
+        companiesFound: uniqueCompanies.length,
+        validated: validCompanies.length,
+      });
+    } catch (error) {
+      console.error('Processing error:', error);
+      await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
+      try {
+        await sendEmail(Email, `Find Target Slow - Error`, `<p>Error: ${error.message}</p>`);
+      } catch (e) {
+        console.error('Failed to send error email:', e);
+      }
     }
-  }
   }); // end trackingContext.run
 });
 

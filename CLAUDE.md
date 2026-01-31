@@ -235,6 +235,14 @@ SCREENSHOT_API_URL  # Custom screenshot API URL (optional)
 - If you need to limit output, use command-specific flags (e.g., `git log -n 10` instead of `git log | head -10`)
 - Avoid chained pipes that can cause output to buffer indefinitely
 
+## Subagent Rule
+- When using Claude Code's Task tool (subagents), always specify `model: "opus"` to ensure Opus 4.5 is used.
+
+## Plan Mode
+
+- Make the plan extremely concise. Sacrifice grammar for the sake of concision.
+- At the end of each plan, give me a list of unresolved questions to answer, if any.
+
 ## Git Workflow
 - Feature branches: `claude/{feature}-{suffix}`
 - Commit style: `Type: Description` (Add, Fix, Improve, Update)

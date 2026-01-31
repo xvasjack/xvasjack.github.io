@@ -34,6 +34,28 @@ logger = logging.getLogger("outlook_actions")
 
 
 # =============================================================================
+# IV-1: Query parameter escaping to prevent injection
+# =============================================================================
+
+
+def _escape_query_param(value: str) -> str:
+    """Escape special characters in email search query parameters.
+
+    IV-1: Prevents query injection by escaping characters that have special
+    meaning in Outlook/Gmail search syntax.
+    """
+    if not value:
+        return ""
+    # Escape quotes and backslashes, remove newlines/tabs
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    escaped = escaped.replace("\n", " ").replace("\r", " ").replace("\t", " ")
+    # If value contains spaces, wrap in quotes
+    if " " in escaped:
+        escaped = f'"{escaped}"'
+    return escaped
+
+
+# =============================================================================
 # CONFIGURATION
 # =============================================================================
 
@@ -53,9 +75,12 @@ OUTLOOK_WEB_URL = "https://outlook.office.com/mail/"
 ALLOWED_SENDER_PATTERNS = [
     r"noreply@github\.com",
     r"notifications@github\.com",
-    # Add your SendGrid sender email pattern here
-    r".*@.*\.sendgrid\.net",
-    # Your specific automation sender
+    # SEC-5: Specific SendGrid patterns instead of overly permissive wildcard
+    # Only allow specific known SendGrid sender addresses
+    r"^notifications@sendgrid\.net$",
+    r"^noreply@sendgrid\.net$",
+    r"^bounces\+\d+@sendgrid\.net$",  # Bounce notifications
+    # Your specific automation sender - add your email pattern here
 ]
 
 ALLOWED_SUBJECT_PATTERNS = [
@@ -322,7 +347,8 @@ async def wait_for_new_email(
         await wait(2)
 
         # Search for the email
-        search_query = f"from:{sender_pattern} subject:{subject_pattern}"
+        # IV-1: Escape query parameters to prevent injection
+        search_query = f"from:{_escape_query_param(sender_pattern)} subject:{_escape_query_param(subject_pattern)}"
         await search_emails(search_query)
         await wait(2)
 

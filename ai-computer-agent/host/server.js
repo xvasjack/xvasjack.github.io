@@ -25,6 +25,12 @@ const PORT = process.env.PORT || 3000;
 const MAX_TASK_DURATION_MINUTES = 240; // 4 hours max
 const STATE_FILE = path.join(__dirname, 'state.json');
 
+// SEC-7: UUID format validation helper
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+function isValidUUID(id) {
+  return typeof id === 'string' && UUID_REGEX.test(id);
+}
+
 // ============================================================================
 // State Persistence
 // ============================================================================
@@ -58,12 +64,16 @@ function loadState() {
 function saveState() {
   try {
     const toSave = {
-      currentTask: state.currentTask ? state.currentTask.toJSON() : null,
+      currentTask: state.currentTask ? (state.currentTask.toJSON ? state.currentTask.toJSON() : state.currentTask) : null,
+      // H6: Guard against plain objects from JSON that lack .toJSON()
       taskHistory: state.taskHistory.map((t) => t.toJSON ? t.toJSON() : t),
       stats: state.stats,
       savedAt: new Date().toISOString(),
     };
-    fs.writeFileSync(STATE_FILE, JSON.stringify(toSave, null, 2));
+    // H5: Atomic write — write to temp file then rename
+    const tmpFile = STATE_FILE + '.tmp';
+    fs.writeFileSync(tmpFile, JSON.stringify(toSave, null, 2));
+    fs.renameSync(tmpFile, STATE_FILE);
   } catch (e) {
     console.error('Failed to save state:', e.message);
   }
@@ -109,7 +119,9 @@ class Task {
   constructor(description, maxDurationMinutes = 120) {
     this.id = uuidv4();
     this.description = description;
-    this.maxDurationMinutes = Math.min(maxDurationMinutes, MAX_TASK_DURATION_MINUTES);
+    // SEC-8: Bound maxDurationMinutes to prevent overflow/underflow
+    const parsedDuration = parseInt(maxDurationMinutes) || 120;
+    this.maxDurationMinutes = Math.max(1, Math.min(parsedDuration, MAX_TASK_DURATION_MINUTES));
     this.status = 'pending';
     this.plan = null;
     this.context = null;
@@ -120,6 +132,7 @@ class Task {
     this.prsMerged = 0;
     this.messages = [];
     this.result = null;
+    this.elapsedSeconds = 0;
   }
 
   toJSON() {
@@ -137,6 +150,7 @@ class Task {
       prsMerged: this.prsMerged,
       messages: this.messages.slice(-20), // Last 20 messages
       result: this.result,
+      elapsedSeconds: this.elapsedSeconds || 0,
     };
   }
 }
@@ -151,8 +165,41 @@ function createTask(description, maxDurationMinutes) {
 // WebSocket Handling
 // ============================================================================
 
+// SEC-3: Shared secret for WebSocket authentication
+// Only set if explicitly configured - empty string no longer bypasses auth
+const WS_SECRET = process.env.AGENT_WS_SECRET && process.env.AGENT_WS_SECRET.trim() !== ''
+  ? process.env.AGENT_WS_SECRET.trim()
+  : null;
+
+// H4: WebSocket heartbeat — detect dead connections
+const PING_INTERVAL = 30000;
+setInterval(() => {
+  wss.clients.forEach((ws) => {
+    if (ws._isAlive === false) {
+      console.log('Terminating dead WebSocket connection');
+      return ws.terminate();
+    }
+    ws._isAlive = false;
+    ws.ping();
+  });
+}, PING_INTERVAL);
+
 wss.on('connection', (ws, req) => {
-  const isVMAgent = req.url === '/agent';
+  ws._isAlive = true;
+  ws.on('pong', () => { ws._isAlive = true; });
+
+  const isVMAgent = req.url === '/agent' || req.url?.startsWith('/agent?');
+
+  // SEC-3: Check auth token if configured (null means auth disabled)
+  if (WS_SECRET !== null && isVMAgent) {
+    const url = new URL(req.url, 'http://localhost');
+    const token = url.searchParams.get('token');
+    if (token !== WS_SECRET) {
+      console.log('VM Agent rejected: invalid token');
+      ws.close(4001, 'Unauthorized');
+      return;
+    }
+  }
 
   if (isVMAgent) {
     console.log('VM Agent connected');
@@ -219,6 +266,7 @@ function handleVMMessage(message) {
         state.currentTask.status = payload.status;
         state.currentTask.iterations = payload.iteration;
         state.currentTask.prsMerged = payload.prs_merged;
+        state.currentTask.elapsedSeconds = payload.elapsed_seconds || 0;
         state.currentTask.messages.push({
           time: new Date().toISOString(),
           message: payload.message,
@@ -235,6 +283,9 @@ function handleVMMessage(message) {
             screenshot: payload.screenshot_base64,
           },
         });
+
+        // LB-4: Persist state after task updates to prevent data loss on crash
+        saveState();
       }
       break;
 
@@ -256,6 +307,13 @@ function handleVMMessage(message) {
 
         state.taskHistory.unshift(state.currentTask);
         state.taskHistory = state.taskHistory.slice(0, 50); // Keep last 50
+
+        // DL-7: Clear large screenshots from older history items to prevent memory leak
+        if (state.taskHistory.length > 5) {
+          state.taskHistory.slice(5).forEach(t => {
+            if (t.largeScreenshot) delete t.largeScreenshot;
+          });
+        }
 
         broadcastToUI({
           type: 'task_complete',
@@ -300,7 +358,7 @@ function handleUIMessage(ws, message) {
 
   switch (type) {
     case 'new_task':
-      if (state.currentTask && state.currentTask.status === 'running') {
+      if (state.currentTask && ['running', 'planning', 'awaiting_approval'].includes(state.currentTask.status)) {
         ws.send(JSON.stringify({
           type: 'error',
           payload: { message: 'A task is already running' },
@@ -367,15 +425,18 @@ function handleUIMessage(ws, message) {
       break;
 
     case 'cancel_task':
-      if (state.currentTask && state.vmAgent) {
+      // DL-6: Check-and-set pattern to prevent race condition with multiple clients
+      if (state.currentTask && state.currentTask.status !== 'cancelled' && state.vmAgent) {
+        const taskToCancel = state.currentTask;
+        taskToCancel.status = 'cancelled';  // Mark as cancelled immediately to prevent duplicate cancels
+        taskToCancel.completedAt = new Date().toISOString();
+
         state.vmAgent.send(JSON.stringify({
           type: 'cancel_task',
-          payload: { task_id: state.currentTask.id },
+          payload: { task_id: taskToCancel.id },
         }));
 
-        state.currentTask.status = 'cancelled';
-        state.currentTask.completedAt = new Date().toISOString();
-        state.taskHistory.unshift(state.currentTask);
+        state.taskHistory.unshift(taskToCancel);
         state.currentTask = null;
 
         broadcastToUI({
@@ -407,9 +468,10 @@ function handleUIMessage(ws, message) {
       break;
 
     case 'get_history':
+      // H6: Guard against plain objects loaded from JSON file
       ws.send(JSON.stringify({
         type: 'history',
-        payload: { tasks: state.taskHistory.map((t) => t.toJSON()) },
+        payload: { tasks: state.taskHistory.map((t) => t.toJSON ? t.toJSON() : t) },
       }));
       break;
   }
@@ -442,8 +504,9 @@ app.get('/api/status', (req, res) => {
 });
 
 app.get('/api/history', (req, res) => {
+  // H6: Guard against plain objects from JSON file
   res.json({
-    tasks: state.taskHistory.map((t) => t.toJSON()),
+    tasks: state.taskHistory.map((t) => t.toJSON ? t.toJSON() : t),
   });
 });
 
@@ -454,7 +517,7 @@ app.post('/api/task', (req, res) => {
     return res.status(400).json({ error: 'Description required' });
   }
 
-  if (state.currentTask && state.currentTask.status === 'running') {
+  if (state.currentTask && ['running', 'planning', 'awaiting_approval'].includes(state.currentTask.status)) {
     return res.status(409).json({ error: 'Task already running' });
   }
 
@@ -484,6 +547,11 @@ app.post('/api/task', (req, res) => {
 app.post('/api/task/:id/approve', (req, res) => {
   const { plan } = req.body;
 
+  // SEC-7: Validate task ID format
+  if (!isValidUUID(req.params.id)) {
+    return res.status(400).json({ error: 'Invalid task ID format' });
+  }
+
   if (!state.currentTask || state.currentTask.id !== req.params.id) {
     return res.status(404).json({ error: 'Task not found' });
   }
@@ -505,9 +573,22 @@ app.post('/api/task/:id/approve', (req, res) => {
 });
 
 app.post('/api/task/:id/cancel', (req, res) => {
+  // SEC-7: Validate task ID format
+  if (!isValidUUID(req.params.id)) {
+    return res.status(400).json({ error: 'Invalid task ID format' });
+  }
+
   if (!state.currentTask || state.currentTask.id !== req.params.id) {
     return res.status(404).json({ error: 'Task not found' });
   }
+
+  // DL-6: Check-and-set pattern to prevent double cancellation
+  if (state.currentTask.status === 'cancelled') {
+    return res.status(409).json({ error: 'Task already cancelled' });
+  }
+
+  // Mark as cancelled immediately to prevent race conditions
+  state.currentTask.status = 'cancelled';
 
   if (state.vmAgent) {
     state.vmAgent.send(JSON.stringify({
@@ -515,8 +596,6 @@ app.post('/api/task/:id/cancel', (req, res) => {
       payload: { task_id: state.currentTask.id },
     }));
   }
-
-  state.currentTask.status = 'cancelled';
   state.currentTask.completedAt = new Date().toISOString();
   state.taskHistory.unshift(state.currentTask);
 

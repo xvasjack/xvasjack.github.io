@@ -88,7 +88,11 @@ async function callGemini3Flash(prompt, jsonMode = false) {
 
     const usage = data.usageMetadata;
     if (usage) {
-      recordTokens('gemini-2.5-flash', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+      recordTokens(
+        'gemini-2.5-flash',
+        usage.promptTokenCount || 0,
+        usage.candidatesTokenCount || 0
+      );
     }
 
     if (data.error) {
@@ -128,7 +132,11 @@ async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
 
     const response = await openai.chat.completions.create(requestOptions);
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const result = response.choices?.[0]?.message?.content || '';
 
@@ -193,7 +201,11 @@ async function callChatGPT(prompt) {
       temperature: 0.2,
     });
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -215,7 +227,11 @@ async function callOpenAISearch(prompt) {
       messages: [{ role: 'user', content: prompt }],
     });
     if (response.usage) {
-      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o-search-preview',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -577,6 +593,13 @@ ${contentToValidate.substring(0, 10000)}`,
       response_format: { type: 'json_object' },
     });
 
+    if (validation.usage) {
+      recordTokens(
+        'gpt-4o',
+        validation.usage.prompt_tokens || 0,
+        validation.usage.completion_tokens || 0
+      );
+    }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
       return { valid: true, corrected_hq: company.hq };
@@ -640,6 +663,13 @@ ${typeof pageText === 'string' && pageText ? pageText.substring(0, 8000) : 'Coul
       response_format: { type: 'json_object' },
     });
 
+    if (validation.usage) {
+      recordTokens(
+        'gpt-4o-mini',
+        validation.usage.prompt_tokens || 0,
+        validation.usage.completion_tokens || 0
+      );
+    }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
       return { valid: true, corrected_hq: result.corrected_hq || company.hq };
@@ -695,7 +725,11 @@ async function callGemini2FlashWithSearch(prompt, maxRetries = 2) {
 
       const usage = data.usageMetadata;
       if (usage) {
-        recordTokens('gemini-2.5-flash', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+        recordTokens(
+          'gemini-2.5-flash',
+          usage.promptTokenCount || 0,
+          usage.candidatesTokenCount || 0
+        );
       }
 
       if (data.error) {
@@ -1798,7 +1832,8 @@ app.post('/api/find-target-v5', async (req, res) => {
   res.write(
     JSON.stringify({
       success: true,
-      message: 'Request received. Parallel search running. Results will be emailed in ~10-15 minutes.',
+      message:
+        'Request received. Parallel search running. Results will be emailed in ~10-15 minutes.',
     }) + '\n'
   );
 
@@ -1815,127 +1850,127 @@ app.post('/api/find-target-v5', async (req, res) => {
   const tracker = createTracker('target-v5', Email, { Business, Country, Exclusion });
 
   trackingContext.run(tracker, async () => {
-  try {
-    const totalStart = Date.now();
-    const searchLog = [];
-
-    // ========== PHASE 0: Plan Search Strategy ==========
-    const plan = await planSearchStrategyV5(Business, Country, Exclusion);
-
-    // ========== PHASE 1: Perplexity Main Search + Parallel Validation ==========
-    // This is the PRIMARY search - runs Perplexity searches in batches, then validates
-    const phase1Results = await runPerplexityMainSearchWithValidation(
-      plan,
-      Business,
-      Exclusion,
-      searchLog
-    );
-
-    // ========== PHASE 2: Iterative Gemini + ChatGPT with "Find More" Pressure ==========
-    // Runs 4 rounds of search → validate, each round building on validated companies
-    // This forces models to find NEW companies instead of repeating the same ones
-    const phase2Results = await runIterativeSecondarySearches(
-      plan,
-      Business,
-      Exclusion,
-      searchLog,
-      phase1Results.validated // Pass Phase 1 validated companies so Phase 2 knows what's already found
-    );
-
-    // ========== PHASE 3: Final Results ==========
-    console.log('\n' + '='.repeat(50));
-    console.log('PHASE 3: FINAL RESULTS');
-    console.log('='.repeat(50));
-
-    // Phase 2 already includes Phase 1 validated companies in its results
-    // Just need to merge flagged and rejected
-    const allValidated = phase2Results.validated;
-    const allFlagged = [...phase1Results.flagged, ...phase2Results.flagged];
-    const allRejected = [...phase1Results.rejected, ...phase2Results.rejected];
-
-    // Final dedup
-    const finalValidated = dedupeCompanies(allValidated);
-    const finalFlagged = dedupeCompanies(allFlagged);
-    const finalRejected = dedupeCompanies(allRejected);
-
-    console.log(`FINAL RESULTS:`);
-    console.log(`  ✓ VALIDATED (both models agree): ${finalValidated.length}`);
-    console.log(`    - From Perplexity (Phase 1): ${phase1Results.validated.length}`);
-    console.log(
-      `    - Added by Gemini/ChatGPT (Phase 2): ${phase2Results.validated.length - phase1Results.validated.length}`
-    );
-    console.log(`  ? FLAGGED (needs review): ${finalFlagged.length}`);
-    console.log(`  ✗ REJECTED (neither agrees): ${finalRejected.length}`);
-
-    // Calculate stats
-    const perplexityTasks = searchLog.filter((s) => s.model === 'perplexity-sonar-pro').length;
-    const geminiTasks = searchLog.filter((s) => !s.model || s.model === 'gemini').length;
-    const chatgptTasks = searchLog.filter((s) => s.model === 'chatgpt-search').length;
-    const totalSearches = searchLog.reduce((sum, s) => sum + s.searchQueries.length, 0);
-    const totalSources = searchLog.reduce((sum, s) => sum + s.sourceCount, 0);
-
-    console.log(`\nSearch Statistics:`);
-    console.log(`  Perplexity searches: ${perplexityTasks} (Phase 1 - batched)`);
-    console.log(`  Gemini searches: ${geminiTasks} (Phase 2 - 8 rounds)`);
-    console.log(`  ChatGPT searches: ${chatgptTasks} (Phase 2 - 8 rounds)`);
-    console.log(`  Total internal searches: ${totalSearches}`);
-    console.log(`  Total sources consulted: ${totalSources}`);
-
-    // Send email with three-tier results
-    const finalResults = {
-      validated: finalValidated,
-      flagged: finalFlagged,
-      rejected: finalRejected,
-    };
-    const htmlContent = buildV5EmailHTML(
-      finalResults,
-      Business,
-      plan.expandedCountry,
-      Exclusion,
-      searchLog
-    );
-
-    await sendEmail(
-      Email,
-      `[V5 ITERATIVE] ${Business} in ${Country} (${finalValidated.length} validated + ${finalFlagged.length} flagged)`,
-      htmlContent
-    );
-
-    const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
-    console.log('\n' + '='.repeat(70));
-    console.log(`V5 ITERATIVE SEARCH COMPLETE!`);
-    console.log(`Email sent to: ${Email}`);
-    console.log(
-      `Validated: ${finalValidated.length} | Flagged: ${finalFlagged.length} | Rejected: ${finalRejected.length}`
-    );
-    console.log(`Total time: ${totalTime} minutes`);
-    console.log('='.repeat(70));
-
-    // Finalize tracking (real token counts recorded via recordTokens in wrappers)
-    await tracker.finish({
-      searchRounds: searchLog.length,
-      validated: finalValidated.length,
-      flagged: finalFlagged.length,
-      rejected: finalRejected.length,
-    });
-  } catch (error) {
-    console.error('V5 Processing error:', error);
-    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
     try {
-      await sendEmail(Email, `Find Target V5 - Error`, `<p>Error: ${error.message}</p>`);
-    } catch (e) {
-      console.error('Failed to send error email:', e);
+      const totalStart = Date.now();
+      const searchLog = [];
+
+      // ========== PHASE 0: Plan Search Strategy ==========
+      const plan = await planSearchStrategyV5(Business, Country, Exclusion);
+
+      // ========== PHASE 1: Perplexity Main Search + Parallel Validation ==========
+      // This is the PRIMARY search - runs Perplexity searches in batches, then validates
+      const phase1Results = await runPerplexityMainSearchWithValidation(
+        plan,
+        Business,
+        Exclusion,
+        searchLog
+      );
+
+      // ========== PHASE 2: Iterative Gemini + ChatGPT with "Find More" Pressure ==========
+      // Runs 4 rounds of search → validate, each round building on validated companies
+      // This forces models to find NEW companies instead of repeating the same ones
+      const phase2Results = await runIterativeSecondarySearches(
+        plan,
+        Business,
+        Exclusion,
+        searchLog,
+        phase1Results.validated // Pass Phase 1 validated companies so Phase 2 knows what's already found
+      );
+
+      // ========== PHASE 3: Final Results ==========
+      console.log('\n' + '='.repeat(50));
+      console.log('PHASE 3: FINAL RESULTS');
+      console.log('='.repeat(50));
+
+      // Phase 2 already includes Phase 1 validated companies in its results
+      // Just need to merge flagged and rejected
+      const allValidated = phase2Results.validated;
+      const allFlagged = [...phase1Results.flagged, ...phase2Results.flagged];
+      const allRejected = [...phase1Results.rejected, ...phase2Results.rejected];
+
+      // Final dedup
+      const finalValidated = dedupeCompanies(allValidated);
+      const finalFlagged = dedupeCompanies(allFlagged);
+      const finalRejected = dedupeCompanies(allRejected);
+
+      console.log(`FINAL RESULTS:`);
+      console.log(`  ✓ VALIDATED (both models agree): ${finalValidated.length}`);
+      console.log(`    - From Perplexity (Phase 1): ${phase1Results.validated.length}`);
+      console.log(
+        `    - Added by Gemini/ChatGPT (Phase 2): ${phase2Results.validated.length - phase1Results.validated.length}`
+      );
+      console.log(`  ? FLAGGED (needs review): ${finalFlagged.length}`);
+      console.log(`  ✗ REJECTED (neither agrees): ${finalRejected.length}`);
+
+      // Calculate stats
+      const perplexityTasks = searchLog.filter((s) => s.model === 'perplexity-sonar-pro').length;
+      const geminiTasks = searchLog.filter((s) => !s.model || s.model === 'gemini').length;
+      const chatgptTasks = searchLog.filter((s) => s.model === 'chatgpt-search').length;
+      const totalSearches = searchLog.reduce((sum, s) => sum + s.searchQueries.length, 0);
+      const totalSources = searchLog.reduce((sum, s) => sum + s.sourceCount, 0);
+
+      console.log(`\nSearch Statistics:`);
+      console.log(`  Perplexity searches: ${perplexityTasks} (Phase 1 - batched)`);
+      console.log(`  Gemini searches: ${geminiTasks} (Phase 2 - 8 rounds)`);
+      console.log(`  ChatGPT searches: ${chatgptTasks} (Phase 2 - 8 rounds)`);
+      console.log(`  Total internal searches: ${totalSearches}`);
+      console.log(`  Total sources consulted: ${totalSources}`);
+
+      // Send email with three-tier results
+      const finalResults = {
+        validated: finalValidated,
+        flagged: finalFlagged,
+        rejected: finalRejected,
+      };
+      const htmlContent = buildV5EmailHTML(
+        finalResults,
+        Business,
+        plan.expandedCountry,
+        Exclusion,
+        searchLog
+      );
+
+      await sendEmail(
+        Email,
+        `[V5 ITERATIVE] ${Business} in ${Country} (${finalValidated.length} validated + ${finalFlagged.length} flagged)`,
+        htmlContent
+      );
+
+      const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
+      console.log('\n' + '='.repeat(70));
+      console.log(`V5 ITERATIVE SEARCH COMPLETE!`);
+      console.log(`Email sent to: ${Email}`);
+      console.log(
+        `Validated: ${finalValidated.length} | Flagged: ${finalFlagged.length} | Rejected: ${finalRejected.length}`
+      );
+      console.log(`Total time: ${totalTime} minutes`);
+      console.log('='.repeat(70));
+
+      // Finalize tracking (real token counts recorded via recordTokens in wrappers)
+      await tracker.finish({
+        searchRounds: searchLog.length,
+        validated: finalValidated.length,
+        flagged: finalFlagged.length,
+        rejected: finalRejected.length,
+      });
+    } catch (error) {
+      console.error('V5 Processing error:', error);
+      await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
+      try {
+        await sendEmail(Email, `Find Target V5 - Error`, `<p>Error: ${error.message}</p>`);
+      } catch (e) {
+        console.error('Failed to send error email:', e);
+      }
+    } finally {
+      // Stop keep-alive and close the streaming response
+      clearInterval(keepAliveInterval);
+      try {
+        res.write(`{"done":true,"timestamp":"${new Date().toISOString()}"}\n`);
+        res.end();
+      } catch (e) {
+        // Connection might already be closed
+      }
     }
-  } finally {
-    // Stop keep-alive and close the streaming response
-    clearInterval(keepAliveInterval);
-    try {
-      res.write(`{"done":true,"timestamp":"${new Date().toISOString()}"}\n`);
-      res.end();
-    } catch (e) {
-      // Connection might already be closed
-    }
-  }
   }); // end trackingContext.run
 });
 

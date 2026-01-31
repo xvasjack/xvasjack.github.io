@@ -51,7 +51,7 @@ async function callGeminiFlash(prompt) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-        timeout: 90000,
+        timeout: 30000,
       }
     );
 
@@ -97,7 +97,7 @@ async function callPerplexitySonar(prompt) {
         model: 'sonar',
         messages: [{ role: 'user', content: prompt }],
       }),
-      timeout: 90000,
+      timeout: 30000,
     });
 
     if (!response.ok) {
@@ -141,7 +141,7 @@ async function callPerplexitySonarPro(prompt) {
         model: 'sonar-pro',
         messages: [{ role: 'user', content: prompt }],
       }),
-      timeout: 90000,
+      timeout: 45000,
     });
 
     if (!response.ok) {
@@ -296,7 +296,7 @@ async function verifyWebsite(url) {
 // ============ FETCH WEBSITE FOR VALIDATION ============
 
 async function fetchWebsite(url) {
-  async function tryFetch(targetUrl, timeoutMs = 30000) {
+  async function tryFetch(targetUrl, timeoutMs = 15000) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
     try {
@@ -378,37 +378,46 @@ async function fetchWebsite(url) {
   }
 
   const urlVariations = getUrlVariations(url);
+  let sawWAF = false;
 
-  for (const targetUrl of urlVariations) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      try {
-        console.log(`  [fetchWebsite] Trying ${targetUrl} (attempt ${attempt})`);
-        const response = await tryFetch(targetUrl);
-        const html = await response.text();
+  try {
+    const result = await Promise.any(
+      urlVariations.map(async (targetUrl) => {
+        try {
+          console.log(`  [fetchWebsite] Trying ${targetUrl}`);
+          const response = await tryFetch(targetUrl);
+          const html = await response.text();
 
-        if (isCloudflareOrWAFChallenge(html)) {
-          console.log(`  [fetchWebsite] ${targetUrl} - Cloudflare/WAF detected`);
-          return '__WAF_PROTECTED__';
+          if (isCloudflareOrWAFChallenge(html)) {
+            console.log(`  [fetchWebsite] ${targetUrl} - Cloudflare/WAF detected`);
+            sawWAF = true;
+            throw new Error('WAF_PROTECTED');
+          }
+
+          if (response.ok || (response.status >= 200 && response.status < 400)) {
+            console.log(`  [fetchWebsite] ${targetUrl} - got ${html.length} chars HTML`);
+            const cleanText = extractText(html);
+            console.log(`  [fetchWebsite] ${targetUrl} - cleaned to ${cleanText.length} chars`);
+            if (cleanText.length > 50) return cleanText;
+            throw new Error('Content too short after cleaning');
+          }
+          throw new Error(`HTTP ${response.status}`);
+        } catch (e) {
+          console.log(`  [fetchWebsite] ${targetUrl} - ${e.message}`);
+          throw e;
         }
-
-        if (response.ok || (response.status >= 200 && response.status < 400)) {
-          console.log(`  [fetchWebsite] ${targetUrl} - got ${html.length} chars HTML`);
-          const cleanText = extractText(html);
-          console.log(`  [fetchWebsite] ${targetUrl} - cleaned to ${cleanText.length} chars`);
-          if (cleanText.length > 50) return cleanText;
-          else console.log(`  [fetchWebsite] ${targetUrl} - content too short after cleaning`);
-        } else {
-          console.log(`  [fetchWebsite] ${targetUrl} - HTTP ${response.status}`);
-        }
-      } catch (e) {
-        console.log(`  [fetchWebsite] ${targetUrl} - ERROR: ${e.message}`);
-        if (attempt < 2) await new Promise((r) => setTimeout(r, 2000));
-      }
+      })
+    );
+    return result;
+  } catch (e) {
+    // Promise.any rejects with AggregateError when all promises reject
+    if (sawWAF) {
+      console.log(`  [fetchWebsite] All variations WAF-blocked for ${url}`);
+      return '__WAF_PROTECTED__';
     }
+    console.log(`  [fetchWebsite] All variations failed for ${url}`);
+    return null;
   }
-
-  console.log(`  [fetchWebsite] All variations failed for ${url}`);
-  return null;
 }
 
 // ============ URL HELPERS ============
@@ -778,7 +787,7 @@ function buildValidationExcel(companies) {
 // ============ ORCHESTRATOR ============
 
 async function orchestrate(companyList, countryList, targetBusiness) {
-  const batchSize = 15;
+  const batchSize = 25;
   const results = [];
 
   for (let i = 0; i < companyList.length; i += batchSize) {

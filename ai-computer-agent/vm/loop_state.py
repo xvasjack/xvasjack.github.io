@@ -108,10 +108,33 @@ def save_loop_state(
                 pass
 
 
+def _cleanup_orphan_tmp_files(path: str):
+    """RL-4: Clean up orphaned .tmp files from failed concurrent saves."""
+    try:
+        directory = os.path.dirname(path) or "."
+        basename = os.path.basename(path)
+        for filename in os.listdir(directory):
+            # Match pattern: basename.UUID.tmp
+            if filename.startswith(basename + ".") and filename.endswith(".tmp"):
+                tmp_path = os.path.join(directory, filename)
+                # Only clean up files older than 5 minutes
+                try:
+                    if time.time() - os.path.getmtime(tmp_path) > 300:
+                        os.remove(tmp_path)
+                        logger.debug(f"Cleaned up orphaned tmp file: {tmp_path}")
+                except OSError:
+                    pass
+    except Exception as e:
+        logger.debug(f"Orphan cleanup failed (non-critical): {e}")
+
+
 def load_loop_state(
     path: str = DEFAULT_LOOP_STATE_PATH,
 ) -> Optional[PersistedLoopState]:
     """Load loop state from file. Returns None if not found or invalid."""
+    # RL-4: Clean up orphaned temp files from failed concurrent saves
+    _cleanup_orphan_tmp_files(path)
+
     if not os.path.exists(path):
         return None
 
