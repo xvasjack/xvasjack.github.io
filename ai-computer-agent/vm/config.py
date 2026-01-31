@@ -17,7 +17,7 @@ _logger = logging.getLogger("config")
 
 
 # M1: Single source of truth for Claude model
-CLAUDE_MODEL = "claude-opus-4-5-20250514"
+CLAUDE_MODEL = "opus"
 
 
 # F1: Centralized timeout configuration

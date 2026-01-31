@@ -10,6 +10,7 @@ Pillow>=10.0.0
 # Windows-specific
 pywin32>=306
 psutil>=5.9.0
+pygetwindow>=0.0.9
 
 # Clipboard
 pyperclip>=1.8.2

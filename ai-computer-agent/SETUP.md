@@ -87,9 +87,11 @@ try {
     Write-Host "Host server: running"
 } catch {
     Write-Host "Starting host server in WSL..."
+    # Ensure node_modules exist before launching server
+    wsl -e bash -c "cd /home/xvasjack/xvasjack.github.io/ai-computer-agent/host && [ -d node_modules ] || npm install"
     wsl -e bash -c "cd /home/xvasjack/xvasjack.github.io/ai-computer-agent/host && nohup node server.js > /tmp/host-server.log 2>&1 &"
     $waited = 0
-    while ($waited -lt 10) {
+    while ($waited -lt 15) {
         Start-Sleep -Seconds 1
         $waited++
         try {
@@ -102,7 +104,10 @@ try {
         } catch {}
     }
     if (-not $hostRunning) {
-        Write-Error "Host server failed to start within 10s"
+        Write-Host "--- Host server log (/tmp/host-server.log) ---"
+        wsl -e cat /tmp/host-server.log
+        Write-Host "--- End log ---"
+        Write-Error "Host server failed to start within 15s. Check log above."
         exit 1
     }
 }
