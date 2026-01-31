@@ -288,7 +288,7 @@ function handleVMMessage(message) {
         broadcastToUI({
           type: 'task_update',
           payload: {
-            task: state.currentTask.toJSON(),
+            task: state.currentTask.toJSON ? state.currentTask.toJSON() : state.currentTask,
             screenshot: payload.screenshot_base64,
           },
         });
@@ -327,7 +327,7 @@ function handleVMMessage(message) {
         broadcastToUI({
           type: 'task_complete',
           payload: {
-            task: state.currentTask.toJSON(),
+            task: state.currentTask.toJSON ? state.currentTask.toJSON() : state.currentTask,
             stats: state.stats,
           },
         });
@@ -397,7 +397,7 @@ function handleUIMessage(ws, message) {
 
       broadcastToUI({
         type: 'task_created',
-        payload: { task: task.toJSON() },
+        payload: { task: task.toJSON ? task.toJSON() : task },
       });
       break;
 
@@ -416,7 +416,7 @@ function handleUIMessage(ws, message) {
 
         broadcastToUI({
           type: 'task_update',
-          payload: { task: state.currentTask.toJSON() },
+          payload: { task: state.currentTask.toJSON ? state.currentTask.toJSON() : state.currentTask },
         });
       }
       break;
@@ -550,7 +550,7 @@ app.post('/api/task', (req, res) => {
     task.status = 'waiting_for_vm';
   }
 
-  res.json({ task: task.toJSON() });
+  res.json({ task: task.toJSON ? task.toJSON() : task });
 });
 
 app.post('/api/task/:id/approve', (req, res) => {
@@ -578,7 +578,7 @@ app.post('/api/task/:id/approve', (req, res) => {
     }));
   }
 
-  res.json({ task: state.currentTask.toJSON() });
+  res.json({ task: state.currentTask.toJSON ? state.currentTask.toJSON() : state.currentTask });
 });
 
 app.post('/api/task/:id/cancel', (req, res) => {
@@ -611,7 +611,7 @@ app.post('/api/task/:id/cancel', (req, res) => {
   const cancelled = state.currentTask;
   state.currentTask = null;
 
-  res.json({ task: cancelled.toJSON() });
+  res.json({ task: cancelled.toJSON ? cancelled.toJSON() : cancelled });
 });
 
 // Serve the UI

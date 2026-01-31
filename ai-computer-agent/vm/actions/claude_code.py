@@ -18,6 +18,8 @@ import logging
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from shared.cli_utils import build_claude_cmd, get_claude_code_path, get_repo_cwd
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("claude_code_actions")
 
@@ -27,15 +29,11 @@ logger = logging.getLogger("claude_code_actions")
 # =============================================================================
 
 
-# Claude Code CLI binary. On Windows calling into WSL, use "wsl claude".
-# If Claude Code is installed natively on Windows, just "claude".
-CLAUDE_CODE_PATH = os.environ.get("CLAUDE_CODE_PATH", "claude")
+# Claude Code CLI binary. On Windows calling into WSL, use "wsl:claude".
+CLAUDE_CODE_PATH = get_claude_code_path()
 
-# Working directory for Claude Code (your repo)
-REPO_PATH = os.environ.get(
-    "REPO_PATH",
-    os.path.expanduser("~/xvasjack.github.io")
-)
+# Working directory for Claude Code (your repo) — WSL-aware
+REPO_PATH = get_repo_cwd()
 
 # Mandate file path (prepended to every prompt)
 MANDATE_PATH = os.environ.get(
@@ -185,13 +183,15 @@ async def run_claude_code(
         try:
             from config import CLAUDE_MODEL
         except ImportError:
-            CLAUDE_MODEL = "claude-opus-4-5-20250514"
+            CLAUDE_MODEL = "opus"
         process = await asyncio.create_subprocess_exec(
-            CLAUDE_CODE_PATH,
-            "--print",
-            "--model", CLAUDE_MODEL,
-            "--message", full_prompt,
-            "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash",
+            *build_claude_cmd(
+                CLAUDE_CODE_PATH,
+                "--print",
+                "--model", CLAUDE_MODEL,
+                "--message", full_prompt,
+                "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash",
+            ),
             cwd=cwd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -422,8 +422,7 @@ async def check_claude_code_installed() -> bool:
     """Check if Claude Code CLI is installed and accessible"""
     try:
         process = await asyncio.create_subprocess_exec(
-            CLAUDE_CODE_PATH,
-            "--version",
+            *build_claude_cmd(CLAUDE_CODE_PATH, "--version"),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
@@ -437,8 +436,7 @@ async def get_claude_code_version() -> Optional[str]:
     """Get Claude Code version"""
     try:
         process = await asyncio.create_subprocess_exec(
-            CLAUDE_CODE_PATH,
-            "--version",
+            *build_claude_cmd(CLAUDE_CODE_PATH, "--version"),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

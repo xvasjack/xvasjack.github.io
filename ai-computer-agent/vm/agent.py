@@ -31,6 +31,7 @@ from shared.protocol import (
     Task, TaskStatus, TaskUpdate, TaskResult,
     MESSAGE_TYPES, encode_message, decode_message
 )
+from shared.cli_utils import build_claude_cmd, get_repo_cwd, is_wsl_mode
 from computer_use import execute_action, get_screen_context, screenshot
 from guardrails import check_action
 from config import CLAUDE_MODEL
@@ -45,13 +46,6 @@ FEEDBACK_LOOP_KEYWORDS = [
     "market-research", "profile-slides", "trading-comparable",
     "validation", "due-diligence", "utb", "feedback loop", "feedback-loop",
 ]
-
-
-def _build_claude_cmd(claude_path: str, *args) -> list:
-    """Build command list for claude CLI. Handles 'wsl:' prefix."""
-    if claude_path.startswith("wsl:"):
-        return ["wsl", "-e", claude_path[4:]] + list(args)
-    return [claude_path] + list(args)
 
 
 def _find_claude_cli() -> str:
@@ -92,10 +86,11 @@ def _find_claude_cli() -> str:
 
 
 def load_config():
-    from config import AgentConfig as CfgAgentConfig
+    from config import AgentConfig as CfgAgentConfig, _validate_ws_url
     claude_path = os.environ.get("CLAUDE_CODE_PATH") or _find_claude_cli()
+    raw_ws_url = os.environ.get("HOST_WS_URL", "ws://localhost:3000/agent")
     return CfgAgentConfig(
-        host_ws_url=os.environ.get("HOST_WS_URL", "ws://localhost:3000/agent"),
+        host_ws_url=_validate_ws_url(raw_ws_url),
         claude_code_path=claude_path,
     )
 
@@ -240,10 +235,9 @@ JSON array:"""
 async def _run_claude_subprocess(config, prompt: str) -> str:
     """Run Claude Code CLI as an async subprocess (B7 fix). A6: Kill subprocess on timeout."""
     claude_path = config.claude_code_path if hasattr(config, 'claude_code_path') else "claude"
-    is_wsl = claude_path.startswith("wsl:")
-    cwd = None if is_wsl else (config.repo_path if hasattr(config, 'repo_path') else os.getcwd())
+    cwd = get_repo_cwd(claude_path)
 
-    cmd = _build_claude_cmd(
+    cmd = build_claude_cmd(
         claude_path,
         "--print", "--model", CLAUDE_MODEL,
         "--message", prompt,
@@ -1189,7 +1183,7 @@ async def main():
 
     # Verify Claude Code CLI (async)
     try:
-        cmd = _build_claude_cmd(config.claude_code_path, "--version")
+        cmd = build_claude_cmd(config.claude_code_path, "--version")
         proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,

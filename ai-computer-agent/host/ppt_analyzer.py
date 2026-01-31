@@ -300,7 +300,7 @@ If output genuinely matches template quality, return {{"passed": true, "summary"
         # B11: Use --print --message --allowedTools Read so CLI can read image files
         # M2: Add --model flag; L10: Use --allowedTools instead of --dangerously-skip-permissions
         result = subprocess.run(
-            ["claude", "--print", "--model", "claude-opus-4-5-20250514",
+            ["claude", "--print", "--model", "opus",
              "--message", prompt, "--allowedTools", "Read",
              "--output-format", "text"],
             capture_output=True,
@@ -495,7 +495,7 @@ If output passes, set passed=true with a brief explanation of why it matches.
 
     try:
         response = client.messages.create(
-            model="claude-opus-4-5-20250514",
+            model="opus",
             max_tokens=4096,
             messages=[{"role": "user", "content": content}]
         )
@@ -693,7 +693,7 @@ FAIL CRITERIA: Any critical issue (empty slides, corrupted data, truncated conte
 
     try:
         response = client.messages.create(
-            model="claude-opus-4-5-20250514",
+            model="opus",
             max_tokens=4096,
             messages=[{"role": "user", "content": content}]
         )

@@ -517,9 +517,10 @@ class FeedbackLoop:
             await self._report_progress("No PR detected — creating PR via gh CLI")
             try:
                 import re
+                from shared.cli_utils import get_repo_cwd
                 gh_proc = await asyncio.create_subprocess_exec(
                     "gh", "pr", "create", "--fill", "--head", f"claude/{self.config.service_name}-fix-iter{iteration.number}",
-                    cwd=os.path.expanduser("~/xvasjack.github.io"),
+                    cwd=get_repo_cwd(),
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )

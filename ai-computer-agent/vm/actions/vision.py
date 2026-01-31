@@ -9,11 +9,17 @@ import tempfile
 import logging
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from config import CLAUDE_MODEL
+
+try:
+    from config import CLAUDE_MODEL
+except ImportError:
+    CLAUDE_MODEL = "opus"
+
+from shared.cli_utils import build_claude_cmd, get_claude_code_path, is_wsl_mode, to_wsl_path
 
 logger = logging.getLogger("vision")
 
-CLAUDE_CODE_PATH = os.environ.get("CLAUDE_CODE_PATH", "claude")
+CLAUDE_CODE_PATH = get_claude_code_path()
 
 
 async def find_element(description: str, screenshot_b64: str = None) -> tuple:
@@ -41,8 +47,11 @@ async def find_element(description: str, screenshot_b64: str = None) -> tuple:
         with os.fdopen(fd, "wb") as f:
             f.write(decoded_data)
 
+        # Fix #5: Convert Windows temp path to WSL path so Claude in WSL can read it
+        readable_path = to_wsl_path(tmp_path) if is_wsl_mode(CLAUDE_CODE_PATH) else tmp_path
+
         prompt = (
-            f"Read the file at {tmp_path} — it is a screenshot of a desktop application or browser window. "
+            f"Read the file at {readable_path} — it is a screenshot of a desktop application or browser window. "
             f"The screen resolution is approximately 1920x1080.\n\n"
             f"TASK: {description}\n\n"
             f"Search for this element by examining:\n"
@@ -58,10 +67,10 @@ async def find_element(description: str, screenshot_b64: str = None) -> tuple:
         proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
-                CLAUDE_CODE_PATH, "--print",
+                *build_claude_cmd(CLAUDE_CODE_PATH, "--print",
                 "--model", CLAUDE_MODEL,
                 "--message", prompt,
-                "--allowedTools", "Read",
+                "--allowedTools", "Read"),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -136,8 +145,11 @@ async def ask_about_screen(question: str, screenshot_b64: str = None) -> str:
         with os.fdopen(fd, "wb") as f:
             f.write(decoded_data)
 
+        # Fix #5: Convert Windows temp path to WSL path so Claude in WSL can read it
+        readable_path = to_wsl_path(tmp_path) if is_wsl_mode(CLAUDE_CODE_PATH) else tmp_path
+
         prompt = (
-            f"Read the file at {tmp_path} — it is a screenshot of a desktop application or browser window.\n\n"
+            f"Read the file at {readable_path} — it is a screenshot of a desktop application or browser window.\n\n"
             f"QUESTION: {question}\n\n"
             f"Answer rules:\n"
             f"- If the question asks for a status (e.g., inbox vs login), answer with EXACTLY one keyword "
@@ -151,10 +163,10 @@ async def ask_about_screen(question: str, screenshot_b64: str = None) -> str:
         proc = None
         try:
             proc = await asyncio.create_subprocess_exec(
-                CLAUDE_CODE_PATH, "--print",
+                *build_claude_cmd(CLAUDE_CODE_PATH, "--print",
                 "--model", CLAUDE_MODEL,
                 "--message", prompt,
-                "--allowedTools", "Read",
+                "--allowedTools", "Read"),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )

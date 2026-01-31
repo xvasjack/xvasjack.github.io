@@ -89,7 +89,7 @@ try {
     Write-Host "Starting host server in WSL..."
     # Ensure node_modules exist before launching server
     wsl -e bash -c "cd /home/xvasjack/xvasjack.github.io/ai-computer-agent/host && [ -d node_modules ] || npm install"
-    wsl -e bash -c "cd /home/xvasjack/xvasjack.github.io/ai-computer-agent/host && nohup node server.js > /tmp/host-server.log 2>&1 &"
+    Start-Process -NoNewWindow -FilePath "wsl" -ArgumentList "-e", "bash", "-c", "cd /home/xvasjack/xvasjack.github.io/ai-computer-agent/host && exec node server.js > /tmp/host-server.log 2>&1"
     $waited = 0
     while ($waited -lt 15) {
         Start-Sleep -Seconds 1

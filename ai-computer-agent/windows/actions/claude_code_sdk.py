@@ -133,7 +133,7 @@ class ClaudeCodeSDK:
 
             # Create streaming message
             with self.client.messages.stream(
-                model="claude-opus-4-5-20250514",
+                model="opus",
                 max_tokens=8192,
                 messages=[{"role": "user", "content": prompt}],
                 system=self._get_system_prompt(),
