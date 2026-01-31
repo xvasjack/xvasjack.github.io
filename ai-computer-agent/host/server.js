@@ -18,7 +18,8 @@ const { v4: uuidv4 } = require('uuid');
 
 const app = express();
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+// M6: Limit max payload size to prevent memory exhaustion
+const wss = new WebSocket.Server({ server, maxPayload: 10 * 1024 * 1024 });
 
 // Configuration
 const PORT = process.env.PORT || 3000;
@@ -212,7 +213,30 @@ wss.on('connection', (ws, req) => {
 
   if (isVMAgent) {
     console.log('VM Agent connected');
+
+    // H3: Close stale agent connection before storing new one
+    if (state.vmAgent && state.vmAgent !== ws && state.vmAgent.readyState === WebSocket.OPEN) {
+      console.log('Closing stale VM Agent connection');
+      state.vmAgent.close(4000, 'Replaced by new connection');
+    }
     state.vmAgent = ws;
+
+    // H1: Dispatch pending waiting_for_vm task to reconnected agent
+    if (state.currentTask && state.currentTask.status === 'waiting_for_vm') {
+      console.log('Dispatching pending task to reconnected agent');
+      state.vmAgent.send(JSON.stringify({
+        type: 'new_task',
+        payload: {
+          id: state.currentTask.id,
+          description: state.currentTask.description,
+          max_duration_minutes: state.currentTask.maxDurationMinutes,
+          context: state.currentTask.context || null,
+        },
+      }));
+      state.currentTask.status = 'planning';
+      state.currentTask.startedAt = new Date().toISOString();
+      broadcastToUI({ type: 'task_update', payload: { task: state.currentTask.toJSON ? state.currentTask.toJSON() : state.currentTask } });
+    }
 
     ws.on('message', (data) => {
       try {
@@ -224,9 +248,12 @@ wss.on('connection', (ws, req) => {
     });
 
     ws.on('close', () => {
-      console.log('VM Agent disconnected');
-      state.vmAgent = null;
-      broadcastToUI({ type: 'vm_status', payload: { connected: false } });
+      // H3: Only null if this is still the active connection
+      if (state.vmAgent === ws) {
+        console.log('VM Agent disconnected');
+        state.vmAgent = null;
+        broadcastToUI({ type: 'vm_status', payload: { connected: false } });
+      }
     });
 
     ws.on('error', (error) => {
@@ -280,6 +307,10 @@ function handleVMMessage(message) {
           time: new Date().toISOString(),
           message: payload.message,
         });
+        // M5: Cap messages array to prevent unbounded memory growth
+        if (state.currentTask.messages.length > 100) {
+          state.currentTask.messages = state.currentTask.messages.slice(-100);
+        }
 
         if (payload.screenshot_base64) {
           state.latestScreenshot = payload.screenshot_base64;
@@ -338,7 +369,8 @@ function handleVMMessage(message) {
       break;
 
     case 'plan_proposal':
-      if (state.currentTask) {
+      // H4: Verify task_id to prevent stale proposals from corrupting current task
+      if (state.currentTask && payload.task_id === state.currentTask.id) {
         state.currentTask.plan = payload.plan;
         state.currentTask.status = 'awaiting_approval';
 
@@ -434,16 +466,20 @@ function handleUIMessage(ws, message) {
       break;
 
     case 'cancel_task':
-      // DL-6: Check-and-set pattern to prevent race condition with multiple clients
-      if (state.currentTask && state.currentTask.status !== 'cancelled' && state.vmAgent) {
+      // H2: Allow cancelling waiting_for_vm tasks even when agent is disconnected
+      if (state.currentTask && state.currentTask.status !== 'cancelled') {
         const taskToCancel = state.currentTask;
-        taskToCancel.status = 'cancelled';  // Mark as cancelled immediately to prevent duplicate cancels
+        const wasWaiting = taskToCancel.status === 'waiting_for_vm';
+        taskToCancel.status = 'cancelled';
         taskToCancel.completedAt = new Date().toISOString();
 
-        state.vmAgent.send(JSON.stringify({
-          type: 'cancel_task',
-          payload: { task_id: taskToCancel.id },
-        }));
+        // Only send cancel to agent if it's connected and task was actually dispatched
+        if (!wasWaiting && state.vmAgent) {
+          state.vmAgent.send(JSON.stringify({
+            type: 'cancel_task',
+            payload: { task_id: taskToCancel.id },
+          }));
+        }
 
         state.taskHistory.unshift(taskToCancel);
         state.currentTask = null;

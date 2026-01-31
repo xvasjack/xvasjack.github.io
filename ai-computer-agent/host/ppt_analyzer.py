@@ -301,8 +301,9 @@ If output genuinely matches template quality, return {{"passed": true, "summary"
         # M2: Add --model flag; L10: Use --allowedTools instead of --dangerously-skip-permissions
         result = subprocess.run(
             ["claude", "--print", "--model", "opus",
-             "--message", prompt, "--allowedTools", "Read",
-             "--output-format", "text"],
+             "--allowedTools", "Read",
+             "--output-format", "text",
+             prompt],  # positional arg MUST be last
             capture_output=True,
             text=True,
             timeout=300,  # 5 min timeout for image analysis

@@ -189,8 +189,8 @@ async def run_claude_code(
                 CLAUDE_CODE_PATH,
                 "--print",
                 "--model", CLAUDE_MODEL,
-                "--message", full_prompt,
                 "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash",
+                full_prompt,  # positional arg MUST be last
             ),
             cwd=cwd,
             stdout=asyncio.subprocess.PIPE,

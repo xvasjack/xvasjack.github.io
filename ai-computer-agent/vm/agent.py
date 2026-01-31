@@ -34,7 +34,7 @@ from shared.protocol import (
 from shared.cli_utils import build_claude_cmd, get_repo_cwd, is_wsl_mode
 from computer_use import execute_action, get_screen_context, screenshot
 from guardrails import check_action
-from config import CLAUDE_MODEL
+from config import CLAUDE_MODEL, TIMEOUTS
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("agent")
@@ -44,7 +44,7 @@ logger = logging.getLogger("agent")
 FEEDBACK_LOOP_KEYWORDS = [
     "target-v3", "target-v4", "target-v5", "target-v6",
     "market-research", "profile-slides", "trading-comparable",
-    "validation", "due-diligence", "utb", "feedback loop", "feedback-loop",
+    "validation", "due-diligence", "unit-to-business", "feedback loop", "feedback-loop",
 ]
 
 
@@ -240,10 +240,11 @@ async def _run_claude_subprocess(config, prompt: str) -> str:
     cmd = build_claude_cmd(
         claude_path,
         "--print", "--model", CLAUDE_MODEL,
-        "--message", prompt,
         "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash",
+        prompt,  # positional arg MUST be last
     )
 
+    subprocess_timeout = TIMEOUTS.get("subprocess", 600)
     proc = await asyncio.create_subprocess_exec(
         *cmd,
         stdout=asyncio.subprocess.PIPE,
@@ -251,7 +252,7 @@ async def _run_claude_subprocess(config, prompt: str) -> str:
         cwd=cwd,
     )
     try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=subprocess_timeout)
         if stderr:
             stderr_text = stderr.decode().strip()
             if stderr_text:
@@ -261,7 +262,7 @@ async def _run_claude_subprocess(config, prompt: str) -> str:
         # A6: Kill subprocess on timeout to prevent orphaned processes
         proc.kill()
         await proc.wait()  # Properly reap the process
-        raise TimeoutError("Claude subprocess timed out after 120 seconds")
+        raise TimeoutError(f"Claude subprocess timed out after {subprocess_timeout} seconds")
     except Exception:
         # RL-1: Ensure subprocess is reaped on ANY exception to prevent zombies
         if proc.returncode is None:

@@ -69,8 +69,8 @@ async def find_element(description: str, screenshot_b64: str = None) -> tuple:
             proc = await asyncio.create_subprocess_exec(
                 *build_claude_cmd(CLAUDE_CODE_PATH, "--print",
                 "--model", CLAUDE_MODEL,
-                "--message", prompt,
-                "--allowedTools", "Read"),
+                "--allowedTools", "Read",
+                prompt),  # positional arg MUST be last
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -165,8 +165,8 @@ async def ask_about_screen(question: str, screenshot_b64: str = None) -> str:
             proc = await asyncio.create_subprocess_exec(
                 *build_claude_cmd(CLAUDE_CODE_PATH, "--print",
                 "--model", CLAUDE_MODEL,
-                "--message", prompt,
-                "--allowedTools", "Read"),
+                "--allowedTools", "Read",
+                prompt),  # positional arg MUST be last
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
