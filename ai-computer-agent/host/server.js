@@ -41,6 +41,15 @@ function loadState() {
       const data = fs.readFileSync(STATE_FILE, 'utf8');
       const saved = JSON.parse(data);
       console.log(`Loaded state: ${saved.taskHistory?.length || 0} historical tasks`);
+      // Clear stale currentTask — a "running" task from a dead session is meaningless
+      if (saved.currentTask && saved.currentTask.status === 'running') {
+        console.log(`Clearing stale running task: ${saved.currentTask.id}`);
+        saved.currentTask.status = 'cancelled';
+        saved.currentTask.completedAt = new Date().toISOString();
+        if (!saved.taskHistory) saved.taskHistory = [];
+        saved.taskHistory.unshift(saved.currentTask);
+        saved.currentTask = null;
+      }
       return {
         vmAgent: null,
         currentTask: saved.currentTask || null,
@@ -235,7 +244,7 @@ wss.on('connection', (ws, req) => {
       type: 'init',
       payload: {
         vmConnected: state.vmAgent !== null,
-        currentTask: state.currentTask ? state.currentTask.toJSON() : null,
+        currentTask: state.currentTask ? (state.currentTask.toJSON ? state.currentTask.toJSON() : state.currentTask) : null,
         stats: state.stats,
         latestScreenshot: state.latestScreenshot,
       },
@@ -498,7 +507,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.get('/api/status', (req, res) => {
   res.json({
     vmConnected: state.vmAgent !== null,
-    currentTask: state.currentTask ? state.currentTask.toJSON() : null,
+    currentTask: state.currentTask ? (state.currentTask.toJSON ? state.currentTask.toJSON() : state.currentTask) : null,
     stats: state.stats,
   });
 });
