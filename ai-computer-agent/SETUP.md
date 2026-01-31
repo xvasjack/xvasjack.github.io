@@ -80,24 +80,24 @@ try {
 # --- Host auto-start ---
 $hostRunning = $false
 try {
-    $tcp = New-Object System.Net.Sockets.TcpClient
-    $tcp.Connect("localhost", 3000)
-    $tcp.Close()
+    $resp = Invoke-WebRequest -Uri "http://localhost:3000/api/status" -UseBasicParsing -TimeoutSec 2
     $hostRunning = $true
     Write-Host "Host server: running"
 } catch {
     Write-Host "Starting host server in WSL..."
+    # Kill any stale server process on port 3000
+    wsl -e bash -c 'fuser -k 3000/tcp 2>/dev/null; true'
+    Start-Sleep -Seconds 1
     # Ensure node_modules exist before launching server
     wsl -e bash -c "cd /home/xvasjack/xvasjack.github.io/ai-computer-agent/host && [ -d node_modules ] || npm install"
-    Start-Job -ScriptBlock { wsl -e bash -c 'cd /home/xvasjack/xvasjack.github.io/ai-computer-agent/host && exec node server.js > /tmp/host-server.log 2>&1' } | Out-Null
+    # Start server fully detached (survives PowerShell exit)
+    wsl -e bash -c 'cd /home/xvasjack/xvasjack.github.io/ai-computer-agent/host && nohup node server.js > /tmp/host-server.log 2>&1 & disown'
     $waited = 0
     while ($waited -lt 15) {
         Start-Sleep -Seconds 1
         $waited++
         try {
-            $tcp = New-Object System.Net.Sockets.TcpClient
-            $tcp.Connect("localhost", 3000)
-            $tcp.Close()
+            $resp = Invoke-WebRequest -Uri "http://localhost:3000/api/status" -UseBasicParsing -TimeoutSec 2
             $hostRunning = $true
             Write-Host "Host server started (${waited}s)"
             break

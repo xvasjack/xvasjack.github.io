@@ -623,6 +623,14 @@ app.get('/', (req, res) => {
 // Start Server
 // ============================================================================
 
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.error(`Port ${PORT} already in use. Kill the existing process and retry.`);
+    process.exit(1);
+  }
+  throw err;
+});
+
 server.listen(PORT, () => {
   console.log(`
 ╔════════════════════════════════════════════════════════════╗
@@ -637,3 +645,14 @@ server.listen(PORT, () => {
 ╚════════════════════════════════════════════════════════════╝
   `);
 });
+
+// Graceful shutdown — save state before exiting
+function gracefulShutdown(signal) {
+  console.log(`Received ${signal}, saving state and shutting down...`);
+  saveState();
+  server.close(() => process.exit(0));
+  setTimeout(() => process.exit(1), 5000); // force exit after 5s
+}
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGHUP', () => gracefulShutdown('SIGHUP'));
