@@ -409,26 +409,7 @@ function handleVMMessage(message) {
         state.currentTask.plan = payload.plan;
         state.currentTask.status = 'awaiting_approval';
 
-        // T0.1: Auto-approve plans if env var set (skip UI approval)
-        if (process.env.AUTO_APPROVE_PLANS === 'true') {
-          state.currentTask.status = 'running';
-          sendToAgent({
-            type: 'plan_approved',
-            payload: { task_id: state.currentTask.id },
-          });
-          broadcastToUI({
-            type: 'task_update',
-            payload: {
-              taskId: state.currentTask.id,
-              status: 'running',
-              message: 'Plan auto-approved',
-            },
-          });
-          console.log(`[AUTO-APPROVE] Plan for task ${state.currentTask.id} auto-approved`);
-          saveState();
-          break;
-        }
-
+        console.log(`[plan_proposal] Broadcasting plan for task ${state.currentTask.id} to UI`);
         broadcastToUI({
           type: 'plan_proposal',
           payload: {
