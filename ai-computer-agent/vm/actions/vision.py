@@ -22,14 +22,40 @@ logger = logging.getLogger("vision")
 CLAUDE_CODE_PATH = get_claude_code_path()
 
 
+def _get_screen_resolution() -> str:
+    """Return current screen resolution string, falling back to 1920x1080."""
+    try:
+        import subprocess
+        # Try xdpyinfo first (X11)
+        result = subprocess.run(
+            ["xdpyinfo"], capture_output=True, text=True, timeout=3
+        )
+        match = re.search(r"dimensions:\s+(\d+x\d+)", result.stdout)
+        if match:
+            return match.group(1)
+    except Exception:
+        pass
+    try:
+        import subprocess
+        # Try xrandr
+        result = subprocess.run(
+            ["xrandr", "--current"], capture_output=True, text=True, timeout=3
+        )
+        match = re.search(r"(\d{3,4}x\d{3,4})\s+\d+\.\d+\*", result.stdout)
+        if match:
+            return match.group(1)
+    except Exception:
+        pass
+    return "1920x1080"  # H19: hardcoded fallback — update if default resolution changes
+
+
+
 async def find_element(description: str, screenshot_b64: str = None) -> tuple:
     """
     Find a UI element on screen using Claude vision.
     Returns (x, y) coordinates or None.
     """
     if not screenshot_b64:
-        import sys
-        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         from computer_use import screenshot
         screenshot_b64 = await screenshot()
 
@@ -44,7 +70,12 @@ async def find_element(description: str, screenshot_b64: str = None) -> tuple:
             logger.error(f"Failed to decode screenshot: {e}")
             return None
 
-        with os.fdopen(fd, "wb") as f:
+        try:
+            f = os.fdopen(fd, "wb")
+        except Exception:
+            os.close(fd)
+            raise
+        with f:
             f.write(decoded_data)
 
         # Fix #5: Convert Windows temp path to WSL path so Claude in WSL can read it
@@ -52,7 +83,8 @@ async def find_element(description: str, screenshot_b64: str = None) -> tuple:
 
         prompt = (
             f"Read the file at {readable_path} — it is a screenshot of a desktop application or browser window. "
-            f"The screen resolution is approximately 1920x1080.\n\n"
+            # H19: Resolution is passed as a hint; ideally query actual resolution at runtime
+            f"The screen resolution is approximately {_get_screen_resolution()}.\n\n"
             f"TASK: {description}\n\n"
             f"Search for this element by examining:\n"
             f"- Text labels, button text, placeholder text\n"
@@ -91,8 +123,8 @@ async def find_element(description: str, screenshot_b64: str = None) -> tuple:
             if match:
                 x, y = int(match.group(1)), int(match.group(2))
                 # IV-7: Validate coordinates are positive (0,0 is usually invalid UI coordinate)
-                if x <= 0 or y <= 0:
-                    logger.warning(f"Vision returned invalid zero/negative coordinates: ({x}, {y})")
+                if x < 0 or y < 0:
+                    logger.warning(f"Vision returned negative coordinates: ({x}, {y})")
                     return None
                 # IV-2: Validate coordinates are within reasonable screen bounds
                 MAX_X, MAX_Y = 3840, 2160  # Support up to 4K displays
@@ -127,8 +159,6 @@ async def ask_about_screen(question: str, screenshot_b64: str = None) -> str:
     Returns the answer string.
     """
     if not screenshot_b64:
-        import sys
-        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         from computer_use import screenshot
         screenshot_b64 = await screenshot()
 
@@ -142,7 +172,12 @@ async def ask_about_screen(question: str, screenshot_b64: str = None) -> str:
             logger.error(f"Failed to decode screenshot: {e}")
             return ""
 
-        with os.fdopen(fd, "wb") as f:
+        try:
+            f = os.fdopen(fd, "wb")
+        except Exception:
+            os.close(fd)
+            raise
+        with f:
             f.write(decoded_data)
 
         # Fix #5: Convert Windows temp path to WSL path so Claude in WSL can read it
