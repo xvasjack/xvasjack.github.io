@@ -12,12 +12,13 @@
         .go:disabled { background: #444; }
         .stop { background: #ff4757; color: white; display: none; }
         .log { height: 500px; overflow-y: auto; background: #111; padding: 10px; font-size: 13px; border-radius: 4px; }
-        .log div { padding: 2px 0; }
+        .log div { padding: 2px 0; word-wrap: break-word; white-space: pre-wrap; }
         .t { color: #666; }
         .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ff4757; margin-right: 6px; }
         .dot.on { background: #2ed573; }
-        .plan-box { background: #252540; border: 1px solid #5352ed; padding: 10px; margin: 10px 0; border-radius: 4px; display: none; }
+        .plan-box { background: #252540; border: 1px solid #5352ed; padding: 10px; margin: 10px 0; border-radius: 4px; display: none; max-height: 400px; overflow-y: auto; }
         .plan-box pre { white-space: pre-wrap; margin: 5px 0; font-size: 12px; }
+        
         .plan-box button { margin: 5px 5px 0 0; }
         .btn-approve { background: #2ed573; color: #111; }
         .btn-reject { background: #ff4757; color: white; }
@@ -48,8 +49,9 @@
         function connect() {
             ws = new WebSocket(`${location.protocol==='https:'?'wss:':'ws:'}//${location.host}`);
             ws.onopen = () => log('Connected');
-            ws.onclose = () => { log('Disconnected'); setTimeout(connect, 3000); };
-            ws.onmessage = e => handle(JSON.parse(e.data));
+            ws.onclose = () => { log('Disconnected'); document.getElementById('planBox').style.display = 'none'; setVM(false); setTimeout(connect, 3000); };
+            ws.onerror = (err) => { console.error('WebSocket error:', err); log('Connection error'); };
+            ws.onmessage = e => { try { handle(JSON.parse(e.data)); } catch(err) { console.error('Message parse error:', err); } };
         }
         function handle(m) {
             const p = m.payload;
@@ -60,10 +62,20 @@
                         setRunning(true);
                         log('> Reconnected: task in progress');
                     }
+                    if (p.currentTask && p.currentTask.status === 'awaiting_approval') {
+                        setRunning(true);
+                        if (p.pendingPlan) {
+                            currentPlan = p.pendingPlan;
+                            document.getElementById('planContent').textContent = typeof p.pendingPlan === 'string' ? p.pendingPlan : JSON.stringify(p.pendingPlan, null, 2);
+                            document.getElementById('planBox').style.display = 'block';
+                            log('> Reconnected: plan awaiting approval');
+                        }
+                    }
                     break;
                 case 'vm_status': setVM(p.connected); break;
                 case 'task_created': setRunning(true); log('> Task started'); break;
                 case 'task_update':
+                    setRunning(true);
                     const t = p.task;
                     if (t) {
                         const sb = document.getElementById('sb');
@@ -90,6 +102,18 @@
                     log('> Task cancelled');
                     break;
                 case 'error': log('ERROR: '+p.message); break;
+                case 'screenshot':
+                    if (p.url) {
+                        const img = document.createElement('img');
+                        img.src = p.url;
+                        img.style.maxWidth = '100%';
+                        img.style.borderRadius = '4px';
+                        img.style.marginTop = '4px';
+                        document.getElementById('log').appendChild(img);
+                        document.getElementById('log').scrollTop = document.getElementById('log').scrollHeight;
+                    }
+                    if (p.filename) log('> Screenshot: ' + p.filename);
+                    break;
                 case 'plan_proposal':
                     // H11: Show plan for user approval instead of auto-approving
                     currentPlan = p.plan;
@@ -101,6 +125,7 @@
         }
         function approvePlan() {
             if (currentPlan) {
+                if (!ws || ws.readyState !== WebSocket.OPEN) return;
                 ws.send(JSON.stringify({type:'approve_plan',payload:{plan:currentPlan}}));
                 log('> Plan approved');
                 document.getElementById('planBox').style.display = 'none';
@@ -108,6 +133,7 @@
             }
         }
         function rejectPlan() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
             const feedback = prompt('Rejection reason (optional):') || 'Rejected by user';
             ws.send(JSON.stringify({type:'reject_plan',payload:{feedback:feedback}}));
             log('> Plan rejected: ' + feedback);
@@ -125,6 +151,11 @@
         function send() {
             const v = document.getElementById('in').value.trim();
             if (!v) return;
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+            const btn = document.getElementById('go');
+            if (btn.disabled) return;
+            btn.disabled = true;
+            setTimeout(() => { if (!running || document.getElementById('dot').classList.contains('on')) btn.disabled = false; }, 2000);
             if (running) {
                 ws.send(JSON.stringify({type:'user_input',payload:{input:v}}));
                 log('You: '+v);
@@ -135,7 +166,7 @@
             document.getElementById('in').value = '';
         }
         function cancel() {
-            if(confirm('Stop?')) ws.send(JSON.stringify({type:'cancel_task',payload:{}}));
+            if(confirm('Stop?') && ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({type:'cancel_task',payload:{}}));
         }
         // H10: Escape HTML to prevent XSS
         function escapeHtml(str) {
