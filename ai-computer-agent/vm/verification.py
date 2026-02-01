@@ -13,6 +13,10 @@ import os
 import logging
 from typing import Dict, Any, Optional
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from shared.cli_utils import is_wsl_mode, get_subprocess_cwd
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("verification")
 
@@ -125,8 +129,17 @@ async def verify_pr_created(pr_number: Optional[int]) -> Dict[str, Any]:
         return {"verified": False, "error": "No PR number provided"}
 
     try:
+        # C2 fix: WSL-wrap gh CLI calls
+        if is_wsl_mode():
+            win_cwd, wsl_cwd = get_subprocess_cwd()
+            cmd = ["wsl", "--cd", wsl_cwd, "-e", "gh", "pr", "view", str(pr_number), "--json", "state,commits"]
+        else:
+            win_cwd = None
+            cmd = ["gh", "pr", "view", str(pr_number), "--json", "state,commits"]
+
         proc = await asyncio.create_subprocess_exec(
-            "gh", "pr", "view", str(pr_number), "--json", "state,commits",
+            *cmd,
+            cwd=win_cwd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
