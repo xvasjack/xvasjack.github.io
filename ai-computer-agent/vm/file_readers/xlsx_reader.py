@@ -290,7 +290,8 @@ def check_sheet_issues(ws, sheet_name: str, headers: List[str]) -> List[DataIssu
     max_row = ws.max_row or 0
     max_col = ws.max_column or 0
 
-    for row in range(2, max_row + 1):
+    # 3.15: Cap at 1000 rows to prevent OOM on huge files
+    for row in range(2, min(max_row + 1, 1002)):
         row_values = [ws.cell(row=row, column=col).value for col in range(1, max_col + 1)]
 
         # Check for empty rows

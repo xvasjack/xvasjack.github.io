@@ -916,6 +916,18 @@ class Agent:
                 elapsed_seconds=elapsed,
             )
 
+        except asyncio.CancelledError:
+            # 3.5: Handle CancelledError separately (Python 3.9+ — not a subclass of Exception)
+            logger.warning("Feedback loop cancelled")
+            elapsed = int(time.time() - start_time)
+            return TaskResult(
+                task_id=task.id,
+                status=TaskStatus.FAILED,
+                summary="Feedback loop cancelled",
+                iterations=0,
+                prs_merged=0,
+                elapsed_seconds=elapsed,
+            )
         except Exception as e:
             logger.error(f"Feedback loop failed: {e}")
             elapsed = int(time.time() - start_time)
@@ -944,7 +956,7 @@ class Agent:
         try:
             steps = await asyncio.wait_for(
                 get_plan_from_claude_async(self.config, task.description),
-                timeout=180  # 3 minute timeout for plan generation
+                timeout=TIMEOUTS.get("plan_generation", 180)  # 3.8: Use config timeout
             )
         except asyncio.TimeoutError:
             logger.error("Plan generation timed out after 180 seconds")

@@ -678,6 +678,10 @@ app.post('/api/task', (req, res) => {
     task.status = 'waiting_for_vm';
   }
 
+  // 2.3: Broadcast to WS UI
+  broadcastToUI({ type: 'task_created', payload: { task: task.toJSON ? task.toJSON() : task } });
+  saveState();
+
   res.json({ task: task.toJSON ? task.toJSON() : task });
 });
 
@@ -711,6 +715,10 @@ app.post('/api/task/:id/approve', (req, res) => {
     });
   }
 
+  // 2.3: Broadcast approval to WS UI
+  broadcastToUI({ type: 'task_update', payload: { task: state.currentTask.toJSON ? state.currentTask.toJSON() : state.currentTask } });
+  saveState();
+
   res.json({ task: state.currentTask.toJSON ? state.currentTask.toJSON() : state.currentTask });
 });
 
@@ -740,9 +748,15 @@ app.post('/api/task/:id/cancel', (req, res) => {
   }
   state.currentTask.completedAt = new Date().toISOString();
   state.taskHistory.unshift(state.currentTask);
+  // 2.4: Track cancel stats + persist state
+  state.stats.failedTasks = (state.stats.failedTasks || 0) + 1;
 
   const cancelled = state.currentTask;
   state.currentTask = null;
+
+  // 2.3: Broadcast cancellation to WS UI
+  broadcastToUI({ type: 'task_cancelled', payload: { task: cancelled.toJSON ? cancelled.toJSON() : cancelled } });
+  saveState();
 
   res.json({ task: cancelled.toJSON ? cancelled.toJSON() : cancelled });
 });

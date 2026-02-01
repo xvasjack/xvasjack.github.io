@@ -262,8 +262,9 @@ def check_folder_access(path: str) -> Tuple[bool, Optional[BlockReason]]:
     # M20 fix: Normalize path to prevent ../traversal bypass
     path = os.path.normpath(os.path.realpath(path))
 
+    # 3.1: Anchor end of pattern to prevent prefix-only matches
     for allowed_pattern in CONFIG.allowed_folders:
-        if re.match(allowed_pattern, path, re.IGNORECASE):
+        if re.fullmatch(allowed_pattern, path, re.IGNORECASE):
             return True, None
 
     logger.warning(f"BLOCKED: Folder access not authorized: {path}")

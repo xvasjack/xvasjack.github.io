@@ -202,6 +202,12 @@ async def verify_deployment(
     if not health_url:
         return {"verified": False, "error": "No health URL provided"}
 
+    # 3.3: Validate URL scheme is http or https only
+    from urllib.parse import urlparse
+    parsed = urlparse(health_url)
+    if parsed.scheme not in ("http", "https"):
+        return {"verified": False, "error": f"Invalid URL scheme: {parsed.scheme}. Only http/https allowed."}
+
     try:
         # F50: WSL-wrap curl when running in WSL mode
         if is_wsl_mode(get_claude_code_path()):

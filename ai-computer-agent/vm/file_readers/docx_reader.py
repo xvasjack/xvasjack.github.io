@@ -294,7 +294,8 @@ def extract_sections(doc) -> List[SectionInfo]:
     sections = []
 
     # Pattern for section numbers like "1.0", "1.1", "4.9", "8", "8."
-    section_pattern = re.compile(r'^(\d+(?:\.\d+)?)\s*[.\s]*(.*)$')
+    # 3.13: Require period after number to avoid matching years like "2024 Revenue"
+    section_pattern = re.compile(r'^(\d+\.(?:\d+)?)\s*(.*)$')
 
     for para in doc.paragraphs:
         text = para.text.strip()
@@ -380,17 +381,8 @@ def count_images(doc) -> int:
     """Count images in the document"""
     image_count = 0
 
-    # Check inline shapes
-    for para in doc.paragraphs:
-        for run in para.runs:
-            # Category 5 fix: Image counting errors should be logged, not silently swallowed
-            try:
-                if run._element.xpath('.//a:blip'):
-                    image_count += 1
-            except Exception as e:
-                logger.debug(f"Error checking image in run: {e}")
-
-    # Check shapes in document
+    # 3.14: Use only rels-based counting to avoid double-counting
+    # (inline blip check and rels both count the same images)
     try:
         for rel in doc.part.rels.values():
             if "image" in rel.target_ref:

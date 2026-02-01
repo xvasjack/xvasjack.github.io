@@ -226,7 +226,9 @@ class FeedbackLoop:
                 iteration=current_iteration,
                 prs_merged=self.prs_merged,
             )
-            if asyncio.iscoroutine(result):
+            # 3.6: Use inspect.isawaitable for broader check (covers coroutines, tasks, futures)
+            import inspect
+            if inspect.isawaitable(result):
                 await result
 
     def _save_state(self, iteration_number: int):

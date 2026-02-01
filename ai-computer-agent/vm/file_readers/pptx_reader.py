@@ -117,11 +117,14 @@ class PPTXAnalysis:
             "total_links": self.total_links,
             "issues": self.issues,
             "summary": self.summary,
+            # 3.11: Include description and slide_number in to_dict
             "companies": [
                 {
                     "name": c.name,
                     "website": c.website,
                     "has_logo": c.has_logo,
+                    "description": getattr(c, 'description', ''),
+                    "slide_number": getattr(c, 'slide_number', 0),
                 }
                 for c in self.companies
             ]
@@ -311,6 +314,12 @@ def extract_company_from_slide(slide, slide_number: int) -> Optional[CompanyInfo
     company_name = texts[0] if texts else None
 
     if not company_name or len(company_name) < 2:
+        return None
+
+    # 3.12: Skip known non-company patterns (titles, headers, etc.)
+    skip_patterns = ["table of contents", "agenda", "appendix", "disclaimer",
+                     "confidential", "prepared for", "prepared by", "page "]
+    if any(p in company_name.lower() for p in skip_patterns):
         return None
 
     # Find website

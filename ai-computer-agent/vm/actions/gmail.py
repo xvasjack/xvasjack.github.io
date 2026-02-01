@@ -313,33 +313,15 @@ async def wait_for_download(timeout_seconds: int = 60) -> bool:
 def _list_download_files() -> List[str]:
     """List files in download folder.
 
-    RC-5: Uses timeout to handle slow NFS/network filesystems.
+    1.15: Removed signal.SIGALRM — unsafe with asyncio event loop.
+    Plain os.listdir is safe for local filesystems.
     """
     if not os.path.exists(DOWNLOAD_PATH):
         return []
     try:
-        # RC-5: os.listdir can block on network filesystems
-        # For sync context, we can't use executor, but add a simple check
-        import signal
-
-        def _timeout_handler(signum, frame):
-            raise TimeoutError("Directory listing timed out")
-
-        # Only set alarm on Unix systems
-        if hasattr(signal, 'SIGALRM'):
-            old_handler = signal.signal(signal.SIGALRM, _timeout_handler)
-            signal.alarm(5)  # 5 second timeout
-            try:
-                files = os.listdir(DOWNLOAD_PATH)
-            finally:
-                signal.alarm(0)
-                signal.signal(signal.SIGALRM, old_handler)
-        else:
-            # Windows doesn't support SIGALRM, just do the listing
-            files = os.listdir(DOWNLOAD_PATH)
-
+        files = os.listdir(DOWNLOAD_PATH)
         return [os.path.join(DOWNLOAD_PATH, f) for f in files]
-    except (TimeoutError, OSError) as e:
+    except OSError as e:
         logger.warning(f"Failed to list download directory: {e}")
         return []
 

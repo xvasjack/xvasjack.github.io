@@ -127,11 +127,13 @@ async def find_element(description: str, screenshot_b64: str = None) -> tuple:
                 if stderr_text:
                     logger.debug(f"Vision stderr: {stderr_text}")
 
-            if "NONE" in output.upper():
+            # 1.8: Exact match to avoid false positives like "NONE-related"
+            if output.strip().upper() == "NONE":
                 return None
 
-            # Category 8 fix: Regex should accept single-digit coordinates
-            match = re.search(r'(\d{1,4})\s*,\s*(\d{1,4})', output)
+            # 1.9: Take LAST match — Claude often explains before giving coords
+            matches = list(re.finditer(r'(\d{1,4})\s*,\s*(\d{1,4})', output))
+            match = matches[-1] if matches else None
             if match:
                 x, y = int(match.group(1)), int(match.group(2))
                 # IV-7: Validate coordinates are positive (0,0 is usually invalid UI coordinate)

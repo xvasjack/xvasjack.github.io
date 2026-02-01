@@ -108,7 +108,11 @@ def _get_gmail_service():
     # Refresh or create new credentials
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
+            try:
+                creds.refresh(Request())
+            except Exception as e:
+                logger.error(f"OAuth token refresh failed: {e}")
+                return None
         else:
             if not os.path.exists(GMAIL_CREDENTIALS_PATH):
                 raise FileNotFoundError(
@@ -365,7 +369,10 @@ async def download_attachment_api(
 
             # Check file extension
             ext = os.path.splitext(filename)[1].lower()
-            if ext not in (".pptx", ".xlsx", ".xls", ".docx", ".pdf", ".csv"):
+            # 1.14: Extended whitelist — add .ppt, .html, .htm, .zip
+            allowed_exts = {".pptx", ".xlsx", ".xls", ".docx", ".pdf", ".csv", ".ppt", ".html", ".htm", ".zip"}
+            if ext not in allowed_exts:
+                logger.warning(f"Skipping attachment with unknown extension: {filename}")
                 continue
 
             # Category 1 fix: part.get("body", {}) may return None
@@ -446,23 +453,24 @@ async def wait_for_email_api(
         try:
             emails = await search_emails_api(query, max_results=3)
 
-            for email in emails:
+            # 1.13: Rename loop var to avoid shadowing stdlib `email` module
+            for email_msg in emails:
                 # Guardrails
-                if not _check_sender_allowed(email["sender"]):
-                    logger.warning(f"Sender not allowed: {email['sender']}")
+                if not _check_sender_allowed(email_msg["sender"]):
+                    logger.warning(f"Sender not allowed: {email_msg['sender']}")
                     continue
-                if not _check_subject_allowed(email["subject"]):
-                    logger.warning(f"Subject not allowed: {email['subject']}")
+                if not _check_subject_allowed(email_msg["subject"]):
+                    logger.warning(f"Subject not allowed: {email_msg['subject']}")
                     continue
 
-                if email.get("has_attachment"):
-                    file_path = await download_attachment_api(email["id"], download_dir)
+                if email_msg.get("has_attachment"):
+                    file_path = await download_attachment_api(email_msg["id"], download_dir)
                     if file_path:
                         return {
                             "success": True,
                             "file_path": file_path,
-                            "email_id": email["id"],
-                            "subject": email["subject"],
+                            "email_id": email_msg["id"],
+                            "subject": email_msg["subject"],
                         }
 
         except Exception as e:

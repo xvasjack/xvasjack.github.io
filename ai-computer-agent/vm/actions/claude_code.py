@@ -115,7 +115,8 @@ You are being invoked by an automated agent. Follow these rules:
 4. NEVER delete test files to make tests pass — fix the actual code
 5. ALWAYS run tests after changes
 6. ALWAYS commit with message format: "Fix: <description>"
-7. ALWAYS push directly to main (no PRs, no branches)
+7. After changes, commit with message "Fix: <description>" and push to main
+8. NEVER push --force to main
 """)
         parts.append(f"\n## Task\n{task_prompt}")
 
@@ -198,19 +199,39 @@ async def run_claude_code(
             from config import CLAUDE_MODEL
         except ImportError:
             CLAUDE_MODEL = "opus"
-        process = await asyncio.create_subprocess_exec(
-            *build_claude_cmd(
+
+        # 3.2: If prompt > 30K chars, pipe via stdin to avoid Windows 32K CLI arg limit
+        use_stdin = len(full_prompt) > 30000
+        if use_stdin:
+            cmd_args = build_claude_cmd(
+                CLAUDE_CODE_PATH,
+                "--print",
+                "--model", CLAUDE_MODEL,
+                "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash",
+                "-",  # read from stdin
+                wsl_cwd=wsl_cwd or cwd,
+            )
+        else:
+            cmd_args = build_claude_cmd(
                 CLAUDE_CODE_PATH,
                 "--print",
                 "--model", CLAUDE_MODEL,
                 "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash",
                 full_prompt,  # positional arg MUST be last
                 wsl_cwd=wsl_cwd or cwd,  # B1 fix: pass WSL cwd via --cd flag
-            ),
+            )
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd_args,
             cwd=effective_cwd,  # B1 fix: None in WSL mode to avoid WinError 267
+            stdin=asyncio.subprocess.PIPE if use_stdin else None,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
+
+        if use_stdin:
+            process.stdin.write(full_prompt.encode())
+            process.stdin.close()
 
         try:
             stdout, stderr = await asyncio.wait_for(

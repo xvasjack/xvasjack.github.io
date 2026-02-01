@@ -423,11 +423,8 @@ async def open_url_in_browser(url: str, browser: str = "chrome"):
         await open_application(browser)
         await asyncio.sleep(1.5)
 
-    # Open new tab and navigate
-    await hotkey("ctrl", "t")
-    await asyncio.sleep(0.3)
-
-    # Clear address bar and type URL
+    # 1.7: Navigate in current tab instead of opening new tab to prevent tab accumulation
+    # Focus address bar directly (no new tab)
     await hotkey("ctrl", "l")
     await asyncio.sleep(0.1)
     await type_text(url)

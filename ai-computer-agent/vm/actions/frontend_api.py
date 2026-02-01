@@ -8,9 +8,13 @@ Falls back to browser automation if API POST fails.
 import asyncio
 import os
 import re
+import sys
 import logging
 from typing import Dict, Any, Optional
 from urllib.parse import urlparse
+
+# 0.8: Add sys.path so `from config import ...` works when imported first
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("frontend_api")

@@ -14,7 +14,14 @@ import asyncio
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import logging
-from anthropic import Anthropic
+
+# 0.9: Guard import — anthropic package may not be installed
+try:
+    from anthropic import Anthropic
+    HAS_ANTHROPIC = True
+except ImportError:
+    Anthropic = None
+    HAS_ANTHROPIC = False
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("research")
@@ -281,7 +288,8 @@ If the architecture needs redesign, say so clearly with migration steps.
                     obj, _ = decoder.raw_decode(response[brace_idx:])
                     json_match = type('Match', (), {'group': lambda self: json.dumps(obj)})()
                 except json.JSONDecodeError:
-                    json_match = re.search(r'\{[\s\S]*?\}', response)
+                    # 3.19: raw_decode failed; skip broken regex fallback for nested JSON
+                    json_match = None
             if json_match:
                 data = json.loads(json_match.group())
 

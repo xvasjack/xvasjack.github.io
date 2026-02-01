@@ -28,6 +28,7 @@
     <div class="top">
         <span class="dot" id="dot"></span>
         <input id="in" placeholder="Type task or comment..." onkeydown="if(event.key==='Enter')send()">
+        <input id="ctx" placeholder="Context (optional)" style="flex:0.5;font-size:11px">
         <button class="go" id="go" onclick="send()" disabled>Send</button>
         <button class="stop" id="stop" onclick="cancel()">Stop</button>
     </div>
@@ -91,6 +92,20 @@
                         }
                     }
                     if(p.task?.messages?.length) log(p.task.messages[p.task.messages.length-1].message);
+                    // 2.2: Render screenshots from task_update
+                    if(t && t.screenshot) {
+                        const img = document.createElement('img');
+                        img.src = 'data:image/png;base64,' + t.screenshot;
+                        img.style.maxWidth = '100%';
+                        img.style.borderRadius = '4px';
+                        img.style.marginTop = '4px';
+                        document.getElementById('log').appendChild(img);
+                        document.getElementById('log').scrollTop = document.getElementById('log').scrollHeight;
+                    }
+                    // 2.5: Handle planning and waiting_for_vm statuses
+                    if(t && (t.status === 'planning' || t.status === 'waiting_for_vm')) {
+                        log('> Status: ' + t.status);
+                    }
                     break;
                 case 'task_complete':
                     setRunning(false);
@@ -111,7 +126,16 @@
                     break;
                 case 'error': log('ERROR: '+p.message); break;
                 case 'screenshot':
-                    if (p.url) {
+                    // 2.1: Server sends { screenshot: base64 }, handle both formats
+                    if (p.screenshot) {
+                        const img = document.createElement('img');
+                        img.src = 'data:image/png;base64,' + p.screenshot;
+                        img.style.maxWidth = '100%';
+                        img.style.borderRadius = '4px';
+                        img.style.marginTop = '4px';
+                        document.getElementById('log').appendChild(img);
+                        document.getElementById('log').scrollTop = document.getElementById('log').scrollHeight;
+                    } else if (p.url) {
                         const img = document.createElement('img');
                         img.src = p.url;
                         img.style.maxWidth = '100%';
@@ -168,7 +192,12 @@
                 ws.send(JSON.stringify({type:'user_input',payload:{input:v}}));
                 log('You: '+v);
             } else {
-                ws.send(JSON.stringify({type:'new_task',payload:{description:v,maxDurationMinutes:120}}));
+                // 2.6: Include context if provided
+                const ctx = document.getElementById('ctx').value.trim();
+                const payload = {description:v,maxDurationMinutes:120};
+                if(ctx) payload.context = ctx;
+                ws.send(JSON.stringify({type:'new_task',payload:payload}));
+                document.getElementById('ctx').value = '';
                 log('Task: '+v);
             }
             document.getElementById('in').value = '';
@@ -188,6 +217,8 @@
             const row = document.createElement('div');
             row.innerHTML = `<span class="t">${escapeHtml(t)}</span> ${escapeHtml(msg)}`;
             d.appendChild(row);
+            // 2.7: Cap DOM log at 500 entries to prevent memory growth
+            while(d.childNodes.length > 500) d.removeChild(d.firstChild);
             d.scrollTop = d.scrollHeight;
         }
         connect();

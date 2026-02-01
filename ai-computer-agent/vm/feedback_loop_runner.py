@@ -21,12 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from feedback_loop import FeedbackLoop, LoopConfig, LoopResult
-from actions.frontend import submit_form as frontend_submit_form
 from actions.frontend_api import submit_form_api
-from actions.gmail import (
-    open_gmail, search_emails, open_first_email,
-    download_attachment, wait_for_download, get_recent_downloads,
-)
 from actions.gmail_api import wait_for_email_api, HAS_GMAIL_API
 from actions.claude_code import run_claude_code, improve_output
 from actions.github import merge_pr, wait_for_ci, get_ci_error_logs
@@ -34,6 +29,21 @@ from template_comparison import compare_output_to_template as compare_output, au
 from file_readers.pptx_reader import analyze_pptx
 from file_readers.xlsx_reader import analyze_xlsx
 from file_readers.docx_reader import analyze_docx
+
+# 0.7: Wrap browser imports in try/except — GUI deps may not be available
+HAS_BROWSER = False
+try:
+    from actions.frontend import submit_form as frontend_submit_form
+    from actions.gmail import (
+        open_gmail, search_emails, open_first_email,
+        download_attachment, wait_for_download, get_recent_downloads,
+    )
+    HAS_BROWSER = True
+except ImportError:
+    logger.warning("Browser automation not available (missing pyautogui/win32gui)")
+    frontend_submit_form = None
+    open_gmail = search_emails = open_first_email = None
+    download_attachment = wait_for_download = get_recent_downloads = None
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("feedback_loop_runner")
@@ -115,6 +125,10 @@ async def submit_form_callback(
     page = url_map.get(service_name, f"{service_name}.html")
     url = f"{FRONTEND_URL}/{page}"
 
+    # 0.7: Check browser is available before attempting
+    if not HAS_BROWSER or frontend_submit_form is None:
+        return {"success": False, "error": "API submission failed and browser automation not available"}
+
     # F9: Wrap browser fallback in try/except to prevent unhandled crash
     try:
         return await frontend_submit_form(url, form_data)
@@ -134,13 +148,15 @@ async def wait_for_email_callback(
     """
     logger.info(f"Waiting for {service_name} email (timeout: {timeout_minutes}m)")
 
-    download_dir = os.path.expanduser("~/Downloads")
+    # 1.1: Use AGENT_DOWNLOAD_PATH if set
+    download_dir = os.environ.get("AGENT_DOWNLOAD_PATH", os.path.expanduser("~/Downloads"))
 
     # Primary: Gmail API
     if HAS_GMAIL_API:
         try:
             subject_hint = SERVICE_EMAIL_SUBJECTS.get(service_name, service_name)
-            query = f"subject:({subject_hint}) has:attachment newer_than:1h"
+            # 1.5: 1h too restrictive — use 3h
+            query = f"subject:({subject_hint}) has:attachment newer_than:3h"
             result = await wait_for_email_api(
                 query=query,
                 download_dir=download_dir,
@@ -155,10 +171,16 @@ async def wait_for_email_callback(
             logger.warning(f"Gmail API error: {e} — falling back to browser")
 
     # Fallback: Browser automation
+    if not HAS_BROWSER:
+        logger.warning("Browser automation not available, skipping browser email fallback")
+    else:
+        deadline_browser = time.time() + (timeout_minutes * 60)
+        poll_interval_browser = 30
+
     deadline = time.time() + (timeout_minutes * 60)
     poll_interval = 30
 
-    while time.time() < deadline:
+    while HAS_BROWSER and time.time() < deadline:
         try:
             await open_gmail()
             await asyncio.sleep(2)
@@ -214,12 +236,12 @@ async def wait_for_email_callback(
                             logger.info(f"Found in Downloads: {f}")
                             return {"success": True, "file_path": f}
 
-                # S3: Recency-only fallback — newest file < 10min old with expected extension
+                # 1.2: Recency-only fallback — reduced from 10min to 2min for safety
                 for pattern in patterns:
                     for f in sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True):
                         age = time.time() - os.path.getmtime(f)
-                        if age < 600:
-                            logger.info(f"Found recent file in Downloads (no name match): {f}")
+                        if age < 120:
+                            logger.info(f"Found recent file in Downloads (no name match, <2min): {f}")
                             return {"success": True, "file_path": f}
         except Exception as e:
             # Category 8 fix: Log download check errors instead of silently swallowing
@@ -602,6 +624,15 @@ async def run_feedback_loop(
             if not _first_iteration_done[0]:
                 return {"success": True, "skipped": True}
             return await real_submit()
+
+    # 3.9: start_from="analyze" without file should error, not silently fall through
+    if start_from == "analyze" and not existing_file_path:
+        logger.error("start_from='analyze' requires existing_file_path")
+        return LoopResult(
+            success=False, iterations=0, prs_merged=0,
+            summary="Error: start_from='analyze' requires existing_file_path",
+            elapsed_seconds=0,
+        )
 
     if start_from == "analyze" and existing_file_path:
         real_wait = wait_email

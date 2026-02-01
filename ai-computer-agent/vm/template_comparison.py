@@ -683,7 +683,15 @@ def compare_docx_to_template(
         else:
             passed_checks += 1
     else:
-        passed_checks += 1  # Section not present, not an error
+        # 1.10: Missing section = failed check, not a free pass
+        discrepancies.append(Discrepancy(
+            severity=Severity.HIGH,
+            category="missing_section",
+            location="Financials Section",
+            expected=f"Section {expected_fin}.x for Financials",
+            actual="Section not found",
+            suggestion="Add a Financials section to the report."
+        ))
 
     # Check Pre-DD Workplan section number
     total_checks += 1
@@ -706,7 +714,15 @@ def compare_docx_to_template(
         else:
             passed_checks += 1
     else:
-        passed_checks += 1
+        # 1.10: Missing section = failed check
+        discrepancies.append(Discrepancy(
+            severity=Severity.HIGH,
+            category="missing_section",
+            location="Pre-DD Workplan Section",
+            expected=f"Section {expected_wp}",
+            actual="Section not found",
+            suggestion="Add a Pre-DD Workplan section to the report."
+        ))
 
     # Check Future Plans section number
     total_checks += 1
@@ -729,7 +745,15 @@ def compare_docx_to_template(
         else:
             passed_checks += 1
     else:
-        passed_checks += 1
+        # 1.10: Missing section = failed check
+        discrepancies.append(Discrepancy(
+            severity=Severity.HIGH,
+            category="missing_section",
+            location="Future Plans Section",
+            expected=f"Section {expected_fut}",
+            actual="Section not found",
+            suggestion="Add a Future Plans section to the report."
+        ))
 
     # ========== TABLE CHECKS ==========
 
@@ -885,7 +909,8 @@ def auto_detect_template(file_path: str, analysis: Dict[str, Any]) -> Optional[s
         companies = analysis.get("companies", [])
         slide_count = analysis.get("slide_count", 0)
 
-        if slide_count > 10 and len(companies) > 10:
+        # 3.16: Use >= 10 for boundary
+        if slide_count >= 10 and len(companies) >= 10:
             return "target-search"
         elif slide_count < 10:
             return "profile-slides"
