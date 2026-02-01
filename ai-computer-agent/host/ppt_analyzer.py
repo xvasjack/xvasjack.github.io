@@ -496,7 +496,7 @@ If output passes, set passed=true with a brief explanation of why it matches.
 
     try:
         response = client.messages.create(
-            model="opus",
+            model="claude-opus-4-5-20251101",
             max_tokens=4096,
             messages=[{"role": "user", "content": content}]
         )
@@ -694,7 +694,7 @@ FAIL CRITERIA: Any critical issue (empty slides, corrupted data, truncated conte
 
     try:
         response = client.messages.create(
-            model="opus",
+            model="claude-opus-4-5-20251101",
             max_tokens=4096,
             messages=[{"role": "user", "content": content}]
         )

@@ -272,12 +272,12 @@ SEVERITY DEFINITIONS:
 BE SPECIFIC — not "data fields present" but "company_name, website, description fields present and non-empty".
 """
 
-        from config import CLAUDE_MODEL
+        from config import CLAUDE_API_MODEL
         # H15: Use async or run_in_executor
         # Category 1 fix: Handle get_running_loop() without running loop
         if self._async:
             response = await self.client.messages.create(
-                model=CLAUDE_MODEL,
+                model=CLAUDE_API_MODEL,
                 max_tokens=2048,
                 messages=[{"role": "user", "content": prompt}]
             )
@@ -291,7 +291,7 @@ BE SPECIFIC — not "data fields present" but "company_name, website, descriptio
                 _aio.set_event_loop(loop)
             response = await loop.run_in_executor(
                 None, lambda: self.client.messages.create(
-                    model=CLAUDE_MODEL,
+                    model=CLAUDE_API_MODEL,
                     max_tokens=2048,
                     messages=[{"role": "user", "content": prompt}]
                 )
@@ -438,11 +438,11 @@ Return ONLY JSON (no explanation):
 }}
 """
 
-        from config import CLAUDE_MODEL
+        from config import CLAUDE_API_MODEL
         # H15: Use async or run_in_executor
         if self._async:
             response = await self.client.messages.create(
-                model=CLAUDE_MODEL,
+                model=CLAUDE_API_MODEL,
                 max_tokens=2048,
                 messages=[{"role": "user", "content": prompt}]
             )
@@ -450,7 +450,7 @@ Return ONLY JSON (no explanation):
             import asyncio as _aio
             response = await _aio.get_running_loop().run_in_executor(
                 None, lambda: self.client.messages.create(
-                    model=CLAUDE_MODEL,
+                    model=CLAUDE_API_MODEL,
                     max_tokens=2048,
                     messages=[{"role": "user", "content": prompt}]
                 )

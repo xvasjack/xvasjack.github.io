@@ -62,6 +62,7 @@ if (-not (Test-Path "__pycache__")) {
 if (-not $env:HOST_WS_URL) { $env:HOST_WS_URL = "ws://localhost:3000/agent" }
 if (-not $env:REPO_PATH) { $env:REPO_PATH = "$env:USERPROFILE\xvasjack.github.io" }
 if (-not $env:USER_EMAIL) { $env:USER_EMAIL = "xvasjack@gmail.com" }  # F4: Actual user email
+if (-not $env:AUTO_APPROVE_PLANS) { $env:AUTO_APPROVE_PLANS = "true" }  # T0.1: Auto-approve plans by default
 
 # Check if host server is running on port 3000
 $hostRunning = $false

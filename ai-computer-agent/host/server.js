@@ -329,7 +329,7 @@ function handleVMMessage(message) {
     case 'task_update':
       if (state.currentTask && state.currentTask.id === payload.task_id) {
         // C18 fix: Validate status string
-        const VALID_STATUSES = new Set(['pending', 'planning', 'awaiting_approval', 'running', 'completed', 'failed', 'cancelled', 'waiting_for_vm']);
+        const VALID_STATUSES = new Set(['pending', 'planning', 'awaiting_approval', 'running', 'completed', 'failed', 'cancelled', 'waiting_for_vm', 'stuck', 'timeout', 'paused']);
         if (payload.status && VALID_STATUSES.has(payload.status)) {
           state.currentTask.status = payload.status;
         } else if (payload.status) {
@@ -408,6 +408,26 @@ function handleVMMessage(message) {
       if (state.currentTask && payload.task_id === state.currentTask.id) {
         state.currentTask.plan = payload.plan;
         state.currentTask.status = 'awaiting_approval';
+
+        // T0.1: Auto-approve plans if env var set (skip UI approval)
+        if (process.env.AUTO_APPROVE_PLANS === 'true') {
+          state.currentTask.status = 'running';
+          sendToAgent({
+            type: 'plan_approved',
+            payload: { task_id: state.currentTask.id },
+          });
+          broadcastToUI({
+            type: 'task_update',
+            payload: {
+              taskId: state.currentTask.id,
+              status: 'running',
+              message: 'Plan auto-approved',
+            },
+          });
+          console.log(`[AUTO-APPROVE] Plan for task ${state.currentTask.id} auto-approved`);
+          saveState();
+          break;
+        }
 
         broadcastToUI({
           type: 'plan_proposal',

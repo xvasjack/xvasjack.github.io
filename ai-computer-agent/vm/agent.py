@@ -139,6 +139,8 @@ async def _parse_task_intent(config, description: str) -> dict:
         "start by opening the email", "start from email",
         "open the email", "check email first", "download the file",
         "start from download", "find the latest", "find the email",
+        "start at email", "start at the email", "email stage",
+        "begin from email", "begin at email",
     ]
     if any(phrase in desc_lower for phrase in email_skip):
         intent["start_from"] = "email_check"
@@ -727,6 +729,32 @@ class Agent:
                     form_data = json.loads(task.context) if isinstance(task.context, str) else task.context
                 except (json.JSONDecodeError, TypeError):
                     form_data = {"business": task.description}
+
+            # T0.2: Extract prompt from task description if not in form_data
+            if "prompt" not in form_data:
+                _desc = task.description
+                # Strip known prefixes to extract the business prompt
+                for prefix in [
+                    "do feedback loop on ", "start at email stage ",
+                    "start at the email stage ", "start from email ",
+                    "begin from email ", "begin at email ",
+                    "start at email ", "start at the email ",
+                ]:
+                    if _desc.lower().startswith(prefix):
+                        _desc = _desc[len(prefix):]
+                        break
+                # Strip service name if it appears at the start
+                if service_name and _desc.lower().startswith(service_name.lower()):
+                    _desc = _desc[len(service_name):].strip(" -:,")
+                _desc = _desc.strip()
+                if _desc:
+                    form_data["prompt"] = _desc
+                    # Also try to fill Business and Country if not set
+                    if "Business" not in form_data and "business" not in form_data:
+                        form_data["Business"] = _desc
+                    if "Country" not in form_data and "country" not in form_data:
+                        # Default to empty; agent can fill later
+                        form_data["Country"] = ""
 
             # B3 fix: Send progress updates during planning
             await self.send_update(TaskUpdate(

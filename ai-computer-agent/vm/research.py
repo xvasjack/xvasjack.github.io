@@ -76,10 +76,10 @@ class ResearchAgent:
         prompt = self._build_research_prompt(context)
 
         # H15: Use async client if available
-        from config import CLAUDE_MODEL
+        from config import CLAUDE_API_MODEL
         if self._async:
             response = await self.client.messages.create(
-                model=CLAUDE_MODEL,
+                model=CLAUDE_API_MODEL,
                 max_tokens=4096,
                 system="""You are a senior software architect debugging a RECURRING production issue.
 
@@ -123,7 +123,7 @@ Output JSON:
             response = await asyncio.wait_for(
                 asyncio.get_running_loop().run_in_executor(
                     None, lambda: self.client.messages.create(
-                        model=CLAUDE_MODEL,
+                        model=CLAUDE_API_MODEL,
                         max_tokens=4096,
                         system="""You are a senior software architect debugging a RECURRING production issue.
 
