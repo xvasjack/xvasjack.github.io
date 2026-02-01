@@ -1,6 +1,6 @@
 # AI Computer Agent — Complete Project Knowledge Base
 
-Last updated: 2026-01-31
+Last updated: 2026-02-01
 
 ---
 
@@ -39,16 +39,17 @@ Also supports ad-hoc desktop automation (plan-based tasks) — but the feedback 
 All Claude CLI invocations go through `shared/cli_utils.py`:
 
 ```python
-from shared.cli_utils import build_claude_cmd, get_repo_cwd
+from shared.cli_utils import build_claude_cmd, get_subprocess_cwd
 
-cmd = build_claude_cmd(CLAUDE_CODE_PATH, "--print", "--model", "opus", "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash", prompt)  # prompt is positional, MUST be last
-proc = await asyncio.create_subprocess_exec(*cmd, cwd=get_repo_cwd(), stdout=PIPE, stderr=PIPE)
+win_cwd, wsl_cwd = get_subprocess_cwd(CLAUDE_CODE_PATH)
+cmd = build_claude_cmd(CLAUDE_CODE_PATH, "--print", "--model", "opus", "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash", prompt, wsl_cwd=wsl_cwd)  # prompt is positional, MUST be last
+proc = await asyncio.create_subprocess_exec(*cmd, cwd=win_cwd, stdout=PIPE, stderr=PIPE)  # win_cwd=None in WSL mode
 ```
 
 - Uses Max subscription. **No ANTHROPIC_API_KEY needed.**
 - `CLAUDE_CODE_PATH` env var (default: `"claude"`) — set to `"wsl:claude"` (with colon!) if Claude Code only installed in WSL
-- `build_claude_cmd("wsl:claude", "--version")` → `["wsl", "-e", "claude", "--version"]`
-- `get_repo_cwd("wsl:claude")` → `/home/xvasjack/xvasjack.github.io` (WSL path)
+- `build_claude_cmd("wsl:claude", "--version", wsl_cwd="/home/xvasjack/...")` → `["wsl", "--cd", "/home/xvasjack/...", "-e", "claude", "--version"]`
+- `get_subprocess_cwd("wsl:claude")` → `(None, "/home/xvasjack/xvasjack.github.io")` — pass cwd=None to subprocess, wsl_cwd to build_claude_cmd
 - `to_wsl_path(r"C:\Temp\foo.png")` → `/mnt/c/Temp/foo.png` (for vision temp files)
 - Model string: `"opus"` everywhere (not the full ID)
 - Timeout: 600s for fixes, 120s for plan generation, 45s for vision
@@ -77,7 +78,7 @@ Both fall back gracefully if no API key. The agent works without them — just l
 
 ### Feedback Loop Task (`_run_feedback_loop_task`)
 
-Triggered when task description contains keywords: `target-v3`, `target-v4`, `target-v5`, `target-v6`, `market-research`, `profile-slides`, `trading-comparable`, `validation`, `due-diligence`, `unit-to-business`, `feedback loop`.
+Triggered when task description contains keywords: `target-v3`, `target-v4`, `target-v5`, `target-v6`, `market-research`, `profile-slides`, `trading-comparable`, `validation`, `due-diligence`, `utb`, `feedback loop`.
 
 **Current problem (as of 2026-01-31)**: The agent does NOT parse user intent from the description beyond extracting the service name. If user says "results already emailed, start from email", agent ignores this and starts with form submission anyway. `start_from` param exists in `feedback_loop_runner.py` but is only populated from `task.context` JSON, never from the description.
 
@@ -360,6 +361,7 @@ ai-computer-agent/
 │       └── gmail_token.json        # Refresh token (auto-generated)
 │
 ├── shared/
+│   ├── cli_utils.py           # Claude CLI WSL helpers: build_claude_cmd, get_subprocess_cwd
 │   └── protocol.py            # WS message types and data classes
 │
 ├── .claude/hooks/
@@ -445,12 +447,15 @@ TIMEOUT_HEALTH_CHECK=10
 TIMEOUT_PLAN_GENERATION=180
 ```
 
-### Railway URLs (all have defaults: https://{service}.up.railway.app)
+### Railway URLs (defaults updated 2026-02-01 to match actual production)
 
 ```bash
+# Defaults now use actual production URLs (e.g. target-v3-production.up.railway.app)
+# Set env vars to override:
 TARGET_V3_URL, TARGET_V4_URL, TARGET_V5_URL, TARGET_V6_URL
 MARKET_RESEARCH_URL, PROFILE_SLIDES_URL, TRADING_COMPARABLE_URL
 VALIDATION_URL, DUE_DILIGENCE_URL, UTB_URL
+USER_EMAIL=your-email@example.com    # B4: Default email for feedback loop tasks
 ```
 
 ---
@@ -499,7 +504,67 @@ python3 agent.py
 | **pywin32 only on Windows** | `requirements.txt` includes pywin32, won't install on Linux/WSL |
 | **Claude CLI OOMs in WSL** | `claude --print` can crash with JS heap OOM under constrained WSL memory. May need `NODE_OPTIONS=--max-old-space-size=4096`. |
 
-### Recently Fixed (2026-01-31 audit)
+### Recently Fixed (2026-02-01 comprehensive audit — 80+ fixes)
+
+**Tier 1 Blocking (B1-B12)**:
+- **B1: WinError 267** — subprocess cwd was WSL path on Windows. Now uses `get_subprocess_cwd()` → `(None, wsl_cwd)` and `wsl --cd` flag. Fixed in cli_utils.py, agent.py, claude_code.py, feedback_loop.py, github.py, verification.py.
+- **B2: UI running flag** — `setRunning(true)` now called in task_update handler (was only in task_created).
+- **B3: No progress updates** — Agent sends updates before intent parsing, plan generation, and approval wait.
+- **B4: Email never provided** — Falls back to `USER_EMAIL` env var.
+- **B5: utb keyword** — Reverted "unit-to-business" back to "utb" — false positive risk acceptable, service lookup was broken.
+- **B6: asyncio.run in executor** — `get_plan_from_claude` is now fully async.
+- **B7: Wrong form fields** — `frontend_api.py` now has per-service field mapping (10 services).
+- **B8: Email timeout clamped** — Passes explicit `email_wait_timeout_minutes * 60` instead of `step_timeout=0`.
+- **B9: Wrong API paths** — target services now use `/api/find-target`, `/api/find-target-v4`, etc.
+- **B10: Wrong Railway URLs** — All 10 fallback URLs updated to actual production URLs.
+
+**Tier 2 Critical (C1-C21)**:
+- **C1**: `from vision import` → `from actions.vision import` (8 locations in gmail.py + frontend.py).
+- **C2**: All `gh` CLI calls WSL-wrapped via `is_wsl_mode()` check (github.py, verification.py, feedback_loop.py).
+- **C3**: `git stash` uses WSL-aware command construction.
+- **C4**: WebSocket sends serialized via `asyncio.Lock()` in agent.py.
+- **C5**: `threading.Lock` removed from `LRUDict` — blocks event loop; access is single-coroutine.
+- **C6**: Plan approval tracks `_plan_task_id` to prevent cross-task approval.
+- **C7**: `ws.send()` guarded with null/readyState check in UI.
+- **C8**: `JSON.parse` wrapped in try/catch in UI `ws.onmessage`.
+- **C9**: Dead `_needs_reconnect` code removed entirely (set in 4 places, never read).
+- **C10**: Safe int parsing for TIMEOUT env vars with `_safe_int()` helper.
+- **C11**: Agent disconnect marks running task as `failed` (was orphaned in `running` forever).
+- **C12**: `reject_plan` now transitions task to `cancelled` and broadcasts update.
+- **C13**: `gh pr create` subprocess killed on timeout to prevent resource leak.
+- **C14**: `LRUDict` converted to `dict()` before JSON serialization in `_save_state`.
+- **C15**: Vision coordinate validation `<= 0` → `< 0` (allows (0,0) top-left).
+- **C16**: `get_all_windows()` wrapped in `run_in_executor()` for async contexts.
+- **C17**: Cancelled task not re-dispatched on reconnect (already correct by design).
+- **C18**: Task status validated against whitelist before applying in server.js.
+- **C19**: `httpx.Timeout()` syntax fixed (keyword arg `timeout=`).
+- **C20**: `ppt_analyzer.py` loop variable shadowing fixed in 3 list comprehensions.
+
+**Tier 3 High (selected H1-H28)**:
+- **H1**: Reconnect restores plan approval box for `awaiting_approval` tasks.
+- **H7**: Send button debounced (2s cooldown).
+- **H14**: `_wait_for_deployment` returns `False` (not `True`) when curl not found.
+- **H16**: HTTP approve endpoint rejects if task not in `awaiting_approval`.
+- **H17**: Guardrails email sender uses domain-anchored matching.
+- **H18**: `delete_template()` uses `os.path.basename()` to prevent path traversal.
+- **H19**: Vision resolution detection instead of hardcoded 1920x1080.
+- **H21**: VM agent error handler nulls `state.vmAgent`.
+- **H27**: `agent_guard.py` blocks force push variants (`-f`, `--force`, `--force-with-lease`).
+
+**Tier 4 Medium (selected M1-M24)**:
+- **M1**: `CLAUDE_STREAM` message type added to protocol.py.
+- **M2**: Screenshot handler added in UI.
+- **M3-M6**: Plan box CSS (max-height, overflow), word-wrap, ws.onclose/onerror handlers.
+- **M7**: JSON parse failures logged at WARNING not DEBUG.
+- **M10**: Version check has 10s timeout.
+- **M14/M21**: Retry backoff capped at `max_delay=300s`.
+- **M15/M23**: `broadcastToUI` wraps individual sends in try-catch.
+- **M16**: Duplicate `sys.path.insert` calls removed from vision.py.
+- **M18**: File descriptor leak on `os.fdopen()` failure fixed.
+- **M20**: Guardrails folder check normalizes paths with `os.path.realpath()`.
+- **M24**: `setInterval` handles stored and cleared on graceful shutdown.
+
+### Previous fixes (2026-01-31 audit)
 
 | Fix | Detail |
 |-----|--------|
@@ -508,7 +573,6 @@ python3 agent.py
 | **Cancel without agent** | `waiting_for_vm` tasks can now be cancelled from UI even when agent disconnected (H2). |
 | **Duplicate agent clobber** | Old agent connection closed before storing new one; close handler scoped (H3). |
 | **`plan_proposal` task_id check** | Stale proposals from cancelled tasks no longer corrupt current task (H4). |
-| **`utb` false positives** | Changed keyword from `"utb"` to `"unit-to-business"` to avoid matching "distribute", "contribute", etc. (H5). |
 | **Subprocess timeout** | Now uses `TIMEOUTS["subprocess"]` (default 600s) instead of hardcoded 120s (M4). |
 | **Messages cap** | `currentTask.messages` capped at 100 entries (M5). |
 | **WS maxPayload** | WebSocket server limited to 10MB payload (M6). |
@@ -556,7 +620,7 @@ API pattern: `POST /api/{service}` → `{ Business, Country, Exclusion, Email }`
 | due-diligence | DOCX | dd-report |
 | utb | ? | None |
 
-Railway URLs: `https://{service}.up.railway.app`
+Railway URLs: Production URLs vary per service (see `config.py RAILWAY_URLS`)
 Frontend: `https://xvasjack.github.io/{page}.html`
 
 ---

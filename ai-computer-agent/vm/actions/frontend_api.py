@@ -95,10 +95,10 @@ from config import RAILWAY_URLS
 
 # Service name -> API path mapping
 SERVICE_API_PATHS = {
-    "target-v3": "/api/target",
-    "target-v4": "/api/target",
-    "target-v5": "/api/target",
-    "target-v6": "/api/target",
+    "target-v3": "/api/find-target",
+    "target-v4": "/api/find-target-v4",
+    "target-v5": "/api/find-target-v5",
+    "target-v6": "/api/find-target-v6",
     "market-research": "/api/market-research",
     "profile-slides": "/api/profile-slides",
     "trading-comparable": "/api/trading-comparable",
@@ -163,7 +163,7 @@ async def submit_form_api(
 
     url = base_url.rstrip("/") + api_path
 
-    # Build POST body matching the frontend form format
+    # B7 fix: Per-service field mapping instead of hardcoded 4 fields
     email = form_data.get("email", form_data.get("Email", ""))
 
     # Issue 29/57 fix: Validate email format
@@ -173,12 +173,29 @@ async def submit_form_api(
             "error": f"Invalid email format: {email[:50]}...",
         }
 
-    body = {
-        "Business": form_data.get("business", form_data.get("Business", "")),
-        "Country": form_data.get("country", form_data.get("Country", "")),
-        "Exclusion": form_data.get("exclusion", form_data.get("Exclusion", "")),
-        "Email": email,
+    # B7: Service-specific field extraction
+    SERVICE_FIELDS = {
+        "target-v3": ["Business", "Country", "Exclusion", "Email"],
+        "target-v4": ["Business", "Country", "Exclusion", "Email"],
+        "target-v5": ["Business", "Country", "Exclusion", "Email"],
+        "target-v6": ["Business", "Country", "Exclusion", "Email"],
+        "market-research": ["prompt", "Email"],
+        "profile-slides": ["Business", "Country", "Email"],
+        "trading-comparable": ["TargetCompanyOrIndustry", "IsProfitable", "Email"],
+        "validation": ["Companies", "Countries", "TargetBusiness", "OutputOption", "Email"],
+        "due-diligence": ["Business", "Country", "Email"],
+        "utb": ["Business", "Country", "Email"],
     }
+
+    fields = SERVICE_FIELDS.get(service_name, list(form_data.keys()))
+    body = {}
+    for f in fields:
+        # Case-insensitive field lookup
+        val = form_data.get(f) or form_data.get(f.lower()) or form_data.get(f[0].upper() + f[1:])
+        if f == "Email":
+            val = email
+        if val is not None:
+            body[f] = val
 
     # C1: Mask PII in log messages
     logger.info(f"POST {url} — Business={_mask_pii(body['Business'])}, Country={body['Country']}")
@@ -251,7 +268,7 @@ async def _submit_httpx(
     """Submit using httpx."""
     try:
         async with httpx.AsyncClient(
-            timeout=httpx.Timeout(timeout_read, connect=timeout_connect)
+            timeout=httpx.Timeout(timeout=timeout_read, connect=timeout_connect)
         ) as client:
             resp = await client.post(url, json=body)
 

@@ -340,9 +340,15 @@ def get_all_windows() -> List[WindowInfo]:
     return windows
 
 
+
+async def get_all_windows_async() -> List[WindowInfo]:
+    """C16: Async wrapper for get_all_windows to avoid blocking the event loop."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, get_all_windows)
+
 async def focus_window(title_pattern: str) -> bool:
     """Focus a window by title pattern"""
-    windows = get_all_windows()
+    windows = await get_all_windows_async()
 
     for window in windows:
         if title_pattern.lower() in window.title.lower():
@@ -444,7 +450,7 @@ async def wait_for_window(title_pattern: str, timeout: int = 30) -> bool:
     start_time = time.time()
 
     while time.time() - start_time < timeout:
-        windows = get_all_windows()
+        windows = await get_all_windows_async()
         for window in windows:
             if title_pattern.lower() in window.title.lower():
                 return True

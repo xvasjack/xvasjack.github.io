@@ -41,6 +41,11 @@ class PersistedLoopState:
     def to_dict(self) -> Dict[str, Any]:
         d = asdict(self)
         d["schema_version"] = STATE_SCHEMA_VERSION
+        # C14 defensive fix: Ensure issue_tracker is a plain dict
+        if not isinstance(d.get("issue_tracker"), dict):
+            d["issue_tracker"] = dict(d.get("issue_tracker", {}))
+        else:
+            d["issue_tracker"] = dict(d["issue_tracker"])
         return d
 
     @classmethod

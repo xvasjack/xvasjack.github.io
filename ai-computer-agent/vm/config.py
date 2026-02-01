@@ -21,14 +21,23 @@ CLAUDE_MODEL = "opus"
 
 
 # F1: Centralized timeout configuration
+# C10 fix: Safe int parsing to prevent crash on invalid env var values
+def _safe_int(key, default):
+    try:
+        return int(os.environ.get(key, default))
+    except (ValueError, TypeError):
+        _logger.warning(f"Invalid value for {key}, using default {default}")
+        return int(default)
+
+
 TIMEOUTS = {
-    "http_request": int(os.environ.get("TIMEOUT_HTTP_REQUEST", "60")),
-    "websocket_recv": int(os.environ.get("TIMEOUT_WEBSOCKET_RECV", "120")),
-    "subprocess": int(os.environ.get("TIMEOUT_SUBPROCESS", "600")),
-    "email_wait": int(os.environ.get("TIMEOUT_EMAIL_WAIT", "300")),
-    "ci_wait": int(os.environ.get("TIMEOUT_CI_WAIT", "1800")),
-    "health_check": int(os.environ.get("TIMEOUT_HEALTH_CHECK", "10")),
-    "plan_generation": int(os.environ.get("TIMEOUT_PLAN_GENERATION", "180")),
+    "http_request": _safe_int("TIMEOUT_HTTP_REQUEST", "60"),
+    "websocket_recv": _safe_int("TIMEOUT_WEBSOCKET_RECV", "120"),
+    "subprocess": _safe_int("TIMEOUT_SUBPROCESS", "600"),
+    "email_wait": _safe_int("TIMEOUT_EMAIL_WAIT", "300"),
+    "ci_wait": _safe_int("TIMEOUT_CI_WAIT", "1800"),
+    "health_check": _safe_int("TIMEOUT_HEALTH_CHECK", "10"),
+    "plan_generation": _safe_int("TIMEOUT_PLAN_GENERATION", "180"),
 }
 
 
@@ -167,17 +176,18 @@ class PathConfig:
 
 
 # Issue 2: Railway backend URLs
+# B10 fix: Updated fallback URLs to match actual production deployments
 RAILWAY_URLS = {
-    "target-v3": os.environ.get("TARGET_V3_URL", "https://target-v3.up.railway.app"),
-    "target-v4": os.environ.get("TARGET_V4_URL", "https://target-v4.up.railway.app"),
-    "target-v5": os.environ.get("TARGET_V5_URL", "https://target-v5.up.railway.app"),
-    "target-v6": os.environ.get("TARGET_V6_URL", "https://target-v6.up.railway.app"),
-    "market-research": os.environ.get("MARKET_RESEARCH_URL", "https://market-research.up.railway.app"),
-    "profile-slides": os.environ.get("PROFILE_SLIDES_URL", "https://profile-slides.up.railway.app"),
-    "trading-comparable": os.environ.get("TRADING_COMPARABLE_URL", "https://trading-comparable.up.railway.app"),
-    "validation": os.environ.get("VALIDATION_URL", "https://validation.up.railway.app"),
-    "due-diligence": os.environ.get("DUE_DILIGENCE_URL", "https://due-diligence.up.railway.app"),
-    "utb": os.environ.get("UTB_URL", "https://utb.up.railway.app"),
+    "target-v3": os.environ.get("TARGET_V3_URL", "https://target-v3-production.up.railway.app"),
+    "target-v4": os.environ.get("TARGET_V4_URL", "https://target-v4-production.up.railway.app"),
+    "target-v5": os.environ.get("TARGET_V5_URL", "https://target-v5-production.up.railway.app"),
+    "target-v6": os.environ.get("TARGET_V6_URL", "https://xvasjackgithubio-production-f428.up.railway.app"),
+    "market-research": os.environ.get("MARKET_RESEARCH_URL", "https://xvasjackgithubio-production-174c.up.railway.app"),
+    "profile-slides": os.environ.get("PROFILE_SLIDES_URL", "https://xvasjackgithubio-production-fb38.up.railway.app"),
+    "trading-comparable": os.environ.get("TRADING_COMPARABLE_URL", "https://xvasjackgithubio-production-cc35.up.railway.app"),
+    "validation": os.environ.get("VALIDATION_URL", "https://xvasjackgithubio-production-c761.up.railway.app"),
+    "due-diligence": os.environ.get("DUE_DILIGENCE_URL", "https://xvasjackgithubio-production-aa37.up.railway.app"),
+    "utb": os.environ.get("UTB_URL", "https://xvasjackgithubio-production-1c7d.up.railway.app"),
 }
 
 

@@ -323,13 +323,13 @@ If output genuinely matches template quality, return {{"passed": true, "summary"
 
             issues = [
                 SlideIssue(
-                    slide_number=i.get("slide_number", 0),
-                    severity=i.get("severity", "minor"),
-                    category=i.get("category", "unknown"),
-                    description=i.get("description", ""),
-                    suggestion=i.get("suggestion", ""),
+                    slide_number=issue.get("slide_number", 0),
+                    severity=issue.get("severity", "minor"),
+                    category=issue.get("category", "unknown"),
+                    description=issue.get("description", ""),
+                    suggestion=issue.get("suggestion", ""),
                 )
-                for i in result_data.get("issues", [])
+                for issue in result_data.get("issues", [])
             ]
 
             return AnalysisResult(
@@ -528,13 +528,13 @@ If output passes, set passed=true with a brief explanation of why it matches.
         # Convert to AnalysisResult
         issues = [
             SlideIssue(
-                slide_number=i.get("slide_number", 0),
-                severity=i.get("severity", "minor"),
-                category=i.get("category", "unknown"),
-                description=i.get("description", ""),
-                suggestion=i.get("suggestion", ""),
+                slide_number=issue.get("slide_number", 0),
+                severity=issue.get("severity", "minor"),
+                category=issue.get("category", "unknown"),
+                description=issue.get("description", ""),
+                suggestion=issue.get("suggestion", ""),
             )
-            for i in result_data.get("issues", [])
+            for issue in result_data.get("issues", [])
         ]
 
         return AnalysisResult(
@@ -708,13 +708,13 @@ FAIL CRITERIA: Any critical issue (empty slides, corrupted data, truncated conte
 
             issues = [
                 SlideIssue(
-                    slide_number=i.get("slide_number", 0),
-                    severity=i.get("severity", "minor"),
-                    category=i.get("category", "unknown"),
-                    description=i.get("description", ""),
-                    suggestion=i.get("suggestion", ""),
+                    slide_number=issue.get("slide_number", 0),
+                    severity=issue.get("severity", "minor"),
+                    category=issue.get("category", "unknown"),
+                    description=issue.get("description", ""),
+                    suggestion=issue.get("suggestion", ""),
                 )
-                for i in result_data.get("issues", [])
+                for issue in result_data.get("issues", [])
             ]
 
             return AnalysisResult(

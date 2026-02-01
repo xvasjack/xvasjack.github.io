@@ -46,39 +46,31 @@ def _get_issue_key(issues: List[str]) -> str:
 # C2: LRU Dict for bounded issue tracking
 class LRUDict(OrderedDict):
     """LRU-evicting dictionary to prevent unbounded memory growth.
-
-    RC-3: Thread-safe with asyncio.Lock for concurrent access protection.
-    Note: For async code, use async_get/async_set methods.
+    
+    C5 fix: Removed threading.Lock — access pattern is single-coroutine sequential.
+    threading.Lock blocks the event loop instead of yielding.
     """
 
     def __init__(self, max_size: int = 100):
         super().__init__()
         self.max_size = max_size
-        # RC-3: Lock for thread-safe concurrent access
-        import threading
-        self._lock = threading.Lock()
 
     def __setitem__(self, key, value):
-        with self._lock:
-            if key in self:
-                self.move_to_end(key)
-            super().__setitem__(key, value)
-            if len(self) > self.max_size:
-                self.popitem(last=False)
+        if key in self:
+            self.move_to_end(key)
+        super().__setitem__(key, value)
+        if len(self) > self.max_size:
+            self.popitem(last=False)
 
     def get(self, key, default=None):
-        with self._lock:
-            if key in self:
-                self.move_to_end(key)
-            return super().get(key, default)
+        if key in self:
+            self.move_to_end(key)
+        return super().get(key, default)
 
     def update(self, *args, **kwargs):
-        """RC-3: Thread-safe update."""
-        with self._lock:
-            super().update(*args, **kwargs)
-            # Evict excess items after bulk update
-            while len(self) > self.max_size:
-                self.popitem(last=False)
+        super().update(*args, **kwargs)
+        while len(self) > self.max_size:
+            self.popitem(last=False)
 
 
 # =============================================================================
@@ -243,7 +235,7 @@ class FeedbackLoop:
                 iteration=iteration_number,
                 state=self.state.value,
                 prs_merged=self.prs_merged,
-                issue_tracker=self.issue_tracker,
+                issue_tracker=dict(self.issue_tracker),  # C14 fix: convert LRUDict to plain dict for JSON serialization
                 iterations_data=[
                     {"number": it.number, "state": it.state.value, "issues": it.issues_found}
                     for it in self.iterations
@@ -395,8 +387,10 @@ class FeedbackLoop:
         )
 
         try:
+            # B8 fix: Pass explicit timeout instead of 0 (which gets clamped to 30s)
             email_result = await retry_with_backoff(
-                self.wait_for_email, max_retries=2, step_name="wait_for_email", step_timeout=0,
+                self.wait_for_email, max_retries=2, step_name="wait_for_email",
+                step_timeout=self.config.email_wait_timeout_minutes * 60,
             )
         except Exception as e:
             iteration.issues_found.append(f"Email wait failed after retries: {e}")
@@ -517,14 +511,25 @@ class FeedbackLoop:
             await self._report_progress("No PR detected — creating PR via gh CLI")
             try:
                 import re
-                from shared.cli_utils import get_repo_cwd
+                from shared.cli_utils import get_subprocess_cwd, is_wsl_mode
+                win_cwd, wsl_cwd = get_subprocess_cwd()
+                if is_wsl_mode():
+                    gh_cmd = ["wsl", "--cd", wsl_cwd, "-e", "gh", "pr", "create", "--fill", "--head", f"claude/{self.config.service_name}-fix-iter{iteration.number}"]
+                else:
+                    gh_cmd = ["gh", "pr", "create", "--fill", "--head", f"claude/{self.config.service_name}-fix-iter{iteration.number}"]
                 gh_proc = await asyncio.create_subprocess_exec(
-                    "gh", "pr", "create", "--fill", "--head", f"claude/{self.config.service_name}-fix-iter{iteration.number}",
-                    cwd=get_repo_cwd(),
+                    *gh_cmd,
+                    cwd=win_cwd,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                stdout, stderr = await asyncio.wait_for(gh_proc.communicate(), timeout=60)
+                try:
+                    stdout, stderr = await asyncio.wait_for(gh_proc.communicate(), timeout=60)
+                except asyncio.TimeoutError:
+                    # C13 fix: Kill subprocess on timeout to prevent resource leak
+                    gh_proc.kill()
+                    await gh_proc.wait()
+                    raise
                 gh_result_stdout = stdout.decode() if stdout else ""
                 gh_result_stderr = stderr.decode() if stderr else ""
                 if gh_proc.returncode == 0:
@@ -824,10 +829,9 @@ class FeedbackLoop:
                     return True
 
             except FileNotFoundError:
-                # M17: curl not installed — fall back to fixed wait
-                logger.warning("curl not found, falling back to fixed wait (60s)")
-                await asyncio.sleep(60)
-                return True
+                # H14 fix: Return False (unknown) instead of True when curl not found
+                logger.warning("curl not found — cannot verify deployment")
+                return False
             except Exception as e:
                 logger.warning(f"Health check error: {e}")
 

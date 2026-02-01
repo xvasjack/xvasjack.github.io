@@ -123,7 +123,7 @@ async def open_gmail():
     screen = await screenshot()
 
     # Use vision to detect login page vs inbox
-    from vision import ask_about_screen
+    from actions.vision import ask_about_screen
     answer = await ask_about_screen(
         "Is this a Gmail inbox or a Google login page? Answer INBOX or LOGIN",
         screen,
@@ -145,7 +145,7 @@ async def search_emails(query: str):
     logger.info(f"Searching Gmail: {query}")
 
     # Try clicking the search bar via vision first, fall back to "/" shortcut
-    from vision import find_element
+    from actions.vision import find_element
     screen = await screenshot()
     coords = await find_element("Find the Gmail search bar / search input field", screen)
     if coords:
@@ -173,7 +173,7 @@ async def search_automation_emails():
 
 async def open_first_email():
     """Open the first email in the list (uses vision click, not keyboard shortcut)."""
-    from vision import find_element
+    from actions.vision import find_element
     screen = await screenshot()
     coords = await find_element(
         "Find the first email row/item in the Gmail email list to click on it", screen
@@ -212,7 +212,7 @@ async def download_attachment(filename_hint: Optional[str] = None):
 
     screen = await screenshot()
 
-    from vision import find_element
+    from actions.vision import find_element
     desc = "Find the download icon/button for the email attachment"
     if filename_hint:
         desc += f" (filename hint: {filename_hint})"
@@ -247,7 +247,7 @@ async def download_all_attachments():
 
     screen = await screenshot()
 
-    from vision import find_element
+    from actions.vision import find_element
     # Look for "Download all" button first
     coords = await find_element(
         "Find the 'Download all attachments' button or icon in Gmail", screen

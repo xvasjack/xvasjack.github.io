@@ -125,7 +125,7 @@ async def fill_search_form(data: SearchFormData):
     """
     logger.info(f"Filling search form: {data.business} in {data.country}")
 
-    from vision import find_element
+    from actions.vision import find_element
 
     screen = await screenshot()
 
@@ -252,7 +252,7 @@ async def submit_form(url: str, form_data: Dict) -> Dict:
             await wait(2)
 
         # H1: Use vision-based clicking to fill form fields
-        from vision import find_element
+        from actions.vision import find_element
 
         fields_to_fill = [
             ("Business Type", "business", form_data.get("business", "")),
@@ -307,7 +307,7 @@ async def wait_for_submission_confirmation(timeout_seconds: int = 30) -> bool:
     """H2: Wait for form submission confirmation using vision to detect state."""
     logger.info("Waiting for submission confirmation")
 
-    from vision import ask_about_screen
+    from actions.vision import ask_about_screen
 
     start_time = time.monotonic()
 

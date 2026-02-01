@@ -61,6 +61,7 @@ if (-not (Test-Path "__pycache__")) {
 # Set defaults
 if (-not $env:HOST_WS_URL) { $env:HOST_WS_URL = "ws://localhost:3000/agent" }
 if (-not $env:REPO_PATH) { $env:REPO_PATH = "$env:USERPROFILE\xvasjack.github.io" }
+if (-not $env:USER_EMAIL) { $env:USER_EMAIL = "your-email@example.com" }  # B4: Default email for automation
 
 # Check if host server is running on port 3000
 $hostRunning = $false

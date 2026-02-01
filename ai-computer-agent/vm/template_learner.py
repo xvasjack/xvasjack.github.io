@@ -542,6 +542,8 @@ class TemplateManager:
 
     def delete_template(self, name: str) -> bool:
         """Delete a learned template"""
+        # H18 fix: Sanitize template name to prevent path traversal
+        name = os.path.basename(name)
         filepath = os.path.join(self.templates_dir, f"{name}.json")
         if os.path.exists(filepath):
             os.remove(filepath)

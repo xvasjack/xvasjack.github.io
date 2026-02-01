@@ -178,6 +178,7 @@ MESSAGE_TYPES = {
     "CANCEL_TASK": "cancel_task",
     "SCREENSHOT_REQUEST": "screenshot_request",
     "SCREENSHOT_RESPONSE": "screenshot_response",
+    "CLAUDE_STREAM": "claude_stream",
 }
 
 

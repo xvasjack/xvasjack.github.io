@@ -66,6 +66,12 @@ def check_command(command: str) -> str:
     for danger in DANGEROUS_COMMANDS:
         if danger in command_lower:
             return f"Dangerous command: {danger}"
+
+    # H27 fix: Also block force push variants to main/master
+    if "push" in command_lower and ("main" in command_lower or "master" in command_lower):
+        if "-f" in command_lower or "--force" in command_lower or "--force-with-lease" in command_lower:
+            return "BLOCKED: Force push to main/master is forbidden"
+
     return ""
 
 

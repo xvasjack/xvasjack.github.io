@@ -184,14 +184,26 @@ def check_email_allowed(sender: str, subject: str) -> Tuple[bool, Optional[Block
     sender = sender[:MAX_SENDER_LENGTH] if sender else ""
     subject = subject[:MAX_SUBJECT_LENGTH] if subject else ""
 
-    # M6: Check sender with exact match (not substring) to prevent bypass
+    # H17 fix: Domain-anchored matching to prevent bypass via attacker@not-sendgrid.net
     sender_allowed = False
     sender_lower = sender.lower().strip()
-    for allowed_sender in CONFIG.allowed_email_senders:
-        pattern = re.escape(allowed_sender.lower())
-        if re.search(r'(^|<)' + pattern + r'(>|$)', sender_lower):
-            sender_allowed = True
-            break
+    # Extract email address from sender field (handle "Name <email>" format)
+    email_match = re.search(r'[\w.+-]+@[\w.-]+', sender_lower)
+    if email_match:
+        sender_email = email_match.group(0)
+        _, _, sender_domain = sender_email.rpartition('@')
+        for allowed_sender in CONFIG.allowed_email_senders:
+            allowed = allowed_sender.lower().strip()
+            if '@' in allowed:
+                # Full email match
+                if sender_email == allowed:
+                    sender_allowed = True
+                    break
+            else:
+                # Domain match: exact or subdomain (e.g. mail.sendgrid.net matches sendgrid.net)
+                if sender_domain == allowed or sender_domain.endswith('.' + allowed):
+                    sender_allowed = True
+                    break
 
     if not sender_allowed:
         logger.warning(f"BLOCKED: Email sender not in allowed list: {sender}")
@@ -242,6 +254,9 @@ def check_email_compose_attempt(screen_text: str, action: dict) -> Tuple[bool, O
 
 def check_folder_access(path: str) -> Tuple[bool, Optional[BlockReason]]:
     """Check if folder/file access is allowed"""
+    import os
+    # M20 fix: Normalize path to prevent ../traversal bypass
+    path = os.path.normpath(os.path.realpath(path))
 
     for allowed_pattern in CONFIG.allowed_folders:
         if re.match(allowed_pattern, path, re.IGNORECASE):

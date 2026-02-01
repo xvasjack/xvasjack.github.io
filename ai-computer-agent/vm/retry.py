@@ -21,6 +21,7 @@ async def retry_with_backoff(
     step_timeout: float = 300.0,
     step_name: str = "step",
     min_timeout: float = 30.0,  # Category 3 fix: Minimum timeout to prevent infinite wait
+    max_delay: float = 300.0,  # M14/M21 fix: Cap maximum delay to prevent unbounded waits
 ) -> Any:
     """
     Retry an async function with exponential backoff.
@@ -33,6 +34,7 @@ async def retry_with_backoff(
         step_timeout: Max time per attempt (seconds), 0 = use min_timeout
         step_name: Name for logging
         min_timeout: Minimum timeout when step_timeout is 0
+        max_delay: Maximum delay between retries (seconds), caps exponential growth
 
     Returns:
         Result of fn()
@@ -67,7 +69,8 @@ async def retry_with_backoff(
             logger.warning(f"{step_name}: failed (attempt {attempt + 1}/{max_retries}): {e}")
 
         if attempt < max_retries - 1:
-            delay = initial_delay * (backoff_factor ** attempt)
+            # M14/M21 fix: Cap delay to prevent unbounded exponential growth
+            delay = min(initial_delay * (backoff_factor ** attempt), max_delay)
             logger.info(f"{step_name}: retrying in {delay:.1f}s")
             await asyncio.sleep(delay)
 

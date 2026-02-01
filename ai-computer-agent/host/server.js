@@ -90,7 +90,7 @@ function saveState() {
 }
 
 // Save state periodically and on changes
-setInterval(saveState, 30000); // Every 30 seconds
+const saveStateInterval = setInterval(saveState, 30000); // Every 30 seconds
 
 // ============================================================================
 // State Management
@@ -183,7 +183,7 @@ const WS_SECRET = process.env.AGENT_WS_SECRET && process.env.AGENT_WS_SECRET.tri
 
 // H4: WebSocket heartbeat — detect dead connections
 const PING_INTERVAL = 30000;
-setInterval(() => {
+const pingInterval = setInterval(() => {
   wss.clients.forEach((ws) => {
     if (ws._isAlive === false) {
       console.log('Terminating dead WebSocket connection');
@@ -252,12 +252,28 @@ wss.on('connection', (ws, req) => {
       if (state.vmAgent === ws) {
         console.log('VM Agent disconnected');
         state.vmAgent = null;
+        // C11 fix: Mark running task as failed when agent disconnects
+        if (state.currentTask && ['running', 'awaiting_approval', 'planning'].includes(state.currentTask.status)) {
+          console.log(`Marking task ${state.currentTask.id} as failed (agent disconnected)`);
+          state.currentTask.status = 'failed';
+          state.currentTask.completedAt = new Date().toISOString();
+          state.currentTask.result = 'Agent disconnected during execution';
+          state.stats.failedTasks++;
+          state.taskHistory.unshift(state.currentTask);
+          state.currentTask = null;
+          saveState();
+        }
         broadcastToUI({ type: 'vm_status', payload: { connected: false } });
       }
     });
 
     ws.on('error', (error) => {
       console.error('VM Agent error:', error);
+      // H21 fix: Null the vmAgent on error to prevent sends to dead connection
+      if (state.vmAgent === ws) {
+        state.vmAgent = null;
+        broadcastToUI({ type: 'vm_status', payload: { connected: false } });
+      }
     });
 
     broadcastToUI({ type: 'vm_status', payload: { connected: true } });
@@ -299,7 +315,13 @@ function handleVMMessage(message) {
   switch (type) {
     case 'task_update':
       if (state.currentTask && state.currentTask.id === payload.task_id) {
-        state.currentTask.status = payload.status;
+        // C18 fix: Validate status string
+        const VALID_STATUSES = new Set(['pending', 'planning', 'awaiting_approval', 'running', 'completed', 'failed', 'cancelled', 'waiting_for_vm']);
+        if (payload.status && VALID_STATUSES.has(payload.status)) {
+          state.currentTask.status = payload.status;
+        } else if (payload.status) {
+          console.warn(`Invalid task status received: ${payload.status}`);
+        }
         state.currentTask.iterations = payload.iteration;
         state.currentTask.prsMerged = payload.prs_merged;
         state.currentTask.elapsedSeconds = payload.elapsed_seconds || 0;
@@ -455,6 +477,10 @@ function handleUIMessage(ws, message) {
 
     case 'reject_plan':
       if (state.currentTask && state.vmAgent) {
+        // C12 fix: Update task state on plan rejection
+        state.currentTask.status = 'cancelled';
+        state.currentTask.completedAt = new Date().toISOString();
+        state.currentTask.result = 'Plan rejected by user';
         state.vmAgent.send(JSON.stringify({
           type: 'plan_rejected',
           payload: {
@@ -462,6 +488,11 @@ function handleUIMessage(ws, message) {
             feedback: payload.feedback,
           },
         }));
+        state.stats.failedTasks++;
+        state.taskHistory.unshift(state.currentTask);
+        state.currentTask = null;
+        broadcastToUI({ type: 'task_cancelled', payload: {} });
+        saveState();
       }
       break;
 
@@ -525,8 +556,13 @@ function handleUIMessage(ws, message) {
 function broadcastToUI(message) {
   const data = JSON.stringify(message);
   state.uiClients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(data);
+    // M15/M23 fix: Wrap individual sends in try-catch
+    try {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(data);
+      }
+    } catch (e) {
+      console.error('Failed to send to UI client:', e.message);
     }
   });
 }
@@ -599,6 +635,11 @@ app.post('/api/task/:id/approve', (req, res) => {
 
   if (!state.currentTask || state.currentTask.id !== req.params.id) {
     return res.status(404).json({ error: 'Task not found' });
+  }
+
+  // H16 fix: Verify task is actually awaiting approval
+  if (state.currentTask.status !== 'awaiting_approval') {
+    return res.status(409).json({ error: `Cannot approve task in ${state.currentTask.status} state` });
   }
 
   if (state.vmAgent) {
@@ -685,6 +726,9 @@ server.listen(PORT, () => {
 // Graceful shutdown — save state before exiting
 function gracefulShutdown(signal) {
   console.log(`Received ${signal}, saving state and shutting down...`);
+  // M24 fix: Clear intervals to prevent resource leaks
+  clearInterval(saveStateInterval);
+  clearInterval(pingInterval);
   saveState();
   server.close(() => process.exit(0));
   setTimeout(() => process.exit(1), 5000); // force exit after 5s

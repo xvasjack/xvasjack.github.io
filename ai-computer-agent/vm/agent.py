@@ -31,7 +31,7 @@ from shared.protocol import (
     Task, TaskStatus, TaskUpdate, TaskResult,
     MESSAGE_TYPES, encode_message, decode_message
 )
-from shared.cli_utils import build_claude_cmd, get_repo_cwd, is_wsl_mode
+from shared.cli_utils import build_claude_cmd, get_repo_cwd, get_subprocess_cwd, is_wsl_mode
 from computer_use import execute_action, get_screen_context, screenshot
 from guardrails import check_action
 from config import CLAUDE_MODEL, TIMEOUTS
@@ -44,7 +44,7 @@ logger = logging.getLogger("agent")
 FEEDBACK_LOOP_KEYWORDS = [
     "target-v3", "target-v4", "target-v5", "target-v6",
     "market-research", "profile-slides", "trading-comparable",
-    "validation", "due-diligence", "unit-to-business", "feedback loop", "feedback-loop",
+    "validation", "due-diligence", "utb", "feedback loop", "feedback-loop",
 ]
 
 
@@ -169,9 +169,9 @@ async def _parse_task_intent(config, description: str) -> dict:
     return intent
 
 
-def get_plan_from_claude(config, task_description: str) -> List[dict]:
+async def get_plan_from_claude_async(config, task_description: str) -> List[dict]:
     """
-    Call Claude Code ONCE to get a complete plan.
+    B6 fix: Async version — call Claude Code ONCE to get a complete plan.
     Returns list of action dicts.
     """
 
@@ -207,9 +207,8 @@ Return ONLY a JSON array, nothing else:
 JSON array:"""
 
     try:
-        # B7/A2: Use asyncio.run() to create a new event loop in the executor thread
-        # This avoids deadlock when called via run_in_executor from async context
-        output = asyncio.run(_run_claude_subprocess(config, prompt))
+        # B6 fix: Now fully async — no need for asyncio.run() or run_in_executor
+        output = await _run_claude_subprocess(config, prompt)
 
         print(f"=== Claude Response ({len(output)} chars) ===")
         print(output[:2000])
@@ -235,13 +234,15 @@ JSON array:"""
 async def _run_claude_subprocess(config, prompt: str) -> str:
     """Run Claude Code CLI as an async subprocess (B7 fix). A6: Kill subprocess on timeout."""
     claude_path = config.claude_code_path if hasattr(config, 'claude_code_path') else "claude"
-    cwd = get_repo_cwd(claude_path)
+    # B1 fix: Use get_subprocess_cwd to avoid WinError 267
+    win_cwd, wsl_cwd = get_subprocess_cwd(claude_path)
 
     cmd = build_claude_cmd(
         claude_path,
         "--print", "--model", CLAUDE_MODEL,
         "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash",
         prompt,  # positional arg MUST be last
+        wsl_cwd=wsl_cwd,
     )
 
     subprocess_timeout = TIMEOUTS.get("subprocess", 600)
@@ -249,7 +250,7 @@ async def _run_claude_subprocess(config, prompt: str) -> str:
         *cmd,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
-        cwd=cwd,
+        cwd=win_cwd,
     )
     try:
         stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=subprocess_timeout)
@@ -339,7 +340,7 @@ def extract_steps_from_response(response: str) -> List[dict]:
                     return steps
         except json.JSONDecodeError as e:
             # C1: Log JSON parse failures instead of silent pass
-            logger.debug(f"JSON array parse failed: {e}")
+            logger.warning(f"JSON array parse failed: {e}")
 
     # Method 2: Find individual JSON objects with "action" field
     # C2: Add iteration limit to prevent CPU hang on malformed input
@@ -359,7 +360,7 @@ def extract_steps_from_response(response: str) -> List[dict]:
                     steps.append(normalize_action(obj))
             except json.JSONDecodeError as e:
                 # C1: Log JSON parse failures instead of silent pass
-                logger.debug(f"JSON object parse failed: {e}")
+                logger.warning(f"JSON object parse failed: {e}")
         remaining = remaining[idx + 1:]
     if iterations >= MAX_EXTRACTION_ITERATIONS:
         logger.warning(f"JSON extraction hit iteration limit ({MAX_EXTRACTION_ITERATIONS})")
@@ -488,19 +489,20 @@ class Agent:
         self._send_queue: List[str] = []  # H18: queue for retry
         # Issue 17/22 fix: Add asyncio.Lock for _send_queue synchronization
         self._send_queue_lock = asyncio.Lock()
-        self._needs_reconnect = False
-        # Issue 23 fix: Lock for reconnect flag
-        self._reconnect_lock = asyncio.Lock()
         # A1: Shutdown event for graceful termination
         self._shutdown_event = asyncio.Event()
         # D9: Task lock for concurrent task handling
         self._task_lock = asyncio.Lock()
+        # C4 fix: Serialize WebSocket sends to prevent frame interleaving
+        self._ws_send_lock = asyncio.Lock()
         # A1: Initialize _ping_counter to avoid hasattr race condition
         self._ping_counter = 0
         self._ping_counter_lock = asyncio.Lock()
         # Plan approval flow
         self._plan_event = asyncio.Event()
         self._plan_approved = False
+        # C6 fix: Track which task the plan event is for
+        self._plan_task_id = None
 
     @property
     def _cancelled(self) -> bool:
@@ -557,8 +559,6 @@ class Agent:
 
     async def _flush_send_queue(self):
         """Send any queued messages after reconnect. Issue 17/22 fix: Uses lock. B1: Fix TOCTOU race."""
-        # RC-4: Avoid nested locks by tracking need_reconnect outside the queue lock
-        need_reconnect = False
         async with self._send_queue_lock:
             # B1: Capture local reference to prevent race condition if ws becomes None
             ws = self.ws
@@ -573,13 +573,8 @@ class Agent:
                 except Exception as e:
                     logger.error(f"Failed to flush queued message: {e}")
                     self._send_queue.insert(0, msg)
-                    # DL-1: Mark for reconnect and exit loop
-                    need_reconnect = True
+                    # DL-1: Break and reconnect
                     break
-        # RC-4: Acquire reconnect lock after releasing queue lock to avoid nested locking
-        if need_reconnect:
-            async with self._reconnect_lock:
-                self._needs_reconnect = True
 
     async def _safe_send(self, msg: str):
         """H18: Send with error handling — queue on failure. A4: Fix TOCTOU race with local reference."""
@@ -589,7 +584,9 @@ class Agent:
             # RC-1: Wrap send in try/except to handle TOCTOU race where ws closes between check and send
             if ws and not getattr(ws, 'closed', True):
                 try:
-                    await ws.send(msg)
+                    # C4 fix: Serialize sends to prevent frame interleaving
+                    async with self._ws_send_lock:
+                        await ws.send(msg)
                     return  # Success, no need to queue
                 except websockets.ConnectionClosed:
                     # RC-1: Connection closed during send - fall through to queue
@@ -601,9 +598,6 @@ class Agent:
                     logger.warning(f"Send queue full ({self.MAX_SEND_QUEUE_SIZE}), dropping oldest message")
                     self._send_queue.pop(0)
                 self._send_queue.append(msg)
-            # RC-2: Always use lock when accessing _needs_reconnect
-            async with self._reconnect_lock:
-                self._needs_reconnect = True
         except (AttributeError, websockets.ConnectionClosed) as e:
             # A4: Handle case where ws becomes None or closed during send
             logger.warning(f"WebSocket unavailable during send: {e}")
@@ -611,9 +605,6 @@ class Agent:
                 if len(self._send_queue) >= self.MAX_SEND_QUEUE_SIZE:
                     self._send_queue.pop(0)
                 self._send_queue.append(msg)
-            # RC-2: Always use lock when accessing _needs_reconnect
-            async with self._reconnect_lock:
-                self._needs_reconnect = True
         except asyncio.CancelledError:
             # EH-1: CancelledError must be propagated, not swallowed
             raise
@@ -624,9 +615,6 @@ class Agent:
                 if len(self._send_queue) >= self.MAX_SEND_QUEUE_SIZE:
                     self._send_queue.pop(0)
                 self._send_queue.append(msg)
-            # RC-2: Always use lock when accessing _needs_reconnect
-            async with self._reconnect_lock:
-                self._needs_reconnect = True
         except Exception as e:
             # LB-11: Log unexpected exceptions but re-raise to avoid masking bugs
             logger.error(f"Unexpected error in send: {e}", exc_info=True)
@@ -653,6 +641,7 @@ class Agent:
         # Wait for approval/rejection
         self._plan_event.clear()
         self._plan_approved = False
+        self._plan_task_id = task.id  # C6 fix: track which task
 
         try:
             await asyncio.wait_for(self._plan_event.wait(), timeout=300)
@@ -739,6 +728,14 @@ class Agent:
                 except (json.JSONDecodeError, TypeError):
                     form_data = {"business": task.description}
 
+            # B3 fix: Send progress updates during planning
+            await self.send_update(TaskUpdate(
+                task_id=task.id, status=TaskStatus.RUNNING,
+                message="Parsing task intent...",
+                iteration=0, prs_merged=0,
+                elapsed_seconds=int(time.time() - start_time),
+            ))
+
             # Parse user intent from description (uses Claude Code CLI or keyword fallback)
             user_intent = await _parse_task_intent(self.config, task.description)
             logger.info(f"Parsed task intent: {user_intent}")
@@ -750,14 +747,19 @@ class Agent:
                 if not form_data.get("Email") and not form_data.get("email"):
                     form_data["Email"] = user_intent["email_address"]
 
-            # Validate required fields for form submission
+            # B4 fix: Fall back to USER_EMAIL env var if not in form_data
             if not form_data.get("Email") and not form_data.get("email"):
-                elapsed = int(time.time() - start_time)
-                return TaskResult(
-                    task_id=task.id, status=TaskStatus.FAILED,
-                    summary="Missing required 'Email' in form_data. Provide task context as JSON with Email, Business, Country fields.",
-                    iterations=0, prs_merged=0, elapsed_seconds=elapsed,
-                )
+                default_email = os.environ.get("USER_EMAIL", "")
+                if default_email:
+                    form_data["Email"] = default_email
+                    logger.info(f"Using default email from USER_EMAIL env var")
+                else:
+                    elapsed = int(time.time() - start_time)
+                    return TaskResult(
+                        task_id=task.id, status=TaskStatus.FAILED,
+                        summary="Missing required 'Email'. Set USER_EMAIL env var or provide task context JSON with Email field.",
+                        iterations=0, prs_merged=0, elapsed_seconds=elapsed,
+                    )
 
             async def on_progress(state, message, iteration=0, prs_merged=0):
                 await self.send_update(TaskUpdate(
@@ -903,12 +905,17 @@ class Agent:
 
         # Step 1: Get complete plan from Claude (ONE call)
         print("\n>>> Getting plan from Claude...")
-        # Issue 19 fix: Add timeout to run_in_executor to prevent indefinite hang
+        # B3 fix: Send progress update before plan generation
+        await self.send_update(TaskUpdate(
+            task_id=task.id, status=TaskStatus.RUNNING,
+            message="Generating plan with Claude...",
+            iteration=0, prs_merged=0,
+            elapsed_seconds=int(time.time() - start_time),
+        ))
+        # B6 fix: Call async get_plan_from_claude directly instead of via run_in_executor
         try:
             steps = await asyncio.wait_for(
-                asyncio.get_running_loop().run_in_executor(
-                    None, get_plan_from_claude, self.config, task.description
-                ),
+                get_plan_from_claude_async(self.config, task.description),
                 timeout=180  # 3 minute timeout for plan generation
             )
         except asyncio.TimeoutError:
@@ -1113,9 +1120,14 @@ class Agent:
 
                 # B8: Handle additional message types
                 elif msg_type == MESSAGE_TYPES.get("PLAN_APPROVED", "plan_approved"):
-                    logger.info("Plan approved by host")
-                    self._plan_approved = True
-                    self._plan_event.set()
+                    # C6 fix: Verify task_id matches before setting event
+                    approved_task_id = payload.get("task_id")
+                    if approved_task_id and self._plan_task_id and approved_task_id != self._plan_task_id:
+                        logger.warning(f"Plan approval for wrong task: {approved_task_id} vs {self._plan_task_id}")
+                    else:
+                        logger.info("Plan approved by host")
+                        self._plan_approved = True
+                        self._plan_event.set()
 
                 elif msg_type == MESSAGE_TYPES.get("PLAN_REJECTED", "plan_rejected"):
                     logger.info(f"Plan rejected: {payload.get('feedback', '')}")
@@ -1198,7 +1210,8 @@ async def main():
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
-        stdout, _ = await proc.communicate()
+        # M10 fix: Add timeout to version check to prevent indefinite hang
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
         print(f"Claude Code CLI: {stdout.decode().strip()} (path: {config.claude_code_path})")
     except Exception as e:
         print(f"WARNING: Claude Code CLI check failed: {e}")
