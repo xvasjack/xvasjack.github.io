@@ -30,6 +30,9 @@ from file_readers.pptx_reader import analyze_pptx
 from file_readers.xlsx_reader import analyze_xlsx
 from file_readers.docx_reader import analyze_docx
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("feedback_loop_runner")
+
 # 0.7: Wrap browser imports in try/except — GUI deps may not be available
 HAS_BROWSER = False
 try:
@@ -44,9 +47,6 @@ except ImportError:
     frontend_submit_form = None
     open_gmail = search_emails = open_first_email = None
     download_attachment = wait_for_download = get_recent_downloads = None
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("feedback_loop_runner")
 
 
 # =============================================================================

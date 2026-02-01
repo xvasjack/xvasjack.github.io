@@ -96,6 +96,7 @@ ALLOWED_SUBJECT_PATTERNS = [
 
 def _get_gmail_service():
     """Get authenticated Gmail API service."""
+    global HAS_GMAIL_API
     if not HAS_GMAIL_API:
         raise RuntimeError("Gmail API dependencies not installed")
 
@@ -112,6 +113,8 @@ def _get_gmail_service():
                 creds.refresh(Request())
             except Exception as e:
                 logger.error(f"OAuth token refresh failed: {e}")
+                # 0.6: Disable Gmail API to prevent repeated failed refresh attempts
+                HAS_GMAIL_API = False
                 return None
         else:
             if not os.path.exists(GMAIL_CREDENTIALS_PATH):

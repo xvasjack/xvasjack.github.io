@@ -622,6 +622,11 @@ class Agent:
     async def _wait_for_plan_approval(self, task: Task, plan_summary: str, start_time: float) -> Optional[TaskResult]:
         """Send plan proposal and wait for user approval/rejection.
         Returns None if approved, TaskResult if rejected/timed out/cancelled."""
+        # 0.1: Agent-side auto-approve — skip WebSocket round-trip entirely
+        if os.environ.get("AUTO_APPROVE_PLANS") == "true":
+            logger.info("[AUTO-APPROVE] Skipping plan proposal — AUTO_APPROVE_PLANS=true")
+            return None
+
         # Send plan proposal to host
         msg = encode_message(MESSAGE_TYPES.get("PLAN_PROPOSAL", "plan_proposal"), {
             "task_id": task.id,
