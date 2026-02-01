@@ -15,7 +15,7 @@ from typing import Dict, Any, Optional
 
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from shared.cli_utils import is_wsl_mode, get_subprocess_cwd
+from shared.cli_utils import is_wsl_mode, get_subprocess_cwd, get_claude_code_path
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("verification")
@@ -130,7 +130,8 @@ async def verify_pr_created(pr_number: Optional[int]) -> Dict[str, Any]:
 
     try:
         # C2 fix: WSL-wrap gh CLI calls
-        if is_wsl_mode():
+        # F49: Pass CLAUDE_CODE_PATH to is_wsl_mode
+        if is_wsl_mode(get_claude_code_path()):
             win_cwd, wsl_cwd = get_subprocess_cwd()
             cmd = ["wsl", "--cd", wsl_cwd, "-e", "gh", "pr", "view", str(pr_number), "--json", "state,commits"]
         else:
@@ -202,8 +203,13 @@ async def verify_deployment(
         return {"verified": False, "error": "No health URL provided"}
 
     try:
+        # F50: WSL-wrap curl when running in WSL mode
+        if is_wsl_mode(get_claude_code_path()):
+            cmd = ["wsl", "-e", "curl", "-sS", "--max-time", str(timeout_seconds), health_url]
+        else:
+            cmd = ["curl", "-sS", "--max-time", str(timeout_seconds), health_url]
         proc = await asyncio.create_subprocess_exec(
-            "curl", "-sf", "--max-time", str(timeout_seconds), health_url,
+            *cmd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )

@@ -8,9 +8,9 @@ mss>=9.0.1
 Pillow>=10.0.0
 
 # Windows-specific
-pywin32>=306
+pywin32>=306; sys_platform == 'win32'
 psutil>=5.9.0
-pygetwindow>=0.0.9
+pygetwindow>=0.0.9; sys_platform == 'win32'
 
 # Clipboard
 pyperclip>=1.8.2

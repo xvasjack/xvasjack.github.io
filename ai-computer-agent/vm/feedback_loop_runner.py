@@ -115,7 +115,12 @@ async def submit_form_callback(
     page = url_map.get(service_name, f"{service_name}.html")
     url = f"{FRONTEND_URL}/{page}"
 
-    return await frontend_submit_form(url, form_data)
+    # F9: Wrap browser fallback in try/except to prevent unhandled crash
+    try:
+        return await frontend_submit_form(url, form_data)
+    except Exception as e:
+        logger.error(f"Browser fallback failed: {e}")
+        return {"success": False, "error": f"Both API and browser submission failed: {e}"}
 
 
 async def wait_for_email_callback(
@@ -182,6 +187,11 @@ async def wait_for_email_callback(
                     }
 
         except Exception as e:
+            # F57: Re-raise auth/login errors — retrying won't fix them
+            err_str = str(e).lower()
+            if any(kw in err_str for kw in ("auth", "login", "credential", "permission", "forbidden", "401", "403")):
+                logger.error(f"Email auth/login error (not retrying): {e}")
+                return {"success": False, "error": f"Authentication error: {e}"}
             logger.warning(f"Email check failed: {e}")
 
         # Issue 7: Also check Downloads folder for recent files
@@ -199,15 +209,16 @@ async def wait_for_email_callback(
                             continue
                         svc_lower = service_name.replace("-", "").replace("_", "")
                         # Require the service name to appear as a distinct part, not just substring
-                        if age < 120 and (svc_lower in fname_lower or fname_lower.startswith(svc_lower)):
+                        # F58: Extended download window from 2min to 10min
+                        if age < 600 and (svc_lower in fname_lower or fname_lower.startswith(svc_lower)):
                             logger.info(f"Found in Downloads: {f}")
                             return {"success": True, "file_path": f}
 
-                # S3: Recency-only fallback — newest file < 120s old with expected extension
+                # S3: Recency-only fallback — newest file < 10min old with expected extension
                 for pattern in patterns:
                     for f in sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True):
                         age = time.time() - os.path.getmtime(f)
-                        if age < 120:
+                        if age < 600:
                             logger.info(f"Found recent file in Downloads (no name match): {f}")
                             return {"success": True, "file_path": f}
         except Exception as e:
@@ -358,7 +369,7 @@ async def generate_fix_callback(
 
     return {
         "success": result.success if result else False,
-        "pr_number": result.pr_number if result else None,
+        "pr_number": None,  # Push-to-main: no PRs
         "description": output_desc,
         "error": result.error if result else "No result returned",
     }
@@ -397,7 +408,7 @@ async def get_logs_callback(
             f"Focus on errors from the CURRENT deployment, not old entries.\n\n"
             f"Do NOT make any code changes.",
             service_name=service_name,
-            timeout_seconds=60,
+            timeout_seconds=300,  # F10: Increased from 60s — Railway logs can be slow
         )
 
         if result.success and result.output:
@@ -478,6 +489,16 @@ async def run_feedback_loop(
     Returns:
         LoopResult with success status and stats
     """
+    # F46: Validate start_from values
+    VALID_START_FROM = {None, "email_check", "analyze"}
+    if start_from not in VALID_START_FROM:
+        logger.error(f"Invalid start_from value: '{start_from}'. Valid: {VALID_START_FROM}")
+        return LoopResult(
+            success=False, iterations=0, prs_merged=0,
+            summary=f"Error: Invalid start_from='{start_from}'",
+            elapsed_seconds=0,
+        )
+
     # A6: Validate service_name is not None or empty
     if not service_name or not service_name.strip():
         logger.error("service_name is required but was None or empty")

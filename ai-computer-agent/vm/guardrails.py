@@ -41,6 +41,10 @@ class BlockReason(Enum):
 
 
 # M4: Import GuardrailConfig from config.py (single source of truth)
+# F69: Add parent dir to sys.path so import works regardless of cwd
+import os as _os
+import sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
 from config import GuardrailConfig
 
 
@@ -76,9 +80,9 @@ BLOCKED_WINDOW_TITLES = [
     # Prevent accessing financial/payment
     r"PayPal",
     r"Stripe Dashboard",
-    r"billing",
-    r"payment",
-    r"checkout",
+    r"\bbilling\b",
+    r"\bpayment\b",
+    r"\bcheckout\b",
     # Prevent accessing AI billing specifically
     r"platform\.openai\.com.*billing",
     r"console\.anthropic\.com.*billing",

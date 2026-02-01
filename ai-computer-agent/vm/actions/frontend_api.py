@@ -198,7 +198,7 @@ async def submit_form_api(
             body[f] = val
 
     # C1: Mask PII in log messages
-    logger.info(f"POST {url} — Business={_mask_pii(body['Business'])}, Country={body['Country']}")
+    logger.info(f"POST {url} — Business={_mask_pii(body.get('Business', 'N/A'))}, Country={body.get('Country', 'N/A')}")
 
     # Try aiohttp first, then httpx, then fall back
     if aiohttp:

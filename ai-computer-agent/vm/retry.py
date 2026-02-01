@@ -22,6 +22,7 @@ async def retry_with_backoff(
     step_name: str = "step",
     min_timeout: float = 30.0,  # Category 3 fix: Minimum timeout to prevent infinite wait
     max_delay: float = 300.0,  # M14/M21 fix: Cap maximum delay to prevent unbounded waits
+    cancel_token: Optional[dict] = None,  # F44: Check between retries
 ) -> Any:
     """
     Retry an async function with exponential backoff.
@@ -55,6 +56,9 @@ async def retry_with_backoff(
         logger.warning(f"{step_name}: step_timeout=0 interpreted as {min_timeout}s (not infinite)")
 
     for attempt in range(max_retries):
+        # F44: Check cancellation between retries
+        if cancel_token and cancel_token.get("cancelled"):
+            raise asyncio.CancelledError(f"{step_name}: cancelled by user")
         try:
             result = await asyncio.wait_for(fn(), timeout=effective_timeout)
             if attempt > 0:

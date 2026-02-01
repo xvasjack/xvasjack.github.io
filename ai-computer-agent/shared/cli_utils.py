@@ -36,9 +36,11 @@ def get_claude_code_path():
 
 
 def get_repo_cwd(claude_path=None):
-    """Repo dir: WSL path when WSL mode, expanduser otherwise."""
+    """Repo dir: WSL path when WSL mode, expanduser otherwise.
+    F67: Use REPO_PATH env var in both modes, with hardcoded fallbacks.
+    """
     if is_wsl_mode(claude_path):
-        return "/home/xvasjack/xvasjack.github.io"
+        return os.environ.get("REPO_PATH", "/home/xvasjack/xvasjack.github.io")
     return os.environ.get("REPO_PATH", os.path.expanduser("~/xvasjack.github.io"))
 
 

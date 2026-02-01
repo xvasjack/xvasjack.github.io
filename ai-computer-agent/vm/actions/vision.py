@@ -23,10 +23,23 @@ CLAUDE_CODE_PATH = get_claude_code_path()
 
 
 def _get_screen_resolution() -> str:
-    """Return current screen resolution string, falling back to 1920x1080."""
+    """Return current screen resolution string, falling back to 1920x1080.
+    F20: Try Windows ctypes first (works on Windows without X11).
+    """
+    # F20: Windows — use ctypes.windll.user32
+    try:
+        import ctypes
+        user32 = ctypes.windll.user32
+        w = user32.GetSystemMetrics(0)  # SM_CXSCREEN
+        h = user32.GetSystemMetrics(1)  # SM_CYSCREEN
+        if w > 0 and h > 0:
+            return f"{w}x{h}"
+    except (AttributeError, OSError):
+        pass  # Not Windows or windll not available
+
+    # Linux/X11 fallbacks
     try:
         import subprocess
-        # Try xdpyinfo first (X11)
         result = subprocess.run(
             ["xdpyinfo"], capture_output=True, text=True, timeout=3
         )
@@ -37,7 +50,6 @@ def _get_screen_resolution() -> str:
         pass
     try:
         import subprocess
-        # Try xrandr
         result = subprocess.run(
             ["xrandr", "--current"], capture_output=True, text=True, timeout=3
         )
@@ -46,7 +58,7 @@ def _get_screen_resolution() -> str:
             return match.group(1)
     except Exception:
         pass
-    return "1920x1080"  # H19: hardcoded fallback — update if default resolution changes
+    return "1920x1080"  # H19: hardcoded fallback
 
 
 

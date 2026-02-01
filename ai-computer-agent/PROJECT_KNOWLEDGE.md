@@ -12,7 +12,7 @@ Autonomous development feedback loop agent. User provides a task (e.g. "fix mark
 3. Downloads output from Gmail
 4. Compares output against template
 5. Uses Claude Code CLI to generate code fix
-6. Creates PR, waits for CI, merges
+6. Commits and pushes directly to main (no PRs)
 7. Waits for Railway deploy
 8. Repeats until output matches template
 
@@ -116,10 +116,13 @@ Each iteration runs these steps IN ORDER. No step can be skipped mid-iteration (
    - If stuck (same issues 3x) → try research, then "stuck"
 4. **GENERATING_FIX** — Call `generate_fix()` callback (retry 2x, 600s timeout)
    - Uses Claude Code CLI with structured fix prompt from ComparisonResult
-5. **MERGING_PR** — Wait for CI, then merge PR via `gh` CLI
-   - Handles: merge conflicts, CI failures, review_required
+   - Claude commits and pushes directly to main (no PRs)
+5. **VERIFYING_PUSH** — Verify git push succeeded (push-to-main flow)
+   - If push failed, log error and continue to next iteration
 6. **WAITING_FOR_DEPLOY** — Poll health endpoint (exponential backoff 15s→60s, max 10min)
-7. **CHECKING_LOGS** — Check Railway logs (non-blocking)
+   - Only runs if code was actually pushed
+   - No health URL: reduced to 30s blind wait
+7. **CHECKING_LOGS** — Check Railway logs (120s timeout, wrapped in try/except)
 
 Returns "continue" → next iteration.
 
@@ -162,8 +165,8 @@ if start_from == "analyze" and existing_file_path:
 | `wait_for_email` | Gmail API (`gmail_api.py`) | Browser Gmail (`gmail.py`), then Downloads folder scan |
 | `analyze_output` | File readers + `template_comparison.py` | Auto-detect template |
 | `generate_fix` | Claude Code CLI (`claude_code.py`) | - |
-| `merge_pr` | `gh pr merge` | - |
-| `wait_for_ci` | `gh pr checks` polling | - |
+| ~~`merge_pr`~~ | ~~`gh pr merge`~~ | **Removed — push-to-main flow** |
+| ~~`wait_for_ci`~~ | ~~`gh pr checks` polling~~ | **Removed — push-to-main flow** |
 
 ### Form Submission Details
 
@@ -419,6 +422,8 @@ HOST_WS_URL=ws://localhost:3000/agent    # Agent connects here
 CLAUDE_CODE_PATH=claude                   # Or "wsl:claude" (with colon) if only in WSL
 REPO_PATH=~/xvasjack.github.io           # Repo for Claude Code cwd
 AGENT_DOWNLOAD_PATH=~/Downloads           # Where attachments go
+AGENT_BROWSER=brave                       # Browser for automation (brave, chrome, edge)
+USER_EMAIL=xvasjack@gmail.com             # Default email for feedback loop tasks
 FRONTEND_URL=https://xvasjack.github.io  # Frontend base URL
 GITHUB_OWNER=xvasjack
 GITHUB_REPO=xvasjack.github.io
@@ -501,10 +506,35 @@ python3 agent.py
 | Issue | Detail |
 |-------|--------|
 | **Gmail creds required** | `vm/credentials/` must have OAuth2 files. First run needs browser. |
-| **pywin32 only on Windows** | `requirements.txt` includes pywin32, won't install on Linux/WSL |
+| **pywin32 only on Windows** | `requirements.txt` now has `; sys_platform == 'win32'` marker (F77) |
 | **Claude CLI OOMs in WSL** | `claude --print` can crash with JS heap OOM under constrained WSL memory. May need `NODE_OPTIONS=--max-old-space-size=4096`. |
 
-### Recently Fixed (2026-02-01 comprehensive audit — 80+ fixes)
+### Recently Fixed (2026-02-01 — 80-issue audit, 60 fixes across 21 files)
+
+**Phase 1-5 Fix Summary (F1-F77)**:
+- **F1**: Service name aliases (e.g. "market-assessment" → "market-research")
+- **F2**: Terminal logging after task result
+- **F3**: Removed slow Claude CLI intent parsing, keyword-only
+- **F4**: USER_EMAIL set to xvasjack@gmail.com
+- **F5**: KeyError on body['Business'] in frontend_api.py
+- **F6-F13**: Deploy wait skipped if no code pushed, check_logs timeout, actual iteration count
+- **F18-F19**: Protocol validation, sendToAgent() helper with readyState check
+- **F20**: Windows ctypes screen resolution detection
+- **F21-F28**: Brave browser support, Gmail load wait 8s, vision-based clicks (no keyboard shortcuts)
+- **F29-F30**: Clipboard save/restore, click coordinate validation
+- **F31-F42**: UI plan box fixes, server state persistence, debounced saves, stale task cleanup
+- **F43-F45**: try-catch per message type, cancel_token in retry, analyze_output retry
+- **F49-F50**: WSL-wrapped gh and curl in verification.py
+- **F51**: Normalized issue keys for stuck detection
+- **F54-F56**: Reduced blind wait 120→30s, curl error capture, state save error level
+- **F67**: get_repo_cwd uses REPO_PATH env var in WSL mode too
+- **F68**: config_local merges fields instead of replacing entire objects
+- **F69-F70**: guardrails.py import fix, word boundary on "billing" pattern
+- **F72-F73**: fsync before os.replace, type validation on loaded state fields
+- **F77**: pywin32 platform marker in requirements.txt
+- **MAJOR**: Replaced entire PR/CI/merge flow with push-to-main (~200 lines removed)
+
+### Previously Fixed (2026-02-01 comprehensive audit — 80+ fixes)
 
 **Tier 1 Blocking (B1-B12)**:
 - **B1: WinError 267** — subprocess cwd was WSL path on Windows. Now uses `get_subprocess_cwd()` → `(None, wsl_cwd)` and `wsl --cd` flag. Fixed in cli_utils.py, agent.py, claude_code.py, feedback_loop.py, github.py, verification.py.
@@ -584,7 +614,7 @@ python3 agent.py
 |-------|--------|
 | No tests for agent code | `npm test` tests backend, not ai-computer-agent |
 | Single task at a time | New task cancels old. No queue. |
-| git stash not popped | `claude_code.py` stashes before invocation, never pops |
+| ~~git stash not popped~~ | Fixed (F11): `claude_code.py` now pops stash after invocation |
 | utb has no template | `SERVICE_TO_TEMPLATE["utb"] = None` |
 | 3 separate email whitelists | guardrails.py, gmail.py, gmail_api.py each have own lists |
 | CORS wide open | server.js: `cors()` with no restrictions |
@@ -637,8 +667,8 @@ Every Claude Code invocation is prepended with `vm/claude_mandate.md`:
 4. NEVER modify tests to make them pass
 5. ALWAYS run npm test after changes
 6. ALWAYS commit as "Fix: <description>"
-7. ALWAYS push to branch claude/{SERVICE_NAME}-fix-<desc>
-8. ALWAYS create PR (never push to main)
+7. ALWAYS commit and push directly to main
+8. NEVER create PRs — push-to-main workflow
 ```
 
 Variables filled in per invocation: `{ALLOWED_DIRECTORIES}`, `{SERVICE_NAME}`, `{ITERATION_NUMBER}`, `{PREVIOUS_ISSUES}`, `{ORIGINAL_TASK}`, `{FIX_PROMPT}`
@@ -664,10 +694,18 @@ Allowed folders: `C:\Users\*\Downloads`, `C:\agent-shared`, `Z:\`.
 
 ## 15. GIT WORKFLOW
 
-- Feature branches: `claude/{service}-fix-iter{N}`
+**Push-to-main (current)**: Agent commits and pushes directly to main. No PRs, no CI wait, no merge.
 - Commit format: `Fix: <description>`
-- Always create PR, never push to main directly
 - Run `npm test` before pushing
-- `--delete-branch` on merge
-- Merge conflicts: Claude Code CLI resolves via `fix_merge_conflict()`
-- CI failures: Claude Code CLI resolves via `fix_ci_failure()`
+- Railway auto-deploys from main push
+- `merge_pr()`, `wait_for_ci()`, `fix_merge_conflict()` functions still exist but are not called
+
+**Previous (deprecated)**: Feature branches → PR → CI → merge. Eliminated ~200 lines of PR/CI/merge logic.
+
+## 16. USER ENVIRONMENT
+
+- **Browser**: Brave (default). Set `AGENT_BROWSER` env var to change. Chrome also installed.
+- **Gmail keyboard shortcuts**: OFF (default). Agent uses vision-based clicks and Ctrl+/ fallback, not keyboard shortcuts.
+- **Email**: xvasjack@gmail.com (set via `USER_EMAIL` env var)
+- **NOT a VM**: Agent runs directly on Windows 11 laptop with WSL. `vm/` directory name is historical.
+- **Screen resolution**: Auto-detected via Windows ctypes (`GetSystemMetrics`), falls back to xdpyinfo/xrandr, then 1920x1080.

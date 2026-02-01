@@ -38,8 +38,11 @@ def _get_issue_key(issues: List[str]) -> str:
 
     RC-5: Use full SHA256 hash (64 chars) instead of truncated 32 chars
     to prevent hash collision causing false "stuck" detection.
+    F51: Normalize issues (strip, lowercase) to prevent same bug retried forever
+    due to trivial formatting differences.
     """
-    all_issues_str = ";".join(sorted(issues))
+    normalized = [i.strip().lower() for i in issues if i]
+    all_issues_str = ";".join(sorted(normalized))
     return hashlib.sha256(all_issues_str.encode()).hexdigest()  # Full hash
 
 
@@ -244,7 +247,8 @@ class FeedbackLoop:
             )
             save_loop_state(state)
         except Exception as e:
-            logger.warning(f"Failed to save loop state: {e}")
+            # F56: Upgrade to error — state loss means no crash recovery
+            logger.error(f"Failed to save loop state: {e}")
 
     def _clear_state(self):
         """Issue 8: Clear persisted state on completion."""
@@ -333,11 +337,13 @@ class FeedbackLoop:
         final_issues = []
         if self.iterations and len(self.iterations) > 0:
             final_issues = self.iterations[-1].issues_found
+        # F8: Track actual iteration count, not max_iterations
+        actual_iterations = len(self.iterations)
         return LoopResult(
             success=False,
-            iterations=self.config.max_iterations,
+            iterations=actual_iterations,
             prs_merged=self.prs_merged,
-            summary=f"Max iterations ({self.config.max_iterations}) reached",
+            summary=f"Max iterations ({actual_iterations}/{self.config.max_iterations}) reached",
             elapsed_seconds=elapsed,
             final_issues=final_issues,
         )
@@ -417,21 +423,27 @@ class FeedbackLoop:
 
         # Category 3 fix: Add timeout to analyze_output (can hang on corrupted files)
         # Category 5 fix: Add error handling around analyze_output call
-        try:
-            analysis = await asyncio.wait_for(
-                self.analyze_output(iteration.output_file),
-                timeout=300  # 5 minute timeout for analysis
-            )
-        except asyncio.TimeoutError:
-            iteration.issues_found.append("Output analysis timed out after 5 minutes")
-            # RL-3: Clear output_file on analysis timeout since analysis is incomplete
-            iteration.output_file = None
-            return "continue"
-        except Exception as e:
-            iteration.issues_found.append(f"Output analysis failed: {e}")
-            # RL-3: Clear output_file on analysis error since analysis is incomplete
-            iteration.output_file = None
-            return "continue"
+        # F45: Retry analysis up to 2 times for transient failures
+        analysis = None
+        for _analysis_attempt in range(2):
+            try:
+                analysis = await asyncio.wait_for(
+                    self.analyze_output(iteration.output_file),
+                    timeout=300  # 5 minute timeout for analysis
+                )
+                break  # Success
+            except asyncio.TimeoutError:
+                if _analysis_attempt == 1:
+                    iteration.issues_found.append("Output analysis timed out after 5 minutes (2 attempts)")
+                    iteration.output_file = None
+                    return "continue"
+                logger.warning("Analysis timed out, retrying...")
+            except Exception as e:
+                if _analysis_attempt == 1:
+                    iteration.issues_found.append(f"Output analysis failed: {e}")
+                    iteration.output_file = None
+                    return "continue"
+                logger.warning(f"Analysis failed ({e}), retrying...")
 
         if analysis is None:
             iteration.issues_found.append("Output analysis returned None")
@@ -505,200 +517,55 @@ class FeedbackLoop:
             iteration.issues_found.append(f"Fix generation failed: {fix_result.get('error')}")
             return "continue"
 
-        # Gap 1: If fix succeeded but no PR was created, try creating one explicitly
-        if fix_result.get("success") and not iteration.pr_number:
-            logger.warning("Fix succeeded but no PR created — attempting explicit PR creation")
-            await self._report_progress("No PR detected — creating PR via gh CLI")
-            try:
-                import re
-                from shared.cli_utils import get_subprocess_cwd, is_wsl_mode
-                win_cwd, wsl_cwd = get_subprocess_cwd()
-                if is_wsl_mode():
-                    gh_cmd = ["wsl", "--cd", wsl_cwd, "-e", "gh", "pr", "create", "--fill", "--head", f"claude/{self.config.service_name}-fix-iter{iteration.number}"]
-                else:
-                    gh_cmd = ["gh", "pr", "create", "--fill", "--head", f"claude/{self.config.service_name}-fix-iter{iteration.number}"]
-                gh_proc = await asyncio.create_subprocess_exec(
-                    *gh_cmd,
-                    cwd=win_cwd,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                )
-                try:
-                    stdout, stderr = await asyncio.wait_for(gh_proc.communicate(), timeout=60)
-                except asyncio.TimeoutError:
-                    # C13 fix: Kill subprocess on timeout to prevent resource leak
-                    gh_proc.kill()
-                    await gh_proc.wait()
-                    raise
-                gh_result_stdout = stdout.decode() if stdout else ""
-                gh_result_stderr = stderr.decode() if stderr else ""
-                if gh_proc.returncode == 0:
-                    pr_match = re.search(r'/pull/(\d+)', gh_result_stdout)
-                    if pr_match:
-                        iteration.pr_number = int(pr_match.group(1))
-                        logger.info(f"Created PR #{iteration.pr_number} via gh CLI fallback")
-                    else:
-                        logger.warning(f"gh pr create output didn't contain PR number: {gh_result_stdout}")
-                else:
-                    logger.warning(f"gh pr create failed: {gh_result_stderr}")
-            except Exception as e:
-                logger.warning(f"Explicit PR creation failed: {e}")
+        # Step 5: Verify push succeeded (push-to-main flow, no PRs)
+        # F7/F13: Track whether code was actually pushed
+        code_pushed = fix_result.get("success") and fix_result.get("description")
+        if code_pushed:
+            await self._report_progress("Fix committed and pushed to main")
+            self.prs_merged += 1  # Track as "changes deployed" for stats
+        else:
+            logger.warning("Fix generation did not produce a push — skipping deploy wait")
 
-        # Issue 4: Verify PR created
-        # EH-3: Use explicit None check instead of boolean evaluation (pr_number=0 is valid)
-        if iteration.pr_number is not None:
-            pr_verification = await verify_pr_created(iteration.pr_number)
-            if not pr_verification.get("verified"):
-                logger.warning(f"PR verification failed: {pr_verification.get('error')}")
+        # Step 6: Wait for deployment (only if code was pushed)
+        # F7/F13: Skip deploy wait if no code was pushed
+        if code_pushed:
+            self.state = LoopState.WAITING_FOR_DEPLOY
+            iteration.state = LoopState.WAITING_FOR_DEPLOY
+            await self._report_progress("Waiting for deployment")
 
-        # Step 5: Wait for CI and merge PR
-        # EH-3: Use explicit None check instead of boolean evaluation
-        if iteration.pr_number is not None:
-            self.state = LoopState.MERGING_PR
-            iteration.state = LoopState.MERGING_PR
+            deploy_ok = await self._wait_for_deployment()
+            iteration.deploy_verified = deploy_ok
 
-            # Wait for CI
-            # C7: Add timeout to CI wait to prevent indefinite blocking
-            await self._report_progress(f"Waiting for CI on PR #{iteration.pr_number}")
-            try:
-                ci_result = await asyncio.wait_for(
-                    self.wait_for_ci_fn(iteration.pr_number),
-                    timeout=self.config.ci_wait_timeout_minutes * 60
-                )
-            except asyncio.TimeoutError:
-                iteration.issues_found.append(f"CI wait timed out after {self.config.ci_wait_timeout_minutes} minutes")
-                return "continue"
-            except Exception as e:
-                iteration.issues_found.append(f"CI wait failed: {e}")
-                return "continue"
+            # Issue 4: Verify deployment
+            if deploy_ok:
+                health_url = self.config.health_check_url or self.config.railway_service_url
+                if health_url:
+                    if not health_url.endswith("/health"):
+                        health_url = health_url.rstrip("/") + "/health"
+                    deploy_verification = await verify_deployment(health_url)
+                    if not deploy_verification.get("verified"):
+                        logger.warning(f"Deploy verification failed: {deploy_verification.get('error')}")
 
-            # Category 1 fix: null check before .get() on ci_result
-            if ci_result is None:
-                iteration.issues_found.append("CI check returned None")
-                return "continue"
+            if not deploy_ok:
+                logger.warning("Deployment verification failed/timed out")
+                iteration.issues_found.append("Deployment verification failed — testing against old code")
+                await self._report_progress("WARNING: Deploy verification failed, results may be stale")
+        else:
+            iteration.deploy_verified = False
 
-            if not ci_result.get("passed"):
-                iteration.issues_found.append(f"CI failed: {ci_result.get('error')}")
-                return "continue"
-
-            # Merge (with retry for transient failures)
-            await self._report_progress(f"Merging PR #{iteration.pr_number}")
-            try:
-                merge_result = await retry_with_backoff(
-                    lambda: self.merge_pr_fn(iteration.pr_number),
-                    max_retries=3, initial_delay=5, step_name="merge_pr", step_timeout=60,
-                )
-            except Exception as e:
-                iteration.issues_found.append(f"Merge failed after retries: {e}")
-                return "continue"
-
-            # A3: Validate merge_result is dict before calling .get()
-            if not isinstance(merge_result, dict):
-                iteration.issues_found.append(f"Invalid merge_result type: {type(merge_result)}")
-                return "continue"
-
-            if merge_result.get("success"):
-                iteration.pr_merged = True
-                self.prs_merged += 1
-            else:
-                error_type = merge_result.get("error_type", "")
-                if error_type == "merge_conflict":
-                    await self._report_progress(f"Merge conflict on PR #{iteration.pr_number} — invoking fix")
-                    try:
-                        from actions.claude_code import fix_merge_conflict
-                        # Category 1 fix: null check before .get() on merge_result
-                        conflict_files = merge_result.get("conflict_files", []) if merge_result else []
-                        await fix_merge_conflict(iteration.pr_number, conflict_files, service_name=self.config.service_name)
-                        # Retry merge after conflict resolution
-                        merge_result = await self.merge_pr_fn(iteration.pr_number)
-                        if merge_result and merge_result.get("success"):
-                            iteration.pr_merged = True
-                            self.prs_merged += 1
-                        else:
-                            # B5: Report progress on merge conflict failure
-                            await self._report_progress(f"Merge still failed after conflict fix: {merge_result.get('error') if merge_result else 'Unknown'}")
-                            iteration.issues_found.append(f"Merge still failed after conflict fix: {merge_result.get('error') if merge_result else 'Unknown'}")
-                            return "continue"
-                    except Exception as e:
-                        # B5: Report progress on exception
-                        await self._report_progress(f"Merge conflict fix failed: {e}")
-                        iteration.issues_found.append(f"Merge conflict fix failed: {e}")
-                        return "continue"
-                elif error_type == "not_mergeable":
-                    await self._report_progress(f"Not mergeable (CI may be failing) on PR #{iteration.pr_number} — invoking fix")
-                    try:
-                        from actions.claude_code import fix_ci_failure
-                        from actions.github import get_ci_error_logs
-                        ci_logs = await get_ci_error_logs(iteration.pr_number)
-                        # A8: Check ci_logs is not None before calling .get()
-                        if ci_logs and ci_logs.get("success"):
-                            error_logs = ci_logs.get("logs", "")
-                        else:
-                            error_logs = ""
-                        await fix_ci_failure(iteration.pr_number, error_logs, self.config.service_name)
-                        # Wait for CI to re-run then retry merge
-                        await asyncio.sleep(30)
-                        merge_result = await self.merge_pr_fn(iteration.pr_number)
-                        if merge_result and merge_result.get("success"):
-                            iteration.pr_merged = True
-                            self.prs_merged += 1
-                        else:
-                            # B5: Report progress on CI fix failure
-                            await self._report_progress(f"Merge still failed after CI fix: {merge_result.get('error') if merge_result else 'Unknown'}")
-                            iteration.issues_found.append(f"Merge still failed after CI fix: {merge_result.get('error') if merge_result else 'Unknown'}")
-                            return "continue"
-                    except Exception as e:
-                        # B5: Report progress on exception
-                        await self._report_progress(f"CI failure fix failed: {e}")
-                        iteration.issues_found.append(f"CI failure fix failed: {e}")
-                        return "continue"
-                elif error_type == "review_required":
-                    await self._report_progress("Review/CI pending — waiting 30s before retry")
-                    await asyncio.sleep(30)
-                    merge_result = await self.merge_pr_fn(iteration.pr_number)
-                    if merge_result and merge_result.get("success"):
-                        iteration.pr_merged = True
-                        self.prs_merged += 1
-                    else:
-                        # B5: Report progress on review wait failure
-                        await self._report_progress(f"Merge failed after wait: {merge_result.get('error') if merge_result else 'Unknown'}")
-                        iteration.issues_found.append(f"Merge failed after wait: {merge_result.get('error') if merge_result else 'Unknown'}")
-                        return "continue"
-                else:
-                    # B5: Report progress on generic merge failure
-                    await self._report_progress(f"Merge failed: {merge_result.get('error')}")
-                    iteration.issues_found.append(f"Merge failed: {merge_result.get('error')}")
-                    return "continue"
-
-        # Step 6: Wait for deployment
-        self.state = LoopState.WAITING_FOR_DEPLOY
-        iteration.state = LoopState.WAITING_FOR_DEPLOY
-        await self._report_progress("Waiting for deployment")
-
-        deploy_ok = await self._wait_for_deployment()
-        iteration.deploy_verified = deploy_ok
-
-        # Issue 4: Verify deployment
-        if deploy_ok:
-            health_url = self.config.health_check_url or self.config.railway_service_url
-            if health_url:
-                if not health_url.endswith("/health"):
-                    health_url = health_url.rstrip("/") + "/health"
-                deploy_verification = await verify_deployment(health_url)
-                if not deploy_verification.get("verified"):
-                    logger.warning(f"Deploy verification failed: {deploy_verification.get('error')}")
-
-        if not deploy_ok:
-            logger.warning("Deployment verification failed/timed out")
-            iteration.issues_found.append("Deployment verification failed — testing against old code")
-            await self._report_progress("WARNING: Deploy verification failed, results may be stale")
-
-        # Step 7: Check logs
+        # Step 7: Check logs (F6: add timeout + try/except)
         self.state = LoopState.CHECKING_LOGS
         iteration.state = LoopState.CHECKING_LOGS
         await self._report_progress("Checking logs for errors")
 
-        log_result = await self.check_logs()
+        try:
+            log_result = await asyncio.wait_for(self.check_logs(), timeout=120)
+        except asyncio.TimeoutError:
+            logger.warning("Log check timed out after 120s")
+            log_result = {"has_errors": False, "errors": [], "logs": "Log check timed out"}
+        except Exception as e:
+            logger.warning(f"Log check failed: {e}")
+            log_result = {"has_errors": False, "errors": [], "logs": f"Log check error: {e}"}
         if log_result.get("has_errors"):
             logger.warning(f"Log errors found: {log_result.get('errors', [])}")
 
@@ -797,9 +664,9 @@ class FeedbackLoop:
         health_url = self.config.health_check_url or self.config.railway_service_url
 
         if not health_url:
-            # No health URL configured, use fixed wait
-            logger.info("No health check URL configured, waiting 120s")
-            await asyncio.sleep(120)
+            # F54: No health URL configured, use shorter fixed wait
+            logger.info("No health check URL configured, waiting 30s for Railway deploy")
+            await asyncio.sleep(30)
             return True
 
         # Ensure the URL ends with /health
@@ -817,16 +684,20 @@ class FeedbackLoop:
         while time.time() - start < timeout:
             attempts += 1
             try:
+                # F55: Use -sS -w to capture HTTP status instead of -sf suppressing errors
                 proc = await asyncio.create_subprocess_exec(
-                    "curl", "-sf", "--max-time", "10", health_url,
+                    "curl", "-sS", "--max-time", "10", "-o", "/dev/null", "-w", "%{http_code}", health_url,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                 )
-                stdout, _ = await proc.communicate()
+                stdout, stderr = await proc.communicate()
+                http_code = stdout.decode().strip() if stdout else ""
 
-                if proc.returncode == 0:
-                    logger.info(f"Health check passed: {stdout.decode()[:100]}")
+                if proc.returncode == 0 and http_code.startswith("2"):
+                    logger.info(f"Health check passed: HTTP {http_code}")
                     return True
+                else:
+                    logger.warning(f"Health check: HTTP {http_code}, stderr={stderr.decode()[:200] if stderr else ''}")
 
             except FileNotFoundError:
                 # H14 fix: Return False (unknown) instead of True when curl not found

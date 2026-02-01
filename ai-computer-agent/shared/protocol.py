@@ -57,6 +57,11 @@ class Task:
 
     @classmethod
     def from_dict(cls, d: dict):
+        # F66: Copy dict to avoid mutating caller's data
+        d = dict(d)
+        # F18: Validate required fields
+        if 'id' not in d or 'description' not in d:
+            raise TypeError(f"Task requires 'id' and 'description', got keys: {list(d.keys())}")
         # Handle status field - may be missing or string
         if 'status' in d:
             if isinstance(d['status'], str):
@@ -193,6 +198,9 @@ def decode_message(raw: str) -> tuple:
     """
     try:
         data = json.loads(raw)
+        # F65: Validate data is a dict before calling .get()
+        if not isinstance(data, dict):
+            return None, None
         return data.get("type"), data.get("payload", {})
     except (json.JSONDecodeError, TypeError, KeyError) as e:
         # DL-4: Return None tuple on error instead of crashing

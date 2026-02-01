@@ -216,15 +216,25 @@ def load_config():
     )
 
     # Try to load local overrides
+    # F68: Merge config_local fields instead of replacing entire objects
     try:
-        from config_local import (
-            agent_config,
-            guardrail_config,
-            path_config
-        )
-        agent = agent_config
-        guardrails = guardrail_config
-        paths = path_config
+        import config_local
+        for attr in vars(config_local):
+            if attr.startswith("_"):
+                continue
+            val = getattr(config_local, attr)
+            if attr == "agent_config" and isinstance(val, AgentConfig):
+                for f in vars(val):
+                    if not f.startswith("_") and getattr(val, f) != getattr(AgentConfig(), f):
+                        setattr(agent, f, getattr(val, f))
+            elif attr == "guardrail_config" and isinstance(val, GuardrailConfig):
+                for f in vars(val):
+                    if not f.startswith("_") and getattr(val, f) != getattr(GuardrailConfig(), f):
+                        setattr(guardrails, f, getattr(val, f))
+            elif attr == "path_config" and isinstance(val, PathConfig):
+                for f in vars(val):
+                    if not f.startswith("_") and getattr(val, f) != getattr(PathConfig(), f):
+                        setattr(paths, f, getattr(val, f))
     except ImportError:
         pass
 

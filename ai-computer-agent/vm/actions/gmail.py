@@ -60,6 +60,9 @@ def _escape_query_param(value: str) -> str:
 
 GMAIL_URL = "https://mail.google.com"
 
+# F21: Read browser from env var, default to Brave (user's primary browser)
+AGENT_BROWSER = os.environ.get("AGENT_BROWSER", "brave")
+
 # Use actual browser download folder, not a custom one
 DOWNLOAD_PATH = os.environ.get(
     "AGENT_DOWNLOAD_PATH",
@@ -116,9 +119,19 @@ def is_email_allowed(sender: str, subject: str) -> bool:
 
 async def open_gmail():
     """Open Gmail in browser and verify we reach the inbox (not a login page)."""
-    logger.info("Opening Gmail")
-    await open_url_in_browser(GMAIL_URL)
-    await wait(3)
+    logger.info(f"Opening Gmail in {AGENT_BROWSER}")
+    # F27: Try to focus existing browser window first to avoid tab accumulation
+    already_open = await focus_window(AGENT_BROWSER)
+    if already_open:
+        # Navigate in current tab instead of opening new one
+        await hotkey("ctrl", "l")  # Focus address bar
+        await wait(0.2)
+        await type_text(GMAIL_URL)
+        await press_key("enter")
+    else:
+        await open_url_in_browser(GMAIL_URL, browser=AGENT_BROWSER)
+    # F22: Increased wait from 3s to 8s for Gmail to fully load
+    await wait(8)
 
     screen = await screenshot()
 
@@ -144,15 +157,17 @@ async def search_emails(query: str):
     """
     logger.info(f"Searching Gmail: {query}")
 
-    # Try clicking the search bar via vision first, fall back to "/" shortcut
+    # F23: Click search bar via vision. Fallback: Ctrl+/ (universal, works without shortcuts)
     from actions.vision import find_element
     screen = await screenshot()
     coords = await find_element("Find the Gmail search bar / search input field", screen)
     if coords:
         await click(coords[0], coords[1])
     else:
-        await press_key("/")
-    await wait(0.3)
+        # F23: Don't use "/" shortcut (requires Gmail keyboard shortcuts enabled)
+        # Use Ctrl+/ or just click at the known position of search bar
+        await hotkey("ctrl", "/")
+    await wait(0.5)
 
     # Clear existing search
     await hotkey("ctrl", "a")
@@ -181,8 +196,9 @@ async def open_first_email():
     if coords:
         await click(coords[0], coords[1])
     else:
-        # Fallback to keyboard shortcut
-        await press_key("o")
+        # F28: Don't use "o" shortcut (requires Gmail keyboard shortcuts enabled)
+        # Fallback: press Enter which works universally to open focused email
+        await press_key("enter")
     await wait(1)
 
 

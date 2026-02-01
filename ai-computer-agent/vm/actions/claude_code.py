@@ -115,8 +115,7 @@ You are being invoked by an automated agent. Follow these rules:
 4. NEVER delete test files to make tests pass — fix the actual code
 5. ALWAYS run tests after changes
 6. ALWAYS commit with message format: "Fix: <description>"
-7. ALWAYS push to branch claude/<service>-fix-<short-desc>
-8. ALWAYS create a PR (don't push directly to main)
+7. ALWAYS push directly to main (no PRs, no branches)
 """)
         parts.append(f"\n## Task\n{task_prompt}")
 
@@ -172,6 +171,8 @@ async def run_claude_code(
     effective_cwd = working_dir or win_cwd  # Use win_cwd (None in WSL mode)
 
     # T6/C3 fix: Stash uncommitted changes — WSL-aware
+    # F78: Add timeout to git stash to prevent hang
+    stash_applied = False
     try:
         from shared.cli_utils import is_wsl_mode
         if is_wsl_mode(CLAUDE_CODE_PATH):
@@ -182,7 +183,12 @@ async def run_claude_code(
             *git_cmd,
             cwd=effective_cwd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
-        await stash_proc.communicate()
+        stdout, _ = await asyncio.wait_for(stash_proc.communicate(), timeout=30)
+        stash_output = stdout.decode().strip() if stdout else ""
+        # Track if stash actually saved something (vs "No local changes to save")
+        stash_applied = "Saved working directory" in stash_output
+    except asyncio.TimeoutError:
+        logger.warning("git stash timed out after 30s (non-fatal)")
     except Exception as e:
         logger.warning(f"git stash failed (non-fatal): {e}")
 
@@ -219,6 +225,21 @@ async def run_claude_code(
             except asyncio.TimeoutError:
                 # B4: Explicitly wait for process to prevent zombie
                 await process.wait()
+            # F12: Restore stash on timeout to prevent changes being lost
+            if stash_applied:
+                try:
+                    from shared.cli_utils import is_wsl_mode
+                    if is_wsl_mode(CLAUDE_CODE_PATH):
+                        pop_cmd = ["wsl", "--cd", wsl_cwd or cwd, "-e", "git", "stash", "pop"]
+                    else:
+                        pop_cmd = ["git", "stash", "pop"]
+                    pop_proc = await asyncio.create_subprocess_exec(
+                        *pop_cmd, cwd=effective_cwd,
+                        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                    )
+                    await asyncio.wait_for(pop_proc.communicate(), timeout=10)
+                except Exception:
+                    logger.warning("git stash pop failed after timeout (changes may be in stash)")
             return ClaudeCodeResult(
                 success=False,
                 output="",
@@ -232,6 +253,22 @@ async def run_claude_code(
 
         # Try to extract PR number if one was created
         pr_number = extract_pr_number(output)
+
+        # F11: Restore stashed changes after Claude Code finishes
+        if stash_applied:
+            try:
+                from shared.cli_utils import is_wsl_mode
+                if is_wsl_mode(CLAUDE_CODE_PATH):
+                    pop_cmd = ["wsl", "--cd", wsl_cwd or cwd, "-e", "git", "stash", "pop"]
+                else:
+                    pop_cmd = ["git", "stash", "pop"]
+                pop_proc = await asyncio.create_subprocess_exec(
+                    *pop_cmd, cwd=effective_cwd,
+                    stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+                )
+                await asyncio.wait_for(pop_proc.communicate(), timeout=30)
+            except Exception as e:
+                logger.warning(f"git stash pop failed (non-fatal): {e}")
 
         return ClaudeCodeResult(
             success=success,
@@ -302,7 +339,7 @@ async def fix_issue(
     if context:
         prompt += f"\n\nAdditional context:\n{context}"
 
-    prompt += "\n\nAfter fixing, commit and create a PR."
+    prompt += "\n\nAfter fixing, commit and push directly to main."
 
     return await run_claude_code(
         prompt,
@@ -333,7 +370,7 @@ Please:
 1. Identify the root cause of these issues in the code
 2. Implement fixes
 3. Run tests to verify
-4. Commit and create a PR
+4. Commit and push directly to main
 
 Focus on backend/{service_name}/"""
 
@@ -366,7 +403,7 @@ Please:
 1. Find the code that generates the PPT
 2. Fix the issues
 3. Run tests
-4. Commit and create a PR
+4. Commit and push directly to main
 
 Look in backend/{service_name}/"""
 
@@ -408,7 +445,7 @@ async def fix_ci_failure(
 
 Error logs:
 ```
-{error_logs[:3000]}
+{error_logs[:5000] if len(error_logs) <= 5000 else error_logs[:3000] + '\n...[truncated]...\n' + error_logs[-2000:]}
 ```
 
 Please:

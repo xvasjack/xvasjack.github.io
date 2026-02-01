@@ -47,6 +47,24 @@ FEEDBACK_LOOP_KEYWORDS = [
     "validation", "due-diligence", "utb", "feedback loop", "feedback-loop",
 ]
 
+# F1: Service name aliases — maps user-facing names to canonical service names
+SERVICE_NAME_ALIASES = {
+    "market-assessment": "market-research",
+    "market-analysis": "market-research",
+    "market-report": "market-research",
+    "company-profile": "profile-slides",
+    "company-profiles": "profile-slides",
+    "profile-slide": "profile-slides",
+    "trading-comp": "trading-comparable",
+    "trading-comps": "trading-comparable",
+    "target-search": "target-v6",
+    "target-list": "target-v6",
+    "dd-report": "due-diligence",
+    "due-diligence-report": "due-diligence",
+    "unit-to-business": "utb",
+    "validation-report": "validation",
+}
+
 
 def _find_claude_cli() -> str:
     """Auto-detect claude CLI path. Falls back to 'claude'."""
@@ -102,45 +120,16 @@ def _is_feedback_loop_task(description: str) -> bool:
 
 
 async def _parse_task_intent(config, description: str) -> dict:
-    """Parse user intent from description using Claude Code CLI (Max subscription).
-    Falls back to keyword matching if CLI call fails.
+    """Parse user intent from description using keyword matching.
+
+    F3: Removed Claude CLI subprocess call (was 600s timeout for 3 keyword fields).
+    Keyword matching is instant and handles all known patterns.
 
     Returns dict with optional keys:
         start_from: "email_check" | "analyze" | None
         existing_file_path: str | None
         email_address: str | None
     """
-    # Layer 1: Use Claude Code CLI for smart parsing (uses Max subscription, no API key)
-    try:
-        prompt = (
-            f"Parse this task description and return ONLY a JSON object.\n\n"
-            f"TASK: {description}\n\n"
-            f"Extract these fields (omit if not mentioned):\n"
-            f'- "start_from": "email_check" if user says results already emailed/received/sent '
-            f'and wants to start from checking email. "analyze" if user says file already downloaded. '
-            f"null if full loop from form submission.\n"
-            f'- "existing_file_path": exact file path if user specifies one, null otherwise\n'
-            f'- "email_address": email address if user mentions one, null otherwise\n\n'
-            f'Return ONLY valid JSON, nothing else. '
-            f'Example: {{"start_from": "email_check", "email_address": "user@gmail.com"}}'
-        )
-
-        output = await _run_claude_subprocess(config, prompt)
-        import json as _json
-        text = output.strip()
-        start = text.find('{')
-        end = text.rfind('}')
-        if start >= 0 and end > start:
-            parsed = _json.loads(text[start:end + 1])
-            if parsed.get("start_from") not in (None, "email_check", "analyze"):
-                parsed.pop("start_from", None)
-            result = {k: v for k, v in parsed.items() if v is not None}
-            logger.info(f"Claude intent parse: {result}")
-            return result
-    except Exception as e:
-        logger.warning(f"Claude intent parsing failed, using keyword fallback: {e}")
-
-    # Layer 2: Keyword fallback (always works, no external calls)
     desc_lower = description.lower()
     intent = {}
 
@@ -712,7 +701,18 @@ class Agent:
                 if kw in desc_lower and kw not in ("feedback loop", "feedback-loop"):
                     service_name = kw
                     break
+
+            # F1: Check aliases if no direct keyword match
             if not service_name:
+                for alias, canonical in SERVICE_NAME_ALIASES.items():
+                    if alias in desc_lower:
+                        service_name = canonical
+                        logger.info(f"Service name resolved via alias: '{alias}' -> '{canonical}'")
+                        break
+
+            if not service_name:
+                # F47: Log error before returning failure
+                logger.error(f"Service detection failed for description: {task.description[:200]}")
                 elapsed = int(time.time() - start_time)
                 return TaskResult(
                     task_id=task.id, status=TaskStatus.FAILED,
@@ -1177,8 +1177,10 @@ class Agent:
         try:
             result = await self.run_task(task)
             await self.send_result(result)
+            # F2: Log result to terminal so user sees outcome
+            logger.info(f"Task {task.id[:8]} done: {result.status.value} — {result.summary[:200]}")
         except asyncio.CancelledError:
-            logger.info("Task was cancelled")
+            logger.info(f"Task {task.id[:8]} cancelled")
             await self.send_result(TaskResult(
                 task_id=task.id,
                 status=TaskStatus.FAILED,
@@ -1188,7 +1190,7 @@ class Agent:
                 elapsed_seconds=int(time.time() - _start),
             ))
         except Exception as e:
-            logger.error(f"Task execution error: {e}")
+            logger.error(f"Task {task.id[:8]} error: {e}")
             await self.send_result(TaskResult(
                 task_id=task.id,
                 status=TaskStatus.FAILED,

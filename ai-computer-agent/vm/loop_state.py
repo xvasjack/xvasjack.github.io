@@ -62,15 +62,36 @@ class PersistedLoopState:
         if saved_version < STATE_SCHEMA_VERSION:
             data = cls._migrate_state(data, saved_version)
 
+        # F73: Type-validate critical fields to prevent corrupt state crashes
+        iteration = data.get("iteration", 0)
+        if not isinstance(iteration, int):
+            try:
+                iteration = int(iteration)
+            except (ValueError, TypeError):
+                logger.warning(f"Invalid iteration value: {iteration}, resetting to 0")
+                iteration = 0
+
+        prs_merged = data.get("prs_merged", 0)
+        if not isinstance(prs_merged, int):
+            try:
+                prs_merged = int(prs_merged)
+            except (ValueError, TypeError):
+                prs_merged = 0
+
+        issue_tracker = data.get("issue_tracker", {})
+        if not isinstance(issue_tracker, dict):
+            logger.warning(f"Invalid issue_tracker type: {type(issue_tracker)}, resetting")
+            issue_tracker = {}
+
         return cls(
-            service_name=data.get("service_name", ""),
-            iteration=data.get("iteration", 0),
-            state=data.get("state", "idle"),
-            prs_merged=data.get("prs_merged", 0),
-            issue_tracker=data.get("issue_tracker", {}),
+            service_name=str(data.get("service_name", "")),
+            iteration=iteration,
+            state=str(data.get("state", "idle")),
+            prs_merged=prs_merged,
+            issue_tracker=issue_tracker,
             iterations_data=data.get("iterations_data", []),
-            started_at=data.get("started_at", 0.0),
-            last_saved_at=data.get("last_saved_at", 0.0),
+            started_at=float(data.get("started_at", 0.0)),
+            last_saved_at=float(data.get("last_saved_at", 0.0)),
             schema_version=STATE_SCHEMA_VERSION,
         )
 
@@ -101,6 +122,9 @@ def save_loop_state(
         os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
         with open(tmp_path, "w") as f:
             json.dump(data, f, indent=2)
+            # F72: Flush + fsync before os.replace to prevent data loss on crash
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(tmp_path, path)
         logger.debug(f"Loop state saved: iteration={state.iteration}, state={state.state}")
     except Exception as e:

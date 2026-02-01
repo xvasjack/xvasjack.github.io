@@ -42,11 +42,13 @@ function loadState() {
       const data = fs.readFileSync(STATE_FILE, 'utf8');
       const saved = JSON.parse(data);
       console.log(`Loaded state: ${saved.taskHistory?.length || 0} historical tasks`);
-      // Clear stale currentTask — a "running" task from a dead session is meaningless
-      if (saved.currentTask && saved.currentTask.status === 'running') {
-        console.log(`Clearing stale running task: ${saved.currentTask.id}`);
+      // F38: Clear stale tasks from dead sessions (running, planning, awaiting_approval)
+      const staleStatuses = ['running', 'planning', 'awaiting_approval'];
+      if (saved.currentTask && staleStatuses.includes(saved.currentTask.status)) {
+        console.log(`Clearing stale ${saved.currentTask.status} task: ${saved.currentTask.id}`);
         saved.currentTask.status = 'cancelled';
         saved.currentTask.completedAt = new Date().toISOString();
+        saved.currentTask.result = `Cancelled: server restarted while task was ${saved.currentTask.status}`;
         if (!saved.taskHistory) saved.taskHistory = [];
         saved.taskHistory.unshift(saved.currentTask);
         saved.currentTask = null;
@@ -91,6 +93,16 @@ function saveState() {
 
 // Save state periodically and on changes
 const saveStateInterval = setInterval(saveState, 30000); // Every 30 seconds
+
+// F41: Debounced saveState for frequent updates (task_update)
+let _saveStateTimer = null;
+function saveStateDebounced() {
+  if (_saveStateTimer) return; // Already scheduled
+  _saveStateTimer = setTimeout(() => {
+    _saveStateTimer = null;
+    saveState();
+  }, 2000); // Max once per 2s
+}
 
 // ============================================================================
 // State Management
@@ -224,7 +236,7 @@ wss.on('connection', (ws, req) => {
     // H1: Dispatch pending waiting_for_vm task to reconnected agent
     if (state.currentTask && state.currentTask.status === 'waiting_for_vm') {
       console.log('Dispatching pending task to reconnected agent');
-      state.vmAgent.send(JSON.stringify({
+      sendToAgent({
         type: 'new_task',
         payload: {
           id: state.currentTask.id,
@@ -232,7 +244,7 @@ wss.on('connection', (ws, req) => {
           max_duration_minutes: state.currentTask.maxDurationMinutes,
           context: state.currentTask.context || null,
         },
-      }));
+      });
       state.currentTask.status = 'planning';
       state.currentTask.startedAt = new Date().toISOString();
       broadcastToUI({ type: 'task_update', payload: { task: state.currentTask.toJSON ? state.currentTask.toJSON() : state.currentTask } });
@@ -311,7 +323,8 @@ wss.on('connection', (ws, req) => {
 
 function handleVMMessage(message) {
   const { type, payload } = message;
-
+  // F43: Wrap each case in try-catch to prevent one bad message from crashing the handler
+  try {
   switch (type) {
     case 'task_update':
       if (state.currentTask && state.currentTask.id === payload.task_id) {
@@ -346,8 +359,8 @@ function handleVMMessage(message) {
           },
         });
 
-        // LB-4: Persist state after task updates to prevent data loss on crash
-        saveState();
+        // LB-4: Persist state after task updates (F41: debounced to prevent blocking)
+        saveStateDebounced();
       }
       break;
 
@@ -403,6 +416,8 @@ function handleVMMessage(message) {
             plan: payload.plan,
           },
         });
+        // F37: Persist state after plan proposal so plan survives crash
+        saveState();
       }
       break;
 
@@ -413,6 +428,9 @@ function handleVMMessage(message) {
         payload: { screenshot: payload.screenshot },
       });
       break;
+  }
+  } catch (e) {
+    console.error(`Error handling VM message type=${type}:`, e.message);
   }
 }
 
@@ -430,11 +448,13 @@ function handleUIMessage(ws, message) {
       }
 
       const task = createTask(payload.description, payload.maxDurationMinutes);
+      // F40: Store context on task object so it survives reconnect
+      task.context = payload.context || null;
       state.currentTask = task;
 
       // If VM is connected, send the task
       if (state.vmAgent) {
-        state.vmAgent.send(JSON.stringify({
+        sendToAgent({
           type: 'new_task',
           payload: {
             id: task.id,
@@ -442,7 +462,7 @@ function handleUIMessage(ws, message) {
             max_duration_minutes: task.maxDurationMinutes,
             context: payload.context,
           },
-        }));
+        });
         task.status = 'planning';
         task.startedAt = new Date().toISOString();
       } else {
@@ -456,17 +476,18 @@ function handleUIMessage(ws, message) {
       break;
 
     case 'approve_plan':
-      if (state.currentTask && state.vmAgent) {
+      // F35: Only approve if task is actually awaiting approval
+      if (state.currentTask && state.vmAgent && state.currentTask.status === 'awaiting_approval') {
         state.currentTask.status = 'running';
         state.currentTask.plan = payload.plan;
 
-        state.vmAgent.send(JSON.stringify({
+        sendToAgent({
           type: 'plan_approved',
           payload: {
             task_id: state.currentTask.id,
             plan: payload.plan,
           },
-        }));
+        });
 
         broadcastToUI({
           type: 'task_update',
@@ -476,18 +497,19 @@ function handleUIMessage(ws, message) {
       break;
 
     case 'reject_plan':
-      if (state.currentTask && state.vmAgent) {
+      // F36: Only reject if task is actually awaiting approval
+      if (state.currentTask && state.vmAgent && state.currentTask.status === 'awaiting_approval') {
         // C12 fix: Update task state on plan rejection
         state.currentTask.status = 'cancelled';
         state.currentTask.completedAt = new Date().toISOString();
         state.currentTask.result = 'Plan rejected by user';
-        state.vmAgent.send(JSON.stringify({
+        sendToAgent({
           type: 'plan_rejected',
           payload: {
             task_id: state.currentTask.id,
             feedback: payload.feedback,
           },
-        }));
+        });
         state.stats.failedTasks++;
         state.taskHistory.unshift(state.currentTask);
         state.currentTask = null;
@@ -506,10 +528,10 @@ function handleUIMessage(ws, message) {
 
         // Only send cancel to agent if it's connected and task was actually dispatched
         if (!wasWaiting && state.vmAgent) {
-          state.vmAgent.send(JSON.stringify({
+          sendToAgent({
             type: 'cancel_task',
             payload: { task_id: taskToCancel.id },
-          }));
+          });
         }
 
         state.taskHistory.unshift(taskToCancel);
@@ -524,22 +546,22 @@ function handleUIMessage(ws, message) {
 
     case 'user_input':
       if (state.currentTask && state.vmAgent) {
-        state.vmAgent.send(JSON.stringify({
+        sendToAgent({
           type: 'user_input',
           payload: {
             task_id: state.currentTask.id,
             input: payload.input,
           },
-        }));
+        });
       }
       break;
 
     case 'request_screenshot':
       if (state.vmAgent) {
-        state.vmAgent.send(JSON.stringify({
+        sendToAgent({
           type: 'screenshot_request',
           payload: {},
-        }));
+        });
       }
       break;
 
@@ -551,6 +573,20 @@ function handleUIMessage(ws, message) {
       }));
       break;
   }
+}
+
+// F19: Safe send to agent with readyState check
+function sendToAgent(data) {
+  if (state.vmAgent && state.vmAgent.readyState === WebSocket.OPEN) {
+    try {
+      state.vmAgent.send(typeof data === 'string' ? data : JSON.stringify(data));
+      return true;
+    } catch (e) {
+      console.error('Failed to send to agent:', e.message);
+      return false;
+    }
+  }
+  return false;
 }
 
 function broadcastToUI(message) {
@@ -607,7 +643,7 @@ app.post('/api/task', (req, res) => {
   state.currentTask = task;
 
   if (state.vmAgent) {
-    state.vmAgent.send(JSON.stringify({
+    sendToAgent({
       type: 'new_task',
       payload: {
         id: task.id,
@@ -615,7 +651,7 @@ app.post('/api/task', (req, res) => {
         max_duration_minutes: task.maxDurationMinutes,
         context: context,
       },
-    }));
+    });
     task.status = 'planning';
     task.startedAt = new Date().toISOString();
   } else {
@@ -646,13 +682,13 @@ app.post('/api/task/:id/approve', (req, res) => {
     state.currentTask.status = 'running';
     state.currentTask.plan = plan;
 
-    state.vmAgent.send(JSON.stringify({
+    sendToAgent({
       type: 'plan_approved',
       payload: {
         task_id: state.currentTask.id,
         plan: plan,
       },
-    }));
+    });
   }
 
   res.json({ task: state.currentTask.toJSON ? state.currentTask.toJSON() : state.currentTask });
@@ -677,10 +713,10 @@ app.post('/api/task/:id/cancel', (req, res) => {
   state.currentTask.status = 'cancelled';
 
   if (state.vmAgent) {
-    state.vmAgent.send(JSON.stringify({
+    sendToAgent({
       type: 'cancel_task',
       payload: { task_id: state.currentTask.id },
-    }));
+    });
   }
   state.currentTask.completedAt = new Date().toISOString();
   state.taskHistory.unshift(state.currentTask);

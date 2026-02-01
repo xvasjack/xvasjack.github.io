@@ -269,14 +269,26 @@ async def type_text_unicode(text: str):
     """
     Type text that may contain Unicode characters.
     Uses clipboard paste (Ctrl+V) which supports all characters.
+    F29: Saves and restores clipboard to avoid data loss.
     """
     _require_computer_use()
     logger.info(f"Typing (unicode): {text[:50]}...")
     try:
         import pyperclip
+        # F29: Save original clipboard
+        try:
+            old_clipboard = pyperclip.paste()
+        except Exception:
+            old_clipboard = None
         pyperclip.copy(text)
         pyautogui.hotkey('ctrl', 'v')
         await asyncio.sleep(0.1)
+        # F29: Restore original clipboard
+        if old_clipboard is not None:
+            try:
+                pyperclip.copy(old_clipboard)
+            except Exception:
+                pass
     except ImportError:
         # Fallback to regular typing (will drop non-ASCII)
         logger.warning("pyperclip not installed, falling back to pyautogui.write()")
@@ -347,14 +359,26 @@ async def get_all_windows_async() -> List[WindowInfo]:
     return await loop.run_in_executor(None, get_all_windows)
 
 async def focus_window(title_pattern: str) -> bool:
-    """Focus a window by title pattern"""
+    """Focus a window by title pattern.
+    F26: Verify focus succeeded, use Alt+Tab fallback if not.
+    """
     windows = await get_all_windows_async()
 
     for window in windows:
         if title_pattern.lower() in window.title.lower():
             try:
                 win32gui.SetForegroundWindow(window.handle)
-                await asyncio.sleep(0.2)
+                await asyncio.sleep(0.3)
+                # F26: Verify focus actually changed
+                focused = win32gui.GetForegroundWindow()
+                if focused == window.handle:
+                    return True
+                # Fallback: Alt+Tab approach
+                logger.warning(f"SetForegroundWindow silent fail, trying ShowWindow+SetForegroundWindow")
+                win32gui.ShowWindow(window.handle, 9)  # SW_RESTORE
+                await asyncio.sleep(0.1)
+                win32gui.SetForegroundWindow(window.handle)
+                await asyncio.sleep(0.3)
                 return True
             except Exception as e:
                 logger.warning(f"Could not focus window: {e}")
@@ -366,13 +390,13 @@ async def open_application(app_name: str):
     """Open an application via Windows search"""
     logger.info(f"Opening application: {app_name}")
 
-    # Press Win key to open start menu
+    # F25: Press Win key to open start menu (increased wait for slow machines)
     await hotkey("win")
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(1.5)
 
     # Type app name
     await type_text(app_name)
-    await asyncio.sleep(0.3)
+    await asyncio.sleep(1.0)
 
     # Press Enter to open
     await press_key("enter")
@@ -481,7 +505,11 @@ async def execute_action(action: dict) -> dict:
     try:
         # M8: Validate required keys before dispatch
         if action_type == "click":
-            await click(params.get("x", 0), params.get("y", 0), params.get("button", "left"))
+            # F30: Validate coordinates > 0 to prevent FAILSAFE abort at (0,0)
+            x, y = params.get("x", 0), params.get("y", 0)
+            if x <= 0 or y <= 0:
+                return {"success": False, "error": f"Invalid click coordinates ({x}, {y}) — must be > 0"}
+            await click(x, y, params.get("button", "left"))
         elif action_type == "double_click":
             await double_click(params.get("x", 0), params.get("y", 0))
         elif action_type == "right_click":

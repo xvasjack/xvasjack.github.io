@@ -64,9 +64,11 @@
                     }
                     if (p.currentTask && p.currentTask.status === 'awaiting_approval') {
                         setRunning(true);
-                        if (p.pendingPlan) {
-                            currentPlan = p.pendingPlan;
-                            document.getElementById('planContent').textContent = typeof p.pendingPlan === 'string' ? p.pendingPlan : JSON.stringify(p.pendingPlan, null, 2);
+                        // F31: Use currentTask.plan instead of nonexistent pendingPlan
+                        const plan = p.currentTask.plan;
+                        if (plan) {
+                            currentPlan = plan;
+                            document.getElementById('planContent').textContent = typeof plan === 'string' ? plan : JSON.stringify(plan, null, 2);
                             document.getElementById('planBox').style.display = 'block';
                             log('> Reconnected: plan awaiting approval');
                         }
@@ -93,12 +95,18 @@
                 case 'task_complete':
                     setRunning(false);
                     document.getElementById('sb').style.display = 'none';
+                    // F34: Hide plan box on task complete
+                    document.getElementById('planBox').style.display = 'none';
+                    currentPlan = null;
                     log('> Done: '+p.task.status);
                     if(p.task.result) log(p.task.result);
                     break;
                 case 'task_cancelled':
                     setRunning(false);
                     document.getElementById('sb').style.display = 'none';
+                    // F33: Hide plan box on task cancelled
+                    document.getElementById('planBox').style.display = 'none';
+                    currentPlan = null;
                     log('> Task cancelled');
                     break;
                 case 'error': log('ERROR: '+p.message); break;
