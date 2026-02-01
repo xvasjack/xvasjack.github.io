@@ -19,6 +19,10 @@ from typing import Optional, List
 from dataclasses import dataclass
 import logging
 
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from shared.cli_utils import is_wsl_mode, get_subprocess_cwd
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("github_actions")
 
@@ -78,13 +82,20 @@ async def _run_gh(args: List[str], timeout_seconds: int = 60) -> dict:
     Returns:
         {"success": bool, "stdout": str, "stderr": str, "returncode": int}
     """
-    cmd = ["gh"] + args
+    # C2 fix: WSL-wrap gh CLI calls
+    if is_wsl_mode():
+        win_cwd, wsl_cwd = get_subprocess_cwd()
+        cmd = ["wsl", "--cd", wsl_cwd, "-e", "gh"] + args
+    else:
+        win_cwd = None
+        cmd = ["gh"] + args
     # C4: Sanitize args for logging to prevent log injection
     logger.info(f"Running: {_sanitize_for_logging(cmd)}")
 
     try:
         process = await asyncio.create_subprocess_exec(
             *cmd,
+            cwd=win_cwd,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
