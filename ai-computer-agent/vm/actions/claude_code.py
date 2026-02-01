@@ -18,7 +18,7 @@ import logging
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from shared.cli_utils import build_claude_cmd, get_claude_code_path, get_repo_cwd
+from shared.cli_utils import build_claude_cmd, get_claude_code_path, get_repo_cwd, get_subprocess_cwd
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("claude_code_actions")
@@ -167,12 +167,20 @@ async def run_claude_code(
     logger.info(f"Running Claude Code (service={service_name}, iter={iteration}): {prompt[:100]}...")
 
     cwd = working_dir or REPO_PATH
+    # B1 fix: Use get_subprocess_cwd for proper WSL handling
+    win_cwd, wsl_cwd = get_subprocess_cwd(CLAUDE_CODE_PATH)
+    effective_cwd = working_dir or win_cwd  # Use win_cwd (None in WSL mode)
 
-    # T6: Stash uncommitted changes to prevent git switch failures
+    # T6/C3 fix: Stash uncommitted changes — WSL-aware
     try:
+        from shared.cli_utils import is_wsl_mode
+        if is_wsl_mode(CLAUDE_CODE_PATH):
+            git_cmd = ["wsl", "--cd", wsl_cwd or cwd, "-e", "git", "stash", "--include-untracked"]
+        else:
+            git_cmd = ["git", "stash", "--include-untracked"]
         stash_proc = await asyncio.create_subprocess_exec(
-            "git", "stash", "--include-untracked",
-            cwd=cwd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+            *git_cmd,
+            cwd=effective_cwd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
         await stash_proc.communicate()
     except Exception as e:
@@ -191,8 +199,9 @@ async def run_claude_code(
                 "--model", CLAUDE_MODEL,
                 "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash",
                 full_prompt,  # positional arg MUST be last
+                wsl_cwd=wsl_cwd or cwd,  # B1 fix: pass WSL cwd via --cd flag
             ),
-            cwd=cwd,
+            cwd=effective_cwd,  # B1 fix: None in WSL mode to avoid WinError 267
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
