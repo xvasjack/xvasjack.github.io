@@ -43,7 +43,7 @@ Run this once on the Windows VM (with a browser available):
 ```powershell
 cd C:\agent\windows
 .\venv\Scripts\Activate.ps1
-python -c "from actions.gmail_api import _get_gmail_service; _get_gmail_service()"
+python test_gmail.py
 ```
 
 A browser window will open. Sign in with **xvasjack@gmail.com** and grant read-only Gmail access.
@@ -53,7 +53,7 @@ This creates `credentials/gmail_token.json` automatically. Future runs use this 
 ## Step 5: Verify
 
 ```powershell
-python -c "from actions.gmail_api import search_emails_api; print(search_emails_api('newer_than:1d', max_results=1))"
+python test_gmail.py
 ```
 
 Should return a list of recent emails (or empty list if none match).
