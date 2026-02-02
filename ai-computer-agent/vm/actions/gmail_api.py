@@ -73,6 +73,7 @@ GMAIL_TOKEN_PATH = os.environ.get(
 ALLOWED_SENDERS = [
     "noreply@github.com",
     "notifications@github.com",
+    "xvasjack@gmail.com",
 ]
 
 # Guardrails: allowed subject patterns
