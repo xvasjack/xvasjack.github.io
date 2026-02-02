@@ -1535,7 +1535,7 @@ Your response MUST include a JSON block. Use this format:
       "contractValue": "$X million (if known)",
       "strengths": "Specific strengths",
       "weaknesses": "Specific weaknesses",
-      "description": "Detailed 50+ word description including revenue, growth rate, market position, key services, strategic context, and why this company matters for market entry analysis",
+      "description": "REQUIRED 50+ words with revenue, market share, growth rate, key services, strategic significance including revenue, growth rate, market position, key services, strategic context, and why this company matters for market entry analysis",
       "status": "active/expanding/restructuring/exited",
       "partnershipInterest": "high/medium/low"
     }
@@ -1549,7 +1549,7 @@ Your response MUST include a JSON block. Use this format:
       "outcome": "Successful - $X revenue/Failed - exited in YEAR/Ongoing",
       "keyProject": "Project name and description",
       "localPartner": "Partner company name",
-      "description": "Detailed 50+ word description of company's presence, operations, market position, and strategic significance"
+      "description": "REQUIRED 50+ words with revenue, market share, growth rate, key services, strategic significance of company's presence, operations, market position, and strategic significance"
     }
   ],
   "caseStudies": [
@@ -2355,8 +2355,8 @@ Return a JSON object with this EXPANDED structure for 15+ slides:
       "slideTitle": "${country} - Japanese Energy Companies",
       "subtitle": "Current presence and activities",
       "players": [
-        {"name": "Tokyo Gas", "website": "https://www.tokyo-gas.co.jp", "presence": "JV with Local Partner", "projects": "3 ESCO contracts", "revenue": "$X million", "assessment": "Strong/Weak", "description": "Detailed 50+ word description including market position, entry strategy, key projects, revenue figures, growth trajectory, and strategic significance for competitive landscape"},
-        {"name": "Osaka Gas", "website": "https://www.osakagas.co.jp", "presence": "Direct investment", "projects": "LNG terminal stake", "revenue": "$X million", "assessment": "Strong/Weak", "description": "Detailed 50+ word description"}
+        {"name": "Tokyo Gas", "website": "https://www.tokyo-gas.co.jp", "presence": "JV with Local Partner", "projects": "3 ESCO contracts", "revenue": "$X million", "assessment": "Strong/Weak", "description": "REQUIRED 50+ words with revenue, market share, growth rate, key services, strategic significance including market position, entry strategy, key projects, revenue figures, growth trajectory, and strategic significance for competitive landscape"},
+        {"name": "Osaka Gas", "website": "https://www.osakagas.co.jp", "presence": "Direct investment", "projects": "LNG terminal stake", "revenue": "$X million", "assessment": "Strong/Weak", "description": "REQUIRED 50+ words with revenue, market share, growth rate, key services, strategic significance"}
       ],
       "marketInsight": "Overall assessment of Japanese presence"
     },
@@ -2364,8 +2364,8 @@ Return a JSON object with this EXPANDED structure for 15+ slides:
       "slideTitle": "${country} - Major Local Players",
       "subtitle": "Domestic energy companies",
       "players": [
-        {"name": "Company A", "website": "https://companya.com", "type": "State-owned/Private", "revenue": "$X million", "marketShare": "X%", "strengths": "...", "weaknesses": "...", "description": "Detailed 50+ word description including revenue, growth rate, market share, key services, geographic coverage, and competitive advantages"},
-        {"name": "Company B", "website": "https://companyb.com", "type": "State-owned/Private", "revenue": "$X million", "marketShare": "X%", "strengths": "...", "weaknesses": "...", "description": "Detailed 50+ word description"}
+        {"name": "Company A", "website": "https://companya.com", "type": "State-owned/Private", "revenue": "$X million", "marketShare": "X%", "strengths": "...", "weaknesses": "...", "description": "REQUIRED 50+ words with revenue, market share, growth rate, key services, strategic significance including revenue, growth rate, market share, key services, geographic coverage, and competitive advantages"},
+        {"name": "Company B", "website": "https://companyb.com", "type": "State-owned/Private", "revenue": "$X million", "marketShare": "X%", "strengths": "...", "weaknesses": "...", "description": "REQUIRED 50+ words with revenue, market share, growth rate, key services, strategic significance"}
       ],
       "concentration": "Market concentration assessment"
     },
@@ -2373,8 +2373,8 @@ Return a JSON object with this EXPANDED structure for 15+ slides:
       "slideTitle": "${country} - Foreign Energy Companies",
       "subtitle": "International competitors",
       "players": [
-        {"name": "ENGIE", "website": "https://www.engie.com", "origin": "France", "entryYear": "2018", "mode": "JV", "projects": "X contracts", "success": "High/Medium/Low", "description": "Detailed 50+ word description including entry strategy, local partnerships, revenue, project portfolio, and competitive position"},
-        {"name": "Siemens", "website": "https://www.siemens-energy.com", "origin": "Germany", "entryYear": "2015", "mode": "Direct", "projects": "Smart grid", "success": "High/Medium/Low", "description": "Detailed 50+ word description"}
+        {"name": "ENGIE", "website": "https://www.engie.com", "origin": "France", "entryYear": "2018", "mode": "JV", "projects": "X contracts", "success": "High/Medium/Low", "description": "REQUIRED 50+ words with revenue, market share, growth rate, key services, strategic significance including entry strategy, local partnerships, revenue, project portfolio, and competitive position"},
+        {"name": "Siemens", "website": "https://www.siemens-energy.com", "origin": "Germany", "entryYear": "2015", "mode": "Direct", "projects": "Smart grid", "success": "High/Medium/Low", "description": "REQUIRED 50+ words with revenue, market share, growth rate, key services, strategic significance"}
       ],
       "competitiveInsight": "How foreign players compete"
     },
@@ -2959,7 +2959,7 @@ Return JSON with:
 
   "competitivePositioning": {
     "keyPlayers": [
-      {"name": "actual company", "website": "https://company.com", "strengths": "specific", "weaknesses": "specific", "threat": "how they could block you", "description": "Detailed 50+ word description with revenue, market share, entry year, key projects, geographic coverage, strategic positioning, and why this player matters for competitive analysis"}
+      {"name": "actual company", "website": "https://company.com", "strengths": "specific", "weaknesses": "specific", "threat": "how they could block you", "description": "REQUIRED 50+ words with revenue, market share, growth rate, key services, strategic significance with revenue, market share, entry year, key projects, geographic coverage, strategic positioning, and why this player matters for competitive analysis"}
     ],
     "whiteSpaces": ["specific gaps with EVIDENCE of demand and SIZE of opportunity"],
     "potentialPartners": [{"name": "actual company", "website": "https://partner.com", "rationale": "why they'd partner, what they bring, what you bring"}]
@@ -3780,19 +3780,21 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
     },
   }));
 
+  // Size opp bullets area based on content count
+  const oppH = Math.min(2.0, Math.max(0.6, oppBullets.length * 0.4 + 0.2));
   if (oppBullets.length > 0) {
     slide.addText(oppBullets, {
       x: LEFT_MARGIN,
       y: contentY + 0.5,
       w: fullWidth,
-      h: 2.0,
+      h: oppH,
       valign: 'top',
       fill: { color: COLORS.lightGreen },
     });
   }
 
-  // Obstacles header (single text shape with fill)
-  const obsY = contentY + 2.65;
+  // Obstacles header — position dynamically below opportunities
+  const obsY = contentY + 0.5 + oppH + 0.15;
   slide.addText('Obstacles & Risks', {
     x: LEFT_MARGIN,
     y: obsY,
@@ -3819,12 +3821,14 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
     },
   }));
 
+  // Size obs bullets area based on content count, cap to stay above footer
+  const obsH = Math.min(2.0, Math.max(0.6, obsBullets.length * 0.4 + 0.2), 6.65 - (obsY + 0.5));
   if (obsBullets.length > 0) {
     slide.addText(obsBullets, {
       x: LEFT_MARGIN,
       y: obsY + 0.5,
       w: fullWidth,
-      h: 2.0,
+      h: Math.max(0.3, obsH),
       valign: 'top',
       fill: { color: COLORS.lightOrange },
     });
@@ -5798,7 +5802,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       x: LEFT_MARGIN,
       y: escoMarket.chartData ? 5.3 : 3.2,
       w: CONTENT_WIDTH,
-      h: 1.3,
+      h: Math.min(1.3, segRows.length * 0.35 + 0.2),
       fontSize: 11,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
@@ -6597,6 +6601,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (highPriority) segInsights.push(`Top Priority: ${highPriority.name}`);
   }
 
+  let nextSegY = 1.35; // Track vertical position for dynamic layout
   if (segmentsList.length > 0) {
     const segmentRows = [
       tableHeader(['Segment', 'Size', 'Energy Intensity', 'Decision Maker', 'Priority']),
@@ -6612,26 +6617,29 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
     // Use dynamic column widths
     const segColWidths = calculateColumnWidths(segmentRows, CONTENT_WIDTH);
+    const segTableH = Math.min(2.0, segmentRows.length * 0.35 + 0.2);
     targetSlide.addTable(segmentRows, {
       x: LEFT_MARGIN,
       y: 1.35,
       w: CONTENT_WIDTH,
-      h: 2.0,
+      h: segTableH,
       fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: segColWidths.length > 0 ? segColWidths : [2.5, 2.5, 2.0, 2.5, 3.0],
       valign: 'top',
     });
-    // Add insights below table
+    nextSegY = 1.35 + segTableH + 0.15;
+    // Add insights below table — dynamic y
     if (segInsights.length > 0) {
       addCalloutBox(targetSlide, 'Market Approach', segInsights.slice(0, 3).join(' • '), {
         x: LEFT_MARGIN,
-        y: 3.5,
+        y: nextSegY,
         w: CONTENT_WIDTH,
         h: 0.55,
         type: 'insight',
       });
+      nextSegY += 0.55 + 0.15;
     }
   }
 
@@ -6645,7 +6653,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     .map(ensureWebsite)
     .map(enrichDescription);
   if (topTargets.length > 0) {
-    const priorityYBase = segInsights.length > 0 ? 4.2 : 3.5;
+    const priorityYBase = nextSegY;
     targetSlide.addText('Priority Target Companies', {
       x: LEFT_MARGIN,
       y: priorityYBase,
@@ -6731,7 +6739,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   if (timing.windowOfOpportunity) {
     addCalloutBox(timingSlide, 'WINDOW OF OPPORTUNITY', timing.windowOfOpportunity, {
       x: LEFT_MARGIN,
-      y: triggers.length > 0 ? 4.3 : 1.5,
+      y: triggers.length > 0 ? Math.min(1.3 + 2.8 + 0.15, 5.5) : 1.5,
       w: CONTENT_WIDTH,
       h: 1.0,
       type: 'recommendation',
@@ -6954,9 +6962,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       `Attractiveness: ${ratings.attractiveness || 'N/A'}/10 | Feasibility: ${ratings.feasibility || 'N/A'}/10`,
       {
         x: LEFT_MARGIN,
-        y: 6.65,
+        y: 6.5,
         w: CONTENT_WIDTH,
-        h: 0.3,
+        h: 0.25,
         fontSize: 12,
         bold: true,
         color: COLORS.dk2,
@@ -7058,11 +7066,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       },
     ]);
   }
+  const metricsTableH = Math.min(2.5, metricsRows.length * 0.35 + 0.2);
   finalSlide.addTable(metricsRows, {
     x: LEFT_MARGIN,
     y: 1.3,
     w: CONTENT_WIDTH,
-    h: 2.5,
+    h: metricsTableH,
     fontSize: 11,
     fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
