@@ -8,37 +8,9 @@
     "createdAt": "2026-02-02T10:47:44.143Z",
     "startedAt": "2026-02-02T10:47:44.143Z",
     "completedAt": null,
-    "iterations": 2,
+    "iterations": 3,
     "prsMerged": 2,
     "messages": [
-      {
-        "time": "2026-02-02T10:48:28.139Z",
-        "message": "[idle] Starting feedback loop for market-research"
-      },
-      {
-        "time": "2026-02-02T10:48:28.144Z",
-        "message": "[idle] === Iteration 1/10 ==="
-      },
-      {
-        "time": "2026-02-02T10:48:28.145Z",
-        "message": "[testing_frontend] [Stage 1/7] Submitting form on frontend..."
-      },
-      {
-        "time": "2026-02-02T10:48:31.735Z",
-        "message": "[waiting_for_email] [Stage 2/7] Waiting for email result (timeout: 15m)..."
-      },
-      {
-        "time": "2026-02-02T10:48:39.748Z",
-        "message": "[analyzing_output] [Stage 3/7] Analyzing output against template..."
-      },
-      {
-        "time": "2026-02-02T10:48:40.156Z",
-        "message": "[analyzing_output] [ISSUES] Found 4 issue(s): [HIGH] missing_websites at Multiple slides: Expected 'All companies should have website URLs', got '25 companies without websites: energy services, oil and gas Market Analysis, 1. Policy & Regulations, Policy & Regulations, 2023 Petroleum Law amendments created investor-friendly regime with firm enforcement, Government wants both fossil development AND decarbonization - creates compliance burden......'. Suggestion: Ensure website field is populated from search results. Add validation before adding company.; [HIGH] shallow_descriptions at Multiple slides: Expected 'Descriptions with 50+ words each', got '29/29 companies (100%) have thin descriptions'. Suggestion: Expand company descriptions to 50+ words. Include specific metrics (revenue, growth rate, market share), strategic context, and why the company is relevant. Shallow: energy services, oil and gas Market Analysis, 1. Policy & Regulations, Policy & Regulations, 2023 Petroleum Law amendments created investor-friendly regime with firm enforcement, Government wants both fossil development AND decarbonization - creates compliance burden...; [CRITICAL] text_overflow at Slides 24: Expected 'All text fits within shape boundaries', got '1 shapes overflow across 1 slides (worst: 1 extra lines)'. Suggestion: Reduce text or increase shape height. In pptxgenjs: increase `h` parameter or reduce `fontSize`. Overflow on slides: [24]. Consider splitting content across multiple slides if text is too long."
-      },
-      {
-        "time": "2026-02-02T10:48:40.157Z",
-        "message": "[generating_fix] [Stage 4/7] Generating fix via Claude Code (up to 20 min)..."
-      },
       {
         "time": "2026-02-02T11:01:50.517Z",
         "message": "[generating_fix] Fix committed and pushed to main"
@@ -90,10 +62,38 @@
       {
         "time": "2026-02-02T11:15:47.501Z",
         "message": "[checking_logs] [Stage 6/7] Checking logs for runtime errors..."
+      },
+      {
+        "time": "2026-02-02T11:16:48.927Z",
+        "message": "[checking_logs] [Stage 7/7] Iteration complete — looping back to retest..."
+      },
+      {
+        "time": "2026-02-02T11:16:48.930Z",
+        "message": "[checking_logs] === Iteration 3/10 ==="
+      },
+      {
+        "time": "2026-02-02T11:16:48.930Z",
+        "message": "[testing_frontend] [Stage 1/7] Submitting form on frontend..."
+      },
+      {
+        "time": "2026-02-02T11:16:49.520Z",
+        "message": "[waiting_for_email] [Stage 2/7] Waiting for email result (timeout: 15m)..."
+      },
+      {
+        "time": "2026-02-02T11:16:54.389Z",
+        "message": "[analyzing_output] [Stage 3/7] Analyzing output against template..."
+      },
+      {
+        "time": "2026-02-02T11:16:54.782Z",
+        "message": "[analyzing_output] [ISSUES] Found 5 issue(s): [HIGH] missing_websites at Multiple slides: Expected 'All companies should have website URLs', got '26 companies without websites: energy services Market Analysis, 1. Policy & Regulations, Policy & Regulations, Primary energy mix data not specified in research., Energy demand growth not quantified, but energy services market growing at 12-15% CAGR....'. Suggestion: Ensure website field is populated from search results. Add validation before adding company.; [HIGH] duplicate_companies at Presentation: Expected 'No duplicate companies', got 'Found duplicates: Key Insights'. Suggestion: Add deduplication logic by company name and website domain.; [HIGH] shallow_descriptions at Multiple slides: Expected 'Descriptions with 50+ words each', got '29/29 companies (100%) have thin descriptions'. Suggestion: Expand company descriptions to 50+ words. Include specific metrics (revenue, growth rate, market share), strategic context, and why the company is relevant. Shallow: energy services Market Analysis, 1. Policy & Regulations, Policy & Regulations, Market unbundling by 2025 creates third-party openings, Government is actively pushing compliance (e.g., 75% audit compliance in 2024)..."
+      },
+      {
+        "time": "2026-02-02T11:16:54.782Z",
+        "message": "[generating_fix] [Stage 4/7] Generating fix via Claude Code (up to 20 min)..."
       }
     ],
     "result": null,
-    "elapsedSeconds": 1683
+    "elapsedSeconds": 1750
   },
   "taskHistory": [
     {
@@ -2114,5 +2114,5 @@
     "failedTasks": 25,
     "totalPRsMerged": 0
   },
-  "savedAt": "2026-02-02T11:16:33.277Z"
+  "savedAt": "2026-02-02T11:27:23.361Z"
 }
