@@ -156,7 +156,7 @@ async def wait_for_email_callback(
         try:
             subject_hint = SERVICE_EMAIL_SUBJECTS.get(service_name, service_name)
             # 1.5: 1h too restrictive — use 3h
-            query = f"subject:({subject_hint}) has:attachment newer_than:3h"
+            query = f"subject:({subject_hint}) has:attachment"
             result = await wait_for_email_api(
                 query=query,
                 download_dir=download_dir,
@@ -186,7 +186,7 @@ async def wait_for_email_callback(
             await asyncio.sleep(2)
 
             subject_hint = SERVICE_EMAIL_SUBJECTS.get(service_name, service_name)
-            query = f"subject:({subject_hint}) has:attachment newer_than:1h is:unread"
+            query = f"subject:({subject_hint}) has:attachment"
             await search_emails(query)
             await asyncio.sleep(2)
 
