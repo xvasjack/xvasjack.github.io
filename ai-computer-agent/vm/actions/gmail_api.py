@@ -448,39 +448,51 @@ async def wait_for_email_api(
     Returns:
         {"success": True, "file_path": ...} or {"success": False, "error": ...}
     """
-    logger.info(f"Waiting for email: {query} (timeout: {timeout_minutes}m)")
+    logger.info(f"Waiting for email: query={query} | timeout={timeout_minutes}m | poll_interval={poll_interval}s")
 
     deadline = time.time() + (timeout_minutes * 60)
+    poll_count = 0
 
     while time.time() < deadline:
+        poll_count += 1
+        remaining = int(deadline - time.time())
+        logger.info(f"[Poll #{poll_count}] Searching Gmail... (query: {query}) | {remaining}s remaining")
+
         try:
             emails = await search_emails_api(query, max_results=3)
+            logger.info(f"[Poll #{poll_count}] Found {len(emails)} email(s) matching query")
 
             # 1.13: Rename loop var to avoid shadowing stdlib `email` module
-            for email_msg in emails:
+            for i, email_msg in enumerate(emails):
+                logger.info(f"[Poll #{poll_count}] Email {i+1}: subject='{email_msg['subject']}' from='{email_msg['sender']}' has_attachment={email_msg.get('has_attachment')}")
                 # Guardrails
                 if not _check_sender_allowed(email_msg["sender"]):
-                    logger.warning(f"Sender not allowed: {email_msg['sender']}")
+                    logger.warning(f"[Poll #{poll_count}] SKIPPED — sender not allowed: {email_msg['sender']}")
                     continue
                 if not _check_subject_allowed(email_msg["subject"]):
-                    logger.warning(f"Subject not allowed: {email_msg['subject']}")
+                    logger.warning(f"[Poll #{poll_count}] SKIPPED — subject not allowed: {email_msg['subject']}")
                     continue
 
                 if email_msg.get("has_attachment"):
+                    logger.info(f"[Poll #{poll_count}] Match found! Downloading attachment from email {email_msg['id']}...")
                     file_path = await download_attachment_api(email_msg["id"], download_dir)
                     if file_path:
+                        logger.info(f"[Poll #{poll_count}] SUCCESS — downloaded: {file_path}")
                         return {
                             "success": True,
                             "file_path": file_path,
                             "email_id": email_msg["id"],
                             "subject": email_msg["subject"],
                         }
+                    else:
+                        logger.warning(f"[Poll #{poll_count}] Attachment download returned None — skipping")
+                else:
+                    logger.info(f"[Poll #{poll_count}] Email has no attachment — skipping")
 
         except Exception as e:
-            logger.warning(f"Email poll failed: {e}")
+            logger.warning(f"[Poll #{poll_count}] Poll failed with error: {e}")
 
-        remaining = int(deadline - time.time())
-        logger.info(f"No matching email yet. Retrying in {poll_interval}s ({remaining}s remaining)")
+        logger.info(f"[Poll #{poll_count}] No matching email yet. Sleeping {poll_interval}s... ({remaining}s remaining)")
         await asyncio.sleep(poll_interval)
 
     return {
