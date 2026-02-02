@@ -3388,17 +3388,41 @@ function isValidCompany(item) {
     /^primary\s+energy/i,
     /energy\s+demand\s+growth/i,
     /market\s+(growing|size|overview|dynamics|unbundling)/i,
-    /government\s+is\s+/i,
-    /compliance/i,
+    /government\s+(is|wants|policy)/i,
+    /compliance\s+(burden|require)/i,
     /^\d+%\s/,
     /CAGR/i,
     /^[^a-zA-Z]*$/, // No letters at all
+    /policy\s*&\s*regulations/i,
+    /^policy\b/i,
+    /^regulations?\b/i,
+    /petroleum\s+law/i,
+    /investor[- ]friendly/i,
+    /decarbonization/i,
+    /creates?\s+(investor|compliance)/i,
+    /amendments?\s+created/i,
+    /regime\s+with/i,
+    /enforcement/i,
+    /^(opportunities|obstacles|recommendations|overview|summary|conclusion)/i,
+    /strategic\s+(analysis|implication|recommendation)/i,
+    /competitive\s+landscape/i,
+    /entry\s+strategy/i,
+    /market\s+entry/i,
+    /^(total|final)\s+energy/i,
+    /slide\s*\d/i,
+    /table\s+of\s+contents/i,
   ];
   for (const pattern of invalidPatterns) {
     if (pattern.test(name)) return false;
   }
   // Name too long to be a company name (likely analysis text)
   if (name.length > 80) return false;
+  // Reject names that look like sentences (contain verbs and are long)
+  if (
+    /\b(created|creates|wants|drives|enables|requires|should|must|will|can)\b/i.test(name) &&
+    name.length > 30
+  )
+    return false;
   return true;
 }
 
@@ -5209,38 +5233,38 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   ];
 
   tocSections.forEach((item, idx) => {
-    const yPos = 1.5 + idx * 1.0;
-    // Section title
+    const yPos = 1.5 + idx * 1.05;
+    // Section title + slide number on same row (no overlap)
     tocSlide.addText(item.section, {
       x: LEFT_MARGIN,
       y: yPos,
       w: 8,
-      h: 0.4,
+      h: 0.35,
       fontSize: 16,
       bold: true,
       color: COLORS.dk2,
       fontFace: FONT,
     });
-    // Section description
-    tocSlide.addText(item.slides, {
-      x: LEFT_MARGIN + 0.3,
-      y: yPos + 0.4,
-      w: 10,
-      h: 0.35,
-      fontSize: 11,
-      color: '666666',
-      fontFace: FONT,
-    });
-    // Slide number indicator
+    // Slide number indicator (same row as title)
     tocSlide.addText(`Slide ${item.start}`, {
       x: 11,
       y: yPos,
       w: 1.9,
-      h: 0.4,
+      h: 0.35,
       fontSize: 12,
       color: COLORS.accent1,
       fontFace: FONT,
       align: 'right',
+    });
+    // Section description (below title row, no overlap)
+    tocSlide.addText(item.slides, {
+      x: LEFT_MARGIN + 0.3,
+      y: yPos + 0.38,
+      w: 10,
+      h: 0.3,
+      fontSize: 11,
+      color: '666666',
+      fontFace: FONT,
     });
   });
 
@@ -6621,7 +6645,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       x: LEFT_MARGIN,
       y: 1.3,
       w: CONTENT_WIDTH,
-      h: 2.0,
+      h: 1.8,
       fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
@@ -6630,31 +6654,32 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
     // Add insights below table
     if (segInsights.length > 0) {
-      addCalloutBox(targetSlide, 'Market Approach', segInsights.slice(0, 4).join(' • '), {
+      addCalloutBox(targetSlide, 'Market Approach', segInsights.slice(0, 3).join(' • '), {
         x: LEFT_MARGIN,
-        y: 3.5,
+        y: 3.3,
         w: CONTENT_WIDTH,
-        h: 0.55,
+        h: 0.5,
         type: 'insight',
       });
     }
   }
 
-  // Top targets
-  const topTargets = safeArray(targetSeg.topTargets, 3).map((t) => {
-    if (t && (t.company || t.name) && !t.website) {
-      const searchName = encodeURIComponent(String(t.company || t.name).trim());
-      t.website = `https://www.google.com/search?q=${searchName}+official+website`;
-    }
-    return t;
-  });
+  // Top targets — normalize name field and apply validation+enrichment
+  const topTargets = safeArray(targetSeg.topTargets, 3)
+    .map((t) => {
+      if (t && t.company && !t.name) t.name = t.company;
+      return t;
+    })
+    .filter(isValidCompany)
+    .map(ensureWebsite)
+    .map(enrichDescription);
   if (topTargets.length > 0) {
-    const priorityYBase = segInsights.length > 0 ? 4.2 : 3.5;
+    const priorityYBase = segInsights.length > 0 ? 3.95 : 3.3;
     targetSlide.addText('Priority Target Companies', {
       x: LEFT_MARGIN,
       y: priorityYBase,
       w: CONTENT_WIDTH,
-      h: 0.3,
+      h: 0.25,
       fontSize: 11,
       bold: true,
       color: COLORS.dk2 || '1F497D',
@@ -6676,9 +6701,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const targetColWidths = calculateColumnWidths(targetCompRows, CONTENT_WIDTH);
     targetSlide.addTable(targetCompRows, {
       x: LEFT_MARGIN,
-      y: priorityYBase + 0.35,
+      y: priorityYBase + 0.3,
       w: CONTENT_WIDTH,
-      h: 1.3,
+      h: 1.1,
       fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
