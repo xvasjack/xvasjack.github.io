@@ -176,11 +176,13 @@ def _check_sender_allowed(sender: str) -> bool:
             return True
 
     # Allow emails from the configured sender (for internal automation)
-    sender_email = os.environ.get("SENDER_EMAIL", "")
-    if sender_email:
-        config_domain = _extract_email_domain(sender_email)
-        if config_domain and sender_domain == config_domain:
-            return True
+    # Check both SENDER_EMAIL and USER_EMAIL env vars
+    for env_var in ("SENDER_EMAIL", "USER_EMAIL"):
+        config_email = os.environ.get(env_var, "")
+        if config_email:
+            config_domain = _extract_email_domain(config_email)
+            if config_domain and sender_domain == config_domain:
+                return True
 
     return False
 
@@ -473,21 +475,20 @@ async def wait_for_email_api(
                     logger.warning(f"[Poll #{poll_count}] SKIPPED — subject not allowed: {email_msg['subject']}")
                     continue
 
-                if email_msg.get("has_attachment"):
-                    logger.info(f"[Poll #{poll_count}] Match found! Downloading attachment from email {email_msg['id']}...")
-                    file_path = await download_attachment_api(email_msg["id"], download_dir)
-                    if file_path:
-                        logger.info(f"[Poll #{poll_count}] SUCCESS — downloaded: {file_path}")
-                        return {
-                            "success": True,
-                            "file_path": file_path,
-                            "email_id": email_msg["id"],
-                            "subject": email_msg["subject"],
-                        }
-                    else:
-                        logger.warning(f"[Poll #{poll_count}] Attachment download returned None — skipping")
+                # Note: has_attachment from metadata format is unreliable (parts not returned).
+                # The Gmail query already includes has:attachment, so trust that and try downloading.
+                logger.info(f"[Poll #{poll_count}] Attempting attachment download from email {email_msg['id']}...")
+                file_path = await download_attachment_api(email_msg["id"], download_dir)
+                if file_path:
+                    logger.info(f"[Poll #{poll_count}] SUCCESS — downloaded: {file_path}")
+                    return {
+                        "success": True,
+                        "file_path": file_path,
+                        "email_id": email_msg["id"],
+                        "subject": email_msg["subject"],
+                    }
                 else:
-                    logger.info(f"[Poll #{poll_count}] Email has no attachment — skipping")
+                    logger.warning(f"[Poll #{poll_count}] No downloadable attachment in email {email_msg['id']} — trying next")
 
         except Exception as e:
             logger.warning(f"[Poll #{poll_count}] Poll failed with error: {e}")
