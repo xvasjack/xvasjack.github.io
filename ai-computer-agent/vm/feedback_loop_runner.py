@@ -677,17 +677,20 @@ async def run_feedback_loop(
 
     iteration_counter = [resume_from]
     seen_email_ids = set()  # Track processed email IDs across iterations
-    submission_epoch = [0]  # Timestamp of last form submission (only accept emails after this)
+    # Track when a fix was last deployed — only require fresh emails after that
+    last_fix_deployed_epoch = [0]
 
     async def submit():
-        submission_epoch[0] = int(time.time())
         return await submit_form_callback(service_name, form_data)
 
     async def wait_email():
+        # Iteration 1 (no fix deployed yet): accept any unseen email (including old ones)
+        # Iteration 2+ (after fix deployed): only accept emails after the fix was deployed
+        epoch = last_fix_deployed_epoch[0] if last_fix_deployed_epoch[0] else None
         result = await wait_for_email_callback(
             service_name,
             skip_email_ids=seen_email_ids,
-            after_epoch=submission_epoch[0] if submission_epoch[0] else None,
+            after_epoch=epoch,
         )
         # Track this email ID so next iteration skips it
         if result.get("success") and result.get("email_id"):
@@ -731,9 +734,14 @@ async def run_feedback_loop(
             return {"success": False, "error": "No issues to fix"}
 
         iteration_counter[0] += 1
-        return await generate_fix_callback(
+        result = await generate_fix_callback(
             issues, analysis, service_name, iteration_counter[0]
         )
+        # After a successful fix+push, record timestamp so next iteration
+        # only accepts emails arriving after the new code was deployed
+        if result and result.get("success"):
+            last_fix_deployed_epoch[0] = int(time.time())
+        return result
 
     async def merge(pr_number):
         return await merge_pr(pr_number)
