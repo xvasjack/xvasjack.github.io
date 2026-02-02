@@ -211,12 +211,17 @@ async def run_claude_code(
             wsl_cwd=wsl_cwd or cwd,
         )
 
+        # Give Claude Code 4GB heap to avoid OOM on large prompts
+        env = os.environ.copy()
+        env["NODE_OPTIONS"] = "--max-old-space-size=4096"
+
         process = await asyncio.create_subprocess_exec(
             *cmd_args,
             cwd=effective_cwd,  # B1 fix: None in WSL mode to avoid WinError 267
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            env=env,
         )
 
         process.stdin.write(full_prompt.encode())
