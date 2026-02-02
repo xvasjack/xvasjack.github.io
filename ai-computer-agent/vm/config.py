@@ -99,6 +99,9 @@ class AgentConfig:
     # Claude Code CLI path
     claude_code_path: str = "claude"
 
+    # Auto-approve plans without waiting for UI (set AUTO_APPROVE_PLANS=true)
+    auto_approve_plans: bool = field(default_factory=lambda: os.environ.get("AUTO_APPROVE_PLANS", "").lower() == "true")
+
     # Repo path
     repo_path: str = os.path.expanduser("~/xvasjack.github.io")
 
