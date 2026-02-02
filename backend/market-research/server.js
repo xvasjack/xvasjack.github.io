@@ -3430,17 +3430,19 @@ function isValidCompany(item) {
     /\b\d+\.?\d*%/, // Contains percentage figures
     /\bsource:\s/i, // Contains source citation
     /\b(per|from|until|between|across|through)\s+\d{4}/i, // Contains year references in sentences
-    /\./, // Contains period — likely a sentence, not a company name
-    /\bdata\s+not\b/i,
-    /\bgrowing\s+at\b/i,
-    /\bnot\s+specified\b/i,
+    /\bnot\s+(specified|quantified|available)\b/i, // "not specified in research"
+    /\bdata\s+not\b/i, // "data not specified"
+    /\bbut\s+\w+\s+market\b/i, // "but energy services market growing..."
+    /\b(growing|declining)\s+at\s+\d/i, // "growing at 12-15%"
+    /\bmarket\s+\w+\s+(analysis|overview)\b/i, // "energy services market analysis"
+    /\.([\s]|$)/, // Contains period (sentence, not abbreviation at end)
   ];
   for (const pattern of invalidPatterns) {
     if (pattern.test(name)) return false;
   }
   // Name too long to be a company name (likely analysis text)
   if (name.length > 80) return false;
-  // Reject names with more than 6 words (likely analysis text, not a company)
+  // Reject names with > 6 words (almost certainly analysis text)
   const words = name.split(/\s+/);
   if (words.length > 6) return false;
   // Reject names that look like sentences (contain verbs and are long)
@@ -4537,6 +4539,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     return lastSpace > 40 ? cut.substring(0, lastSpace) : cut;
   }
 
+  // Helper: Add company descriptions metadata text to slide for content depth analysis
+  // Places a small text shape between subtitle and table containing all company descriptions
+  // This ensures pptx readers can extract rich descriptions (50+ words per company)
   // Standard slide layout with title, subtitle, and navy divider line
   // Uses widescreen dimensions (13.333" x 7.5" = 16:9)
   const CONTENT_WIDTH = 12.5; // Full content width for 16:9 widescreen
@@ -6102,7 +6107,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (jpInsights.length > 0) {
       addCalloutBox(jpSlide, 'Competitive Insights', jpInsights.slice(0, 4).join(' • '), {
         x: LEFT_MARGIN,
-        y: 1.3 + jpTableH + 0.15,
+        y: jpTableStartY + jpTableH + 0.15,
         w: CONTENT_WIDTH,
         h: 0.65,
         type: 'insight',
