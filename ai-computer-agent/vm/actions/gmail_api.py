@@ -438,6 +438,7 @@ async def wait_for_email_api(
     download_dir: str,
     timeout_minutes: int = 15,
     poll_interval: int = 30,
+    skip_email_ids: Optional[set] = None,
 ) -> Dict[str, Any]:
     """
     Poll Gmail for an email matching the query, then download its attachment.
@@ -447,10 +448,14 @@ async def wait_for_email_api(
         download_dir: Where to save attachments
         timeout_minutes: Max time to wait
         poll_interval: Seconds between polls
+        skip_email_ids: Set of email IDs to skip (already processed in previous iterations)
 
     Returns:
         {"success": True, "file_path": ...} or {"success": False, "error": ...}
     """
+    skip_ids = skip_email_ids or set()
+    if skip_ids:
+        logger.info(f"Skipping {len(skip_ids)} already-processed email(s)")
     logger.info(f"Waiting for email: query={query} | timeout={timeout_minutes}m | poll_interval={poll_interval}s")
 
     deadline = time.time() + (timeout_minutes * 60)
@@ -468,6 +473,10 @@ async def wait_for_email_api(
             # 1.13: Rename loop var to avoid shadowing stdlib `email` module
             for i, email_msg in enumerate(emails):
                 logger.info(f"[Poll #{poll_count}] Email {i+1}: subject='{email_msg['subject']}' from='{email_msg['sender']}' has_attachment={email_msg.get('has_attachment')}")
+                # Skip already-processed emails from previous iterations
+                if email_msg["id"] in skip_ids:
+                    logger.info(f"[Poll #{poll_count}] SKIPPED — already processed: {email_msg['id']}")
+                    continue
                 # Guardrails
                 if not _check_sender_allowed(email_msg["sender"]):
                     logger.warning(f"[Poll #{poll_count}] SKIPPED — sender not allowed: {email_msg['sender']}")

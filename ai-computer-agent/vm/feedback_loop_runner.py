@@ -140,6 +140,7 @@ async def submit_form_callback(
 async def wait_for_email_callback(
     service_name: str,
     timeout_minutes: int = 15,
+    skip_email_ids: set = None,
 ) -> Dict[str, Any]:
     """
     Wait for automation output email.
@@ -161,6 +162,7 @@ async def wait_for_email_callback(
                 download_dir=download_dir,
                 timeout_minutes=timeout_minutes,
                 poll_interval=30,
+                skip_email_ids=skip_email_ids,
             )
             if result.get("success"):
                 logger.info(f"Gmail API downloaded: {result.get('file_path')}")
@@ -672,12 +674,18 @@ async def run_feedback_loop(
         logger.warning(f"Failed to check loop state: {e}")
 
     iteration_counter = [resume_from]
+    seen_email_ids = set()  # Track processed email IDs across iterations
 
     async def submit():
         return await submit_form_callback(service_name, form_data)
 
     async def wait_email():
-        return await wait_for_email_callback(service_name)
+        result = await wait_for_email_callback(service_name, skip_email_ids=seen_email_ids)
+        # Track this email ID so next iteration skips it
+        if result.get("success") and result.get("email_id"):
+            seen_email_ids.add(result["email_id"])
+            logger.info(f"Tracked email {result['email_id']} — {len(seen_email_ids)} seen total")
+        return result
 
     async def analyze(file_path):
         # Issue 9: Try learned template first
