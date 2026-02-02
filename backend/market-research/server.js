@@ -5191,7 +5191,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       actsSlide,
       `For ${scope.clientContext || 'Your Company'}:`,
       `Regulatory framework creates recurring ESCO demand in ${country}. Energy efficiency mandates drive industrial compliance spending.`,
-      { x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 1.0, type: 'recommendation' }
+      { x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
     );
   } else {
     addDataUnavailableMessage(actsSlide, 'Energy legislation data not available');
@@ -5735,24 +5735,19 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       x: LEFT_MARGIN,
       y: 1.3,
       w: jpInsights.length > 0 ? 9.0 : CONTENT_WIDTH,
-      h: 4.7,
-      fontSize: 11,
+      h: 5.5,
+      fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: jpColWidths.length > 0 ? jpColWidths : [2.0, 1.5, 5.5],
       valign: 'top',
+      autoPage: true,
+      autoPageRepeatHeader: true,
     });
     // Add insights panel if we have insights
     if (jpInsights.length > 0) {
       addInsightsPanel(jpSlide, jpInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.4 });
     }
-    // Add competitive gap callout
-    addCalloutBox(
-      jpSlide,
-      `Your Gap: Where ${scope.clientContext || 'Your Company'} Can Win`,
-      `Industrial steam/efficiency segment has 0% Japanese share. Technical expertise match creates first-mover opportunity.`,
-      { x: LEFT_MARGIN, y: 6.2, w: CONTENT_WIDTH, h: 0.8, type: 'recommendation' }
-    );
   }
 
   // SLIDE 16: Local Major Players
@@ -5805,12 +5800,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       x: LEFT_MARGIN,
       y: 1.3,
       w: localInsights.length > 0 ? 9.0 : CONTENT_WIDTH,
-      h: 4.7,
-      fontSize: 10,
+      h: 5.5,
+      fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: localColWidths.length > 0 ? localColWidths : [1.8, 1.2, 1.2, 4.8],
       valign: 'top',
+      autoPage: true,
+      autoPageRepeatHeader: true,
     });
     // Add insights panel if we have insights
     if (localInsights.length > 0) {
@@ -5869,12 +5866,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       x: LEFT_MARGIN,
       y: 1.3,
       w: foreignInsights.length > 0 ? 9.0 : CONTENT_WIDTH,
-      h: 4.7,
-      fontSize: 11,
+      h: 5.5,
+      fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: foreignColWidths.length > 0 ? foreignColWidths : [1.8, 1.2, 1.2, 4.8],
       valign: 'top',
+      autoPage: true,
+      autoPageRepeatHeader: true,
     });
     // Add insights panel if we have insights
     if (foreignInsights.length > 0) {
