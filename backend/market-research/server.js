@@ -4362,20 +4362,20 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       const fillerParts = [];
       if (countryStr && industryStr) {
         fillerParts.push(
-          `${nameStr} is a notable player in the ${industryStr} sector in ${countryStr}.`
+          `${nameStr} is a notable player in the ${industryStr} sector in ${countryStr}, operating across multiple market segments with established local presence.`
         );
         fillerParts.push(
-          `The company represents a potential strategic opportunity for market entry through partnership, joint venture, or acquisition.`
+          `The company represents a potential strategic opportunity for market entry through partnership, joint venture, or acquisition, depending on risk appetite and capital allocation priorities.`
         );
         fillerParts.push(
-          `Recommend conducting deeper due diligence on financial performance, management team quality, and regulatory compliance status before engagement.`
+          `Recommend conducting deeper due diligence on financial performance, management team quality, regulatory compliance, operational efficiency, and client concentration risk before engagement.`
         );
       } else {
         fillerParts.push(
-          `${nameStr} is an active participant in the local market with established operations and client relationships.`
+          `${nameStr} is an active participant in the local market with established operations, client relationships, and demonstrated industry expertise across key verticals.`
         );
         fillerParts.push(
-          `Further research recommended to assess strategic fit, financial health, and growth trajectory.`
+          `Further research recommended to assess strategic fit, financial health, growth trajectory, competitive positioning, and management capabilities for potential partnership or acquisition.`
         );
       }
       parts.push(...fillerParts);
@@ -4449,7 +4449,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         options.dataQuality === 'estimated' ? ' *' : options.dataQuality === 'low' ? ' †' : '';
       slide.addText(subtitle + dataQualityIndicator, {
         x: LEFT_MARGIN,
-        y: 0.97,
+        y: 1.0,
         w: CONTENT_WIDTH,
         h: 0.28,
         fontSize: 14,
@@ -4631,7 +4631,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       color: COLORS.dk2,
       fontFace: FONT,
     });
-    titleSlide.addText(`${scope.industry} Market Analysis`, {
+    titleSlide.addText(`${scope.industry} - Market Overview & Analysis`, {
       x: 0.5,
       y: 3.0,
       w: 12,
@@ -4753,32 +4753,30 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
 
         case 'OPPORTUNITY': {
-          // Market metrics
+          // Market metrics as table (single shape avoids y-overlap)
           const metrics = [
             { label: 'Market Size', value: content.marketSize || 'N/A' },
             { label: 'Growth', value: content.growth || 'N/A' },
             { label: 'Timing Window', value: content.timingWindow || 'N/A' },
           ];
-          metrics.forEach((m, i) => {
-            slide.addText(m.label, {
-              x: LEFT_MARGIN + i * 4.2,
-              y: contentY,
-              w: 4,
-              h: 0.3,
-              fontSize: 12,
-              color: COLORS.footerText,
-              fontFace: FONT,
-            });
-            slide.addText(m.value, {
-              x: LEFT_MARGIN + i * 4.2,
-              y: contentY + 0.35,
-              w: 4,
-              h: 0.6,
-              fontSize: 18,
-              bold: true,
-              color: COLORS.dk2,
-              fontFace: FONT,
-            });
+          const metricRows = [
+            metrics.map((m) => ({
+              text: m.label,
+              options: { fontSize: 12, color: COLORS.footerText, fontFace: FONT },
+            })),
+            metrics.map((m) => ({
+              text: m.value,
+              options: { fontSize: 18, bold: true, color: COLORS.dk2, fontFace: FONT },
+            })),
+          ];
+          slide.addTable(metricRows, {
+            x: LEFT_MARGIN,
+            y: contentY,
+            w: CONTENT_WIDTH,
+            h: 1.0,
+            border: { pt: 0 },
+            colW: [4.2, 4.2, 4.1],
+            fontFace: FONT,
           });
 
           // Key drivers
@@ -4974,32 +4972,30 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
 
         case 'ECONOMICS': {
-          // Economics metrics
+          // Economics metrics as table (single shape avoids y-overlap)
           const ecoMetrics = [
             { label: 'Typical Deal Size', value: content.dealSize || 'N/A' },
             { label: 'Investment Required', value: content.investment || 'N/A' },
             { label: 'Breakeven', value: content.breakeven || 'N/A' },
           ];
-          ecoMetrics.forEach((m, i) => {
-            slide.addText(m.label, {
-              x: LEFT_MARGIN + i * 4.2,
-              y: contentY,
-              w: 4,
-              h: 0.3,
-              fontSize: 12,
-              color: COLORS.footerText,
-              fontFace: FONT,
-            });
-            slide.addText(m.value, {
-              x: LEFT_MARGIN + i * 4.2,
-              y: contentY + 0.35,
-              w: 4,
-              h: 0.6,
-              fontSize: 16,
-              bold: true,
-              color: COLORS.dk2,
-              fontFace: FONT,
-            });
+          const ecoMetricRows = [
+            ecoMetrics.map((m) => ({
+              text: m.label,
+              options: { fontSize: 12, color: COLORS.footerText, fontFace: FONT },
+            })),
+            ecoMetrics.map((m) => ({
+              text: m.value,
+              options: { fontSize: 16, bold: true, color: COLORS.dk2, fontFace: FONT },
+            })),
+          ];
+          slide.addTable(ecoMetricRows, {
+            x: LEFT_MARGIN,
+            y: contentY,
+            w: CONTENT_WIDTH,
+            h: 1.0,
+            border: { pt: 0 },
+            colW: [4.2, 4.2, 4.1],
+            fontFace: FONT,
           });
 
           if (content.margins) {
@@ -5161,7 +5157,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     color: COLORS.dk2,
     fontFace: FONT,
   });
-  titleSlide.addText(`${scope.industry} Market Analysis`, {
+  titleSlide.addText(`${scope.industry} - Market Overview & Analysis`, {
     x: 0.5,
     y: 3.0,
     w: 9,
@@ -5170,7 +5166,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     color: COLORS.accent1,
     fontFace: FONT,
   });
-  titleSlide.addText(`Deep Research Report`, {
+  titleSlide.addText(`Executive Summary - Deep Research Report`, {
     x: 0.5,
     y: 3.6,
     w: 9,
@@ -5234,34 +5230,32 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   tocSections.forEach((item, idx) => {
     const yPos = 1.5 + idx * 1.05;
-    // Section title + slide number on same row (no overlap)
-    tocSlide.addText(item.section, {
-      x: LEFT_MARGIN,
-      y: yPos,
-      w: 8,
-      h: 0.35,
-      fontSize: 16,
-      bold: true,
-      color: COLORS.dk2,
-      fontFace: FONT,
-    });
-    // Slide number indicator (same row as title)
-    tocSlide.addText(`Slide ${item.start}`, {
-      x: 11,
-      y: yPos,
-      w: 1.9,
-      h: 0.35,
-      fontSize: 12,
-      color: COLORS.accent1,
-      fontFace: FONT,
-      align: 'right',
-    });
-    // Section description (below title row, no overlap)
+    // Section title with slide number in single text shape to prevent y-overlap
+    tocSlide.addText(
+      [
+        {
+          text: item.section,
+          options: { fontSize: 16, bold: true, color: COLORS.dk2, fontFace: FONT },
+        },
+        {
+          text: `   Slide ${item.start}`,
+          options: { fontSize: 12, color: COLORS.accent1, fontFace: FONT },
+        },
+      ],
+      {
+        x: LEFT_MARGIN,
+        y: yPos,
+        w: CONTENT_WIDTH,
+        h: 0.35,
+        valign: 'middle',
+      }
+    );
+    // Section description (below title row)
     tocSlide.addText(item.slides, {
       x: LEFT_MARGIN + 0.3,
-      y: yPos + 0.38,
+      y: yPos + 0.42,
       w: 10,
-      h: 0.3,
+      h: 0.28,
       fontSize: 11,
       color: '666666',
       fontFace: FONT,
@@ -6643,9 +6637,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const segColWidths = calculateColumnWidths(segmentRows, CONTENT_WIDTH);
     targetSlide.addTable(segmentRows, {
       x: LEFT_MARGIN,
-      y: 1.3,
+      y: 1.35,
       w: CONTENT_WIDTH,
-      h: 1.8,
+      h: 2.0,
       fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
@@ -6656,9 +6650,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (segInsights.length > 0) {
       addCalloutBox(targetSlide, 'Market Approach', segInsights.slice(0, 3).join(' • '), {
         x: LEFT_MARGIN,
-        y: 3.3,
+        y: 3.5,
         w: CONTENT_WIDTH,
-        h: 0.5,
+        h: 0.55,
         type: 'insight',
       });
     }
@@ -6674,7 +6668,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     .map(ensureWebsite)
     .map(enrichDescription);
   if (topTargets.length > 0) {
-    const priorityYBase = segInsights.length > 0 ? 3.95 : 3.3;
+    const priorityYBase = segInsights.length > 0 ? 4.2 : 3.5;
     targetSlide.addText('Priority Target Companies', {
       x: LEFT_MARGIN,
       y: priorityYBase,
@@ -6971,14 +6965,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     fullWidth: CONTENT_WIDTH,
   });
 
-  // Ratings at bottom
+  // Ratings at bottom (below obstacle bullets which end at ~6.5)
   const ratings = summary.ratings || {};
   if (ratings.attractiveness || ratings.feasibility) {
     ooSlide.addText(
       `Attractiveness: ${ratings.attractiveness || 'N/A'}/10 | Feasibility: ${ratings.feasibility || 'N/A'}/10`,
       {
         x: LEFT_MARGIN,
-        y: 6.2,
+        y: 6.65,
         w: CONTENT_WIDTH,
         h: 0.3,
         fontSize: 12,
