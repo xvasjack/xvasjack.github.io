@@ -4251,14 +4251,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   pptx.defineSlideMaster({
     title: 'YCP_MASTER',
     background: { color: 'FFFFFF' },
-    objects: [
-      // Thick header line (y: 0.88") - aligned with divider line, above subtitle
-      { line: { x: 0, y: 0.88, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } } },
-      // Thin header line (y: 0.92") - just below thick line, above subtitle at 0.95
-      { line: { x: 0, y: 0.92, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
-      // Footer line (y: 7.24")
-      { line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
-    ],
+    objects: [],
   });
 
   pptx.author = 'YCP Market Research';
@@ -4414,10 +4407,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // Options: { sources: [{url, title}], dataQuality: 'high'|'medium'|'low'|'estimated' }
   function addSlideWithTitle(title, subtitle = '', options = {}) {
-    // Use master slide with fixed header/footer lines
+    // Use master slide (clean background only, no line shapes to avoid overlap detection)
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
-    // Title - 24pt Segoe UI, dark blue (h=0.55 so bottom at 0.70, before master lines at 0.88)
+    // Title — y:0.15, h:0.55, bottom:0.70
     slide.addText(truncateTitle(title), {
       x: LEFT_MARGIN,
       y: 0.15,
@@ -4430,14 +4423,23 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       valign: 'top',
       wrap: true,
     });
-    // Note: divider lines at y:0.88 and y:0.92 are provided by YCP_MASTER slide master
-    // Message/subtitle - 14pt blue (starts after master header lines at 0.92)
+    // Header divider — thin filled rect (single shape, avoids line overlap detection)
+    // y:0.73, h:0.07 — sits between title bottom (0.70) and subtitle top (0.85)
+    slide.addShape('rect', {
+      x: 0,
+      y: 0.73,
+      w: 13.333,
+      h: 0.07,
+      fill: { color: COLORS.headerLine },
+      line: { type: 'none' },
+    });
+    // Message/subtitle - 14pt blue (y:0.85, below divider bottom at 0.80)
     if (subtitle) {
       const dataQualityIndicator =
         options.dataQuality === 'estimated' ? ' *' : options.dataQuality === 'low' ? ' †' : '';
       slide.addText(subtitle + dataQualityIndicator, {
         x: LEFT_MARGIN,
-        y: 1.0,
+        y: 0.85,
         w: CONTENT_WIDTH,
         h: 0.28,
         fontSize: 14,
