@@ -696,6 +696,13 @@ class FeedbackLoop:
 
         logger.info(f"Polling health endpoint: {health_url}")
 
+        # Railway deploy sequence: old container serves 200 → old killed → new starts → new serves 200
+        # A single 200 might hit the OLD container. We need to:
+        # 1. Wait for initial 200 (may be old or new container)
+        # 2. Wait 30s for Railway to kill old container and start new one
+        # 3. Confirm 200 again (must be new container now)
+        SETTLE_WAIT = 30  # seconds between first and second health check
+
         attempts = 0
         while time.time() - start < timeout:
             attempts += 1
@@ -710,8 +717,24 @@ class FeedbackLoop:
                 http_code = stdout.decode().strip() if stdout else ""
 
                 if proc.returncode == 0 and http_code.startswith("2"):
-                    logger.info(f"Health check passed: HTTP {http_code}")
-                    return True
+                    logger.info(f"Health check passed: HTTP {http_code} — waiting {SETTLE_WAIT}s for deploy to settle...")
+                    await asyncio.sleep(SETTLE_WAIT)
+
+                    # Second health check to confirm new container is serving
+                    proc2 = await asyncio.create_subprocess_exec(
+                        "curl", "-sS", "--max-time", "10", "-o", "/dev/null", "-w", "%{http_code}", health_url,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                    )
+                    stdout2, stderr2 = await proc2.communicate()
+                    http_code2 = stdout2.decode().strip() if stdout2 else ""
+
+                    if proc2.returncode == 0 and http_code2.startswith("2"):
+                        logger.info(f"Health check confirmed after settle: HTTP {http_code2} — deploy fully ready")
+                        return True
+                    else:
+                        # Old container was killed during settle wait — new one not ready yet, keep polling
+                        logger.warning(f"Health check failed after settle wait: HTTP {http_code2} — container likely restarting")
                 else:
                     logger.warning(f"Health check: HTTP {http_code}, stderr={stderr.decode()[:200] if stderr else ''}")
 
