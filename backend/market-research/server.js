@@ -3411,6 +3411,19 @@ function isValidCompany(item) {
     /^(total|final)\s+energy/i,
     /slide\s*\d/i,
     /table\s+of\s+contents/i,
+    /energy\s+services?,?\s*(oil|gas)/i, // "energy services, oil and gas" is a sector, not a company
+    /oil\s+and\s+gas\s+market/i,
+    /^(key|main|top|major|primary)\s+(players?|companies|competitors|findings|trends)/i,
+    /market\s+(research|report|analysis|assessment|study)/i,
+    /^(national|foreign|local|japanese)\s+(energy|policy|investment|players?)/i,
+    /^(implementation|execution|roadmap|timeline|action)\s*(plan|steps?)?$/i,
+    /^(demand|supply|pricing|infrastructure|capacity)\s+(analysis|overview|trends?)/i,
+    /^(target|customer|client)\s+(segments?|list|companies)/i,
+    /\b(M&A|merger|acquisition)\s+(activity|targets?|landscape)/i,
+    /^why\s+now\b/i,
+    /^go[\s/]no[\s-]go\b/i,
+    /^ESCO\s+(market|economics|deal)/i,
+    /^(gas|lng|electricity|power)\s+(market|supply|demand)/i,
   ];
   for (const pattern of invalidPatterns) {
     if (pattern.test(name)) return false;
@@ -3423,6 +3436,12 @@ function isValidCompany(item) {
     name.length > 30
   )
     return false;
+  // Reject names that are mostly lowercase words with no proper nouns (likely descriptions)
+  const words = name.split(/\s+/);
+  if (words.length > 4) {
+    const capitalizedWords = words.filter((w) => /^[A-Z]/.test(w));
+    if (capitalizedWords.length < words.length * 0.3 && name.length > 40) return false;
+  }
   return true;
 }
 
@@ -3557,7 +3576,7 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
   }
 }
 
-// Helper: add callout/insight box to slide
+// Helper: add callout/insight box to slide (single shape to avoid overlap detection)
 // Uses widescreen dimensions (13.333" x 7.5" = 16:9)
 function addCalloutBox(slide, title, content, options = {}) {
   const boxX = options.x || 0.4; // LEFT_MARGIN for widescreen
@@ -3577,51 +3596,29 @@ function addCalloutBox(slide, title, content, options = {}) {
   };
   const colors = typeColors[boxType] || typeColors.insight;
 
-  // Box background with border
-  slide.addShape('rect', {
-    x: boxX,
-    y: boxY,
-    w: boxW,
-    h: boxH,
-    fill: { color: colors.fill },
-    line: { color: colors.border, pt: 1.5 },
-  });
-
-  // Title (if provided)
+  // Use single addText shape with fill+border to avoid shape overlap
+  const textParts = [];
   if (title) {
-    slide.addText(title, {
-      x: boxX + 0.1,
-      y: boxY + 0.05,
-      w: boxW - 0.2,
-      h: 0.25,
-      fontSize: 10,
-      bold: true,
-      color: colors.titleColor,
-      fontFace: FONT,
+    textParts.push({
+      text: title + '\n',
+      options: { fontSize: 10, bold: true, color: colors.titleColor, fontFace: FONT },
     });
-    // Content below title
-    if (content) {
-      slide.addText(truncate(content, 200), {
-        x: boxX + 0.1,
-        y: boxY + 0.35,
-        w: boxW - 0.2,
-        h: boxH - 0.45,
-        fontSize: 10,
-        color: '000000',
-        fontFace: FONT,
-        valign: 'top',
-      });
-    }
-  } else if (content) {
-    // Just content, no title
-    slide.addText(truncate(content, 200), {
-      x: boxX + 0.1,
-      y: boxY + 0.1,
-      w: boxW - 0.2,
-      h: boxH - 0.2,
-      fontSize: 10,
-      color: '000000',
-      fontFace: FONT,
+  }
+  if (content) {
+    textParts.push({
+      text: truncate(content, 200),
+      options: { fontSize: 10, color: '000000', fontFace: FONT },
+    });
+  }
+  if (textParts.length > 0) {
+    slide.addText(textParts, {
+      x: boxX,
+      y: boxY,
+      w: boxW,
+      h: boxH,
+      fill: { color: colors.fill },
+      line: { color: colors.border, pt: 1.5 },
+      margin: [5, 8, 5, 8],
       valign: 'top',
     });
   }
@@ -3693,23 +3690,14 @@ function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, opt
     white: 'FFFFFF',
   };
 
-  // Use master slide if defined, otherwise create plain slide
-  const slide = options.masterName
-    ? pptx.addSlide({ masterName: options.masterName })
-    : pptx.addSlide();
+  // Use plain slide (not master) for section dividers to avoid master line overlaps
+  const slide = pptx.addSlide();
 
-  // Dark navy background for section divider
-  slide.addShape('rect', {
-    x: 0,
-    y: 0,
-    w: 13.333,
-    h: 7.5,
-    fill: { color: COLORS.accent3 || '011AB7' },
-  });
-
-  // Section number (small, top left)
-  if (sectionNumber && totalSections) {
-    slide.addText(`Section ${sectionNumber} of ${totalSections}`, {
+  // Section number (small, top left) — use background fill on text instead of separate rect
+  const sectionLabel =
+    sectionNumber && totalSections ? `Section ${sectionNumber} of ${totalSections}` : '';
+  if (sectionLabel) {
+    slide.addText(sectionLabel, {
       x: 0.5,
       y: 0.5,
       w: 3,
@@ -3744,10 +3732,14 @@ function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, opt
     line: { color: 'FFFFFF', width: 3 },
   });
 
+  // Set slide background color instead of rect shape to avoid overlaps
+  slide.background = { color: COLORS.accent3 || '011AB7' };
+
   return slide;
 }
 
 // Helper: create Opportunities & Obstacles summary slide (two-column layout)
+// Uses single shapes per section to avoid overlap detection between rect+text
 function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles = [], options = {}) {
   const FONT = 'Segoe UI';
   const LEFT_MARGIN = options.x || 0.4;
@@ -3761,24 +3753,19 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
     lightOrange: 'FFF3E0',
   };
 
-  // Opportunities section (top)
-  slide.addShape('rect', {
+  // Opportunities header (single text shape with fill)
+  slide.addText('Opportunities', {
     x: LEFT_MARGIN,
     y: contentY,
     w: fullWidth,
-    h: 0.4,
-    fill: { color: COLORS.green },
-  });
-  slide.addText('Opportunities', {
-    x: LEFT_MARGIN + 0.1,
-    y: contentY,
-    w: fullWidth - 0.2,
     h: 0.4,
     fontSize: 13,
     bold: true,
     color: COLORS.white,
     fontFace: FONT,
     valign: 'middle',
+    margin: [0, 8, 0, 8],
+    fill: { color: COLORS.green },
   });
 
   const oppBullets = (opportunities || []).slice(0, 4).map((opp) => ({
@@ -3804,25 +3791,20 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
     });
   }
 
-  // Obstacles section (below opportunities)
+  // Obstacles header (single text shape with fill)
   const obsY = contentY + 2.65;
-  slide.addShape('rect', {
+  slide.addText('Obstacles & Risks', {
     x: LEFT_MARGIN,
     y: obsY,
     w: fullWidth,
-    h: 0.4,
-    fill: { color: COLORS.orange },
-  });
-  slide.addText('Obstacles & Risks', {
-    x: LEFT_MARGIN + 0.1,
-    y: obsY,
-    w: fullWidth - 0.2,
     h: 0.4,
     fontSize: 13,
     bold: true,
     color: COLORS.white,
     fontFace: FONT,
     valign: 'middle',
+    margin: [0, 8, 0, 8],
+    fill: { color: COLORS.orange },
   });
 
   const obsBullets = (obstacles || []).slice(0, 4).map((obs) => ({
@@ -4458,7 +4440,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       });
     }
 
-    // Add data quality indicator if applicable
+    // Add data quality indicator if applicable (y must stay above footer line at 7.24)
     const hasDataQuality = options.dataQuality === 'estimated' || options.dataQuality === 'low';
     if (hasDataQuality) {
       const legend =
@@ -4467,9 +4449,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           : '† Limited data availability';
       slide.addText(legend, {
         x: LEFT_MARGIN,
-        y: 7.05,
+        y: 6.85,
         w: 4,
-        h: 0.2,
+        h: 0.18,
         fontSize: 8,
         italic: true,
         color: 'E46C0A',
@@ -4525,13 +4507,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
       });
 
-      // Place source citations on separate row from data quality to avoid overlap
-      const sourceY = hasDataQuality ? 6.85 : 7.05;
+      // Place source citations same row as data quality (6.85) or standalone row
+      // Must stay above footer line at y=7.24
+      const sourceY = 6.85;
       slide.addText(sourceElements, {
         x: LEFT_MARGIN + 4.5,
         y: sourceY,
         w: CONTENT_WIDTH - 4.5,
-        h: 0.2,
+        h: 0.18,
         valign: 'top',
         align: 'right',
       });
@@ -4674,40 +4657,34 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
       switch (slideData.type) {
         case 'VERDICT': {
-          // Verdict box
+          // Verdict box — single text shape with fill to avoid rect+text overlap
           const verdictColor =
             content.decision === 'GO'
               ? COLORS.green
               : content.decision === 'NO_GO'
                 ? COLORS.red
                 : COLORS.orange;
-          slide.addShape('rect', {
-            x: LEFT_MARGIN,
-            y: contentY,
-            w: CONTENT_WIDTH,
-            h: 1.2,
-            fill: { color: verdictColor },
-            line: { color: verdictColor, pt: 0 },
-          });
-          slide.addText(`VERDICT: ${content.decision?.replace('_', ' ') || 'CONDITIONAL GO'}`, {
-            x: LEFT_MARGIN + 0.2,
-            y: contentY + 0.1,
-            w: CONTENT_WIDTH - 0.4,
-            h: 0.5,
-            fontSize: 24,
-            bold: true,
-            color: COLORS.white,
-            fontFace: FONT,
-          });
-          slide.addText(content.oneLiner || '', {
-            x: LEFT_MARGIN + 0.2,
-            y: contentY + 0.6,
-            w: CONTENT_WIDTH - 0.4,
-            h: 0.5,
-            fontSize: 14,
-            color: COLORS.white,
-            fontFace: FONT,
-          });
+          slide.addText(
+            [
+              {
+                text: `VERDICT: ${content.decision?.replace('_', ' ') || 'CONDITIONAL GO'}\n`,
+                options: { fontSize: 24, bold: true, color: COLORS.white, fontFace: FONT },
+              },
+              {
+                text: content.oneLiner || '',
+                options: { fontSize: 14, color: COLORS.white, fontFace: FONT },
+              },
+            ],
+            {
+              x: LEFT_MARGIN,
+              y: contentY,
+              w: CONTENT_WIDTH,
+              h: 1.2,
+              fill: { color: verdictColor },
+              margin: [8, 16, 8, 16],
+              valign: 'middle',
+            }
+          );
 
           // Conditions
           if (content.conditions && content.conditions.length > 0) {
@@ -6626,10 +6603,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     ];
     segmentsList.forEach((s) => {
       segmentRows.push([
-        { text: s.name || '' },
-        { text: truncate(s.size || '', 25) },
-        { text: s.energyIntensity || '' },
-        { text: truncate(s.decisionMaker || '', 20) },
+        { text: truncate(s.name || '', 25) },
+        { text: truncate(s.size || '', 20) },
+        { text: truncate(s.energyIntensity || '', 15) },
+        { text: truncate(s.decisionMaker || '', 18) },
         { text: s.priority ? `${s.priority}/5` : '' },
       ]);
     });
@@ -6682,22 +6659,27 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const targetCompRows = [tableHeader(['Company', 'Industry', 'Energy Spend', 'Location'])];
     topTargets.forEach((t) => {
       const nameCell = t.website
-        ? { text: t.company || '', options: { hyperlink: { url: t.website }, color: '0066CC' } }
-        : { text: t.company || '' };
+        ? {
+            text: truncate(t.company || '', 30),
+            options: { hyperlink: { url: t.website }, color: '0066CC' },
+          }
+        : { text: truncate(t.company || '', 30) };
       targetCompRows.push([
         nameCell,
-        { text: t.industry || '' },
-        { text: t.energySpend || '' },
-        { text: t.location || '' },
+        { text: truncate(t.industry || '', 20) },
+        { text: truncate(t.energySpend || '', 20) },
+        { text: truncate(t.location || '', 20) },
       ]);
     });
     // Use dynamic column widths
     const targetColWidths = calculateColumnWidths(targetCompRows, CONTENT_WIDTH);
+    // Calculate available height: from priorityYBase+0.3 to max 6.65 (above footer area)
+    const targetTableH = Math.min(1.5, 6.65 - (priorityYBase + 0.3));
     targetSlide.addTable(targetCompRows, {
       x: LEFT_MARGIN,
       y: priorityYBase + 0.3,
       w: CONTENT_WIDTH,
-      h: 1.1,
+      h: targetTableH,
       fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
