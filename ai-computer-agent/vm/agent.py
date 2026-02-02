@@ -228,23 +228,28 @@ async def _run_claude_subprocess(config, prompt: str) -> str:
     # B1 fix: Use get_subprocess_cwd to avoid WinError 267
     win_cwd, wsl_cwd = get_subprocess_cwd(claude_path)
 
+    # Pipe prompt via stdin to avoid --allowedTools variadic flag consuming it
     cmd = build_claude_cmd(
         claude_path,
         "--print", "--model", CLAUDE_MODEL,
         "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash",
-        prompt,  # positional arg MUST be last
+        "-",  # read prompt from stdin
         wsl_cwd=wsl_cwd,
     )
 
     subprocess_timeout = TIMEOUTS.get("subprocess", 600)
+    env = os.environ.copy()
+    env["NODE_OPTIONS"] = "--max-old-space-size=4096"
     proc = await asyncio.create_subprocess_exec(
         *cmd,
+        stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         cwd=win_cwd,
+        env=env,
     )
     try:
-        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=subprocess_timeout)
+        stdout, stderr = await asyncio.wait_for(proc.communicate(input=prompt.encode()), timeout=subprocess_timeout)
         if stderr:
             stderr_text = stderr.decode().strip()
             if stderr_text:
