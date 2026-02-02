@@ -436,7 +436,7 @@ async def download_attachment_api(
 async def wait_for_email_api(
     query: str,
     download_dir: str,
-    timeout_minutes: int = 15,
+    timeout_minutes: int = 65,
     poll_interval: int = 30,
     skip_email_ids: Optional[set] = None,
     after_epoch: Optional[int] = None,

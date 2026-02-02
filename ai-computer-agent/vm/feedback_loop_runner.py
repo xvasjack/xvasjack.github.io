@@ -139,7 +139,7 @@ async def submit_form_callback(
 
 async def wait_for_email_callback(
     service_name: str,
-    timeout_minutes: int = 15,
+    timeout_minutes: int = 65,
     skip_email_ids: set = None,
     after_epoch: int = None,
 ) -> Dict[str, Any]:
