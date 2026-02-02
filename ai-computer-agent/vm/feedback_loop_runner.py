@@ -57,15 +57,15 @@ FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://xvasjack.github.io")
 
 # S2: Map service names to email subject search hints (backend emails use human-readable subjects)
 SERVICE_EMAIL_SUBJECTS = {
-    "target-v3": "target search",
-    "target-v4": "target search",
-    "target-v5": "target search",
-    "target-v6": "target search",
-    "market-research": "market research",
-    "profile-slides": "profile slide",
-    "trading-comparable": "trading comp",
-    "validation": "validation result",
-    "due-diligence": "due diligence",
+    "target-v3": "[V3]",
+    "target-v4": "[V4]",
+    "target-v5": "[V5]",
+    "target-v6": "[V6]",
+    "market-research": "Market Research:",
+    "profile-slides": "Profile Slides:",
+    "trading-comparable": "Trading Comps:",
+    "validation": "Speeda List Validation:",
+    "due-diligence": "DD Report:",
     "utb": "utb",
 }
 
@@ -156,7 +156,7 @@ async def wait_for_email_callback(
         try:
             subject_hint = SERVICE_EMAIL_SUBJECTS.get(service_name, service_name)
             # Filter to recent emails only to avoid grabbing old results
-            query = f"subject:({subject_hint}) has:attachment newer_than:1h"
+            query = f"subject:({subject_hint}) has:attachment"
             result = await wait_for_email_api(
                 query=query,
                 download_dir=download_dir,
