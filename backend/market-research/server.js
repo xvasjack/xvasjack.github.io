@@ -5209,13 +5209,27 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     x: LEFT_MARGIN,
     y: 0.15,
     w: CONTENT_WIDTH,
-    h: 0.55,
+    h: 0.6,
     fontSize: 24,
     bold: true,
     color: COLORS.dk2,
     fontFace: FONT,
   });
-  // Note: divider lines provided by YCP_MASTER at y:0.88 and y:0.92
+  // Header lines
+  tocSlide.addShape('line', {
+    x: 0,
+    y: 0.78,
+    w: 13.333,
+    h: 0,
+    line: { color: COLORS.headerLine, width: 4.5 },
+  });
+  tocSlide.addShape('line', {
+    x: 0,
+    y: 0.82,
+    w: 13.333,
+    h: 0,
+    line: { color: COLORS.headerLine, width: 2.25 },
+  });
 
   // TOC sections with slide numbers
   const tocSections = [
