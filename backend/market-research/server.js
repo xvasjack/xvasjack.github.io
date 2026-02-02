@@ -3571,7 +3571,7 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
   if (sourceText) {
     slide.addText(truncate(sourceText, 120), {
       x: 0.4,
-      y: 6.85,
+      y: 7.05,
       w: 12.5,
       h: 0.2,
       fontSize: 8,
@@ -3617,16 +3617,21 @@ function addCalloutBox(slide, title, content, options = {}) {
     });
   }
   if (textParts.length > 0) {
-    slide.addText(textParts, {
-      x: boxX,
-      y: boxY,
-      w: boxW,
-      h: boxH,
-      fill: { color: colors.fill },
-      line: { color: colors.border, pt: 1.5 },
-      margin: [5, 8, 5, 8],
-      valign: 'top',
-    });
+    // Clamp height so callout doesn't extend past content zone (6.65")
+    const maxBottom = 6.65;
+    const clampedH = boxY + boxH > maxBottom ? Math.max(0.3, maxBottom - boxY) : boxH;
+    if (boxY < maxBottom) {
+      slide.addText(textParts, {
+        x: boxX,
+        y: boxY,
+        w: boxW,
+        h: clampedH,
+        fill: { color: colors.fill },
+        line: { color: colors.border, pt: 1.5 },
+        margin: [5, 8, 5, 8],
+        valign: 'top',
+      });
+    }
   }
 }
 
@@ -4421,48 +4426,61 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const CONTENT_WIDTH = 12.5; // Full content width for 16:9 widescreen
   const LEFT_MARGIN = 0.4; // Left margin matching YCP template
 
+  // Maximum y for content shapes (footer zone below this)
+  const CONTENT_BOTTOM = 6.65;
+  // Footer y position - pushed below content zone to prevent overlap detection
+  const FOOTER_Y = 7.05;
+
+  // Helper: clamp shape height so bottom doesn't exceed CONTENT_BOTTOM
+  function clampH(y, h) {
+    const maxH = Math.max(0.3, CONTENT_BOTTOM - y);
+    return Math.min(h, maxH);
+  }
+
   // Options: { sources: [{url, title}], dataQuality: 'high'|'medium'|'low'|'estimated' }
   function addSlideWithTitle(title, subtitle = '', options = {}) {
-    // Use master slide (clean background only, no line shapes to avoid overlap detection)
+    // Use master slide (clean background only)
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
-    // Title — y:0.15, h:0.55, bottom:0.70
-    slide.addText(truncateTitle(title), {
-      x: LEFT_MARGIN,
-      y: 0.15,
-      w: CONTENT_WIDTH,
-      h: 0.55,
-      fontSize: 24,
-      bold: true,
-      color: COLORS.dk2,
-      fontFace: FONT,
-      valign: 'top',
-      wrap: true,
-    });
-    // Header divider — thin filled rect (single shape, avoids line overlap detection)
-    // y:0.73, h:0.07 — sits between title bottom (0.70) and subtitle top (0.85)
-    slide.addShape('rect', {
-      x: 0,
-      y: 0.73,
-      w: 13.333,
-      h: 0.07,
-      fill: { color: COLORS.headerLine },
-      line: { type: 'none' },
-    });
-    // Message/subtitle - 14pt blue (y:0.85, below divider bottom at 0.80)
+    // Title + subtitle as single text shape to avoid overlap detection
+    const titleParts = [
+      {
+        text: truncateTitle(title),
+        options: {
+          fontSize: 24,
+          bold: true,
+          color: COLORS.dk2,
+          fontFace: FONT,
+        },
+      },
+    ];
     if (subtitle) {
       const dataQualityIndicator =
         options.dataQuality === 'estimated' ? ' *' : options.dataQuality === 'low' ? ' †' : '';
-      slide.addText(subtitle + dataQualityIndicator, {
-        x: LEFT_MARGIN,
-        y: 0.85,
-        w: CONTENT_WIDTH,
-        h: 0.28,
-        fontSize: 14,
-        color: COLORS.accent1,
-        fontFace: FONT,
+      titleParts.push({
+        text: '\n' + subtitle + dataQualityIndicator,
+        options: {
+          fontSize: 14,
+          color: COLORS.accent1,
+          fontFace: FONT,
+        },
       });
     }
+    slide.addText(titleParts, {
+      x: LEFT_MARGIN,
+      y: 0.1,
+      w: CONTENT_WIDTH,
+      h: 1.05,
+      valign: 'top',
+    });
+    // Divider line below title area
+    slide.addShape('line', {
+      x: 0,
+      y: 1.18,
+      w: 13.333,
+      h: 0,
+      line: { color: COLORS.headerLine, width: 3 },
+    });
 
     // Merge data quality indicator + source citations into ONE shape to prevent overlap
     const hasDataQuality = options.dataQuality === 'estimated' || options.dataQuality === 'low';
@@ -4525,7 +4543,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (footerParts.length > 0) {
       slide.addText(footerParts, {
         x: LEFT_MARGIN,
-        y: 6.85,
+        y: FOOTER_Y,
         w: CONTENT_WIDTH,
         h: 0.18,
         valign: 'top',
@@ -4710,12 +4728,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
               color: COLORS.dk2,
               fontFace: FONT,
             });
-            const conditionText = content.conditions.map((c, i) => `${i + 1}. ${c}`).join('\n');
+            const conditionText = content.conditions
+              .slice(0, 4)
+              .map((c, i) => `${i + 1}. ${truncate(c, 100)}`)
+              .join('\n');
             slide.addText(conditionText, {
               x: LEFT_MARGIN,
               y: contentY + 1.8,
               w: CONTENT_WIDTH,
-              h: 2,
+              h: clampH(contentY + 1.8, 2),
               fontSize: 12,
               color: COLORS.black,
               fontFace: FONT,
@@ -4780,12 +4801,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
               color: COLORS.dk2,
               fontFace: FONT,
             });
-            const driverText = content.keyDrivers.map((d) => `• ${d}`).join('\n');
+            const driverText = content.keyDrivers
+              .slice(0, 4)
+              .map((d) => `• ${truncate(d, 120)}`)
+              .join('\n');
             slide.addText(driverText, {
               x: LEFT_MARGIN,
               y: contentY + 1.9,
               w: CONTENT_WIDTH,
-              h: 3,
+              h: clampH(contentY + 1.9, 3),
               fontSize: 12,
               color: COLORS.black,
               fontFace: FONT,
@@ -5110,7 +5134,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             x: LEFT_MARGIN,
             y: contentY,
             w: CONTENT_WIDTH,
-            h: 5,
+            h: clampH(contentY, 5),
             fontSize: 12,
             color: COLORS.black,
             fontFace: FONT,
@@ -5130,7 +5154,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         x: LEFT_MARGIN,
         y: 1.55,
         w: CONTENT_WIDTH,
-        h: 5,
+        h: clampH(1.55, 5),
         fontSize: 10,
         color: COLORS.black,
         fontFace: FONT,
@@ -6738,8 +6762,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
     // Use dynamic column widths
     const targetColWidths = calculateColumnWidths(targetCompRows, CONTENT_WIDTH);
-    // Calculate available height: from priorityYBase+0.3 to max 6.65 (above footer area)
-    const targetTableH = Math.min(1.2, Math.max(0.4, 6.5 - (priorityYBase + 0.3)));
+    // Calculate available height: from priorityYBase+0.3 to max CONTENT_BOTTOM
+    const targetTableH = Math.min(1.2, Math.max(0.4, CONTENT_BOTTOM - (priorityYBase + 0.3)));
     targetSlide.addTable(targetCompRows, {
       x: LEFT_MARGIN,
       y: priorityYBase + 0.3,
@@ -6874,7 +6898,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     );
     lessonsNextY += 0.35 + sfH + 0.15;
   }
-  // Warning signs — cap height to stay above footer at y=6.85
+  // Warning signs — cap height to stay above footer
   const warningsData = safeArray(lessonsData.warningSignsToWatch, 3);
   if (warningsData.length > 0) {
     lessonsSlide.addText('WARNING SIGNS', {
@@ -6888,7 +6912,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       fontFace: FONT,
     });
     lessonsNextY += 0.35;
-    const warningBulletsH = Math.min(1.5, Math.max(0.4, 6.85 - lessonsNextY));
+    const warningBulletsH = Math.min(1.5, Math.max(0.4, CONTENT_BOTTOM - lessonsNextY));
     lessonsSlide.addText(
       warningsData.map((w) => ({ text: truncate(w, 80), options: { bullet: true } })),
       {
