@@ -6830,7 +6830,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       }
     );
   }
-  // Warning signs
+  // Warning signs — cap height to stay above footer line at y=7.24
   const warningsData = safeArray(lessonsData.warningSignsToWatch, 3);
   const warningsBaseY = successFactors.length > 0 ? lessonsBaseY + 1.5 : lessonsBaseY;
   if (warningsData.length > 0) {
@@ -6844,13 +6844,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       color: COLORS.orange,
       fontFace: FONT,
     });
+    const warningBulletsH = Math.min(1.5, 6.85 - (warningsBaseY + 0.35));
     lessonsSlide.addText(
       warningsData.map((w) => ({ text: truncate(w, 80), options: { bullet: true } })),
       {
         x: LEFT_MARGIN,
         y: warningsBaseY + 0.35,
         w: CONTENT_WIDTH,
-        h: 1.5,
+        h: Math.max(0.4, warningBulletsH),
         fontSize: 10,
         fontFace: FONT,
         color: COLORS.black,
