@@ -333,21 +333,9 @@ def extract_company_from_slide(slide, slide_number: int) -> Optional[CompanyInfo
     if _re.match(r'^section\s+\d+', company_name.lower()):
         return None
     # Skip "Country - Topic" section headers (e.g. "Vietnam - Foreign Investment Rules")
-    # These have a dash/em-dash separator and topic keywords that aren't company names
-    topic_keywords = [
-        "energy", "investment", "legislation", "regulation", "policy", "target",
-        "capex", "pipeline", "digital", "technology", "infrastructure", "gas",
-        "oil", "adoption", "decarbonization", "forecast", "supply", "demand",
-        "import", "export", "production", "consumption", "transition", "strategy",
-        "framework", "reform", "incentive", "subsidy", "tariff", "pricing",
-        "utilization", "exploration", "refining", "petrochemical", "renewable",
-        "upstream", "downstream", "midstream", "offshore", "onshore", "project",
-        "national", "foreign", "domestic", "rules", "standards", "compliance",
-    ]
-    if _re.match(r'^[A-Z][a-zA-Z\s]+\s*[-–—]\s*', company_name):
-        name_lower = company_name.lower()
-        if any(kw in name_lower for kw in topic_keywords):
-            return None
+    # Any "Word(s) - Phrase" where left side is 1-3 words is likely a section header, not a company
+    if _re.match(r'^[A-Z][a-zA-Z\s]{1,30}\s*[-–—]\s*\S', company_name):
+        return None
     if any(p in company_name.lower() for p in skip_patterns):
         return None
 
