@@ -3665,7 +3665,7 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
   const FONT = 'Segoe UI';
   const LEFT_MARGIN = options.x || 0.4;
   const contentY = options.y || 1.4;
-  const colWidth = options.colWidth || 6;
+  const fullWidth = options.fullWidth || 12.5;
   const COLORS = {
     green: '2E7D32',
     orange: 'E46C0A',
@@ -3674,93 +3674,88 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
     lightOrange: 'FFF3E0',
   };
 
-  // Opportunities column (left)
-  // Header with green background
+  // Opportunities section (top)
   slide.addShape('rect', {
     x: LEFT_MARGIN,
     y: contentY,
-    w: colWidth,
-    h: 0.5,
+    w: fullWidth,
+    h: 0.4,
     fill: { color: COLORS.green },
   });
   slide.addText('Opportunities', {
     x: LEFT_MARGIN + 0.1,
     y: contentY,
-    w: colWidth - 0.2,
-    h: 0.5,
-    fontSize: 14,
+    w: fullWidth - 0.2,
+    h: 0.4,
+    fontSize: 13,
     bold: true,
     color: COLORS.white,
     fontFace: FONT,
     valign: 'middle',
   });
 
-  // Opportunities list
-  const oppBullets = (opportunities || []).slice(0, 5).map((opp) => ({
-    text: truncate(String(opp), 120),
+  const oppBullets = (opportunities || []).slice(0, 4).map((opp) => ({
+    text: truncate(String(opp), 150),
     options: {
-      fontSize: 11,
+      fontSize: 10,
       color: '333333',
       fontFace: FONT,
-      bullet: { type: 'bullet', code: '2714', color: COLORS.green }, // Checkmark
-      paraSpaceBefore: 8,
-      paraSpaceAfter: 4,
+      bullet: { type: 'bullet', code: '2714', color: COLORS.green },
+      paraSpaceBefore: 6,
+      paraSpaceAfter: 3,
     },
   }));
 
   if (oppBullets.length > 0) {
     slide.addText(oppBullets, {
       x: LEFT_MARGIN,
-      y: contentY + 0.6,
-      w: colWidth,
-      h: 3.5,
+      y: contentY + 0.5,
+      w: fullWidth,
+      h: 2.0,
       valign: 'top',
       fill: { color: COLORS.lightGreen },
     });
   }
 
-  // Obstacles column (right)
-  const rightColX = LEFT_MARGIN + colWidth + 0.3;
-
-  // Header with orange background
+  // Obstacles section (below opportunities)
+  const obsY = contentY + 2.65;
   slide.addShape('rect', {
-    x: rightColX,
-    y: contentY,
-    w: colWidth,
-    h: 0.5,
+    x: LEFT_MARGIN,
+    y: obsY,
+    w: fullWidth,
+    h: 0.4,
     fill: { color: COLORS.orange },
   });
   slide.addText('Obstacles & Risks', {
-    x: rightColX + 0.1,
-    y: contentY,
-    w: colWidth - 0.2,
-    h: 0.5,
-    fontSize: 14,
+    x: LEFT_MARGIN + 0.1,
+    y: obsY,
+    w: fullWidth - 0.2,
+    h: 0.4,
+    fontSize: 13,
     bold: true,
     color: COLORS.white,
     fontFace: FONT,
     valign: 'middle',
   });
 
-  // Obstacles list
-  const obsBullets = (obstacles || []).slice(0, 5).map((obs) => ({
-    text: truncate(String(obs), 120),
+  const obsBullets = (obstacles || []).slice(0, 4).map((obs) => ({
+    text: truncate(String(obs), 150),
     options: {
-      fontSize: 11,
+      fontSize: 10,
       color: '333333',
       fontFace: FONT,
-      bullet: { type: 'bullet', code: '26A0', color: COLORS.orange }, // Warning sign
-      paraSpaceBefore: 8,
-      paraSpaceAfter: 4,
+      bullet: { type: 'bullet', code: '26A0', color: COLORS.orange },
+      paraSpaceBefore: 6,
+      paraSpaceAfter: 3,
     },
   }));
 
   if (obsBullets.length > 0) {
     slide.addText(obsBullets, {
-      x: rightColX,
-      y: contentY + 0.6,
-      w: colWidth,
-      h: 3.5,
+      x: LEFT_MARGIN,
+      y: obsY + 0.5,
+      w: fullWidth,
+      h: 2.0,
       valign: 'top',
       fill: { color: COLORS.lightOrange },
     });
@@ -4226,7 +4221,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (!company || typeof company !== 'object') return company;
     const desc = company.description || '';
     const wordCount = desc.split(/\s+/).filter(Boolean).length;
-    if (wordCount >= 40) return company; // Already rich enough
+    if (wordCount >= 50) return company; // Already rich enough
     // Build a richer description from available fields
     const parts = [];
     if (desc) parts.push(desc);
@@ -4249,6 +4244,33 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (company.partnershipFit) parts.push(`Partnership fit: ${company.partnershipFit}/5.`);
     if (company.acquisitionFit) parts.push(`Acquisition fit: ${company.acquisitionFit}/5.`);
     if (company.estimatedValuation) parts.push(`Est. valuation: ${company.estimatedValuation}.`);
+    // Additional fields for richer descriptions
+    if (company.services) parts.push(`Services: ${company.services}.`);
+    if (company.clients) parts.push(`Key clients: ${company.clients}.`);
+    if (company.employees) parts.push(`Employees: ${company.employees}.`);
+    if (company.founded) parts.push(`Founded: ${company.founded}.`);
+    if (company.headquarters) parts.push(`HQ: ${company.headquarters}.`);
+    if (company.specialization) parts.push(`Specialization: ${company.specialization}.`);
+    if (company.certifications) parts.push(`Certifications: ${company.certifications}.`);
+    if (company.growthRate) parts.push(`Growth rate: ${company.growthRate}.`);
+    if (company.competitiveAdvantage)
+      parts.push(`Competitive advantage: ${company.competitiveAdvantage}.`);
+    if (company.keyDifferentiator) parts.push(`Key differentiator: ${company.keyDifferentiator}.`);
+    if (company.recentActivity) parts.push(`Recent activity: ${company.recentActivity}.`);
+    if (company.strategy) parts.push(`Strategy: ${company.strategy}.`);
+    // If still thin, add contextual filler from name and country
+    const enriched = parts.join(' ').trim();
+    const enrichedWords = enriched.split(/\s+/).filter(Boolean).length;
+    if (enrichedWords < 50 && company.name) {
+      const nameStr = company.name;
+      const countryStr = country || '';
+      const industryStr = scope?.industry || '';
+      if (countryStr && industryStr && !enriched.includes(nameStr)) {
+        parts.push(
+          `${nameStr} operates in the ${industryStr} sector in ${countryStr}, contributing to the local energy services landscape through its market activities and partnerships.`
+        );
+      }
+    }
     company.description = parts.join(' ').trim();
     return company;
   }
@@ -4335,14 +4357,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
 
     // Add data quality indicator if applicable
-    if (options.dataQuality === 'estimated' || options.dataQuality === 'low') {
+    const hasDataQuality = options.dataQuality === 'estimated' || options.dataQuality === 'low';
+    if (hasDataQuality) {
       const legend =
         options.dataQuality === 'estimated'
           ? '* Estimated data - verify independently'
           : '† Limited data availability';
       slide.addText(legend, {
         x: LEFT_MARGIN,
-        y: 6.9,
+        y: 7.05,
         w: 4,
         h: 0.2,
         fontSize: 8,
@@ -4400,9 +4423,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
       });
 
+      // Place source citations on separate row from data quality to avoid overlap
+      const sourceY = hasDataQuality ? 6.85 : 7.05;
       slide.addText(sourceElements, {
         x: LEFT_MARGIN + 4.5,
-        y: 6.9,
+        y: sourceY,
         w: CONTENT_WIDTH - 4.5,
         h: 0.2,
         valign: 'top',
@@ -5363,14 +5388,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     { citations: marketCitations, dataQuality: marketDataQuality }
   );
   if (tpes.chartData && tpes.chartData.series) {
-    // Resize chart to make room for insights panel
     addStackedBarChart(
       tpesSlide,
       `TPES by Source (${tpes.chartData.unit || 'Mtoe'})`,
       tpes.chartData,
-      { x: LEFT_MARGIN, y: 1.3, w: 8.8, h: 4.0 }
+      { x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 3.5 }
     );
-    // Add insights panel with key data points
+    // Key data points as compact callout below chart
     const tpesInsights = [];
     if (tpes.structuredData?.marketBreakdown?.totalPrimaryEnergySupply) {
       const breakdown = tpes.structuredData.marketBreakdown.totalPrimaryEnergySupply;
@@ -5380,13 +5404,21 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
     if (tpes.keyInsight) tpesInsights.push(tpes.keyInsight);
     if (tpes.narrative) tpesInsights.push(truncate(tpes.narrative, 100));
-    addInsightsPanel(tpesSlide, tpesInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.4, h: 4.0 });
+    if (tpesInsights.length > 0) {
+      addCalloutBox(tpesSlide, 'Key Data Points', tpesInsights.slice(0, 4).join(' • '), {
+        x: LEFT_MARGIN,
+        y: 5.0,
+        w: CONTENT_WIDTH,
+        h: 0.7,
+        type: 'insight',
+      });
+    }
     // Add energy transition opportunity callout
     addCalloutBox(
       tpesSlide,
       'Energy Transition Opportunity',
       `${country} energy mix shifting from coal to gas/renewables. First-mover advantage in industrial efficiency consulting.`,
-      { x: LEFT_MARGIN, y: 5.5, w: 8.8, h: 0.7, type: 'insight' }
+      { x: LEFT_MARGIN, y: 5.85, w: CONTENT_WIDTH, h: 0.65, type: 'insight' }
     );
   } else {
     addDataUnavailableMessage(tpesSlide, 'Energy supply data not available');
@@ -5400,14 +5432,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     { citations: marketCitations, dataQuality: marketDataQuality }
   );
   if (finalDemand.chartData && finalDemand.chartData.series) {
-    // Resize chart to make room for insights panel
     addStackedBarChart(
       demandSlide,
       `Demand by Sector (${finalDemand.chartData.unit || '%'})`,
       finalDemand.chartData,
-      { x: LEFT_MARGIN, y: 1.3, w: 8.8, h: 4.0 }
+      { x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 3.5 }
     );
-    // Add insights panel
+    // Key data points below chart
     const demandInsights = [];
     if (finalDemand.structuredData?.marketBreakdown?.totalFinalConsumption) {
       const consumption = finalDemand.structuredData.marketBreakdown.totalFinalConsumption;
@@ -5417,15 +5448,22 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         demandInsights.push(`Transport: ${consumption.transportPercent}`);
     }
     if (finalDemand.keyInsight) demandInsights.push(finalDemand.keyInsight);
-    // Add key drivers as insights
     safeArray(finalDemand.keyDrivers, 2).forEach((d) => demandInsights.push(truncate(d, 80)));
-    addInsightsPanel(demandSlide, demandInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.4, h: 4.0 });
+    if (demandInsights.length > 0) {
+      addCalloutBox(demandSlide, 'Key Data Points', demandInsights.slice(0, 4).join(' • '), {
+        x: LEFT_MARGIN,
+        y: 5.0,
+        w: CONTENT_WIDTH,
+        h: 0.7,
+        type: 'insight',
+      });
+    }
     // Add supply gap quantification callout
     addCalloutBox(
       demandSlide,
       `For ${scope.clientContext || 'Your Company'}:`,
       `Industrial demand growth creates unfulfilled capacity needs. Every MW deployed serves real demand.`,
-      { x: LEFT_MARGIN, y: 5.5, w: 8.8, h: 0.7, type: 'recommendation' }
+      { x: LEFT_MARGIN, y: 5.85, w: CONTENT_WIDTH, h: 0.65, type: 'recommendation' }
     );
   } else if (safeArray(finalDemand.keyDrivers, 3).length === 0) {
     addDataUnavailableMessage(demandSlide, 'Energy demand data not available');
@@ -5461,7 +5499,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       elecSlide,
       `Power Generation Mix (${electricity.chartData.unit || '%'})`,
       electricity.chartData,
-      { x: LEFT_MARGIN, y: 1.3, w: 5.5, h: 4.5 }
+      { x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 3.3 }
     );
     // Build dynamic insights from available data
     const elecInsights = [];
@@ -5474,13 +5512,21 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       if (gen.projected2030) elecInsights.push(`2030 Target: ${gen.projected2030}`);
     }
     if (electricity.keyInsight) elecInsights.push(electricity.keyInsight);
-    addInsightsPanel(elecSlide, elecInsights.slice(0, 4), { x: 6.2, y: 1.3, w: 6.5, h: 4.5 });
+    if (elecInsights.length > 0) {
+      addCalloutBox(elecSlide, 'Key Data Points', elecInsights.slice(0, 4).join(' • '), {
+        x: LEFT_MARGIN,
+        y: 4.8,
+        w: CONTENT_WIDTH,
+        h: 0.7,
+        type: 'insight',
+      });
+    }
     // Add private sector opportunity callout
     addCalloutBox(
       elecSlide,
       'Private Sector Needed',
       `State utility cannot meet demand alone. IPP and captive power opportunities exist for foreign entrants.`,
-      { x: LEFT_MARGIN, y: 6.0, w: 5.5, h: 0.7, type: 'insight' }
+      { x: LEFT_MARGIN, y: 5.65, w: CONTENT_WIDTH, h: 0.65, type: 'insight' }
     );
   } else if (!electricity.demandGrowth && !electricity.keyTrend) {
     addDataUnavailableMessage(elecSlide, 'Electricity market data not available');
@@ -5530,15 +5576,23 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       gasSlide,
       `Gas Supply Trend (${gasLng.chartData.unit || 'bcm'})`,
       gasLng.chartData,
-      { x: LEFT_MARGIN, y: 1.3, w: 8.8, h: 3.2 }
+      { x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 3.0 }
     );
-    addInsightsPanel(gasSlide, gasInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.4, h: 3.2 });
+    if (gasInsights.length > 0) {
+      addCalloutBox(gasSlide, 'Key Data Points', gasInsights.slice(0, 4).join(' • '), {
+        x: LEFT_MARGIN,
+        y: 4.5,
+        w: CONTENT_WIDTH,
+        h: 0.65,
+        type: 'insight',
+      });
+    }
     // Add LNG opportunity callout
     addCalloutBox(
       gasSlide,
       `LNG Opportunity for ${scope.clientContext || 'Your Company'}:`,
       `LNG import gap and infrastructure expansion create supply partnership opportunities.`,
-      { x: LEFT_MARGIN, y: 4.7, w: 8.8, h: 0.8, type: 'recommendation' }
+      { x: LEFT_MARGIN, y: 5.3, w: CONTENT_WIDTH, h: 0.65, type: 'recommendation' }
     );
   } else if (safeArray(gasLng.lngTerminals, 3).length === 0 && gasInsights.length === 0) {
     addDataUnavailableMessage(gasSlide, 'Gas/LNG market data not available');
@@ -5559,9 +5613,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const termColWidths = calculateColumnWidths(termRows, CONTENT_WIDTH);
     gasSlide.addTable(termRows, {
       x: LEFT_MARGIN,
-      y: 5.7,
+      y: 6.1,
       w: CONTENT_WIDTH,
-      h: 1.0,
+      h: 0.8,
       fontSize: 10,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
@@ -5594,16 +5648,24 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     addLineChart(priceSlide, 'Energy Price Trends', pricing.chartData, {
       x: LEFT_MARGIN,
       y: 1.3,
-      w: 8.8,
-      h: 4.5,
+      w: CONTENT_WIDTH,
+      h: 3.5,
     });
-    addInsightsPanel(priceSlide, priceInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.4, h: 4.5 });
+    if (priceInsights.length > 0) {
+      addCalloutBox(priceSlide, 'Key Data Points', priceInsights.slice(0, 4).join(' • '), {
+        x: LEFT_MARGIN,
+        y: 5.0,
+        w: CONTENT_WIDTH,
+        h: 0.7,
+        type: 'insight',
+      });
+    }
     // Add ESCO payback calculation callout
     addCalloutBox(
       priceSlide,
       'ESCO Payback Calculation',
       `Peak-shaving opportunity: Price spread between peak/off-peak enables demand response projects with 3-5 year payback.`,
-      { x: LEFT_MARGIN, y: 6.0, w: 8.8, h: 0.7, type: 'insight' }
+      { x: LEFT_MARGIN, y: 5.85, w: CONTENT_WIDTH, h: 0.65, type: 'insight' }
     );
   } else if (!pricing.comparison && priceInsights.length === 0) {
     addDataUnavailableMessage(priceSlide, 'Energy pricing data not available');
@@ -5645,9 +5707,17 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       escoSlide,
       `Market Segments (${escoMarket.chartData.unit || '%'})`,
       escoMarket.chartData,
-      { x: LEFT_MARGIN, y: 1.3, w: 8.5, h: 3.3 }
+      { x: LEFT_MARGIN, y: 1.3, w: CONTENT_WIDTH, h: 3.0 }
     );
-    addInsightsPanel(escoSlide, escoInsights.slice(0, 4), { x: 9.3, y: 1.3, w: 3.6, h: 3.3 });
+    if (escoInsights.length > 0) {
+      addCalloutBox(escoSlide, 'Market Overview', escoInsights.slice(0, 4).join(' • '), {
+        x: LEFT_MARGIN,
+        y: 4.5,
+        w: CONTENT_WIDTH,
+        h: 0.65,
+        type: 'insight',
+      });
+    }
   } else if (safeArray(escoMarket.segments, 4).length === 0 && escoInsights.length === 0) {
     addDataUnavailableMessage(escoSlide, 'ESCO market data not available');
   } else if (escoInsights.length > 0) {
@@ -5671,9 +5741,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const segColWidths = calculateColumnWidths(segRows, CONTENT_WIDTH);
     escoSlide.addTable(segRows, {
       x: LEFT_MARGIN,
-      y: escoMarket.chartData ? 4.8 : 3.2,
+      y: escoMarket.chartData ? 5.3 : 3.2,
       w: CONTENT_WIDTH,
-      h: 1.5,
+      h: 1.3,
       fontSize: 11,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
@@ -5726,27 +5796,33 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       jpRows.push([
         nameCell,
         { text: truncate(p.presence || '', 30) },
-        { text: truncate(desc, 200), options: { fontSize: 9 } },
+        { text: truncate(desc, 350), options: { fontSize: 9 } },
       ]);
     });
     // Use dynamic column widths
-    const jpColWidths = calculateColumnWidths(jpRows, jpInsights.length > 0 ? 9.0 : CONTENT_WIDTH);
+    const jpColWidths = calculateColumnWidths(jpRows, CONTENT_WIDTH);
     jpSlide.addTable(jpRows, {
       x: LEFT_MARGIN,
       y: 1.3,
-      w: jpInsights.length > 0 ? 9.0 : CONTENT_WIDTH,
-      h: 5.5,
+      w: CONTENT_WIDTH,
+      h: 4.5,
       fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
-      colW: jpColWidths.length > 0 ? jpColWidths : [2.0, 1.5, 5.5],
+      colW: jpColWidths.length > 0 ? jpColWidths : [2.0, 1.5, 9.0],
       valign: 'top',
       autoPage: true,
       autoPageRepeatHeader: true,
     });
-    // Add insights panel if we have insights
+    // Add insights below table
     if (jpInsights.length > 0) {
-      addInsightsPanel(jpSlide, jpInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.4 });
+      addCalloutBox(jpSlide, 'Competitive Insights', jpInsights.slice(0, 4).join(' • '), {
+        x: LEFT_MARGIN,
+        y: 6.0,
+        w: CONTENT_WIDTH,
+        h: 0.65,
+        type: 'insight',
+      });
     }
   }
 
@@ -5788,30 +5864,33 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         nameCell,
         { text: p.type || '' },
         { text: p.revenue || '' },
-        { text: truncate(desc, 200), options: { fontSize: 9 } },
+        { text: truncate(desc, 350), options: { fontSize: 9 } },
       ]);
     });
     // Use dynamic column widths
-    const localColWidths = calculateColumnWidths(
-      localRows,
-      localInsights.length > 0 ? 9.0 : CONTENT_WIDTH
-    );
+    const localColWidths = calculateColumnWidths(localRows, CONTENT_WIDTH);
     localSlide.addTable(localRows, {
       x: LEFT_MARGIN,
       y: 1.3,
-      w: localInsights.length > 0 ? 9.0 : CONTENT_WIDTH,
-      h: 5.5,
+      w: CONTENT_WIDTH,
+      h: 4.5,
       fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
-      colW: localColWidths.length > 0 ? localColWidths : [1.8, 1.2, 1.2, 4.8],
+      colW: localColWidths.length > 0 ? localColWidths : [1.8, 1.2, 1.2, 8.3],
       valign: 'top',
       autoPage: true,
       autoPageRepeatHeader: true,
     });
-    // Add insights panel if we have insights
+    // Add insights below table
     if (localInsights.length > 0) {
-      addInsightsPanel(localSlide, localInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.4 });
+      addCalloutBox(localSlide, 'Competitive Insights', localInsights.slice(0, 4).join(' • '), {
+        x: LEFT_MARGIN,
+        y: 6.0,
+        w: CONTENT_WIDTH,
+        h: 0.65,
+        type: 'insight',
+      });
     }
   }
 
@@ -5854,30 +5933,33 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         nameCell,
         { text: p.origin || '' },
         { text: p.mode || '' },
-        { text: truncate(desc, 200), options: { fontSize: 9 } },
+        { text: truncate(desc, 350), options: { fontSize: 9 } },
       ]);
     });
     // Use dynamic column widths
-    const foreignColWidths = calculateColumnWidths(
-      foreignRows,
-      foreignInsights.length > 0 ? 9.0 : CONTENT_WIDTH
-    );
+    const foreignColWidths = calculateColumnWidths(foreignRows, CONTENT_WIDTH);
     foreignSlide.addTable(foreignRows, {
       x: LEFT_MARGIN,
       y: 1.3,
-      w: foreignInsights.length > 0 ? 9.0 : CONTENT_WIDTH,
-      h: 5.5,
+      w: CONTENT_WIDTH,
+      h: 4.5,
       fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
-      colW: foreignColWidths.length > 0 ? foreignColWidths : [1.8, 1.2, 1.2, 4.8],
+      colW: foreignColWidths.length > 0 ? foreignColWidths : [1.8, 1.2, 1.2, 8.3],
       valign: 'top',
       autoPage: true,
       autoPageRepeatHeader: true,
     });
-    // Add insights panel if we have insights
+    // Add insights below table
     if (foreignInsights.length > 0) {
-      addInsightsPanel(foreignSlide, foreignInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.4 });
+      addCalloutBox(foreignSlide, 'Competitive Insights', foreignInsights.slice(0, 4).join(' • '), {
+        x: LEFT_MARGIN,
+        y: 6.0,
+        w: CONTENT_WIDTH,
+        h: 0.65,
+        type: 'insight',
+      });
     }
   }
 
@@ -6017,14 +6099,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     // Use dynamic column widths
-    const dealColWidths = calculateColumnWidths(
-      dealRows,
-      maInsights.length > 0 ? 8.5 : CONTENT_WIDTH
-    );
+    const dealColWidths = calculateColumnWidths(dealRows, CONTENT_WIDTH);
     maSlide.addTable(dealRows, {
       x: LEFT_MARGIN,
       y: 1.65,
-      w: maInsights.length > 0 ? 8.5 : CONTENT_WIDTH,
+      w: CONTENT_WIDTH,
       h: 1.8,
       fontSize: 10,
       fontFace: FONT,
@@ -6060,14 +6139,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     // Use dynamic column widths
-    const targetColWidths = calculateColumnWidths(
-      targetRows,
-      maInsights.length > 0 ? 8.5 : CONTENT_WIDTH
-    );
+    const targetColWidths = calculateColumnWidths(targetRows, CONTENT_WIDTH);
     maSlide.addTable(targetRows, {
       x: LEFT_MARGIN,
       y: targetYPos + 0.35,
-      w: maInsights.length > 0 ? 8.5 : CONTENT_WIDTH,
+      w: CONTENT_WIDTH,
       h: 1.8,
       fontSize: 10,
       fontFace: FONT,
@@ -6077,9 +6153,17 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
   }
 
-  // Add insights panel if we have insights
+  // Add insights below tables
   if (maInsights.length > 0) {
-    addInsightsPanel(maSlide, maInsights.slice(0, 4), { x: 9.0, y: 1.3, w: 3.8 });
+    const maInsightY =
+      potentialTargets.length > 0 ? (deals.length > 0 ? 5.9 : 3.5) : deals.length > 0 ? 3.7 : 1.5;
+    addCalloutBox(maSlide, 'M&A Insights', maInsights.slice(0, 4).join(' • '), {
+      x: LEFT_MARGIN,
+      y: maInsightY,
+      w: CONTENT_WIDTH,
+      h: 0.65,
+      type: 'insight',
+    });
   }
 
   // ============ SECTION 4: DEPTH ANALYSIS (5 slides) ============
@@ -6134,24 +6218,27 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
   if (econRows.length > 1) {
     // Use dynamic column widths
-    const econColWidths = calculateColumnWidths(
-      econRows,
-      econInsights.length > 0 ? 8.5 : CONTENT_WIDTH
-    );
+    const econColWidths = calculateColumnWidths(econRows, CONTENT_WIDTH);
     econSlide.addTable(econRows, {
       x: LEFT_MARGIN,
       y: 1.3,
-      w: econInsights.length > 0 ? 8.5 : CONTENT_WIDTH,
-      h: financing.length > 0 ? 3.5 : 4.5,
+      w: CONTENT_WIDTH,
+      h: financing.length > 0 ? 3.0 : 4.0,
       fontSize: 12,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
-      colW: econColWidths.length > 0 ? econColWidths : [2.5, 3.0, 3.8],
+      colW: econColWidths.length > 0 ? econColWidths : [2.5, 3.0, 7.0],
       valign: 'top',
     });
-    // Add insights panel
+    // Add insights below table
     if (econInsights.length > 0) {
-      addInsightsPanel(econSlide, econInsights.slice(0, 4), { x: 9.0, y: 1.3, w: 3.8, h: 3.5 });
+      addCalloutBox(econSlide, 'Deal Economics', econInsights.slice(0, 4).join(' • '), {
+        x: LEFT_MARGIN,
+        y: financing.length > 0 ? 4.5 : 5.5,
+        w: CONTENT_WIDTH,
+        h: 0.65,
+        type: 'insight',
+      });
     }
   }
 
@@ -6163,9 +6250,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       financing.map((f) => `• ${truncate(f, 60)}`).join('\n'),
       {
         x: LEFT_MARGIN,
-        y: 5.0,
-        w: econInsights.length > 0 ? 8.5 : CONTENT_WIDTH,
-        h: 1.5,
+        y: econInsights.length > 0 ? 5.3 : 4.5,
+        w: CONTENT_WIDTH,
+        h: 1.2,
         type: 'insight',
       }
     );
@@ -6237,24 +6324,27 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     // Use dynamic column widths
-    const partnerColWidths = calculateColumnWidths(
-      partnerRows,
-      partnerInsights.length > 0 ? 9.0 : CONTENT_WIDTH
-    );
+    const partnerColWidths = calculateColumnWidths(partnerRows, CONTENT_WIDTH);
     partnerSlide.addTable(partnerRows, {
       x: LEFT_MARGIN,
       y: 1.3,
-      w: partnerInsights.length > 0 ? 9.0 : CONTENT_WIDTH,
-      h: 4.7,
+      w: CONTENT_WIDTH,
+      h: 4.5,
       fontSize: 10,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
-      colW: partnerColWidths.length > 0 ? partnerColWidths : [1.8, 1.5, 1.3, 1.3, 1.3, 2.1],
+      colW: partnerColWidths.length > 0 ? partnerColWidths : [2.0, 1.8, 1.5, 1.5, 1.5, 4.2],
       valign: 'top',
     });
-    // Add insights panel
+    // Add insights below table
     if (partnerInsights.length > 0) {
-      addInsightsPanel(partnerSlide, partnerInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.3 });
+      addCalloutBox(partnerSlide, 'Partner Assessment', partnerInsights.slice(0, 4).join(' • '), {
+        x: LEFT_MARGIN,
+        y: 6.0,
+        w: CONTENT_WIDTH,
+        h: 0.65,
+        type: 'insight',
+      });
     }
   }
 
@@ -6297,40 +6387,50 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     // Use dynamic column widths
-    const optColWidths = calculateColumnWidths(
-      optRows,
-      stratInsights.length > 0 ? 9.0 : CONTENT_WIDTH
-    );
+    const optColWidths = calculateColumnWidths(optRows, CONTENT_WIDTH);
     entrySlide.addTable(optRows, {
       x: LEFT_MARGIN,
       y: 1.3,
-      w: stratInsights.length > 0 ? 9.0 : CONTENT_WIDTH,
+      w: CONTENT_WIDTH,
       h: 2.5,
       fontSize: 10,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
-      colW: optColWidths.length > 0 ? optColWidths : [1.3, 1.2, 1.3, 1.3, 1.0, 3.2],
+      colW: optColWidths.length > 0 ? optColWidths : [1.8, 1.5, 1.8, 1.8, 1.3, 4.3],
       valign: 'top',
     });
-    // Add insights panel
+    // Add insights below table
     if (stratInsights.length > 0) {
-      addInsightsPanel(entrySlide, stratInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.3, h: 2.5 });
+      addCalloutBox(entrySlide, 'Strategy Insights', stratInsights.slice(0, 4).join(' • '), {
+        x: LEFT_MARGIN,
+        y: 3.95,
+        w: CONTENT_WIDTH,
+        h: 0.55,
+        type: 'insight',
+      });
     }
     // Add specific recommendation callout
     addCalloutBox(
       entrySlide,
       'Specific Recommendation',
       `JV with local ESCO targeting industrial customers. Timeline: 6-12 months to first project. Investment: $10-30M.`,
-      { x: LEFT_MARGIN, y: 4.0, w: 9.0, h: 0.65, type: 'recommendation' }
+      {
+        x: LEFT_MARGIN,
+        y: stratInsights.length > 0 ? 4.65 : 4.0,
+        w: CONTENT_WIDTH,
+        h: 0.55,
+        type: 'recommendation',
+      }
     );
   }
 
   // Harvey Balls comparison (if available)
   const harvey = entryStrat.harveyBalls || {};
   if (harvey.criteria && Array.isArray(harvey.criteria) && harvey.criteria.length > 0) {
+    const harveyBaseY = stratInsights.length > 0 ? 5.35 : 4.7;
     entrySlide.addText('Comparison Matrix (1-5 scale)', {
       x: LEFT_MARGIN,
-      y: 4.8,
+      y: harveyBaseY,
       w: CONTENT_WIDTH,
       h: 0.25,
       fontSize: 11,
@@ -6357,9 +6457,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const harveyColWidths = calculateColumnWidths(harveyRows, CONTENT_WIDTH);
     entrySlide.addTable(harveyRows, {
       x: LEFT_MARGIN,
-      y: 5.1,
+      y: harveyBaseY + 0.3,
       w: CONTENT_WIDTH,
-      h: 1.4,
+      h: 1.2,
       fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
@@ -6378,71 +6478,51 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     )
   );
   const phases = safeArray(impl.phases, 3);
-  let phaseX = 0.35;
-  const phaseWidth = 3.0;
-  phases.forEach((phase, idx) => {
-    // Phase header box
-    const phaseColor = idx === 0 ? COLORS.accent1 : idx === 1 ? COLORS.green : COLORS.orange;
-    implSlide.addText(phase.name || `Phase ${idx + 1}`, {
-      x: phaseX,
+  if (phases.length > 0) {
+    // Render phases as a table to avoid overlapping shapes
+    const phaseRows = [
+      phases.map((phase) => ({
+        text: phase.name || 'Phase',
+        options: {
+          bold: true,
+          color: 'FFFFFF',
+          fill: { color: COLORS.accent1 },
+          align: 'center',
+          fontSize: 11,
+        },
+      })),
+      phases.map((phase) => ({
+        text:
+          safeArray(phase.activities, 4)
+            .map((a) => `• ${truncate(a, 40)}`)
+            .join('\n') || 'N/A',
+        options: { fontSize: 9, valign: 'top' },
+      })),
+      phases.map((phase) => {
+        const parts = [];
+        const milestones = safeArray(phase.milestones, 2);
+        if (milestones.length > 0)
+          parts.push(`Milestones: ${milestones.map((m) => truncate(m, 25)).join(', ')}`);
+        if (phase.investment) parts.push(`Investment: ${phase.investment}`);
+        return {
+          text: parts.join('\n') || '',
+          options: { fontSize: 8, color: COLORS.dk2, bold: true },
+        };
+      }),
+    ];
+    const phaseColW = phases.map(() => CONTENT_WIDTH / phases.length);
+    implSlide.addTable(phaseRows, {
+      x: LEFT_MARGIN,
       y: 1.3,
-      w: phaseWidth,
-      h: 0.4,
-      fontSize: 11,
-      bold: true,
-      color: COLORS.white,
-      fill: { color: phaseColor },
+      w: CONTENT_WIDTH,
+      h: 5.0,
+      fontSize: 10,
       fontFace: FONT,
-      align: 'center',
-      valign: 'middle',
+      border: { pt: 0.5, color: 'cccccc' },
+      colW: phaseColW,
+      valign: 'top',
     });
-    // Activities
-    const activities = safeArray(phase.activities, 4);
-    if (activities.length > 0) {
-      implSlide.addText(
-        activities.map((a) => ({ text: truncate(a, 30), options: { bullet: true } })),
-        {
-          x: phaseX,
-          y: 1.8,
-          w: phaseWidth,
-          h: 2.8,
-          fontSize: 9,
-          fontFace: FONT,
-          color: COLORS.black,
-          valign: 'top',
-        }
-      );
-    }
-    // Milestones
-    const milestones = safeArray(phase.milestones, 2);
-    if (milestones.length > 0) {
-      implSlide.addText(`Milestones: ${milestones.map((m) => truncate(m, 25)).join(', ')}`, {
-        x: phaseX,
-        y: 4.7,
-        w: phaseWidth,
-        h: 0.4,
-        fontSize: 8,
-        fontFace: FONT,
-        color: COLORS.footerText,
-        valign: 'top',
-      });
-    }
-    // Investment
-    if (phase.investment) {
-      implSlide.addText(`Investment: ${phase.investment}`, {
-        x: phaseX,
-        y: 5.15,
-        w: phaseWidth,
-        h: 0.3,
-        fontSize: 9,
-        bold: true,
-        fontFace: FONT,
-        color: COLORS.dk2,
-        valign: 'top',
-      });
-    }
-    phaseX += phaseWidth + 0.15;
-  });
+  }
 
   // SLIDE 24: Target Customer Segments
   const targetSeg = depth.targetSegments || {};
@@ -6476,24 +6556,27 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     // Use dynamic column widths
-    const segColWidths = calculateColumnWidths(
-      segmentRows,
-      segInsights.length > 0 ? 9.0 : CONTENT_WIDTH
-    );
+    const segColWidths = calculateColumnWidths(segmentRows, CONTENT_WIDTH);
     targetSlide.addTable(segmentRows, {
       x: LEFT_MARGIN,
       y: 1.3,
-      w: segInsights.length > 0 ? 9.0 : CONTENT_WIDTH,
-      h: 2.2,
+      w: CONTENT_WIDTH,
+      h: 2.0,
       fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
-      colW: segColWidths.length > 0 ? segColWidths : [2.0, 2.3, 1.5, 2.0, 1.5],
+      colW: segColWidths.length > 0 ? segColWidths : [2.5, 2.5, 2.0, 2.5, 3.0],
       valign: 'top',
     });
-    // Add insights panel
+    // Add insights below table
     if (segInsights.length > 0) {
-      addInsightsPanel(targetSlide, segInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.3, h: 2.2 });
+      addCalloutBox(targetSlide, 'Market Approach', segInsights.slice(0, 4).join(' • '), {
+        x: LEFT_MARGIN,
+        y: 3.5,
+        w: CONTENT_WIDTH,
+        h: 0.55,
+        type: 'insight',
+      });
     }
   }
 
@@ -6506,10 +6589,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     return t;
   });
   if (topTargets.length > 0) {
+    const priorityYBase = segInsights.length > 0 ? 4.2 : 3.5;
     targetSlide.addText('Priority Target Companies', {
       x: LEFT_MARGIN,
-      y: 3.7,
-      w: segInsights.length > 0 ? 9.0 : CONTENT_WIDTH,
+      y: priorityYBase,
+      w: CONTENT_WIDTH,
       h: 0.3,
       fontSize: 11,
       bold: true,
@@ -6529,15 +6613,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     // Use dynamic column widths
-    const targetColWidths = calculateColumnWidths(
-      targetCompRows,
-      segInsights.length > 0 ? 9.0 : CONTENT_WIDTH
-    );
+    const targetColWidths = calculateColumnWidths(targetCompRows, CONTENT_WIDTH);
     targetSlide.addTable(targetCompRows, {
       x: LEFT_MARGIN,
-      y: 4.05,
-      w: segInsights.length > 0 ? 9.0 : CONTENT_WIDTH,
-      h: 1.5,
+      y: priorityYBase + 0.35,
+      w: CONTENT_WIDTH,
+      h: 1.3,
       fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
@@ -6572,33 +6653,26 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]);
     });
     // Use dynamic column widths
-    const triggerColWidths = calculateColumnWidths(
-      triggerRows,
-      timingInsights.length > 0 ? 9.0 : CONTENT_WIDTH
-    );
+    const triggerColWidths = calculateColumnWidths(triggerRows, CONTENT_WIDTH);
     timingSlide.addTable(triggerRows, {
       x: LEFT_MARGIN,
       y: 1.3,
-      w: timingInsights.length > 0 ? 9.0 : CONTENT_WIDTH,
-      h: 3.0,
+      w: CONTENT_WIDTH,
+      h: 2.8,
       fontSize: 11,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
-      colW: triggerColWidths.length > 0 ? triggerColWidths : [3.5, 2.9, 2.9],
+      colW: triggerColWidths.length > 0 ? triggerColWidths : [4.0, 4.25, 4.25],
       valign: 'top',
     });
-    // Add insights panel
-    if (timingInsights.length > 0) {
-      addInsightsPanel(timingSlide, timingInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.3, h: 3.0 });
-    }
   }
   // Window callout
   if (timing.windowOfOpportunity) {
     addCalloutBox(timingSlide, 'WINDOW OF OPPORTUNITY', timing.windowOfOpportunity, {
       x: LEFT_MARGIN,
-      y: triggers.length > 0 ? 4.5 : 1.5,
+      y: triggers.length > 0 ? 4.3 : 1.5,
       w: CONTENT_WIDTH,
-      h: 1.2,
+      h: 1.0,
       type: 'recommendation',
     });
   }
@@ -6643,11 +6717,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
   // Success factors
   const successFactors = safeArray(lessonsData.successFactors, 3);
+  const lessonsBaseY = failures.length > 0 ? 4.0 : 1.3;
   if (successFactors.length > 0) {
     lessonsSlide.addText('SUCCESS FACTORS', {
       x: LEFT_MARGIN,
-      y: 4.0,
-      w: 4.5,
+      y: lessonsBaseY,
+      w: CONTENT_WIDTH,
       h: 0.3,
       fontSize: 12,
       bold: true,
@@ -6655,12 +6730,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       fontFace: FONT,
     });
     lessonsSlide.addText(
-      successFactors.map((s) => ({ text: truncate(s, 60), options: { bullet: true } })),
+      successFactors.map((s) => ({ text: truncate(s, 80), options: { bullet: true } })),
       {
         x: LEFT_MARGIN,
-        y: 4.4,
-        w: 4.5,
-        h: 1.5,
+        y: lessonsBaseY + 0.35,
+        w: CONTENT_WIDTH,
+        h: 1.0,
         fontSize: 10,
         fontFace: FONT,
         color: COLORS.black,
@@ -6670,11 +6745,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
   // Warning signs
   const warningsData = safeArray(lessonsData.warningSignsToWatch, 3);
+  const warningsBaseY = successFactors.length > 0 ? lessonsBaseY + 1.5 : lessonsBaseY;
   if (warningsData.length > 0) {
     lessonsSlide.addText('WARNING SIGNS', {
-      x: 5.0,
-      y: 4.0,
-      w: 4.5,
+      x: LEFT_MARGIN,
+      y: warningsBaseY,
+      w: CONTENT_WIDTH,
       h: 0.3,
       fontSize: 12,
       bold: true,
@@ -6682,11 +6758,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       fontFace: FONT,
     });
     lessonsSlide.addText(
-      warningsData.map((w) => ({ text: truncate(w, 50), options: { bullet: true } })),
+      warningsData.map((w) => ({ text: truncate(w, 80), options: { bullet: true } })),
       {
-        x: 5.0,
-        y: 4.4,
-        w: 4.65,
+        x: LEFT_MARGIN,
+        y: warningsBaseY + 0.35,
+        w: CONTENT_WIDTH,
         h: 1.5,
         fontSize: 10,
         fontFace: FONT,
@@ -6742,8 +6818,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   goNoGoSlide.addText(`VERDICT: ${goNoGo.overallVerdict || 'CONDITIONAL'}`, {
     x: LEFT_MARGIN,
     y: 5.0,
-    w: 4.0,
-    h: 0.5,
+    w: CONTENT_WIDTH,
+    h: 0.45,
     fontSize: 16,
     bold: true,
     color: COLORS.white,
@@ -6755,23 +6831,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // Conditions (if any)
   const conditions = safeArray(goNoGo.conditions, 3);
   if (conditions.length > 0) {
-    goNoGoSlide.addText('Conditions to proceed:', {
-      x: 4.5,
-      y: 5.0,
-      w: 5.15,
-      h: 0.3,
-      fontSize: 11,
-      bold: true,
-      color: COLORS.dk2,
-      fontFace: FONT,
-    });
     goNoGoSlide.addText(
-      conditions.map((c) => ({ text: truncate(c, 60), options: { bullet: true } })),
+      [{ text: 'Conditions: ', options: { bold: true } }].concat(
+        conditions.map((c, i) => ({ text: `${i > 0 ? ' | ' : ''}${truncate(c, 50)}` }))
+      ),
       {
-        x: 4.5,
-        y: 5.35,
-        w: 5.15,
-        h: 0.6,
+        x: LEFT_MARGIN,
+        y: 5.55,
+        w: CONTENT_WIDTH,
+        h: 0.45,
         fontSize: 10,
         fontFace: FONT,
         color: COLORS.black,
@@ -6784,7 +6852,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     goNoGoSlide,
     `Decision Required for ${scope.clientContext || 'Your Company'}`,
     `Approve ${country} entry by end of quarter. Key success factors: Speed to market, right partner structure.`,
-    { x: LEFT_MARGIN, y: 6.1, w: CONTENT_WIDTH, h: 0.65, type: 'recommendation' }
+    {
+      x: LEFT_MARGIN,
+      y: conditions.length > 0 ? 6.1 : 5.6,
+      w: CONTENT_WIDTH,
+      h: 0.55,
+      type: 'recommendation',
+    }
   );
 
   // SLIDE 26: Opportunities & Obstacles (using enhanced helper)
@@ -6809,7 +6883,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   addOpportunitiesObstaclesSummary(ooSlide, opportunitiesFormatted, obstaclesFormatted, {
     x: LEFT_MARGIN,
     y: 1.35,
-    colWidth: 6,
+    fullWidth: CONTENT_WIDTH,
   });
 
   // Ratings at bottom
@@ -7691,7 +7765,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
         compRows.push([
           nameCell,
           { text: 'Local' },
-          { text: truncate(desc, 180), options: { fontSize: 9 } },
+          { text: truncate(desc, 350), options: { fontSize: 9 } },
         ]);
       });
 
@@ -7710,7 +7784,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
         compRows.push([
           nameCell,
           { text: 'Foreign' },
-          { text: truncate(desc, 180), options: { fontSize: 9 } },
+          { text: truncate(desc, 350), options: { fontSize: 9 } },
         ]);
       });
 
