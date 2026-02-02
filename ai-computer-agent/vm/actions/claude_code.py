@@ -200,38 +200,27 @@ async def run_claude_code(
         except ImportError:
             CLAUDE_MODEL = "opus"
 
-        # 3.2: If prompt > 30K chars, pipe via stdin to avoid Windows 32K CLI arg limit
-        use_stdin = len(full_prompt) > 30000
-        if use_stdin:
-            cmd_args = build_claude_cmd(
-                CLAUDE_CODE_PATH,
-                "--print",
-                "--model", CLAUDE_MODEL,
-                "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash",
-                "-",  # read from stdin
-                wsl_cwd=wsl_cwd or cwd,
-            )
-        else:
-            cmd_args = build_claude_cmd(
-                CLAUDE_CODE_PATH,
-                "--print",
-                "--model", CLAUDE_MODEL,
-                "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash",
-                full_prompt,  # positional arg MUST be last
-                wsl_cwd=wsl_cwd or cwd,  # B1 fix: pass WSL cwd via --cd flag
-            )
+        # Always pipe prompt via stdin to avoid --allowedTools variadic flag
+        # consuming the prompt as a tool name (CLI bug: <tools...> is greedy)
+        cmd_args = build_claude_cmd(
+            CLAUDE_CODE_PATH,
+            "--print",
+            "--model", CLAUDE_MODEL,
+            "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash",
+            "-",  # read prompt from stdin
+            wsl_cwd=wsl_cwd or cwd,
+        )
 
         process = await asyncio.create_subprocess_exec(
             *cmd_args,
             cwd=effective_cwd,  # B1 fix: None in WSL mode to avoid WinError 267
-            stdin=asyncio.subprocess.PIPE if use_stdin else None,
+            stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
         )
 
-        if use_stdin:
-            process.stdin.write(full_prompt.encode())
-            process.stdin.close()
+        process.stdin.write(full_prompt.encode())
+        process.stdin.close()
 
         try:
             stdout, stderr = await asyncio.wait_for(
