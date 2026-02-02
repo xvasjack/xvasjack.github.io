@@ -4949,9 +4949,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           }
 
           if (content.recommended) {
+            const recY =
+              contentY + safeTableHeight((content.options || []).length + 1, { maxH: 4.5 }) + 0.2;
             slide.addText(`Recommended: ${content.recommended}`, {
               x: LEFT_MARGIN,
-              y: 5.5,
+              y: recY,
               w: CONTENT_WIDTH,
               h: 0.4,
               fontSize: 14,
@@ -5189,7 +5191,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     color: COLORS.dk2,
     fontFace: FONT,
   });
-  // Note: divider lines provided by YCP_MASTER at y:0.88 and y:0.92
+  // Header divider rect (matching addSlideWithTitle)
+  tocSlide.addShape('rect', {
+    x: 0,
+    y: 0.73,
+    w: 13.333,
+    h: 0.07,
+    fill: { color: COLORS.headerLine },
+    line: { type: 'none' },
+  });
 
   // TOC sections with slide numbers
   const tocSections = [
@@ -5284,11 +5294,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         { text: truncate(act.enforcement || '', 40) },
       ]);
     });
+    const actsTableH = 4.0;
     actsSlide.addTable(actsRows, {
       x: LEFT_MARGIN,
       y: 1.3,
       w: CONTENT_WIDTH,
-      h: 4.0,
+      h: actsTableH,
       fontSize: 12,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
@@ -5300,7 +5311,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       actsSlide,
       `For ${scope.clientContext || 'Your Company'}:`,
       `Regulatory framework creates recurring ESCO demand in ${country}. Energy efficiency mandates drive industrial compliance spending.`,
-      { x: LEFT_MARGIN, y: 5.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+      {
+        x: LEFT_MARGIN,
+        y: 1.3 + actsTableH + 0.15,
+        w: CONTENT_WIDTH,
+        h: 0.7,
+        type: 'recommendation',
+      }
     );
   } else {
     addDataUnavailableMessage(actsSlide, 'Energy legislation data not available');
@@ -6313,9 +6330,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
     // Add insights below table
     if (econInsights.length > 0) {
+      const econTableH = financing.length > 0 ? 3.0 : 4.0;
+      const econInsightY = 1.3 + econTableH + 0.15;
       addCalloutBox(econSlide, 'Deal Economics', econInsights.slice(0, 4).join(' • '), {
         x: LEFT_MARGIN,
-        y: financing.length > 0 ? 4.5 : 5.5,
+        y: econInsightY,
         w: CONTENT_WIDTH,
         h: 0.65,
         type: 'insight',
@@ -6406,11 +6425,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
     // Use dynamic column widths
     const partnerColWidths = calculateColumnWidths(partnerRows, CONTENT_WIDTH);
+    const partnerTableH = 4.5;
     partnerSlide.addTable(partnerRows, {
       x: LEFT_MARGIN,
       y: 1.3,
       w: CONTENT_WIDTH,
-      h: 4.5,
+      h: partnerTableH,
       fontSize: 10,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
@@ -6421,7 +6441,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (partnerInsights.length > 0) {
       addCalloutBox(partnerSlide, 'Partner Assessment', partnerInsights.slice(0, 4).join(' • '), {
         x: LEFT_MARGIN,
-        y: 6.0,
+        y: 1.3 + partnerTableH + 0.15,
         w: CONTENT_WIDTH,
         h: 0.65,
         type: 'insight',
@@ -7633,11 +7653,12 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       },
     ]);
   });
+  const recTableH = 4.0;
   recSlide.addTable(recRows, {
     x: LEFT_MARGIN,
     y: 1.3,
     w: CONTENT_WIDTH,
-    h: 4.0,
+    h: recTableH,
     fontSize: 11,
     fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
@@ -7647,7 +7668,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   // Next steps
   recSlide.addText('Recommended Next Steps:', {
     x: LEFT_MARGIN,
-    y: 5.5,
+    y: 1.3 + recTableH + 0.15,
     w: CONTENT_WIDTH,
     h: 0.3,
     fontSize: 12,
@@ -7668,7 +7689,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     })),
     {
       x: LEFT_MARGIN,
-      y: 5.85,
+      y: 1.3 + recTableH + 0.5,
       w: CONTENT_WIDTH,
       h: 0.8,
       fontSize: 10,
