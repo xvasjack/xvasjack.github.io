@@ -30,22 +30,10 @@
       {
         "time": "2026-02-02T10:23:07.675Z",
         "message": "[waiting_for_email] [Stage 2/7] Waiting for email result (timeout: 15m)..."
-      },
-      {
-        "time": "2026-02-02T10:23:11.482Z",
-        "message": "[analyzing_output] [Stage 3/7] Analyzing output against template..."
-      },
-      {
-        "time": "2026-02-02T10:23:12.015Z",
-        "message": "[analyzing_output] [ISSUES] Found 4 issue(s): [HIGH] missing_websites at Multiple slides: Expected 'All companies should have website URLs', got '25 companies without websites: energy services, oil and gas Market Analysis, 1. Policy & Regulations, Policy & Regulations, 2023 Petroleum Law amendments created investor-friendly regime with firm enforcement, Government wants both fossil development AND decarbonization - creates compliance burden......'. Suggestion: Ensure website field is populated from search results. Add validation before adding company.; [HIGH] shallow_descriptions at Multiple slides: Expected 'Descriptions with 50+ words each', got '29/29 companies (100%) have thin descriptions'. Suggestion: Expand company descriptions to 50+ words. Include specific metrics (revenue, growth rate, market share), strategic context, and why the company is relevant. Shallow: energy services, oil and gas Market Analysis, 1. Policy & Regulations, Policy & Regulations, 2023 Petroleum Law amendments created investor-friendly regime with firm enforcement, Government wants both fossil development AND decarbonization - creates compliance burden...; [CRITICAL] text_overflow at Slides 24: Expected 'All text fits within shape boundaries', got '1 shapes overflow across 1 slides (worst: 1 extra lines)'. Suggestion: Reduce text or increase shape height. In pptxgenjs: increase `h` parameter or reduce `fontSize`. Overflow on slides: [24]. Consider splitting content across multiple slides if text is too long."
-      },
-      {
-        "time": "2026-02-02T10:23:12.016Z",
-        "message": "[generating_fix] [Stage 4/7] Generating fix via Claude Code (up to 20 min)..."
       }
     ],
     "result": null,
-    "elapsedSeconds": 109
+    "elapsedSeconds": 104
   },
   "taskHistory": [
     {
@@ -1994,5 +1982,5 @@
     "failedTasks": 25,
     "totalPRsMerged": 0
   },
-  "savedAt": "2026-02-02T10:41:32.527Z"
+  "savedAt": "2026-02-02T10:23:08.902Z"
 }

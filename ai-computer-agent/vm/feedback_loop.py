@@ -520,15 +520,15 @@ class FeedbackLoop:
             iteration.issues_found.append("Fix generation returned None")
             return "continue"
 
-        logger.info(f"Fix result: success={fix_result.get('success')}, error={fix_result.get('error', 'none')[:200]}")
+        logger.info(f"Fix result: success={fix_result.get('success')}, error={(fix_result.get('error') or 'none')[:200]}")
 
         iteration.fix_applied = fix_result.get("description", "")
         iteration.pr_number = fix_result.get("pr_number")
 
         if not fix_result.get("success"):
-            error_msg = fix_result.get('error', 'unknown error')
+            error_msg = fix_result.get('error') or 'unknown error'
             logger.error(f"Fix generation FAILED: {error_msg}")
-            await self._report_progress(f"[Stage 4/7] Fix FAILED: {error_msg[:200]}")
+            await self._report_progress(f"[Stage 4/7] Fix FAILED: {str(error_msg)[:200]}")
             iteration.issues_found.append(f"Fix generation failed: {error_msg}")
             return "continue"
 
