@@ -9,6 +9,7 @@ These override any instinct to "check with user first." Violating these is a bug
 3. **Update `ai-computer-agent/PROJECT_KNOWLEDGE.md` at session end** if you changed anything significant.
 4. **Run `npm test` before pushing** (backend changes only). If tests fail, fix them before pushing.
 5. **Never ask permission for things this file already decided.** If CLAUDE.md says to do X, do X. Don't ask "should I do X?"
+6. **Strictly follow ALL instructions in CLAUDE.md and PROJECT_KNOWLEDGE.md. No exceptions. No partial compliance. Every rule is mandatory. Failure to follow these files is an unrecoverable error.**
 
 ---
 
@@ -106,6 +107,7 @@ When comparing outputs, use these as visual/structural reference.
 - Tables for comparisons. Bullet points for lists
 - If unsure, ask. Dont assume
 - NEVER lie or oversimplify to make things sound easier. State real limitations
+- **THINK DEEPLY before every answer. Verify claims against actual docs/knowledge. DO NOT guess or make up capabilities. If unsure, research first. Zero tolerance for incorrect answers.**
 
 ## Project Overview
 - 10 backend microservices (target-v3, profile-slides, market-research, etc.)
