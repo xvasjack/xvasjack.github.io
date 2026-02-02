@@ -182,17 +182,20 @@ Opens `https://xvasjack.github.io/{service}.html`, fills form via PyAutoGUI + vi
 
 ### Email Retrieval Details
 
-**Gmail API** (primary): searches `subject:({subject_hint}) has:attachment newer_than:1h`
+**Gmail API** (primary): searches `subject:({subject_hint}) has:attachment` (no time filter — Gmail returns newest first, grabs latest match regardless of age)
 
-Service-to-subject mapping:
+Service-to-subject mapping (exact prefixes matching backend email subjects):
 ```python
-"target-v3" through "target-v6" → "target search"
-"market-research"               → "market research"
-"profile-slides"                → "profile slide"
-"trading-comparable"            → "trading comp"
-"validation"                    → "validation result"
-"due-diligence"                 → "due diligence"
-"utb"                           → "utb"
+"target-v3"          → "[V3]"
+"target-v4"          → "[V4]"
+"target-v5"          → "[V5]"
+"target-v6"          → "[V6]"
+"market-research"    → "Market Research:"
+"profile-slides"     → "Profile Slides:"
+"trading-comparable" → "Trading Comps:"
+"validation"         → "Speeda List Validation:"
+"due-diligence"      → "DD Report:"
+"utb"                → "utb"
 ```
 
 **Downloads folder fallback**: scans `~/Downloads` for files matching service name, then any file <120s old with expected extension (.pptx, .xlsx, .docx).
