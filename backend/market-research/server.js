@@ -4405,12 +4405,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     // Use master slide with fixed header/footer lines
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
 
-    // Title - 24pt Segoe UI, dark blue
+    // Title - 24pt Segoe UI, dark blue (h=0.55 so bottom at 0.70, before master lines at 0.88)
     slide.addText(truncateTitle(title), {
       x: LEFT_MARGIN,
       y: 0.15,
       w: CONTENT_WIDTH,
-      h: 0.7,
+      h: 0.55,
       fontSize: 24,
       bold: true,
       color: COLORS.dk2,
@@ -4418,23 +4418,16 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       valign: 'top',
       wrap: true,
     });
-    // Navy divider line under title
-    slide.addShape('line', {
-      x: LEFT_MARGIN,
-      y: 0.9,
-      w: CONTENT_WIDTH,
-      h: 0,
-      line: { color: COLORS.dk2, width: 2.5 },
-    });
-    // Message/subtitle - 14pt blue (the "so what" insight)
+    // Note: divider lines at y:0.88 and y:0.92 are provided by YCP_MASTER slide master
+    // Message/subtitle - 14pt blue (starts after master header lines at 0.92)
     if (subtitle) {
       const dataQualityIndicator =
         options.dataQuality === 'estimated' ? ' *' : options.dataQuality === 'low' ? ' †' : '';
       slide.addText(subtitle + dataQualityIndicator, {
         x: LEFT_MARGIN,
-        y: 0.95,
+        y: 0.97,
         w: CONTENT_WIDTH,
-        h: 0.3,
+        h: 0.28,
         fontSize: 14,
         color: COLORS.accent1,
         fontFace: FONT,
@@ -5178,19 +5171,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     x: LEFT_MARGIN,
     y: 0.15,
     w: CONTENT_WIDTH,
-    h: 0.7,
+    h: 0.55,
     fontSize: 24,
     bold: true,
     color: COLORS.dk2,
     fontFace: FONT,
   });
-  tocSlide.addShape('line', {
-    x: LEFT_MARGIN,
-    y: 0.9,
-    w: CONTENT_WIDTH,
-    h: 0,
-    line: { color: COLORS.dk2, width: 2.5 },
-  });
+  // Note: divider lines provided by YCP_MASTER at y:0.88 and y:0.92
 
   // TOC sections with slide numbers
   const tocSections = [
