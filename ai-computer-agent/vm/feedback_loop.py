@@ -369,7 +369,7 @@ class FeedbackLoop:
         # Step 1: Submit form on frontend (retry 3x)
         self.state = LoopState.TESTING_FRONTEND
         iteration.state = LoopState.TESTING_FRONTEND
-        await self._report_progress("Submitting form on frontend")
+        await self._report_progress("[Stage 1/7] Submitting form on frontend...")
 
         try:
             submit_result = await retry_with_backoff(
@@ -391,7 +391,7 @@ class FeedbackLoop:
         self.state = LoopState.WAITING_FOR_EMAIL
         iteration.state = LoopState.WAITING_FOR_EMAIL
         await self._report_progress(
-            f"Waiting for email (timeout: {self.config.email_wait_timeout_minutes}m)"
+            f"[Stage 2/7] Waiting for email result (timeout: {self.config.email_wait_timeout_minutes}m)..."
         )
 
         try:
@@ -421,7 +421,7 @@ class FeedbackLoop:
         # Step 3: Analyze output
         self.state = LoopState.ANALYZING_OUTPUT
         iteration.state = LoopState.ANALYZING_OUTPUT
-        await self._report_progress("Analyzing output")
+        await self._report_progress("[Stage 3/7] Analyzing output against template...")
 
         # Category 3 fix: Add timeout to analyze_output (can hang on corrupted files)
         # Category 5 fix: Add error handling around analyze_output call
@@ -472,10 +472,10 @@ class FeedbackLoop:
                 iteration.issues_found = [f"Invalid issues format: {type(issues).__name__}"]
 
         if not issues:
-            await self._report_progress("No issues found — output matches template!")
+            await self._report_progress("[PASS] No issues found — output matches template!")
             return "pass"
 
-        await self._report_progress(f"Found {len(issues)} issues: {issues[:3]}")
+        await self._report_progress(f"[ISSUES] Found {len(issues)} issue(s): {'; '.join(str(i) for i in issues[:3])}")
 
         # Check if stuck on same issues
         # Issue 71 fix: Hash ALL issues, not just first 3, to prevent missing later issues
@@ -496,12 +496,12 @@ class FeedbackLoop:
         # Step 4: Generate fix (retry 2x)
         self.state = LoopState.GENERATING_FIX
         iteration.state = LoopState.GENERATING_FIX
-        await self._report_progress("Generating fix via Claude Code")
+        await self._report_progress("[Stage 4/7] Generating fix via Claude Code (up to 20 min)...")
 
         try:
             fix_result = await retry_with_backoff(
                 lambda: self.generate_fix(issues, analysis),
-                max_retries=2, step_name="generate_fix", step_timeout=600,
+                max_retries=2, step_name="generate_fix", step_timeout=1200,
             )
         except Exception as e:
             iteration.issues_found.append(f"Fix generation failed after retries: {e}")
@@ -533,7 +533,7 @@ class FeedbackLoop:
         if code_pushed:
             self.state = LoopState.WAITING_FOR_DEPLOY
             iteration.state = LoopState.WAITING_FOR_DEPLOY
-            await self._report_progress("Waiting for deployment")
+            await self._report_progress("[Stage 5/7] Waiting for Railway deployment...")
 
             deploy_ok = await self._wait_for_deployment()
             iteration.deploy_verified = deploy_ok
@@ -558,7 +558,7 @@ class FeedbackLoop:
         # Step 7: Check logs (F6: add timeout + try/except)
         self.state = LoopState.CHECKING_LOGS
         iteration.state = LoopState.CHECKING_LOGS
-        await self._report_progress("Checking logs for errors")
+        await self._report_progress("[Stage 6/7] Checking logs for runtime errors...")
 
         try:
             log_result = await asyncio.wait_for(self.check_logs(), timeout=120)
@@ -574,6 +574,7 @@ class FeedbackLoop:
         # Issue 8: Save state after iteration completes
         self._save_state(iteration.number)
 
+        await self._report_progress("[Stage 7/7] Iteration complete — looping back to retest...")
         return "continue"
 
     async def _try_research(self, issues: List[str], iteration: LoopIteration) -> str:

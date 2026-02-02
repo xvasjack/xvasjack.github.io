@@ -318,7 +318,20 @@ def extract_company_from_slide(slide, slide_number: int) -> Optional[CompanyInfo
 
     # 3.12: Skip known non-company patterns (titles, headers, etc.)
     skip_patterns = ["table of contents", "agenda", "appendix", "disclaimer",
-                     "confidential", "prepared for", "prepared by", "page "]
+                     "confidential", "prepared for", "prepared by", "page ",
+                     # Market-research section headers (false positive fix)
+                     "section ", "overview", "legislation", "regulatory",
+                     "key players", "market size", "market trends",
+                     "competitive landscape", "swot", "pest", "porter",
+                     "recommendations", "conclusion", "executive summary",
+                     "introduction", "methodology", "references", "sources"]
+    # Also skip if it looks like a country/region header (all caps, short)
+    if company_name.isupper() and len(company_name.split()) <= 3:
+        return None
+    # Skip numbered section patterns like "Section 1 of 5"
+    import re as _re
+    if _re.match(r'^section\s+\d+', company_name.lower()):
+        return None
     if any(p in company_name.lower() for p in skip_patterns):
         return None
 

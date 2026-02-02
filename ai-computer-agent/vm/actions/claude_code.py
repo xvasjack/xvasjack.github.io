@@ -131,7 +131,7 @@ You are being invoked by an automated agent. Follow these rules:
 async def run_claude_code(
     prompt: str,
     working_dir: Optional[str] = None,
-    timeout_seconds: int = 600,
+    timeout_seconds: int = 1200,
     service_name: Optional[str] = None,
     allowed_dirs: Optional[List[str]] = None,
     iteration: int = 0,
