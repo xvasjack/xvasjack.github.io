@@ -140,6 +140,7 @@ async def submit_form_callback(
 async def wait_for_email_callback(
     service_name: str,
     timeout_minutes: int = 15,
+    submitted_at: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
     Wait for automation output email.
@@ -155,8 +156,10 @@ async def wait_for_email_callback(
     if HAS_GMAIL_API:
         try:
             subject_hint = SERVICE_EMAIL_SUBJECTS.get(service_name, service_name)
-            # Filter to recent emails only to avoid grabbing old results
-            query = f"subject:({subject_hint}) has:attachment"
+            # Use after: with epoch timestamp to only find emails sent after form submission
+            # Subtract 60s buffer for clock skew between our machine and Gmail
+            after_epoch = int((submitted_at or time.time()) - 60)
+            query = f"subject:({subject_hint}) has:attachment after:{after_epoch}"
             result = await wait_for_email_api(
                 query=query,
                 download_dir=download_dir,
@@ -619,11 +622,15 @@ async def run_feedback_loop(
 
     iteration_counter = [resume_from]
 
+    # Track when form was last submitted so email check only finds newer emails
+    _last_submit_time = [time.time()]
+
     async def submit():
+        _last_submit_time[0] = time.time()
         return await submit_form_callback(service_name, form_data)
 
     async def wait_email():
-        return await wait_for_email_callback(service_name)
+        return await wait_for_email_callback(service_name, submitted_at=_last_submit_time[0])
 
     async def analyze(file_path):
         # Issue 9: Try learned template first
