@@ -9,6 +9,7 @@ These override any instinct to "check with user first." Violating these is a bug
 3. **Update `ai-computer-agent/PROJECT_KNOWLEDGE.md` at session end** if you changed anything significant.
 4. **Run `npm test` before pushing** (backend changes only). If tests fail, fix them before pushing.
 5. **Never ask permission for things this file already decided.** If CLAUDE.md says to do X, do X. Don't ask "should I do X?"
+6. **Strictly follow ALL instructions in CLAUDE.md and PROJECT_KNOWLEDGE.md. No exceptions. No partial compliance. Every rule is mandatory. Failure to follow these files is an unrecoverable error.**
 
 ---
 
