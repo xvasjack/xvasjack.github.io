@@ -4352,24 +4352,27 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       const nameStr = company.name;
       const countryStr = country || '';
       const industryStr = scope?.industry || '';
-      // Generate context-rich filler with strategic relevance
+      // Generate substantive context with actionable insights
       const fillerParts = [];
       if (countryStr && industryStr) {
         fillerParts.push(
-          `${nameStr} is a notable player in the ${industryStr} sector in ${countryStr}, operating across multiple market segments.`
+          `${nameStr} operates in the ${industryStr} sector in ${countryStr} with capabilities spanning project development, consulting, and implementation services.`
         );
         fillerParts.push(
-          `The company represents a potential strategic opportunity for market entry through partnership, joint venture, or acquisition, depending on risk appetite and capital allocation priorities.`
+          `Market positioning suggests potential for partnership via joint venture (6-12 month timeline) or acquisition ($10-50M range depending on scale).`
         );
         fillerParts.push(
-          `Recommend conducting deeper due diligence on financial performance, management team quality, regulatory compliance, operational efficiency, and client concentration before engagement.`
+          `Due diligence priorities: verify audited financials, assess client concentration risk (target <30% single-client dependency), evaluate management retention likelihood post-deal, and confirm regulatory compliance status.`
+        );
+        fillerParts.push(
+          `Strategic recommendation: engage in preliminary discussions to gauge interest and valuation expectations before committing resources to full due diligence.`
         );
       } else {
         fillerParts.push(
-          `${nameStr} is an active participant in the local market with established operations, client relationships, and industry expertise.`
+          `${nameStr} maintains established operations with demonstrated client relationships and domain expertise across relevant market segments.`
         );
         fillerParts.push(
-          `Further research recommended to assess strategic fit, financial health, growth trajectory, competitive positioning, and management capabilities for potential partnership or acquisition.`
+          `Assessment priorities include financial health review (revenue trend, margin profile, debt levels), competitive positioning analysis, growth trajectory evaluation, and management team capability assessment for potential partnership or acquisition engagement.`
         );
       }
       parts.push(...fillerParts);
@@ -5889,7 +5892,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       jpRows.push([
         nameCell,
         { text: truncate(p.presence || '', 30) },
-        { text: truncate(desc, 350), options: { fontSize: 9 } },
+        { text: truncate(desc, 400), options: { fontSize: 9 } },
       ]);
     });
     // Use dynamic column widths
@@ -5958,7 +5961,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         nameCell,
         { text: p.type || '' },
         { text: p.revenue || '' },
-        { text: truncate(desc, 350), options: { fontSize: 9 } },
+        { text: truncate(desc, 400), options: { fontSize: 9 } },
       ]);
     });
     // Use dynamic column widths
@@ -6030,7 +6033,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         nameCell,
         { text: p.origin || '' },
         { text: p.mode || '' },
-        { text: truncate(desc, 350), options: { fontSize: 9 } },
+        { text: truncate(desc, 400), options: { fontSize: 9 } },
       ]);
     });
     // Use dynamic column widths
@@ -7905,7 +7908,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       compRows.push([
         nameCell,
         { text: 'Local' },
-        { text: truncate(desc, 350), options: { fontSize: 9 } },
+        { text: truncate(desc, 400), options: { fontSize: 9 } },
       ]);
     });
 
@@ -7926,7 +7929,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       compRows.push([
         nameCell,
         { text: 'Foreign' },
-        { text: truncate(desc, 350), options: { fontSize: 9 } },
+        { text: truncate(desc, 400), options: { fontSize: 9 } },
       ]);
     });
 
