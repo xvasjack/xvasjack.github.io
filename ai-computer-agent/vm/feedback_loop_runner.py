@@ -141,6 +141,7 @@ async def wait_for_email_callback(
     service_name: str,
     timeout_minutes: int = 15,
     skip_email_ids: set = None,
+    after_epoch: int = None,
 ) -> Dict[str, Any]:
     """
     Wait for automation output email.
@@ -163,6 +164,7 @@ async def wait_for_email_callback(
                 timeout_minutes=timeout_minutes,
                 poll_interval=30,
                 skip_email_ids=skip_email_ids,
+                after_epoch=after_epoch,
             )
             if result.get("success"):
                 logger.info(f"Gmail API downloaded: {result.get('file_path')}")
@@ -675,12 +677,18 @@ async def run_feedback_loop(
 
     iteration_counter = [resume_from]
     seen_email_ids = set()  # Track processed email IDs across iterations
+    submission_epoch = [0]  # Timestamp of last form submission (only accept emails after this)
 
     async def submit():
+        submission_epoch[0] = int(time.time())
         return await submit_form_callback(service_name, form_data)
 
     async def wait_email():
-        result = await wait_for_email_callback(service_name, skip_email_ids=seen_email_ids)
+        result = await wait_for_email_callback(
+            service_name,
+            skip_email_ids=seen_email_ids,
+            after_epoch=submission_epoch[0] if submission_epoch[0] else None,
+        )
         # Track this email ID so next iteration skips it
         if result.get("success") and result.get("email_id"):
             seen_email_ids.add(result["email_id"])

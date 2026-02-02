@@ -439,6 +439,7 @@ async def wait_for_email_api(
     timeout_minutes: int = 15,
     poll_interval: int = 30,
     skip_email_ids: Optional[set] = None,
+    after_epoch: Optional[int] = None,
 ) -> Dict[str, Any]:
     """
     Poll Gmail for an email matching the query, then download its attachment.
@@ -449,6 +450,7 @@ async def wait_for_email_api(
         timeout_minutes: Max time to wait
         poll_interval: Seconds between polls
         skip_email_ids: Set of email IDs to skip (already processed in previous iterations)
+        after_epoch: Only match emails received after this Unix epoch (seconds)
 
     Returns:
         {"success": True, "file_path": ...} or {"success": False, "error": ...}
@@ -456,6 +458,9 @@ async def wait_for_email_api(
     skip_ids = skip_email_ids or set()
     if skip_ids:
         logger.info(f"Skipping {len(skip_ids)} already-processed email(s)")
+    # Add time filter to only match emails after form submission
+    if after_epoch:
+        query = f"{query} after:{after_epoch}"
     logger.info(f"Waiting for email: query={query} | timeout={timeout_minutes}m | poll_interval={poll_interval}s")
 
     deadline = time.time() + (timeout_minutes * 60)
