@@ -106,6 +106,7 @@ When comparing outputs, use these as visual/structural reference.
 - Tables for comparisons. Bullet points for lists
 - If unsure, ask. Dont assume
 - NEVER lie or oversimplify to make things sound easier. State real limitations
+- **THINK DEEPLY before every answer. Verify claims against actual docs/knowledge. DO NOT guess or make up capabilities. If unsure, research first. Zero tolerance for incorrect answers.**
 
 ## Project Overview
 - 10 backend microservices (target-v3, profile-slides, market-research, etc.)
