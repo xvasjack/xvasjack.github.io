@@ -320,6 +320,7 @@ async def analyze_output_callback(
 
         return {
             "issues": issues,
+            "passed": comparison_result.passed,
             "analysis": analysis,
             "comparison": comparison_result.to_dict(),
             "fix_prompt": comparison_result.generate_claude_code_prompt(),

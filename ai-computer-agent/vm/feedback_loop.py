@@ -471,8 +471,12 @@ class FeedbackLoop:
             else:
                 iteration.issues_found = [f"Invalid issues format: {type(issues).__name__}"]
 
-        if not issues:
-            await self._report_progress("[PASS] No issues found — output matches template!")
+        if analysis.get("passed", not issues):
+            # Template says output passes — log non-critical issues but don't loop
+            if issues:
+                await self._report_progress(f"[PASS] Output matches template (with {len(issues)} non-critical notes)")
+            else:
+                await self._report_progress("[PASS] No issues found — output matches template!")
             return "pass"
 
         await self._report_progress(f"[ISSUES] Found {len(issues)} issue(s): {'; '.join(str(i) for i in issues[:3])}")
