@@ -567,13 +567,26 @@ class Agent:
                     # DL-1: Break and reconnect
                     break
 
+    @staticmethod
+    def _is_ws_open(ws) -> bool:
+        """Check if WebSocket is open. Handles websockets v10-v16+.
+        v10-11: ws.closed (bool), v12+/v16: ws.state (enum, OPEN=1)."""
+        if ws is None:
+            return False
+        if hasattr(ws, 'closed'):
+            return not ws.closed
+        if hasattr(ws, 'state'):
+            # websockets v16 ClientConnection: state.value == 1 means OPEN
+            return getattr(ws.state, 'value', None) == 1
+        return True  # Optimistic: try to send, let exception handler catch failures
+
     async def _safe_send(self, msg: str):
         """H18: Send with error handling — queue on failure. A4: Fix TOCTOU race with local reference."""
         # A4: Capture local reference to prevent race condition
         ws = self.ws
         try:
             # RC-1: Wrap send in try/except to handle TOCTOU race where ws closes between check and send
-            if ws and not getattr(ws, 'closed', True):
+            if self._is_ws_open(ws):
                 try:
                     # C4 fix: Serialize sends to prevent frame interleaving
                     async with self._ws_send_lock:
