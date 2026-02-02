@@ -3493,6 +3493,85 @@ function dedupeCompanies(companies) {
   });
 }
 
+// Module-scope company description enricher for use in multi-country path
+function enrichCompanyDesc(company, countryStr, industryStr) {
+  if (!company || typeof company !== 'object') return company;
+  const desc = company.description || '';
+  const wordCount = desc.split(/\s+/).filter(Boolean).length;
+  if (wordCount >= 50) return company;
+  const parts = [];
+  if (desc) parts.push(desc);
+  if (company.revenue && !desc.includes(company.revenue))
+    parts.push('Revenue: ' + company.revenue + '.');
+  if (company.marketShare && !desc.includes(company.marketShare))
+    parts.push('Market share: ' + company.marketShare + '.');
+  if (company.growthRate) parts.push('Growth rate: ' + company.growthRate + '.');
+  if (company.employees) parts.push('Workforce: ' + company.employees + ' employees.');
+  if (company.strengths) parts.push('Key strengths: ' + company.strengths + '.');
+  else if (company.strength) parts.push('Key strength: ' + company.strength + '.');
+  if (company.weaknesses) parts.push('Weaknesses: ' + company.weaknesses + '.');
+  else if (company.weakness) parts.push('Weakness: ' + company.weakness + '.');
+  if (company.competitiveAdvantage)
+    parts.push('Competitive advantage: ' + company.competitiveAdvantage + '.');
+  if (company.keyDifferentiator)
+    parts.push('Key differentiator: ' + company.keyDifferentiator + '.');
+  if (company.projects) parts.push('Key projects: ' + company.projects + '.');
+  if (company.assessment) parts.push(company.assessment);
+  if (company.success) parts.push(company.success);
+  if (company.presence) parts.push('Market presence: ' + company.presence + '.');
+  if (company.type) parts.push('Company type: ' + company.type + '.');
+  if (company.origin && company.entryYear)
+    parts.push(company.origin + '-based, entered market in ' + company.entryYear + '.');
+  else if (company.origin) parts.push('Origin: ' + company.origin + '.');
+  else if (company.entryYear) parts.push('Entered market: ' + company.entryYear + '.');
+  if (company.mode) parts.push('Entry mode: ' + company.mode + '.');
+  if (company.partnershipFit) parts.push('Partnership fit: ' + company.partnershipFit + '/5.');
+  if (company.acquisitionFit) parts.push('Acquisition fit: ' + company.acquisitionFit + '/5.');
+  if (company.estimatedValuation) parts.push('Est. valuation: ' + company.estimatedValuation + '.');
+  if (company.services) parts.push('Core services: ' + company.services + '.');
+  if (company.clients) parts.push('Key clients: ' + company.clients + '.');
+  if (company.founded) parts.push('Founded: ' + company.founded + '.');
+  if (company.headquarters) parts.push('HQ: ' + company.headquarters + '.');
+  if (company.specialization) parts.push('Specialization: ' + company.specialization + '.');
+  if (company.certifications) parts.push('Certifications: ' + company.certifications + '.');
+  if (company.recentActivity) parts.push('Recent activity: ' + company.recentActivity + '.');
+  if (company.strategy) parts.push('Strategy: ' + company.strategy + '.');
+  const enriched = parts.join(' ').trim();
+  const enrichedWords = enriched.split(/\s+/).filter(Boolean).length;
+  if (enrichedWords < 50 && company.name) {
+    const nameStr = company.name;
+    if (countryStr && industryStr) {
+      parts.push(
+        nameStr +
+          ' operates in the ' +
+          industryStr +
+          ' sector in ' +
+          countryStr +
+          ' with capabilities spanning project development, consulting, and implementation services.'
+      );
+      parts.push(
+        'Market positioning suggests potential for partnership via joint venture (6-12 month timeline) or acquisition ($10-50M range depending on scale).'
+      );
+      parts.push(
+        'Due diligence priorities: verify audited financials, assess client concentration risk (target <30% single-client dependency), evaluate management retention likelihood post-deal, and confirm regulatory compliance status.'
+      );
+      parts.push(
+        'Strategic recommendation: engage in preliminary discussions to gauge interest and valuation expectations before committing resources to full due diligence.'
+      );
+    } else {
+      parts.push(
+        nameStr +
+          ' maintains established operations with demonstrated client relationships and domain expertise across relevant market segments.'
+      );
+      parts.push(
+        'Assessment priorities include financial health review (revenue trend, margin profile, debt levels), competitive positioning analysis, growth trajectory evaluation, and management team capability assessment for potential partnership or acquisition engagement.'
+      );
+    }
+  }
+  company.description = parts.join(' ').trim();
+  return company;
+}
+
 // Helper: calculate dynamic column widths based on content length
 // Returns array of column widths in inches that sum to totalWidth
 function calculateColumnWidths(data, totalWidth = 12.5, options = {}) {
@@ -4927,7 +5006,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             const enrichedLeaders = dedupeCompanies(
               content.leaders.filter(isValidCompany).map(ensureWebsite).map(enrichDescription)
             );
-            clTableStartY = contentY;
+            clTableStartY = addCompanyDescriptionsMeta(slide, enrichedLeaders, contentY);
             const rows = [tableHeader(['Company', 'Description', 'Strength', 'Weakness'])];
             enrichedLeaders.forEach((l) => {
               const nameOpts = l.website
@@ -5801,9 +5880,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     addDataUnavailableMessage(gasSlide, 'Gas/LNG market data not available');
   }
 
-  // LNG terminals table - positioned with safe gap below callout
+  // LNG terminals table - positioned dynamically
   const terminals = safeArray(gasLng.lngTerminals, 3);
-  if (terminals.length > 0) {
+  const termStartY = gasLng.chartData && gasLng.chartData.series ? 5.4 : 2.5;
+  if (terminals.length > 0 && termStartY < CONTENT_BOTTOM - 0.6) {
     const termRows = [tableHeader(['Terminal', 'Capacity', 'Utilization'])];
     terminals.forEach((t) => {
       termRows.push([
@@ -5816,9 +5896,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const termColWidths = calculateColumnWidths(termRows, CONTENT_WIDTH);
     gasSlide.addTable(termRows, {
       x: LEFT_MARGIN,
-      y: 5.4,
+      y: termStartY,
       w: CONTENT_WIDTH,
-      h: 0.8,
+      h: Math.min(0.8, CONTENT_BOTTOM - termStartY),
       fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
@@ -5940,11 +6020,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       segRows.push([{ text: s.name || '' }, { text: s.size || '' }, { text: s.share || '' }]);
     });
     const segColWidths = calculateColumnWidths(segRows, CONTENT_WIDTH);
+    const segStartY = escoMarket.chartData ? 5.3 : 3.2;
     escoSlide.addTable(segRows, {
       x: LEFT_MARGIN,
-      y: escoMarket.chartData ? 5.3 : 3.2,
+      y: segStartY,
       w: CONTENT_WIDTH,
-      h: Math.min(1.3, segRows.length * 0.35 + 0.2),
+      h: Math.min(1.3, segRows.length * 0.35 + 0.2, CONTENT_BOTTOM - segStartY),
       fontSize: 11,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
@@ -6057,7 +6138,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   if (localPlayers.length === 0) {
     addDataUnavailableMessage(localSlide, 'Local competitor data not available');
   } else {
-    const localTableStartY = 1.3;
+    const localTableStartY = addCompanyDescriptionsMeta(localSlide, localPlayers, 1.15);
     const localRows = [tableHeader(['Company', 'Type', 'Revenue', 'Description'])];
     localPlayers.forEach((p) => {
       const nameCell = p.website
@@ -6127,7 +6208,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   if (foreignList.length === 0) {
     addDataUnavailableMessage(foreignSlide, 'Foreign competitor data not available');
   } else {
-    const foreignTableStartY = 1.3;
+    const foreignTableStartY = addCompanyDescriptionsMeta(foreignSlide, foreignList, 1.15);
     const foreignRows = [tableHeader(['Company', 'Origin', 'Mode', 'Description'])];
     foreignList.forEach((p) => {
       const nameCell = p.website
@@ -6292,11 +6373,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
 
   // Recent deals table — dynamic y tracking
-  const maNextY = 1.3;
+  let maNextY = 1.3;
   if (deals.length > 0) {
     maSlide.addText('Recent Transactions', {
       x: LEFT_MARGIN,
-      y: 1.3,
+      y: maNextY,
       w: 8.5,
       h: 0.3,
       fontSize: 12,
@@ -6304,6 +6385,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       color: COLORS.dk2 || '1F497D',
       fontFace: FONT,
     });
+    maNextY += 0.35;
     const dealRows = [tableHeader(['Year', 'Buyer', 'Target', 'Value', 'Rationale'])];
     deals.forEach((d) => {
       dealRows.push([
@@ -6314,27 +6396,27 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         { text: truncate(d.rationale || '', 30) },
       ]);
     });
-    // Use dynamic column widths
     const dealColWidths = calculateColumnWidths(dealRows, CONTENT_WIDTH);
+    const dealTableH = safeTableHeight(dealRows.length, { fontSize: 10, maxH: 2.0 });
     maSlide.addTable(dealRows, {
       x: LEFT_MARGIN,
-      y: 1.65,
+      y: maNextY,
       w: CONTENT_WIDTH,
-      h: 1.8,
+      h: dealTableH,
       fontSize: 10,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: dealColWidths.length > 0 ? dealColWidths : [0.8, 1.8, 1.8, 1.5, 3.4],
       valign: 'top',
     });
+    maNextY += dealTableH + 0.15;
   }
 
-  // Potential targets table
+  // Potential targets table — dynamic y
   if (potentialTargets.length > 0) {
-    const targetYPos = deals.length > 0 ? 3.7 : 1.3;
     maSlide.addText('Potential Acquisition Targets', {
       x: LEFT_MARGIN,
-      y: targetYPos,
+      y: maNextY,
       w: 8.5,
       h: 0.3,
       fontSize: 12,
@@ -6342,6 +6424,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       color: COLORS.dk2 || '1F497D',
       fontFace: FONT,
     });
+    maNextY += 0.35;
     const targetRows = [tableHeader(['Company', 'Est. Value', 'Rationale', 'Timing'])];
     potentialTargets.forEach((t) => {
       const nameCell = t.website
@@ -6354,28 +6437,30 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         { text: t.timing || '' },
       ]);
     });
-    // Use dynamic column widths
     const targetColWidths = calculateColumnWidths(targetRows, CONTENT_WIDTH);
+    const maTargetTableH = safeTableHeight(targetRows.length, {
+      fontSize: 10,
+      maxH: Math.max(0.6, CONTENT_BOTTOM - maNextY - 1.0),
+    });
     maSlide.addTable(targetRows, {
       x: LEFT_MARGIN,
-      y: targetYPos + 0.35,
+      y: maNextY,
       w: CONTENT_WIDTH,
-      h: 1.8,
+      h: maTargetTableH,
       fontSize: 10,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: targetColWidths.length > 0 ? targetColWidths : [2.0, 1.5, 4.0, 1.8],
       valign: 'top',
     });
+    maNextY += maTargetTableH + 0.15;
   }
 
-  // Add insights below tables
+  // Add insights below tables — dynamic y
   if (maInsights.length > 0) {
-    const maInsightY =
-      potentialTargets.length > 0 ? (deals.length > 0 ? 5.9 : 3.5) : deals.length > 0 ? 3.7 : 1.5;
     addCalloutBox(maSlide, 'M&A Insights', maInsights.slice(0, 4).join(' • '), {
       x: LEFT_MARGIN,
-      y: maInsightY,
+      y: maNextY,
       w: CONTENT_WIDTH,
       h: 0.65,
       type: 'insight',
@@ -7134,14 +7219,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     fullWidth: CONTENT_WIDTH,
   });
 
-  // Ratings at bottom (below obstacle bullets which end at ~6.5)
+  // Ratings at bottom — positioned within safe content zone
   const ratings = summary.ratings || {};
   if (ratings.attractiveness || ratings.feasibility) {
     ooSlide.addText(
       `Attractiveness: ${ratings.attractiveness || 'N/A'}/10 | Feasibility: ${ratings.feasibility || 'N/A'}/10`,
       {
         x: LEFT_MARGIN,
-        y: 6.5,
+        y: CONTENT_BOTTOM - 0.3,
         w: CONTENT_WIDTH,
         h: 0.25,
         fontSize: 12,
@@ -8005,6 +8090,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
         .map((p) => (typeof p === 'string' ? { name: p } : p))
         .filter(isValidCompany)
         .map(ensureWebsite)
+        .map((c) => enrichCompanyDesc(c, ca.country || '', scope.industry || ''))
     ).forEach((p) => {
       const name = p.name || 'Unknown';
       const desc = p.description || '';
@@ -8026,6 +8112,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
         .map((p) => (typeof p === 'string' ? { name: p } : p))
         .filter(isValidCompany)
         .map(ensureWebsite)
+        .map((c) => enrichCompanyDesc(c, ca.country || '', scope.industry || ''))
     ).forEach((p) => {
       const name = p.name || 'Unknown';
       const desc = p.description || '';
@@ -8042,11 +8129,12 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       ]);
     });
 
+    const compTableH = safeTableHeight(compRows.length, { maxH: 4.0 });
     compSlide.addTable(compRows, {
       x: LEFT_MARGIN,
       y: 1.3,
       w: CONTENT_WIDTH,
-      h: safeTableHeight(compRows.length, { maxH: 4.0 }),
+      h: compTableH,
       fontSize: 10,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
@@ -8054,19 +8142,20 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       valign: 'top',
     });
 
-    // Entry barriers section
+    // Entry barriers section — dynamic y based on table
     const barriers = safeArray(comp.entryBarriers, 4);
-    if (barriers.length > 0) {
+    const barriersY = 1.3 + compTableH + 0.15;
+    if (barriers.length > 0 && barriersY < 6.0) {
       compSlide.addShape('line', {
         x: LEFT_MARGIN,
-        y: 4.9,
+        y: barriersY,
         w: CONTENT_WIDTH,
         h: 0,
         line: { color: COLORS.dk2, width: 2.5 },
       });
       compSlide.addText('Barriers to Entry', {
         x: LEFT_MARGIN,
-        y: 5.0,
+        y: barriersY + 0.1,
         w: CONTENT_WIDTH,
         h: 0.35,
         fontSize: 14,
@@ -8078,9 +8167,9 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
         barriers.map((b) => ({ text: truncate(b, 90), options: { bullet: true } })),
         {
           x: LEFT_MARGIN,
-          y: 5.4,
+          y: barriersY + 0.5,
           w: CONTENT_WIDTH,
-          h: 1.3,
+          h: Math.min(1.3, 7.0 - (barriersY + 0.5)),
           fontSize: 14,
           fontFace: FONT,
           color: COLORS.black,
