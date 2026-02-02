@@ -5294,7 +5294,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         { text: truncate(act.enforcement || '', 40) },
       ]);
     });
-    const actsTableH = 4.0;
+    const actsTableH = safeTableHeight(actsRows.length, { maxH: 4.5 });
     actsSlide.addTable(actsRows, {
       x: LEFT_MARGIN,
       y: 1.3,
@@ -6350,9 +6350,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       financing.map((f) => `• ${truncate(f, 60)}`).join('\n'),
       {
         x: LEFT_MARGIN,
-        y: econInsights.length > 0 ? 5.3 : 4.5,
+        y: econInsights.length > 0 ? 1.3 + 3.0 + 0.15 + 0.65 + 0.15 : 1.3 + 3.0 + 0.15,
         w: CONTENT_WIDTH,
-        h: 1.2,
+        h: 0.8,
         type: 'insight',
       }
     );
@@ -6425,7 +6425,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
     // Use dynamic column widths
     const partnerColWidths = calculateColumnWidths(partnerRows, CONTENT_WIDTH);
-    const partnerTableH = 4.5;
+    const partnerTableH = safeTableHeight(partnerRows.length, { maxH: 4.5 });
     partnerSlide.addTable(partnerRows, {
       x: LEFT_MARGIN,
       y: 1.3,
@@ -7653,7 +7653,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       },
     ]);
   });
-  const recTableH = 4.0;
+  const recTableH = safeTableHeight(recRows.length, { maxH: 4.5 });
   recSlide.addTable(recRows, {
     x: LEFT_MARGIN,
     y: 1.3,
