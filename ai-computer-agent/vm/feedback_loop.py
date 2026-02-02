@@ -508,19 +508,28 @@ class FeedbackLoop:
                 max_retries=2, step_name="generate_fix", step_timeout=1200,
             )
         except Exception as e:
+            logger.error(f"Fix generation FAILED (exception): {e}")
+            await self._report_progress(f"[Stage 4/7] Fix FAILED (exception): {str(e)[:200]}")
             iteration.issues_found.append(f"Fix generation failed after retries: {e}")
             return "continue"
 
         # Category 1 fix: null check before .get() on fix_result
         if fix_result is None:
+            logger.error("Fix generation FAILED: returned None")
+            await self._report_progress("[Stage 4/7] Fix FAILED: returned None")
             iteration.issues_found.append("Fix generation returned None")
             return "continue"
+
+        logger.info(f"Fix result: success={fix_result.get('success')}, error={fix_result.get('error', 'none')[:200]}")
 
         iteration.fix_applied = fix_result.get("description", "")
         iteration.pr_number = fix_result.get("pr_number")
 
         if not fix_result.get("success"):
-            iteration.issues_found.append(f"Fix generation failed: {fix_result.get('error')}")
+            error_msg = fix_result.get('error', 'unknown error')
+            logger.error(f"Fix generation FAILED: {error_msg}")
+            await self._report_progress(f"[Stage 4/7] Fix FAILED: {error_msg[:200]}")
+            iteration.issues_found.append(f"Fix generation failed: {error_msg}")
             return "continue"
 
         # Step 5: Verify push succeeded (push-to-main flow, no PRs)
