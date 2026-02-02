@@ -4344,17 +4344,17 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       const fillerParts = [];
       if (countryStr && industryStr) {
         fillerParts.push(
-          `${nameStr} is a notable player in the ${industryStr} sector in ${countryStr}, operating across multiple market segments with established local presence.`
+          `${nameStr} is a notable player in the ${industryStr} sector in ${countryStr}, operating across multiple market segments.`
         );
         fillerParts.push(
           `The company represents a potential strategic opportunity for market entry through partnership, joint venture, or acquisition, depending on risk appetite and capital allocation priorities.`
         );
         fillerParts.push(
-          `Recommend conducting deeper due diligence on financial performance, management team quality, regulatory compliance, operational efficiency, and client concentration risk before engagement.`
+          `Recommend conducting deeper due diligence on financial performance, management team quality, regulatory compliance, operational efficiency, and client concentration before engagement.`
         );
       } else {
         fillerParts.push(
-          `${nameStr} is an active participant in the local market with established operations, client relationships, and demonstrated industry expertise across key verticals.`
+          `${nameStr} is an active participant in the local market with established operations, client relationships, and industry expertise.`
         );
         fillerParts.push(
           `Further research recommended to assess strategic fit, financial health, growth trajectory, competitive positioning, and management capabilities for potential partnership or acquisition.`
