@@ -423,7 +423,7 @@ def compare_pptx_to_template(
     total_checks += 1
     bad_urls = []
     for company in companies:
-        website = company.get("website", "")
+        website = company.get("website") or ""
         for blocked in template.blocked_domains:
             if blocked in website.lower():
                 bad_urls.append({

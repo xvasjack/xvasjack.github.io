@@ -183,7 +183,7 @@ async def submit_form_api(
         "target-v4": ["Business", "Country", "Exclusion", "Email"],
         "target-v5": ["Business", "Country", "Exclusion", "Email"],
         "target-v6": ["Business", "Country", "Exclusion", "Email"],
-        "market-research": ["prompt", "Email"],
+        "market-research": ["prompt", "email"],
         "profile-slides": ["Business", "Country", "Email"],
         "trading-comparable": ["TargetCompanyOrIndustry", "IsProfitable", "Email"],
         "validation": ["Companies", "Countries", "TargetBusiness", "OutputOption", "Email"],
@@ -196,7 +196,7 @@ async def submit_form_api(
     for f in fields:
         # Case-insensitive field lookup
         val = form_data.get(f) or form_data.get(f.lower()) or form_data.get(f[0].upper() + f[1:])
-        if f == "Email":
+        if f.lower() == "email":
             val = email
         if val is not None:
             body[f] = val
