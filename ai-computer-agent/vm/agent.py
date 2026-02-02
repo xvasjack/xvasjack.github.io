@@ -739,7 +739,17 @@ class Agent:
             form_data = {}
             if task.context:
                 try:
-                    form_data = json.loads(task.context) if isinstance(task.context, str) else task.context
+                    raw_context = json.loads(task.context) if isinstance(task.context, str) else task.context
+                    # Support nested form_data key from structured context
+                    if isinstance(raw_context, dict) and "form_data" in raw_context:
+                        form_data = dict(raw_context["form_data"])
+                        # Carry over start_from and existing_file_path to form_data
+                        if "start_from" in raw_context:
+                            form_data["start_from"] = raw_context["start_from"]
+                        if "existing_file_path" in raw_context:
+                            form_data["existing_file_path"] = raw_context["existing_file_path"]
+                    else:
+                        form_data = raw_context
                 except (json.JSONDecodeError, TypeError):
                     form_data = {"business": task.description}
 
