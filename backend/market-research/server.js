@@ -4833,33 +4833,33 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           // Leaders table
           if (content.leaders && content.leaders.length > 0) {
             const rows = [tableHeader(['Company', 'Strength', 'Weakness'])];
-            dedupeCompanies(content.leaders.filter(isValidCompany).map(ensureWebsite)).forEach(
-              (l) => {
-                const nameOpts = l.website
-                  ? {
-                      fontFace: FONT,
-                      fontSize: 11,
-                      bold: true,
-                      color: '0066CC',
-                      hyperlink: { url: l.website },
-                    }
-                  : { fontFace: FONT, fontSize: 11, bold: true, color: COLORS.black };
-                rows.push([
-                  {
-                    text: l.name || '',
-                    options: nameOpts,
-                  },
-                  {
-                    text: l.strength || '',
-                    options: { fontFace: FONT, fontSize: 11, color: COLORS.green },
-                  },
-                  {
-                    text: l.weakness || '',
-                    options: { fontFace: FONT, fontSize: 11, color: COLORS.red },
-                  },
-                ]);
-              }
-            );
+            dedupeCompanies(
+              content.leaders.filter(isValidCompany).map(ensureWebsite).map(enrichDescription)
+            ).forEach((l) => {
+              const nameOpts = l.website
+                ? {
+                    fontFace: FONT,
+                    fontSize: 11,
+                    bold: true,
+                    color: '0066CC',
+                    hyperlink: { url: l.website },
+                  }
+                : { fontFace: FONT, fontSize: 11, bold: true, color: COLORS.black };
+              rows.push([
+                {
+                  text: l.name || '',
+                  options: nameOpts,
+                },
+                {
+                  text: l.strength || '',
+                  options: { fontFace: FONT, fontSize: 11, color: COLORS.green },
+                },
+                {
+                  text: l.weakness || '',
+                  options: { fontFace: FONT, fontSize: 11, color: COLORS.red },
+                },
+              ]);
+            });
             slide.addTable(rows, {
               x: LEFT_MARGIN,
               y: contentY,
