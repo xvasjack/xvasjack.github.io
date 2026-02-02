@@ -65,6 +65,9 @@ class LearnedTemplate:
     # AI-generated notes about what makes this output "good"
     quality_notes: str
 
+    # Formatting profile learned from PPTX (None for non-PPTX)
+    formatting_rules: Optional[Dict[str, Any]] = None
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
@@ -182,6 +185,20 @@ class TemplateLearner:
             additional_rules
         )
 
+        # Extract formatting profile for PPTX files
+        formatting_rules = None
+        if file_type == "pptx":
+            try:
+                from file_readers.pptx_reader import extract_formatting_profile
+                fmt_profile = extract_formatting_profile(file_path)
+                if fmt_profile:
+                    formatting_rules = fmt_profile.to_dict()
+                    logger.info(f"Extracted formatting profile: font={fmt_profile.font_family}, "
+                                f"title_size={fmt_profile.title_font_size_pt}pt, "
+                                f"title_color=#{fmt_profile.title_font_color_hex}")
+            except Exception as e:
+                logger.warning(f"Could not extract formatting profile: {e}")
+
         # Create the template
         template = LearnedTemplate(
             name=template_name,
@@ -196,6 +213,7 @@ class TemplateLearner:
             min_items=quality_analysis.get("min_items", 10),
             max_items=quality_analysis.get("max_items", 100),
             quality_notes=quality_analysis.get("quality_notes", ""),
+            formatting_rules=formatting_rules,
         )
 
         # Save it
@@ -654,6 +672,49 @@ def compare_with_learned_template(
                 "category": "quality_rule_failed",
                 "message": rule.get('message', f"Quality rule '{rule_name}' failed"),
             })
+
+    # Compare formatting profiles if available
+    if template.formatting_rules and template.file_type == "pptx":
+        try:
+            from file_readers.pptx_reader import extract_formatting_profile, FormattingProfile
+            # Get the output file path from analysis
+            output_path = analysis.get("file_path", "")
+            if output_path and os.path.exists(output_path):
+                out_profile = extract_formatting_profile(output_path)
+                ref_profile = FormattingProfile.from_dict(dict(template.formatting_rules))
+
+                if out_profile and ref_profile:
+                    total_checks += 1
+                    # Check overflow
+                    if out_profile.overflow_shapes:
+                        issues.append({
+                            "severity": "critical",
+                            "category": "text_overflow",
+                            "message": f"{len(out_profile.overflow_shapes)} text shapes overflow their boundaries",
+                        })
+                    # Check overlap
+                    elif out_profile.overlap_pairs:
+                        issues.append({
+                            "severity": "high",
+                            "category": "content_overlap",
+                            "message": f"{len(out_profile.overlap_pairs)} shape pairs overlap",
+                        })
+                    else:
+                        checks_passed += 1
+
+                    # Check font family
+                    if ref_profile.font_family and out_profile.font_family:
+                        total_checks += 1
+                        if ref_profile.font_family.lower() == out_profile.font_family.lower():
+                            checks_passed += 1
+                        else:
+                            issues.append({
+                                "severity": "medium",
+                                "category": "font_mismatch",
+                                "message": f"Font '{out_profile.font_family}' should be '{ref_profile.font_family}'",
+                            })
+        except Exception as e:
+            logger.debug(f"Formatting comparison in learned template failed: {e}")
 
     # Calculate score
     score = (checks_passed / max(total_checks, 1)) * 100

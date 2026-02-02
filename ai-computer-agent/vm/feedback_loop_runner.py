@@ -380,6 +380,42 @@ def _load_template_reference(service_name: str) -> str:
     return "\n".join(section_lines).strip()
 
 
+def _load_formatting_spec(service_name: str) -> str:
+    """Load MARKET_RESEARCH_FORMATTING_SPEC.md when formatting issues detected."""
+    spec_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "MARKET_RESEARCH_FORMATTING_SPEC.md"
+    )
+    if not os.path.exists(spec_path):
+        return ""
+    try:
+        with open(spec_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        # Truncate to avoid prompt bloat — keep sections 1-3 (fonts, layout, density)
+        lines = content.split("\n")
+        truncated = []
+        for line in lines:
+            truncated.append(line)
+            if line.startswith("## 4"):  # Stop before chart usage section
+                break
+        return "\n".join(truncated).strip()
+    except Exception:
+        return ""
+
+
+def _has_formatting_issues(issues: List[str]) -> bool:
+    """Check if any issues are formatting-related"""
+    formatting_keywords = [
+        "overflow", "overlap", "font_size", "font_family", "color_mismatch",
+        "header_line", "title_font", "subtitle_font", "bold_mismatch",
+        "text_overflow", "content_overlap", "formatting",
+    ]
+    for issue in issues:
+        if any(kw in issue.lower() for kw in formatting_keywords):
+            return True
+    return False
+
+
 async def generate_fix_callback(
     issues: List[str],
     analysis: Dict[str, Any],
@@ -399,6 +435,24 @@ async def generate_fix_callback(
             f"{template_ref}\n"
         )
 
+    # Load formatting spec when formatting issues are present
+    formatting_context = ""
+    if _has_formatting_issues(issues):
+        fmt_spec = _load_formatting_spec(service_name)
+        if fmt_spec:
+            formatting_context = (
+                f"\n\n## Formatting Specification (from reference template)\n"
+                f"Fix formatting to match this spec. These values were extracted from the approved reference template.\n\n"
+                f"{fmt_spec}\n\n"
+                f"### pptxgenjs-specific fix hints:\n"
+                f"- Text overflow: reduce text length, or increase `h` parameter on the text shape\n"
+                f"- Content overlap: adjust `y` parameter so that y + h of shape A < y of shape B\n"
+                f"- Wrong color: use hex string without '#' prefix, e.g. `color: '1F497D'`\n"
+                f"- Wrong font size: set `fontSize` in points, e.g. `fontSize: 24`\n"
+                f"- Missing header line: add `slide.addShape('line', {{...}})` after title\n"
+                f"- Wrong font: set `fontFace: 'Segoe UI'` on all text elements\n"
+            )
+
     # Issue 11: Use structured fix_prompt from ComparisonResult if available
     fix_prompt = analysis.get("fix_prompt") if analysis else None
 
@@ -412,7 +466,7 @@ async def generate_fix_callback(
                 f"the root cause may be deeper than a surface-level fix."
             )
         result = await run_claude_code(
-            fix_prompt + ref_context + iteration_context,
+            fix_prompt + ref_context + formatting_context + iteration_context,
             service_name=service_name,
             iteration=iteration,
             previous_issues="\n".join(issues) if issues else None,
@@ -432,6 +486,7 @@ async def generate_fix_callback(
             f"content quality (depth, specificity, actionable insights) and visual formatting "
             f"(layout, fonts, spacing, data tables). No critical or major discrepancies.{iteration_context}"
             f"{ref_context}"
+            f"{formatting_context}"
         )
 
         result = await improve_output(

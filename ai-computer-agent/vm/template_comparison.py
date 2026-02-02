@@ -147,6 +147,9 @@ class PPTTemplate:
     require_descriptions: bool = True
     logo_min_size: int = 50  # pixels
 
+    # Reference PPTX for formatting comparison (path relative to repo root)
+    reference_pptx_path: Optional[str] = None
+
     # Expected slide structure
     expected_slides: List[Dict[str, Any]] = field(default_factory=list)
 
@@ -285,6 +288,7 @@ TEMPLATES = {
         require_logos=False,  # Market research may not have logos
         require_websites=True,
         require_descriptions=True,
+        reference_pptx_path="Market_Research_energy_services_2025-12-31 (6).pptx",
         min_words_per_description=50,
         min_content_paragraphs=3,
         require_actionable_content=True,
@@ -346,6 +350,200 @@ TEMPLATES = {
         ],
     ),
 }
+
+
+# =============================================================================
+# REFERENCE PPTX MAPPING (per service)
+# =============================================================================
+
+SERVICE_REFERENCE_PPTX = {
+    "market-research": "Market_Research_energy_services_2025-12-31 (6).pptx",
+    "profile-slides": "YCP profile slide template v3.pptx",
+    "target-search": "YCP Target List Slide Template.pptx",
+    "trading-comps": "trading comps slide ref.pptx",
+}
+
+
+def _resolve_reference_pptx(template_name: str, reference_path: Optional[str] = None) -> Optional[str]:
+    """Resolve reference PPTX path relative to repo root"""
+    path = reference_path or SERVICE_REFERENCE_PPTX.get(template_name)
+    if not path:
+        return None
+
+    # Try repo root (2 levels up from vm/)
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    full_path = os.path.join(repo_root, path)
+    if os.path.exists(full_path):
+        return full_path
+
+    # Try current directory
+    if os.path.exists(path):
+        return os.path.abspath(path)
+
+    logger.debug(f"Reference PPTX not found: {path}")
+    return None
+
+
+def _compare_formatting_profiles(
+    reference_profile,
+    output_profile,
+) -> List["Discrepancy"]:
+    """Compare two FormattingProfiles and return formatting discrepancies"""
+    discrepancies = []
+
+    if not reference_profile or not output_profile:
+        return discrepancies
+
+    # --- TEXT OVERFLOW (CRITICAL) ---
+    if output_profile.overflow_shapes:
+        overflow_slides = set()
+        worst_overflow = 0
+        for ov in output_profile.overflow_shapes:
+            overflow_slides.add(ov["slide"])
+            worst_overflow = max(worst_overflow, ov.get("overflow_lines", 0))
+
+        discrepancies.append(Discrepancy(
+            severity=Severity.CRITICAL,
+            category="text_overflow",
+            location=f"Slides {', '.join(str(s) for s in sorted(overflow_slides)[:10])}",
+            expected="All text fits within shape boundaries",
+            actual=f"{len(output_profile.overflow_shapes)} shapes overflow across {len(overflow_slides)} slides (worst: {worst_overflow} extra lines)",
+            suggestion=(
+                f"Reduce text or increase shape height. In pptxgenjs: increase `h` parameter or reduce `fontSize`. "
+                f"Overflow on slides: {sorted(overflow_slides)[:5]}. "
+                f"Consider splitting content across multiple slides if text is too long."
+            ),
+        ))
+
+    # --- CONTENT OVERLAP (HIGH) ---
+    if output_profile.overlap_pairs:
+        overlap_slides = set()
+        for op in output_profile.overlap_pairs:
+            overlap_slides.add(op["slide"])
+
+        discrepancies.append(Discrepancy(
+            severity=Severity.HIGH,
+            category="content_overlap",
+            location=f"Slides {', '.join(str(s) for s in sorted(overlap_slides)[:10])}",
+            expected="No overlapping content shapes",
+            actual=f"{len(output_profile.overlap_pairs)} overlapping shape pairs on {len(overlap_slides)} slides",
+            suggestion=(
+                f"Adjust `y` positions so shapes don't overlap. Each shape's y + h must be less than the next shape's y. "
+                f"Overlap on slides: {sorted(overlap_slides)[:5]}."
+            ),
+        ))
+
+    # --- HEADER STYLING (HIGH) ---
+    # Title font size mismatch
+    if reference_profile.title_font_size_pt and output_profile.title_font_size_pt:
+        ref_size = reference_profile.title_font_size_pt
+        out_size = output_profile.title_font_size_pt
+        if abs(ref_size - out_size) > 2:
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH,
+                category="title_font_size_mismatch",
+                location="Presentation-wide",
+                expected=f"Title font size: {ref_size}pt (from reference template)",
+                actual=f"Title font size: {out_size}pt",
+                suggestion=f"Change title fontSize to {ref_size} in pptxgenjs slide generation.",
+            ))
+
+    # Title color mismatch
+    if reference_profile.title_font_color_hex and output_profile.title_font_color_hex:
+        ref_color = reference_profile.title_font_color_hex.upper()
+        out_color = output_profile.title_font_color_hex.upper()
+        if ref_color != out_color:
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH,
+                category="title_color_mismatch",
+                location="Presentation-wide",
+                expected=f"Title color: #{ref_color} (from reference template)",
+                actual=f"Title color: #{out_color}",
+                suggestion=f"Change title color to '#{ref_color}' in pptxgenjs. Use `color: '{ref_color}'`.",
+            ))
+
+    # Title bold mismatch
+    if reference_profile.title_font_bold is not None and output_profile.title_font_bold is not None:
+        if reference_profile.title_font_bold != output_profile.title_font_bold:
+            expected_bold = "bold" if reference_profile.title_font_bold else "not bold"
+            actual_bold = "bold" if output_profile.title_font_bold else "not bold"
+            discrepancies.append(Discrepancy(
+                severity=Severity.MEDIUM,
+                category="title_bold_mismatch",
+                location="Presentation-wide",
+                expected=f"Title should be {expected_bold} (from reference template)",
+                actual=f"Title is {actual_bold}",
+                suggestion=f"Set title `bold: {str(reference_profile.title_font_bold).lower()}` in pptxgenjs.",
+            ))
+
+    # Subtitle font size mismatch
+    if reference_profile.subtitle_font_size_pt and output_profile.subtitle_font_size_pt:
+        ref_size = reference_profile.subtitle_font_size_pt
+        out_size = output_profile.subtitle_font_size_pt
+        if abs(ref_size - out_size) > 2:
+            discrepancies.append(Discrepancy(
+                severity=Severity.MEDIUM,
+                category="subtitle_font_size_mismatch",
+                location="Presentation-wide",
+                expected=f"Subtitle font size: {ref_size}pt (from reference template)",
+                actual=f"Subtitle font size: {out_size}pt",
+                suggestion=f"Change subtitle/message fontSize to {ref_size} in pptxgenjs.",
+            ))
+
+    # Subtitle color mismatch
+    if reference_profile.subtitle_font_color_hex and output_profile.subtitle_font_color_hex:
+        ref_color = reference_profile.subtitle_font_color_hex.upper()
+        out_color = output_profile.subtitle_font_color_hex.upper()
+        if ref_color != out_color:
+            discrepancies.append(Discrepancy(
+                severity=Severity.MEDIUM,
+                category="subtitle_color_mismatch",
+                location="Presentation-wide",
+                expected=f"Subtitle color: #{ref_color} (from reference template)",
+                actual=f"Subtitle color: #{out_color}",
+                suggestion=f"Change subtitle/message color to '#{ref_color}' in pptxgenjs.",
+            ))
+
+    # --- HEADER LINE COUNT (HIGH) ---
+    if reference_profile.header_line_count_mode > 0:
+        # Check how many output slides have the expected header line count
+        ref_line_count = reference_profile.header_line_count_mode
+        slides_missing_lines = 0
+        total_content_slides = 0
+        for sf in output_profile.slides:
+            if sf.slide_number == 1:
+                continue  # skip title slide
+            total_content_slides += 1
+            if sf.header_line_count < ref_line_count:
+                slides_missing_lines += 1
+
+        if total_content_slides > 0 and slides_missing_lines > total_content_slides * 0.3:
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH,
+                category="missing_header_lines",
+                location=f"{slides_missing_lines}/{total_content_slides} content slides",
+                expected=f"{ref_line_count} header divider line(s) per slide (from reference template)",
+                actual=f"{slides_missing_lines} slides missing header lines",
+                suggestion=(
+                    f"Add a horizontal line shape under the title area. "
+                    f"Reference y position: {reference_profile.header_line_y_positions}. "
+                    f"In pptxgenjs: use `slide.addShape('line', {{x: 0.35, y: {reference_profile.header_line_y_positions[0] if reference_profile.header_line_y_positions else 1.1}, w: 9.3, h: 0, line: {{color: '1F497D', width: 2.5}}}})` on each content slide."
+                ),
+            ))
+
+    # --- FONT FAMILY (MEDIUM) ---
+    if reference_profile.font_family and output_profile.font_family:
+        if reference_profile.font_family.lower() != output_profile.font_family.lower():
+            discrepancies.append(Discrepancy(
+                severity=Severity.MEDIUM,
+                category="font_family_mismatch",
+                location="Presentation-wide",
+                expected=f"Font: {reference_profile.font_family} (from reference template)",
+                actual=f"Font: {output_profile.font_family}",
+                suggestion=f"Change fontFace to '{reference_profile.font_family}' in pptxgenjs.",
+            ))
+
+    return discrepancies
 
 
 # =============================================================================
@@ -643,6 +841,65 @@ def compare_pptx_to_template(
             passed_checks += 1
     else:
         passed_checks += 1
+
+    # ==========================================================================
+    # FORMATTING CHECKS (learned from reference template)
+    # ==========================================================================
+
+    try:
+        from file_readers.pptx_reader import extract_formatting_profile
+
+        # Get reference PPTX formatting profile
+        ref_pptx_path = _resolve_reference_pptx(template.name, template.reference_pptx_path)
+        output_path = pptx_analysis.get("file_path")
+
+        if ref_pptx_path and output_path and os.path.exists(output_path):
+            total_checks += 1  # formatting check counts as one aggregate check
+            ref_profile = extract_formatting_profile(ref_pptx_path)
+            out_profile = extract_formatting_profile(output_path)
+
+            if ref_profile and out_profile:
+                fmt_discrepancies = _compare_formatting_profiles(ref_profile, out_profile)
+                if fmt_discrepancies:
+                    discrepancies.extend(fmt_discrepancies)
+                else:
+                    passed_checks += 1
+            else:
+                passed_checks += 1  # can't check = pass
+        elif output_path and os.path.exists(output_path):
+            # No reference template — still check output for overflow/overlap
+            total_checks += 1
+            out_profile = extract_formatting_profile(output_path)
+            if out_profile:
+                # Only report overflow and overlap (no reference comparison)
+                if out_profile.overflow_shapes:
+                    overflow_slides = set(ov["slide"] for ov in out_profile.overflow_shapes)
+                    discrepancies.append(Discrepancy(
+                        severity=Severity.CRITICAL,
+                        category="text_overflow",
+                        location=f"Slides {', '.join(str(s) for s in sorted(overflow_slides)[:10])}",
+                        expected="All text fits within shape boundaries",
+                        actual=f"{len(out_profile.overflow_shapes)} shapes overflow across {len(overflow_slides)} slides",
+                        suggestion="Reduce text length or increase shape height (h parameter in pptxgenjs).",
+                    ))
+                if out_profile.overlap_pairs:
+                    overlap_slides = set(op["slide"] for op in out_profile.overlap_pairs)
+                    discrepancies.append(Discrepancy(
+                        severity=Severity.HIGH,
+                        category="content_overlap",
+                        location=f"Slides {', '.join(str(s) for s in sorted(overlap_slides)[:10])}",
+                        expected="No overlapping content shapes",
+                        actual=f"{len(out_profile.overlap_pairs)} overlapping shape pairs",
+                        suggestion="Adjust y positions so shapes don't overlap.",
+                    ))
+                if not out_profile.overflow_shapes and not out_profile.overlap_pairs:
+                    passed_checks += 1
+            else:
+                passed_checks += 1
+    except ImportError:
+        logger.debug("pptx_reader formatting extraction not available")
+    except Exception as e:
+        logger.warning(f"Formatting comparison failed: {e}")
 
     # Generate summary
     passed = len([d for d in discrepancies if d.severity == Severity.CRITICAL]) == 0
