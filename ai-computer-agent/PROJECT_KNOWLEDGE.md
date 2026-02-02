@@ -363,6 +363,7 @@ ai-computer-agent/
 │   ├── feedback_loop_runner.py # Wires callbacks, manages start_from, crash recovery
 │   ├── template_comparison.py # Output vs template comparison engine (structural + content depth)
 │   ├── template_reference.md  # MBB content depth standards per service (read by fix prompts)
+│   ├── run_loop.py            # One-shot feedback loop runner (python run_loop.py)
 │   ├── template_learner.py    # AI template learning (needs ANTHROPIC_API_KEY)
 │   ├── research.py            # AI research for stuck issues (needs ANTHROPIC_API_KEY)
 │   ├── verification.py        # State transition verification
