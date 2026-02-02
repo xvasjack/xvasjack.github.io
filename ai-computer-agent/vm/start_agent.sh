@@ -27,7 +27,6 @@ fi
 # Set defaults
 export HOST_WS_URL="${HOST_WS_URL:-ws://localhost:3000/agent}"
 export REPO_PATH="${REPO_PATH:-$HOME/xvasjack.github.io}"
-export AUTO_APPROVE_PLANS="${AUTO_APPROVE_PLANS:-true}"  # T0.1: Auto-approve plans by default
 export USER_EMAIL="${USER_EMAIL:-$(git -C "$REPO_PATH" config user.email 2>/dev/null || echo "")}"
 
 # 0.10: Discover CLAUDE_CODE_PATH

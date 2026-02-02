@@ -622,17 +622,6 @@ class Agent:
     async def _wait_for_plan_approval(self, task: Task, plan_summary: str, start_time: float) -> Optional[TaskResult]:
         """Send plan proposal and wait for user approval/rejection.
         Returns None if approved, TaskResult if rejected/timed out/cancelled."""
-        # T0.1: Auto-approve if configured via env var
-        if os.environ.get("AUTO_APPROVE_PLANS", "").lower() == "true":
-            logger.info(f"Auto-approving plan:\n{plan_summary}")
-            await self.send_update(TaskUpdate(
-                task_id=task.id, status=TaskStatus.RUNNING,
-                message=f"[auto-approved] {plan_summary[:200]}",
-                iteration=0, prs_merged=0,
-                elapsed_seconds=int(time.time() - start_time),
-            ))
-            return None  # Approved
-
         # Send plan proposal to host
         msg = encode_message(MESSAGE_TYPES.get("PLAN_PROPOSAL", "plan_proposal"), {
             "task_id": task.id,
