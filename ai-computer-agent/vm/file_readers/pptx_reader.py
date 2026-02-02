@@ -127,7 +127,21 @@ class PPTXAnalysis:
                     "slide_number": getattr(c, 'slide_number', 0),
                 }
                 for c in self.companies
-            ]
+            ],
+            # Include slide details for content depth checks
+            "slides": [
+                {
+                    "number": s.number,
+                    "title": s.title,
+                    "type": "title" if s.number == 1 else "",
+                    "all_text": "\n".join(s.text_content),
+                    "text_blocks": s.text_content,
+                    "has_image": s.has_image,
+                    "has_table": s.has_table,
+                    "links": s.links,
+                }
+                for s in self.slides
+            ],
         }
 
 

@@ -155,8 +155,8 @@ async def wait_for_email_callback(
     if HAS_GMAIL_API:
         try:
             subject_hint = SERVICE_EMAIL_SUBJECTS.get(service_name, service_name)
-            # 1.5: 1h too restrictive — use 3h
-            query = f"subject:({subject_hint}) has:attachment"
+            # Filter to recent emails only to avoid grabbing old results
+            query = f"subject:({subject_hint}) has:attachment newer_than:1h"
             result = await wait_for_email_api(
                 query=query,
                 download_dir=download_dir,
