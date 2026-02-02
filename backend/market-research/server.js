@@ -4306,9 +4306,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       parts.push(`Market share: ${company.marketShare}.`);
     if (company.growthRate) parts.push(`Growth rate: ${company.growthRate}.`);
     if (company.employees) parts.push(`Workforce: ${company.employees} employees.`);
-    // Strategic assessment
+    // Strategic assessment (support both singular and plural field names)
     if (company.strengths) parts.push(`Key strengths: ${company.strengths}.`);
+    else if (company.strength) parts.push(`Key strength: ${company.strength}.`);
     if (company.weaknesses) parts.push(`Weaknesses: ${company.weaknesses}.`);
+    else if (company.weakness) parts.push(`Weakness: ${company.weakness}.`);
     if (company.competitiveAdvantage)
       parts.push(`Competitive advantage: ${company.competitiveAdvantage}.`);
     if (company.keyDifferentiator) parts.push(`Key differentiator: ${company.keyDifferentiator}.`);
@@ -4826,53 +4828,61 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
 
         case 'COMPETITIVE_LANDSCAPE': {
-          // Leaders table
+          // Leaders table — include description for content depth
+          let clTableH = 0;
           if (content.leaders && content.leaders.length > 0) {
-            const rows = [tableHeader(['Company', 'Strength', 'Weakness'])];
+            const rows = [tableHeader(['Company', 'Description', 'Strength', 'Weakness'])];
             dedupeCompanies(
               content.leaders.filter(isValidCompany).map(ensureWebsite).map(enrichDescription)
             ).forEach((l) => {
               const nameOpts = l.website
                 ? {
                     fontFace: FONT,
-                    fontSize: 11,
+                    fontSize: 9,
                     bold: true,
                     color: '0066CC',
                     hyperlink: { url: l.website },
                   }
-                : { fontFace: FONT, fontSize: 11, bold: true, color: COLORS.black };
+                : { fontFace: FONT, fontSize: 9, bold: true, color: COLORS.black };
               rows.push([
                 {
                   text: l.name || '',
                   options: nameOpts,
                 },
                 {
-                  text: l.strength || '',
-                  options: { fontFace: FONT, fontSize: 11, color: COLORS.green },
+                  text: truncate(l.description || '', 200),
+                  options: { fontFace: FONT, fontSize: 9, color: COLORS.black },
                 },
                 {
-                  text: l.weakness || '',
-                  options: { fontFace: FONT, fontSize: 11, color: COLORS.red },
+                  text: truncate(l.strength || '', 60),
+                  options: { fontFace: FONT, fontSize: 9, color: COLORS.green },
+                },
+                {
+                  text: truncate(l.weakness || '', 60),
+                  options: { fontFace: FONT, fontSize: 9, color: COLORS.red },
                 },
               ]);
             });
+            clTableH = Math.min(3.5, rows.length * 0.35 + 0.2);
             slide.addTable(rows, {
               x: LEFT_MARGIN,
               y: contentY,
               w: CONTENT_WIDTH,
-              h: 3,
+              h: clTableH,
               fontFace: FONT,
-              fontSize: 11,
-              valign: 'middle',
+              fontSize: 9,
+              valign: 'top',
               border: { pt: 0.5, color: COLORS.gray },
+              colW: [2.0, 5.5, 2.5, 2.5],
             });
           }
 
-          // White spaces
+          // White spaces — position dynamically below table
           if (content.whiteSpaces && content.whiteSpaces.length > 0) {
+            const wsBaseY = contentY + clTableH + 0.2;
             slide.addText('Market White Spaces:', {
               x: LEFT_MARGIN,
-              y: contentY + 3.3,
+              y: wsBaseY,
               w: CONTENT_WIDTH,
               h: 0.3,
               fontSize: 14,
@@ -4880,12 +4890,16 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
               color: COLORS.green,
               fontFace: FONT,
             });
-            const wsText = content.whiteSpaces.map((w) => `• ${w}`).join('\n');
+            const wsText = content.whiteSpaces
+              .slice(0, 4)
+              .map((w) => `• ${truncate(String(w), 120)}`)
+              .join('\n');
+            const wsH = Math.min(1.5, 6.65 - (wsBaseY + 0.4));
             slide.addText(wsText, {
               x: LEFT_MARGIN,
-              y: contentY + 3.7,
+              y: wsBaseY + 0.4,
               w: CONTENT_WIDTH,
-              h: 1.5,
+              h: Math.max(0.3, wsH),
               fontSize: 12,
               color: COLORS.black,
               fontFace: FONT,
@@ -5825,7 +5839,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     truncateSubtitle(japanesePlayers.marketInsight || japanesePlayers.subtitle || '', 95),
     { citations: competitorCitations, dataQuality: competitorDataQuality }
   );
-  const jpPlayers = safeArray(japanesePlayers.players, 5).map(ensureWebsite);
+  const jpPlayers = safeArray(japanesePlayers.players, 5).map(ensureWebsite).map(enrichDescription);
 
   // Build dynamic insights for Japanese players
   const jpInsights = [];
@@ -5892,7 +5906,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     truncateSubtitle(localMajor.concentration || localMajor.subtitle || '', 95),
     { citations: competitorCitations, dataQuality: competitorDataQuality }
   );
-  const localPlayers = safeArray(localMajor.players, 5).map(ensureWebsite);
+  const localPlayers = safeArray(localMajor.players, 5).map(ensureWebsite).map(enrichDescription);
 
   // Build dynamic insights for local players
   const localInsights = [];
@@ -5960,7 +5974,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     truncateSubtitle(foreignPlayers.competitiveInsight || foreignPlayers.subtitle || '', 95),
     { citations: competitorCitations, dataQuality: competitorDataQuality }
   );
-  const foreignList = safeArray(foreignPlayers.players, 5).map(ensureWebsite);
+  const foreignList = safeArray(foreignPlayers.players, 5)
+    .map(ensureWebsite)
+    .map(enrichDescription);
 
   // Build dynamic insights for foreign players
   const foreignInsights = [];
@@ -6126,7 +6142,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     maInsights.push(`Deal Volume: ${maActivity.structuredData.maActivity.dealVolume}`);
   }
   const deals = safeArray(maActivity.recentDeals, 3);
-  const potentialTargets = safeArray(maActivity.potentialTargets, 3).map(ensureWebsite);
+  const potentialTargets = safeArray(maActivity.potentialTargets, 3)
+    .map(ensureWebsite)
+    .map(enrichDescription);
   if (deals.length > 0) maInsights.push(`${deals.length} recent deals identified`);
   if (potentialTargets.length > 0) maInsights.push(`${potentialTargets.length} potential targets`);
 
@@ -6324,7 +6342,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     truncateSubtitle(partnerAssess.recommendedPartner || partnerAssess.subtitle || '', 95),
     { citations: depthCitations, dataQuality: depthDataQuality }
   );
-  const partners = safeArray(partnerAssess.partners, 5).map(ensureWebsite);
+  const partners = safeArray(partnerAssess.partners, 5).map(ensureWebsite).map(enrichDescription);
 
   // Build dynamic insights for partner assessment
   const partnerInsights = [];
