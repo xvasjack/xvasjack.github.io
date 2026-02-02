@@ -1,6 +1,6 @@
 # AI Computer Agent — Complete Project Knowledge Base
 
-Last updated: 2026-02-01
+Last updated: 2026-02-02
 
 ---
 
@@ -225,15 +225,40 @@ Uses LRU dict (max 100 entries) keyed by SHA256 of sorted issues. When same issu
 
 ### What Gets Checked
 
-**PPTX**: slide count, company count, logos, websites, descriptions, blocked domains (facebook, linkedin, wikipedia, etc.), duplicates
+**PPTX (structural)**: slide count, company count, logos, websites, descriptions, blocked domains (facebook, linkedin, wikipedia, etc.), duplicates
+
+**PPTX (content depth)** — added 2026-02-02:
+- `shallow_descriptions` (HIGH): >30% of companies have descriptions below `min_words_per_description`
+- `thin_slides` (HIGH): >30% of content slides have fewer than `min_content_paragraphs` text blocks
+- `missing_actionable_insights` (CRITICAL): <20% of content slides contain actionable keywords (only when `require_actionable_content=True`)
+- `generic_content` (HIGH): >50% of descriptions contain shallow filler phrases ("is a company that", "was founded in", etc.)
 
 **XLSX**: required sheets, row counts, required columns, data validation (URLs, numbers, no-empty)
 
 **DOCX**: cover page fields, section numbering, table structure, Pre-DD Workplan rows, financial format (SGD '000)
 
+### PPTTemplate Content Depth Fields (added 2026-02-02)
+
+```python
+min_words_per_description: int = 40      # min words per company description
+min_content_paragraphs: int = 3          # min text blocks per content slide
+require_actionable_content: bool = False  # check for recommendation/strategy language
+content_depth_keywords: List[str]         # words indicating substantive content
+shallow_content_phrases: List[str]        # red flags for generic filler
+```
+
+Configured per template:
+- `market-research`: 50 word min, actionable required, strict keywords+phrases
+- `profile-slides`: 40 word min, actionable not required, moderate keywords+phrases
+- `target-search`: defaults (40 word min, no actionable check)
+
+### Template Reference File
+
+`vm/template_reference.md` — MBB-quality content standards per service. Loaded by `feedback_loop_runner._load_template_reference()` and appended to every fix prompt so Claude Code knows expected content depth. Sections: Market Research, Profile Slides, Target Search, Due Diligence Report.
+
 ### ComparisonResult → Claude Code Prompt
 
-`generate_claude_code_prompt()` creates a structured fix prompt grouped by severity (CRITICAL, HIGH, MEDIUM). Each issue includes: category, location, expected vs actual, fix suggestion.
+`generate_claude_code_prompt()` creates a structured fix prompt grouped by severity (CRITICAL, HIGH, MEDIUM). Each issue includes: category, location, expected vs actual, fix suggestion. The fix prompt is then augmented with the relevant section from `template_reference.md` via `_load_template_reference()` in `feedback_loop_runner.py`.
 
 ### Auto-Detection
 
@@ -336,7 +361,8 @@ ai-computer-agent/
 │   ├── guardrails.py          # Blocked apps/URLs/processes/folders
 │   ├── feedback_loop.py       # State machine: 7 steps per iteration
 │   ├── feedback_loop_runner.py # Wires callbacks, manages start_from, crash recovery
-│   ├── template_comparison.py # Output vs template comparison engine
+│   ├── template_comparison.py # Output vs template comparison engine (structural + content depth)
+│   ├── template_reference.md  # MBB content depth standards per service (read by fix prompts)
 │   ├── template_learner.py    # AI template learning (needs ANTHROPIC_API_KEY)
 │   ├── research.py            # AI research for stuck issues (needs ANTHROPIC_API_KEY)
 │   ├── verification.py        # State transition verification
