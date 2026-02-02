@@ -709,3 +709,92 @@ Allowed folders: `C:\Users\*\Downloads`, `C:\agent-shared`, `Z:\`.
 - **Email**: xvasjack@gmail.com (set via `USER_EMAIL` env var)
 - **NOT a VM**: Agent runs directly on Windows 11 laptop with WSL. `vm/` directory name is historical.
 - **Screen resolution**: Auto-detected via Windows ctypes (`GetSystemMetrics`), falls back to xdpyinfo/xrandr, then 1920x1080.
+
+---
+
+## 17. FILE-BY-FILE REFERENCE (every file, what it does)
+
+### Core — Orchestration & Communication
+
+| File | Lines | Summary |
+|------|-------|---------|
+| `vm/agent.py` | 1296 | Main agent. WS client with auto-reconnect (2s→60s). Dispatches to feedback loop or plan mode. Generates plans via Claude CLI. Executes PyAutoGUI actions. Plan approval/rejection relay. Single task; new cancels old. Entry: `asyncio.run(main())` |
+| `vm/config.py` | 272 | All config via `@dataclass AgentConfig`. Model, timeouts (claude 600s, vision 45s, plan 120s), Railway URLs for 10 services, guardrail lists, browser settings. `config_local.json` overrides. `FEEDBACK_LOOP_SERVICES` dict |
+| `host/server.js` | 550+ | Express + WS on :3000. Paths: `/agent` (one agent), `/` (UI clients). Bidirectional message routing. State → `state.json`. REST: POST/GET /api/task, POST /api/task/cancel. Task lifecycle: pending→planning→awaiting_approval→running→completed/failed |
+| `host/public/index.html` | 228 | Browser UI. Task input, plan approve/reject box, status bar (iteration, PRs, elapsed), log area. Handles: init, task_update, task_complete, task_cancelled, plan_proposal, vm_status, screenshot. WS auto-reconnect 3s |
+| `shared/protocol.py` | 207 | Message types (NEW_TASK, TASK_UPDATE, PLAN_PROPOSAL, PLAN_APPROVED, PLAN_REJECTED, CANCEL_TASK, TASK_COMPLETE). encode/decode JSON. Data classes: Task, TaskUpdate, TaskResult with size limits (plan 50KB, message 10KB) |
+| `shared/cli_utils.py` | 56 | WSL bridge. `build_claude_cmd("wsl:claude", ...)` → `["wsl", "--cd", path, "-e", "claude", ...]`. `to_wsl_path()` Win→WSL path. `get_subprocess_cwd()` → `(win_cwd, wsl_cwd)` tuple |
+
+### Actions — How agent interacts with the world
+
+| File | Lines | Summary |
+|------|-------|---------|
+| `vm/actions/claude_code.py` | 200+ | Claude CLI subprocess. Reads `claude_mandate.md`, fills `{ALLOWED_DIRECTORIES}`, `{SERVICE_NAME}`, `{FIX_PROMPT}` etc. Runs `claude --print --model opus --allowedTools Read,Edit,Write,Grep,Glob,Bash`. 600s timeout. Parses output for commit hash |
+| `vm/actions/frontend_api.py` | 180+ | Direct HTTP POST to Railway APIs. Per-service field mapping for all 10 services. Maps Business/Country/Email to each service's payload format. Primary submission — no browser needed |
+| `vm/actions/gmail_api.py` | 350+ | Gmail API with OAuth2. `check_for_email()` searches by subject + recency. Downloads to `~/Downloads/agent_output/`. Sender whitelist, extension whitelist (.pptx .xlsx .docx .pdf .csv), path traversal protection, 50MB limit |
+| `vm/actions/gmail.py` | 250+ | Browser Gmail fallback. PyAutoGUI + vision to navigate Brave. Find emails by subject, download attachments. Read-only: compose/send/delete blocked |
+| `vm/actions/frontend.py` | 200+ | Browser form fallback. Opens GitHub Pages URL, fills form fields via PyAutoGUI + vision, clicks submit. Used when HTTP POST fails |
+| `vm/actions/vision.py` | 150+ | Screenshot analysis via Claude CLI. `find_element(desc)` → `{x, y}` coords. `ask_about_screen(question)` → yes/no. 45s timeout. Uses `mss` for screenshots |
+| `vm/actions/github.py` | 180+ | GitHub ops via `gh` CLI. PR status, merge, CI checks. WSL-aware: wraps in `wsl -e` when needed |
+| `vm/actions/outlook.py` | 423 | Outlook email fallback (not primary). Browser-based Outlook Web automation. Sender/subject whitelist. Compose/reply/forward/send/delete all blocked. Mostly a stub |
+
+### Feedback Loop — Core automation cycle
+
+| File | Lines | Summary |
+|------|-------|---------|
+| `vm/feedback_loop.py` | 400+ | State machine: TESTING_FRONTEND → WAITING_FOR_EMAIL → ANALYZING_OUTPUT → GENERATING_FIX → VERIFYING_PUSH → WAITING_FOR_DEPLOY → CHECKING_LOGS. Stuck detection via LRU dict (SHA256 of issues, 3x = stuck → ResearchAgent) |
+| `vm/feedback_loop_runner.py` | 300+ | Wires callbacks to implementations. submit→frontend_api, email→gmail_api, analyze→template_comparison, fix→claude_code. `start_from` param skips steps on first iteration. Crash recovery integration |
+| `vm/template_comparison.py` | 500+ | Hardcoded templates per service. PPTX: slide count, company count, logos, websites, blocked domains, duplicates. XLSX: sheets, columns, row counts. DOCX: cover page, section numbering, table formats. Generates structured fix prompt grouped by severity |
+| `vm/loop_state.py` | 216 | Crash recovery. Saves to `loop_state.json` atomically (write .tmp → os.replace). Fields: service, iteration, state, issue_tracker. Schema versioning + migration. Validates types on load |
+
+### Desktop Automation & Safety
+
+| File | Lines | Summary |
+|------|-------|---------|
+| `vm/computer_use.py` | 300+ | PyAutoGUI wrapper. `screenshot()` via mss. `click(x,y)` with bounds check. `type_text()` via clipboard paste (Ctrl+V) for Unicode. `scroll()`, `hotkey()`, `press()`. Resolution via Windows ctypes |
+| `vm/guardrails.py` | 200+ | Runtime safety. Blocked: Teams/Slack/Discord, banking, billing, cloud consoles. Allowed: GitHub, Gmail (read-only), localhost. Blocked commands: rm -rf, force push, reset --hard. Validates every URL and command |
+| `vm/retry.py` | 82 | Generic `retry_with_backoff()` async. Exponential backoff, configurable initial/factor/max. Cancel token support. Minimum timeout floor |
+| `vm/verification.py` | 246 | Verifies state transitions. `verify_form_submission()`, `verify_email_downloaded()` (exists + non-empty + parseable), `verify_pr_created()` via gh, `verify_deployment()` via health endpoint |
+
+### AI Intelligence Layer
+
+| File | Lines | Summary |
+|------|-------|---------|
+| `vm/research.py` | 555 | Root cause analysis when stuck (3+ iterations same issues). Uses Anthropic API directly (not CLI). Returns: root cause, alternative approaches, recommended fix, confidence. Also has COMMON_ISSUES_AND_SOLUTIONS lookup |
+| `vm/template_learner.py` | 701 | Learns quality templates from example files. Anthropic API analyzes "good" PPTX/XLSX, extracts rules, saves as JSON. `learn_from_comparison(good, bad)` diffs quality. `compare_with_learned_template()` validates output |
+| `vm/claude_mandate.md` | 23 | Template prepended to every Claude CLI call. Rules: only modify allowed dirs, never touch .env/credentials/workflows, never destructive commands, always npm test, commit "Fix: <desc>", push to main |
+
+### File Readers — Parse service outputs
+
+| File | Lines | Summary |
+|------|-------|---------|
+| `vm/file_readers/pptx_reader.py` | 556 | Parses PPTX via python-pptx. Extracts: slide count, titles, text, images, hyperlinks, tables. Company extraction (name, website, logo). Quality checks. ZIP bomb protection (500MB, 100:1 ratio). SSRF-safe URL validation |
+| `vm/file_readers/xlsx_reader.py` | 523 | Parses XLSX via openpyxl. Extracts: sheets, headers, rows. Quality checks: expected columns, empty rows, invalid URLs, placeholders. ZIP bomb protection. Auto-mapped header fields |
+| `vm/file_readers/docx_reader.py` | 630 | Parses DOCX via python-docx. Extracts: cover page, section headers, tables, images. DD-report compliance: financials@4.0, workplan@4.9, future@8, SGD format, CAGR column. ZIP bomb protection |
+
+### Startup, Hooks & Docs
+
+| File | Lines | Summary |
+|------|-------|---------|
+| `vm/start_agent.sh` | 53 | Bash startup. Checks Python + Claude CLI. Sets env defaults (HOST_WS_URL, REPO_PATH, USER_EMAIL, CLAUDE_CODE_PATH). Auto-starts host server if :3000 not occupied. Runs `python3 agent.py` |
+| `vm/start_agent.ps1` | 113 | PowerShell startup. 4-location Claude CLI discovery (env→PATH→%APPDATA%\npm→npm root). Auto-starts host via Start-Process. Sets same env defaults. Runs `python agent.py` |
+| `.claude/hooks/agent_guard.py` | 118 | PreToolUse hook. Blocks Edit/Write to .env, credentials, workflows, CLAUDE.md, ai-computer-agent/. Blocks Bash: rm -rf, force push, reset --hard, format. Returns allow/block JSON |
+| `host/ppt_analyzer.py` | ~200 | Standalone PPT analysis script on host side. Vision-based slide comparison using screenshots. Not part of main loop — utility |
+| `vm/test_gmail.py` | ~50 | Gmail OAuth2 test script. Standalone — verifies credentials work |
+| `ARCHITECTURE.md` | 135 | High-level architecture diagram, data flow, guardrail layers, design decisions, env vars table |
+| `SETUP.md` | 266 | Quick setup guide. WSL setup, Windows folder structure, start.ps1 template, template screenshots, test API, before-bed checklist, abort methods, troubleshooting |
+| `GMAIL_SETUP.md` | ~100 | Gmail OAuth2 setup guide. Google Cloud Console steps, credential download, first-run flow |
+| `PROJECT_KNOWLEDGE.md` | 750+ | THIS FILE. Complete project knowledge base |
+| `MISTAKES.md` | ~20 | Log of past mistakes for future reference |
+| `README.md` | ~50 | Brief overview and getting started |
+| `test_inputs.json` | ~30 | Sample task inputs for testing |
+
+### Windows-specific (alternative agent path, not primary)
+
+| File | Lines | Summary |
+|------|-------|---------|
+| `windows/plan_generator.py` | ~150 | Plan generation for Windows-native path |
+| `windows/decision_tracker.py` | ~100 | Tracks agent decisions for debugging |
+| `windows/data_models.py` | ~80 | Data models for Windows agent |
+| `windows/output_analyzers/` | ~400 | HTML and PDF output analyzers (registry pattern) |
+| `windows/actions/claude_code_sdk.py` | ~150 | Claude Code SDK integration (alternative to CLI) |
