@@ -27,7 +27,7 @@ fi
 # Set defaults
 export HOST_WS_URL="${HOST_WS_URL:-ws://localhost:3000/agent}"
 export REPO_PATH="${REPO_PATH:-$HOME/xvasjack.github.io}"
-export USER_EMAIL="${USER_EMAIL:-$(git -C "$REPO_PATH" config user.email 2>/dev/null || echo "")}"
+export USER_EMAIL="${USER_EMAIL:-$(git -C "$REPO_PATH" config user.email 2>/dev/null || echo "xvasjack@gmail.com")}"
 
 # 0.10: Discover CLAUDE_CODE_PATH
 if command -v claude &>/dev/null; then

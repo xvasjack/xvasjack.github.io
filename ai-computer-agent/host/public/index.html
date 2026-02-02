@@ -76,7 +76,15 @@
                     }
                     break;
                 case 'vm_status': setVM(p.connected); break;
-                case 'task_created': setRunning(true); log('> Task started'); break;
+                case 'task_created':
+                    setRunning(true);
+                    // Reset status bar styling from any previous failure
+                    const sbReset = document.getElementById('sb');
+                    sbReset.style.borderColor = '#333';
+                    sbReset.style.background = '#252540';
+                    document.getElementById('sb-state').style.color = '';
+                    log('> Task started');
+                    break;
                 case 'task_update':
                     setRunning(true);
                     const t = p.task;
@@ -109,12 +117,23 @@
                     break;
                 case 'task_complete':
                     setRunning(false);
-                    document.getElementById('sb').style.display = 'none';
                     // F34: Hide plan box on task complete
                     document.getElementById('planBox').style.display = 'none';
                     currentPlan = null;
-                    log('> Done: '+p.task.status);
-                    if(p.task.result) log(p.task.result);
+                    if(p.task.status === 'failed') {
+                        // Keep status bar visible with failure info
+                        const sb = document.getElementById('sb');
+                        sb.style.display = 'block';
+                        sb.style.borderColor = '#ff4757';
+                        sb.style.background = '#2a1520';
+                        document.getElementById('sb-state').textContent = 'FAILED';
+                        document.getElementById('sb-state').style.color = '#ff4757';
+                        logError('FAILED: ' + (p.task.result || p.task.status));
+                    } else {
+                        document.getElementById('sb').style.display = 'none';
+                        log('> Done: '+p.task.status);
+                    }
+                    if(p.task.result && p.task.status !== 'failed') log(p.task.result);
                     break;
                 case 'task_cancelled':
                     setRunning(false);
@@ -124,7 +143,7 @@
                     currentPlan = null;
                     log('> Task cancelled');
                     break;
-                case 'error': log('ERROR: '+p.message); break;
+                case 'error': logError('ERROR: '+p.message); break;
                 case 'screenshot':
                     // 2.1: Server sends { screenshot: base64 }, handle both formats
                     if (p.screenshot) {
@@ -218,6 +237,17 @@
             row.innerHTML = `<span class="t">${escapeHtml(t)}</span> ${escapeHtml(msg)}`;
             d.appendChild(row);
             // 2.7: Cap DOM log at 500 entries to prevent memory growth
+            while(d.childNodes.length > 500) d.removeChild(d.firstChild);
+            d.scrollTop = d.scrollHeight;
+        }
+        function logError(msg) {
+            const d = document.getElementById('log');
+            const t = new Date().toLocaleTimeString();
+            const row = document.createElement('div');
+            row.style.color = '#ff4757';
+            row.style.fontWeight = 'bold';
+            row.innerHTML = `<span class="t" style="color:#ff4757">${escapeHtml(t)}</span> ${escapeHtml(msg)}`;
+            d.appendChild(row);
             while(d.childNodes.length > 500) d.removeChild(d.firstChild);
             d.scrollTop = d.scrollHeight;
         }
