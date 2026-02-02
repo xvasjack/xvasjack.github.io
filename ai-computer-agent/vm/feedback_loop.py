@@ -117,7 +117,7 @@ class LoopConfig:
     service_name: str
     max_iterations: int = 10
     max_same_issue_attempts: int = 3
-    email_wait_timeout_minutes: int = 15
+    email_wait_timeout_minutes: int = 65
     deploy_wait_timeout_minutes: int = 10
     ci_wait_timeout_minutes: int = 10
     health_check_url: Optional[str] = None
