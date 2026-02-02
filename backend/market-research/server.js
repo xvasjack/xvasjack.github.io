@@ -3424,6 +3424,12 @@ function isValidCompany(item) {
     /^go[\s/]no[\s-]go\b/i,
     /^ESCO\s+(market|economics|deal)/i,
     /^(gas|lng|electricity|power)\s+(market|supply|demand)/i,
+    /^[A-Z][a-z]+(?:'s)?\s+(share|monopoly|market|consumption|push|growth)/i,
+    /\b(targeted|expected|projected|estimated)\s+to\s+(drop|grow|reach|increase|decline)/i,
+    /\b(strong|weak|moderate|significant|limited),?\s+(state|growth|push|driven)/i,
+    /\b\d+\.?\d*%/, // Contains percentage figures
+    /\bsource:\s/i, // Contains source citation
+    /\b(per|from|until|between|across|through)\s+\d{4}/i, // Contains year references in sentences
   ];
   for (const pattern of invalidPatterns) {
     if (pattern.test(name)) return false;
@@ -4221,6 +4227,13 @@ Transform this research into a narrative. Return JSON:
   }
 }
 
+// Helper: calculate safe table height based on row count to prevent overlap
+function safeTableHeight(rowCount, opts = {}) {
+  const { fontSize = 11, maxH = 5.0 } = opts;
+  const rowH = fontSize <= 9 ? 0.35 : fontSize >= 12 ? 0.45 : 0.4;
+  return Math.max(0.6, Math.min(rowH * rowCount + 0.15, maxH));
+}
+
 // ============ UNIVERSAL SLIDE GENERATOR ============
 // Generates slides dynamically based on story narrative, not hardcoded structure
 async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
@@ -4527,13 +4540,6 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }));
   }
 
-  // Helper: calculate safe table height based on row count to prevent overlap
-  function safeTableHeight(rowCount, opts = {}) {
-    const { fontSize = 11, maxH = 5.0 } = opts;
-    const rowH = fontSize <= 9 ? 0.35 : fontSize >= 12 ? 0.45 : 0.4;
-    return Math.max(0.6, Math.min(rowH * rowCount + 0.15, maxH));
-  }
-
   // Helper to show "Data unavailable" message on slides with missing data
   function addDataUnavailableMessage(slide, message = 'Data not available for this section') {
     slide.addShape('rect', {
@@ -4814,7 +4820,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
               x: LEFT_MARGIN,
               y: contentY,
               w: CONTENT_WIDTH,
-              h: 4,
+              h: safeTableHeight(rows.length, { maxH: 4.5 }),
               fontFace: FONT,
               fontSize: 11,
               valign: 'middle',
@@ -4940,7 +4946,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
               x: LEFT_MARGIN,
               y: contentY,
               w: CONTENT_WIDTH,
-              h: 4,
+              h: safeTableHeight(rows.length, { maxH: 4.5 }),
               fontFace: FONT,
               fontSize: 11,
               valign: 'middle',
@@ -5074,7 +5080,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
               x: LEFT_MARGIN,
               y: contentY,
               w: CONTENT_WIDTH,
-              h: 4,
+              h: safeTableHeight(rows.length, { maxH: 4.5 }),
               fontFace: FONT,
               fontSize: 11,
               valign: 'middle',
@@ -6622,7 +6628,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       x: LEFT_MARGIN,
       y: 1.3,
       w: CONTENT_WIDTH,
-      h: 4.5,
+      h: safeTableHeight(phaseRows.length, { maxH: 4.5 }),
       fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
@@ -6637,7 +6643,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     targetSeg.slideTitle || `${country} - Target Customer Segments`,
     truncateSubtitle(targetSeg.goToMarketApproach || targetSeg.subtitle || '', 95)
   );
-  const segmentsList = safeArray(targetSeg.segments, 4);
+  const segmentsList = safeArray(targetSeg.segments, 3);
 
   // Build dynamic insights for target segments
   const segInsights = [];
@@ -6680,14 +6686,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     nextSegY = 1.35 + segTableH + 0.15;
     // Add insights below table — dynamic y
     if (segInsights.length > 0) {
-      addCalloutBox(targetSlide, 'Market Approach', segInsights.slice(0, 3).join(' • '), {
+      addCalloutBox(targetSlide, 'Market Approach', segInsights.slice(0, 2).join(' • '), {
         x: LEFT_MARGIN,
         y: nextSegY,
         w: CONTENT_WIDTH,
-        h: 0.55,
+        h: 0.65,
         type: 'insight',
       });
-      nextSegY += 0.55 + 0.15;
+      nextSegY += 0.65 + 0.15;
     }
   }
 
@@ -6730,7 +6736,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     // Use dynamic column widths
     const targetColWidths = calculateColumnWidths(targetCompRows, CONTENT_WIDTH);
     // Calculate available height: from priorityYBase+0.3 to max 6.65 (above footer area)
-    const targetTableH = Math.min(1.5, 6.65 - (priorityYBase + 0.3));
+    const targetTableH = Math.min(1.2, Math.max(0.4, 6.5 - (priorityYBase + 0.3)));
     targetSlide.addTable(targetCompRows, {
       x: LEFT_MARGIN,
       y: priorityYBase + 0.3,
@@ -6800,11 +6806,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     lessonsData.slideTitle || `${country} - Lessons from Market`,
     truncateSubtitle(lessonsData.subtitle || 'What previous entrants learned', 95)
   );
+  let lessonsNextY = 1.3;
   const failures = safeArray(lessonsData.failures, 3);
   if (failures.length > 0) {
     lessonsSlide.addText('FAILURES TO AVOID', {
       x: LEFT_MARGIN,
-      y: 1.3,
+      y: lessonsNextY,
       w: 4.5,
       h: 0.3,
       fontSize: 12,
@@ -6812,6 +6819,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       color: COLORS.red,
       fontFace: FONT,
     });
+    lessonsNextY += 0.35;
     const failureRows = [tableHeader(['Company', 'Reason', 'Lesson'])];
     failures.forEach((f) => {
       failureRows.push([
@@ -6820,25 +6828,26 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         { text: truncate(f.lesson || '', 35) },
       ]);
     });
+    const failTableH = safeTableHeight(failureRows.length, { fontSize: 10, maxH: 2.0 });
     lessonsSlide.addTable(failureRows, {
       x: LEFT_MARGIN,
-      y: 1.7,
+      y: lessonsNextY,
       w: CONTENT_WIDTH,
-      h: 2.0,
+      h: failTableH,
       fontSize: 10,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.2, 3.5, 3.6],
       valign: 'top',
     });
+    lessonsNextY += failTableH + 0.15;
   }
   // Success factors
   const successFactors = safeArray(lessonsData.successFactors, 3);
-  const lessonsBaseY = failures.length > 0 ? 4.0 : 1.3;
   if (successFactors.length > 0) {
     lessonsSlide.addText('SUCCESS FACTORS', {
       x: LEFT_MARGIN,
-      y: lessonsBaseY,
+      y: lessonsNextY,
       w: CONTENT_WIDTH,
       h: 0.3,
       fontSize: 12,
@@ -6846,27 +6855,28 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       color: COLORS.green,
       fontFace: FONT,
     });
+    const sfH = Math.min(1.0, successFactors.length * 0.3 + 0.1);
     lessonsSlide.addText(
       successFactors.map((s) => ({ text: truncate(s, 80), options: { bullet: true } })),
       {
         x: LEFT_MARGIN,
-        y: lessonsBaseY + 0.35,
+        y: lessonsNextY + 0.35,
         w: CONTENT_WIDTH,
-        h: 1.0,
+        h: sfH,
         fontSize: 10,
         fontFace: FONT,
         color: COLORS.black,
         valign: 'top',
       }
     );
+    lessonsNextY += 0.35 + sfH + 0.15;
   }
-  // Warning signs — cap height to stay above footer line at y=7.24
+  // Warning signs — cap height to stay above footer at y=6.85
   const warningsData = safeArray(lessonsData.warningSignsToWatch, 3);
-  const warningsBaseY = successFactors.length > 0 ? lessonsBaseY + 1.5 : lessonsBaseY;
   if (warningsData.length > 0) {
     lessonsSlide.addText('WARNING SIGNS', {
       x: LEFT_MARGIN,
-      y: warningsBaseY,
+      y: lessonsNextY,
       w: CONTENT_WIDTH,
       h: 0.3,
       fontSize: 12,
@@ -6874,14 +6884,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       color: COLORS.orange,
       fontFace: FONT,
     });
-    const warningBulletsH = Math.min(1.5, 6.85 - (warningsBaseY + 0.35));
+    lessonsNextY += 0.35;
+    const warningBulletsH = Math.min(1.5, Math.max(0.4, 6.85 - lessonsNextY));
     lessonsSlide.addText(
       warningsData.map((w) => ({ text: truncate(w, 80), options: { bullet: true } })),
       {
         x: LEFT_MARGIN,
-        y: warningsBaseY + 0.35,
+        y: lessonsNextY,
         w: CONTENT_WIDTH,
-        h: Math.max(0.4, warningBulletsH),
+        h: warningBulletsH,
         fontSize: 10,
         fontFace: FONT,
         color: COLORS.black,
@@ -7923,7 +7934,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       x: LEFT_MARGIN,
       y: 1.3,
       w: CONTENT_WIDTH,
-      h: 3.5,
+      h: safeTableHeight(compRows.length, { maxH: 4.0 }),
       fontSize: 10,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
