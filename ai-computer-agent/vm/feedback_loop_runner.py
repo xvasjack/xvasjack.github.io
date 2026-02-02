@@ -155,12 +155,7 @@ async def wait_for_email_callback(
     if HAS_GMAIL_API:
         try:
             subject_hint = SERVICE_EMAIL_SUBJECTS.get(service_name, service_name)
-            # Time filter: use after:{epoch} to skip stale old emails.
-            # Set to 30 min before callback start — generous buffer for clock skew,
-            # but still filters out emails from days/weeks ago.
-            import time as _time
-            cutoff_epoch = int(_time.time()) - 1800  # 30 min before now
-            query = f"subject:({subject_hint}) has:attachment after:{cutoff_epoch}"
+            query = f"subject:({subject_hint}) has:attachment"
             result = await wait_for_email_api(
                 query=query,
                 download_dir=download_dir,
