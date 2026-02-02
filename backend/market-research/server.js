@@ -4184,10 +4184,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     title: 'YCP_MASTER',
     background: { color: 'FFFFFF' },
     objects: [
-      // Thick header line (y: 1.02")
-      { line: { x: 0, y: 1.02, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } } },
-      // Thin header line (y: 1.10")
-      { line: { x: 0, y: 1.1, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
+      // Thick header line (y: 0.88") - aligned with divider line, above subtitle
+      { line: { x: 0, y: 0.88, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 4.5 } } },
+      // Thin header line (y: 0.92") - just below thick line, above subtitle at 0.95
+      { line: { x: 0, y: 0.92, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
       // Footer line (y: 7.24")
       { line: { x: 0, y: 7.24, w: 13.333, h: 0, line: { color: COLORS.headerLine, width: 2.25 } } },
     ],
@@ -4220,6 +4220,56 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     recommendation: rawSummary.recommendation || '',
   };
   const country = countryAnalysis.country || synthesis.country;
+
+  // Enrich thin company descriptions by combining available data fields
+  function enrichDescription(company) {
+    if (!company || typeof company !== 'object') return company;
+    const desc = company.description || '';
+    const wordCount = desc.split(/\s+/).filter(Boolean).length;
+    if (wordCount >= 40) return company; // Already rich enough
+    // Build a richer description from available fields
+    const parts = [];
+    if (desc) parts.push(desc);
+    if (company.revenue && !desc.includes(company.revenue))
+      parts.push(`Revenue: ${company.revenue}.`);
+    if (company.marketShare && !desc.includes(company.marketShare))
+      parts.push(`Market share: ${company.marketShare}.`);
+    if (company.strengths) parts.push(`Strengths: ${company.strengths}.`);
+    if (company.weaknesses) parts.push(`Weaknesses: ${company.weaknesses}.`);
+    if (company.projects) parts.push(`Key projects: ${company.projects}.`);
+    if (company.assessment) parts.push(company.assessment);
+    if (company.success) parts.push(company.success);
+    if (company.presence) parts.push(`Presence: ${company.presence}.`);
+    if (company.type) parts.push(`Type: ${company.type}.`);
+    if (company.origin && company.entryYear)
+      parts.push(`${company.origin}-based, entered market in ${company.entryYear}.`);
+    else if (company.origin) parts.push(`Origin: ${company.origin}.`);
+    else if (company.entryYear) parts.push(`Entered market: ${company.entryYear}.`);
+    if (company.mode) parts.push(`Entry mode: ${company.mode}.`);
+    if (company.partnershipFit) parts.push(`Partnership fit: ${company.partnershipFit}/5.`);
+    if (company.acquisitionFit) parts.push(`Acquisition fit: ${company.acquisitionFit}/5.`);
+    if (company.estimatedValuation) parts.push(`Est. valuation: ${company.estimatedValuation}.`);
+    company.description = parts.join(' ').trim();
+    return company;
+  }
+
+  // Apply description enrichment to all player arrays
+  function enrichPlayerArray(arr) {
+    if (!Array.isArray(arr)) return arr;
+    return arr.map(enrichDescription);
+  }
+  if (competitors.japanesePlayers?.players)
+    competitors.japanesePlayers.players = enrichPlayerArray(competitors.japanesePlayers.players);
+  if (competitors.localMajor?.players)
+    competitors.localMajor.players = enrichPlayerArray(competitors.localMajor.players);
+  if (competitors.foreignPlayers?.players)
+    competitors.foreignPlayers.players = enrichPlayerArray(competitors.foreignPlayers.players);
+  if (depth.partnerAssessment?.partners)
+    depth.partnerAssessment.partners = enrichPlayerArray(depth.partnerAssessment.partners);
+  if (competitors.maActivity?.potentialTargets)
+    competitors.maActivity.potentialTargets = enrichPlayerArray(
+      competitors.maActivity.potentialTargets
+    );
 
   // Debug: confirm data source
   console.log(`  [PPT] Using countryAnalysis data for ${country}`);
@@ -4673,11 +4723,20 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           // Leaders table
           if (content.leaders && content.leaders.length > 0) {
             const rows = [tableHeader(['Company', 'Strength', 'Weakness'])];
-            content.leaders.forEach((l) => {
+            content.leaders.map(ensureWebsite).forEach((l) => {
+              const nameOpts = l.website
+                ? {
+                    fontFace: FONT,
+                    fontSize: 11,
+                    bold: true,
+                    color: '0066CC',
+                    hyperlink: { url: l.website },
+                  }
+                : { fontFace: FONT, fontSize: 11, bold: true, color: COLORS.black };
               rows.push([
                 {
                   text: l.name || '',
-                  options: { fontFace: FONT, fontSize: 11, bold: true, color: COLORS.black },
+                  options: nameOpts,
                 },
                 {
                   text: l.strength || '',
@@ -4907,13 +4966,18 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
 
         default: {
-          // Generic content slide - render as bullet points
-          const textContent =
+          // Generic content slide - render as bullet points (truncated to prevent overflow)
+          let textContent =
             typeof content === 'string'
               ? content
               : Array.isArray(content)
-                ? content.map((c) => `• ${c}`).join('\n')
+                ? content
+                    .slice(0, 8)
+                    .map((c) => `• ${truncate(String(c), 120)}`)
+                    .join('\n')
                 : JSON.stringify(content, null, 2);
+          // Cap total length to fit in available space
+          if (textContent.length > 1200) textContent = textContent.substring(0, 1200);
           slide.addText(textContent, {
             x: LEFT_MARGIN,
             y: contentY,
@@ -5046,7 +5110,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   ];
 
   tocSections.forEach((item, idx) => {
-    const yPos = 1.4 + idx * 1.0;
+    const yPos = 1.5 + idx * 1.0;
     // Section title
     tocSlide.addText(item.section, {
       x: LEFT_MARGIN,
@@ -5662,7 +5726,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       jpRows.push([
         nameCell,
         { text: truncate(p.presence || '', 30) },
-        { text: truncate(desc, 80) },
+        { text: truncate(desc, 200), options: { fontSize: 9 } },
       ]);
     });
     // Use dynamic column widths
@@ -5675,7 +5739,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       fontSize: 11,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
-      colW: jpColWidths.length > 0 ? jpColWidths : [2.0, 2.0, 5.0],
+      colW: jpColWidths.length > 0 ? jpColWidths : [2.0, 1.5, 5.5],
       valign: 'top',
     });
     // Add insights panel if we have insights
@@ -5729,7 +5793,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         nameCell,
         { text: p.type || '' },
         { text: p.revenue || '' },
-        { text: truncate(desc, 80) },
+        { text: truncate(desc, 200), options: { fontSize: 9 } },
       ]);
     });
     // Use dynamic column widths
@@ -5745,7 +5809,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       fontSize: 10,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
-      colW: localColWidths.length > 0 ? localColWidths : [2.0, 1.5, 1.5, 4.3],
+      colW: localColWidths.length > 0 ? localColWidths : [1.8, 1.2, 1.2, 4.8],
       valign: 'top',
     });
     // Add insights panel if we have insights
@@ -5793,7 +5857,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         nameCell,
         { text: p.origin || '' },
         { text: p.mode || '' },
-        { text: truncate(desc, 80) },
+        { text: truncate(desc, 200), options: { fontSize: 9 } },
       ]);
     });
     // Use dynamic column widths
@@ -5809,7 +5873,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       fontSize: 11,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
-      colW: foreignColWidths.length > 0 ? foreignColWidths : [2.0, 1.5, 1.5, 4.3],
+      colW: foreignColWidths.length > 0 ? foreignColWidths : [1.8, 1.2, 1.2, 4.8],
       valign: 'top',
     });
     // Add insights panel if we have insights
@@ -5922,7 +5986,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     maInsights.push(`Deal Volume: ${maActivity.structuredData.maActivity.dealVolume}`);
   }
   const deals = safeArray(maActivity.recentDeals, 3);
-  const potentialTargets = safeArray(maActivity.potentialTargets, 3);
+  const potentialTargets = safeArray(maActivity.potentialTargets, 3).map(ensureWebsite);
   if (deals.length > 0) maInsights.push(`${deals.length} recent deals identified`);
   if (potentialTargets.length > 0) maInsights.push(`${potentialTargets.length} potential targets`);
 
@@ -5986,8 +6050,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
     const targetRows = [tableHeader(['Company', 'Est. Value', 'Rationale', 'Timing'])];
     potentialTargets.forEach((t) => {
+      const nameCell = t.website
+        ? { text: t.name || '', options: { hyperlink: { url: t.website }, color: '0066CC' } }
+        : { text: t.name || '' };
       targetRows.push([
-        { text: t.name || '' },
+        nameCell,
         { text: t.estimatedValue || '' },
         { text: truncate(t.rationale || '', 40) },
         { text: t.timing || '' },
@@ -6334,12 +6401,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const activities = safeArray(phase.activities, 4);
     if (activities.length > 0) {
       implSlide.addText(
-        activities.map((a) => ({ text: truncate(a, 35), options: { bullet: true } })),
+        activities.map((a) => ({ text: truncate(a, 30), options: { bullet: true } })),
         {
           x: phaseX,
           y: 1.8,
           w: phaseWidth,
-          h: 2.5,
+          h: 2.8,
           fontSize: 9,
           fontFace: FONT,
           color: COLORS.black,
@@ -6352,9 +6419,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (milestones.length > 0) {
       implSlide.addText(`Milestones: ${milestones.map((m) => truncate(m, 25)).join(', ')}`, {
         x: phaseX,
-        y: 4.4,
+        y: 4.7,
         w: phaseWidth,
-        h: 0.5,
+        h: 0.4,
         fontSize: 8,
         fontFace: FONT,
         color: COLORS.footerText,
@@ -6365,7 +6432,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (phase.investment) {
       implSlide.addText(`Investment: ${phase.investment}`, {
         x: phaseX,
-        y: 4.9,
+        y: 5.15,
         w: phaseWidth,
         h: 0.3,
         fontSize: 9,
@@ -7610,25 +7677,43 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       ],
     ];
 
-    safeArray(comp.localPlayers, 3).forEach((p) => {
-      const name = typeof p === 'string' ? p : p.name || 'Unknown';
-      const desc = typeof p === 'string' ? '' : p.description || '';
-      compRows.push([
-        { text: truncate(name, 30) },
-        { text: 'Local' },
-        { text: truncate(desc, 70) },
-      ]);
-    });
+    safeArray(comp.localPlayers, 3)
+      .map((p) => (typeof p === 'string' ? { name: p } : p))
+      .map(ensureWebsite)
+      .forEach((p) => {
+        const name = p.name || 'Unknown';
+        const desc = p.description || '';
+        const nameCell = p.website
+          ? {
+              text: truncate(name, 30),
+              options: { hyperlink: { url: p.website }, color: '0066CC' },
+            }
+          : { text: truncate(name, 30) };
+        compRows.push([
+          nameCell,
+          { text: 'Local' },
+          { text: truncate(desc, 180), options: { fontSize: 9 } },
+        ]);
+      });
 
-    safeArray(comp.foreignPlayers, 3).forEach((p) => {
-      const name = typeof p === 'string' ? p : p.name || 'Unknown';
-      const desc = typeof p === 'string' ? '' : p.description || '';
-      compRows.push([
-        { text: truncate(name, 30) },
-        { text: 'Foreign' },
-        { text: truncate(desc, 70) },
-      ]);
-    });
+    safeArray(comp.foreignPlayers, 3)
+      .map((p) => (typeof p === 'string' ? { name: p } : p))
+      .map(ensureWebsite)
+      .forEach((p) => {
+        const name = p.name || 'Unknown';
+        const desc = p.description || '';
+        const nameCell = p.website
+          ? {
+              text: truncate(name, 30),
+              options: { hyperlink: { url: p.website }, color: '0066CC' },
+            }
+          : { text: truncate(name, 30) };
+        compRows.push([
+          nameCell,
+          { text: 'Foreign' },
+          { text: truncate(desc, 180), options: { fontSize: 9 } },
+        ]);
+      });
 
     compSlide.addTable(compRows, {
       x: LEFT_MARGIN,
