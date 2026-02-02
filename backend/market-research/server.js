@@ -1523,6 +1523,7 @@ Your response MUST include a JSON block. Use this format:
   "players": [
     {
       "name": "Company Name",
+      "website": "https://company.com",
       "origin": "Country",
       "entryYear": "2020",
       "entryMode": "JV/Subsidiary/Direct/M&A",
@@ -1534,6 +1535,7 @@ Your response MUST include a JSON block. Use this format:
       "contractValue": "$X million (if known)",
       "strengths": "Specific strengths",
       "weaknesses": "Specific weaknesses",
+      "description": "Detailed 50+ word description including revenue, growth rate, market position, key services, strategic context, and why this company matters for market entry analysis",
       "status": "active/expanding/restructuring/exited",
       "partnershipInterest": "high/medium/low"
     }
@@ -1541,11 +1543,13 @@ Your response MUST include a JSON block. Use this format:
   "japanesePlayers": [
     {
       "company": "Tokyo Gas/Osaka Gas/JERA/etc",
+      "website": "https://company.co.jp",
       "entryMode": "JV/Subsidiary/Partnership",
       "year": "2020",
       "outcome": "Successful - $X revenue/Failed - exited in YEAR/Ongoing",
       "keyProject": "Project name and description",
-      "localPartner": "Partner company name"
+      "localPartner": "Partner company name",
+      "description": "Detailed 50+ word description of company's presence, operations, market position, and strategic significance"
     }
   ],
   "caseStudies": [
@@ -1582,7 +1586,9 @@ REQUIREMENTS:
 - Use REAL data from research. Mark dataQuality as "low" if information is estimated.
 - For Japanese companies, be specific about project names, values, and outcomes
 - Include at least one case study with detailed entry/exit analysis
-- For ESCO market state, provide actual numbers where available`;
+- For ESCO market state, provide actual numbers where available
+- EVERY company in "players" and "japanesePlayers" MUST have a "website" field with the company's actual corporate URL
+- EVERY company MUST have a "description" field with 50+ words covering: revenue, growth rate, market share, key services/projects, geographic coverage, entry strategy details, and competitive significance. NO generic one-liners.`;
 
       const result = await callKimiDeepResearch(queryContext, country, industry);
 
@@ -2349,8 +2355,8 @@ Return a JSON object with this EXPANDED structure for 15+ slides:
       "slideTitle": "${country} - Japanese Energy Companies",
       "subtitle": "Current presence and activities",
       "players": [
-        {"name": "Tokyo Gas", "presence": "JV with Local Partner", "projects": "3 ESCO contracts", "revenue": "$X million", "assessment": "Strong/Weak"},
-        {"name": "Osaka Gas", "presence": "Direct investment", "projects": "LNG terminal stake", "revenue": "$X million", "assessment": "Strong/Weak"}
+        {"name": "Tokyo Gas", "website": "https://www.tokyo-gas.co.jp", "presence": "JV with Local Partner", "projects": "3 ESCO contracts", "revenue": "$X million", "assessment": "Strong/Weak", "description": "Detailed 50+ word description including market position, entry strategy, key projects, revenue figures, growth trajectory, and strategic significance for competitive landscape"},
+        {"name": "Osaka Gas", "website": "https://www.osakagas.co.jp", "presence": "Direct investment", "projects": "LNG terminal stake", "revenue": "$X million", "assessment": "Strong/Weak", "description": "Detailed 50+ word description"}
       ],
       "marketInsight": "Overall assessment of Japanese presence"
     },
@@ -2358,8 +2364,8 @@ Return a JSON object with this EXPANDED structure for 15+ slides:
       "slideTitle": "${country} - Major Local Players",
       "subtitle": "Domestic energy companies",
       "players": [
-        {"name": "Company A", "type": "State-owned/Private", "revenue": "$X million", "marketShare": "X%", "strengths": "...", "weaknesses": "..."},
-        {"name": "Company B", "type": "State-owned/Private", "revenue": "$X million", "marketShare": "X%", "strengths": "...", "weaknesses": "..."}
+        {"name": "Company A", "website": "https://companya.com", "type": "State-owned/Private", "revenue": "$X million", "marketShare": "X%", "strengths": "...", "weaknesses": "...", "description": "Detailed 50+ word description including revenue, growth rate, market share, key services, geographic coverage, and competitive advantages"},
+        {"name": "Company B", "website": "https://companyb.com", "type": "State-owned/Private", "revenue": "$X million", "marketShare": "X%", "strengths": "...", "weaknesses": "...", "description": "Detailed 50+ word description"}
       ],
       "concentration": "Market concentration assessment"
     },
@@ -2367,8 +2373,8 @@ Return a JSON object with this EXPANDED structure for 15+ slides:
       "slideTitle": "${country} - Foreign Energy Companies",
       "subtitle": "International competitors",
       "players": [
-        {"name": "ENGIE", "origin": "France", "entryYear": "2018", "mode": "JV", "projects": "X contracts", "success": "High/Medium/Low"},
-        {"name": "Siemens", "origin": "Germany", "entryYear": "2015", "mode": "Direct", "projects": "Smart grid", "success": "High/Medium/Low"}
+        {"name": "ENGIE", "website": "https://www.engie.com", "origin": "France", "entryYear": "2018", "mode": "JV", "projects": "X contracts", "success": "High/Medium/Low", "description": "Detailed 50+ word description including entry strategy, local partnerships, revenue, project portfolio, and competitive position"},
+        {"name": "Siemens", "website": "https://www.siemens-energy.com", "origin": "Germany", "entryYear": "2015", "mode": "Direct", "projects": "Smart grid", "success": "High/Medium/Low", "description": "Detailed 50+ word description"}
       ],
       "competitiveInsight": "How foreign players compete"
     },
@@ -2421,6 +2427,7 @@ Return a JSON object with this EXPANDED structure for 15+ slides:
       "partners": [
         {
           "name": "Company Name",
+          "website": "https://company.com",
           "type": "Local ESCO / Engineering / Conglomerate",
           "revenue": "$X million",
           "employees": "X",
@@ -2513,7 +2520,7 @@ Return a JSON object with this EXPANDED structure for 15+ slides:
         }
       ],
       "topTargets": [
-        {"company": "Company Name", "industry": "Sector", "energySpend": "$X million/year", "location": "Zone/Province"}
+        {"company": "Company Name", "website": "https://company.com", "industry": "Sector", "energySpend": "$X million/year", "location": "Zone/Province"}
       ],
       "goToMarketApproach": "How to reach these customers"
     }
@@ -2581,6 +2588,8 @@ CRITICAL:
 - If data unavailable, use reasonable estimates and mark as "estimated"
 - Aim for actionable specificity, not generic descriptions
 - DEPTH IS KEY: Executive-level decision-making requires specific numbers, names, timelines
+- WEBSITE URLs: Every company in players, partners, and topTargets MUST have a "website" field with the company's actual URL. Search for and include the real corporate website URL. If unknown, use the most likely URL based on company name.
+- COMPANY DESCRIPTIONS: Every company in players arrays MUST have a "description" field with 50+ words. Include specific metrics (revenue, growth rate, market share), strategic context, key services, geographic coverage, and why the company matters for competitive analysis. Do NOT write generic Wikipedia-style descriptions.
 
 Return ONLY valid JSON.`;
 
@@ -2950,10 +2959,10 @@ Return JSON with:
 
   "competitivePositioning": {
     "keyPlayers": [
-      {"name": "actual company", "strengths": "specific", "weaknesses": "specific", "threat": "how they could block you"}
+      {"name": "actual company", "website": "https://company.com", "strengths": "specific", "weaknesses": "specific", "threat": "how they could block you", "description": "Detailed 50+ word description with revenue, market share, entry year, key projects, geographic coverage, strategic positioning, and why this player matters for competitive analysis"}
     ],
     "whiteSpaces": ["specific gaps with EVIDENCE of demand and SIZE of opportunity"],
-    "potentialPartners": [{"name": "actual company", "rationale": "why they'd partner, what they bring, what you bring"}]
+    "potentialPartners": [{"name": "actual company", "website": "https://partner.com", "rationale": "why they'd partner, what they bring, what you bring"}]
   },
 
   "regulatoryPathway": {
@@ -3033,7 +3042,9 @@ CRITICAL QUALITY STANDARDS:
 3. SPECIFICITY. Every number needs a year. Every company needs context. Every regulation needs an enforcement reality check.
 4. COMPETITIVE EDGE. The reader should learn something they couldn't find in an hour of desk research.
 5. ACTIONABLE CONCLUSIONS. End each section with what the reader should DO with this information.
-6. PROFESSIONAL PROSE. Write like The Economist - clear, precise, analytical. Use technical terms where they add precision, but always explain significance.`;
+6. PROFESSIONAL PROSE. Write like The Economist - clear, precise, analytical. Use technical terms where they add precision, but always explain significance.
+7. COMPANY DESCRIPTIONS: Every company in keyPlayers and potentialPartners MUST have a "description" field with 50+ words. Include revenue, growth rate, market share, key services, geographic coverage, and competitive advantages. NEVER write generic one-liners like "X is a company that provides Y" — include specific metrics and strategic context.
+8. WEBSITE URLs: Every company MUST have a "website" field with the company's actual corporate website URL.`;
 
   const result = await callDeepSeek(prompt, systemPrompt, 12000);
 
@@ -3528,7 +3539,7 @@ function addInsightsPanel(slide, insights = [], options = {}) {
   const panelX = options.x || 9.8; // Position to right of chart
   const panelY = options.y || 1.5;
   const panelW = options.w || 3.2;
-  const panelH = options.h || 4.5;
+  const panelH = options.h || 4.0;
 
   // Panel header
   slide.addText('Key Insights', {
@@ -5094,7 +5105,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       x: LEFT_MARGIN,
       y: 1.3,
       w: CONTENT_WIDTH,
-      h: 5.2,
+      h: 4.0,
       fontSize: 12,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
@@ -5283,7 +5294,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       tpesSlide,
       `TPES by Source (${tpes.chartData.unit || 'Mtoe'})`,
       tpes.chartData,
-      { x: LEFT_MARGIN, y: 1.3, w: 8.8, h: 5.0 }
+      { x: LEFT_MARGIN, y: 1.3, w: 8.8, h: 4.0 }
     );
     // Add insights panel with key data points
     const tpesInsights = [];
@@ -5295,7 +5306,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
     if (tpes.keyInsight) tpesInsights.push(tpes.keyInsight);
     if (tpes.narrative) tpesInsights.push(truncate(tpes.narrative, 100));
-    addInsightsPanel(tpesSlide, tpesInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.4 });
+    addInsightsPanel(tpesSlide, tpesInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.4, h: 4.0 });
     // Add energy transition opportunity callout
     addCalloutBox(
       tpesSlide,
@@ -5334,7 +5345,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (finalDemand.keyInsight) demandInsights.push(finalDemand.keyInsight);
     // Add key drivers as insights
     safeArray(finalDemand.keyDrivers, 2).forEach((d) => demandInsights.push(truncate(d, 80)));
-    addInsightsPanel(demandSlide, demandInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.4 });
+    addInsightsPanel(demandSlide, demandInsights.slice(0, 4), { x: 9.5, y: 1.3, w: 3.4, h: 4.0 });
     // Add supply gap quantification callout
     addCalloutBox(
       demandSlide,
@@ -5474,9 +5485,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const termColWidths = calculateColumnWidths(termRows, CONTENT_WIDTH);
     gasSlide.addTable(termRows, {
       x: LEFT_MARGIN,
-      y: 4.7,
+      y: 5.7,
       w: CONTENT_WIDTH,
-      h: 1.8,
+      h: 1.2,
       fontSize: 11,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
@@ -5562,7 +5573,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       escoMarket.chartData,
       { x: LEFT_MARGIN, y: 1.3, w: 8.5, h: 3.3 }
     );
-    addInsightsPanel(escoSlide, escoInsights.slice(0, 4), { x: 9.3, y: 1.3, w: 3.6 });
+    addInsightsPanel(escoSlide, escoInsights.slice(0, 4), { x: 9.3, y: 1.3, w: 3.6, h: 3.3 });
   } else if (safeArray(escoMarket.segments, 4).length === 0 && escoInsights.length === 0) {
     addDataUnavailableMessage(escoSlide, 'ESCO market data not available');
   } else if (escoInsights.length > 0) {
@@ -5632,13 +5643,16 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   if (jpPlayers.length === 0) {
     addDataUnavailableMessage(jpSlide, 'Japanese competitor data not available');
   } else {
-    const jpRows = [tableHeader(['Company', 'Presence', 'Projects', 'Assessment'])];
+    const jpRows = [tableHeader(['Company', 'Presence', 'Description'])];
     jpPlayers.forEach((p) => {
+      const nameCell = p.website
+        ? { text: p.name || '', options: { hyperlink: { url: p.website }, color: '0066CC' } }
+        : { text: p.name || '' };
+      const desc = p.description || p.projects || p.assessment || '';
       jpRows.push([
-        { text: p.name || '' },
+        nameCell,
         { text: truncate(p.presence || '', 30) },
-        { text: truncate(p.projects || '', 35) },
-        { text: p.assessment || '' },
+        { text: truncate(desc, 80) },
       ]);
     });
     // Use dynamic column widths
@@ -5647,11 +5661,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       x: LEFT_MARGIN,
       y: 1.3,
       w: jpInsights.length > 0 ? 9.0 : CONTENT_WIDTH,
-      h: 5.2,
+      h: 4.7,
       fontSize: 11,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
-      colW: jpColWidths.length > 0 ? jpColWidths : [2.0, 2.5, 3.0, 1.8],
+      colW: jpColWidths.length > 0 ? jpColWidths : [2.0, 2.0, 5.0],
       valign: 'top',
     });
     // Add insights panel if we have insights
@@ -5695,14 +5709,17 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   if (localPlayers.length === 0) {
     addDataUnavailableMessage(localSlide, 'Local competitor data not available');
   } else {
-    const localRows = [tableHeader(['Company', 'Type', 'Revenue', 'Market Share', 'Strengths'])];
+    const localRows = [tableHeader(['Company', 'Type', 'Revenue', 'Description'])];
     localPlayers.forEach((p) => {
+      const nameCell = p.website
+        ? { text: p.name || '', options: { hyperlink: { url: p.website }, color: '0066CC' } }
+        : { text: p.name || '' };
+      const desc = p.description || `${p.strengths || ''} ${p.weaknesses || ''}`.trim() || '';
       localRows.push([
-        { text: p.name || '' },
+        nameCell,
         { text: p.type || '' },
         { text: p.revenue || '' },
-        { text: p.marketShare || '' },
-        { text: truncate(p.strengths || '', 35) },
+        { text: truncate(desc, 80) },
       ]);
     });
     // Use dynamic column widths
@@ -5714,11 +5731,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       x: LEFT_MARGIN,
       y: 1.3,
       w: localInsights.length > 0 ? 9.0 : CONTENT_WIDTH,
-      h: 5.2,
+      h: 4.7,
       fontSize: 10,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
-      colW: localColWidths.length > 0 ? localColWidths : [2.0, 1.3, 1.5, 1.3, 3.2],
+      colW: localColWidths.length > 0 ? localColWidths : [2.0, 1.5, 1.5, 4.3],
       valign: 'top',
     });
     // Add insights panel if we have insights
@@ -5753,14 +5770,20 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   if (foreignList.length === 0) {
     addDataUnavailableMessage(foreignSlide, 'Foreign competitor data not available');
   } else {
-    const foreignRows = [tableHeader(['Company', 'Origin', 'Entry Year', 'Mode', 'Success'])];
+    const foreignRows = [tableHeader(['Company', 'Origin', 'Mode', 'Description'])];
     foreignList.forEach((p) => {
+      const nameCell = p.website
+        ? { text: p.name || '', options: { hyperlink: { url: p.website }, color: '0066CC' } }
+        : { text: p.name || '' };
+      const desc =
+        p.description ||
+        `${p.entryYear ? `Entered ${p.entryYear}. ` : ''}${p.success || ''} ${p.projects || ''}`.trim() ||
+        '';
       foreignRows.push([
-        { text: p.name || '' },
+        nameCell,
         { text: p.origin || '' },
-        { text: p.entryYear || '' },
         { text: p.mode || '' },
-        { text: p.success || '' },
+        { text: truncate(desc, 80) },
       ]);
     });
     // Use dynamic column widths
@@ -5772,11 +5795,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       x: LEFT_MARGIN,
       y: 1.3,
       w: foreignInsights.length > 0 ? 9.0 : CONTENT_WIDTH,
-      h: 5.2,
+      h: 4.7,
       fontSize: 11,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
-      colW: foreignColWidths.length > 0 ? foreignColWidths : [2.5, 1.5, 1.3, 2.0, 2.0],
+      colW: foreignColWidths.length > 0 ? foreignColWidths : [2.0, 1.5, 1.5, 4.3],
       valign: 'top',
     });
     // Add insights panel if we have insights
@@ -6052,7 +6075,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
     // Add insights panel
     if (econInsights.length > 0) {
-      addInsightsPanel(econSlide, econInsights.slice(0, 4), { x: 9.0, y: 1.3, w: 3.8 });
+      addInsightsPanel(econSlide, econInsights.slice(0, 4), { x: 9.0, y: 1.3, w: 3.8, h: 3.5 });
     }
   }
 
@@ -6122,8 +6145,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       ]),
     ];
     partners.forEach((p) => {
+      const nameCell = p.website
+        ? {
+            text: truncate(p.name || '', 20),
+            options: { hyperlink: { url: p.website }, color: '0066CC' },
+          }
+        : { text: truncate(p.name || '', 20) };
       partnerRows.push([
-        { text: truncate(p.name || '', 20) },
+        nameCell,
         { text: truncate(p.type || '', 15) },
         { text: p.revenue || '' },
         { text: p.partnershipFit ? `${p.partnershipFit}/5` : '' },
@@ -6140,7 +6169,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       x: LEFT_MARGIN,
       y: 1.3,
       w: partnerInsights.length > 0 ? 9.0 : CONTENT_WIDTH,
-      h: 5.2,
+      h: 4.7,
       fontSize: 10,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
@@ -6225,7 +6254,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   if (harvey.criteria && Array.isArray(harvey.criteria) && harvey.criteria.length > 0) {
     entrySlide.addText('Comparison Matrix (1-5 scale)', {
       x: LEFT_MARGIN,
-      y: 4.0,
+      y: 4.9,
       w: CONTENT_WIDTH,
       h: 0.3,
       fontSize: 12,
@@ -6252,9 +6281,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const harveyColWidths = calculateColumnWidths(harveyRows, CONTENT_WIDTH);
     entrySlide.addTable(harveyRows, {
       x: LEFT_MARGIN,
-      y: 4.4,
+      y: 5.3,
       w: CONTENT_WIDTH,
-      h: 2.0,
+      h: 1.6,
       fontSize: 10,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
@@ -6393,7 +6422,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
 
   // Top targets
-  const topTargets = safeArray(targetSeg.topTargets, 4);
+  const topTargets = safeArray(targetSeg.topTargets, 3);
   if (topTargets.length > 0) {
     targetSlide.addText('Priority Target Companies', {
       x: LEFT_MARGIN,
@@ -6407,8 +6436,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
     const targetCompRows = [tableHeader(['Company', 'Industry', 'Energy Spend', 'Location'])];
     topTargets.forEach((t) => {
+      const nameCell = t.website
+        ? { text: t.company || '', options: { hyperlink: { url: t.website }, color: '0066CC' } }
+        : { text: t.company || '' };
       targetCompRows.push([
-        { text: t.company || '' },
+        nameCell,
         { text: t.industry || '' },
         { text: t.energySpend || '' },
         { text: t.location || '' },
@@ -6423,8 +6455,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       x: LEFT_MARGIN,
       y: 4.4,
       w: segInsights.length > 0 ? 9.0 : CONTENT_WIDTH,
-      h: 2.0,
-      fontSize: 10,
+      h: 1.8,
+      fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: targetColWidths.length > 0 ? targetColWidths : [2.5, 2.3, 2.25, 2.25],
@@ -6657,7 +6689,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         x: 4.5,
         y: 5.35,
         w: 5.15,
-        h: 1.2,
+        h: 0.6,
         fontSize: 10,
         fontFace: FONT,
         color: COLORS.black,
@@ -6670,7 +6702,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     goNoGoSlide,
     `Decision Required for ${scope.clientContext || 'Your Company'}`,
     `Approve ${country} entry by end of quarter. Key success factors: Speed to market, right partner structure.`,
-    { x: LEFT_MARGIN, y: 6.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+    { x: LEFT_MARGIN, y: 6.0, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
   );
 
   // SLIDE 26: Opportunities & Obstacles (using enhanced helper)
@@ -7047,7 +7079,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     x: LEFT_MARGIN,
     y: 1.3,
     w: CONTENT_WIDTH,
-    h: 5.2,
+    h: 4.7,
     fontSize: 12,
     fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
@@ -7443,7 +7475,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       x: LEFT_MARGIN,
       y: 1.3,
       w: CONTENT_WIDTH,
-      h: 5.2,
+      h: 4.7,
       fontSize: 14,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
@@ -7506,7 +7538,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       x: LEFT_MARGIN,
       y: 1.3,
       w: CONTENT_WIDTH,
-      h: 5.2,
+      h: 4.7,
       fontSize: 14,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
