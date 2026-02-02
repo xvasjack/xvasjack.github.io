@@ -1,5 +1,7 @@
 const { callDeepSeek } = require('./ai-clients');
 
+// ============ PPT GENERATION ============
+
 // Helper: truncate text to fit slides - end at sentence or phrase boundary
 // CRITICAL: Never cut mid-sentence. Better to be shorter than incomplete.
 // Adds ellipsis (...) when text is truncated to indicate continuation
