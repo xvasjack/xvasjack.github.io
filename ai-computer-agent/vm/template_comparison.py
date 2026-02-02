@@ -155,6 +155,20 @@ class PPTTemplate:
         "name", "website", "description"
     ])
 
+    # Content depth settings
+    min_words_per_description: int = 40
+    min_content_paragraphs: int = 3
+    require_actionable_content: bool = False
+    content_depth_keywords: List[str] = field(default_factory=lambda: [
+        "recommend", "opportunity", "strategy", "market size",
+        "growth", "competitive", "next steps", "should consider",
+        "potential", "outlook", "forecast", "implication"
+    ])
+    shallow_content_phrases: List[str] = field(default_factory=lambda: [
+        "is a company that", "was founded in", "is located in",
+        "is a leading", "provides services"
+    ])
+
     # URL validation
     blocked_domains: List[str] = field(default_factory=lambda: [
         "facebook.com", "linkedin.com", "twitter.com",
@@ -250,6 +264,17 @@ TEMPLATES = {
         require_websites=True,
         require_descriptions=True,
         required_company_fields=["name", "website", "description", "financials"],
+        min_words_per_description=40,
+        min_content_paragraphs=2,
+        require_actionable_content=False,
+        content_depth_keywords=[
+            "revenue", "EBITDA", "margin", "growth", "employees",
+            "market share", "competitive", "strategic", "acquisition",
+        ],
+        shallow_content_phrases=[
+            "is a company that", "was founded in", "is located in",
+            "is a leading",
+        ],
     ),
 
     "market-research": PPTTemplate(
@@ -260,6 +285,19 @@ TEMPLATES = {
         require_logos=False,  # Market research may not have logos
         require_websites=True,
         require_descriptions=True,
+        min_words_per_description=50,
+        min_content_paragraphs=3,
+        require_actionable_content=True,
+        content_depth_keywords=[
+            "recommend", "opportunity", "strategy", "market size",
+            "growth", "competitive", "next steps", "should consider",
+            "potential", "outlook", "forecast", "implication",
+            "CAGR", "TAM", "SAM", "market share",
+        ],
+        shallow_content_phrases=[
+            "is a company that", "was founded in", "is located in",
+            "is a leading", "provides services",
+        ],
     ),
 
     "validation-results": ExcelTemplate(
@@ -462,6 +500,147 @@ def compare_pptx_to_template(
             actual=f"Found duplicates: {', '.join(duplicates[:3])}",
             suggestion="Add deduplication logic by company name and website domain."
         ))
+    else:
+        passed_checks += 1
+
+    # ==========================================================================
+    # CONTENT DEPTH CHECKS
+    # ==========================================================================
+
+    # Check description word count
+    total_checks += 1
+    if companies:
+        shallow_descriptions = []
+        for c in companies:
+            desc = c.get("description", "") or ""
+            word_count = len(desc.split())
+            if word_count < template.min_words_per_description:
+                shallow_descriptions.append(c.get("name", "Unknown"))
+
+        shallow_pct = len(shallow_descriptions) / max(len(companies), 1) * 100
+        if shallow_pct > 30:
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH,
+                category="shallow_descriptions",
+                location="Multiple slides",
+                expected=f"Descriptions with {template.min_words_per_description}+ words each",
+                actual=f"{len(shallow_descriptions)}/{len(companies)} companies ({shallow_pct:.0f}%) have thin descriptions",
+                suggestion=(
+                    f"Expand company descriptions to {template.min_words_per_description}+ words. "
+                    f"Include specific metrics (revenue, growth rate, market share), strategic context, "
+                    f"and why the company is relevant. Shallow: {', '.join(shallow_descriptions[:5])}"
+                ),
+            ))
+        else:
+            passed_checks += 1
+    else:
+        passed_checks += 1
+
+    # Check slide content depth (paragraphs per content slide)
+    total_checks += 1
+    slides = pptx_analysis.get("slides", [])
+    if slides:
+        thin_slides = []
+        content_slides = []
+        for i, slide in enumerate(slides):
+            slide_type = (slide.get("type", "") or "").lower()
+            # Skip title slides, divider slides, section headers
+            if any(kw in slide_type for kw in ("title", "divider", "section", "header")):
+                continue
+            content_slides.append(i)
+            # Count text blocks/paragraphs
+            text_blocks = slide.get("text_blocks", [])
+            paragraphs = slide.get("paragraphs", [])
+            text_count = len(text_blocks) if text_blocks else len(paragraphs) if paragraphs else 0
+            # Fallback: count from all_text split by newlines
+            if text_count == 0:
+                all_text = slide.get("all_text", "") or ""
+                text_count = len([p for p in all_text.split("\n") if p.strip()])
+            if text_count < template.min_content_paragraphs:
+                thin_slides.append(i + 1)  # 1-indexed for reporting
+
+        if content_slides:
+            thin_pct = len(thin_slides) / max(len(content_slides), 1) * 100
+            if thin_pct > 30:
+                discrepancies.append(Discrepancy(
+                    severity=Severity.HIGH,
+                    category="thin_slides",
+                    location=f"Slides {', '.join(str(s) for s in thin_slides[:5])}...",
+                    expected=f"{template.min_content_paragraphs}+ text blocks per content slide",
+                    actual=f"{len(thin_slides)}/{len(content_slides)} content slides ({thin_pct:.0f}%) have insufficient content",
+                    suggestion=(
+                        f"Add more substantive content to thin slides. Each content slide should have "
+                        f"at least {template.min_content_paragraphs} text blocks with market data, "
+                        f"analysis, or strategic context."
+                    ),
+                ))
+            else:
+                passed_checks += 1
+        else:
+            passed_checks += 1
+    else:
+        passed_checks += 1
+
+    # Check for actionable content (keywords indicating substance)
+    if template.require_actionable_content:
+        total_checks += 1
+        slides_with_actionable = 0
+        total_content_slides = 0
+
+        for slide in slides:
+            slide_type = (slide.get("type", "") or "").lower()
+            if any(kw in slide_type for kw in ("title", "divider", "section", "header")):
+                continue
+            total_content_slides += 1
+            all_text = (slide.get("all_text", "") or "").lower()
+            if any(kw in all_text for kw in template.content_depth_keywords):
+                slides_with_actionable += 1
+
+        if total_content_slides > 0:
+            actionable_pct = slides_with_actionable / total_content_slides * 100
+            if actionable_pct < 20:
+                discrepancies.append(Discrepancy(
+                    severity=Severity.CRITICAL,
+                    category="missing_actionable_insights",
+                    location="Presentation-wide",
+                    expected="20%+ of content slides with actionable language (recommendations, strategy, outlook)",
+                    actual=f"Only {slides_with_actionable}/{total_content_slides} slides ({actionable_pct:.0f}%) contain actionable content",
+                    suggestion=(
+                        "Add strategic recommendations, market outlook, and next steps. "
+                        "Use language like 'recommend', 'opportunity', 'should consider', 'growth potential', "
+                        "'strategic fit', 'next steps'. Every content slide should answer 'so what?'"
+                    ),
+                ))
+            else:
+                passed_checks += 1
+        else:
+            passed_checks += 1
+
+    # Check for generic/shallow text patterns in descriptions
+    total_checks += 1
+    if companies and template.shallow_content_phrases:
+        generic_companies = []
+        for c in companies:
+            desc = (c.get("description", "") or "").lower()
+            if any(phrase in desc for phrase in template.shallow_content_phrases):
+                generic_companies.append(c.get("name", "Unknown"))
+
+        generic_pct = len(generic_companies) / max(len(companies), 1) * 100
+        if generic_pct > 50:
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH,
+                category="generic_content",
+                location="Multiple slides",
+                expected="Descriptions with specific metrics and strategic context",
+                actual=f"{len(generic_companies)}/{len(companies)} companies ({generic_pct:.0f}%) have generic filler text",
+                suggestion=(
+                    "Replace generic descriptions ('is a company that', 'was founded in', 'is a leading') "
+                    "with specific data: revenue figures, growth rates, market share, competitive positioning. "
+                    f"Generic: {', '.join(generic_companies[:5])}"
+                ),
+            ))
+        else:
+            passed_checks += 1
     else:
         passed_checks += 1
 

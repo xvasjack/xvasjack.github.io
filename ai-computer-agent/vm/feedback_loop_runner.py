@@ -334,6 +334,53 @@ async def analyze_output_callback(
         }
 
 
+def _load_template_reference(service_name: str) -> str:
+    """Load the relevant section from template_reference.md for a service."""
+    ref_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "template_reference.md")
+    if not os.path.exists(ref_path):
+        return ""
+
+    try:
+        with open(ref_path, "r", encoding="utf-8") as f:
+            content = f.read()
+    except Exception:
+        return ""
+
+    # Map service names to section headers in template_reference.md
+    section_map = {
+        "target-v3": "Target Search",
+        "target-v4": "Target Search",
+        "target-v5": "Target Search",
+        "target-v6": "Target Search",
+        "market-research": "Market Research",
+        "profile-slides": "Profile Slides",
+        "due-diligence": "Due Diligence Report",
+    }
+
+    header_keyword = section_map.get(service_name)
+    if not header_keyword:
+        return ""
+
+    # Extract the relevant section (## header to next ## header)
+    lines = content.split("\n")
+    capturing = False
+    section_lines = []
+    for line in lines:
+        if line.startswith("## ") and header_keyword.lower() in line.lower():
+            capturing = True
+            section_lines.append(line)
+            continue
+        if capturing and line.startswith("## "):
+            break
+        if capturing:
+            section_lines.append(line)
+
+    if not section_lines:
+        return ""
+
+    return "\n".join(section_lines).strip()
+
+
 async def generate_fix_callback(
     issues: List[str],
     analysis: Dict[str, Any],
@@ -342,6 +389,16 @@ async def generate_fix_callback(
 ) -> Dict[str, Any]:
     """Generate fix using Claude Code CLI"""
     logger.info(f"Generating fix for {len(issues)} issues")
+
+    # Load content depth reference for this service
+    template_ref = _load_template_reference(service_name)
+    ref_context = ""
+    if template_ref:
+        ref_context = (
+            f"\n\n## Content Quality Reference\n"
+            f"The output must meet this content depth standard:\n\n"
+            f"{template_ref}\n"
+        )
 
     # Issue 11: Use structured fix_prompt from ComparisonResult if available
     fix_prompt = analysis.get("fix_prompt") if analysis else None
@@ -356,7 +413,7 @@ async def generate_fix_callback(
                 f"the root cause may be deeper than a surface-level fix."
             )
         result = await run_claude_code(
-            fix_prompt + iteration_context,
+            fix_prompt + ref_context + iteration_context,
             service_name=service_name,
             iteration=iteration,
             previous_issues="\n".join(issues) if issues else None,
@@ -375,6 +432,7 @@ async def generate_fix_callback(
             f"Output from {service_name} must match the reference template in both "
             f"content quality (depth, specificity, actionable insights) and visual formatting "
             f"(layout, fonts, spacing, data tables). No critical or major discrepancies.{iteration_context}"
+            f"{ref_context}"
         )
 
         result = await improve_output(
