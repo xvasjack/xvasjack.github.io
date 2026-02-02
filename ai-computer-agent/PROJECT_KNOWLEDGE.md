@@ -1,6 +1,6 @@
 # AI Computer Agent — Complete Project Knowledge Base
 
-Last updated: 2026-02-02
+Last updated: 2026-02-02 (formatting checks added)
 
 ---
 
@@ -230,6 +230,16 @@ Uses LRU dict (max 100 entries) keyed by SHA256 of sorted issues. When same issu
 
 **PPTX (structural)**: slide count, company count, logos, websites, descriptions, blocked domains (facebook, linkedin, wikipedia, etc.), duplicates
 
+**PPTX (formatting)** — added 2026-02-02:
+- `text_overflow` (CRITICAL): text exceeds shape boundary (estimated lines > available lines)
+- `content_overlap` (HIGH): shapes overlap vertically (y+height > next shape y)
+- `title_font_size_mismatch` (HIGH): title font size differs from reference template
+- `title_color_mismatch` (HIGH): title color differs from reference template
+- `missing_header_lines` (HIGH): content slides missing divider line vs reference
+- `font_family_mismatch` (MEDIUM): wrong font family vs reference
+- `subtitle_font_size_mismatch` / `subtitle_color_mismatch` (MEDIUM)
+- Formatting values are learned at runtime from reference PPTX, not hardcoded
+
 **PPTX (content depth)** — added 2026-02-02:
 - `shallow_descriptions` (HIGH): >30% of companies have descriptions below `min_words_per_description`
 - `thin_slides` (HIGH): >30% of content slides have fewer than `min_content_paragraphs` text blocks
@@ -255,13 +265,34 @@ Configured per template:
 - `profile-slides`: 40 word min, actionable not required, moderate keywords+phrases
 - `target-search`: defaults (40 word min, no actionable check)
 
+### Formatting Profile System (added 2026-02-02)
+
+`pptx_reader.extract_formatting_profile()` reads a PPTX and returns `FormattingProfile`:
+- Per-shape: position (x,y,w,h in inches), font (name, size, color, bold), text length, line estimates
+- Per-slide: shapes, title/subtitle font info, header line count/positions
+- Aggregate: mode/median of title font, subtitle font, header lines, font family, content start y
+- Overflow detection: estimated text lines > available lines per shape
+- Overlap detection: shapes sorted by y, y+height > next shape's y
+
+Reference templates per service in `template_comparison.SERVICE_REFERENCE_PPTX`:
+- market-research → `Market_Research_energy_services_2025-12-31 (6).pptx`
+- profile-slides → `YCP profile slide template v3.pptx`
+- target-search → `YCP Target List Slide Template.pptx`
+- trading-comps → `trading comps slide ref.pptx`
+
 ### Template Reference File
 
 `vm/template_reference.md` — MBB-quality content standards per service. Loaded by `feedback_loop_runner._load_template_reference()` and appended to every fix prompt so Claude Code knows expected content depth. Sections: Market Research, Profile Slides, Target Search, Due Diligence Report.
 
+### Formatting Spec File
+
+`MARKET_RESEARCH_FORMATTING_SPEC.md` — font/color/layout rules. Loaded by `feedback_loop_runner._load_formatting_spec()` and included in fix prompts when formatting issues detected. Includes pptxgenjs-specific fix hints (adjust h, y, color hex, fontSize).
+
 ### ComparisonResult → Claude Code Prompt
 
-`generate_claude_code_prompt()` creates a structured fix prompt grouped by severity (CRITICAL, HIGH, MEDIUM). Each issue includes: category, location, expected vs actual, fix suggestion. The fix prompt is then augmented with the relevant section from `template_reference.md` via `_load_template_reference()` in `feedback_loop_runner.py`.
+`generate_claude_code_prompt()` creates a structured fix prompt grouped by severity (CRITICAL, HIGH, MEDIUM). Each issue includes: category, location, expected vs actual, fix suggestion. The fix prompt is then augmented with:
+1. `template_reference.md` section via `_load_template_reference()` — content quality
+2. `MARKET_RESEARCH_FORMATTING_SPEC.md` via `_load_formatting_spec()` — formatting (only when formatting issues detected)
 
 ### Auto-Detection
 
