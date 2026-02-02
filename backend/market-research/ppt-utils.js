@@ -482,7 +482,7 @@ function addCalloutBox(slide, title, content, options = {}) {
   }
   if (content) {
     textParts.push({
-      text: truncate(content, 160),
+      text: truncate(content, 200),
       options: { fontSize: 9, color: '000000', fontFace: FONT },
     });
   }
@@ -1103,10 +1103,12 @@ Transform this research into a narrative. Return JSON:
 }
 
 // Helper: calculate safe table height based on row count to prevent overlap
+// Uses generous row heights to account for text wrapping in cells
 function safeTableHeight(rowCount, opts = {}) {
   const { fontSize = 11, maxH = 5.0 } = opts;
-  const rowH = fontSize <= 9 ? 0.35 : fontSize >= 12 ? 0.45 : 0.4;
-  return Math.max(0.6, Math.min(rowH * rowCount + 0.15, maxH));
+  // Increase row height estimates to prevent tables from auto-expanding past declared h
+  const rowH = fontSize <= 9 ? 0.4 : fontSize >= 12 ? 0.5 : 0.45;
+  return Math.max(0.6, Math.min(rowH * rowCount + 0.2, maxH));
 }
 
 module.exports = {
