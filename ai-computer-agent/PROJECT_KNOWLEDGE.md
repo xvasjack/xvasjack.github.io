@@ -1,6 +1,6 @@
 # AI Computer Agent — Complete Project Knowledge Base
 
-Last updated: 2026-02-02 (formatting checks added)
+Last updated: 2026-02-03 (market-research pattern-based rebuild)
 
 ---
 
@@ -770,3 +770,66 @@ Allowed folders: `C:\Users\*\Downloads`, `C:\agent-shared`, `Z:\`.
 - **Email**: xvasjack@gmail.com (set via `USER_EMAIL` env var)
 - **NOT a VM**: Agent runs directly on Windows 11 laptop with WSL. `vm/` directory name is historical.
 - **Screen resolution**: Auto-detected via Windows ctypes (`GetSystemMetrics`), falls back to xdpyinfo/xrandr, then 1920x1080.
+
+---
+
+## 17. MARKET-RESEARCH REBUILD (2026-02-03)
+
+Major rebuild of the market-research PPTX generation pipeline. Template becomes a pattern library + quality bar, not a rigid 27-slide recipe.
+
+### Architecture Changes
+
+**Before**: Hardcoded 27-slide structure, monolithic DeepSeek synthesis, generic scoring.
+**After**: Dynamic section-based generation, per-section Gemini synthesis, pattern-based layout, content-depth scoring.
+
+### New Files Created
+
+| File | Purpose |
+|------|---------|
+| `ai-computer-agent/vm/pattern_extractor.py` | Extracts 12 layout patterns from reference PPTX using python-pptx |
+| `ai-computer-agent/vm/issue_pattern_detector.py` | Detects recurring failures in issue history (3+ same failure = change approach) |
+| `backend/market-research/template-patterns.json` | 12 layout patterns with exact positions/fonts/colors from template |
+| `backend/market-research/issue-history.json` | Per-iteration scoring history for self-learning loop |
+
+### Files Modified (Heavy)
+
+| File | Change |
+|------|--------|
+| `backend/market-research/ai-clients.js` | Added `callGemini()` with Gemini 2.0 Flash, fallback to DeepSeek |
+| `backend/market-research/research-orchestrator.js` | Per-section Gemini synthesis (policy/market/competitors/summary), depth-demanding prompts, content validation, removed AI reviewer |
+| `backend/market-research/ppt-utils.js` | Added 10 layout functions: `choosePattern`, `addDualChart`, `addChevronFlow`, `addInsightPanelsFromPattern`, `addCalloutOverlay`, `addMatrix`, `addCaseStudyRows`, `addFinancialCharts`, `addColoredBorderTable` + `templatePatterns` export |
+| `backend/market-research/ppt-single-country.js` | Replaced hardcoded 27-slide + Story Architect with section-based generation. Uses `classifyDataBlocks()` → `choosePattern()` → pattern-specific renderers. Market charts use insight panels layout (chart 60% + callouts 40%). Dynamic slide count per section. 3265→1868 lines |
+| `ai-computer-agent/vm/template_comparison.py` | Added market-research content-depth + pattern-match scoring (named regulations, numeric data, named companies, insight keywords, chart presence) |
+| `ai-computer-agent/vm/feedback_loop.py` | Added `_check_service_health()` (Railway health check before iterations), `_check_hollow_output()` (>50% empty = abort) |
+| `ai-computer-agent/vm/feedback_loop_runner.py` | Added issue history context, pattern detection, priority rules in fix prompts |
+| `ai-computer-agent/host/ppt_analyzer.py` | Simplified to PASS/FAIL with content_depth/pattern_match/formatting categories |
+
+### Files Deleted
+
+| File | Reason |
+|------|--------|
+| `backend/market-research/compare-to-template.js` | Replaced by template_comparison.py pattern-based scoring |
+
+### 12 Layout Patterns
+
+Cover, TOC/Divider, 2×2 Matrix, Label-Row Table, Multi-Column Data Table, Text-Heavy Policy Block, Chart+Insight Panels (chart left 60% + 2-3 callout panels right 40%), Chart+Callout Boxes (5 sub-variations), Case Study Rows, Dual Chart Financial, Diagram+Text Split, Glossary Table.
+
+### Synthesis Flow
+
+1. Kimi web search (15 topics, unchanged)
+2. Per-section Gemini synthesis with depth-demanding prompts (fallback: Gemini → DeepSeek → null)
+3. Content validation: ≥3 regulations, ≥3 data series, ≥3 companies. Score 0-100 per section
+4. Weak sections (<50) get re-researched
+5. >50% empty after retry → abort, don't email hollow PPT
+
+### Self-Learning Loop
+
+- `issue-history.json`: Each iteration appends scores + failures + fixes
+- `issue_pattern_detector.py`: Same failure 3+ times → "change approach, don't patch"
+- Fix prompts include last 3 iteration issues + pattern detection results + priority rules
+
+### Key Environment Variables Added
+
+```bash
+GEMINI_API_KEY    # Required for per-section synthesis (fallback to DeepSeek if missing)
+```
