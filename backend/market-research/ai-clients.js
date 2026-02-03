@@ -19,13 +19,23 @@ const PRICING = {
   'kimi-32k': { input: 0.35, output: 0.35 }, // Moonshot v1 32k context
 };
 
-function trackCost(model, inputTokens, outputTokens, searchCount = 0) {
+function trackCost(
+  model,
+  inputTokens,
+  outputTokens,
+  customInputPrice = null,
+  customOutputPrice = null
+) {
   let cost = 0;
   const pricing = PRICING[model];
 
-  if (pricing) {
+  if (customInputPrice !== null && customOutputPrice !== null) {
+    // Use custom pricing (for models not in PRICING map, like Gemini)
+    cost =
+      (inputTokens / 1000000) * customInputPrice + (outputTokens / 1000000) * customOutputPrice;
+  } else if (pricing) {
     if (pricing.perSearch) {
-      cost = searchCount * pricing.perSearch;
+      cost = inputTokens * pricing.perSearch; // inputTokens is searchCount for search models
     } else {
       cost = (inputTokens / 1000000) * pricing.input + (outputTokens / 1000000) * pricing.output;
     }
@@ -36,7 +46,6 @@ function trackCost(model, inputTokens, outputTokens, searchCount = 0) {
     model,
     inputTokens,
     outputTokens,
-    searchCount,
     cost,
     time: new Date().toISOString(),
   });
@@ -70,8 +79,22 @@ async function withRetry(fn, maxRetries = 3, baseDelayMs = 1000, operationName =
 }
 
 // DeepSeek Chat - for lighter tasks (scope parsing)
-async function callDeepSeekChat(prompt, systemPrompt = '', maxTokens = 4096) {
+// Supports both legacy (prompt, systemPrompt, maxTokens) and new (prompt, options) signatures
+async function callDeepSeekChat(prompt, systemPromptOrOptions = '', maxTokens = 4096) {
   try {
+    // Handle both legacy and new call signatures
+    let systemPrompt = '';
+    let actualMaxTokens = maxTokens;
+
+    if (typeof systemPromptOrOptions === 'object') {
+      // New signature: callDeepSeekChat(prompt, { systemPrompt, maxTokens, ... })
+      systemPrompt = systemPromptOrOptions.systemPrompt || '';
+      actualMaxTokens = systemPromptOrOptions.maxTokens || 4096;
+    } else {
+      // Legacy signature: callDeepSeekChat(prompt, systemPrompt, maxTokens)
+      systemPrompt = systemPromptOrOptions;
+    }
+
     const messages = [];
     if (systemPrompt) {
       messages.push({ role: 'system', content: systemPrompt });
@@ -87,7 +110,7 @@ async function callDeepSeekChat(prompt, systemPrompt = '', maxTokens = 4096) {
       body: JSON.stringify({
         model: 'deepseek-chat',
         messages,
-        max_tokens: maxTokens,
+        max_tokens: actualMaxTokens,
         temperature: 0.3,
       }),
     });
@@ -104,12 +127,24 @@ async function callDeepSeekChat(prompt, systemPrompt = '', maxTokens = 4096) {
     trackCost('deepseek-chat', inputTokens, outputTokens);
     recordTokens('deepseek-chat', inputTokens, outputTokens);
 
+    const content = data.choices?.[0]?.message?.content || '';
+
+    // Return just the text string to match callGemini's signature
+    if (typeof systemPromptOrOptions === 'object') {
+      return content;
+    }
+
+    // Return legacy format for backward compatibility
     return {
-      content: data.choices?.[0]?.message?.content || '',
+      content,
       usage: { input: inputTokens, output: outputTokens },
     };
   } catch (error) {
     console.error('DeepSeek Chat API error:', error.message);
+    // Return empty string for new signature, object for legacy
+    if (typeof systemPromptOrOptions === 'object') {
+      return '';
+    }
     return { content: '', usage: { input: 0, output: 0 } };
   }
 }
@@ -330,6 +365,70 @@ Be specific. Cite sources. No fluff.`;
   return callKimi(query, systemPrompt, true);
 }
 
+/**
+ * Call Gemini 2.0 Flash for synthesis tasks
+ * Cheaper and faster than DeepSeek for structured synthesis
+ * Falls back to DeepSeekChat if no Gemini key
+ */
+async function callGemini(prompt, options = {}) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.log('  [Gemini] No API key, falling back to DeepSeekChat');
+    return callDeepSeekChat(prompt, options);
+  }
+
+  const { temperature = 0.3, maxTokens = 8192, systemPrompt, jsonMode = false } = options;
+
+  return withRetry(async () => {
+    const contents = [];
+    if (systemPrompt) {
+      contents.push({ role: 'user', parts: [{ text: systemPrompt }] });
+      contents.push({
+        role: 'model',
+        parts: [{ text: 'Understood. I will follow these instructions.' }],
+      });
+    }
+    contents.push({ role: 'user', parts: [{ text: prompt }] });
+
+    const generationConfig = {
+      temperature,
+      maxOutputTokens: maxTokens,
+    };
+    if (jsonMode) {
+      generationConfig.responseMimeType = 'application/json';
+    }
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents, generationConfig }),
+      }
+    );
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Gemini API error ${response.status}: ${errText}`);
+    }
+
+    const data = await response.json();
+    const candidate = data.candidates?.[0];
+    if (!candidate || !candidate.content?.parts?.[0]?.text) {
+      throw new Error('Gemini returned empty response');
+    }
+
+    const text = candidate.content.parts[0].text;
+
+    // Track cost
+    const inputTokens = data.usageMetadata?.promptTokenCount || 0;
+    const outputTokens = data.usageMetadata?.candidatesTokenCount || 0;
+    trackCost('gemini-2.0-flash', inputTokens, outputTokens, 0.1, 0.4);
+
+    return text;
+  }, 'Gemini');
+}
+
 module.exports = {
   costTracker,
   PRICING,
@@ -339,4 +438,5 @@ module.exports = {
   callDeepSeek,
   callKimi,
   callKimiDeepResearch,
+  callGemini,
 };
