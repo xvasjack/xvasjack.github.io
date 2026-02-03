@@ -730,7 +730,7 @@ class FeedbackLoop:
                 stdout, stderr = await proc.communicate()
                 http_code = stdout.decode().strip() if stdout else ""
 
-                if proc.returncode == 0 and http_code.startswith("2"):
+                if http_code.startswith("2"):
                     logger.info(f"Health check passed: HTTP {http_code} — waiting {SETTLE_WAIT}s for deploy to settle...")
                     await asyncio.sleep(SETTLE_WAIT)
 
@@ -743,12 +743,12 @@ class FeedbackLoop:
                     stdout2, stderr2 = await proc2.communicate()
                     http_code2 = stdout2.decode().strip() if stdout2 else ""
 
-                    if proc2.returncode == 0 and http_code2.startswith("2"):
+                    if http_code2.startswith("2"):
                         logger.info(f"Health check confirmed after settle: HTTP {http_code2} — deploy fully ready")
                         return True
                     else:
                         # Old container was killed during settle wait — new one not ready yet, keep polling
-                        logger.warning(f"Health check failed after settle wait: HTTP {http_code2} — container likely restarting")
+                        logger.warning(f"Health check failed after settle wait: HTTP {http_code2}, curl exit {proc2.returncode} — container likely restarting")
                 else:
                     logger.warning(f"Health check: HTTP {http_code}, stderr={stderr.decode()[:200] if stderr else ''}")
 
@@ -784,10 +784,10 @@ class FeedbackLoop:
             stdout, stderr = await proc.communicate()
             http_code = stdout.decode().strip() if stdout else ""
             
-            if proc.returncode == 0 and http_code.startswith("2"):
+            if http_code.startswith("2"):
                 return True
-            
-            logger.warning(f"Service unhealthy: HTTP {http_code}")
+
+            logger.warning(f"Service unhealthy: HTTP {http_code}, curl exit {proc.returncode}")
             return False
         except Exception as e:
             logger.warning(f"Health check failed: {e}")
