@@ -366,6 +366,14 @@ class FeedbackLoop:
             verify_deployment,
         )
 
+        # Pre-iteration health check
+        if not await self._check_service_health():
+            await self._report_progress("Service unhealthy — waiting 60s before retrying")
+            await asyncio.sleep(60)
+            if not await self._check_service_health():
+                iteration.issues_found.append("Service unhealthy after retry — skipping iteration")
+                return "continue"
+
         # Step 1: Submit form on frontend (retry 3x)
         self.state = LoopState.TESTING_FRONTEND
         iteration.state = LoopState.TESTING_FRONTEND
@@ -470,6 +478,12 @@ class FeedbackLoop:
                 iteration.issues_found = [issues]
             else:
                 iteration.issues_found = [f"Invalid issues format: {type(issues).__name__}"]
+
+        # Hollow output check — abort scoring if >50% empty
+        if await self._check_hollow_output(analysis):
+            await self._report_progress("[HOLLOW] Output is >50% empty — skipping layout scoring, fixing research pipeline")
+            iteration.issues_found.insert(0, "HOLLOW OUTPUT: >50% content missing — fix research/synthesis pipeline before fixing layout")
+            # Don't return "pass" even if analysis says passed — hollow output should never pass
 
         if analysis.get("passed", not issues):
             # Template says output passes — log non-critical issues but don't loop
@@ -750,4 +764,55 @@ class FeedbackLoop:
             await asyncio.sleep(current_interval)
 
         logger.warning(f"Health check timed out after {timeout}s")
+        return False
+
+    async def _check_service_health(self) -> bool:
+        """Check Railway service health before iteration."""
+        health_url = self.config.health_check_url or self.config.railway_service_url
+        if not health_url:
+            return True  # No URL configured, assume healthy
+        
+        if not health_url.endswith("/health"):
+            health_url = health_url.rstrip("/") + "/health"
+        
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "curl", "-sS", "--max-time", "10", "-o", "/dev/null", "-w", "%{http_code}", health_url,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
+            http_code = stdout.decode().strip() if stdout else ""
+            
+            if proc.returncode == 0 and http_code.startswith("2"):
+                return True
+            
+            logger.warning(f"Service unhealthy: HTTP {http_code}")
+            return False
+        except Exception as e:
+            logger.warning(f"Health check failed: {e}")
+            return False
+    
+    async def _check_hollow_output(self, analysis: dict) -> bool:
+        """Check if output is hollow (>50% empty content). Returns True if hollow."""
+        if not analysis:
+            return True
+        
+        issues = analysis.get("issues", [])
+        comparison = analysis.get("comparison", {})
+        
+        # Check if comparison result shows >50% checks failed
+        total_checks = comparison.get("total_checks", 0)
+        passed_checks = comparison.get("passed_checks", 0)
+        
+        if total_checks > 0 and passed_checks / total_checks < 0.5:
+            logger.warning(f"Hollow output: only {passed_checks}/{total_checks} checks passed")
+            return True
+        
+        # Check for critical content issues
+        critical_count = comparison.get("critical_issues", 0)
+        if critical_count >= 3:
+            logger.warning(f"Hollow output: {critical_count} critical issues")
+            return True
+        
         return False
