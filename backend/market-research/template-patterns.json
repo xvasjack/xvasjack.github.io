@@ -1,0 +1,390 @@
+{
+  "style": {
+    "slideWidth": 13.333,
+    "slideHeight": 7.5,
+    "fonts": {
+      "title": { "family": "Century Gothic", "size": 20, "color": "1B2A4A", "bold": true },
+      "subtitle": { "family": "Century Gothic", "size": 11, "color": "333333", "italic": true },
+      "body": { "family": "Century Gothic", "size": 10, "color": "333333" },
+      "tableHeader": { "family": "Century Gothic", "size": 10, "color": "FFFFFF", "bold": true },
+      "tableBody": { "family": "Century Gothic", "size": 9, "color": "333333" },
+      "source": { "family": "Century Gothic", "size": 7, "color": "999999" },
+      "calloutTitle": { "family": "Century Gothic", "size": 10, "color": "1B2A4A", "bold": true },
+      "calloutBody": { "family": "Century Gothic", "size": 9, "color": "333333" },
+      "insightTitle": { "family": "Century Gothic", "size": 10, "color": "FFFFFF", "bold": true },
+      "insightBody": { "family": "Century Gothic", "size": 9, "color": "333333" }
+    },
+    "colors": {
+      "darkNavy": "1B2A4A",
+      "mediumBlue": "2E5090",
+      "lightBlue": "D6E4F0",
+      "accentBlue": "007FFF",
+      "orange": "E46C0A",
+      "green": "1D8348",
+      "red": "B71C1C",
+      "gray": "F2F2F2",
+      "darkGray": "666666",
+      "calloutFill": "F5F5F5",
+      "calloutBorder": "CCCCCC",
+      "insightBarColor": "2E5090",
+      "tableHeaderFill": "1F497D",
+      "tableAltRowFill": "F2F2F2",
+      "highlightBorder": "E46C0A",
+      "white": "FFFFFF",
+      "black": "333333"
+    },
+    "headerLine": { "y": 0.73, "color": "293F55", "thickness": 3 },
+    "footer": {
+      "logoPos": { "x": 11.5, "y": 6.9, "w": 1.5, "h": 0.4 },
+      "copyrightPos": { "x": 0.4, "y": 7.1, "w": 5, "h": 0.25, "fontSize": 7 },
+      "pageNumPos": { "x": 12.5, "y": 7.1, "w": 0.5, "h": 0.25, "fontSize": 7 }
+    },
+    "sourceFootnote": { "y": 7.05, "fontSize": 7, "color": "999999" }
+  },
+  "patterns": {
+    "cover": {
+      "id": 1,
+      "description": "Title slide with country name, industry, and date",
+      "bestFor": ["presentation_start"],
+      "templateSlides": [1],
+      "elements": {
+        "countryTitle": { "x": 0.5, "y": 2.2, "w": 9, "h": 0.8, "fontSize": 42, "bold": true, "color": "1F497D" },
+        "industrySubtitle": { "x": 0.5, "y": 3.0, "w": 9, "h": 0.5, "fontSize": 24, "color": "007FFF" },
+        "tagline": { "x": 0.5, "y": 3.6, "w": 12, "h": 0.5, "fontSize": 16, "italic": true },
+        "date": { "x": 0.5, "y": 6.5, "w": 9, "h": 0.3, "fontSize": 10, "color": "666666" }
+      }
+    },
+    "toc_divider": {
+      "id": 2,
+      "description": "Table of contents or section divider, parameterized by which section is highlighted",
+      "bestFor": ["navigation", "section_break"],
+      "templateSlides": [4, 5, 11, 20, 30],
+      "elements": {
+        "sectionTitle": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55, "fontSize": 24, "bold": true, "color": "1F497D" },
+        "sectionItems": {
+          "startY": 1.5,
+          "itemHeight": 1.05,
+          "titleFontSize": 16,
+          "descFontSize": 11,
+          "titleColor": "1F497D",
+          "descColor": "666666",
+          "highlightColor": "007FFF"
+        }
+      }
+    },
+    "matrix_2x2": {
+      "id": 3,
+      "description": "2x2 matrix for strategic analysis (opportunities vs barriers, pros vs cons)",
+      "bestFor": ["opportunities_vs_barriers", "strategic_comparison", "swot_analysis"],
+      "templateSlides": [2, 3],
+      "elements": {
+        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "quadrants": [
+          { "x": 0.4, "y": 1.3, "w": 6.0, "h": 2.5, "label": "top-left", "fill": "D6E4F0" },
+          { "x": 6.6, "y": 1.3, "w": 6.3, "h": 2.5, "label": "top-right", "fill": "F2F2F2" },
+          { "x": 0.4, "y": 4.0, "w": 6.0, "h": 2.5, "label": "bottom-left", "fill": "F2F2F2" },
+          { "x": 6.6, "y": 4.0, "w": 6.3, "h": 2.5, "label": "bottom-right", "fill": "D6E4F0" }
+        ],
+        "quadrantLabel": { "fontSize": 14, "bold": true, "color": "1F497D" },
+        "quadrantBody": { "fontSize": 10, "color": "333333" }
+      }
+    },
+    "label_row_table": {
+      "id": 4,
+      "description": "Structured label-row table with themed category labels on left",
+      "bestFor": ["section_summary", "themed_overview", "category_breakdown"],
+      "templateSlides": [6, 12, 21],
+      "subVariations": {
+        "narrative": { "description": "Narrative text in content cells", "templateSlides": [6, 21] },
+        "metrics": { "description": "Numeric metrics in content cells", "templateSlides": [12] }
+      },
+      "elements": {
+        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "table": {
+          "x": 0.4, "y": 1.3, "w": 12.5,
+          "labelColWidth": 2.0,
+          "contentColWidth": 10.5,
+          "rowHeight": 0.9,
+          "maxRows": 6,
+          "labelFill": "1F497D",
+          "labelColor": "FFFFFF",
+          "labelFontSize": 10,
+          "labelBold": true,
+          "contentFill": "F2F2F2",
+          "contentColor": "333333",
+          "contentFontSize": 9,
+          "borderColor": "CCCCCC",
+          "borderWidth": 0.5
+        }
+      }
+    },
+    "data_table_reference": {
+      "id": "5A",
+      "description": "Multi-column reference data table for structured comparative data",
+      "bestFor": ["regulation_list", "law_reference", "structured_data"],
+      "templateSlides": [7, 10],
+      "elements": {
+        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "table": {
+          "x": 0.4, "y": 1.3, "w": 12.5, "maxH": 5.0,
+          "headerFill": "1F497D",
+          "headerColor": "FFFFFF",
+          "headerFontSize": 10,
+          "headerBold": true,
+          "bodyFontSize": 9,
+          "bodyColor": "333333",
+          "altRowFill": "F2F2F2",
+          "borderColor": "CCCCCC",
+          "borderWidth": 0.5
+        }
+      }
+    },
+    "data_table_highlighted": {
+      "id": "5B",
+      "description": "Multi-column data table with colored left border for highlighting",
+      "bestFor": ["company_comparison", "competitive_analysis", "highlighted_data"],
+      "templateSlides": [22],
+      "elements": {
+        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "table": {
+          "x": 0.4, "y": 1.3, "w": 12.5, "maxH": 5.0,
+          "headerFill": "1F497D",
+          "headerColor": "FFFFFF",
+          "headerFontSize": 10,
+          "headerBold": true,
+          "bodyFontSize": 9,
+          "bodyColor": "333333",
+          "leftBorderColor": "E46C0A",
+          "leftBorderWidth": 3,
+          "borderColor": "CCCCCC",
+          "borderWidth": 0.5
+        }
+      }
+    },
+    "text_policy_block": {
+      "id": 6,
+      "description": "Text-heavy policy or regulatory analysis with structured prose",
+      "bestFor": ["policy_analysis", "regulatory_review", "legal_analysis"],
+      "templateSlides": [8, 9],
+      "subVariations": {
+        "analysis": { "description": "Policy analysis prose with headers", "templateSlides": [8] },
+        "comparison": { "description": "Side-by-side decree comparison", "templateSlides": [9] }
+      },
+      "elements": {
+        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "contentArea": { "x": 0.4, "y": 1.3, "w": 12.5, "h": 5.0 },
+        "sectionHeader": { "fontSize": 12, "bold": true, "color": "1F497D" },
+        "bodyText": { "fontSize": 10, "color": "333333", "lineSpacing": 1.3 },
+        "emphasisText": { "fontSize": 10, "bold": true, "color": "E46C0A" },
+        "comparisonSplit": {
+          "leftCol": { "x": 0.4, "y": 1.3, "w": 6.0 },
+          "rightCol": { "x": 6.8, "y": 1.3, "w": 6.1 },
+          "dividerX": 6.5
+        }
+      }
+    },
+    "chart_insight_panels": {
+      "id": 7,
+      "description": "Chart (left 60%) with 2-3 insight panels (right 40%)",
+      "bestFor": ["time_series_with_insights", "composition_with_takeaways"],
+      "templateSlides": [13, 15],
+      "subVariations": {
+        "three_panels_overlay": { "description": "3 insight panels + callout overlay on chart", "templateSlides": [13] },
+        "two_panels_callouts": { "description": "2 insight panels + bottom callout boxes", "templateSlides": [15] }
+      },
+      "elements": {
+        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "chart": { "x": 0.4, "y": 1.3, "w": 7.8, "h": 5.2 },
+        "insightPanels": [
+          {
+            "x": 8.5, "y": 1.3, "w": 4.4, "h": 1.5,
+            "blueBar": { "x": 8.5, "y": 1.3, "w": 0.08, "h": 1.5, "color": "2E5090" },
+            "titleY": 1.35, "bodyY": 1.65
+          },
+          {
+            "x": 8.5, "y": 3.0, "w": 4.4, "h": 1.5,
+            "blueBar": { "x": 8.5, "y": 3.0, "w": 0.08, "h": 1.5, "color": "2E5090" },
+            "titleY": 3.05, "bodyY": 3.35
+          },
+          {
+            "x": 8.5, "y": 4.7, "w": 4.4, "h": 1.5,
+            "blueBar": { "x": 8.5, "y": 4.7, "w": 0.08, "h": 1.5, "color": "2E5090" },
+            "titleY": 4.75, "bodyY": 5.05
+          }
+        ],
+        "calloutOverlay": { "x": 1.0, "y": 4.8, "w": 5.5, "h": 1.2, "fill": "F5F5F5", "border": "CCCCCC", "borderWidth": 1, "cornerRadius": 3 }
+      }
+    },
+    "chart_callout_dual": {
+      "id": "8A",
+      "description": "Two charts side by side with callout at bottom",
+      "bestFor": ["two_related_datasets", "composition_plus_breakdown"],
+      "templateSlides": [14],
+      "elements": {
+        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "chartLeft": { "x": 0.4, "y": 1.3, "w": 6.0, "h": 4.2 },
+        "chartRight": { "x": 6.8, "y": 1.3, "w": 6.1, "h": 4.2 },
+        "quoteCallout": { "x": 0.4, "y": 5.7, "w": 12.5, "h": 0.8, "fill": "F5F5F5", "border": "CCCCCC" }
+      }
+    },
+    "chart_annotations": {
+      "id": "8B",
+      "description": "Single chart with on-chart annotation callouts",
+      "bestFor": ["time_series_annotated", "trend_with_events"],
+      "templateSlides": [16],
+      "elements": {
+        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "chart": { "x": 0.4, "y": 1.3, "w": 12.5, "h": 4.5 },
+        "annotations": {
+          "maxCount": 4,
+          "style": { "fill": "FFFFFF", "border": "E46C0A", "borderWidth": 1.5, "fontSize": 8, "w": 2.5, "h": 0.8 }
+        },
+        "bottomCallout": { "x": 0.4, "y": 6.0, "w": 12.5, "h": 0.5, "fill": "F5F5F5" }
+      }
+    },
+    "chart_side_bullets": {
+      "id": "8C",
+      "description": "Chart on left with side bullet points on right",
+      "bestFor": ["trend_with_analysis", "data_plus_commentary"],
+      "templateSlides": [17, 19],
+      "elements": {
+        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "chart": { "x": 0.4, "y": 1.3, "w": 7.5, "h": 4.5 },
+        "bulletPanel": {
+          "x": 8.2, "y": 1.3, "w": 4.7, "h": 4.5,
+          "bulletFontSize": 9,
+          "bulletColor": "333333",
+          "headerFontSize": 11,
+          "headerColor": "1F497D",
+          "headerBold": true
+        },
+        "bottomCallout": { "x": 0.4, "y": 6.0, "w": 12.5, "h": 0.5, "fill": "F5F5F5" }
+      }
+    },
+    "chart_callout_simple": {
+      "id": "8D",
+      "description": "Full-width chart with simple callout box below",
+      "bestFor": ["time_series_simple", "single_metric_trend"],
+      "templateSlides": [18, 32],
+      "elements": {
+        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "chart": { "x": 0.4, "y": 1.3, "w": 12.5, "h": 3.8 },
+        "callout": { "x": 0.4, "y": 5.3, "w": 12.5, "h": 1.0, "fill": "F5F5F5", "border": "CCCCCC", "borderWidth": 1 }
+      }
+    },
+    "chart_fullwidth": {
+      "id": "8E",
+      "description": "Full-width chart spanning entire content area",
+      "bestFor": ["overview_chart", "full_dataset_visualization"],
+      "templateSlides": [31],
+      "elements": {
+        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "chart": { "x": 0.4, "y": 1.3, "w": 12.5, "h": 5.2 }
+      }
+    },
+    "case_study_rows": {
+      "id": 9,
+      "description": "4-5 labeled rows for case study narrative with optional chevron process flow",
+      "bestFor": ["company_case_study", "project_narrative", "detailed_analysis"],
+      "templateSlides": [23, 24, 27, 28],
+      "subVariations": {
+        "five_rows_multi_chevron": { "description": "5 rows + multi-phase chevron flow", "templateSlides": [23, 28] },
+        "five_rows_two_chevron": { "description": "5 rows + 2-phase chevron flow", "templateSlides": [24] },
+        "four_rows_no_chevron": { "description": "4 rows without chevron", "templateSlides": [27] }
+      },
+      "elements": {
+        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "rows": [
+          { "label": "Business Overview", "labelX": 0.4, "labelW": 2.0, "contentX": 2.5, "contentW": 10.4, "y": 1.3, "h": 0.8 },
+          { "label": "Context", "labelX": 0.4, "labelW": 2.0, "contentX": 2.5, "contentW": 10.4, "y": 2.2, "h": 1.0 },
+          { "label": "Objective", "labelX": 0.4, "labelW": 2.0, "contentX": 2.5, "contentW": 10.4, "y": 3.3, "h": 0.6 },
+          { "label": "Scope", "labelX": 0.4, "labelW": 2.0, "contentX": 2.5, "contentW": 10.4, "y": 4.0, "h": 1.3 },
+          { "label": "Outcome", "labelX": 0.4, "labelW": 2.0, "contentX": 2.5, "contentW": 10.4, "y": 5.4, "h": 0.8 }
+        ],
+        "labelStyle": { "fill": "1F497D", "color": "FFFFFF", "fontSize": 10, "bold": true },
+        "contentStyle": { "fill": "F2F2F2", "color": "333333", "fontSize": 9 },
+        "chevronFlow": {
+          "x": 2.5, "y": 4.1, "w": 10.4, "h": 1.1,
+          "maxPhases": 5,
+          "chevronColors": ["2E5090", "3A6BA5", "4D80BA", "6095CF", "73AAE4"],
+          "textColor": "FFFFFF",
+          "fontSize": 8,
+          "spacing": 0.05
+        }
+      }
+    },
+    "dual_chart_financial": {
+      "id": 10,
+      "description": "Side-by-side financial charts (e.g., income statement + balance sheet)",
+      "bestFor": ["financial_performance", "revenue_profit_comparison", "financial_overview"],
+      "templateSlides": [26, 29],
+      "elements": {
+        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "chartLeft": {
+          "x": 0.4, "y": 1.3, "w": 6.0, "h": 4.0,
+          "chartTitle": { "fontSize": 11, "bold": true, "color": "1F497D" }
+        },
+        "chartRight": {
+          "x": 6.8, "y": 1.3, "w": 6.1, "h": 4.0,
+          "chartTitle": { "fontSize": 11, "bold": true, "color": "1F497D" }
+        },
+        "metricsRow": {
+          "y": 5.5, "h": 0.6,
+          "metricBoxWidth": 3.0,
+          "metricValueFontSize": 16,
+          "metricLabelFontSize": 9,
+          "metricValueColor": "1F497D",
+          "metricLabelColor": "666666"
+        },
+        "bottomCallout": { "x": 0.4, "y": 6.2, "w": 12.5, "h": 0.4, "fill": "F5F5F5" }
+      }
+    },
+    "diagram_text_split": {
+      "id": 11,
+      "description": "Diagram or hierarchy on left, text explanation on right",
+      "bestFor": ["organizational_structure", "process_diagram", "hierarchy"],
+      "templateSlides": [25],
+      "elements": {
+        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "diagramArea": { "x": 0.4, "y": 1.3, "w": 6.5, "h": 5.0 },
+        "textArea": {
+          "x": 7.2, "y": 1.3, "w": 5.7, "h": 5.0,
+          "headerFontSize": 12,
+          "bodyFontSize": 10,
+          "headerColor": "1F497D",
+          "bodyColor": "333333"
+        }
+      }
+    },
+    "glossary_table": {
+      "id": 12,
+      "description": "Term-definition table for glossary or reference",
+      "bestFor": ["definitions", "glossary", "terminology"],
+      "templateSlides": [33, 34],
+      "elements": {
+        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "table": {
+          "x": 0.4, "y": 1.3, "w": 12.5, "maxH": 5.2,
+          "termColWidth": 3.0,
+          "defColWidth": 9.5,
+          "headerFill": "1F497D",
+          "headerColor": "FFFFFF",
+          "termFontSize": 10,
+          "termBold": true,
+          "termColor": "1F497D",
+          "defFontSize": 9,
+          "defColor": "333333",
+          "altRowFill": "F2F2F2",
+          "borderColor": "CCCCCC",
+          "borderWidth": 0.5
+        }
+      }
+    }
+  },
+  "chartPalette": {
+    "primary": ["2E5090", "E46C0A", "1D8348", "B71C1C", "7B1FA2", "00838F"],
+    "extended": ["2E5090", "E46C0A", "1D8348", "B71C1C", "7B1FA2", "00838F", "FF6F00", "1565C0", "2E7D32", "AD1457"],
+    "financial": { "revenue": "2E5090", "profit": "1D8348", "cost": "B71C1C", "projection": "999999" },
+    "semantic": { "positive": "1D8348", "negative": "B71C1C", "neutral": "666666", "highlight": "E46C0A", "primary": "2E5090" }
+  }
+}

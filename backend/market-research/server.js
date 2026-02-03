@@ -1,0 +1,258 @@
+require('dotenv').config({ path: '../.env' });
+const express = require('express');
+const cors = require('cors');
+const fetch = require('node-fetch');
+const { securityHeaders, rateLimiter } = require('./shared/security');
+const { requestLogger, healthCheck } = require('./shared/middleware');
+const { setupGlobalErrorHandlers } = require('./shared/logging');
+const { createTracker, trackingContext } = require('./shared/tracking');
+
+// Extracted modules
+const { costTracker } = require('./ai-clients');
+const { parseScope } = require('./research-framework');
+const { researchCountry, synthesizeFindings } = require('./research-orchestrator');
+const { generatePPT } = require('./ppt-multi-country');
+
+// Setup global error handlers to prevent crashes
+setupGlobalErrorHandlers({ logMemory: false });
+
+// ============ EXPRESS SETUP ============
+const app = express();
+app.set('trust proxy', 1); // Trust Railway's reverse proxy for rate limiting
+app.use(securityHeaders);
+app.use(rateLimiter);
+app.use(cors());
+app.use(requestLogger);
+app.use(express.json({ limit: '10mb' }));
+
+// Check required environment variables
+const requiredEnvVars = ['DEEPSEEK_API_KEY', 'KIMI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
+const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
+if (missingVars.length > 0) {
+  console.error('Missing environment variables:', missingVars.join(', '));
+}
+
+// ============ EMAIL DELIVERY ============
+
+async function sendEmail(to, subject, html, attachment) {
+  console.log('\n=== STAGE 5: EMAIL DELIVERY ===');
+  console.log(`Sending to: ${to}`);
+
+  const emailData = {
+    personalizations: [{ to: [{ email: to }] }],
+    from: { email: process.env.SENDER_EMAIL, name: 'Market Research AI' },
+    subject: subject,
+    content: [{ type: 'text/html', value: html }],
+    attachments: [
+      {
+        filename: attachment.filename,
+        content: attachment.content,
+        type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        disposition: 'attachment',
+      },
+    ],
+  };
+
+  const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(emailData),
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`Email failed: ${error}`);
+  }
+
+  console.log('Email sent successfully');
+  return { success: true };
+}
+
+// ============ MAIN ORCHESTRATOR ============
+
+async function runMarketResearch(userPrompt, email) {
+  const startTime = Date.now();
+  console.log('\n========================================');
+  console.log('MARKET RESEARCH - START');
+  console.log('========================================');
+  console.log('Time:', new Date().toISOString());
+  console.log('Email:', email);
+
+  // Reset cost tracker
+  costTracker.totalCost = 0;
+  costTracker.calls = [];
+
+  const tracker = createTracker('market-research', email, { prompt: userPrompt.substring(0, 200) });
+
+  return trackingContext.run(tracker, async () => {
+    try {
+      // Stage 1: Parse scope
+      const scope = await parseScope(userPrompt);
+
+      // Stage 2: Research each country (in parallel with limit)
+      console.log('\n=== STAGE 2: COUNTRY RESEARCH ===');
+      console.log(`Researching ${scope.targetMarkets.length} countries...`);
+
+      const countryAnalyses = [];
+
+      // Process countries in batches of 2 to manage API rate limits
+      for (let i = 0; i < scope.targetMarkets.length; i += 2) {
+        const batch = scope.targetMarkets.slice(i, i + 2);
+        const batchResults = await Promise.all(
+          batch.map((country) =>
+            researchCountry(country, scope.industry, scope.clientContext, scope)
+          )
+        );
+        countryAnalyses.push(...batchResults);
+      }
+
+      // Stage 3: Synthesize findings
+      const synthesis = await synthesizeFindings(countryAnalyses, scope);
+
+      // Stage 4: Generate PPT
+      const pptBuffer = await generatePPT(synthesis, countryAnalyses, scope);
+
+      // Stage 5: Send email
+      const filename = `Market_Research_${scope.industry.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pptx`;
+
+      const emailHtml = `
+      <p>Your market research report is attached.</p>
+      <p style="color: #666; font-size: 12px;">${scope.industry} - ${scope.targetMarkets.join(', ')}</p>
+    `;
+
+      await sendEmail(
+        email,
+        `Market Research: ${scope.industry} - ${scope.targetMarkets.join(', ')}`,
+        emailHtml,
+        {
+          filename,
+          content: pptBuffer.toString('base64'),
+        }
+      );
+
+      const totalTime = (Date.now() - startTime) / 1000;
+      console.log('\n========================================');
+      console.log('MARKET RESEARCH - COMPLETE');
+      console.log('========================================');
+      console.log(
+        `Total time: ${totalTime.toFixed(0)} seconds (${(totalTime / 60).toFixed(1)} minutes)`
+      );
+      console.log(`Total cost: $${costTracker.totalCost.toFixed(2)}`);
+      console.log(`Countries analyzed: ${countryAnalyses.length}`);
+
+      // Estimate costs from internal costTracker by aggregating per model
+      const modelTokens = {};
+      for (const call of costTracker.calls) {
+        if (!modelTokens[call.model]) {
+          modelTokens[call.model] = { input: 0, output: 0 };
+        }
+        modelTokens[call.model].input += call.inputTokens || 0;
+        modelTokens[call.model].output += call.outputTokens || 0;
+      }
+      // Add model calls to shared tracker (pass numeric token counts directly)
+      for (const [model, tokens] of Object.entries(modelTokens)) {
+        tracker.addModelCall(model, tokens.input, tokens.output);
+      }
+
+      // Track usage
+      await tracker.finish({
+        countriesAnalyzed: countryAnalyses.length,
+        industry: scope.industry,
+      });
+
+      return {
+        success: true,
+        scope,
+        countriesAnalyzed: countryAnalyses.length,
+        totalCost: costTracker.totalCost,
+        totalTimeSeconds: totalTime,
+      };
+    } catch (error) {
+      console.error('Market research failed:', error);
+      await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
+
+      // Try to send error email
+      try {
+        await sendEmail(
+          email,
+          'Market Research Failed',
+          `
+        <h2>Market Research Error</h2>
+        <p>Your market research request encountered an error:</p>
+        <pre>${error.message}</pre>
+        <p>Please try again or contact support.</p>
+      `,
+          {
+            filename: 'error.txt',
+            content: Buffer.from(error.stack || error.message).toString('base64'),
+          }
+        );
+      } catch (emailError) {
+        console.error('Failed to send error email:', emailError);
+      }
+
+      throw error;
+    }
+  }); // end trackingContext.run
+}
+
+// ============ API ENDPOINTS ============
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'market-research',
+    timestamp: new Date().toISOString(),
+    costToday: costTracker.totalCost,
+  });
+});
+
+// ============ HEALTH CHECK ============
+app.get('/health', healthCheck('market-research'));
+
+// Main research endpoint
+app.post('/api/market-research', async (req, res) => {
+  const { prompt, email } = req.body;
+
+  if (!prompt || !email) {
+    return res.status(400).json({ error: 'Missing required fields: prompt, email' });
+  }
+
+  // Respond immediately - research runs in background
+  res.json({
+    success: true,
+    message: 'Market research started. Results will be emailed when complete.',
+    estimatedTime: '30-60 minutes',
+  });
+
+  // Run research in background
+  runMarketResearch(prompt, email).catch((error) => {
+    console.error('Background research failed:', error);
+  });
+});
+
+// Cost tracking endpoint
+app.get('/api/costs', (req, res) => {
+  res.json(costTracker);
+});
+
+// ============ START SERVER ============
+
+const PORT = process.env.PORT || 3010;
+app.listen(PORT, () => {
+  console.log(`Market Research server running on port ${PORT}`);
+  console.log('Environment check:');
+  console.log('  - DEEPSEEK_API_KEY:', process.env.DEEPSEEK_API_KEY ? 'Set' : 'MISSING');
+  console.log('  - KIMI_API_KEY:', process.env.KIMI_API_KEY ? 'Set' : 'MISSING');
+  console.log(
+    '  - KIMI_API_BASE:',
+    process.env.KIMI_API_BASE || 'https://api.moonshot.ai/v1 (default)'
+  );
+  console.log('  - PERPLEXITY_API_KEY:', process.env.PERPLEXITY_API_KEY ? 'Set' : 'MISSING');
+  console.log('  - SENDGRID_API_KEY:', process.env.SENDGRID_API_KEY ? 'Set' : 'MISSING');
+  console.log('  - SENDER_EMAIL:', process.env.SENDER_EMAIL || 'MISSING');
+});

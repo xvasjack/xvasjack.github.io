@@ -1,0 +1,80 @@
+{
+  "metadata": {
+    "extractedFrom": "260114_SunCorp_Netpluz DD Report v4 (1).docx",
+    "extractedAt": "2026-01-17T12:39:21.800Z",
+    "userOverride": "Segoe UI 10pt for all text"
+  },
+  "fonts": {
+    "heading1": {
+      "family": "Segoe UI",
+      "size": 10,
+      "bold": true,
+      "color": "#365F91"
+    },
+    "heading2": {
+      "family": "Segoe UI",
+      "size": 10,
+      "bold": true,
+      "color": "#4F81BD"
+    },
+    "heading3": {
+      "family": "Segoe UI",
+      "size": 10,
+      "bold": true,
+      "color": "#4F81BD"
+    },
+    "body": {
+      "family": "Segoe UI",
+      "size": 10,
+      "color": "#000000"
+    },
+    "caption": {
+      "family": "Segoe UI",
+      "size": 10,
+      "color": "#808080",
+      "italic": true
+    }
+  },
+  "tables": {
+    "headerRow": {
+      "bgColor": "#C6D9F1",
+      "textColor": "#000000",
+      "bold": true,
+      "fontSize": 10
+    },
+    "bodyRow": {
+      "bgColor": "#FFFFFF",
+      "altBgColor": "#C6D9F1",
+      "fontSize": 10
+    },
+    "borders": {
+      "color": "#000000",
+      "width": 1,
+      "style": "single"
+    },
+    "cellPadding": {
+      "top": 4,
+      "right": 6,
+      "bottom": 4,
+      "left": 6
+    }
+  },
+  "paragraphs": {
+    "spacing": {
+      "before": 6,
+      "after": 6,
+      "line": 115
+    }
+  },
+  "lists": {
+    "bullet": "•",
+    "indent": 36,
+    "spacing": 3
+  },
+  "page": {
+    "marginTop": 72,
+    "marginBottom": 72,
+    "marginLeft": 72,
+    "marginRight": 72
+  }
+}

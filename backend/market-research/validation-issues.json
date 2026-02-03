@@ -1,0 +1,16 @@
+{
+  "timestamp": "2026-01-17T15:46:05.062Z",
+  "valid": true,
+  "summary": {
+    "passed": 31,
+    "failed": 0,
+    "warnings": 0
+  },
+  "failed": [],
+  "warnings": [],
+  "structure": {
+    "slides": 7,
+    "charts": 1,
+    "tables": 15
+  }
+}

@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Profile Slides</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+          },
+          colors: {
+            primary: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              200: '#c7d2fe',
+              300: '#a5b4fc',
+              400: '#818cf8',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              800: '#3730a3',
+              900: '#312e81',
+            }
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { animation: spin 1s linear infinite; }
+
+    /* Layout selector styles */
+    .layout-preview { transition: all 0.2s; }
+    .layout-option input:checked + .layout-preview {
+      border-color: #4f46e5;
+      background: #eef2ff;
+      box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.15);
+    }
+    .preview-slide {
+      display: flex;
+      gap: 4px;
+      height: 70px;
+      background: #1e293b;
+      border-radius: 6px;
+      padding: 5px;
+      margin-bottom: 8px;
+    }
+    .preview-left { flex: 1; background: #fff; border-radius: 4px; }
+    .preview-right { flex: 1; display: flex; flex-direction: column; gap: 2px; }
+    .preview-row { flex: 1; background: #6366f1; border-radius: 2px; display: flex; }
+    .preview-row-label { width: 30%; background: #4338ca; border-radius: 2px 0 0 2px; }
+    .preview-row-value { flex: 1; background: #fff; border-radius: 0 2px 2px 0; }
+    .preview-empty { flex: 1; background: transparent; }
+    .preview-images { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; flex: 1; }
+    .preview-images-6 { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr 1fr; gap: 2px; flex: 1; }
+    .preview-img { background: #94a3b8; border-radius: 3px; }
+    .preview-img-row { display: flex; gap: 3px; flex: 1; }
+    .preview-img-left { width: 40%; background: #94a3b8; border-radius: 3px; }
+    .preview-img-label { flex: 1; background: #e2e8f0; border-radius: 3px; }
+    .preview-right-half { flex: 1; display: flex; flex-direction: column; gap: 2px; padding-bottom: 18px; }
+  </style>
+</head>
+<body class="font-sans bg-slate-100 text-slate-900 h-screen flex overflow-hidden">
+  <!-- Sidebar -->
+  <aside class="w-64 bg-white border-r border-slate-200 flex flex-col shadow-sm">
+    <!-- Logo -->
+    <div class="p-5 border-b border-slate-200">
+      <a href="find-target.html" class="flex items-center gap-3 text-slate-900 no-underline">
+        <span class="w-9 h-9 bg-indigo-600 rounded-lg flex items-center justify-center">
+          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+          </svg>
+        </span>
+        <span class="font-semibold text-lg">YCP Tools</span>
+      </a>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="flex-1 p-4 space-y-1 overflow-y-auto">
+      <!-- Search Section -->
+      <div class="mb-4">
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Search</p>
+        <a href="find-target.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v3 Search
+        </a>
+        <a href="find-target-v5.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v5 Search
+        </a>
+        <a href="find-target-v6.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+          v6 Search
+        </a>
+      </div>
+
+      <!-- Tools Section -->
+      <div class="mb-4">
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Tools</p>
+        <a href="validation.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Validation
+        </a>
+        <a href="validation-v2.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          Validation V2
+        </a>
+        <a href="trading-comparable.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          Trading Comp
+        </a>
+        <a href="profile-slides.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium bg-indigo-50 text-indigo-700 rounded-lg">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+          Profile Slides
+        </a>
+        <a href="utb.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+          UTB
+        </a>
+        <a href="market-research.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          Market Research
+        </a>
+      </div>
+
+      <!-- Other Section -->
+      <div>
+        <p class="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Other</p>
+        <a href="due-diligence.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+          Due Diligence
+        </a>
+        <a href="find-target-slow.html" class="flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-600 rounded-lg hover:bg-slate-100 hover:text-slate-900 transition-colors">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          v3 Slow
+        </a>
+      </div>
+    </nav>
+
+    <!-- Email Input -->
+    <div class="p-4 border-t border-slate-200 bg-slate-50">
+      <label class="block text-xs font-medium text-slate-500 mb-1.5">Your Email</label>
+      <input type="email" id="globalEmail" placeholder="your@company.com"
+        class="w-full px-3 py-2 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow">
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="flex-1 flex flex-col overflow-hidden">
+    <!-- Header -->
+    <header class="bg-white border-b border-slate-200 px-8 py-5">
+      <div class="flex items-center gap-3 mb-1">
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-full">
+          <span class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
+          Online
+        </span>
+      </div>
+      <h1 class="text-2xl font-bold text-slate-900">Profile Slides</h1>
+      <p class="text-slate-600 mt-1">Generate company profile slides from websites. Each slide takes 1-2 minutes to generate.</p>
+    </header>
+
+    <!-- Content -->
+    <div class="flex-1 overflow-y-auto p-8">
+      <div class="max-w-4xl mx-auto">
+        <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-8">
+          <form id="slidesForm">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <!-- Left Column -->
+              <div class="space-y-5">
+                <div>
+                  <label for="targetDescription" class="block text-sm font-medium text-slate-700 mb-1.5">Title</label>
+                  <input type="text" id="targetDescription" name="targetDescription" placeholder="e.g., Semiconductor manufacturers in Southeast Asia" required
+                    class="w-full px-4 py-3 text-base bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow">
+                </div>
+
+                <div>
+                  <label for="websites" class="block text-sm font-medium text-slate-700 mb-1.5">Company Websites</label>
+                  <textarea id="websites" name="websites" rows="6" placeholder="https://www.company1.com&#10;https://www.company2.com&#10;https://www.company3.com" required
+                    class="w-full px-4 py-3 text-base bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow resize-none"></textarea>
+                  <p class="text-xs text-slate-500 mt-1.5">One URL per line. Up to 50 websites.</p>
+                </div>
+
+                <button type="submit" id="submitBtn"
+                  class="w-full flex items-center justify-center gap-2 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
+                  <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                  </svg>
+                  Generate Slides
+                </button>
+              </div>
+
+              <!-- Right Column - Layout Selector -->
+              <div>
+                <div class="border-2 border-slate-200 rounded-xl p-5 bg-slate-50">
+                  <p class="text-sm font-semibold text-slate-700 mb-4">Right Side Layout</p>
+                  <div class="grid grid-cols-2 gap-3">
+                    <!-- Table 6 -->
+                    <label class="layout-option cursor-pointer">
+                      <input type="radio" name="rightLayout" value="table-6" checked class="sr-only">
+                      <div class="layout-preview border-2 border-slate-200 rounded-lg p-3 bg-white hover:border-indigo-300">
+                        <div class="preview-slide">
+                          <div class="preview-left"></div>
+                          <div class="preview-right">
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                          </div>
+                        </div>
+                        <p class="text-sm font-medium text-center text-slate-700">Table (6 Rows)</p>
+                      </div>
+                    </label>
+
+                    <!-- Table Unlimited -->
+                    <label class="layout-option cursor-pointer">
+                      <input type="radio" name="rightLayout" value="table-unlimited" class="sr-only">
+                      <div class="layout-preview border-2 border-slate-200 rounded-lg p-3 bg-white hover:border-indigo-300">
+                        <div class="preview-slide">
+                          <div class="preview-left"></div>
+                          <div class="preview-right">
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                          </div>
+                        </div>
+                        <p class="text-sm font-medium text-center text-slate-700">Table (No Limit Rows)</p>
+                      </div>
+                    </label>
+
+                    <!-- Table Half -->
+                    <label class="layout-option cursor-pointer">
+                      <input type="radio" name="rightLayout" value="table-half" class="sr-only">
+                      <div class="layout-preview border-2 border-slate-200 rounded-lg p-3 bg-white hover:border-indigo-300">
+                        <div class="preview-slide">
+                          <div class="preview-left"></div>
+                          <div class="preview-right-half">
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                            <div class="preview-row"><div class="preview-row-label"></div><div class="preview-row-value"></div></div>
+                          </div>
+                        </div>
+                        <p class="text-sm font-medium text-center text-slate-700">Table (Half Page)</p>
+                      </div>
+                    </label>
+
+                    <!-- Empty -->
+                    <label class="layout-option cursor-pointer">
+                      <input type="radio" name="rightLayout" value="empty" class="sr-only">
+                      <div class="layout-preview border-2 border-slate-200 rounded-lg p-3 bg-white hover:border-indigo-300">
+                        <div class="preview-slide">
+                          <div class="preview-left"></div>
+                          <div class="preview-right">
+                            <div class="preview-empty"></div>
+                          </div>
+                        </div>
+                        <p class="text-sm font-medium text-center text-slate-700">Empty</p>
+                      </div>
+                    </label>
+
+                    <!-- Images 4 -->
+                    <label class="layout-option cursor-pointer">
+                      <input type="radio" name="rightLayout" value="images" class="sr-only">
+                      <div class="layout-preview border-2 border-slate-200 rounded-lg p-3 bg-white hover:border-indigo-300">
+                        <div class="preview-slide">
+                          <div class="preview-left"></div>
+                          <div class="preview-right">
+                            <div class="preview-images">
+                              <div class="preview-img"></div>
+                              <div class="preview-img"></div>
+                              <div class="preview-img"></div>
+                              <div class="preview-img"></div>
+                            </div>
+                          </div>
+                        </div>
+                        <p class="text-sm font-medium text-center text-slate-700">Images (4)</p>
+                      </div>
+                    </label>
+
+                    <!-- Images 6 -->
+                    <label class="layout-option cursor-pointer">
+                      <input type="radio" name="rightLayout" value="images-6" class="sr-only">
+                      <div class="layout-preview border-2 border-slate-200 rounded-lg p-3 bg-white hover:border-indigo-300">
+                        <div class="preview-slide">
+                          <div class="preview-left"></div>
+                          <div class="preview-right">
+                            <div class="preview-images-6">
+                              <div class="preview-img"></div>
+                              <div class="preview-img"></div>
+                              <div class="preview-img"></div>
+                              <div class="preview-img"></div>
+                              <div class="preview-img"></div>
+                              <div class="preview-img"></div>
+                            </div>
+                          </div>
+                        </div>
+                        <p class="text-sm font-medium text-center text-slate-700">Images (6)</p>
+                      </div>
+                    </label>
+
+                    <!-- Images Labeled -->
+                    <label class="layout-option cursor-pointer col-span-2">
+                      <input type="radio" name="rightLayout" value="images-labeled" class="sr-only">
+                      <div class="layout-preview border-2 border-slate-200 rounded-lg p-3 bg-white hover:border-indigo-300">
+                        <div class="preview-slide">
+                          <div class="preview-left"></div>
+                          <div class="preview-right">
+                            <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
+                            <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
+                            <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
+                            <div class="preview-img-row"><div class="preview-img-left"></div><div class="preview-img-label"></div></div>
+                          </div>
+                        </div>
+                        <p class="text-sm font-medium text-center text-slate-700">Img + Label</p>
+                      </div>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Messages -->
+            <div id="successMessage" class="hidden mt-6 flex items-center gap-3 p-4 bg-emerald-50 border border-emerald-200 text-emerald-700 rounded-lg">
+              <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+              <span id="successText">Request received! Your PowerPoint file will be emailed within 5-10 minutes.</span>
+            </div>
+
+            <div id="errorMessage" class="hidden mt-6 flex items-center gap-3 p-4 bg-red-50 border border-red-200 text-red-700 rounded-lg">
+              <svg class="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+              <span>Error submitting request. Please try again.</span>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // Email caching
+    const globalEmailInput = document.getElementById('globalEmail');
+
+    const cachedEmail = localStorage.getItem('ycpUserEmail');
+    if (cachedEmail) {
+      globalEmailInput.value = cachedEmail;
+    }
+
+    globalEmailInput.addEventListener('input', () => {
+      localStorage.setItem('ycpUserEmail', globalEmailInput.value);
+    });
+
+    const form = document.getElementById('slidesForm');
+    const submitBtn = document.getElementById('submitBtn');
+    const successMessage = document.getElementById('successMessage');
+    const errorMessage = document.getElementById('errorMessage');
+    const successText = document.getElementById('successText');
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const targetDescription = document.getElementById('targetDescription').value.trim();
+      const websitesInput = document.getElementById('websites').value.trim();
+      const email = globalEmailInput.value.trim() || localStorage.getItem('ycpUserEmail');
+      const rightLayout = document.querySelector('input[name="rightLayout"]:checked').value;
+
+      if (!targetDescription || !websitesInput) {
+        alert('Please fill in all fields');
+        return;
+      }
+      if (!email) {
+        alert('Please enter your email in the sidebar');
+        return;
+      }
+
+      const websites = websitesInput.split('\n').map(u => u.trim()).filter(u => u);
+      if (websites.length === 0) {
+        alert('Please enter at least one website URL');
+        return;
+      }
+
+      if (websites.length > 50) {
+        alert('Maximum 50 websites per request. Please reduce the number of URLs.');
+        return;
+      }
+
+      // Disable and show loading
+      submitBtn.disabled = true;
+      submitBtn.innerHTML = '<svg class="spinner w-5 h-5" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" opacity="0.25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" opacity="0.75"></path></svg> Submitting...';
+
+      successMessage.classList.add('hidden');
+      errorMessage.classList.add('hidden');
+
+      try {
+        const response = await fetch('https://xvasjackgithubio-production-fb38.up.railway.app/api/profile-slides', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ websites, email, targetDescription, rightLayout })
+        });
+
+        if (!response.ok) {
+          throw new Error('Request failed');
+        }
+
+        // Show success
+        successText.textContent = `Request received! ${websites.length} website(s) will be processed. PowerPoint file will be emailed to ${email} within 5-10 minutes.`;
+        successMessage.classList.remove('hidden');
+        form.reset();
+
+      } catch (err) {
+        console.error('Error:', err);
+        errorMessage.classList.remove('hidden');
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg> Generate Slides';
+      }
+    });
+  </script>
+</body>
+</html>

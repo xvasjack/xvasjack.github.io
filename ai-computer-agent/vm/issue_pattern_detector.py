@@ -1,0 +1,338 @@
+"""
+Issue Pattern Detector for Market Research Feedback Loop
+
+Analyzes issue-history.json to detect recurring failure patterns.
+When the same issue recurs 3+ times, it recommends changing the approach
+rather than continuing to patch.
+
+Categories of patterns:
+- Content depth consistently low → research prompts failing
+- Pattern selection wrong → data classification misidentifying types
+- Layout issues → pattern formatting not matching template
+- API failures → model or endpoint issues
+"""
+
+import json
+import os
+import logging
+from typing import List, Dict, Any, Optional
+from collections import Counter
+from datetime import datetime
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("issue_pattern_detector")
+
+HISTORY_PATH = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+    "backend", "market-research", "issue-history.json"
+)
+
+
+class IssueCategory:
+    CONTENT_DEPTH = "content_depth"
+    PATTERN_SELECTION = "pattern_selection"
+    LAYOUT_FORMATTING = "layout_formatting"
+    API_FAILURE = "api_failure"
+    EMPTY_DATA = "empty_data"
+    RESEARCH_QUALITY = "research_quality"
+    INSIGHT_MISSING = "insight_missing"
+    CHART_ERROR = "chart_error"
+    TABLE_OVERFLOW = "table_overflow"
+    UNKNOWN = "unknown"
+
+
+def load_history(path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Load issue history from JSON file"""
+    p = path or HISTORY_PATH
+    if not os.path.exists(p):
+        return []
+    try:
+        with open(p, 'r') as f:
+            data = json.load(f)
+        return data.get("iterations", []) if isinstance(data, dict) else data
+    except (json.JSONDecodeError, IOError) as e:
+        logger.error(f"Failed to load history: {e}")
+        return []
+
+
+def append_iteration(iteration: Dict[str, Any], path: Optional[str] = None) -> None:
+    """Append a new iteration to the history file"""
+    p = path or HISTORY_PATH
+    history = {"iterations": []}
+    if os.path.exists(p):
+        try:
+            with open(p, 'r') as f:
+                history = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            history = {"iterations": []}
+
+    if not isinstance(history, dict):
+        history = {"iterations": history if isinstance(history, list) else []}
+
+    if "iterations" not in history:
+        history["iterations"] = []
+
+    iteration["timestamp"] = datetime.utcnow().isoformat()
+    history["iterations"].append(iteration)
+
+    # Keep last 50 iterations max
+    history["iterations"] = history["iterations"][-50:]
+
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, 'w') as f:
+        json.dump(history, f, indent=2)
+
+
+def categorize_issue(issue_text: str) -> str:
+    """Categorize an issue string into a known category"""
+    text = issue_text.lower()
+
+    if any(kw in text for kw in ["empty", "no data", "hollow", "missing data", "null", "undefined"]):
+        return IssueCategory.EMPTY_DATA
+    if any(kw in text for kw in ["shallow", "generic", "thin", "depth", "superficial", "not specific"]):
+        return IssueCategory.CONTENT_DEPTH
+    if any(kw in text for kw in ["wrong pattern", "misclassified", "wrong layout", "pattern mismatch"]):
+        return IssueCategory.PATTERN_SELECTION
+    if any(kw in text for kw in ["overflow", "overlap", "positioning", "formatting", "font", "color"]):
+        return IssueCategory.LAYOUT_FORMATTING
+    if any(kw in text for kw in ["api error", "rate limit", "timeout", "503", "500", "connection"]):
+        return IssueCategory.API_FAILURE
+    if any(kw in text for kw in ["research", "search", "query", "kimi", "web search"]):
+        return IssueCategory.RESEARCH_QUALITY
+    if any(kw in text for kw in ["insight", "callout", "so what", "implication", "takeaway"]):
+        return IssueCategory.INSIGHT_MISSING
+    if any(kw in text for kw in ["chart", "graph", "visualization", "axis", "legend"]):
+        return IssueCategory.CHART_ERROR
+    if any(kw in text for kw in ["table", "row", "column", "cell", "truncat"]):
+        return IssueCategory.TABLE_OVERFLOW
+
+    return IssueCategory.UNKNOWN
+
+
+def detect_patterns(history: List[Dict[str, Any]], window: int = 5) -> Dict[str, Any]:
+    """
+    Analyze recent history to detect recurring patterns.
+
+    Args:
+        history: List of iteration records
+        window: How many recent iterations to analyze
+
+    Returns:
+        Dict with detected patterns, recommendations, and severity
+    """
+    if not history:
+        return {"patterns": [], "recommendations": [], "severity": "none"}
+
+    recent = history[-window:]
+
+    # Collect all issues and their categories
+    all_issues = []
+    category_counts = Counter()
+    fix_attempts = []
+    scores = {"content_depth": [], "insight": [], "pattern_match": []}
+
+    for iteration in recent:
+        failures = iteration.get("specificFailures", [])
+        for failure in failures:
+            cat = categorize_issue(failure)
+            category_counts[cat] += 1
+            all_issues.append({"text": failure, "category": cat})
+
+        fix_attempts.extend(iteration.get("fixesAttempted", []))
+
+        if "contentDepthScore" in iteration:
+            scores["content_depth"].append(iteration["contentDepthScore"])
+        if "insightScore" in iteration:
+            scores["insight"].append(iteration["insightScore"])
+        if "patternMatchScore" in iteration:
+            scores["pattern_match"].append(iteration["patternMatchScore"])
+
+    patterns = []
+    recommendations = []
+    severity = "low"
+
+    # Pattern 1: Same category 3+ times → change approach
+    for cat, count in category_counts.items():
+        if count >= 3:
+            severity = "critical"
+            patterns.append({
+                "type": "recurring_failure",
+                "category": cat,
+                "count": count,
+                "message": f"{cat} has failed {count} times in last {window} iterations"
+            })
+            recommendations.append(_get_approach_change_recommendation(cat))
+
+    # Pattern 2: Content depth consistently low
+    if scores["content_depth"] and len(scores["content_depth"]) >= 3:
+        avg = sum(scores["content_depth"]) / len(scores["content_depth"])
+        if avg < 40:
+            severity = "critical"
+            patterns.append({
+                "type": "consistently_low_score",
+                "metric": "content_depth",
+                "average": round(avg, 1),
+                "message": f"Content depth avg {avg:.0f}/100 across {len(scores['content_depth'])} iterations"
+            })
+            recommendations.append(
+                "Research prompts are failing to produce deep content. "
+                "Try: (1) Different research queries with more specific terms, "
+                "(2) Switch synthesis model (Gemini → DeepSeek or vice versa), "
+                "(3) Add explicit examples of desired output depth to prompts."
+            )
+
+    # Pattern 3: Insight scores consistently low
+    if scores["insight"] and len(scores["insight"]) >= 3:
+        avg = sum(scores["insight"]) / len(scores["insight"])
+        if avg < 30:
+            if severity != "critical":
+                severity = "high"
+            patterns.append({
+                "type": "consistently_low_score",
+                "metric": "insight",
+                "average": round(avg, 1),
+                "message": f"Insight generation avg {avg:.0f}/100"
+            })
+            recommendations.append(
+                "Insight generation is weak. Add explicit 'so what' prompting: "
+                "'For each data point, explain what it means for [client] entering [market].'"
+            )
+
+    # Pattern 4: Same fix attempted multiple times without improvement
+    fix_counter = Counter(fix_attempts)
+    for fix, count in fix_counter.items():
+        if count >= 2:
+            if severity != "critical":
+                severity = "high"
+            patterns.append({
+                "type": "repeated_fix",
+                "fix": fix,
+                "count": count,
+                "message": f"Fix '{fix[:80]}' attempted {count} times without resolving"
+            })
+            recommendations.append(
+                f"Stop patching with '{fix[:50]}...'. The root cause is different. "
+                "Investigate the upstream data pipeline, not the symptom."
+            )
+
+    return {
+        "patterns": patterns,
+        "recommendations": recommendations,
+        "severity": severity,
+        "categoryCounts": dict(category_counts),
+        "recentScores": {k: v for k, v in scores.items() if v},
+    }
+
+
+def _get_approach_change_recommendation(category: str) -> str:
+    """Get specific recommendation for recurring failure category"""
+    recs = {
+        IssueCategory.CONTENT_DEPTH: (
+            "Content depth keeps failing. STOP patching prompts. Instead: "
+            "(1) Check if research queries return useful data, "
+            "(2) Try different AI model for synthesis, "
+            "(3) Add few-shot examples of deep content to prompts."
+        ),
+        IssueCategory.EMPTY_DATA: (
+            "Data keeps coming back empty. Root cause is likely: "
+            "(1) Research queries too narrow/specific, "
+            "(2) API rate limits silently returning empty, "
+            "(3) JSON parsing failing silently. Check research-orchestrator logs."
+        ),
+        IssueCategory.PATTERN_SELECTION: (
+            "Pattern selection keeps mismatching. The data classifier is wrong. "
+            "Review choosePattern() logic — the dataType being assigned doesn't match actual data."
+        ),
+        IssueCategory.LAYOUT_FORMATTING: (
+            "Layout issues persist. Re-extract positions from template PPTX. "
+            "The pattern definitions in template-patterns.json may not match the reference."
+        ),
+        IssueCategory.API_FAILURE: (
+            "API failures recurring. Check: (1) API key validity, "
+            "(2) Rate limits, (3) Model availability. Consider adding fallback chain."
+        ),
+        IssueCategory.RESEARCH_QUALITY: (
+            "Research quality consistently poor. Try: "
+            "(1) More specific search queries with year ranges, "
+            "(2) Different search topics, "
+            "(3) Verify Kimi API is returning web search results."
+        ),
+        IssueCategory.INSIGHT_MISSING: (
+            "Insights keep missing. Add explicit insight generation step: "
+            "After each data block, prompt 'What does this mean for [client]?'"
+        ),
+        IssueCategory.CHART_ERROR: (
+            "Chart errors recurring. Check: (1) Data format matches chart type expectations, "
+            "(2) Series/categories arrays not empty, (3) Numeric values are actually numbers."
+        ),
+        IssueCategory.TABLE_OVERFLOW: (
+            "Table overflow keeps happening. (1) Increase maxH, "
+            "(2) Reduce font size, (3) Split across slides when data exceeds threshold."
+        ),
+    }
+    return recs.get(category, f"Recurring {category} failures. Investigate root cause, not symptoms.")
+
+
+def generate_fix_context(history: List[Dict[str, Any]], window: int = 3) -> str:
+    """
+    Generate context string for the fix generator (Claude Code).
+    Includes last N iterations, detected patterns, and priority instructions.
+    """
+    recent = history[-window:] if len(history) >= window else history
+    pattern_analysis = detect_patterns(history, window=min(5, len(history)))
+
+    context_parts = []
+
+    # Last iterations summary
+    context_parts.append("## Recent Iteration History")
+    for i, iteration in enumerate(recent):
+        context_parts.append(f"\n### Iteration {iteration.get('number', i+1)}")
+        context_parts.append(f"- Content Depth: {iteration.get('contentDepthScore', 'N/A')}/100")
+        context_parts.append(f"- Insight Score: {iteration.get('insightScore', 'N/A')}/100")
+        context_parts.append(f"- Pattern Match: {iteration.get('patternMatchScore', 'N/A')}/100")
+        failures = iteration.get("specificFailures", [])
+        if failures:
+            context_parts.append(f"- Failures: {'; '.join(failures[:5])}")
+        fixes = iteration.get("fixesAttempted", [])
+        if fixes:
+            context_parts.append(f"- Fixes tried: {'; '.join(fixes[:3])}")
+
+    # Pattern analysis
+    if pattern_analysis["patterns"]:
+        context_parts.append("\n## Detected Recurring Patterns (IMPORTANT)")
+        for p in pattern_analysis["patterns"]:
+            context_parts.append(f"- **{p['type']}**: {p['message']}")
+
+        context_parts.append("\n## Recommendations (FOLLOW THESE)")
+        for r in pattern_analysis["recommendations"]:
+            context_parts.append(f"- {r}")
+
+    # Priority instruction
+    context_parts.append("\n## Priority Instruction")
+    context_parts.append(
+        "If content empty → fix research pipeline (queries, API, parsing). "
+        "If layout wrong → fix pattern selection (choosePattern logic). "
+        "If formatting off → re-check pattern definitions (template-patterns.json). "
+        "If insights missing → add insight generation prompts. "
+        "DO NOT keep patching the same approach if it has failed 3+ times."
+    )
+
+    return "\n".join(context_parts)
+
+
+if __name__ == "__main__":
+    import sys
+
+    path = sys.argv[1] if len(sys.argv) > 1 else HISTORY_PATH
+    history = load_history(path)
+
+    if not history:
+        print("No history found.")
+        sys.exit(0)
+
+    analysis = detect_patterns(history)
+    print(json.dumps(analysis, indent=2))
+
+    if analysis["patterns"]:
+        print("\n--- Fix Context ---")
+        print(generate_fix_context(history))

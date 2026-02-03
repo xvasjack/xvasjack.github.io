@@ -1,0 +1,864 @@
+"""
+Feedback Loop Runner
+
+Connects the FeedbackLoop orchestrator to concrete implementations:
+- Frontend form submission via PyAutoGUI
+- Gmail email checking via browser automation
+- Output analysis via file readers
+- Fix generation via Claude Code CLI
+- PR operations via gh CLI
+- Log checking via Railway CLI or health endpoints
+"""
+
+import asyncio
+import os
+import sys
+import time
+from typing import Callable, Dict, List, Optional, Any
+import logging
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from feedback_loop import FeedbackLoop, LoopConfig, LoopResult
+from actions.frontend_api import submit_form_api
+from actions.gmail_api import wait_for_email_api, HAS_GMAIL_API
+from actions.claude_code import run_claude_code, improve_output
+from actions.github import merge_pr, wait_for_ci, get_ci_error_logs
+from template_comparison import compare_output_to_template as compare_output, auto_detect_template
+from file_readers.pptx_reader import analyze_pptx
+from file_readers.xlsx_reader import analyze_xlsx
+from file_readers.docx_reader import analyze_docx
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("feedback_loop_runner")
+
+# Issue history and pattern detection
+try:
+    from issue_pattern_detector import load_history, append_iteration, detect_patterns, generate_fix_context
+    HAS_ISSUE_DETECTOR = True
+except ImportError:
+    HAS_ISSUE_DETECTOR = False
+    logger.warning("issue_pattern_detector not available")
+
+
+# 0.7: Wrap browser imports in try/except — GUI deps may not be available
+HAS_BROWSER = False
+try:
+    from actions.frontend import submit_form as frontend_submit_form
+    from actions.gmail import (
+        open_gmail, search_emails, open_first_email,
+        download_attachment, wait_for_download, get_recent_downloads,
+    )
+    HAS_BROWSER = True
+except ImportError:
+    logger.warning("Browser automation not available (missing pyautogui/win32gui)")
+    frontend_submit_form = None
+    open_gmail = search_emails = open_first_email = None
+    download_attachment = wait_for_download = get_recent_downloads = None
+
+
+# =============================================================================
+# CONFIGURATION
+# =============================================================================
+
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "https://xvasjack.github.io")
+
+# S2: Map service names to email subject search hints (backend emails use human-readable subjects)
+SERVICE_EMAIL_SUBJECTS = {
+    "target-v3": "[V3]",
+    "target-v4": "[V4]",
+    "target-v5": "[V5]",
+    "target-v6": "[V6]",
+    "market-research": "Market Research:",
+    "profile-slides": "Profile Slides:",
+    "trading-comparable": "Trading Comps:",
+    "validation": "Speeda List Validation:",
+    "due-diligence": "DD Report:",
+    "utb": "utb",
+}
+
+# Issue 5: Map service names to template names in template_comparison.TEMPLATES
+SERVICE_TO_TEMPLATE = {
+    "target-v3": "target-search",
+    "target-v4": "target-search",
+    "target-v5": "target-search",
+    "target-v6": "target-search",
+    "market-research": "market-research",
+    "profile-slides": "profile-slides",
+    "trading-comparable": "trading-comps",
+    "validation": "validation-results",
+    "due-diligence": "dd-report",
+    "utb": None,  # needs template
+}
+
+
+# =============================================================================
+# CALLBACK IMPLEMENTATIONS
+# =============================================================================
+
+
+async def submit_form_callback(
+    service_name: str,
+    form_data: Dict[str, str],
+) -> Dict[str, Any]:
+    """
+    Submit form — API POST first, browser fallback.
+    Issue 2: Direct HTTP POST to Railway backend.
+    Issue 7: Fallback to browser automation if API fails.
+    """
+    # Primary: Direct API POST
+    try:
+        result = await submit_form_api(service_name, form_data)
+        if result.get("success"):
+            logger.info(f"API POST succeeded for {service_name}")
+            return result
+        logger.warning(f"API POST failed: {result.get('error')} — falling back to browser")
+    except Exception as e:
+        logger.warning(f"API POST error: {e} — falling back to browser")
+
+    # Fallback: Browser automation
+    url_map = {
+        "target-v3": "find-target.html",
+        "target-v4": "find-target-v4.html",
+        "target-v5": "find-target-v5.html",
+        "target-v6": "find-target-v6.html",
+        "market-research": "market-research.html",
+        "profile-slides": "profile-slides.html",
+        "trading-comparable": "trading-comparable.html",
+        "validation": "validation.html",
+        "due-diligence": "due-diligence.html",
+        "utb": "utb.html",
+    }
+
+    page = url_map.get(service_name, f"{service_name}.html")
+    url = f"{FRONTEND_URL}/{page}"
+
+    # 0.7: Check browser is available before attempting
+    if not HAS_BROWSER or frontend_submit_form is None:
+        return {"success": False, "error": "API submission failed and browser automation not available"}
+
+    # F9: Wrap browser fallback in try/except to prevent unhandled crash
+    try:
+        return await frontend_submit_form(url, form_data)
+    except Exception as e:
+        logger.error(f"Browser fallback failed: {e}")
+        return {"success": False, "error": f"Both API and browser submission failed: {e}"}
+
+
+async def wait_for_email_callback(
+    service_name: str,
+    timeout_minutes: int = 65,
+    skip_email_ids: set = None,
+    after_epoch: int = None,
+) -> Dict[str, Any]:
+    """
+    Wait for automation output email.
+    Issue 3: Gmail API first, browser fallback.
+    Issue 7: Fallback to checking Downloads folder.
+    """
+    logger.info(f"Waiting for {service_name} email (timeout: {timeout_minutes}m)")
+
+    # 1.1: Use AGENT_DOWNLOAD_PATH if set
+    download_dir = os.environ.get("AGENT_DOWNLOAD_PATH", os.path.expanduser("~/Downloads"))
+
+    # Primary: Gmail API
+    if HAS_GMAIL_API:
+        try:
+            subject_hint = SERVICE_EMAIL_SUBJECTS.get(service_name, service_name)
+            query = f"subject:({subject_hint}) has:attachment"
+            result = await wait_for_email_api(
+                query=query,
+                download_dir=download_dir,
+                timeout_minutes=timeout_minutes,
+                poll_interval=30,
+                skip_email_ids=skip_email_ids,
+                after_epoch=after_epoch,
+            )
+            if result.get("success"):
+                logger.info(f"Gmail API downloaded: {result.get('file_path')}")
+                return result
+            logger.warning(f"Gmail API failed: {result.get('error')} — falling back to browser")
+        except Exception as e:
+            logger.warning(f"Gmail API error: {e} — falling back to browser")
+
+    # Fallback: Browser automation
+    if not HAS_BROWSER:
+        logger.warning("Browser automation not available, skipping browser email fallback")
+    else:
+        deadline_browser = time.time() + (timeout_minutes * 60)
+        poll_interval_browser = 30
+
+    deadline = time.time() + (timeout_minutes * 60)
+    poll_interval = 30
+
+    while HAS_BROWSER and time.time() < deadline:
+        try:
+            await open_gmail()
+            await asyncio.sleep(2)
+
+            subject_hint = SERVICE_EMAIL_SUBJECTS.get(service_name, service_name)
+            query = f"subject:({subject_hint}) has:attachment"
+            await search_emails(query)
+            await asyncio.sleep(2)
+
+            await open_first_email()
+            await asyncio.sleep(1)
+
+            await download_attachment()
+            await asyncio.sleep(1)
+
+            downloaded = await wait_for_download(timeout_seconds=60)
+
+            if downloaded:
+                files = get_recent_downloads(max_age_minutes=2)
+                if files:
+                    logger.info(f"Downloaded: {files[0]}")
+                    return {
+                        "success": True,
+                        "file_path": files[0],
+                        "all_files": files,
+                    }
+
+        except Exception as e:
+            # F57: Re-raise auth/login errors — retrying won't fix them
+            err_str = str(e).lower()
+            if any(kw in err_str for kw in ("auth", "login", "credential", "permission", "forbidden", "401", "403")):
+                logger.error(f"Email auth/login error (not retrying): {e}")
+                return {"success": False, "error": f"Authentication error: {e}"}
+            logger.warning(f"Email check failed: {e}")
+
+        # Issue 7: Also check Downloads folder for recent files
+        try:
+            if os.path.exists(download_dir):
+                import glob
+                patterns = [f"{download_dir}/*.pptx", f"{download_dir}/*.xlsx", f"{download_dir}/*.docx"]
+                for pattern in patterns:
+                    for f in sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True):
+                        age = time.time() - os.path.getmtime(f)
+                        # Category 8 fix: Use more precise filename matching
+                        fname_lower = os.path.basename(f).lower().replace("-", "").replace("_", "")
+                        # Issue 100/24/32 fix: Check service_name is not None before string ops
+                        if not service_name:
+                            continue
+                        svc_lower = service_name.replace("-", "").replace("_", "")
+                        # Require the service name to appear as a distinct part, not just substring
+                        # F58: Extended download window from 2min to 10min
+                        if age < 600 and (svc_lower in fname_lower or fname_lower.startswith(svc_lower)):
+                            logger.info(f"Found in Downloads: {f}")
+                            return {"success": True, "file_path": f}
+
+                # 1.2: Recency-only fallback — reduced from 10min to 2min for safety
+                for pattern in patterns:
+                    for f in sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True):
+                        age = time.time() - os.path.getmtime(f)
+                        if age < 120:
+                            logger.info(f"Found recent file in Downloads (no name match, <2min): {f}")
+                            return {"success": True, "file_path": f}
+        except Exception as e:
+            # Category 8 fix: Log download check errors instead of silently swallowing
+            logger.debug(f"Download folder check failed: {e}")
+
+        logger.info(f"No email yet, waiting {poll_interval}s...")
+        await asyncio.sleep(poll_interval)
+
+    return {
+        "success": False,
+        "error": f"Email not received within {timeout_minutes} minutes",
+    }
+
+
+async def analyze_output_callback(
+    file_path: str,
+    service_name: str,
+    template_name: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Analyze downloaded output file against template"""
+    logger.info(f"Analyzing output: {file_path}")
+
+    if not os.path.exists(file_path):
+        return {
+            "issues": [f"File not found: {file_path}"],
+            "analysis": None,
+        }
+
+    try:
+        # Read file based on extension
+        ext = os.path.splitext(file_path)[1].lower()
+
+        if ext == ".pptx":
+            raw = analyze_pptx(file_path)
+            analysis = raw.to_dict() if hasattr(raw, 'to_dict') else raw
+        elif ext in (".xlsx", ".xls"):
+            raw = analyze_xlsx(file_path)
+            analysis = raw.to_dict() if hasattr(raw, 'to_dict') else raw
+        elif ext == ".docx":
+            raw = analyze_docx(file_path)
+            analysis = raw.to_dict() if hasattr(raw, 'to_dict') else raw
+        else:
+            return {
+                "issues": [f"Unsupported file type: {ext}"],
+                "analysis": None,
+            }
+
+        # Ensure analysis is a plain dict
+        # B6: Use dataclasses.asdict() as fallback since vars() fails on dataclasses
+        if not isinstance(analysis, dict):
+            if hasattr(analysis, 'to_dict'):
+                analysis = analysis.to_dict()
+            else:
+                import dataclasses
+                if dataclasses.is_dataclass(analysis):
+                    analysis = dataclasses.asdict(analysis)
+                else:
+                    analysis = vars(analysis)
+
+        # Issue 5: Map service name to template name
+        template = template_name or SERVICE_TO_TEMPLATE.get(service_name)
+        if template is None:
+            # Try auto-detection
+            template = auto_detect_template(file_path, analysis)
+        if template is None:
+            return {
+                "issues": ["No template available for this service — manual review needed"],
+                "analysis": analysis,
+            }
+
+        # Issue 10: compare_output returns ComparisonResult object, not dict
+        comparison_result = compare_output(analysis, template)
+
+        # Use ComparisonResult's structured output
+        issues = [d.to_comment() for d in comparison_result.discrepancies]
+
+        return {
+            "issues": issues,
+            "passed": comparison_result.passed,
+            "analysis": analysis,
+            "comparison": comparison_result.to_dict(),
+            "fix_prompt": comparison_result.generate_claude_code_prompt(),
+        }
+
+    except Exception as e:
+        logger.error(f"Analysis failed: {e}")
+        return {
+            "issues": [f"Analysis error: {str(e)}"],
+            "analysis": None,
+        }
+
+
+def _load_template_reference(service_name: str) -> str:
+    """Load the relevant section from template_reference.md for a service."""
+    ref_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "template_reference.md")
+    if not os.path.exists(ref_path):
+        return ""
+
+    try:
+        with open(ref_path, "r", encoding="utf-8") as f:
+            content = f.read()
+    except Exception:
+        return ""
+
+    # Map service names to section headers in template_reference.md
+    section_map = {
+        "target-v3": "Target Search",
+        "target-v4": "Target Search",
+        "target-v5": "Target Search",
+        "target-v6": "Target Search",
+        "market-research": "Market Research",
+        "profile-slides": "Profile Slides",
+        "due-diligence": "Due Diligence Report",
+    }
+
+    header_keyword = section_map.get(service_name)
+    if not header_keyword:
+        return ""
+
+    # Extract the relevant section (## header to next ## header)
+    lines = content.split("\n")
+    capturing = False
+    section_lines = []
+    for line in lines:
+        if line.startswith("## ") and header_keyword.lower() in line.lower():
+            capturing = True
+            section_lines.append(line)
+            continue
+        if capturing and line.startswith("## "):
+            break
+        if capturing:
+            section_lines.append(line)
+
+    if not section_lines:
+        return ""
+
+    return "\n".join(section_lines).strip()
+
+
+def _load_formatting_spec(service_name: str) -> str:
+    """Load MARKET_RESEARCH_FORMATTING_SPEC.md when formatting issues detected."""
+    spec_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        "MARKET_RESEARCH_FORMATTING_SPEC.md"
+    )
+    if not os.path.exists(spec_path):
+        return ""
+    try:
+        with open(spec_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        # Truncate to avoid prompt bloat — keep sections 1-3 (fonts, layout, density)
+        lines = content.split("\n")
+        truncated = []
+        for line in lines:
+            truncated.append(line)
+            if line.startswith("## 4"):  # Stop before chart usage section
+                break
+        return "\n".join(truncated).strip()
+    except Exception:
+        return ""
+
+
+def _has_formatting_issues(issues: List[str]) -> bool:
+    """Check if any issues are formatting-related"""
+    formatting_keywords = [
+        "overflow", "overlap", "font_size", "font_family", "color_mismatch",
+        "header_line", "title_font", "subtitle_font", "bold_mismatch",
+        "text_overflow", "content_overlap", "formatting",
+    ]
+    for issue in issues:
+        if any(kw in issue.lower() for kw in formatting_keywords):
+            return True
+    return False
+
+
+async def generate_fix_callback(
+    issues: List[str],
+    analysis: Dict[str, Any],
+    service_name: str,
+    iteration: int = 0,
+) -> Dict[str, Any]:
+    """Generate fix using Claude Code CLI"""
+    logger.info(f"Generating fix for {len(issues)} issues")
+
+    # Load content depth reference for this service
+    template_ref = _load_template_reference(service_name)
+    ref_context = ""
+    if template_ref:
+        ref_context = (
+            f"\n\n## Content Quality Reference\n"
+            f"The output must meet this content depth standard:\n\n"
+            f"{template_ref}\n"
+        )
+
+    # Load formatting spec when formatting issues are present
+    formatting_context = ""
+    if _has_formatting_issues(issues):
+        fmt_spec = _load_formatting_spec(service_name)
+        if fmt_spec:
+            formatting_context = (
+                f"\n\n## Formatting Specification (from reference template)\n"
+                f"Fix formatting to match this spec. These values were extracted from the approved reference template.\n\n"
+                f"{fmt_spec}\n\n"
+                f"### pptxgenjs-specific fix hints:\n"
+                f"- Text overflow: reduce text length, or increase `h` parameter on the text shape\n"
+                f"- Content overlap: adjust `y` parameter so that y + h of shape A < y of shape B\n"
+                f"- Wrong color: use hex string without '#' prefix, e.g. `color: '1F497D'`\n"
+                f"- Wrong font size: set `fontSize` in points, e.g. `fontSize: 24`\n"
+                f"- Missing header line: add `slide.addShape('line', {{...}})` after title\n"
+                f"- Wrong font: set `fontFace: 'Segoe UI'` on all text elements\n"
+            )
+
+    # Issue 11: Use structured fix_prompt from ComparisonResult if available
+    fix_prompt = analysis.get("fix_prompt") if analysis else None
+
+    # Issue history and pattern detection context
+    history_context = ""
+    if HAS_ISSUE_DETECTOR:
+        try:
+            # Append current iteration to history
+            append_iteration({
+                "issues": issues[:10],  # Limit to avoid prompt bloat
+                "fixDescription": analysis.get("fix_prompt", "")[:200] if analysis else "",
+                "iteration": iteration,
+            })
+            
+            # Detect patterns from history
+            patterns = detect_patterns()
+            if patterns:
+                fix_ctx = generate_fix_context(patterns)
+                if fix_ctx:
+                    history_context = (
+                        f"\n\n## Issue History Analysis\n"
+                        f"{fix_ctx}\n"
+                        f"\n### Priority Rules:\n"
+                        f"- If content empty → fix research pipeline (research-orchestrator.js)\n"
+                        f"- If layout wrong → fix pattern selection (ppt-utils.js choosePattern)\n"
+                        f"- If formatting off → re-check pattern definitions (template-patterns.json)\n"
+                        f"- If same issue 3+ times → CHANGE APPROACH, don't patch\n"
+                    )
+        except Exception as e:
+            logger.warning(f"Issue pattern detection failed: {e}")
+
+    if fix_prompt and fix_prompt != "No issues found. Output matches template.":
+        # Use the ComparisonResult's built-in prompt (has severity grouping, locations, suggestions)
+        iteration_context = ""
+        if iteration > 1:
+            iteration_context = (
+                f"\n\nThis is fix attempt #{iteration}. "
+                f"Previous attempts fixed some issues but these remain — "
+                f"the root cause may be deeper than a surface-level fix."
+            )
+        result = await run_claude_code(
+            fix_prompt + ref_context + formatting_context + history_context + iteration_context,
+            service_name=service_name,
+            iteration=iteration,
+            previous_issues="\n".join(issues) if issues else None,
+        )
+    else:
+        # Fallback to improve_output with generic prompt
+        iteration_context = ""
+        if iteration > 1:
+            iteration_context = (
+                f" This is fix attempt #{iteration}. "
+                f"Previous attempts fixed some issues but these remain — "
+                f"the root cause may be deeper than a surface-level fix."
+            )
+
+        expected_outcome = (
+            f"Output from {service_name} must match the reference template in both "
+            f"content quality (depth, specificity, actionable insights) and visual formatting "
+            f"(layout, fonts, spacing, data tables). No critical or major discrepancies.{iteration_context}"
+            f"{ref_context}"
+            f"{formatting_context}"
+            f"{history_context}"
+        )
+
+        result = await improve_output(
+            service_name=service_name,
+            current_issues=issues,
+            expected_outcome=expected_outcome,
+            iteration=iteration,
+            previous_issues="\n".join(issues) if issues else None,
+        )
+
+    # Category 1 fix: Check result.output not None before slice
+    output_desc = ""
+    if result is not None and result.output is not None:
+        output_desc = result.output[:500]
+
+    return {
+        "success": result.success if result else False,
+        "pr_number": None,  # Push-to-main: no PRs
+        "description": output_desc,
+        "error": result.error if result else "No result returned",
+    }
+
+
+async def get_logs_callback(
+    service_name: str,
+    railway_service_url: Optional[str] = None,
+) -> Dict[str, Any]:
+    """
+    Check logs for errors after deployment.
+
+    Uses Claude Code CLI to run `railway logs` if Railway CLI is available,
+    otherwise checks the health endpoint for error indicators.
+    """
+    logger.info(f"Checking logs for {service_name}")
+
+    # Method 1: Try Railway CLI via Claude Code
+    try:
+        result = await run_claude_code(
+            f"Check Railway logs for the {service_name} service.\n\n"
+            f"STEPS:\n"
+            f"1. Run: railway logs --latest 100\n"
+            f"2. Analyze output for ERRORS (not just warnings)\n\n"
+            f"CRITICAL ERROR TYPES TO LOOK FOR:\n"
+            f"- Crashes: segfault, unhandled exception, OOM kill, SIGTERM\n"
+            f"- Deployment: failed to start, port conflict, missing env vars\n"
+            f"- Runtime: repeated errors, timeouts, connection failures, ECONNREFUSED\n\n"
+            f"REPORT FORMAT:\n"
+            f"For each critical error found, report:\n"
+            f"- Error type (crash/deployment/runtime)\n"
+            f"- Error message (exact text)\n"
+            f"- Frequency (how many times in the logs?)\n"
+            f"- Root cause hypothesis (one sentence)\n\n"
+            f"If no critical errors: report 'No critical errors found' with a brief summary of log activity.\n"
+            f"Focus on errors from the CURRENT deployment, not old entries.\n\n"
+            f"Do NOT make any code changes.",
+            service_name=service_name,
+            timeout_seconds=300,  # F10: Increased from 60s — Railway logs can be slow
+        )
+
+        if result.success and result.output:
+            has_errors = any(
+                keyword in result.output.lower()
+                for keyword in ["error", "crash", "oom", "fatal", "unhandled", "sigterm"]
+            )
+            return {
+                "has_errors": has_errors,
+                "logs": result.output[:2000],
+                "errors": [result.output[:500]] if has_errors else [],
+            }
+    except Exception as e:
+        logger.warning(f"Railway log check failed: {e}")
+
+    # Method 2: Check health endpoint
+    if railway_service_url:
+        health_url = railway_service_url.rstrip("/") + "/health"
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                "curl", "-sf", "--max-time", "10", health_url,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await proc.communicate()
+
+            if proc.returncode != 0:
+                return {
+                    "has_errors": True,
+                    "logs": f"Health check failed: {stderr.decode()[:500]}",
+                    "errors": ["Health endpoint not responding"],
+                }
+
+            return {
+                "has_errors": False,
+                "logs": stdout.decode()[:500],
+                "errors": [],
+            }
+        except Exception as e:
+            logger.warning(f"Health check failed: {e}")
+
+    # Method 3: No log checking available
+    logger.info("No log checking method available")
+    return {
+        "has_errors": False,
+        "logs": "",
+        "errors": [],
+    }
+
+
+# =============================================================================
+# RUNNER
+# =============================================================================
+
+
+async def run_feedback_loop(
+    service_name: str,
+    form_data: Dict[str, str],
+    max_iterations: int = 10,
+    health_check_url: Optional[str] = None,
+    railway_service_url: Optional[str] = None,
+    on_progress: Optional[Callable] = None,
+    start_from: Optional[str] = None,
+    existing_file_path: Optional[str] = None,
+    cancel_token: Optional[dict] = None,
+) -> LoopResult:
+    """
+    Run the complete feedback loop for a service.
+
+    Args:
+        service_name: Service to test/fix
+        form_data: Form fields to submit
+        max_iterations: Max fix iterations
+        health_check_url: URL to poll after deployment
+        railway_service_url: Railway service base URL
+        on_progress: Callback for progress updates
+
+    Returns:
+        LoopResult with success status and stats
+    """
+    # F46: Validate start_from values
+    VALID_START_FROM = {None, "email_check", "analyze"}
+    if start_from not in VALID_START_FROM:
+        logger.error(f"Invalid start_from value: '{start_from}'. Valid: {VALID_START_FROM}")
+        return LoopResult(
+            success=False, iterations=0, prs_merged=0,
+            summary=f"Error: Invalid start_from='{start_from}'",
+            elapsed_seconds=0,
+        )
+
+    # A6: Validate service_name is not None or empty
+    if not service_name or not service_name.strip():
+        logger.error("service_name is required but was None or empty")
+        return LoopResult(
+            success=False,
+            iterations=0,
+            prs_merged=0,
+            summary="Error: Missing required service_name",
+            elapsed_seconds=0,
+        )
+
+    # Issue 6: Pass research config
+    config = LoopConfig(
+        service_name=service_name,
+        max_iterations=max_iterations,
+        health_check_url=health_check_url,
+        railway_service_url=railway_service_url,
+        anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY"),
+        max_research_attempts=2,
+    )
+
+    # Issue 8: Check for interrupted loop state
+    resume_from = 0
+    saved_issue_tracker = None
+    saved_prs_merged = 0
+    try:
+        from loop_state import load_loop_state
+        saved = load_loop_state()
+        if saved and saved.service_name == service_name:
+            logger.info(f"Found interrupted loop state: iteration={saved.iteration}")
+            resume_from = max(0, saved.iteration - 1)  # Re-run the interrupted iteration
+            # C8: Restore issue_tracker from saved state
+            saved_issue_tracker = saved.issue_tracker
+            saved_prs_merged = saved.prs_merged
+    except Exception as e:
+        logger.warning(f"Failed to check loop state: {e}")
+
+    iteration_counter = [resume_from]
+    seen_email_ids = set()  # Track processed email IDs across iterations
+    # Track when a fix was last deployed — only require fresh emails after that
+    last_fix_deployed_epoch = [0]
+
+    async def submit():
+        return await submit_form_callback(service_name, form_data)
+
+    async def wait_email():
+        # Iteration 1 (no fix deployed yet): accept any unseen email (including old ones)
+        # Iteration 2+ (after fix deployed): only accept emails after the fix was deployed
+        epoch = last_fix_deployed_epoch[0] if last_fix_deployed_epoch[0] else None
+        result = await wait_for_email_callback(
+            service_name,
+            skip_email_ids=seen_email_ids,
+            after_epoch=epoch,
+        )
+        # Track this email ID so next iteration skips it
+        if result.get("success") and result.get("email_id"):
+            seen_email_ids.add(result["email_id"])
+            logger.info(f"Tracked email {result['email_id']} — {len(seen_email_ids)} seen total")
+        return result
+
+    async def analyze(file_path):
+        # Issue 9: Try learned template first
+        analysis_result = await analyze_output_callback(file_path, service_name)
+
+        # Category 5 fix: Wrap callback in try/except
+        try:
+            from template_learner import TemplateManager, compare_with_learned_template
+            manager = TemplateManager()
+            learned = manager.get_template(f"{service_name}-learned")
+            if learned and analysis_result and analysis_result.get("analysis"):
+                learned_comparison = compare_with_learned_template(
+                    analysis_result["analysis"] if isinstance(analysis_result["analysis"], dict)
+                    else analysis_result["analysis"].to_dict()
+                    if hasattr(analysis_result["analysis"], "to_dict")
+                    else analysis_result["analysis"],
+                    learned,
+                )
+                # Merge learned template issues
+                if learned_comparison and learned_comparison.get("issues"):
+                    analysis_result.setdefault("issues", []).extend(
+                        [i.get("message", str(i)) for i in learned_comparison["issues"] if i]
+                    )
+                logger.info(f"Learned template score: {learned_comparison.get('score') if learned_comparison else 'N/A'}")
+        except Exception as e:
+            logger.warning(f"Learned template comparison failed: {e}")
+
+        return analysis_result
+
+    async def fix(issues, analysis):
+        # Category 10 fix: Increment counter after validation, not before
+        # First validate inputs
+        if not issues and not (analysis and analysis.get("fix_prompt")):
+            logger.warning("fix called with no issues and no fix_prompt")
+            return {"success": False, "error": "No issues to fix"}
+
+        iteration_counter[0] += 1
+        result = await generate_fix_callback(
+            issues, analysis, service_name, iteration_counter[0]
+        )
+        # After a successful fix+push, record timestamp so next iteration
+        # only accepts emails arriving after the new code was deployed
+        if result and result.get("success"):
+            last_fix_deployed_epoch[0] = int(time.time())
+        return result
+
+    async def merge(pr_number):
+        return await merge_pr(pr_number)
+
+    async def ci(pr_number):
+        return await wait_for_ci(pr_number)
+
+    async def logs():
+        return await get_logs_callback(service_name, railway_service_url)
+
+    # Skip-to mode: wrap callbacks to skip steps on first iteration
+    _first_iteration_done = [False]
+
+    if start_from in ("email_check", "analyze"):
+        real_submit = submit
+        async def submit():
+            if not _first_iteration_done[0]:
+                return {"success": True, "skipped": True}
+            return await real_submit()
+
+    # 3.9: start_from="analyze" without file should error, not silently fall through
+    if start_from == "analyze" and not existing_file_path:
+        logger.error("start_from='analyze' requires existing_file_path")
+        return LoopResult(
+            success=False, iterations=0, prs_merged=0,
+            summary="Error: start_from='analyze' requires existing_file_path",
+            elapsed_seconds=0,
+        )
+
+    if start_from == "analyze" and existing_file_path:
+        real_wait = wait_email
+        async def wait_email():
+            if not _first_iteration_done[0]:
+                return {"success": True, "file_path": existing_file_path, "skipped": True}
+            return await real_wait()
+
+    # Mark first iteration done inside fix callback
+    real_fix = fix
+    async def fix(issues, analysis):
+        _first_iteration_done[0] = True
+        return await real_fix(issues, analysis)
+
+    loop = FeedbackLoop(
+        config=config,
+        submit_form=submit,
+        wait_for_email=wait_email,
+        analyze_output=analyze,
+        generate_fix=fix,
+        merge_pr=merge,
+        wait_for_ci=ci,
+        check_logs=logs,
+        on_progress=on_progress,
+    )
+
+    # C8: Restore state from saved loop if resuming
+    if saved_issue_tracker:
+        loop.issue_tracker.update(saved_issue_tracker)
+    if saved_prs_merged:
+        loop.prs_merged = saved_prs_merged
+
+    result = await loop.run(cancel_token=cancel_token, resume_from=resume_from)
+
+    # Issue 9: Learn from successful output
+    # A8: Guard against empty iterations list before accessing [-1]
+    if result.success and loop.iterations and len(loop.iterations) > 0:
+        last_iter = loop.iterations[-1]
+        if last_iter and last_iter.output_file:
+            try:
+                api_key = os.environ.get("ANTHROPIC_API_KEY")
+                if api_key:
+                    from template_learner import TemplateLearner
+                    learner = TemplateLearner(api_key)
+                    await learner.learn_from_file(
+                        last_iter.output_file,
+                        f"{service_name}-learned",
+                        description=f"Learned from successful {service_name} output",
+                    )
+                    logger.info(f"Learned template saved for {service_name}")
+            except Exception as e:
+                logger.warning(f"Failed to learn template: {e}")
+
+    return result

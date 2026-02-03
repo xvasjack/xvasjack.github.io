@@ -1,0 +1,14 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "cd \"$CLAUDE_PROJECT_DIR\" && DIRTY=$(git diff --name-only HEAD 2>/dev/null) && UNPUSHED=$(git log @{u}..HEAD --oneline 2>/dev/null) && if [ -n \"$DIRTY\" ] || [ -n \"$UNPUSHED\" ]; then echo '{\"decision\":\"block\",\"reason\":\"STOP BLOCKED: You have uncommitted or unpushed changes. Per CLAUDE.md you MUST git add, commit, and push ALL changes before stopping.\"}'; else echo '{}'; fi"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>AI Agent</title>
+    <style>
+        body { font-family: monospace; background: #1a1a2e; color: #eee; padding: 20px; max-width: 700px; margin: 0 auto; }
+        .top { display: flex; gap: 10px; margin-bottom: 10px; }
+        input { flex: 1; padding: 10px; background: #252540; border: 1px solid #333; border-radius: 4px; color: #eee; font-family: monospace; }
+        button { padding: 10px 16px; border: none; border-radius: 4px; cursor: pointer; font-family: monospace; }
+        .go { background: #5352ed; color: white; }
+        .go:disabled { background: #444; }
+        .stop { background: #ff4757; color: white; display: none; }
+        .log { height: 500px; overflow-y: auto; background: #111; padding: 10px; font-size: 13px; border-radius: 4px; }
+        .log div { padding: 2px 0; word-wrap: break-word; white-space: pre-wrap; }
+        .t { color: #666; }
+        .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ff4757; margin-right: 6px; }
+        .dot.on { background: #2ed573; }
+        .plan-box { background: #252540; border: 1px solid #5352ed; padding: 10px; margin: 10px 0; border-radius: 4px; display: none; max-height: 400px; overflow-y: auto; }
+        .plan-box pre { white-space: pre-wrap; margin: 5px 0; font-size: 12px; }
+        
+        .plan-box button { margin: 5px 5px 0 0; }
+        .btn-approve { background: #2ed573; color: #111; }
+        .btn-reject { background: #ff4757; color: white; }
+    </style>
+</head>
+<body>
+    <div class="top">
+        <span class="dot" id="dot"></span>
+        <input id="in" placeholder="Type task or comment..." onkeydown="if(event.key==='Enter')send()">
+        <input id="ctx" placeholder="Context (optional)" style="flex:0.5;font-size:11px">
+        <button class="go" id="go" onclick="send()" disabled>Send</button>
+        <button class="stop" id="stop" onclick="cancel()">Stop</button>
+    </div>
+    <div class="plan-box" id="planBox">
+        <strong>Plan Proposal:</strong>
+        <pre id="planContent"></pre>
+        <button class="btn-approve" onclick="approvePlan()">Approve</button>
+        <button class="btn-reject" onclick="rejectPlan()">Reject</button>
+    </div>
+    <div id="sb" style="display:none;padding:6px 10px;background:#252540;border:1px solid #333;margin-bottom:8px;font-size:12px;border-radius:4px">
+        <span id="sb-state">idle</span> |
+        Iter: <span id="sb-iter">-</span> |
+        PRs: <span id="sb-prs">0</span> |
+        <span id="sb-time">0s</span>
+    </div>
+    <div class="log" id="log"></div>
+    <script>
+        let ws, running = false, currentPlan = null;
+        function connect() {
+            ws = new WebSocket(`${location.protocol==='https:'?'wss:':'ws:'}//${location.host}`);
+            ws.onopen = () => log('Connected');
+            ws.onclose = () => { log('Disconnected'); document.getElementById('planBox').style.display = 'none'; setVM(false); setTimeout(connect, 3000); };
+            ws.onerror = (err) => { console.error('WebSocket error:', err); log('Connection error'); };
+            ws.onmessage = e => { try { handle(JSON.parse(e.data)); } catch(err) { console.error('Message parse error:', err); } };
+        }
+        function handle(m) {
+            const p = m.payload;
+            switch(m.type) {
+                case 'init':
+                    setVM(p.vmConnected);
+                    if (p.currentTask && p.currentTask.status === 'running') {
+                        setRunning(true);
+                        log('> Reconnected: task in progress');
+                    }
+                    if (p.currentTask && p.currentTask.status === 'awaiting_approval') {
+                        setRunning(true);
+                        // F31: Use currentTask.plan instead of nonexistent pendingPlan
+                        const plan = p.currentTask.plan;
+                        if (plan) {
+                            currentPlan = plan;
+                            document.getElementById('planContent').textContent = typeof plan === 'string' ? plan : JSON.stringify(plan, null, 2);
+                            document.getElementById('planBox').style.display = 'block';
+                            log('> Reconnected: plan awaiting approval');
+                        }
+                    }
+                    break;
+                case 'vm_status': setVM(p.connected); break;
+                case 'task_created':
+                    setRunning(true);
+                    // Reset status bar styling from any previous failure
+                    const sbReset = document.getElementById('sb');
+                    sbReset.style.borderColor = '#333';
+                    sbReset.style.background = '#252540';
+                    document.getElementById('sb-state').style.color = '';
+                    log('> Task started');
+                    break;
+                case 'task_update':
+                    setRunning(true);
+                    const t = p.task;
+                    if (t) {
+                        const sb = document.getElementById('sb');
+                        sb.style.display = 'block';
+                        document.getElementById('sb-state').textContent = t.status || 'running';
+                        document.getElementById('sb-iter').textContent = t.iterations || 0;
+                        document.getElementById('sb-prs').textContent = t.prsMerged || 0;
+                        if (t.elapsedSeconds) {
+                            const m = Math.floor(t.elapsedSeconds/60), s = t.elapsedSeconds%60;
+                            document.getElementById('sb-time').textContent = m ? m+'m '+s+'s' : s+'s';
+                        }
+                    }
+                    if(p.task?.messages?.length) log(p.task.messages[p.task.messages.length-1].message);
+                    // 2.2: Render screenshots from task_update
+                    if(t && t.screenshot) {
+                        const img = document.createElement('img');
+                        img.src = 'data:image/png;base64,' + t.screenshot;
+                        img.style.maxWidth = '100%';
+                        img.style.borderRadius = '4px';
+                        img.style.marginTop = '4px';
+                        document.getElementById('log').appendChild(img);
+                        document.getElementById('log').scrollTop = document.getElementById('log').scrollHeight;
+                    }
+                    // 2.5: Handle planning and waiting_for_vm statuses
+                    if(t && (t.status === 'planning' || t.status === 'waiting_for_vm')) {
+                        log('> Status: ' + t.status);
+                    }
+                    break;
+                case 'task_complete':
+                    setRunning(false);
+                    // F34: Hide plan box on task complete
+                    document.getElementById('planBox').style.display = 'none';
+                    currentPlan = null;
+                    if(p.task.status === 'failed') {
+                        // Keep status bar visible with failure info
+                        const sb = document.getElementById('sb');
+                        sb.style.display = 'block';
+                        sb.style.borderColor = '#ff4757';
+                        sb.style.background = '#2a1520';
+                        document.getElementById('sb-state').textContent = 'FAILED';
+                        document.getElementById('sb-state').style.color = '#ff4757';
+                        logError('FAILED: ' + (p.task.result || p.task.status));
+                    } else {
+                        document.getElementById('sb').style.display = 'none';
+                        log('> Done: '+p.task.status);
+                    }
+                    if(p.task.result && p.task.status !== 'failed') log(p.task.result);
+                    break;
+                case 'task_cancelled':
+                    setRunning(false);
+                    document.getElementById('sb').style.display = 'none';
+                    // F33: Hide plan box on task cancelled
+                    document.getElementById('planBox').style.display = 'none';
+                    currentPlan = null;
+                    log('> Task cancelled');
+                    break;
+                case 'error': logError('ERROR: '+p.message); break;
+                case 'screenshot':
+                    // 2.1: Server sends { screenshot: base64 }, handle both formats
+                    if (p.screenshot) {
+                        const img = document.createElement('img');
+                        img.src = 'data:image/png;base64,' + p.screenshot;
+                        img.style.maxWidth = '100%';
+                        img.style.borderRadius = '4px';
+                        img.style.marginTop = '4px';
+                        document.getElementById('log').appendChild(img);
+                        document.getElementById('log').scrollTop = document.getElementById('log').scrollHeight;
+                    } else if (p.url) {
+                        const img = document.createElement('img');
+                        img.src = p.url;
+                        img.style.maxWidth = '100%';
+                        img.style.borderRadius = '4px';
+                        img.style.marginTop = '4px';
+                        document.getElementById('log').appendChild(img);
+                        document.getElementById('log').scrollTop = document.getElementById('log').scrollHeight;
+                    }
+                    if (p.filename) log('> Screenshot: ' + p.filename);
+                    break;
+                case 'plan_proposal':
+                    // H11: Show plan for user approval instead of auto-approving
+                    currentPlan = p.plan;
+                    document.getElementById('planContent').textContent = typeof p.plan === 'string' ? p.plan : JSON.stringify(p.plan, null, 2);
+                    document.getElementById('planBox').style.display = 'block';
+                    log('> Plan received — review and approve/reject');
+                    break;
+            }
+        }
+        function approvePlan() {
+            if (currentPlan) {
+                if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                ws.send(JSON.stringify({type:'approve_plan',payload:{plan:currentPlan}}));
+                log('> Plan approved');
+                document.getElementById('planBox').style.display = 'none';
+                currentPlan = null;
+            }
+        }
+        function rejectPlan() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+            const feedback = prompt('Rejection reason (optional):') || 'Rejected by user';
+            ws.send(JSON.stringify({type:'reject_plan',payload:{feedback:feedback}}));
+            log('> Plan rejected: ' + feedback);
+            document.getElementById('planBox').style.display = 'none';
+            currentPlan = null;
+        }
+        function setVM(on) {
+            document.getElementById('dot').classList.toggle('on', on);
+            document.getElementById('go').disabled = !on;
+        }
+        function setRunning(r) {
+            running = r;
+            document.getElementById('stop').style.display = r ? 'inline' : 'none';
+        }
+        function send() {
+            const v = document.getElementById('in').value.trim();
+            if (!v) return;
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+            const btn = document.getElementById('go');
+            if (btn.disabled) return;
+            btn.disabled = true;
+            setTimeout(() => { if (!running || document.getElementById('dot').classList.contains('on')) btn.disabled = false; }, 2000);
+            if (running) {
+                ws.send(JSON.stringify({type:'user_input',payload:{input:v}}));
+                log('You: '+v);
+            } else {
+                // 2.6: Include context if provided
+                const ctx = document.getElementById('ctx').value.trim();
+                const payload = {description:v,maxDurationMinutes:120};
+                if(ctx) payload.context = ctx;
+                ws.send(JSON.stringify({type:'new_task',payload:payload}));
+                document.getElementById('ctx').value = '';
+                log('Task: '+v);
+            }
+            document.getElementById('in').value = '';
+        }
+        function cancel() {
+            if(confirm('Stop?') && ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({type:'cancel_task',payload:{}}));
+        }
+        // H10: Escape HTML to prevent XSS
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+        function log(msg) {
+            const d = document.getElementById('log');
+            const t = new Date().toLocaleTimeString();
+            const row = document.createElement('div');
+            row.innerHTML = `<span class="t">${escapeHtml(t)}</span> ${escapeHtml(msg)}`;
+            d.appendChild(row);
+            // 2.7: Cap DOM log at 500 entries to prevent memory growth
+            while(d.childNodes.length > 500) d.removeChild(d.firstChild);
+            d.scrollTop = d.scrollHeight;
+        }
+        function logError(msg) {
+            const d = document.getElementById('log');
+            const t = new Date().toLocaleTimeString();
+            const row = document.createElement('div');
+            row.style.color = '#ff4757';
+            row.style.fontWeight = 'bold';
+            row.innerHTML = `<span class="t" style="color:#ff4757">${escapeHtml(t)}</span> ${escapeHtml(msg)}`;
+            d.appendChild(row);
+            while(d.childNodes.length > 500) d.removeChild(d.firstChild);
+            d.scrollTop = d.scrollHeight;
+        }
+        connect();
+    </script>
+</body>
+</html>
