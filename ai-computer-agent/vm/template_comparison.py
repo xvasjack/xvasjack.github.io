@@ -843,6 +843,126 @@ def compare_pptx_to_template(
         passed_checks += 1
 
     # ==========================================================================
+    # MARKET RESEARCH: CONTENT DEPTH + PATTERN MATCH SCORING
+    # ==========================================================================
+
+    if template.name == "Market Research Report":
+        total_checks += 1
+        # Content depth scoring based on research quality
+        all_text = " ".join(
+            (slide.get("all_text", "") or "").lower()
+            for slide in slides
+        )
+        
+        # Check for named regulations with years (policy depth)
+        import re as _re
+        regulation_pattern = r'\b(act|law|decree|regulation|ordinance|directive)\b.*?\b(19|20)\d{2}\b'
+        named_regulations = len(_re.findall(regulation_pattern, all_text))
+        
+        # Check for numeric data series (market depth)
+        number_pattern = r'\b\d+[\.,]?\d*\s*(%|billion|million|MW|GW|TWh|mtoe|bcm|USD|JPY|EUR)\b'
+        data_points = len(_re.findall(number_pattern, all_text, _re.IGNORECASE))
+        
+        # Check for named companies (competitor depth)
+        # Look for company indicators followed by proper nouns
+        company_indicators = ["co.", "corp", "ltd", "inc", "group", "holdings", "plc", "gmbh", "sa", "ag"]
+        named_companies = sum(1 for ind in company_indicators if ind in all_text)
+        
+        # Score content depth
+        depth_score = 0
+        depth_failures = []
+        
+        if named_regulations >= 3:
+            depth_score += 30
+        elif named_regulations >= 1:
+            depth_score += 15
+        else:
+            depth_failures.append(f"Policy depth: only {named_regulations} named regulations (need ≥3)")
+        
+        if data_points >= 15:
+            depth_score += 40
+        elif data_points >= 5:
+            depth_score += 20
+        else:
+            depth_failures.append(f"Market depth: only {data_points} quantified data points (need ≥15)")
+        
+        if named_companies >= 3:
+            depth_score += 30
+        elif named_companies >= 1:
+            depth_score += 15
+        else:
+            depth_failures.append(f"Competitor depth: only {named_companies} named companies (need ≥3)")
+        
+        if depth_score < 50:
+            discrepancies.append(Discrepancy(
+                severity=Severity.CRITICAL,
+                category="shallow_research_content",
+                location="Presentation-wide",
+                expected="Deep research: ≥3 named regulations, ≥15 data points, ≥3 named companies",
+                actual=f"Content depth score: {depth_score}/100. {'; '.join(depth_failures)}",
+                suggestion=(
+                    "Research content is too shallow. Fix the research pipeline: "
+                    "1) Add specific regulation names with years and decree numbers. "
+                    "2) Include quantified market data (market size in $, growth rates, capacity in MW/GW). "
+                    "3) Name specific competitor companies with revenue, market share, entry details. "
+                    "Each section needs 'so what' insights connecting data to client implications."
+                ),
+            ))
+        else:
+            passed_checks += 1
+        
+        # Check for insight quality (pattern match)
+        total_checks += 1
+        insight_keywords = [
+            "implication", "opportunity", "barrier", "recommend",
+            "should", "risk", "advantage", "critical", "timing",
+            "window", "first mover", "competitive edge"
+        ]
+        insight_count = sum(1 for kw in insight_keywords if kw in all_text)
+        
+        if insight_count < 5:
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH,
+                category="missing_strategic_insights",
+                location="Presentation-wide",
+                expected="Strategic insights with implications, recommendations, and timing",
+                actual=f"Only {insight_count}/12 insight indicators found",
+                suggestion=(
+                    "Add strategic insights to each section. Every data point needs a 'so what' — "
+                    "what does this mean for the client? Include timing windows, competitive advantages, "
+                    "and specific recommendations with evidence."
+                ),
+            ))
+        else:
+            passed_checks += 1
+        
+        # Check for chart/data visualization presence
+        total_checks += 1
+        chart_slides = sum(
+            1 for slide in slides
+            if any(kw in (slide.get("all_text", "") or "").lower()
+                   for kw in ["chart", "figure", "graph", "source:"])
+            or slide.get("has_chart", False)
+            or slide.get("chart_count", 0) > 0
+        )
+        
+        if chart_slides < 3:
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH,
+                category="insufficient_data_visualization",
+                location="Presentation-wide",
+                expected="At least 3 slides with charts/data visualizations",
+                actual=f"Only {chart_slides} slides appear to have charts",
+                suggestion=(
+                    "Market research needs data visualization. Add charts for: "
+                    "energy mix over time, market size growth, price comparisons, "
+                    "competitor market share. Use pptxgenjs addChart() with the pattern library."
+                ),
+            ))
+        else:
+            passed_checks += 1
+
+    # ==========================================================================
     # FORMATTING CHECKS (learned from reference template)
     # ==========================================================================
 
