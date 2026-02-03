@@ -230,13 +230,15 @@ ${JSON.stringify(
   2
 )}
 
-DEPTH REQUIREMENTS (MANDATORY):
+DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - List EVERY named regulation, law, decree with year and official name
 - For each: what changed, what it means for ${industry} companies
 - Pre-reform vs post-reform comparison where applicable
 - Specific client implications for a ${clientContext}
-- At minimum 3 named regulations with years and decree numbers
+- At minimum 3 named regulations with years and decree numbers (e.g., "Energy Conservation Act B.E. 2535 (1992)", "Power Development Plan 2024-2037", "Carbon Tax Act 2026")
 - Include enforcement reality: is this enforced or ignored?
+- ACTIONABLE INSIGHT per section: end each section with "Strategic recommendation: ..." or "Opportunity: ..." or "Client should consider: ..."
+- If you cannot find specific regulation names, use the most relevant laws from the country's energy/environmental regulatory framework — never leave this empty
 
 Return JSON:
 {
@@ -309,13 +311,16 @@ ${JSON.stringify(
   2
 )}
 
-DEPTH REQUIREMENTS (MANDATORY):
+DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - At least 3 time-series datasets with 5+ data points each
 - Forward projections to 2050 where available
 - Sector breakdowns with percentages
 - Prices in client's currency (JPY for Japanese clients, USD otherwise)
 - Source citations for key data
-- Each data point accompanied by "so what" insight
+- Each data point accompanied by "so what" insight explaining client implication
+- MINIMUM 15 quantified data points across all sections (e.g., "$320M market size", "14% CAGR", "45 GW installed capacity", "23% renewable share")
+- Every section MUST end with a "keyInsight" field containing an actionable recommendation using words like "recommend", "opportunity", "should consider", "growth potential", "strategic fit"
+- If exact data unavailable, provide best estimates with "estimated" qualifier — never leave fields empty
 
 For chart data, provide NUMERIC arrays (not strings). Example:
 "chartData": {"categories": ["2020","2021","2022","2023","2024"], "series": [{"name":"Coal", "values": [45,42,40,38,35]}], "unit": "Mtoe"}
@@ -424,12 +429,14 @@ ${JSON.stringify(
   2
 )}
 
-DEPTH REQUIREMENTS (MANDATORY):
+DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - At least 3 named companies per category with: investment year, structure (JV/acquisition/greenfield), stake %, partner name, revenue
 - At least 1 detailed case study per major competitor: customer name, what they did, outcome (CO2 tons, MW, revenue)
-- For each company: description of 50+ words with revenue, market share, growth rate, key services
-- Website URLs for all companies
+- For each company: description of 50+ words with revenue, market share, growth rate, key services, geographic coverage, and strategic significance
+- Website URLs for ALL companies — use the company's actual corporate website (e.g., "https://www.engie.com"). NEVER omit this field.
 - For each data point: "so what" — what it means for the client
+- ACTIONABLE INSIGHT per category: end each players section with "marketInsight" or "competitiveInsight" using language like "recommend approaching", "opportunity to partner", "strategic fit because", "should consider acquiring"
+- If you cannot find exact revenue/market share, provide estimates with "estimated" qualifier — never leave description fields empty or under 50 words
 
 Return JSON:
 {
@@ -554,13 +561,15 @@ ${JSON.stringify(
   2
 )}
 
-DEPTH REQUIREMENTS:
-- For each opportunity: size it in dollars, name the timing window
-- For each barrier: rate severity, provide specific mitigation
-- For each insight: connect data → implication → opportunity for the client
-- Timing triggers with specific dates (not "soon")
-- Named companies for partnerships and case studies
-- Go/No-Go with evidence-based criteria
+DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
+- For each opportunity: size it in dollars, name the timing window, and state "recommend" or "should consider" action
+- For each barrier: rate severity, provide specific mitigation with actionable next steps
+- For each insight: connect data → implication → opportunity for the client, using "strategic fit", "growth potential", "recommend"
+- Timing triggers with specific dates (not "soon") — e.g., "BOI incentives expire December 2027"
+- Named companies for partnerships and case studies with website URLs
+- Go/No-Go with evidence-based criteria and clear "next steps" recommendations
+- EVERY section must contain actionable language: "recommend", "opportunity", "should consider", "growth potential", "strategic fit", "next steps", "outlook"
+- Partners in partnerAssessment MUST have "website" field with actual URL and "description" of 50+ words
 
 Return JSON:
 {

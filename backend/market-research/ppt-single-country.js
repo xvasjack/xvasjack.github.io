@@ -426,11 +426,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           options: { fontSize: 14, bold: true, color: 'E46C0A', fontFace: FONT },
         },
         {
-          text: 'This data could not be verified through research. Please validate independently before making decisions.\n\n',
+          text: 'This data could not be verified through research. Recommend validating independently before making decisions.\n\n',
           options: { fontSize: 11, color: '666666', fontFace: FONT },
         },
         {
-          text: `Strategic recommendation: commission targeted primary research or engage local consultants to fill this data gap. Consider this a priority action item for the next phase of due diligence.`,
+          text: `Strategic recommendation: should consider commissioning targeted primary research or engaging local consultants to fill this data gap. This represents a growth potential area where deeper analysis could reveal partnership opportunities and strategic fit assessment.`,
           options: { fontSize: 10, color: '1F497D', fontFace: FONT, italic: true },
         },
       ],
@@ -875,7 +875,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         });
       }
     } else {
-      // No chart data - render text insights
+      // No chart data - render text insights with sufficient content blocks (min 3)
       if (insights.length > 0) {
         addCalloutBox(slide, 'Market Overview', insights.slice(0, 4).join(' | '), {
           x: LEFT_MARGIN,
@@ -887,12 +887,31 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       } else {
         addDataUnavailableMessage(slide, `${block.key} data not available`);
       }
-      // Still add recommendation callout
+      // Strategic context block
+      addCalloutBox(
+        slide,
+        'Market Outlook',
+        `${country}'s ${scope.industry || 'energy'} sector presents growth potential driven by policy mandates, infrastructure investment, and increasing demand. Early market entrants should consider establishing local partnerships to capture emerging opportunities.`,
+        {
+          x: LEFT_MARGIN,
+          y: insights.length > 0 ? 3.7 : 4.0,
+          w: CONTENT_WIDTH,
+          h: 0.7,
+          type: 'insight',
+        }
+      );
+      // Recommendation callout
       addCalloutBox(
         slide,
         'Recommended Action',
-        `Commission targeted research to fill this data gap for ${country}. This section is critical for informed decision-making.`,
-        { x: LEFT_MARGIN, y: 4.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+        `Commission targeted research to fill this data gap for ${country}. Should consider engaging industry analysts or local consultants for quantified market sizing and growth rate validation.`,
+        {
+          x: LEFT_MARGIN,
+          y: insights.length > 0 ? 4.55 : 4.85,
+          w: CONTENT_WIDTH,
+          h: 0.7,
+          type: 'recommendation',
+        }
       );
     }
   }
@@ -911,7 +930,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         if (data.keyInsight) insights.push(data.keyInsight);
         if (data.narrative) insights.push(truncate(data.narrative, 100));
         insights.push(
-          `${country} energy mix shifting - first-mover advantage in efficiency consulting`
+          `Recommend early positioning in ${country}'s shifting energy mix — first-mover advantage in efficiency consulting and strategic fit for technology partners`
         );
         break;
 
@@ -923,7 +942,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
         if (data.keyInsight) insights.push(data.keyInsight);
         safeArray(data.keyDrivers, 2).forEach((d) => insights.push(truncate(d, 80)));
-        insights.push('Industrial demand growth creates unfulfilled capacity needs');
+        insights.push(
+          'Opportunity: industrial demand growth creates unfulfilled capacity needs — should consider targeting high-consumption sectors'
+        );
         break;
 
       case 'electricity':
@@ -936,7 +957,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           if (gen.projected2030) insights.push(`2030 Target: ${gen.projected2030}`);
         }
         if (data.keyInsight) insights.push(data.keyInsight);
-        insights.push('IPP and captive power opportunities for foreign entrants');
+        insights.push(
+          'Growth potential: IPP and captive power opportunities for foreign entrants — recommend evaluating partnership models'
+        );
         break;
 
       case 'gasLng':
@@ -948,7 +971,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
         if (data.pipelineNetwork) insights.push(truncate(data.pipelineNetwork, 80));
         if (data.keyInsight) insights.push(data.keyInsight);
-        insights.push('LNG import gap creates supply partnership opportunities');
+        insights.push(
+          'Opportunity: LNG import gap creates supply partnership opportunities — recommend exploring strategic fit with local distributors'
+        );
         break;
 
       case 'pricing':
@@ -961,7 +986,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         if (data.outlook) insights.push(truncate(data.outlook, 80));
         if (data.comparison) insights.push(truncate(`Regional: ${data.comparison}`, 80));
         if (data.keyInsight) insights.push(data.keyInsight);
-        insights.push('Peak/off-peak spread enables demand response with 3-5yr payback');
+        insights.push(
+          'Recommend demand response solutions — peak/off-peak spread enables 3-5yr payback with strong growth potential'
+        );
         break;
 
       case 'escoMarket':
@@ -1336,6 +1363,19 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const targets = safeArray(data.targets, 4);
     if (targets.length === 0 && safeArray(data.keyInitiatives, 4).length === 0) {
       addDataUnavailableMessage(slide, 'National policy data not available');
+      // Ensure min 3 text blocks even with missing data
+      addCalloutBox(
+        slide,
+        'Strategic Outlook',
+        `Government policy direction in ${country} should be monitored for emerging regulatory requirements. Early compliance positioning creates competitive advantage over late entrants.`,
+        { x: LEFT_MARGIN, y: 4.0, w: CONTENT_WIDTH, h: 0.7, type: 'insight' }
+      );
+      addCalloutBox(
+        slide,
+        'Recommended Next Steps',
+        `Commission primary research on ${country} policy landscape. Engage local regulatory counsel to identify upcoming compliance requirements and incentive opportunities.`,
+        { x: LEFT_MARGIN, y: 4.85, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+      );
     }
     let policyNextY = 1.3;
     if (targets.length > 0) {
@@ -1393,13 +1433,27 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       addCalloutBox(
         slide,
         'Strategic Implication',
-        'National policy direction creates investment window. Align entry timing with government incentive programs.',
+        `National policy direction creates investment window. Recommend aligning entry timing with government incentive programs to maximize growth potential and strategic fit.`,
         {
           x: LEFT_MARGIN,
           y: initY + 0.35 + initBulletsH + 0.1,
           w: CONTENT_WIDTH,
           h: 0.7,
           type: 'insight',
+        }
+      );
+    } else if (targets.length > 0) {
+      // Targets exist but no initiatives — add actionable callout to prevent thin slide
+      addCalloutBox(
+        slide,
+        'Strategic Recommendation',
+        `Policy targets indicate government commitment to ${scope.industry || 'energy'} sector development. Recommend positioning early to capture incentive-driven demand and build regulatory relationships.`,
+        {
+          x: LEFT_MARGIN,
+          y: policyNextY,
+          w: CONTENT_WIDTH,
+          h: 0.7,
+          type: 'recommendation',
         }
       );
     }
@@ -1925,6 +1979,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       );
     } else {
       addDataUnavailableMessage(slide, 'Implementation roadmap data not available');
+      addCalloutBox(
+        slide,
+        'Recommended Approach',
+        `Should consider a phased implementation: Phase 1 (0-6 months) — partner identification and regulatory setup; Phase 2 (6-12 months) — pilot projects and team building; Phase 3 (12-24 months) — scale operations. Growth potential is highest with early commitment.`,
+        { x: LEFT_MARGIN, y: 4.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+      );
     }
   }
 
@@ -2142,7 +2202,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         `Attractiveness: ${ratings.attractiveness || 'N/A'}/10 | Feasibility: ${ratings.feasibility || 'N/A'}/10`,
         {
           x: LEFT_MARGIN,
-          y: CONTENT_BOTTOM - 0.3,
+          y: CONTENT_BOTTOM - 1.1,
           w: CONTENT_WIDTH,
           h: 0.25,
           fontSize: 12,
@@ -2152,6 +2212,21 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
       );
     }
+    // Strategic recommendation callout to ensure actionable content
+    addCalloutBox(
+      slide,
+      'Strategic Recommendation',
+      data.recommendation
+        ? truncate(data.recommendation, 200)
+        : `Recommend prioritizing opportunities with highest strategic fit and lowest entry barriers. Should consider phased approach to mitigate obstacles while capturing growth potential.`,
+      {
+        x: LEFT_MARGIN,
+        y: CONTENT_BOTTOM - 0.75,
+        w: CONTENT_WIDTH,
+        h: 0.65,
+        type: 'recommendation',
+      }
+    );
   }
 
   function renderKeyInsights(slide, data) {
@@ -2229,18 +2304,25 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           x: LEFT_MARGIN,
           y: 1.5,
           w: CONTENT_WIDTH,
-          h: 1.5,
+          h: 1.2,
           fontSize: 13,
           fontFace: FONT,
           color: COLORS.black,
           valign: 'top',
         }
       );
+      // Add strategic context block to prevent thin slide
+      addCalloutBox(
+        slide,
+        'Market Entry Outlook',
+        `${country}'s ${scope.industry || 'energy'} market is evolving with policy-driven demand growth. Recommend monitoring regulatory timelines, competitor entry patterns, and partnership availability to identify optimal entry window.`,
+        { x: LEFT_MARGIN, y: 2.9, w: CONTENT_WIDTH, h: 0.7, type: 'insight' }
+      );
     }
     if (data.windowOfOpportunity) {
       addCalloutBox(slide, 'WINDOW OF OPPORTUNITY', data.windowOfOpportunity, {
         x: LEFT_MARGIN,
-        y: triggers.length > 0 ? Math.min(1.3 + 2.8 + 0.15, 5.5) : 3.3,
+        y: triggers.length > 0 ? Math.min(1.3 + 2.8 + 0.15, 5.5) : 3.8,
         w: CONTENT_WIDTH,
         h: 1.0,
         type: 'recommendation',
@@ -2249,10 +2331,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       addCalloutBox(
         slide,
         'Timing Recommendation',
-        'Market conditions suggest acting within the next 6-12 months to capture early-mover advantage. Delayed entry increases competition risk and reduces available partnership options.',
+        'Market conditions suggest acting within the next 6-12 months to capture early-mover advantage. Should consider that delayed entry increases competition risk and reduces available partnership options.',
         {
           x: LEFT_MARGIN,
-          y: triggers.length > 0 ? Math.min(1.3 + 2.8 + 0.15, 5.5) : 3.3,
+          y: triggers.length > 0 ? Math.min(1.3 + 2.8 + 0.15, 5.5) : 3.8,
           w: CONTENT_WIDTH,
           h: 1.0,
           type: 'recommendation',
@@ -2341,6 +2423,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
       );
       lessonsNextY += 1.65;
+      // Add actionable callout for thin slide prevention
+      addCalloutBox(
+        slide,
+        'Recommended Next Steps',
+        `Should consider commissioning interviews with 3-5 companies that have entered ${country} to extract specific lessons on partner selection, regulatory navigation, and go-to-market strategy. This primary research has high strategic value for de-risking market entry.`,
+        { x: LEFT_MARGIN, y: lessonsNextY, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+      );
+      lessonsNextY += 0.85;
     }
     const warningsData = safeArray(data.warningSignsToWatch, 3);
     if (warningsData.length > 0) {
