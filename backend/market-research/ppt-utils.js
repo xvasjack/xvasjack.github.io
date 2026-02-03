@@ -1,5 +1,13 @@
 const { callDeepSeek } = require('./ai-clients');
 
+// Load template patterns for smart layout engine
+let templatePatterns = {};
+try {
+  templatePatterns = require('./template-patterns.json');
+} catch (e) {
+  console.warn('[ppt-utils] template-patterns.json not found, using defaults');
+}
+
 // ============ PPT GENERATION ============
 
 // Helper: truncate text to fit slides - end at sentence or phrase boundary
@@ -1142,6 +1150,464 @@ function safeTableHeight(rowCount, opts = {}) {
   return Math.max(0.6, Math.min(rowH * rowCount + 0.2, maxH));
 }
 
+// ============ SMART LAYOUT PATTERN FUNCTIONS ============
+
+/**
+ * Pattern selection: classify data type and choose the best layout pattern
+ */
+function choosePattern(dataType, data) {
+  switch (dataType) {
+    case 'time_series_multi_insight':
+      return 'chart_insight_panels';
+    case 'time_series_annotated':
+      return 'chart_annotations';
+    case 'two_related_series':
+      return 'chart_callout_dual';
+    case 'time_series_simple':
+      return 'chart_callout_simple';
+    case 'composition_breakdown':
+      return 'chart_callout_dual';
+    case 'company_comparison':
+      return 'data_table_highlighted';
+    case 'regulation_list':
+      return 'data_table_reference';
+    case 'policy_analysis':
+      return 'text_policy_block';
+    case 'case_study':
+      return 'case_study_rows';
+    case 'financial_performance':
+      return 'dual_chart_financial';
+    case 'opportunities_vs_barriers':
+      return 'matrix_2x2';
+    case 'section_summary':
+      return 'label_row_table';
+    case 'definitions':
+      return 'glossary_table';
+    default:
+      // Auto-detect from data shape
+      if (data?.chartData?.series && data.chartData.series.length >= 2) return 'chart_callout_dual';
+      if (data?.chartData?.series) return 'chart_callout_simple';
+      if (data?.chartData?.values) return 'chart_callout_simple';
+      if (data?.players || data?.companies) return 'data_table_highlighted';
+      if (data?.rows || data?.acts || data?.regulations) return 'data_table_reference';
+      return 'label_row_table';
+  }
+}
+
+/**
+ * Add dual charts side by side (Pattern 8A, 10)
+ */
+function addDualChart(slide, leftData, rightData, patternDef, opts = {}) {
+  const p = patternDef || templatePatterns.patterns?.chart_callout_dual?.elements || {};
+  const leftPos = p.chartLeft || { x: 0.4, y: 1.3, w: 6.0, h: 4.2 };
+  const rightPos = p.chartRight || { x: 6.8, y: 1.3, w: 6.1, h: 4.2 };
+  const style = templatePatterns.style || {};
+  const colors = style.colors || {};
+
+  // Left chart
+  if (leftData.chartData) {
+    const chartType = leftData.type || (leftData.chartData.series ? 'bar' : 'pie');
+    if (chartType === 'bar' && leftData.chartData.series) {
+      addStackedBarChart(slide, leftData.title || '', leftData.chartData, leftPos);
+    } else if (chartType === 'line' && leftData.chartData.series) {
+      addLineChart(slide, leftData.title || '', leftData.chartData, leftPos);
+    } else if (leftData.chartData.values) {
+      addPieChart(slide, leftData.title || '', leftData.chartData, leftPos);
+    }
+  }
+
+  // Right chart
+  if (rightData.chartData) {
+    const chartType = rightData.type || (rightData.chartData.series ? 'bar' : 'pie');
+    if (chartType === 'bar' && rightData.chartData.series) {
+      addStackedBarChart(slide, rightData.title || '', rightData.chartData, rightPos);
+    } else if (chartType === 'line' && rightData.chartData.series) {
+      addLineChart(slide, rightData.title || '', rightData.chartData, rightPos);
+    } else if (rightData.chartData.values) {
+      addPieChart(slide, rightData.title || '', rightData.chartData, rightPos);
+    }
+  }
+
+  // Bottom callout
+  if (opts.callout) {
+    const calloutPos = p.quoteCallout || { x: 0.4, y: 5.7, w: 12.5, h: 0.8 };
+    addCalloutBox(slide, opts.callout.title || 'Key Insight', opts.callout.text || '', {
+      x: calloutPos.x,
+      y: calloutPos.y,
+      w: calloutPos.w,
+      h: calloutPos.h,
+      type: 'insight',
+    });
+  }
+}
+
+/**
+ * Add chevron process flow (Pattern 9A, 9B)
+ */
+function addChevronFlow(slide, phases, patternDef, opts = {}) {
+  const p = patternDef || templatePatterns.patterns?.case_study_rows?.elements?.chevronFlow || {};
+  const baseX = p.x || 2.5;
+  const baseY = opts.y || p.y || 4.1;
+  const totalW = p.w || 10.4;
+  const h = p.h || 1.1;
+  const maxPhases = p.maxPhases || 5;
+  const colors = p.chevronColors || ['2E5090', '3A6BA5', '4D80BA', '6095CF', '73AAE4'];
+  const spacing = p.spacing || 0.05;
+
+  const count = Math.min(phases.length, maxPhases);
+  const chevronW = (totalW - spacing * (count - 1)) / count;
+
+  phases.slice(0, count).forEach((phase, idx) => {
+    const x = baseX + idx * (chevronW + spacing);
+    slide.addShape('chevron', {
+      x,
+      y: baseY,
+      w: chevronW,
+      h,
+      fill: { color: colors[idx % colors.length] },
+    });
+    slide.addText(
+      truncate(typeof phase === 'string' ? phase : phase.name || phase.label || '', 25),
+      {
+        x: x + 0.1,
+        y: baseY + 0.1,
+        w: chevronW - 0.2,
+        h: h - 0.2,
+        fontSize: p.fontSize || 8,
+        color: p.textColor || 'FFFFFF',
+        fontFace: 'Century Gothic',
+        align: 'center',
+        valign: 'middle',
+      }
+    );
+  });
+}
+
+/**
+ * Add insight panels with blue bar (Pattern 7A, 7B)
+ */
+function addInsightPanelsFromPattern(slide, insights, patternDef) {
+  const p = patternDef || templatePatterns.patterns?.chart_insight_panels?.elements || {};
+  const panelDefs = p.insightPanels || [
+    { x: 8.5, y: 1.3, w: 4.4, h: 1.5 },
+    { x: 8.5, y: 3.0, w: 4.4, h: 1.5 },
+    { x: 8.5, y: 4.7, w: 4.4, h: 1.5 },
+  ];
+  const style = templatePatterns.style || {};
+  const barColor = style.colors?.insightBarColor || '2E5090';
+
+  insights.slice(0, panelDefs.length).forEach((insight, idx) => {
+    const def = panelDefs[idx];
+    // Blue vertical bar
+    slide.addShape('rect', {
+      x: def.x,
+      y: def.y,
+      w: 0.08,
+      h: def.h,
+      fill: { color: barColor },
+    });
+    // Panel background
+    slide.addShape('rect', {
+      x: def.x + 0.12,
+      y: def.y,
+      w: def.w - 0.12,
+      h: def.h,
+      fill: { color: 'F5F5F5' },
+      line: { color: 'E0E0E0', width: 0.5 },
+    });
+    // Title
+    const title =
+      typeof insight === 'string' ? `Insight ${idx + 1}` : insight.title || `Insight ${idx + 1}`;
+    slide.addText(title, {
+      x: def.x + 0.2,
+      y: def.y + 0.05,
+      w: def.w - 0.3,
+      h: 0.35,
+      fontSize: 10,
+      bold: true,
+      color: '1B2A4A',
+      fontFace: 'Century Gothic',
+    });
+    // Body
+    const body = typeof insight === 'string' ? insight : insight.text || insight.body || '';
+    slide.addText(truncate(body, 200), {
+      x: def.x + 0.2,
+      y: def.y + 0.4,
+      w: def.w - 0.3,
+      h: def.h - 0.5,
+      fontSize: 9,
+      color: '333333',
+      fontFace: 'Century Gothic',
+      valign: 'top',
+    });
+  });
+}
+
+/**
+ * Add callout overlay on chart (Pattern 7A, 8B)
+ */
+function addCalloutOverlay(slide, text, pos) {
+  const p = pos || templatePatterns.patterns?.chart_insight_panels?.elements?.calloutOverlay || {};
+  const x = p.x || 1.0;
+  const y = p.y || 4.8;
+  const w = p.w || 5.5;
+  const h = p.h || 1.2;
+
+  slide.addShape('rect', {
+    x,
+    y,
+    w,
+    h,
+    fill: { color: p.fill || 'F5F5F5' },
+    line: { color: p.border || 'CCCCCC', width: p.borderWidth || 1 },
+    rectRadius: p.cornerRadius || 0.05,
+    shadow: { type: 'outer', blur: 3, opacity: 0.15, offset: 1.5, color: '000000' },
+  });
+  slide.addText(truncate(text, 300), {
+    x: x + 0.1,
+    y: y + 0.1,
+    w: w - 0.2,
+    h: h - 0.2,
+    fontSize: 9,
+    color: '333333',
+    fontFace: 'Century Gothic',
+    valign: 'middle',
+  });
+}
+
+/**
+ * Add 2x2 matrix (Pattern 3)
+ */
+function addMatrix(slide, quadrants, patternDef) {
+  const p = patternDef || templatePatterns.patterns?.matrix_2x2?.elements || {};
+  const quads = p.quadrants || [
+    { x: 0.4, y: 1.3, w: 6.0, h: 2.5, fill: 'D6E4F0' },
+    { x: 6.6, y: 1.3, w: 6.3, h: 2.5, fill: 'F2F2F2' },
+    { x: 0.4, y: 4.0, w: 6.0, h: 2.5, fill: 'F2F2F2' },
+    { x: 6.6, y: 4.0, w: 6.3, h: 2.5, fill: 'D6E4F0' },
+  ];
+
+  quadrants.slice(0, 4).forEach((q, idx) => {
+    const qDef = quads[idx];
+    // Background
+    slide.addShape('rect', {
+      x: qDef.x,
+      y: qDef.y,
+      w: qDef.w,
+      h: qDef.h,
+      fill: { color: qDef.fill || 'F2F2F2' },
+      line: { color: 'CCCCCC', width: 0.5 },
+    });
+    // Label
+    slide.addText(q.label || q.title || '', {
+      x: qDef.x + 0.15,
+      y: qDef.y + 0.1,
+      w: qDef.w - 0.3,
+      h: 0.35,
+      fontSize: 14,
+      bold: true,
+      color: '1F497D',
+      fontFace: 'Century Gothic',
+    });
+    // Items
+    const items = Array.isArray(q.items) ? q.items : typeof q.text === 'string' ? [q.text] : [];
+    const itemText = items
+      .slice(0, 5)
+      .map((i) => `• ${truncate(typeof i === 'string' ? i : i.text || '', 80)}`)
+      .join('\n');
+    slide.addText(itemText, {
+      x: qDef.x + 0.15,
+      y: qDef.y + 0.5,
+      w: qDef.w - 0.3,
+      h: qDef.h - 0.6,
+      fontSize: 10,
+      color: '333333',
+      fontFace: 'Century Gothic',
+      valign: 'top',
+    });
+  });
+}
+
+/**
+ * Add case study rows with optional chevron (Pattern 9)
+ */
+function addCaseStudyRows(slide, rows, chevrons, patternDef) {
+  const p = patternDef || templatePatterns.patterns?.case_study_rows?.elements || {};
+  const rowDefs = p.rows || [
+    { label: 'Business Overview', y: 1.3, h: 0.8 },
+    { label: 'Context', y: 2.2, h: 1.0 },
+    { label: 'Objective', y: 3.3, h: 0.6 },
+    { label: 'Scope', y: 4.0, h: 1.3 },
+    { label: 'Outcome', y: 5.4, h: 0.8 },
+  ];
+  const labelStyle = p.labelStyle || { fill: '1F497D', color: 'FFFFFF', fontSize: 10, bold: true };
+  const contentStyle = p.contentStyle || { fill: 'F2F2F2', color: '333333', fontSize: 9 };
+  const labelX = 0.4;
+  const labelW = 2.0;
+  const contentX = 2.5;
+  const contentW = 10.4;
+
+  rows.slice(0, rowDefs.length).forEach((row, idx) => {
+    const def = rowDefs[idx];
+    const label = row.label || def.label;
+    const content = row.content || row.text || row.value || '';
+
+    // Label cell
+    slide.addShape('rect', {
+      x: labelX,
+      y: def.y,
+      w: labelW,
+      h: def.h,
+      fill: { color: labelStyle.fill },
+    });
+    slide.addText(label, {
+      x: labelX + 0.1,
+      y: def.y,
+      w: labelW - 0.2,
+      h: def.h,
+      fontSize: labelStyle.fontSize,
+      bold: labelStyle.bold,
+      color: labelStyle.color,
+      fontFace: 'Century Gothic',
+      valign: 'middle',
+    });
+
+    // Content cell
+    slide.addShape('rect', {
+      x: contentX,
+      y: def.y,
+      w: contentW,
+      h: def.h,
+      fill: { color: contentStyle.fill },
+      line: { color: 'CCCCCC', width: 0.5 },
+    });
+    slide.addText(truncate(content, 500), {
+      x: contentX + 0.1,
+      y: def.y + 0.05,
+      w: contentW - 0.2,
+      h: def.h - 0.1,
+      fontSize: contentStyle.fontSize,
+      color: contentStyle.color,
+      fontFace: 'Century Gothic',
+      valign: 'top',
+    });
+  });
+
+  // Add chevron flow if provided
+  if (chevrons && Array.isArray(chevrons) && chevrons.length > 0) {
+    addChevronFlow(slide, chevrons, p.chevronFlow);
+  }
+}
+
+/**
+ * Add financial dual charts (Pattern 10)
+ */
+function addFinancialCharts(slide, incomeData, balanceData, patternDef) {
+  const p = patternDef || templatePatterns.patterns?.dual_chart_financial?.elements || {};
+
+  // Use addDualChart for the charts
+  addDualChart(
+    slide,
+    { chartData: incomeData.chartData, title: incomeData.title || 'Income Statement', type: 'bar' },
+    { chartData: balanceData.chartData, title: balanceData.title || 'Balance Sheet', type: 'bar' },
+    p
+  );
+
+  // Add metrics row below charts
+  const metricsRow = p.metricsRow || { y: 5.5, h: 0.6 };
+  const metrics = incomeData.metrics || [];
+  const metricW = metricsRow.metricBoxWidth || 3.0;
+
+  metrics.slice(0, 4).forEach((metric, idx) => {
+    const x = 0.4 + idx * (metricW + 0.3);
+    slide.addText(metric.value || '', {
+      x,
+      y: metricsRow.y,
+      w: metricW,
+      h: 0.3,
+      fontSize: metricsRow.metricValueFontSize || 16,
+      bold: true,
+      color: metricsRow.metricValueColor || '1F497D',
+      fontFace: 'Century Gothic',
+      align: 'center',
+    });
+    slide.addText(metric.label || '', {
+      x,
+      y: metricsRow.y + 0.3,
+      w: metricW,
+      h: 0.25,
+      fontSize: metricsRow.metricLabelFontSize || 9,
+      color: metricsRow.metricLabelColor || '666666',
+      fontFace: 'Century Gothic',
+      align: 'center',
+    });
+  });
+}
+
+/**
+ * Add colored border table (Pattern 5B)
+ */
+function addColoredBorderTable(slide, data, color, patternDef) {
+  const p = patternDef || templatePatterns.patterns?.data_table_highlighted?.elements?.table || {};
+  const rows = data.rows || [];
+  const headers = data.headers || [];
+  const borderColor = color || p.leftBorderColor || 'E46C0A';
+
+  if (rows.length === 0) return;
+
+  // Build table rows
+  const tableRows = [];
+
+  // Header row
+  if (headers.length > 0) {
+    tableRows.push(
+      headers.map((h) => ({
+        text: h,
+        options: {
+          bold: true,
+          color: p.headerColor || 'FFFFFF',
+          fill: { color: p.headerFill || '1F497D' },
+          fontSize: p.headerFontSize || 10,
+          fontFace: 'Century Gothic',
+        },
+      }))
+    );
+  }
+
+  // Data rows with colored left border
+  rows.forEach((row, rowIdx) => {
+    const cells = Array.isArray(row) ? row : Object.values(row);
+    tableRows.push(
+      cells.map((cell, colIdx) => ({
+        text: truncate(String(cell || ''), 100),
+        options: {
+          fontSize: p.bodyFontSize || 9,
+          color: p.bodyColor || '333333',
+          fontFace: 'Century Gothic',
+          border:
+            colIdx === 0
+              ? [
+                  { pt: 0.5, color: p.borderColor || 'CCCCCC' },
+                  { pt: 0.5, color: p.borderColor || 'CCCCCC' },
+                  { pt: 0.5, color: p.borderColor || 'CCCCCC' },
+                  { pt: p.leftBorderWidth || 3, color: borderColor },
+                ]
+              : { pt: 0.5, color: p.borderColor || 'CCCCCC' },
+        },
+      }))
+    );
+  });
+
+  slide.addTable(tableRows, {
+    x: p.x || 0.4,
+    y: p.y || 1.3,
+    w: p.w || 12.5,
+    h: Math.min(p.maxH || 5.0, tableRows.length * 0.4 + 0.2),
+    fontFace: 'Century Gothic',
+    valign: 'top',
+  });
+}
+
 module.exports = {
   truncate,
   truncateSubtitle,
@@ -1167,4 +1633,14 @@ module.exports = {
   addPieChart,
   buildStoryNarrative,
   safeTableHeight,
+  choosePattern,
+  addDualChart,
+  addChevronFlow,
+  addInsightPanelsFromPattern,
+  addCalloutOverlay,
+  addMatrix,
+  addCaseStudyRows,
+  addFinancialCharts,
+  addColoredBorderTable,
+  templatePatterns,
 };
