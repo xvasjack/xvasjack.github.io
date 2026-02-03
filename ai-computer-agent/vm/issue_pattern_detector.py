@@ -109,6 +109,81 @@ def categorize_issue(issue_text: str) -> str:
     return IssueCategory.UNKNOWN
 
 
+def _hash_issues(issues: List[str]) -> str:
+    """Hash issue list for oscillation comparison.
+    Same algorithm as feedback_loop._get_issue_key — reimplemented to avoid circular import."""
+    import hashlib
+    normalized = [i.strip().lower() for i in issues if i]
+    return hashlib.sha256(";".join(sorted(normalized)).encode()).hexdigest()
+
+
+def detect_oscillation(history: List[Dict[str, Any]], window: int = 6) -> Optional[Dict[str, str]]:
+    """
+    Detect oscillation patterns in recent history.
+
+    Method 1: Issue hash cycling (A→B→A pattern)
+    Method 2: Git diff hash repeat (same diff applied twice)
+    Method 3: Category sequence alternation (formatting→content→formatting)
+
+    Returns dict with 'message' and 'recommendation' if oscillation detected, else None.
+    """
+    if len(history) < 3:
+        return None
+
+    recent = history[-window:]
+
+    # Method 1: Issue hash cycling
+    hashes = []
+    for it in recent:
+        issues = it.get("issues", it.get("specificFailures", []))
+        hashes.append(_hash_issues(issues))
+
+    for n in range(2, len(hashes)):
+        if hashes[n] == hashes[n - 2] and hashes[n] != hashes[n - 1]:
+            return {
+                "method": "issue_hash_cycle",
+                "message": f"Issues are cycling: iteration {n-1} and {n+1} have identical issues but {n} is different (A→B→A pattern).",
+                "recommendation": "The fix is flip-flopping. Address BOTH sides simultaneously — the fix for A is causing B and vice versa.",
+            }
+
+    # Method 2: Diff hash repeat
+    diff_hashes = {}
+    for idx, it in enumerate(recent):
+        diff = it.get("git_diff", "")
+        if diff:
+            import hashlib
+            dh = hashlib.sha256(diff.encode()).hexdigest()
+            if dh in diff_hashes:
+                return {
+                    "method": "diff_repeat",
+                    "message": f"Same code diff applied at iterations {diff_hashes[dh]+1} and {idx+1}.",
+                    "recommendation": "Identical fix was applied twice — it clearly doesn't work. Try a fundamentally different approach.",
+                }
+            diff_hashes[dh] = idx
+
+    # Method 3: Category sequence alternation
+    cat_sequences = []
+    for it in recent:
+        issues = it.get("issues", it.get("specificFailures", []))
+        cats = Counter(categorize_issue(str(i)) for i in issues if i)
+        dominant = cats.most_common(1)[0][0] if cats else "unknown"
+        cat_sequences.append(dominant)
+
+    if len(cat_sequences) >= 4:
+        # Check for A,B,A,B pattern
+        distinct = set(cat_sequences[-4:])
+        if len(distinct) == 2:
+            seq = cat_sequences[-4:]
+            if seq[0] == seq[2] and seq[1] == seq[3] and seq[0] != seq[1]:
+                return {
+                    "method": "category_alternation",
+                    "message": f"Issue categories are alternating: {seq[0]}→{seq[1]}→{seq[0]}→{seq[1]}.",
+                    "recommendation": f"Fixing {seq[0]} issues creates {seq[1]} issues and vice versa. Find the shared root cause.",
+                }
+
+    return None
+
+
 def detect_patterns(history: List[Dict[str, Any]], window: int = 5) -> Dict[str, Any]:
     """
     Analyze recent history to detect recurring patterns.
@@ -306,6 +381,14 @@ def generate_fix_context(history: List[Dict[str, Any]], window: int = 3) -> str:
         context_parts.append("\n## Recommendations (FOLLOW THESE)")
         for r in pattern_analysis["recommendations"]:
             context_parts.append(f"- {r}")
+
+    # Oscillation detection
+    oscillation = detect_oscillation(history)
+    if oscillation:
+        context_parts.append("\n\n## ⚠ OSCILLATION DETECTED ⚠")
+        context_parts.append(f"{oscillation['message']}")
+        context_parts.append(f"REQUIRED ACTION: {oscillation['recommendation']}")
+        context_parts.append("The fix agent MUST address BOTH sides of the oscillation simultaneously.")
 
     # Priority instruction
     context_parts.append("\n## Priority Instruction")

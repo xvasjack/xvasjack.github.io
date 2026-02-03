@@ -81,49 +81,49 @@ class ComparisonResult:
             "summary": self.summary,
         }
 
+    def prioritize_and_limit(self, max_issues=5):
+        """Return self with issues sorted by severity, top N marked as 'fix now'.
+        All issues remain visible for context but only top N should be fixed this round."""
+        if len(self.discrepancies) <= max_issues:
+            return self
+        severity_order = {Severity.CRITICAL: 0, Severity.HIGH: 1, Severity.MEDIUM: 2, Severity.LOW: 3}
+        self.discrepancies = sorted(self.discrepancies, key=lambda d: severity_order.get(d.severity, 4))
+        self._fix_now_count = max_issues
+        return self
+
     def generate_claude_code_prompt(self) -> str:
         """Generate a prompt for Claude Code to fix the issues"""
         if not self.discrepancies:
             return "No issues found. Output matches template."
 
-        # Group by severity
-        critical = [d for d in self.discrepancies if d.severity == Severity.CRITICAL]
-        high = [d for d in self.discrepancies if d.severity == Severity.HIGH]
-        medium = [d for d in self.discrepancies if d.severity == Severity.MEDIUM]
+        fix_now_count = getattr(self, '_fix_now_count', None)
+        total_count = len(self.discrepancies)
 
         prompt = f"""Fix the following issues in the output generation code:
 
 Output file: {self.output_file}
 Template: {self.template_name}
-Total issues: {len(self.discrepancies)} ({self.critical_count} critical, {self.high_count} high)
+Total issues: {total_count} ({self.critical_count} critical, {self.high_count} high)
 
 """
 
-        if critical:
-            prompt += "## CRITICAL ISSUES (must fix)\n\n"
-            for d in critical:
-                prompt += f"- **{d.category}** at {d.location}\n"
-                prompt += f"  - Expected: {d.expected}\n"
-                prompt += f"  - Actual: {d.actual}\n"
-                prompt += f"  - Fix: {d.suggestion}\n\n"
+        if fix_now_count and fix_now_count < total_count:
+            prompt += f"FOCUS: Fix ONLY the top {fix_now_count} issues below (marked [FIX NOW]).\n"
+            prompt += f"The remaining {total_count - fix_now_count} issues are shown for context only — do NOT fix them this round.\n"
+            prompt += "Keep your diff as SMALL as possible.\n\n"
 
-        if high:
-            prompt += "## HIGH PRIORITY ISSUES\n\n"
-            for d in high:
-                prompt += f"- **{d.category}** at {d.location}\n"
-                prompt += f"  - Expected: {d.expected}\n"
-                prompt += f"  - Actual: {d.actual}\n"
-                prompt += f"  - Fix: {d.suggestion}\n\n"
-
-        if medium:
-            prompt += "## MEDIUM PRIORITY ISSUES\n\n"
-            for d in medium[:5]:  # Limit to top 5
-                prompt += f"- {d.category} at {d.location}: {d.suggestion}\n"
+        for idx, d in enumerate(self.discrepancies):
+            tag = "[FIX NOW]" if fix_now_count is None or idx < fix_now_count else "[CONTEXT ONLY]"
+            sev = d.severity.value.upper()
+            prompt += f"- {tag} [{sev}] **{d.category}** at {d.location}\n"
+            prompt += f"  - Expected: {d.expected}\n"
+            prompt += f"  - Actual: {d.actual}\n"
+            prompt += f"  - Fix: {d.suggestion}\n\n"
 
         prompt += """
 Please:
 1. Identify the root cause in the code
-2. Fix all critical and high priority issues
+2. Fix the issues marked [FIX NOW]
 3. Commit and push changes
 """
 
