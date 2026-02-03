@@ -246,54 +246,40 @@ def analyze_with_claude_cli(
     # Get service-specific criteria
     specific_criteria = get_service_specific_criteria(service_name)
 
-    prompt = f"""You are a senior quality analyst comparing PowerPoint automation output against a reference template for a {service_name} service.
+    prompt = f"""You are a senior quality analyst evaluating PowerPoint output for a {service_name} service.
 
-TEMPLATE SLIDES (reference — what output SHOULD look like):
+TEMPLATE SLIDES (reference):
 {template_list}
 
-OUTPUT SLIDES (actual generated output to evaluate):
+OUTPUT SLIDES (to evaluate):
 {output_list}
 
 {specific_criteria}
 
-ANALYSIS INSTRUCTIONS:
-1. Read EVERY image file using the Read tool — both template and output
-2. Analyze the WHOLE PRESENTATION as a cohesive narrative (not just slide-by-slide)
-3. Compare output against template on these dimensions:
-   - Content depth and thoroughness (are insights as deep as template?)
-   - Data quality and specificity (named companies, specific metrics, not generic)
-   - Narrative flow (logical progression from intro to conclusion)
-   - Visual formatting (fonts, colors, spacing, layout consistency)
-   - Completeness (all expected sections present?)
-4. If output has FEWER slides than template, explain what's missing and why it matters
-5. If output has MORE slides than template, check if extras add value or are filler
+Read EVERY image file using the Read tool.
 
-Return ONLY a JSON object (no markdown, no explanation):
+EVALUATION:
+1. Does output match template CONTENT DEPTH? (named regulations, quantified data, named companies)
+2. Does output match template LAYOUT PATTERNS? (chart+insight panels, case study rows, data tables)
+3. Is formatting professional? (no overflow, no overlap, consistent fonts/colors)
+
+Return ONLY JSON:
 {{
     "passed": true/false,
-    "summary": "2-3 sentence assessment covering content quality, depth, and formatting — not just layout",
+    "summary": "One sentence: PASS or FAIL with the primary reason",
     "issues": [
         {{
             "slide_number": 1,
             "severity": "critical/major/minor",
-            "category": "content_depth/insights/story_flow/formatting/layout/data/missing/extra",
-            "description": "Specific difference observed (be precise, cite what you see)",
-            "suggestion": "Exact actionable fix needed"
+            "category": "content_depth/pattern_match/formatting",
+            "description": "What's wrong",
+            "suggestion": "How to fix"
         }}
     ]
 }}
 
-PASS CRITERIA:
-- passed=true ONLY if: no critical issues AND content depth matches template AND insights are specific/actionable
-- For market-research: shallow/generic analysis = FAIL even if layout is perfect
-- Empty issues[] ONLY if output is indistinguishable from template quality
-
-FAIL ON:
-- Corrupted/unreadable images: return {{"passed": false, "summary": "Could not analyze: image corrupted/unreadable", "issues": []}}
-- Missing critical sections that exist in template
-- Generic/shallow content where template has specific/deep analysis
-
-If output genuinely matches template quality, return {{"passed": true, "summary": "Output matches template quality — [brief reason]", "issues": []}}
+PASS = no critical issues AND content depth matches template.
+FAIL = any critical issue OR shallow/generic content.
 """
 
     try:
@@ -627,53 +613,25 @@ def analyze_without_template(
         )
 
     client = anthropic.Anthropic()
+    prompt = f"""Evaluate these PowerPoint slides from a {service_name} service for professional quality.
 
-    prompt = f"""You are analyzing PowerPoint slides from a {service_name} automation output.
-No reference template is available — evaluate standalone quality.
+PASS criteria: Content is deep (specific data, named entities, quantified metrics), layout is clean, no critical issues.
+FAIL criteria: Shallow/generic content, broken layout, empty slides, truncated text.
 
-ANALYZE EACH SLIDE FOR:
-
-1. CONTENT COMPLETENESS:
-   - Are all expected data fields populated (not empty/placeholder)?
-   - Are sections visibly incomplete (e.g., "TODO", "N/A" placeholders, blank areas)?
-   - Does each slide have a clear purpose and sufficient content?
-
-2. DATA INTEGRITY:
-   - Text truncation: content cut off mid-sentence or overflowing boundaries?
-   - Broken tables: misaligned columns, missing rows, garbled data?
-   - Numbers/lists: readable, properly formatted, not corrupted?
-
-3. LAYOUT & VISUAL QUALITY:
-   - Consistent formatting across all slides (fonts, colors, spacing)?
-   - Professional appearance: no debug text, artifacts, or rendering errors?
-   - Readable: text not too small, sufficient contrast, proper alignment?
-
-4. PRESENTATION STRUCTURE:
-   - Logical flow from first slide to last (title -> content -> conclusion)?
-   - Each slide is standalone and understandable?
-   - No duplicate or redundant slides?
-
-ALSO ANALYZE THE WHOLE PRESENTATION:
-- Does it tell a coherent story?
-- Is the overall quality suitable for professional use?
-
-Return ONLY JSON (no markdown, no explanation):
+Return ONLY JSON:
 {{
     "passed": true/false,
-    "summary": "2-3 sentence assessment: is this output usable and professional?",
+    "summary": "One sentence verdict",
     "issues": [
         {{
             "slide_number": 1,
             "severity": "critical/major/minor",
-            "category": "content/layout/formatting/structure/data/missing",
-            "description": "Specific problem observed",
-            "suggestion": "How to fix it"
+            "category": "content_depth/formatting/layout",
+            "description": "What's wrong",
+            "suggestion": "How to fix"
         }}
     ]
 }}
-
-PASS CRITERIA: No critical issues AND content is complete enough for professional use.
-FAIL CRITERIA: Any critical issue (empty slides, corrupted data, truncated content) OR major content gaps.
 """
 
     content = [{"type": "text", "text": prompt}]
