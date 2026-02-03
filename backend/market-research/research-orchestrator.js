@@ -1,4 +1,9 @@
-const { callDeepSeekChat, callDeepSeek, callKimiDeepResearch } = require('./ai-clients');
+const {
+  callDeepSeekChat,
+  callDeepSeek,
+  callKimiDeepResearch,
+  callGemini,
+} = require('./ai-clients');
 const { generateResearchFramework } = require('./research-framework');
 const {
   policyResearchAgent,
@@ -160,6 +165,558 @@ async function fillResearchGaps(gaps, country, industry) {
     `    Collected ${additionalData.gapResearch.length} gap fills, ${additionalData.verificationResearch.length} verifications`
   );
   return additionalData;
+}
+
+// ============ PER-SECTION GEMINI SYNTHESIS ============
+
+/**
+ * Parse JSON from AI response, stripping markdown fences
+ */
+function parseJsonResponse(text) {
+  let jsonStr = text.trim();
+  if (jsonStr.startsWith('```')) {
+    jsonStr = jsonStr
+      .replace(/```json?\n?/g, '')
+      .replace(/```/g, '')
+      .trim();
+  }
+  return JSON.parse(jsonStr);
+}
+
+/**
+ * Synthesize with fallback chain: Gemini → DeepSeek → raw text
+ */
+async function synthesizeWithFallback(prompt, options = {}) {
+  const { maxTokens = 8192, jsonMode = true } = options;
+
+  try {
+    const result = await callGemini(prompt, { maxTokens, jsonMode, temperature: 0.2 });
+    return parseJsonResponse(result);
+  } catch (geminiErr) {
+    console.warn(`  [Synthesis] Gemini failed: ${geminiErr.message}, trying DeepSeek...`);
+    try {
+      const result = await callDeepSeekChat(prompt, '', maxTokens);
+      return parseJsonResponse(result.content);
+    } catch (dsErr) {
+      console.error(`  [Synthesis] DeepSeek also failed: ${dsErr.message}`);
+      return null;
+    }
+  }
+}
+
+/**
+ * Synthesize POLICY section with depth requirements
+ */
+async function synthesizePolicy(researchData, country, industry, clientContext) {
+  console.log(`  [Synthesis] Policy section for ${country}...`);
+
+  const prompt = `You are synthesizing policy and regulatory research for ${country}'s ${industry} market.
+Client context: ${clientContext}
+
+RESEARCH DATA:
+${JSON.stringify(
+  Object.fromEntries(
+    Object.entries(researchData).filter(
+      ([k]) =>
+        k.includes('policy') ||
+        k.includes('regulation') ||
+        k.includes('law') ||
+        k.includes('investment') ||
+        k.includes('incentive') ||
+        k.includes('govern')
+    )
+  ),
+  null,
+  2
+)}
+
+DEPTH REQUIREMENTS (MANDATORY):
+- List EVERY named regulation, law, decree with year and official name
+- For each: what changed, what it means for ${industry} companies
+- Pre-reform vs post-reform comparison where applicable
+- Specific client implications for a ${clientContext}
+- At minimum 3 named regulations with years and decree numbers
+- Include enforcement reality: is this enforced or ignored?
+
+Return JSON:
+{
+  "foundationalActs": {
+    "slideTitle": "${country} - ${industry} Foundational Acts",
+    "subtitle": "Key insight in max 15 words",
+    "acts": [
+      {"name": "Official Act Name", "year": "YYYY", "requirements": "Specific requirements", "penalties": "Specific penalties", "enforcement": "Enforcement reality"}
+    ],
+    "keyMessage": "One sentence insight connecting regulations to client opportunity"
+  },
+  "nationalPolicy": {
+    "slideTitle": "${country} - National ${industry} Policy",
+    "policyDirection": "Current government stance with evidence",
+    "targets": [
+      {"metric": "Named target", "target": "Specific number", "deadline": "Year", "status": "Current status"}
+    ],
+    "keyInitiatives": ["Named initiative with budget/timeline"]
+  },
+  "investmentRestrictions": {
+    "slideTitle": "${country} - Foreign Investment Rules",
+    "ownershipLimits": {"general": "X%", "promoted": "X%", "exceptions": "Specific exceptions"},
+    "incentives": [
+      {"name": "Named incentive program", "benefit": "Specific benefit with numbers", "eligibility": "Who qualifies"}
+    ],
+    "riskLevel": "low/medium/high",
+    "riskJustification": "Specific reasoning with evidence"
+  }
+}
+
+Return ONLY valid JSON.`;
+
+  const result = await synthesizeWithFallback(prompt);
+  return (
+    result || {
+      foundationalActs: { acts: [] },
+      nationalPolicy: { targets: [] },
+      investmentRestrictions: {},
+    }
+  );
+}
+
+/**
+ * Synthesize MARKET section with depth requirements
+ */
+async function synthesizeMarket(researchData, country, industry, clientContext) {
+  console.log(`  [Synthesis] Market section for ${country}...`);
+
+  const prompt = `You are synthesizing market data research for ${country}'s ${industry} market.
+Client context: ${clientContext}
+
+RESEARCH DATA:
+${JSON.stringify(
+  Object.fromEntries(
+    Object.entries(researchData).filter(
+      ([k]) =>
+        k.includes('market') ||
+        k.includes('energy') ||
+        k.includes('demand') ||
+        k.includes('supply') ||
+        k.includes('price') ||
+        k.includes('electric') ||
+        k.includes('gas') ||
+        k.includes('lng') ||
+        k.includes('esco') ||
+        k.includes('size')
+    )
+  ),
+  null,
+  2
+)}
+
+DEPTH REQUIREMENTS (MANDATORY):
+- At least 3 time-series datasets with 5+ data points each
+- Forward projections to 2050 where available
+- Sector breakdowns with percentages
+- Prices in client's currency (JPY for Japanese clients, USD otherwise)
+- Source citations for key data
+- Each data point accompanied by "so what" insight
+
+For chart data, provide NUMERIC arrays (not strings). Example:
+"chartData": {"categories": ["2020","2021","2022","2023","2024"], "series": [{"name":"Coal", "values": [45,42,40,38,35]}], "unit": "Mtoe"}
+
+Return JSON with these sections:
+{
+  "tpes": {
+    "slideTitle": "${country} - Total Primary Energy Supply",
+    "subtitle": "Key insight",
+    "chartData": {"categories": [...years...], "series": [{"name":"Source", "values": [...numbers...]}], "unit": "Mtoe"},
+    "keyInsight": "What this means for client",
+    "dataType": "time_series_multi_insight"
+  },
+  "finalDemand": {
+    "slideTitle": "${country} - Final Energy Demand",
+    "subtitle": "Key insight",
+    "chartData": {"categories": [...], "series": [...], "unit": "%"},
+    "growthRate": "X% CAGR with years",
+    "keyDrivers": ["Named driver with evidence"],
+    "keyInsight": "Client implication",
+    "dataType": "time_series_multi_insight"
+  },
+  "electricity": {
+    "slideTitle": "${country} - Electricity & Power",
+    "subtitle": "Key insight",
+    "totalCapacity": "XX GW",
+    "chartData": {"categories": [...sources...], "values": [...%...], "unit": "%"},
+    "demandGrowth": "X% with year range",
+    "keyTrend": "Trend with evidence",
+    "keyInsight": "Client implication",
+    "dataType": "composition_breakdown"
+  },
+  "gasLng": {
+    "slideTitle": "${country} - Gas & LNG Market",
+    "subtitle": "Key insight",
+    "chartData": {"categories": [...years...], "series": [...], "unit": "bcm"},
+    "lngTerminals": [{"name": "Named terminal", "capacity": "X mtpa", "utilization": "X%"}],
+    "pipelineNetwork": "Description",
+    "keyInsight": "Client implication",
+    "dataType": "time_series_annotated"
+  },
+  "pricing": {
+    "slideTitle": "${country} - Energy Pricing",
+    "subtitle": "Key insight",
+    "chartData": {"categories": [...years...], "series": [...], "unit": "USD/kWh"},
+    "comparison": "vs regional peers with specific numbers",
+    "outlook": "Projected trend with reasoning",
+    "keyInsight": "Client implication",
+    "dataType": "two_related_series"
+  },
+  "escoMarket": {
+    "slideTitle": "${country} - ESCO/${industry} Market",
+    "subtitle": "Key insight",
+    "marketSize": "$XXX million with year",
+    "growthRate": "X% CAGR with period",
+    "segments": [{"name": "Named segment", "size": "$XXM", "share": "X%"}],
+    "chartData": {"categories": [...], "values": [...], "unit": "%"},
+    "keyDrivers": "Named drivers",
+    "keyInsight": "Client implication",
+    "dataType": "composition_breakdown"
+  }
+}
+
+Return ONLY valid JSON.`;
+
+  const result = await synthesizeWithFallback(prompt, { maxTokens: 12288 });
+  return (
+    result || {
+      tpes: {},
+      finalDemand: {},
+      electricity: {},
+      gasLng: {},
+      pricing: {},
+      escoMarket: {},
+    }
+  );
+}
+
+/**
+ * Synthesize COMPETITORS section with depth requirements
+ */
+async function synthesizeCompetitors(researchData, country, industry, clientContext) {
+  console.log(`  [Synthesis] Competitors section for ${country}...`);
+
+  const prompt = `You are synthesizing competitive intelligence for ${country}'s ${industry} market.
+Client context: ${clientContext}
+
+RESEARCH DATA:
+${JSON.stringify(
+  Object.fromEntries(
+    Object.entries(researchData).filter(
+      ([k]) =>
+        k.includes('compet') ||
+        k.includes('player') ||
+        k.includes('company') ||
+        k.includes('japanese') ||
+        k.includes('foreign') ||
+        k.includes('local') ||
+        k.includes('case') ||
+        k.includes('m&a') ||
+        k.includes('merger') ||
+        k.includes('acqui')
+    )
+  ),
+  null,
+  2
+)}
+
+DEPTH REQUIREMENTS (MANDATORY):
+- At least 3 named companies per category with: investment year, structure (JV/acquisition/greenfield), stake %, partner name, revenue
+- At least 1 detailed case study per major competitor: customer name, what they did, outcome (CO2 tons, MW, revenue)
+- For each company: description of 50+ words with revenue, market share, growth rate, key services
+- Website URLs for all companies
+- For each data point: "so what" — what it means for the client
+
+Return JSON:
+{
+  "japanesePlayers": {
+    "slideTitle": "${country} - Japanese ${industry} Companies",
+    "subtitle": "Key insight",
+    "players": [
+      {
+        "name": "Company Name", "website": "https://...",
+        "presence": "JV/Direct/etc", "projects": "Named projects",
+        "revenue": "$X million", "assessment": "Strong/Weak",
+        "description": "50+ words with specific metrics, entry strategy, project details, market position"
+      }
+    ],
+    "marketInsight": "Overall assessment of Japanese presence",
+    "dataType": "company_comparison"
+  },
+  "localMajor": {
+    "slideTitle": "${country} - Major Local Players",
+    "subtitle": "Key insight",
+    "players": [
+      {
+        "name": "Company", "website": "https://...", "type": "State-owned/Private",
+        "revenue": "$X million", "marketShare": "X%",
+        "strengths": "Specific", "weaknesses": "Specific",
+        "description": "50+ words with specific metrics"
+      }
+    ],
+    "concentration": "Market concentration with evidence",
+    "dataType": "company_comparison"
+  },
+  "foreignPlayers": {
+    "slideTitle": "${country} - Foreign ${industry} Companies",
+    "subtitle": "Key insight",
+    "players": [
+      {
+        "name": "Company", "website": "https://...", "origin": "Country",
+        "entryYear": "YYYY", "mode": "JV/Direct",
+        "projects": "Named projects", "success": "High/Medium/Low",
+        "description": "50+ words with specific metrics"
+      }
+    ],
+    "competitiveInsight": "How foreign players compete",
+    "dataType": "company_comparison"
+  },
+  "caseStudy": {
+    "slideTitle": "${country} - Market Entry Case Study",
+    "subtitle": "Lessons from the best example",
+    "company": "Named company",
+    "entryYear": "YYYY", "entryMode": "Specific mode",
+    "investment": "$X million", "outcome": "Specific results with numbers",
+    "keyLessons": ["Specific lesson 1", "Lesson 2", "Lesson 3"],
+    "applicability": "How this applies to client specifically",
+    "dataType": "case_study"
+  },
+  "maActivity": {
+    "slideTitle": "${country} - M&A Activity",
+    "subtitle": "Key insight",
+    "recentDeals": [{"year": "YYYY", "buyer": "Name", "target": "Name", "value": "$X million", "rationale": "Why"}],
+    "potentialTargets": [{"name": "Name", "website": "https://...", "estimatedValue": "$X million", "rationale": "Why attractive", "timing": "Availability"}],
+    "valuationMultiples": "Typical multiples with evidence",
+    "dataType": "regulation_list"
+  }
+}
+
+Return ONLY valid JSON.`;
+
+  const result = await synthesizeWithFallback(prompt, { maxTokens: 12288 });
+  return (
+    result || {
+      japanesePlayers: { players: [] },
+      localMajor: { players: [] },
+      foreignPlayers: { players: [] },
+      caseStudy: {},
+      maActivity: {},
+    }
+  );
+}
+
+/**
+ * Synthesize SUMMARY section with depth requirements
+ */
+async function synthesizeSummary(
+  researchData,
+  policy,
+  market,
+  competitors,
+  country,
+  industry,
+  clientContext
+) {
+  console.log(`  [Synthesis] Summary & recommendations for ${country}...`);
+
+  const prompt = `You are creating the strategic summary and recommendations for ${country}'s ${industry} market.
+Client context: ${clientContext}
+
+SYNTHESIZED SECTIONS (already processed):
+Policy: ${JSON.stringify(policy, null, 2)}
+Market: ${JSON.stringify(market, null, 2)}
+Competitors: ${JSON.stringify(competitors, null, 2)}
+
+ADDITIONAL RESEARCH DATA:
+${JSON.stringify(
+  Object.fromEntries(
+    Object.entries(researchData).filter(
+      ([k]) =>
+        k.includes('insight') ||
+        k.includes('summary') ||
+        k.includes('strateg') ||
+        k.includes('timing') ||
+        k.includes('lesson') ||
+        k.includes('opportunity') ||
+        k.includes('risk') ||
+        k.includes('entry') ||
+        k.includes('partner') ||
+        k.includes('segment') ||
+        k.includes('implement') ||
+        k.includes('econ')
+    )
+  ),
+  null,
+  2
+)}
+
+DEPTH REQUIREMENTS:
+- For each opportunity: size it in dollars, name the timing window
+- For each barrier: rate severity, provide specific mitigation
+- For each insight: connect data → implication → opportunity for the client
+- Timing triggers with specific dates (not "soon")
+- Named companies for partnerships and case studies
+- Go/No-Go with evidence-based criteria
+
+Return JSON:
+{
+  "depth": {
+    "escoEconomics": {
+      "slideTitle": "${country} - Deal Economics",
+      "subtitle": "Key insight",
+      "typicalDealSize": {"min": "$XM", "max": "$YM", "average": "$ZM"},
+      "contractTerms": {"duration": "X years", "savingsSplit": "Client X% / Provider Y%", "guaranteeStructure": "Type"},
+      "financials": {"paybackPeriod": "X years", "irr": "X-Y%", "marginProfile": "X% gross margin"},
+      "financingOptions": ["Named option 1", "Named option 2"],
+      "keyInsight": "Investment thesis"
+    },
+    "partnerAssessment": {
+      "slideTitle": "${country} - Partner Assessment",
+      "subtitle": "Key insight",
+      "partners": [
+        {"name": "Company", "website": "https://...", "type": "Type", "revenue": "$XM", "partnershipFit": 4, "acquisitionFit": 3, "estimatedValuation": "$X-YM", "description": "50+ words"}
+      ],
+      "recommendedPartner": "Top pick with reasoning"
+    },
+    "entryStrategy": {
+      "slideTitle": "${country} - Entry Strategy Options",
+      "subtitle": "Key insight",
+      "options": [
+        {"mode": "Joint Venture", "timeline": "X months", "investment": "$XM", "controlLevel": "X%", "pros": ["Pro 1"], "cons": ["Con 1"], "riskLevel": "Low/Medium/High"},
+        {"mode": "Acquisition", "timeline": "X months", "investment": "$XM", "controlLevel": "Full", "pros": ["Pro 1"], "cons": ["Con 1"], "riskLevel": "Medium"},
+        {"mode": "Greenfield", "timeline": "X months", "investment": "$XM", "controlLevel": "Full", "pros": ["Pro 1"], "cons": ["Con 1"], "riskLevel": "High"}
+      ],
+      "recommendation": "Recommended with specific reasoning",
+      "harveyBalls": {"criteria": ["Speed", "Investment", "Risk", "Control", "Local Knowledge"], "jv": [3,4,3,2,5], "acquisition": [4,2,3,5,4], "greenfield": [1,3,4,5,1]}
+    },
+    "implementation": {
+      "slideTitle": "${country} - Implementation Roadmap",
+      "subtitle": "Phased approach",
+      "phases": [
+        {"name": "Phase 1: Setup (Months 0-6)", "activities": ["Activity 1","Activity 2","Activity 3"], "milestones": ["Milestone 1"], "investment": "$XM"},
+        {"name": "Phase 2: Launch (Months 6-12)", "activities": ["Activity 1","Activity 2"], "milestones": ["Milestone 1"], "investment": "$XM"},
+        {"name": "Phase 3: Scale (Months 12-24)", "activities": ["Activity 1","Activity 2"], "milestones": ["Milestone 1"], "investment": "$XM"}
+      ],
+      "totalInvestment": "$XM over 24 months",
+      "breakeven": "Month X"
+    },
+    "targetSegments": {
+      "slideTitle": "${country} - Target Customer Segments",
+      "subtitle": "Key insight",
+      "segments": [{"name": "Segment", "size": "X units", "energyIntensity": "High/Med/Low", "decisionMaker": "Title", "priority": 5}],
+      "topTargets": [{"company": "Name", "website": "https://...", "industry": "Sector", "energySpend": "$XM/yr", "location": "Region"}],
+      "goToMarketApproach": "Specific approach"
+    }
+  },
+  "summary": {
+    "timingIntelligence": {
+      "slideTitle": "${country} - Why Now?",
+      "subtitle": "Time-sensitive factors",
+      "triggers": [{"trigger": "Named trigger with date", "impact": "Specific impact", "action": "Specific action with deadline"}],
+      "windowOfOpportunity": "Why 2025-2026 is optimal, specifically"
+    },
+    "lessonsLearned": {
+      "slideTitle": "${country} - Lessons from Market",
+      "subtitle": "What killed previous entrants",
+      "failures": [{"company": "Named company", "year": "YYYY", "reason": "Specific reason", "lesson": "What to do differently"}],
+      "successFactors": ["What successful entrants did right - specific"],
+      "warningSignsToWatch": ["Named warning sign"]
+    },
+    "opportunities": [{"opportunity": "Named opportunity", "size": "$XM", "timing": "Why now", "action": "What to do"}],
+    "obstacles": [{"obstacle": "Named barrier", "severity": "High/Med/Low", "mitigation": "How to address"}],
+    "ratings": {"attractiveness": 7, "attractivenessRationale": "Multi-factor with evidence", "feasibility": 6, "feasibilityRationale": "Multi-factor with evidence"},
+    "keyInsights": [{"title": "Non-obvious headline", "data": "Specific evidence", "pattern": "Causal mechanism", "implication": "Strategic response"}],
+    "recommendation": "Clear recommendation with first step",
+    "goNoGo": {
+      "criteria": [{"criterion": "Named criterion", "met": true, "evidence": "Specific evidence"}],
+      "overallVerdict": "GO/NO-GO/CONDITIONAL GO",
+      "conditions": ["Specific condition if conditional"]
+    }
+  }
+}
+
+Return ONLY valid JSON.`;
+
+  const result = await synthesizeWithFallback(prompt, { maxTokens: 16384 });
+  return (
+    result || {
+      depth: {},
+      summary: { opportunities: [], obstacles: [], ratings: {}, keyInsights: [] },
+    }
+  );
+}
+
+/**
+ * Validate content depth before allowing PPT generation
+ * Returns { valid: boolean, failures: string[], scores: {} }
+ */
+function validateContentDepth(synthesis) {
+  const failures = [];
+  const scores = { policy: 0, market: 0, competitors: 0, overall: 0 };
+
+  // Policy check: ≥3 named regulations with years
+  const policy = synthesis.policy || {};
+  const acts = (policy.foundationalActs?.acts || []).filter((a) => a.name && a.year);
+  const targets = policy.nationalPolicy?.targets || [];
+  if (acts.length >= 3) scores.policy += 40;
+  else if (acts.length >= 1) scores.policy += 20;
+  else failures.push(`Policy: only ${acts.length} named regulations (need ≥3)`);
+  if (targets.length >= 2) scores.policy += 30;
+  if (policy.investmentRestrictions?.incentives?.length >= 1) scores.policy += 30;
+
+  // Market check: ≥3 data series with ≥5 points
+  const market = synthesis.market || {};
+  let seriesCount = 0;
+  for (const section of ['tpes', 'finalDemand', 'electricity', 'gasLng', 'pricing', 'escoMarket']) {
+    const chartData = market[section]?.chartData;
+    if (chartData) {
+      if (chartData.series && Array.isArray(chartData.series)) {
+        const validSeries = chartData.series.filter(
+          (s) => Array.isArray(s.values) && s.values.length >= 3
+        );
+        seriesCount += validSeries.length;
+      } else if (
+        chartData.values &&
+        Array.isArray(chartData.values) &&
+        chartData.values.length >= 3
+      ) {
+        seriesCount++;
+      }
+    }
+  }
+  if (seriesCount >= 3) scores.market = 70;
+  else if (seriesCount >= 1) scores.market = 40;
+  else failures.push(`Market: only ${seriesCount} valid data series (need ≥3)`);
+  if (market.escoMarket?.marketSize) scores.market += 30;
+
+  // Competitors check: ≥3 companies with details
+  const competitors = synthesis.competitors || {};
+  let totalCompanies = 0;
+  for (const section of ['japanesePlayers', 'localMajor', 'foreignPlayers']) {
+    const players = competitors[section]?.players || [];
+    totalCompanies += players.filter((p) => p.name && (p.revenue || p.description)).length;
+  }
+  if (totalCompanies >= 5) scores.competitors = 100;
+  else if (totalCompanies >= 3) scores.competitors = 70;
+  else if (totalCompanies >= 1) scores.competitors = 40;
+  else failures.push(`Competitors: only ${totalCompanies} detailed companies (need ≥3)`);
+
+  scores.overall = Math.round((scores.policy + scores.market + scores.competitors) / 3);
+
+  const valid = failures.length === 0 || scores.overall >= 50;
+
+  console.log(
+    `  [Validation] Policy: ${scores.policy}/100 | Market: ${scores.market}/100 | Competitors: ${scores.competitors}/100 | Overall: ${scores.overall}/100`
+  );
+  if (failures.length > 0) {
+    console.log(`  [Validation] Failures: ${failures.join('; ')}`);
+  }
+
+  return { valid, failures, scores };
 }
 
 // Step 3: Re-synthesize with additional data
@@ -347,454 +904,138 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     }
   }
 
-  // Synthesize research into structured output using DeepSeek
-  // Expanded structure for 15+ slides matching Escort template
-  console.log(`  [Synthesizing ${country} data for deep-dive report...]`);
+  // ============ PER-SECTION GEMINI SYNTHESIS ============
+  console.log(`  [Synthesizing ${country} data per-section with Gemini...]`);
 
-  const synthesisPrompt = `You are a senior strategy consultant at YCP creating a comprehensive market analysis for ${country}'s ${industry} market. Your client is a ${clientContext}.
+  // Run policy, market, and competitor synthesis in parallel
+  const [policySynthesis, marketSynthesis, competitorsSynthesis] = await Promise.all([
+    synthesizePolicy(researchData, country, industry, clientContext),
+    synthesizeMarket(researchData, country, industry, clientContext),
+    synthesizeCompetitors(researchData, country, industry, clientContext),
+  ]);
 
-CRITICAL REQUIREMENTS:
-1. DEPTH over breadth - specific numbers, names, dates for every claim
-2. CHART DATA - USE the structuredData.chartData from research when available. Do NOT fabricate chart numbers.
-3. SLIDE-READY - each section maps to a specific slide
-4. STORY FLOW - each slide must answer the reader's question and set up the next
-5. DATA QUALITY - if research has dataQuality:"estimated", note this in the insight. Never present estimates as verified facts.
+  // Summary synthesis depends on the above sections
+  const summaryResult = await synthesizeSummary(
+    researchData,
+    policySynthesis,
+    marketSynthesis,
+    competitorsSynthesis,
+    country,
+    industry,
+    clientContext
+  );
 
-=== NARRATIVE STRUCTURE ===
-Your presentation tells a story. Each section answers a question and raises the next:
+  // Assemble the full synthesis
+  let countryAnalysis = {
+    country,
+    policy: policySynthesis,
+    market: marketSynthesis,
+    competitors: competitorsSynthesis,
+    depth: summaryResult.depth || {},
+    summary: summaryResult.summary || {},
+    rawData: researchData,
+  };
 
-POLICY SECTION → "What rules govern this market?" → Leads reader to ask "How big is the opportunity?"
-MARKET SECTION → "How big is the opportunity?" → Leads to "Who's already chasing it?"
-COMPETITOR SECTION → "Who competes here?" → Leads to "Can I win? What's my opening?"
-DEPTH SECTION → "What's the economics/path?" → Leads to "Should I proceed?"
-SUMMARY SECTION → "GO or NO-GO?" → Clear recommendation
+  // Validate content depth BEFORE proceeding
+  const validation = validateContentDepth(countryAnalysis);
+  countryAnalysis.contentValidation = validation;
 
-Each slide's "subtitle" field should be the INSIGHT, not a description. Answer "So what?" in max 15 words.
+  // If validation fails badly, attempt re-research for weak sections
+  if (!validation.valid && validation.scores.overall < 30) {
+    console.log(
+      `  [CONTENT TOO THIN] Score ${validation.scores.overall}/100 — attempting re-research...`
+    );
 
-=== INSIGHTS INTELLIGENCE ===
-Use the failure cases, timing triggers, and competitive intelligence to:
-- Identify non-obvious opportunities (underserved segments, distressed competitors)
-- Provide timing urgency (incentive expirations, regulatory deadlines)
-- Warn about real risks (what killed previous entrants)
-- Distinguish enforced vs ignored regulations
-
-RESEARCH DATA:
-${JSON.stringify(researchData, null, 2)}
-
-Return a JSON object with this EXPANDED structure for 15+ slides:
-
-{
-  "country": "${country}",
-
-  // === SECTION 1: POLICY & REGULATIONS (3 slides) ===
-  "policy": {
-    "foundationalActs": {
-      "slideTitle": "${country} - Energy Foundational Acts",
-      "subtitle": "Key legislation governing energy sector",
-      "acts": [
-        {"name": "Energy Conservation Act", "year": "2022", "requirements": "Mandatory audits for >2MW facilities", "penalties": "Fine up to $50K", "enforcement": "23 auditors for 4,200 facilities"}
-      ],
-      "keyMessage": "One sentence insight"
-    },
-    "nationalPolicy": {
-      "slideTitle": "${country} - National Energy Policy",
-      "subtitle": "Government targets and roadmap",
-      "targets": [
-        {"metric": "Carbon Neutrality", "target": "2050", "status": "Legislated"},
-        {"metric": "Renewable Share", "target": "30%", "deadline": "2030"}
-      ],
-      "keyInitiatives": ["Initiative 1 with budget/timeline", "Initiative 2"],
-      "policyDirection": "Current government stance with evidence"
-    },
-    "investmentRestrictions": {
-      "slideTitle": "${country} - Foreign Investment Rules",
-      "subtitle": "Ownership limits and incentives",
-      "ownershipLimits": {"general": "49%", "promoted": "100% allowed", "exceptions": "BOI promoted projects"},
-      "incentives": [
-        {"name": "BOI Scheme", "benefit": "8-year tax holiday", "eligibility": "Energy efficiency projects >$1M"}
-      ],
-      "riskLevel": "low/medium/high",
-      "riskJustification": "Specific reasoning"
-    }
-  },
-
-  // === SECTION 2: MARKET DATA (6 slides with charts) ===
-  "market": {
-    "tpes": {
-      "slideTitle": "${country} - Total Primary Energy Supply",
-      "subtitle": "Energy supply mix by source",
-      "chartData": {
-        "categories": ["2020", "2021", "2022", "2023", "2024"],
-        "series": [
-          {"name": "Oil", "values": [45, 44, 43, 42, 41]},
-          {"name": "Natural Gas", "values": [25, 26, 27, 28, 30]},
-          {"name": "Coal", "values": [20, 19, 18, 17, 15]},
-          {"name": "Renewables", "values": [10, 11, 12, 13, 14]}
-        ],
-        "unit": "Mtoe"
-      },
-      "keyInsight": "One insight about TPES trend"
-    },
-    "finalDemand": {
-      "slideTitle": "${country} - Final Energy Demand",
-      "subtitle": "Consumption by sector",
-      "chartData": {
-        "categories": ["Industrial", "Transport", "Residential", "Commercial"],
-        "series": [
-          {"name": "2020", "values": [40, 30, 20, 10]},
-          {"name": "2024", "values": [42, 32, 18, 8]}
-        ],
-        "unit": "%"
-      },
-      "growthRate": "X% CAGR 2020-2024",
-      "keyDrivers": ["Driver 1", "Driver 2"]
-    },
-    "electricity": {
-      "slideTitle": "${country} - Electricity & Power",
-      "subtitle": "Generation capacity and mix",
-      "totalCapacity": "XX GW installed",
-      "chartData": {
-        "categories": ["Coal", "Gas", "Hydro", "Solar", "Wind", "Nuclear"],
-        "values": [40, 30, 15, 10, 3, 2],
-        "unit": "%"
-      },
-      "demandGrowth": "X% annually",
-      "keyTrend": "Insight about power sector"
-    },
-    "gasLng": {
-      "slideTitle": "${country} - Gas & LNG Market",
-      "subtitle": "Natural gas supply and infrastructure",
-      "chartData": {
-        "categories": ["2020", "2021", "2022", "2023", "2024"],
-        "series": [
-          {"name": "Domestic Production", "values": [30, 28, 26, 24, 22]},
-          {"name": "LNG Imports", "values": [20, 22, 24, 26, 28]}
-        ],
-        "unit": "bcm"
-      },
-      "lngTerminals": [{"name": "Terminal 1", "capacity": "X mtpa", "utilization": "Y%"}],
-      "pipelineNetwork": "Description of coverage"
-    },
-    "pricing": {
-      "slideTitle": "${country} - Energy Pricing",
-      "subtitle": "Tariff trends and outlook",
-      "chartData": {
-        "categories": ["2020", "2021", "2022", "2023", "2024"],
-        "series": [
-          {"name": "Industrial Electricity", "values": [0.08, 0.09, 0.10, 0.11, 0.12]},
-          {"name": "Natural Gas", "values": [8, 9, 10, 11, 12]}
-        ],
-        "units": ["USD/kWh", "USD/mmbtu"]
-      },
-      "comparison": "vs regional peers",
-      "outlook": "Expected trend"
-    },
-    "escoMarket": {
-      "slideTitle": "${country} - ESCO Market",
-      "subtitle": "Energy services market overview",
-      "marketSize": "$XXX million in 2024",
-      "growthRate": "X% CAGR",
-      "segments": [
-        {"name": "Industrial", "size": "$XXM", "share": "X%"},
-        {"name": "Commercial", "size": "$XXM", "share": "X%"}
-      ],
-      "keyDrivers": ["Driver 1", "Driver 2"],
-      "chartData": {
-        "categories": ["Industrial", "Commercial", "Government"],
-        "values": [60, 30, 10],
-        "unit": "% of market"
-      }
-    }
-  },
-
-  // === SECTION 3: COMPETITOR OVERVIEW (5 slides) ===
-  "competitors": {
-    "japanesePlayers": {
-      "slideTitle": "${country} - Japanese Energy Companies",
-      "subtitle": "Current presence and activities",
-      "players": [
-        {"name": "Tokyo Gas", "website": "https://www.tokyo-gas.co.jp", "presence": "JV with Local Partner", "projects": "3 ESCO contracts", "revenue": "$X million", "assessment": "Strong/Weak", "description": "REQUIRED 50+ words with revenue, market share, growth rate, key services, strategic significance including market position, entry strategy, key projects, revenue figures, growth trajectory, and strategic significance for competitive landscape"},
-        {"name": "Osaka Gas", "website": "https://www.osakagas.co.jp", "presence": "Direct investment", "projects": "LNG terminal stake", "revenue": "$X million", "assessment": "Strong/Weak", "description": "REQUIRED 50+ words with revenue, market share, growth rate, key services, strategic significance"}
-      ],
-      "marketInsight": "Overall assessment of Japanese presence"
-    },
-    "localMajor": {
-      "slideTitle": "${country} - Major Local Players",
-      "subtitle": "Domestic energy companies",
-      "players": [
-        {"name": "Company A", "website": "https://companya.com", "type": "State-owned/Private", "revenue": "$X million", "marketShare": "X%", "strengths": "...", "weaknesses": "...", "description": "REQUIRED 50+ words with revenue, market share, growth rate, key services, strategic significance including revenue, growth rate, market share, key services, geographic coverage, and competitive advantages"},
-        {"name": "Company B", "website": "https://companyb.com", "type": "State-owned/Private", "revenue": "$X million", "marketShare": "X%", "strengths": "...", "weaknesses": "...", "description": "REQUIRED 50+ words with revenue, market share, growth rate, key services, strategic significance"}
-      ],
-      "concentration": "Market concentration assessment"
-    },
-    "foreignPlayers": {
-      "slideTitle": "${country} - Foreign Energy Companies",
-      "subtitle": "International competitors",
-      "players": [
-        {"name": "ENGIE", "website": "https://www.engie.com", "origin": "France", "entryYear": "2018", "mode": "JV", "projects": "X contracts", "success": "High/Medium/Low", "description": "REQUIRED 50+ words with revenue, market share, growth rate, key services, strategic significance including entry strategy, local partnerships, revenue, project portfolio, and competitive position"},
-        {"name": "Siemens", "website": "https://www.siemens-energy.com", "origin": "Germany", "entryYear": "2015", "mode": "Direct", "projects": "Smart grid", "success": "High/Medium/Low", "description": "REQUIRED 50+ words with revenue, market share, growth rate, key services, strategic significance"}
-      ],
-      "competitiveInsight": "How foreign players compete"
-    },
-    "caseStudy": {
-      "slideTitle": "${country} - Market Entry Case Study",
-      "subtitle": "Lessons from successful entries",
-      "company": "Company Name",
-      "entryYear": "2018",
-      "entryMode": "JV with Local Partner",
-      "investment": "$X million",
-      "outcome": "Current status and results",
-      "keyLessons": ["Lesson 1", "Lesson 2", "Lesson 3"],
-      "applicability": "How this applies to client"
-    },
-    "maActivity": {
-      "slideTitle": "${country} - M&A Activity",
-      "subtitle": "Recent deals and targets",
-      "recentDeals": [
-        {"year": "2024", "buyer": "Company A", "target": "Company B", "value": "$X million", "rationale": "..."}
-      ],
-      "potentialTargets": [
-        {"name": "Company X", "estimatedValue": "$X million", "rationale": "Why attractive", "timing": "Available now/Soon"}
-      ],
-      "valuationMultiples": "Typical deal terms in market"
-    }
-  },
-
-  // === SECTION 4: DEPTH ANALYSIS (5 slides) ===
-  "depth": {
-    "escoEconomics": {
-      "slideTitle": "${country} - ESCO Deal Economics",
-      "subtitle": "Contract structures and returns",
-      "typicalDealSize": {"min": "$X million", "max": "$Y million", "average": "$Z million"},
-      "contractTerms": {
-        "duration": "5-10 years typical",
-        "savingsSplit": "Client 70% / ESCO 30% typical",
-        "guaranteeStructure": "Shared savings or guaranteed savings"
-      },
-      "financials": {
-        "paybackPeriod": "X years",
-        "irr": "X-Y%",
-        "marginProfile": "X% gross margin typical"
-      },
-      "financingOptions": ["Option 1", "Option 2"],
-      "keyInsight": "Investment thesis for ESCO business"
-    },
-    "partnerAssessment": {
-      "slideTitle": "${country} - Partner Assessment",
-      "subtitle": "Potential partners ranked by fit",
-      "partners": [
-        {
-          "name": "Company Name",
-          "website": "https://company.com",
-          "type": "Local ESCO / Engineering / Conglomerate",
-          "revenue": "$X million",
-          "employees": "X",
-          "capabilities": ["Capability 1", "Capability 2"],
-          "partnershipFit": "1-5 score",
-          "acquisitionFit": "1-5 score",
-          "estimatedValuation": "$X-Y million",
-          "keyContact": "How to approach"
-        }
-      ],
-      "recommendedPartner": "Top recommendation with reasoning"
-    },
-    "entryStrategy": {
-      "slideTitle": "${country} - Entry Strategy Options",
-      "subtitle": "Comparison of market entry modes",
-      "options": [
-        {
-          "mode": "Joint Venture",
-          "timeline": "X months",
-          "investment": "$X million",
-          "controlLevel": "Minority/50-50/Majority",
-          "pros": ["Pro 1", "Pro 2"],
-          "cons": ["Con 1", "Con 2"],
-          "riskLevel": "Low/Medium/High"
-        },
-        {
-          "mode": "Acquisition",
-          "timeline": "X months",
-          "investment": "$X million",
-          "controlLevel": "Full",
-          "pros": ["Pro 1", "Pro 2"],
-          "cons": ["Con 1", "Con 2"],
-          "riskLevel": "Low/Medium/High"
-        },
-        {
-          "mode": "Greenfield",
-          "timeline": "X months",
-          "investment": "$X million",
-          "controlLevel": "Full",
-          "pros": ["Pro 1", "Pro 2"],
-          "cons": ["Con 1", "Con 2"],
-          "riskLevel": "Low/Medium/High"
-        }
-      ],
-      "recommendation": "Recommended option with detailed reasoning",
-      "harveyBalls": {
-        "criteria": ["Speed to Market", "Investment Required", "Risk Level", "Control", "Local Knowledge"],
-        "jv": [3, 4, 3, 2, 5],
-        "acquisition": [4, 2, 3, 5, 4],
-        "greenfield": [1, 3, 4, 5, 1]
-      }
-    },
-    "implementation": {
-      "slideTitle": "${country} - Implementation Roadmap",
-      "subtitle": "Phased approach to market entry",
-      "phases": [
-        {
-          "name": "Phase 1: Setup (Months 0-6)",
-          "activities": ["Activity 1", "Activity 2", "Activity 3"],
-          "milestones": ["Milestone 1", "Milestone 2"],
-          "investment": "$X"
-        },
-        {
-          "name": "Phase 2: Launch (Months 6-12)",
-          "activities": ["Activity 1", "Activity 2"],
-          "milestones": ["Milestone 1", "Milestone 2"],
-          "investment": "$X"
-        },
-        {
-          "name": "Phase 3: Scale (Months 12-24)",
-          "activities": ["Activity 1", "Activity 2"],
-          "milestones": ["Milestone 1", "Milestone 2"],
-          "investment": "$X"
-        }
-      ],
-      "totalInvestment": "$X million over 24 months",
-      "breakeven": "Expected in month X"
-    },
-    "targetSegments": {
-      "slideTitle": "${country} - Target Customer Segments",
-      "subtitle": "Priority segments for initial focus",
-      "segments": [
-        {
-          "name": "Segment name",
-          "size": "X factories / $X million potential",
-          "energyIntensity": "High/Medium/Low",
-          "decisionMaker": "Who to target",
-          "salesCycle": "X months typical",
-          "priority": "1-5"
-        }
-      ],
-      "topTargets": [
-        {"company": "Company Name", "website": "https://company.com", "industry": "Sector", "energySpend": "$X million/year", "location": "Zone/Province"}
-      ],
-      "goToMarketApproach": "How to reach these customers"
-    }
-  },
-
-  // === SECTION 5: SUMMARY & RECOMMENDATIONS ===
-  "summary": {
-    "timingIntelligence": {
-      "slideTitle": "${country} - Why Now?",
-      "subtitle": "Time-sensitive factors driving urgency",
-      "triggers": [
-        {"trigger": "BOI incentives expire Dec 2027", "impact": "Miss tax holiday window", "action": "Apply before Q2 2026"},
-        {"trigger": "Carbon tax effective 2026", "impact": "20-30% demand acceleration", "action": "Position before enforcement"},
-        {"trigger": "3 ESCOs seeking buyers", "impact": "Acquisition window closing", "action": "Approach Absolute Energy Q1"}
-      ],
-      "windowOfOpportunity": "Clear statement of why 2025-2026 is optimal entry timing"
-    },
-    "lessonsLearned": {
-      "slideTitle": "${country} - Lessons from Market",
-      "subtitle": "What killed previous entrants and how to avoid",
-      "failures": [
-        {"company": "Company that failed", "year": "20XX", "reason": "Specific reason", "lesson": "What to do differently"}
-      ],
-      "successFactors": ["What successful entrants did right"],
-      "warningSignsToWatch": ["Red flags that indicate trouble"]
-    },
-    "opportunities": [
-      {"opportunity": "Specific opportunity", "size": "$X million", "timing": "Why now", "action": "What to do"}
-    ],
-    "obstacles": [
-      {"obstacle": "Specific barrier", "severity": "High/Medium/Low", "mitigation": "How to address"}
-    ],
-    "ratings": {
-      "attractiveness": 7,
-      "attractivenessRationale": "Multi-factor justification with specific evidence",
-      "feasibility": 6,
-      "feasibilityRationale": "Multi-factor justification with specific evidence"
-    },
-    "keyInsights": [
-      {
-        "title": "Max 10 word headline - must be NON-OBVIOUS",
-        "data": "The specific evidence - numbers, names, dates",
-        "pattern": "The causal mechanism others miss",
-        "implication": "The strategic response - specific action"
-      }
-    ],
-    "recommendation": "Clear recommendation for entry or not - with specific first step",
-    "goNoGo": {
-      "criteria": [
-        {"criterion": "Market size >$100M", "met": true, "evidence": "Market is $X million"},
-        {"criterion": "Regulatory clarity", "met": true, "evidence": "Clear ESCO framework exists"},
-        {"criterion": "Viable partners available", "met": true, "evidence": "3 partners identified"},
-        {"criterion": "Acceptable risk level", "met": true, "evidence": "Risk score X/10"},
-        {"criterion": "Timing window open", "met": true, "evidence": "BOI incentives available until Dec 2027"}
-      ],
-      "overallVerdict": "GO / NO-GO / CONDITIONAL GO",
-      "conditions": ["Specific condition 1 if conditional", "Specific condition 2"]
-    }
-  }
-}
-
-CRITICAL:
-- Every number needs year, source context
-- Chart data must have numeric arrays (not placeholders)
-- If data unavailable, use reasonable estimates and mark as "estimated"
-- Aim for actionable specificity, not generic descriptions
-- DEPTH IS KEY: Executive-level decision-making requires specific numbers, names, timelines
-- WEBSITE URLs: Every company in players, partners, and topTargets MUST have a "website" field with the company's actual URL. Search for and include the real corporate website URL. If unknown, use the most likely URL based on company name.
-- COMPANY DESCRIPTIONS: Every company in players arrays MUST have a "description" field with 50+ words. Include specific metrics (revenue, growth rate, market share), strategic context, key services, geographic coverage, and why the company matters for competitive analysis. Do NOT write generic Wikipedia-style descriptions.
-
-Return ONLY valid JSON.`;
-
-  const synthesis = await callDeepSeek(synthesisPrompt, '', 16384);
-
-  let countryAnalysis;
-  try {
-    // Validate synthesis response before parsing
-    if (!synthesis.content || synthesis.content.length < 100) {
-      console.error(
-        `  [ERROR] Synthesis returned empty or insufficient content (${synthesis.content?.length || 0} chars)`
-      );
-      return {
-        country,
-        error: 'Synthesis returned empty response',
-        message: 'DeepSeek API may be experiencing issues. Please retry.',
-        rawData: researchData,
-        researchTimeMs: Date.now() - startTime,
-      };
-    }
-
-    let jsonStr = synthesis.content.trim();
-    if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr
-        .replace(/```json?\n?/g, '')
-        .replace(/```/g, '')
-        .trim();
-    }
-    countryAnalysis = JSON.parse(jsonStr);
-    // Preserve raw research data with citations for PPT footer
-    countryAnalysis.rawData = researchData;
-    // Debug: log synthesis structure
-    const policyKeys = countryAnalysis.policy ? Object.keys(countryAnalysis.policy) : [];
-    const marketKeys = countryAnalysis.market ? Object.keys(countryAnalysis.market) : [];
-    const compKeys = countryAnalysis.competitors ? Object.keys(countryAnalysis.competitors) : [];
-    console.log(`  [Synthesis] Policy sections: ${policyKeys.length} (${policyKeys.join(', ')})`);
-    console.log(`  [Synthesis] Market sections: ${marketKeys.length} (${marketKeys.join(', ')})`);
-    console.log(`  [Synthesis] Competitor sections: ${compKeys.length} (${compKeys.join(', ')})`);
-  } catch (error) {
-    console.error(`Failed to parse first synthesis for ${country}:`, error.message);
-    return {
-      country,
-      error: 'Synthesis failed',
-      rawData: researchData,
-      researchTimeMs: Date.now() - startTime,
+    // Build targeted gap queries from failures
+    const gaps = {
+      criticalGaps: validation.failures.map((f) => ({
+        area: f.split(':')[0].toLowerCase(),
+        gap: f,
+        searchQuery: `${country} ${industry} ${f.includes('regulation') ? 'laws regulations acts' : f.includes('Market') ? 'market size data statistics' : 'companies competitors'} ${new Date().getFullYear()}`,
+        priority: 'high',
+      })),
+      dataToVerify: [],
     };
+
+    const additionalData = await fillResearchGaps(gaps, country, industry);
+
+    if (additionalData.gapResearch.length > 0) {
+      // Re-synthesize weak sections only
+      if (validation.scores.policy < 50) {
+        const newPolicy = await synthesizePolicy(
+          {
+            ...researchData,
+            ...Object.fromEntries(
+              additionalData.gapResearch
+                .filter((g) => g.area === 'policy')
+                .map((g) => [`gap_${g.gap}`, g.findings])
+            ),
+          },
+          country,
+          industry,
+          clientContext
+        );
+        if (
+          newPolicy.foundationalActs?.acts?.length >
+          (countryAnalysis.policy.foundationalActs?.acts?.length || 0)
+        ) {
+          countryAnalysis.policy = newPolicy;
+        }
+      }
+      if (validation.scores.market < 50) {
+        const newMarket = await synthesizeMarket(
+          {
+            ...researchData,
+            ...Object.fromEntries(
+              additionalData.gapResearch
+                .filter((g) => g.area === 'market')
+                .map((g) => [`gap_${g.gap}`, g.findings])
+            ),
+          },
+          country,
+          industry,
+          clientContext
+        );
+        countryAnalysis.market = { ...countryAnalysis.market, ...newMarket };
+      }
+      if (validation.scores.competitors < 50) {
+        const newComp = await synthesizeCompetitors(
+          {
+            ...researchData,
+            ...Object.fromEntries(
+              additionalData.gapResearch
+                .filter((g) => g.area === 'competitors')
+                .map((g) => [`gap_${g.gap}`, g.findings])
+            ),
+          },
+          country,
+          industry,
+          clientContext
+        );
+        countryAnalysis.competitors = { ...countryAnalysis.competitors, ...newComp };
+      }
+
+      // Re-validate
+      const revalidation = validateContentDepth(countryAnalysis);
+      countryAnalysis.contentValidation = revalidation;
+
+      if (revalidation.scores.overall < 25) {
+        console.error(
+          `  [ABORT] Content still too thin after retry (${revalidation.scores.overall}/100). Will not generate hollow PPT.`
+        );
+        countryAnalysis.aborted = true;
+        countryAnalysis.abortReason = `Content depth ${revalidation.scores.overall}/100 after retry. Failures: ${revalidation.failures.join('; ')}`;
+      }
+    }
   }
+
+  // Debug: log synthesis structure
+  const policyKeys = countryAnalysis.policy ? Object.keys(countryAnalysis.policy) : [];
+  const marketKeys = countryAnalysis.market ? Object.keys(countryAnalysis.market) : [];
+  const compKeys = countryAnalysis.competitors ? Object.keys(countryAnalysis.competitors) : [];
+  console.log(`  [Synthesis] Policy sections: ${policyKeys.length} (${policyKeys.join(', ')})`);
+  console.log(`  [Synthesis] Market sections: ${marketKeys.length} (${marketKeys.join(', ')})`);
+  console.log(`  [Synthesis] Competitor sections: ${compKeys.length} (${compKeys.join(', ')})`);
 
   // ============ ITERATIVE REFINEMENT LOOP WITH CONFIDENCE SCORING ============
   // Like Deep Research: score → identify gaps → research → re-synthesize → repeat until ready
@@ -1228,45 +1469,9 @@ CRITICAL QUALITY STANDARDS:
     };
   }
 
-  // ============ REVIEWER LOOP ============
-  // Reviewer AI critiques → Working AI revises → Repeat until approved
-
-  const MAX_REVISIONS = 3;
-  let revisionCount = 0;
-  let approved = false;
-
-  console.log(`\n  [REVIEW CYCLE] Starting quality review...`);
-
-  while (!approved && revisionCount < MAX_REVISIONS) {
-    // Reviewer evaluates current analysis
-    const review = await reviewAnalysis(synthesis, countryAnalysis, scope);
-
-    if (review.verdict === 'APPROVE' || review.overallScore >= 7) {
-      console.log(
-        `  ✓ APPROVED after ${revisionCount} revision(s) | Final score: ${review.overallScore}/10`
-      );
-      approved = true;
-      synthesis.qualityScore = review.overallScore;
-      synthesis.reviewIterations = revisionCount;
-      break;
-    }
-
-    revisionCount++;
-    console.log(
-      `\n  [REVISION ${revisionCount}/${MAX_REVISIONS}] Score: ${review.overallScore}/10 - Revising...`
-    );
-
-    // Working AI revises based on feedback
-    synthesis = await reviseAnalysis(synthesis, review, countryAnalysis, scope, systemPrompt);
-  }
-
-  // Final review if we hit max revisions
-  if (!approved) {
-    const finalReview = await reviewAnalysis(synthesis, countryAnalysis, scope);
-    synthesis.qualityScore = finalReview.overallScore;
-    synthesis.reviewIterations = revisionCount;
-    console.log(`  → Max revisions reached | Final score: ${finalReview.overallScore}/10`);
-  }
+  // Quality score from content validation (reviewer removed — content depth validates quality)
+  synthesis.qualityScore = countryAnalysis.contentValidation?.scores?.overall || 50;
+  synthesis.reviewIterations = 0;
 
   return synthesis;
 }
@@ -1386,4 +1591,9 @@ module.exports = {
   reviseAnalysis,
   synthesizeSingleCountry,
   synthesizeFindings,
+  validateContentDepth,
+  synthesizePolicy,
+  synthesizeMarket,
+  synthesizeCompetitors,
+  synthesizeSummary,
 };
