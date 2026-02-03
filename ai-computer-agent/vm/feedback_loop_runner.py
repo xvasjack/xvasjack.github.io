@@ -33,6 +33,15 @@ from file_readers.docx_reader import analyze_docx
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("feedback_loop_runner")
 
+# Issue history and pattern detection
+try:
+    from issue_pattern_detector import load_history, append_iteration, detect_patterns, generate_fix_context
+    HAS_ISSUE_DETECTOR = True
+except ImportError:
+    HAS_ISSUE_DETECTOR = False
+    logger.warning("issue_pattern_detector not available")
+
+
 # 0.7: Wrap browser imports in try/except — GUI deps may not be available
 HAS_BROWSER = False
 try:
@@ -460,6 +469,34 @@ async def generate_fix_callback(
     # Issue 11: Use structured fix_prompt from ComparisonResult if available
     fix_prompt = analysis.get("fix_prompt") if analysis else None
 
+    # Issue history and pattern detection context
+    history_context = ""
+    if HAS_ISSUE_DETECTOR:
+        try:
+            # Append current iteration to history
+            append_iteration({
+                "issues": issues[:10],  # Limit to avoid prompt bloat
+                "fixDescription": analysis.get("fix_prompt", "")[:200] if analysis else "",
+                "iteration": iteration,
+            })
+            
+            # Detect patterns from history
+            patterns = detect_patterns()
+            if patterns:
+                fix_ctx = generate_fix_context(patterns)
+                if fix_ctx:
+                    history_context = (
+                        f"\n\n## Issue History Analysis\n"
+                        f"{fix_ctx}\n"
+                        f"\n### Priority Rules:\n"
+                        f"- If content empty → fix research pipeline (research-orchestrator.js)\n"
+                        f"- If layout wrong → fix pattern selection (ppt-utils.js choosePattern)\n"
+                        f"- If formatting off → re-check pattern definitions (template-patterns.json)\n"
+                        f"- If same issue 3+ times → CHANGE APPROACH, don't patch\n"
+                    )
+        except Exception as e:
+            logger.warning(f"Issue pattern detection failed: {e}")
+
     if fix_prompt and fix_prompt != "No issues found. Output matches template.":
         # Use the ComparisonResult's built-in prompt (has severity grouping, locations, suggestions)
         iteration_context = ""
@@ -470,7 +507,7 @@ async def generate_fix_callback(
                 f"the root cause may be deeper than a surface-level fix."
             )
         result = await run_claude_code(
-            fix_prompt + ref_context + formatting_context + iteration_context,
+            fix_prompt + ref_context + formatting_context + history_context + iteration_context,
             service_name=service_name,
             iteration=iteration,
             previous_issues="\n".join(issues) if issues else None,
@@ -491,6 +528,7 @@ async def generate_fix_callback(
             f"(layout, fonts, spacing, data tables). No critical or major discrepancies.{iteration_context}"
             f"{ref_context}"
             f"{formatting_context}"
+            f"{history_context}"
         )
 
         result = await improve_output(
