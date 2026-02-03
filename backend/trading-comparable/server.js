@@ -2823,7 +2823,8 @@ async function applyWaterfallFilters(
     }
 
     const sheet = XLSX.utils.aoa_to_sheet(sheetData);
-    const sheetName = `${sheetNumber}. AR${ruleIdx + 1}: ${rule.name}`.substring(0, 31); // Excel 31-char limit
+    const safeName = rule.name.replace(/[:\\/?*[\]]/g, '');
+    const sheetName = `${sheetNumber}. AR${ruleIdx + 1} ${safeName}`.substring(0, 31); // Excel 31-char limit
     XLSX.utils.book_append_sheet(outputWorkbook, sheet, sheetName);
     sheetNumber++;
   }
