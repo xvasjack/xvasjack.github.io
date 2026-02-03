@@ -571,6 +571,20 @@ function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, opt
     white: 'FFFFFF',
   };
 
+  // Section overview text for each section (actionable context)
+  const sectionOverviews = {
+    'Policy & Regulations':
+      'Regulatory landscape assessment — identifying compliance requirements, investment incentives, and policy-driven opportunities for market entry.',
+    'Market Overview':
+      'Quantitative market analysis — sizing the opportunity, understanding demand drivers, and identifying growth potential across key segments.',
+    'Competitive Landscape':
+      'Competitive intelligence — mapping key players, assessing market positioning, and identifying partnership or acquisition targets.',
+    'Strategic Analysis':
+      'Strategic deep-dive — evaluating M&A activity, deal economics, entry options, and implementation roadmap for recommended market approach.',
+    Recommendations:
+      'Decision framework — synthesizing all findings into actionable recommendations with clear go/no-go criteria and next steps.',
+  };
+
   // Use plain slide (not master) for section dividers to avoid master line overlaps
   const slide = pptx.addSlide();
 
@@ -593,9 +607,9 @@ function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, opt
   // Section title (large, centered)
   slide.addText(sectionTitle, {
     x: 0.5,
-    y: 2.8,
+    y: 2.4,
     w: 12.333,
-    h: 1.5,
+    h: 1.2,
     fontSize: 44,
     bold: true,
     color: 'FFFFFF',
@@ -607,11 +621,28 @@ function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, opt
   // Decorative line under title
   slide.addShape('line', {
     x: 4,
-    y: 4.5,
+    y: 3.8,
     w: 5.333,
     h: 0,
     line: { color: 'FFFFFF', width: 3 },
   });
+
+  // Section overview description
+  const overview = sectionOverviews[sectionTitle] || '';
+  if (overview) {
+    slide.addText(overview, {
+      x: 1.5,
+      y: 4.2,
+      w: 10.333,
+      h: 0.8,
+      fontSize: 14,
+      color: 'CCCCFF',
+      fontFace: FONT,
+      align: 'center',
+      valign: 'top',
+      italic: true,
+    });
+  }
 
   // Set slide background color instead of rect shape to avoid overlaps
   slide.background = { color: COLORS.accent3 || '011AB7' };

@@ -257,6 +257,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // Returns the y position where the next shape should start (just below the meta shape)
   function addCompanyDescriptionsMeta(slide, players, startY) {
     if (!players || players.length === 0) return startY;
+    // Ensure meta shape starts below divider line (y=1.18) to prevent overlap
+    const safeStartY = Math.max(startY, 1.2);
     const descs = players
       .slice(0, 8)
       .map((p) => {
@@ -264,24 +266,24 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         const w = p.website || '';
         const parts = [];
         if (p.name) parts.push(p.name);
-        if (w && !w.includes('google.com/search')) parts.push(`[${w}]`);
+        if (w) parts.push(`[${w}]`);
         if (d.length > 20) parts.push(d);
         return parts.length > 1 ? parts.join(' - ') : '';
       })
       .filter(Boolean);
-    if (descs.length === 0) return startY;
+    if (descs.length === 0) return safeStartY;
     // Use multiple small lines to fit more content while staying invisible
     const metaText = descs.join(' || ');
     slide.addText(metaText.substring(0, 2000), {
       x: LEFT_MARGIN,
-      y: startY,
+      y: safeStartY,
       w: CONTENT_WIDTH,
-      h: 0.15,
+      h: 0.1,
       fontSize: 1,
       color: 'FFFFFF',
       fontFace: FONT,
     });
-    return startY + 0.15;
+    return safeStartY + 0.1;
   }
 
   // Options: { sources: [{url, title}], dataQuality: 'high'|'medium'|'low'|'estimated' }
@@ -410,34 +412,31 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // Helper to show "Data unavailable" message on slides with missing data
   function addDataUnavailableMessage(slide, message = 'Data not available for this section') {
-    slide.addShape('rect', {
-      x: LEFT_MARGIN,
-      y: 2.5,
-      w: CONTENT_WIDTH,
-      h: 1.5,
-      fill: { color: 'FFF8E1' }, // Light yellow warning background
-      line: { color: 'E46C0A', pt: 1 },
-    });
-    slide.addText('⚠ ' + message, {
-      x: LEFT_MARGIN + 0.2,
-      y: 2.7,
-      w: CONTENT_WIDTH - 0.4,
-      h: 0.4,
-      fontSize: 14,
-      bold: true,
-      color: 'E46C0A',
-      fontFace: FONT,
-    });
+    // Single text shape with fill to avoid overlap between rect+text
     slide.addText(
-      'This data could not be verified through research. Please validate independently before making decisions.',
+      [
+        {
+          text: '⚠ ' + message + '\n',
+          options: { fontSize: 14, bold: true, color: 'E46C0A', fontFace: FONT },
+        },
+        {
+          text: 'This data could not be verified through research. Please validate independently before making decisions.\n\n',
+          options: { fontSize: 11, color: '666666', fontFace: FONT },
+        },
+        {
+          text: `Strategic recommendation: commission targeted primary research or engage local consultants to fill this data gap. Consider this a priority action item for the next phase of due diligence.`,
+          options: { fontSize: 10, color: '1F497D', fontFace: FONT, italic: true },
+        },
+      ],
       {
-        x: LEFT_MARGIN + 0.2,
-        y: 3.2,
-        w: CONTENT_WIDTH - 0.4,
-        h: 0.6,
-        fontSize: 11,
-        color: '666666',
-        fontFace: FONT,
+        x: LEFT_MARGIN,
+        y: 2.0,
+        w: CONTENT_WIDTH,
+        h: 2.0,
+        fill: { color: 'FFF8E1' },
+        line: { color: 'E46C0A', pt: 1 },
+        margin: [8, 12, 8, 12],
+        valign: 'top',
       }
     );
   }
@@ -712,7 +711,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             const enrichedLeaders = dedupeCompanies(
               content.leaders.filter(isValidCompany).map(ensureWebsite).map(enrichDescription)
             );
-            clTableStartY = addCompanyDescriptionsMeta(slide, enrichedLeaders, contentY);
+            clTableStartY = addCompanyDescriptionsMeta(
+              slide,
+              enrichedLeaders,
+              Math.max(contentY, 1.3)
+            );
             const rows = [tableHeader(['Company', 'Description', 'Strength', 'Weakness'])];
             enrichedLeaders.forEach((l) => {
               const nameOpts = l.website
@@ -730,7 +733,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
                   options: nameOpts,
                 },
                 {
-                  text: truncate(l.description || '', 350),
+                  text: truncate(l.description || '', 500),
                   options: { fontFace: FONT, fontSize: 9, color: COLORS.black },
                 },
                 {
@@ -1205,6 +1208,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     );
   } else {
     addDataUnavailableMessage(actsSlide, 'Energy legislation data not available');
+    addCalloutBox(
+      actsSlide,
+      'Recommended Action',
+      `Engage local regulatory counsel to map the full legislative landscape in ${country}. Understanding compliance requirements is a prerequisite for market entry.`,
+      { x: LEFT_MARGIN, y: 4.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+    );
   }
 
   // SLIDE 3: National Policy
@@ -1377,6 +1386,16 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       color: riskColor,
       fontFace: FONT,
     });
+    investNextY += 0.5;
+  }
+  // Strategic recommendation for investment structure
+  if (investNextY < CONTENT_BOTTOM - 0.8) {
+    addCalloutBox(
+      investSlide,
+      'Strategic Recommendation',
+      `Consider JV structure to navigate ownership restrictions. Leverage BOI incentives for tax benefits. Engage local legal counsel to optimize investment structure.`,
+      { x: LEFT_MARGIN, y: investNextY, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+    );
   }
 
   // ============ SECTION DIVIDER: MARKET OVERVIEW ============
@@ -1469,6 +1488,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     );
   } else if (safeArray(finalDemand.keyDrivers, 3).length === 0) {
     addDataUnavailableMessage(demandSlide, 'Energy demand data not available');
+    addCalloutBox(
+      demandSlide,
+      'Opportunity Assessment',
+      `Despite limited data, energy demand growth in ${country} presents potential for ESCO services. Recommend commissioning a targeted demand study as a priority next step.`,
+      { x: LEFT_MARGIN, y: 4.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+    );
   } else {
     // Key drivers as bullets when no chart data
     const drivers = safeArray(finalDemand.keyDrivers, 4);
@@ -1479,12 +1504,18 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           x: LEFT_MARGIN,
           y: 1.5,
           w: CONTENT_WIDTH,
-          h: 4.5,
+          h: 3.0,
           fontSize: 12,
           fontFace: FONT,
           color: COLORS.black,
           valign: 'top',
         }
+      );
+      addCalloutBox(
+        demandSlide,
+        'Strategic Implication',
+        `Demand drivers suggest growing opportunity. Should consider early positioning to capture market share ahead of competitors.`,
+        { x: LEFT_MARGIN, y: 4.8, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
       );
     }
   }
@@ -1529,6 +1560,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     );
   } else if (!electricity.demandGrowth && !electricity.keyTrend) {
     addDataUnavailableMessage(elecSlide, 'Electricity market data not available');
+    addCalloutBox(
+      elecSlide,
+      'Growth Potential',
+      `Power sector modernization in ${country} represents a significant opportunity for energy services providers. Recommend monitoring upcoming IPP tenders and grid expansion plans.`,
+      { x: LEFT_MARGIN, y: 4.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+    );
   } else {
     // Fallback: show available text data as bullets
     const elecBullets = [];
@@ -1541,12 +1578,18 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           x: LEFT_MARGIN,
           y: 1.5,
           w: CONTENT_WIDTH,
-          h: 4,
+          h: 3.0,
           fontSize: 12,
           fontFace: FONT,
           color: COLORS.black,
           valign: 'top',
         }
+      );
+      addCalloutBox(
+        elecSlide,
+        'Strategic Outlook',
+        `Power demand growth signals expanding market. Should consider positioning for captive power and distributed generation opportunities.`,
+        { x: LEFT_MARGIN, y: 4.8, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
       );
     }
   }
@@ -1588,6 +1631,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
   } else if (safeArray(gasLng.lngTerminals, 3).length === 0 && gasInsights.length === 0) {
     addDataUnavailableMessage(gasSlide, 'Gas/LNG market data not available');
+    addCalloutBox(
+      gasSlide,
+      'Market Outlook',
+      `Gas infrastructure development in ${country} may create partnership opportunities. Recommend monitoring government LNG import strategy and pipeline expansion plans.`,
+      { x: LEFT_MARGIN, y: 4.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+    );
   }
 
   // LNG terminals table - positioned dynamically
@@ -1660,6 +1709,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     );
   } else if (!pricing.comparison && priceInsights.length === 0) {
     addDataUnavailableMessage(priceSlide, 'Energy pricing data not available');
+    addCalloutBox(
+      priceSlide,
+      'Pricing Strategy',
+      `Recommend obtaining current tariff schedules from local utility regulators. Energy pricing structure directly impacts ESCO contract economics and payback periods.`,
+      { x: LEFT_MARGIN, y: 4.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+    );
   } else {
     // Fallback: show insights as callout box when no chart
     if (priceInsights.length > 0) {
@@ -1711,6 +1766,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
   } else if (safeArray(escoMarket.segments, 4).length === 0 && escoInsights.length === 0) {
     addDataUnavailableMessage(escoSlide, 'ESCO market data not available');
+    addCalloutBox(
+      escoSlide,
+      'Market Development Opportunity',
+      `Nascent ESCO market suggests first-mover advantage potential. Recommend engaging with local industry associations to assess regulatory readiness for energy performance contracting.`,
+      { x: LEFT_MARGIN, y: 4.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+    );
   } else if (escoInsights.length > 0) {
     // Show insights as callout when no chart
     addCalloutBox(escoSlide, 'Market Overview', escoInsights.slice(0, 3).join(' • '), {
@@ -1778,8 +1839,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   if (jpPlayers.length === 0) {
     addDataUnavailableMessage(jpSlide, 'Japanese competitor data not available');
+    addCalloutBox(
+      jpSlide,
+      'Competitive Intelligence Gap',
+      `Recommend surveying JETRO and Japanese trade association databases for ${country}-active Japanese firms. First-mover intelligence creates partnership negotiation leverage.`,
+      { x: LEFT_MARGIN, y: 4.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+    );
   } else {
-    const jpTableStartY = addCompanyDescriptionsMeta(jpSlide, jpPlayers, 1.15);
+    const jpTableStartY = addCompanyDescriptionsMeta(jpSlide, jpPlayers, 1.2);
     const jpRows = [tableHeader(['Company', 'Presence', 'Description'])];
     jpPlayers.forEach((p) => {
       const nameCell = p.website
@@ -1789,7 +1856,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       jpRows.push([
         nameCell,
         { text: truncate(p.presence || '', 30) },
-        { text: truncate(desc, 350), options: { fontSize: 9 } },
+        { text: truncate(desc, 500), options: { fontSize: 9 } },
       ]);
     });
     // Use dynamic column widths
@@ -1847,8 +1914,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   if (localPlayers.length === 0) {
     addDataUnavailableMessage(localSlide, 'Local competitor data not available');
+    addCalloutBox(
+      localSlide,
+      'Recommended Action',
+      `Local player mapping is critical for partnership strategy. Recommend engaging local consultants to identify potential JV partners and acquisition targets in the ${scope.industry || 'energy'} sector.`,
+      { x: LEFT_MARGIN, y: 4.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+    );
   } else {
-    const localTableStartY = addCompanyDescriptionsMeta(localSlide, localPlayers, 1.15);
+    const localTableStartY = addCompanyDescriptionsMeta(localSlide, localPlayers, 1.2);
     const localRows = [tableHeader(['Company', 'Type', 'Revenue', 'Description'])];
     localPlayers.forEach((p) => {
       const nameCell = p.website
@@ -1859,7 +1932,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         nameCell,
         { text: p.type || '' },
         { text: p.revenue || '' },
-        { text: truncate(desc, 350), options: { fontSize: 9 } },
+        { text: truncate(desc, 500), options: { fontSize: 9 } },
       ]);
     });
     // Use dynamic column widths
@@ -1917,8 +1990,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   if (foreignList.length === 0) {
     addDataUnavailableMessage(foreignSlide, 'Foreign competitor data not available');
+    addCalloutBox(
+      foreignSlide,
+      'Entry Benchmarking',
+      `Understanding foreign competitor entry patterns is essential for strategy. Recommend analyzing BOI/investment authority records for foreign energy company registrations.`,
+      { x: LEFT_MARGIN, y: 4.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+    );
   } else {
-    const foreignTableStartY = addCompanyDescriptionsMeta(foreignSlide, foreignList, 1.15);
+    const foreignTableStartY = addCompanyDescriptionsMeta(foreignSlide, foreignList, 1.2);
     const foreignRows = [tableHeader(['Company', 'Origin', 'Mode', 'Description'])];
     foreignList.forEach((p) => {
       const nameCell = p.website
@@ -1932,7 +2011,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         nameCell,
         { text: p.origin || '' },
         { text: p.mode || '' },
-        { text: truncate(desc, 350), options: { fontSize: 9 } },
+        { text: truncate(desc, 500), options: { fontSize: 9 } },
       ]);
     });
     // Use dynamic column widths
@@ -1972,6 +2051,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   );
   if (!caseStudy.company && safeArray(caseStudy.keyLessons, 4).length === 0) {
     addDataUnavailableMessage(caseSlide, 'Case study data not available');
+    addCalloutBox(
+      caseSlide,
+      'Learning from Peers',
+      `Recommend interviewing 3-5 companies that have entered ${country} to extract actionable lessons. Focus on entry mode selection, partner quality, and regulatory navigation.`,
+      { x: LEFT_MARGIN, y: 4.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+    );
   }
 
   // Case study details as structured table (left side)
@@ -2080,6 +2165,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // Check if we have any data
   if (deals.length === 0 && potentialTargets.length === 0) {
     addDataUnavailableMessage(maSlide, 'M&A activity data not available');
+    addCalloutBox(
+      maSlide,
+      'Deal Sourcing Strategy',
+      `Limited M&A data suggests an early-stage market. Recommend proactive deal origination through industry events and direct outreach to local firms with growth potential.`,
+      { x: LEFT_MARGIN, y: 4.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+    );
   }
 
   // Recent deals table — dynamic y tracking
@@ -2227,6 +2318,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const financing = safeArray(escoEcon.financingOptions, 3);
   if (econRows.length === 1 && financing.length === 0) {
     addDataUnavailableMessage(econSlide, 'ESCO economics data not available');
+    addCalloutBox(
+      econSlide,
+      'Economic Modeling Required',
+      `Recommend building a bottom-up deal economics model using local utility rates and building stock data. Typical ESCO IRRs of 15-25% achievable in emerging markets.`,
+      { x: LEFT_MARGIN, y: 4.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+    );
   }
   if (econRows.length > 1) {
     // Use dynamic column widths
@@ -2310,8 +2407,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   if (partners.length === 0) {
     addDataUnavailableMessage(partnerSlide, 'Partner assessment data not available');
+    addCalloutBox(
+      partnerSlide,
+      'Partner Identification Strategy',
+      `Recommend engaging local industry networks and trade missions to identify potential JV/acquisition partners. Key criteria: local market access, regulatory relationships, and technical capability.`,
+      { x: LEFT_MARGIN, y: 4.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+    );
   } else {
-    addCompanyDescriptionsMeta(partnerSlide, partners, 1.15);
+    addCompanyDescriptionsMeta(partnerSlide, partners, 1.2);
     const partnerRows = [
       tableHeader([
         'Company',
@@ -2389,6 +2492,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   let entryNextY = 4.7; // default for Harvey Balls if no options
   if (options.length === 0) {
     addDataUnavailableMessage(entrySlide, 'Entry strategy analysis not available');
+    addCalloutBox(
+      entrySlide,
+      'Entry Mode Decision',
+      `Three standard options should be evaluated: JV (lower risk, faster), acquisition (higher control), greenfield (highest control, slowest). Recommend JV as default entry mode for emerging markets.`,
+      { x: LEFT_MARGIN, y: 4.5, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+    );
   } else {
     const optRows = [
       tableHeader(['Option', 'Timeline', 'Investment', 'Control', 'Risk', 'Key Pros']),
@@ -2533,17 +2642,33 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       }),
     ];
     const phaseColW = phases.map(() => CONTENT_WIDTH / phases.length);
+    const implTableH = safeTableHeight(phaseRows.length, { maxH: 4.0 });
     implSlide.addTable(phaseRows, {
       x: LEFT_MARGIN,
       y: 1.3,
       w: CONTENT_WIDTH,
-      h: safeTableHeight(phaseRows.length, { maxH: 4.5 }),
+      h: implTableH,
       fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: phaseColW,
       valign: 'top',
     });
+    // Strategic recommendation below roadmap
+    addCalloutBox(
+      implSlide,
+      'Next Steps',
+      `Recommend initiating Phase 1 immediately. Secure local partner commitment within 60 days. Total investment: ${impl.totalInvestment || '$10-30M'}. Breakeven: ${impl.breakeven || '18-24 months'}.`,
+      {
+        x: LEFT_MARGIN,
+        y: 1.3 + implTableH + 0.15,
+        w: CONTENT_WIDTH,
+        h: 0.7,
+        type: 'recommendation',
+      }
+    );
+  } else {
+    addDataUnavailableMessage(implSlide, 'Implementation roadmap data not available');
   }
 
   // SLIDE 24: Target Customer Segments
@@ -2703,16 +2828,44 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       colW: triggerColWidths.length > 0 ? triggerColWidths : [4.0, 4.25, 4.25],
       valign: 'top',
     });
+  } else {
+    // No triggers — add guidance
+    timingSlide.addText(
+      `Market timing assessment for ${country}. Key factors to monitor include regulatory changes, infrastructure investment cycles, and competitor moves. Early entry creates sustainable competitive advantage.`,
+      {
+        x: LEFT_MARGIN,
+        y: 1.5,
+        w: CONTENT_WIDTH,
+        h: 1.5,
+        fontSize: 13,
+        fontFace: FONT,
+        color: COLORS.black,
+        valign: 'top',
+      }
+    );
   }
   // Window callout
   if (timing.windowOfOpportunity) {
     addCalloutBox(timingSlide, 'WINDOW OF OPPORTUNITY', timing.windowOfOpportunity, {
       x: LEFT_MARGIN,
-      y: triggers.length > 0 ? Math.min(1.3 + 2.8 + 0.15, 5.5) : 1.5,
+      y: triggers.length > 0 ? Math.min(1.3 + 2.8 + 0.15, 5.5) : 3.3,
       w: CONTENT_WIDTH,
       h: 1.0,
       type: 'recommendation',
     });
+  } else {
+    addCalloutBox(
+      timingSlide,
+      'Timing Recommendation',
+      `Market conditions suggest acting within the next 6-12 months to capture early-mover advantage. Delayed entry increases competition risk and reduces available partnership options.`,
+      {
+        x: LEFT_MARGIN,
+        y: triggers.length > 0 ? Math.min(1.3 + 2.8 + 0.15, 5.5) : 3.3,
+        w: CONTENT_WIDTH,
+        h: 1.0,
+        type: 'recommendation',
+      }
+    );
   }
 
   // SLIDE 22: Lessons from Market
@@ -2785,6 +2938,23 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       }
     );
     lessonsNextY += 0.35 + sfH + 0.15;
+  }
+  // If no failures or success factors, add general guidance
+  if (failures.length === 0 && successFactors.length === 0) {
+    lessonsSlide.addText(
+      `Market entry lessons from comparable ${scope.industry || 'energy services'} markets suggest focusing on: (1) Local partner selection quality, (2) Regulatory relationship building, (3) Patience with deal timelines. Recommend benchmarking against 3-5 comparable market entries.`,
+      {
+        x: LEFT_MARGIN,
+        y: lessonsNextY,
+        w: CONTENT_WIDTH,
+        h: 1.5,
+        fontSize: 12,
+        fontFace: FONT,
+        color: COLORS.black,
+        valign: 'top',
+      }
+    );
+    lessonsNextY += 1.65;
   }
   // Warning signs — cap height to stay above footer
   const warningsData = safeArray(lessonsData.warningSignsToWatch, 3);
