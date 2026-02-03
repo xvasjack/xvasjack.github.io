@@ -35,11 +35,48 @@ logger = logging.getLogger("feedback_loop_runner")
 
 # Issue history and pattern detection
 try:
-    from issue_pattern_detector import load_history, append_iteration, detect_patterns, generate_fix_context
+    from issue_pattern_detector import load_history, append_iteration, detect_patterns, generate_fix_context, categorize_issue
     HAS_ISSUE_DETECTOR = True
 except ImportError:
     HAS_ISSUE_DETECTOR = False
     logger.warning("issue_pattern_detector not available")
+
+
+# In-memory storage for git diffs per iteration (not persisted — reset each loop run)
+_recent_diffs: List[str] = []
+
+
+# Scope routing: map issue categories to source files
+SCOPE_FILES = {
+    "research": "research-orchestrator.js, ai-clients.js",
+    "synthesis": "research-orchestrator.js, ppt-single-country.js",
+    "layout": "ppt-utils.js, ppt-single-country.js, template-patterns.json",
+    "formatting": "template-patterns.json, ppt-utils.js",
+}
+SCOPE_DONT_TOUCH = {
+    "research": "ppt-single-country.js, ppt-utils.js, template-patterns.json",
+    "synthesis": "template-patterns.json, ppt-utils.js",
+    "layout": "research-orchestrator.js, ai-clients.js",
+    "formatting": "research-orchestrator.js, ai-clients.js, ppt-single-country.js",
+}
+
+
+def _classify_fix_scope(issues: List[str]) -> str:
+    """Classify issues into dominant scope: research|synthesis|layout|formatting."""
+    if not HAS_ISSUE_DETECTOR:
+        return "layout"
+    counts = {"research": 0, "synthesis": 0, "layout": 0, "formatting": 0}
+    for issue in issues:
+        cat = categorize_issue(str(issue))
+        if cat in ("empty_data", "api_failure"):
+            counts["research"] += 1
+        elif cat in ("content_depth", "insight_missing", "research_quality"):
+            counts["synthesis"] += 1
+        elif cat in ("pattern_selection", "chart_error", "table_overflow"):
+            counts["layout"] += 1
+        elif cat == "layout_formatting":
+            counts["formatting"] += 1
+    return max(counts, key=counts.get) if any(counts.values()) else "layout"
 
 
 # 0.7: Wrap browser imports in try/except — GUI deps may not be available
@@ -327,6 +364,10 @@ async def analyze_output_callback(
         # Issue 10: compare_output returns ComparisonResult object, not dict
         comparison_result = compare_output(analysis, template)
 
+        # Prioritize and limit to top 5 issues per iteration
+        if hasattr(comparison_result, 'prioritize_and_limit'):
+            comparison_result = comparison_result.prioritize_and_limit(max_issues=5)
+
         # Use ComparisonResult's structured output
         issues = [d.to_comment() for d in comparison_result.discrepancies]
 
@@ -469,21 +510,43 @@ async def generate_fix_callback(
     # Issue 11: Use structured fix_prompt from ComparisonResult if available
     fix_prompt = analysis.get("fix_prompt") if analysis else None
 
+    # Build previous diff context
+    diff_context = ""
+    if iteration > 1 and len(_recent_diffs) >= iteration - 1:
+        prev_diff = _recent_diffs[iteration - 2]  # 0-indexed
+        if prev_diff:
+            diff_context = (
+                f"\n\n## PREVIOUS FIX (iteration {iteration - 1}) — Code That Was Changed\n"
+                f"```diff\n{prev_diff[:3000]}\n```\n"
+                f"This did NOT fully resolve the issues. Do NOT repeat the same change.\n"
+                f"If the same file was changed, try a DIFFERENT approach in that file.\n"
+            )
+
+    # Scope routing
+    scope = _classify_fix_scope(issues)
+    scope_context = (
+        f"\n\n## FIX SCOPE: {scope.upper()}\n"
+        f"START with these files: {SCOPE_FILES.get(scope, '')}\n"
+        f"Do NOT touch: {SCOPE_DONT_TOUCH.get(scope, '')}\n"
+    )
+
     # Issue history and pattern detection context
     history_context = ""
     if HAS_ISSUE_DETECTOR:
         try:
-            # Append current iteration to history
+            # Append current iteration to history (include git_diff for oscillation detection)
             append_iteration({
                 "issues": issues[:10],  # Limit to avoid prompt bloat
                 "fixDescription": analysis.get("fix_prompt", "")[:200] if analysis else "",
                 "iteration": iteration,
+                "git_diff": _recent_diffs[iteration - 1] if iteration <= len(_recent_diffs) else "",
             })
-            
-            # Detect patterns from history
-            patterns = detect_patterns()
+
+            # Detect patterns from history (bug fix: pass load_history() not empty call)
+            history = load_history()
+            patterns = detect_patterns(history)
             if patterns:
-                fix_ctx = generate_fix_context(patterns)
+                fix_ctx = generate_fix_context(history)
                 if fix_ctx:
                     history_context = (
                         f"\n\n## Issue History Analysis\n"
@@ -507,7 +570,7 @@ async def generate_fix_callback(
                 f"the root cause may be deeper than a surface-level fix."
             )
         result = await run_claude_code(
-            fix_prompt + ref_context + formatting_context + history_context + iteration_context,
+            fix_prompt + ref_context + formatting_context + history_context + diff_context + scope_context + iteration_context,
             service_name=service_name,
             iteration=iteration,
             previous_issues="\n".join(issues) if issues else None,
@@ -529,6 +592,8 @@ async def generate_fix_callback(
             f"{ref_context}"
             f"{formatting_context}"
             f"{history_context}"
+            f"{diff_context}"
+            f"{scope_context}"
         )
 
         result = await improve_output(
@@ -539,15 +604,25 @@ async def generate_fix_callback(
             previous_issues="\n".join(issues) if issues else None,
         )
 
+    # Store current iteration's git diff for future iterations
+    git_diff = ""
+    if result is not None:
+        git_diff = getattr(result, 'git_diff', '') or ''
+    # Ensure list is long enough
+    while len(_recent_diffs) < iteration:
+        _recent_diffs.append("")
+    _recent_diffs[iteration - 1] = git_diff
+
     # Category 1 fix: Check result.output not None before slice
     output_desc = ""
     if result is not None and result.output is not None:
-        output_desc = result.output[:500]
+        output_desc = result.output[:2000]
 
     return {
         "success": result.success if result else False,
         "pr_number": None,  # Push-to-main: no PRs
         "description": output_desc,
+        "git_diff": git_diff,  # For issue_pattern_detector oscillation detection
         "error": result.error if result else "No result returned",
     }
 
@@ -666,6 +741,10 @@ async def run_feedback_loop(
     Returns:
         LoopResult with success status and stats
     """
+    # Reset in-memory diff storage for this loop run
+    global _recent_diffs
+    _recent_diffs = []
+
     # F46: Validate start_from values
     VALID_START_FROM = {None, "email_check", "analyze"}
     if start_from not in VALID_START_FROM:

@@ -58,6 +58,7 @@ class ClaudeCodeResult:
     output: str
     error: Optional[str] = None
     pr_number: Optional[int] = None
+    git_diff: str = ""
 
 
 # =============================================================================
@@ -128,6 +129,77 @@ You are being invoked by an automated agent. Follow these rules:
 # =============================================================================
 
 
+async def _get_git_head(effective_cwd, wsl_cwd):
+    """Get current HEAD commit hash. WSL-aware. Returns hash or empty string."""
+    try:
+        from shared.cli_utils import is_wsl_mode
+        if is_wsl_mode(CLAUDE_CODE_PATH):
+            cmd = ["wsl", "--cd", wsl_cwd or effective_cwd, "-e", "git", "rev-parse", "HEAD"]
+        else:
+            cmd = ["git", "rev-parse", "HEAD"]
+        proc = await asyncio.create_subprocess_exec(
+            *cmd, cwd=effective_cwd,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=10)
+        return stdout.decode().strip() if stdout else ""
+    except Exception as e:
+        logger.debug(f"_get_git_head failed: {e}")
+        return ""
+
+
+async def _capture_git_diff(effective_cwd, wsl_cwd, pre_head, max_chars=5000):
+    """Capture code diff from last commit. Returns stat + truncated diff.
+    Returns "" if HEAD hasn't changed since pre_head (no new commit)."""
+    try:
+        # Check if HEAD changed
+        current_head = await _get_git_head(effective_cwd, wsl_cwd)
+        if not current_head or current_head == pre_head:
+            return ""  # No new commit made
+
+        from shared.cli_utils import is_wsl_mode
+        wsl = is_wsl_mode(CLAUDE_CODE_PATH)
+
+        # Get stat summary
+        if wsl:
+            stat_cmd = ["wsl", "--cd", wsl_cwd or effective_cwd, "-e", "git", "diff", "HEAD~1", "--stat"]
+        else:
+            stat_cmd = ["git", "diff", "HEAD~1", "--stat"]
+        stat_proc = await asyncio.create_subprocess_exec(
+            *stat_cmd, cwd=effective_cwd,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        stat_out, _ = await asyncio.wait_for(stat_proc.communicate(), timeout=15)
+        stat_text = stat_out.decode("utf-8", errors="replace").strip() if stat_out else ""
+
+        # Get full diff
+        if wsl:
+            diff_cmd = ["wsl", "--cd", wsl_cwd or effective_cwd, "-e", "git", "diff", "HEAD~1"]
+        else:
+            diff_cmd = ["git", "diff", "HEAD~1"]
+        diff_proc = await asyncio.create_subprocess_exec(
+            *diff_cmd, cwd=effective_cwd,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        diff_out, _ = await asyncio.wait_for(diff_proc.communicate(), timeout=15)
+        diff_text = diff_out.decode("utf-8", errors="replace") if diff_out else ""
+
+        # Truncate with head/tail preservation
+        if len(diff_text) > max_chars:
+            head_size = max_chars * 3 // 4
+            tail_size = max_chars // 4
+            diff_text = diff_text[:head_size] + f"\n\n... [{len(diff_text) - max_chars} chars truncated] ...\n\n" + diff_text[-tail_size:]
+
+        parts = []
+        if stat_text:
+            parts.append(f"### Files changed:\n{stat_text}")
+        if diff_text:
+            parts.append(f"### Diff:\n{diff_text}")
+        return "\n".join(parts) if parts else ""
+    except Exception as e:
+        return f"(diff capture failed: {e})"
+
+
 async def run_claude_code(
     prompt: str,
     working_dir: Optional[str] = None,
@@ -192,6 +264,9 @@ async def run_claude_code(
         logger.warning("git stash timed out after 30s (non-fatal)")
     except Exception as e:
         logger.warning(f"git stash failed (non-fatal): {e}")
+
+    # Capture HEAD before Claude Code runs (for git diff after)
+    pre_head = await _get_git_head(effective_cwd, wsl_cwd)
 
     process = None  # RL-2: Track process for cleanup
     try:
@@ -285,11 +360,17 @@ async def run_claude_code(
             except Exception as e:
                 logger.warning(f"git stash pop failed (non-fatal): {e}")
 
+        # Capture git diff if Claude Code committed changes
+        git_diff = ""
+        if success:
+            git_diff = await _capture_git_diff(effective_cwd, wsl_cwd, pre_head)
+
         return ClaudeCodeResult(
             success=success,
             output=output,
             error=error if error else None,
             pr_number=pr_number,
+            git_diff=git_diff,
         )
 
     except FileNotFoundError:
