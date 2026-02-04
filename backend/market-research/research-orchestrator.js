@@ -106,7 +106,7 @@ Return ONLY valid JSON.`;
 
     return gaps;
   } catch (error) {
-    console.error('  Failed to parse gaps:', error.message);
+    console.error('  Failed to parse gaps:', error?.message);
     return {
       sectionScores: {},
       overallScore: 40,
@@ -193,12 +193,12 @@ async function synthesizeWithFallback(prompt, options = {}) {
     const result = await callGemini(prompt, { maxTokens, jsonMode, temperature: 0.2 });
     return parseJsonResponse(result);
   } catch (geminiErr) {
-    console.warn(`  [Synthesis] Gemini failed: ${geminiErr.message}, trying DeepSeek...`);
+    console.warn(`  [Synthesis] Gemini failed: ${geminiErr?.message}, trying DeepSeek...`);
     try {
       const result = await callDeepSeekChat(prompt, '', maxTokens);
       return parseJsonResponse(result.content);
     } catch (dsErr) {
-      console.error(`  [Synthesis] DeepSeek also failed: ${dsErr.message}`);
+      console.error(`  [Synthesis] DeepSeek also failed: ${dsErr?.message}`);
       return null;
     }
   }
@@ -863,7 +863,7 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
     newSynthesis.country = country;
     return newSynthesis;
   } catch (error) {
-    console.error('  Re-synthesis failed:', error.message);
+    console.error('  Re-synthesis failed:', error?.message);
     return originalSynthesis; // Fall back to original
   }
 }
@@ -1260,7 +1260,7 @@ Return ONLY valid JSON.`;
     );
     return review;
   } catch (error) {
-    console.error('  Reviewer failed to parse:', error.message);
+    console.error('  Reviewer failed to parse:', error?.message);
     // Don't auto-approve on error - return low score requiring revision
     return {
       overallScore: 4,
@@ -1322,7 +1322,7 @@ Return ONLY valid JSON with the full analysis structure.`;
     revised.country = countryAnalysis.country;
     return revised;
   } catch (error) {
-    console.error('  Revision failed:', error.message);
+    console.error('  Revision failed:', error?.message);
     return synthesis; // Return original if revision fails
   }
 }
@@ -1524,7 +1524,7 @@ CRITICAL QUALITY STANDARDS:
     synthesis.isSingleCountry = true;
     synthesis.country = countryAnalysis.country;
   } catch (error) {
-    console.error('Failed to parse single country synthesis:', error.message);
+    console.error('Failed to parse single country synthesis:', error?.message);
     return {
       isSingleCountry: true,
       country: countryAnalysis.country,
@@ -1638,7 +1638,7 @@ Focus on COMPARISONS and TRADE-OFFS, not just summaries.`;
     }
     return JSON.parse(jsonStr);
   } catch (error) {
-    console.error('Failed to parse synthesis:', error.message);
+    console.error('Failed to parse synthesis:', error?.message);
     return {
       executiveSummary: ['Synthesis parsing failed - raw content available'],
       rawContent: result.content,
