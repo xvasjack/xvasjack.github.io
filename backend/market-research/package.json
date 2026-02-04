@@ -4,7 +4,7 @@
   "description": "AI-powered market research analysis with multi-country comparison",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "node --expose-gc --max-old-space-size=450 server.js",
     "dev": "node server.js"
   },
   "dependencies": {
