@@ -507,7 +507,11 @@ async function _callGemini(prompt) {
 
     const usage = data.usageMetadata;
     if (usage) {
-      recordTokens('gemini-2.5-flash-lite', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+      recordTokens(
+        'gemini-2.5-flash-lite',
+        usage.promptTokenCount || 0,
+        usage.candidatesTokenCount || 0
+      );
     }
 
     if (data.error) {
@@ -544,7 +548,11 @@ async function _callGPT4oFallback(prompt, jsonMode = false, reason = '') {
 
     const response = await openai.chat.completions.create(requestOptions);
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const result = response.choices?.[0]?.message?.content || '';
 
@@ -622,7 +630,11 @@ async function _callClaude(prompt, systemPrompt = null, _jsonMode = false) {
 
     const response = await anthropic.messages.create(requestParams);
     if (response.usage) {
-      recordTokens('claude-sonnet-4', response.usage.input_tokens || 0, response.usage.output_tokens || 0);
+      recordTokens(
+        'claude-sonnet-4',
+        response.usage.input_tokens || 0,
+        response.usage.output_tokens || 0
+      );
     }
     const text = response.content?.[0]?.text || '';
 
@@ -684,7 +696,11 @@ async function callChatGPT(prompt) {
       temperature: 0.2,
     });
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -706,7 +722,11 @@ async function _callOpenAISearch(prompt) {
       messages: [{ role: 'user', content: prompt }],
     });
     if (response.usage) {
-      recordTokens('gpt-4o-search-preview', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o-search-preview',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -779,7 +799,11 @@ async function _callDeepSeek(prompt, maxTokens = 4000) {
     });
     const data = await response.json();
     if (data.usage) {
-      recordTokens('deepseek-chat', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
+      recordTokens(
+        'deepseek-chat',
+        data.usage.prompt_tokens || 0,
+        data.usage.completion_tokens || 0
+      );
     }
     if (data.error) {
       console.error('DeepSeek API error:', data.error);
@@ -792,27 +816,30 @@ async function _callDeepSeek(prompt, maxTokens = 4000) {
   }
 }
 
-// Kimi 128k (Moonshot) - Best for large context DD analysis
+// Kimi K2 - Best for large context DD analysis
 async function callKimi128k(prompt, maxTokens = 16000) {
   if (!process.env.KIMI_API_KEY) {
     console.log('[DD] KIMI_API_KEY not set, skipping Kimi');
     return '';
   }
   try {
-    const response = await fetch('https://api.moonshot.cn/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${process.env.KIMI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'moonshot-v1-128k',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: maxTokens,
-        temperature: 0.1,
-      }),
-      timeout: 300000, // 5 min timeout for large context
-    });
+    const response = await fetch(
+      `${process.env.KIMI_API_BASE || 'https://api.moonshot.ai/v1'}/chat/completions`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${process.env.KIMI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'kimi-k2-0905-preview',
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: maxTokens,
+          temperature: 0.6,
+        }),
+        timeout: 300000, // 5 min timeout for large context
+      }
+    );
 
     if (!response.ok) {
       const errorText = await response.text();
@@ -822,7 +849,7 @@ async function callKimi128k(prompt, maxTokens = 16000) {
 
     const data = await response.json();
     if (data.usage) {
-      recordTokens('moonshot-v1-128k', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
+      recordTokens('kimi-k2', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
     }
     if (data.error) {
       console.error('[DD] Kimi API error:', data.error.message || data.error);
@@ -830,7 +857,7 @@ async function callKimi128k(prompt, maxTokens = 16000) {
     }
 
     const result = data.choices?.[0]?.message?.content || '';
-    console.log(`[DD] Kimi 128k returned ${result.length} chars`);
+    console.log(`[DD] Kimi K2 returned ${result.length} chars`);
     return result;
   } catch (error) {
     console.error('[DD] Kimi error:', error.message);
@@ -1336,7 +1363,11 @@ RULES:
       response_format: { type: 'json_object' },
     });
     if (extraction.usage) {
-      recordTokens('gpt-4o-mini', extraction.usage.prompt_tokens || 0, extraction.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o-mini',
+        extraction.usage.prompt_tokens || 0,
+        extraction.usage.completion_tokens || 0
+      );
     }
     const parsed = JSON.parse(extraction.choices[0].message.content);
     return Array.isArray(parsed.companies) ? parsed.companies : [];
@@ -1767,7 +1798,11 @@ ${contentToValidate.substring(0, 10000)}`,
     });
 
     if (validation.usage) {
-      recordTokens('gpt-4o', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o',
+        validation.usage.prompt_tokens || 0,
+        validation.usage.completion_tokens || 0
+      );
     }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
@@ -1909,7 +1944,11 @@ ${typeof pageText === 'string' && pageText ? pageText.substring(0, 8000) : 'Coul
     });
 
     if (validation.usage) {
-      recordTokens('gpt-4o-mini', validation.usage.prompt_tokens || 0, validation.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o-mini',
+        validation.usage.prompt_tokens || 0,
+        validation.usage.completion_tokens || 0
+      );
     }
     const result = JSON.parse(validation.choices[0].message.content);
     if (result.valid === true) {
@@ -2077,7 +2116,11 @@ Return JSON format:
         temperature: 0.1,
       });
       if (gptResponse.usage) {
-        recordTokens('gpt-4o', gptResponse.usage.prompt_tokens || 0, gptResponse.usage.completion_tokens || 0);
+        recordTokens(
+          'gpt-4o',
+          gptResponse.usage.prompt_tokens || 0,
+          gptResponse.usage.completion_tokens || 0
+        );
       }
       result = JSON.parse(gptResponse.choices?.[0]?.message?.content || '{}');
     } catch (e) {
@@ -2197,7 +2240,11 @@ Return key financial data found (revenue, profit, assets) with the SOURCE URL fo
       if (filingResponse.ok) {
         const data = await filingResponse.json();
         if (data.usage) {
-          recordTokens('sonar-pro', data.usage.prompt_tokens || 0, data.usage.completion_tokens || 0);
+          recordTokens(
+            'sonar-pro',
+            data.usage.prompt_tokens || 0,
+            data.usage.completion_tokens || 0
+          );
         }
         const content = data.choices?.[0]?.message?.content || '';
         searchResults.push({ query: 'financial_filings', result: content });
@@ -2591,7 +2638,11 @@ OUTPUT: Structured extraction organized by data category.`;
       max_tokens: 16000,
     });
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     deepAnalysis = response.choices?.[0]?.message?.content || '';
   }
@@ -2734,7 +2785,11 @@ CRITICAL: Output ONLY valid JSON. No markdown, no code blocks, no explanations. 
       response_format: { type: 'json_object' },
     });
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     rawResponse = response.choices?.[0]?.message?.content || '';
   }
@@ -3002,35 +3057,39 @@ app.post('/api/due-diligence', async (req, res) => {
     message: `Processing ${files.length} files. DD report will be emailed to ${email}`,
   });
 
-  const tracker = createTracker('due-diligence', email, { fileCount: files.length, components, reportLength });
+  const tracker = createTracker('due-diligence', email, {
+    fileCount: files.length,
+    components,
+    reportLength,
+  });
 
   trackingContext.run(tracker, async () => {
-  // Process in background
-  try {
-    const reportJson = await generateDueDiligenceReport(
-      files,
-      instructions,
-      reportLength,
-      components
-    );
+    // Process in background
+    try {
+      const reportJson = await generateDueDiligenceReport(
+        files,
+        instructions,
+        reportLength,
+        components
+      );
 
-    // Generate DOCX from structured JSON
-    console.log(`[DD] Generating DOCX for report ${reportId}...`);
-    const docxBuffer = await generateDocx(reportJson);
-    console.log(`[DD] DOCX generated: ${docxBuffer.length} bytes`);
+      // Generate DOCX from structured JSON
+      console.log(`[DD] Generating DOCX for report ${reportId}...`);
+      const docxBuffer = await generateDocx(reportJson);
+      console.log(`[DD] DOCX generated: ${docxBuffer.length} bytes`);
 
-    // Extract company name from report for filename
-    const coverSection = reportJson.sections?.find((s) => s.type === 'cover_page');
-    const titleSection = reportJson.sections?.find((s) => s.type === 'title');
-    const companyName =
-      coverSection?.companyName ||
-      titleSection?.text?.replace('Due Diligence Report: ', '') ||
-      'Company';
-    const safeCompanyName = companyName.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 50);
-    const filename = `DD_Report_${safeCompanyName}_${Date.now()}.docx`;
+      // Extract company name from report for filename
+      const coverSection = reportJson.sections?.find((s) => s.type === 'cover_page');
+      const titleSection = reportJson.sections?.find((s) => s.type === 'title');
+      const companyName =
+        coverSection?.companyName ||
+        titleSection?.text?.replace('Due Diligence Report: ', '') ||
+        'Company';
+      const safeCompanyName = companyName.replace(/[^a-zA-Z0-9_-]/g, '_').substring(0, 50);
+      const filename = `DD_Report_${safeCompanyName}_${Date.now()}.docx`;
 
-    // Build email HTML (simple notification)
-    const emailHtml = `
+      // Build email HTML (simple notification)
+      const emailHtml = `
       <div style="font-family: Calibri, Arial, sans-serif; max-width: 800px; margin: 0 auto;">
         <h2 style="color: #365F91; border-bottom: 2px solid #4F81BD; padding-bottom: 10px;">Due Diligence Report</h2>
         <p style="color: #666;">Generated: ${new Date().toLocaleString()}</p>
@@ -3044,77 +3103,77 @@ app.post('/api/due-diligence', async (req, res) => {
       </div>
     `;
 
-    // Update report store with completed report (store both JSON and DOCX buffer)
-    reportStore.set(reportId, {
-      status: 'completed',
-      reportJson: reportJson,
-      docxBuffer: docxBuffer,
-      filename: filename,
-      files: files.map((f) => f.name),
-      components: components,
-      email: email,
-      createdAt: reportStore.get(reportId)?.createdAt || new Date().toISOString(),
-      completedAt: new Date().toISOString(),
-    });
-    console.log(
-      `[DD] Report ${reportId} saved to store (${reportJson.sections?.length} sections, ${docxBuffer.length} bytes DOCX)`
-    );
+      // Update report store with completed report (store both JSON and DOCX buffer)
+      reportStore.set(reportId, {
+        status: 'completed',
+        reportJson: reportJson,
+        docxBuffer: docxBuffer,
+        filename: filename,
+        files: files.map((f) => f.name),
+        components: components,
+        email: email,
+        createdAt: reportStore.get(reportId)?.createdAt || new Date().toISOString(),
+        completedAt: new Date().toISOString(),
+      });
+      console.log(
+        `[DD] Report ${reportId} saved to store (${reportJson.sections?.length} sections, ${docxBuffer.length} bytes DOCX)`
+      );
 
-    // Send email with DOCX attachment
-    await sendEmail({
-      to: email,
-      subject: `DD Report: ${files[0]?.name || 'Due Diligence Analysis'}`,
-      html: emailHtml,
-      attachments: [
-        {
-          filename: filename,
-          content: docxBuffer.toString('base64'),
-          type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-        },
-      ],
-      fromName: 'YCP Due Diligence',
-    });
-
-    console.log(`[DD] Email sent successfully to ${email}`);
-
-    // Finalize tracking (real token counts recorded via recordTokens in wrappers)
-    await tracker.finish({
-      filesProcessed: files.length,
-      sectionsGenerated: reportJson?.sections?.length || 0,
-    });
-  } catch (error) {
-    console.error('[DD] Error processing DD request:', error.message);
-    console.error('[DD] Stack:', error.stack);
-    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
-
-    // Update report store with error status
-    reportStore.set(reportId, {
-      status: 'error',
-      error: error.message,
-      files: files.map((f) => f.name),
-      components: components,
-      email: email,
-      createdAt: reportStore.get(reportId)?.createdAt || new Date().toISOString(),
-      errorAt: new Date().toISOString(),
-    });
-
-    // Send error notification
-    try {
+      // Send email with DOCX attachment
       await sendEmail({
         to: email,
-        subject: 'DD Report Error',
-        html: `
+        subject: `DD Report: ${files[0]?.name || 'Due Diligence Analysis'}`,
+        html: emailHtml,
+        attachments: [
+          {
+            filename: filename,
+            content: docxBuffer.toString('base64'),
+            type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+          },
+        ],
+        fromName: 'YCP Due Diligence',
+      });
+
+      console.log(`[DD] Email sent successfully to ${email}`);
+
+      // Finalize tracking (real token counts recorded via recordTokens in wrappers)
+      await tracker.finish({
+        filesProcessed: files.length,
+        sectionsGenerated: reportJson?.sections?.length || 0,
+      });
+    } catch (error) {
+      console.error('[DD] Error processing DD request:', error.message);
+      console.error('[DD] Stack:', error.stack);
+      await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
+
+      // Update report store with error status
+      reportStore.set(reportId, {
+        status: 'error',
+        error: error.message,
+        files: files.map((f) => f.name),
+        components: components,
+        email: email,
+        createdAt: reportStore.get(reportId)?.createdAt || new Date().toISOString(),
+        errorAt: new Date().toISOString(),
+      });
+
+      // Send error notification
+      try {
+        await sendEmail({
+          to: email,
+          subject: 'DD Report Error',
+          html: `
           <h2>Due Diligence Report Generation Failed</h2>
           <p>We encountered an error while processing your files:</p>
           <pre style="background: #f5f5f5; padding: 15px; border-radius: 5px;">${escapeHtml(error.message)}</pre>
           <p>Please try again or contact support if the issue persists.</p>
         `,
-        fromName: 'YCP Due Diligence',
-      });
-    } catch (emailError) {
-      console.error('[DD] Failed to send error email:', emailError.message);
+          fromName: 'YCP Due Diligence',
+        });
+      } catch (emailError) {
+        console.error('[DD] Failed to send error email:', emailError.message);
+      }
     }
-  }
   }); // end trackingContext.run
 });
 

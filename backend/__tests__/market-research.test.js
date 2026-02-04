@@ -9,9 +9,8 @@
 // ============ COST TRACKING ============
 const PRICING = {
   'deepseek-chat': { input: 0.28, output: 0.42 },
-  'deepseek-reasoner': { input: 0.28, output: 0.42 },
-  'kimi-128k': { input: 0.84, output: 0.84 },
-  'kimi-32k': { input: 0.35, output: 0.35 },
+  'deepseek-reasoner': { input: 0.42, output: 1.68 },
+  'kimi-k2': { input: 0.6, output: 2.5 },
 };
 
 function trackCost(model, inputTokens, outputTokens, searchCount = 0) {
@@ -302,17 +301,12 @@ describe('trackCost', () => {
 
   test('calculates cost for deepseek-reasoner', () => {
     const cost = trackCost('deepseek-reasoner', 500000, 1500000);
-    expect(cost).toBeCloseTo(0.77, 2); // (0.5 * 0.28) + (1.5 * 0.42) = 0.14 + 0.63 = 0.77
+    expect(cost).toBeCloseTo(2.73, 2); // (0.5 * 0.42) + (1.5 * 1.68) = 0.21 + 2.52 = 2.73
   });
 
-  test('calculates cost for kimi-128k', () => {
-    const cost = trackCost('kimi-128k', 2000000, 1000000);
-    expect(cost).toBeCloseTo(2.52, 2); // (2 * 0.84) + (1 * 0.84) = 2.52
-  });
-
-  test('calculates cost for kimi-32k', () => {
-    const cost = trackCost('kimi-32k', 1000000, 2000000);
-    expect(cost).toBeCloseTo(1.05, 2); // (1 * 0.35) + (2 * 0.35) = 1.05
+  test('calculates cost for kimi-k2', () => {
+    const cost = trackCost('kimi-k2', 2000000, 1000000);
+    expect(cost).toBeCloseTo(3.7, 2); // (2 * 0.60) + (1 * 2.50) = 1.20 + 2.50 = 3.70
   });
 
   test('returns 0 for unknown model', () => {
