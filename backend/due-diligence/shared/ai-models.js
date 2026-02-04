@@ -54,12 +54,12 @@ const MODEL_CONFIG = {
     timeout: 90000,
     maxTokens: 4096,
   },
-  // Kimi/Moonshot
-  'moonshot-v1-128k': {
+  // Kimi
+  'kimi-k2': {
     provider: 'kimi',
-    cost: { input: 0.84, output: 0.84 },
+    cost: { input: 0.6, output: 2.5 },
     timeout: 30000,
-    maxTokens: 8192,
+    maxTokens: 16384,
   },
 };
 
