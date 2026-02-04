@@ -29,18 +29,12 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
 // Cost estimates per model (USD per 1K tokens)
 const MODEL_COSTS = {
-  // OpenAI
-  'gpt-4o': { input: 0.005, output: 0.015 },
-  'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
-  'gpt-4o-search-preview': { input: 0.005, output: 0.015 },
   // Perplexity
   'sonar-pro': { input: 0.003, output: 0.015 },
   sonar: { input: 0.001, output: 0.001 },
   // Gemini
-  'gemini-2.5-flash': { input: 0.00015, output: 0.0006 },
-  'gemini-2.5-flash-lite': { input: 0.0001, output: 0.0004 },
+  'gemini-3-flash-preview': { input: 0.0005, output: 0.003 },
   'gemini-2.5-pro': { input: 0.00125, output: 0.005 },
-  'gemini-3-flash': { input: 0.00015, output: 0.0006 },
   // Anthropic
   'claude-3-opus': { input: 0.015, output: 0.075 },
   'claude-3-sonnet': { input: 0.003, output: 0.015 },
@@ -51,7 +45,7 @@ const MODEL_COSTS = {
   'deepseek-chat': { input: 0.00028, output: 0.00042 },
   'deepseek-reasoner': { input: 0.00042, output: 0.00168 },
   // Kimi
-  'kimi-k2': { input: 0.0006, output: 0.0025 },
+  'kimi-k2.5': { input: 0.0006, output: 0.0025 },
 };
 
 // Cache access token
@@ -152,7 +146,7 @@ function calculateCostFromTokens(model, inputTokens, outputTokens) {
   // Exact match first
   let costs = MODEL_COSTS[m];
   if (!costs) {
-    // Longest key match (prevents gpt-4o matching before gpt-4o-mini)
+    // Longest key match (prevents partial key collisions)
     const sorted = Object.keys(MODEL_COSTS).sort((a, b) => b.length - a.length);
     const key = sorted.find((k) => m.includes(k));
     costs = key ? MODEL_COSTS[key] : null;

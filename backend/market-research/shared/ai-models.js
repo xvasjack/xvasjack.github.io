@@ -8,31 +8,12 @@ const fetch = require('node-fetch');
 // ============ MODEL CONFIGURATION ============
 
 const MODEL_CONFIG = {
-  // OpenAI
-  'gpt-4o': {
-    provider: 'openai',
-    cost: { input: 2.5, output: 10.0 }, // per 1M tokens
-    timeout: 30000,
-    maxTokens: 8192,
-  },
-  'gpt-4o-mini': {
-    provider: 'openai',
-    cost: { input: 0.15, output: 0.6 },
-    timeout: 30000,
-    maxTokens: 4096,
-  },
   // Google Gemini
-  'gemini-2.5-flash': {
+  'gemini-3-flash-preview': {
     provider: 'gemini',
-    cost: { input: 0.1, output: 0.4 },
+    cost: { input: 0.5, output: 3.0 },
     timeout: 30000,
     maxTokens: 8192,
-  },
-  'gemini-2.5-flash-lite': {
-    provider: 'gemini',
-    cost: { input: 0.02, output: 0.08 },
-    timeout: 20000,
-    maxTokens: 4096,
   },
   // DeepSeek
   'deepseek-chat': {
@@ -55,7 +36,7 @@ const MODEL_CONFIG = {
     maxTokens: 4096,
   },
   // Kimi
-  'kimi-k2': {
+  'kimi-k2.5': {
     provider: 'kimi',
     cost: { input: 0.6, output: 2.5 },
     timeout: 30000,
@@ -339,7 +320,7 @@ function withTimeout(promise, timeoutMs, operationName = 'Operation') {
  * Call Gemini API with consistent error handling
  * @param {string} prompt - Prompt text
  * @param {Object} options - Options
- * @param {string} options.model - Model name (default: gemini-2.5-flash)
+ * @param {string} options.model - Model name (default: gemini-3-flash-preview)
  * @param {boolean} options.jsonMode - Enable JSON response mode
  * @param {number} options.temperature - Temperature (default: 0.1)
  * @param {number} options.timeout - Timeout in ms
@@ -347,7 +328,7 @@ function withTimeout(promise, timeoutMs, operationName = 'Operation') {
  */
 async function callGemini(prompt, options = {}) {
   const {
-    model = 'gemini-2.5-flash',
+    model = 'gemini-3-flash-preview',
     jsonMode = false,
     temperature = 0.1,
     timeout = 30000,
