@@ -33,7 +33,7 @@ if (missingVars.length > 0) {
 
 // ============ EMAIL DELIVERY ============
 // Fix 4: Use shared sendEmail with 3 retries + exponential backoff (was inline with zero retries)
-const { sendEmail } = require('../shared/email.js');
+const { sendEmail } = require('./shared/email.js');
 
 // ============ MAIN ORCHESTRATOR ============
 

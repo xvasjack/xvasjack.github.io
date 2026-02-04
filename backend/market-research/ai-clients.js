@@ -140,7 +140,7 @@ async function callDeepSeekChat(prompt, systemPromptOrOptions = '', maxTokens = 
       usage: { input: inputTokens, output: outputTokens },
     };
   } catch (error) {
-    console.error('DeepSeek Chat API error:', error.message);
+    console.error('DeepSeek Chat API error:', error?.message);
     // Return empty string for new signature, object for legacy
     if (typeof systemPromptOrOptions === 'object') {
       return '';
@@ -202,7 +202,7 @@ async function callDeepSeek(prompt, systemPrompt = '', maxTokens = 16384) {
       usage: { input: inputTokens, output: outputTokens },
     };
   } catch (error) {
-    console.error('DeepSeek Reasoner API error:', error.message);
+    console.error('DeepSeek Reasoner API error:', error?.message);
     return { content: '', usage: { input: 0, output: 0 } };
   }
 }
@@ -323,7 +323,7 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true) {
       researchQuality,
     };
   } catch (error) {
-    console.error('Kimi API error:', error.message);
+    console.error('Kimi API error:', error?.message);
     return { content: '', citations: [], researchQuality: 'failed' };
   }
 }
@@ -379,54 +379,59 @@ async function callGemini(prompt, options = {}) {
 
   const { temperature = 0.3, maxTokens = 8192, systemPrompt, jsonMode = false } = options;
 
-  return withRetry(async () => {
-    const contents = [];
-    if (systemPrompt) {
-      contents.push({ role: 'user', parts: [{ text: systemPrompt }] });
-      contents.push({
-        role: 'model',
-        parts: [{ text: 'Understood. I will follow these instructions.' }],
-      });
-    }
-    contents.push({ role: 'user', parts: [{ text: prompt }] });
-
-    const generationConfig = {
-      temperature,
-      maxOutputTokens: maxTokens,
-    };
-    if (jsonMode) {
-      generationConfig.responseMimeType = 'application/json';
-    }
-
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents, generationConfig }),
+  return withRetry(
+    async () => {
+      const contents = [];
+      if (systemPrompt) {
+        contents.push({ role: 'user', parts: [{ text: systemPrompt }] });
+        contents.push({
+          role: 'model',
+          parts: [{ text: 'Understood. I will follow these instructions.' }],
+        });
       }
-    );
+      contents.push({ role: 'user', parts: [{ text: prompt }] });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Gemini API error ${response.status}: ${errText}`);
-    }
+      const generationConfig = {
+        temperature,
+        maxOutputTokens: maxTokens,
+      };
+      if (jsonMode) {
+        generationConfig.responseMimeType = 'application/json';
+      }
 
-    const data = await response.json();
-    const candidate = data.candidates?.[0];
-    if (!candidate || !candidate.content?.parts?.[0]?.text) {
-      throw new Error('Gemini returned empty response');
-    }
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents, generationConfig }),
+        }
+      );
 
-    const text = candidate.content.parts[0].text;
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Gemini API error ${response.status}: ${errText}`);
+      }
 
-    // Track cost
-    const inputTokens = data.usageMetadata?.promptTokenCount || 0;
-    const outputTokens = data.usageMetadata?.candidatesTokenCount || 0;
-    trackCost('gemini-2.0-flash', inputTokens, outputTokens, 0.1, 0.4);
+      const data = await response.json();
+      const candidate = data.candidates?.[0];
+      if (!candidate || !candidate.content?.parts?.[0]?.text) {
+        throw new Error('Gemini returned empty response');
+      }
 
-    return text;
-  }, 'Gemini');
+      const text = candidate.content.parts[0].text;
+
+      // Track cost
+      const inputTokens = data.usageMetadata?.promptTokenCount || 0;
+      const outputTokens = data.usageMetadata?.candidatesTokenCount || 0;
+      trackCost('gemini-2.0-flash', inputTokens, outputTokens, 0.1, 0.4);
+
+      return text;
+    },
+    3,
+    1000,
+    'Gemini'
+  );
 }
 
 module.exports = {
