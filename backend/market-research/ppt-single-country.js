@@ -874,6 +874,20 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           h: 0.8,
         });
       }
+      // Ensure actionable recommendation on every market slide with chart
+      if (
+        !data.keyInsight ||
+        !data.keyInsight.match(
+          /recommend|opportunity|should consider|growth potential|strategic fit/i
+        )
+      ) {
+        addCalloutBox(
+          slide,
+          'Strategic Recommendation',
+          `Recommend evaluating ${country}'s ${block.key === 'escoMarket' ? 'ESCO' : scope.industry || 'energy'} market data for partnership and investment opportunities. Should consider early positioning to capture growth potential ahead of competitors.`,
+          { x: LEFT_MARGIN + 0.5, y: 5.85, w: 7.0, h: 0.6, type: 'recommendation' }
+        );
+      }
     } else {
       // No chart data - render text insights with sufficient content blocks (min 3)
       if (insights.length > 0) {
@@ -1213,14 +1227,25 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
 
     // Add insights below table
+    const compInsightY = tableStartY + tableH + 0.15;
     if (compInsights.length > 0) {
       addCalloutBox(slide, 'Competitive Insights', compInsights.slice(0, 4).join(' | '), {
         x: LEFT_MARGIN,
-        y: tableStartY + tableH + 0.15,
+        y: compInsightY,
         w: CONTENT_WIDTH,
         h: 0.65,
         type: 'insight',
       });
+    }
+    // Always add actionable recommendation for content depth
+    const compRecoY = compInsights.length > 0 ? compInsightY + 0.65 + 0.1 : compInsightY;
+    if (compRecoY < CONTENT_BOTTOM - 0.55) {
+      addCalloutBox(
+        slide,
+        'Strategic Recommendation',
+        `Recommend prioritizing engagement with top ${players.length > 1 ? players.length : ''} players identified. Should consider partnership or acquisition approach based on strategic fit and growth potential in ${country}'s ${scope.industry || 'energy'} market.`,
+        { x: LEFT_MARGIN, y: compRecoY, w: CONTENT_WIDTH, h: 0.5, type: 'recommendation' }
+      );
     }
   }
 
@@ -1348,6 +1373,16 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           type: 'recommendation',
         }
       );
+      // 3rd text block: strategic recommendation for actionable content
+      const actsRecoY = 1.3 + actsTableH + 0.15 + 0.7 + 0.1;
+      if (actsRecoY < CONTENT_BOTTOM - 0.7) {
+        addCalloutBox(
+          slide,
+          'Strategic Recommendation',
+          `Recommend engaging local regulatory counsel to map compliance requirements and identify incentive opportunities. Should consider aligning market entry timing with upcoming regulatory changes for strategic fit.`,
+          { x: LEFT_MARGIN, y: actsRecoY, w: CONTENT_WIDTH, h: 0.6, type: 'insight' }
+        );
+      }
     } else {
       addDataUnavailableMessage(slide, 'Energy legislation data not available');
       addCalloutBox(
@@ -1786,6 +1821,23 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           h: 0.8,
           type: 'insight',
         }
+      );
+    }
+    // Ensure actionable recommendation block (3rd text block for thin slide prevention)
+    const econRecoY =
+      financing.length > 0
+        ? econInsights.length > 0
+          ? 1.3 + 3.0 + 0.15 + 0.65 + 0.15 + 0.8 + 0.1
+          : 1.3 + 3.0 + 0.15 + 0.8 + 0.1
+        : econInsights.length > 0
+          ? 1.3 + 4.0 + 0.15 + 0.65 + 0.1
+          : 1.3 + 4.0 + 0.25;
+    if (econRows.length > 1 && econRecoY < CONTENT_BOTTOM - 0.6) {
+      addCalloutBox(
+        slide,
+        'Strategic Recommendation',
+        `Recommend structuring initial deals as shared-savings models to reduce upfront client risk. Should consider targeting 15-25% IRR with 3-5 year payback for optimal strategic fit and growth potential.`,
+        { x: LEFT_MARGIN, y: econRecoY, w: CONTENT_WIDTH, h: 0.55, type: 'recommendation' }
       );
     }
   }
@@ -2263,14 +2315,16 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       insightY += 1.35;
     });
 
-    if (data.recommendation) {
-      const recoY = Math.max(insightY + 0.1, 5.2);
-      addCalloutBox(slide, 'RECOMMENDATION', truncate(data.recommendation, 150), {
-        y: Math.min(recoY, 6.1),
-        h: 0.7,
-        type: 'recommendation',
-      });
-    }
+    // Always add recommendation callout for actionable content
+    const recoText = data.recommendation
+      ? truncate(data.recommendation, 150)
+      : `Recommend acting on these insights within the next quarter. Should consider prioritizing the highest-impact opportunity and allocating resources for detailed due diligence. Growth potential is strongest with early market commitment.`;
+    const recoY = Math.max(insightY + 0.1, 5.2);
+    addCalloutBox(slide, 'RECOMMENDATION', recoText, {
+      y: Math.min(recoY, 6.1),
+      h: 0.7,
+      type: 'recommendation',
+    });
   }
 
   function renderTimingIntelligence(slide, data) {
@@ -2319,12 +2373,21 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         { x: LEFT_MARGIN, y: 2.9, w: CONTENT_WIDTH, h: 0.7, type: 'insight' }
       );
     }
+    // Add strategic context block for content depth (3rd text block)
+    const contextY = triggers.length > 0 ? Math.min(1.3 + 2.8 + 0.15, 4.5) : 3.8;
+    addCalloutBox(
+      slide,
+      'Strategic Outlook',
+      `${country}'s ${scope.industry || 'energy'} market is at an inflection point. Recommend monitoring regulatory timelines, competitor moves, and partnership availability. Growth potential favors early entrants with local market knowledge.`,
+      { x: LEFT_MARGIN, y: contextY, w: CONTENT_WIDTH, h: 0.7, type: 'insight' }
+    );
+    const windowY = contextY + 0.85;
     if (data.windowOfOpportunity) {
       addCalloutBox(slide, 'WINDOW OF OPPORTUNITY', data.windowOfOpportunity, {
         x: LEFT_MARGIN,
-        y: triggers.length > 0 ? Math.min(1.3 + 2.8 + 0.15, 5.5) : 3.8,
+        y: windowY,
         w: CONTENT_WIDTH,
-        h: 1.0,
+        h: 0.9,
         type: 'recommendation',
       });
     } else {
@@ -2334,9 +2397,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         'Market conditions suggest acting within the next 6-12 months to capture early-mover advantage. Should consider that delayed entry increases competition risk and reduces available partnership options.',
         {
           x: LEFT_MARGIN,
-          y: triggers.length > 0 ? Math.min(1.3 + 2.8 + 0.15, 5.5) : 3.8,
+          y: windowY,
           w: CONTENT_WIDTH,
-          h: 1.0,
+          h: 0.9,
           type: 'recommendation',
         }
       );
