@@ -14,9 +14,8 @@ const costTracker = {
 // deepseek-reasoner = V3.2 Thinking Mode (max 64K output)
 const PRICING = {
   'deepseek-chat': { input: 0.28, output: 0.42 }, // Cache miss pricing
-  'deepseek-reasoner': { input: 0.28, output: 0.42 }, // Same pricing, but thinking mode
-  'kimi-128k': { input: 0.84, output: 0.84 }, // Moonshot v1 128k context
-  'kimi-32k': { input: 0.35, output: 0.35 }, // Moonshot v1 32k context
+  'deepseek-reasoner': { input: 0.42, output: 1.68 }, // Thinking mode (higher pricing)
+  'kimi-k2': { input: 0.6, output: 2.5 }, // Kimi K2 256k context
 };
 
 function trackCost(
@@ -207,8 +206,8 @@ async function callDeepSeek(prompt, systemPrompt = '', maxTokens = 16384) {
   }
 }
 
-// Kimi (Moonshot) API - for deep research with web browsing
-// Uses 128k context for thorough analysis with retry logic
+// Kimi K2 API - for deep research with web browsing
+// Uses 256k context for thorough analysis with retry logic
 async function callKimi(query, systemPrompt = '', useWebSearch = true) {
   const messages = [];
   if (systemPrompt) {
@@ -217,10 +216,10 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true) {
   messages.push({ role: 'user', content: query });
 
   const requestBody = {
-    model: 'moonshot-v1-128k',
+    model: 'kimi-k2-0905-preview',
     messages,
     max_tokens: 8192,
-    temperature: 0.3,
+    temperature: 0.6,
   };
 
   // Enable web search tool if requested (can be disabled via env var for testing)
@@ -272,8 +271,8 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true) {
 
     const inputTokens = data.usage?.prompt_tokens || 0;
     const outputTokens = data.usage?.completion_tokens || 0;
-    trackCost('kimi-128k', inputTokens, outputTokens);
-    recordTokens('kimi-128k', inputTokens, outputTokens);
+    trackCost('kimi-k2', inputTokens, outputTokens);
+    recordTokens('kimi-k2', inputTokens, outputTokens);
 
     // Debug: log if response has tool calls or empty content
     const content = data.choices?.[0]?.message?.content || '';
@@ -400,7 +399,7 @@ async function callGemini(prompt, options = {}) {
       }
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -424,7 +423,7 @@ async function callGemini(prompt, options = {}) {
       // Track cost
       const inputTokens = data.usageMetadata?.promptTokenCount || 0;
       const outputTokens = data.usageMetadata?.candidatesTokenCount || 0;
-      trackCost('gemini-2.0-flash', inputTokens, outputTokens, 0.1, 0.4);
+      trackCost('gemini-2.5-flash', inputTokens, outputTokens, 0.1, 0.4);
 
       return text;
     },
