@@ -5,6 +5,7 @@ Compares actual output (PPT/Excel) against expected templates/criteria.
 Generates specific, actionable feedback for Claude Code to fix.
 """
 
+import json
 import os
 import re
 from typing import List, Dict, Any, Optional
@@ -288,7 +289,7 @@ TEMPLATES = {
         require_logos=False,  # Market research may not have logos
         require_websites=True,
         require_descriptions=True,
-        reference_pptx_path="Market_Research_energy_services_2025-12-31 (6).pptx",
+        reference_pptx_path="251219_Escort_Phase 1 Market Selection_V3.pptx",
         min_words_per_description=50,
         min_content_paragraphs=3,
         require_actionable_content=True,
@@ -357,7 +358,7 @@ TEMPLATES = {
 # =============================================================================
 
 SERVICE_REFERENCE_PPTX = {
-    "market-research": "Market_Research_energy_services_2025-12-31 (6).pptx",
+    "market-research": "251219_Escort_Phase 1 Market Selection_V3.pptx",
     "profile-slides": "YCP profile slide template v3.pptx",
     "target-search": "YCP Target List Slide Template.pptx",
     "trading-comps": "trading comps slide ref.pptx",
@@ -542,6 +543,240 @@ def _compare_formatting_profiles(
                 actual=f"Font: {output_profile.font_family}",
                 suggestion=f"Change fontFace to '{reference_profile.font_family}' in pptxgenjs.",
             ))
+
+    return discrepancies
+
+
+# =============================================================================
+# PER-SLIDE PATTERN MATCHING (Part 4)
+# =============================================================================
+
+_cached_patterns = None
+
+
+def _load_template_patterns() -> Optional[dict]:
+    """Load template-patterns.json for per-slide comparison."""
+    global _cached_patterns
+    if _cached_patterns is not None:
+        return _cached_patterns
+
+    # repo_root: 2 levels up from vm/
+    repo_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    patterns_path = os.path.join(repo_root, "backend", "market-research", "template-patterns.json")
+    if not os.path.exists(patterns_path):
+        logger.debug(f"template-patterns.json not found at {patterns_path}")
+        return None
+    try:
+        with open(patterns_path, "r", encoding="utf-8") as f:
+            _cached_patterns = json.load(f)
+        return _cached_patterns
+    except Exception as e:
+        logger.warning(f"Failed to load template-patterns.json: {e}")
+        return None
+
+
+def _get_slide_title_text(slide_fmt) -> Optional[str]:
+    """Get title text from a SlideFormatting by finding the topmost large-font text shape."""
+    best = None
+    best_score = -1
+    for sf in slide_fmt.shapes:
+        if sf.text_content and sf.top < 0.8:
+            score = sf.font_size_pt or 0
+            if score > best_score:
+                best_score = score
+                best = sf.text_content
+    return best
+
+
+def _classify_output_slide(slide_fmt) -> Optional[str]:
+    """Classify an output slide into a pattern name based on shape fingerprinting.
+
+    Returns pattern name or None if unclassifiable.
+    """
+    # Count shapes by type
+    type_counts = {}
+    for sf in slide_fmt.shapes:
+        type_counts[sf.shape_type] = type_counts.get(sf.shape_type, 0) + 1
+
+    chart_count = type_counts.get("chart", 0)
+    table_count = type_counts.get("table", 0)
+    text_count = type_counts.get("text_box", 0) + type_counts.get("placeholder", 0)
+    total_shapes = len(slide_fmt.shapes)
+
+    # Rule 1: slide 1 = cover
+    if slide_fmt.slide_number == 1:
+        return "cover"
+
+    # Rule 2: TOC/divider — title contains "table of contents"
+    title_text = _get_slide_title_text(slide_fmt)
+    if title_text and "table of contents" in title_text.lower():
+        return "toc_divider"
+
+    # Rule 3: dual chart
+    if chart_count >= 2:
+        return "dual_chart_financial"
+
+    # Rule 4: single chart
+    if chart_count == 1:
+        # Check for right-side text shapes (insight panels)
+        right_text = [sf for sf in slide_fmt.shapes
+                      if sf.shape_type in ("text_box", "placeholder")
+                      and sf.left > 7.5 and sf.text_length > 0]
+        if right_text:
+            return "chart_insight_panels"
+        return "chart_callout_boxes"
+
+    # Rule 5: table, no charts
+    if table_count >= 1 and chart_count == 0:
+        # Check for narrow left-column label shapes with fill
+        label_shapes = [sf for sf in slide_fmt.shapes
+                        if sf.shape_type in ("text_box", "placeholder")
+                        and sf.width < 2.5 and sf.fill_color_hex is not None
+                        and sf.left < 1.0]
+        if label_shapes:
+            return "label_row_table"
+        return "data_table_reference"
+
+    # Rule 6: 2x2 matrix — 4 similarly-sized shapes in grid layout
+    content_shapes = [sf for sf in slide_fmt.shapes
+                      if sf.shape_type in ("text_box", "placeholder", "group")
+                      and sf.top > 1.0 and sf.height > 1.0 and sf.width > 2.0]
+    if len(content_shapes) == 4:
+        widths = [sf.width for sf in content_shapes]
+        heights = [sf.height for sf in content_shapes]
+        if max(widths) - min(widths) < 2.0 and max(heights) - min(heights) < 1.5:
+            return "matrix_2x2"
+
+    # Rule 7: mostly text
+    if text_count >= 3 and table_count == 0 and chart_count == 0:
+        return "text_policy_block"
+
+    # Rule 8: few shapes, likely a divider/section break
+    if total_shapes <= 5 and text_count >= 1:
+        return "toc_divider"
+
+    return None
+
+
+def _compare_slide_to_pattern(slide_fmt, pattern_name: str, pattern_spec: dict) -> List["Discrepancy"]:
+    """Compare a single slide against its pattern spec from template-patterns.json.
+
+    Returns list of discrepancies found.
+    """
+    discrepancies = []
+    elements = pattern_spec.get("elements", {})
+    slide_loc = f"Slide {slide_fmt.slide_number}"
+
+    # Helper: find shape by type
+    def find_shapes_by_type(stype):
+        return [sf for sf in slide_fmt.shapes if sf.shape_type == stype]
+
+    # Helper: find title shape
+    def find_title_shape():
+        for sf in slide_fmt.shapes:
+            if sf.text_content and sf.top < 0.8 and sf.font_size_pt and sf.font_size_pt >= 14:
+                return sf
+        return None
+
+    # Check title position if spec has it
+    title_spec = elements.get("title") or elements.get("sectionTitle") or elements.get("countryTitle")
+    if title_spec:
+        title_shape = find_title_shape()
+        if title_shape:
+            spec_y = title_spec.get("y", 0)
+            if abs(title_shape.top - spec_y) > 0.3:
+                discrepancies.append(Discrepancy(
+                    severity=Severity.MEDIUM,
+                    category="title_position_mismatch",
+                    location=slide_loc,
+                    expected=f"Title y={spec_y}\"",
+                    actual=f"Title y={title_shape.top}\"",
+                    suggestion=f"Move title to y={spec_y} on {slide_loc}.",
+                ))
+
+    # Check content area position
+    content_spec = elements.get("contentArea")
+    if content_spec:
+        content_y = content_spec.get("y", 1.3)
+        # Find first content shape below title
+        content_shapes = [sf for sf in slide_fmt.shapes
+                          if sf.top > 0.8 and sf.shape_type in ("text_box", "table", "placeholder")]
+        if content_shapes:
+            first_content = min(content_shapes, key=lambda s: s.top)
+            if abs(first_content.top - content_y) > 0.3:
+                discrepancies.append(Discrepancy(
+                    severity=Severity.MEDIUM,
+                    category="content_position_mismatch",
+                    location=slide_loc,
+                    expected=f"Content starts at y={content_y}\"",
+                    actual=f"Content starts at y={first_content.top}\"",
+                    suggestion=f"Move content area to y={content_y} on {slide_loc}.",
+                ))
+
+    # Check chart presence and dimensions
+    chart_spec = elements.get("chart")
+    if chart_spec:
+        chart_shapes = find_shapes_by_type("chart")
+        if not chart_shapes:
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH,
+                category="missing_chart",
+                location=slide_loc,
+                expected=f"Chart expected (pattern: {pattern_name})",
+                actual="No chart found",
+                suggestion=f"Add chart to {slide_loc} using addChart() in pptxgenjs.",
+            ))
+        else:
+            cs = chart_shapes[0]
+            spec_w = chart_spec.get("w")
+            spec_h = chart_spec.get("h")
+            if spec_w and abs(cs.width - spec_w) > 0.5:
+                discrepancies.append(Discrepancy(
+                    severity=Severity.MEDIUM,
+                    category="chart_size_mismatch",
+                    location=slide_loc,
+                    expected=f"Chart width={spec_w}\"",
+                    actual=f"Chart width={cs.width}\"",
+                    suggestion=f"Resize chart to w={spec_w} on {slide_loc}.",
+                ))
+            if spec_h and abs(cs.height - spec_h) > 0.5:
+                discrepancies.append(Discrepancy(
+                    severity=Severity.MEDIUM,
+                    category="chart_size_mismatch",
+                    location=slide_loc,
+                    expected=f"Chart height={spec_h}\"",
+                    actual=f"Chart height={cs.height}\"",
+                    suggestion=f"Resize chart to h={spec_h} on {slide_loc}.",
+                ))
+
+    # Check table presence and width
+    table_spec = elements.get("table")
+    if table_spec:
+        table_shapes = find_shapes_by_type("table")
+        if not table_shapes:
+            # Only flag if this pattern type expects a table as primary content
+            if pattern_name in ("label_row_table", "data_table_reference",
+                                "data_table_highlighted", "glossary_table"):
+                discrepancies.append(Discrepancy(
+                    severity=Severity.HIGH,
+                    category="missing_table",
+                    location=slide_loc,
+                    expected=f"Table expected (pattern: {pattern_name})",
+                    actual="No table found",
+                    suggestion=f"Add table to {slide_loc} using addTable() in pptxgenjs.",
+                ))
+        else:
+            ts = table_shapes[0]
+            spec_w = table_spec.get("w")
+            if spec_w and abs(ts.width - spec_w) > 0.5:
+                discrepancies.append(Discrepancy(
+                    severity=Severity.MEDIUM,
+                    category="table_width_mismatch",
+                    location=slide_loc,
+                    expected=f"Table width={spec_w}\"",
+                    actual=f"Table width={ts.width}\"",
+                    suggestion=f"Resize table to w={spec_w} on {slide_loc}.",
+                ))
 
     return discrepancies
 
@@ -1020,6 +1255,45 @@ def compare_pptx_to_template(
         logger.debug("pptx_reader formatting extraction not available")
     except Exception as e:
         logger.warning(f"Formatting comparison failed: {e}")
+
+    # ==========================================================================
+    # PER-SLIDE PATTERN MATCHING (market-research only)
+    # ==========================================================================
+
+    if template.name == "Market Research Report":
+        try:
+            from file_readers.pptx_reader import extract_formatting_profile as _efp
+
+            output_path = pptx_analysis.get("file_path")
+            if output_path and os.path.exists(output_path):
+                patterns_data = _load_template_patterns()
+                # Re-use out_profile if already extracted above, otherwise extract fresh
+                try:
+                    out_profile_for_slides = out_profile
+                except NameError:
+                    out_profile_for_slides = _efp(output_path)
+
+                if patterns_data and out_profile_for_slides and out_profile_for_slides.slides:
+                    patterns_dict = patterns_data.get("patterns", {})
+                    total_checks += 1
+                    slide_discrepancies = []
+
+                    for slide_fmt in out_profile_for_slides.slides:
+                        classified = _classify_output_slide(slide_fmt)
+                        if classified and classified in patterns_dict:
+                            slide_discs = _compare_slide_to_pattern(
+                                slide_fmt, classified, patterns_dict[classified]
+                            )
+                            slide_discrepancies.extend(slide_discs)
+
+                    if slide_discrepancies:
+                        discrepancies.extend(slide_discrepancies)
+                    else:
+                        passed_checks += 1
+        except ImportError:
+            logger.debug("pptx_reader not available for per-slide matching")
+        except Exception as e:
+            logger.warning(f"Per-slide pattern matching failed: {e}")
 
     # Generate summary
     passed = len([d for d in discrepancies if d.severity == Severity.CRITICAL]) == 0
