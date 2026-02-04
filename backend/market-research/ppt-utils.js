@@ -1,4 +1,4 @@
-const { callDeepSeek } = require('./ai-clients');
+const { callKimiAnalysis } = require('./ai-clients');
 
 // Load template patterns for smart layout engine
 let templatePatterns = {};
@@ -1101,12 +1101,12 @@ Transform this research into a narrative. Return JSON:
 }`;
 
   try {
-    const response = await callDeepSeek(prompt, systemPrompt, 8192);
+    const response = await callKimiAnalysis(prompt, systemPrompt, 8192);
 
     // Parse response
     let story;
     try {
-      const jsonMatch = response.match(/\{[\s\S]*\}/);
+      const jsonMatch = response.content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         story = JSON.parse(jsonMatch[0]);
       } else {

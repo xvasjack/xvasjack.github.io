@@ -40,10 +40,6 @@ const MODEL_COSTS = {
   'claude-3-sonnet': { input: 0.003, output: 0.015 },
   'claude-sonnet-4': { input: 0.003, output: 0.015 },
   'claude-3-haiku': { input: 0.00025, output: 0.00125 },
-  // DeepSeek
-  deepseek: { input: 0.00014, output: 0.00028 },
-  'deepseek-chat': { input: 0.00028, output: 0.00042 },
-  'deepseek-reasoner': { input: 0.00042, output: 0.00168 },
   // Kimi
   'kimi-k2.5': { input: 0.0006, output: 0.0025 },
 };

@@ -1,6 +1,6 @@
 const {
-  callDeepSeekChat,
-  callDeepSeek,
+  callKimiChat,
+  callKimiAnalysis,
   callKimiDeepResearch,
   callGemini,
 } = require('./ai-clients');
@@ -77,7 +77,7 @@ RULES:
 
 Return ONLY valid JSON.`;
 
-  const result = await callDeepSeekChat(gapPrompt, '', 4096);
+  const result = await callKimiChat(gapPrompt, '', 4096);
 
   try {
     let jsonStr = result.content.trim();
@@ -184,7 +184,7 @@ function parseJsonResponse(text) {
 }
 
 /**
- * Synthesize with fallback chain: Gemini → DeepSeek → raw text
+ * Synthesize with fallback chain: Gemini → Kimi → raw text
  */
 async function synthesizeWithFallback(prompt, options = {}) {
   const { maxTokens = 8192, jsonMode = true } = options;
@@ -193,12 +193,12 @@ async function synthesizeWithFallback(prompt, options = {}) {
     const result = await callGemini(prompt, { maxTokens, jsonMode, temperature: 0.2 });
     return parseJsonResponse(result);
   } catch (geminiErr) {
-    console.warn(`  [Synthesis] Gemini failed: ${geminiErr?.message}, trying DeepSeek...`);
+    console.warn(`  [Synthesis] Gemini failed: ${geminiErr?.message}, trying Kimi...`);
     try {
-      const result = await callDeepSeekChat(prompt, '', maxTokens);
+      const result = await callKimiChat(prompt, '', maxTokens);
       return parseJsonResponse(result.content);
-    } catch (dsErr) {
-      console.error(`  [Synthesis] DeepSeek also failed: ${dsErr?.message}`);
+    } catch (kimiErr) {
+      console.error(`  [Synthesis] Kimi also failed: ${kimiErr?.message}`);
       return null;
     }
   }
@@ -832,7 +832,7 @@ Additional requirements:
 
 Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
 
-  const result = await callDeepSeek(prompt, '', 8192);
+  const result = await callKimiAnalysis(prompt, '', 8192);
 
   try {
     let jsonStr = result.content.trim();
@@ -1241,7 +1241,7 @@ BE HARSH. A 7/10 means it's good. 8+ means it's exceptional. Most first drafts a
 Only "APPROVE" if score is 7+ and no critical issues remain.
 Return ONLY valid JSON.`;
 
-  const result = await callDeepSeekChat(reviewPrompt, '', 4096);
+  const result = await callKimiChat(reviewPrompt, '', 4096);
 
   try {
     let jsonStr = result.content.trim();
@@ -1307,7 +1307,7 @@ For example, if reviewer says "executive summary is vague", rewrite ALL 5 bullet
 
 Return ONLY valid JSON with the full analysis structure.`;
 
-  const result = await callDeepSeek(revisePrompt, systemPrompt, 12000);
+  const result = await callKimiAnalysis(revisePrompt, systemPrompt, 12000);
 
   try {
     let jsonStr = result.content.trim();
@@ -1509,7 +1509,7 @@ CRITICAL QUALITY STANDARDS:
 7. COMPANY DESCRIPTIONS: Every company in keyPlayers and potentialPartners MUST have a "description" field with 50+ words. Include revenue, growth rate, market share, key services, geographic coverage, and competitive advantages. NEVER write generic one-liners like "X is a company that provides Y" — include specific metrics and strategic context.
 8. WEBSITE URLs: Every company MUST have a "website" field with the company's actual corporate website URL.`;
 
-  const result = await callDeepSeek(prompt, systemPrompt, 12000);
+  const result = await callKimiAnalysis(prompt, systemPrompt, 12000);
 
   let synthesis;
   try {
@@ -1626,7 +1626,7 @@ Return JSON with:
 
 Focus on COMPARISONS and TRADE-OFFS, not just summaries.`;
 
-  const result = await callDeepSeek(prompt, systemPrompt, 12000);
+  const result = await callKimiAnalysis(prompt, systemPrompt, 12000);
 
   try {
     let jsonStr = result.content.trim();
