@@ -213,6 +213,14 @@ async def wait_for_email_callback(
                 after_epoch=after_epoch,
             )
             if result.get("success"):
+                # Fix 3: Detect backend failure emails by subject
+                if "failed" in result.get("subject", "").lower():
+                    logger.warning(f"Backend sent failure email: {result.get('subject')}")
+                    return {
+                        "success": False,
+                        "error": f"Backend sent failure email: {result.get('subject')}",
+                        "email_id": result.get("email_id"),
+                    }
                 logger.info(f"Gmail API downloaded: {result.get('file_path')}")
                 return result
             logger.warning(f"Gmail API failed: {result.get('error')} — falling back to browser")
@@ -778,6 +786,7 @@ async def run_feedback_loop(
 
     # Issue 8: Check for interrupted loop state
     resume_from = 0
+    saved = None
     saved_issue_tracker = None
     saved_prs_merged = 0
     try:
@@ -796,14 +805,16 @@ async def run_feedback_loop(
     seen_email_ids = set()  # Track processed email IDs across iterations
     # Track when a fix was last deployed — only require fresh emails after that
     last_fix_deployed_epoch = [0]
+    # Fix 1: Use loop start time as floor — never match emails from before this run
+    loop_start_epoch = int(saved.started_at) if saved and saved.started_at else int(time.time())
 
     async def submit():
         return await submit_form_callback(service_name, form_data)
 
     async def wait_email():
-        # Iteration 1 (no fix deployed yet): accept any unseen email (including old ones)
-        # Iteration 2+ (after fix deployed): only accept emails after the fix was deployed
-        epoch = last_fix_deployed_epoch[0] if last_fix_deployed_epoch[0] else None
+        # Always use loop_start_epoch as floor — prevents picking up stale emails
+        # after resume or on iteration 1 before any fix is deployed
+        epoch = max(last_fix_deployed_epoch[0], loop_start_epoch)
         result = await wait_for_email_callback(
             service_name,
             skip_email_ids=seen_email_ids,

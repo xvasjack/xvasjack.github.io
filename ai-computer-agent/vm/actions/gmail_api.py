@@ -376,7 +376,7 @@ async def download_attachment_api(
             # Check file extension
             ext = os.path.splitext(filename)[1].lower()
             # 1.14: Extended whitelist — add .ppt, .html, .htm, .zip
-            allowed_exts = {".pptx", ".xlsx", ".xls", ".docx", ".pdf", ".csv", ".ppt", ".html", ".htm", ".zip"}
+            allowed_exts = {".pptx", ".xlsx", ".xls", ".docx", ".pdf", ".csv", ".ppt", ".html", ".htm", ".zip", ".txt"}
             if ext not in allowed_exts:
                 logger.warning(f"Skipping attachment with unknown extension: {filename}")
                 continue

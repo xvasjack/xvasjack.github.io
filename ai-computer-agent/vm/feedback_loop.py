@@ -484,6 +484,7 @@ class FeedbackLoop:
             await self._report_progress("[HOLLOW] Output is >50% empty — skipping layout scoring, fixing research pipeline")
             iteration.issues_found.insert(0, "HOLLOW OUTPUT: >50% content missing — fix research/synthesis pipeline before fixing layout")
             # Don't return "pass" even if analysis says passed — hollow output should never pass
+            analysis["passed"] = False
 
         if analysis.get("passed", not issues):
             # Template says output passes — log non-critical issues but don't loop
