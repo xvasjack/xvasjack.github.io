@@ -27,6 +27,7 @@ try:
     from pptx import Presentation
     from pptx.util import Inches, Pt, Emu
     from pptx.enum.shapes import MSO_SHAPE_TYPE
+    from pptx.enum.text import PP_ALIGN
     HAS_PPTX = True
 except ImportError:
     HAS_PPTX = False
@@ -79,6 +80,16 @@ class ShapeFormatting:
     text_length: int = 0
     estimated_lines: int = 0
     available_lines: int = 0  # based on box height and font size
+    text_content: Optional[str] = None  # first 100 chars, for slide classification
+    paragraph_alignment: Optional[str] = None  # left/center/right/justify
+    fill_color_hex: Optional[str] = None  # shape background fill
+    border_color_hex: Optional[str] = None  # shape outline color
+    border_width_pt: Optional[float] = None  # shape outline width
+    margin_left: Optional[float] = None  # text frame margin inches
+    margin_top: Optional[float] = None
+    margin_right: Optional[float] = None
+    margin_bottom: Optional[float] = None
+    line_spacing: Optional[float] = None  # paragraph line spacing
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -153,12 +164,35 @@ class FormattingProfile:
             "font_family": self.font_family,
             "overflow_shapes": self.overflow_shapes,
             "overlap_pairs": self.overlap_pairs,
+            "slides": [s.to_dict() for s in self.slides],
         }
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "FormattingProfile":
-        slides = [SlideFormatting(**s) if isinstance(s, dict) else s
-                  for s in data.pop("slides", [])]
+        raw_slides = data.pop("slides", [])
+        slides = []
+        for s in raw_slides:
+            if isinstance(s, dict):
+                # Reconstruct ShapeFormatting objects within shapes list
+                raw_shapes = s.pop("shapes", [])
+                shape_objs = []
+                for sh in raw_shapes:
+                    if isinstance(sh, dict):
+                        # Filter to known ShapeFormatting fields
+                        shape_objs.append(ShapeFormatting(
+                            **{k: v for k, v in sh.items()
+                               if k in ShapeFormatting.__dataclass_fields__}
+                        ))
+                    else:
+                        shape_objs.append(sh)
+                slide_obj = SlideFormatting(
+                    **{k: v for k, v in s.items()
+                       if k in SlideFormatting.__dataclass_fields__}
+                )
+                slide_obj.shapes = shape_objs
+                slides.append(slide_obj)
+            else:
+                slides.append(s)
         overflow = data.pop("overflow_shapes", [])
         overlap = data.pop("overlap_pairs", [])
         profile = cls(**{k: v for k, v in data.items()
@@ -191,6 +225,8 @@ def _get_shape_type(shape) -> str:
             return "line"
         if shape.shape_type == MSO_SHAPE_TYPE.GROUP:
             return "group"
+        if shape.shape_type == MSO_SHAPE_TYPE.CHART:
+            return "chart"
         if shape.has_text_frame:
             return "text_box"
     except Exception:
@@ -258,8 +294,70 @@ def _extract_shape_formatting(shape) -> ShapeFormatting:
     font_name, font_size_pt, font_color_hex, font_bold = _get_first_run_font(shape)
 
     text_length = 0
+    text_content = None
+    paragraph_alignment = None
+    fill_color_hex = None
+    border_color_hex = None
+    border_width_pt = None
+    margin_left = None
+    margin_top = None
+    margin_right = None
+    margin_bottom = None
+    line_spacing_val = None
+
     if shape.has_text_frame:
         text_length = sum(len(p.text) for p in shape.text_frame.paragraphs)
+        # Extract first 100 chars for classification
+        full_text = shape.text_frame.text or ""
+        if full_text.strip():
+            text_content = full_text.strip()[:100]
+        # Paragraph alignment from first non-empty paragraph
+        try:
+            for para in shape.text_frame.paragraphs:
+                if para.text.strip() and para.alignment is not None:
+                    align_map = {0: "left", 1: "center", 2: "right", 3: "justify"}
+                    paragraph_alignment = align_map.get(para.alignment, str(para.alignment))
+                    break
+        except Exception:
+            pass
+        # Text frame margins
+        try:
+            tf = shape.text_frame
+            if tf.margin_left is not None:
+                margin_left = round(tf.margin_left / EMU_PER_INCH, 3)
+            if tf.margin_top is not None:
+                margin_top = round(tf.margin_top / EMU_PER_INCH, 3)
+            if tf.margin_right is not None:
+                margin_right = round(tf.margin_right / EMU_PER_INCH, 3)
+            if tf.margin_bottom is not None:
+                margin_bottom = round(tf.margin_bottom / EMU_PER_INCH, 3)
+        except Exception:
+            pass
+        # Line spacing from first non-empty paragraph
+        try:
+            for para in shape.text_frame.paragraphs:
+                if para.text.strip() and para.line_spacing is not None:
+                    line_spacing_val = float(para.line_spacing)
+                    break
+        except Exception:
+            pass
+
+    # Shape fill color
+    try:
+        if hasattr(shape, 'fill') and shape.fill.type is not None:
+            if shape.fill.type == 1:  # Solid fill
+                fill_color_hex = str(shape.fill.fore_color.rgb)
+    except Exception:
+        pass
+
+    # Shape border/outline
+    try:
+        if hasattr(shape, 'line') and shape.line.color and shape.line.color.rgb:
+            border_color_hex = str(shape.line.color.rgb)
+        if hasattr(shape, 'line') and shape.line.width is not None:
+            border_width_pt = round(shape.line.width / 12700, 1)  # EMU to pt
+    except Exception:
+        pass
 
     estimated_lines = _estimate_text_lines(text_length, width, font_size_pt)
     available_lines = _estimate_available_lines(height, font_size_pt)
@@ -272,6 +370,16 @@ def _extract_shape_formatting(shape) -> ShapeFormatting:
         text_length=text_length,
         estimated_lines=estimated_lines,
         available_lines=available_lines,
+        text_content=text_content,
+        paragraph_alignment=paragraph_alignment,
+        fill_color_hex=fill_color_hex,
+        border_color_hex=border_color_hex,
+        border_width_pt=border_width_pt,
+        margin_left=margin_left,
+        margin_top=margin_top,
+        margin_right=margin_right,
+        margin_bottom=margin_bottom,
+        line_spacing=line_spacing_val,
     )
 
 

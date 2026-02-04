@@ -34,37 +34,37 @@ EMU_PER_INCH = 914400
 # Pattern classification mapping: slide numbers to pattern names
 PATTERN_MAPPING = {
     1: "cover",
-    2: "matrix_2x2",
-    3: "matrix_2x2",
-    4: "toc_divider",
+    2: "toc_divider",
+    3: "matrix_2x2",           # executive summary
+    4: "matrix_2x2",           # Vietnam opportunities overview
     5: "toc_divider",
-    6: "structured_table",
-    7: "multicolumn_table",
-    8: "text_policy_block",
-    9: "text_policy_block",
-    10: "multicolumn_table",
+    6: "label_row_table",      # regulatory summary
+    7: "data_table_reference", # foundational acts
+    8: "text_policy_block",    # policies
+    9: "text_policy_block",    # regulations
+    10: "text_policy_block",   # incentives
     11: "toc_divider",
-    12: "structured_table",
-    13: "chart_insight_panels",
-    14: "chart_callout_boxes",
-    15: "chart_insight_panels",
-    16: "chart_callout_boxes",
-    17: "chart_callout_boxes",
-    18: "chart_callout_boxes",
-    19: "chart_callout_boxes",
+    12: "label_row_table",     # market summary
+    13: "chart_insight_panels",# TPES
+    14: "chart_insight_panels",# energy consumption
+    15: "chart_insight_panels",# electricity
+    16: "chart_callout_boxes", # electricity price
+    17: "chart_callout_boxes", # natural gas
+    18: "chart_callout_boxes", # LNG infrastructure
+    19: "chart_callout_boxes", # gas import
     20: "toc_divider",
-    21: "structured_table",
-    22: "multicolumn_table",
-    23: "case_study_rows",
-    24: "case_study_rows",
-    25: "diagram_text_split",
-    26: "dual_chart_financial",
-    27: "case_study_rows",
-    28: "case_study_rows",
-    29: "dual_chart_financial",
+    21: "label_row_table",     # Japanese players summary
+    22: "data_table_highlighted", # player presence
+    23: "case_study_rows",     # Osaka Gas case 1
+    24: "case_study_rows",     # Osaka Gas case 2
+    25: "case_study_rows",     # Japanese PR reference
+    26: "dual_chart_financial",# SOGEC financials
+    27: "case_study_rows",     # Toho Gas case 1
+    28: "case_study_rows",     # Toho Gas case 2
+    29: "dual_chart_financial",# PSM financials
     30: "toc_divider",
-    31: "chart_callout_boxes",
-    32: "chart_callout_boxes",
+    31: "chart_callout_boxes", # electricity supply
+    32: "chart_callout_boxes", # electricity price
     33: "glossary_table",
     34: "glossary_table",
 }
@@ -118,6 +118,18 @@ PATTERN_INFO = {
     "glossary_table": {
         "description": "Two-column table for terms and definitions",
         "bestFor": ["glossary", "definitions", "term explanations"]
+    },
+    "label_row_table": {
+        "description": "Structured label-row table with themed category labels on left",
+        "bestFor": ["section summary", "themed overview", "category breakdown"]
+    },
+    "data_table_reference": {
+        "description": "Multi-column reference data table for structured comparative data",
+        "bestFor": ["regulation list", "law reference", "structured data"]
+    },
+    "data_table_highlighted": {
+        "description": "Multi-column data table with colored left border for highlighting",
+        "bestFor": ["company comparison", "competitive analysis", "highlighted data"]
     }
 }
 
@@ -637,7 +649,7 @@ def main():
     else:
         # Default relative path
         script_dir = Path(__file__).parent
-        template_path = script_dir / '..' / '..' / 'Market_Research_energy_services_2025-12-31 (6).pptx'
+        template_path = script_dir / '..' / '..' / '251219_Escort_Phase 1 Market Selection_V3.pptx'
 
     # Determine output path
     if args.output:
