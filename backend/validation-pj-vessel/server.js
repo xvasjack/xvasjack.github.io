@@ -707,7 +707,7 @@ function buildMultiCriteriaExcel(companies, criteria) {
 
 // ============ ORCHESTRATOR ============
 
-async function orchestrate(companyList, countryList, criteria) {
+async function orchestrate(companyList, countryList, criteria, websiteMap = {}) {
   const batchSize = 10;
   const results = [];
 
@@ -719,8 +719,10 @@ async function orchestrate(companyList, countryList, criteria) {
 
     const batchResults = await Promise.all(
       batch.map(async (companyName) => {
-        // STEP 1: Find website (2-source parallel)
-        const website = await findCompanyWebsite(companyName, countryList);
+        // STEP 1: Find website (use provided URL or 2-source parallel discovery)
+        const providedUrl = websiteMap[companyName];
+        const website = providedUrl || (await findCompanyWebsite(companyName, countryList));
+        if (providedUrl) console.log(`  Using provided website for ${companyName}: ${providedUrl}`);
 
         if (!website) {
           return {
@@ -817,7 +819,7 @@ async function orchestrate(companyList, countryList, criteria) {
 // ============ VALIDATION ENDPOINT ============
 
 app.post('/api/validation', async (req, res) => {
-  const { Companies, Countries, Criteria, Email } = req.body;
+  const { Companies, Countries, Criteria, Email, Websites } = req.body;
 
   if (!Companies || !Criteria || !Array.isArray(Criteria) || Criteria.length === 0 || !Email) {
     return res.status(400).json({ error: 'Companies, Criteria (array), and Email are required' });
@@ -828,6 +830,8 @@ app.post('/api/validation', async (req, res) => {
   console.log(`Criteria: ${Criteria.length} items`);
   Criteria.forEach((c, i) => console.log(`  ${i + 1}. ${c}`));
   console.log(`Countries: ${Countries}`);
+  const websiteMap = Websites && typeof Websites === 'object' ? Websites : {};
+  console.log(`Provided websites: ${Object.keys(websiteMap).length}`);
   console.log(`Email: ${Email}`);
   console.log('='.repeat(50));
 
@@ -860,7 +864,7 @@ app.post('/api/validation', async (req, res) => {
       }
 
       // Run the pipeline
-      const results = await orchestrate(companyList, countryList, Criteria);
+      const results = await orchestrate(companyList, countryList, Criteria, websiteMap);
 
       // Build Excel
       const excelBase64 = buildMultiCriteriaExcel(results, Criteria);

@@ -150,7 +150,7 @@
                   <div id="progressFill" class="h-full bg-indigo-600 rounded-full transition-all duration-300" style="width: 0%"></div>
                 </div>
                 <p id="progressText" class="text-xs text-slate-500 mt-2">Analyzing...</p>
-                <div id="detectionResults" class="hidden grid grid-cols-2 gap-3 mt-3">
+                <div id="detectionResults" class="hidden grid grid-cols-3 gap-3 mt-3">
                   <div class="text-center p-3 bg-white rounded-lg border border-slate-200">
                     <p id="companyCount" class="text-2xl font-bold text-indigo-600">0</p>
                     <p class="text-xs text-slate-500">Companies</p>
@@ -158,6 +158,10 @@
                   <div class="text-center p-3 bg-white rounded-lg border border-slate-200">
                     <p id="countryCount" class="text-2xl font-bold text-indigo-600">0</p>
                     <p class="text-xs text-slate-500">Countries</p>
+                  </div>
+                  <div class="text-center p-3 bg-white rounded-lg border border-slate-200">
+                    <p id="websiteCount" class="text-2xl font-bold text-indigo-600">0</p>
+                    <p class="text-xs text-slate-500">Websites</p>
                   </div>
                 </div>
               </div>
@@ -297,6 +301,7 @@
             detectionResults.classList.remove('hidden');
             document.getElementById('companyCount').textContent = extractedData.companies.length;
             document.getElementById('countryCount').textContent = extractedData.countries.length;
+            document.getElementById('websiteCount').textContent = Object.keys(extractedData.websites || {}).length;
           }, 300);
         } catch (err) { progressText.textContent = 'Error: ' + err.message; }
       };
@@ -310,34 +315,46 @@
       const maxCols = Math.max(...json.slice(0,20).map(r => r?.length || 0));
 
       for (let c = 0; c < maxCols; c++) {
-        const col = { idx: c, compScore: 0, countryScore: 0 };
+        const col = { idx: c, compScore: 0, countryScore: 0, webScore: 0 };
         for (let r = 0; r < Math.min(json.length, 30); r++) {
           const val = json[r]?.[c] ? String(json[r][c]).trim() : '';
           if (!val) continue;
           const low = val.toLowerCase();
           if (r < 5 && /company|name|firm|corp/i.test(val)) col.compScore += 10;
           if (r < 5 && /country|location|region/i.test(val)) col.countryScore += 10;
+          if (r < 5 && /website|url|site|homepage|domain|link/i.test(val)) col.webScore += 10;
           if (knownCountries.some(x => low === x)) col.countryScore += 2;
           if (/\b(ltd|inc|corp|sdn|bhd|pte|llc|gmbh)\b/i.test(val)) col.compScore += 3;
+          if (/^https?:\/\//i.test(val) || (/\.(com|org|net|co|io|my|sg|ph|vn|th|id|jp|cn|kr)\b/i.test(val) && !/\s/.test(val))) col.webScore += 3;
         }
         cols.push(col);
       }
 
       const compCol = cols.reduce((a,b) => b.compScore > a.compScore ? b : a, {compScore:-1,idx:0});
       const countryCol = cols.reduce((a,b) => b.countryScore > a.countryScore && b.idx !== compCol.idx ? b : a, {countryScore:-1,idx:-1});
+      const webCol = cols.reduce((a,b) => b.webScore > a.webScore && b.idx !== compCol.idx && b.idx !== countryCol.idx ? b : a, {webScore:0,idx:-1});
 
+      const websites = {};
       for (let i = 1; i < json.length; i++) {
         const row = json[i];
         if (!row) continue;
         const comp = row[compCol.idx] ? String(row[compCol.idx]).trim() : '';
-        if (comp.length > 1 && comp.length < 200 && !knownCountries.includes(comp.toLowerCase())) companies.push(comp);
+        if (comp.length > 1 && comp.length < 200 && !knownCountries.includes(comp.toLowerCase())) {
+          companies.push(comp);
+          if (webCol.webScore > 0 && webCol.idx >= 0) {
+            const url = row[webCol.idx] ? String(row[webCol.idx]).trim() : '';
+            if (url && (/^https?:\/\//i.test(url) || /\.(com|org|net|co|io|my|sg|ph|vn|th|id|jp|cn|kr)\b/i.test(url))) {
+              websites[comp] = url.startsWith('http') ? url : 'https://' + url;
+            }
+          }
+        }
         for (let j = 0; j < row.length; j++) {
           const cell = row[j] ? String(row[j]).toLowerCase().trim() : '';
           const match = knownCountries.find(x => cell === x);
           if (match) countries.add(match.charAt(0).toUpperCase() + match.slice(1));
         }
       }
-      return { companies: companies.slice(0, 200), countries: Array.from(countries) };
+      return { companies: companies.slice(0, 200), countries: Array.from(countries), websites };
     }
 
     // Criteria builder
@@ -388,6 +405,37 @@
       return Array.from(inputs).map(i => i.value.trim()).filter(v => v.length > 0);
     }
 
+    function parseManualWebsites() {
+      const text = document.getElementById('companies').value;
+      if (!text) return {};
+      const websites = {};
+      text.split(/[\n\r]+/).forEach(line => {
+        line = line.trim();
+        if (!line) return;
+        const urlMatch = line.match(/https?:\/\/[^\s|,\t]+/i);
+        if (urlMatch) {
+          const url = urlMatch[0].replace(/[.,;:!?)]+$/, '');
+          const name = line.replace(urlMatch[0], '').replace(/[|\t,]+/g, ' ').trim();
+          if (name) websites[name] = url;
+        }
+      });
+      return websites;
+    }
+
+    function parseManualCompanies() {
+      const text = document.getElementById('companies').value;
+      if (!text) return '';
+      return text.split(/[\n\r]+/).map(line => {
+        line = line.trim();
+        if (!line) return '';
+        const urlMatch = line.match(/https?:\/\/[^\s|,\t]+/i);
+        if (urlMatch) {
+          return line.replace(urlMatch[0], '').replace(/[|\t,]+/g, ' ').trim();
+        }
+        return line;
+      }).filter(l => l).join('\n');
+    }
+
     // TODO: Replace with Railway deployment URL
     const BACKEND_URL = 'https://xvasjackgithubio-production-5d54.up.railway.app/api/validation';
 
@@ -398,13 +446,15 @@
       const error = document.getElementById('errorMessage');
       success.classList.add('hidden'); error.classList.add('hidden');
 
-      let companiesData, countriesData;
+      let companiesData, countriesData, websitesData;
       if (currentMode === 'file') {
         if (!extractedData?.companies.length) { alert('Please upload an Excel file first'); return; }
         companiesData = extractedData.companies.join('\n');
         countriesData = extractedData.countries.join('\n');
+        websitesData = extractedData.websites || {};
       } else {
-        companiesData = document.getElementById('companies').value;
+        websitesData = parseManualWebsites();
+        companiesData = parseManualCompanies();
         countriesData = document.getElementById('countries').value;
         if (!companiesData.trim()) { alert('Please enter company names'); return; }
       }
@@ -426,7 +476,8 @@
             Companies: companiesData,
             Countries: countriesData,
             Criteria: criteria,
-            Email: email
+            Email: email,
+            Websites: websitesData
           })
         });
         if (res.ok) { success.classList.remove('hidden'); }
