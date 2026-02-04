@@ -220,10 +220,18 @@ ${JSON.stringify(
       ([k]) =>
         k.includes('policy') ||
         k.includes('regulation') ||
+        k.includes('regulat') ||
         k.includes('law') ||
         k.includes('investment') ||
         k.includes('incentive') ||
-        k.includes('govern')
+        k.includes('govern') ||
+        k.includes('legislat') ||
+        k.includes('legal') ||
+        k.includes('tax') ||
+        k.includes('compliance') ||
+        k.includes('framework') ||
+        k.includes('act') ||
+        k.includes('decree')
     )
   ),
   null,
@@ -243,6 +251,7 @@ DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - MANDATORY: nationalPolicy.targets array MUST have at least 3 entries
 - MANDATORY: investmentRestrictions.incentives array MUST have at least 2 entries
 - If exact names are unavailable, provide the closest known regulation with "estimated" qualifier — NEVER return empty arrays
+- CRITICAL: If research data is sparse, use your training knowledge about ${country}'s energy/environmental laws. Name REAL regulations — do not leave arrays empty.
 
 Return JSON:
 {
@@ -308,7 +317,17 @@ ${JSON.stringify(
         k.includes('gas') ||
         k.includes('lng') ||
         k.includes('esco') ||
-        k.includes('size')
+        k.includes('size') ||
+        k.includes('capacity') ||
+        k.includes('power') ||
+        k.includes('renew') ||
+        k.includes('fuel') ||
+        k.includes('oil') ||
+        k.includes('infrastructure') ||
+        k.includes('generat') ||
+        k.includes('consum') ||
+        k.includes('growth') ||
+        k.includes('forecast')
     )
   ),
   null,
@@ -328,6 +347,8 @@ DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - MANDATORY: Each of the 6 sections (tpes, finalDemand, electricity, gasLng, pricing, escoMarket) MUST have a populated keyInsight field with actionable language
 - MANDATORY: chartData in at least 3 sections must have series/values arrays with 3+ numeric data points
 - MANDATORY: escoMarket must have marketSize (e.g., "$XXM") and growthRate (e.g., "XX% CAGR") populated
+- CRITICAL: If research data lacks specific numbers, use your training knowledge to provide REAL approximate data for ${country}'s energy sector. Include market sizes, installed capacities, consumption figures, growth rates. NEVER leave numeric fields empty.
+- EVERY keyInsight MUST contain at least one of: "recommend", "opportunity", "should consider", "growth potential", "strategic fit", "next steps", "outlook"
 
 For chart data, provide NUMERIC arrays (not strings). Example:
 "chartData": {"categories": ["2020","2021","2022","2023","2024"], "series": [{"name":"Coal", "values": [45,42,40,38,35]}], "unit": "Mtoe"}
@@ -429,7 +450,15 @@ ${JSON.stringify(
         k.includes('case') ||
         k.includes('m&a') ||
         k.includes('merger') ||
-        k.includes('acqui')
+        k.includes('acqui') ||
+        k.includes('partner') ||
+        k.includes('landscape') ||
+        k.includes('rival') ||
+        k.includes('incumbent') ||
+        k.includes('operator') ||
+        k.includes('provider') ||
+        k.includes('firm') ||
+        k.includes('enterprise')
     )
   ),
   null,
@@ -447,6 +476,8 @@ DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - MANDATORY: japanesePlayers.players must have at least 2 entries, localMajor.players at least 3 entries, foreignPlayers.players at least 2 entries
 - MANDATORY: Every player description must be 50+ words. If you lack specific data, describe the company's general capabilities, market positioning, estimated scale, and strategic relevance
 - MANDATORY: caseStudy must have company, entryYear, entryMode, investment, and outcome all populated with specific data
+- CRITICAL: If research data is sparse, use your training knowledge to name REAL companies operating in ${country}'s ${industry} sector. Include their actual corporate website URLs. NEVER return empty player arrays.
+- EVERY description must include strategic context: why this company matters, what threat/opportunity it presents, and a recommendation (e.g., "recommend approaching for JV", "should consider as acquisition target", "strategic fit for technology licensing")
 
 Return JSON:
 {
@@ -564,7 +595,14 @@ ${JSON.stringify(
         k.includes('partner') ||
         k.includes('segment') ||
         k.includes('implement') ||
-        k.includes('econ')
+        k.includes('econ') ||
+        k.includes('outlook') ||
+        k.includes('assess') ||
+        k.includes('recommend') ||
+        k.includes('target') ||
+        k.includes('deal') ||
+        k.includes('valuat') ||
+        k.includes('financ')
     )
   ),
   null,
@@ -585,6 +623,8 @@ DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - MANDATORY: implementation.phases must have exactly 3 entries with activities, milestones, and investment
 - MANDATORY: summary.opportunities must have at least 3 entries, summary.obstacles at least 2 entries
 - MANDATORY: summary.keyInsights must have at least 3 entries with title, data, pattern, and implication
+- EVERY section and sub-section MUST contain actionable language: "recommend", "opportunity", "should consider", "growth potential", "strategic fit", "next steps", "outlook"
+- CRITICAL: If research data is sparse, use training knowledge to provide realistic assessments. NEVER return empty arrays or placeholder text.
 
 Return JSON:
 {
