@@ -25,7 +25,7 @@ app.use(requestLogger);
 app.use(express.json({ limit: '10mb' }));
 
 // Check required environment variables
-const requiredEnvVars = ['DEEPSEEK_API_KEY', 'KIMI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
+const requiredEnvVars = ['KIMI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
 const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
@@ -212,7 +212,6 @@ const PORT = process.env.PORT || 3010;
 app.listen(PORT, () => {
   console.log(`Market Research server running on port ${PORT}`);
   console.log('Environment check:');
-  console.log('  - DEEPSEEK_API_KEY:', process.env.DEEPSEEK_API_KEY ? 'Set' : 'MISSING');
   console.log('  - KIMI_API_KEY:', process.env.KIMI_API_KEY ? 'Set' : 'MISSING');
   console.log(
     '  - KIMI_API_BASE:',

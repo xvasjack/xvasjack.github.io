@@ -1,4 +1,4 @@
-const { callDeepSeekChat } = require('./ai-clients');
+const { callKimiChat } = require('./ai-clients');
 
 const RESEARCH_FRAMEWORK = {
   // === SECTION 1: POLICY & REGULATIONS (3 slides) ===
@@ -357,7 +357,7 @@ If countries are vague like "ASEAN", expand to: ["Thailand", "Vietnam", "Indones
 Return ONLY valid JSON, no markdown or explanation.`;
 
   // Use lighter chat model for simple parsing task
-  const result = await callDeepSeekChat(userPrompt, systemPrompt, 1024);
+  const result = await callKimiChat(userPrompt, systemPrompt, 1024);
 
   try {
     // Clean up response - remove markdown code blocks if present
@@ -474,7 +474,7 @@ CRITICAL RULES:
 
 Return ONLY valid JSON.`;
 
-  const result = await callDeepSeekChat(frameworkPrompt, '', 4096);
+  const result = await callKimiChat(frameworkPrompt, '', 4096);
 
   try {
     let jsonStr = result.content.trim();

@@ -8,13 +8,8 @@ const costTracker = {
   calls: [],
 };
 
-// Pricing per 1M tokens (from DeepSeek docs - Dec 2024)
-// Both deepseek-chat and deepseek-reasoner use same pricing
-// deepseek-chat = V3.2 Non-thinking Mode (max 8K output)
-// deepseek-reasoner = V3.2 Thinking Mode (max 64K output)
+// Pricing per 1M tokens
 const PRICING = {
-  'deepseek-chat': { input: 0.28, output: 0.42 }, // Cache miss pricing
-  'deepseek-reasoner': { input: 0.42, output: 1.68 }, // Thinking mode (higher pricing)
   'kimi-k2.5': { input: 0.6, output: 2.5 }, // Kimi K2.5 256k context
 };
 
@@ -77,138 +72,9 @@ async function withRetry(fn, maxRetries = 3, baseDelayMs = 1000, operationName =
   throw lastError;
 }
 
-// DeepSeek Chat - for lighter tasks (scope parsing)
-// Supports both legacy (prompt, systemPrompt, maxTokens) and new (prompt, options) signatures
-async function callDeepSeekChat(prompt, systemPromptOrOptions = '', maxTokens = 4096) {
-  try {
-    // Handle both legacy and new call signatures
-    let systemPrompt = '';
-    let actualMaxTokens = maxTokens;
-
-    if (typeof systemPromptOrOptions === 'object') {
-      // New signature: callDeepSeekChat(prompt, { systemPrompt, maxTokens, ... })
-      systemPrompt = systemPromptOrOptions.systemPrompt || '';
-      actualMaxTokens = systemPromptOrOptions.maxTokens || 4096;
-    } else {
-      // Legacy signature: callDeepSeekChat(prompt, systemPrompt, maxTokens)
-      systemPrompt = systemPromptOrOptions;
-    }
-
-    const messages = [];
-    if (systemPrompt) {
-      messages.push({ role: 'system', content: systemPrompt });
-    }
-    messages.push({ role: 'user', content: prompt });
-
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages,
-        max_tokens: actualMaxTokens,
-        temperature: 0.3,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`DeepSeek Chat HTTP error ${response.status}:`, errorText.substring(0, 200));
-      return { content: '', usage: { input: 0, output: 0 } };
-    }
-
-    const data = await response.json();
-    const inputTokens = data.usage?.prompt_tokens || 0;
-    const outputTokens = data.usage?.completion_tokens || 0;
-    trackCost('deepseek-chat', inputTokens, outputTokens);
-    recordTokens('deepseek-chat', inputTokens, outputTokens);
-
-    const content = data.choices?.[0]?.message?.content || '';
-
-    // Return just the text string to match callGemini's signature
-    if (typeof systemPromptOrOptions === 'object') {
-      return content;
-    }
-
-    // Return legacy format for backward compatibility
-    return {
-      content,
-      usage: { input: inputTokens, output: outputTokens },
-    };
-  } catch (error) {
-    console.error('DeepSeek Chat API error:', error?.message);
-    // Return empty string for new signature, object for legacy
-    if (typeof systemPromptOrOptions === 'object') {
-      return '';
-    }
-    return { content: '', usage: { input: 0, output: 0 } };
-  }
-}
-
-// DeepSeek V3.2 Thinking Mode - for deep analysis with chain-of-thought
-async function callDeepSeek(prompt, systemPrompt = '', maxTokens = 16384) {
-  try {
-    const messages = [];
-    if (systemPrompt) {
-      messages.push({ role: 'system', content: systemPrompt });
-    }
-    messages.push({ role: 'user', content: prompt });
-
-    const response = await fetch('https://api.deepseek.com/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'deepseek-reasoner',
-        messages,
-        max_tokens: maxTokens,
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(
-        `DeepSeek Reasoner HTTP error ${response.status}:`,
-        errorText.substring(0, 200)
-      );
-      // Fallback to chat model
-      console.log('Falling back to deepseek-chat...');
-      return callDeepSeekChat(prompt, systemPrompt, maxTokens);
-    }
-
-    const data = await response.json();
-    const inputTokens = data.usage?.prompt_tokens || 0;
-    const outputTokens = data.usage?.completion_tokens || 0;
-    trackCost('deepseek-reasoner', inputTokens, outputTokens);
-    recordTokens('deepseek-reasoner', inputTokens, outputTokens);
-
-    // R1 returns reasoning_content + content
-    const content = data.choices?.[0]?.message?.content || '';
-    const reasoning = data.choices?.[0]?.message?.reasoning_content || '';
-
-    console.log(
-      `  [DeepSeek V3.2 Thinking] Reasoning: ${reasoning.length} chars, Output: ${content.length} chars`
-    );
-
-    return {
-      content,
-      reasoning,
-      usage: { input: inputTokens, output: outputTokens },
-    };
-  } catch (error) {
-    console.error('DeepSeek Reasoner API error:', error?.message);
-    return { content: '', usage: { input: 0, output: 0 } };
-  }
-}
-
 // Kimi K2 API - for deep research with web browsing
 // Uses 256k context for thorough analysis with retry logic
-async function callKimi(query, systemPrompt = '', useWebSearch = true) {
+async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens = 8192) {
   const messages = [];
   if (systemPrompt) {
     messages.push({ role: 'system', content: systemPrompt });
@@ -218,7 +84,7 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true) {
   const requestBody = {
     model: 'kimi-k2.5',
     messages,
-    max_tokens: 8192,
+    max_tokens: maxTokens,
     temperature: 0.6,
   };
 
@@ -364,16 +230,30 @@ Be specific. Cite sources. No fluff.`;
   return callKimi(query, systemPrompt, true);
 }
 
+// Light tasks (scope parsing, gap ID, review). No web search.
+async function callKimiChat(prompt, systemPrompt = '', maxTokens = 4096) {
+  const result = await callKimi(prompt, systemPrompt, false, maxTokens);
+  return result; // { content, citations, usage, researchQuality }
+}
+
+// Heavy synthesis/analysis. No web search.
+async function callKimiAnalysis(prompt, systemPrompt = '', maxTokens = 12000) {
+  const result = await callKimi(prompt, systemPrompt, false, maxTokens);
+  return result;
+}
+
 /**
  * Call Gemini 3 Flash for synthesis tasks
  * Fast and capable for structured synthesis
- * Falls back to DeepSeekChat if no Gemini key
+ * Falls back to KimiChat if no Gemini key
  */
 async function callGemini(prompt, options = {}) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    console.log('  [Gemini] No API key, falling back to DeepSeekChat');
-    return callDeepSeekChat(prompt, options);
+    console.log('  [Gemini] No API key, falling back to KimiChat');
+    return callKimiChat(prompt, options.systemPrompt || '', options.maxTokens || 8192).then(
+      (r) => r.content
+    );
   }
 
   const { temperature = 0.3, maxTokens = 8192, systemPrompt, jsonMode = false } = options;
@@ -438,9 +318,9 @@ module.exports = {
   PRICING,
   trackCost,
   withRetry,
-  callDeepSeekChat,
-  callDeepSeek,
   callKimi,
+  callKimiChat,
+  callKimiAnalysis,
   callKimiDeepResearch,
   callGemini,
 };
