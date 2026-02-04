@@ -49,11 +49,9 @@ const MODEL_COSTS = {
   // DeepSeek
   deepseek: { input: 0.00014, output: 0.00028 },
   'deepseek-chat': { input: 0.00028, output: 0.00042 },
-  'deepseek-reasoner': { input: 0.00028, output: 0.00042 },
-  // Kimi (Moonshot)
-  'moonshot-v1-128k': { input: 0.00084, output: 0.00084 },
-  'kimi-128k': { input: 0.00084, output: 0.00084 },
-  'kimi-32k': { input: 0.00035, output: 0.00035 },
+  'deepseek-reasoner': { input: 0.00042, output: 0.00168 },
+  // Kimi
+  'kimi-k2': { input: 0.0006, output: 0.0025 },
   'gemini-2.0-flash': { input: 0.0001, output: 0.0004 },
 };
 
