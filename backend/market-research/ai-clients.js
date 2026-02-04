@@ -15,7 +15,7 @@ const costTracker = {
 const PRICING = {
   'deepseek-chat': { input: 0.28, output: 0.42 }, // Cache miss pricing
   'deepseek-reasoner': { input: 0.42, output: 1.68 }, // Thinking mode (higher pricing)
-  'kimi-k2': { input: 0.6, output: 2.5 }, // Kimi K2 256k context
+  'kimi-k2.5': { input: 0.6, output: 2.5 }, // Kimi K2.5 256k context
 };
 
 function trackCost(
@@ -216,7 +216,7 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true) {
   messages.push({ role: 'user', content: query });
 
   const requestBody = {
-    model: 'kimi-k2-0905-preview',
+    model: 'kimi-k2.5',
     messages,
     max_tokens: 8192,
     temperature: 0.6,
@@ -271,8 +271,8 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true) {
 
     const inputTokens = data.usage?.prompt_tokens || 0;
     const outputTokens = data.usage?.completion_tokens || 0;
-    trackCost('kimi-k2', inputTokens, outputTokens);
-    recordTokens('kimi-k2', inputTokens, outputTokens);
+    trackCost('kimi-k2.5', inputTokens, outputTokens);
+    recordTokens('kimi-k2.5', inputTokens, outputTokens);
 
     // Debug: log if response has tool calls or empty content
     const content = data.choices?.[0]?.message?.content || '';
@@ -336,7 +336,7 @@ async function callKimiDeepResearch(topic, country, industry) {
 
 Your job is to conduct DEEP research on the given topic. Not surface-level - actually dig into:
 - Primary sources (government websites, official statistics, company filings)
-- Recent news and developments (2024-2025)
+- Recent news and developments (2025-2026)
 - Specific numbers with sources
 - Company-specific intelligence
 - Regulatory details with enforcement reality
@@ -352,7 +352,7 @@ DO NOT give generic statements like "the market is growing". Give specifics like
 
 ${topic}
 
-Search the web for recent data (2024-2025). Find:
+Search the web for recent data (2025-2026). Find:
 1. Specific statistics and numbers
 2. Key regulations and their enforcement status
 3. Major companies and their market positions
@@ -365,8 +365,8 @@ Be specific. Cite sources. No fluff.`;
 }
 
 /**
- * Call Gemini 2.0 Flash for synthesis tasks
- * Cheaper and faster than DeepSeek for structured synthesis
+ * Call Gemini 3 Flash for synthesis tasks
+ * Fast and capable for structured synthesis
  * Falls back to DeepSeekChat if no Gemini key
  */
 async function callGemini(prompt, options = {}) {
@@ -399,7 +399,7 @@ async function callGemini(prompt, options = {}) {
       }
 
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -423,7 +423,7 @@ async function callGemini(prompt, options = {}) {
       // Track cost
       const inputTokens = data.usageMetadata?.promptTokenCount || 0;
       const outputTokens = data.usageMetadata?.candidatesTokenCount || 0;
-      trackCost('gemini-2.5-flash', inputTokens, outputTokens, 0.1, 0.4);
+      trackCost('gemini-3-flash-preview', inputTokens, outputTokens, 0.5, 3.0);
 
       return text;
     },
