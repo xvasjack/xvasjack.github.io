@@ -274,13 +274,18 @@ async def wait_for_email_callback(
             logger.warning(f"Email check failed: {e}")
 
         # Issue 7: Also check Downloads folder for recent files
+        # Stale-state fix (bug 4): Only accept files modified AFTER after_epoch
         try:
             if os.path.exists(download_dir):
                 import glob
                 patterns = [f"{download_dir}/*.pptx", f"{download_dir}/*.xlsx", f"{download_dir}/*.docx"]
                 for pattern in patterns:
                     for f in sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True):
-                        age = time.time() - os.path.getmtime(f)
+                        file_mtime = os.path.getmtime(f)
+                        # Reject files from before the form submission epoch
+                        if after_epoch and file_mtime < after_epoch:
+                            continue
+                        age = time.time() - file_mtime
                         # Category 8 fix: Use more precise filename matching
                         fname_lower = os.path.basename(f).lower().replace("-", "").replace("_", "")
                         # Issue 100/24/32 fix: Check service_name is not None before string ops
@@ -293,10 +298,13 @@ async def wait_for_email_callback(
                             logger.info(f"Found in Downloads: {f}")
                             return {"success": True, "file_path": f}
 
-                # 1.2: Recency-only fallback — reduced from 10min to 2min for safety
+                # 1.2: Recency-only fallback — only accept files newer than after_epoch
                 for pattern in patterns:
                     for f in sorted(glob.glob(pattern), key=os.path.getmtime, reverse=True):
-                        age = time.time() - os.path.getmtime(f)
+                        file_mtime = os.path.getmtime(f)
+                        if after_epoch and file_mtime < after_epoch:
+                            continue
+                        age = time.time() - file_mtime
                         if age < 120:
                             logger.info(f"Found recent file in Downloads (no name match, <2min): {f}")
                             return {"success": True, "file_path": f}
@@ -734,6 +742,7 @@ async def run_feedback_loop(
     start_from: Optional[str] = None,
     existing_file_path: Optional[str] = None,
     cancel_token: Optional[dict] = None,
+    task_id: str = "",
 ) -> LoopResult:
     """
     Run the complete feedback loop for a service.
@@ -785,28 +794,34 @@ async def run_feedback_loop(
     )
 
     # Issue 8: Check for interrupted loop state
+    # Stale-state fix: only resume if BOTH service_name AND task_id match
     resume_from = 0
     saved = None
     saved_issue_tracker = None
     saved_prs_merged = 0
     try:
-        from loop_state import load_loop_state
+        from loop_state import load_loop_state, clear_loop_state
         saved = load_loop_state()
-        if saved and saved.service_name == service_name:
-            logger.info(f"Found interrupted loop state: iteration={saved.iteration}")
-            resume_from = max(0, saved.iteration - 1)  # Re-run the interrupted iteration
-            # C8: Restore issue_tracker from saved state
+        if saved and saved.service_name == service_name and saved.task_id == task_id and task_id:
+            logger.info(f"Resuming same task (id={task_id}): iteration={saved.iteration}")
+            resume_from = max(0, saved.iteration - 1)
             saved_issue_tracker = saved.issue_tracker
             saved_prs_merged = saved.prs_merged
+        elif saved:
+            # Different task — clear stale state and start fresh
+            logger.info(f"New task (id={task_id}) — clearing stale state from task {saved.task_id}")
+            clear_loop_state()
+            saved = None
     except Exception as e:
         logger.warning(f"Failed to check loop state: {e}")
 
     iteration_counter = [resume_from]
-    seen_email_ids = set()  # Track processed email IDs across iterations
-    # Track when a fix was last deployed — only require fresh emails after that
-    last_fix_deployed_epoch = [0]
-    # Fix 1: Use loop start time as floor — never match emails from before this run
-    loop_start_epoch = int(saved.started_at) if saved and saved.started_at else int(time.time())
+    # Stale-state fix (bug 3): Restore seen_email_ids from saved state on resume
+    seen_email_ids = set(saved.seen_email_ids) if saved and saved.seen_email_ids else set()
+    # Stale-state fix (bug 5): Restore last_fix_deployed_epoch from saved state on resume
+    last_fix_deployed_epoch = [saved.last_fix_deployed_epoch if saved else 0]
+    # Stale-state fix (bug 2): Always use current time — never inherit stale epoch
+    loop_start_epoch = int(time.time())
 
     async def submit():
         return await submit_form_callback(service_name, form_data)
@@ -823,6 +838,7 @@ async def run_feedback_loop(
         # Track this email ID so next iteration skips it
         if result.get("success") and result.get("email_id"):
             seen_email_ids.add(result["email_id"])
+            state_extras["seen_email_ids"] = list(seen_email_ids)
             logger.info(f"Tracked email {result['email_id']} — {len(seen_email_ids)} seen total")
         return result
 
@@ -869,6 +885,7 @@ async def run_feedback_loop(
         # only accepts emails arriving after the new code was deployed
         if result and result.get("success"):
             last_fix_deployed_epoch[0] = int(time.time())
+            state_extras["last_fix_deployed_epoch"] = last_fix_deployed_epoch[0]
         return result
 
     async def merge(pr_number):
@@ -912,6 +929,13 @@ async def run_feedback_loop(
         _first_iteration_done[0] = True
         return await real_fix(issues, analysis)
 
+    # Stale-state fix: shared extras dict that closures update, persisted via FeedbackLoop._save_state
+    state_extras = {
+        "task_id": task_id,
+        "seen_email_ids": list(seen_email_ids),
+        "last_fix_deployed_epoch": last_fix_deployed_epoch[0],
+    }
+
     loop = FeedbackLoop(
         config=config,
         submit_form=submit,
@@ -922,6 +946,7 @@ async def run_feedback_loop(
         wait_for_ci=ci,
         check_logs=logs,
         on_progress=on_progress,
+        state_extras=state_extras,
     )
 
     # C8: Restore state from saved loop if resuming

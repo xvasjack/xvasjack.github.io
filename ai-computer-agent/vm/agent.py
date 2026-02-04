@@ -908,6 +908,7 @@ class Agent:
                     start_from=start_from,
                     existing_file_path=existing_file_path,
                     cancel_token=cancel_token,
+                    task_id=task.id,
                 )
             finally:
                 cancel_token["cancelled"] = True
