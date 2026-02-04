@@ -22,7 +22,7 @@ DEFAULT_LOOP_STATE_PATH = os.environ.get(
 )
 
 # Issue 86/32 fix: State schema version for migration support
-STATE_SCHEMA_VERSION = 2
+STATE_SCHEMA_VERSION = 3
 
 
 @dataclass
@@ -35,6 +35,10 @@ class PersistedLoopState:
     iterations_data: List[Dict[str, Any]] = field(default_factory=list)
     started_at: float = 0.0
     last_saved_at: float = 0.0
+    # Stale-state fix: task_id for resume matching, seen_email_ids + last_fix_deployed_epoch for persistence
+    task_id: str = ""
+    seen_email_ids: List[str] = field(default_factory=list)
+    last_fix_deployed_epoch: float = 0.0
     # Issue 86/32 fix: Add schema version field
     schema_version: int = STATE_SCHEMA_VERSION
 
@@ -83,6 +87,17 @@ class PersistedLoopState:
             logger.warning(f"Invalid issue_tracker type: {type(issue_tracker)}, resetting")
             issue_tracker = {}
 
+        # Stale-state fix: read new fields with safe defaults
+        seen_email_ids = data.get("seen_email_ids", [])
+        if not isinstance(seen_email_ids, list):
+            seen_email_ids = []
+
+        last_fix_deployed_epoch = data.get("last_fix_deployed_epoch", 0.0)
+        try:
+            last_fix_deployed_epoch = float(last_fix_deployed_epoch)
+        except (ValueError, TypeError):
+            last_fix_deployed_epoch = 0.0
+
         return cls(
             service_name=str(data.get("service_name", "")),
             iteration=iteration,
@@ -92,6 +107,9 @@ class PersistedLoopState:
             iterations_data=data.get("iterations_data", []),
             started_at=float(data.get("started_at", 0.0)),
             last_saved_at=float(data.get("last_saved_at", 0.0)),
+            task_id=str(data.get("task_id", "")),
+            seen_email_ids=seen_email_ids,
+            last_fix_deployed_epoch=last_fix_deployed_epoch,
             schema_version=STATE_SCHEMA_VERSION,
         )
 
@@ -104,6 +122,12 @@ class PersistedLoopState:
         if from_version < 2:
             if "issue_tracker" not in data:
                 data["issue_tracker"] = {}
+
+        # v2 -> v3: Add task_id, seen_email_ids, last_fix_deployed_epoch
+        if from_version < 3:
+            data.setdefault("task_id", "")
+            data.setdefault("seen_email_ids", [])
+            data.setdefault("last_fix_deployed_epoch", 0.0)
 
         return data
 

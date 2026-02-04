@@ -197,6 +197,7 @@ class FeedbackLoop:
         wait_for_ci: Callable,
         check_logs: Callable,
         on_progress: Optional[Callable] = None,
+        state_extras: Optional[Dict[str, Any]] = None,
     ):
         self.config = config
         self.submit_form = submit_form
@@ -215,6 +216,8 @@ class FeedbackLoop:
         self.issue_tracker: LRUDict = LRUDict(max_size=100)
         self.start_time = 0
         self._research_attempts = 0
+        # Stale-state fix: extras dict for persisting seen_email_ids, last_fix_deployed_epoch, task_id
+        self._state_extras = state_extras
 
     async def _report_progress(self, message: str):
         """Report progress to host"""
@@ -247,6 +250,11 @@ class FeedbackLoop:
                 ],
                 started_at=self.start_time,
             )
+            # Stale-state fix: merge extras (seen_email_ids, last_fix_deployed_epoch, task_id)
+            if self._state_extras:
+                state.task_id = self._state_extras.get("task_id", "")
+                state.seen_email_ids = self._state_extras.get("seen_email_ids", [])
+                state.last_fix_deployed_epoch = self._state_extras.get("last_fix_deployed_epoch", 0.0)
             save_loop_state(state)
         except Exception as e:
             # F56: Upgrade to error — state loss means no crash recovery
