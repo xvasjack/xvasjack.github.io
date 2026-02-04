@@ -1,7 +1,6 @@
 require('dotenv').config({ path: '../.env' });
 const express = require('express');
 const cors = require('cors');
-const fetch = require('node-fetch');
 const { securityHeaders, rateLimiter } = require('./shared/security');
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
@@ -33,43 +32,8 @@ if (missingVars.length > 0) {
 }
 
 // ============ EMAIL DELIVERY ============
-
-async function sendEmail(to, subject, html, attachment) {
-  console.log('\n=== STAGE 5: EMAIL DELIVERY ===');
-  console.log(`Sending to: ${to}`);
-
-  const emailData = {
-    personalizations: [{ to: [{ email: to }] }],
-    from: { email: process.env.SENDER_EMAIL, name: 'Market Research AI' },
-    subject: subject,
-    content: [{ type: 'text/html', value: html }],
-    attachments: [
-      {
-        filename: attachment.filename,
-        content: attachment.content,
-        type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        disposition: 'attachment',
-      },
-    ],
-  };
-
-  const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.SENDGRID_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(emailData),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`Email failed: ${error}`);
-  }
-
-  console.log('Email sent successfully');
-  return { success: true };
-}
+// Fix 4: Use shared sendEmail with 3 retries + exponential backoff (was inline with zero retries)
+const { sendEmail } = require('../shared/email.js');
 
 // ============ MAIN ORCHESTRATOR ============
 
@@ -123,15 +87,16 @@ async function runMarketResearch(userPrompt, email) {
       <p style="color: #666; font-size: 12px;">${scope.industry} - ${scope.targetMarkets.join(', ')}</p>
     `;
 
-      await sendEmail(
-        email,
-        `Market Research: ${scope.industry} - ${scope.targetMarkets.join(', ')}`,
-        emailHtml,
-        {
+      await sendEmail({
+        to: email,
+        subject: `Market Research: ${scope.industry} - ${scope.targetMarkets.join(', ')}`,
+        html: emailHtml,
+        attachments: {
           filename,
           content: pptBuffer.toString('base64'),
-        }
-      );
+        },
+        fromName: 'Market Research AI',
+      });
 
       const totalTime = (Date.now() - startTime) / 1000;
       console.log('\n========================================');
@@ -176,20 +141,21 @@ async function runMarketResearch(userPrompt, email) {
 
       // Try to send error email
       try {
-        await sendEmail(
-          email,
-          'Market Research Failed',
-          `
+        await sendEmail({
+          to: email,
+          subject: 'Market Research Failed',
+          html: `
         <h2>Market Research Error</h2>
         <p>Your market research request encountered an error:</p>
         <pre>${error.message}</pre>
         <p>Please try again or contact support.</p>
       `,
-          {
+          attachments: {
             filename: 'error.txt',
             content: Buffer.from(error.stack || error.message).toString('base64'),
-          }
-        );
+          },
+          fromName: 'Market Research AI',
+        });
       } catch (emailError) {
         console.error('Failed to send error email:', emailError);
       }
