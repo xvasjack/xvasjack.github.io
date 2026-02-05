@@ -392,10 +392,20 @@ async function fetchWebsite(url) {
     'enable cookies',
   ];
 
+  const OVERALL_TIMEOUT = 45000;
+  const PER_ATTEMPT_TIMEOUT = 10000;
+  const outerController = new AbortController();
+  const outerTimer = setTimeout(() => outerController.abort(), OVERALL_TIMEOUT);
+
   const tryFetch = async (targetUrl) => {
+    if (outerController.signal.aborted) {
+      return { status: 'error', reason: 'Overall timeout exceeded' };
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), PER_ATTEMPT_TIMEOUT);
+    const onOuterAbort = () => controller.abort();
+    outerController.signal.addEventListener('abort', onOuterAbort);
     try {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 20000); // Increased to 20 seconds
       const response = await fetch(targetUrl, {
         headers: {
           'User-Agent':
@@ -409,8 +419,6 @@ async function fetchWebsite(url) {
         signal: controller.signal,
         redirect: 'follow',
       });
-      clearTimeout(timeout);
-
       // Check for HTTP-level blocks
       if (response.status === 403 || response.status === 406) {
         return {
@@ -448,51 +456,60 @@ async function fetchWebsite(url) {
       return { status: 'insufficient', reason: 'Content too short' };
     } catch (e) {
       return { status: 'error', reason: e.message || 'Connection failed' };
+    } finally {
+      clearTimeout(timeout);
+      outerController.signal.removeEventListener('abort', onOuterAbort);
     }
   };
 
-  // Parse base URL
-  let baseUrl = url;
   try {
-    const parsed = new URL(url);
-    baseUrl = `${parsed.protocol}//${parsed.host}`;
-  } catch (e) {
-    baseUrl = url.replace(/\/+$/, '');
-  }
-
-  // Try original URL first
-  let result = await tryFetch(url);
-  if (result.status === 'ok') return result;
-  if (result.status === 'security_blocked') return result; // Return security block immediately
-
-  // Try with/without www
-  const hasWww = baseUrl.includes('://www.');
-  const altBaseUrl = hasWww ? baseUrl.replace('://www.', '://') : baseUrl.replace('://', '://www.');
-
-  // Try alternative paths on BOTH original and www/non-www variants
-  const urlVariants = [baseUrl, altBaseUrl];
-  const urlPaths = ['', '/en', '/home', '/about', '/index.html', '/index.php'];
-
-  for (const variant of urlVariants) {
-    for (const path of urlPaths) {
-      const testUrl = variant + path;
-      result = await tryFetch(testUrl);
-      if (result.status === 'ok') return result;
-      if (result.status === 'security_blocked') return result;
+    // Parse base URL
+    let baseUrl = url;
+    try {
+      const parsed = new URL(url);
+      baseUrl = `${parsed.protocol}//${parsed.host}`;
+    } catch (e) {
+      baseUrl = url.replace(/\/+$/, '');
     }
-  }
 
-  // Try HTTPS if original was HTTP (on both variants)
-  if (url.startsWith('http://')) {
+    // Try original URL first
+    let result = await tryFetch(url);
+    if (result.status === 'ok') return result;
+    if (result.status === 'security_blocked') return result; // Return security block immediately
+
+    // Try with/without www
+    const hasWww = baseUrl.includes('://www.');
+    const altBaseUrl = hasWww
+      ? baseUrl.replace('://www.', '://')
+      : baseUrl.replace('://', '://www.');
+
+    // Try alternative paths on BOTH original and www/non-www variants
+    const urlVariants = [baseUrl, altBaseUrl];
+    const urlPaths = ['', '/en', '/home', '/about', '/index.html', '/index.php'];
+
     for (const variant of urlVariants) {
-      const httpsVariant = variant.replace('http://', 'https://');
-      result = await tryFetch(httpsVariant);
-      if (result.status === 'ok') return result;
-      if (result.status === 'security_blocked') return result;
+      for (const path of urlPaths) {
+        const testUrl = variant + path;
+        result = await tryFetch(testUrl);
+        if (result.status === 'ok') return result;
+        if (result.status === 'security_blocked') return result;
+      }
     }
-  }
 
-  return { status: 'inaccessible', reason: 'Could not fetch content from any URL variation' };
+    // Try HTTPS if original was HTTP (on both variants)
+    if (url.startsWith('http://')) {
+      for (const variant of urlVariants) {
+        const httpsVariant = variant.replace('http://', 'https://');
+        result = await tryFetch(httpsVariant);
+        if (result.status === 'ok') return result;
+        if (result.status === 'security_blocked') return result;
+      }
+    }
+
+    return { status: 'inaccessible', reason: 'Could not fetch content from any URL variation' };
+  } finally {
+    clearTimeout(outerTimer);
+  }
 }
 
 // ============ DYNAMIC EXCLUSION RULES BUILDER (n8n-style PAGE SIGNAL detection) ============
