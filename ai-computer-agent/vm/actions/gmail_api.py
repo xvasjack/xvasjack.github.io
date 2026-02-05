@@ -441,6 +441,8 @@ async def wait_for_email_api(
     poll_interval: int = 30,
     skip_email_ids: Optional[set] = None,
     after_epoch: Optional[int] = None,
+    liveness_check: Optional[Any] = None,
+    liveness_check_interval: int = 3,
 ) -> Dict[str, Any]:
     """
     Poll Gmail for an email matching the query, then download its attachment.
@@ -470,6 +472,23 @@ async def wait_for_email_api(
     while time.time() < deadline:
         poll_count += 1
         remaining = int(deadline - time.time())
+
+        # Backend liveness check every N polls (skip first poll — give backend time)
+        if liveness_check and poll_count > 1 and poll_count % liveness_check_interval == 0:
+            alive = await liveness_check()
+            if not alive.get("alive"):
+                logger.warning(f"[Poll #{poll_count}] Backend health check FAILED: {alive.get('reason')}")
+                await asyncio.sleep(10)  # double-check (avoid false positive from network blip)
+                alive2 = await liveness_check()
+                if not alive2.get("alive"):
+                    logger.error(f"[Poll #{poll_count}] Backend confirmed dead: {alive2.get('reason')}")
+                    return {
+                        "success": False,
+                        "error": f"Backend died during email wait: {alive2.get('reason')}",
+                        "backend_died": True,
+                    }
+                logger.info(f"[Poll #{poll_count}] Backend recovered on recheck — continuing")
+
         logger.info(f"[Poll #{poll_count}] Searching Gmail... (query: {query}) | {remaining}s remaining")
 
         try:
