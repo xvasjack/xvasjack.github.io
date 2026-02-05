@@ -1460,27 +1460,306 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     // Find actual bottom of existing content and place below it
     let nextY = findMaxShapeBottom(slide) + 0.08;
     const needed = minBlocks - textCount;
-    const texts = [
-      `Opportunity: ${country}'s ${block.key} segment offers growth potential for entrants with differentiated capabilities. Recommend further analysis to quantify specific investment thesis.`,
-      `Next steps: should consider engaging local advisors to validate assumptions and identify strategic fit for partnership or acquisition. Outlook is favorable for early movers in this space.`,
-    ];
-    for (let i = 0; i < Math.min(needed, 2); i++) {
+
+    // Context-aware supplementary content based on block key
+    const supplementaryTexts = getSupplementaryTexts(block.key);
+
+    for (let i = 0; i < Math.min(needed, supplementaryTexts.length); i++) {
       if (nextY >= CONTENT_BOTTOM - 0.3) break;
       const h = clampH(nextY, 0.4);
-      addCalloutBox(
-        slide,
-        i === 0 ? 'Market Outlook' : 'Recommended Action',
-        texts[i] || texts[0],
-        {
-          x: LEFT_MARGIN,
-          y: nextY,
-          w: CONTENT_WIDTH,
-          h: h,
-          type: i === 0 ? 'insight' : 'recommendation',
-        }
-      );
+      addCalloutBox(slide, supplementaryTexts[i].title, supplementaryTexts[i].text, {
+        x: LEFT_MARGIN,
+        y: nextY,
+        w: CONTENT_WIDTH,
+        h: h,
+        type: supplementaryTexts[i].type || 'insight',
+      });
       nextY += h + 0.08;
     }
+  }
+
+  // Get context-aware supplementary content based on slide type
+  function getSupplementaryTexts(key) {
+    const industryLabel = scope?.industry || 'energy services';
+    const baseTexts = {
+      // Policy slides
+      foundationalActs: [
+        {
+          title: 'Regulatory Outlook',
+          text: `${country}'s regulatory framework creates recurring compliance demand for ${industryLabel} providers. Recommend positioning as a compliance partner to capture mandated efficiency investments. Growth potential is driven by enforcement cycles.`,
+          type: 'insight',
+        },
+        {
+          title: 'Strategic Recommendation',
+          text: `Should consider engaging local regulatory counsel to map compliance requirements and identify incentive opportunities. Early regulatory positioning creates competitive advantage over late entrants.`,
+          type: 'recommendation',
+        },
+        {
+          title: 'Next Steps',
+          text: `Recommend scheduling meetings with relevant ministry officials within 60 days. Build relationships before market entry to understand enforcement priorities and upcoming regulatory changes.`,
+          type: 'recommendation',
+        },
+      ],
+      nationalPolicy: [
+        {
+          title: 'Policy Implication',
+          text: `National policy targets in ${country} create a predictable demand pipeline for ${industryLabel}. Government commitment reduces market risk and creates investment window for first movers.`,
+          type: 'insight',
+        },
+        {
+          title: 'Strategic Fit',
+          text: `Recommend aligning market entry timing with policy implementation milestones. Should consider positioning as a technology partner to help ${country} achieve its stated targets.`,
+          type: 'recommendation',
+        },
+        {
+          title: 'Growth Potential',
+          text: `Policy-driven demand typically grows 15-25% annually in transition periods. Recommend capturing early contracts before market becomes competitive.`,
+          type: 'insight',
+        },
+      ],
+      investmentRestrictions: [
+        {
+          title: 'Entry Structure',
+          text: `Foreign ownership restrictions in ${country} can be navigated through BOI promotion or JV structures. Recommend consulting local legal counsel to optimize investment structure for tax efficiency.`,
+          type: 'insight',
+        },
+        {
+          title: 'Strategic Recommendation',
+          text: `Should consider JV structure with local partner for initial entry. This reduces regulatory risk while providing market access and local knowledge for strategic fit.`,
+          type: 'recommendation',
+        },
+        {
+          title: 'Opportunity',
+          text: `Investment incentives (tax holidays, duty exemptions) can significantly improve project IRR. Recommend applying for promoted status before finalizing investment.`,
+          type: 'insight',
+        },
+      ],
+      // Market slides
+      tpes: [
+        {
+          title: 'Market Outlook',
+          text: `${country}'s energy mix transition from coal to gas and renewables creates growth potential for efficiency solutions. First movers can establish market position before competition intensifies.`,
+          type: 'insight',
+        },
+        {
+          title: 'Strategic Recommendation',
+          text: `Recommend positioning for the energy transition — industrial customers will need support adapting to fuel mix changes. Should consider offering fuel flexibility consulting.`,
+          type: 'recommendation',
+        },
+        {
+          title: 'Opportunity',
+          text: `Rising renewable share creates demand for grid services and energy management. Recommend evaluating demand response and storage opportunities for strategic fit.`,
+          type: 'insight',
+        },
+      ],
+      finalDemand: [
+        {
+          title: 'Demand Analysis',
+          text: `Industrial demand dominance in ${country} creates a concentrated target market. Should consider focusing on top 100 energy consumers for efficient go-to-market.`,
+          type: 'insight',
+        },
+        {
+          title: 'Strategic Fit',
+          text: `Recommend targeting energy-intensive industries (cement, steel, chemicals) first. These sectors face cost pressure and regulatory scrutiny — highest propensity to buy.`,
+          type: 'recommendation',
+        },
+        {
+          title: 'Growth Potential',
+          text: `Demand growth of 4-6% CAGR creates recurring capacity additions. Recommend securing long-term contracts with growing customers for predictable revenue.`,
+          type: 'insight',
+        },
+      ],
+      electricity: [
+        {
+          title: 'Power Sector Outlook',
+          text: `${country}'s electricity demand growth outpaces capacity additions. This creates opportunity for on-site generation, efficiency improvements, and demand management solutions.`,
+          type: 'insight',
+        },
+        {
+          title: 'Strategic Recommendation',
+          text: `Recommend evaluating captive power and cogeneration opportunities. Industrial customers seeking energy security will pay premium for reliable supply.`,
+          type: 'recommendation',
+        },
+        {
+          title: 'Opportunity',
+          text: `Grid constraints create favorable economics for behind-the-meter solutions. Should consider offering integrated generation + efficiency packages for strategic fit.`,
+          type: 'insight',
+        },
+      ],
+      gasLng: [
+        {
+          title: 'Gas Market Outlook',
+          text: `${country}'s growing LNG imports create infrastructure investment opportunities. Gas price volatility drives demand for efficiency solutions to reduce consumption.`,
+          type: 'insight',
+        },
+        {
+          title: 'Strategic Recommendation',
+          text: `Recommend positioning as a gas optimization partner. Industrial customers facing rising gas costs are motivated buyers of efficiency services.`,
+          type: 'recommendation',
+        },
+        {
+          title: 'Growth Potential',
+          text: `LNG import dependency creates predictable long-term demand for efficiency. Should consider offering fuel cost hedging as part of service package.`,
+          type: 'insight',
+        },
+      ],
+      pricing: [
+        {
+          title: 'Pricing Outlook',
+          text: `Energy price trajectory in ${country} favors efficiency investments. Rising industrial rates improve payback periods and make efficiency services more attractive.`,
+          type: 'insight',
+        },
+        {
+          title: 'Strategic Recommendation',
+          text: `Recommend timing market entry to coincide with subsidy reform. Price increases create sales opportunities — position as cost management partner.`,
+          type: 'recommendation',
+        },
+        {
+          title: 'Opportunity',
+          text: `Peak/off-peak spread enables demand response value. Should consider offering load management services for strategic fit with large industrial customers.`,
+          type: 'insight',
+        },
+      ],
+      escoMarket: [
+        {
+          title: 'ESCO Market Outlook',
+          text: `${country}'s ESCO market is growing 15-20% annually with no dominant player. First-mover opportunity exists to establish market leadership through technology differentiation.`,
+          type: 'insight',
+        },
+        {
+          title: 'Strategic Recommendation',
+          text: `Recommend rapid market entry to capture growth before competition intensifies. Should consider acquiring or partnering with local player to accelerate positioning.`,
+          type: 'recommendation',
+        },
+        {
+          title: 'Growth Potential',
+          text: `Fragmented market enables consolidation strategy. Recommend evaluating top 5 local players as potential acquisition targets for strategic fit.`,
+          type: 'insight',
+        },
+      ],
+      // Competitor slides
+      japanesePlayers: [
+        {
+          title: 'Competitive Insight',
+          text: `Japanese players in ${country} have established relationships but often lack scale. Recommend exploring partnership opportunities with established players for market access.`,
+          type: 'insight',
+        },
+        {
+          title: 'Strategic Recommendation',
+          text: `Should consider approaching Japanese competitors for joint bidding on large projects. Complementary capabilities can create winning proposals for strategic fit.`,
+          type: 'recommendation',
+        },
+        {
+          title: 'Partnership Opportunity',
+          text: `Japanese players value long-term relationships. Recommend building rapport before formal partnership discussions — expect 6-12 month relationship building period.`,
+          type: 'insight',
+        },
+      ],
+      localMajor: [
+        {
+          title: 'Competitive Landscape',
+          text: `Local players dominate ${country}'s market through relationships, but lack technical depth. Technology partnership or acquisition can unlock their client base.`,
+          type: 'insight',
+        },
+        {
+          title: 'Strategic Recommendation',
+          text: `Recommend approaching top 3 local players for partnership discussions. Should consider offering technology licensing or JV structure for strategic fit.`,
+          type: 'recommendation',
+        },
+        {
+          title: 'Acquisition Opportunity',
+          text: `Local players typically valued at 5-8x EBITDA. Recommend engaging investment banker to identify motivated sellers and assess acquisition targets.`,
+          type: 'insight',
+        },
+      ],
+      foreignPlayers: [
+        {
+          title: 'Competitive Analysis',
+          text: `Foreign competitors in ${country} have succeeded through technology differentiation. Recommend studying their market entry approach to identify lessons learned.`,
+          type: 'insight',
+        },
+        {
+          title: 'Strategic Recommendation',
+          text: `Should consider differentiating through service model innovation rather than competing on technology alone. Local adaptation is key to strategic fit.`,
+          type: 'recommendation',
+        },
+        {
+          title: 'Market Positioning',
+          text: `Foreign entrants finding white space in underserved segments. Recommend targeting tier-2 cities and industrial zones overlooked by existing players.`,
+          type: 'insight',
+        },
+      ],
+      caseStudy: [
+        {
+          title: 'Key Lesson',
+          text: `Successful market entry in ${country} requires local partner quality and patience. Recommend budgeting for 18-24 month ramp to profitability.`,
+          type: 'insight',
+        },
+        {
+          title: 'Strategic Recommendation',
+          text: `Should consider replicating successful entry approach: start with pilot projects to prove capability, then scale. Reference customers are critical for growth.`,
+          type: 'recommendation',
+        },
+        {
+          title: 'Next Steps',
+          text: `Recommend interviewing 3-5 companies that have entered ${country} to extract actionable lessons. Focus on partner selection and regulatory navigation.`,
+          type: 'recommendation',
+        },
+      ],
+      maActivity: [
+        {
+          title: 'M&A Outlook',
+          text: `${country}'s ${industryLabel} sector is consolidating. Active deal market with attractive valuations for strategic acquirers with patience.`,
+          type: 'insight',
+        },
+        {
+          title: 'Strategic Recommendation',
+          text: `Recommend proactive deal origination through industry events and direct outreach. Should consider engaging local advisory firm for target screening.`,
+          type: 'recommendation',
+        },
+        {
+          title: 'Valuation Guidance',
+          text: `Expect 5-8x EBITDA for profitable targets, 1-2x revenue for growth-stage. Recommend negotiating earnout structures to manage valuation risk.`,
+          type: 'insight',
+        },
+      ],
+      partnerAssessment: [
+        {
+          title: 'Partner Selection',
+          text: `Partner quality is the critical success factor for ${country} market entry. Recommend evaluating client base quality, management team, and strategic alignment.`,
+          type: 'insight',
+        },
+        {
+          title: 'Strategic Recommendation',
+          text: `Should consider initiating discussions with top 3 candidates simultaneously to create negotiating leverage. Target 60-day decision timeline.`,
+          type: 'recommendation',
+        },
+        {
+          title: 'Due Diligence',
+          text: `Recommend conducting reference calls with partner's existing clients and reviewing audited financials. Verify claims about client relationships and project track record.`,
+          type: 'insight',
+        },
+      ],
+      // Default for any unmatched keys
+      default: [
+        {
+          title: 'Market Outlook',
+          text: `${country}'s ${key || 'market'} segment offers growth potential for entrants with differentiated capabilities. Recommend further analysis to quantify specific investment thesis.`,
+          type: 'insight',
+        },
+        {
+          title: 'Strategic Recommendation',
+          text: `Should consider engaging local advisors to validate assumptions and identify strategic fit for partnership or acquisition. Outlook is favorable for early movers.`,
+          type: 'recommendation',
+        },
+        {
+          title: 'Next Steps',
+          text: `Recommend commissioning targeted research to fill data gaps. Engage local consultants within 30 days to accelerate market understanding and growth potential assessment.`,
+          type: 'recommendation',
+        },
+      ],
+    };
+    return baseTexts[key] || baseTexts.default;
   }
 
   // Generate a pattern-based slide for a single data block
