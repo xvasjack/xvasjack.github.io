@@ -8,6 +8,7 @@ const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { sendEmailLegacy: sendEmail } = require('./shared/email');
 const { createTracker, trackingContext, recordTokens } = require('./shared/tracking');
+const { withRetry } = require('./shared/ai-models');
 
 setupGlobalErrorHandlers();
 
@@ -25,13 +26,38 @@ if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
 }
 
+// ============ URL CACHE ============
+
+const urlCache = new Map(); // key: normalized company name, value: { url, timestamp }
+const URL_CACHE_TTL = 60 * 60 * 1000; // 1 hour
+
+function normalizeForCache(name) {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, '');
+}
+
+function getCachedUrl(companyName) {
+  const key = normalizeForCache(companyName);
+  const entry = urlCache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.timestamp > URL_CACHE_TTL) {
+    urlCache.delete(key);
+    return null;
+  }
+  return entry.url;
+}
+
+function setCachedUrl(companyName, url) {
+  const key = normalizeForCache(companyName);
+  urlCache.set(key, { url, timestamp: Date.now() });
+}
+
 // ============ AI TOOLS ============
 
-// Gemini 2.5 Flash with Google Search grounding — URL discovery + WAF fallback
+// Gemini 2.0 Flash with Google Search grounding — URL discovery + WAF fallback
 async function callGeminiWithGrounding(prompt) {
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -46,7 +72,7 @@ async function callGeminiWithGrounding(prompt) {
     if (!response.ok) {
       const errorText = await response.text();
       console.error(
-        `Gemini 2.5 Flash grounding HTTP error ${response.status}:`,
+        `Gemini 2.0 Flash grounding HTTP error ${response.status}:`,
         errorText.substring(0, 200)
       );
       return { text: '', groundingChunks: [] };
@@ -57,14 +83,14 @@ async function callGeminiWithGrounding(prompt) {
     const usage = data.usageMetadata;
     if (usage) {
       recordTokens(
-        'gemini-2.5-flash',
+        'gemini-2.0-flash',
         usage.promptTokenCount || 0,
         usage.candidatesTokenCount || 0
       );
     }
 
     if (data.error) {
-      console.error('Gemini 2.5 Flash grounding API error:', data.error.message);
+      console.error('Gemini 2.0 Flash grounding API error:', data.error.message);
       return { text: '', groundingChunks: [] };
     }
 
@@ -74,7 +100,7 @@ async function callGeminiWithGrounding(prompt) {
 
     return { text, groundingChunks };
   } catch (error) {
-    console.error('Gemini 2.5 Flash grounding error:', error.message);
+    console.error('Gemini 2.0 Flash grounding error:', error.message);
     return { text: '', groundingChunks: [] };
   }
 }
@@ -312,8 +338,9 @@ async function fetchWebsite(url) {
   const urlVariations = getUrlVariations(url);
   let sawWAF = false;
 
+  let homepageText = null;
   try {
-    const result = await Promise.any(
+    homepageText = await Promise.any(
       urlVariations.map(async (targetUrl) => {
         try {
           console.log(`  [fetchWebsite] Trying ${targetUrl}`);
@@ -340,7 +367,6 @@ async function fetchWebsite(url) {
         }
       })
     );
-    return result;
   } catch (e) {
     if (sawWAF) {
       console.log(`  [fetchWebsite] All variations WAF-blocked for ${url}`);
@@ -349,6 +375,44 @@ async function fetchWebsite(url) {
     console.log(`  [fetchWebsite] All variations failed for ${url}`);
     return null;
   }
+
+  if (!homepageText) return null;
+
+  // Fetch additional pages (/about, /about-us, /services) for richer content
+  const MAX_TOTAL_CHARS = 15000;
+  let combined = homepageText.substring(0, MAX_TOTAL_CHARS);
+
+  try {
+    const baseUrl = new URL(url);
+    const subpages = ['/about', '/about-us', '/services'];
+    const subpageResults = await Promise.allSettled(
+      subpages.map(async (path) => {
+        const subUrl = `${baseUrl.protocol}//${baseUrl.host}${path}`;
+        try {
+          const resp = await tryFetch(subUrl, 10000);
+          if (!resp.ok) return null;
+          const html = await resp.text();
+          if (isCloudflareOrWAFChallenge(html)) return null;
+          const text = extractText(html);
+          return text.length > 100 ? text : null;
+        } catch {
+          return null;
+        }
+      })
+    );
+
+    for (const result of subpageResults) {
+      if (result.status === 'fulfilled' && result.value && combined.length < MAX_TOTAL_CHARS) {
+        const remaining = MAX_TOTAL_CHARS - combined.length;
+        combined += '\n\n' + result.value.substring(0, remaining);
+      }
+    }
+    console.log(`  [fetchWebsite] Total content after subpages: ${combined.length} chars`);
+  } catch (e) {
+    console.log(`  [fetchWebsite] Subpage fetch failed: ${e.message}`);
+  }
+
+  return combined;
 }
 
 // ============ URL HELPERS ============
@@ -533,6 +597,13 @@ async function findWebsiteViaGemini(companyName, countries) {
 async function findCompanyWebsite(companyName, countries) {
   console.log(`  Finding website for: ${companyName}`);
 
+  // Check cache first
+  const cached = getCachedUrl(companyName);
+  if (cached) {
+    console.log(`    Cache hit: ${cached}`);
+    return cached;
+  }
+
   const [serpResult, geminiResult] = await Promise.all([
     findWebsiteViaSerpAPI(companyName, countries),
     findWebsiteViaGemini(companyName, countries),
@@ -548,15 +619,19 @@ async function findCompanyWebsite(companyName, countries) {
 
       if (serpDomain === geminiDomain) {
         console.log(`    Consensus: both agree on ${serpDomain} — high confidence`);
+        setCachedUrl(companyName, serpResult);
         return serpResult;
       } else {
         console.log(
           `    Disagreement: SerpAPI=${serpDomain}, Gemini=${geminiDomain} — using SerpAPI (more reliable)`
         );
+        setCachedUrl(companyName, serpResult);
         return serpResult;
       }
     } catch (e) {
-      return serpResult || geminiResult;
+      const result = serpResult || geminiResult;
+      if (result) setCachedUrl(companyName, result);
+      return result;
     }
   }
 
@@ -568,6 +643,7 @@ async function findCompanyWebsite(companyName, countries) {
     const verification = await verifyWebsite(singleResult);
     if (verification.valid) {
       console.log(`    Verified: ${singleResult} exists`);
+      setCachedUrl(companyName, singleResult);
       return singleResult;
     } else {
       console.log(`    Rejected: ${singleResult} — ${verification.reason}`);
@@ -614,23 +690,30 @@ OUTPUT: Return valid JSON only:
   "business_description": "what this company does"
 }`;
 
-  try {
-    const result = await callGeminiFlash(prompt);
-    const jsonMatch = result.match(/\{[\s\S]*\}/);
-    if (jsonMatch) {
+  const retryResult = await withRetry(
+    async () => {
+      const result = await callGeminiFlash(prompt);
+      const jsonMatch = result.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('No JSON in response');
       const parsed = JSON.parse(jsonMatch[0]);
+      if (!parsed.criteria_results || !Array.isArray(parsed.criteria_results)) {
+        throw new Error('Missing criteria_results array');
+      }
       return {
-        criteria_results: (parsed.criteria_results || []).map((r) => ({
+        criteria_results: parsed.criteria_results.map((r) => ({
           criterion: r.criterion,
           result: (r.result || 'FAIL').toUpperCase() === 'PASS' ? 'PASS' : 'FAIL',
           reason: r.reason || '',
         })),
         business_description: parsed.business_description || '',
       };
-    }
-  } catch (e) {
-    console.error(`Multi-criteria classification error for ${company.company_name}:`, e.message);
-  }
+    },
+    2,
+    1000,
+    `classify ${company.company_name}`
+  );
+
+  if (retryResult) return retryResult;
 
   // Fallback: all FAIL
   return {
@@ -641,6 +724,93 @@ OUTPUT: Return valid JSON only:
     })),
     business_description: 'Error during classification',
   };
+}
+
+// ============ BATCH MULTI-CRITERIA CLASSIFICATION ============
+
+async function classifyMultiCriteriaBatch(companies, criteria) {
+  const CLASSIFY_BATCH_SIZE = 3;
+  const allResults = new Map();
+
+  for (let i = 0; i < companies.length; i += CLASSIFY_BATCH_SIZE) {
+    const chunk = companies.slice(i, i + CLASSIFY_BATCH_SIZE);
+
+    const criteriaList = criteria.map((c, idx) => `${idx + 1}. ${c}`).join('\n');
+
+    const companySections = chunk
+      .map((c, idx) => {
+        const isAIResearch = c.pageText.startsWith('[AI Research');
+        const trimmedContent = c.pageText.substring(0, 3000);
+        return `=== COMPANY ${idx + 1}: ${c.company_name} (${c.website}) ===
+${isAIResearch ? 'COMPANY INFORMATION (from AI research):' : 'WEBSITE CONTENT:'}
+${trimmedContent}`;
+      })
+      .join('\n\n');
+
+    const prompt = `You are a company validator. For each company below, evaluate ALL criteria and determine PASS or FAIL based ONLY on the provided content.
+
+CRITERIA:
+${criteriaList}
+
+${companySections}
+
+RULES:
+1. Evaluate EACH criterion independently for EACH company
+2. Base determination ONLY on the content provided
+3. If content is unclear or insufficient for a criterion → FAIL
+4. Be accurate - do not guess or assume
+
+OUTPUT: Return valid JSON only, an array with one entry per company:
+[
+  {
+    "company_index": 1,
+    "criteria_results": [
+      {"criterion": 1, "result": "PASS", "reason": "brief explanation"},
+      {"criterion": 2, "result": "FAIL", "reason": "brief explanation"}
+    ],
+    "business_description": "what this company does"
+  }
+]`;
+
+    const batchResult = await withRetry(
+      async () => {
+        const result = await callGeminiFlash(prompt);
+        const jsonMatch = result.match(/\[[\s\S]*\]/);
+        if (!jsonMatch) throw new Error('No JSON array in batch response');
+        const parsed = JSON.parse(jsonMatch[0]);
+        if (!Array.isArray(parsed)) throw new Error('Response is not an array');
+        return parsed;
+      },
+      2,
+      1000,
+      `batch classify ${chunk.length} companies`
+    );
+
+    for (let j = 0; j < chunk.length; j++) {
+      const companyEntry = batchResult?.find((r) => r.company_index === j + 1);
+      if (companyEntry && companyEntry.criteria_results) {
+        allResults.set(chunk[j].company_name, {
+          criteria_results: companyEntry.criteria_results.map((r) => ({
+            criterion: r.criterion,
+            result: (r.result || 'FAIL').toUpperCase() === 'PASS' ? 'PASS' : 'FAIL',
+            reason: r.reason || '',
+          })),
+          business_description: companyEntry.business_description || '',
+        });
+      } else {
+        // Fallback: classify individually
+        console.log(`  Batch miss for ${chunk[j].company_name}, classifying individually...`);
+        const individual = await classifyMultiCriteria(
+          { company_name: chunk[j].company_name, website: chunk[j].website },
+          criteria,
+          chunk[j].pageText
+        );
+        allResults.set(chunk[j].company_name, individual);
+      }
+    }
+  }
+
+  return allResults;
 }
 
 // ============ WAF FALLBACK: GEMINI RESEARCH ============
@@ -708,7 +878,7 @@ function buildMultiCriteriaExcel(companies, criteria) {
 // ============ ORCHESTRATOR ============
 
 async function orchestrate(companyList, countryList, criteria, websiteMap = {}) {
-  const batchSize = 10;
+  const batchSize = 15;
   const results = [];
 
   for (let i = 0; i < companyList.length; i += batchSize) {
@@ -717,9 +887,9 @@ async function orchestrate(companyList, countryList, criteria, websiteMap = {}) 
       `\nBatch ${Math.floor(i / batchSize) + 1}/${Math.ceil(companyList.length / batchSize)} (${batch.length} companies)`
     );
 
-    const batchResults = await Promise.all(
+    // STEP 1-3: Find websites and fetch content in parallel
+    const fetchedCompanies = await Promise.all(
       batch.map(async (companyName) => {
-        // STEP 1: Find website (use provided URL or 2-source parallel discovery)
         const providedUrl = websiteMap[companyName];
         const website = providedUrl || (await findCompanyWebsite(companyName, countryList));
         if (providedUrl) console.log(`  Using provided website for ${companyName}: ${providedUrl}`);
@@ -728,28 +898,30 @@ async function orchestrate(companyList, countryList, criteria, websiteMap = {}) 
           return {
             company_name: companyName,
             website: null,
-            criteria_results: criteria.map((_, idx) => ({
-              criterion: idx + 1,
-              result: 'FAIL',
-              reason: 'Official website not found',
-            })),
-            business_description: 'Could not locate official company website',
+            pageText: null,
+            earlyResult: {
+              company_name: companyName,
+              website: null,
+              criteria_results: criteria.map((_, idx) => ({
+                criterion: idx + 1,
+                result: 'FAIL',
+                reason: 'Official website not found',
+              })),
+              business_description: 'Could not locate official company website',
+            },
           };
         }
 
-        // STEP 3: Fetch website HTML
         let pageText = await fetchWebsite(website);
-
         console.log(
           `  Fetched pageText for ${companyName}: type=${typeof pageText}, length=${pageText?.length || 0}`
         );
 
-        // WAF fallback: use Gemini with grounding to research
+        // WAF fallback
         if (pageText === '__WAF_PROTECTED__' || !pageText || pageText.length < 100) {
           console.log(`  ${companyName}: Website blocked/inaccessible, using Gemini research...`);
           try {
             const aiResearch = await callGeminiResearch(companyName, website);
-
             if (
               aiResearch &&
               !aiResearch.includes('UNABLE_TO_RESEARCH') &&
@@ -761,12 +933,17 @@ async function orchestrate(companyList, countryList, criteria, websiteMap = {}) 
               return {
                 company_name: companyName,
                 website,
-                criteria_results: criteria.map((_, idx) => ({
-                  criterion: idx + 1,
-                  result: 'FAIL',
-                  reason: 'Website protected by WAF/Cloudflare, could not research',
-                })),
-                business_description: 'Website blocked by security measures, unable to validate',
+                pageText: null,
+                earlyResult: {
+                  company_name: companyName,
+                  website,
+                  criteria_results: criteria.map((_, idx) => ({
+                    criterion: idx + 1,
+                    result: 'FAIL',
+                    reason: 'Website protected by WAF/Cloudflare, could not research',
+                  })),
+                  business_description: 'Website blocked by security measures, unable to validate',
+                },
               };
             }
           } catch (e) {
@@ -774,42 +951,65 @@ async function orchestrate(companyList, countryList, criteria, websiteMap = {}) 
             return {
               company_name: companyName,
               website,
-              criteria_results: criteria.map((_, idx) => ({
-                criterion: idx + 1,
-                result: 'FAIL',
-                reason: 'Website protected, research failed',
-              })),
-              business_description: 'Website blocked by security measures, unable to validate',
+              pageText: null,
+              earlyResult: {
+                company_name: companyName,
+                website,
+                criteria_results: criteria.map((_, idx) => ({
+                  criterion: idx + 1,
+                  result: 'FAIL',
+                  reason: 'Website protected, research failed',
+                })),
+                business_description: 'Website blocked by security measures, unable to validate',
+              },
             };
           }
         }
 
-        // STEP 5: Classify ALL criteria — single Gemini 3 Flash call
-        const classification = await classifyMultiCriteria(
-          { company_name: companyName, website },
-          criteria,
-          pageText
-        );
+        return { company_name: companyName, website, pageText, earlyResult: null };
+      })
+    );
 
+    // Separate early results (failures) from companies needing classification
+    const earlyResults = fetchedCompanies.filter((c) => c.earlyResult).map((c) => c.earlyResult);
+    const toClassify = fetchedCompanies.filter((c) => !c.earlyResult && c.pageText);
+
+    // STEP 5: Batch classification
+    let classifiedMap = new Map();
+    if (toClassify.length > 0) {
+      console.log(`  Batch classifying ${toClassify.length} companies...`);
+      classifiedMap = await classifyMultiCriteriaBatch(toClassify, criteria);
+    }
+
+    const batchResults = [
+      ...earlyResults,
+      ...toClassify.map((c) => {
+        const classification = classifiedMap.get(c.company_name) || {
+          criteria_results: criteria.map((_, idx) => ({
+            criterion: idx + 1,
+            result: 'FAIL',
+            reason: 'Classification failed',
+          })),
+          business_description: 'Error during classification',
+        };
         console.log(
-          `  ${companyName}: Classified ${classification.criteria_results.length} criteria`
+          `  ${c.company_name}: Classified ${classification.criteria_results.length} criteria`
         );
-
         return {
-          company_name: companyName,
-          website,
+          company_name: c.company_name,
+          website: c.website,
           criteria_results: classification.criteria_results,
           business_description: classification.business_description,
         };
-      })
-    );
+      }),
+    ];
 
     results.push(...batchResults);
     console.log(`Completed: ${results.length}/${companyList.length}`);
 
-    // 2s delay between batches
+    // 1s delay between batches
     if (i + batchSize < companyList.length) {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
     }
   }
 

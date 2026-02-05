@@ -171,7 +171,7 @@
               <div class="grid grid-cols-2 gap-4">
                 <div>
                   <label class="block text-sm font-medium text-slate-700 mb-1.5">Company Names</label>
-                  <textarea id="companies" name="Companies" rows="5" placeholder="One company per line (up to 200)"
+                  <textarea id="companies" name="Companies" rows="5" placeholder="One company per line (up to 300)"
                     class="w-full px-4 py-3 text-sm bg-white border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-shadow resize-none"></textarea>
                 </div>
                 <div>
@@ -310,7 +310,7 @@
 
     function analyzeData(json) {
       const companies = [], countries = new Set();
-      const knownCountries = ['malaysia','singapore','thailand','indonesia','vietnam','philippines','china','japan','korea','south korea','taiwan','hong kong','india','australia','usa','united states','uk','united kingdom','germany','france','italy','spain','netherlands','belgium','cambodia','myanmar'];
+      const knownCountries = ['afghanistan','albania','algeria','andorra','angola','antigua and barbuda','argentina','armenia','australia','austria','azerbaijan','bahamas','bahrain','bangladesh','barbados','belarus','belgium','belize','benin','bhutan','bolivia','bosnia and herzegovina','botswana','brazil','brunei','bulgaria','burkina faso','burundi','cabo verde','cambodia','cameroon','canada','central african republic','chad','chile','china','colombia','comoros','congo','costa rica','croatia','cuba','cyprus','czech republic','czechia','democratic republic of the congo','denmark','djibouti','dominica','dominican republic','east timor','ecuador','egypt','el salvador','equatorial guinea','eritrea','estonia','eswatini','ethiopia','fiji','finland','france','gabon','gambia','georgia','germany','ghana','greece','grenada','guatemala','guinea','guinea-bissau','guyana','haiti','honduras','hong kong','hungary','iceland','india','indonesia','iran','iraq','ireland','israel','italy','ivory coast','jamaica','japan','jordan','kazakhstan','kenya','kiribati','korea','south korea','north korea','kuwait','kyrgyzstan','laos','latvia','lebanon','lesotho','liberia','libya','liechtenstein','lithuania','luxembourg','macau','madagascar','malawi','malaysia','maldives','mali','malta','marshall islands','mauritania','mauritius','mexico','micronesia','moldova','monaco','mongolia','montenegro','morocco','mozambique','myanmar','namibia','nauru','nepal','netherlands','new zealand','nicaragua','niger','nigeria','north macedonia','norway','oman','pakistan','palau','palestine','panama','papua new guinea','paraguay','peru','philippines','poland','portugal','qatar','romania','russia','rwanda','saint kitts and nevis','saint lucia','saint vincent and the grenadines','samoa','san marino','sao tome and principe','saudi arabia','senegal','serbia','seychelles','sierra leone','singapore','slovakia','slovenia','solomon islands','somalia','south africa','south sudan','spain','sri lanka','sudan','suriname','sweden','switzerland','syria','taiwan','tajikistan','tanzania','thailand','togo','tonga','trinidad and tobago','tunisia','turkey','turkmenistan','tuvalu','uganda','ukraine','united arab emirates','united kingdom','united states','usa','uk','uae','uruguay','uzbekistan','vanuatu','vatican city','venezuela','vietnam','yemen','zambia','zimbabwe'];
       const cols = [];
       const maxCols = Math.max(...json.slice(0,20).map(r => r?.length || 0));
 
@@ -354,7 +354,7 @@
           if (match) countries.add(match.charAt(0).toUpperCase() + match.slice(1));
         }
       }
-      return { companies: companies.slice(0, 200), countries: Array.from(countries), websites };
+      return { companies: companies.slice(0, 300), countries: Array.from(countries), websites };
     }
 
     // Criteria builder
