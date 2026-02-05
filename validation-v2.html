@@ -192,6 +192,14 @@
               </button>
             </div>
 
+            <div class="mt-4 flex items-center gap-2">
+              <input type="checkbox" id="includeWaterfall"
+                class="w-4 h-4 text-indigo-600 border-slate-300 rounded focus:ring-indigo-500">
+              <label for="includeWaterfall" class="text-sm font-medium text-slate-700">
+                Include waterfall slide (PPT)
+              </label>
+            </div>
+
             <button type="submit" id="submitBtn"
               class="w-full mt-5 flex items-center justify-center gap-2 px-6 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-lg shadow-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed">
               Submit
@@ -469,7 +477,8 @@
             Countries: countriesData,
             Criteria: criteria,
             Email: email,
-            Websites: websitesData
+            Websites: websitesData,
+            IncludeWaterfall: document.getElementById('includeWaterfall').checked
           })
         });
         if (res.ok) { success.classList.remove('hidden'); }
