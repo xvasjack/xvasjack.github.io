@@ -1055,22 +1055,24 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
       }
 
-      // Insight panels on right 40% — stacked with proper spacing, limited to 2 to prevent overflow
-      if (insights.length > 0) {
+      // Use findMaxShapeBottom for proper y positioning below chart
+      let chartNextY = findMaxShapeBottom(slide) + 0.1;
+
+      // Insight panels below chart — stacked vertically to prevent y-overlap detection
+      if (insights.length > 0 && chartNextY < CONTENT_BOTTOM - 1.0) {
         const insightPanels = insights.slice(0, 2).map((text, idx) => ({
           title: idx === 0 ? 'Key Insight' : 'Opportunity',
           text: truncate(text, 120),
         }));
+        const panelH = 0.45;
         addInsightPanelsFromPattern(slide, insightPanels, {
           insightPanels: [
-            { x: 8.5, y: 1.3, w: 4.4, h: 1.4 },
-            { x: 8.5, y: 2.85, w: 4.4, h: 1.4 },
+            { x: LEFT_MARGIN, y: chartNextY, w: CONTENT_WIDTH, h: panelH },
+            { x: LEFT_MARGIN, y: chartNextY + panelH + 0.08, w: CONTENT_WIDTH, h: panelH },
           ],
         });
+        chartNextY += (panelH + 0.08) * Math.min(insights.length, 2) + 0.08;
       }
-
-      // Use findMaxShapeBottom for proper y positioning below chart
-      let chartNextY = findMaxShapeBottom(slide) + 0.1;
 
       // Key insight below chart — only if room
       if (data.keyInsight && chartNextY < CONTENT_BOTTOM - 0.6) {
@@ -1397,7 +1399,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             : { text: safeCell(p.name) },
           { text: safeCell(p.origin) },
           { text: safeCell(p.mode) },
-          { text: truncate(desc, 500), options: { fontSize: 9 } },
+          { text: truncate(desc, 150), options: { fontSize: 9 } },
         ];
       };
     } else if (block.key === 'localMajor') {
@@ -1417,7 +1419,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             : { text: safeCell(p.name) },
           { text: safeCell(p.type) },
           { text: safeCell(p.revenue) },
-          { text: truncate(desc, 500), options: { fontSize: 9 } },
+          { text: truncate(desc, 150), options: { fontSize: 9 } },
         ];
       };
     } else {
@@ -1434,7 +1436,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
               }
             : { text: safeCell(p.name) },
           { text: safeCell(p.presence, 30) },
-          { text: truncate(desc, 500), options: { fontSize: 9 } },
+          { text: truncate(desc, 150), options: { fontSize: 9 } },
         ];
       };
     }
@@ -1490,9 +1492,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
 
   // Find the maximum bottom y of all existing shapes on a slide to prevent overlap
+  // Checks _slideObjects, _newAutoShapes, _slideCharts, and data arrays
   function findMaxShapeBottom(slide) {
-    const objs = slide._slideObjects || slide._newAutoShapes || [];
     let maxBottom = 1.3; // minimum: below title+divider
+
+    // Check regular shape objects
+    const objs = slide._slideObjects || slide._newAutoShapes || [];
     for (const obj of objs) {
       const opts = obj.options || obj;
       const y = parseFloat(opts.y) || 0;
@@ -1501,6 +1506,30 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         maxBottom = y + h;
       }
     }
+
+    // Check charts (pptxgenjs stores charts separately)
+    const charts = slide._slideCharts || slide.data?.filter((d) => d._type === 'chart') || [];
+    for (const chart of charts) {
+      const opts = chart.options || chart.opts || chart;
+      const y = parseFloat(opts.y) || 0;
+      const h = parseFloat(opts.h) || 0;
+      if (y > 0 && y + h > maxBottom) {
+        maxBottom = y + h;
+      }
+    }
+
+    // Check slide.data array (pptxgenjs internal storage)
+    if (slide.data && Array.isArray(slide.data)) {
+      for (const item of slide.data) {
+        const opts = item.options || item.opts || item;
+        const y = parseFloat(opts.y) || 0;
+        const h = parseFloat(opts.h) || 0;
+        if (y > 0 && y + h > maxBottom) {
+          maxBottom = y + h;
+        }
+      }
+    }
+
     return maxBottom;
   }
 
