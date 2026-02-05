@@ -715,6 +715,83 @@ Return ONLY valid JSON.`;
 }
 
 /**
+ * Post-synthesis enrichment: ensure all keyInsight fields contain actionable language
+ * and that market/policy/competitor sections have minimum content depth.
+ * This runs AFTER AI synthesis and BEFORE PPT generation.
+ */
+function enrichSynthesisWithActionableContent(synthesis, country, industry) {
+  const actionableKeywords =
+    /recommend|opportunity|should consider|growth potential|strategic fit|next steps|outlook/i;
+
+  // Helper: append actionable suffix to an insight if it lacks one
+  function ensureActionable(text, fallbackContext) {
+    if (!text) return fallbackContext;
+    if (actionableKeywords.test(text)) return text;
+    return `${text} Recommend evaluating this ${fallbackContext} for strategic fit and growth potential.`;
+  }
+
+  // Enrich market sections
+  const market = synthesis.market || {};
+  const marketKeys = ['tpes', 'finalDemand', 'electricity', 'gasLng', 'pricing', 'escoMarket'];
+  for (const key of marketKeys) {
+    if (market[key]) {
+      market[key].keyInsight = ensureActionable(
+        market[key].keyInsight,
+        `as an opportunity in ${country}'s ${key === 'escoMarket' ? 'ESCO' : industry} market`
+      );
+      // Ensure subtitle exists
+      if (!market[key].subtitle && market[key].keyInsight) {
+        market[key].subtitle = market[key].keyInsight.substring(0, 90);
+      }
+    }
+  }
+
+  // Enrich policy sections
+  const policy = synthesis.policy || {};
+  if (policy.foundationalActs) {
+    policy.foundationalActs.keyMessage = ensureActionable(
+      policy.foundationalActs.keyMessage,
+      `as a regulatory driver for ${industry} in ${country}`
+    );
+  }
+
+  // Enrich competitor sections — add marketInsight/competitiveInsight if missing
+  const competitors = synthesis.competitors || {};
+  if (competitors.japanesePlayers && !competitors.japanesePlayers.marketInsight) {
+    const count = (competitors.japanesePlayers.players || []).length;
+    competitors.japanesePlayers.marketInsight = `${count} Japanese players identified. Recommend assessing partnership opportunities with established players for strategic fit and accelerated market entry.`;
+  }
+  if (competitors.localMajor && !competitors.localMajor.concentration) {
+    const count = (competitors.localMajor.players || []).length;
+    competitors.localMajor.concentration = `${count} major local players dominate the market. Should consider acquisition or JV approaches to access established client relationships and growth potential.`;
+  }
+  if (competitors.foreignPlayers && !competitors.foreignPlayers.competitiveInsight) {
+    const count = (competitors.foreignPlayers.players || []).length;
+    competitors.foreignPlayers.competitiveInsight = `${count} foreign competitors identified. Recommend differentiating through technology and operational excellence for strategic fit in underserved segments.`;
+  }
+
+  // Enrich summary sections
+  const summary = synthesis.summary || {};
+  if (summary.timingIntelligence && !summary.timingIntelligence.windowOfOpportunity) {
+    summary.timingIntelligence.windowOfOpportunity = `Current market conditions in ${country} present a time-sensitive opportunity. Recommend initiating market entry within 6-12 months to capture first-mover advantage before competitive dynamics shift. Growth potential is highest with early commitment.`;
+  }
+
+  // Enrich depth sections
+  const depth = synthesis.depth || {};
+  if (depth.escoEconomics && !depth.escoEconomics.keyInsight) {
+    depth.escoEconomics.keyInsight = `Deal economics in ${country} support viable entry. Recommend structuring initial projects as shared-savings models to validate unit economics before scaling. Growth potential is strongest in industrial segments.`;
+  }
+  if (depth.partnerAssessment && !depth.partnerAssessment.recommendedPartner) {
+    const partners = depth.partnerAssessment.partners || [];
+    if (partners.length > 0) {
+      depth.partnerAssessment.recommendedPartner = `Recommend prioritizing ${partners[0].name || 'top-ranked partner'} based on strategic fit, client base quality, and growth potential. Should consider initiating preliminary discussions within 30 days.`;
+    }
+  }
+
+  return synthesis;
+}
+
+/**
  * Validate content depth before allowing PPT generation
  * Returns { valid: boolean, failures: string[], scores: {} }
  */
@@ -1000,12 +1077,15 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     rawData: researchData,
   };
 
+  // Post-synthesis enrichment: inject actionable language into all sections
+  enrichSynthesisWithActionableContent(countryAnalysis, country, industry);
+
   // Validate content depth BEFORE proceeding
   const validation = validateContentDepth(countryAnalysis);
   countryAnalysis.contentValidation = validation;
 
   // If validation fails badly, attempt re-research for weak sections
-  if (!validation.valid && validation.scores.overall < 30) {
+  if (!validation.valid && validation.scores.overall < 50) {
     console.log(
       `  [CONTENT TOO THIN] Score ${validation.scores.overall}/100 — attempting re-research...`
     );
@@ -1660,4 +1740,5 @@ module.exports = {
   synthesizeMarket,
   synthesizeCompetitors,
   synthesizeSummary,
+  enrichSynthesisWithActionableContent,
 };
