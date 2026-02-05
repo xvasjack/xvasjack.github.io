@@ -85,7 +85,7 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
     model: 'kimi-k2.5',
     messages,
     max_tokens: maxTokens,
-    temperature: 0.6,
+    temperature: 1,
   };
 
   // Enable web search tool if requested (can be disabled via env var for testing)
