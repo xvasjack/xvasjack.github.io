@@ -421,6 +421,99 @@ class FeedbackLoop:
             return "continue"
 
         if not email_result.get("success"):
+            # Determine if this is a backend issue worth diagnosing
+            is_backend_issue = (
+                email_result.get("backend_died")
+                or email_result.get("backend_failure_email")
+                or "not received within" in email_result.get("error", "")
+            )
+
+            if is_backend_issue:
+                fix_applied = False
+                crash_detected = False
+                error_desc = email_result.get("error", "unknown")
+                await self._report_progress(f"[Failure] {error_desc} — checking Railway logs...")
+
+                try:
+                    log_result = await asyncio.wait_for(self.check_logs(), timeout=120)
+                    if log_result and log_result.get("has_errors"):
+                        crash_errors = log_result.get("errors", [])
+                        actionable_kw = [
+                            "error", "exception", "crash", "oom", "kill", "traceback",
+                            "stack", "unhandled", "fatal", "segfault", "SIGTERM",
+                            "failed", "ABORT", "ECONNREFUSED", "timeout",
+                        ]
+                        has_actionable = any(
+                            any(kw in str(err).lower() for kw in actionable_kw)
+                            for err in crash_errors
+                        )
+                        if has_actionable:
+                            crash_detected = True
+                            crash_issues = [f"Backend failure: {error_desc}"]
+                            for err in crash_errors[:3]:
+                                crash_issues.append(f"Log error: {err}")
+                            await self._report_progress(
+                                f"[Diagnosis] {len(crash_issues)} error(s) found — generating fix..."
+                            )
+                            try:
+                                fix_result = await retry_with_backoff(
+                                    lambda ci=crash_issues: self.generate_fix(ci, {
+                                        "fix_prompt": (
+                                            "The market-research backend FAILED during processing.\n\n"
+                                            "## Pipeline stages (for context):\n"
+                                            "1. Scope parsing (research-framework.js parseScope)\n"
+                                            "2. Country research (research-agents.js, 6-7 parallel agents via Kimi)\n"
+                                            "3. Per-section synthesis (research-orchestrator.js synthesize*)\n"
+                                            "4. Content validation + re-research if thin\n"
+                                            "5. Iterative refinement (up to 3 rounds)\n"
+                                            "6. Cross-country synthesis\n"
+                                            "7. PPT generation (ppt-single-country.js / ppt-multi-country.js)\n"
+                                            "8. Email delivery (shared/email.js via SendGrid)\n\n"
+                                            "## Errors from Railway logs:\n"
+                                            + "\n".join(ci) + "\n\n"
+                                            "## GUARDRAILS — CRITICAL:\n"
+                                            "- ONLY modify files in backend/market-research/\n"
+                                            "- Do NOT modify other service directories\n"
+                                            "- Do NOT modify infrastructure (Dockerfile, railway.json)\n"
+                                            "- Do NOT modify top-level backend/shared/ (only backend/market-research/shared/ is OK)\n"
+                                            "- Identify which pipeline stage failed from the log errors and fix THAT stage\n"
+                                        ),
+                                        "crash_fix": True,
+                                    }),
+                                    max_retries=1, step_name="crash_fix", step_timeout=1200,
+                                )
+                                if fix_result and fix_result.get("success"):
+                                    fix_applied = True
+                                    self.prs_merged += 1
+                                    await self._report_progress(
+                                        "[Fix applied] Pushed — waiting for Railway redeploy..."
+                                    )
+                                    await self._wait_for_deployment()
+                            except Exception as e:
+                                logger.warning(f"Fix generation failed: {e}")
+                        else:
+                            await self._report_progress(
+                                "[Diagnosis] Logs have errors but no actionable details"
+                            )
+                    else:
+                        await self._report_progress(
+                            "[Diagnosis] No errors in logs — likely Railway redeploy or transient issue"
+                        )
+                except Exception as e:
+                    logger.warning(f"Post-failure log check failed: {e}")
+
+                # Decision
+                if fix_applied:
+                    iteration.issues_found.append(f"Backend failed, fix applied: {error_desc}")
+                    return "continue"  # resubmit to test the fix
+                elif crash_detected:
+                    iteration.issues_found.append(f"Backend failed, could not fix: {error_desc}")
+                    return "stuck"  # don't resubmit into same crash
+                else:
+                    iteration.issues_found.append(f"Backend issue (no crash detected): {error_desc}")
+                    return "continue"  # likely redeploy, resubmit
+
+            # Non-backend failure (Gmail error, network issue) — just retry
             iteration.issues_found.append(f"Email wait failed: {email_result.get('error')}")
             return "continue"
 

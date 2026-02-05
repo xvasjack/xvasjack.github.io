@@ -254,6 +254,7 @@ async def wait_for_email_callback(
                         "success": False,
                         "error": f"Backend sent failure email: {result.get('subject')}",
                         "email_id": result.get("email_id"),
+                        "backend_failure_email": True,
                     }
                 logger.info(f"Gmail API downloaded: {result.get('file_path')}")
                 return result
@@ -572,13 +573,26 @@ async def generate_fix_callback(
                 f"If the same file was changed, try a DIFFERENT approach in that file.\n"
             )
 
-    # Scope routing
-    scope = _classify_fix_scope(issues)
-    scope_context = (
-        f"\n\n## FIX SCOPE: {scope.upper()}\n"
-        f"START with these files: {SCOPE_FILES.get(scope, '')}\n"
-        f"Do NOT touch: {SCOPE_DONT_TOUCH.get(scope, '')}\n"
-    )
+    # Scope routing — skip for crash/failure fixes (crash could be in any file)
+    if analysis and analysis.get("crash_fix"):
+        scope_context = (
+            "\n\n## FIX SCOPE: ALL FILES IN backend/market-research/ (CRASH FIX)\n"
+            "Backend crashed or failed — investigate ALL source files for the root cause.\n"
+            "Key files by pipeline stage:\n"
+            "- Scope parsing: research-framework.js\n"
+            "- Research agents: research-agents.js, ai-clients.js\n"
+            "- Synthesis: research-orchestrator.js\n"
+            "- PPT generation: ppt-single-country.js, ppt-multi-country.js, ppt-utils.js\n"
+            "- Email: shared/email.js\n"
+            "- Server/orchestrator: server.js\n"
+        )
+    else:
+        scope = _classify_fix_scope(issues)
+        scope_context = (
+            f"\n\n## FIX SCOPE: {scope.upper()}\n"
+            f"START with these files: {SCOPE_FILES.get(scope, '')}\n"
+            f"Do NOT touch: {SCOPE_DONT_TOUCH.get(scope, '')}\n"
+        )
 
     # Issue history and pattern detection context
     history_context = ""
