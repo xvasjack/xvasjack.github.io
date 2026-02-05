@@ -46,6 +46,31 @@ except ImportError:
 _recent_diffs: List[str] = []
 
 
+async def _check_backend_alive(service_name: str) -> dict:
+    """Health check during email wait to detect container restart."""
+    try:
+        from config import RAILWAY_URLS
+    except ImportError:
+        return {"alive": True, "reason": "config not available"}
+    base_url = RAILWAY_URLS.get(service_name)
+    if not base_url:
+        return {"alive": True, "reason": "no URL configured"}
+    health_url = base_url.rstrip("/") + "/health"
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "curl", "-sS", "--max-time", "5", "-o", "/dev/null",
+            "-w", "%{http_code}", health_url,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await proc.communicate()
+        code = stdout.decode().strip() if stdout else ""
+        if code.startswith("2"):
+            return {"alive": True, "reason": f"HTTP {code}"}
+        return {"alive": False, "reason": f"HTTP {code}"}
+    except Exception as e:
+        return {"alive": False, "reason": str(e)}
+
+
 # Scope routing: map issue categories to source files
 SCOPE_FILES = {
     "research": "research-orchestrator.js, ai-clients.js",
@@ -204,6 +229,10 @@ async def wait_for_email_callback(
         try:
             subject_hint = SERVICE_EMAIL_SUBJECTS.get(service_name, service_name)
             query = f"subject:({subject_hint}) has:attachment in:anywhere"
+
+            async def check_alive():
+                return await _check_backend_alive(service_name)
+
             result = await wait_for_email_api(
                 query=query,
                 download_dir=download_dir,
@@ -211,7 +240,12 @@ async def wait_for_email_callback(
                 poll_interval=30,
                 skip_email_ids=skip_email_ids,
                 after_epoch=after_epoch,
+                liveness_check=check_alive,
+                liveness_check_interval=3,
             )
+            if result.get("backend_died"):
+                logger.error("Backend died during email wait — skipping browser fallback")
+                return result
             if result.get("success"):
                 # Fix 3: Detect backend failure emails by subject
                 if "failed" in result.get("subject", "").lower():
