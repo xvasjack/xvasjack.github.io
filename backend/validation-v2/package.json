@@ -1,5 +1,5 @@
 {
-  "name": "validation-v2",
+  "name": "validation-pj-vessel",
   "version": "1.0.0",
   "main": "server.js",
   "scripts": {
@@ -12,8 +12,9 @@
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.0.0",
     "node-fetch": "^2.7.0",
-    "openai": "^4.20.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
   },
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  }
 }
