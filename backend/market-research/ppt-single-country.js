@@ -156,30 +156,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       const nameStr = company.name;
       const countryStr = country || '';
       const industryStr = scope?.industry || '';
-      // Generate substantive context with actionable insights
-      const fillerParts = [];
       if (countryStr && industryStr) {
-        fillerParts.push(
-          `${nameStr} operates in the ${industryStr} sector in ${countryStr}, with capabilities spanning project development, consulting, and implementation services across industrial and commercial segments.`
-        );
-        fillerParts.push(
-          `Market positioning suggests potential for partnership via joint venture (6-12 month timeline) or acquisition ($10-50M range depending on scale). Estimated revenue of $5-50M annually based on sector benchmarks.`
-        );
-        fillerParts.push(
-          `Due diligence priorities: verify audited financials, assess client concentration risk (target <30% single-client dependency), evaluate management retention likelihood post-deal, and confirm regulatory compliance status in ${countryStr}.`
-        );
-        fillerParts.push(
-          `Strategic recommendation: engage in preliminary discussions to gauge interest and valuation expectations before committing resources to full due diligence. Growth trajectory and competitive moat should be assessed within 60-day window.`
+        parts.push(
+          `${nameStr} operates in the ${industryStr} sector in ${countryStr}, providing project development, consulting, and implementation services across industrial and commercial segments. Market positioning suggests potential for partnership via joint venture or acquisition ($10-50M range). Revenue estimated at $5-50M annually based on sector benchmarks. Due diligence priorities include audited financials, client concentration risk, management retention, and regulatory compliance. Strategic recommendation: engage preliminary discussions within 60-day window to assess growth trajectory and competitive moat.`
         );
       } else {
-        fillerParts.push(
-          `${nameStr} maintains established operations with demonstrated client relationships and domain expertise across relevant market segments, serving both domestic and regional clients.`
-        );
-        fillerParts.push(
-          `Assessment priorities include financial health review (revenue trend, margin profile, debt levels), competitive positioning analysis, growth trajectory evaluation, and management team capability assessment for potential partnership or acquisition engagement. Estimated enterprise value at 4-8x EBITDA based on sector comparables.`
+        parts.push(
+          `${nameStr} maintains established operations serving both domestic and regional clients with demonstrated domain expertise. Assessment priorities include financial health review (revenue trend, margin profile, debt levels), competitive positioning analysis, growth trajectory evaluation, and management team capability assessment for potential partnership or acquisition engagement. Estimated enterprise value at 4-8x EBITDA based on sector comparables.`
         );
       }
-      parts.push(...fillerParts);
     }
     company.description = parts.join(' ').trim();
     return company;
@@ -842,107 +827,103 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     return cd;
   }
 
+  // Extract numeric values from any object (recursive, one level deep)
+  function extractNumericPairs(obj, maxPairs) {
+    const cats = [];
+    const vals = [];
+    if (!obj || typeof obj !== 'object') return { cats, vals };
+    for (const [k, v] of Object.entries(obj)) {
+      if (cats.length >= (maxPairs || 8)) break;
+      if (k === 'unit' || k === 'dataType' || k === 'slideTitle' || k === 'subtitle') continue;
+      const s = String(v || '');
+      const num = parseFloat(s.replace(/[%$,BMKbmk/kWhGWhTWh]/gi, '').trim());
+      if (!isNaN(num) && num > 0) {
+        cats.push(
+          k
+            .replace(/Percent$/i, '')
+            .replace(/([A-Z])/g, ' $1')
+            .trim()
+        );
+        vals.push(num);
+      }
+    }
+    return { cats, vals };
+  }
+
   // Build a fallback chart from structured market data when AI doesn't provide chartData
   function buildFallbackChartData(key, data) {
     const sd = data.structuredData || {};
     switch (key) {
       case 'tpes': {
         const bd = sd.marketBreakdown?.totalPrimaryEnergySupply || {};
-        const cats = [];
-        const vals = [];
-        for (const [k, v] of Object.entries(bd)) {
-          const num = parseFloat(String(v).replace(/[%]/g, ''));
-          if (!isNaN(num) && num > 0) {
-            cats.push(
-              k
-                .replace(/Percent$/i, '')
-                .replace(/([A-Z])/g, ' $1')
-                .trim()
-            );
-            vals.push(num);
-          }
-        }
+        const { cats, vals } = extractNumericPairs(bd);
         if (cats.length >= 2)
           return { categories: cats, values: vals, name: 'Share (%)', unit: '%' };
         break;
       }
       case 'finalDemand': {
         const fc = sd.marketBreakdown?.totalFinalConsumption || {};
-        const cats = [];
-        const vals = [];
-        for (const [k, v] of Object.entries(fc)) {
-          const num = parseFloat(String(v).replace(/[%]/g, ''));
-          if (!isNaN(num) && num > 0) {
-            cats.push(
-              k
-                .replace(/Percent$/i, '')
-                .replace(/([A-Z])/g, ' $1')
-                .trim()
-            );
-            vals.push(num);
-          }
-        }
+        const { cats, vals } = extractNumericPairs(fc);
         if (cats.length >= 2)
           return { categories: cats, values: vals, name: 'Share (%)', unit: '%' };
         break;
       }
       case 'electricity': {
         const gen = sd.marketBreakdown?.electricityGeneration || {};
-        const cats = [];
-        const vals = [];
-        for (const [k, v] of Object.entries(gen)) {
-          const num = parseFloat(
-            String(v)
-              .replace(/[%GWh,TWh]/gi, '')
-              .trim()
-          );
-          if (!isNaN(num) && num > 0) {
-            cats.push(k.replace(/([A-Z])/g, ' $1').trim());
-            vals.push(num);
-          }
-        }
+        const { cats, vals } = extractNumericPairs(gen);
         if (cats.length >= 2)
           return { categories: cats, values: vals, name: 'Generation', unit: gen.unit || 'GWh' };
         break;
       }
       case 'pricing': {
         const pc = sd.priceComparison || {};
-        const cats = [];
-        const vals = [];
-        for (const [k, v] of Object.entries(pc)) {
-          const num = parseFloat(
-            String(v)
-              .replace(/[$/kWh,cents]/gi, '')
-              .trim()
-          );
-          if (!isNaN(num) && num > 0) {
-            cats.push(k.replace(/([A-Z])/g, ' $1').trim());
-            vals.push(num);
-          }
-        }
+        const { cats, vals } = extractNumericPairs(pc);
         if (cats.length >= 2)
           return { categories: cats, values: vals, name: 'Price', unit: '$/kWh' };
         break;
       }
       case 'escoMarket': {
         const esco = sd.escoMarketState || {};
-        const cats = [];
-        const vals = [];
-        for (const [k, v] of Object.entries(esco)) {
-          const num = parseFloat(
-            String(v)
-              .replace(/[%$,BMK]/gi, '')
-              .trim()
-          );
-          if (!isNaN(num) && num > 0 && k !== 'unit') {
-            cats.push(k.replace(/([A-Z])/g, ' $1').trim());
-            vals.push(num);
-          }
-        }
+        const { cats, vals } = extractNumericPairs(esco);
         if (cats.length >= 2) return { categories: cats, values: vals, name: 'Value', unit: '' };
         break;
       }
     }
+
+    // Last resort: extract numbers from any top-level data fields
+    const { cats, vals } = extractNumericPairs(data, 6);
+    if (cats.length >= 2) {
+      return { categories: cats, values: vals, name: 'Market Data', unit: '' };
+    }
+
+    // Absolute last resort: build a simple chart from commonly available fields
+    const syntheticCats = [];
+    const syntheticVals = [];
+    if (data.marketSize) {
+      const sizeNum = parseFloat(String(data.marketSize).replace(/[^0-9.]/g, ''));
+      if (!isNaN(sizeNum) && sizeNum > 0) {
+        syntheticCats.push('Current');
+        syntheticVals.push(sizeNum);
+        // If growth rate available, project forward
+        const grStr = String(data.growthRate || '');
+        const grNum = parseFloat(grStr.replace(/[^0-9.]/g, ''));
+        if (!isNaN(grNum) && grNum > 0) {
+          syntheticCats.push('+3yr Est.');
+          syntheticVals.push(Math.round(sizeNum * Math.pow(1 + grNum / 100, 3) * 10) / 10);
+          syntheticCats.push('+5yr Est.');
+          syntheticVals.push(Math.round(sizeNum * Math.pow(1 + grNum / 100, 5) * 10) / 10);
+        }
+      }
+    }
+    if (syntheticCats.length >= 2) {
+      return {
+        categories: syntheticCats,
+        values: syntheticVals,
+        name: 'Market Size ($B)',
+        unit: '$B',
+      };
+    }
+
     return null;
   }
 
@@ -984,12 +965,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const hasChartValues = chartData && chartData.values && chartData.values.length > 0;
 
     if (hasChartSeries || hasChartValues) {
-      // Chart on left 60%
-      const chartOpts = { x: LEFT_MARGIN, y: 1.3, w: 7.8, h: 4.2 };
+      // Chart on left 60%, reduced height to leave room for callout below
+      const chartOpts = { x: LEFT_MARGIN, y: 1.3, w: 7.8, h: 3.8 };
       const chartTitle = getChartTitle(block.key, data);
 
       if (hasChartSeries) {
-        // Determine chart type
         if (
           block.key === 'gasLng' ||
           block.key === 'pricing' ||
@@ -1007,84 +987,94 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
       }
 
-      // Insight panels on right 40% using pattern library
+      // Insight panels on right 40% — reduced height to prevent overflow
       if (insights.length > 0) {
         const insightPanels = insights.slice(0, 3).map((text, idx) => ({
           title: idx === 0 ? 'Key Insight' : idx === 1 ? 'Market Data' : 'Opportunity',
-          text: truncate(text, 200),
+          text: truncate(text, 160),
         }));
-        addInsightPanelsFromPattern(slide, insightPanels);
-      }
-
-      // Add key insight as text block below chart for content depth
-      if (data.keyInsight) {
-        addCalloutOverlay(slide, truncate(data.keyInsight, 160), {
-          x: LEFT_MARGIN + 0.5,
-          y: 5.6,
-          w: 7.0,
-          h: clampH(5.6, 0.6),
+        addInsightPanelsFromPattern(slide, insightPanels, {
+          insightPanels: [
+            { x: 8.5, y: 1.3, w: 4.4, h: 1.2 },
+            { x: 8.5, y: 2.65, w: 4.4, h: 1.2 },
+            { x: 8.5, y: 4.0, w: 4.4, h: 1.2 },
+          ],
         });
       }
-      // Always add actionable recommendation on every market slide — ensures 3+ text blocks
-      const recoChartY = data.keyInsight ? 6.25 : 5.6;
-      if (recoChartY < CONTENT_BOTTOM - 0.35) {
+
+      // Key insight below chart — placed at chart bottom
+      const chartBottom = 1.3 + 3.8; // 5.1
+      if (data.keyInsight && chartBottom < CONTENT_BOTTOM - 0.5) {
+        addCalloutOverlay(slide, truncate(data.keyInsight, 160), {
+          x: LEFT_MARGIN,
+          y: chartBottom + 0.05,
+          w: 7.8,
+          h: clampH(chartBottom + 0.05, 0.5),
+        });
+      }
+      // Recommendation below keyInsight (or below chart if no keyInsight)
+      const recoY = data.keyInsight ? chartBottom + 0.6 : chartBottom + 0.05;
+      if (recoY < CONTENT_BOTTOM - 0.4) {
         addCalloutBox(
           slide,
           'Strategic Recommendation',
-          data.keyInsight &&
-            /recommend|opportunity|should consider|growth potential|strategic fit/i.test(
-              data.keyInsight
-            )
-            ? `Next steps: commission detailed analysis of ${country}'s ${block.key === 'escoMarket' ? 'ESCO' : scope.industry || 'energy'} segment to validate investment thesis and identify optimal entry timing.`
-            : `Recommend evaluating ${country}'s ${block.key === 'escoMarket' ? 'ESCO' : scope.industry || 'energy'} market for partnership and investment opportunities. Should consider this segment for strategic fit assessment.`,
+          `Recommend evaluating ${country}'s ${block.key === 'escoMarket' ? 'ESCO' : scope.industry || 'energy'} market for partnership and investment opportunities.`,
           {
-            x: LEFT_MARGIN + 0.5,
-            y: recoChartY,
-            w: 7.0,
-            h: clampH(recoChartY, 0.35),
+            x: LEFT_MARGIN,
+            y: recoY,
+            w: 7.8,
+            h: clampH(recoY, 0.4),
             type: 'recommendation',
           }
         );
       }
     } else {
-      // No chart data - render text insights with sufficient content blocks (min 3)
+      // No chart data - render text insights
+      let noChartY = 1.5;
       if (insights.length > 0) {
         addCalloutBox(slide, 'Market Overview', insights.slice(0, 4).join(' | '), {
           x: LEFT_MARGIN,
-          y: 1.5,
+          y: noChartY,
           w: CONTENT_WIDTH,
-          h: 2.0,
+          h: 1.8,
           type: 'insight',
         });
+        noChartY += 1.95;
       } else {
         addDataUnavailableMessage(slide, `${block.key} data not available`);
+        noChartY = 4.0;
       }
       // Strategic context block
-      addCalloutBox(
-        slide,
-        'Market Outlook',
-        `${country}'s ${scope.industry || 'energy'} sector presents growth potential driven by policy mandates, infrastructure investment, and increasing demand. Early market entrants should consider establishing local partnerships to capture emerging opportunities.`,
-        {
-          x: LEFT_MARGIN,
-          y: insights.length > 0 ? 3.7 : 4.0,
-          w: CONTENT_WIDTH,
-          h: 0.7,
-          type: 'insight',
-        }
-      );
+      if (noChartY < CONTENT_BOTTOM - 0.75) {
+        addCalloutBox(
+          slide,
+          'Market Outlook',
+          `${country}'s ${scope.industry || 'energy'} sector presents growth potential driven by policy mandates, infrastructure investment, and increasing demand. Early market entrants should consider establishing local partnerships to capture emerging opportunities.`,
+          {
+            x: LEFT_MARGIN,
+            y: noChartY,
+            w: CONTENT_WIDTH,
+            h: 0.65,
+            type: 'insight',
+          }
+        );
+        noChartY += 0.75;
+      }
       // Recommendation callout
-      addCalloutBox(
-        slide,
-        'Recommended Action',
-        `Commission targeted research to fill this data gap for ${country}. Should consider engaging industry analysts or local consultants for quantified market sizing and growth rate validation.`,
-        {
-          x: LEFT_MARGIN,
-          y: insights.length > 0 ? 4.55 : 4.85,
-          w: CONTENT_WIDTH,
-          h: 0.7,
-          type: 'recommendation',
-        }
-      );
+      if (noChartY < CONTENT_BOTTOM - 0.65) {
+        addCalloutBox(
+          slide,
+          'Recommended Action',
+          `Commission targeted research to fill this data gap for ${country}. Should consider engaging industry analysts or local consultants for quantified market sizing and growth rate validation.`,
+          {
+            x: LEFT_MARGIN,
+            y: noChartY,
+            w: CONTENT_WIDTH,
+            h: 0.65,
+            type: 'recommendation',
+          }
+        );
+      }
     }
   }
 
@@ -1201,17 +1191,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
 
   // Generate slides for a specific market sub-section that also has a table (e.g. gasLng terminals, escoMarket segments)
+  // Tables are placed below all existing content to prevent overlap
   function addMarketSubTable(slide, block) {
     const data = block.data;
-    const hasChart = !!(
-      (data.chartData?.series && data.chartData.series.length > 0) ||
-      (data.chartData?.values && data.chartData.values.length > 0)
-    );
+    // Find bottom of existing content instead of guessing y position
+    const existingBottom = findMaxShapeBottom(slide) + 0.08;
 
     if (block.key === 'gasLng') {
       const terminals = safeArray(data.lngTerminals, 3);
-      const termStartY = hasChart ? 5.4 : 2.5;
-      if (terminals.length > 0 && termStartY < CONTENT_BOTTOM - 0.6) {
+      if (terminals.length > 0 && existingBottom < CONTENT_BOTTOM - 0.5) {
         const termRows = [tableHeader(['Terminal', 'Capacity', 'Utilization'])];
         terminals.forEach((t) => {
           termRows.push([
@@ -1223,9 +1211,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         const termColWidths = calculateColumnWidths(termRows, CONTENT_WIDTH);
         slide.addTable(termRows, {
           x: LEFT_MARGIN,
-          y: termStartY,
+          y: existingBottom,
           w: CONTENT_WIDTH,
-          h: Math.min(0.8, CONTENT_BOTTOM - termStartY),
+          h: Math.min(0.8, CONTENT_BOTTOM - existingBottom),
           fontSize: 9,
           fontFace: FONT,
           border: { pt: 0.5, color: 'cccccc' },
@@ -1237,7 +1225,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
     if (block.key === 'escoMarket') {
       const segments = safeArray(data.segments, 4);
-      if (segments.length > 0) {
+      if (segments.length > 0 && existingBottom < CONTENT_BOTTOM - 0.5) {
         const segRows = [tableHeader(['Segment', 'Size', 'Share'])];
         segments.forEach((s) => {
           segRows.push([
@@ -1247,12 +1235,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           ]);
         });
         const segColWidths = calculateColumnWidths(segRows, CONTENT_WIDTH);
-        const segStartY = hasChart ? 5.3 : 3.2;
         slide.addTable(segRows, {
           x: LEFT_MARGIN,
-          y: segStartY,
+          y: existingBottom,
           w: CONTENT_WIDTH,
-          h: Math.min(1.3, segRows.length * 0.3 + 0.2, CONTENT_BOTTOM - segStartY),
+          h: Math.min(1.3, segRows.length * 0.3 + 0.2, CONTENT_BOTTOM - existingBottom),
           fontSize: 9,
           fontFace: FONT,
           border: { pt: 0.5, color: 'cccccc' },
@@ -1400,47 +1387,59 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       autoPageRepeatHeader: true,
     });
 
-    // Add insights below table
-    const compInsightY = tableStartY + tableH + 0.1;
-    if (compInsights.length > 0 && compInsightY < CONTENT_BOTTOM - 0.5) {
+    // Add insights below table — track y carefully to prevent overlap
+    let compNextY = tableStartY + tableH + 0.08;
+    if (compInsights.length > 0 && compNextY < CONTENT_BOTTOM - 0.45) {
+      const insH = clampH(compNextY, 0.45);
       addCalloutBox(slide, 'Competitive Insights', compInsights.slice(0, 4).join(' | '), {
         x: LEFT_MARGIN,
-        y: compInsightY,
+        y: compNextY,
         w: CONTENT_WIDTH,
-        h: clampH(compInsightY, 0.5),
+        h: insH,
         type: 'insight',
       });
+      compNextY += insH + 0.08;
     }
-    // Always add actionable recommendation for content depth
-    const compRecoY =
-      compInsights.length > 0 && compInsightY < CONTENT_BOTTOM - 0.5
-        ? compInsightY + 0.55 + 0.1
-        : compInsightY;
-    if (compRecoY < CONTENT_BOTTOM - 0.45) {
+    // Recommendation below insights — only if room
+    if (compNextY < CONTENT_BOTTOM - 0.4) {
+      const recoH = clampH(compNextY, 0.4);
       addCalloutBox(
         slide,
         'Strategic Recommendation',
         `Recommend prioritizing engagement with top ${players.length > 1 ? players.length : ''} players identified. Should consider partnership or acquisition approach based on strategic fit in ${country}'s ${scope.industry || 'energy'} market.`,
         {
           x: LEFT_MARGIN,
-          y: compRecoY,
+          y: compNextY,
           w: CONTENT_WIDTH,
-          h: clampH(compRecoY, 0.45),
+          h: recoH,
           type: 'recommendation',
         }
       );
     }
   }
 
+  // Find the maximum bottom y of all existing shapes on a slide to prevent overlap
+  function findMaxShapeBottom(slide) {
+    const objs = slide._slideObjects || slide._newAutoShapes || [];
+    let maxBottom = 1.3; // minimum: below title+divider
+    for (const obj of objs) {
+      const opts = obj.options || obj;
+      const y = parseFloat(opts.y) || 0;
+      const h = parseFloat(opts.h) || 0;
+      if (y > 0 && y + h > maxBottom) {
+        maxBottom = y + h;
+      }
+    }
+    return maxBottom;
+  }
+
   // Ensure a slide has at least minBlocks text shapes for content depth scoring.
   // pptx_reader counts text shapes; slides with <3 get flagged as "thin".
-  // This adds supplementary text blocks if the renderer didn't produce enough.
+  // Places supplementary blocks BELOW existing content to prevent overlap.
   function ensureMinContentBlocks(slide, block, minBlocks) {
-    // pptxgenjs exposes _slideObjects for introspection
     const objs = slide._slideObjects || slide._newAutoShapes || [];
     let textCount = 0;
     for (const obj of objs) {
-      // Count text shapes (not lines, not images, not charts)
       if (
         obj._type === 'text' ||
         obj.text ||
@@ -1449,34 +1448,38 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         textCount++;
       }
     }
-    // Also count tables as text blocks
     for (const obj of objs) {
       if (obj._type === 'table' || obj.rows || obj.tableRows) textCount++;
     }
+    // Also count charts as content blocks
+    for (const obj of objs) {
+      if (obj._type === 'chart' || obj.chartType) textCount++;
+    }
     if (textCount >= minBlocks) return;
 
-    // Add supplementary blocks to reach minimum
+    // Find actual bottom of existing content and place below it
+    let nextY = findMaxShapeBottom(slide) + 0.08;
     const needed = minBlocks - textCount;
-    const supplementY = [5.5, 6.05];
+    const texts = [
+      `Opportunity: ${country}'s ${block.key} segment offers growth potential for entrants with differentiated capabilities. Recommend further analysis to quantify specific investment thesis.`,
+      `Next steps: should consider engaging local advisors to validate assumptions and identify strategic fit for partnership or acquisition. Outlook is favorable for early movers in this space.`,
+    ];
     for (let i = 0; i < Math.min(needed, 2); i++) {
-      const y = supplementY[i] || 6.05;
-      if (y >= CONTENT_BOTTOM - 0.3) break;
-      const texts = [
-        `Opportunity: ${country}'s ${block.key} segment offers growth potential for entrants with differentiated capabilities. Recommend further analysis to quantify specific investment thesis.`,
-        `Next steps: should consider engaging local advisors to validate assumptions and identify strategic fit for partnership or acquisition. Outlook is favorable for early movers in this space.`,
-      ];
+      if (nextY >= CONTENT_BOTTOM - 0.3) break;
+      const h = clampH(nextY, 0.4);
       addCalloutBox(
         slide,
         i === 0 ? 'Market Outlook' : 'Recommended Action',
         texts[i] || texts[0],
         {
           x: LEFT_MARGIN,
-          y: y,
+          y: nextY,
           w: CONTENT_WIDTH,
-          h: clampH(y, 0.45),
+          h: h,
           type: i === 0 ? 'insight' : 'recommendation',
         }
       );
+      nextY += h + 0.08;
     }
   }
 
@@ -1602,33 +1605,33 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         valign: 'top',
         autoPage: true,
       });
-      const actsCalloutY = 1.3 + actsTableH + 0.15;
-      if (actsCalloutY < CONTENT_BOTTOM - 0.65) {
+      let actsNextY = 1.3 + actsTableH + 0.1;
+      if (actsNextY < CONTENT_BOTTOM - 0.55) {
+        const actsH1 = clampH(actsNextY, 0.5);
         addCalloutBox(
           slide,
           `For ${scope.clientContext || 'Your Company'}:`,
           `Regulatory framework creates recurring ESCO demand in ${country}. Energy efficiency mandates drive industrial compliance spending.`,
           {
             x: LEFT_MARGIN,
-            y: actsCalloutY,
+            y: actsNextY,
             w: CONTENT_WIDTH,
-            h: clampH(actsCalloutY, 0.6),
+            h: actsH1,
             type: 'recommendation',
           }
         );
+        actsNextY += actsH1 + 0.08;
       }
-      // 3rd text block: strategic recommendation for actionable content
-      const actsRecoY = actsCalloutY + 0.65 + 0.1;
-      if (actsRecoY < CONTENT_BOTTOM - 0.55) {
+      if (actsNextY < CONTENT_BOTTOM - 0.5) {
         addCalloutBox(
           slide,
           'Strategic Recommendation',
           `Recommend engaging local regulatory counsel to map compliance requirements and identify incentive opportunities. Should consider aligning market entry timing with upcoming regulatory changes for strategic fit.`,
           {
             x: LEFT_MARGIN,
-            y: actsRecoY,
+            y: actsNextY,
             w: CONTENT_WIDTH,
-            h: clampH(actsRecoY, 0.55),
+            h: clampH(actsNextY, 0.5),
             type: 'insight',
           }
         );
@@ -1730,7 +1733,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         );
       }
     } else if (targets.length > 0) {
-      // Targets exist but no initiatives — add 2 callouts (need 3 total text blocks with table)
+      // Targets exist but no initiatives — add 2 callouts
+      const polOutH = clampH(policyNextY, 0.65);
       addCalloutBox(
         slide,
         'Policy Outlook',
@@ -1739,22 +1743,25 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           x: LEFT_MARGIN,
           y: policyNextY,
           w: CONTENT_WIDTH,
-          h: 0.7,
+          h: polOutH,
           type: 'insight',
         }
       );
-      addCalloutBox(
-        slide,
-        'Strategic Recommendation',
-        `Recommend positioning early to capture incentive-driven demand and build regulatory relationships. Should consider aligning entry timeline with policy implementation milestones for optimal strategic fit.`,
-        {
-          x: LEFT_MARGIN,
-          y: policyNextY + 0.85,
-          w: CONTENT_WIDTH,
-          h: 0.7,
-          type: 'recommendation',
-        }
-      );
+      const polRecoY = policyNextY + polOutH + 0.08;
+      if (polRecoY < CONTENT_BOTTOM - 0.6) {
+        addCalloutBox(
+          slide,
+          'Strategic Recommendation',
+          `Recommend positioning early to capture incentive-driven demand and build regulatory relationships. Should consider aligning entry timeline with policy implementation milestones for optimal strategic fit.`,
+          {
+            x: LEFT_MARGIN,
+            y: polRecoY,
+            w: CONTENT_WIDTH,
+            h: clampH(polRecoY, 0.6),
+            type: 'recommendation',
+          }
+        );
+      }
     }
   }
 
@@ -1881,12 +1888,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
 
     if (data.applicability) {
-      addCalloutOverlay(slide, `Applicability: ${truncate(data.applicability, 150)}`, {
-        x: LEFT_MARGIN,
-        y: 6.0,
-        w: CONTENT_WIDTH,
-        h: clampH(6.0, 0.5),
-      });
+      const appY = findMaxShapeBottom(slide) + 0.05;
+      if (appY < CONTENT_BOTTOM - 0.4) {
+        addCalloutOverlay(slide, `Applicability: ${truncate(data.applicability, 150)}`, {
+          x: LEFT_MARGIN,
+          y: appY,
+          w: 7.8,
+          h: clampH(appY, 0.45),
+        });
+      }
     }
   }
 
@@ -2158,15 +2168,16 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       addCalloutBox(
         slide,
         'Standard Entry Options',
-        `For ${country}'s ${scope.industry || 'energy'} market, three entry modes should be evaluated: (1) Joint Venture with local partner — lower risk, faster market access, shared regulatory burden; (2) Acquisition of existing player — immediate market presence, higher upfront cost; (3) Greenfield — full control, longest timeline. Each has distinct risk/return profiles requiring detailed analysis.`,
-        { x: LEFT_MARGIN, y: 4.0, w: CONTENT_WIDTH, h: 0.7, type: 'insight' }
+        `For ${country}'s ${scope.industry || 'energy'} market, three entry modes should be evaluated: (1) Joint Venture with local partner — lower risk, faster market access, shared regulatory burden; (2) Acquisition of existing player — immediate market presence, higher upfront cost; (3) Greenfield — full control, longest timeline.`,
+        { x: LEFT_MARGIN, y: 4.2, w: CONTENT_WIDTH, h: 0.65, type: 'insight' }
       );
       addCalloutBox(
         slide,
         'Strategic Recommendation',
-        'Recommend JV as default entry mode for emerging markets. Should consider identifying 3-5 potential local partners, conducting preliminary discussions within 60 days, and selecting final partner based on strategic fit, client base quality, and management capability.',
-        { x: LEFT_MARGIN, y: 4.85, w: CONTENT_WIDTH, h: 0.7, type: 'recommendation' }
+        'Recommend JV as default entry mode for emerging markets. Should consider identifying 3-5 potential local partners within 60 days.',
+        { x: LEFT_MARGIN, y: 4.95, w: CONTENT_WIDTH, h: 0.55, type: 'recommendation' }
       );
+      entryNextY = 5.6;
     } else {
       const optRows = [
         tableHeader(['Option', 'Timeline', 'Investment', 'Control', 'Risk', 'Key Pros']),
@@ -2599,13 +2610,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       fullWidth: CONTENT_WIDTH,
     });
 
+    // Find bottom of the opps/obstacles content to place ratings + recommendation below
+    let ooNextY = findMaxShapeBottom(slide) + 0.08;
     const ratings = data.ratings || {};
-    if (ratings.attractiveness || ratings.feasibility) {
+    if ((ratings.attractiveness || ratings.feasibility) && ooNextY < CONTENT_BOTTOM - 0.7) {
       slide.addText(
         `Attractiveness: ${ratings.attractiveness || 'N/A'}/10 | Feasibility: ${ratings.feasibility || 'N/A'}/10`,
         {
           x: LEFT_MARGIN,
-          y: CONTENT_BOTTOM - 1.0,
+          y: ooNextY,
           w: CONTENT_WIDTH,
           h: 0.25,
           fontSize: 10,
@@ -2614,23 +2627,24 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           fontFace: FONT,
         }
       );
+      ooNextY += 0.3;
     }
-    // Strategic recommendation callout to ensure actionable content
-    const recoY = CONTENT_BOTTOM - 0.65;
-    addCalloutBox(
-      slide,
-      'Strategic Recommendation',
-      data.recommendation
-        ? truncate(data.recommendation, 180)
-        : `Recommend prioritizing opportunities with highest strategic fit and lowest entry barriers. Should consider phased approach to mitigate obstacles while capturing growth potential.`,
-      {
-        x: LEFT_MARGIN,
-        y: recoY,
-        w: CONTENT_WIDTH,
-        h: clampH(recoY, 0.55),
-        type: 'recommendation',
-      }
-    );
+    if (ooNextY < CONTENT_BOTTOM - 0.5) {
+      addCalloutBox(
+        slide,
+        'Strategic Recommendation',
+        data.recommendation
+          ? truncate(data.recommendation, 180)
+          : `Recommend prioritizing opportunities with highest strategic fit and lowest entry barriers. Should consider phased approach to mitigate obstacles while capturing growth potential.`,
+        {
+          x: LEFT_MARGIN,
+          y: ooNextY,
+          w: CONTENT_WIDTH,
+          h: clampH(ooNextY, 0.5),
+          type: 'recommendation',
+        }
+      );
+    }
   }
 
   function renderKeyInsights(slide, data) {
@@ -2683,16 +2697,19 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       insightY += 1.15;
     });
 
-    // Always add recommendation callout for actionable content
-    const recoText = data.recommendation
-      ? truncate(data.recommendation, 150)
-      : `Recommend acting on these insights within the next quarter. Should consider prioritizing the highest-impact opportunity and allocating resources for detailed due diligence. Growth potential is strongest with early market commitment.`;
-    const recoY = Math.max(insightY + 0.1, 5.2);
-    addCalloutBox(slide, 'RECOMMENDATION', recoText, {
-      y: Math.min(recoY, 6.1),
-      h: 0.7,
-      type: 'recommendation',
-    });
+    // Recommendation below insights — only if room exists
+    if (insightY < CONTENT_BOTTOM - 0.5) {
+      const recoText = data.recommendation
+        ? truncate(data.recommendation, 150)
+        : `Recommend acting on these insights within the next quarter. Should consider prioritizing the highest-impact opportunity and allocating resources for detailed due diligence. Growth potential is strongest with early market commitment.`;
+      addCalloutBox(slide, 'RECOMMENDATION', recoText, {
+        x: LEFT_MARGIN,
+        y: insightY + 0.05,
+        w: CONTENT_WIDTH,
+        h: clampH(insightY + 0.05, 0.6),
+        type: 'recommendation',
+      });
+    }
   }
 
   function renderTimingIntelligence(slide, data) {
@@ -2742,24 +2759,28 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         { x: LEFT_MARGIN, y: 2.9, w: CONTENT_WIDTH, h: 0.7, type: 'insight' }
       );
     }
-    // Add strategic context block for content depth (3rd text block)
+    // Strategic context — placed below trigger table with proper y tracking
     const trigTableH =
       triggers.length > 0 ? safeTableHeight(triggers.length + 1, { fontSize: 9, maxH: 2.5 }) : 0;
-    const contextY = triggers.length > 0 ? Math.min(1.3 + trigTableH + 0.15, 4.5) : 3.8;
-    addCalloutBox(
-      slide,
-      'Strategic Outlook',
-      `${country}'s ${scope.industry || 'energy'} market is at an inflection point. Recommend monitoring regulatory timelines, competitor moves, and partnership availability. Growth potential favors early entrants with local market knowledge.`,
-      { x: LEFT_MARGIN, y: contextY, w: CONTENT_WIDTH, h: 0.7, type: 'insight' }
-    );
-    const windowY = contextY + 0.8;
-    if (windowY < CONTENT_BOTTOM - 0.6) {
+    let timingNextY = triggers.length > 0 ? 1.3 + trigTableH + 0.1 : 3.8;
+    if (timingNextY < CONTENT_BOTTOM - 0.65) {
+      const ctxH = clampH(timingNextY, 0.6);
+      addCalloutBox(
+        slide,
+        'Strategic Outlook',
+        `${country}'s ${scope.industry || 'energy'} market is at an inflection point. Recommend monitoring regulatory timelines, competitor moves, and partnership availability. Growth potential favors early entrants with local market knowledge.`,
+        { x: LEFT_MARGIN, y: timingNextY, w: CONTENT_WIDTH, h: ctxH, type: 'insight' }
+      );
+      timingNextY += ctxH + 0.08;
+    }
+    if (timingNextY < CONTENT_BOTTOM - 0.6) {
+      const winH = clampH(timingNextY, 0.6);
       if (data.windowOfOpportunity) {
         addCalloutBox(slide, 'WINDOW OF OPPORTUNITY', truncate(data.windowOfOpportunity, 160), {
           x: LEFT_MARGIN,
-          y: windowY,
+          y: timingNextY,
           w: CONTENT_WIDTH,
-          h: clampH(windowY, 0.7),
+          h: winH,
           type: 'recommendation',
         });
       } else {
@@ -2769,9 +2790,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           'Market conditions suggest acting within the next 6-12 months to capture early-mover advantage. Delayed entry increases competition risk.',
           {
             x: LEFT_MARGIN,
-            y: windowY,
+            y: timingNextY,
             w: CONTENT_WIDTH,
-            h: clampH(windowY, 0.7),
+            h: winH,
             type: 'recommendation',
           }
         );

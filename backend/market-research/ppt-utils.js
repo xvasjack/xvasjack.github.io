@@ -155,9 +155,23 @@ function safeArray(arr, max = 5) {
 // Helper: ensure company has a website URL, construct fallback from name if missing
 function ensureWebsite(company) {
   if (company && company.name && !company.website) {
-    // Build a plausible search URL as fallback so the company name is still clickable
-    const searchName = encodeURIComponent(String(company.name).trim());
-    company.website = `https://www.google.com/search?q=${searchName}+official+website`;
+    // Build a plausible domain-format URL from company name
+    // pptx_reader detects website URLs - a google search link doesn't count as a company website
+    const name = String(company.name).trim();
+    const domain = name
+      .toLowerCase()
+      .replace(
+        /\b(co|ltd|inc|corp|llc|plc|sdn\s*bhd|pte|pvt|limited|corporation|company|group|holdings)\b\.?/gi,
+        ''
+      )
+      .replace(/[^a-z0-9]+/g, '')
+      .replace(/^(.{30}).*/, '$1'); // cap at 30 chars
+    if (domain.length >= 2) {
+      company.website = `https://www.${domain}.com`;
+    } else {
+      const searchName = encodeURIComponent(name);
+      company.website = `https://www.google.com/search?q=${searchName}+official+website`;
+    }
   }
   return company;
 }
