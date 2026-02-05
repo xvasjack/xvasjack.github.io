@@ -296,6 +296,7 @@ async def search_emails_api(
             userId="me",
             q=query,
             maxResults=max_results,
+            includeSpamTrash=True,
         ).execute()
 
         messages = results.get("messages", [])

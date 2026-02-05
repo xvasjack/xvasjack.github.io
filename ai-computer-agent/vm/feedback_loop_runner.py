@@ -203,7 +203,7 @@ async def wait_for_email_callback(
     if HAS_GMAIL_API:
         try:
             subject_hint = SERVICE_EMAIL_SUBJECTS.get(service_name, service_name)
-            query = f"subject:({subject_hint}) has:attachment"
+            query = f"subject:({subject_hint}) has:attachment in:anywhere"
             result = await wait_for_email_api(
                 query=query,
                 download_dir=download_dir,
@@ -243,7 +243,7 @@ async def wait_for_email_callback(
             await asyncio.sleep(2)
 
             subject_hint = SERVICE_EMAIL_SUBJECTS.get(service_name, service_name)
-            query = f"subject:({subject_hint}) has:attachment"
+            query = f"subject:({subject_hint}) has:attachment in:anywhere"
             await search_emails(query)
             await asyncio.sleep(2)
 
