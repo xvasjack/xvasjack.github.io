@@ -130,7 +130,7 @@ async function callGPT4oFallback(prompt, jsonMode = false, reason = '') {
       requestOptions.response_format = { type: 'json_object' };
     }
 
-    const response = await openai.chat.completions.create(requestOptions);
+    const response = await openai.chat.completions.create(requestOptions, { timeout: 60000 });
     if (response.usage) {
       recordTokens(
         'gpt-4o',
@@ -195,11 +195,14 @@ async function callPerplexity(prompt) {
 
 async function callChatGPT(prompt) {
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.2,
-    });
+    const response = await openai.chat.completions.create(
+      {
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.2,
+      },
+      { timeout: 60000 }
+    );
     if (response.usage) {
       recordTokens(
         'gpt-4o',
@@ -222,10 +225,13 @@ async function callChatGPT(prompt) {
 // Updated to use gpt-4o-search-preview (more stable than mini version)
 async function callOpenAISearch(prompt) {
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o-search-preview',
-      messages: [{ role: 'user', content: prompt }],
-    });
+    const response = await openai.chat.completions.create(
+      {
+        model: 'gpt-4o-search-preview',
+        messages: [{ role: 'user', content: prompt }],
+      },
+      { timeout: 90000 }
+    );
     if (response.usage) {
       recordTokens(
         'gpt-4o-search-preview',
@@ -244,6 +250,16 @@ async function callOpenAISearch(prompt) {
     // Fallback to regular gpt-4o if search model not available
     return callChatGPT(prompt);
   }
+}
+
+// ============ TIMEOUT UTILITY ============
+
+function withTimeout(promise, ms, label = 'operation') {
+  let timer;
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms / 1000}s`)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
 
 // ============ DEDUPLICATION (Enhanced for v20) ============
@@ -1169,7 +1185,7 @@ async function runPerplexityMainSearchWithValidation(plan, business, exclusion, 
   // Accumulate results across batches
   const allValidated = [];
   const allFlagged = [];
-  const allRejected = [];
+  let rejectedCount = 0;
   const seenWebsites = new Set(); // Track already validated websites
 
   // Process each batch: search → dedupe → validate → next batch
@@ -1227,14 +1243,15 @@ async function runPerplexityMainSearchWithValidation(plan, business, exclusion, 
     // Add to accumulated results
     allValidated.push(...batchResults.validated);
     allFlagged.push(...batchResults.flagged);
-    allRejected.push(...batchResults.rejected);
 
-    // Track validated websites to avoid re-validating
-    for (const c of [
-      ...batchResults.validated,
-      ...batchResults.flagged,
-      ...batchResults.rejected,
-    ]) {
+    // Track rejected websites for dedup but drop the data to free memory
+    for (const c of batchResults.rejected) {
+      if (c.website) seenWebsites.add(c.website.toLowerCase());
+    }
+    rejectedCount += batchResults.rejected.length;
+
+    // Track validated/flagged websites to avoid re-validating
+    for (const c of [...batchResults.validated, ...batchResults.flagged]) {
       if (c.website) seenWebsites.add(c.website.toLowerCase());
     }
 
@@ -1242,7 +1259,7 @@ async function runPerplexityMainSearchWithValidation(plan, business, exclusion, 
       `    Batch ${batchIdx + 1} results: ${batchResults.validated.length} valid, ${batchResults.flagged.length} flagged, ${batchResults.rejected.length} rejected`
     );
     console.log(
-      `    Running totals: ${allValidated.length} valid, ${allFlagged.length} flagged, ${allRejected.length} rejected`
+      `    Running totals: ${allValidated.length} valid, ${allFlagged.length} flagged, ${rejectedCount} rejected`
     );
   }
 
@@ -1250,9 +1267,9 @@ async function runPerplexityMainSearchWithValidation(plan, business, exclusion, 
   console.log(`\n  Phase 1 completed in ${duration} minutes`);
   console.log(`    Validated: ${allValidated.length}`);
   console.log(`    Flagged: ${allFlagged.length}`);
-  console.log(`    Rejected: ${allRejected.length}`);
+  console.log(`    Rejected: ${rejectedCount}`);
 
-  return { validated: allValidated, flagged: allFlagged, rejected: allRejected };
+  return { validated: allValidated, flagged: allFlagged, rejectedCount };
 }
 
 // Phase 2: Iterative Gemini + ChatGPT searches with "find more" pressure
@@ -1275,7 +1292,7 @@ async function runIterativeSecondarySearches(
   // Track all validated and flagged companies across rounds
   const allValidated = [...existingValidated];
   const allFlagged = [];
-  const allRejected = [];
+  let rejectedCount = 0;
   const seenWebsites = new Set(
     existingValidated.map((c) => c.website?.toLowerCase()).filter(Boolean)
   );
@@ -1371,23 +1388,34 @@ Return company name, website, location. Exclude: ${exclusion}`,
     const geminiPrompt = geminiAngles[round % geminiAngles.length](foundCompanyNames);
     const chatgptConfig = chatgptAngles[round % chatgptAngles.length](foundCompanyNames);
 
-    // Run Gemini and ChatGPT searches IN PARALLEL
+    // Run Gemini and ChatGPT searches IN PARALLEL (3-min timeout per round)
     console.log(`    Running Gemini + ChatGPT searches in parallel...`);
-    const [geminiCompanies, chatgptCompanies] = await Promise.all([
-      runAgenticSearchTask(geminiPrompt, expandedCountry, searchLog).catch((e) => {
-        console.error(`    Gemini round ${round + 1} failed: ${e.message}`);
-        return [];
-      }),
-      runChatGPTSearchTask(
-        chatgptConfig.query,
-        chatgptConfig.context,
-        expandedCountry,
-        searchLog
-      ).catch((e) => {
-        console.error(`    ChatGPT round ${round + 1} failed: ${e.message}`);
-        return [];
-      }),
-    ]);
+    let geminiCompanies = [];
+    let chatgptCompanies = [];
+    try {
+      [geminiCompanies, chatgptCompanies] = await withTimeout(
+        Promise.all([
+          runAgenticSearchTask(geminiPrompt, expandedCountry, searchLog).catch((e) => {
+            console.error(`    Gemini round ${round + 1} failed: ${e.message}`);
+            return [];
+          }),
+          runChatGPTSearchTask(
+            chatgptConfig.query,
+            chatgptConfig.context,
+            expandedCountry,
+            searchLog
+          ).catch((e) => {
+            console.error(`    ChatGPT round ${round + 1} failed: ${e.message}`);
+            return [];
+          }),
+        ]),
+        180000,
+        `Round ${round + 1} search`
+      );
+    } catch (e) {
+      console.error(`    Round ${round + 1} search timed out, skipping: ${e.message}`);
+      continue;
+    }
 
     console.log(
       `    Gemini found: ${geminiCompanies.length}, ChatGPT found: ${chatgptCompanies.length}`
@@ -1431,14 +1459,15 @@ Return company name, website, location. Exclude: ${exclusion}`,
     // Add to cumulative results
     allValidated.push(...roundResults.validated);
     allFlagged.push(...roundResults.flagged);
-    allRejected.push(...roundResults.rejected);
 
-    // Track seen websites
-    for (const c of [
-      ...roundResults.validated,
-      ...roundResults.flagged,
-      ...roundResults.rejected,
-    ]) {
+    // Track rejected websites for dedup but drop the data to free memory
+    for (const c of roundResults.rejected) {
+      if (c.website) seenWebsites.add(c.website.toLowerCase());
+    }
+    rejectedCount += roundResults.rejected.length;
+
+    // Track validated/flagged websites
+    for (const c of [...roundResults.validated, ...roundResults.flagged]) {
       if (c.website) seenWebsites.add(c.website.toLowerCase());
     }
 
@@ -1453,7 +1482,7 @@ Return company name, website, location. Exclude: ${exclusion}`,
   console.log(`    Total validated: ${allValidated.length}`);
   console.log(`    Total flagged: ${allFlagged.length}`);
 
-  return { validated: allValidated, flagged: allFlagged, rejected: allRejected };
+  return { validated: allValidated, flagged: allFlagged, rejectedCount };
 }
 
 // Generate diverse search tasks for a business/country
@@ -1523,87 +1552,106 @@ async function validateCompaniesV5(companies, business, country, exclusion) {
   for (let i = 0; i < companies.length; i += batchSize) {
     const batch = companies.slice(i, i + batchSize);
 
-    const validations = await Promise.all(
-      batch.map(async (company) => {
-        try {
-          // Fetch website content for validation (shared between both models)
-          let pageContent = '';
-          let fetchResult = { status: 'error', reason: 'No website' };
-
-          if (company.website && company.website.startsWith('http')) {
+    let validations;
+    try {
+      validations = await withTimeout(
+        Promise.all(
+          batch.map(async (company) => {
             try {
-              fetchResult = await fetchWebsite(company.website);
+              // Fetch website content for validation (shared between both models)
+              let pageContent = '';
+              let fetchResult = { status: 'error', reason: 'No website' };
+
+              if (company.website && company.website.startsWith('http')) {
+                try {
+                  fetchResult = await fetchWebsite(company.website);
+                } catch (e) {
+                  fetchResult = { status: 'error', reason: e.message };
+                }
+              }
+
+              // Handle different fetch results
+              if (fetchResult.status === 'security_blocked') {
+                console.log(
+                  `    ? SECURITY: ${company.company_name} (${fetchResult.reason}) - flagging for human review`
+                );
+                return {
+                  company,
+                  status: 'flagged',
+                  geminiValid: false,
+                  chatgptValid: false,
+                  geminiReason: `Security blocked: ${fetchResult.reason}`,
+                  chatgptReason: `Security blocked: ${fetchResult.reason}`,
+                  securityBlocked: true,
+                };
+              }
+
+              if (fetchResult.status !== 'ok') {
+                console.log(`    ✗ REMOVED: ${company.company_name} (${fetchResult.reason})`);
+                return { company, status: 'skipped' };
+              }
+
+              pageContent = fetchResult.content;
+
+              // Run both validations in parallel
+              const [geminiResult, chatgptResult] = await Promise.all([
+                validateSingleCompany(company, business, country, exclusion, pageContent, 'gemini'),
+                validateSingleCompany(
+                  company,
+                  business,
+                  country,
+                  exclusion,
+                  pageContent,
+                  'chatgpt'
+                ),
+              ]);
+
+              // Free page content after validation
+              pageContent = null;
+
+              const geminiValid = geminiResult.valid === true;
+              const chatgptValid = chatgptResult.valid === true;
+
+              let status;
+              if (geminiValid && chatgptValid) {
+                status = 'valid';
+              } else if (geminiValid || chatgptValid) {
+                status = 'flagged';
+              } else {
+                status = 'rejected';
+              }
+
+              return {
+                company,
+                status,
+                geminiValid,
+                chatgptValid,
+                geminiReason: geminiResult.reason,
+                chatgptReason: chatgptResult.reason,
+                corrected_hq: geminiResult.corrected_hq || chatgptResult.corrected_hq,
+              };
             } catch (e) {
-              fetchResult = { status: 'error', reason: e.message };
+              console.error(`  Validation error for ${company.company_name}: ${e.message}`);
+              return {
+                company,
+                status: 'rejected',
+                geminiValid: false,
+                chatgptValid: false,
+                geminiReason: 'Error',
+                chatgptReason: 'Error',
+              };
             }
-          }
-
-          // Handle different fetch results
-          if (fetchResult.status === 'security_blocked') {
-            // Website has security/Cloudflare protection - FLAG for human review, don't remove
-            console.log(
-              `    ? SECURITY: ${company.company_name} (${fetchResult.reason}) - flagging for human review`
-            );
-            return {
-              company,
-              status: 'flagged',
-              geminiValid: false,
-              chatgptValid: false,
-              geminiReason: `Security blocked: ${fetchResult.reason}`,
-              chatgptReason: `Security blocked: ${fetchResult.reason}`,
-              securityBlocked: true,
-            };
-          }
-
-          if (fetchResult.status !== 'ok') {
-            // Website truly inaccessible - remove
-            console.log(`    ✗ REMOVED: ${company.company_name} (${fetchResult.reason})`);
-            return { company, status: 'skipped' };
-          }
-
-          pageContent = fetchResult.content;
-
-          // Run both validations in parallel
-          const [geminiResult, chatgptResult] = await Promise.all([
-            validateSingleCompany(company, business, country, exclusion, pageContent, 'gemini'),
-            validateSingleCompany(company, business, country, exclusion, pageContent, 'chatgpt'),
-          ]);
-
-          // Determine consensus status
-          const geminiValid = geminiResult.valid === true;
-          const chatgptValid = chatgptResult.valid === true;
-
-          let status;
-          if (geminiValid && chatgptValid) {
-            status = 'valid';
-          } else if (geminiValid || chatgptValid) {
-            status = 'flagged';
-          } else {
-            status = 'rejected';
-          }
-
-          return {
-            company,
-            status,
-            geminiValid,
-            chatgptValid,
-            geminiReason: geminiResult.reason,
-            chatgptReason: chatgptResult.reason,
-            corrected_hq: geminiResult.corrected_hq || chatgptResult.corrected_hq,
-          };
-        } catch (e) {
-          console.error(`  Validation error for ${company.company_name}: ${e.message}`);
-          return {
-            company,
-            status: 'rejected',
-            geminiValid: false,
-            chatgptValid: false,
-            geminiReason: 'Error',
-            chatgptReason: 'Error',
-          };
-        }
-      })
-    );
+          })
+        ),
+        180000,
+        `Validation batch ${Math.floor(i / batchSize) + 1}`
+      );
+    } catch (e) {
+      console.error(
+        `  Validation batch timed out, skipping ${batch.length} companies: ${e.message}`
+      );
+      continue;
+    }
 
     for (const v of validations) {
       // Skip companies with inaccessible websites (already logged above)
@@ -1883,15 +1931,14 @@ app.post('/api/find-target-v5', async (req, res) => {
       console.log('='.repeat(50));
 
       // Phase 2 already includes Phase 1 validated companies in its results
-      // Just need to merge flagged and rejected
+      // Just need to merge flagged; rejected is count-only (data freed for memory)
       const allValidated = phase2Results.validated;
       const allFlagged = [...phase1Results.flagged, ...phase2Results.flagged];
-      const allRejected = [...phase1Results.rejected, ...phase2Results.rejected];
+      const totalRejected = (phase1Results.rejectedCount || 0) + (phase2Results.rejectedCount || 0);
 
       // Final dedup
       const finalValidated = dedupeCompanies(allValidated);
       const finalFlagged = dedupeCompanies(allFlagged);
-      const finalRejected = dedupeCompanies(allRejected);
 
       console.log(`FINAL RESULTS:`);
       console.log(`  ✓ VALIDATED (both models agree): ${finalValidated.length}`);
@@ -1900,7 +1947,7 @@ app.post('/api/find-target-v5', async (req, res) => {
         `    - Added by Gemini/ChatGPT (Phase 2): ${phase2Results.validated.length - phase1Results.validated.length}`
       );
       console.log(`  ? FLAGGED (needs review): ${finalFlagged.length}`);
-      console.log(`  ✗ REJECTED (neither agrees): ${finalRejected.length}`);
+      console.log(`  ✗ REJECTED (neither agrees): ${totalRejected}`);
 
       // Calculate stats
       const perplexityTasks = searchLog.filter((s) => s.model === 'perplexity-sonar-pro').length;
@@ -1920,7 +1967,6 @@ app.post('/api/find-target-v5', async (req, res) => {
       const finalResults = {
         validated: finalValidated,
         flagged: finalFlagged,
-        rejected: finalRejected,
       };
       const htmlContent = buildV5EmailHTML(
         finalResults,
@@ -1941,7 +1987,7 @@ app.post('/api/find-target-v5', async (req, res) => {
       console.log(`V5 ITERATIVE SEARCH COMPLETE!`);
       console.log(`Email sent to: ${Email}`);
       console.log(
-        `Validated: ${finalValidated.length} | Flagged: ${finalFlagged.length} | Rejected: ${finalRejected.length}`
+        `Validated: ${finalValidated.length} | Flagged: ${finalFlagged.length} | Rejected: ${totalRejected}`
       );
       console.log(`Total time: ${totalTime} minutes`);
       console.log('='.repeat(70));
@@ -1951,7 +1997,7 @@ app.post('/api/find-target-v5', async (req, res) => {
         searchRounds: searchLog.length,
         validated: finalValidated.length,
         flagged: finalFlagged.length,
-        rejected: finalRejected.length,
+        rejected: totalRejected,
       });
     } catch (error) {
       console.error('V5 Processing error:', error);
