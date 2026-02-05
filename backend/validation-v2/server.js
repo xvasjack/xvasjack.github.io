@@ -3,6 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
 const XLSX = require('xlsx');
+const pptxgen = require('pptxgenjs');
 const { securityHeaders, rateLimiter } = require('./shared/security');
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
@@ -53,11 +54,11 @@ function setCachedUrl(companyName, url) {
 
 // ============ AI TOOLS ============
 
-// Gemini 2.0 Flash with Google Search grounding — URL discovery + WAF fallback
+// Gemini 2.5 Flash with Google Search grounding — URL discovery + WAF fallback
 async function callGeminiWithGrounding(prompt) {
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -65,14 +66,14 @@ async function callGeminiWithGrounding(prompt) {
           contents: [{ parts: [{ text: prompt }] }],
           tools: [{ google_search: {} }],
         }),
-        timeout: 30000,
+        timeout: 60000,
       }
     );
 
     if (!response.ok) {
       const errorText = await response.text();
       console.error(
-        `Gemini 2.0 Flash grounding HTTP error ${response.status}:`,
+        `Gemini 2.5 Flash grounding HTTP error ${response.status}:`,
         errorText.substring(0, 200)
       );
       return { text: '', groundingChunks: [] };
@@ -83,14 +84,14 @@ async function callGeminiWithGrounding(prompt) {
     const usage = data.usageMetadata;
     if (usage) {
       recordTokens(
-        'gemini-2.0-flash',
+        'gemini-2.5-flash',
         usage.promptTokenCount || 0,
         usage.candidatesTokenCount || 0
       );
     }
 
     if (data.error) {
-      console.error('Gemini 2.0 Flash grounding API error:', data.error.message);
+      console.error('Gemini 2.5 Flash grounding API error:', data.error.message);
       return { text: '', groundingChunks: [] };
     }
 
@@ -100,27 +101,27 @@ async function callGeminiWithGrounding(prompt) {
 
     return { text, groundingChunks };
   } catch (error) {
-    console.error('Gemini 2.0 Flash grounding error:', error.message);
+    console.error('Gemini 2.5 Flash grounding error:', error.message);
     return { text: '', groundingChunks: [] };
   }
 }
 
-// Gemini 3 Flash — multi-criteria classifier
+// Gemini 2.5 Flash — multi-criteria classifier
 async function callGeminiFlash(prompt) {
   try {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-        timeout: 30000,
+        timeout: 60000,
       }
     );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`Gemini 3 Flash HTTP error ${response.status}:`, errorText.substring(0, 200));
+      console.error(`Gemini 2.5 Flash HTTP error ${response.status}:`, errorText.substring(0, 200));
       return '';
     }
 
@@ -128,21 +129,25 @@ async function callGeminiFlash(prompt) {
 
     const usage = data.usageMetadata;
     if (usage) {
-      recordTokens('gemini-3-flash', usage.promptTokenCount || 0, usage.candidatesTokenCount || 0);
+      recordTokens(
+        'gemini-2.5-flash',
+        usage.promptTokenCount || 0,
+        usage.candidatesTokenCount || 0
+      );
     }
 
     if (data.error) {
-      console.error('Gemini 3 Flash API error:', data.error.message);
+      console.error('Gemini 2.5 Flash API error:', data.error.message);
       return '';
     }
 
     const result = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
     if (!result) {
-      console.warn('Gemini 3 Flash returned empty response');
+      console.warn('Gemini 2.5 Flash returned empty response');
     }
     return result;
   } catch (error) {
-    console.error('Gemini 3 Flash error:', error.message);
+    console.error('Gemini 2.5 Flash error:', error.message);
     return '';
   }
 }
@@ -875,6 +880,221 @@ function buildMultiCriteriaExcel(companies, criteria) {
   return buffer.toString('base64');
 }
 
+// ============ WATERFALL PPT ============
+
+function computeWaterfallData(results, criteria) {
+  const total = results.length;
+  const counts = [total];
+  const labels = ['Total Companies'];
+
+  for (let i = 0; i < criteria.length; i++) {
+    const count = results.filter((r) => {
+      if (!r.criteria_results) return false;
+      for (let j = 0; j <= i; j++) {
+        const cr = r.criteria_results.find((c) => c.criterion === j + 1);
+        if (!cr || cr.result !== 'PASS') return false;
+      }
+      return true;
+    }).length;
+    counts.push(count);
+    labels.push(criteria[i]);
+  }
+
+  return { counts, labels };
+}
+
+async function generateWaterfallContent(criteria, counts, countries) {
+  const countryStr = countries && countries.length > 0 ? countries.join(', ') : 'various countries';
+  const criteriaDesc = criteria
+    .map((c, i) => `${i + 1}. ${c} (${counts[i + 1]} passed)`)
+    .join('\n');
+
+  const prompt = `Generate JSON for a waterfall chart slide about screening companies.
+
+Context:
+- ${counts[0]} companies were screened in ${countryStr}
+- Criteria applied sequentially:
+${criteriaDesc}
+- ${counts[counts.length - 1]} companies passed all criteria
+
+Return ONLY valid JSON:
+{
+  "title": "short title under 15 words describing this screening",
+  "subtitle": "summary sentence under 30 words",
+  "chartHeader": "short chart label under 10 words",
+  "callouts": ["for each criterion, explain why companies were removed (inverse of criterion)"]
+}
+
+The callouts array must have exactly ${criteria.length} entries, one per criterion.`;
+
+  const result = await withRetry(
+    async () => {
+      const text = await callGeminiFlash(prompt);
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) throw new Error('No JSON in waterfall content response');
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (!parsed.title || !parsed.callouts || !Array.isArray(parsed.callouts)) {
+        throw new Error('Missing required fields');
+      }
+      return parsed;
+    },
+    2,
+    1000,
+    'generate waterfall content'
+  );
+
+  if (result) return result;
+
+  // Hardcoded fallback
+  return {
+    title: 'Target Candidate Screening',
+    subtitle: `${counts[0]} companies screened against ${criteria.length} criteria`,
+    chartHeader: 'Screening Results',
+    callouts: criteria.map((c) => `Did not meet: ${c}`),
+  };
+}
+
+async function buildWaterfallPPT(waterfallData, slideContent) {
+  const pptx = new pptxgen();
+  pptx.layout = 'LAYOUT_WIDE'; // 13.333" x 7.5"
+
+  const slide = pptx.addSlide();
+
+  const { counts, labels } = waterfallData;
+  const { title, subtitle, chartHeader, callouts } = slideContent;
+
+  // Title
+  slide.addText(title, {
+    x: 0.5,
+    y: 0.2,
+    w: 12,
+    h: 0.5,
+    fontSize: 20,
+    fontFace: 'Segoe UI',
+    bold: true,
+    color: '333333',
+  });
+
+  // Subtitle
+  slide.addText(subtitle, {
+    x: 0.5,
+    y: 0.7,
+    w: 12,
+    h: 0.4,
+    fontSize: 14,
+    fontFace: 'Segoe UI',
+    color: '666666',
+  });
+
+  // Chart header (centered, underlined)
+  slide.addText(chartHeader, {
+    x: 1.0,
+    y: 1.2,
+    w: 8.5,
+    h: 0.4,
+    fontSize: 14,
+    fontFace: 'Segoe UI',
+    bold: true,
+    color: '333333',
+    align: 'center',
+    underline: true,
+  });
+
+  // Bar rendering
+  const barAreaX = 1.0,
+    barAreaY = 1.8,
+    barAreaW = 8.5,
+    barAreaH = 4.0;
+  const maxVal = counts[0] || 1;
+  const numBars = counts.length;
+  const totalBarSlot = barAreaW / numBars;
+  const barWidth = totalBarSlot * 0.65;
+  const barGap = totalBarSlot * 0.35;
+
+  counts.forEach((count, i) => {
+    const barHeight = Math.max((count / maxVal) * barAreaH, 0.05);
+    const barX = barAreaX + i * totalBarSlot + barGap / 2;
+    const barY = barAreaY + barAreaH - barHeight;
+    const color = i === numBars - 1 ? 'E46C0A' : '99CCFF';
+
+    // Bar rectangle
+    slide.addShape(pptx.ShapeType.rect, {
+      x: barX,
+      y: barY,
+      w: barWidth,
+      h: barHeight,
+      fill: { color },
+      line: { color: 'FFFFFF', width: 1 },
+    });
+
+    // Data label (above bar)
+    slide.addText(String(count), {
+      x: barX,
+      y: barY - 0.35,
+      w: barWidth,
+      h: 0.3,
+      fontSize: 14,
+      fontFace: 'Segoe UI',
+      bold: true,
+      color: '333333',
+      align: 'center',
+    });
+
+    // Category label (below axis)
+    const label = labels[i].length > 30 ? labels[i].substring(0, 27) + '...' : labels[i];
+    slide.addText(label, {
+      x: barX - 0.1,
+      y: barAreaY + barAreaH + 0.15,
+      w: barWidth + 0.2,
+      h: 0.8,
+      fontSize: 10,
+      fontFace: 'Segoe UI',
+      color: '333333',
+      align: 'center',
+      valign: 'top',
+      wrap: true,
+    });
+  });
+
+  // Horizontal axis line
+  slide.addShape(pptx.ShapeType.line, {
+    x: barAreaX,
+    y: barAreaY + barAreaH,
+    w: barAreaW,
+    h: 0,
+    line: { color: '333333', width: 1.5 },
+  });
+
+  // Callout rendering (right side)
+  const calloutX = 10.0,
+    calloutW = 2.8;
+  const calloutAreaY = 1.8,
+    calloutAreaH = 4.0;
+  const spacing = Math.min(1.2, calloutAreaH / callouts.length);
+
+  callouts.forEach((text, i) => {
+    const cy = calloutAreaY + i * spacing;
+    slide.addText(text, {
+      shape: pptx.ShapeType.wedgeRectCallout,
+      x: calloutX,
+      y: cy,
+      w: calloutW,
+      h: spacing - 0.1,
+      fill: { color: 'FFFFFF' },
+      line: { color: 'BFBFBF', width: 0.75 },
+      fontSize: 10,
+      fontFace: 'Segoe UI',
+      color: '333333',
+      align: 'center',
+      valign: 'middle',
+      wrap: true,
+    });
+  });
+
+  const base64 = await pptx.write({ outputType: 'base64' });
+  return base64;
+}
+
 // ============ ORCHESTRATOR ============
 
 async function orchestrate(companyList, countryList, criteria, websiteMap = {}) {
@@ -1019,7 +1239,7 @@ async function orchestrate(companyList, countryList, criteria, websiteMap = {}) 
 // ============ VALIDATION ENDPOINT ============
 
 app.post('/api/validation', async (req, res) => {
-  const { Companies, Countries, Criteria, Email, Websites } = req.body;
+  const { Companies, Countries, Criteria, Email, Websites, IncludeWaterfall } = req.body;
 
   if (!Companies || !Criteria || !Array.isArray(Criteria) || Criteria.length === 0 || !Email) {
     return res.status(400).json({ error: 'Companies, Criteria (array), and Email are required' });
@@ -1069,6 +1289,24 @@ app.post('/api/validation', async (req, res) => {
       // Build Excel
       const excelBase64 = buildMultiCriteriaExcel(results, Criteria);
 
+      // Build Waterfall PPT (if requested)
+      let pptBase64 = null;
+      if (IncludeWaterfall) {
+        try {
+          const waterfallData = computeWaterfallData(results, Criteria);
+          const slideContent = await generateWaterfallContent(
+            Criteria,
+            waterfallData.counts,
+            countryList
+          );
+          pptBase64 = await buildWaterfallPPT(waterfallData, slideContent);
+          console.log('Waterfall PPT generated');
+        } catch (err) {
+          console.error('Waterfall PPT failed:', err.message);
+          // Non-fatal: still send Excel
+        }
+      }
+
       // Summary: count passes per criterion
       const criteriaSummary = Criteria.map((c, i) => {
         const passCount = results.filter((r) =>
@@ -1088,14 +1326,24 @@ app.post('/api/validation', async (req, res) => {
         <p>Please see the attached Excel file for detailed results.</p>
       `;
 
+      const attachments = [
+        {
+          content: excelBase64,
+          name: `validation-pj-vessel-${new Date().toISOString().split('T')[0]}.xlsx`,
+        },
+      ];
+      if (pptBase64) {
+        attachments.push({
+          content: pptBase64,
+          name: `waterfall-${new Date().toISOString().split('T')[0]}.pptx`,
+        });
+      }
+
       await sendEmail(
         Email,
         `Validation (PJ Vessel): ${results.length} companies evaluated against ${Criteria.length} criteria`,
         emailBody,
-        {
-          content: excelBase64,
-          name: `validation-pj-vessel-${new Date().toISOString().split('T')[0]}.xlsx`,
-        }
+        attachments
       );
 
       const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
