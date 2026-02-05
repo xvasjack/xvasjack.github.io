@@ -1033,8 +1033,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const hasChartValues = chartData && chartData.values && chartData.values.length > 0;
 
     if (hasChartSeries || hasChartValues) {
-      // Chart on left 60%, reduced height to leave room for callout below
-      const chartOpts = { x: LEFT_MARGIN, y: 1.3, w: 7.8, h: 3.8 };
+      // Chart on left, reduced height to leave room for callout below
+      const chartOpts = { x: LEFT_MARGIN, y: 1.3, w: 7.8, h: 3.5 };
       const chartTitle = getChartTitle(block.key, data);
 
       if (hasChartSeries) {
@@ -1055,48 +1055,36 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         }
       }
 
-      // Use findMaxShapeBottom for proper y positioning below chart
-      let chartNextY = findMaxShapeBottom(slide) + 0.1;
+      // Calculate Y directly from chart position since findMaxShapeBottom may not catch pptxgenjs charts immediately
+      let chartNextY = chartOpts.y + chartOpts.h + 0.15;
 
-      // Insight panels below chart — stacked vertically to prevent y-overlap detection
-      if (insights.length > 0 && chartNextY < CONTENT_BOTTOM - 1.0) {
-        const insightPanels = insights.slice(0, 2).map((text, idx) => ({
-          title: idx === 0 ? 'Key Insight' : 'Opportunity',
-          text: truncate(text, 120),
-        }));
-        const panelH = 0.45;
-        addInsightPanelsFromPattern(slide, insightPanels, {
-          insightPanels: [
-            { x: LEFT_MARGIN, y: chartNextY, w: CONTENT_WIDTH, h: panelH },
-            { x: LEFT_MARGIN, y: chartNextY + panelH + 0.08, w: CONTENT_WIDTH, h: panelH },
-          ],
-        });
-        chartNextY += (panelH + 0.08) * Math.min(insights.length, 2) + 0.08;
+      // Only add ONE insight panel to prevent overlap (not two stacked)
+      if (insights.length > 0 && chartNextY < CONTENT_BOTTOM - 0.55) {
+        const panelH = 0.4;
+        addInsightPanelsFromPattern(
+          slide,
+          [{ title: 'Key Insight', text: truncate(insights[0], 100) }],
+          {
+            insightPanels: [{ x: LEFT_MARGIN, y: chartNextY, w: CONTENT_WIDTH, h: panelH }],
+          }
+        );
+        chartNextY += panelH + 0.12;
       }
 
-      // Key insight below chart — only if room
-      if (data.keyInsight && chartNextY < CONTENT_BOTTOM - 0.6) {
-        const insH = clampH(chartNextY, 0.5);
-        addCalloutOverlay(slide, truncate(data.keyInsight, 120), {
-          x: LEFT_MARGIN,
-          y: chartNextY,
-          w: 7.8,
-          h: insH,
-        });
-        chartNextY += insH + 0.1;
-      }
-
-      // Recommendation below all content — only if room
+      // Recommendation below insight — only if room (skip keyInsight to prevent overlap)
       if (chartNextY < CONTENT_BOTTOM - 0.45) {
         addCalloutBox(
           slide,
           'Recommendation',
-          `Evaluate ${country}'s ${block.key === 'escoMarket' ? 'ESCO' : scope.industry || 'energy'} market for partnership opportunities.`,
+          truncate(
+            `Evaluate ${country}'s ${block.key === 'escoMarket' ? 'ESCO' : scope.industry || 'energy'} market for partnership opportunities.`,
+            90
+          ),
           {
             x: LEFT_MARGIN,
             y: chartNextY,
-            w: 7.8,
-            h: clampH(chartNextY, 0.4),
+            w: CONTENT_WIDTH,
+            h: clampH(chartNextY, 0.35),
             type: 'recommendation',
           }
         );
@@ -1399,7 +1387,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             : { text: safeCell(p.name) },
           { text: safeCell(p.origin) },
           { text: safeCell(p.mode) },
-          { text: truncate(desc, 150), options: { fontSize: 9 } },
+          { text: truncate(desc, 100), options: { fontSize: 8 } },
         ];
       };
     } else if (block.key === 'localMajor') {
@@ -1419,7 +1407,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             : { text: safeCell(p.name) },
           { text: safeCell(p.type) },
           { text: safeCell(p.revenue) },
-          { text: truncate(desc, 150), options: { fontSize: 9 } },
+          { text: truncate(desc, 100), options: { fontSize: 8 } },
         ];
       };
     } else {
@@ -1436,7 +1424,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
               }
             : { text: safeCell(p.name) },
           { text: safeCell(p.presence, 30) },
-          { text: truncate(desc, 150), options: { fontSize: 9 } },
+          { text: truncate(desc, 100), options: { fontSize: 8 } },
         ];
       };
     }
@@ -1460,26 +1448,34 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       autoPageRepeatHeader: true,
     });
 
-    // Add insights below table — track y carefully to prevent overlap
-    let compNextY = tableStartY + tableH + 0.08;
-    if (compInsights.length > 0 && compNextY < CONTENT_BOTTOM - 0.45) {
-      const insH = clampH(compNextY, 0.45);
-      addCalloutBox(slide, 'Competitive Insights', compInsights.slice(0, 4).join(' | '), {
-        x: LEFT_MARGIN,
-        y: compNextY,
-        w: CONTENT_WIDTH,
-        h: insH,
-        type: 'insight',
-      });
-      compNextY += insH + 0.08;
-    }
-    // Recommendation below insights — only if room
-    if (compNextY < CONTENT_BOTTOM - 0.4) {
-      const recoH = clampH(compNextY, 0.4);
+    // Add insights below table — increased gap to 0.12 to prevent overlap
+    let compNextY = tableStartY + tableH + 0.12;
+    if (compInsights.length > 0 && compNextY < CONTENT_BOTTOM - 0.4) {
+      const insH = clampH(compNextY, 0.38);
       addCalloutBox(
         slide,
-        'Strategic Recommendation',
-        `Recommend prioritizing engagement with top ${players.length > 1 ? players.length : ''} players identified. Should consider partnership or acquisition approach based on strategic fit in ${country}'s ${scope.industry || 'energy'} market.`,
+        'Competitive Insights',
+        truncate(compInsights.slice(0, 3).join(' | '), 140),
+        {
+          x: LEFT_MARGIN,
+          y: compNextY,
+          w: CONTENT_WIDTH,
+          h: insH,
+          type: 'insight',
+        }
+      );
+      compNextY += insH + 0.12;
+    }
+    // Recommendation below insights — only if room, with truncated text
+    if (compNextY < CONTENT_BOTTOM - 0.38) {
+      const recoH = clampH(compNextY, 0.35);
+      addCalloutBox(
+        slide,
+        'Recommendation',
+        truncate(
+          `Prioritize engagement with ${players.length} players. Consider partnership or acquisition for strategic fit in ${country}'s market.`,
+          120
+        ),
         {
           x: LEFT_MARGIN,
           y: compNextY,
