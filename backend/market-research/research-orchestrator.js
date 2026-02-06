@@ -891,7 +891,7 @@ function validateContentDepth(synthesis) {
 
   scores.overall = Math.round((scores.policy + scores.market + scores.competitors) / 3);
 
-  const valid = failures.length === 0 || scores.overall >= 50;
+  const valid = failures.length === 0;
 
   console.log(
     `  [Validation] Policy: ${scores.policy}/100 | Market: ${scores.market}/100 | Competitors: ${scores.competitors}/100 | Overall: ${scores.overall}/100`

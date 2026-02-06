@@ -327,38 +327,7 @@ function enrichCompanyDesc(company, countryStr, industryStr) {
   if (company.certifications) parts.push('Certifications: ' + company.certifications + '.');
   if (company.recentActivity) parts.push('Recent activity: ' + company.recentActivity + '.');
   if (company.strategy) parts.push('Strategy: ' + company.strategy + '.');
-  const enriched = parts.join(' ').trim();
-  const enrichedWords = enriched.split(/\s+/).filter(Boolean).length;
-  if (enrichedWords < 50 && company.name) {
-    const nameStr = company.name;
-    if (countryStr && industryStr) {
-      parts.push(
-        nameStr +
-          ' operates in the ' +
-          industryStr +
-          ' sector in ' +
-          countryStr +
-          ' with capabilities spanning project development, consulting, and implementation services.'
-      );
-      parts.push(
-        'Market positioning suggests potential for partnership via joint venture (6-12 month timeline) or acquisition ($10-50M range depending on scale).'
-      );
-      parts.push(
-        'Due diligence priorities: verify audited financials, assess client concentration risk (target <30% single-client dependency), evaluate management retention likelihood post-deal, and confirm regulatory compliance status.'
-      );
-      parts.push(
-        'Strategic recommendation: engage in preliminary discussions to gauge interest and valuation expectations before committing resources to full due diligence.'
-      );
-    } else {
-      parts.push(
-        nameStr +
-          ' maintains established operations with demonstrated client relationships and domain expertise across relevant market segments.'
-      );
-      parts.push(
-        'Assessment priorities include financial health review (revenue trend, margin profile, debt levels), competitive positioning analysis, growth trajectory evaluation, and management team capability assessment for potential partnership or acquisition engagement.'
-      );
-    }
-  }
+  // Let thin descriptions stay thin — no fabricated filler
   company.description = parts.join(' ').trim();
   return company;
 }
