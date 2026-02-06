@@ -1,0 +1,35 @@
+# Binary files - keep in /home/user/templates-backup/ instead
+*.pptx
+*.xlsx
+*.xls
+*.pdf
+*.doc
+*.docx
+
+# Images (except logo)
+*.png
+!backend/ycp-logo.png
+*.jpg
+*.jpeg
+*.gif
+*.bmp
+*.webp
+
+# Node
+node_modules/
+
+# Generated
+dist/
+build/
+coverage/
+
+# Environment
+.env
+.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Screenshot cache
+ai-computer-agent/host/.form_screenshot_*
