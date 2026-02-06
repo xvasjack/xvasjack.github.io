@@ -364,3 +364,155 @@ class TestTableHeaderFill:
         hdr_discs = [d for d in discs if d.category == "table_header_fill_mismatch"]
         assert len(hdr_discs) == 1
         assert hdr_discs[0].severity == Severity.HIGH
+
+
+# =============================================================================
+# ROUND 2: ITALIC, BORDER, FONT FAMILY, DEDUP TESTS
+# =============================================================================
+
+class TestItalicMismatch:
+    def test_italic_mismatch_produces_discrepancy(self):
+        shape = _make_shape(font_italic=False)
+        spec = {"italic": True}
+        discs = _check_element_style(shape, spec, "Slide 4", "subtitle")
+        italic_discs = [d for d in discs if d.category == "italic_mismatch"]
+        assert len(italic_discs) == 1
+        assert italic_discs[0].severity == Severity.MEDIUM
+
+    def test_italic_match_no_discrepancy(self):
+        shape = _make_shape(font_italic=True)
+        spec = {"italic": True}
+        discs = _check_element_style(shape, spec, "Slide 4", "subtitle")
+        italic_discs = [d for d in discs if d.category == "italic_mismatch"]
+        assert len(italic_discs) == 0
+
+
+class TestBorderColorMismatch:
+    def test_border_color_mismatch_produces_discrepancy(self):
+        shape = _make_shape(border_color_hex="FF0000")
+        spec = {"border": "1F497D"}
+        discs = _check_element_style(shape, spec, "Slide 6", "calloutBox")
+        border_discs = [d for d in discs if d.category == "border_color_mismatch"]
+        assert len(border_discs) == 1
+        assert border_discs[0].severity == Severity.MEDIUM
+
+    def test_border_color_match_no_discrepancy(self):
+        shape = _make_shape(border_color_hex="1F497D")
+        spec = {"border": "1F497D"}
+        discs = _check_element_style(shape, spec, "Slide 6", "calloutBox")
+        border_discs = [d for d in discs if d.category == "border_color_mismatch"]
+        assert len(border_discs) == 0
+
+
+class TestFontFamilyPerElement:
+    def test_wrong_font_family_produces_discrepancy(self):
+        shape = _make_shape(dominant_font_name="Segoe UI")
+        spec = {"family": "Century Gothic"}
+        discs = _check_element_style(shape, spec, "Slide 3", "bodyText")
+        family_discs = [d for d in discs if d.category == "font_family_element_mismatch"]
+        assert len(family_discs) == 1
+        assert family_discs[0].severity == Severity.HIGH
+
+    def test_correct_font_family_no_discrepancy(self):
+        shape = _make_shape(dominant_font_name="Century Gothic")
+        spec = {"family": "Century Gothic"}
+        discs = _check_element_style(shape, spec, "Slide 3", "bodyText")
+        family_discs = [d for d in discs if d.category == "font_family_element_mismatch"]
+        assert len(family_discs) == 0
+
+
+class TestDedupTitleDiscrepancies:
+    def test_dedup_removes_aggregate_title_when_per_element_ran(self):
+        """When per-element font_size_mismatch exists at Slide level,
+        the aggregate title_font_size_mismatch at Presentation-wide should be removed."""
+        from template_comparison import Discrepancy, Severity
+        discrepancies = [
+            Discrepancy(severity=Severity.HIGH, category="title_font_size_mismatch",
+                        location="Presentation-wide", expected="24pt", actual="20pt",
+                        suggestion="fix"),
+            Discrepancy(severity=Severity.MEDIUM, category="font_size_mismatch",
+                        location="Slide 3", expected="24pt", actual="20pt",
+                        suggestion="fix"),
+        ]
+        per_element_categories = {d.category for d in discrepancies
+                                  if d.location.startswith("Slide ")}
+        dedup_categories = {"title_font_size_mismatch", "title_color_mismatch",
+                           "title_bold_mismatch", "subtitle_font_size_mismatch",
+                           "subtitle_color_mismatch"}
+        if per_element_categories & {"font_size_mismatch", "font_color_mismatch", "bold_mismatch"}:
+            discrepancies = [d for d in discrepancies
+                            if d.category not in dedup_categories
+                            or d.location != "Presentation-wide"]
+        assert len(discrepancies) == 1
+        assert discrepancies[0].location == "Slide 3"
+
+
+# =============================================================================
+# ROUND 3: CONTENT QUALITY TESTS
+# =============================================================================
+
+class TestContentQuality:
+    def test_source_attribution_detection(self):
+        """SOURCE_PATTERNS regex matches common citation formats."""
+        import re
+        SOURCE_PATTERNS = re.compile(
+            r'(?:source\s*[:;]|according to|per\s+(?:[A-Z][\w]+)|'
+            r'cited by|based on\s+(?:data|research|analysis|report|survey)|'
+            r'(?:McKinsey|BCG|Bloomberg|IEA|World Bank|Statista|Euromonitor)\b)',
+            re.IGNORECASE
+        )
+        assert len(SOURCE_PATTERNS.findall("Source: IEA, 2024")) >= 1
+        assert len(SOURCE_PATTERNS.findall("According to Bloomberg")) >= 1
+        assert len(SOURCE_PATTERNS.findall("Based on data from McKinsey")) >= 2
+        assert len(SOURCE_PATTERNS.findall("The market is growing rapidly")) == 0
+
+    def test_data_freshness_scoring(self):
+        """Years closer to current year score as fresh."""
+        import datetime
+        current_year = datetime.datetime.now().year
+        years = [2020, 2021, 2022, 2025, 2026]
+        recent = [y for y in years if y >= current_year - 3]
+        stale = [y for y in years if y < current_year - 4]
+        assert len(recent) >= 2
+        assert len(stale) >= 2
+
+    def test_recommendation_specificity(self):
+        """Rec text with entity + timeline + number = specific."""
+        import re
+        text = "Recommend partnering with Tesla Corp by Q2 2026 to capture $50M market opportunity"
+        has_entity = bool(re.search(r'[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\s+(?:Corp|Ltd|Inc|Group)', text))
+        has_timeline = bool(re.search(r'(?:by|within|before|Q[1-4])\s+\d{4}', text, re.IGNORECASE))
+        has_number = bool(re.search(r'\$[\d,]+|\d+\s*(?:million|billion|M|B)', text, re.IGNORECASE))
+        assert has_entity
+        assert has_timeline
+        assert has_number
+
+    def test_redundancy_jaccard(self):
+        """Jaccard similarity catches near-duplicate sentences."""
+        s1 = "The renewable energy market in Thailand is growing rapidly due to government incentives"
+        s2 = "The renewable energy market in Thailand is expanding rapidly due to government incentives and subsidies"
+        words1 = set(s1.lower().split())
+        words2 = set(s2.lower().split())
+        jaccard = len(words1 & words2) / len(words1 | words2)
+        assert jaccard > 0.65
+
+    def test_insight_chain_completeness(self):
+        """Insight with data + implication + action = complete chain."""
+        import re
+        para = "Market growing at 15% CAGR suggests a 12-month window, companies should invest now"
+        has_data = bool(re.search(r'\d+(?:\.\d+)?%', para))
+        has_implication = bool(re.search(r'suggests?', para))
+        has_action = bool(re.search(r'should', para))
+        assert has_data and has_implication and has_action
+
+    def test_incomplete_chain_detected(self):
+        """Insight with only data but no implication or action = incomplete."""
+        import re
+        para = "The market size is $5.2 billion and growing at 8.3% annually"
+        has_data = bool(re.search(r'\d+(?:\.\d+)?%|\$[\d,]+', para))
+        has_implication = bool(re.search(r'(?:therefore|suggests?|implies?|indicates?|means)', para))
+        has_action = bool(re.search(r'(?:should|must|recommend|consider|within|by\s+\d{4})', para))
+        assert has_data
+        assert not has_implication
+        assert not has_action
+        assert sum([has_data, has_implication, has_action]) < 2

@@ -77,6 +77,7 @@ class ShapeFormatting:
     font_size_pt: Optional[float] = None
     font_color_hex: Optional[str] = None
     font_bold: Optional[bool] = None
+    font_italic: Optional[bool] = None
     text_length: int = 0
     estimated_lines: int = 0
     available_lines: int = 0  # based on box height and font size
@@ -99,6 +100,8 @@ class ShapeFormatting:
     table_header_fill_hex: Optional[str] = None
     table_header_font_color_hex: Optional[str] = None
     table_body_alt_row_fill_hex: Optional[str] = None
+    table_border_color_hex: Optional[str] = None
+    table_left_border_color_hex: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -244,12 +247,12 @@ def _get_shape_type(shape) -> str:
     return "other"
 
 
-def _get_first_run_font(shape) -> Tuple[Optional[str], Optional[float], Optional[str], Optional[bool]]:
+def _get_first_run_font(shape) -> Tuple[Optional[str], Optional[float], Optional[str], Optional[bool], Optional[bool]]:
     """Extract font info from the first run with text in a shape.
-    Returns (font_name, font_size_pt, color_hex, bold)"""
+    Returns (font_name, font_size_pt, color_hex, bold, italic)"""
     try:
         if not shape.has_text_frame:
-            return None, None, None, None
+            return None, None, None, None, None
         for para in shape.text_frame.paragraphs:
             for run in para.runs:
                 if not run.text.strip():
@@ -259,15 +262,16 @@ def _get_first_run_font(shape) -> Tuple[Optional[str], Optional[float], Optional
                 size_pt = round(font.size / 12700, 1) if font.size else None  # EMU to pt
                 color_hex = None
                 bold = font.bold
+                italic = font.italic
                 try:
                     if font.color and font.color.rgb:
                         color_hex = str(font.color.rgb)
                 except Exception:
                     pass
-                return name, size_pt, color_hex, bold
+                return name, size_pt, color_hex, bold, italic
     except Exception:
         pass
-    return None, None, None, None
+    return None, None, None, None, None
 
 
 def _estimate_text_lines(text_length: int, box_width_inches: float, font_size_pt: Optional[float]) -> int:
@@ -301,7 +305,7 @@ def _extract_shape_formatting(shape) -> ShapeFormatting:
     width = _emu_to_inches(shape.width)
     height = _emu_to_inches(shape.height)
 
-    font_name, font_size_pt, font_color_hex, font_bold = _get_first_run_font(shape)
+    font_name, font_size_pt, font_color_hex, font_bold, font_italic = _get_first_run_font(shape)
 
     text_length = 0
     text_content = None
@@ -426,6 +430,8 @@ def _extract_shape_formatting(shape) -> ShapeFormatting:
     table_header_fill = None
     table_header_font_color = None
     table_body_alt_row_fill = None
+    table_border_color = None
+    table_left_border_color = None
     if shape_type == "table":
         try:
             tbl = shape.table
@@ -453,6 +459,39 @@ def _extract_shape_formatting(shape) -> ShapeFormatting:
                         table_body_alt_row_fill = str(alt_cell.fill.fore_color.rgb)
                 except Exception:
                     pass
+            # Table cell border color (internal grid, NOT shape outline)
+            try:
+                cell = tbl.rows[0].cells[0]
+                tc_xml = cell._tc
+                ns = '{http://schemas.openxmlformats.org/drawingml/2006/main}'
+                tc_pr = tc_xml.find(f'{ns}tcPr')
+                if tc_pr is not None:
+                    tc_bdr = tc_pr.find(f'{ns}tcBdr')
+                    if tc_bdr is not None:
+                        # Internal grid border (insideH or top as representative)
+                        for bdr_name in ['insideH', 'top', 'bottom']:
+                            bdr = tc_bdr.find(f'{ns}{bdr_name}')
+                            if bdr is not None:
+                                ln = bdr.find(f'{ns}ln')
+                                if ln is not None:
+                                    sf_el = ln.find(f'{ns}solidFill')
+                                    if sf_el is not None:
+                                        srgb = sf_el.find(f'{ns}srgbClr')
+                                        if srgb is not None:
+                                            table_border_color = srgb.get('val')
+                                            break
+                        # Left border (for highlighted tables)
+                        left_bdr = tc_bdr.find(f'{ns}left')
+                        if left_bdr is not None:
+                            ln = left_bdr.find(f'{ns}ln')
+                            if ln is not None:
+                                sf_el = ln.find(f'{ns}solidFill')
+                                if sf_el is not None:
+                                    srgb = sf_el.find(f'{ns}srgbClr')
+                                    if srgb is not None:
+                                        table_left_border_color = srgb.get('val')
+            except Exception:
+                pass
         except Exception:
             pass
 
@@ -464,6 +503,7 @@ def _extract_shape_formatting(shape) -> ShapeFormatting:
         left=left, top=top, width=width, height=height,
         font_name=font_name, font_size_pt=font_size_pt,
         font_color_hex=font_color_hex, font_bold=font_bold,
+        font_italic=font_italic,
         text_length=text_length,
         estimated_lines=estimated_lines,
         available_lines=available_lines,
@@ -485,6 +525,8 @@ def _extract_shape_formatting(shape) -> ShapeFormatting:
         table_header_fill_hex=table_header_fill,
         table_header_font_color_hex=table_header_font_color,
         table_body_alt_row_fill_hex=table_body_alt_row_fill,
+        table_border_color_hex=table_border_color,
+        table_left_border_color_hex=table_left_border_color,
     )
 
 

@@ -231,7 +231,8 @@ def categorize_issue(issue_text: str) -> str:
                                       "missing section", "missing_sections",
                                       "insufficient_slides", "insufficient slides"]):
         return IssueCategory.EMPTY_DATA
-    if any(kw in text for kw in ["shallow", "generic", "thin", "depth", "superficial", "not specific"]):
+    if any(kw in text for kw in ["shallow", "generic", "thin", "depth", "superficial", "not specific",
+                                      "citation", "stale", "redundan", "data density"]):
         return IssueCategory.CONTENT_DEPTH
     if any(kw in text for kw in ["wrong pattern", "misclassified", "wrong layout", "pattern mismatch"]):
         return IssueCategory.PATTERN_SELECTION
@@ -242,7 +243,8 @@ def categorize_issue(issue_text: str) -> str:
         return IssueCategory.API_FAILURE
     if any(kw in text for kw in ["research", "search", "query", "kimi", "web search"]):
         return IssueCategory.RESEARCH_QUALITY
-    if any(kw in text for kw in ["insight", "callout", "so what", "implication", "takeaway"]):
+    if any(kw in text for kw in ["insight", "callout", "so what", "implication", "takeaway",
+                                      "vague", "recommend", "chain"]):
         return IssueCategory.INSIGHT_MISSING
     if any(kw in text for kw in ["chart", "graph", "visualization", "axis", "legend"]):
         return IssueCategory.CHART_ERROR

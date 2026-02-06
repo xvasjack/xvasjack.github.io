@@ -732,7 +732,10 @@ async def _diagnose_root_cause(
             "1) Edit the PROMPT TEXT in research-orchestrator.js synthesizeMarket() — "
             "find the 'DEPTH REQUIREMENTS' section and add more specific requirements. "
             "2) Also check synthesizePolicy() and synthesizeCompetitors() prompts. "
-            "3) Do NOT add code in ppt-single-country.js to pad thin content — fix the prompt."
+            "3) Require source citations: every claim needs 'Source: [name], [year]'. "
+            "4) Require data freshness: search queries should target current_year-2 to current_year. "
+            "5) Require per-paragraph data: at least one number/percentage per content paragraph. "
+            "DO NOT add code in ppt-single-country.js to pad thin content — fix the prompt."
         ),
         "pattern_selection": (
             "1) Review choosePattern() in ppt-utils.js — the dataType being assigned doesn't match actual data. "
@@ -753,8 +756,10 @@ async def _diagnose_root_cause(
         "insight_missing": (
             "1) Edit the PROMPT TEXT in research-orchestrator.js synthesizeSummary() — "
             "add explicit 'so what' and 'now what' prompting. "
-            "2) Look for the insight generation section in the prompt string. "
-            "3) Add examples of what good insights look like (specific data + implication + timing)."
+            "2) Require the CHAIN: each insight = DATA (number) + IMPLICATION (means...) + ACTION (should...). "
+            "3) Recommendations must be specific: WHO (company names) + WHEN (timeline) + HOW MUCH ($$). "
+            "4) Add examples of what good insights look like (specific data + implication + timing). "
+            "5) DO NOT generate generic recommendations like 'explore opportunities' — name the opportunity."
         ),
         "chart_error": (
             "1) Validate data format in ppt-single-country.js before calling addChart(). "
@@ -952,7 +957,7 @@ async def generate_fix_callback(
                 f"- Wrong color: use hex string without '#' prefix, e.g. `color: '1F497D'`\n"
                 f"- Wrong font size: set `fontSize` in points, e.g. `fontSize: 24`\n"
                 f"- Missing header line: add `slide.addShape('line', {{...}})` after title\n"
-                f"- Wrong font: set `fontFace: 'Segoe UI'` on all text elements\n"
+                f"- Wrong font: set `fontFace: 'Century Gothic'` on all text elements\n"
             )
 
     # Issue 11: Use structured fix_prompt from ComparisonResult if available

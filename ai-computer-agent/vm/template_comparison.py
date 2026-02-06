@@ -12,6 +12,7 @@ from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 from enum import Enum
 import math
+import datetime
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -672,11 +673,30 @@ def _check_element_style(shape, element_spec: dict, slide_loc: str,
                 suggestion=f"Set bold: {str(expected_bold).lower()} for {element_name} in pptxgenjs.",
             ))
 
+    # Font family per-element check
+    expected_family = element_spec.get("family") or role_defaults.get("family")
+    actual_family = shape.dominant_font_name or shape.font_name
+    if expected_family and actual_family:
+        if expected_family.lower() != actual_family.lower():
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH, category="font_family_element_mismatch",
+                location=slide_loc,
+                expected=f"{element_name} fontFace={expected_family}",
+                actual=f"{element_name} fontFace={actual_family}",
+                suggestion=f"Set fontFace to '{expected_family}' for {element_name} in pptxgenjs.",
+            ))
+
     # Italic check
     expected_italic = element_spec.get("italic")
-    if expected_italic is not None:
-        # font_bold is extracted but italic isn't directly — check via font_name proxy
-        pass  # Italic detection requires additional extraction; skip false positives
+    if expected_italic is not None and shape.font_italic is not None:
+        if expected_italic != shape.font_italic:
+            discrepancies.append(Discrepancy(
+                severity=Severity.MEDIUM, category="italic_mismatch",
+                location=slide_loc,
+                expected=f"{element_name} italic={expected_italic}",
+                actual=f"{element_name} italic={shape.font_italic}",
+                suggestion=f"Set italic: {str(expected_italic).lower()} for {element_name} in pptxgenjs.",
+            ))
 
     # Fill color check
     expected_fill = element_spec.get("fill")
@@ -716,6 +736,31 @@ def _check_element_style(shape, element_spec: dict, slide_loc: str,
                 expected=f"{element_name} lineSpacing={expected_spacing}",
                 actual=f"{element_name} lineSpacing={shape.line_spacing}",
                 suggestion=f"Set lineSpacingMultiple: {expected_spacing} for {element_name}.",
+            ))
+
+    # Border color check
+    expected_border = element_spec.get("border")
+    if expected_border and shape.border_color_hex:
+        dist = _hex_color_distance(expected_border, shape.border_color_hex)
+        if dist > COLOR_TOLERANCE:
+            discrepancies.append(Discrepancy(
+                severity=Severity.MEDIUM, category="border_color_mismatch",
+                location=slide_loc,
+                expected=f"{element_name} border=#{expected_border}",
+                actual=f"{element_name} border=#{shape.border_color_hex}",
+                suggestion=f"Set border color to '{expected_border}' for {element_name} in pptxgenjs.",
+            ))
+
+    # Border width check
+    expected_bw = element_spec.get("borderWidth")
+    if expected_bw and shape.border_width_pt:
+        if abs(shape.border_width_pt - expected_bw) > 1:
+            discrepancies.append(Discrepancy(
+                severity=Severity.LOW, category="border_width_mismatch",
+                location=slide_loc,
+                expected=f"{element_name} borderWidth={expected_bw}pt",
+                actual=f"{element_name} borderWidth={shape.border_width_pt}pt",
+                suggestion=f"Set border width to {expected_bw} for {element_name}.",
             ))
 
     return discrepancies
@@ -1239,6 +1284,32 @@ def _compare_slide_to_pattern(slide_fmt, pattern_name: str, pattern_spec: dict,
                         suggestion=f"Set table alternating row fill to '{expected_alt_fill}'.",
                     ))
 
+            # Table cell grid border color (from XML extraction, not shape outline)
+            expected_border_color = table_spec.get("borderColor")
+            if expected_border_color and ts.table_border_color_hex:
+                dist = _hex_color_distance(expected_border_color, ts.table_border_color_hex)
+                if dist > COLOR_TOLERANCE:
+                    discrepancies.append(Discrepancy(
+                        severity=Severity.LOW, category="table_border_color_mismatch",
+                        location=slide_loc,
+                        expected=f"Table borderColor=#{expected_border_color}",
+                        actual=f"Table borderColor=#{ts.table_border_color_hex}",
+                        suggestion=f"Set table border color to '{expected_border_color}' in addTable().",
+                    ))
+
+            # Table left border (highlighted tables like data_table_highlighted)
+            expected_left_border = table_spec.get("leftBorderColor")
+            if expected_left_border and ts.table_left_border_color_hex:
+                dist = _hex_color_distance(expected_left_border, ts.table_left_border_color_hex)
+                if dist > COLOR_TOLERANCE:
+                    discrepancies.append(Discrepancy(
+                        severity=Severity.MEDIUM, category="table_left_border_color_mismatch",
+                        location=slide_loc,
+                        expected=f"Table leftBorderColor=#{expected_left_border}",
+                        actual=f"Table leftBorder=#{ts.table_left_border_color_hex}",
+                        suggestion=f"Set table left border color to '{expected_left_border}' for highlighted table.",
+                    ))
+
     # =====================================================================
     # DICT ELEMENT STYLE CHECKS — check each named element with style props
     # =====================================================================
@@ -1254,7 +1325,8 @@ def _compare_slide_to_pattern(slide_fmt, pattern_name: str, pattern_spec: dict,
             continue
         # Only check elements that have style properties
         has_style = any(k in elem_spec for k in
-                        ["fontSize", "color", "bold", "italic", "fill", "align", "lineSpacing"])
+                        ["fontSize", "color", "bold", "italic", "fill", "align",
+                         "lineSpacing", "border", "borderWidth", "family"])
         if not has_style:
             continue
 
@@ -1336,6 +1408,30 @@ def _compare_slide_to_pattern(slide_fmt, pattern_name: str, pattern_spec: dict,
                             suggestion=f"Set case study row label fill to '{expected_label_fill}'.",
                         ))
                         break  # one example is enough
+
+    # Chevron flow colors
+    chevron_spec = elements.get("chevronFlow")
+    if isinstance(chevron_spec, dict):
+        chevron_colors = chevron_spec.get("chevronColors", [])
+        if chevron_colors:
+            cy = chevron_spec.get("y", 4.1)
+            cx = chevron_spec.get("x", 2.5)
+            chevron_shapes = [sf for sf in slide_fmt.shapes
+                              if sf.fill_color_hex
+                              and abs(sf.top - cy) < POSITION_TOLERANCE
+                              and sf.left >= cx - 0.3]
+            if chevron_shapes:
+                first_fill = chevron_shapes[0].fill_color_hex
+                first_expected = chevron_colors[0]
+                dist = _hex_color_distance(first_expected, first_fill)
+                if dist > COLOR_TOLERANCE:
+                    discrepancies.append(Discrepancy(
+                        severity=Severity.MEDIUM, category="fill_color_mismatch",
+                        location=slide_loc,
+                        expected=f"Chevron flow color=#{first_expected}",
+                        actual=f"Chevron fill=#{first_fill}",
+                        suggestion=f"Set chevron flow colors to {chevron_colors} in pptxgenjs.",
+                    ))
 
     # =====================================================================
     # NESTED ELEMENT STYLE CHECKS — bulletPanel, chartLeft.chartTitle, etc.
@@ -2069,6 +2165,224 @@ def compare_pptx_to_template(
         else:
             passed_checks += 1
 
+        # Insight chain completeness — each insight needs data + implication + action
+        total_checks += 1
+        if insight_paragraphs:
+            complete_chains = 0
+            for para in insight_paragraphs:
+                has_data = bool(re.search(r'\d+(?:\.\d+)?%|\$[\d,]+|\d+\s*(?:billion|million|bn|mn)', para, re.IGNORECASE))
+                has_implication = bool(re.search(r'(?:therefore|suggests?|implies?|indicates?|means|results? in|leads? to|drives?|enables?)', para, re.IGNORECASE))
+                has_action = bool(re.search(r'(?:should|must|recommend|advise|consider|prioriti[zs]e|within|by\s+\d{4}|opportunity to)', para, re.IGNORECASE))
+                components = sum([has_data, has_implication, has_action])
+                if components >= 2:
+                    complete_chains += 1
+
+            chain_ratio = complete_chains / len(insight_paragraphs) if insight_paragraphs else 0
+            if chain_ratio < 0.3 and len(insight_paragraphs) >= 3:
+                discrepancies.append(Discrepancy(
+                    severity=Severity.HIGH,
+                    category="incomplete_insight_chain",
+                    location="Strategic + Recommendations sections",
+                    expected=">=30% of insight paragraphs have data + implication + action",
+                    actual=f"Only {complete_chains}/{len(insight_paragraphs)} ({chain_ratio:.0%}) insights have complete chains",
+                    suggestion=(
+                        "Insights lack the 'So What \u2192 Now What \u2192 By When' chain. "
+                        "Each insight paragraph needs: 1) DATA (a number or percentage), "
+                        "2) IMPLICATION (what it means: 'this suggests...'), "
+                        "3) ACTION (what to do: 'should prioritize...' or timeline). "
+                        "Fix the synthesis prompt in research-orchestrator.js to require this chain."
+                    ),
+                ))
+            else:
+                passed_checks += 1
+        else:
+            passed_checks += 1
+
+        # Source attribution check — consulting reports cite sources
+        total_checks += 1
+        SOURCE_PATTERNS = re.compile(
+            r'(?:source\s*[:;]|according to|per\s+(?:[A-Z][\w]+)|'
+            r'cited by|based on\s+(?:data|research|analysis|report|survey)|'
+            r'(?:McKinsey|BCG|Deloitte|PwC|EY|KPMG|Bloomberg|IEA|World Bank|IMF|'
+            r'Statista|Euromonitor|Grand View|Fortune Business|Mordor|Allied Market|'
+            r'Markets and Markets|Frost & Sullivan)\b)',
+            re.IGNORECASE
+        )
+        total_citations = 0
+        sections_without_sources = []
+        for section_key in ["policy", "market", "competitive", "strategic"]:
+            section_slides_src = section_map.get(section_key, [])
+            section_text = " ".join((s.get("all_text") or "") for s in section_slides_src)
+            citations = len(SOURCE_PATTERNS.findall(section_text))
+            total_citations += citations
+            if citations == 0 and len(section_slides_src) > 0:
+                sections_without_sources.append(section_key)
+
+        if total_citations < 3 or len(sections_without_sources) >= 2:
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH,
+                category="missing_source_citations",
+                location=f"Sections: {', '.join(sections_without_sources) or 'all sections sparse'}",
+                expected=">=3 source citations across report, every content section has >=1",
+                actual=f"{total_citations} total citations. Missing in: {', '.join(sections_without_sources)}",
+                suggestion=(
+                    "Add source attributions to research content. Each section needs at least one "
+                    "'Source: [name], [year]' or 'According to [research firm]' citation. "
+                    "Fix the synthesis prompts in research-orchestrator.js to require source attribution."
+                ),
+            ))
+        else:
+            passed_checks += 1
+
+        # Data freshness — consulting reports use recent data
+        total_checks += 1
+        current_year = datetime.datetime.now().year
+        all_mr_text = " ".join((s.get("all_text") or "") for s in slides)
+        year_matches = [int(y) for y in re.findall(r'\b(19\d{2}|20\d{2})\b', all_mr_text)
+                        if 1990 <= int(y) <= current_year + 5]
+        if year_matches:
+            recent_years = [y for y in year_matches if y >= current_year - 3]
+            stale_years = [y for y in year_matches if y < current_year - 4]
+            freshness_ratio = len(recent_years) / len(year_matches)
+            if freshness_ratio < 0.3 and len(stale_years) > 5:
+                discrepancies.append(Discrepancy(
+                    severity=Severity.MEDIUM,
+                    category="stale_data_references",
+                    location="Presentation-wide",
+                    expected=">=30% of year references within last 3 years",
+                    actual=f"{len(recent_years)}/{len(year_matches)} years are recent ({freshness_ratio:.0%}). {len(stale_years)} stale references",
+                    suggestion=(
+                        f"Research data is outdated. {len(stale_years)} references are from {current_year-4} or earlier. "
+                        "Update research queries in research-agents.js to search for data from "
+                        f"{current_year-2}-{current_year}. Add year filters to search queries."
+                    ),
+                ))
+            else:
+                passed_checks += 1
+        else:
+            passed_checks += 1  # no years = can't check freshness
+
+        # Per-slide data density — each content slide should have quantified facts
+        total_checks += 1
+        content_slides_for_density = []
+        zero_data_slides = []
+        for slide in slides:
+            slide_type = (slide.get("type", "") or "").lower()
+            title_text_d = (slide.get("title", "") or "").lower()
+            if any(kw in slide_type for kw in ("title", "divider", "section", "header")):
+                continue
+            if any(kw in title_text_d for kw in ("table of contents", "appendix", "disclaimer")):
+                continue
+            slide_text = slide.get("all_text", "") or ""
+            if len(slide_text.strip()) < 50:
+                continue
+            content_slides_for_density.append(slide)
+            dp_count = _count_data_points(slide_text.lower())
+            if dp_count == 0:
+                zero_data_slides.append(slide.get("number", 0))
+
+        if content_slides_for_density:
+            zero_pct = len(zero_data_slides) / len(content_slides_for_density) * 100
+            if zero_pct > 40:
+                discrepancies.append(Discrepancy(
+                    severity=Severity.HIGH,
+                    category="low_data_density_slides",
+                    location=f"Slides {', '.join(str(s) for s in zero_data_slides[:6])}",
+                    expected=">=60% of content slides contain quantified data (%, $, units)",
+                    actual=f"{len(zero_data_slides)}/{len(content_slides_for_density)} slides ({zero_pct:.0f}%) have zero data points",
+                    suggestion=(
+                        "Too many slides are narrative-only with no numbers. "
+                        "Every content slide should have at least 1 quantified fact "
+                        "(market size, growth rate, percentage, dollar amount). "
+                        "Fix synthesis prompts to require data points per paragraph."
+                    ),
+                ))
+            else:
+                passed_checks += 1
+        else:
+            passed_checks += 1
+
+        # Recommendation specificity — rec slides need entity + timeline + impact
+        total_checks += 1
+        rec_slides = section_map.get("recommendations", [])
+        if rec_slides:
+            specific_recs = 0
+            for rec_slide in rec_slides:
+                rec_text = rec_slide.get("all_text", "") or ""
+                has_entity = bool(re.search(r'[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\s+(?:Co\.|Corp|Ltd|Inc|Group|Holdings|PLC)', rec_text))
+                has_entity = has_entity or bool(_count_companies(rec_text) >= 1)
+                has_timeline = bool(re.search(r'(?:within|by|before|Q[1-4])\s+\d{4}|(?:\d+[-\u2013]\d+)\s*(?:months?|years?|weeks?)', rec_text, re.IGNORECASE))
+                has_number = bool(re.search(r'\d+(?:\.\d+)?%|\$[\d,]+|\d+\s*(?:million|billion|M|B)', rec_text, re.IGNORECASE))
+                if sum([has_entity, has_timeline, has_number]) >= 2:
+                    specific_recs += 1
+
+            if len(rec_slides) > 0 and specific_recs / len(rec_slides) < 0.5:
+                discrepancies.append(Discrepancy(
+                    severity=Severity.HIGH,
+                    category="vague_recommendations",
+                    location="Recommendations section",
+                    expected=">=50% of rec slides have entity names + timeline + quantified impact",
+                    actual=f"Only {specific_recs}/{len(rec_slides)} recommendation slides are specific",
+                    suggestion=(
+                        "Recommendations are too vague. Each recommendation slide should include: "
+                        "1) WHO (specific company/entity names), "
+                        "2) WHEN (timeline: 'within 12 months', 'by Q3 2026'), "
+                        "3) HOW MUCH (quantified impact: '$2M opportunity', '15% market share'). "
+                        "Fix synthesis prompts in research-orchestrator.js synthesizeSummary()."
+                    ),
+                ))
+            else:
+                passed_checks += 1
+        else:
+            passed_checks += 1
+
+        # Cross-slide redundancy — detect near-duplicate content across slides
+        total_checks += 1
+        slide_sentences = {}
+        for slide in slides:
+            slide_num = slide.get("number", 0)
+            text = slide.get("all_text", "") or ""
+            # Extract sentences >20 words
+            sents = [s.strip() for s in re.split(r'[.!?\n]', text) if len(s.split()) > 20]
+            slide_sentences[slide_num] = sents
+
+        redundant_pairs = []
+        slide_nums_list = sorted(slide_sentences.keys())
+        for i, sn1 in enumerate(slide_nums_list):
+            for sn2 in slide_nums_list[i+1:]:
+                for s1 in slide_sentences[sn1]:
+                    words1 = set(s1.lower().split())
+                    for s2 in slide_sentences[sn2]:
+                        words2 = set(s2.lower().split())
+                        if len(words1) < 5 or len(words2) < 5:
+                            continue
+                        intersection = words1 & words2
+                        union = words1 | words2
+                        jaccard = len(intersection) / len(union) if union else 0
+                        if jaccard > 0.65:
+                            redundant_pairs.append((sn1, sn2))
+                            break
+                    if redundant_pairs and redundant_pairs[-1] == (sn1, sn2):
+                        break
+
+        unique_redundant = list(set(redundant_pairs))
+        if len(unique_redundant) >= 3:
+            pair_strs = [f"Slides {a}&{b}" for a, b in unique_redundant[:5]]
+            discrepancies.append(Discrepancy(
+                severity=Severity.MEDIUM,
+                category="cross_slide_redundancy",
+                location=f"{', '.join(pair_strs)}",
+                expected="Each slide provides unique analysis, minimal repetition",
+                actual=f"{len(unique_redundant)} slide pairs have near-duplicate content (>65% word overlap)",
+                suggestion=(
+                    "Multiple slides repeat the same information. Diversify content: "
+                    "each slide should cover a distinct sub-topic. "
+                    "Fix research-orchestrator.js synthesis prompts to assign different angles per slide."
+                ),
+            ))
+        else:
+            passed_checks += 1
+
         # Chart check — scoped to Market section
         total_checks += 1
         market_slides = section_map.get("market", [])
@@ -2210,6 +2524,19 @@ def compare_pptx_to_template(
             logger.debug("pptx_reader not available for per-slide matching")
         except Exception as e:
             logger.warning(f"Per-slide pattern matching failed: {e}")
+
+    # Dedup title discrepancies — remove aggregate Presentation-wide title checks
+    # when per-element checks already detected the same issue per-slide
+    if template.name == "Market Research Report":
+        per_element_categories = {d.category for d in discrepancies
+                                  if d.location.startswith("Slide ")}
+        dedup_categories = {"title_font_size_mismatch", "title_color_mismatch",
+                           "title_bold_mismatch", "subtitle_font_size_mismatch",
+                           "subtitle_color_mismatch"}
+        if per_element_categories & {"font_size_mismatch", "font_color_mismatch", "bold_mismatch"}:
+            discrepancies = [d for d in discrepancies
+                            if d.category not in dedup_categories
+                            or d.location != "Presentation-wide"]
 
     # Generate summary
     passed = len([d for d in discrepancies if d.severity == Severity.CRITICAL]) == 0
