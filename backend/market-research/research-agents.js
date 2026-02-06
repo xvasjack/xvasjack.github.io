@@ -28,6 +28,16 @@ function extractJsonFromContent(content) {
     }
   }
 
+  // Strategy 2.5: Match [...] array
+  const arrayMatch = content.match(/\[[\s\S]*\]/);
+  if (arrayMatch) {
+    try {
+      return { data: JSON.parse(arrayMatch[0]), status: 'success' };
+    } catch (e) {
+      console.log(`      [JSON] Strategy 2.5 (array regex) parse error: ${e.message}`);
+    }
+  }
+
   // Strategy 3: Parse entire content as JSON
   try {
     return { data: JSON.parse(content), status: 'success' };
@@ -288,24 +298,24 @@ REQUIREMENTS:
 
         const result = await callKimiDeepResearch(queryContext, country, industry);
 
-        // Try to extract structured JSON from the response with improved error tracking
-        let structuredData = null;
-        let extractionStatus = 'unknown';
-        let rawJson = null;
-        if (result.content) {
-          const jsonMatch = result.content.match(/```json\s*([\s\S]*?)\s*```/);
-          if (jsonMatch) {
-            rawJson = jsonMatch[1];
-            try {
-              structuredData = JSON.parse(jsonMatch[1]);
-              extractionStatus = 'success';
-            } catch (e) {
-              console.log(`      [Market] Failed to parse JSON for ${topicKey}: ${e.message}`);
-              extractionStatus = 'parse_error';
+        // JSON extraction (multi-strategy with retry)
+        let extractResult = extractJsonFromContent(result.content);
+        let structuredData = extractResult.data;
+        let extractionStatus = extractResult.status;
+
+        if (extractionStatus !== 'success' && result.content) {
+          console.log(
+            `      [Market] ${topicKey}: extraction failed (${extractionStatus}), retrying...`
+          );
+          const retryQuery = `${queryContext}\n\nCRITICAL: Return ONLY valid JSON. No explanation, no markdown. Just the raw JSON object.`;
+          const retryResult = await callKimiDeepResearch(retryQuery, country, industry);
+          if (retryResult.content) {
+            extractResult = extractJsonFromContent(retryResult.content);
+            structuredData = extractResult.data;
+            extractionStatus = extractResult.status;
+            if (extractionStatus === 'success') {
+              console.log(`      [Market] ${topicKey}: Retry successful`);
             }
-          } else {
-            extractionStatus = 'no_json_found';
-            console.log(`      [Market] No JSON block found for ${topicKey}`);
           }
         }
 
@@ -314,7 +324,6 @@ REQUIREMENTS:
           content: result.content,
           structuredData: structuredData,
           extractionStatus: extractionStatus,
-          rawJson: rawJson, // Keep for debugging/retry
           citations: result.citations || [],
           chartType: framework.chartType || null,
           slideTitle: framework.slideTitle?.replace('{country}', country) || '',
@@ -456,24 +465,24 @@ REQUIREMENTS:
 
       const result = await callKimiDeepResearch(queryContext, country, industry);
 
-      // Extract structured JSON with improved error tracking
-      let structuredData = null;
-      let extractionStatus = 'unknown';
-      let rawJson = null;
-      if (result.content) {
-        const jsonMatch = result.content.match(/```json\s*([\s\S]*?)\s*```/);
-        if (jsonMatch) {
-          rawJson = jsonMatch[1];
-          try {
-            structuredData = JSON.parse(jsonMatch[1]);
-            extractionStatus = 'success';
-          } catch (e) {
-            console.log(`      [Competitor] Failed to parse JSON for ${topicKey}: ${e.message}`);
-            extractionStatus = 'parse_error';
+      // JSON extraction (multi-strategy with retry)
+      let extractResult = extractJsonFromContent(result.content);
+      let structuredData = extractResult.data;
+      let extractionStatus = extractResult.status;
+
+      if (extractionStatus !== 'success' && result.content) {
+        console.log(
+          `      [Competitor] ${topicKey}: extraction failed (${extractionStatus}), retrying...`
+        );
+        const retryQuery = `${queryContext}\n\nCRITICAL: Return ONLY valid JSON. No explanation, no markdown. Just the raw JSON object.`;
+        const retryResult = await callKimiDeepResearch(retryQuery, country, industry);
+        if (retryResult.content) {
+          extractResult = extractJsonFromContent(retryResult.content);
+          structuredData = extractResult.data;
+          extractionStatus = extractResult.status;
+          if (extractionStatus === 'success') {
+            console.log(`      [Competitor] ${topicKey}: Retry successful`);
           }
-        } else {
-          extractionStatus = 'no_json_found';
-          console.log(`      [Competitor] No JSON block found for ${topicKey}`);
         }
       }
 
@@ -482,7 +491,6 @@ REQUIREMENTS:
         content: result.content,
         structuredData: structuredData,
         extractionStatus: extractionStatus,
-        rawJson: rawJson, // Keep for debugging/retry
         citations: result.citations || [],
         slideTitle: framework.slideTitle?.replace('{country}', country) || '',
         dataQuality: structuredData?.dataQuality || 'unknown',
@@ -674,21 +682,27 @@ DEPTH IS CRITICAL - We need specifics for executive decision-making, not general
 
       const result = await callKimiDeepResearch(queryContext, country, industry);
 
-      // Extract structured JSON from response
-      let structuredData = null;
-      let dataQuality = 'unknown';
-      if (result.content) {
-        const jsonMatch = result.content.match(/```json\s*([\s\S]*?)\s*```/);
-        if (jsonMatch) {
-          try {
-            structuredData = JSON.parse(jsonMatch[1]);
-            dataQuality = structuredData.dataQuality || 'unknown';
-            console.log(`      [${topicKey}] Extracted structured JSON (quality: ${dataQuality})`);
-          } catch (e) {
-            console.log(`      [${topicKey}] JSON parse failed: ${e.message}`);
+      // JSON extraction (multi-strategy with retry)
+      let extractResult = extractJsonFromContent(result.content);
+      let structuredData = extractResult.data;
+      let extractionStatus = extractResult.status;
+
+      if (extractionStatus !== 'success' && result.content) {
+        console.log(
+          `      [Depth] ${topicKey}: extraction failed (${extractionStatus}), retrying...`
+        );
+        const retryQuery = `${queryContext}\n\nCRITICAL: Return ONLY valid JSON. No explanation, no markdown. Just the raw JSON object.`;
+        const retryResult = await callKimiDeepResearch(retryQuery, country, industry);
+        if (retryResult.content) {
+          extractResult = extractJsonFromContent(retryResult.content);
+          structuredData = extractResult.data;
+          extractionStatus = extractResult.status;
+          if (extractionStatus === 'success') {
+            console.log(`      [Depth] ${topicKey}: Retry successful`);
           }
         }
       }
+      const dataQuality = structuredData?.dataQuality || 'unknown';
 
       return {
         key: topicKey,
@@ -696,6 +710,7 @@ DEPTH IS CRITICAL - We need specifics for executive decision-making, not general
         citations: result.citations || [],
         slideTitle: framework.slideTitle?.replace('{country}', country) || '',
         structuredData,
+        extractionStatus,
         dataQuality,
         researchQuality: result.researchQuality || 'unknown',
       };
@@ -866,21 +881,27 @@ This intelligence is for CEO-level decision making. We need SPECIFIC names, date
 
       const result = await callKimiDeepResearch(queryContext, country, industry);
 
-      // Extract structured JSON from response
-      let structuredData = null;
-      let dataQuality = 'unknown';
-      if (result.content) {
-        const jsonMatch = result.content.match(/```json\s*([\s\S]*?)\s*```/);
-        if (jsonMatch) {
-          try {
-            structuredData = JSON.parse(jsonMatch[1]);
-            dataQuality = structuredData.dataQuality || 'unknown';
-            console.log(`      [${topicKey}] Extracted structured JSON (quality: ${dataQuality})`);
-          } catch (e) {
-            console.log(`      [${topicKey}] JSON parse failed: ${e.message}`);
+      // JSON extraction (multi-strategy with retry)
+      let extractResult = extractJsonFromContent(result.content);
+      let structuredData = extractResult.data;
+      let extractionStatus = extractResult.status;
+
+      if (extractionStatus !== 'success' && result.content) {
+        console.log(
+          `      [Insights] ${topicKey}: extraction failed (${extractionStatus}), retrying...`
+        );
+        const retryQuery = `${queryContext}\n\nCRITICAL: Return ONLY valid JSON. No explanation, no markdown. Just the raw JSON object.`;
+        const retryResult = await callKimiDeepResearch(retryQuery, country, industry);
+        if (retryResult.content) {
+          extractResult = extractJsonFromContent(retryResult.content);
+          structuredData = extractResult.data;
+          extractionStatus = extractResult.status;
+          if (extractionStatus === 'success') {
+            console.log(`      [Insights] ${topicKey}: Retry successful`);
           }
         }
       }
+      const dataQuality = structuredData?.dataQuality || 'unknown';
 
       return {
         key: topicKey,
@@ -888,6 +909,7 @@ This intelligence is for CEO-level decision making. We need SPECIFIC names, date
         citations: result.citations || [],
         slideTitle: framework.slideTitle?.replace('{country}', country) || '',
         structuredData,
+        extractionStatus,
         dataQuality,
         researchQuality: result.researchQuality || 'unknown',
       };
@@ -961,4 +983,5 @@ module.exports = {
   depthResearchAgent,
   insightsResearchAgent,
   universalResearchAgent,
+  extractJsonFromContent,
 };
