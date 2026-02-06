@@ -352,11 +352,25 @@ async function synthesizePolicy(researchData, country, industry, clientContext) 
     `    [Policy] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE - will use training knowledge'})`
   );
 
+  const researchContext = dataAvailable
+    ? `RESEARCH DATA (use this as primary source):
+${JSON.stringify(filteredData, null, 2)}`
+    : `RESEARCH DATA: EMPTY due to API issues.
+
+You MUST use your extensive training knowledge to populate all required fields.
+For ${country}'s ${industry} sector, you have knowledge of:
+- Major energy/environmental laws (e.g., Energy Conservation Acts, Renewable Energy Acts, Carbon Tax Laws)
+- Foreign investment regulations (BOI incentives, ownership caps, promoted sectors)
+- National energy targets (renewable percentages, emissions reduction goals)
+- Regulatory bodies (energy ministries, investment promotion agencies)
+
+This is NOT optional. Return COMPLETE data structures using your training knowledge.
+Research data unavailable but your training data for ${country} energy regulations is sufficient.`;
+
   const prompt = `You are synthesizing policy and regulatory research for ${country}'s ${industry} market.
 Client context: ${clientContext}
 
-RESEARCH DATA${dataAvailable ? '' : ' (SPARSE - use your training knowledge)'}:
-${JSON.stringify(filteredData, null, 2)}
+${researchContext}
 
 DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - List EVERY named regulation, law, decree with year and official name
@@ -452,11 +466,28 @@ async function synthesizeMarket(researchData, country, industry, clientContext) 
     `    [Market] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE - will use training knowledge'})`
   );
 
+  const researchContext = dataAvailable
+    ? `RESEARCH DATA (use this as primary source):
+${JSON.stringify(filteredData, null, 2)}`
+    : `RESEARCH DATA: EMPTY due to API issues.
+
+You MUST use your extensive training knowledge to populate all required fields.
+For ${country}'s ${industry}/energy sector, you have knowledge of:
+- Energy consumption patterns (total primary energy supply, final demand by sector)
+- Power generation mix (coal, gas, hydro, renewables, nuclear)
+- Market sizes and growth rates (electricity market, gas/LNG, ESCO/efficiency services)
+- Energy pricing trends and subsidies
+- Infrastructure (power plants, LNG terminals, pipeline networks)
+- Government energy statistics and forecasts
+
+This is NOT optional. Return COMPLETE data structures with realistic estimates using your training knowledge.
+Research data unavailable but your training data for ${country} energy markets is sufficient.
+Include chartData arrays with historical data (2020-2024) and projections where applicable.`;
+
   const prompt = `You are synthesizing market data research for ${country}'s ${industry} market.
 Client context: ${clientContext}
 
-RESEARCH DATA${dataAvailable ? '' : ' (SPARSE - use your training knowledge)'}:
-${JSON.stringify(filteredData, null, 2)}
+${researchContext}
 
 DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - At least 3 time-series datasets with 5+ data points each
@@ -587,11 +618,27 @@ async function synthesizeCompetitors(researchData, country, industry, clientCont
     `    [Competitors] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE - will use training knowledge'})`
   );
 
+  const researchContext = dataAvailable
+    ? `RESEARCH DATA (use this as primary source):
+${JSON.stringify(filteredData, null, 2)}`
+    : `RESEARCH DATA: EMPTY due to API issues.
+
+You MUST use your extensive training knowledge to populate all required fields.
+For ${country}'s ${industry}/energy sector, you have knowledge of:
+- Japanese companies operating in ${country} (trading houses like Marubeni, JERA, Mitsubishi; energy firms)
+- Major local energy companies (state utilities like EVN in Vietnam, PTT in Thailand; local ESCOs)
+- Foreign energy firms with presence (Schneider Electric, Siemens, ENGIE, Veolia, other European/US players)
+- Energy sector M&A activity and market entry patterns
+- Typical market structures (state-owned dominance, private sector role, foreign participation)
+
+This is NOT optional. Return COMPLETE player arrays with company names, estimated market positions, and strategic context.
+Research data unavailable but your training data for ${country} energy sector players is sufficient.
+Use real company names from your knowledge — do NOT return empty player arrays.`;
+
   const prompt = `You are synthesizing competitive intelligence for ${country}'s ${industry} market.
 Client context: ${clientContext}
 
-RESEARCH DATA${dataAvailable ? '' : ' (SPARSE - use your training knowledge)'}:
-${JSON.stringify(filteredData, null, 2)}
+${researchContext}
 
 DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - At least 3 named companies per category with: investment year, structure (JV/acquisition/greenfield), stake %, partner name, revenue
