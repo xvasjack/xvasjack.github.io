@@ -521,6 +521,80 @@ def _has_formatting_issues(issues: List[str]) -> bool:
     return False
 
 
+async def _diagnose_root_cause(
+    issues: List[str],
+    service_name: str,
+    iteration: int,
+) -> Dict[str, Any]:
+    """
+    Think-first step: Diagnose root cause before attempting fix.
+    Returns diagnosis with recommended strategy.
+    """
+    logger.info("Diagnosing root cause...")
+
+    # Check for known patterns first
+    if HAS_ISSUE_DETECTOR:
+        try:
+            from issue_pattern_detector import get_successful_fix_for_issues
+            past_fix = get_successful_fix_for_issues(issues)
+            if past_fix:
+                logger.info(f"Using past pattern: {past_fix.get('strategy', '')[:50]}...")
+                return {
+                    "diagnosis": past_fix.get("diagnosis", ""),
+                    "strategy": past_fix.get("strategy", ""),
+                    "from_memory": True,
+                    "confidence": "high",
+                }
+        except (ImportError, Exception) as e:
+            logger.debug(f"Pattern memory check failed: {e}")
+
+    # Categorize issues by type
+    issue_categories = {}
+    for issue in issues:
+        if HAS_ISSUE_DETECTOR:
+            cat = categorize_issue(issue)
+        else:
+            cat = "unknown"
+        issue_categories.setdefault(cat, []).append(issue)
+
+    # Determine dominant category
+    dominant = max(issue_categories.keys(), key=lambda k: len(issue_categories[k])) if issue_categories else "unknown"
+
+    # Build diagnosis based on category patterns
+    diagnosis_map = {
+        "empty_data": "Research pipeline returning empty results. Root cause likely in query construction or API connectivity.",
+        "content_depth": "Content is shallow/generic. Research queries may be too broad or synthesis prompts lack depth guidance.",
+        "pattern_selection": "Wrong layout pattern selected. Data classifier (choosePattern) misidentifying data type.",
+        "layout_formatting": "Formatting mismatch. Pattern definitions may not match reference template positions.",
+        "api_failure": "API errors. Check rate limits, key validity, or model availability.",
+        "research_quality": "Research returning low-quality results. Queries may need more specificity.",
+        "insight_missing": "Missing business insights. Synthesis step not generating 'so what' implications.",
+        "chart_error": "Chart generation failing. Check data format matches chart type expectations.",
+        "table_overflow": "Table content exceeds bounds. Need to adjust sizing or split across slides.",
+    }
+
+    strategy_map = {
+        "empty_data": "1) Check research-orchestrator.js query construction, 2) Verify API responses, 3) Add fallback data sources",
+        "content_depth": "1) Add depth guidance to prompts, 2) Increase research specificity, 3) Add few-shot examples",
+        "pattern_selection": "1) Review choosePattern logic, 2) Verify dataType classification, 3) Add pattern debug logging",
+        "layout_formatting": "1) Re-extract positions from template, 2) Update template-patterns.json, 3) Match ppt-utils.js to spec",
+        "api_failure": "1) Check API key, 2) Implement retry logic, 3) Add fallback provider",
+        "research_quality": "1) Use more specific queries, 2) Add year ranges, 3) Verify web search results",
+        "insight_missing": "1) Add explicit insight prompts, 2) Chain 'so what' questions, 3) Add implication generation",
+        "chart_error": "1) Validate data format, 2) Check series arrays, 3) Ensure numeric types",
+        "table_overflow": "1) Increase maxH, 2) Reduce font size, 3) Split across slides",
+    }
+
+    return {
+        "diagnosis": diagnosis_map.get(dominant, f"Mixed issues dominated by {dominant}"),
+        "strategy": strategy_map.get(dominant, "Investigate root cause in relevant pipeline stage"),
+        "dominant_category": dominant,
+        "issue_breakdown": {k: len(v) for k, v in issue_categories.items()},
+        "from_memory": False,
+        "confidence": "medium" if iteration <= 2 else "low",
+    }
+
+
 async def generate_fix_callback(
     issues: List[str],
     analysis: Dict[str, Any],
@@ -529,6 +603,24 @@ async def generate_fix_callback(
 ) -> Dict[str, Any]:
     """Generate fix using Claude Code CLI"""
     logger.info(f"Generating fix for {len(issues)} issues")
+
+    # THINK FIRST: Diagnose root cause before fixing
+    diagnosis = await _diagnose_root_cause(issues, service_name, iteration)
+    diagnosis_context = ""
+    if diagnosis:
+        if diagnosis.get("from_memory"):
+            logger.info(f"Using past pattern for {diagnosis.get('dominant_category', 'issues')}")
+        else:
+            logger.info(f"Diagnosing root cause... Category: {diagnosis.get('dominant_category', 'unknown')}")
+
+        diagnosis_context = (
+            f"\n\n## Root Cause Diagnosis (think first)\n"
+            f"**Diagnosis**: {diagnosis.get('diagnosis', 'Unknown')}\n"
+            f"**Recommended Strategy**: {diagnosis.get('strategy', 'Investigate')}\n"
+            f"**Confidence**: {diagnosis.get('confidence', 'low')}\n"
+        )
+        if diagnosis.get("from_memory"):
+            diagnosis_context += "**Source**: Previously successful fix pattern\n"
 
     # Load content depth reference for this service
     template_ref = _load_template_reference(service_name)
@@ -634,7 +726,7 @@ async def generate_fix_callback(
                 f"the root cause may be deeper than a surface-level fix."
             )
         result = await run_claude_code(
-            fix_prompt + ref_context + formatting_context + history_context + diff_context + scope_context + iteration_context,
+            fix_prompt + diagnosis_context + ref_context + formatting_context + history_context + diff_context + scope_context + iteration_context,
             service_name=service_name,
             iteration=iteration,
             previous_issues="\n".join(issues) if issues else None,
@@ -653,6 +745,7 @@ async def generate_fix_callback(
             f"Output from {service_name} must match the reference template in both "
             f"content quality (depth, specificity, actionable insights) and visual formatting "
             f"(layout, fonts, spacing, data tables). No critical or major discrepancies.{iteration_context}"
+            f"{diagnosis_context}"
             f"{ref_context}"
             f"{formatting_context}"
             f"{history_context}"
@@ -1023,5 +1116,22 @@ async def run_feedback_loop(
                     logger.info(f"Learned template saved for {service_name}")
             except Exception as e:
                 logger.warning(f"Failed to learn template: {e}")
+
+        # Save successful fix to memory for future reuse
+        if HAS_ISSUE_DETECTOR and len(loop.iterations) > 1:
+            try:
+                from issue_pattern_detector import save_successful_fix
+                # Get the issues and fix from the iteration before success
+                prev_iter = loop.iterations[-2] if len(loop.iterations) >= 2 else None
+                if prev_iter and prev_iter.issues:
+                    save_successful_fix(
+                        issues=prev_iter.issues,
+                        fix_description=getattr(prev_iter, 'fix_description', '') or '',
+                        git_diff=_recent_diffs[-1] if _recent_diffs else '',
+                        service_name=service_name,
+                    )
+                    logger.info("Saved successful fix to memory")
+            except Exception as e:
+                logger.warning(f"Failed to save fix to memory: {e}")
 
     return result
