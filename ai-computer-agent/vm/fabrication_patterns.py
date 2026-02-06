@@ -28,8 +28,8 @@ FABRICATION_PATTERNS = [
     r"fallback(?:Result|Data|Companies|Regulations)",
     # Hardcoded year arrays for fake trends
     r"\[\s*2019\s*,\s*2020\s*,\s*2021\s*,\s*2022\s*,\s*2023\s*\]",
-    # Fake percentage ranges
-    r"\d+(?:\.\d+)?%\s*(?:annually|per\s*year|growth)",
+    # NOTE: Percentage patterns removed — too broad, false-positives on prompt text edits
+    # (e.g., "12% annual growth" in DEPTH REQUIREMENTS examples in research-orchestrator.js)
 
     # --- Broader patterns (catch bypass variants) ---
 
@@ -37,8 +37,6 @@ FABRICATION_PATTERNS = [
     r"\$\d+\s*(?:million|billion|trillion)\s*\((?:estimated|approx)",
     # Hedged dollar amounts: "approximately $50M", "~$50M"
     r"(?:approximately|roughly|around|~)\s*\$\d+[BMK]",
-    # Percentage growth — any word order: "5.3% annual growth", "5.3 percent annually"
-    r"\d+(?:\.\d+)?\s*(?:percent|%)\s*(?:annual|yearly|year-over-year|growth|decline)",
     # ANY 4+ consecutive year array: [2020, 2021, 2022, 2023, 2024]
     r"\[\s*20\d{2}\s*(?:,\s*20\d{2}\s*){3,}\]",
     # Broader fake URL: www.{word}-{word}.com.{tld} or .co.{tld}

@@ -1534,6 +1534,57 @@ async def run_feedback_loop(
         _first_iteration_done[0] = True
         return await real_fix(issues, analysis)
 
+    # Fix 2: Cache output when fix is reverted — skip submit+email+analyze on retry
+    _cached_email_result = [None]
+    _cached_analysis_result = [None]
+    _reuse_output = [False]
+
+    real_submit_reuse = submit
+    async def submit():
+        if _reuse_output[0]:
+            logger.info("Reusing previous output (fix was reverted, code unchanged)")
+            return {"success": True, "skipped": True}
+        return await real_submit_reuse()
+
+    real_wait_reuse = wait_email
+    async def wait_email():
+        if _reuse_output[0] and _cached_email_result[0]:
+            return _cached_email_result[0]
+        result = await real_wait_reuse()
+        if result.get("success"):
+            _cached_email_result[0] = result
+        return result
+
+    real_analyze_reuse = analyze
+    async def analyze(file_path):
+        if _reuse_output[0] and _cached_analysis_result[0]:
+            _reuse_output[0] = False  # Reset AFTER reuse so fix gets fresh attempt
+            return _cached_analysis_result[0]
+        result = await real_analyze_reuse(file_path)
+        _cached_analysis_result[0] = result
+        return result
+
+    real_fix_reuse = fix
+    async def fix(issues, analysis):
+        result = await real_fix_reuse(issues, analysis)
+        if result and not result.get("success"):
+            # Code reverted = output unchanged = safe to reuse
+            reverted = (
+                result.get("fabrication_reverted")
+                or (result.get("error") or "").startswith("Diff too large")
+                or (result.get("error") or "").startswith("Wrong files")
+            )
+            if reverted:
+                _reuse_output[0] = True
+                # Fix 3: advance epoch so stale emails can't slip through
+                last_fix_deployed_epoch[0] = int(time.time())
+                state_extras["last_fix_deployed_epoch"] = last_fix_deployed_epoch[0]
+                logger.info("Fix reverted — will reuse output on next iteration")
+        else:
+            # Successful fix = code changed = need fresh output
+            _reuse_output[0] = False
+        return result
+
     # Stale-state fix: shared extras dict that closures update, persisted via FeedbackLoop._save_state
     state_extras = {
         "task_id": task_id,

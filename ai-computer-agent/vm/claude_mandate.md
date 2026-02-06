@@ -52,14 +52,13 @@ Previous issues: {PREVIOUS_ISSUES}
 **NEVER hardcode content to mask empty research results.**
 
 Fabricating content violates user trust. You will be blocked by:
-1. PreToolUse hook (blocks fake URLs, fake companies, fake percentages)
+1. PreToolUse hook (blocks fake URLs, fake companies, fallback functions)
 2. Diff validator (rejects commits with fabrication patterns)
 3. This commit will be reverted if it gets through
 
 Examples of FORBIDDEN fabrications:
 - Fake company URLs: `https://www.energy-services-company.com.vn`
 - Fake company names: `Local Energy Services Co.`
-- Hardcoded percentages: `5.3% annually`
 - Fallback data functions: `getFallbackCompetitors()`, `getDefaultChartData()`
 - Hardcoded year arrays: `[2019, 2020, 2021, 2022, 2023]`
 - Estimated values: `$50B (estimated)`
@@ -69,7 +68,7 @@ If data is missing, the fix is in the RESEARCH PIPELINE, not in adding fake data
 If your fix adds ANY of these, it will be auto-reverted:
 - Arrays of hardcoded numbers [35, 33, 31, 29, 27]
 - Objects with hardcoded chartData/series/values
-- "Estimated revenue", "growth potential", "strategic fit" in added code
+- "Estimated revenue" or "estimated enterprise value" in added code
 - const defaultResult = { ... } or const fallbackData = { ... }
 
 ## WHEN YOU CANNOT FIX THE ISSUE
