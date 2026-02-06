@@ -46,26 +46,83 @@ except ImportError:
 # In-memory storage for git diffs per iteration (not persisted — reset each loop run)
 _recent_diffs: List[str] = []
 
-# Fabrication patterns — must match agent_guard.py
-FABRICATION_PATTERNS = [
-    r"https?://www\.\w+-\w+-\w+\.com\.\w{2}",  # Fake country-TLD URLs
-    r"getSupplementaryTexts|getDefaultChartData|getFallback\w*Content",
-    r"Local Energy Services Co\.",
-    r"\$\d+[BMK]\s*\(estimated\)",
-    r"\w+\s+Energy\s+Conservation\s+Act",
-    r"fallback(?:Result|Data|Companies|Regulations)",
-    r"\[\s*2019\s*,\s*2020\s*,\s*2021\s*,\s*2022\s*,\s*2023\s*\]",
-    r"\d+(?:\.\d+)?%\s*(?:annually|per\s*year|growth)",
-]
+# Import shared fabrication patterns (single source of truth)
+try:
+    from fabrication_patterns import check_fabrication as _shared_check_fabrication, FABRICATION_PATTERNS
+except ImportError:
+    logger.warning("fabrication_patterns module not found — using inline fallback")
+    FABRICATION_PATTERNS = [
+        r"https?://www\.\w+-\w+-\w+\.com\.\w{2}",
+        r"getFallback\w*Content|getDefault\w*Data",
+        r"fallback(?:Result|Data|Companies|Regulations)",
+    ]
+    _shared_check_fabrication = None
+
+# Import WSL-aware helpers for auto-revert
+try:
+    from shared.cli_utils import get_repo_cwd, get_subprocess_cwd, is_wsl_mode
+except ImportError:
+    get_repo_cwd = None
+    get_subprocess_cwd = None
+    is_wsl_mode = None
+
+
+async def _auto_revert_last_commit() -> bool:
+    """Revert the last commit and push, to undo fabricated content.
+    WSL-aware: handles both Windows-calling-WSL and native Linux.
+    Returns True if revert succeeded."""
+    try:
+        repo_path = get_repo_cwd() if get_repo_cwd else os.path.expanduser("~/xvasjack.github.io")
+        win_cwd, wsl_cwd = get_subprocess_cwd() if get_subprocess_cwd else (repo_path, None)
+
+        if wsl_cwd:
+            # WSL mode: call git through wsl
+            revert_cmd = ["wsl", "--cd", wsl_cwd, "-e", "git", "revert", "HEAD", "--no-edit"]
+            push_cmd = ["wsl", "--cd", wsl_cwd, "-e", "git", "push"]
+            effective_cwd = None
+        else:
+            revert_cmd = ["git", "revert", "HEAD", "--no-edit"]
+            push_cmd = ["git", "push"]
+            effective_cwd = win_cwd or repo_path
+
+        # Revert
+        proc = await asyncio.create_subprocess_exec(
+            *revert_cmd, cwd=effective_cwd,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+        if proc.returncode != 0:
+            logger.error(f"git revert failed: {stderr.decode()[:200]}")
+            return False
+
+        # Push the revert
+        proc = await asyncio.create_subprocess_exec(
+            *push_cmd, cwd=effective_cwd,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=30)
+        if proc.returncode != 0:
+            logger.error(f"git push (revert) failed: {stderr.decode()[:200]}")
+            return False
+
+        logger.info("Auto-revert: fabricated commit reverted and pushed")
+        return True
+    except Exception as e:
+        logger.error(f"Auto-revert failed: {e}")
+        return False
 
 
 def _validate_no_fabrication(git_diff: str) -> Optional[str]:
     """Validate that a git diff does not contain fabricated content.
     Returns error message if fabrication detected, None otherwise."""
-    import re
     if not git_diff:
         return None
 
+    # Use shared module (has broader patterns)
+    if _shared_check_fabrication is not None:
+        return _shared_check_fabrication(git_diff)
+
+    # Fallback: local check
     for pattern in FABRICATION_PATTERNS:
         match = re.search(pattern, git_diff, re.IGNORECASE)
         if match:
@@ -822,17 +879,20 @@ async def generate_fix_callback(
             "needs_human": True,
         }
 
-    # FABRICATION VALIDATION: Reject diffs containing fabricated content
+    # FABRICATION VALIDATION: Reject diffs containing fabricated content + auto-revert
     if result and result.success:
         fabrication_error = _validate_no_fabrication(full_git_diff)
         if fabrication_error:
-            logger.error(f"Fix REJECTED: {fabrication_error}")
+            logger.error(f"Fix REJECTED + REVERTING: {fabrication_error}")
+            reverted = await _auto_revert_last_commit()
+            revert_msg = " (commit reverted)" if reverted else " (REVERT FAILED — bad commit still on main!)"
             return {
                 "success": False,
                 "pr_number": None,
-                "description": f"Fix rejected: {fabrication_error}",
+                "description": f"Fix rejected{revert_msg}: {fabrication_error}",
                 "git_diff": git_diff,
                 "error": fabrication_error,
+                "fabrication_reverted": reverted,
             }
 
     # Category 1 fix: Check result.output not None before slice

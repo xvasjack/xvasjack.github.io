@@ -23,6 +23,20 @@ import sys
 import re
 import os
 
+# Import shared fabrication patterns
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'vm'))
+try:
+    from fabrication_patterns import check_fabrication as _shared_check_fabrication, FABRICATION_PATTERNS
+except ImportError:
+    # Fallback: if shared module not found, define minimal patterns inline
+    FABRICATION_PATTERNS = [
+        r"https?://www\.\w+-\w+-\w+\.com\.\w{2}",
+        r"getFallback\w*Content|getDefault\w*Data",
+        r"fallback(?:Result|Data|Companies|Regulations)",
+        r"\[\s*20\d{2}\s*(?:,\s*20\d{2}\s*){3,}\]",
+    ]
+    _shared_check_fabrication = None
+
 
 # Files/patterns that should NEVER be modified
 PROTECTED_PATTERNS = [
@@ -51,26 +65,6 @@ DANGEROUS_COMMANDS = [
     "rmdir /s",
     "git push origin main",
     "git push origin master",
-]
-
-# Patterns that indicate fabricated/hardcoded content (AGENT_MODE only)
-FABRICATION_PATTERNS = [
-    # Fake country-TLD URLs like www.energy-service-company.com.vn
-    r"https?://www\.\w+-\w+-\w+\.com\.\w{2}",
-    # Fabrication helper functions
-    r"getSupplementaryTexts|getDefaultChartData|getFallback\w*Content",
-    # Fake company names that appeared in bad commits
-    r"Local Energy Services Co\.",
-    # Estimated dollar amounts that look fabricated
-    r"\$\d+[BMK]\s*\(estimated\)",
-    # Fake regulation names
-    r"\w+\s+Energy\s+Conservation\s+Act",
-    # Fallback variables that mask empty data
-    r"fallback(?:Result|Data|Companies|Regulations)",
-    # Hardcoded year arrays for fake trends
-    r"\[\s*2019\s*,\s*2020\s*,\s*2021\s*,\s*2022\s*,\s*2023\s*\]",
-    # Fake percentage ranges
-    r"\d+(?:\.\d+)?%\s*(?:annually|per\s*year|growth)",
 ]
 
 
@@ -123,6 +117,12 @@ def check_fabrication(content: str) -> str:
     if not content:
         return ""
 
+    # Use shared module if available (has broader patterns)
+    if _shared_check_fabrication is not None:
+        result = _shared_check_fabrication(content)
+        return result or ""
+
+    # Fallback: local check with inline patterns
     for pattern in FABRICATION_PATTERNS:
         match = re.search(pattern, content, re.IGNORECASE)
         if match:
@@ -175,8 +175,8 @@ def main():
             _deny(f"AGENT GUARD: {reason} — file: {file_path}")
             return
 
-        # AGENT_MODE: Check for fabrication in Edit/Write to backend/
-        if agent_mode and "backend/" in file_path:
+        # AGENT_MODE: Check for fabrication in ALL file writes (not just backend/)
+        if agent_mode:
             content = tool_input.get("new_string", "") or tool_input.get("content", "")
             reason = check_fabrication(content)
             if reason:
@@ -196,6 +196,13 @@ def main():
             reason = check_bash_file_write(command)
             if reason:
                 _deny(f"AGENT GUARD: {reason}")
+                return
+
+            # AGENT_MODE: Check Bash command content for fabrication patterns
+            # Catches: echo "fake data" > file, heredocs, printf, etc.
+            reason = check_fabrication(command)
+            if reason:
+                _deny(f"AGENT GUARD: {reason} (in Bash command)")
                 return
 
     # Allow everything else
