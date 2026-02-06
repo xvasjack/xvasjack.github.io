@@ -413,6 +413,7 @@ DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - At minimum 3 named regulations with years and decree numbers (e.g., "Energy Conservation Act B.E. 2535 (1992)", "Power Development Plan 2024-2037", "Carbon Tax Act 2026")
 - Include enforcement reality: is this enforced or ignored?
 - ACTIONABLE INSIGHT per section: end each section with "Strategic recommendation: ..." or "Opportunity: ..." or "Client should consider: ..."
+- SOURCE CITATIONS: foundationalActs.keyMessage field MUST include at least one source citation in format "According to [regulatory body/ministry name], [year]" or "Source: [law name], effective [year]"
 - If you cannot find specific regulation names, use the most relevant laws from the country's energy/environmental regulatory framework — never leave this empty
 - MANDATORY: foundationalActs.acts array MUST have at least 3 entries with name, year, requirements, and enforcement fields all populated
 - MANDATORY: nationalPolicy.targets array MUST have at least 3 entries
@@ -685,19 +686,33 @@ Client context: ${clientContext}
 
 ${researchContext}
 
+CRITICAL — DESCRIPTION LENGTH REQUIREMENT (AUTO-REJECT IF NOT MET):
+=============================================================================
+EVERY SINGLE COMPANY DESCRIPTION MUST BE EXACTLY 50-80 WORDS.
+If you write a description with <50 words, the output will be REJECTED.
+=============================================================================
+
+EXAMPLE OF VALID 50+ WORD DESCRIPTION:
+"ABC Energy (revenue $45M, 2024) operates 180+ industrial efficiency contracts across 7 provinces with 12% annual growth since 2019. Strong government relationships and 23-year track record in food/beverage sector. Weakness: limited technology capabilities. Strategic fit for client: established customer base, needs foreign technology partner for next-generation solutions. Recommend approaching for 60/40 JV structure given complementary strengths in technology and market access."
+(Word count: 63 words ✓)
+
+EACH DESCRIPTION MUST INCLUDE ALL 4 COMPONENTS:
+1. FINANCIAL METRIC: revenue/market share/valuation with year
+2. SCALE INDICATOR: employees/locations/customers/contracts with number
+3. COMPETITIVE ASSESSMENT: strengths + weaknesses (both required)
+4. STRATEGIC RECOMMENDATION: specific action verb (recommend/consider/approach/target) + reasoning
+
 DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - At least 3 named companies per category with: investment year, structure (JV/acquisition/greenfield), stake %, partner name, revenue
 - At least 1 detailed case study per major competitor: customer name, what they did, outcome (CO2 tons, MW, revenue)
-- For each company: description of EXACTLY 50-80 words MINIMUM (count them). MUST include: (1) specific revenue OR market share with year, (2) growth rate OR scale metric (employees/locations), (3) competitive positioning (what makes them different), (4) strategic relevance (why client should care). Example: "ABC Energy (revenue $45M, 2024) operates 180+ industrial efficiency contracts across 7 provinces with 12% annual growth since 2019. Strong government relationships and 23-year track record in food/beverage sector. Weakness: limited technology capabilities. Strategic fit for client: established customer base, needs foreign technology partner for next-generation solutions. Recommend approaching for 60/40 JV structure."
 - Website URLs for ALL companies — use the company's actual corporate website (e.g., "https://www.engie.com"). NEVER omit this field. Every player object MUST have a "website" field starting with "https://".
 - For each data point: "so what" — what it means for the client
 - ACTIONABLE INSIGHT per category: end each players section with "marketInsight" or "competitiveInsight" using language like "recommend approaching", "opportunity to partner", "strategic fit because", "should consider acquiring"
+- SOURCE CITATIONS: Every section must cite at least ONE source. Use format "According to [source name], [year]" or "Source: [company name] annual report, [year]" within the marketInsight/competitiveInsight text.
 - If you cannot find exact revenue/market share, provide estimates with "estimated" qualifier — never leave description fields empty or under 50 words
 - MANDATORY: japanesePlayers.players must have at least 2 entries, localMajor.players at least 3 entries, foreignPlayers.players at least 2 entries
-- MANDATORY: Every player description must be 50-80 words MINIMUM (word count check: split by spaces, filter empty, must be >=50). If you lack specific data, describe the company's general capabilities, market positioning, estimated scale, and strategic relevance
 - MANDATORY: caseStudy must have company, entryYear, entryMode, investment, and outcome all populated with specific data
 - CRITICAL: Research data may be empty due to API issues. In this case, you MUST use your training knowledge to name REAL companies operating in ${country}'s ${industry} sector. For Vietnamese energy services: include state-owned utilities (EVN), major local ESCOs, Japanese trading companies with presence (Marubeni, JERA), and international firms (Schneider, Siemens). Include their actual corporate website URLs. NEVER return empty player arrays — use training knowledge to populate with real company names, estimated market positions, and strategic context.
-- EVERY description must include strategic context: why this company matters, what threat/opportunity it presents, and a recommendation (e.g., "recommend approaching for JV", "should consider as acquisition target", "strategic fit for technology licensing")
 
 Return JSON:
 {
@@ -830,20 +845,47 @@ ${JSON.stringify(
   2
 )}
 
+CRITICAL — INSIGHT STRUCTURE REQUIREMENT (AUTO-REJECT IF NOT MET):
+=============================================================================
+EVERY INSIGHT IN summary.keyInsights MUST FOLLOW THIS 4-PART CHAIN:
+1. DATA: [specific number/percentage + year/date]
+2. SO WHAT: [implication - why it matters]
+3. NOW WHAT: [specific action with verb: recommend/target/approach/consider]
+4. BY WHEN: [timing window with month/quarter/year]
+=============================================================================
+
+EXAMPLE OF VALID INSIGHT WITH COMPLETE CHAIN:
+{
+  "title": "Enforcement backlog creates 18-month entry window",
+  "data": "Energy audits mandatory for 4,200 factories >2MW but only 23 DEDE auditors exist (2024 data)",
+  "pattern": "Enforcement backlog creates 18-month compliance window before DEDE hires 40 new auditors in 2026",
+  "implication": "Recommend targeting non-compliant factories in Q1 2025 before regulatory crackdown accelerates in late 2026"
+}
+✓ Has number (4,200, 23) ✓ Has year (2024, 2026) ✓ Has causal link (because X, which creates Y) ✓ Has action+timing (target Q1 2025 before late 2026)
+
+BAD INSIGHT (WILL BE REJECTED):
+{
+  "title": "Market is growing",
+  "data": "The market is expanding",
+  "pattern": "Growth creates opportunities",
+  "implication": "Companies should consider entering"
+}
+✗ No numbers ✗ No dates ✗ No causal chain ✗ No specific timing
+
 DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - For each opportunity: size it in dollars, name the timing window, and state "recommend" or "should consider" action
 - For each barrier: rate severity, provide specific mitigation with actionable next steps
-- For each insight: FOLLOW THIS EXACT STRUCTURE: [DATA POINT with number/date] → [SO WHAT: why it matters] → [NOW WHAT: specific action] → [BY WHEN: timing window]. Example: "Energy audits mandatory for 4,200 factories >2MW but only 23 DEDE auditors exist (2024 data) → enforcement backlog creates 18-month compliance window → recommend targeting non-compliant factories in Q1 2025 → before DEDE hires 40 new auditors in 2026." NEVER write vague insights like "market is growing" or "opportunity exists."
 - Timing triggers with specific dates (not "soon") — e.g., "BOI incentives expire December 2027"
 - Named companies for partnerships and case studies with website URLs
 - Go/No-Go with evidence-based criteria and clear "next steps" recommendations
 - EVERY section must contain actionable language: "recommend", "opportunity", "should consider", "growth potential", "strategic fit", "next steps", "outlook"
+- SOURCE CITATIONS: Every major section (opportunities, entryStrategy, implementation) must cite at least ONE source. Use format "According to [source], [year]" or "Industry reports indicate..." within the text.
 - Partners in partnerAssessment MUST have "website" field with actual URL (starting with "https://") and "description" of 50-80 words MINIMUM (word count check applies)
 - MANDATORY: partnerAssessment.partners must have at least 3 entries each with website and 50-80 word description
 - MANDATORY: entryStrategy.options must have exactly 3 entries (JV, Acquisition, Greenfield) with all fields populated
 - MANDATORY: implementation.phases must have exactly 3 entries with activities, milestones, and investment
 - MANDATORY: summary.opportunities must have at least 3 entries, summary.obstacles at least 2 entries
-- MANDATORY: summary.keyInsights must have at least 3 entries with title, data, pattern, and implication. Each insight MUST include: (1) a number or percentage, (2) a year/date, (3) a causal explanation ("because X, which creates Y"), (4) a specific recommended action with timing.
+- MANDATORY: summary.keyInsights must have at least 3 entries. Each MUST include: (1) a number or percentage, (2) a year/date, (3) a causal explanation ("because X, which creates Y"), (4) a specific recommended action with timing.
 - EVERY section and sub-section MUST contain actionable language: "recommend", "opportunity", "should consider", "growth potential", "strategic fit", "next steps", "outlook"
 - CRITICAL: If research data is sparse, use training knowledge to provide realistic assessments. NEVER return empty arrays or placeholder text.
 
