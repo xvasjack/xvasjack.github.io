@@ -17,10 +17,10 @@ _logger = logging.getLogger("config")
 
 
 # M1: Single source of truth for Claude model
-CLAUDE_MODEL = "opus"
+# Upgraded to Opus 4.6 (Feb 2026): 1M context, adaptive thinking, better agentic coding
+CLAUDE_MODEL = "claude-opus-4-6"
 # Full model ID for direct Anthropic API calls (research.py, template_learner.py, ppt_analyzer.py)
-# CLI accepts "opus" as alias, but API requires the full ID
-CLAUDE_API_MODEL = "claude-opus-4-5-20251101"
+CLAUDE_API_MODEL = "claude-opus-4-6-20260205"
 
 
 # F1: Centralized timeout configuration

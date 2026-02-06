@@ -27,6 +27,12 @@ HISTORY_PATH = os.path.join(
     "backend", "market-research", "issue-history.json"
 )
 
+# Successful fix memory — stores fixes that worked so we don't reinvent the wheel
+SUCCESS_MEMORY_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "successful_fixes.json"
+)
+
 
 class IssueCategory:
     CONTENT_DEPTH = "content_depth"
@@ -81,6 +87,140 @@ def append_iteration(iteration: Dict[str, Any], path: Optional[str] = None) -> N
     os.makedirs(os.path.dirname(p), exist_ok=True)
     with open(p, 'w') as f:
         json.dump(history, f, indent=2)
+
+
+# =============================================================================
+# SUCCESSFUL FIX MEMORY — Learn from what worked
+# =============================================================================
+
+
+def load_success_memory(path: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Load successful fix memory"""
+    p = path or SUCCESS_MEMORY_PATH
+    if not os.path.exists(p):
+        return []
+    try:
+        with open(p, 'r') as f:
+            data = json.load(f)
+        return data.get("fixes", []) if isinstance(data, dict) else data
+    except (json.JSONDecodeError, IOError) as e:
+        logger.error(f"Failed to load success memory: {e}")
+        return []
+
+
+def save_successful_fix(
+    issues: List[str],
+    fix_description: str,
+    git_diff: str,
+    service_name: str,
+    diagnosis: str = "",
+    strategy: str = "",
+    path: Optional[str] = None,
+) -> None:
+    """
+    Record a successful fix for future reuse.
+    Called when a fix iteration passes validation.
+    """
+    p = path or SUCCESS_MEMORY_PATH
+    memory = {"fixes": []}
+    if os.path.exists(p):
+        try:
+            with open(p, 'r') as f:
+                memory = json.load(f)
+        except (json.JSONDecodeError, IOError):
+            memory = {"fixes": []}
+
+    if not isinstance(memory, dict):
+        memory = {"fixes": memory if isinstance(memory, list) else []}
+
+    # Build issue signature for matching
+    categories = [categorize_issue(i) for i in issues if i]
+    dominant_cat = max(set(categories), key=categories.count) if categories else "unknown"
+
+    fix_record = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "service_name": service_name,
+        "issues": issues[:10],  # Limit stored issues
+        "issue_categories": list(set(categories)),
+        "dominant_category": dominant_cat,
+        "issue_signature": _hash_issues(issues),
+        "fix_description": fix_description[:500],
+        "git_diff": git_diff[:2000],  # Truncate large diffs
+        "diagnosis": diagnosis,
+        "strategy": strategy,
+    }
+
+    memory.setdefault("fixes", []).append(fix_record)
+
+    # Keep last 100 successful fixes
+    memory["fixes"] = memory["fixes"][-100:]
+
+    os.makedirs(os.path.dirname(p), exist_ok=True)
+    with open(p, 'w') as f:
+        json.dump(memory, f, indent=2)
+
+    logger.info(f"Saved successful fix for {dominant_cat} issues")
+
+
+def get_successful_fix_for_issues(
+    issues: List[str],
+    service_name: Optional[str] = None,
+    path: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Find a past successful fix that matches current issues.
+
+    Matching priority:
+    1. Exact issue signature match (same issues)
+    2. Same dominant category + similar issue count
+    3. Same service + dominant category
+
+    Returns the best matching fix record or None.
+    """
+    memory = load_success_memory(path)
+    if not memory:
+        return None
+
+    # Build current issue profile
+    categories = [categorize_issue(i) for i in issues if i]
+    dominant_cat = max(set(categories), key=categories.count) if categories else "unknown"
+    current_sig = _hash_issues(issues)
+
+    best_match = None
+    best_score = 0
+
+    for fix in memory:
+        score = 0
+
+        # Exact signature match = instant win
+        if fix.get("issue_signature") == current_sig:
+            logger.info("Using past pattern... (exact match)")
+            return fix
+
+        # Category match
+        if fix.get("dominant_category") == dominant_cat:
+            score += 3
+
+        # Service match
+        if service_name and fix.get("service_name") == service_name:
+            score += 2
+
+        # Category overlap
+        fix_cats = set(fix.get("issue_categories", []))
+        current_cats = set(categories)
+        overlap = len(fix_cats & current_cats)
+        score += overlap
+
+        if score > best_score:
+            best_score = score
+            best_match = fix
+
+    # Require minimum score of 3 to suggest a past fix
+    if best_score >= 3 and best_match:
+        logger.info(f"Using past pattern... (score={best_score})")
+        return best_match
+
+    return None
 
 
 def categorize_issue(issue_text: str) -> str:
