@@ -141,18 +141,86 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
     recordTokens('kimi-k2.5', inputTokens, outputTokens);
 
     // Debug: log if response has tool calls or empty content
-    const content = data.choices?.[0]?.message?.content || '';
+    let content = data.choices?.[0]?.message?.content || '';
     const toolCalls = data.choices?.[0]?.message?.tool_calls;
+
+    // If Kimi returned tool_calls without content, it wants to use web search
+    // We need to continue the conversation to get the final answer
+    if (!content && toolCalls && useWebSearch) {
+      console.log('  [Kimi] Web search tool called, continuing conversation for final answer...');
+      try {
+        // Add assistant's tool call message to conversation
+        messages.push({
+          role: 'assistant',
+          content: '',
+          tool_calls: toolCalls,
+        });
+
+        // Add tool results (simulate successful web search)
+        for (const toolCall of toolCalls) {
+          messages.push({
+            role: 'tool',
+            tool_call_id: toolCall.id,
+            content: 'Web search completed. Please analyze the findings and provide your response.',
+          });
+        }
+
+        // Make second API call to get final answer
+        const followupData = await withRetry(
+          async () => {
+            const followupResponse = await fetch(`${kimiBaseUrl}/chat/completions`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${process.env.KIMI_API_KEY}`,
+              },
+              body: JSON.stringify({
+                model: 'kimi-k2.5',
+                messages,
+                max_tokens: maxTokens,
+                temperature: 1,
+              }),
+            });
+
+            if (!followupResponse.ok) {
+              const errorText = await followupResponse.text();
+              if (followupResponse.status >= 500 || followupResponse.status === 429) {
+                throw new Error(
+                  `Kimi followup HTTP ${followupResponse.status}: ${errorText.substring(0, 100)}`
+                );
+              }
+              return null;
+            }
+
+            return await followupResponse.json();
+          },
+          3,
+          2000,
+          'Kimi followup'
+        );
+
+        if (followupData && followupData.choices?.[0]?.message?.content) {
+          content = followupData.choices[0].message.content;
+          console.log(`  [Kimi] Followup successful, got ${content.length} chars`);
+
+          // Track followup tokens
+          const followupInput = followupData.usage?.prompt_tokens || 0;
+          const followupOutput = followupData.usage?.completion_tokens || 0;
+          trackCost('kimi-k2.5', followupInput, followupOutput);
+          recordTokens('kimi-k2.5', followupInput, followupOutput);
+        }
+      } catch (followupErr) {
+        console.error('  [Kimi] Followup failed:', followupErr?.message);
+      }
+    }
 
     // Validate research quality
     let researchQuality = 'good';
-    if (!content && toolCalls) {
+    if (!content) {
       console.log(
-        '  [Kimi] Response contains tool_calls instead of content - web search may need handling'
+        '  [Kimi] Empty response after followup - finish_reason:',
+        data.choices?.[0]?.finish_reason
       );
-      researchQuality = 'failed';
-    } else if (!content) {
-      console.log('  [Kimi] Empty response - finish_reason:', data.choices?.[0]?.finish_reason);
       researchQuality = 'failed';
     } else if (content.length < 100) {
       console.log(`  [Kimi] Thin response (${content.length} chars) - may be incomplete`);

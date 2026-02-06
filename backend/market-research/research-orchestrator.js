@@ -412,6 +412,7 @@ DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - Specific client implications for a ${clientContext}
 - At minimum 3 named regulations with years and decree numbers (e.g., "Energy Conservation Act B.E. 2535 (1992)", "Power Development Plan 2024-2037", "Carbon Tax Act 2026")
 - Include enforcement reality: is this enforced or ignored?
+- SOURCE CITATIONS REQUIRED: At least one source attribution for policy section (e.g., "Source: Ministry of Energy 2024", "According to World Bank Doing Business Report 2025"). Policy claims need verification context.
 - ACTIONABLE INSIGHT per section: end each section with "Strategic recommendation: ..." or "Opportunity: ..." or "Client should consider: ..."
 - SOURCE CITATIONS: foundationalActs.keyMessage field MUST include at least one source citation in format "According to [regulatory body/ministry name], [year]" or "Source: [law name], effective [year]"
 - If you cannot find specific regulation names, use the most relevant laws from the country's energy/environmental regulatory framework — never leave this empty
@@ -705,6 +706,9 @@ EACH DESCRIPTION MUST INCLUDE ALL 4 COMPONENTS:
 DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - At least 3 named companies per category with: investment year, structure (JV/acquisition/greenfield), stake %, partner name, revenue
 - At least 1 detailed case study per major competitor: customer name, what they did, outcome (CO2 tons, MW, revenue)
+- For each company: description of EXACTLY 50-80 words MINIMUM (count them). MUST include: (1) specific revenue OR market share with year, (2) growth rate OR scale metric (employees/locations), (3) competitive positioning (what makes them different), (4) strategic relevance (why client should care). Example: "ABC Energy (revenue $45M, 2024) operates 180+ industrial efficiency contracts across 7 provinces with 12% annual growth since 2019. Strong government relationships and 23-year track record in food/beverage sector. Weakness: limited technology capabilities. Strategic fit for client: established customer base, needs foreign technology partner for next-generation solutions. Recommend approaching for 60/40 JV structure."
+- CRITICAL TEXT LENGTH LIMIT: Keep descriptions between 50-80 words (NOT 100+) to prevent overflow on slides. Target 65 words. Descriptions >90 words will overflow. Be concise while maintaining depth.
+- SOURCE CITATIONS REQUIRED: Include at least one source attribution per section (e.g., "Source: Bloomberg 2024", "According to Vietnam Energy Association"). Competitive intelligence needs source context.
 - Website URLs for ALL companies — use the company's actual corporate website (e.g., "https://www.engie.com"). NEVER omit this field. Every player object MUST have a "website" field starting with "https://".
 - For each data point: "so what" — what it means for the client
 - ACTIONABLE INSIGHT per category: end each players section with "marketInsight" or "competitiveInsight" using language like "recommend approaching", "opportunity to partner", "strategic fit because", "should consider acquiring"
@@ -875,6 +879,23 @@ BAD INSIGHT (WILL BE REJECTED):
 DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - For each opportunity: size it in dollars, name the timing window, and state "recommend" or "should consider" action
 - For each barrier: rate severity, provide specific mitigation with actionable next steps
+- STRATEGIC INSIGHTS CHAIN (CRITICAL): Each insight paragraph MUST follow this 4-part structure:
+  1. DATA POINT: Include a specific number, percentage, or date
+  2. SO WHAT (implication): Explain why this matters - what it reveals or creates
+  3. NOW WHAT (action): State a specific recommended action ("recommend targeting...", "should prioritize...", "opportunity to enter...")
+  4. BY WHEN (timing): Include a timing window, deadline, or urgency trigger
+
+  Example: "4,200 factories >2MW face mandatory energy audits (data point with number), but only 23 DEDE auditors exist as of 2024 (data point with year) → enforcement backlog creates 18-month compliance window before regulations tighten (implication) → recommend targeting non-compliant factories in food/beverage sector where penalties are highest (action) → enter Q1 2025 before DEDE completes hiring 40 new auditors in late 2026 (timing)."
+
+  NEVER write shallow insights like "market is growing" or "opportunity exists" or "regulations are changing" without the full data→implication→action→timing chain.
+
+- INSIGHT QUALITY REQUIREMENTS: Every insight in summary.keyInsights must score 4+ on this rubric:
+  * Contains specific number/percentage: +2 points
+  * Contains year/date/timeframe: +2 points
+  * Contains causal explanation (because/which creates/due to): +2 points
+  * Contains specific action verb (recommend/should/opportunity to): +2 points
+  * Contains timing window (by when/before/after): +2 points
+  Minimum passing score: 4/10. Target score: 8+/10.
 - Timing triggers with specific dates (not "soon") — e.g., "BOI incentives expire December 2027"
 - Named companies for partnerships and case studies with website URLs
 - Go/No-Go with evidence-based criteria and clear "next steps" recommendations
