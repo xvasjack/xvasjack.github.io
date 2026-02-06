@@ -90,23 +90,67 @@ better than a commit that injects fake data.
 - Iteration 5+: STOP patching same files. The root cause is in a DIFFERENT file. Trace the data flow.
 - If you changed the same file 3+ times without improvement: the bug is UPSTREAM of that file.
 
-## THINK BEFORE FIXING — MANDATORY
+## MANDATORY DEEP ANALYSIS PROTOCOL
 
-Before writing ANY code, analyze from multiple angles:
+Before writing ANY code, you MUST complete these steps. Shallow fixes get reverted.
 
-1. ROOT CAUSE: What pipeline stage actually fails? Trace the data flow.
-   Read the code. Don't guess.
-2. THREE APPROACHES: List 3 different ways to fix this.
-3. FOR EACH APPROACH, ask:
+### Step 1: Understand What Was Actually Produced
+- Read the "Content Pipeline Diagnostic" section below (if present)
+- Read the slide text excerpts — this is what the pipeline ACTUALLY generated
+- Identify: what SPECIFIC content is missing? What exists but is generic?
+
+### Step 2: Trace the Data Flow (read the code, don't guess)
+1. Open research-orchestrator.js → find the synthesize*() function for the failing section
+2. Read the prompt string — find the DEPTH REQUIREMENTS section
+3. Does the prompt ALREADY ask for what's missing?
+   - YES → problem is UPSTREAM: research data is thin. Fix search queries in research-agents.js
+   - NO → add the specific requirement to the prompt
+
+### Step 3: Design Your Fix
+1. ROOT CAUSE: [which function in which file loses/corrupts the data?]
+2. Why previous fixes failed: [what did they change vs what should change?]
+3. My approach: [file:function to modify, and WHY]
+4. List 3 approaches. For EACH:
    - Does this fix the root cause or just patch the symptom?
-   - Could this make something else worse?
-   - Does this add ANY hardcoded content? (if yes → REJECTED by hook)
-   - Will this work for ANY country/industry, not just the failing one?
-4. PICK THE BEST: Least risk, fixes root cause, generalizes.
-5. COMMIT MESSAGE: Explain WHY this approach, not just WHAT changed.
+   - Does this add ANY hardcoded content? (if yes → REJECTED)
+   - Will this work for ANY country/industry? (if no → REJECTED)
+   - Would this produce the SAME output regardless of research data? (if yes → WRONG)
+5. PICK the approach that fixes the root cause and generalizes.
+
+### Step 4: Verify Before Committing
+- Run `npm test`
+- Read your own diff. Does it contain ANY fabricated content strings? → DELETE THEM
+- Commit message: explain WHY this approach, not just WHAT changed
 
 You are fixing a PIPELINE. Your fix must generalize.
 If the same issue could recur with different inputs, your fix is wrong.
+
+## Decision Tree — What Kind of Fix Is This?
+
+ASK YOURSELF: Is the OUTPUT content wrong, or is the FORMATTING wrong?
+
+### If CONTENT is wrong (thin, generic, missing data, no insights):
+-> The fix is almost always in the AI PROMPT TEXT, not in code.
+-> Go to research-orchestrator.js
+-> Find the synthesize*() function for the failing section
+-> Look at the prompt string — it starts with "You are synthesizing..."
+-> Edit the DEPTH REQUIREMENTS section of that prompt
+-> Example: If market data is shallow, add "Include specific market size figures in USD with source year" to the prompt
+-> WRONG APPROACH: Adding code in ppt-single-country.js to pad/enrich thin content
+
+### If FORMATTING is wrong (wrong fonts, positions, colors, overflow):
+-> The fix is in template-patterns.json (values) or ppt-utils.js (code that reads them)
+-> DO NOT touch research-orchestrator.js prompts
+-> Example: If title font is wrong, check template-patterns.json title.fontSize
+
+### If LAYOUT is wrong (wrong slide pattern, chart missing, wrong element arrangement):
+-> The fix is in ppt-utils.js choosePattern() or ppt-single-country.js slide building
+-> Check template-patterns.json for the expected pattern definition
+
+### If DATA EXISTS but is MISSING from slides:
+-> The fix is in ppt-single-country.js — data is being dropped during slide generation
+-> Trace the data flow: research-orchestrator.js output → ppt-single-country.js input
+-> Check if the expected field name matches what the slide builder reads
 
 ## What to Fix
 {FIX_PROMPT}

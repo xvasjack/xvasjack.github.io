@@ -162,17 +162,19 @@ SCOPE_FILES = {
     "synthesis": "research-orchestrator.js, ppt-single-country.js",
     "layout": "ppt-utils.js, ppt-single-country.js, template-patterns.json",
     "formatting": "template-patterns.json, ppt-utils.js",
+    "mixed": "research-orchestrator.js, ppt-single-country.js, ppt-utils.js, template-patterns.json",
 }
 SCOPE_DONT_TOUCH = {
     "research": "ppt-single-country.js, ppt-utils.js, template-patterns.json",
     "synthesis": "template-patterns.json, ppt-utils.js",
     "layout": "research-orchestrator.js, ai-clients.js",
     "formatting": "research-orchestrator.js, ai-clients.js, ppt-single-country.js",
+    "mixed": "",  # No restrictions — issues span multiple areas
 }
 
 
 def _classify_fix_scope(issues: List[str]) -> str:
-    """Classify issues into dominant scope: research|synthesis|layout|formatting."""
+    """Classify issues into dominant scope: research|synthesis|layout|formatting|mixed."""
     if not HAS_ISSUE_DETECTOR:
         return "layout"
     counts = {"research": 0, "synthesis": 0, "layout": 0, "formatting": 0}
@@ -186,7 +188,56 @@ def _classify_fix_scope(issues: List[str]) -> str:
             counts["layout"] += 1
         elif cat == "layout_formatting":
             counts["formatting"] += 1
-    return max(counts, key=counts.get) if any(counts.values()) else "layout"
+    total = sum(counts.values())
+    if total == 0:
+        return "layout"
+    dominant = max(counts, key=counts.get)
+    # Fix 5: When no single category dominates (>60%), use mixed scope
+    if counts[dominant] / total < 0.6:
+        return "mixed"
+    return dominant
+
+
+# Fix 6: Tell agent EXACTLY what to modify within each scope (prompt vs code vs config)
+SCOPE_WHAT_TO_CHANGE = {
+    "research": (
+        "CHANGE TYPE: AI prompt text + API query parameters\n"
+        "WHERE: The prompt strings inside synthesizePolicy(), synthesizeMarket(), "
+        "synthesizeCompetitors(), synthesizeSummary() in research-orchestrator.js\n"
+        "Look for the 'DEPTH REQUIREMENTS' sections inside each prompt string.\n"
+        "Also check: search query construction in research-agents.js\n"
+        "DO NOT add code workarounds to pad thin content — fix the prompt that generates it."
+    ),
+    "synthesis": (
+        "CHANGE TYPE: AI prompt text OR data-passing code\n"
+        "WHERE: If content is thin/generic -> edit prompt strings in research-orchestrator.js "
+        "(synthesize* functions, DEPTH REQUIREMENTS sections)\n"
+        "If content exists but gets lost during slide generation -> edit data mapping in "
+        "ppt-single-country.js (how research results are read and placed on slides)\n"
+        "DO NOT add enrichDescription-style workarounds that pad thin data with generic text."
+    ),
+    "layout": (
+        "CHANGE TYPE: JavaScript layout logic OR JSON config\n"
+        "WHERE: choosePattern() in ppt-utils.js (pattern selection logic), "
+        "slide building functions in ppt-single-country.js (element positioning), "
+        "or pattern definitions in template-patterns.json (position/size values)\n"
+        "DO NOT touch research-orchestrator.js prompts."
+    ),
+    "formatting": (
+        "CHANGE TYPE: JSON config values OR pptxgenjs parameters\n"
+        "WHERE: template-patterns.json (font sizes, colors, positions) OR "
+        "pptxgenjs calls in ppt-utils.js (addText, addShape params)\n"
+        "DO NOT touch research content or prompts."
+    ),
+    "mixed": (
+        "CHANGE TYPE: Mixed — issues span multiple areas\n"
+        "Analyze each issue independently and change the appropriate layer:\n"
+        "- Content quality issues -> edit AI prompt text in research-orchestrator.js\n"
+        "- Layout issues -> edit ppt-utils.js or template-patterns.json\n"
+        "- Data loss issues -> trace the data flow from research-orchestrator.js through "
+        "ppt-single-country.js to find where data gets dropped"
+    ),
+}
 
 
 # 0.7: Wrap browser imports in try/except — GUI deps may not be available
@@ -581,14 +632,11 @@ def _load_formatting_spec(service_name: str) -> str:
     try:
         with open(spec_path, "r", encoding="utf-8") as f:
             content = f.read()
-        # Truncate to avoid prompt bloat — keep sections 1-3 (fonts, layout, density)
-        lines = content.split("\n")
-        truncated = []
-        for line in lines:
-            truncated.append(line)
-            if line.startswith("## 4"):  # Stop before chart usage section
-                break
-        return "\n".join(truncated).strip()
+        # Fix 2: Load full spec — chart guidelines, insight framework, slide type
+        # templates, and quality checklist are directly relevant to common failures
+        # (insufficient_data_visualization, missing_strategic_insights).
+        # Prompt size is already capped by _build_prompt's 50K truncation.
+        return content.strip()
     except Exception:
         return ""
 
@@ -658,16 +706,51 @@ async def _diagnose_root_cause(
         "table_overflow": "Table content exceeds bounds. Need to adjust sizing or split across slides.",
     }
 
+    # Fix 8: Specific function/file references so the agent knows exactly where to look
     strategy_map = {
-        "empty_data": "1) Check research-orchestrator.js query construction, 2) Verify API responses, 3) Add fallback data sources",
-        "content_depth": "1) Add depth guidance to prompts, 2) Increase research specificity, 3) Add few-shot examples",
-        "pattern_selection": "1) Review choosePattern logic, 2) Verify dataType classification, 3) Add pattern debug logging",
-        "layout_formatting": "1) Re-extract positions from template, 2) Update template-patterns.json, 3) Match ppt-utils.js to spec",
-        "api_failure": "1) Check API key, 2) Implement retry logic, 3) Add fallback provider",
-        "research_quality": "1) Use more specific queries, 2) Add year ranges, 3) Verify web search results",
-        "insight_missing": "1) Add explicit insight prompts, 2) Chain 'so what' questions, 3) Add implication generation",
-        "chart_error": "1) Validate data format, 2) Check series arrays, 3) Ensure numeric types",
-        "table_overflow": "1) Increase maxH, 2) Reduce font size, 3) Split across slides",
+        "empty_data": (
+            "1) Check research-orchestrator.js: are the search queries in research-agents.js returning results? "
+            "2) Check ai-clients.js: is the API response being parsed correctly? "
+            "3) Check research-orchestrator.js orchestrateResearch(): is the pipeline sequencing correct?"
+        ),
+        "content_depth": (
+            "1) Edit the PROMPT TEXT in research-orchestrator.js synthesizeMarket() — "
+            "find the 'DEPTH REQUIREMENTS' section and add more specific requirements. "
+            "2) Also check synthesizePolicy() and synthesizeCompetitors() prompts. "
+            "3) Do NOT add code in ppt-single-country.js to pad thin content — fix the prompt."
+        ),
+        "pattern_selection": (
+            "1) Review choosePattern() in ppt-utils.js — the dataType being assigned doesn't match actual data. "
+            "2) Verify the data classification logic matches template-patterns.json pattern names. "
+            "3) Check ppt-single-country.js for where dataType is set before choosePattern() is called."
+        ),
+        "layout_formatting": (
+            "1) Re-extract positions from reference PPTX into template-patterns.json. "
+            "2) Check ppt-utils.js addText/addShape calls — are they reading from template-patterns.json? "
+            "3) Match x/y/w/h/fontSize values in ppt-utils.js to the spec in template-patterns.json."
+        ),
+        "api_failure": "1) Check API key validity, 2) Check rate limits in ai-clients.js, 3) Add fallback provider chain",
+        "research_quality": (
+            "1) Edit search query construction in research-agents.js — use more specific terms with year ranges. "
+            "2) Verify Kimi API in ai-clients.js is returning web search results (not just training data). "
+            "3) Check research-orchestrator.js for where search results are filtered or truncated."
+        ),
+        "insight_missing": (
+            "1) Edit the PROMPT TEXT in research-orchestrator.js synthesizeSummary() — "
+            "add explicit 'so what' and 'now what' prompting. "
+            "2) Look for the insight generation section in the prompt string. "
+            "3) Add examples of what good insights look like (specific data + implication + timing)."
+        ),
+        "chart_error": (
+            "1) Validate data format in ppt-single-country.js before calling addChart(). "
+            "2) Check series/categories arrays are not empty and values are numeric. "
+            "3) Check ppt-utils.js chart helper functions for type mismatches."
+        ),
+        "table_overflow": (
+            "1) Increase maxH in template-patterns.json for the relevant pattern. "
+            "2) Reduce fontSize in ppt-utils.js table rendering calls. "
+            "3) Add slide-splitting logic in ppt-single-country.js when row count exceeds threshold."
+        ),
     }
 
     return {
@@ -680,11 +763,78 @@ async def _diagnose_root_cause(
     }
 
 
+def _build_deep_analysis_context(analysis: Dict[str, Any], diagnosis: Optional[Dict] = None) -> str:
+    """Build context showing the agent what was actually produced and where quality dropped.
+
+    Combines output excerpts + diagnostic scores + diagnosis steps into one block.
+    Budget: ~3KB. Only meaningful for content/insight issues.
+    """
+    if not analysis:
+        return ""
+    comparison = analysis.get("comparison", {})
+    raw = analysis.get("analysis", {})
+    if not raw:
+        return ""
+
+    lines = ["\n\n## Content Pipeline Diagnostic"]
+
+    # Scores
+    depth = comparison.get("content_depth_score", "?")
+    insight = comparison.get("insight_score", "?")
+    lines.append(f"- Content depth score: {depth}/100")
+    lines.append(f"- Insight quality score: {insight}/10")
+
+    # What's specifically missing
+    if comparison.get("missing_regulations"):
+        lines.append(f"- MISSING: Named regulations with years (found {comparison.get('regulation_count', 0)}, need >=3)")
+    if comparison.get("missing_data_points"):
+        lines.append(f"- MISSING: Quantified data points (found {comparison.get('data_point_count', 0)}, need >=15)")
+    if comparison.get("missing_companies"):
+        lines.append(f"- MISSING: Named companies (found {comparison.get('company_indicator_count', 0)}, need >=3)")
+
+    # Actual output excerpts — show what was ACTUALLY generated
+    slides_data = raw.get("slides", []) if isinstance(raw, dict) else []
+    if slides_data:
+        # Slide structure
+        titles = [s.get("title", "(no title)") for s in slides_data]
+        lines.append(f"\n### Slide Structure ({len(slides_data)} slides)")
+        for i, t in enumerate(titles[:20], 1):
+            lines.append(f"  {i}. {t}")
+
+        # Thinnest content slides (skip title slide)
+        content_slides = [s for s in slides_data if s.get("number", 0) > 1]
+        content_slides.sort(key=lambda s: len(s.get("all_text", "") or ""))
+        thinnest = content_slides[:3]
+        if thinnest:
+            lines.append(f"\n### Thinnest Slides (actual output text)")
+            for s in thinnest:
+                text = (s.get("all_text", "") or "")[:500]
+                word_count = len(text.split())
+                lines.append(f"\n**Slide {s.get('number', '?')} ({word_count} words): {s.get('title', '(no title)')}**")
+                lines.append(f"```\n{text}\n```")
+
+        # Total word count
+        total_words = sum(len((s.get("all_text", "") or "").split()) for s in slides_data)
+        lines.append(f"\n- Total word count across all slides: {total_words}")
+    elif not slides_data:
+        lines.append("\n- No slides found in output")
+
+    # Diagnosis steps
+    lines.append(f"\n### DIAGNOSE before fixing:")
+    lines.append("1. Read research-orchestrator.js synthesize*() — does the DEPTH REQUIREMENTS section ask for what's missing?")
+    lines.append("2. YES requirements exist but output thin → research data itself is sparse → fix search queries in research-agents.js")
+    lines.append("3. NO requirements don't exist → add them to the prompt")
+    lines.append("4. If data IS in the research output but NOT on slides → ppt-single-country.js is dropping it")
+
+    return "\n".join(lines)
+
+
 async def generate_fix_callback(
     issues: List[str],
     analysis: Dict[str, Any],
     service_name: str,
     iteration: int = 0,
+    form_data: Optional[Dict] = None,
 ) -> Dict[str, Any]:
     """Generate fix using Claude Code CLI"""
     logger.info(f"Generating fix for {len(issues)} issues")
@@ -755,10 +905,31 @@ async def generate_fix_callback(
         if prev_diff:
             diff_context = (
                 f"\n\n## PREVIOUS FIX (iteration {iteration - 1}) — Code That Was Changed\n"
-                f"```diff\n{prev_diff[:3000]}\n```\n"
+                f"```diff\n{prev_diff[:8000]}\n```\n"
                 f"This did NOT fully resolve the issues. Do NOT repeat the same change.\n"
                 f"If the same file was changed, try a DIFFERENT approach in that file.\n"
             )
+
+    # Fix 3: Iteration delta tracking — show what improved/worsened since last fix
+    delta_context = ""
+    if iteration > 1 and HAS_ISSUE_DETECTOR:
+        try:
+            history = load_history()
+            if len(history) >= 2:
+                prev_issues = set(history[-2].get("specificFailures", []))
+                curr_issues = set(issues[:10])
+                resolved = prev_issues - curr_issues
+                new_issues = curr_issues - prev_issues
+                persisted = prev_issues & curr_issues
+                if resolved or new_issues:
+                    delta_context = (
+                        f"\n\n## Iteration Delta (what changed since last fix)\n"
+                        f"- Resolved ({len(resolved)}): {'; '.join(list(resolved)[:3]) or 'none'}\n"
+                        f"- NEW issues ({len(new_issues)}): {'; '.join(list(new_issues)[:3]) or 'none'}\n"
+                        f"- Still broken ({len(persisted)}): {'; '.join(list(persisted)[:3]) or 'none'}\n"
+                    )
+        except Exception as e:
+            logger.debug(f"Delta tracking failed: {e}")
 
     # Scope routing — skip for crash/failure fixes (crash could be in any file)
     if analysis and analysis.get("crash_fix"):
@@ -775,22 +946,33 @@ async def generate_fix_callback(
         )
     else:
         scope = _classify_fix_scope(issues)
+        dont_touch = SCOPE_DONT_TOUCH.get(scope, '')
         scope_context = (
             f"\n\n## FIX SCOPE: {scope.upper()}\n"
             f"START with these files: {SCOPE_FILES.get(scope, '')}\n"
-            f"Do NOT touch: {SCOPE_DONT_TOUCH.get(scope, '')}\n"
         )
+        if dont_touch:
+            scope_context += f"Do NOT touch: {dont_touch}\n"
+        # Fix 6: Inject what-to-change guidance
+        what_to_change = SCOPE_WHAT_TO_CHANGE.get(scope, "")
+        if what_to_change:
+            scope_context += f"\n## What to Change (IMPORTANT)\n{what_to_change}\n"
 
     # Issue history and pattern detection context
     history_context = ""
     if HAS_ISSUE_DETECTOR:
         try:
             # Append current iteration to history (include git_diff for oscillation detection)
+            # Fix 1: Use field names that detect_patterns() actually reads
+            comparison = analysis.get("comparison", {}) if analysis else {}
             append_iteration({
-                "issues": issues[:10],  # Limit to avoid prompt bloat
-                "fixDescription": analysis.get("fix_prompt", "")[:200] if analysis else "",
+                "specificFailures": issues[:10],
+                "fixesAttempted": [analysis.get("fix_prompt", "")[:200]] if analysis else [],
                 "iteration": iteration,
                 "git_diff": _recent_diffs[iteration - 1] if iteration <= len(_recent_diffs) else "",
+                "contentDepthScore": comparison.get("content_depth_score"),
+                "insightScore": comparison.get("insight_score"),
+                "patternMatchScore": comparison.get("pattern_match_score"),
             })
 
             # Detect patterns from history (bug fix: pass load_history() not empty call)
@@ -811,6 +993,28 @@ async def generate_fix_callback(
         except Exception as e:
             logger.warning(f"Issue pattern detection failed: {e}")
 
+    # Deep analysis context for content/insight issues — show agent what was actually produced
+    deep_analysis_context = ""
+    if diagnosis and diagnosis.get("dominant_category") in (
+        "content_depth", "insight_missing", "research_quality", "empty_data"
+    ):
+        deep_analysis_context = _build_deep_analysis_context(analysis, diagnosis)
+
+    # Original user request context — what was the user asking for?
+    request_context = ""
+    if form_data:
+        user_request = form_data.get("prompt") or ""
+        if not user_request:
+            parts = [form_data.get("Business", ""), form_data.get("Country", "")]
+            user_request = " in ".join(p for p in parts if p).strip()
+        if user_request:
+            request_context = (
+                f"\n\n## Original User Request\n"
+                f"The user asked for: {user_request[:500]}\n"
+                f"VERIFY: Is the output about THIS topic? If it discusses a different country/industry, "
+                f"the research queries in research-agents.js need to be fixed.\n"
+            )
+
     if fix_prompt and fix_prompt != "No issues found. Output matches template.":
         # Use the ComparisonResult's built-in prompt (has severity grouping, locations, suggestions)
         iteration_context = ""
@@ -821,7 +1025,7 @@ async def generate_fix_callback(
                 f"the root cause may be deeper than a surface-level fix."
             )
         result = await run_claude_code(
-            fix_prompt + diagnosis_context + ref_context + formatting_context + history_context + diff_context + scope_context + iteration_context,
+            fix_prompt + diagnosis_context + ref_context + formatting_context + history_context + diff_context + delta_context + scope_context + deep_analysis_context + request_context + iteration_context,
             service_name=service_name,
             iteration=iteration,
             previous_issues="\n".join(issues) if issues else None,
@@ -845,7 +1049,10 @@ async def generate_fix_callback(
             f"{formatting_context}"
             f"{history_context}"
             f"{diff_context}"
+            f"{delta_context}"
             f"{scope_context}"
+            f"{deep_analysis_context}"
+            f"{request_context}"
         )
 
         result = await improve_output(
@@ -1145,7 +1352,8 @@ async def run_feedback_loop(
 
         iteration_counter[0] += 1
         result = await generate_fix_callback(
-            issues, analysis, service_name, iteration_counter[0]
+            issues, analysis, service_name, iteration_counter[0],
+            form_data=form_data,
         )
         # After a successful fix+push, record timestamp so next iteration
         # only accepts emails arriving after the new code was deployed

@@ -59,6 +59,13 @@ class ComparisonResult:
     passed_checks: int
     discrepancies: List[Discrepancy] = field(default_factory=list)
     summary: str = ""
+    # Fix 10: Expose scores and detail counts for content pipeline diagnostic
+    content_depth_score: Optional[int] = None
+    insight_score: Optional[float] = None
+    pattern_match_score: Optional[int] = None
+    regulation_count: int = 0
+    data_point_count: int = 0
+    company_indicator_count: int = 0
 
     @property
     def critical_count(self) -> int:
@@ -69,7 +76,7 @@ class ComparisonResult:
         return sum(1 for d in self.discrepancies if d.severity == Severity.HIGH)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        d = {
             "output_file": self.output_file,
             "template_name": self.template_name,
             "passed": self.passed,
@@ -78,9 +85,24 @@ class ComparisonResult:
             "critical_issues": self.critical_count,
             "high_issues": self.high_count,
             "total_issues": len(self.discrepancies),
-            "discrepancies": [d.to_dict() for d in self.discrepancies],
+            "discrepancies": [d_.to_dict() for d_ in self.discrepancies],
             "summary": self.summary,
         }
+        # Fix 10: Expose scores and detail counts for content pipeline diagnostic
+        if self.content_depth_score is not None:
+            d["content_depth_score"] = self.content_depth_score
+        if self.insight_score is not None:
+            d["insight_score"] = self.insight_score
+        if self.pattern_match_score is not None:
+            d["pattern_match_score"] = self.pattern_match_score
+        d["regulation_count"] = self.regulation_count
+        d["data_point_count"] = self.data_point_count
+        d["company_indicator_count"] = self.company_indicator_count
+        # Flag missing categories for diagnostic
+        d["missing_regulations"] = self.regulation_count < 3
+        d["missing_data_points"] = self.data_point_count < 15
+        d["missing_companies"] = self.company_indicator_count < 3
+        return d
 
     def prioritize_and_limit(self, max_issues=5):
         """Return self with issues sorted by severity, top N marked as 'fix now'.
@@ -804,6 +826,13 @@ def compare_pptx_to_template(
     total_checks = 0
     passed_checks = 0
 
+    # Tracking vars for market research scores (populated inside MR block)
+    _mr_depth_score = None
+    _mr_insight_score = None
+    _mr_regulation_count = 0
+    _mr_data_point_count = 0
+    _mr_company_indicator_count = 0
+
     # Check slide count
     total_checks += 1
     slide_count = pptx_analysis.get("slide_count", 0)
@@ -1127,7 +1156,13 @@ def compare_pptx_to_template(
             depth_score += 15
         else:
             depth_failures.append(f"Competitor depth: only {named_companies} named companies (need ≥3)")
-        
+
+        # Populate tracking vars for ComparisonResult
+        _mr_depth_score = depth_score
+        _mr_regulation_count = named_regulations
+        _mr_data_point_count = data_points
+        _mr_company_indicator_count = named_companies
+
         if depth_score < 50:
             discrepancies.append(Discrepancy(
                 severity=Severity.CRITICAL,
@@ -1146,27 +1181,82 @@ def compare_pptx_to_template(
         else:
             passed_checks += 1
         
-        # Check for insight quality (pattern match)
+        # Fix 9: Semantic insight quality scoring (not just keyword counting)
         total_checks += 1
         insight_keywords = [
             "implication", "opportunity", "barrier", "recommend",
             "should", "risk", "advantage", "critical", "timing",
             "window", "first mover", "competitive edge"
         ]
-        insight_count = sum(1 for kw in insight_keywords if kw in all_text)
-        
-        if insight_count < 5:
+
+        # Quality signals: score each insight-containing paragraph
+        INSIGHT_QUALITY_SIGNALS = [
+            (r"\b(19|20)\d{2}\b", 1),                              # Contains a year
+            (r"\$[\d,]+|\d+\s*(?:billion|million)", 2),            # Dollar amounts
+            (r"\d+(?:\.\d+)?%", 1),                                # Percentages
+            (r"(?:within|by|before)\s+\d{4}|(?:\d+[-\u2013]\d+)\s*months?", 2),  # Timing
+            (r"(?:should|must|recommend|advise)\s+\w+", 1),        # Directive
+            (r"(?:because|due to|driven by|as a result|therefore|consequently)", 2),  # Causal reasoning
+            (r"(?:however|but|despite|although|conversely)", 1),   # Nuance/contrast
+        ]
+
+        # Split text into paragraphs, find those with insight keywords
+        paragraphs = [p.strip() for p in all_text.split("\n") if len(p.strip()) > 30]
+        insight_paragraphs = []
+        for para in paragraphs:
+            if any(kw in para for kw in insight_keywords):
+                insight_paragraphs.append(para)
+
+        # Score each insight paragraph
+        para_scores = []
+        best_data_excerpt = ""
+        for para in insight_paragraphs:
+            score = 0
+            for pattern, weight in INSIGHT_QUALITY_SIGNALS:
+                if _re.search(pattern, para, _re.IGNORECASE):
+                    score += weight
+            para_scores.append(score)
+            # Track best data excerpt for Fix 11 actionable example
+            if score > 0 and not best_data_excerpt and len(para) < 200:
+                best_data_excerpt = para[:150]
+
+        avg_quality = sum(para_scores) / max(len(para_scores), 1)
+        _mr_insight_score = round(avg_quality, 1)
+        insight_count = len(insight_paragraphs)
+        with_numbers = sum(1 for s in para_scores if s >= 2)
+        with_timing = sum(1 for para in insight_paragraphs
+                         if _re.search(r"(?:within|by|before)\s+\d{4}|(?:\d+[-\u2013]\d+)\s*months?", para, _re.IGNORECASE))
+
+        if avg_quality < 4 or insight_count < 3:
+            # Fix 11: Build actionable suggestion with concrete example
+            specifics = []
+            if insight_count > 0:
+                specifics.append(f"{with_numbers}/{insight_count} insight paragraphs contain numbers or dates")
+                specifics.append(f"{with_timing}/{insight_count} contain timing windows")
+            else:
+                specifics.append("0 paragraphs contain insight language")
+
+            suggestion = (
+                f"Insights lack specificity — {'; '.join(specifics)}. "
+            )
+            if best_data_excerpt:
+                suggestion += (
+                    f"Example from THIS output: '{best_data_excerpt[:100]}...'\n"
+                    f"A shallow version: 'The market shows growth'\n"
+                    f"A deep insight: '[data point] growing at X% suggests a Y-month window "
+                    f"for first-mover advantage, because [regulation] takes effect in [year]'\n"
+                )
+            suggestion += (
+                "Every insight needs: 1) So what? (implication) 2) Now what? (action) 3) By when? (timing)"
+            )
+
             discrepancies.append(Discrepancy(
                 severity=Severity.HIGH,
                 category="missing_strategic_insights",
                 location="Presentation-wide",
-                expected="Strategic insights with implications, recommendations, and timing",
-                actual=f"Only {insight_count}/12 insight indicators found",
-                suggestion=(
-                    "Add strategic insights to each section. Every data point needs a 'so what' — "
-                    "what does this mean for the client? Include timing windows, competitive advantages, "
-                    "and specific recommendations with evidence."
-                ),
+                expected="Strategic insights with avg quality score >=4/10 (specificity, timing, reasoning)",
+                actual=f"Insight quality: avg {avg_quality:.1f}/10, {insight_count} insight paragraphs, {with_numbers} with data",
+                suggestion=suggestion,
             ))
         else:
             passed_checks += 1
@@ -1306,6 +1396,13 @@ def compare_pptx_to_template(
         passed_checks=passed_checks,
         discrepancies=discrepancies,
     )
+
+    # Populate market research scores on result
+    result.content_depth_score = _mr_depth_score
+    result.insight_score = _mr_insight_score
+    result.regulation_count = _mr_regulation_count
+    result.data_point_count = _mr_data_point_count
+    result.company_indicator_count = _mr_company_indicator_count
 
     result.summary = f"Checked {total_checks} criteria, {passed_checks} passed. " \
                      f"Found {len(discrepancies)} issues ({result.critical_count} critical, {result.high_count} high)."
