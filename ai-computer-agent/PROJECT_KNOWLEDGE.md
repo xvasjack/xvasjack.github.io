@@ -1,6 +1,6 @@
 # AI Computer Agent — Complete Project Knowledge Base
 
-Last updated: 2026-02-06 (anti-fabrication guardrails)
+Last updated: 2026-02-06 (deep analysis pipeline — fix agent gets actual output content)
 
 ---
 
@@ -799,9 +799,10 @@ Major rebuild of the market-research PPTX generation pipeline. Template becomes 
 | `backend/market-research/research-orchestrator.js` | Per-section Gemini synthesis (policy/market/competitors/summary), depth-demanding prompts, content validation, removed AI reviewer |
 | `backend/market-research/ppt-utils.js` | Added 10 layout functions: `choosePattern`, `addDualChart`, `addChevronFlow`, `addInsightPanelsFromPattern`, `addCalloutOverlay`, `addMatrix`, `addCaseStudyRows`, `addFinancialCharts`, `addColoredBorderTable` + `templatePatterns` export |
 | `backend/market-research/ppt-single-country.js` | Replaced hardcoded 27-slide + Story Architect with section-based generation. Uses `classifyDataBlocks()` → `choosePattern()` → pattern-specific renderers. Market charts use insight panels layout (chart 60% + callouts 40%). Dynamic slide count per section. 3265→1868 lines |
-| `ai-computer-agent/vm/template_comparison.py` | Added market-research content-depth + pattern-match scoring (named regulations, numeric data, named companies, insight keywords, chart presence) |
+| `ai-computer-agent/vm/template_comparison.py` | Added market-research content-depth + pattern-match scoring. **Now populates** ComparisonResult.content_depth_score/insight_score/regulation_count/data_point_count/company_indicator_count on the result object (were computed but never assigned) |
 | `ai-computer-agent/vm/feedback_loop.py` | Added `_check_service_health()` (Railway health check before iterations), `_check_hollow_output()` (>50% empty = abort) |
-| `ai-computer-agent/vm/feedback_loop_runner.py` | Added issue history context, pattern detection, priority rules in fix prompts |
+| `ai-computer-agent/vm/feedback_loop_runner.py` | Added issue history context, pattern detection, priority rules. **Now includes**: `_build_deep_analysis_context()` showing actual slide text/scores/diagnosis to fix agent; `form_data` threaded to fix prompt so agent sees original user request; deep analysis injected for content_depth/insight_missing/research_quality/empty_data issues |
+| `ai-computer-agent/vm/claude_mandate.md` | Replaced generic "THINK BEFORE FIXING" with 4-step deep analysis protocol requiring reading output excerpts and tracing data flow before writing code |
 | `ai-computer-agent/host/ppt_analyzer.py` | Simplified to PASS/FAIL with content_depth/pattern_match/formatting categories |
 
 ### Files Deleted
