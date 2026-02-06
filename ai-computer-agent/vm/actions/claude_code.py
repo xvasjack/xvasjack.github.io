@@ -238,12 +238,13 @@ async def _capture_full_diff_for_validation(effective_cwd, wsl_cwd, pre_head, ma
 async def run_claude_code(
     prompt: str,
     working_dir: Optional[str] = None,
-    timeout_seconds: int = 1200,
+    timeout_seconds: int = 1800,
     service_name: Optional[str] = None,
     allowed_dirs: Optional[List[str]] = None,
     iteration: int = 0,
     previous_issues: Optional[str] = None,
     original_task: Optional[str] = None,
+    allowed_tools: Optional[str] = None,
 ) -> ClaudeCodeResult:
     """
     Run Claude Code with a prompt, including mandate guardrails.
@@ -306,17 +307,20 @@ async def run_claude_code(
     process = None  # RL-2: Track process for cleanup
     try:
         try:
-            from config import CLAUDE_MODEL
+            from config import CLAUDE_FIX_MODEL
         except ImportError:
-            CLAUDE_MODEL = "opus"
+            CLAUDE_FIX_MODEL = "claude-sonnet-4-5-20250929"
+
+        # B5: Use caller-specified tools or default full toolset
+        tools = allowed_tools or "Read,Edit,Write,Grep,Glob,Bash"
 
         # Always pipe prompt via stdin to avoid --allowedTools variadic flag
         # consuming the prompt as a tool name (CLI bug: <tools...> is greedy)
         cmd_args = build_claude_cmd(
             CLAUDE_CODE_PATH,
             "--print",
-            "--model", CLAUDE_MODEL,
-            "--allowedTools", "Read,Edit,Write,Grep,Glob,Bash",
+            "--model", CLAUDE_FIX_MODEL,
+            "--allowedTools", tools,
             "-",  # read prompt from stdin
             wsl_cwd=wsl_cwd or cwd,
         )

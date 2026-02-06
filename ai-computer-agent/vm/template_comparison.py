@@ -315,7 +315,7 @@ TEMPLATES = {
         max_slides=40,
         min_companies=0,  # Market research is section-based, not company-per-slide
         require_logos=False,  # Market research may not have logos
-        require_websites=True,
+        require_websites=False,  # A2: MR is section-based, not company-per-slide
         require_descriptions=True,
         reference_pptx_path="251219_Escort_Phase 1 Market Selection_V3.pptx",
         min_words_per_description=50,
@@ -1052,111 +1052,116 @@ def compare_pptx_to_template(
         passed_checks += 1
 
     # Check company count
-    total_checks += 1
     companies = pptx_analysis.get("companies", [])
-    if len(companies) < template.min_companies:
-        discrepancies.append(Discrepancy(
-            severity=Severity.CRITICAL,
-            category="insufficient_companies",
-            location="Presentation",
-            expected=f"At least {template.min_companies} companies",
-            actual=f"{len(companies)} companies",
-            suggestion=f"Search is returning too few results. Check search parameters and API calls."
-        ))
-    else:
-        passed_checks += 1
-
-    # Check logos
-    # Category 6 fix: Zero companies should not pass logo validation
-    if template.require_logos:
+    # A2: Skip company-specific checks when min_companies=0 (e.g., market research)
+    if template.min_companies > 0:
         total_checks += 1
-        if not companies:
+        if len(companies) < template.min_companies:
             discrepancies.append(Discrepancy(
                 severity=Severity.CRITICAL,
-                category="no_companies_for_logo_check",
+                category="insufficient_companies",
                 location="Presentation",
-                expected="Companies to validate logos",
-                actual="0 companies found",
-                suggestion="Cannot validate logos when no companies are present"
-            ))
-        else:
-            companies_without_logos = [c for c in companies if not c.get("has_logo")]
-            if companies_without_logos:
-                missing_pct = len(companies_without_logos) / max(len(companies), 1) * 100
-                # LB-8: Use >= for consistent threshold comparison
-                severity = Severity.CRITICAL if missing_pct >= 50 else Severity.HIGH if missing_pct >= 20 else Severity.MEDIUM
-                discrepancies.append(Discrepancy(
-                    severity=severity,
-                    category="missing_logos",
-                    location="Multiple slides",
-                    expected="All companies should have logos",
-                    actual=f"{len(companies_without_logos)} companies without logos ({missing_pct:.0f}%)",
-                    suggestion="Check logo fetching logic. Ensure fallback to placeholder if logo not found."
-                ))
-            else:
-                passed_checks += 1
-
-    # Check websites
-    if template.require_websites:
-        total_checks += 1
-        companies_without_websites = [c for c in companies if not c.get("website")]
-        if companies_without_websites:
-            missing_names = [c.get("name", "Unknown") for c in companies_without_websites[:5]]
-            discrepancies.append(Discrepancy(
-                severity=Severity.HIGH,
-                category="missing_websites",
-                location="Multiple slides",
-                expected="All companies should have website URLs",
-                actual=f"{len(companies_without_websites)} companies without websites: {', '.join(missing_names)}...",
-                suggestion="Ensure website field is populated from search results. Add validation before adding company."
+                expected=f"At least {template.min_companies} companies",
+                actual=f"{len(companies)} companies",
+                suggestion=f"Search is returning too few results. Check search parameters and API calls."
             ))
         else:
             passed_checks += 1
 
-    # Check for blocked domains in websites
-    total_checks += 1
-    bad_urls = []
-    for company in companies:
-        website = company.get("website") or ""
-        for blocked in template.blocked_domains:
-            if blocked in website.lower():
-                bad_urls.append({
-                    "company": company.get("name"),
-                    "url": website,
-                    "blocked": blocked
-                })
+        # Check logos
+        # Category 6 fix: Zero companies should not pass logo validation
+        if template.require_logos:
+            total_checks += 1
+            if not companies:
+                discrepancies.append(Discrepancy(
+                    severity=Severity.CRITICAL,
+                    category="no_companies_for_logo_check",
+                    location="Presentation",
+                    expected="Companies to validate logos",
+                    actual="0 companies found",
+                    suggestion="Cannot validate logos when no companies are present"
+                ))
+            else:
+                companies_without_logos = [c for c in companies if not c.get("has_logo")]
+                if companies_without_logos:
+                    missing_pct = len(companies_without_logos) / max(len(companies), 1) * 100
+                    # LB-8: Use >= for consistent threshold comparison
+                    severity = Severity.CRITICAL if missing_pct >= 50 else Severity.HIGH if missing_pct >= 20 else Severity.MEDIUM
+                    discrepancies.append(Discrepancy(
+                        severity=severity,
+                        category="missing_logos",
+                        location="Multiple slides",
+                        expected="All companies should have logos",
+                        actual=f"{len(companies_without_logos)} companies without logos ({missing_pct:.0f}%)",
+                        suggestion="Check logo fetching logic. Ensure fallback to placeholder if logo not found."
+                    ))
+                else:
+                    passed_checks += 1
 
-    if bad_urls:
-        discrepancies.append(Discrepancy(
-            severity=Severity.HIGH,
-            category="blocked_domain_urls",
-            location="Multiple companies",
-            expected="Company websites should be actual company domains",
-            actual=f"{len(bad_urls)} companies have social/directory URLs: {bad_urls[0]['company']} -> {bad_urls[0]['url']}",
-            suggestion=f"Filter out URLs containing: {', '.join(template.blocked_domains[:3])}. Find actual company website."
-        ))
-    else:
-        passed_checks += 1
+        # Check websites
+        if template.require_websites:
+            total_checks += 1
+            companies_without_websites = [c for c in companies if not c.get("website")]
+            if companies_without_websites:
+                missing_names = [c.get("name", "Unknown") for c in companies_without_websites[:5]]
+                discrepancies.append(Discrepancy(
+                    severity=Severity.HIGH,
+                    category="missing_websites",
+                    location="Multiple slides",
+                    expected="All companies should have website URLs",
+                    actual=f"{len(companies_without_websites)} companies without websites: {', '.join(missing_names)}...",
+                    suggestion="Ensure website field is populated from search results. Add validation before adding company."
+                ))
+            else:
+                passed_checks += 1
 
-    # Check for duplicate companies
-    # Category 11 fix: Duplicate names should preserve original case for reporting
-    # LB-7: Use Counter instead of list.count() to avoid O(n^2) complexity
-    from collections import Counter
-    total_checks += 1
-    names_lower = [c.get("name", "").lower().strip() for c in companies]
-    names_original = {c.get("name", "").lower().strip(): c.get("name", "") for c in companies}
-    name_counts = Counter(names_lower)
-    duplicates = [names_original.get(name, name) for name, count in name_counts.items() if count > 1]
-    if duplicates:
-        discrepancies.append(Discrepancy(
-            severity=Severity.HIGH,
-            category="duplicate_companies",
-            location="Presentation",
-            expected="No duplicate companies",
-            actual=f"Found duplicates: {', '.join(duplicates[:3])}",
-            suggestion="Add deduplication logic by company name and website domain."
-        ))
+        # Check for blocked domains in websites
+        total_checks += 1
+        bad_urls = []
+        for company in companies:
+            website = company.get("website") or ""
+            for blocked in template.blocked_domains:
+                if blocked in website.lower():
+                    bad_urls.append({
+                        "company": company.get("name"),
+                        "url": website,
+                        "blocked": blocked
+                    })
+
+        if bad_urls:
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH,
+                category="blocked_domain_urls",
+                location="Multiple companies",
+                expected="Company websites should be actual company domains",
+                actual=f"{len(bad_urls)} companies have social/directory URLs: {bad_urls[0]['company']} -> {bad_urls[0]['url']}",
+                suggestion=f"Filter out URLs containing: {', '.join(template.blocked_domains[:3])}. Find actual company website."
+            ))
+        else:
+            passed_checks += 1
+
+        # Check for duplicate companies
+        # Category 11 fix: Duplicate names should preserve original case for reporting
+        # LB-7: Use Counter instead of list.count() to avoid O(n^2) complexity
+        from collections import Counter
+        total_checks += 1
+        names_lower = [c.get("name", "").lower().strip() for c in companies]
+        names_original = {c.get("name", "").lower().strip(): c.get("name", "") for c in companies}
+        name_counts = Counter(names_lower)
+        duplicates = [names_original.get(name, name) for name, count in name_counts.items() if count > 1]
+        if duplicates:
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH,
+                category="duplicate_companies",
+                location="Presentation",
+                expected="No duplicate companies",
+                actual=f"Found duplicates: {', '.join(duplicates[:3])}",
+                suggestion="Add deduplication logic by company name and website domain."
+            ))
+        else:
+            passed_checks += 1
     else:
+        # A2: min_companies=0 — skip all company checks, count as passed
         passed_checks += 1
 
     # ==========================================================================

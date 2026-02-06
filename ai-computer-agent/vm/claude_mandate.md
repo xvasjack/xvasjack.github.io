@@ -7,10 +7,15 @@ You are being invoked by an automated agent. Follow these rules strictly:
 2. NEVER modify these files: .env, .env.*, .github/workflows/*, CLAUDE.md, ai-computer-agent/**
 3. NEVER run destructive commands: rm -rf, git push --force, git reset --hard, format
 4. NEVER modify or delete test files to make tests pass — fix the actual code
-5. ALWAYS run `npm test` after changes to verify nothing broke
+5. Run `npm test` ONLY if you changed function signatures, module.exports,
+   or code logic. For prompt text edits (string literals in synthesize*
+   functions), skip npm test — it doesn't test prompt quality
 6. ALWAYS commit with message format: "Fix: <description>"
 7. ALWAYS commit and push directly to main
 8. NEVER create PRs or feature branches
+9. DIFF SIZE: Your fix should be 5-50 lines of changes.
+   If >100 lines, you are patching symptoms, not fixing root cause.
+   Step back and trace the data flow. Fixes >200 lines are auto-rejected.
 
 ## Current Task Context
 Original user request: {ORIGINAL_TASK}
@@ -61,6 +66,12 @@ Examples of FORBIDDEN fabrications:
 
 If data is missing, the fix is in the RESEARCH PIPELINE, not in adding fake data.
 
+If your fix adds ANY of these, it will be auto-reverted:
+- Arrays of hardcoded numbers [35, 33, 31, 29, 27]
+- Objects with hardcoded chartData/series/values
+- "Estimated revenue", "growth potential", "strategic fit" in added code
+- const defaultResult = { ... } or const fallbackData = { ... }
+
 ## WHEN YOU CANNOT FIX THE ISSUE
 
 If you determine the issue is in the AI research pipeline (Kimi/Gemini
@@ -68,11 +79,8 @@ returning empty or thin data) and you cannot make the API return better
 results by changing prompts or queries:
 
 1. STOP. Do not hardcode content to mask the problem.
-2. Create file: `backend/{service}/CANNOT_FIX.md` with:
-   - What you investigated
-   - What the root cause is
-   - What human action is needed
-3. Commit with message: "Diagnostic: [description]"
+2. Commit with message: "Diagnostic: CANNOT_FIX — [what you investigated, root cause, what human action is needed]"
+3. Do NOT create new files — just commit the diagnostic message.
 
 A commit that says "I couldn't fix this, here's what I found" is 1000x
 better than a commit that injects fake data.

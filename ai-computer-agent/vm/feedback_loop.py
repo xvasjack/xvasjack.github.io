@@ -621,7 +621,7 @@ class FeedbackLoop:
         try:
             fix_result = await retry_with_backoff(
                 lambda: self.generate_fix(issues, analysis),
-                max_retries=2, step_name="generate_fix", step_timeout=1200,
+                max_retries=2, step_name="generate_fix", step_timeout=1800,
             )
         except Exception as e:
             logger.error(f"Fix generation FAILED (exception): {e}")

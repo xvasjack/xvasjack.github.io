@@ -20,6 +20,8 @@ _logger = logging.getLogger("config")
 CLAUDE_MODEL = "claude-opus-4-6"
 # Full model ID for direct Anthropic API calls (research.py, template_learner.py, ppt_analyzer.py)
 CLAUDE_API_MODEL = "claude-opus-4-6"
+# A1: Faster model for fix generation (Sonnet for speed, Opus for analysis)
+CLAUDE_FIX_MODEL = "claude-sonnet-4-5-20250929"
 
 
 # F1: Centralized timeout configuration

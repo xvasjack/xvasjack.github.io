@@ -46,6 +46,9 @@ except ImportError:
 # In-memory storage for git diffs per iteration (not persisted — reset each loop run)
 _recent_diffs: List[str] = []
 
+# B7: Fabrication revert counter — stop burning iterations on repeated fabrication
+_fabrication_revert_count = 0
+
 # Import shared fabrication patterns (single source of truth)
 try:
     from fabrication_patterns import check_fabrication as _shared_check_fabrication, FABRICATION_PATTERNS
@@ -114,17 +117,27 @@ async def _auto_revert_last_commit() -> bool:
 
 def _validate_no_fabrication(git_diff: str) -> Optional[str]:
     """Validate that a git diff does not contain fabricated content.
+    B6: Only scan ADDED lines — context lines contain existing code that
+    would false-positive on fabrication patterns.
     Returns error message if fabrication detected, None otherwise."""
     if not git_diff:
         return None
 
+    # B6: Filter to only added lines (strip the leading '+')
+    added_only = "\n".join(
+        line[1:] for line in git_diff.splitlines()
+        if line.startswith('+') and not line.startswith('+++')
+    )
+    if not added_only.strip():
+        return None
+
     # Use shared module (has broader patterns)
     if _shared_check_fabrication is not None:
-        return _shared_check_fabrication(git_diff)
+        return _shared_check_fabrication(added_only)
 
     # Fallback: local check
     for pattern in FABRICATION_PATTERNS:
-        match = re.search(pattern, git_diff, re.IGNORECASE)
+        match = re.search(pattern, added_only, re.IGNORECASE)
         if match:
             return f"FABRICATION DETECTED in commit: Pattern matched '{match.group(0)[:50]}'"
 
@@ -190,7 +203,7 @@ def _classify_fix_scope(issues: List[str]) -> str:
             counts["formatting"] += 1
     total = sum(counts.values())
     if total == 0:
-        return "layout"
+        return "mixed"  # B8: was "layout" — unknown scope should allow all files
     dominant = max(counts, key=counts.get)
     # Fix 5: When no single category dominates (>60%), use mixed scope
     if counts[dominant] / total < 0.6:
@@ -829,6 +842,48 @@ def _build_deep_analysis_context(analysis: Dict[str, Any], diagnosis: Optional[D
     return "\n".join(lines)
 
 
+# B5: Tool sets by scope — no Write for non-crash fixes
+SCOPE_ALLOWED_TOOLS = {
+    "research": "Read,Edit,Grep,Glob,Bash",
+    "synthesis": "Read,Edit,Grep,Glob,Bash",
+    "layout": "Read,Edit,Grep,Glob,Bash",
+    "formatting": "Read,Edit,Grep,Glob,Bash",
+    "mixed": "Read,Edit,Grep,Glob,Bash",
+    "crash": "Read,Edit,Write,Grep,Glob,Bash",
+}
+
+# B1: Maximum fix prompt size (chars) — keeps total with CLAUDE.md+mandate under ~26KB
+MAX_FIX_PROMPT_CHARS = 10000
+
+
+def _pick_top_issue_cluster(issues: List[str], max_issues: int = 3) -> List[str]:
+    """B2: Pick issues from the highest-severity single category.
+    Prevents agent from oscillating between conflicting fix categories."""
+    if not issues or len(issues) <= max_issues:
+        return issues
+    if not HAS_ISSUE_DETECTOR:
+        return issues[:max_issues]
+
+    # Group by category
+    groups: Dict[str, List[str]] = {}
+    for issue in issues:
+        cat = categorize_issue(str(issue))
+        groups.setdefault(cat, []).append(issue)
+
+    # Severity order for categories
+    cat_priority = {
+        "empty_data": 0, "api_failure": 1, "content_depth": 2,
+        "research_quality": 3, "insight_missing": 4,
+        "pattern_selection": 5, "chart_error": 6,
+        "table_overflow": 7, "layout_formatting": 8, "unknown": 9,
+    }
+    # Pick the highest-priority group
+    best_cat = min(groups.keys(), key=lambda c: cat_priority.get(c, 99))
+    cluster = groups[best_cat][:max_issues]
+    logger.info(f"B2: Picked {len(cluster)} issues from category '{best_cat}' (total {len(issues)} across {len(groups)} categories)")
+    return cluster
+
+
 async def generate_fix_callback(
     issues: List[str],
     analysis: Dict[str, Any],
@@ -838,6 +893,9 @@ async def generate_fix_callback(
 ) -> Dict[str, Any]:
     """Generate fix using Claude Code CLI"""
     logger.info(f"Generating fix for {len(issues)} issues")
+
+    # B2: Focus on one issue cluster per iteration
+    issues = _pick_top_issue_cluster(issues, max_issues=3)
 
     # THINK FIRST: Diagnose root cause before fixing
     diagnosis = await _diagnose_root_cause(issues, service_name, iteration)
@@ -1015,8 +1073,13 @@ async def generate_fix_callback(
                 f"the research queries in research-agents.js need to be fixed.\n"
             )
 
+    # B5: Determine allowed tools based on scope
+    is_crash = bool(analysis and analysis.get("crash_fix"))
+    scope = "crash" if is_crash else _classify_fix_scope(issues)
+    allowed_tools = SCOPE_ALLOWED_TOOLS.get(scope, "Read,Edit,Grep,Glob,Bash")
+
     if fix_prompt and fix_prompt != "No issues found. Output matches template.":
-        # Use the ComparisonResult's built-in prompt (has severity grouping, locations, suggestions)
+        # B1: Priority-based prompt assembly with 10KB cap
         iteration_context = ""
         if iteration > 1:
             iteration_context = (
@@ -1024,11 +1087,31 @@ async def generate_fix_callback(
                 f"Previous attempts fixed some issues but these remain — "
                 f"the root cause may be deeper than a surface-level fix."
             )
+
+        # Priority 1 (always include): fix_prompt + scope_context + diagnosis_context
+        prompt_parts = [fix_prompt, scope_context, diagnosis_context]
+        current_len = sum(len(p) for p in prompt_parts)
+
+        # Priority 2 (include if fits): diff_context
+        if diff_context and current_len + len(diff_context) < MAX_FIX_PROMPT_CHARS:
+            prompt_parts.append(diff_context)
+            current_len += len(diff_context)
+
+        # Priority 3 (add one-by-one until budget hit): formatting, template_ref, deep_analysis, history, delta, request, iteration
+        for ctx in [formatting_context, ref_context, deep_analysis_context, history_context, delta_context, request_context, iteration_context]:
+            if ctx and current_len + len(ctx) < MAX_FIX_PROMPT_CHARS:
+                prompt_parts.append(ctx)
+                current_len += len(ctx)
+
+        full_fix_prompt = "".join(prompt_parts)
+        logger.info(f"B1: Fix prompt {len(full_fix_prompt)} chars (budget {MAX_FIX_PROMPT_CHARS})")
+
         result = await run_claude_code(
-            fix_prompt + diagnosis_context + ref_context + formatting_context + history_context + diff_context + delta_context + scope_context + deep_analysis_context + request_context + iteration_context,
+            full_fix_prompt,
             service_name=service_name,
             iteration=iteration,
             previous_issues="\n".join(issues) if issues else None,
+            allowed_tools=allowed_tools,
         )
     else:
         # Fallback to improve_output with generic prompt
@@ -1074,25 +1157,40 @@ async def generate_fix_callback(
         _recent_diffs.append("")
     _recent_diffs[iteration - 1] = git_diff
 
-    # ESCAPE VALVE: Check if agent signaled "cannot fix"
-    if result and result.success and "CANNOT_FIX.md" in (full_git_diff or git_diff):
-        logger.warning("Agent signaled: cannot fix without human help")
-        return {
-            "success": False,
-            "pr_number": None,
-            "description": "Agent created CANNOT_FIX.md — needs human intervention",
-            "git_diff": git_diff,
-            "error": "Agent needs human help",
-            "needs_human": True,
-        }
+    # ESCAPE VALVE: Check if agent signaled "cannot fix" via commit message
+    if result and result.success:
+        output_text = (getattr(result, 'output', '') or '').lower()
+        if "cannot_fix" in output_text or "diagnostic: cannot_fix" in output_text:
+            logger.warning("Agent signaled: cannot fix without human help")
+            return {
+                "success": False,
+                "pr_number": None,
+                "description": "Agent signaled CANNOT_FIX — needs human intervention",
+                "git_diff": git_diff,
+                "error": "Agent needs human help",
+                "needs_human": True,
+            }
 
     # FABRICATION VALIDATION: Reject diffs containing fabricated content + auto-revert
+    global _fabrication_revert_count
     if result and result.success:
         fabrication_error = _validate_no_fabrication(full_git_diff)
         if fabrication_error:
             logger.error(f"Fix REJECTED + REVERTING: {fabrication_error}")
             reverted = await _auto_revert_last_commit()
             revert_msg = " (commit reverted)" if reverted else " (REVERT FAILED — bad commit still on main!)"
+            # B7: Fabrication revert counter — stop burning iterations
+            _fabrication_revert_count += 1
+            if _fabrication_revert_count >= 2:
+                return {
+                    "success": False,
+                    "pr_number": None,
+                    "description": f"2 fabrication reverts — agent cannot fix without fabricating",
+                    "git_diff": git_diff,
+                    "error": "2 fabrication reverts — agent cannot fix without fabricating",
+                    "needs_human": True,
+                    "fabrication_reverted": reverted,
+                }
             return {
                 "success": False,
                 "pr_number": None,
@@ -1100,6 +1198,38 @@ async def generate_fix_callback(
                 "git_diff": git_diff,
                 "error": fabrication_error,
                 "fabrication_reverted": reverted,
+            }
+
+    # B3: Diff size hard limit — reject >200 added lines (crash exempt)
+    if result and result.success and full_git_diff and scope != "crash":
+        added_lines = sum(1 for l in full_git_diff.splitlines()
+                         if l.startswith('+') and not l.startswith('+++'))
+        if added_lines > 200:
+            logger.error(f"Fix REJECTED: diff too large ({added_lines} added lines, max 200)")
+            await _auto_revert_last_commit()
+            return {
+                "success": False,
+                "pr_number": None,
+                "description": f"Diff too large ({added_lines} lines added, max 200)",
+                "git_diff": git_diff,
+                "error": f"Diff too large ({added_lines} lines, max 200)",
+            }
+
+    # B4: File change enforcement — only allowed files for the scope
+    if result and result.success and full_git_diff and scope not in ("mixed", "crash"):
+        changed_files = set(re.findall(r'^\+\+\+ b/(.+)$', full_git_diff, re.MULTILINE))
+        allowed = set(f.strip() for f in SCOPE_FILES.get(scope, '').split(',') if f.strip())
+        disallowed = [f for f in changed_files
+                      if not any(a in f for a in allowed)]
+        if disallowed:
+            logger.error(f"Fix REJECTED: wrong files {disallowed} (scope={scope})")
+            await _auto_revert_last_commit()
+            return {
+                "success": False,
+                "pr_number": None,
+                "description": f"Wrong files: {disallowed} (scope={scope})",
+                "git_diff": git_diff,
+                "error": f"Wrong files: {disallowed} (scope={scope})",
             }
 
     # Category 1 fix: Check result.output not None before slice
@@ -1231,9 +1361,10 @@ async def run_feedback_loop(
     Returns:
         LoopResult with success status and stats
     """
-    # Reset in-memory diff storage for this loop run
-    global _recent_diffs
+    # Reset in-memory storage for this loop run
+    global _recent_diffs, _fabrication_revert_count
     _recent_diffs = []
+    _fabrication_revert_count = 0
 
     # F46: Validate start_from values
     VALID_START_FROM = {None, "email_check", "analyze"}

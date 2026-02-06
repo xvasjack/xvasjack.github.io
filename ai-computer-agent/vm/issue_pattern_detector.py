@@ -227,7 +227,9 @@ def categorize_issue(issue_text: str) -> str:
     """Categorize an issue string into a known category"""
     text = issue_text.lower()
 
-    if any(kw in text for kw in ["empty", "no data", "hollow", "missing data", "null", "undefined"]):
+    if any(kw in text for kw in ["empty", "no data", "hollow", "missing data", "null", "undefined",
+                                      "missing section", "missing_sections",
+                                      "insufficient_slides", "insufficient slides"]):
         return IssueCategory.EMPTY_DATA
     if any(kw in text for kw in ["shallow", "generic", "thin", "depth", "superficial", "not specific"]):
         return IssueCategory.CONTENT_DEPTH

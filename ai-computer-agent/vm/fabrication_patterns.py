@@ -47,6 +47,17 @@ FABRICATION_PATTERNS = [
     r"(?:default|fallback|placeholder|sample|mock|dummy)(?:Data|Result|Companies|Content|Values|Competitors|Regulations|Statistics)",
     # Fallback/default getter functions
     r"get(?:Fallback|Default|Placeholder|Sample|Mock|Dummy)\w*\(",
+
+    # --- B6: Additional patterns (catch common fabrication fingerprints) ---
+
+    # Hardcoded numeric array in JS (>4 numbers in brackets)
+    r"\[\s*\d+\s*(?:,\s*\d+\s*){4,}\]",
+    # chartData/series with hardcoded values
+    r"series:\s*\[\s*\{[^}]*values:\s*\[",
+    # Hardcoded estimates
+    r"(?:Estimated|estimated)\s+(?:revenue|enterprise value|valuation)",
+    # Default/fallback result objects
+    r"const\s+default(?:Result|Data|Market|Policy|Competitor)\s*=\s*\{",
 ]
 
 
