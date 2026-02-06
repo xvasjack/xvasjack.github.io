@@ -81,15 +81,17 @@ See `ai-computer-agent/ARCHITECTURE.md` for the VM-based automation system that:
 - Compares against templates
 - Sends fix requests back to Claude Code CLI (uses Max plan, no API cost)
 
-### Template Files (in repo root)
+### Template Files (in ~/templates-backup/, NOT in repo)
+Binary files removed from repo to prevent Claude CLI OOM crashes.
 | Service | Template File |
 |---------|---------------|
-| target-v3/v4/v5/v6 | `YCP Target List Slide Template.pptx` |
-| profile-slides | `YCP profile slide template v3.pptx`, `profile slide ref v4.pptx` |
-| trading-comparable | `trading comps slide ref.pptx` |
-| market-research | `Market_Research_*.pptx` samples |
+| target-v3/v4/v5/v6 | `~/templates-backup/YCP Target List Slide Template.pptx` |
+| profile-slides | `~/templates-backup/YCP profile slide template v3.pptx`, `~/templates-backup/profile slide ref v4.pptx` |
+| trading-comparable | `~/templates-backup/trading comps slide ref.pptx` |
+| market-research | `~/templates-backup/Market_Research_*.pptx` samples |
 
 When comparing outputs, use these as visual/structural reference.
+**Do NOT move these back into the repo — they cause OOM crashes.**
 
 ---
 
