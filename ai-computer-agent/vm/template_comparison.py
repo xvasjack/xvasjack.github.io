@@ -807,10 +807,11 @@ def _count_regulations(text: str) -> int:
     """Count named regulations with years in text."""
     reg_keywords = r'(?:act|law|decree|regulation|ordinance|directive|plan|policy|code|standard)'
     pattern = (
-        rf'\b{reg_keywords}\b.{{0,60}}\b(?:19|20)\d{{2}}\b'
-        rf'|\b(?:19|20)\d{{2}}\b.{{0,60}}\b{reg_keywords}\b'
+        rf'\b{reg_keywords}\b.{{0,60}}?\b(?:19|20)\d{{2}}\b'
+        rf'|\b(?:19|20)\d{{2}}\b.{{0,60}}?\b{reg_keywords}\b'
     )
-    return len(re.findall(pattern, text.lower()))
+    matches = re.findall(pattern, text.lower())
+    return len(matches)
 
 
 def _count_data_points(text: str) -> int:
@@ -819,12 +820,13 @@ def _count_data_points(text: str) -> int:
         r'(?:\$|US\$|€|£|¥|₹|฿|Rp\.?\s?)?'
         r'\d{1,3}(?:[,\.]\d{3})*(?:\.\d+)?'
         r'\s*'
-        r'(?:%|billion|million|trillion|thousand'
+        r'(?:%'
+        r'|(?:billion|million|trillion|thousand'
         r'|bn|mn|B|M|K|T'
         r'|MW|GW|kW|TW|TWh|GWh|MWh|kWh'
         r'|mtoe|mtpa|bcm|bbl|tcf'
         r'|USD|JPY|EUR|GBP|THB|VND|IDR|PHP|SGD|MYR'
-        r')\b'
+        r')\b)'
     )
     return len(re.findall(pattern, text, re.IGNORECASE))
 
@@ -833,7 +835,7 @@ def _count_companies(text: str) -> int:
     """Count distinct named companies in text. Requires ORIGINAL CASE text."""
     suffix_re = re.compile(
         r'([A-Z][A-Za-z\s&\.\-]{1,40}?'
-        r'(?:Co\.|Corp|Ltd|Inc|Group|Holdings|PLC|GmbH|SA|AG))\b',
+        r'(?:Co\.|Corp\.?|Ltd\.?|Inc\.?|Group|Holdings|PLC|GmbH|SA|AG))(?:\b|[,.\s]|$)',
         re.DOTALL
     )
     suffixed = set(m.strip() for m in suffix_re.findall(text))
