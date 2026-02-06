@@ -1,6 +1,53 @@
 const { callKimiDeepResearch } = require('./ai-clients');
 const { RESEARCH_FRAMEWORK, RESEARCH_TOPIC_GROUPS } = require('./research-framework');
 
+/**
+ * Try multiple JSON extraction strategies
+ * Returns { data, status } where status is 'success', 'parse_error', or 'no_json_found'
+ */
+function extractJsonFromContent(content) {
+  if (!content) return { data: null, status: 'no_content' };
+
+  // Strategy 1: Match ```json ... ``` blocks
+  const jsonMatch = content.match(/```json\s*([\s\S]*?)\s*```/);
+  if (jsonMatch) {
+    try {
+      return { data: JSON.parse(jsonMatch[1]), status: 'success' };
+    } catch (e) {
+      console.log(`      [JSON] Strategy 1 (json block) parse error: ${e.message}`);
+    }
+  }
+
+  // Strategy 2: Match ``` ... ``` blocks (no json label)
+  const codeMatch = content.match(/```\s*([\s\S]*?)\s*```/);
+  if (codeMatch) {
+    try {
+      return { data: JSON.parse(codeMatch[1]), status: 'success' };
+    } catch (e) {
+      console.log(`      [JSON] Strategy 2 (code block) parse error: ${e.message}`);
+    }
+  }
+
+  // Strategy 3: Parse entire content as JSON
+  try {
+    return { data: JSON.parse(content), status: 'success' };
+  } catch (e) {
+    // Not valid JSON
+  }
+
+  // Strategy 4: Regex for largest {...} object
+  const objectMatch = content.match(/\{[\s\S]*\}/);
+  if (objectMatch) {
+    try {
+      return { data: JSON.parse(objectMatch[0]), status: 'success' };
+    } catch (e) {
+      console.log(`      [JSON] Strategy 4 (object regex) parse error: ${e.message}`);
+    }
+  }
+
+  return { data: null, status: 'no_json_found' };
+}
+
 // Policy Research Agent - handles regulatory and policy topics
 async function policyResearchAgent(country, industry, _clientContext) {
   console.log(`    [POLICY AGENT] Starting research for ${country}...`);
@@ -66,23 +113,25 @@ REQUIREMENTS:
 - Include specific percentages, years, and monetary values where available
 - Mark dataQuality as "low" if information is estimated or uncertain`;
 
-      const result = await callKimiDeepResearch(queryContext, country, industry);
+      let result = await callKimiDeepResearch(queryContext, country, industry);
 
-      // Extract structured JSON from the response
-      let structuredData = null;
-      let extractionStatus = 'unknown';
-      if (result.content) {
-        const jsonMatch = result.content.match(/```json\s*([\s\S]*?)\s*```/);
-        if (jsonMatch) {
-          try {
-            structuredData = JSON.parse(jsonMatch[1]);
-            extractionStatus = 'success';
-          } catch (e) {
-            console.log(`      [Policy] Failed to parse JSON for ${topicKey}: ${e.message}`);
-            extractionStatus = 'parse_error';
-          }
-        } else {
-          extractionStatus = 'no_json_found';
+      // Extract structured JSON using multi-strategy extraction
+      let extractResult = extractJsonFromContent(result.content);
+      let structuredData = extractResult.data;
+      let extractionStatus = extractResult.status;
+
+      // Retry once with simplified prompt if extraction failed
+      if (extractionStatus !== 'success' && result.content) {
+        console.log(
+          `      [Policy] ${topicKey}: JSON extraction failed (${extractionStatus}), retrying...`
+        );
+        const retryQuery = `${queryContext}\n\nCRITICAL: Return ONLY valid JSON. No explanation, no markdown. Just the raw JSON object.`;
+        result = await callKimiDeepResearch(retryQuery, country, industry);
+        extractResult = extractJsonFromContent(result.content);
+        structuredData = extractResult.data;
+        extractionStatus = extractResult.status;
+        if (extractionStatus === 'success') {
+          console.log(`      [Policy] ${topicKey}: Retry successful`);
         }
       }
 

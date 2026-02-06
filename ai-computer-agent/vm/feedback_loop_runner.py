@@ -12,6 +12,7 @@ Connects the FeedbackLoop orchestrator to concrete implementations:
 
 import asyncio
 import os
+import re
 import sys
 import time
 from typing import Callable, Dict, List, Optional, Any
@@ -44,6 +45,33 @@ except ImportError:
 
 # In-memory storage for git diffs per iteration (not persisted — reset each loop run)
 _recent_diffs: List[str] = []
+
+# Fabrication patterns — must match agent_guard.py
+FABRICATION_PATTERNS = [
+    r"https?://www\.\w+-\w+-\w+\.com\.\w{2}",  # Fake country-TLD URLs
+    r"getSupplementaryTexts|getDefaultChartData|getFallback\w*Content",
+    r"Local Energy Services Co\.",
+    r"\$\d+[BMK]\s*\(estimated\)",
+    r"\w+\s+Energy\s+Conservation\s+Act",
+    r"fallback(?:Result|Data|Companies|Regulations)",
+    r"\[\s*2019\s*,\s*2020\s*,\s*2021\s*,\s*2022\s*,\s*2023\s*\]",
+    r"\d+(?:\.\d+)?%\s*(?:annually|per\s*year|growth)",
+]
+
+
+def _validate_no_fabrication(git_diff: str) -> Optional[str]:
+    """Validate that a git diff does not contain fabricated content.
+    Returns error message if fabrication detected, None otherwise."""
+    import re
+    if not git_diff:
+        return None
+
+    for pattern in FABRICATION_PATTERNS:
+        match = re.search(pattern, git_diff, re.IGNORECASE)
+        if match:
+            return f"FABRICATION DETECTED in commit: Pattern matched '{match.group(0)[:50]}'"
+
+    return None
 
 
 async def _check_backend_alive(service_name: str) -> dict:
@@ -622,6 +650,16 @@ async def generate_fix_callback(
         if diagnosis.get("from_memory"):
             diagnosis_context += "**Source**: Previously successful fix pattern\n"
 
+        # Add required analysis template for structured thinking
+        diagnosis_context += (
+            "\n\n## Required Analysis (complete BEFORE writing code)\n"
+            "1. Root cause: [which function in which file loses/corrupts the data?]\n"
+            "2. Why previous fixes failed: [what did they change vs what should change?]\n"
+            "3. My approach: [file:function to modify, and WHY]\n"
+            "4. Fabrication check: Does this add any hardcoded content strings? [YES=STOP / NO=proceed]\n"
+            "5. Generalization check: Will this work for other countries/industries? [YES/NO]\n"
+        )
+
     # Load content depth reference for this service
     template_ref = _load_template_reference(service_name)
     ref_context = ""
@@ -763,12 +801,39 @@ async def generate_fix_callback(
 
     # Store current iteration's git diff for future iterations
     git_diff = ""
+    full_git_diff = ""
     if result is not None:
         git_diff = getattr(result, 'git_diff', '') or ''
+        full_git_diff = getattr(result, 'full_git_diff', '') or git_diff
     # Ensure list is long enough
     while len(_recent_diffs) < iteration:
         _recent_diffs.append("")
     _recent_diffs[iteration - 1] = git_diff
+
+    # ESCAPE VALVE: Check if agent signaled "cannot fix"
+    if result and result.success and "CANNOT_FIX.md" in (full_git_diff or git_diff):
+        logger.warning("Agent signaled: cannot fix without human help")
+        return {
+            "success": False,
+            "pr_number": None,
+            "description": "Agent created CANNOT_FIX.md — needs human intervention",
+            "git_diff": git_diff,
+            "error": "Agent needs human help",
+            "needs_human": True,
+        }
+
+    # FABRICATION VALIDATION: Reject diffs containing fabricated content
+    if result and result.success:
+        fabrication_error = _validate_no_fabrication(full_git_diff)
+        if fabrication_error:
+            logger.error(f"Fix REJECTED: {fabrication_error}")
+            return {
+                "success": False,
+                "pr_number": None,
+                "description": f"Fix rejected: {fabrication_error}",
+                "git_diff": git_diff,
+                "error": fabrication_error,
+            }
 
     # Category 1 fix: Check result.output not None before slice
     output_desc = ""
