@@ -803,6 +803,57 @@ def _compare_slide_to_pattern(slide_fmt, pattern_name: str, pattern_spec: dict) 
     return discrepancies
 
 
+def _count_regulations(text: str) -> int:
+    """Count named regulations with years in text."""
+    reg_keywords = r'(?:act|law|decree|regulation|ordinance|directive|plan|policy|code|standard)'
+    pattern = (
+        rf'\b{reg_keywords}\b.{{0,60}}\b(?:19|20)\d{{2}}\b'
+        rf'|\b(?:19|20)\d{{2}}\b.{{0,60}}\b{reg_keywords}\b'
+    )
+    return len(re.findall(pattern, text.lower()))
+
+
+def _count_data_points(text: str) -> int:
+    """Count quantified data points with units in text."""
+    pattern = (
+        r'(?:\$|US\$|€|£|¥|₹|฿|Rp\.?\s?)?'
+        r'\d{1,3}(?:[,\.]\d{3})*(?:\.\d+)?'
+        r'\s*'
+        r'(?:%|billion|million|trillion|thousand'
+        r'|bn|mn|B|M|K|T'
+        r'|MW|GW|kW|TW|TWh|GWh|MWh|kWh'
+        r'|mtoe|mtpa|bcm|bbl|tcf'
+        r'|USD|JPY|EUR|GBP|THB|VND|IDR|PHP|SGD|MYR'
+        r')\b'
+    )
+    return len(re.findall(pattern, text, re.IGNORECASE))
+
+
+def _count_companies(text: str) -> int:
+    """Count distinct named companies in text. Requires ORIGINAL CASE text."""
+    suffix_re = re.compile(
+        r'([A-Z][A-Za-z\s&\.\-]{1,40}?'
+        r'(?:Co\.|Corp|Ltd|Inc|Group|Holdings|PLC|GmbH|SA|AG))\b',
+        re.DOTALL
+    )
+    suffixed = set(m.strip() for m in suffix_re.findall(text))
+
+    acronym_re = re.compile(r'\b[A-Z]{3,}\b')
+    non_company = {
+        'CAGR','USD','EUR','JPY','GBP','THB','VND','IDR','GW','MW','TWH',
+        'LNG','GDP','BOI','ISO','ESG','ESCO','TAM','SAM','IRR','ROI','EPC',
+        'PPP','IPP','SPP','VSPP','API','CEO','CFO','COO','CTO','B2B','B2C',
+        'THE','AND','FOR','BUT','NOT','ALL','ANY','WHO','HOW','WHY','HAS',
+        'ASEAN','APEC','OECD','IMF','ADB',
+    }
+    acronyms = set(acronym_re.findall(text)) - non_company
+
+    for sname in suffixed:
+        acronyms -= {a for a in acronyms if a in sname}
+
+    return len(suffixed) + len(acronyms)
+
+
 # =============================================================================
 # COMPARISON FUNCTIONS
 # =============================================================================
@@ -1113,24 +1164,15 @@ def compare_pptx_to_template(
     if template.name == "Market Research Report":
         total_checks += 1
         # Content depth scoring based on research quality
-        all_text = " ".join(
-            (slide.get("all_text", "") or "").lower()
+        original_text = " ".join(
+            (slide.get("all_text", "") or "")
             for slide in slides
         )
-        
-        # Check for named regulations with years (policy depth)
-        import re as _re
-        regulation_pattern = r'\b(act|law|decree|regulation|ordinance|directive)\b.*?\b(19|20)\d{2}\b'
-        named_regulations = len(_re.findall(regulation_pattern, all_text))
-        
-        # Check for numeric data series (market depth)
-        number_pattern = r'\b\d+[\.,]?\d*\s*(%|billion|million|MW|GW|TWh|mtoe|bcm|USD|JPY|EUR)\b'
-        data_points = len(_re.findall(number_pattern, all_text, _re.IGNORECASE))
-        
-        # Check for named companies (competitor depth)
-        # Look for company indicators followed by proper nouns
-        company_indicators = ["co.", "corp", "ltd", "inc", "group", "holdings", "plc", "gmbh", "sa", "ag"]
-        named_companies = sum(1 for ind in company_indicators if ind in all_text)
+        all_text = original_text.lower()
+
+        named_regulations = _count_regulations(all_text)
+        data_points = _count_data_points(all_text)
+        named_companies = _count_companies(original_text)
         
         # Score content depth
         depth_score = 0
