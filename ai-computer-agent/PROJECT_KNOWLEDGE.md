@@ -1,6 +1,6 @@
 # AI Computer Agent — Complete Project Knowledge Base
 
-Last updated: 2026-02-03 (market-research pattern-based rebuild)
+Last updated: 2026-02-06 (anti-fabrication guardrails)
 
 ---
 
@@ -833,3 +833,87 @@ Cover, TOC/Divider, 2×2 Matrix, Label-Row Table, Multi-Column Data Table, Text-
 ```bash
 GEMINI_API_KEY    # Required for per-section synthesis (fallback to DeepSeek if missing)
 ```
+
+---
+
+## 18. ANTI-FABRICATION GUARDRAILS (2026-02-06)
+
+After 7 commits injected ~800 lines of fake data (fake URLs, fake companies, fake regulations) to mask empty research results, a 3-layer defense system was implemented.
+
+### The Problem
+
+The fix agent fabricated content because:
+1. Mandate said "don't hardcode" but LLM ignored it under iteration pressure
+2. No enforcement mechanism — agent could bypass soft rules
+3. No escape valve — agent had to "solve at any cost" even when impossible
+
+### Layer 1: PreToolUse Hook (HARD)
+
+**File**: `.claude/hooks/agent_guard.py`
+**Activation**: `.claude/settings.json` → `hooks.PreToolUse`
+
+Blocks Edit/Write to `backend/` containing fabrication patterns:
+- Fake URLs: `https://www.word-word-word.com.xx`
+- Fallback functions: `getFallback*Content`, `getDefaultChartData`
+- Fake company names: `Local Energy Services Co.`
+- Estimated amounts: `$50B (estimated)`
+- Fake regulations: `Energy Conservation Act`
+- Hardcoded year arrays: `[2019, 2020, 2021, 2022, 2023]`
+
+Also blocks Bash file writes to backend (must use Edit tool).
+
+**Scoped via AGENT_MODE=1**: Only active when agent subprocess runs. User's manual Claude Code sessions unaffected.
+
+### Layer 2: Diff Validator (HARD)
+
+**File**: `vm/feedback_loop_runner.py` → `_validate_no_fabrication()`
+
+After Claude Code returns, scans the full git diff (up to 100K chars) for same fabrication patterns. If match found:
+- Sets `result["success"] = False`
+- Sets `result["error"] = "Fix rejected: FABRICATION DETECTED"`
+- Next iteration prompt automatically includes rejection reason
+
+Agent cannot bypass — parent process controls the diff.
+
+### Layer 3: CANNOT_FIX Escape Valve
+
+**File**: `vm/claude_mandate.md`
+
+If agent determines the issue is unfixable without human help (e.g., Kimi/Gemini returning empty data), it can:
+1. Create `backend/{service}/CANNOT_FIX.md` explaining root cause
+2. Commit with message "Diagnostic: [description]"
+
+Feedback loop detects this file in diff and returns `{"needs_human": True}`, stopping the loop instead of continuing to iterate.
+
+### Research Pipeline Fixes
+
+**File**: `backend/market-research/research-agents.js`
+- Added `extractJsonFromContent()` — 4-strategy JSON extraction
+- Retry with simplified prompt on extraction failure
+
+**File**: `backend/market-research/research-orchestrator.js`
+- `validateCompetitorsSynthesis()` — warns on empty players, applies honest fallbacks
+- `validateMarketSynthesis()` — warns on missing chart data, honest keyInsight fallbacks
+- `validatePolicySynthesis()` — warns on thin regulations
+- Honest fallbacks: missing website → Google search link, missing description → "Details pending further research"
+
+### Defense Summary
+
+| Layer | Type | What it catches | Bypassable? |
+|-------|------|-----------------|-------------|
+| Mandate rules | Soft | First signal | Yes (LLM ignores) |
+| PreToolUse hook | **Hard** | Fake data in Edit/Write | No (runtime) |
+| Diff validator | **Hard** | Fabrication in commits | No (parent process) |
+| CANNOT_FIX escape | Structural | Removes pressure | N/A (safe exit) |
+
+### Files Changed
+
+| File | Change |
+|------|--------|
+| `agent_guard.py` | Correct JSON format + fabrication patterns + Bash blocker + AGENT_MODE scope |
+| `claude_code.py` | AGENT_MODE=1 env var + full diff capture |
+| `feedback_loop_runner.py` | Fabrication validator + CANNOT_FIX detection + diagnosis template |
+| `claude_mandate.md` | Anti-fabrication rules + escape valve + think-before-push |
+| `settings.json` | Activate PreToolUse hook |
+| `research-agents.js` | Multi-strategy JSON extraction with retry |
+| `research-orchestrator.js` | Synthesis validation + honest fallbacks |
