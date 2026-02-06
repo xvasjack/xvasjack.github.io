@@ -1,0 +1,112 @@
+{
+  "$schema": "Test inputs for automated feedback loop",
+  "description": "Default test inputs for each service. Used by feedback_loop_runner.py",
+
+  "target-v3": {
+    "business": "packaging companies",
+    "country": "Thailand",
+    "exclusion": "trading companies, distributors",
+    "email": "test@example.com",
+    "expected_output": {
+      "min_companies": 20,
+      "file_type": "pptx"
+    }
+  },
+
+  "target-v4": {
+    "business": "logistics companies",
+    "country": "Vietnam",
+    "exclusion": "",
+    "email": "test@example.com",
+    "expected_output": {
+      "min_companies": 25,
+      "file_type": "pptx"
+    }
+  },
+
+  "target-v5": {
+    "business": "energy services",
+    "country": "Japan",
+    "exclusion": "utilities, power plants",
+    "email": "test@example.com",
+    "expected_output": {
+      "min_companies": 20,
+      "file_type": "pptx"
+    }
+  },
+
+  "target-v6": {
+    "business": "food manufacturing",
+    "country": "Indonesia",
+    "exclusion": "restaurants, retail",
+    "email": "test@example.com",
+    "expected_output": {
+      "min_companies": 20,
+      "file_type": "pptx"
+    }
+  },
+
+  "profile-slides": {
+    "websites": ["https://www.grab.com"],
+    "targetDescription": "ride-hailing and delivery",
+    "email": "test@example.com",
+    "rightLayout": "table-6",
+    "expected_output": {
+      "min_slides": 5,
+      "file_type": "pptx"
+    }
+  },
+
+  "market-research": {
+    "business": "electric vehicle charging",
+    "country": "Southeast Asia",
+    "exclusion": "",
+    "email": "test@example.com",
+    "expected_output": {
+      "min_slides": 10,
+      "file_type": "pptx"
+    }
+  },
+
+  "validation": {
+    "business": "technology companies",
+    "country": "Singapore",
+    "exclusion": "",
+    "email": "test@example.com",
+    "file": "sample_companies.xlsx",
+    "expected_output": {
+      "file_type": "xlsx"
+    }
+  },
+
+  "trading-comparable": {
+    "email": "test@example.com",
+    "file": "sample_companies.xlsx",
+    "expected_output": {
+      "file_type": "xlsx"
+    }
+  },
+
+  "utb": {
+    "business": "SaaS platform",
+    "metrics": {
+      "monthly_revenue": 100000,
+      "customers": 500,
+      "churn_rate": 5
+    },
+    "email": "test@example.com",
+    "expected_output": {
+      "file_type": "pptx"
+    }
+  },
+
+  "due-diligence": {
+    "company": "Example Corp",
+    "website": "https://example.com",
+    "email": "test@example.com",
+    "reportLength": "medium",
+    "expected_output": {
+      "file_type": "pptx"
+    }
+  }
+}

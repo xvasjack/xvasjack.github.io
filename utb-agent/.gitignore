@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+*.pyc
+
+# Local config (contains API keys)
+config_local.py
+.env
+
+# Logs
+*.log
+guardrail_audit.log
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Downloaded files
+downloads/
+uploads/
+
+# Credentials (Issue 3: Gmail OAuth2 tokens)
+credentials/
+vm/credentials/
+
+# Loop state (Issue 8: crash recovery)
+loop_state.json
+vm/loop_state.json
+
+# Server state
+host/state.json
+host/state-utb.json
+
+# Screenshots
+host/.form_screenshot_*
+
+# Templates (learned, not source-controlled)
+vm/templates/
