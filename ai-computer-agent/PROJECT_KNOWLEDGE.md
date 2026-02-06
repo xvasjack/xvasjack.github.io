@@ -1,6 +1,6 @@
 # AI Computer Agent — Complete Project Knowledge Base
 
-Last updated: 2026-02-06 (pipeline quality overhaul — 4 workstreams)
+Last updated: 2026-02-06 (section-aware scoring + bug fixes post-overhaul)
 
 ---
 
@@ -570,14 +570,31 @@ python3 agent.py
 | **pywin32 only on Windows** | `requirements.txt` now has `; sys_platform == 'win32'` marker (F77) |
 | **Claude CLI OOMs in WSL** | `claude --print` can crash with JS heap OOM under constrained WSL memory. May need `NODE_OPTIONS=--max-old-space-size=4096`. |
 
-### Recently Fixed (2026-02-06 — Pipeline Quality Overhaul)
+### Recently Fixed (2026-02-06 — Section-Aware Scoring + Bug Fixes)
 
-**4 Workstreams completed:**
+**Section-aware scoring replaces global proxy counting:**
+- Scoring now assigns slides to 5 sections (Policy, Market, Competitive, Strategic, Recommendations) using section divider detection
+- Each section checked independently: Policy → regulations, Market → data points, Competitive → companies
+- Discrepancy messages tell fix agent exactly WHICH section is broken (not "Presentation-wide")
+- New functions: `_assign_slides_to_sections()`, `_score_section()`, `MARKET_RESEARCH_SECTIONS` config
+- Insight quality scoring scoped to Strategic + Recommendations sections (not all slides)
+- Chart check scoped to Market section
+
+**Bug fixes from triple-check:**
+- Fixed `_re` undefined crash in insight quality scoring (lines 1260, 1272 → `re`)
+- Removed 3 more hardcoded filler strings (fabricated advice in Acts, Implementation, Go/No-Go)
+- Added synthesis null guards for `synthesis.country` (lines 44/75/100) and `synthesis.confidenceScore`
+- Replaced 3 hardcoded "Energy" fallback titles with `scope.industry`
+
+**Tests:** 29 Python tests (21 counting + 8 section-aware), 1285 JS tests all pass.
+
+### Previously Fixed (2026-02-06 — Pipeline Quality Overhaul, 4 Workstreams)
+
 - **WS1**: Removed 32 fabricated filler strings from `ppt-single-country.js` (-302 lines net). Wired synthesis data to 7 slide types. Added `return` after `addDataUnavailableMessage` to prevent orphaned elements. Removed filler from `ppt-utils.js` `enrichCompanyDesc`.
 - **WS2**: Replaced single-strategy JSON extraction in 4 research agents (market, competitor, depth, insights) with `extractJsonFromContent` (6 strategies) + automatic retry on failure. Added array regex strategy 2.5. Exported `extractJsonFromContent` for testing.
 - **WS3**: Extracted regulation, data point, and company counting into helper functions (`_count_regulations`, `_count_data_points`, `_count_companies`) in `template_comparison.py`. Broader pattern matching for accurate scoring. Created `original_text` for case-sensitive company detection.
 - **WS1C**: Removed `scores.overall >= 50` bypass from `validateContentDepth` in `research-orchestrator.js` so re-research triggers on content depth failures.
-- **Tests**: 21 Python tests for scoring helpers, 10 JS tests for JSON extraction. All 1285 backend tests pass.
+- **Tests**: 10 JS tests for JSON extraction.
 
 ### Previously Fixed (2026-02-01 — 80-issue audit, 60 fixes across 21 files)
 
