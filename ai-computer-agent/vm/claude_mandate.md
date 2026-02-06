@@ -42,6 +42,41 @@ Previous issues: {PREVIOUS_ISSUES}
 - package.json
 - Email templates
 
+## ANTI-FABRICATION — HARD RULE
+
+**NEVER hardcode content to mask empty research results.**
+
+Fabricating content violates user trust. You will be blocked by:
+1. PreToolUse hook (blocks fake URLs, fake companies, fake percentages)
+2. Diff validator (rejects commits with fabrication patterns)
+3. This commit will be reverted if it gets through
+
+Examples of FORBIDDEN fabrications:
+- Fake company URLs: `https://www.energy-services-company.com.vn`
+- Fake company names: `Local Energy Services Co.`
+- Hardcoded percentages: `5.3% annually`
+- Fallback data functions: `getFallbackCompetitors()`, `getDefaultChartData()`
+- Hardcoded year arrays: `[2019, 2020, 2021, 2022, 2023]`
+- Estimated values: `$50B (estimated)`
+
+If data is missing, the fix is in the RESEARCH PIPELINE, not in adding fake data.
+
+## WHEN YOU CANNOT FIX THE ISSUE
+
+If you determine the issue is in the AI research pipeline (Kimi/Gemini
+returning empty or thin data) and you cannot make the API return better
+results by changing prompts or queries:
+
+1. STOP. Do not hardcode content to mask the problem.
+2. Create file: `backend/{service}/CANNOT_FIX.md` with:
+   - What you investigated
+   - What the root cause is
+   - What human action is needed
+3. Commit with message: "Diagnostic: [description]"
+
+A commit that says "I couldn't fix this, here's what I found" is 1000x
+better than a commit that injects fake data.
+
 ## Fix Priority Order (ALWAYS follow this)
 1. Content empty/hollow → fix research-orchestrator.js (API calls, search queries, parsing)
 2. Content shallow/generic → fix synthesis prompts in research-orchestrator.js
@@ -54,6 +89,24 @@ Previous issues: {PREVIOUS_ISSUES}
 - Iteration 3+: If same category persists, the surface fix isn't working. Look one level deeper.
 - Iteration 5+: STOP patching same files. The root cause is in a DIFFERENT file. Trace the data flow.
 - If you changed the same file 3+ times without improvement: the bug is UPSTREAM of that file.
+
+## THINK BEFORE FIXING — MANDATORY
+
+Before writing ANY code, analyze from multiple angles:
+
+1. ROOT CAUSE: What pipeline stage actually fails? Trace the data flow.
+   Read the code. Don't guess.
+2. THREE APPROACHES: List 3 different ways to fix this.
+3. FOR EACH APPROACH, ask:
+   - Does this fix the root cause or just patch the symptom?
+   - Could this make something else worse?
+   - Does this add ANY hardcoded content? (if yes → REJECTED by hook)
+   - Will this work for ANY country/industry, not just the failing one?
+4. PICK THE BEST: Least risk, fixes root cause, generalizes.
+5. COMMIT MESSAGE: Explain WHY this approach, not just WHAT changed.
+
+You are fixing a PIPELINE. Your fix must generalize.
+If the same issue could recur with different inputs, your fix is wrong.
 
 ## What to Fix
 {FIX_PROMPT}

@@ -184,6 +184,123 @@ function parseJsonResponse(text) {
 }
 
 /**
+ * Honest fallback for missing company website - Google search link
+ */
+function ensureHonestWebsite(company) {
+  if (company && company.name && !company.website) {
+    const searchName = encodeURIComponent(String(company.name).trim());
+    company.website = `https://www.google.com/search?q=${searchName}+official+website`;
+  }
+  return company;
+}
+
+/**
+ * Honest fallback for missing company description
+ */
+function ensureHonestDescription(company) {
+  if (company && (!company.description || company.description.length < 30)) {
+    company.description = company.description
+      ? company.description + ' Details pending further research.'
+      : 'Details pending further research.';
+  }
+  return company;
+}
+
+/**
+ * Validate and apply honest fallbacks to competitors synthesis
+ * Returns the result with fallbacks applied, logs warnings for missing data
+ */
+function validateCompetitorsSynthesis(result) {
+  if (!result) return result;
+
+  const sections = ['japanesePlayers', 'localMajor', 'foreignPlayers'];
+  const warnings = [];
+
+  for (const section of sections) {
+    const players = result[section]?.players || [];
+    if (players.length === 0) {
+      warnings.push(`${section}: no players found`);
+    }
+    // Apply honest fallbacks to each player
+    players.forEach((player) => {
+      ensureHonestWebsite(player);
+      ensureHonestDescription(player);
+    });
+  }
+
+  if (warnings.length > 0) {
+    console.log(`  [Synthesis] Competitor warnings: ${warnings.join('; ')}`);
+  }
+
+  return result;
+}
+
+/**
+ * Validate and apply honest fallbacks to market synthesis
+ * Returns the result with fallbacks applied
+ */
+function validateMarketSynthesis(result) {
+  if (!result) return result;
+
+  // Check for required chart data
+  const sections = ['tpes', 'finalDemand', 'electricity', 'gasLng', 'pricing', 'escoMarket'];
+  let chartCount = 0;
+
+  for (const section of sections) {
+    const chartData = result[section]?.chartData;
+    if (chartData) {
+      if (
+        (chartData.series && Array.isArray(chartData.series) && chartData.series.length > 0) ||
+        (chartData.values && Array.isArray(chartData.values) && chartData.values.length > 0)
+      ) {
+        chartCount++;
+      }
+    }
+    // Ensure keyInsight exists with honest fallback
+    if (!result[section]?.keyInsight) {
+      if (result[section]) {
+        result[section].keyInsight = 'Analysis pending additional research.';
+      }
+    }
+  }
+
+  if (chartCount < 2) {
+    console.log(`  [Synthesis] Market warning: only ${chartCount} sections have valid chart data`);
+  }
+
+  // Check ESCO market specifics
+  if (!result.escoMarket?.marketSize) {
+    console.log(`  [Synthesis] Market warning: ESCO market size not available`);
+    if (result.escoMarket) {
+      result.escoMarket.marketSize = 'Data not available';
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Validate and apply honest fallbacks to policy synthesis
+ */
+function validatePolicySynthesis(result) {
+  if (!result) return result;
+
+  const acts = result.foundationalActs?.acts || [];
+  if (acts.length < 2) {
+    console.log(`  [Synthesis] Policy warning: only ${acts.length} regulations found`);
+  }
+
+  // Ensure each act has required fields with honest fallbacks
+  acts.forEach((act) => {
+    if (!act.enforcement) {
+      act.enforcement = 'Enforcement status pending verification.';
+    }
+  });
+
+  return result;
+}
+
+/**
  * Synthesize with fallback chain: Gemini → Kimi → raw text
  */
 async function synthesizeWithFallback(prompt, options = {}) {
@@ -285,13 +402,14 @@ Return JSON:
 Return ONLY valid JSON.`;
 
   const result = await synthesizeWithFallback(prompt);
-  return (
+  const validated = validatePolicySynthesis(
     result || {
       foundationalActs: { acts: [] },
       nationalPolicy: { targets: [] },
       investmentRestrictions: {},
     }
   );
+  return validated;
 }
 
 /**
@@ -415,7 +533,7 @@ Return JSON with these sections:
 Return ONLY valid JSON.`;
 
   const result = await synthesizeWithFallback(prompt, { maxTokens: 12288 });
-  return (
+  const validated = validateMarketSynthesis(
     result || {
       tpes: {},
       finalDemand: {},
@@ -425,6 +543,7 @@ Return ONLY valid JSON.`;
       escoMarket: {},
     }
   );
+  return validated;
 }
 
 /**
@@ -546,7 +665,7 @@ Return JSON:
 Return ONLY valid JSON.`;
 
   const result = await synthesizeWithFallback(prompt, { maxTokens: 12288 });
-  return (
+  const validated = validateCompetitorsSynthesis(
     result || {
       japanesePlayers: { players: [] },
       localMajor: { players: [] },
@@ -555,6 +674,7 @@ Return ONLY valid JSON.`;
       maActivity: {},
     }
   );
+  return validated;
 }
 
 /**

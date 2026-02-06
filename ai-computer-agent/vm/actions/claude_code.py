@@ -59,6 +59,7 @@ class ClaudeCodeResult:
     error: Optional[str] = None
     pr_number: Optional[int] = None
     git_diff: str = ""
+    full_git_diff: str = ""  # Full diff for fabrication validation (up to 100K)
 
 
 # =============================================================================
@@ -200,6 +201,40 @@ async def _capture_git_diff(effective_cwd, wsl_cwd, pre_head, max_chars=5000):
         return f"(diff capture failed: {e})"
 
 
+async def _capture_full_diff_for_validation(effective_cwd, wsl_cwd, pre_head, max_chars=100000):
+    """Capture FULL git diff for fabrication validation (up to 100K chars).
+    Unlike _capture_git_diff which truncates for prompt context, this returns
+    the full diff for scanning by the fabrication validator."""
+    try:
+        # Check if HEAD changed
+        current_head = await _get_git_head(effective_cwd, wsl_cwd)
+        if not current_head or current_head == pre_head:
+            return ""  # No new commit made
+
+        from shared.cli_utils import is_wsl_mode
+        wsl = is_wsl_mode(CLAUDE_CODE_PATH)
+
+        # Get full diff
+        if wsl:
+            diff_cmd = ["wsl", "--cd", wsl_cwd or effective_cwd, "-e", "git", "diff", "HEAD~1"]
+        else:
+            diff_cmd = ["git", "diff", "HEAD~1"]
+        diff_proc = await asyncio.create_subprocess_exec(
+            *diff_cmd, cwd=effective_cwd,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        diff_out, _ = await asyncio.wait_for(diff_proc.communicate(), timeout=30)
+        diff_text = diff_out.decode("utf-8", errors="replace") if diff_out else ""
+
+        # Only truncate if extremely large (100K+)
+        if len(diff_text) > max_chars:
+            diff_text = diff_text[:max_chars] + f"\n\n... [{len(diff_text) - max_chars} chars truncated] ..."
+
+        return diff_text
+    except Exception as e:
+        return f"(full diff capture failed: {e})"
+
+
 async def run_claude_code(
     prompt: str,
     working_dir: Optional[str] = None,
@@ -289,6 +324,8 @@ async def run_claude_code(
         # Give Claude Code 4GB heap to avoid OOM on large prompts
         env = os.environ.copy()
         env["NODE_OPTIONS"] = "--max-old-space-size=4096"
+        # Enable agent mode for anti-fabrication hook
+        env["AGENT_MODE"] = "1"
 
         process = await asyncio.create_subprocess_exec(
             *cmd_args,
@@ -362,8 +399,10 @@ async def run_claude_code(
 
         # Capture git diff if Claude Code committed changes
         git_diff = ""
+        full_git_diff = ""
         if success:
             git_diff = await _capture_git_diff(effective_cwd, wsl_cwd, pre_head)
+            full_git_diff = await _capture_full_diff_for_validation(effective_cwd, wsl_cwd, pre_head)
 
         return ClaudeCodeResult(
             success=success,
@@ -371,6 +410,7 @@ async def run_claude_code(
             error=error if error else None,
             pr_number=pr_number,
             git_diff=git_diff,
+            full_git_diff=full_git_diff,
         )
 
     except FileNotFoundError:
