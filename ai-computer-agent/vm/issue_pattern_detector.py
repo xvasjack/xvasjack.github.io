@@ -235,7 +235,8 @@ def categorize_issue(issue_text: str) -> str:
         return IssueCategory.CONTENT_DEPTH
     if any(kw in text for kw in ["wrong pattern", "misclassified", "wrong layout", "pattern mismatch"]):
         return IssueCategory.PATTERN_SELECTION
-    if any(kw in text for kw in ["overflow", "overlap", "positioning", "formatting", "font", "color"]):
+    if any(kw in text for kw in ["overflow", "overlap", "positioning", "formatting", "font", "color",
+                                      "bold", "italic", "alignment", "spacing", "margin", "fill", "mismatch"]):
         return IssueCategory.LAYOUT_FORMATTING
     if any(kw in text for kw in ["api error", "rate limit", "timeout", "503", "500", "connection"]):
         return IssueCategory.API_FAILURE

@@ -239,7 +239,9 @@ SCOPE_WHAT_TO_CHANGE = {
     "formatting": (
         "CHANGE TYPE: JSON config values OR pptxgenjs parameters\n"
         "WHERE: template-patterns.json (font sizes, colors, positions) OR "
-        "pptxgenjs calls in ppt-utils.js (addText, addShape params)\n"
+        "pptxgenjs calls in ppt-utils.js (addText, addShape, addTable params).\n"
+        "CHECK: fontFace matches style.fonts (Century Gothic), fill colors match style.colors, "
+        "table header fills match pattern spec (e.g. headerFill: 1F497D).\n"
         "DO NOT touch research content or prompts."
     ),
     "mixed": (
@@ -738,8 +740,8 @@ async def _diagnose_root_cause(
             "3) Check ppt-single-country.js for where dataType is set before choosePattern() is called."
         ),
         "layout_formatting": (
-            "1) Re-extract positions from reference PPTX into template-patterns.json. "
-            "2) Check ppt-utils.js addText/addShape calls — are they reading from template-patterns.json? "
+            "1) Check that fontFace matches template-patterns.json style.fonts (Century Gothic). "
+            "2) Check fill colors in addText/addShape/addTable calls match template-patterns.json style.colors. "
             "3) Match x/y/w/h/fontSize values in ppt-utils.js to the spec in template-patterns.json."
         ),
         "api_failure": "1) Check API key validity, 2) Check rate limits in ai-clients.js, 3) Add fallback provider chain",

@@ -11,10 +11,32 @@ import re
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, field
 from enum import Enum
+import math
 import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("template_comparison")
+
+# Tolerances for formatting comparison
+COLOR_TOLERANCE = 30        # Euclidean RGB distance — allows minor theme variations
+FONT_SIZE_TOLERANCE = 1.5   # ±pt — rounding between pptxgenjs and python-pptx
+POSITION_TOLERANCE = 0.3    # ±inches — layout engine differences
+
+
+def _hex_color_distance(hex_a: str, hex_b: str) -> float:
+    """Euclidean RGB distance between two hex colors. Returns 0-441."""
+    if not hex_a or not hex_b:
+        return 0.0
+    a = hex_a.upper().lstrip('#')
+    b = hex_b.upper().lstrip('#')
+    if len(a) != 6 or len(b) != 6:
+        return 0.0
+    try:
+        ra, ga, ba_ = int(a[0:2], 16), int(a[2:4], 16), int(a[4:6], 16)
+        rb, gb, bb = int(b[0:2], 16), int(b[2:4], 16), int(b[4:6], 16)
+        return math.sqrt((ra - rb) ** 2 + (ga - gb) ** 2 + (ba_ - bb) ** 2)
+    except ValueError:
+        return 0.0
 
 
 class Severity(Enum):
@@ -583,6 +605,357 @@ def _compare_formatting_profiles(
 
 
 # =============================================================================
+# ELEMENT-LEVEL FORMATTING CHECKS (Part 3b)
+# =============================================================================
+
+
+def _check_element_style(shape, element_spec: dict, slide_loc: str,
+                         element_name: str, style_data: Optional[dict] = None) -> List["Discrepancy"]:
+    """Check a shape's formatting against its element spec from template-patterns.json.
+
+    Falls back to style.fonts global defaults when per-element spec doesn't define a property.
+    Returns list of Discrepancy objects.
+    """
+    discrepancies = []
+    if not shape or not element_spec:
+        return discrepancies
+
+    # Determine font role for fallback (body by default)
+    fonts = (style_data or {}).get("fonts", {})
+    # If element name suggests title, use title defaults; otherwise body
+    font_role = "body"
+    if "title" in element_name.lower() or "header" in element_name.lower():
+        font_role = "title"
+    elif "subtitle" in element_name.lower():
+        font_role = "subtitle"
+    elif "source" in element_name.lower() or "footnote" in element_name.lower():
+        font_role = "source"
+    role_defaults = fonts.get(font_role, {})
+
+    # Font size check
+    expected_size = element_spec.get("fontSize") or role_defaults.get("size")
+    if expected_size and shape.font_size_pt:
+        if abs(shape.font_size_pt - expected_size) > FONT_SIZE_TOLERANCE:
+            discrepancies.append(Discrepancy(
+                severity=Severity.MEDIUM,
+                category="font_size_mismatch",
+                location=slide_loc,
+                expected=f"{element_name} fontSize={expected_size}pt",
+                actual=f"{element_name} fontSize={shape.font_size_pt}pt",
+                suggestion=f"Change fontSize to {expected_size} for {element_name} in pptxgenjs.",
+            ))
+
+    # Font color check
+    expected_color = element_spec.get("color") or role_defaults.get("color")
+    if expected_color and shape.font_color_hex:
+        dist = _hex_color_distance(expected_color, shape.font_color_hex)
+        if dist > COLOR_TOLERANCE:
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH,
+                category="font_color_mismatch",
+                location=slide_loc,
+                expected=f"{element_name} color=#{expected_color}",
+                actual=f"{element_name} color=#{shape.font_color_hex}",
+                suggestion=f"Change color to '{expected_color}' for {element_name} in pptxgenjs.",
+            ))
+
+    # Bold check
+    expected_bold = element_spec.get("bold")
+    if expected_bold is not None and shape.font_bold is not None:
+        if expected_bold != shape.font_bold:
+            discrepancies.append(Discrepancy(
+                severity=Severity.MEDIUM,
+                category="bold_mismatch",
+                location=slide_loc,
+                expected=f"{element_name} bold={expected_bold}",
+                actual=f"{element_name} bold={shape.font_bold}",
+                suggestion=f"Set bold: {str(expected_bold).lower()} for {element_name} in pptxgenjs.",
+            ))
+
+    # Italic check
+    expected_italic = element_spec.get("italic")
+    if expected_italic is not None:
+        # font_bold is extracted but italic isn't directly — check via font_name proxy
+        pass  # Italic detection requires additional extraction; skip false positives
+
+    # Fill color check
+    expected_fill = element_spec.get("fill")
+    if expected_fill and shape.fill_color_hex:
+        dist = _hex_color_distance(expected_fill, shape.fill_color_hex)
+        if dist > COLOR_TOLERANCE:
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH,
+                category="fill_color_mismatch",
+                location=slide_loc,
+                expected=f"{element_name} fill=#{expected_fill}",
+                actual=f"{element_name} fill=#{shape.fill_color_hex}",
+                suggestion=f"Change fill to '{expected_fill}' for {element_name} in pptxgenjs addShape/addText.",
+            ))
+
+    # Alignment check
+    expected_align = element_spec.get("align")
+    if expected_align and shape.paragraph_alignment:
+        if expected_align.lower() != shape.paragraph_alignment.lower():
+            discrepancies.append(Discrepancy(
+                severity=Severity.MEDIUM,
+                category="alignment_mismatch",
+                location=slide_loc,
+                expected=f"{element_name} align={expected_align}",
+                actual=f"{element_name} align={shape.paragraph_alignment}",
+                suggestion=f"Set align: '{expected_align}' for {element_name} in pptxgenjs.",
+            ))
+
+    # Line spacing check
+    expected_spacing = element_spec.get("lineSpacing")
+    if expected_spacing and shape.line_spacing:
+        if abs(shape.line_spacing - expected_spacing) > expected_spacing * 0.15:
+            discrepancies.append(Discrepancy(
+                severity=Severity.MEDIUM,
+                category="line_spacing_mismatch",
+                location=slide_loc,
+                expected=f"{element_name} lineSpacing={expected_spacing}",
+                actual=f"{element_name} lineSpacing={shape.line_spacing}",
+                suggestion=f"Set lineSpacingMultiple: {expected_spacing} for {element_name}.",
+            ))
+
+    return discrepancies
+
+
+def _find_shape_for_element(slide_fmt, elem_name: str, elem_spec: dict) -> Optional[Any]:
+    """Match an output shape to a template element by position+type proximity.
+
+    Filters by shape_type to avoid matching wrong shape type.
+    Returns the best matching ShapeFormatting or None.
+    """
+    if not elem_spec or not slide_fmt:
+        return None
+
+    spec_x = elem_spec.get("x")
+    spec_y = elem_spec.get("y")
+    if spec_x is None and spec_y is None:
+        return None
+
+    # Determine expected shape type from element name
+    expected_types = None
+    name_lower = elem_name.lower()
+    if "chart" in name_lower:
+        expected_types = {"chart"}
+    elif "table" in name_lower:
+        expected_types = {"table"}
+    elif any(kw in name_lower for kw in ["diagram", "picture", "image", "logo"]):
+        expected_types = {"picture", "group"}
+    else:
+        expected_types = {"text_box", "placeholder"}
+
+    best_shape = None
+    best_dist = float("inf")
+
+    for sf in slide_fmt.shapes:
+        if expected_types and sf.shape_type not in expected_types:
+            continue
+        dx = (sf.left - spec_x) if spec_x is not None else 0
+        dy = (sf.top - spec_y) if spec_y is not None else 0
+        dist = math.sqrt(dx * dx + dy * dy)
+        if dist < best_dist and dist < POSITION_TOLERANCE * 3:  # 0.9" max match distance
+            best_dist = dist
+            best_shape = sf
+
+    return best_shape
+
+
+def _check_cross_slide_consistency(profile, patterns_data: dict) -> List["Discrepancy"]:
+    """Check cross-slide consistency of body font, sizes, margins, and spacing.
+
+    Runs after per-slide checks. Uses style.fonts spec as ground truth.
+    """
+    discrepancies = []
+    if not profile or not profile.slides:
+        return discrepancies
+
+    style = patterns_data.get("style", {})
+    fonts = style.get("fonts", {})
+    body_spec = fonts.get("body", {})
+    expected_body_family = body_spec.get("family")
+    expected_body_size = body_spec.get("size")
+
+    # Collect stats from non-cover slides (skip slide 1)
+    body_fonts = []
+    body_sizes = []
+    left_margins = []
+    slide_vertical_gaps = []
+
+    for sf in profile.slides:
+        if sf.slide_number == 1:
+            continue  # skip cover slide
+        for shape in sf.shapes:
+            if shape.shape_type not in ("text_box", "placeholder"):
+                continue
+            if shape.text_length == 0:
+                continue
+            # Skip title shapes (top < 0.8")
+            if shape.top < 0.8:
+                continue
+            font = shape.dominant_font_name or shape.font_name
+            if font:
+                body_fonts.append(font)
+            if shape.font_size_pt:
+                body_sizes.append(shape.font_size_pt)
+            if shape.left is not None:
+                left_margins.append(round(shape.left, 1))
+
+        # Vertical spacing between content shapes on this slide
+        content_shapes = sorted(
+            [s for s in sf.shapes if s.shape_type in ("text_box", "table", "placeholder")
+             and s.top > 0.8 and s.height > 0],
+            key=lambda s: s.top
+        )
+        for i in range(len(content_shapes) - 1):
+            gap = content_shapes[i + 1].top - (content_shapes[i].top + content_shapes[i].height)
+            slide_vertical_gaps.append(gap)
+
+    # Body font family consistency
+    if expected_body_family and body_fonts:
+        from collections import Counter
+        font_counts = Counter(body_fonts)
+        wrong_font_count = sum(c for f, c in font_counts.items()
+                               if f.lower() != expected_body_family.lower())
+        if len(body_fonts) > 0 and wrong_font_count / len(body_fonts) > 0.2:
+            top_wrong = [(f, c) for f, c in font_counts.most_common()
+                         if f.lower() != expected_body_family.lower()]
+            wrong_name = top_wrong[0][0] if top_wrong else "unknown"
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH,
+                category="inconsistent_body_font",
+                location="Presentation-wide",
+                expected=f"Body font: {expected_body_family} (style.fonts.body)",
+                actual=f"{wrong_font_count}/{len(body_fonts)} body shapes use {wrong_name}",
+                suggestion=f"Change fontFace to '{expected_body_family}' in all addText/addShape calls in ppt-utils.js.",
+            ))
+
+    # Body font size outliers
+    if expected_body_size and body_sizes:
+        outliers = [s for s in body_sizes if abs(s - expected_body_size) > 3]
+        if len(body_sizes) > 0 and len(outliers) / len(body_sizes) > 0.15:
+            discrepancies.append(Discrepancy(
+                severity=Severity.MEDIUM,
+                category="inconsistent_body_font_size",
+                location="Presentation-wide",
+                expected=f"Body fontSize: {expected_body_size}pt (style.fonts.body)",
+                actual=f"{len(outliers)}/{len(body_sizes)} body shapes deviate >3pt from spec",
+                suggestion=f"Normalize body fontSize to {expected_body_size} across all content slides.",
+            ))
+
+    # Left margin consistency (expected: 0.4" from template-patterns)
+    expected_left = 0.4
+    if left_margins:
+        misaligned = [m for m in left_margins if abs(m - expected_left) > POSITION_TOLERANCE]
+        if len(left_margins) > 0 and len(misaligned) / len(left_margins) > 0.2:
+            discrepancies.append(Discrepancy(
+                severity=Severity.HIGH,
+                category="inconsistent_left_margin",
+                location="Presentation-wide",
+                expected=f"Left margin: {expected_left}\" (from template-patterns.json)",
+                actual=f"{len(misaligned)}/{len(left_margins)} shapes misaligned",
+                suggestion=f"Set x: {expected_left} consistently in pptxgenjs addText/addShape calls.",
+            ))
+
+    # Vertical spacing consistency
+    if slide_vertical_gaps:
+        import statistics
+        if len(slide_vertical_gaps) >= 3:
+            try:
+                stdev = statistics.stdev(slide_vertical_gaps)
+                if stdev > 0.3:
+                    discrepancies.append(Discrepancy(
+                        severity=Severity.MEDIUM,
+                        category="uneven_vertical_spacing",
+                        location="Presentation-wide",
+                        expected="Consistent vertical spacing between shapes (stdev <0.3\")",
+                        actual=f"Vertical gap stdev={stdev:.2f}\"",
+                        suggestion="Normalize y positions so gaps between shapes are consistent.",
+                    ))
+            except Exception:
+                pass
+
+    return discrepancies
+
+
+def _check_footer_and_source(slide_fmt, patterns_data: dict) -> List["Discrepancy"]:
+    """Validate source footnote and header line styling per slide."""
+    discrepancies = []
+    style = patterns_data.get("style", {})
+    slide_loc = f"Slide {slide_fmt.slide_number}"
+
+    # Source footnote: shapes at y > 6.5
+    source_spec = style.get("sourceFootnote", {})
+    expected_src_size = source_spec.get("fontSize")
+    expected_src_color = source_spec.get("color")
+    if expected_src_size or expected_src_color:
+        for sf in slide_fmt.shapes:
+            if sf.shape_type not in ("text_box", "placeholder"):
+                continue
+            if sf.top < 6.5:
+                continue
+            if sf.text_content and "source" in (sf.text_content or "").lower():
+                if expected_src_size and sf.font_size_pt:
+                    if abs(sf.font_size_pt - expected_src_size) > FONT_SIZE_TOLERANCE:
+                        discrepancies.append(Discrepancy(
+                            severity=Severity.LOW,
+                            category="source_footnote_size",
+                            location=slide_loc,
+                            expected=f"Source footnote fontSize={expected_src_size}pt",
+                            actual=f"Source footnote fontSize={sf.font_size_pt}pt",
+                            suggestion=f"Set source footnote fontSize to {expected_src_size}.",
+                        ))
+                if expected_src_color and sf.font_color_hex:
+                    dist = _hex_color_distance(expected_src_color, sf.font_color_hex)
+                    if dist > COLOR_TOLERANCE:
+                        discrepancies.append(Discrepancy(
+                            severity=Severity.LOW,
+                            category="source_footnote_color",
+                            location=slide_loc,
+                            expected=f"Source footnote color=#{expected_src_color}",
+                            actual=f"Source footnote color=#{sf.font_color_hex}",
+                            suggestion=f"Set source footnote color to '{expected_src_color}'.",
+                        ))
+                break  # only check first source-like shape
+
+    # Header line color/thickness
+    header_spec = style.get("headerLine", {})
+    expected_line_color = header_spec.get("color")
+    expected_line_thickness = header_spec.get("thickness")
+    if expected_line_color or expected_line_thickness:
+        for sf in slide_fmt.shapes:
+            if sf.shape_type != "line":
+                continue
+            if not (0.5 <= sf.top <= 1.8):
+                continue
+            # This is a header line
+            if expected_line_color and sf.border_color_hex:
+                dist = _hex_color_distance(expected_line_color, sf.border_color_hex)
+                if dist > COLOR_TOLERANCE:
+                    discrepancies.append(Discrepancy(
+                        severity=Severity.HIGH,
+                        category="header_line_color_mismatch",
+                        location=slide_loc,
+                        expected=f"Header line color=#{expected_line_color}",
+                        actual=f"Header line color=#{sf.border_color_hex}",
+                        suggestion=f"Set header line color to '{expected_line_color}' in pptxgenjs addShape('line').",
+                    ))
+            if expected_line_thickness and sf.border_width_pt:
+                if abs(sf.border_width_pt - expected_line_thickness) > 1:
+                    discrepancies.append(Discrepancy(
+                        severity=Severity.MEDIUM,
+                        category="header_line_thickness_mismatch",
+                        location=slide_loc,
+                        expected=f"Header line thickness={expected_line_thickness}pt",
+                        actual=f"Header line thickness={sf.border_width_pt}pt",
+                        suggestion=f"Set header line width to {expected_line_thickness} in pptxgenjs.",
+                    ))
+            break  # only check first header line
+
+
+# =============================================================================
 # PER-SLIDE PATTERN MATCHING (Part 4)
 # =============================================================================
 
@@ -693,7 +1066,8 @@ def _classify_output_slide(slide_fmt) -> Optional[str]:
     return None
 
 
-def _compare_slide_to_pattern(slide_fmt, pattern_name: str, pattern_spec: dict) -> List["Discrepancy"]:
+def _compare_slide_to_pattern(slide_fmt, pattern_name: str, pattern_spec: dict,
+                              patterns_data: Optional[dict] = None) -> List["Discrepancy"]:
     """Compare a single slide against its pattern spec from template-patterns.json.
 
     Returns list of discrepancies found.
@@ -701,6 +1075,7 @@ def _compare_slide_to_pattern(slide_fmt, pattern_name: str, pattern_spec: dict) 
     discrepancies = []
     elements = pattern_spec.get("elements", {})
     slide_loc = f"Slide {slide_fmt.slide_number}"
+    style_data = (patterns_data or {}).get("style", {})
 
     # Helper: find shape by type
     def find_shapes_by_type(stype):
@@ -712,6 +1087,17 @@ def _compare_slide_to_pattern(slide_fmt, pattern_name: str, pattern_spec: dict) 
             if sf.text_content and sf.top < 0.8 and sf.font_size_pt and sf.font_size_pt >= 14:
                 return sf
         return None
+
+    # Helper: find nearest shape by position
+    def find_nearest_shape(x, y, shape_types=None, max_dist=0.9):
+        best, best_d = None, float("inf")
+        for sf in slide_fmt.shapes:
+            if shape_types and sf.shape_type not in shape_types:
+                continue
+            d = math.sqrt((sf.left - x) ** 2 + (sf.top - y) ** 2)
+            if d < best_d and d < max_dist:
+                best, best_d = sf, d
+        return best
 
     # Check title position if spec has it
     title_spec = elements.get("title") or elements.get("sectionTitle") or elements.get("countryTitle")
@@ -784,7 +1170,7 @@ def _compare_slide_to_pattern(slide_fmt, pattern_name: str, pattern_spec: dict) 
                     suggestion=f"Resize chart to h={spec_h} on {slide_loc}.",
                 ))
 
-    # Check table presence and width
+    # Check table presence, width, and cell styling
     table_spec = elements.get("table")
     if table_spec:
         table_shapes = find_shapes_by_type("table")
@@ -812,6 +1198,246 @@ def _compare_slide_to_pattern(slide_fmt, pattern_name: str, pattern_spec: dict) 
                     actual=f"Table width={ts.width}\"",
                     suggestion=f"Resize table to w={spec_w} on {slide_loc}.",
                 ))
+
+            # Table cell styling checks
+            expected_hdr_fill = table_spec.get("headerFill") or table_spec.get("labelFill")
+            if expected_hdr_fill and ts.table_header_fill_hex:
+                dist = _hex_color_distance(expected_hdr_fill, ts.table_header_fill_hex)
+                if dist > COLOR_TOLERANCE:
+                    discrepancies.append(Discrepancy(
+                        severity=Severity.HIGH,
+                        category="table_header_fill_mismatch",
+                        location=slide_loc,
+                        expected=f"Table header fill=#{expected_hdr_fill}",
+                        actual=f"Table header fill=#{ts.table_header_fill_hex}",
+                        suggestion=f"Set table header fill to '{expected_hdr_fill}' in addTable() options.",
+                    ))
+
+            expected_hdr_color = table_spec.get("headerColor") or table_spec.get("labelColor")
+            if expected_hdr_color and ts.table_header_font_color_hex:
+                dist = _hex_color_distance(expected_hdr_color, ts.table_header_font_color_hex)
+                if dist > COLOR_TOLERANCE:
+                    discrepancies.append(Discrepancy(
+                        severity=Severity.HIGH,
+                        category="table_header_color_mismatch",
+                        location=slide_loc,
+                        expected=f"Table header text color=#{expected_hdr_color}",
+                        actual=f"Table header text color=#{ts.table_header_font_color_hex}",
+                        suggestion=f"Set table header text color to '{expected_hdr_color}' in addTable().",
+                    ))
+
+            expected_alt_fill = table_spec.get("altRowFill")
+            if expected_alt_fill and ts.table_body_alt_row_fill_hex:
+                dist = _hex_color_distance(expected_alt_fill, ts.table_body_alt_row_fill_hex)
+                if dist > COLOR_TOLERANCE:
+                    discrepancies.append(Discrepancy(
+                        severity=Severity.MEDIUM,
+                        category="table_alt_row_fill_mismatch",
+                        location=slide_loc,
+                        expected=f"Table alt row fill=#{expected_alt_fill}",
+                        actual=f"Table alt row fill=#{ts.table_body_alt_row_fill_hex}",
+                        suggestion=f"Set table alternating row fill to '{expected_alt_fill}'.",
+                    ))
+
+    # =====================================================================
+    # DICT ELEMENT STYLE CHECKS — check each named element with style props
+    # =====================================================================
+    skip_elements = {"title", "sectionTitle", "countryTitle", "table", "chart",
+                     "contentArea", "quadrants", "insightPanels", "rows",
+                     "sectionItems", "chevronFlow", "comparisonSplit",
+                     "annotations", "subVariations"}
+
+    for elem_name, elem_spec in elements.items():
+        if elem_name in skip_elements:
+            continue
+        if not isinstance(elem_spec, dict):
+            continue
+        # Only check elements that have style properties
+        has_style = any(k in elem_spec for k in
+                        ["fontSize", "color", "bold", "italic", "fill", "align", "lineSpacing"])
+        if not has_style:
+            continue
+
+        matched_shape = _find_shape_for_element(slide_fmt, elem_name, elem_spec)
+        if matched_shape:
+            discrepancies.extend(
+                _check_element_style(matched_shape, elem_spec, slide_loc, elem_name, style_data)
+            )
+
+    # =====================================================================
+    # ARRAY ELEMENT CHECKS — quadrants, insightPanels, rows
+    # =====================================================================
+
+    # Quadrants (matrix_2x2)
+    quadrants = elements.get("quadrants")
+    if isinstance(quadrants, list):
+        for i, q_spec in enumerate(quadrants):
+            qx, qy = q_spec.get("x", 0), q_spec.get("y", 0)
+            q_fill = q_spec.get("fill")
+            matched = find_nearest_shape(qx, qy, {"text_box", "placeholder"})
+            if matched and q_fill and matched.fill_color_hex:
+                dist = _hex_color_distance(q_fill, matched.fill_color_hex)
+                if dist > COLOR_TOLERANCE:
+                    label = q_spec.get("label", f"quadrant_{i}")
+                    discrepancies.append(Discrepancy(
+                        severity=Severity.HIGH,
+                        category="fill_color_mismatch",
+                        location=slide_loc,
+                        expected=f"Quadrant '{label}' fill=#{q_fill}",
+                        actual=f"Quadrant fill=#{matched.fill_color_hex}",
+                        suggestion=f"Set quadrant '{label}' fill to '{q_fill}' in addShape().",
+                    ))
+
+    # Insight panels (chart_insight_panels)
+    insight_panels = elements.get("insightPanels")
+    if isinstance(insight_panels, list):
+        for i, panel in enumerate(insight_panels):
+            blue_bar = panel.get("blueBar", {})
+            bar_color = blue_bar.get("color")
+            bar_x = blue_bar.get("x", panel.get("x", 0))
+            bar_y = blue_bar.get("y", panel.get("y", 0))
+            if bar_color:
+                # Blue bars are narrow shapes — look for shapes near the position
+                bar_shape = find_nearest_shape(bar_x, bar_y)
+                if bar_shape and bar_shape.fill_color_hex:
+                    dist = _hex_color_distance(bar_color, bar_shape.fill_color_hex)
+                    if dist > COLOR_TOLERANCE:
+                        discrepancies.append(Discrepancy(
+                            severity=Severity.HIGH,
+                            category="fill_color_mismatch",
+                            location=slide_loc,
+                            expected=f"Insight panel {i+1} bar color=#{bar_color}",
+                            actual=f"Bar fill=#{bar_shape.fill_color_hex}",
+                            suggestion=f"Set insight panel blue bar fill to '{bar_color}'.",
+                        ))
+
+    # Case study rows
+    rows_spec = elements.get("rows")
+    label_style = elements.get("labelStyle", {})
+    content_style = elements.get("contentStyle", {})
+    if isinstance(rows_spec, list) and (label_style or content_style):
+        expected_label_fill = label_style.get("fill")
+        expected_content_fill = content_style.get("fill")
+        for i, row in enumerate(rows_spec):
+            label_x = row.get("labelX", 0.4)
+            label_y = row.get("y", 0)
+            # Find label shape
+            if expected_label_fill:
+                label_shape = find_nearest_shape(label_x, label_y, {"text_box", "placeholder"})
+                if label_shape and label_shape.fill_color_hex:
+                    dist = _hex_color_distance(expected_label_fill, label_shape.fill_color_hex)
+                    if dist > COLOR_TOLERANCE:
+                        discrepancies.append(Discrepancy(
+                            severity=Severity.HIGH,
+                            category="fill_color_mismatch",
+                            location=slide_loc,
+                            expected=f"Row label fill=#{expected_label_fill}",
+                            actual=f"Row {i+1} label fill=#{label_shape.fill_color_hex}",
+                            suggestion=f"Set case study row label fill to '{expected_label_fill}'.",
+                        ))
+                        break  # one example is enough
+
+    # =====================================================================
+    # NESTED ELEMENT STYLE CHECKS — bulletPanel, chartLeft.chartTitle, etc.
+    # =====================================================================
+
+    # bulletPanel (chart_side_bullets)
+    bullet_panel = elements.get("bulletPanel")
+    if isinstance(bullet_panel, dict) and bullet_panel.get("x") is not None:
+        bp_shape = find_nearest_shape(
+            bullet_panel.get("x", 0), bullet_panel.get("y", 0),
+            {"text_box", "placeholder"}
+        )
+        if bp_shape:
+            # Check nested properties
+            for prop, key in [("headerFontSize", "font_size_pt"), ("headerColor", "font_color_hex")]:
+                expected = bullet_panel.get(prop)
+                if not expected:
+                    continue
+                if prop.endswith("FontSize") and bp_shape.font_size_pt:
+                    if abs(bp_shape.font_size_pt - expected) > FONT_SIZE_TOLERANCE:
+                        discrepancies.append(Discrepancy(
+                            severity=Severity.MEDIUM,
+                            category="font_size_mismatch",
+                            location=slide_loc,
+                            expected=f"bulletPanel {prop}={expected}",
+                            actual=f"bulletPanel fontSize={bp_shape.font_size_pt}",
+                            suggestion=f"Set bulletPanel {prop} to {expected}.",
+                        ))
+                elif prop.endswith("Color") and bp_shape.font_color_hex:
+                    dist = _hex_color_distance(expected, bp_shape.font_color_hex)
+                    if dist > COLOR_TOLERANCE:
+                        discrepancies.append(Discrepancy(
+                            severity=Severity.HIGH,
+                            category="font_color_mismatch",
+                            location=slide_loc,
+                            expected=f"bulletPanel {prop}=#{expected}",
+                            actual=f"bulletPanel color=#{bp_shape.font_color_hex}",
+                            suggestion=f"Set bulletPanel color to '{expected}'.",
+                        ))
+
+    # chartLeft/chartRight with nested chartTitle (dual_chart_financial)
+    for chart_key in ("chartLeft", "chartRight"):
+        chart_elem = elements.get(chart_key)
+        if not isinstance(chart_elem, dict):
+            continue
+        chart_title_spec = chart_elem.get("chartTitle")
+        if isinstance(chart_title_spec, dict):
+            # chartTitle is displayed as text near the chart — find by position
+            cx, cy = chart_elem.get("x", 0), chart_elem.get("y", 0)
+            nearby_text = find_nearest_shape(cx, cy - 0.3, {"text_box", "placeholder"})
+            if not nearby_text:
+                nearby_text = find_nearest_shape(cx, cy, {"text_box", "placeholder"})
+            if nearby_text:
+                discrepancies.extend(
+                    _check_element_style(nearby_text, chart_title_spec, slide_loc,
+                                         f"{chart_key}.chartTitle", style_data)
+                )
+
+    # metricsRow (dual_chart_financial)
+    metrics_spec = elements.get("metricsRow")
+    if isinstance(metrics_spec, dict):
+        metric_color = metrics_spec.get("metricValueColor")
+        metric_size = metrics_spec.get("metricValueFontSize")
+        if metric_color or metric_size:
+            my = metrics_spec.get("y", 5.5)
+            # Find shapes near metrics row y position
+            metric_shapes = [sf for sf in slide_fmt.shapes
+                             if sf.shape_type in ("text_box", "placeholder")
+                             and abs(sf.top - my) < POSITION_TOLERANCE]
+            for ms in metric_shapes[:3]:
+                if metric_size and ms.font_size_pt:
+                    if abs(ms.font_size_pt - metric_size) > FONT_SIZE_TOLERANCE:
+                        discrepancies.append(Discrepancy(
+                            severity=Severity.MEDIUM,
+                            category="font_size_mismatch",
+                            location=slide_loc,
+                            expected=f"metricsRow valueFontSize={metric_size}",
+                            actual=f"Metric fontSize={ms.font_size_pt}",
+                            suggestion=f"Set metric value fontSize to {metric_size}.",
+                        ))
+                        break
+                if metric_color and ms.font_color_hex:
+                    dist = _hex_color_distance(metric_color, ms.font_color_hex)
+                    if dist > COLOR_TOLERANCE:
+                        discrepancies.append(Discrepancy(
+                            severity=Severity.HIGH,
+                            category="font_color_mismatch",
+                            location=slide_loc,
+                            expected=f"metricsRow valueColor=#{metric_color}",
+                            actual=f"Metric color=#{ms.font_color_hex}",
+                            suggestion=f"Set metric value color to '{metric_color}'.",
+                        ))
+                        break
+
+    # Section divider background check (toc_divider)
+    if pattern_name == "toc_divider" and hasattr(slide_fmt, 'background_fill_hex'):
+        if slide_fmt.background_fill_hex:
+            # toc_divider backgrounds are often navy
+            section_items = elements.get("sectionItems", {})
+            highlight_color = section_items.get("highlightColor")
+            # Background should be a dark color if set — flag if unexpected
+            # (Specific expected bg varies; only flag if clearly wrong)
 
     return discrepancies
 
@@ -1555,12 +2181,29 @@ def compare_pptx_to_template(
                         classified = _classify_output_slide(slide_fmt)
                         if classified and classified in patterns_dict:
                             slide_discs = _compare_slide_to_pattern(
-                                slide_fmt, classified, patterns_dict[classified]
+                                slide_fmt, classified, patterns_dict[classified],
+                                patterns_data=patterns_data,
                             )
                             slide_discrepancies.extend(slide_discs)
 
+                        # Footer + source footnote + header line checks (all slides except cover)
+                        if slide_fmt.slide_number > 1:
+                            slide_discrepancies.extend(
+                                _check_footer_and_source(slide_fmt, patterns_data)
+                            )
+
                     if slide_discrepancies:
                         discrepancies.extend(slide_discrepancies)
+                    else:
+                        passed_checks += 1
+
+                    # Cross-slide consistency checks
+                    total_checks += 1
+                    consistency_discs = _check_cross_slide_consistency(
+                        out_profile_for_slides, patterns_data
+                    )
+                    if consistency_discs:
+                        discrepancies.extend(consistency_discs)
                     else:
                         passed_checks += 1
         except ImportError:

@@ -90,6 +90,15 @@ class ShapeFormatting:
     margin_right: Optional[float] = None
     margin_bottom: Optional[float] = None
     line_spacing: Optional[float] = None  # paragraph line spacing
+    # Extended fields for comprehensive formatting checks
+    dominant_font_name: Optional[str] = None  # most common font across all runs
+    has_bullets: bool = False
+    bullet_char: Optional[str] = None
+    indent_level: int = 0
+    vertical_alignment: Optional[str] = None  # top/center/bottom
+    table_header_fill_hex: Optional[str] = None
+    table_header_font_color_hex: Optional[str] = None
+    table_body_alt_row_fill_hex: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -108,6 +117,7 @@ class SlideFormatting:
     subtitle_font_color_hex: Optional[str] = None
     header_line_count: int = 0
     header_line_y_positions: List[float] = field(default_factory=list)  # inches
+    background_fill_hex: Optional[str] = None  # slide background color
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -304,6 +314,11 @@ def _extract_shape_formatting(shape) -> ShapeFormatting:
     margin_right = None
     margin_bottom = None
     line_spacing_val = None
+    dominant_font = None
+    has_bullets = False
+    bullet_char = None
+    indent_level = 0
+    vertical_alignment = None
 
     if shape.has_text_frame:
         text_length = sum(len(p.text) for p in shape.text_frame.paragraphs)
@@ -341,6 +356,54 @@ def _extract_shape_formatting(shape) -> ShapeFormatting:
                     break
         except Exception:
             pass
+        # Dominant font — most common font across all runs
+        try:
+            font_names = []
+            for para in shape.text_frame.paragraphs:
+                for run in para.runs:
+                    if run.text.strip() and run.font.name:
+                        font_names.append(run.font.name)
+            if font_names:
+                dominant_font = Counter(font_names).most_common(1)[0][0]
+        except Exception:
+            pass
+        # Bullet extraction via paragraph XML
+        try:
+            for para in shape.text_frame.paragraphs:
+                if not para.text.strip():
+                    continue
+                p_xml = para._p
+                # Check for bullet character <a:buChar>
+                bu_chars = p_xml.findall('.//{http://schemas.openxmlformats.org/drawingml/2006/main}buChar')
+                if bu_chars:
+                    has_bullets = True
+                    bullet_char = bu_chars[0].get('char', '')
+                    break
+                # Check for auto-numbered bullets <a:buAutoNum>
+                bu_auto = p_xml.findall('.//{http://schemas.openxmlformats.org/drawingml/2006/main}buAutoNum')
+                if bu_auto:
+                    has_bullets = True
+                    break
+        except Exception:
+            pass
+        # Indent level from first non-empty paragraph
+        try:
+            for para in shape.text_frame.paragraphs:
+                if para.text.strip():
+                    indent_level = para.level or 0
+                    break
+        except Exception:
+            pass
+        # Vertical alignment from bodyPr
+        try:
+            body_pr = shape.text_frame._txBody.find(
+                '{http://schemas.openxmlformats.org/drawingml/2006/main}bodyPr')
+            if body_pr is not None:
+                anchor = body_pr.get('anchor')
+                anchor_map = {'t': 'top', 'ctr': 'center', 'b': 'bottom'}
+                vertical_alignment = anchor_map.get(anchor)
+        except Exception:
+            pass
 
     # Shape fill color
     try:
@@ -358,6 +421,40 @@ def _extract_shape_formatting(shape) -> ShapeFormatting:
             border_width_pt = round(shape.line.width / 12700, 1)  # EMU to pt
     except Exception:
         pass
+
+    # Table cell formatting extraction
+    table_header_fill = None
+    table_header_font_color = None
+    table_body_alt_row_fill = None
+    if shape_type == "table":
+        try:
+            tbl = shape.table
+            if len(tbl.rows) > 0 and len(tbl.rows[0].cells) > 0:
+                hdr_cell = tbl.rows[0].cells[0]
+                try:
+                    if hdr_cell.fill.type is not None and hdr_cell.fill.type == 1:
+                        table_header_fill = str(hdr_cell.fill.fore_color.rgb)
+                except Exception:
+                    pass
+                try:
+                    for para in hdr_cell.text_frame.paragraphs:
+                        for run in para.runs:
+                            if run.text.strip() and run.font.color and run.font.color.rgb:
+                                table_header_font_color = str(run.font.color.rgb)
+                                break
+                        if table_header_font_color:
+                            break
+                except Exception:
+                    pass
+            if len(tbl.rows) > 1 and len(tbl.rows[1].cells) > 0:
+                try:
+                    alt_cell = tbl.rows[1].cells[0]
+                    if alt_cell.fill.type is not None and alt_cell.fill.type == 1:
+                        table_body_alt_row_fill = str(alt_cell.fill.fore_color.rgb)
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     estimated_lines = _estimate_text_lines(text_length, width, font_size_pt)
     available_lines = _estimate_available_lines(height, font_size_pt)
@@ -380,6 +477,14 @@ def _extract_shape_formatting(shape) -> ShapeFormatting:
         margin_right=margin_right,
         margin_bottom=margin_bottom,
         line_spacing=line_spacing_val,
+        dominant_font_name=dominant_font,
+        has_bullets=has_bullets,
+        bullet_char=bullet_char,
+        indent_level=indent_level,
+        vertical_alignment=vertical_alignment,
+        table_header_fill_hex=table_header_fill,
+        table_header_font_color_hex=table_header_font_color,
+        table_body_alt_row_fill_hex=table_body_alt_row_fill,
     )
 
 
@@ -388,6 +493,15 @@ def _extract_slide_formatting(slide, slide_number: int) -> SlideFormatting:
     layout_name = ""
     try:
         layout_name = slide.slide_layout.name or ""
+    except Exception:
+        pass
+
+    # Extract slide background fill
+    bg_fill_hex = None
+    try:
+        bg = slide.background
+        if bg.fill.type is not None and bg.fill.type == 1:  # Solid fill
+            bg_fill_hex = str(bg.fill.fore_color.rgb)
     except Exception:
         pass
 
@@ -448,6 +562,7 @@ def _extract_slide_formatting(slide, slide_number: int) -> SlideFormatting:
         subtitle_font_color_hex=subtitle_font_color,
         header_line_count=len(header_lines),
         header_line_y_positions=sorted(header_lines),
+        background_fill_hex=bg_fill_hex,
     )
 
 
