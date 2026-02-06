@@ -1,0 +1,42 @@
+# Binary files that cause OOM when Claude CLI indexes them
+*.pptx
+*.xlsx
+*.xls
+*.pdf
+*.doc
+*.docx
+*.zip
+*.tar
+*.gz
+*.rar
+
+# Images
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.bmp
+*.webp
+
+# Media
+*.mp3
+*.mp4
+*.wav
+*.avi
+*.mov
+
+# Large directories
+.git
+node_modules
+dist
+build
+coverage
+
+# Generated output files
+backend/market-research/test-output.pptx
+backend/market-research/vietnam-output.pptx
+
+# Screenshot cache
+ai-computer-agent/host/.form_screenshot_*
