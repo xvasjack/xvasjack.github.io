@@ -327,12 +327,7 @@ async function synthesizeWithFallback(prompt, options = {}) {
 async function synthesizePolicy(researchData, country, industry, clientContext) {
   console.log(`  [Synthesis] Policy section for ${country}...`);
 
-  const prompt = `You are synthesizing policy and regulatory research for ${country}'s ${industry} market.
-Client context: ${clientContext}
-
-RESEARCH DATA:
-${JSON.stringify(
-  Object.fromEntries(
+  const filteredData = Object.fromEntries(
     Object.entries(researchData).filter(
       ([k]) =>
         k.includes('policy') ||
@@ -350,10 +345,18 @@ ${JSON.stringify(
         k.includes('act') ||
         k.includes('decree')
     )
-  ),
-  null,
-  2
-)}
+  );
+
+  const dataAvailable = Object.keys(filteredData).length > 0;
+  console.log(
+    `    [Policy] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE - will use training knowledge'})`
+  );
+
+  const prompt = `You are synthesizing policy and regulatory research for ${country}'s ${industry} market.
+Client context: ${clientContext}
+
+RESEARCH DATA${dataAvailable ? '' : ' (SPARSE - use your training knowledge)'}:
+${JSON.stringify(filteredData, null, 2)}
 
 DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - List EVERY named regulation, law, decree with year and official name
@@ -368,7 +371,7 @@ DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - MANDATORY: nationalPolicy.targets array MUST have at least 3 entries
 - MANDATORY: investmentRestrictions.incentives array MUST have at least 2 entries
 - If exact names are unavailable, provide the closest known regulation with "estimated" qualifier — NEVER return empty arrays
-- CRITICAL: If research data is sparse, use your training knowledge about ${country}'s energy/environmental laws. Name REAL regulations — do not leave arrays empty.
+- CRITICAL: Research data may be empty due to API issues. In this case, you MUST use your training knowledge about ${country}'s energy/environmental regulatory framework. Name REAL regulations from your training data for ${country}'s ${industry} sector. Include actual law names, years, and regulatory bodies. NEVER return empty arrays — populate with known regulations even if research data is sparse.
 
 Return JSON:
 {
@@ -418,12 +421,7 @@ Return ONLY valid JSON.`;
 async function synthesizeMarket(researchData, country, industry, clientContext) {
   console.log(`  [Synthesis] Market section for ${country}...`);
 
-  const prompt = `You are synthesizing market data research for ${country}'s ${industry} market.
-Client context: ${clientContext}
-
-RESEARCH DATA:
-${JSON.stringify(
-  Object.fromEntries(
+  const filteredData = Object.fromEntries(
     Object.entries(researchData).filter(
       ([k]) =>
         k.includes('market') ||
@@ -447,10 +445,18 @@ ${JSON.stringify(
         k.includes('growth') ||
         k.includes('forecast')
     )
-  ),
-  null,
-  2
-)}
+  );
+
+  const dataAvailable = Object.keys(filteredData).length > 0;
+  console.log(
+    `    [Market] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE - will use training knowledge'})`
+  );
+
+  const prompt = `You are synthesizing market data research for ${country}'s ${industry} market.
+Client context: ${clientContext}
+
+RESEARCH DATA${dataAvailable ? '' : ' (SPARSE - use your training knowledge)'}:
+${JSON.stringify(filteredData, null, 2)}
 
 DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - At least 3 time-series datasets with 5+ data points each
@@ -465,7 +471,7 @@ DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - MANDATORY: Each of the 6 sections (tpes, finalDemand, electricity, gasLng, pricing, escoMarket) MUST have a populated keyInsight field with actionable language
 - MANDATORY: chartData in at least 4 sections (not just 3) must have series/values arrays with 5+ numeric data points each. This is critical for data visualization requirement. Every market slide needs charts.
 - MANDATORY: escoMarket must have marketSize (e.g., "$XXM") and growthRate (e.g., "XX% CAGR") populated
-- CRITICAL: If research data lacks specific numbers, use your training knowledge to provide REAL approximate data for ${country}'s energy sector. Include market sizes, installed capacities, consumption figures, growth rates. NEVER leave numeric fields empty.
+- CRITICAL: Research data may be empty due to API issues. In this case, you MUST use your extensive training knowledge about ${country}'s energy market. Provide REAL approximate data for installed capacity, consumption figures, market sizes, growth rates, pricing trends. Reference known data sources (IEA, government statistics, industry reports). NEVER leave numeric fields or chartData empty — use training knowledge to populate realistic estimates for ${country}'s ${industry} sector.
 - EVERY keyInsight MUST contain at least one of: "recommend", "opportunity", "should consider", "growth potential", "strategic fit", "next steps", "outlook"
 
 For chart data, provide NUMERIC arrays (not strings). Example:
@@ -552,12 +558,7 @@ Return ONLY valid JSON.`;
 async function synthesizeCompetitors(researchData, country, industry, clientContext) {
   console.log(`  [Synthesis] Competitors section for ${country}...`);
 
-  const prompt = `You are synthesizing competitive intelligence for ${country}'s ${industry} market.
-Client context: ${clientContext}
-
-RESEARCH DATA:
-${JSON.stringify(
-  Object.fromEntries(
+  const filteredData = Object.fromEntries(
     Object.entries(researchData).filter(
       ([k]) =>
         k.includes('compet') ||
@@ -579,10 +580,18 @@ ${JSON.stringify(
         k.includes('firm') ||
         k.includes('enterprise')
     )
-  ),
-  null,
-  2
-)}
+  );
+
+  const dataAvailable = Object.keys(filteredData).length > 0;
+  console.log(
+    `    [Competitors] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE - will use training knowledge'})`
+  );
+
+  const prompt = `You are synthesizing competitive intelligence for ${country}'s ${industry} market.
+Client context: ${clientContext}
+
+RESEARCH DATA${dataAvailable ? '' : ' (SPARSE - use your training knowledge)'}:
+${JSON.stringify(filteredData, null, 2)}
 
 DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - At least 3 named companies per category with: investment year, structure (JV/acquisition/greenfield), stake %, partner name, revenue
@@ -595,7 +604,7 @@ DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 - MANDATORY: japanesePlayers.players must have at least 2 entries, localMajor.players at least 3 entries, foreignPlayers.players at least 2 entries
 - MANDATORY: Every player description must be 50-80 words MINIMUM (word count check: split by spaces, filter empty, must be >=50). If you lack specific data, describe the company's general capabilities, market positioning, estimated scale, and strategic relevance
 - MANDATORY: caseStudy must have company, entryYear, entryMode, investment, and outcome all populated with specific data
-- CRITICAL: If research data is sparse, use your training knowledge to name REAL companies operating in ${country}'s ${industry} sector. Include their actual corporate website URLs. NEVER return empty player arrays.
+- CRITICAL: Research data may be empty due to API issues. In this case, you MUST use your training knowledge to name REAL companies operating in ${country}'s ${industry} sector. For Vietnamese energy services: include state-owned utilities (EVN), major local ESCOs, Japanese trading companies with presence (Marubeni, JERA), and international firms (Schneider, Siemens). Include their actual corporate website URLs. NEVER return empty player arrays — use training knowledge to populate with real company names, estimated market positions, and strategic context.
 - EVERY description must include strategic context: why this company matters, what threat/opportunity it presents, and a recommendation (e.g., "recommend approaching for JV", "should consider as acquisition target", "strategic fit for technology licensing")
 
 Return JSON:
