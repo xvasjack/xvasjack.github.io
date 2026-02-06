@@ -66,6 +66,8 @@ class ComparisonResult:
     regulation_count: int = 0
     data_point_count: int = 0
     company_indicator_count: int = 0
+    section_scores: Dict[str, Dict] = field(default_factory=dict)
+    missing_sections: List[str] = field(default_factory=list)
 
     @property
     def critical_count(self) -> int:
@@ -98,10 +100,14 @@ class ComparisonResult:
         d["regulation_count"] = self.regulation_count
         d["data_point_count"] = self.data_point_count
         d["company_indicator_count"] = self.company_indicator_count
-        # Flag missing categories for diagnostic
+        # Flag missing categories for diagnostic (section-aware thresholds)
         d["missing_regulations"] = self.regulation_count < 3
-        d["missing_data_points"] = self.data_point_count < 15
+        d["missing_data_points"] = self.data_point_count < 10
         d["missing_companies"] = self.company_indicator_count < 3
+        if self.section_scores:
+            d["section_scores"] = self.section_scores
+        if self.missing_sections:
+            d["missing_sections"] = self.missing_sections
         return d
 
     def prioritize_and_limit(self, max_issues=5):
@@ -324,6 +330,13 @@ TEMPLATES = {
         shallow_content_phrases=[
             "is a company that", "was founded in", "is located in",
             "is a leading", "provides services",
+        ],
+        expected_slides=[
+            {"type": "section_divider", "title_contains": "policy & regulation", "required": True},
+            {"type": "section_divider", "title_contains": "market overview", "required": True},
+            {"type": "section_divider", "title_contains": "competitive landscape", "required": True},
+            {"type": "section_divider", "title_contains": "strategic analysis", "required": True},
+            {"type": "section_divider", "title_contains": "recommendation", "required": True},
         ],
     ),
 
@@ -857,6 +870,134 @@ def _count_companies(text: str) -> int:
 
 
 # =============================================================================
+# SECTION-AWARE SCORING FOR MARKET RESEARCH
+# =============================================================================
+
+MARKET_RESEARCH_SECTIONS = {
+    "policy": {
+        "divider_keywords": ["policy & regulation", "policy and regulation"],
+        "checks": {
+            "regulations": {"min": 3, "weight": 30},
+            "data_points": {"min": 3, "weight": 10},
+        },
+        "min_slides": 2,
+    },
+    "market": {
+        "divider_keywords": ["market overview"],
+        "checks": {
+            "data_points": {"min": 10, "weight": 40},
+        },
+        "min_slides": 3,
+    },
+    "competitive": {
+        "divider_keywords": ["competitive landscape"],
+        "checks": {
+            "companies": {"min": 3, "weight": 30},
+        },
+        "min_slides": 2,
+    },
+    "strategic": {
+        "divider_keywords": ["strategic analysis"],
+        "checks": {
+            "data_points": {"min": 3, "weight": 15},
+        },
+        "min_slides": 2,
+    },
+    "recommendations": {
+        "divider_keywords": ["recommendation"],
+        "checks": {},
+        "min_slides": 2,
+    },
+}
+
+
+def _assign_slides_to_sections(slides: List[Dict]) -> Dict[str, List[Dict]]:
+    """Assign slides to sections based on section divider detection."""
+    sections: Dict[str, List[Dict]] = {k: [] for k in MARKET_RESEARCH_SECTIONS}
+    sections["preamble"] = []
+    sections["appendix"] = []
+
+    current_section = "preamble"
+
+    for slide in slides:
+        title = (slide.get("title") or "").lower()
+        all_text = (slide.get("all_text") or "").lower()
+        text_to_check = title or all_text[:200]
+
+        # Check if this is a section divider
+        matched_section = None
+        for section_key, section_def in MARKET_RESEARCH_SECTIONS.items():
+            for kw in section_def["divider_keywords"]:
+                if kw in text_to_check:
+                    matched_section = section_key
+                    break
+            if matched_section:
+                break
+
+        if matched_section:
+            current_section = matched_section
+            continue  # divider itself not added to section content
+
+        if current_section in sections:
+            sections[current_section].append(slide)
+
+    return sections
+
+
+def _score_section(section_key: str, slides: List[Dict], section_def: dict) -> tuple:
+    """Score a section's content depth. Returns (score, max_score, failures, counts)."""
+    combined_text = " ".join((s.get("all_text") or "") for s in slides)
+    original_text = combined_text
+    lower_text = combined_text.lower()
+
+    score = 0
+    max_score = 0
+    failures = []
+    counts = {}
+
+    for check_name, check_def in section_def.get("checks", {}).items():
+        weight = check_def.get("weight", 10)
+        min_val = check_def["min"]
+        max_score += weight
+
+        if check_name == "regulations":
+            count = _count_regulations(lower_text)
+            counts["regulations"] = count
+            if count >= min_val:
+                score += weight
+            elif count >= 1:
+                score += weight // 2
+            else:
+                failures.append(f"Policy section: {count} named regulations (need >={min_val})")
+
+        elif check_name == "data_points":
+            count = _count_data_points(lower_text)
+            counts["data_points"] = count
+            if count >= min_val:
+                score += weight
+            elif count >= min_val // 3:
+                score += weight // 2
+            else:
+                failures.append(f"{section_key.title()} section: {count} data points (need >={min_val})")
+
+        elif check_name == "companies":
+            count = _count_companies(original_text)
+            counts["companies"] = count
+            if count >= min_val:
+                score += weight
+            elif count >= 1:
+                score += weight // 2
+            else:
+                failures.append(f"Competitive section: {count} named companies (need >={min_val})")
+
+    min_slides = section_def.get("min_slides", 1)
+    if len(slides) < min_slides:
+        failures.append(f"{section_key.title()} section: only {len(slides)} slides (need >={min_slides})")
+
+    return score, max_score, failures, counts
+
+
+# =============================================================================
 # COMPARISON FUNCTIONS
 # =============================================================================
 
@@ -1160,108 +1301,108 @@ def compare_pptx_to_template(
         passed_checks += 1
 
     # ==========================================================================
-    # MARKET RESEARCH: CONTENT DEPTH + PATTERN MATCH SCORING
+    # MARKET RESEARCH: SECTION-AWARE CONTENT DEPTH SCORING
     # ==========================================================================
 
+    _mr_section_scores = {}
+    _mr_missing_sections = []
+
     if template.name == "Market Research Report":
+        # Assign slides to sections based on divider detection
+        section_map = _assign_slides_to_sections(slides)
+
+        # Check section presence
         total_checks += 1
-        # Content depth scoring based on research quality
-        original_text = " ".join(
-            (slide.get("all_text", "") or "")
-            for slide in slides
-        )
-        all_text = original_text.lower()
+        sections_found = [k for k in MARKET_RESEARCH_SECTIONS if len(section_map.get(k, [])) > 0]
+        sections_missing = [k for k in MARKET_RESEARCH_SECTIONS if len(section_map.get(k, [])) == 0]
+        _mr_missing_sections = sections_missing
 
-        named_regulations = _count_regulations(all_text)
-        data_points = _count_data_points(all_text)
-        named_companies = _count_companies(original_text)
-        
-        # Score content depth
-        depth_score = 0
-        depth_failures = []
-        
-        if named_regulations >= 3:
-            depth_score += 30
-        elif named_regulations >= 1:
-            depth_score += 15
-        else:
-            depth_failures.append(f"Policy depth: only {named_regulations} named regulations (need ≥3)")
-        
-        if data_points >= 15:
-            depth_score += 40
-        elif data_points >= 5:
-            depth_score += 20
-        else:
-            depth_failures.append(f"Market depth: only {data_points} quantified data points (need ≥15)")
-        
-        if named_companies >= 3:
-            depth_score += 30
-        elif named_companies >= 1:
-            depth_score += 15
-        else:
-            depth_failures.append(f"Competitor depth: only {named_companies} named companies (need ≥3)")
-
-        # Populate tracking vars for ComparisonResult
-        _mr_depth_score = depth_score
-        _mr_regulation_count = named_regulations
-        _mr_data_point_count = data_points
-        _mr_company_indicator_count = named_companies
-
-        if depth_score < 50:
+        if sections_missing:
             discrepancies.append(Discrepancy(
                 severity=Severity.CRITICAL,
-                category="shallow_research_content",
-                location="Presentation-wide",
-                expected="Deep research: ≥3 named regulations, ≥15 data points, ≥3 named companies",
-                actual=f"Content depth score: {depth_score}/100. {'; '.join(depth_failures)}",
+                category="missing_sections",
+                location="Presentation structure",
+                expected=f"All 5 sections: {', '.join(MARKET_RESEARCH_SECTIONS.keys())}",
+                actual=f"Missing: {', '.join(sections_missing)}. Found: {', '.join(sections_found) or 'none'}",
                 suggestion=(
-                    "Research content is too shallow. Fix the research pipeline: "
-                    "1) Add specific regulation names with years and decree numbers. "
-                    "2) Include quantified market data (market size in $, growth rates, capacity in MW/GW). "
-                    "3) Name specific competitor companies with revenue, market share, entry details. "
-                    "Each section needs 'so what' insights connecting data to client implications."
+                    f"Missing section dividers or content for: {', '.join(sections_missing)}. "
+                    "Each section needs a divider slide with the section title, followed by content slides."
                 ),
             ))
         else:
             passed_checks += 1
-        
-        # Fix 9: Semantic insight quality scoring (not just keyword counting)
+
+        # Score each section
         total_checks += 1
+        total_depth_score = 0
+        total_max_score = 0
+        all_depth_failures = []
+
+        for section_key, section_def in MARKET_RESEARCH_SECTIONS.items():
+            section_slides = section_map.get(section_key, [])
+            score, max_score, failures, counts = _score_section(section_key, section_slides, section_def)
+            total_depth_score += score
+            total_max_score += max_score
+            all_depth_failures.extend(failures)
+            _mr_section_scores[section_key] = {
+                "score": score, "max_score": max_score,
+                "slide_count": len(section_slides), **counts,
+            }
+
+        # Extract per-section counts for backward compat
+        _mr_depth_score = total_depth_score
+        _mr_regulation_count = _mr_section_scores.get("policy", {}).get("regulations", 0)
+        _mr_data_point_count = _mr_section_scores.get("market", {}).get("data_points", 0)
+        _mr_company_indicator_count = _mr_section_scores.get("competitive", {}).get("companies", 0)
+
+        if total_max_score > 0 and total_depth_score < total_max_score * 0.5:
+            discrepancies.append(Discrepancy(
+                severity=Severity.CRITICAL,
+                category="shallow_research_content",
+                location="Per-section analysis",
+                expected=f"Section depth score >={total_max_score * 0.5:.0f}/{total_max_score}",
+                actual=f"Score: {total_depth_score}/{total_max_score}. {'; '.join(all_depth_failures)}",
+                suggestion=(
+                    "Research content is too shallow in specific sections: "
+                    + "; ".join(all_depth_failures) + ". "
+                    "Fix the research pipeline for the failing sections."
+                ),
+            ))
+        else:
+            passed_checks += 1
+
+        # Insight quality scoring — scoped to Strategic + Recommendations sections
+        total_checks += 1
+        insight_sections_text = " ".join(
+            (s.get("all_text") or "")
+            for k in ("strategic", "recommendations")
+            for s in section_map.get(k, [])
+        ).lower()
+
         insight_keywords = [
             "implication", "opportunity", "barrier", "recommend",
             "should", "risk", "advantage", "critical", "timing",
             "window", "first mover", "competitive edge"
         ]
-
-        # Quality signals: score each insight-containing paragraph
         INSIGHT_QUALITY_SIGNALS = [
-            (r"\b(19|20)\d{2}\b", 1),                              # Contains a year
-            (r"\$[\d,]+|\d+\s*(?:billion|million)", 2),            # Dollar amounts
-            (r"\d+(?:\.\d+)?%", 1),                                # Percentages
-            (r"(?:within|by|before)\s+\d{4}|(?:\d+[-\u2013]\d+)\s*months?", 2),  # Timing
-            (r"(?:should|must|recommend|advise)\s+\w+", 1),        # Directive
-            (r"(?:because|due to|driven by|as a result|therefore|consequently)", 2),  # Causal reasoning
-            (r"(?:however|but|despite|although|conversely)", 1),   # Nuance/contrast
+            (r"\b(19|20)\d{2}\b", 1),
+            (r"\$[\d,]+|\d+\s*(?:billion|million)", 2),
+            (r"\d+(?:\.\d+)?%", 1),
+            (r"(?:within|by|before)\s+\d{4}|(?:\d+[-\u2013]\d+)\s*months?", 2),
+            (r"(?:should|must|recommend|advise)\s+\w+", 1),
+            (r"(?:because|due to|driven by|as a result|therefore|consequently)", 2),
+            (r"(?:however|but|despite|although|conversely)", 1),
         ]
 
-        # Split text into paragraphs, find those with insight keywords
-        paragraphs = [p.strip() for p in all_text.split("\n") if len(p.strip()) > 30]
-        insight_paragraphs = []
-        for para in paragraphs:
-            if any(kw in para for kw in insight_keywords):
-                insight_paragraphs.append(para)
+        paragraphs = [p.strip() for p in insight_sections_text.split("\n") if len(p.strip()) > 30]
+        insight_paragraphs = [p for p in paragraphs if any(kw in p for kw in insight_keywords)]
 
-        # Score each insight paragraph
         para_scores = []
         best_data_excerpt = ""
         for para in insight_paragraphs:
-            score = 0
-            for pattern, weight in INSIGHT_QUALITY_SIGNALS:
-                if _re.search(pattern, para, _re.IGNORECASE):
-                    score += weight
-            para_scores.append(score)
-            # Track best data excerpt for Fix 11 actionable example
-            if score > 0 and not best_data_excerpt and len(para) < 200:
+            s = sum(w for pat, w in INSIGHT_QUALITY_SIGNALS if re.search(pat, para, re.IGNORECASE))
+            para_scores.append(s)
+            if s > 0 and not best_data_excerpt and len(para) < 200:
                 best_data_excerpt = para[:150]
 
         avg_quality = sum(para_scores) / max(len(para_scores), 1)
@@ -1269,63 +1410,56 @@ def compare_pptx_to_template(
         insight_count = len(insight_paragraphs)
         with_numbers = sum(1 for s in para_scores if s >= 2)
         with_timing = sum(1 for para in insight_paragraphs
-                         if _re.search(r"(?:within|by|before)\s+\d{4}|(?:\d+[-\u2013]\d+)\s*months?", para, _re.IGNORECASE))
+                         if re.search(r"(?:within|by|before)\s+\d{4}|(?:\d+[-\u2013]\d+)\s*months?", para, re.IGNORECASE))
 
         if avg_quality < 4 or insight_count < 3:
-            # Fix 11: Build actionable suggestion with concrete example
             specifics = []
             if insight_count > 0:
                 specifics.append(f"{with_numbers}/{insight_count} insight paragraphs contain numbers or dates")
                 specifics.append(f"{with_timing}/{insight_count} contain timing windows")
             else:
                 specifics.append("0 paragraphs contain insight language")
-
-            suggestion = (
-                f"Insights lack specificity — {'; '.join(specifics)}. "
-            )
+            suggestion = f"Insights lack specificity — {'; '.join(specifics)}. "
             if best_data_excerpt:
                 suggestion += (
                     f"Example from THIS output: '{best_data_excerpt[:100]}...'\n"
-                    f"A shallow version: 'The market shows growth'\n"
                     f"A deep insight: '[data point] growing at X% suggests a Y-month window "
                     f"for first-mover advantage, because [regulation] takes effect in [year]'\n"
                 )
-            suggestion += (
-                "Every insight needs: 1) So what? (implication) 2) Now what? (action) 3) By when? (timing)"
-            )
-
+            suggestion += "Every insight needs: 1) So what? (implication) 2) Now what? (action) 3) By when? (timing)"
             discrepancies.append(Discrepancy(
                 severity=Severity.HIGH,
                 category="missing_strategic_insights",
-                location="Presentation-wide",
-                expected="Strategic insights with avg quality score >=4/10 (specificity, timing, reasoning)",
-                actual=f"Insight quality: avg {avg_quality:.1f}/10, {insight_count} insight paragraphs, {with_numbers} with data",
+                location="Strategic + Recommendations sections",
+                expected="Strategic insights with avg quality score >=4/10",
+                actual=f"Insight quality: avg {avg_quality:.1f}/10, {insight_count} paragraphs, {with_numbers} with data",
                 suggestion=suggestion,
             ))
         else:
             passed_checks += 1
-        
-        # Check for chart/data visualization presence
+
+        # Chart check — scoped to Market section
         total_checks += 1
+        market_slides = section_map.get("market", [])
         chart_slides = sum(
-            1 for slide in slides
+            1 for slide in market_slides
             if any(kw in (slide.get("all_text", "") or "").lower()
                    for kw in ["chart", "figure", "graph", "source:"])
             or slide.get("has_chart", False)
+            or slide.get("has_image", False)
             or slide.get("chart_count", 0) > 0
         )
-        
-        if chart_slides < 3:
+        if chart_slides < 2:
             discrepancies.append(Discrepancy(
                 severity=Severity.HIGH,
                 category="insufficient_data_visualization",
-                location="Presentation-wide",
-                expected="At least 3 slides with charts/data visualizations",
-                actual=f"Only {chart_slides} slides appear to have charts",
+                location="Market Overview section",
+                expected="At least 2 Market slides with charts/data visualizations",
+                actual=f"Only {chart_slides} Market slides appear to have charts",
                 suggestion=(
-                    "Market research needs data visualization. Add charts for: "
-                    "energy mix over time, market size growth, price comparisons, "
-                    "competitor market share. Use pptxgenjs addChart() with the pattern library."
+                    "Market section needs data visualization. Add charts for: "
+                    "market size growth, energy mix, price trends, demand projections. "
+                    "Use pptxgenjs addChart() with the pattern library."
                 ),
             ))
         else:
@@ -1447,6 +1581,8 @@ def compare_pptx_to_template(
     result.regulation_count = _mr_regulation_count
     result.data_point_count = _mr_data_point_count
     result.company_indicator_count = _mr_company_indicator_count
+    result.section_scores = _mr_section_scores
+    result.missing_sections = _mr_missing_sections
 
     result.summary = f"Checked {total_checks} criteria, {passed_checks} passed. " \
                      f"Found {len(discrepancies)} issues ({result.critical_count} critical, {result.high_count} high)."

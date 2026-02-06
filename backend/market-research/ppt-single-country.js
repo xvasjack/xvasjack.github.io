@@ -41,7 +41,7 @@ function safeCell(value, maxLen) {
 // ============ SECTION-BASED SLIDE GENERATOR ============
 // Generates slides dynamically based on data depth using pattern library
 async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
-  console.log(`Generating section-based single-country PPT for ${synthesis.country}...`);
+  console.log(`Generating section-based single-country PPT for ${(synthesis || {}).country}...`);
 
   const pptx = new pptxgen();
 
@@ -72,7 +72,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   });
 
   pptx.author = 'YCP Market Research';
-  pptx.title = `${synthesis.country} - ${scope.industry} Market Analysis`;
+  pptx.title = `${(synthesis || {}).country} - ${scope.industry} Market Analysis`;
   pptx.subject = scope.projectType;
 
   // Set default font to Segoe UI (YCP standard)
@@ -97,7 +97,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     goNoGo: rawSummary.goNoGo || {},
     recommendation: rawSummary.recommendation || '',
   };
-  const country = countryAnalysis.country || synthesis.country;
+  const country = countryAnalysis.country || (synthesis || {}).country;
 
   // Enrich thin company descriptions by combining available data fields
   // Target: 50+ words with specific metrics, strategic context, and market relevance
@@ -462,7 +462,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           key: 'foundationalActs',
           dataType: 'regulation_list',
           data: foundActs,
-          title: foundActs.slideTitle || `${country} - Energy Foundational Acts`,
+          title:
+            foundActs.slideTitle ||
+            `${country} - ${scope.industry || 'Industry'} Foundational Acts`,
           subtitle: truncateSubtitle(foundActs.subtitle || foundActs.keyMessage || '', 95),
           citations: getCitationsForCategory('policy_'),
           dataQuality: getDataQualityForCategory('policy_'),
@@ -531,7 +533,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           data: sectionData.japanesePlayers || {},
           title:
             (sectionData.japanesePlayers || {}).slideTitle ||
-            `${country} - Japanese Energy Companies`,
+            `${country} - Japanese ${scope.industry || 'Industry'} Companies`,
           subtitle: truncateSubtitle(
             (sectionData.japanesePlayers || {}).marketInsight ||
               (sectionData.japanesePlayers || {}).subtitle ||
@@ -563,7 +565,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           data: sectionData.foreignPlayers || {},
           title:
             (sectionData.foreignPlayers || {}).slideTitle ||
-            `${country} - Foreign Energy Companies`,
+            `${country} - Foreign ${scope.industry || 'Industry'} Companies`,
           subtitle: truncateSubtitle(
             (sectionData.foreignPlayers || {}).competitiveInsight ||
               (sectionData.foreignPlayers || {}).subtitle ||
@@ -1319,18 +1321,6 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         valign: 'top',
         autoPage: true,
       });
-      addCalloutBox(
-        slide,
-        `For ${scope.clientContext || 'Your Company'}:`,
-        `Regulatory framework creates recurring ${scope.industry || 'energy services'} demand in ${country}. Mandates drive industrial compliance spending.`,
-        {
-          x: LEFT_MARGIN,
-          y: 1.3 + actsTableH + 0.15,
-          w: CONTENT_WIDTH,
-          h: 0.7,
-          type: 'recommendation',
-        }
-      );
       // Synthesis-driven regulatory insight if available
       const actsRecoY = 1.3 + actsTableH + 0.15 + 0.7 + 0.1;
       if (
@@ -1924,18 +1914,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         { y: 1.3 + implTableH + 0.3 }
       );
 
-      addCalloutBox(
-        slide,
-        'Next Steps',
-        `Recommend initiating Phase 1 immediately. Secure local partner commitment within 60 days. Total investment: ${data.totalInvestment || 'TBD'}. Breakeven: ${data.breakeven || 'TBD'}.`,
-        {
-          x: LEFT_MARGIN,
-          y: 1.3 + implTableH + 0.3 + 1.3 + 0.15,
-          w: CONTENT_WIDTH,
-          h: 0.7,
-          type: 'recommendation',
-        }
-      );
+      // Implementation data shown in tables above — no hardcoded advice
     } else {
       addDataUnavailableMessage(slide, 'Implementation roadmap data not available');
       return;
@@ -2541,7 +2520,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     metricsRows.push([
       { text: 'Market Size' },
       { text: safeCell(marketDynamics.marketSize, 40) },
-      { text: `${safeCell(synthesis.confidenceScore) || '--'}/100` },
+      { text: `${safeCell(synthesis && synthesis.confidenceScore) || '--'}/100` },
     ]);
   }
   if (depth.escoEconomics?.typicalDealSize?.average) {
@@ -2596,8 +2575,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   addCalloutBox(
     finalSlide,
     `VERDICT: ${finalGoNoGo.overallVerdict || 'CONDITIONAL'}`,
-    (finalGoNoGo.conditions || []).slice(0, 2).join('; ') ||
-      'Proceed with recommended entry strategy',
+    (finalGoNoGo.conditions || []).slice(0, 2).join('; ') || '--',
     { y: 4.0, h: 0.9, type: finalVerdictType }
   );
   addSourceFootnote(
