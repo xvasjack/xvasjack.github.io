@@ -224,7 +224,7 @@ function isValidCompany(item) {
     /\bbut\s+\w+\s+market\b/i, // "but energy services market growing..."
     /\b(growing|declining)\s+at\s+\d/i, // "growing at 12-15%"
     /\bmarket\s+\w+\s+(analysis|overview)\b/i, // "energy services market analysis"
-    /\.([\s]|$)/, // Contains period (sentence, not abbreviation at end)
+    /[a-z]{3,}\.\s+[A-Z]/, // Contains period ending a sentence (lowercase word. Uppercase start) — allows abbreviations like J.P. and A.T.
   ];
   for (const pattern of invalidPatterns) {
     if (pattern.test(name)) return false;
@@ -330,6 +330,32 @@ function enrichCompanyDesc(company, countryStr, industryStr) {
   // Let thin descriptions stay thin — no fabricated filler
   company.description = parts.join(' ').trim();
   return company;
+}
+
+// Helper: dynamically size text to fit within a shape
+function fitTextToShape(text, maxW, maxH, baseFontPt) {
+  const avgCharWidth = baseFontPt * 0.006; // inches per char
+  const lineHeight = baseFontPt * 0.017; // inches per line
+  const charsPerLine = Math.floor(maxW / avgCharWidth);
+  const maxLines = Math.floor(maxH / lineHeight);
+  const textLines = Math.ceil(text.length / charsPerLine);
+
+  if (textLines <= maxLines) return { text, fontSize: baseFontPt };
+
+  // Try reducing font size
+  for (let fs = baseFontPt - 1; fs >= 10; fs--) {
+    const cw = fs * 0.006;
+    const lh = fs * 0.017;
+    const cpl = Math.floor(maxW / cw);
+    const ml = Math.floor(maxH / lh);
+    if (Math.ceil(text.length / cpl) <= ml) return { text, fontSize: fs };
+  }
+
+  // Still doesn't fit at 10pt — truncate
+  const cpl10 = Math.floor(maxW / (10 * 0.006));
+  const ml10 = Math.floor(maxH / (10 * 0.017));
+  const maxChars = cpl10 * ml10;
+  return { text: text.substring(0, maxChars - 3) + '...', fontSize: 10 };
 }
 
 // Helper: calculate dynamic column widths based on content length
@@ -728,10 +754,10 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
 // YCP Color Palette for charts - WCAG 2.1 AA accessible colors
 // Colors selected for sufficient contrast and colorblind-friendly combinations
 const CHART_COLORS = [
-  '0066CC', // Blue (primary) - high contrast, safe for colorblind
-  'D55E00', // Orange-red - distinguishable for deuteranopia
-  '009E73', // Teal/Green - safe for protanopia
-  'CC79A7', // Muted pink - distinguishable across color blindness types
+  '1736B6', // dark blue
+  '3C57FE', // medium blue
+  '8EC1FF', // light blue
+  'D6D7D9', // gray
   '1F497D', // Navy - dark contrast
   'F0E442', // Yellow - high visibility (use with dark text)
   '56B4E9', // Sky blue - complements orange-red
@@ -823,7 +849,39 @@ function addStackedBarChart(slide, title, data, options = {}) {
   }
 
   if (!chartData || !chartData.categories || !chartData.series || chartData.series.length === 0) {
-    return; // Skip if no valid data
+    console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
+    slide.addText('Chart data unavailable', {
+      x: options.x || 0.5,
+      y: options.y || 1.5,
+      w: options.w || 9,
+      h: options.h || 4.5,
+      fontSize: 14,
+      color: '999999',
+      fontFace: 'Segoe UI',
+      align: 'center',
+      valign: 'middle',
+    });
+    return;
+  }
+
+  // Validate series values are all numbers
+  const hasInvalidValues = chartData.series.some(
+    (s) => s.values && s.values.some((v) => typeof v !== 'number' || isNaN(v))
+  );
+  if (hasInvalidValues) {
+    console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
+    slide.addText('Chart data unavailable', {
+      x: options.x || 0.5,
+      y: options.y || 1.5,
+      w: options.w || 9,
+      h: options.h || 4.5,
+      fontSize: 14,
+      color: '999999',
+      fontFace: 'Segoe UI',
+      align: 'center',
+      valign: 'middle',
+    });
+    return;
   }
 
   // Add visual indicator for projected data in title if applicable
@@ -876,7 +934,39 @@ function addLineChart(slide, title, data, options = {}) {
   }
 
   if (!chartData || !chartData.categories || !chartData.series || chartData.series.length === 0) {
-    return; // Skip if no valid data
+    console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
+    slide.addText('Chart data unavailable', {
+      x: options.x || 0.5,
+      y: options.y || 1.5,
+      w: options.w || 9,
+      h: options.h || 4.5,
+      fontSize: 14,
+      color: '999999',
+      fontFace: 'Segoe UI',
+      align: 'center',
+      valign: 'middle',
+    });
+    return;
+  }
+
+  // Validate series values are all numbers
+  const hasInvalidValues = chartData.series.some(
+    (s) => s.values && s.values.some((v) => typeof v !== 'number' || isNaN(v))
+  );
+  if (hasInvalidValues) {
+    console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
+    slide.addText('Chart data unavailable', {
+      x: options.x || 0.5,
+      y: options.y || 1.5,
+      w: options.w || 9,
+      h: options.h || 4.5,
+      fontSize: 14,
+      color: '999999',
+      fontFace: 'Segoe UI',
+      align: 'center',
+      valign: 'middle',
+    });
+    return;
   }
 
   // Add visual indicator for projected data in title if applicable
@@ -920,7 +1010,36 @@ function addLineChart(slide, title, data, options = {}) {
 // Add a bar chart (horizontal or vertical) to a slide
 function addBarChart(slide, title, data, options = {}) {
   if (!data || !data.categories || !data.values || data.values.length === 0) {
-    return; // Skip if no valid data
+    console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
+    slide.addText('Chart data unavailable', {
+      x: options.x || 0.5,
+      y: options.y || 1.5,
+      w: options.w || 9,
+      h: options.h || 4.5,
+      fontSize: 14,
+      color: '999999',
+      fontFace: 'Segoe UI',
+      align: 'center',
+      valign: 'middle',
+    });
+    return;
+  }
+
+  // Validate values are all numbers
+  if (data.values.some((v) => typeof v !== 'number' || isNaN(v))) {
+    console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
+    slide.addText('Chart data unavailable', {
+      x: options.x || 0.5,
+      y: options.y || 1.5,
+      w: options.w || 9,
+      h: options.h || 4.5,
+      fontSize: 14,
+      color: '999999',
+      fontFace: 'Segoe UI',
+      align: 'center',
+      valign: 'middle',
+    });
+    return;
   }
 
   const chartData = [
@@ -956,7 +1075,36 @@ function addBarChart(slide, title, data, options = {}) {
 // Add a pie/doughnut chart to a slide
 function addPieChart(slide, title, data, options = {}) {
   if (!data || !data.categories || !data.values || data.values.length === 0) {
-    return; // Skip if no valid data
+    console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
+    slide.addText('Chart data unavailable', {
+      x: options.x || 0.5,
+      y: options.y || 1.5,
+      w: options.w || 6,
+      h: options.h || 4.5,
+      fontSize: 14,
+      color: '999999',
+      fontFace: 'Segoe UI',
+      align: 'center',
+      valign: 'middle',
+    });
+    return;
+  }
+
+  // Validate values are all numbers
+  if (data.values.some((v) => typeof v !== 'number' || isNaN(v))) {
+    console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
+    slide.addText('Chart data unavailable', {
+      x: options.x || 0.5,
+      y: options.y || 1.5,
+      w: options.w || 6,
+      h: options.h || 4.5,
+      fontSize: 14,
+      color: '999999',
+      fontFace: 'Segoe UI',
+      align: 'center',
+      valign: 'middle',
+    });
+    return;
   }
 
   const chartData = [
@@ -1244,7 +1392,7 @@ function addChevronFlow(slide, phases, patternDef, opts = {}) {
         h: h - 0.2,
         fontSize: p.fontSize || 8,
         color: p.textColor || 'FFFFFF',
-        fontFace: 'Century Gothic',
+        fontFace: 'Segoe UI',
         align: 'center',
         valign: 'middle',
       }
@@ -1295,18 +1443,19 @@ function addInsightPanelsFromPattern(slide, insights, patternDef) {
       fontSize: 10,
       bold: true,
       color: '1B2A4A',
-      fontFace: 'Century Gothic',
+      fontFace: 'Segoe UI',
     });
     // Body
     const body = typeof insight === 'string' ? insight : insight.text || insight.body || '';
-    slide.addText(truncate(body, 200), {
+    const fittedBody = fitTextToShape(truncate(body, 200), def.w - 0.3, def.h - 0.5, 9);
+    slide.addText(fittedBody.text, {
       x: def.x + 0.2,
       y: def.y + 0.4,
       w: def.w - 0.3,
       h: def.h - 0.5,
-      fontSize: 9,
+      fontSize: fittedBody.fontSize,
       color: '333333',
-      fontFace: 'Century Gothic',
+      fontFace: 'Segoe UI',
       valign: 'top',
     });
   });
@@ -1332,14 +1481,15 @@ function addCalloutOverlay(slide, text, pos) {
     rectRadius: p.cornerRadius || 0.05,
     shadow: { type: 'outer', blur: 3, opacity: 0.15, offset: 1.5, color: '000000' },
   });
-  slide.addText(truncate(text, 300), {
+  const fitted = fitTextToShape(String(text || ''), w - 0.2, h - 0.2, 9);
+  slide.addText(fitted.text, {
     x: x + 0.1,
     y: y + 0.1,
     w: w - 0.2,
     h: h - 0.2,
-    fontSize: 9,
+    fontSize: fitted.fontSize,
     color: '333333',
-    fontFace: 'Century Gothic',
+    fontFace: 'Segoe UI',
     valign: 'middle',
   });
 }
@@ -1376,7 +1526,7 @@ function addMatrix(slide, quadrants, patternDef) {
       fontSize: 14,
       bold: true,
       color: '1F497D',
-      fontFace: 'Century Gothic',
+      fontFace: 'Segoe UI',
     });
     // Items
     const items = Array.isArray(q.items) ? q.items : typeof q.text === 'string' ? [q.text] : [];
@@ -1391,7 +1541,7 @@ function addMatrix(slide, quadrants, patternDef) {
       h: qDef.h - 0.6,
       fontSize: 10,
       color: '333333',
-      fontFace: 'Century Gothic',
+      fontFace: 'Segoe UI',
       valign: 'top',
     });
   });
@@ -1437,7 +1587,7 @@ function addCaseStudyRows(slide, rows, chevrons, patternDef) {
       fontSize: labelStyle.fontSize,
       bold: labelStyle.bold,
       color: labelStyle.color,
-      fontFace: 'Century Gothic',
+      fontFace: 'Segoe UI',
       valign: 'middle',
     });
 
@@ -1457,7 +1607,7 @@ function addCaseStudyRows(slide, rows, chevrons, patternDef) {
       h: def.h - 0.1,
       fontSize: contentStyle.fontSize,
       color: contentStyle.color,
-      fontFace: 'Century Gothic',
+      fontFace: 'Segoe UI',
       valign: 'top',
     });
   });
@@ -1497,7 +1647,7 @@ function addFinancialCharts(slide, incomeData, balanceData, patternDef) {
       fontSize: metricsRow.metricValueFontSize || 16,
       bold: true,
       color: metricsRow.metricValueColor || '1F497D',
-      fontFace: 'Century Gothic',
+      fontFace: 'Segoe UI',
       align: 'center',
     });
     slide.addText(metric.label || '', {
@@ -1507,7 +1657,7 @@ function addFinancialCharts(slide, incomeData, balanceData, patternDef) {
       h: 0.25,
       fontSize: metricsRow.metricLabelFontSize || 9,
       color: metricsRow.metricLabelColor || '666666',
-      fontFace: 'Century Gothic',
+      fontFace: 'Segoe UI',
       align: 'center',
     });
   });
@@ -1537,7 +1687,7 @@ function addColoredBorderTable(slide, data, color, patternDef) {
           color: p.headerColor || 'FFFFFF',
           fill: { color: p.headerFill || '1F497D' },
           fontSize: p.headerFontSize || 10,
-          fontFace: 'Century Gothic',
+          fontFace: 'Segoe UI',
         },
       }))
     );
@@ -1547,23 +1697,27 @@ function addColoredBorderTable(slide, data, color, patternDef) {
   rows.forEach((row, rowIdx) => {
     const cells = Array.isArray(row) ? row : Object.values(row);
     tableRows.push(
-      cells.map((cell, colIdx) => ({
-        text: truncate(String(cell || ''), 100),
-        options: {
-          fontSize: p.bodyFontSize || 9,
-          color: p.bodyColor || '333333',
-          fontFace: 'Century Gothic',
-          border:
-            colIdx === 0
-              ? [
-                  { pt: 0.5, color: p.borderColor || 'CCCCCC' },
-                  { pt: 0.5, color: p.borderColor || 'CCCCCC' },
-                  { pt: 0.5, color: p.borderColor || 'CCCCCC' },
-                  { pt: p.leftBorderWidth || 3, color: borderColor },
-                ]
-              : { pt: 0.5, color: p.borderColor || 'CCCCCC' },
-        },
-      }))
+      cells.map((cell, colIdx) => {
+        const cellText = truncate(String(cell || ''), 100);
+        const fittedCell = fitTextToShape(cellText, 3.0, 0.35, p.bodyFontSize || 9);
+        return {
+          text: fittedCell.text,
+          options: {
+            fontSize: fittedCell.fontSize,
+            color: p.bodyColor || '333333',
+            fontFace: 'Segoe UI',
+            border:
+              colIdx === 0
+                ? [
+                    { pt: 0.5, color: p.borderColor || 'CCCCCC' },
+                    { pt: 0.5, color: p.borderColor || 'CCCCCC' },
+                    { pt: 0.5, color: p.borderColor || 'CCCCCC' },
+                    { pt: p.leftBorderWidth || 3, color: borderColor },
+                  ]
+                : { pt: 0.5, color: p.borderColor || 'CCCCCC' },
+          },
+        };
+      })
     );
   });
 
@@ -1572,7 +1726,7 @@ function addColoredBorderTable(slide, data, color, patternDef) {
     y: p.y || 1.3,
     w: p.w || 12.5,
     h: Math.min(p.maxH || 5.0, tableRows.length * 0.4 + 0.2),
-    fontFace: 'Century Gothic',
+    fontFace: 'Segoe UI',
     valign: 'top',
   });
 }
@@ -1585,6 +1739,7 @@ module.exports = {
   isValidCompany,
   dedupeCompanies,
   enrichCompanyDesc,
+  fitTextToShape,
   calculateColumnWidths,
   createTableRowOptions,
   addSourceFootnote,

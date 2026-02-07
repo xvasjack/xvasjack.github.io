@@ -1,18 +1,23 @@
 {
+  "positions": {
+    "title": { "left": 0.376, "top": 0.049, "width": 12.586, "height": 0.910 },
+    "content_area": { "left": 0.367, "top": 1.467, "width": 12.600, "height": 5.196 },
+    "source_bar": { "left": 0.327, "top": 6.663, "width": 12.595, "height": 0.270 }
+  },
   "style": {
     "slideWidth": 13.333,
     "slideHeight": 7.5,
     "fonts": {
-      "title": { "family": "Century Gothic", "size": 20, "color": "1B2A4A", "bold": true },
-      "subtitle": { "family": "Century Gothic", "size": 11, "color": "333333", "italic": true },
-      "body": { "family": "Century Gothic", "size": 10, "color": "333333" },
-      "tableHeader": { "family": "Century Gothic", "size": 10, "color": "FFFFFF", "bold": true },
-      "tableBody": { "family": "Century Gothic", "size": 9, "color": "333333" },
-      "source": { "family": "Century Gothic", "size": 7, "color": "999999" },
-      "calloutTitle": { "family": "Century Gothic", "size": 10, "color": "1B2A4A", "bold": true },
-      "calloutBody": { "family": "Century Gothic", "size": 9, "color": "333333" },
-      "insightTitle": { "family": "Century Gothic", "size": 10, "color": "FFFFFF", "bold": true },
-      "insightBody": { "family": "Century Gothic", "size": 9, "color": "333333" }
+      "title": { "family": "Segoe UI", "size": 20, "color": "1B2A4A", "bold": true },
+      "subtitle": { "family": "Segoe UI", "size": 11, "color": "333333", "italic": true },
+      "body": { "family": "Segoe UI", "size": 10, "color": "333333" },
+      "tableHeader": { "family": "Segoe UI", "size": 10, "color": "FFFFFF", "bold": true },
+      "tableBody": { "family": "Segoe UI", "size": 9, "color": "333333" },
+      "source": { "family": "Segoe UI", "size": 7, "color": "999999" },
+      "calloutTitle": { "family": "Segoe UI", "size": 10, "color": "1B2A4A", "bold": true },
+      "calloutBody": { "family": "Segoe UI", "size": 9, "color": "333333" },
+      "insightTitle": { "family": "Segoe UI", "size": 10, "color": "FFFFFF", "bold": true },
+      "insightBody": { "family": "Segoe UI", "size": 9, "color": "333333" }
     },
     "colors": {
       "darkNavy": "1B2A4A",
@@ -242,25 +247,6 @@
         "bottomCallout": { "x": 0.4, "y": 6.0, "w": 12.5, "h": 0.5, "fill": "F5F5F5" }
       }
     },
-    "chart_side_bullets": {
-      "id": "8C",
-      "description": "Chart on left with side bullet points on right",
-      "bestFor": ["trend_with_analysis", "data_plus_commentary"],
-      "templateSlides": [17, 19],
-      "elements": {
-        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
-        "chart": { "x": 0.4, "y": 1.3, "w": 7.5, "h": 4.5 },
-        "bulletPanel": {
-          "x": 8.2, "y": 1.3, "w": 4.7, "h": 4.5,
-          "bulletFontSize": 9,
-          "bulletColor": "333333",
-          "headerFontSize": 11,
-          "headerColor": "1F497D",
-          "headerBold": true
-        },
-        "bottomCallout": { "x": 0.4, "y": 6.0, "w": 12.5, "h": 0.5, "fill": "F5F5F5" }
-      }
-    },
     "chart_callout_simple": {
       "id": "8D",
       "description": "Full-width chart with simple callout box below",
@@ -270,16 +256,6 @@
         "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
         "chart": { "x": 0.4, "y": 1.3, "w": 12.5, "h": 3.8 },
         "callout": { "x": 0.4, "y": 5.3, "w": 12.5, "h": 1.0, "fill": "F5F5F5", "border": "CCCCCC", "borderWidth": 1 }
-      }
-    },
-    "chart_fullwidth": {
-      "id": "8E",
-      "description": "Full-width chart spanning entire content area",
-      "bestFor": ["overview_chart", "full_dataset_visualization"],
-      "templateSlides": [31],
-      "elements": {
-        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
-        "chart": { "x": 0.4, "y": 1.3, "w": 12.5, "h": 5.2 }
       }
     },
     "case_study_rows": {
@@ -337,23 +313,6 @@
           "metricLabelColor": "666666"
         },
         "bottomCallout": { "x": 0.4, "y": 6.2, "w": 12.5, "h": 0.4, "fill": "F5F5F5" }
-      }
-    },
-    "diagram_text_split": {
-      "id": 11,
-      "description": "Diagram or hierarchy on left, text explanation on right",
-      "bestFor": ["organizational_structure", "process_diagram", "hierarchy"],
-      "templateSlides": [25],
-      "elements": {
-        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
-        "diagramArea": { "x": 0.4, "y": 1.3, "w": 6.5, "h": 5.0 },
-        "textArea": {
-          "x": 7.2, "y": 1.3, "w": 5.7, "h": 5.0,
-          "headerFontSize": 12,
-          "bodyFontSize": 10,
-          "headerColor": "1F497D",
-          "bodyColor": "333333"
-        }
       }
     },
     "glossary_table": {
