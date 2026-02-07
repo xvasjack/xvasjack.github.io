@@ -38,6 +38,14 @@ function safeCell(value, maxLen) {
   return maxLen ? truncate(str, maxLen) : str;
 }
 
+// Truncate text to max word count to prevent table overflow
+function truncateWords(text, maxWords) {
+  if (!text) return '';
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return text;
+  return words.slice(0, maxWords).join(' ') + '...';
+}
+
 // ============ SECTION-BASED SLIDE GENERATOR ============
 // Generates slides dynamically based on data depth using pattern library
 async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
@@ -1110,7 +1118,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             : { text: safeCell(p.name) },
           { text: safeCell(p.origin) },
           { text: safeCell(p.mode) },
-          { text: truncate(desc, 500), options: { fontSize: 9 } },
+          { text: truncateWords(desc, 65), options: { fontSize: 9 } },
         ];
       };
     } else if (block.key === 'localMajor') {
@@ -1130,7 +1138,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             : { text: safeCell(p.name) },
           { text: safeCell(p.type) },
           { text: safeCell(p.revenue) },
-          { text: truncate(desc, 500), options: { fontSize: 9 } },
+          { text: truncateWords(desc, 65), options: { fontSize: 9 } },
         ];
       };
     } else {
@@ -1147,7 +1155,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
               }
             : { text: safeCell(p.name) },
           { text: safeCell(p.presence, 30) },
-          { text: truncate(desc, 500), options: { fontSize: 9 } },
+          { text: truncateWords(desc, 65), options: { fontSize: 9 } },
         ];
       };
     }
