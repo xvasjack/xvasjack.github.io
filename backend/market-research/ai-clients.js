@@ -74,13 +74,8 @@ async function withRetry(fn, maxRetries = 3, baseDelayMs = 1000, operationName =
 
 // Kimi K2 API - for deep research with web browsing
 // Uses 256k context for thorough analysis with retry logic
-async function callKimi(
-  query,
-  systemPrompt = '',
-  useWebSearch = true,
-  maxTokens = 8192,
-  temperature = 0.3
-) {
+// NOTE: kimi-k2.5 ONLY accepts temperature: 1 (Moonshot API constraint)
+async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens = 8192) {
   const messages = [];
   if (systemPrompt) {
     messages.push({ role: 'system', content: systemPrompt });
@@ -91,7 +86,7 @@ async function callKimi(
     model: 'kimi-k2.5',
     messages,
     max_tokens: maxTokens,
-    temperature: temperature,
+    temperature: 1,
   };
 
   // Enable web search tool if requested (can be disabled via env var for testing)
@@ -191,7 +186,7 @@ async function callKimi(
               model: 'kimi-k2.5',
               messages,
               max_tokens: maxTokens,
-              temperature: temperature,
+              temperature: 1,
             };
             if (useWebSearch && requestBody.tools) {
               followupBody.tools = requestBody.tools;
@@ -272,7 +267,7 @@ async function callKimi(
           model: 'kimi-k2.5',
           messages: retryMessages,
           max_tokens: maxTokens,
-          temperature: temperature,
+          temperature: 1,
         };
         if (useWebSearch && process.env.KIMI_WEB_SEARCH !== 'false') {
           retryBody.tools = [{ type: 'builtin_function', function: { name: '$web_search' } }];
@@ -412,18 +407,18 @@ Search the web for recent data (2025-2026). Find:
 
 Be specific. Cite sources. No fluff.`;
 
-  return callKimi(query, systemPrompt, true, 8192, 0.2);
+  return callKimi(query, systemPrompt, true, 8192);
 }
 
 // Light tasks (scope parsing, gap ID, review). No web search.
 async function callKimiChat(prompt, systemPrompt = '', maxTokens = 4096) {
-  const result = await callKimi(prompt, systemPrompt, false, maxTokens, 0.0);
+  const result = await callKimi(prompt, systemPrompt, false, maxTokens);
   return result; // { content, citations, usage, researchQuality }
 }
 
 // Heavy synthesis/analysis. No web search.
 async function callKimiAnalysis(prompt, systemPrompt = '', maxTokens = 12000) {
-  const result = await callKimi(prompt, systemPrompt, false, maxTokens, 0.5);
+  const result = await callKimi(prompt, systemPrompt, false, maxTokens);
   return result;
 }
 
