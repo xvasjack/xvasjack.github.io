@@ -178,6 +178,185 @@ async def _check_backend_alive(service_name: str) -> dict:
         return {"alive": False, "reason": str(e)}
 
 
+# Known market-research files for validation
+_MR_KNOWN_FILES = {
+    "server.js", "ai-clients.js", "research-agents.js",
+    "research-orchestrator.js", "research-framework.js",
+    "ppt-single-country.js", "ppt-multi-country.js",
+    "ppt-utils.js", "template-patterns.json",
+    "shared/email.js", "shared/tracking.js",
+}
+
+
+async def _ai_diagnose(
+    issues: List[str],
+    service_name: str,
+    iteration: int,
+    analysis: Optional[Dict] = None,
+) -> Optional[Dict[str, Any]]:
+    """AI-powered diagnosis via Haiku. Returns None on failure → static fallback."""
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return None
+
+    # Build context from analysis
+    diagnostics = analysis.get("backend_diagnostics") if analysis else None
+    comparison = analysis.get("comparison", {}) if analysis else {}
+    fix_prompt_text = (analysis.get("fix_prompt") or "")[:2000] if analysis else ""
+
+    diag_str = ""
+    if diagnostics and diagnostics.get("available"):
+        countries = diagnostics.get("countries", [])
+        if countries:
+            c = countries[0]
+            diag_str = (
+                f"Topic count: {c.get('researchTopicCount', '?')}, "
+                f"Synthesis scores: {c.get('synthesisScores', 'N/A')}, "
+                f"Failed sections: {c.get('failedSections', [])}, "
+                f"Topic char counts: {c.get('researchTopicChars', {})}"
+            )
+
+    issues_text = "\n".join(f"- {iss}" for iss in issues[:15])
+
+    scores_str = (
+        f"depth={comparison.get('content_depth_score', '?')}/100, "
+        f"insight={comparison.get('insight_score', '?')}/10, "
+        f"pattern_match={comparison.get('pattern_match_score', '?')}/100"
+    )
+
+    prompt = f"""Diagnose ALL issues and create an end-to-end fix plan.
+
+## Issues Found
+{issues_text}
+
+## Scores: {scores_str}
+
+## Backend Diagnostics
+{diag_str or "Not available"}
+
+## Template Comparison Fix Prompt
+{fix_prompt_text or "Not available"}
+
+## Iteration: {iteration}
+
+Create a COMPREHENSIVE fix plan addressing ALL issues above.
+For each issue: identify which pipeline stage and file is responsible.
+Output ONLY valid JSON:
+{{
+  "diagnosis": "Root cause paragraph covering all issues",
+  "plan": [
+    {{
+      "step": 1,
+      "issue": "Which issue(s) this addresses",
+      "file": "filename.js",
+      "function": "functionName()",
+      "change": "What specifically to change (prompt text / code logic / config values)",
+      "why": "Why this fixes the issue"
+    }}
+  ],
+  "files_to_modify": ["file1.js", "file2.js"],
+  "files_to_avoid": ["file3.js"],
+  "strategy": "Step-by-step instructions for Claude Code to execute the plan",
+  "what_to_change": "CHANGE TYPE and WHERE for each file",
+  "pipeline_stage": "research|synthesis|ppt_generation|formatting|mixed",
+  "confidence": "high|medium|low"
+}}"""
+
+    system_prompt = """You are an expert debugger for a market research PPTX generation pipeline.
+
+## Pipeline Architecture
+1. SCOPE PARSING: research-framework.js — parseScope() extracts industry, countries, client context
+2. RESEARCH: research-agents.js — policyResearchAgent(), marketResearchAgent(), competitorResearchAgent(), contextResearchAgent(), depthResearchAgent(), insightsResearchAgent(), universalResearchAgent() — each calls callKimiDeepResearch() in ai-clients.js
+3. AI CLIENT: ai-clients.js — callKimi() handles web search tool calls, callKimiDeepResearch() for deep research, callGemini() for synthesis, callKimiChat()/callKimiAnalysis() for light tasks
+4. SYNTHESIS: research-orchestrator.js — researchCountry() orchestrates research, synthesizePolicy(), synthesizeMarket(), synthesizeCompetitors(), synthesizeSummary() call callGemini() to merge research into structured sections
+5. PPT GENERATION: ppt-single-country.js builds per-country slides, ppt-multi-country.js combines, ppt-utils.js has choosePattern(), addFormattedText(), chart/table helpers. template-patterns.json defines layout patterns (positions, fonts, colors)
+6. EMAIL: shared/email.js sends via SendGrid
+7. SERVER: server.js — runMarketResearch() orchestrator, /api/diagnostics endpoint
+
+## Issue-to-Stage Mapping
+- Empty/missing content → Stage 2 (research) or Stage 3 (ai-clients): Kimi returning thin data
+- Shallow/generic text → Stage 4 (synthesis): prompts lack depth requirements
+- Wrong layout/pattern → Stage 5 (PPT gen): choosePattern() misclassifying data
+- Formatting (font/color/size) → Stage 5: template-patterns.json values wrong
+- Missing sections → Stage 4→5: synthesis produced it but PPT gen dropped it
+- Chart/table errors → Stage 5: data format mismatch in ppt-utils.js
+- API failures → Stage 3: ai-clients.js error handling
+
+## Rules
+- Be SPECIFIC: name the function and the line range to change
+- Distinguish PROMPT changes (edit text in template literal) from CODE changes (edit logic)
+- If issue is in research data, DO NOT suggest editing PPT code
+- If issue is in layout, DO NOT suggest editing research prompts
+- Address ALL issues, not just the most obvious one
+- Prefer smallest possible change that fixes the root cause"""
+
+    try:
+        from anthropic import AsyncAnthropic
+        from config import CLAUDE_DIAGNOSIS_MODEL
+
+        client = AsyncAnthropic(api_key=api_key)
+        response = await asyncio.wait_for(
+            client.messages.create(
+                model=CLAUDE_DIAGNOSIS_MODEL,
+                max_tokens=1500,
+                system=system_prompt,
+                messages=[{"role": "user", "content": prompt}],
+            ),
+            timeout=20,
+        )
+
+        text = response.content[0].text if response.content else ""
+        # Parse JSON
+        brace = text.find("{")
+        if brace < 0:
+            return None
+        import json as _json
+        obj, _ = _json.JSONDecoder().raw_decode(text[brace:])
+
+        if not obj.get("diagnosis") or not obj.get("files_to_modify"):
+            return None
+
+        # Validate file paths against known market-research files
+        obj["files_to_modify"] = [
+            f for f in obj["files_to_modify"]
+            if f in _MR_KNOWN_FILES or any(f in kf for kf in _MR_KNOWN_FILES)
+        ]
+        if not obj["files_to_modify"]:
+            logger.warning("AI diagnosis returned no valid files")
+            return None
+
+        # Build strategy from plan steps if available
+        plan_steps = obj.get("plan", [])
+        strategy = obj.get("strategy", "")
+        if plan_steps and not strategy:
+            strategy = "\n".join(
+                f"{s.get('step', i+1)}. In {s.get('file', '?')} {s.get('function', '')}: {s.get('change', '')}"
+                for i, s in enumerate(plan_steps)
+            )
+
+        return {
+            "diagnosis": obj["diagnosis"],
+            "strategy": strategy,
+            "files_to_modify": obj["files_to_modify"],
+            "files_to_avoid": obj.get("files_to_avoid", []),
+            "what_to_change": obj.get("what_to_change", ""),
+            "pipeline_stage": obj.get("pipeline_stage", "mixed"),
+            "plan": plan_steps,
+            "confidence": obj.get("confidence", "medium"),
+            "from_ai": True,
+        }
+
+    except asyncio.TimeoutError:
+        logger.warning("AI diagnosis timed out")
+        return None
+    except ImportError:
+        logger.warning("anthropic not installed, skipping AI diagnosis")
+        return None
+    except Exception as e:
+        logger.warning(f"AI diagnosis failed: {e}")
+        return None
+
+
 # Scope routing: map issue categories to source files
 SCOPE_FILES = {
     "research": "research-orchestrator.js, ai-clients.js, research-agents.js",
@@ -701,14 +880,21 @@ async def _diagnose_root_cause(
     service_name: str,
     iteration: int,
     analysis: Optional[Dict] = None,
+    all_issues: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """
     Think-first step: Diagnose root cause before attempting fix.
     Returns diagnosis with recommended strategy.
+
+    Priority chain:
+    1. Pattern memory (free, instant, exact/fuzzy match on past fixes)
+    2. AI diagnosis via Haiku (3-5s, sees ALL issues, end-to-end plan)
+    3. Backend diagnostics (free, evidence-based)
+    4. Static keyword maps (free, instant, 9 categories)
     """
     logger.info("Diagnosing root cause...")
 
-    # Check for known patterns first
+    # Tier 1: Check for known patterns first
     if HAS_ISSUE_DETECTOR:
         try:
             from issue_pattern_detector import get_successful_fix_for_issues
@@ -724,7 +910,15 @@ async def _diagnose_root_cause(
         except (ImportError, Exception) as e:
             logger.debug(f"Pattern memory check failed: {e}")
 
-    # Check backend diagnostics for evidence-based diagnosis
+    # Tier 2: AI diagnosis (analyzes all issues, produces end-to-end plan)
+    ai_result = await _ai_diagnose(
+        all_issues or issues, service_name, iteration, analysis
+    )
+    if ai_result:
+        logger.info(f"AI diagnosis ({ai_result.get('confidence')}): {ai_result['diagnosis'][:80]}...")
+        return ai_result
+
+    # Tier 3: Check backend diagnostics for evidence-based diagnosis
     diag = analysis.get("backend_diagnostics") if analysis else None
     if diag and diag.get("countries"):
         country_diag = diag["countries"][0]  # First country
@@ -928,6 +1122,7 @@ SCOPE_ALLOWED_TOOLS = {
     "formatting": "Read,Edit,Grep,Glob,Bash",
     "mixed": "Read,Edit,Grep,Glob,Bash",
     "crash": "Read,Edit,Write,Grep,Glob,Bash",
+    "ai_dynamic": "Read,Edit,Grep,Glob,Bash",
 }
 
 # B1: Maximum fix prompt size (chars) — keeps total with CLAUDE.md+mandate under ~26KB
@@ -975,11 +1170,16 @@ async def generate_fix_callback(
     """Generate fix using Claude Code CLI"""
     logger.info(f"Generating fix for {len(issues)} issues")
 
+    # Save full issue list before clustering — AI diagnosis needs all issues
+    all_issues = list(issues)
+
     # B2: Focus on one issue cluster per iteration
     issues = _pick_top_issue_cluster(issues, max_issues=3)
 
     # THINK FIRST: Diagnose root cause before fixing
-    diagnosis = await _diagnose_root_cause(issues, service_name, iteration, analysis=analysis)
+    diagnosis = await _diagnose_root_cause(
+        issues, service_name, iteration, analysis=analysis, all_issues=all_issues
+    )
     diagnosis_context = ""
     if diagnosis:
         if diagnosis.get("from_memory"):
@@ -1071,6 +1271,7 @@ async def generate_fix_callback(
             logger.debug(f"Delta tracking failed: {e}")
 
     # Scope routing — skip for crash/failure fixes (crash could be in any file)
+    scope = None
     if analysis and analysis.get("crash_fix"):
         scope_context = (
             "\n\n## FIX SCOPE: ALL FILES IN backend/market-research/ (CRASH FIX)\n"
@@ -1083,6 +1284,29 @@ async def generate_fix_callback(
             "- Email: shared/email.js\n"
             "- Server/orchestrator: server.js\n"
         )
+    elif diagnosis and diagnosis.get("from_ai"):
+        # AI-provided scope
+        files_str = ", ".join(diagnosis.get("files_to_modify", []))
+        avoid_str = ", ".join(diagnosis.get("files_to_avoid", []))
+        scope_context = (
+            f"\n\n## FIX SCOPE: {diagnosis.get('pipeline_stage', '').upper()}\n"
+            f"START with these files: {files_str}\n"
+        )
+        if avoid_str:
+            scope_context += f"Do NOT touch: {avoid_str}\n"
+        what = diagnosis.get("what_to_change", "")
+        if what:
+            scope_context += f"\n## What to Change\n{what}\n"
+        # Include end-to-end plan steps
+        plan_steps = diagnosis.get("plan", [])
+        if plan_steps:
+            scope_context += "\n## End-to-End Fix Plan\n"
+            for step in plan_steps:
+                scope_context += (
+                    f"Step {step.get('step', '?')}: {step.get('file', '?')} "
+                    f"{step.get('function', '')} — {step.get('change', '')}\n"
+                )
+        scope = "ai_dynamic"
     else:
         scope = _classify_fix_scope(issues)
         dont_touch = SCOPE_DONT_TOUCH.get(scope, '')
@@ -1132,11 +1356,18 @@ async def generate_fix_callback(
         except Exception as e:
             logger.warning(f"Issue pattern detection failed: {e}")
 
-    # Deep analysis context for content/insight issues — show agent what was actually produced
+    # Deep analysis context — include for content/insight issues OR AI diagnosis
     deep_analysis_context = ""
-    if diagnosis and diagnosis.get("dominant_category") in (
-        "content_depth", "insight_missing", "research_quality", "empty_data"
-    ):
+    content_related = False
+    if diagnosis:
+        if diagnosis.get("from_ai"):
+            # AI diagnosis: include deep analysis if pipeline_stage suggests content issues
+            content_related = diagnosis.get("pipeline_stage") in ("research", "synthesis", "mixed")
+        elif diagnosis.get("dominant_category") in (
+            "content_depth", "insight_missing", "research_quality", "empty_data"
+        ):
+            content_related = True
+    if content_related:
         deep_analysis_context = _build_deep_analysis_context(analysis, diagnosis)
 
     # Original user request context — what was the user asking for?
@@ -1156,7 +1387,10 @@ async def generate_fix_callback(
 
     # B5: Determine allowed tools based on scope
     is_crash = bool(analysis and analysis.get("crash_fix"))
-    scope = "crash" if is_crash else _classify_fix_scope(issues)
+    if is_crash:
+        scope = "crash"
+    elif scope != "ai_dynamic":  # AI diagnosis already set scope above
+        scope = _classify_fix_scope(issues)
     allowed_tools = SCOPE_ALLOWED_TOOLS.get(scope, "Read,Edit,Grep,Glob,Bash")
 
     if fix_prompt and fix_prompt != "No issues found. Output matches template.":
@@ -1309,11 +1543,25 @@ async def generate_fix_callback(
             }
 
     # B4: File change enforcement — only allowed files for the scope
-    if result and result.success and full_git_diff and scope not in ("mixed", "crash"):
+    if result and result.success and full_git_diff:
         changed_files = set(re.findall(r'^\+\+\+ b/(.+)$', full_git_diff, re.MULTILINE))
-        allowed = set(f.strip() for f in SCOPE_FILES.get(scope, '').split(',') if f.strip())
-        disallowed = [f for f in changed_files
-                      if not any(a in f for a in allowed)]
+
+        if scope == "ai_dynamic" and diagnosis and diagnosis.get("from_ai"):
+            # AI-provided scope: enforce against AI's file list
+            ai_allowed = set(diagnosis.get("files_to_modify", []))
+            disallowed = [
+                f for f in changed_files
+                if not any(a in f for a in ai_allowed)
+                and "shared/" not in f
+            ]
+        elif scope not in ("mixed", "crash"):
+            # Static scope enforcement (existing code)
+            allowed = set(f.strip() for f in SCOPE_FILES.get(scope, '').split(',') if f.strip())
+            disallowed = [f for f in changed_files
+                          if not any(a in f for a in allowed)]
+        else:
+            disallowed = []
+
         if disallowed:
             logger.error(f"Fix REJECTED: wrong files {disallowed} (scope={scope})")
             await _auto_revert_last_commit()
