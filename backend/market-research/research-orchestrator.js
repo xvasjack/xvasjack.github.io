@@ -249,11 +249,33 @@ function validateMarketSynthesis(result) {
   for (const section of sections) {
     const chartData = result[section]?.chartData;
     if (chartData) {
-      if (
-        (chartData.series && Array.isArray(chartData.series) && chartData.series.length > 0) ||
-        (chartData.values && Array.isArray(chartData.values) && chartData.values.length > 0)
-      ) {
+      // Enforce series/categories format; convert historical/projected if needed
+      if (Array.isArray(chartData.series) && chartData.series.length > 0) {
+        // Validate that values are numbers
+        for (const s of chartData.series) {
+          if (Array.isArray(s.values)) {
+            s.values = s.values.map((v) => (typeof v === 'number' ? v : Number(v) || 0));
+          }
+        }
         chartCount++;
+      } else if (chartData.historical || chartData.projected) {
+        // Convert historical/projected format to series/categories
+        const series = [];
+        const catSet = new Set();
+        for (const [key, data] of Object.entries(chartData)) {
+          if (key === 'series' || key === 'categories' || key === 'unit') continue;
+          if (data && typeof data === 'object') {
+            for (const [cat, val] of Object.entries(data)) {
+              catSet.add(cat);
+            }
+            series.push({ name: key, values: Object.values(data).map(Number) });
+          }
+        }
+        if (series.length > 0) {
+          chartData.series = series;
+          chartData.categories = [...catSet];
+          chartCount++;
+        }
       }
     }
     // Ensure keyInsight exists with honest fallback
@@ -332,8 +354,7 @@ async function synthesizeWithFallback(prompt, options = {}) {
     const directPrompt = `${prompt}
 
 CRITICAL: Return ONLY valid JSON. No markdown. No explanation. Just the raw JSON object.
-If research data is missing, USE YOUR TRAINING KNOWLEDGE to populate all fields.
-DO NOT return empty arrays or null values. Use estimates from training data.`;
+Return ONLY valid JSON. Use null for missing fields.`;
 
     const result = await callKimiChat(directPrompt, '', maxTokens);
     const parsed = parseJsonResponse(result.content);
@@ -357,106 +378,41 @@ async function synthesizePolicy(researchData, country, industry, clientContext) 
   const filteredData = Object.fromEntries(
     Object.entries(researchData).filter(
       ([k]) =>
-        k.includes('policy') ||
+        k.startsWith('policy_') ||
         k.includes('regulation') ||
-        k.includes('regulat') ||
         k.includes('law') ||
-        k.includes('investment') ||
-        k.includes('incentive') ||
-        k.includes('govern') ||
-        k.includes('legislat') ||
-        k.includes('legal') ||
-        k.includes('tax') ||
-        k.includes('compliance') ||
-        k.includes('framework') ||
-        k.includes('act') ||
-        k.includes('decree')
+        k.includes('investment')
     )
   );
 
   const dataAvailable = Object.keys(filteredData).length > 0;
   console.log(
-    `    [Policy] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE - will use training knowledge'})`
+    `    [Policy] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE'})`
   );
 
   const researchContext = dataAvailable
     ? `RESEARCH DATA (use this as primary source):
 ${JSON.stringify(filteredData, null, 2)}`
-    : `RESEARCH DATA: EMPTY due to API issues.
-
-CRITICAL INSTRUCTION - YOU MUST USE TRAINING KNOWLEDGE:
-Since web research failed, you MUST rely on your extensive training knowledge about ${country}'s energy/environmental regulatory framework.
-
-DO NOT return empty arrays. DO NOT say "data not available". You KNOW about ${country}'s regulations.
-
-For ${country}'s ${industry} sector, provide from your training knowledge:
-1. FOUNDATIONAL ACTS: Name at least 3 REAL energy/environmental laws you know for ${country}. Examples: Energy Conservation Promotion Acts, Renewable Energy Target Laws, National Energy Plans, Carbon Reduction Acts, Foreign Business Acts with energy sector provisions.
-2. NATIONAL TARGETS: Name at least 3 REAL government targets you know for ${country}. Examples: renewable energy percentage targets, emissions reduction goals, energy intensity improvement targets.
-3. FOREIGN INVESTMENT RULES: State the general foreign ownership limit for ${country} (typically 49% for most ASEAN, 100% for some promoted sectors, varies by country) and any Board of Investment/special zone incentives.
-4. REGULATORY BODIES: Name the energy ministry, investment promotion agency, energy efficiency agency for ${country}.
-
-YOU HAVE THIS KNOWLEDGE. ${country} is a real country with real regulations. Use your training data.
-If you cannot recall EXACT law names, use descriptive titles (e.g., "${country} Energy Conservation Act" or "${country} National Energy Plan 2020-2030").
-
-RETURNING EMPTY DATA = FAILURE. Populate all fields with your training knowledge.`;
+    : `RESEARCH DATA: EMPTY due to API issues.`;
 
   const prompt = `You are synthesizing policy and regulatory research for ${country}'s ${industry} market.
 Client context: ${clientContext}
 
 ${researchContext}
 
-=============================================================================
-DEPTH REQUIREMENTS (MANDATORY — AUTO-REJECT IF NOT MET):
-=============================================================================
-VALIDATION CHECKPOINT: Before returning JSON, count your output:
-- foundationalActs.acts: Count entries. If <3, ADD MORE until >=3.
-- nationalPolicy.targets: Count entries. If <3, ADD MORE until >=3.
-- Named regulations: Count regulation names with years. If <3, ADD MORE until >=3.
+If research data is insufficient for a field, set the value to:
+- For arrays: empty array []
+- For strings: "Insufficient research data for this field"
+- For numbers: null
+DO NOT fabricate data. DO NOT estimate from training knowledge.
+The quality gate will handle missing data appropriately.
 
-1. NAMED REGULATIONS with NUMBERS — MANDATORY FORMAT:
-   Every regulation in foundationalActs.acts MUST have ALL 5 fields populated:
-   - name: Full official law title (e.g., "Energy Conservation Promotion Act B.E. 2535")
-   - year: 4-digit year or range (e.g., "1992 (amended 2007)")
-   - requirements: MUST contain at least 2 quantified metrics (e.g., "Facilities >2MW must conduct energy audits every 3 years")
-   - penalties: MUST contain dollar/currency amount (e.g., "Fine up to 500,000 THB or 0.5% annual revenue")
-   - enforcement: Status of enforcement (e.g., "Enforced by DEDE with 23 auditors nationwide as of 2024")
-
-   VALIDATION: foundationalActs.acts.length >= 3 AND every entry has all 5 fields with numbers
-
-2. DATA DENSITY — COUNTING RULE:
-   Before submitting, count the numeric data points in your output:
-   - foundationalActs section: >=5 numbers (years, percentages, MW/GW, budget amounts)
-   - nationalPolicy section: >=5 numbers (target %, deadline years, current status %)
-   - investmentRestrictions section: >=3 numbers (ownership %, tax years, savings %)
-
-   If total <13 numeric data points across Policy section → REGENERATE with more specificity
-
-3. COMPLETENESS — ARRAY LENGTH VALIDATION:
-   - foundationalActs.acts: MUST have >=3 entries (each entry = 1 regulation)
-   - nationalPolicy.targets: MUST have >=3 entries (each entry = 1 government target)
-   - nationalPolicy.keyInitiatives: MUST have >=2 entries
-   - investmentRestrictions.incentives: MUST have >=2 entries
-
-4. ACTIONABLE LANGUAGE — KEYWORD CHECK:
-   Every keyMessage and policyDirection MUST contain at least ONE of these action verbs:
-   ["recommend", "opportunity to", "should consider", "target", "prioritize", "strategic fit because"]
-
-   MUST connect regulation to client action with numbers:
-   BAD: "Regulations create opportunities"
-   GOOD: "PDP8's 45% renewable target by 2037 creates estimated $2.3B ESCO market — recommend targeting industrial sector first due to 4,200 facilities >2MW requiring audits"
-
-5. SOURCE CITATIONS — VALIDATION:
-   Count citations in your output. If <2 across entire Policy section → ADD sources until >=2
-   Format: "According to [Ministry/Agency], [year]" or "Source: [Law name], [year]"
-
-PRE-SUBMISSION CHECKLIST — DO NOT RETURN JSON UNTIL ALL ARE TRUE:
-☐ foundationalActs.acts.length >= 3
-☐ nationalPolicy.targets.length >= 3
-☐ Total numeric data points >= 13
-☐ Every regulation has name, year, requirements (with 2+ numbers), penalties (with amounts), enforcement
-☐ At least 2 source citations present
-☐ Every keyMessage has an action verb
-=============================================================================
+RULES:
+- Only use data from the INPUT DATA above
+- Use null for any missing fields
+- Include source citations where available
+- Company descriptions should be 45-60 words
+- Insights should reference specific numbers from the data
 
 Return JSON:
 {
@@ -505,142 +461,51 @@ async function synthesizeMarket(researchData, country, industry, clientContext) 
   console.log(`  [Synthesis] Market section for ${country}...`);
 
   const filteredData = Object.fromEntries(
-    Object.entries(researchData).filter(
-      ([k]) =>
-        k.includes('market') ||
-        k.includes('energy') ||
-        k.includes('demand') ||
-        k.includes('supply') ||
-        k.includes('price') ||
-        k.includes('electric') ||
-        k.includes('gas') ||
-        k.includes('lng') ||
-        k.includes('esco') ||
-        k.includes('size') ||
-        k.includes('capacity') ||
-        k.includes('power') ||
-        k.includes('renew') ||
-        k.includes('fuel') ||
-        k.includes('oil') ||
-        k.includes('infrastructure') ||
-        k.includes('generat') ||
-        k.includes('consum') ||
-        k.includes('growth') ||
-        k.includes('forecast')
-    )
+    Object.entries(researchData).filter(([k]) => k.startsWith('market_'))
   );
 
   const dataAvailable = Object.keys(filteredData).length > 0;
   console.log(
-    `    [Market] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE - will use training knowledge'})`
+    `    [Market] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE'})`
   );
 
   const researchContext = dataAvailable
     ? `RESEARCH DATA (use this as primary source):
 ${JSON.stringify(filteredData, null, 2)}`
-    : `RESEARCH DATA: EMPTY due to API issues.
-
-CRITICAL INSTRUCTION - YOU MUST USE TRAINING KNOWLEDGE:
-Since web research failed, you MUST rely on your extensive training knowledge about ${country}'s energy market.
-
-DO NOT return empty chartData. DO NOT return empty arrays. You KNOW approximate data for ${country}.
-
-For ${country}'s ${industry}/energy sector, provide from your training knowledge:
-1. TPES: Total Primary Energy Supply composition (coal %, gas %, oil %, renewables %, nuclear %). You know ${country}'s approximate energy mix.
-2. FINAL DEMAND: Energy consumption by sector (industry %, transport %, residential/commercial %). You know ${country}'s economic structure.
-3. ELECTRICITY: Installed capacity (coal, gas, hydro, solar, wind). You know ${country} has power plants.
-4. GAS/LNG: Does ${country} import LNG? Does it have pipelines? Approximate volumes in bcm.
-5. PRICING: Typical electricity prices for ${country} (industrial vs residential). ASEAN average is 0.08-0.12 USD/kWh.
-6. ESCO MARKET: Estimated market size for energy efficiency services. Use training knowledge about ${country}'s industrial base.
-
-PROVIDE NUMERIC DATA: chartData.series with at least 3-5 data points each. Use your training knowledge to estimate realistic values for ${country}.
-Example: If you know ${country} has significant coal power, chartData for electricity might be: coal 40%, gas 30%, hydro 15%, renewables 10%, other 5%.
-
-YOU HAVE THIS KNOWLEDGE. ${country} is a real country with real energy infrastructure. Use your training data.
-RETURNING EMPTY CHARTDATA = FAILURE. Populate all fields with training knowledge estimates.`;
+    : `RESEARCH DATA: EMPTY due to API issues.`;
 
   const prompt = `You are synthesizing market data research for ${country}'s ${industry} market.
 Client context: ${clientContext}
 
 ${researchContext}
 
-=============================================================================
-DEPTH REQUIREMENTS (MANDATORY):
-=============================================================================
-VALIDATION CHECKPOINT: Before returning JSON, count numeric data points in your output:
-TARGET SCORING for Market section:
-- tpes: 5+ numbers (years, Mtoe values, growth %, shares %)
-- finalDemand: 4+ numbers (growth %, sector shares, totals)
-- electricity: 5+ numbers (GW capacity, %, growth %)
-- gasLng: 3+ numbers (bcm, mtpa, utilization %)
-- pricing: 3+ numbers ($/kWh, year, growth %)
-- escoMarket: 3+ numbers (market size $M, growth %, year)
+If research data is insufficient for a field, set the value to:
+- For arrays: empty array []
+- For strings: "Insufficient research data for this field"
+- For numbers: null
+DO NOT fabricate data. DO NOT estimate from training knowledge.
+The quality gate will handle missing data appropriately.
 
-TOTAL TARGET: >=23 numeric data points. Count yours. If <23 → REGENERATE with more specificity.
+RULES:
+- Only use data from the INPUT DATA above
+- Use null for any missing fields
+- Include source citations where available
+- Insights should reference specific numbers from the data
+- chartData MUST use series/categories format: {"series": [{"name": "Category", "values": [1, 2, 3]}], "categories": ["2020", "2021", "2022"]}
 
-1. DATA DENSITY — COUNTING RULE:
-   Every section MUST contain at least 3 quantified numbers with units:
-   - tpes: MUST have chartData with series containing >=5 numeric values EACH
-   - finalDemand: MUST have growthRate with "X% CAGR YYYY-YYYY"
-   - electricity: MUST have totalCapacity with "XX GW" + demandGrowth with "X% YYYY-YYYY"
-   - gasLng: MUST have lngTerminals array with >=1 entry containing capacity "X mtpa" + utilization "X%"
-   - pricing: MUST have comparison with "vs [country] $X.XX/kWh"
-   - escoMarket: MUST have marketSize "$XXM" + growthRate "XX% CAGR YYYY-YYYY"
-
-   VALIDATION: Count all numbers in output. If <23 total → FAIL
-
-2. CHARTS — MANDATORY chartData PRESENCE:
-   At least 4 of 6 sections MUST have non-empty chartData field.
-   chartData requirements:
-   - series: array with >=1 object, each object has {name: string, values: [array of NUMBERS not strings]}
-   - categories: array with >=3 entries (years or labels)
-   - unit: string (e.g., "Mtoe", "GW", "bcm", "%", "$B")
-
-   VALIDATION: Count sections with chartData. If <4 → ADD chartData until >=4
-
-3. ACTIONABLE LANGUAGE — KEYWORD ENFORCEMENT:
-   Every keyInsight MUST contain ALL 3 elements:
-   a) Specific number with unit (e.g., "45 GW", "$2.3B", "18% CAGR")
-   b) Year or timeframe (e.g., "by 2030", "2020-2024", "as of 2024")
-   c) Action verb (e.g., "recommend targeting", "opportunity to", "should prioritize")
-
-   BAD EXAMPLE: "The market is growing and presents opportunities"
-   GOOD EXAMPLE: "45 GW renewables target by 2030 (up from 12 GW in 2024) creates $2.3B opportunity — recommend targeting solar+storage for industrial clients"
-
-4. SOURCE CITATIONS — COUNT CHECK:
-   Count citations in your output. If <3 across all 6 Market sections → ADD more until >=3
-   Format: "Source: [Agency], [year]" or "According to [Organization] [year]"
-
-5. ESCO MARKET — NON-NEGOTIABLE:
-   escoMarket.marketSize: MUST be "$XXM" or "$X.XB" format with specific number
-   escoMarket.growthRate: MUST be "XX% CAGR YYYY-YYYY" format with specific years
-
-   VALIDATION: Check escoMarket object. If marketSize is empty OR growthRate is empty → REGENERATE entire escoMarket section
-
-PRE-SUBMISSION CHECKLIST — DO NOT RETURN JSON UNTIL ALL ARE TRUE:
-☐ Total numeric data points >= 23 (count them)
-☐ At least 4 sections have chartData with series containing numeric arrays
-☐ Every keyInsight has: number + year + action verb
-☐ escoMarket has marketSize "$XXM" and growthRate "XX% CAGR YYYY-YYYY"
-☐ At least 3 source citations present
-=============================================================================
-
-For chart data, provide NUMERIC arrays (not strings). Example:
-"chartData": {"categories": ["2020","2021","2022","2023","2024"], "series": [{"name":"Coal", "values": [45,42,40,38,35]}], "unit": "Mtoe"}
-
-Return JSON with these sections:
+Return JSON:
 {
   "tpes": {
     "slideTitle": "${country} - Total Primary Energy Supply",
     "subtitle": "Key insight",
-    "chartData": {"categories": [...years...], "series": [{"name":"Source", "values": [...numbers...]}], "unit": "Mtoe"},
+    "chartData": {"categories": ["2020","2021","2022"], "series": [{"name":"Source", "values": [1,2,3]}], "unit": "Mtoe"},
     "keyInsight": "What this means for client",
     "dataType": "time_series_multi_insight"
   },
   "finalDemand": {
     "slideTitle": "${country} - Final Energy Demand",
     "subtitle": "Key insight",
-    "chartData": {"categories": [...], "series": [...], "unit": "%"},
+    "chartData": {"categories": [], "series": [], "unit": "%"},
     "growthRate": "X% CAGR with years",
     "keyDrivers": ["Named driver with evidence"],
     "keyInsight": "Client implication",
@@ -650,7 +515,7 @@ Return JSON with these sections:
     "slideTitle": "${country} - Electricity & Power",
     "subtitle": "Key insight",
     "totalCapacity": "XX GW",
-    "chartData": {"categories": [...sources...], "values": [...%...], "unit": "%"},
+    "chartData": {"categories": [], "series": [], "unit": "%"},
     "demandGrowth": "X% with year range",
     "keyTrend": "Trend with evidence",
     "keyInsight": "Client implication",
@@ -659,7 +524,7 @@ Return JSON with these sections:
   "gasLng": {
     "slideTitle": "${country} - Gas & LNG Market",
     "subtitle": "Key insight",
-    "chartData": {"categories": [...years...], "series": [...], "unit": "bcm"},
+    "chartData": {"categories": [], "series": [], "unit": "bcm"},
     "lngTerminals": [{"name": "Named terminal", "capacity": "X mtpa", "utilization": "X%"}],
     "pipelineNetwork": "Description",
     "keyInsight": "Client implication",
@@ -668,7 +533,7 @@ Return JSON with these sections:
   "pricing": {
     "slideTitle": "${country} - Energy Pricing",
     "subtitle": "Key insight",
-    "chartData": {"categories": [...years...], "series": [...], "unit": "USD/kWh"},
+    "chartData": {"categories": [], "series": [], "unit": "USD/kWh"},
     "comparison": "vs regional peers with specific numbers",
     "outlook": "Projected trend with reasoning",
     "keyInsight": "Client implication",
@@ -680,7 +545,7 @@ Return JSON with these sections:
     "marketSize": "$XXX million with year",
     "growthRate": "X% CAGR with period",
     "segments": [{"name": "Named segment", "size": "$XXM", "share": "X%"}],
-    "chartData": {"categories": [...], "values": [...], "unit": "%"},
+    "chartData": {"categories": [], "series": [], "unit": "%"},
     "keyDrivers": "Named drivers",
     "keyInsight": "Client implication",
     "dataType": "composition_breakdown"
@@ -705,146 +570,37 @@ async function synthesizeCompetitors(researchData, country, industry, clientCont
   console.log(`  [Synthesis] Competitors section for ${country}...`);
 
   const filteredData = Object.fromEntries(
-    Object.entries(researchData).filter(
-      ([k]) =>
-        k.includes('compet') ||
-        k.includes('player') ||
-        k.includes('company') ||
-        k.includes('japanese') ||
-        k.includes('foreign') ||
-        k.includes('local') ||
-        k.includes('case') ||
-        k.includes('m&a') ||
-        k.includes('merger') ||
-        k.includes('acqui') ||
-        k.includes('partner') ||
-        k.includes('landscape') ||
-        k.includes('rival') ||
-        k.includes('incumbent') ||
-        k.includes('operator') ||
-        k.includes('provider') ||
-        k.includes('firm') ||
-        k.includes('enterprise')
-    )
+    Object.entries(researchData).filter(([k]) => k.startsWith('competitors_'))
   );
 
   const dataAvailable = Object.keys(filteredData).length > 0;
   console.log(
-    `    [Competitors] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE - will use training knowledge'})`
+    `    [Competitors] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE'})`
   );
 
   const researchContext = dataAvailable
     ? `RESEARCH DATA (use this as primary source):
 ${JSON.stringify(filteredData, null, 2)}`
-    : `RESEARCH DATA: EMPTY due to API issues.
-
-CRITICAL INSTRUCTION - YOU MUST USE TRAINING KNOWLEDGE:
-Since web research failed, you MUST rely on your training knowledge about ${country}'s energy sector players.
-
-DO NOT return empty player arrays. You KNOW companies operating in ${country}.
-
-For ${country}'s ${industry}/energy sector, provide from your training knowledge:
-1. JAPANESE PLAYERS: Name at least 2 REAL Japanese companies you know operate in ${country}. Examples: JERA, Marubeni, Mitsubishi Corporation, Sumitomo, Tokyo Gas, Osaka Gas. These companies HAVE presence in ASEAN energy markets. Include their actual websites (https://www.jera.co.jp, https://www.marubeni.com, etc.).
-2. LOCAL MAJOR PLAYERS: Name at least 3 REAL local energy companies you know for ${country}. Examples: Vietnam has EVN, PetroVietnam; Thailand has PTT, EGAT, BGRIM; Malaysia has Petronas, TNB. You KNOW the dominant state utilities for ${country}. Include estimated revenues (state utilities in ASEAN typically $1B-$50B+ depending on country size).
-3. FOREIGN PLAYERS: Name at least 2 REAL foreign energy companies you know operate in ${country}. Examples: Schneider Electric, Siemens Energy, ENGIE, Veolia, GE, Honeywell. These multinationals operate across ASEAN. Include their corporate websites.
-
-EVERY COMPANY MUST HAVE:
-- name: Real company name from your training knowledge
-- website: Actual corporate website (use https://www.[company].com format)
-- description: 45-55 words with estimated market position, entry year (approximate), and strategic context
-
-YOU HAVE THIS KNOWLEDGE. ${country} has a real energy sector with real companies. Use your training data.
-RETURNING EMPTY PLAYERS ARRAYS = FAILURE. Populate with real company names from training knowledge.`;
+    : `RESEARCH DATA: EMPTY due to API issues.`;
 
   const prompt = `You are synthesizing competitive intelligence for ${country}'s ${industry} market.
 Client context: ${clientContext}
 
 ${researchContext}
 
-CRITICAL REQUIREMENTS — OUTPUT REJECTED IF ANY ARE VIOLATED:
-=============================================================================
-VALIDATION CHECKPOINT: Before returning JSON, count words in EVERY description field:
-- EVERY company description MUST be EXACTLY 48-52 words (sweet spot)
-- Count each description. If ANY <45 or >55 words → REGENERATE that description
-- Use this formula: Split description by spaces, count array length
+If research data is insufficient for a field, set the value to:
+- For arrays: empty array []
+- For strings: "Insufficient research data for this field"
+- For numbers: null
+DO NOT fabricate data. DO NOT estimate from training knowledge.
+The quality gate will handle missing data appropriately.
 
-1. DESCRIPTION LENGTH — STRICT ENFORCEMENT:
-   TARGET: 50 words per description (range: 48-52 words acceptable)
-   MAXIMUM: 55 words absolute limit
-   MINIMUM: 45 words required for depth
-
-   PROCESS:
-   a) Write the description
-   b) Count words by splitting on spaces
-   c) If <48 words → ADD more detail until 48-52 words
-   d) If >52 words → CUT to 48-52 words without losing key facts
-   e) Verify count before adding to JSON
-
-2. REQUIRED COMPONENTS IN EVERY DESCRIPTION (all 4 mandatory):
-   a) FINANCIAL: revenue/market share/valuation + year (e.g., "$45M revenue, 2024")
-   b) SCALE: specific number (e.g., "180 contracts", "7 provinces", "12% growth since 2019")
-   c) ASSESSMENT: strength + weakness (both required, e.g., "Strong: govt relationships. Weak: limited tech")
-   d) ACTION: specific recommendation with verb (e.g., "Recommend 60/40 JV structure")
-
-3. DATA DENSITY: Every description MUST contain at least 3 numbers/percentages
-
-VALID EXAMPLE (50 words exactly):
-"ABC Energy ($45M revenue, 2024) operates 180+ efficiency contracts across 7 provinces with 12% annual growth since 2019. Strong government relationships and 23-year track record. Weakness: limited tech capabilities. Strategic fit: customer base needs foreign technology partner. Recommend 60/40 JV structure for complementary strengths."
-✓ Financial: $45M, 2024 ✓ Scale: 180, 7, 12% ✓ Assessment: Strong/Weak ✓ Action: Recommend 60/40 ✓ Word count: 50
-
-PRE-SUBMISSION DESCRIPTION CHECK:
-For EVERY company in japanesePlayers, localMajor, foreignPlayers:
-☐ Description word count is 48-52 words (count by splitting on spaces)
-☐ Contains >=3 numbers or percentages
-☐ Has financial metric with year
-☐ Has strength AND weakness
-☐ Has action verb (recommend/consider/target/approach)
-=============================================================================
-
-ADDITIONAL DEPTH REQUIREMENTS:
-- At least 3 named companies per category with: investment year, structure (JV/acquisition/greenfield), stake %, partner name, revenue
-- At least 1 detailed case study per major competitor: customer name, what they did, outcome (CO2 tons, MW, revenue)
-- SOURCE CITATIONS REQUIRED: Include at least one source attribution per section (e.g., "Source: Bloomberg 2024", "According to Vietnam Energy Association"). Competitive intelligence needs source context.
-- Website URLs for ALL companies — use the company's actual corporate website (e.g., "https://www.engie.com"). NEVER omit this field. Every player object MUST have a "website" field starting with "https://".
-- For each data point: "so what" — what it means for the client
-- ACTIONABLE INSIGHT per category: end each players section with "marketInsight" or "competitiveInsight" using language like "recommend approaching", "opportunity to partner", "strategic fit because", "should consider acquiring"
-- SOURCE CITATIONS: Every section must cite at least ONE source. Use format "According to [source name], [year]" or "Source: [company name] annual report, [year]" within the marketInsight/competitiveInsight text.
-- If you cannot find exact revenue/market share, provide estimates with "estimated" qualifier — never leave description fields empty or under 45 words
-- MANDATORY: japanesePlayers.players must have at least 2 entries, localMajor.players at least 3 entries, foreignPlayers.players at least 2 entries
-- MANDATORY: caseStudy must have company, entryYear, entryMode, investment, and outcome all populated with specific data
-- CRITICAL: Research data may be empty due to API issues. In this case, you MUST use your training knowledge to name REAL companies operating in ${country}'s ${industry} sector. For Vietnamese energy services: include state-owned utilities (EVN), major local ESCOs, Japanese trading companies with presence (Marubeni, JERA), and international firms (Schneider, Siemens). Include their actual corporate website URLs. NEVER return empty player arrays — use training knowledge to populate with real company names, estimated market positions, and strategic context.
-
-=============================================================================
-CRITICAL — TEXT LENGTH RULES TO PREVENT SLIDE OVERFLOW (AUTO-REJECT IF VIOLATED):
-=============================================================================
-1. EVERY company description MUST be 45-55 words (NOT 60+, NOT 70+)
-2. TARGET: 48-52 words per description (sweet spot for fitting on slide)
-3. MAXIMUM: 55 words absolute limit
-4. MINIMUM: 45 words (ensures depth)
-5. If ANY description <45 words OR >55 words → OUTPUT REJECTED
-=============================================================================
-
-MANDATORY 4-PART STRUCTURE (ALL DESCRIPTIONS):
-1. FINANCIAL + SCALE: "Company Name (revenue $XM, year) operates X locations/contracts..."
-2. COMPETITIVE POSITION: "Strengths: [specific]. Weakness: [specific]."
-3. STRATEGIC FIT: "Strategic fit for client: [why relevant]."
-4. ACTION: "Recommend [verb] for [reason]." (Use: recommend/consider/approach/target)
-
-VALID EXAMPLE (51 words — within 45-55 word limit):
-"ABC Energy (revenue $45M, 2024) operates 180+ contracts across 7 provinces, 12% annual growth. Strengths: government relationships, 23-year track record. Weakness: limited tech. Strategic fit: established base needs foreign tech partner. Recommend approaching for 60/40 JV given complementary strengths."
-
-REJECTED EXAMPLE (too generic, no numbers):
-"XYZ Company is a leading energy services provider in the region with a strong track record and good relationships. They offer a wide range of services and have been operating for many years."
-✗ No revenue ✗ No specific numbers ✗ No year ✗ Generic phrases ("leading", "strong") ✗ No strategic recommendation
-
-DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
-- EVERY description must contain: (1) Revenue/market share + year, (2) Scale metric (# of contracts/locations/employees), (3) Growth % OR competitive position, (4) Strategic recommendation with action verb
-- DATA DENSITY: Every description needs at least 3 numbers (revenue, year, scale metric, growth %, market share, etc.)
-- Website URLs for ALL companies (format: "https://www.company.com") — NEVER omit
-- ACTIONABLE LANGUAGE: Every marketInsight/competitiveInsight must use: "recommend", "opportunity to", "should consider", "strategic fit because"
-- SOURCE CITATIONS: Include at least one attribution per section (e.g., "Source: Bloomberg 2024", "According to [industry body]")
-- MANDATORY MINIMUMS: japanesePlayers ≥2 entries, localMajor ≥3 entries, foreignPlayers ≥2 entries
-- CASE STUDY: Must have company, entryYear, entryMode, investment ($XM), outcome (specific metrics: MW/revenue/market share)
+RULES:
+- Only use data from the INPUT DATA above
+- Use null for any missing fields
+- Include source citations where available
+- Company descriptions should be 45-60 words
+- Insights should reference specific numbers from the data
 
 Return JSON:
 {
@@ -856,7 +612,7 @@ Return JSON:
         "name": "Company Name", "website": "https://...",
         "presence": "JV/Direct/etc", "projects": "Named projects",
         "revenue": "$X million", "assessment": "Strong/Weak",
-        "description": "45-55 words with specific metrics, entry strategy, project details, market position"
+        "description": "45-60 words with specific metrics, entry strategy, project details, market position"
       }
     ],
     "marketInsight": "Overall assessment of Japanese presence",
@@ -870,7 +626,7 @@ Return JSON:
         "name": "Company", "website": "https://...", "type": "State-owned/Private",
         "revenue": "$X million", "marketShare": "X%",
         "strengths": "Specific", "weaknesses": "Specific",
-        "description": "45-55 words with specific metrics"
+        "description": "45-60 words with specific metrics"
       }
     ],
     "concentration": "Market concentration with evidence",
@@ -884,7 +640,7 @@ Return JSON:
         "name": "Company", "website": "https://...", "origin": "Country",
         "entryYear": "YYYY", "mode": "JV/Direct",
         "projects": "Named projects", "success": "High/Medium/Low",
-        "description": "45-55 words with specific metrics"
+        "description": "45-60 words with specific metrics"
       }
     ],
     "competitiveInsight": "How foreign players compete",
@@ -966,174 +722,24 @@ async function synthesizeSummary(
   const prompt = `You are creating the strategic summary and recommendations for ${country}'s ${industry} market.
 Client context: ${clientContext}
 
-=============================================================================
-CRITICAL — INSIGHT CHAIN REQUIREMENT (AUTO-REJECT IF NOT MET):
-=============================================================================
-EVERY insight in summary.keyInsights MUST have ALL 4 PARTS:
-1. DATA: Specific number/percentage + year (e.g., "4,200 factories", "23 auditors", "2024")
-2. SO WHAT: Causal explanation (e.g., "creates 18-month window because...")
-3. NOW WHAT: Action verb (recommend/target/approach/consider) + specific target
-4. BY WHEN: Timing window (Q1 2025/before 2026/18-month window)
-
-VALID EXAMPLE (has ALL 4 parts):
-{
-  "title": "Enforcement backlog creates 18-month entry window",
-  "data": "Energy audits mandatory for 4,200 factories >2MW but only 23 DEDE auditors exist (2024 data)",
-  "pattern": "Enforcement backlog creates 18-month compliance window before DEDE hires 40 new auditors in 2026",
-  "implication": "Recommend targeting non-compliant factories in Q1 2025 before regulatory crackdown accelerates in late 2026"
-}
-✓ Numbers: 4,200, 23 ✓ Years: 2024, 2026 ✓ Causal: "creates...because" ✓ Action+timing: "target Q1 2025 before..."
-
-REJECTED EXAMPLE (missing parts):
-{
-  "title": "Market is growing",
-  "data": "The market is expanding",
-  "pattern": "Growth creates opportunities",
-  "implication": "Companies should consider entering"
-}
-✗ No numbers ✗ No dates ✗ No causal chain ✗ No timing
-
-MINIMUM: 3 insights, each scoring 8+/10 on this rubric:
-- Specific number/percentage: +2
-- Year/date/timeframe: +2
-- Causal explanation (because/which creates): +2
-- Action verb (recommend/should/target): +2
-- Timing window (by when/before/Q1 2025): +2
-=============================================================================
-
 SYNTHESIZED SECTIONS (already processed):
 Policy: ${summarizeForSummary(policy, 'policy', 800)}
 Market: ${summarizeForSummary(market, 'market', 1200)}
 Competitors: ${summarizeForSummary(competitors, 'competitors', 800)}
 
-ADDITIONAL RESEARCH DATA:
-${JSON.stringify(
-  Object.fromEntries(
-    Object.entries(researchData).filter(
-      ([k]) =>
-        k.includes('insight') ||
-        k.includes('summary') ||
-        k.includes('strateg') ||
-        k.includes('timing') ||
-        k.includes('lesson') ||
-        k.includes('opportunity') ||
-        k.includes('risk') ||
-        k.includes('entry') ||
-        k.includes('partner') ||
-        k.includes('segment') ||
-        k.includes('implement') ||
-        k.includes('econ') ||
-        k.includes('outlook') ||
-        k.includes('assess') ||
-        k.includes('recommend') ||
-        k.includes('target') ||
-        k.includes('deal') ||
-        k.includes('valuat') ||
-        k.includes('financ')
-    )
-  ),
-  null,
-  2
-).slice(0, 3000)}
+If research data is insufficient for a field, set the value to:
+- For arrays: empty array []
+- For strings: "Insufficient research data for this field"
+- For numbers: null
+DO NOT fabricate data. DO NOT estimate from training knowledge.
+The quality gate will handle missing data appropriately.
 
-=============================================================================
-DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
-=============================================================================
-VALIDATION CHECKPOINT: Before returning JSON, validate summary.keyInsights:
-- Count entries in summary.keyInsights array. If <3 → ADD MORE until >=3
-- For EACH insight entry, check ALL 4 fields: data, pattern, implication
-- Count numbers in "data" field. If <2 numbers → REGENERATE that insight
-- Count years/dates in "pattern" or "implication". If <1 year → REGENERATE
-- Check for action verbs. If no "recommend/target/should/consider" → REGENERATE
-
-INSIGHT CHAIN VALIDATION — EVERY insight must pass this 4-part test:
-PART 1 - DATA FIELD: Contains >=2 specific numbers + at least 1 year
-  Example PASS: "4,200 factories >2MW require audits but only 23 DEDE auditors exist (2024)"
-  Example FAIL: "Many factories need audits" (no numbers, no year)
-
-PART 2 - PATTERN FIELD: Contains causal mechanism with "because" or "creates" or "which means"
-  Example PASS: "creates 18-month compliance window because DEDE hiring frozen until 2026"
-  Example FAIL: "Enforcement is weak" (no causality, no mechanism)
-
-PART 3 - IMPLICATION FIELD: Contains action verb + specific target + timing window
-  Example PASS: "Recommend targeting non-compliant factories in Q1 2025 before late 2026 crackdown"
-  Example FAIL: "Companies should enter the market" (vague, no target, no timing)
-
-PART 4 - COMPLETENESS: All 3 fields (data, pattern, implication) present and non-empty
-  If ANY field is missing or <20 characters → REGENERATE entire insight
-
-SCORING RUBRIC (each insight must score >=8/10 to pass):
-✓ Data has >=2 numbers: +2 points
-✓ Data or pattern has >=1 year/date: +2 points
-✓ Pattern has causal word (because/creates/which/due to): +2 points
-✓ Implication has action verb (recommend/target/should/consider/prioritize): +2 points
-✓ Implication has timing (Q1/Q2/before [year]/[X]-month window/by [date]): +2 points
-
-VALID EXAMPLE (10/10 score):
-{
-  "title": "Enforcement backlog creates 18-month entry window",
-  "data": "4,200 factories >2MW require audits but only 23 DEDE auditors exist (2024)",
-  "pattern": "Enforcement backlog creates 18-month compliance window because DEDE hiring frozen until 2026",
-  "implication": "Recommend targeting non-compliant factories in Q1 2025 before regulatory crackdown accelerates in late 2026"
-}
-✓ Numbers: 4,200, 23, 40 [2] ✓ Years: 2024, 2026, Q1 2025 [2] ✓ Causal: "creates...because" [2] ✓ Action: "Recommend targeting" [2] ✓ Timing: "Q1 2025 before late 2026" [2] = 10/10
-
-REJECTED EXAMPLE (2/10 — DO NOT GENERATE):
-{"title": "Market is growing", "data": "The market is expanding", "pattern": "Growth creates opportunities", "implication": "Companies should consider entering"}
-✗ No numbers [0] ✗ No dates [0] ✓ Weak causal [2] ✗ Vague action [0] ✗ No timing [0] = 2/10 FAIL
-
-PRE-SUBMISSION CHECKLIST FOR INSIGHTS:
-☐ summary.keyInsights has >=3 entries
-☐ EVERY entry has data field with >=2 numbers + 1 year
-☐ EVERY entry has pattern field with causal word (because/creates/which/due to)
-☐ EVERY entry has implication field with action verb + timing window
-☐ Total insight quality score: sum of all scores / count >= 8.0 average
-
-MANDATORY REQUIREMENTS FOR EACH SECTION:
-
-1. DATA DENSITY:
-   - EVERY opportunity: dollar size + % growth + timing window
-   - EVERY obstacle: severity rating + mitigation cost/time + next steps
-   - EVERY phase: investment amount + duration + milestones with dates
-
-2. ACTIONABLE LANGUAGE — Use in EVERY section:
-   - "recommend", "should consider", "opportunity to", "strategic fit because", "next steps", "outlook suggests"
-
-3. SOURCE CITATIONS:
-   - opportunities section: cite at least 1 source
-   - entryStrategy section: cite at least 1 source
-   - implementation section: cite at least 1 source
-   - Format: "According to [source], [year]" or "Source: [name], [year]"
-
-4. PARTNER DESCRIPTIONS — STRICT WORD COUNT TO PREVENT OVERFLOW:
-   - partnerAssessment.partners: ≥3 entries
-   - EACH partner description: EXACTLY 48-52 words (count by splitting on spaces)
-   - VALIDATION PROCESS:
-     a) Write description
-     b) Count words (split by spaces, count array length)
-     c) If <48 words → ADD detail until 48-52
-     d) If >52 words → CUT to 48-52 without losing revenue/metrics/strengths/weaknesses
-   - Must include: revenue estimate with year, market position, specific strengths, specific weaknesses, strategic fit rationale
-
-   PRE-SUBMISSION PARTNER CHECK:
-   For EVERY entry in partnerAssessment.partners:
-   ☐ Description word count is 48-52 (count them)
-   ☐ Contains revenue with year (e.g., "$45M, 2024")
-   ☐ Contains at least 2 other numbers
-   ☐ Mentions specific strength AND weakness
-   ☐ Has strategic fit rationale
-
-5. COMPLETENESS:
-   - entryStrategy.options: exactly 3 (JV, Acquisition, Greenfield), ALL fields populated with numbers
-   - implementation.phases: exactly 3, with specific activities + dated milestones + investment ($M)
-   - summary.opportunities: ≥3 entries with size ($M) + timing (year/quarter)
-   - summary.obstacles: ≥2 entries with severity (High/Med/Low) + mitigation plan
-   - summary.keyInsights: ≥3 entries, EACH scoring 8+/10 on rubric above
-
-6. TIMING PRECISION:
-   - Use specific dates: "Q1 2025", "before December 2026", "18-month window"
-   - NEVER use: "soon", "in the future", "eventually"
-=============================================================================
+RULES:
+- Only use data from the INPUT DATA above
+- Use null for any missing fields
+- Include source citations where available
+- Company descriptions should be 45-60 words
+- Insights must have structured fields: data (with specific numbers), pattern (causal mechanism), implication (action verb + timing)
 
 Return JSON:
 {
@@ -1151,7 +757,7 @@ Return JSON:
       "slideTitle": "${country} - Partner Assessment",
       "subtitle": "Key insight",
       "partners": [
-        {"name": "Company", "website": "https://...", "type": "Type", "revenue": "$XM", "partnershipFit": 4, "acquisitionFit": 3, "estimatedValuation": "$X-YM", "description": "45-55 words"}
+        {"name": "Company", "website": "https://...", "type": "Type", "revenue": "$XM", "partnershipFit": 4, "acquisitionFit": 3, "estimatedValuation": "$X-YM", "description": "45-60 words"}
       ],
       "recommendedPartner": "Top pick with reasoning"
     },
@@ -1271,7 +877,7 @@ function validateContentDepth(synthesis) {
   else failures.push(`Market: only ${seriesCount} valid data series (need ≥3)`);
   if (market.escoMarket?.marketSize) scores.market += 30;
 
-  // Competitors check: ≥3 companies with details AND word count validation (45-55 words)
+  // Competitors check: ≥3 companies with details AND word count validation (45-60 words)
   const competitors = synthesis.competitors || {};
   let totalCompanies = 0;
   let thinDescriptions = 0;
@@ -1279,7 +885,7 @@ function validateContentDepth(synthesis) {
   for (const section of ['japanesePlayers', 'localMajor', 'foreignPlayers']) {
     const players = competitors[section]?.players || [];
     totalCompanies += players.filter((p) => p.name && (p.revenue || p.description)).length;
-    // Validate description word count (45-55 words per prompt)
+    // Validate description word count (45-60 words per prompt)
     for (const player of players) {
       if (player.description) {
         const wordCount = player.description.trim().split(/\s+/).length;
@@ -1296,33 +902,32 @@ function validateContentDepth(synthesis) {
   // CRITICAL: Reject if >50% of descriptions are thin or too long
   if (totalCompanies > 0 && thinDescriptions / totalCompanies > 0.5) {
     failures.push(
-      `Competitors: ${thinDescriptions}/${totalCompanies} descriptions <45 words (need 45-55)`
+      `Competitors: ${thinDescriptions}/${totalCompanies} descriptions <45 words (need 45-60)`
     );
     scores.competitors = Math.min(scores.competitors, 40); // Cap score if descriptions thin
   }
   if (totalCompanies > 0 && longDescriptions > 0) {
     failures.push(
-      `Competitors: ${longDescriptions}/${totalCompanies} descriptions >60 words (causes overflow, max 55)`
+      `Competitors: ${longDescriptions}/${totalCompanies} descriptions >60 words (causes overflow, max 60)`
     );
     scores.competitors = Math.min(scores.competitors, 40);
   }
 
-  // Strategic insights validation: check for complete data→implication→action chains
+  // Strategic insights validation: check structured fields (data, implication, timing)
   const summary = synthesis.summary || {};
   const insights = summary.keyInsights || [];
   let completeInsights = 0;
   for (const insight of insights) {
-    // Check for complete chain: data (with numbers), pattern (causal), implication (action+timing)
-    const hasData = insight.data && /\d/.test(insight.data); // Contains number
-    const hasYear = insight.data && /\b(19|20)\d{2}\b/.test(insight.data); // Contains year
-    const hasPattern = insight.pattern && /because|creates|which|due to/i.test(insight.pattern);
+    // Check structured fields: data (contains number), implication (action verb), timing (exists)
+    const hasData = insight.data && /\d/.test(insight.data); // data field contains a number
     const hasAction =
       insight.implication &&
-      /recommend|should|target|consider|prioritize/i.test(insight.implication);
+      /should|recommend|target|prioritize|position|initiate/i.test(insight.implication);
     const hasTiming =
-      insight.implication && /(Q[1-4]|month|before|by|202\d|window)/i.test(insight.implication);
+      (insight.timing && insight.timing.length > 0) ||
+      (insight.title && /(Q[1-4]|202\d|month|window|before|by)/i.test(insight.title));
 
-    if (hasData && hasYear && hasPattern && hasAction && hasTiming) {
+    if (hasData && hasAction && hasTiming) {
       completeInsights++;
     }
   }
@@ -1348,12 +953,12 @@ function validateContentDepth(synthesis) {
   }
   if (partners.length > 0 && thinPartners / partners.length > 0.5) {
     failures.push(
-      `Partners: ${thinPartners}/${partners.length} descriptions <45 words (need 45-55)`
+      `Partners: ${thinPartners}/${partners.length} descriptions <45 words (need 45-60)`
     );
   }
   if (partners.length > 0 && longPartners > 0) {
     failures.push(
-      `Partners: ${longPartners}/${partners.length} descriptions >60 words (causes overflow, max 55)`
+      `Partners: ${longPartners}/${partners.length} descriptions >60 words (causes overflow, max 60)`
     );
   }
 
@@ -1447,8 +1052,14 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
       return originalSynthesis;
     }
 
-    // Preserve country field
+    // Preserve country field and metadata from original
     newSynthesis.country = country;
+    const preserved = {
+      rawData: originalSynthesis.rawData,
+      contentValidation: originalSynthesis.contentValidation,
+      metadata: originalSynthesis.metadata,
+    };
+    Object.assign(newSynthesis, preserved);
     return newSynthesis;
   } catch (error) {
     console.error('  Re-synthesis failed:', error?.message);
@@ -1806,158 +1417,6 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   return countryAnalysis;
 }
 
-// ============ REVIEWER AI SYSTEM ============
-
-// Reviewer AI: Critiques the analysis like a demanding McKinsey partner
-async function reviewAnalysis(synthesis, countryAnalysis, scope) {
-  console.log(`  [REVIEWER] Evaluating analysis quality...`);
-
-  const reviewPrompt = `You are a DEMANDING McKinsey Senior Partner reviewing a market entry analysis before it goes to a Fortune 500 CEO. You've seen hundreds of these. You know what separates good from great.
-
-CLIENT CONTEXT: ${scope.clientContext}
-INDUSTRY: ${scope.industry}
-COUNTRY: ${countryAnalysis.country}
-
-ANALYSIS TO REVIEW:
-${JSON.stringify(synthesis, null, 2)}
-
-RAW DATA AVAILABLE (for fact-checking):
-${JSON.stringify(countryAnalysis, null, 2)}
-
-REVIEW THIS ANALYSIS RUTHLESSLY. Check for:
-
-1. VAGUE CLAIMS: Anything without specific numbers, dates, or names
-   - "The market is growing" = FAIL
-   - "The market grew 14% in 2024 to $320M" = PASS
-
-2. SURFACE-LEVEL INSIGHTS: Things anyone could Google in 5 minutes
-   - "Thailand has a large manufacturing sector" = FAIL
-   - "Thailand's 4,200 factories >2MW face mandatory audits but only 23 DEDE auditors exist" = PASS
-
-3. MISSING CAUSAL CHAINS: Facts without explanation of WHY
-   - "Energy prices are high" = FAIL
-   - "Energy prices are high because Erawan field output dropped 30%" = PASS
-
-4. WEAK COMPETITIVE INTEL: Generic descriptions instead of actionable intelligence
-   - "Several foreign companies operate here" = FAIL
-   - "ENGIE entered via B.Grimm JV in 2018, won 12 contracts, struggles outside Bangkok" = PASS
-
-5. HOLLOW RECOMMENDATIONS: Advice without specific next steps
-   - "Consider partnerships" = FAIL
-   - "Approach Absolute Energy (revenue $45M, 180 clients) before Mitsubishi's rumored bid" = PASS
-
-6. STORY FLOW: Does each section logically lead to the next?
-
-7. EXECUTIVE SUMMARY: Does it tell a compelling story in 5 bullets?
-
-Return JSON:
-{
-  "overallScore": 1-10,
-  "confidence": "low/medium/high",
-  "verdict": "APPROVE" or "REVISE",
-  "criticalIssues": [
-    {
-      "section": "which section has the problem",
-      "issue": "what's wrong specifically",
-      "currentText": "quote the problematic text",
-      "suggestion": "how to fix it with SPECIFIC content"
-    }
-  ],
-  "strengths": ["what's working well - be specific"],
-  "missingElements": ["critical things not covered that should be"],
-  "summaryFeedback": "2-3 sentences of direct feedback to the analyst"
-}
-
-BE HARSH. A 7/10 means it's good. 8+ means it's exceptional. Most first drafts are 4-6.
-Only "APPROVE" if score is 7+ and no critical issues remain.
-Return ONLY valid JSON.`;
-
-  const result = await callKimiChat(reviewPrompt, '', 4096);
-
-  try {
-    let jsonStr = result.content.trim();
-    if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr
-        .replace(/```json?\n?/g, '')
-        .replace(/```/g, '')
-        .trim();
-    }
-    const review = JSON.parse(jsonStr);
-    console.log(
-      `    Score: ${review.overallScore}/10 | Confidence: ${review.confidence} | Verdict: ${review.verdict}`
-    );
-    console.log(
-      `    Issues: ${review.criticalIssues?.length || 0} critical | Strengths: ${review.strengths?.length || 0}`
-    );
-    return review;
-  } catch (error) {
-    console.error('  Reviewer failed to parse:', error?.message);
-    // Don't auto-approve on error - return low score requiring revision
-    return {
-      overallScore: 4,
-      confidence: 'low',
-      verdict: 'REVISE', // Force revision instead of approving low-quality output
-      criticalIssues: ['Reviewer parsing failed - manual review recommended'],
-      reviewerError: true,
-    };
-  }
-}
-
-// Revise analysis based on reviewer feedback
-async function reviseAnalysis(synthesis, review, countryAnalysis, scope, systemPrompt) {
-  console.log(`  [REVISING] Addressing ${review.criticalIssues?.length || 0} issues...`);
-
-  const revisePrompt = `You are revising a market analysis based on SPECIFIC FEEDBACK from a senior reviewer.
-
-ORIGINAL ANALYSIS:
-${JSON.stringify(synthesis, null, 2)}
-
-REVIEWER FEEDBACK:
-Score: ${review.overallScore}/10
-Summary: ${review.summaryFeedback}
-
-CRITICAL ISSUES TO FIX:
-${JSON.stringify(review.criticalIssues, null, 2)}
-
-MISSING ELEMENTS TO ADD:
-${JSON.stringify(review.missingElements, null, 2)}
-
-RAW DATA (use this to add specifics):
-${JSON.stringify(countryAnalysis, null, 2)}
-
-YOUR TASK:
-1. FIX every critical issue listed above
-2. ADD the missing elements
-3. KEEP what the reviewer said was working well
-4. Make every claim SPECIFIC with numbers, names, dates
-
-Return the COMPLETE revised analysis in the same JSON structure.
-DO NOT just acknowledge the feedback - actually REWRITE the weak sections.
-
-For example, if reviewer says "executive summary is vague", rewrite ALL 5 bullets with specific data.
-
-Return ONLY valid JSON with the full analysis structure.`;
-
-  const result = await callKimiAnalysis(revisePrompt, systemPrompt, 12000);
-
-  try {
-    let jsonStr = result.content.trim();
-    if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr
-        .replace(/```json?\n?/g, '')
-        .replace(/```/g, '')
-        .trim();
-    }
-    const revised = JSON.parse(jsonStr);
-    revised.isSingleCountry = true;
-    revised.country = countryAnalysis.country;
-    return revised;
-  } catch (error) {
-    console.error('  Revision failed:', error?.message);
-    return synthesis; // Return original if revision fails
-  }
-}
-
 // ============ SINGLE COUNTRY DEEP DIVE ============
 
 async function synthesizeSingleCountry(countryAnalysis, scope) {
@@ -2036,12 +1495,12 @@ Return JSON with:
 
 {
   "executiveSummary": [
-    "5 bullets that form a logical argument. Each leads to the next. Max 30 words, Economist-style prose.",
-    "Bullet 1: THE OPPORTUNITY - Quantify the prize with specifics (e.g., 'Thailand's $320M ESCO market grew 14% in 2024, yet foreign players hold only 8% share - a gap driven by regulatory complexity, not demand.')",
-    "Bullet 2: THE TIMING - Why this window matters (e.g., 'BOI incentives offering 8-year tax holidays expire December 2027. The carbon tax effective 2026 will accelerate demand 20-30%.')",
-    "Bullet 3: THE BARRIER - The real constraint, explained (e.g., 'The 49% foreign ownership cap applies to non-promoted activities. BOI-promoted energy efficiency projects qualify for majority foreign ownership.')",
-    "Bullet 4: THE PATH - Specific strategy based on evidence (e.g., 'Three Thai ESCOs are seeking technology partners: Absolute Energy, TPSC, and Banpu Power. Absolute has the widest industrial client base.')",
-    "Bullet 5: THE FIRST MOVE - Concrete next step with rationale (e.g., 'Initiate discussions with Absolute Energy (revenue $45M, 180+ industrial clients) before Mitsubishi's rumored approach concludes.')"
+    "5 bullets that form a logical argument. Each leads to the next. STRICT MAX: 25 words per bullet. Economist-style prose.",
+    "Bullet 1: THE OPPORTUNITY - Quantify the prize (e.g., 'Thailand's $320M ESCO market grew 14% in 2024, yet foreign players hold only 8% share.')",
+    "Bullet 2: THE TIMING - Why this window matters (e.g., 'BOI incentives offering 8-year tax holidays expire Dec 2027; carbon tax starts 2026.')",
+    "Bullet 3: THE BARRIER - The constraint (e.g., '49% foreign ownership cap, but BOI-promoted projects qualify for majority foreign ownership.')",
+    "Bullet 4: THE PATH - Specific strategy (e.g., 'Three Thai ESCOs seeking tech partners: Absolute Energy has widest industrial client base.')",
+    "Bullet 5: THE FIRST MOVE - Next step (e.g., 'Initiate talks with Absolute Energy (revenue $45M, 180 clients) before Q2 2026.')"
   ],
 
   "marketOpportunityAssessment": {
@@ -2053,7 +1512,7 @@ Return JSON with:
 
   "competitivePositioning": {
     "keyPlayers": [
-      {"name": "actual company", "website": "https://company.com", "strengths": "specific", "weaknesses": "specific", "threat": "how they could block you", "description": "REQUIRED 45-55 words with revenue, market share, growth rate, key services, strategic significance with revenue, market share, entry year, key projects, geographic coverage, strategic positioning, and why this player matters for competitive analysis"}
+      {"name": "actual company", "website": "https://company.com", "strengths": "specific", "weaknesses": "specific", "threat": "how they could block you", "description": "REQUIRED 45-60 words with revenue, market share, growth rate, key services, strategic significance with revenue, market share, entry year, key projects, geographic coverage, strategic positioning, and why this player matters for competitive analysis"}
     ],
     "whiteSpaces": ["specific gaps with EVIDENCE of demand and SIZE of opportunity"],
     "potentialPartners": [{"name": "actual company", "website": "https://partner.com", "rationale": "why they'd partner, what they bring, what you bring"}]
@@ -2097,13 +1556,15 @@ Return JSON with:
   "keyInsights": [
     {
       "title": "Max 10 words. The non-obvious conclusion. Example: 'Labor cost pressure makes energy savings an HR priority'",
-      "data": "The specific evidence. Example: 'Manufacturing wages rose 8% annually 2021-2024 while productivity gained only 2%. Average factory worker age is 45, up from 38 in 2014.'",
-      "pattern": "The causal mechanism. Example: 'Aging workforce drives wage inflation without productivity gains. Factories facing 5-6% annual cost increases have exhausted labor optimization - energy is the next lever.'",
-      "implication": "The strategic response. Example: 'Position energy efficiency as cost management, not sustainability. Target CFOs with ROI messaging. The urgency is financial, not environmental.'"
+      "data": "The specific evidence with AT LEAST ONE NUMBER and a TIMEFRAME. Example: 'Manufacturing wages rose 8% annually 2021-2024 while productivity gained only 2%. Average factory worker age is 45, up from 38 in 2014.'",
+      "pattern": "The causal mechanism (SO WHAT). Example: 'Aging workforce drives wage inflation without productivity gains. Factories facing 5-6% annual cost increases have exhausted labor optimization - energy is the next lever.'",
+      "implication": "The strategic response (NOW WHAT) with ACTION VERB and TIMING. Example: 'Position energy efficiency as cost management, not sustainability. Target CFOs with ROI messaging in Q1-Q2 2026 before budget cycles lock. The urgency is financial, not environmental.'",
+      "timing": "REQUIRED. When to act and why. Example: 'Move by Q2 2026 — carbon tax starts Jan 2027, BOI incentives expire Dec 2027. 18-month window for tax-free setup.'"
     },
-    "Provide 3 insights. Each must reveal something that requires connecting multiple data points.",
+    "Provide 3-5 insights. Each must reveal something that requires connecting multiple data points.",
+    "COMPLETE CHAIN REQUIRED: data (with number + year) → pattern (causal link) → implication (action verb: 'should prioritize', 'recommend', 'target') → timing (specific deadline or window)",
     "TEST: If someone could find this insight on the first page of Google results, it's too obvious.",
-    "GOOD: 'Southern Thailand's grid congestion (transmission capacity 85% utilized) blocks new solar projects, creating captive demand for on-site efficiency solutions in the $2.1B EEC industrial corridor.'"
+    "GOOD: 'Southern Thailand's grid congestion (transmission capacity 85% utilized) blocks new solar projects, creating captive demand for on-site efficiency solutions in the $2.1B EEC industrial corridor. Recommend targeting EEC zone manufacturers in Q1 2026 before Phase 4 expansion (Dec 2026) when grid upgrades reduce urgency.'"
   ],
 
   "implementationRoadmap": {
@@ -2137,8 +1598,43 @@ CRITICAL QUALITY STANDARDS:
 4. COMPETITIVE EDGE. The reader should learn something they couldn't find in an hour of desk research.
 5. ACTIONABLE CONCLUSIONS. End each section with what the reader should DO with this information.
 6. PROFESSIONAL PROSE. Write like The Economist - clear, precise, analytical. Use technical terms where they add precision, but always explain significance.
-7. COMPANY DESCRIPTIONS: Every company in keyPlayers and potentialPartners MUST have a "description" field with 45-55 words. Include revenue, growth rate, market share, key services, geographic coverage, and competitive advantages. NEVER write generic one-liners like "X is a company that provides Y" — include specific metrics and strategic context.
-8. WEBSITE URLs: Every company MUST have a "website" field with the company's actual corporate website URL.`;
+7. COMPANY DESCRIPTIONS: Every company in keyPlayers and potentialPartners MUST have a "description" field with 45-60 words. Include revenue, growth rate, market share, key services, geographic coverage, and competitive advantages. NEVER write generic one-liners like "X is a company that provides Y" — include specific metrics and strategic context.
+8. WEBSITE URLs: Every company MUST have a "website" field with the company's actual corporate website URL.
+
+=============================================================================
+VALIDATION CHECKPOINT — BEFORE RETURNING JSON, VERIFY THESE:
+=============================================================================
+STOP. Before you return the JSON, run this checklist:
+
+☐ COMPANY DESCRIPTIONS: Count words in EACH company description in competitivePositioning.keyPlayers and competitivePositioning.potentialPartners
+   - Target: 45-60 words EACH
+   - If ANY description <45 words → REWRITE IT with revenue + market share + growth rate + strategic context
+   - If ANY description >60 words → TRIM IT to core metrics
+
+☐ INSIGHT COMPLETENESS: For EACH entry in keyInsights array:
+   - Count numbers in "data" field → must have ≥1 number (dollar, percent, year)
+   - Check "implication" field → must contain action verb ("recommend", "should", "target", "prioritize")
+   - Check "timing" field → must exist and contain specific timeframe ("Q1 2026", "by Dec 2027", "18-month window")
+   - If ANY insight missing these → REWRITE that insight
+
+☐ INSIGHT COUNT: Count keyInsights array length
+   - If <3 → ADD MORE until you have 3-5 insights
+   - Each must connect ≥2 data points from different sections
+
+☐ STRATEGIC DEPTH: Read your own executiveSummary bullets
+   - Count specific numbers across all 5 bullets → should have ≥8 numbers total
+   - Count action verbs ("should", "recommend", "initiate") → should have ≥3
+   - If falling short → REWRITE bullets with more specificity
+
+☐ WORD COUNT LIMITS (prevent text overflow):
+   - Count words in EACH executiveSummary bullet → MAX 25 words per bullet
+   - If ANY bullet >25 words → TRIM IT immediately
+   - keyInsights "data" field → MAX 60 words
+   - keyInsights "pattern" field → MAX 50 words
+   - keyInsights "implication" field → MAX 50 words
+   - If ANY field exceeds limits → REWRITE shorter while keeping numbers/specifics
+
+Do NOT skip this validation. If you catch yourself returning JSON without checking word counts and number counts, you're shipping shallow work.`;
 
   const result = await callKimiAnalysis(prompt, systemPrompt, 12000);
 
@@ -2282,8 +1778,6 @@ module.exports = {
   fillResearchGaps,
   reSynthesize,
   researchCountry,
-  reviewAnalysis,
-  reviseAnalysis,
   synthesizeSingleCountry,
   synthesizeFindings,
   validateContentDepth,
