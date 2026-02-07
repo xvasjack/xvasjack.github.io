@@ -11,7 +11,6 @@ const {
   addSourceFootnote,
   addCalloutBox,
   addInsightsPanel,
-  addSectionDivider,
   addOpportunitiesObstaclesSummary,
   addStackedBarChart,
   addLineChart,
@@ -2540,6 +2539,18 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   generateSection('Market Overview', 1, 6, market);
   // Section 2: Policy & Regulatory (index 1) — classifyDataBlocks maps to "Policy & Regulations"
   generateSection('Policy & Regulatory', 2, 6, policy);
+  // Regulatory transition summary slide (if data available)
+  if (
+    policy?.regulatorySummary &&
+    Array.isArray(policy.regulatorySummary) &&
+    policy.regulatorySummary.length > 0
+  ) {
+    const regSummarySlide = addSlideWithTitle(`${country} - Regulatory Transition Summary`, '', {
+      citations: getCitationsForCategory('policy_'),
+      dataQuality: getDataQualityForCategory('policy_'),
+    });
+    addHorizontalFlowTable(regSummarySlide, policy.regulatorySummary, { font: FONT });
+  }
   // Section 3: Competitive Landscape (index 2)
   generateSection('Competitive Landscape', 3, 6, competitors);
   // Section 4: Strategic Analysis (index 3)

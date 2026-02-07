@@ -1,4 +1,4 @@
-const { callKimiChat } = require('./ai-clients');
+const { callKimiChat, callGemini } = require('./ai-clients');
 
 const RESEARCH_FRAMEWORK = {
   // === SECTION 1: POLICY & REGULATIONS (3 slides) ===
@@ -356,8 +356,22 @@ If countries are vague like "ASEAN", expand to: ["Thailand", "Vietnam", "Indones
 
 Return ONLY valid JSON, no markdown or explanation.`;
 
-  // Use lighter chat model for simple parsing task
-  const result = await callKimiChat(userPrompt, systemPrompt, 1024);
+  // Use Gemini for deterministic parsing (temperature 0.0), Kimi fallback
+  let result;
+  try {
+    const geminiResult = await callGemini(userPrompt, {
+      temperature: 0.0,
+      maxTokens: 4096,
+      jsonMode: true,
+      systemPrompt,
+    });
+    result = {
+      content: typeof geminiResult === 'string' ? geminiResult : geminiResult.content || '',
+    };
+  } catch (e) {
+    console.warn('Gemini failed for scope parsing, falling back to Kimi:', e.message);
+    result = await callKimiChat(userPrompt, systemPrompt, 4096);
+  }
 
   try {
     // Clean up response - remove markdown code blocks if present

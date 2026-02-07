@@ -109,7 +109,7 @@
           "x": 0.4, "y": 1.467, "w": 12.5,
           "labelColWidth": 2.0,
           "contentColWidth": 10.5,
-          "rowHeight": 1.6,
+          "rowHeight": 0.85,
           "maxRows": 6,
           "labelFill": "1B2A4A",
           "labelColor": "FFFFFF",

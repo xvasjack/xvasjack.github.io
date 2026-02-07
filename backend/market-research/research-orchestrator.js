@@ -77,7 +77,20 @@ RULES:
 
 Return ONLY valid JSON.`;
 
-  const result = await callKimiChat(gapPrompt, '', 4096);
+  let result;
+  try {
+    const geminiResult = await callGemini(gapPrompt, {
+      temperature: 0.1,
+      maxTokens: 4096,
+      jsonMode: true,
+    });
+    result = {
+      content: typeof geminiResult === 'string' ? geminiResult : geminiResult.content || '',
+    };
+  } catch (e) {
+    console.warn('Gemini failed for gap identification, falling back to Kimi:', e.message);
+    result = await callKimiChat(gapPrompt, '', 4096);
+  }
 
   try {
     let jsonStr = result.content.trim();

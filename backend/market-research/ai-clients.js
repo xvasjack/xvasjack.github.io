@@ -432,7 +432,7 @@ async function callGemini(prompt, options = {}) {
   if (!apiKey) {
     console.log('  [Gemini] No API key, falling back to KimiChat');
     return callKimiChat(prompt, options.systemPrompt || '', options.maxTokens || 8192).then(
-      (r) => ({ content: r.content, citations: r.citations || [] })
+      (r) => r.content || ''
     );
   }
 

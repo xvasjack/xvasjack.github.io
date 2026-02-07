@@ -27,6 +27,19 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   pptx.defineLayout({ name: 'YCP', width: 13.333, height: 7.5 });
   pptx.layout = 'YCP';
 
+  // ===== DEFINE MASTER SLIDES =====
+  // "No Bar" for cover slide — clean background, no header line
+  pptx.defineSlideMaster({ title: 'NO_BAR', background: { color: 'FFFFFF' }, objects: [] });
+
+  // "Main" for content slides — white background with header line
+  pptx.defineSlideMaster({
+    title: 'YCP_MAIN',
+    background: { color: 'FFFFFF' },
+    objects: [
+      { line: { x: 0.376, y: 0.73, w: 12.586, h: 0, line: { color: '293F55', width: 3 } } },
+    ],
+  });
+
   pptx.author = 'YCP Market Research';
   pptx.title = `${scope.industry} Market Analysis - ${scope.targetMarkets.join(', ')}`;
   pptx.subject = scope.projectType;
@@ -64,9 +77,9 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     return lastSpace > 40 ? cut.substring(0, lastSpace) : cut;
   }
 
-  // Standard slide layout with title, subtitle, and navy divider line
+  // Standard slide layout with title, subtitle (header line provided by YCP_MAIN master)
   function addSlide(title, subtitle = '') {
-    const slide = pptx.addSlide();
+    const slide = pptx.addSlide({ masterName: 'YCP_MAIN' });
     // Title - 20pt bold navy
     slide.addText(truncateTitle(title), {
       x: LEFT_MARGIN,
@@ -80,14 +93,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       valign: 'top',
       wrap: true,
     });
-    // Navy divider line under title
-    slide.addShape('line', {
-      x: LEFT_MARGIN,
-      y: 0.73,
-      w: CONTENT_WIDTH,
-      h: 0,
-      line: { color: COLORS.dk2, width: 3 },
-    });
+    // Header line is provided by YCP_MAIN master — no manual line needed
     // Message/subtitle - 11pt blue (the "so what")
     if (subtitle) {
       slide.addText(subtitle, {
@@ -104,7 +110,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   }
 
   // ============ SLIDE 1: TITLE ============
-  const titleSlide = pptx.addSlide();
+  const titleSlide = pptx.addSlide({ masterName: 'NO_BAR' });
   titleSlide.addText(scope.industry.toUpperCase(), {
     x: 0.5,
     y: 2.2,

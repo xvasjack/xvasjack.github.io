@@ -1,4 +1,4 @@
-const { callKimiAnalysis } = require('./ai-clients');
+const { callKimiAnalysis, callGemini } = require('./ai-clients');
 
 // Load template patterns for smart layout engine
 let templatePatterns = {};
@@ -1207,7 +1207,19 @@ Transform this research into a narrative. Return JSON:
 }`;
 
   try {
-    const response = await callKimiAnalysis(prompt, systemPrompt, 8192);
+    let response;
+    try {
+      const geminiResult = await callGemini(prompt, {
+        temperature: 0.3,
+        maxTokens: 8192,
+        systemPrompt,
+      });
+      const content = typeof geminiResult === 'string' ? geminiResult : geminiResult.content || '';
+      response = { content };
+    } catch (e) {
+      console.warn('Gemini failed for story architect, falling back to Kimi:', e.message);
+      response = await callKimiAnalysis(prompt, systemPrompt, 8192);
+    }
 
     // Parse response
     let story;
