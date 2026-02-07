@@ -80,13 +80,22 @@ async def _auto_revert_last_commit() -> bool:
 
         if wsl_cwd:
             # WSL mode: call git through wsl
+            clean_cmd = ["wsl", "--cd", wsl_cwd, "-e", "git", "checkout", "--", "."]
             revert_cmd = ["wsl", "--cd", wsl_cwd, "-e", "git", "revert", "HEAD", "--no-edit"]
             push_cmd = ["wsl", "--cd", wsl_cwd, "-e", "git", "push"]
             effective_cwd = None
         else:
+            clean_cmd = ["git", "checkout", "--", "."]
             revert_cmd = ["git", "revert", "HEAD", "--no-edit"]
             push_cmd = ["git", "push"]
             effective_cwd = win_cwd or repo_path
+
+        # Clean dirty working tree first (rejected diff left uncommitted changes)
+        clean_proc = await asyncio.create_subprocess_exec(
+            *clean_cmd, cwd=effective_cwd,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
+        )
+        await asyncio.wait_for(clean_proc.communicate(), timeout=15)
 
         # Revert
         proc = await asyncio.create_subprocess_exec(
@@ -171,7 +180,7 @@ async def _check_backend_alive(service_name: str) -> dict:
 
 # Scope routing: map issue categories to source files
 SCOPE_FILES = {
-    "research": "research-orchestrator.js, ai-clients.js",
+    "research": "research-orchestrator.js, ai-clients.js, research-agents.js",
     "synthesis": "research-orchestrator.js, ppt-single-country.js",
     "layout": "ppt-utils.js, ppt-single-country.js, template-patterns.json",
     "formatting": "template-patterns.json, ppt-utils.js",
@@ -218,7 +227,9 @@ SCOPE_WHAT_TO_CHANGE = {
         "WHERE: The prompt strings inside synthesizePolicy(), synthesizeMarket(), "
         "synthesizeCompetitors(), synthesizeSummary() in research-orchestrator.js\n"
         "Look for the 'DEPTH REQUIREMENTS' sections inside each prompt string.\n"
-        "Also check: search query construction in research-agents.js\n"
+        "Also check: universalResearchAgent() in research-agents.js (research execution, "
+        "query construction, timeout handling).\n"
+        "Also check: callKimi/callGemini in ai-clients.js (API response handling).\n"
         "DO NOT add code workarounds to pad thin content — fix the prompt that generates it."
     ),
     "synthesis": (
@@ -886,7 +897,10 @@ def _pick_top_issue_cluster(issues: List[str], max_issues: int = 3) -> List[str]
     }
     # Pick the highest-priority group
     best_cat = min(groups.keys(), key=lambda c: cat_priority.get(c, 99))
-    cluster = groups[best_cat][:max_issues]
+    # Content categories need large prompt edits — limit to 2 issues to keep diff small
+    content_categories = {"content_depth", "insight_missing", "research_quality", "empty_data"}
+    limit = 2 if best_cat in content_categories else max_issues
+    cluster = groups[best_cat][:limit]
     logger.info(f"B2: Picked {len(cluster)} issues from category '{best_cat}' (total {len(issues)} across {len(groups)} categories)")
     return cluster
 
@@ -1095,8 +1109,19 @@ async def generate_fix_callback(
                 f"the root cause may be deeper than a surface-level fix."
             )
 
+        # Priority 0: Always include diff size warning (most common rejection reason)
+        diff_size_reminder = (
+            "\n\n## CRITICAL: DIFF SIZE LIMIT\n"
+            "Your fix will be AUTO-REJECTED and REVERTED if it adds more than 350 lines.\n"
+            "Target: 5-50 added lines. Absolute max: 350.\n"
+            "- Do NOT rewrite entire functions — make targeted edits\n"
+            "- Do NOT add large prompt strings — modify existing ones\n"
+            "- Do NOT add comments or logging — focus on the fix\n"
+            "Count: each '+' line in your diff counts toward the 350 limit.\n"
+        )
+
         # Priority 1 (always include): fix_prompt + scope_context + diagnosis_context
-        prompt_parts = [fix_prompt, scope_context, diagnosis_context]
+        prompt_parts = [diff_size_reminder, fix_prompt, scope_context, diagnosis_context]
         current_len = sum(len(p) for p in prompt_parts)
 
         # Priority 2 (include if fits): diff_context
@@ -1131,6 +1156,7 @@ async def generate_fix_callback(
             )
 
         expected_outcome = (
+            f"CRITICAL: Your diff will be AUTO-REJECTED if >350 added lines. Target: 5-50 lines.\n\n"
             f"Output from {service_name} must match the reference template in both "
             f"content quality (depth, specificity, actionable insights) and visual formatting "
             f"(layout, fonts, spacing, data tables). No critical or major discrepancies.{iteration_context}"
@@ -1207,19 +1233,19 @@ async def generate_fix_callback(
                 "fabrication_reverted": reverted,
             }
 
-    # B3: Diff size hard limit — reject >200 added lines (crash exempt)
+    # B3: Diff size hard limit — reject >350 added lines (crash exempt)
     if result and result.success and full_git_diff and scope != "crash":
         added_lines = sum(1 for l in full_git_diff.splitlines()
                          if l.startswith('+') and not l.startswith('+++'))
-        if added_lines > 200:
-            logger.error(f"Fix REJECTED: diff too large ({added_lines} added lines, max 200)")
+        if added_lines > 350:
+            logger.error(f"Fix REJECTED: diff too large ({added_lines} added lines, max 350)")
             await _auto_revert_last_commit()
             return {
                 "success": False,
                 "pr_number": None,
-                "description": f"Diff too large ({added_lines} lines added, max 200)",
+                "description": f"Diff too large ({added_lines} lines added, max 350)",
                 "git_diff": git_diff,
-                "error": f"Diff too large ({added_lines} lines, max 200)",
+                "error": f"Diff too large ({added_lines} lines, max 350)",
             }
 
     # B4: File change enforcement — only allowed files for the scope

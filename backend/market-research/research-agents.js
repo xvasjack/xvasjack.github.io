@@ -941,7 +941,7 @@ async function universalResearchAgent(
   const agentStart = Date.now();
   const results = {};
 
-  // Run all topics in parallel
+  // Run all topics in parallel with per-topic timeout
   const topicResults = await Promise.all(
     topics.map(async (topic, idx) => {
       const queryContext = `As a senior consultant advising a ${clientContext} on a ${projectType} project, research ${topic.name} for ${country}'s ${industry} market:
@@ -955,13 +955,24 @@ REQUIREMENTS:
 - Focus on actionable intelligence, not general observations
 - Include recent developments (2023-2024)`;
 
-      const result = await callKimiDeepResearch(queryContext, country, industry);
-      return {
-        key: `${category}_${idx}_${topic.name.replace(/\s+/g, '_').toLowerCase()}`,
-        name: topic.name,
-        content: result.content,
-        citations: result.citations || [],
-      };
+      try {
+        // Per-topic timeout: 90s. If one topic hangs, skip it rather than blocking all.
+        const result = await Promise.race([
+          callKimiDeepResearch(queryContext, country, industry),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Topic "${topic.name}" timed out after 90s`)), 90000)
+          ),
+        ]);
+        return {
+          key: `${category}_${idx}_${topic.name.replace(/\s+/g, '_').toLowerCase()}`,
+          name: topic.name,
+          content: result.content,
+          citations: result.citations || [],
+        };
+      } catch (err) {
+        console.warn(`    [${category}] Topic "${topic.name}" failed: ${err.message}`);
+        return { key: `${category}_${idx}_failed`, name: topic.name, content: '', citations: [] };
+      }
     })
   );
 

@@ -472,13 +472,11 @@ Return JSON:
 Return ONLY valid JSON.`;
 
   const result = await synthesizeWithFallback(prompt);
-  const validated = validatePolicySynthesis(
-    result || {
-      foundationalActs: { acts: [] },
-      nationalPolicy: { targets: [] },
-      investmentRestrictions: {},
-    }
-  );
+  if (!result) {
+    console.error('  [synthesizePolicy] Synthesis completely failed — no data returned');
+    return { _synthesisError: true, section: 'policy', message: 'All synthesis attempts failed' };
+  }
+  const validated = validatePolicySynthesis(result);
   return validated;
 }
 
@@ -644,16 +642,11 @@ Return JSON with these sections:
 Return ONLY valid JSON.`;
 
   const result = await synthesizeWithFallback(prompt, { maxTokens: 12288 });
-  const validated = validateMarketSynthesis(
-    result || {
-      tpes: {},
-      finalDemand: {},
-      electricity: {},
-      gasLng: {},
-      pricing: {},
-      escoMarket: {},
-    }
-  );
+  if (!result) {
+    console.error('  [synthesizeMarket] Synthesis completely failed — no data returned');
+    return { _synthesisError: true, section: 'market', message: 'All synthesis attempts failed' };
+  }
+  const validated = validateMarketSynthesis(result);
   return validated;
 }
 
@@ -853,16 +846,40 @@ Return JSON:
 Return ONLY valid JSON.`;
 
   const result = await synthesizeWithFallback(prompt, { maxTokens: 12288 });
-  const validated = validateCompetitorsSynthesis(
-    result || {
-      japanesePlayers: { players: [] },
-      localMajor: { players: [] },
-      foreignPlayers: { players: [] },
-      caseStudy: {},
-      maActivity: {},
-    }
-  );
+  if (!result) {
+    console.error('  [synthesizeCompetitors] Synthesis completely failed — no data returned');
+    return {
+      _synthesisError: true,
+      section: 'competitors',
+      message: 'All synthesis attempts failed',
+    };
+  }
+  const validated = validateCompetitorsSynthesis(result);
   return validated;
+}
+
+/**
+ * Compress synthesis output for inclusion in summary prompt.
+ * Keeps key findings while staying under maxChars.
+ */
+function summarizeForSummary(synthesis, section, maxChars) {
+  if (!synthesis) return `[${section}: no data available]`;
+  if (synthesis._synthesisError) return `[${section}: synthesis failed — ${synthesis.message}]`;
+  const json = JSON.stringify(synthesis);
+  if (json.length <= maxChars) return json;
+  const brief = {};
+  for (const key of Object.keys(synthesis)) {
+    const val = synthesis[key];
+    if (typeof val === 'string') brief[key] = val.slice(0, 200);
+    else if (Array.isArray(val)) brief[key] = val.slice(0, 3);
+    else if (typeof val === 'object' && val) {
+      brief[key] = {};
+      for (const [k, v] of Object.entries(val).slice(0, 5)) {
+        brief[key][k] = typeof v === 'string' ? v.slice(0, 150) : v;
+      }
+    } else brief[key] = val;
+  }
+  return JSON.stringify(brief).slice(0, maxChars);
 }
 
 /**
@@ -918,9 +935,9 @@ MINIMUM: 3 insights, each scoring 8+/10 on this rubric:
 =============================================================================
 
 SYNTHESIZED SECTIONS (already processed):
-Policy: ${JSON.stringify(policy, null, 2)}
-Market: ${JSON.stringify(market, null, 2)}
-Competitors: ${JSON.stringify(competitors, null, 2)}
+Policy: ${summarizeForSummary(policy, 'policy', 800)}
+Market: ${summarizeForSummary(market, 'market', 1200)}
+Competitors: ${summarizeForSummary(competitors, 'competitors', 800)}
 
 ADDITIONAL RESEARCH DATA:
 ${JSON.stringify(
@@ -950,7 +967,7 @@ ${JSON.stringify(
   ),
   null,
   2
-)}
+).slice(0, 3000)}
 
 =============================================================================
 DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
@@ -1095,12 +1112,17 @@ Return JSON:
 Return ONLY valid JSON.`;
 
   const result = await synthesizeWithFallback(prompt, { maxTokens: 16384 });
-  return (
-    result || {
+  if (!result) {
+    console.error('  [synthesizeSummary] Synthesis completely failed — no data returned');
+    return {
       depth: {},
       summary: { opportunities: [], obstacles: [], ratings: {}, keyInsights: [] },
-    }
-  );
+      _synthesisError: true,
+      section: 'summary',
+      message: 'All synthesis attempts failed',
+    };
+  }
+  return result;
 }
 
 /**
@@ -1294,7 +1316,19 @@ async function researchCountry(country, industry, clientContext, scope = null) {
       )
     );
 
-    const categoryResults = await Promise.all(categoryPromises);
+    // Timeout wrapper: abort if research takes >5 minutes total
+    let categoryResults;
+    try {
+      categoryResults = await Promise.race([
+        Promise.all(categoryPromises),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Research timed out after 5min')), 300000)
+        ),
+      ]);
+    } catch (err) {
+      console.error(`  [ERROR] Research phase failed: ${err.message}`);
+      categoryResults = [];
+    }
 
     // Merge all results
     for (const result of categoryResults) {
@@ -1305,6 +1339,21 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     console.log(
       `\n  [AGENTS COMPLETE] ${Object.keys(researchData).length} topics researched in ${researchTimeTemp}s (dynamic framework)`
     );
+
+    // Validate: did we actually get useful research data?
+    const actualTopics = Object.keys(researchData).length;
+    if (actualTopics < 3) {
+      console.error(
+        `  [ERROR] Dynamic framework returned only ${actualTopics} topics with data (minimum 3 required)`
+      );
+      return {
+        country,
+        error: 'Insufficient research data',
+        message: `Only ${actualTopics} topics returned data from dynamic framework. APIs may have failed.`,
+        topicsFound: actualTopics,
+        researchTimeMs: Date.now() - startTime,
+      };
+    }
   } else {
     // Fallback: Use hardcoded framework for energy-specific research
     console.log(`  [MULTI-AGENT SYSTEM] Launching 6 specialized research agents...`);
@@ -1366,6 +1415,22 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     synthesizeMarket(researchData, country, industry, clientContext),
     synthesizeCompetitors(researchData, country, industry, clientContext),
   ]);
+
+  // Check if too many synthesis sections failed
+  const failedSections = [policySynthesis, marketSynthesis, competitorsSynthesis]
+    .filter((s) => s?._synthesisError)
+    .map((s) => s.section);
+  if (failedSections.length >= 2) {
+    console.error(
+      `  [ERROR] ${failedSections.length}/3 synthesis sections failed: ${failedSections.join(', ')}`
+    );
+    return {
+      country,
+      error: 'Synthesis failed',
+      message: `Sections failed: ${failedSections.join(', ')}. Research data may be empty or API issues.`,
+      researchTimeMs: Date.now() - startTime,
+    };
+  }
 
   // Summary synthesis depends on the above sections
   const summaryResult = await synthesizeSummary(

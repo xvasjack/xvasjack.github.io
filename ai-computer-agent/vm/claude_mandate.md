@@ -15,7 +15,7 @@ You are being invoked by an automated agent. Follow these rules strictly:
 8. NEVER create PRs or feature branches
 9. DIFF SIZE: Your fix should be 5-50 lines of changes.
    If >100 lines, you are patching symptoms, not fixing root cause.
-   Step back and trace the data flow. Fixes >200 lines are auto-rejected.
+   Step back and trace the data flow. Fixes >350 lines are auto-rejected.
 
 ## Current Task Context
 Original user request: {ORIGINAL_TASK}

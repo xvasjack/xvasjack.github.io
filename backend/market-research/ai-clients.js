@@ -105,26 +105,33 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
     // Use retry logic for network resilience
     const data = await withRetry(
       async () => {
-        const response = await fetch(`${kimiBaseUrl}/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${process.env.KIMI_API_KEY}`,
-          },
-          body: JSON.stringify(requestBody),
-        });
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 min
+        try {
+          const response = await fetch(`${kimiBaseUrl}/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${process.env.KIMI_API_KEY}`,
+            },
+            body: JSON.stringify(requestBody),
+            signal: controller.signal,
+          });
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          // Throw to trigger retry for server errors
-          if (response.status >= 500 || response.status === 429) {
-            throw new Error(`Kimi HTTP ${response.status}: ${errorText.substring(0, 100)}`);
+          if (!response.ok) {
+            const errorText = await response.text();
+            // Throw to trigger retry for server errors
+            if (response.status >= 500 || response.status === 429) {
+              throw new Error(`Kimi HTTP ${response.status}: ${errorText.substring(0, 100)}`);
+            }
+            console.error(`Kimi HTTP error ${response.status}:`, errorText.substring(0, 200));
+            return null; // Don't retry client errors
           }
-          console.error(`Kimi HTTP error ${response.status}:`, errorText.substring(0, 200));
-          return null; // Don't retry client errors
-        }
 
-        return await response.json();
+          return await response.json();
+        } finally {
+          clearTimeout(timeoutId);
+        }
       },
       3,
       2000,
@@ -168,31 +175,38 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
         // Make second API call to get final answer
         const followupData = await withRetry(
           async () => {
-            const followupResponse = await fetch(`${kimiBaseUrl}/chat/completions`, {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${process.env.KIMI_API_KEY}`,
-              },
-              body: JSON.stringify({
-                model: 'kimi-k2.5',
-                messages,
-                max_tokens: maxTokens,
-                temperature: 1,
-              }),
-            });
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 min
+            try {
+              const followupResponse = await fetch(`${kimiBaseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${process.env.KIMI_API_KEY}`,
+                },
+                body: JSON.stringify({
+                  model: 'kimi-k2.5',
+                  messages,
+                  max_tokens: maxTokens,
+                  temperature: 1,
+                }),
+                signal: controller.signal,
+              });
 
-            if (!followupResponse.ok) {
-              const errorText = await followupResponse.text();
-              if (followupResponse.status >= 500 || followupResponse.status === 429) {
-                throw new Error(
-                  `Kimi followup HTTP ${followupResponse.status}: ${errorText.substring(0, 100)}`
-                );
+              if (!followupResponse.ok) {
+                const errorText = await followupResponse.text();
+                if (followupResponse.status >= 500 || followupResponse.status === 429) {
+                  throw new Error(
+                    `Kimi followup HTTP ${followupResponse.status}: ${errorText.substring(0, 100)}`
+                  );
+                }
+                return null;
               }
-              return null;
-            }
 
-            return await followupResponse.json();
+              return await followupResponse.json();
+            } finally {
+              clearTimeout(timeoutId);
+            }
           },
           3,
           2000,
@@ -256,7 +270,11 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
       researchQuality,
     };
   } catch (error) {
-    console.error('Kimi API error:', error?.message);
+    if (error?.name === 'AbortError') {
+      console.error(`[Kimi] API call timed out after 120s`);
+    } else {
+      console.error('Kimi API error:', error?.message);
+    }
     return { content: '', citations: [], researchQuality: 'failed' };
   }
 }
@@ -346,34 +364,41 @@ async function callGemini(prompt, options = {}) {
         generationConfig.responseMimeType = 'application/json';
       }
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents, generationConfig }),
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents, generationConfig }),
+            signal: controller.signal,
+          }
+        );
+
+        if (!response.ok) {
+          const errText = await response.text();
+          throw new Error(`Gemini API error ${response.status}: ${errText}`);
         }
-      );
 
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`Gemini API error ${response.status}: ${errText}`);
+        const data = await response.json();
+        const candidate = data.candidates?.[0];
+        if (!candidate || !candidate.content?.parts?.[0]?.text) {
+          throw new Error('Gemini returned empty response');
+        }
+
+        const text = candidate.content.parts[0].text;
+
+        // Track cost
+        const inputTokens = data.usageMetadata?.promptTokenCount || 0;
+        const outputTokens = data.usageMetadata?.candidatesTokenCount || 0;
+        trackCost('gemini-3-flash-preview', inputTokens, outputTokens, 0.5, 3.0);
+
+        return text;
+      } finally {
+        clearTimeout(timeoutId);
       }
-
-      const data = await response.json();
-      const candidate = data.candidates?.[0];
-      if (!candidate || !candidate.content?.parts?.[0]?.text) {
-        throw new Error('Gemini returned empty response');
-      }
-
-      const text = candidate.content.parts[0].text;
-
-      // Track cost
-      const inputTokens = data.usageMetadata?.promptTokenCount || 0;
-      const outputTokens = data.usageMetadata?.candidatesTokenCount || 0;
-      trackCost('gemini-3-flash-preview', inputTokens, outputTokens, 0.5, 3.0);
-
-      return text;
     },
     3,
     1000,

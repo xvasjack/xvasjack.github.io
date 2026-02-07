@@ -343,10 +343,16 @@ async def run_claude_code(
         process.stdin.write(full_prompt.encode())
         process.stdin.close()
 
+        # Later iterations have more context → agent needs more time
+        effective_timeout = timeout_seconds
+        if iteration >= 3:
+            effective_timeout = min(timeout_seconds + 600, 3600)  # +10min, cap at 1hr
+        logger.info(f"Claude Code timeout: {effective_timeout}s (iter {iteration})")
+
         try:
             stdout, stderr = await asyncio.wait_for(
                 process.communicate(),
-                timeout=timeout_seconds
+                timeout=effective_timeout
             )
         except asyncio.TimeoutError:
             # Issue 20/21 fix: Call communicate() after kill() to properly reap the process
@@ -374,7 +380,7 @@ async def run_claude_code(
             return ClaudeCodeResult(
                 success=False,
                 output="",
-                error=f"Claude Code timed out after {timeout_seconds}s"
+                error=f"Claude Code timed out after {effective_timeout}s"
             )
 
         output = stdout.decode("utf-8", errors="replace")
