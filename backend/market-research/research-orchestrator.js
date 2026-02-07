@@ -408,36 +408,54 @@ ${researchContext}
 =============================================================================
 DEPTH REQUIREMENTS (MANDATORY — AUTO-REJECT IF NOT MET):
 =============================================================================
-1. NAMED REGULATIONS with NUMBERS: Every regulation must have:
-   - Official name + year + decree/law number
-   - EXAMPLE: "Energy Conservation Act B.E. 2535 (1992, amended 2007)"
-   - EXAMPLE: "Power Development Plan 8 (PDP8, 2024-2037, 45% renewable target)"
-   - Include SPECIFIC NUMBERS: capacity targets (GW), % targets, budget ($M)
+VALIDATION CHECKPOINT: Before returning JSON, count your output:
+- foundationalActs.acts: Count entries. If <3, ADD MORE until >=3.
+- nationalPolicy.targets: Count entries. If <3, ADD MORE until >=3.
+- Named regulations: Count regulation names with years. If <3, ADD MORE until >=3.
 
-2. DATA DENSITY: EVERY field must contain QUANTIFIED data:
-   - requirements: Include specific metrics ("factories >2MW must audit every 3 years")
-   - penalties: Include amounts ("fine of 500,000 THB" or "0.5% of revenue")
-   - targets: Include numbers ("30% renewable by 2030" or "reduce 20% emissions by 2027")
-   - incentives: Include values ("8-year tax holiday" or "import duty exemption saving ~15%")
+1. NAMED REGULATIONS with NUMBERS — MANDATORY FORMAT:
+   Every regulation in foundationalActs.acts MUST have ALL 5 fields populated:
+   - name: Full official law title (e.g., "Energy Conservation Promotion Act B.E. 2535")
+   - year: 4-digit year or range (e.g., "1992 (amended 2007)")
+   - requirements: MUST contain at least 2 quantified metrics (e.g., "Facilities >2MW must conduct energy audits every 3 years")
+   - penalties: MUST contain dollar/currency amount (e.g., "Fine up to 500,000 THB or 0.5% annual revenue")
+   - enforcement: Status of enforcement (e.g., "Enforced by DEDE with 23 auditors nationwide as of 2024")
 
-3. COMPLETENESS — NEVER return empty or thin data:
-   - foundationalActs.acts: ≥3 entries, EACH with name, year, requirements (with numbers), penalties (with amounts), enforcement
-   - nationalPolicy.targets: ≥3 entries, EACH with specific metric + target number + deadline year + current status
-   - investmentRestrictions.incentives: ≥2 entries, EACH with program name + quantified benefit + eligibility criteria
+   VALIDATION: foundationalActs.acts.length >= 3 AND every entry has all 5 fields with numbers
 
-4. ACTIONABLE LANGUAGE in EVERY keyMessage/policyDirection:
-   - MUST use: "recommend", "opportunity to", "should consider", "strategic fit because"
-   - MUST connect regulation to client action: "PDP8's 45% renewable target by 2037 creates $2.3B ESCO opportunity — recommend targeting industrial efficiency first"
+2. DATA DENSITY — COUNTING RULE:
+   Before submitting, count the numeric data points in your output:
+   - foundationalActs section: >=5 numbers (years, percentages, MW/GW, budget amounts)
+   - nationalPolicy section: >=5 numbers (target %, deadline years, current status %)
+   - investmentRestrictions section: >=3 numbers (ownership %, tax years, savings %)
 
-5. SOURCE CITATIONS: Include at least ONE source per section:
-   - Format: "According to Ministry of Energy 2024" or "Source: PDP8 policy document"
+   If total <13 numeric data points across Policy section → REGENERATE with more specificity
 
-SCORING — Each regulation/target scores on this rubric (must score 8+/10):
-✓ Has official name: +2
-✓ Has year/date: +2
-✓ Has specific numbers (%, $, GW, deadlines): +2
-✓ Has enforcement reality or status: +2
-✓ Connects to client opportunity: +2
+3. COMPLETENESS — ARRAY LENGTH VALIDATION:
+   - foundationalActs.acts: MUST have >=3 entries (each entry = 1 regulation)
+   - nationalPolicy.targets: MUST have >=3 entries (each entry = 1 government target)
+   - nationalPolicy.keyInitiatives: MUST have >=2 entries
+   - investmentRestrictions.incentives: MUST have >=2 entries
+
+4. ACTIONABLE LANGUAGE — KEYWORD CHECK:
+   Every keyMessage and policyDirection MUST contain at least ONE of these action verbs:
+   ["recommend", "opportunity to", "should consider", "target", "prioritize", "strategic fit because"]
+
+   MUST connect regulation to client action with numbers:
+   BAD: "Regulations create opportunities"
+   GOOD: "PDP8's 45% renewable target by 2037 creates estimated $2.3B ESCO market — recommend targeting industrial sector first due to 4,200 facilities >2MW requiring audits"
+
+5. SOURCE CITATIONS — VALIDATION:
+   Count citations in your output. If <2 across entire Policy section → ADD sources until >=2
+   Format: "According to [Ministry/Agency], [year]" or "Source: [Law name], [year]"
+
+PRE-SUBMISSION CHECKLIST — DO NOT RETURN JSON UNTIL ALL ARE TRUE:
+☐ foundationalActs.acts.length >= 3
+☐ nationalPolicy.targets.length >= 3
+☐ Total numeric data points >= 13
+☐ Every regulation has name, year, requirements (with 2+ numbers), penalties (with amounts), enforcement
+☐ At least 2 source citations present
+☐ Every keyMessage has an action verb
 =============================================================================
 
 Return JSON:
@@ -549,32 +567,62 @@ ${researchContext}
 =============================================================================
 DEPTH REQUIREMENTS (MANDATORY):
 =============================================================================
-1. DATA DENSITY: MINIMUM 15 quantified data points across all 6 sections
-   - EVERY section needs numbers: market size ($M), capacity (GW/MW), growth (% CAGR), prices ($/unit)
-   - EXAMPLES: "$320M market", "14% CAGR 2020-2024", "45 GW installed", "23% renewable share", "$0.08/kWh"
+VALIDATION CHECKPOINT: Before returning JSON, count numeric data points in your output:
+TARGET SCORING for Market section:
+- tpes: 5+ numbers (years, Mtoe values, growth %, shares %)
+- finalDemand: 4+ numbers (growth %, sector shares, totals)
+- electricity: 5+ numbers (GW capacity, %, growth %)
+- gasLng: 3+ numbers (bcm, mtpa, utilization %)
+- pricing: 3+ numbers ($/kWh, year, growth %)
+- escoMarket: 3+ numbers (market size $M, growth %, year)
 
-2. CHARTS: At least 4 of 6 sections MUST have chartData:
-   - chartData.series: array of objects with name + values (NUMERIC array, NOT strings)
-   - chartData.categories: array of years ["2020","2021","2022","2023","2024"] or categories
-   - chartData.unit: unit of measurement ("Mtoe", "GW", "bcm", "%", "$B")
-   - MINIMUM 5 data points per chart
+TOTAL TARGET: >=23 numeric data points. Count yours. If <23 → REGENERATE with more specificity.
 
-3. ACTIONABLE LANGUAGE in EVERY keyInsight:
-   - MUST use: "recommend", "opportunity to", "should consider", "growth potential", "strategic fit because"
-   - MUST connect data to client action: "45 GW renewables by 2030 (up from 12 GW in 2024) creates $2.3B opportunity — recommend targeting solar+storage integration"
+1. DATA DENSITY — COUNTING RULE:
+   Every section MUST contain at least 3 quantified numbers with units:
+   - tpes: MUST have chartData with series containing >=5 numeric values EACH
+   - finalDemand: MUST have growthRate with "X% CAGR YYYY-YYYY"
+   - electricity: MUST have totalCapacity with "XX GW" + demandGrowth with "X% YYYY-YYYY"
+   - gasLng: MUST have lngTerminals array with >=1 entry containing capacity "X mtpa" + utilization "X%"
+   - pricing: MUST have comparison with "vs [country] $X.XX/kWh"
+   - escoMarket: MUST have marketSize "$XXM" + growthRate "XX% CAGR YYYY-YYYY"
 
-4. SOURCE CITATIONS: Cite data sources in keyInsight text
-   - Format: "Source: IEA 2024", "According to Vietnam Electricity, 2024", "Ministry of Energy data"
+   VALIDATION: Count all numbers in output. If <23 total → FAIL
 
-5. MANDATORY FOR ALL 6 SECTIONS (tpes, finalDemand, electricity, gasLng, pricing, escoMarket):
-   - keyInsight field with actionable recommendation (see #3)
-   - Specific numbers with units (see #1)
-   - Year/timeframe for all data points (e.g., "2024 data", "2020-2024", "projected to 2030")
+2. CHARTS — MANDATORY chartData PRESENCE:
+   At least 4 of 6 sections MUST have non-empty chartData field.
+   chartData requirements:
+   - series: array with >=1 object, each object has {name: string, values: [array of NUMBERS not strings]}
+   - categories: array with >=3 entries (years or labels)
+   - unit: string (e.g., "Mtoe", "GW", "bcm", "%", "$B")
 
-6. ESCO MARKET SECTION — CRITICAL:
-   - marketSize: "$XXM" (e.g., "$180M", "$450M")
-   - growthRate: "XX% CAGR" with year range (e.g., "18% CAGR 2020-2024")
-   - NEVER leave these fields empty or say "data not available"
+   VALIDATION: Count sections with chartData. If <4 → ADD chartData until >=4
+
+3. ACTIONABLE LANGUAGE — KEYWORD ENFORCEMENT:
+   Every keyInsight MUST contain ALL 3 elements:
+   a) Specific number with unit (e.g., "45 GW", "$2.3B", "18% CAGR")
+   b) Year or timeframe (e.g., "by 2030", "2020-2024", "as of 2024")
+   c) Action verb (e.g., "recommend targeting", "opportunity to", "should prioritize")
+
+   BAD EXAMPLE: "The market is growing and presents opportunities"
+   GOOD EXAMPLE: "45 GW renewables target by 2030 (up from 12 GW in 2024) creates $2.3B opportunity — recommend targeting solar+storage for industrial clients"
+
+4. SOURCE CITATIONS — COUNT CHECK:
+   Count citations in your output. If <3 across all 6 Market sections → ADD more until >=3
+   Format: "Source: [Agency], [year]" or "According to [Organization] [year]"
+
+5. ESCO MARKET — NON-NEGOTIABLE:
+   escoMarket.marketSize: MUST be "$XXM" or "$X.XB" format with specific number
+   escoMarket.growthRate: MUST be "XX% CAGR YYYY-YYYY" format with specific years
+
+   VALIDATION: Check escoMarket object. If marketSize is empty OR growthRate is empty → REGENERATE entire escoMarket section
+
+PRE-SUBMISSION CHECKLIST — DO NOT RETURN JSON UNTIL ALL ARE TRUE:
+☐ Total numeric data points >= 23 (count them)
+☐ At least 4 sections have chartData with series containing numeric arrays
+☐ Every keyInsight has: number + year + action verb
+☐ escoMarket has marketSize "$XXM" and growthRate "XX% CAGR YYYY-YYYY"
+☐ At least 3 source citations present
 =============================================================================
 
 For chart data, provide NUMERIC arrays (not strings). Example:
@@ -715,11 +763,22 @@ ${researchContext}
 
 CRITICAL REQUIREMENTS — OUTPUT REJECTED IF ANY ARE VIOLATED:
 =============================================================================
-1. DESCRIPTION LENGTH: Every company description MUST be 45-55 words (count them)
-   - <45 words = REJECTED (too thin)
-   - >55 words = REJECTED (causes overflow)
-   - >65 words = REJECTED (will overflow on slides)
-   - Target: 55-60 words
+VALIDATION CHECKPOINT: Before returning JSON, count words in EVERY description field:
+- EVERY company description MUST be EXACTLY 48-52 words (sweet spot)
+- Count each description. If ANY <45 or >55 words → REGENERATE that description
+- Use this formula: Split description by spaces, count array length
+
+1. DESCRIPTION LENGTH — STRICT ENFORCEMENT:
+   TARGET: 50 words per description (range: 48-52 words acceptable)
+   MAXIMUM: 55 words absolute limit
+   MINIMUM: 45 words required for depth
+
+   PROCESS:
+   a) Write the description
+   b) Count words by splitting on spaces
+   c) If <48 words → ADD more detail until 48-52 words
+   d) If >52 words → CUT to 48-52 words without losing key facts
+   e) Verify count before adding to JSON
 
 2. REQUIRED COMPONENTS IN EVERY DESCRIPTION (all 4 mandatory):
    a) FINANCIAL: revenue/market share/valuation + year (e.g., "$45M revenue, 2024")
@@ -729,9 +788,17 @@ CRITICAL REQUIREMENTS — OUTPUT REJECTED IF ANY ARE VIOLATED:
 
 3. DATA DENSITY: Every description MUST contain at least 3 numbers/percentages
 
-EXAMPLE (58 words, all 4 components):
-"ABC Energy ($45M revenue, 2024) operates 180+ efficiency contracts across 7 provinces with 12% annual growth since 2019. Strong government relationships and 23-year track record in food/beverage. Weakness: limited tech capabilities. Strategic fit: established customer base needs foreign technology partner. Recommend 60/40 JV structure for complementary strengths."
-✓ Financial: $45M, 2024 ✓ Scale: 180 contracts, 7 provinces, 12% growth ✓ Assessment: Strong (govt), Weak (tech) ✓ Action: Recommend 60/40 JV
+VALID EXAMPLE (50 words exactly):
+"ABC Energy ($45M revenue, 2024) operates 180+ efficiency contracts across 7 provinces with 12% annual growth since 2019. Strong government relationships and 23-year track record. Weakness: limited tech capabilities. Strategic fit: customer base needs foreign technology partner. Recommend 60/40 JV structure for complementary strengths."
+✓ Financial: $45M, 2024 ✓ Scale: 180, 7, 12% ✓ Assessment: Strong/Weak ✓ Action: Recommend 60/40 ✓ Word count: 50
+
+PRE-SUBMISSION DESCRIPTION CHECK:
+For EVERY company in japanesePlayers, localMajor, foreignPlayers:
+☐ Description word count is 48-52 words (count by splitting on spaces)
+☐ Contains >=3 numbers or percentages
+☐ Has financial metric with year
+☐ Has strength AND weakness
+☐ Has action verb (recommend/consider/target/approach)
 =============================================================================
 
 ADDITIONAL DEPTH REQUIREMENTS:
@@ -972,32 +1039,55 @@ ${JSON.stringify(
 =============================================================================
 DEPTH REQUIREMENTS (MANDATORY — FAILURE TO MEET = REJECTED OUTPUT):
 =============================================================================
+VALIDATION CHECKPOINT: Before returning JSON, validate summary.keyInsights:
+- Count entries in summary.keyInsights array. If <3 → ADD MORE until >=3
+- For EACH insight entry, check ALL 4 fields: data, pattern, implication
+- Count numbers in "data" field. If <2 numbers → REGENERATE that insight
+- Count years/dates in "pattern" or "implication". If <1 year → REGENERATE
+- Check for action verbs. If no "recommend/target/should/consider" → REGENERATE
 
-INSIGHT SCORING RUBRIC — EVERY insight must score 8+/10:
-✓ Specific number/percentage: +2 points
-✓ Year/date/timeframe: +2 points
-✓ Causal explanation (because/which creates): +2 points
-✓ Action verb (recommend/should/target): +2 points
-✓ Timing window (by when/before/Q1/month): +2 points
+INSIGHT CHAIN VALIDATION — EVERY insight must pass this 4-part test:
+PART 1 - DATA FIELD: Contains >=2 specific numbers + at least 1 year
+  Example PASS: "4,200 factories >2MW require audits but only 23 DEDE auditors exist (2024)"
+  Example FAIL: "Many factories need audits" (no numbers, no year)
 
-EVERY summary.keyInsights entry MUST have ALL 4 PARTS:
-1. DATA: Specific number + year (e.g., "4,200 factories, 23 auditors, 2024")
-2. SO WHAT: Causal mechanism (e.g., "creates 18-month window because DEDE hiring frozen until 2026")
-3. NOW WHAT: Action with verb (e.g., "Recommend targeting non-compliant factories")
-4. BY WHEN: Timing trigger (e.g., "in Q1 2025 before late 2026 crackdown")
+PART 2 - PATTERN FIELD: Contains causal mechanism with "because" or "creates" or "which means"
+  Example PASS: "creates 18-month compliance window because DEDE hiring frozen until 2026"
+  Example FAIL: "Enforcement is weak" (no causality, no mechanism)
 
-EXAMPLE INSIGHT (10/10 score):
+PART 3 - IMPLICATION FIELD: Contains action verb + specific target + timing window
+  Example PASS: "Recommend targeting non-compliant factories in Q1 2025 before late 2026 crackdown"
+  Example FAIL: "Companies should enter the market" (vague, no target, no timing)
+
+PART 4 - COMPLETENESS: All 3 fields (data, pattern, implication) present and non-empty
+  If ANY field is missing or <20 characters → REGENERATE entire insight
+
+SCORING RUBRIC (each insight must score >=8/10 to pass):
+✓ Data has >=2 numbers: +2 points
+✓ Data or pattern has >=1 year/date: +2 points
+✓ Pattern has causal word (because/creates/which/due to): +2 points
+✓ Implication has action verb (recommend/target/should/consider/prioritize): +2 points
+✓ Implication has timing (Q1/Q2/before [year]/[X]-month window/by [date]): +2 points
+
+VALID EXAMPLE (10/10 score):
 {
   "title": "Enforcement backlog creates 18-month entry window",
   "data": "4,200 factories >2MW require audits but only 23 DEDE auditors exist (2024)",
-  "pattern": "Enforcement backlog creates 18-month compliance window before DEDE hires 40 new auditors in 2026",
+  "pattern": "Enforcement backlog creates 18-month compliance window because DEDE hiring frozen until 2026",
   "implication": "Recommend targeting non-compliant factories in Q1 2025 before regulatory crackdown accelerates in late 2026"
 }
-✓ Numbers: 4,200, 23, 40 [2] ✓ Years: 2024, 2026, Q1 2025 [2] ✓ Causal: "creates...before" [2] ✓ Action: "Recommend targeting" [2] ✓ Timing: "Q1 2025 before late 2026" [2] = 10/10
+✓ Numbers: 4,200, 23, 40 [2] ✓ Years: 2024, 2026, Q1 2025 [2] ✓ Causal: "creates...because" [2] ✓ Action: "Recommend targeting" [2] ✓ Timing: "Q1 2025 before late 2026" [2] = 10/10
 
-REJECTED INSIGHT (2/10 score — DO NOT GENERATE LIKE THIS):
+REJECTED EXAMPLE (2/10 — DO NOT GENERATE):
 {"title": "Market is growing", "data": "The market is expanding", "pattern": "Growth creates opportunities", "implication": "Companies should consider entering"}
-✗ No numbers [0] ✗ No dates [0] ✓ Weak causal [2] ✗ Vague action [0] ✗ No timing [0] = 2/10 REJECTED
+✗ No numbers [0] ✗ No dates [0] ✓ Weak causal [2] ✗ Vague action [0] ✗ No timing [0] = 2/10 FAIL
+
+PRE-SUBMISSION CHECKLIST FOR INSIGHTS:
+☐ summary.keyInsights has >=3 entries
+☐ EVERY entry has data field with >=2 numbers + 1 year
+☐ EVERY entry has pattern field with causal word (because/creates/which/due to)
+☐ EVERY entry has implication field with action verb + timing window
+☐ Total insight quality score: sum of all scores / count >= 8.0 average
 
 MANDATORY REQUIREMENTS FOR EACH SECTION:
 
@@ -1015,10 +1105,23 @@ MANDATORY REQUIREMENTS FOR EACH SECTION:
    - implementation section: cite at least 1 source
    - Format: "According to [source], [year]" or "Source: [name], [year]"
 
-4. PARTNER DESCRIPTIONS — WORD COUNT LIMIT TO PREVENT OVERFLOW:
+4. PARTNER DESCRIPTIONS — STRICT WORD COUNT TO PREVENT OVERFLOW:
    - partnerAssessment.partners: ≥3 entries
-   - EACH partner description: 45-55 words (NOT 60+, NOT 70+)
-   - Must include: revenue estimate, market position, specific strengths/weaknesses, strategic fit rationale
+   - EACH partner description: EXACTLY 48-52 words (count by splitting on spaces)
+   - VALIDATION PROCESS:
+     a) Write description
+     b) Count words (split by spaces, count array length)
+     c) If <48 words → ADD detail until 48-52
+     d) If >52 words → CUT to 48-52 without losing revenue/metrics/strengths/weaknesses
+   - Must include: revenue estimate with year, market position, specific strengths, specific weaknesses, strategic fit rationale
+
+   PRE-SUBMISSION PARTNER CHECK:
+   For EVERY entry in partnerAssessment.partners:
+   ☐ Description word count is 48-52 (count them)
+   ☐ Contains revenue with year (e.g., "$45M, 2024")
+   ☐ Contains at least 2 other numbers
+   ☐ Mentions specific strength AND weakness
+   ☐ Has strategic fit rationale
 
 5. COMPLETENESS:
    - entryStrategy.options: exactly 3 (JV, Acquisition, Greenfield), ALL fields populated with numbers
