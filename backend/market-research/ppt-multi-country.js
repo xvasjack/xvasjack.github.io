@@ -31,19 +31,19 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   pptx.title = `${scope.industry} Market Analysis - ${scope.targetMarkets.join(', ')}`;
   pptx.subject = scope.projectType;
 
-  // YCP Theme Colors (from profile-slides template)
+  // YCP Theme Colors (matching ppt-single-country.js)
   const COLORS = {
-    headerLine: '293F55', // Dark navy for header/footer lines
-    accent3: '011AB7', // Dark blue - table header background
-    accent1: '007FFF', // Bright blue - secondary/subtitle
-    dk2: '1F497D', // Section underline/title color
+    headerLine: '1B2A4A',
+    accent3: '1B2A4A',
+    accent1: '3C57FE',
+    dk2: '1B2A4A',
     white: 'FFFFFF',
     black: '000000',
-    gray: 'BFBFBF', // Border color
-    footerText: '808080', // Gray footer text
-    green: '2E7D32', // Positive/Opportunity
-    orange: 'E46C0A', // Warning/Obstacle
-    red: 'C62828', // Negative/Risk
+    gray: 'D6D7D9',
+    footerText: '808080',
+    green: '1D8348',
+    orange: 'E46C0A',
+    red: 'B71C1C',
   };
 
   // Set default font to Segoe UI (YCP standard)
@@ -67,13 +67,13 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   // Standard slide layout with title, subtitle, and navy divider line
   function addSlide(title, subtitle = '') {
     const slide = pptx.addSlide();
-    // Title - 24pt bold navy
+    // Title - 20pt bold navy
     slide.addText(truncateTitle(title), {
       x: LEFT_MARGIN,
-      y: 0.15,
+      y: 0.049,
       w: CONTENT_WIDTH,
       h: 0.7,
-      fontSize: 24,
+      fontSize: 20,
       bold: true,
       color: COLORS.dk2,
       fontFace: FONT,
@@ -83,19 +83,19 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     // Navy divider line under title
     slide.addShape('line', {
       x: LEFT_MARGIN,
-      y: 0.9,
+      y: 0.73,
       w: CONTENT_WIDTH,
       h: 0,
-      line: { color: COLORS.dk2, width: 2.5 },
+      line: { color: COLORS.dk2, width: 3 },
     });
-    // Message/subtitle - 14pt blue (the "so what")
+    // Message/subtitle - 11pt blue (the "so what")
     if (subtitle) {
       slide.addText(subtitle, {
         x: LEFT_MARGIN,
-        y: 0.95,
+        y: 0.78,
         w: CONTENT_WIDTH,
         h: 0.3,
-        fontSize: 14,
+        fontSize: 11,
         color: COLORS.accent1,
         fontFace: FONT,
       });
@@ -110,7 +110,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     y: 2.2,
     w: 9,
     h: 0.8,
-    fontSize: 36,
+    fontSize: 42,
     bold: true,
     color: COLORS.dk2,
     fontFace: FONT,
@@ -191,13 +191,13 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     if (c.error) return;
     overviewRows.push([
       { text: c.country, options: { fontFace: FONT } },
-      { text: truncate(c.marketDynamics?.marketSize || 'N/A', 60), options: { fontFace: FONT } },
+      { text: truncate(c.market?.marketSize || 'N/A', 60), options: { fontFace: FONT } },
       {
-        text: truncate(c.policyRegulatory?.foreignOwnershipRules || 'N/A', 60),
+        text: truncate(c.policy?.foreignOwnershipRules || 'N/A', 60),
         options: { fontFace: FONT },
       },
       {
-        text: truncate(c.policyRegulatory?.regulatoryRisk || 'N/A', 40),
+        text: truncate(c.policy?.regulatoryRisk || 'N/A', 40),
         options: { fontFace: FONT },
       },
     ]);
@@ -205,7 +205,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
 
   overviewSlide.addTable(overviewRows, {
     x: LEFT_MARGIN,
-    y: 1.3,
+    y: 1.467,
     w: CONTENT_WIDTH,
     h: 4.7,
     fontSize: 12,
@@ -220,10 +220,13 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     'Executive Summary',
     synthesis.executiveSummary?.subtitle || 'Key findings across markets'
   );
-  const keyFindings = safeArray(
-    synthesis.executiveSummary?.keyFindings || synthesis.keyFindings,
-    4
-  );
+  const execPoints = Array.isArray(synthesis.executiveSummary)
+    ? synthesis.executiveSummary.slice(0, 5)
+    : typeof synthesis.executiveSummary === 'string'
+      ? [synthesis.executiveSummary]
+      : synthesis.executiveSummary?.keyFindings ||
+        synthesis.executiveSummary?.points || ['No executive summary available'];
+  const keyFindings = safeArray(execPoints, 4);
   if (keyFindings.length > 0) {
     execSlide.addText(
       keyFindings.map((f, idx) => ({
@@ -232,7 +235,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       })),
       {
         x: LEFT_MARGIN,
-        y: 1.3,
+        y: 1.467,
         w: CONTENT_WIDTH,
         h: 4.5,
         fontSize: 13,
@@ -277,7 +280,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     if (c.error) return;
     chartLabels.push(c.country);
     // Try to extract numeric value from market size string
-    const sizeStr = c.marketDynamics?.marketSize || '';
+    const sizeStr = c.market?.marketSize || '';
     const numMatch = sizeStr.match(/[$€]?\s*([\d,.]+)\s*(billion|million|B|M)?/i);
     let value = 0;
     if (numMatch) {
@@ -299,7 +302,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       ],
       {
         x: LEFT_MARGIN,
-        y: 1.4,
+        y: 1.467,
         w: CONTENT_WIDTH,
         h: 4.5,
         barDir: 'bar',
@@ -325,31 +328,31 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   // Draw quadrant background
   matrixSlide.addShape('rect', {
     x: 0.5,
-    y: 1.3,
+    y: 1.467,
     w: 4.25,
     h: 2.5,
-    fill: { color: 'FFF0F0' }, // Bottom-left (low-low) - light red
+    fill: { color: 'D6E4F0' }, // Bottom-left (low-low)
   });
   matrixSlide.addShape('rect', {
     x: 4.75,
-    y: 1.3,
+    y: 1.467,
     w: 4.25,
     h: 2.5,
-    fill: { color: 'FFFAED' }, // Bottom-right (high attract, low feas) - light orange
+    fill: { color: 'F2F2F2' }, // Bottom-right (high attract, low feas)
   });
   matrixSlide.addShape('rect', {
     x: 0.5,
-    y: 3.8,
+    y: 3.967,
     w: 4.25,
     h: 2.5,
-    fill: { color: 'FFFAED' }, // Top-left (low attract, high feas) - light orange
+    fill: { color: 'F2F2F2' }, // Top-left (low attract, high feas)
   });
   matrixSlide.addShape('rect', {
     x: 4.75,
-    y: 3.8,
+    y: 3.967,
     w: 4.25,
     h: 2.5,
-    fill: { color: 'F0FFF0' }, // Top-right (high-high) - light green
+    fill: { color: 'D6E4F0' }, // Top-right (high-high)
   });
   // Axis labels
   matrixSlide.addText('← Low Attractiveness | High Attractiveness →', {
@@ -364,7 +367,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   });
   matrixSlide.addText('High\nFeasibility\n\n\n\n\n\nLow\nFeasibility', {
     x: 9.1,
-    y: 1.3,
+    y: 1.467,
     w: 0.6,
     h: 5.0,
     fontSize: 8,
@@ -501,7 +504,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   const recTableH = safeTableHeight(recRows.length, { maxH: 4.5 });
   recSlide.addTable(recRows, {
     x: LEFT_MARGIN,
-    y: 1.3,
+    y: 1.467,
     w: CONTENT_WIDTH,
     h: recTableH,
     fontSize: 11,
@@ -513,7 +516,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   // Next steps
   recSlide.addText('Recommended Next Steps:', {
     x: LEFT_MARGIN,
-    y: 1.3 + recTableH + 0.15,
+    y: 1.467 + recTableH + 0.15,
     w: CONTENT_WIDTH,
     h: 0.3,
     fontSize: 12,
@@ -534,7 +537,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     })),
     {
       x: LEFT_MARGIN,
-      y: 1.3 + recTableH + 0.5,
+      y: 1.467 + recTableH + 0.5,
       w: CONTENT_WIDTH,
       h: 0.8,
       fontSize: 10,
@@ -551,7 +554,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     const countryName = ca.country;
 
     // ---------- SLIDE: {Country} - Policy & Regulations ----------
-    const reg = ca.policyRegulatory || {};
+    const reg = ca.policy || {};
     const regSubtitle = reg.governmentStance ? truncateSubtitle(reg.governmentStance, 95) : '';
     const regSlide = addSlide(`${countryName} - Policy & Regulations`, regSubtitle);
 
@@ -602,7 +605,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
 
     regSlide.addTable(regRows, {
       x: LEFT_MARGIN,
-      y: 1.3,
+      y: 1.467,
       w: CONTENT_WIDTH,
       h: 4.7,
       fontSize: 14,
@@ -613,8 +616,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     });
 
     // ---------- SLIDE: {Country} - Market ----------
-    const market = ca.marketDynamics || {};
-    const macro = ca.macroContext || {};
+    const market = ca.market || {};
     const marketSubtitle = market.marketSize ? truncateSubtitle(market.marketSize, 95) : '';
     const marketSlide = addSlide(`${countryName} - Market`, marketSubtitle);
 
@@ -653,19 +655,22 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     if (market.supplyChain) {
       marketRows.push([{ text: 'Supply Chain' }, { text: truncate(market.supplyChain, 100) }]);
     }
-    if (macro.energyIntensity) {
+    if (market.energyIntensity) {
       marketRows.push([
         { text: 'Energy Intensity' },
-        { text: truncate(macro.energyIntensity, 100) },
+        { text: truncate(market.energyIntensity, 100) },
       ]);
     }
-    if (macro.keyObservation) {
-      marketRows.push([{ text: 'Key Observation' }, { text: truncate(macro.keyObservation, 100) }]);
+    if (market.keyObservation) {
+      marketRows.push([
+        { text: 'Key Observation' },
+        { text: truncate(market.keyObservation, 100) },
+      ]);
     }
 
     marketSlide.addTable(marketRows, {
       x: LEFT_MARGIN,
-      y: 1.3,
+      y: 1.467,
       w: CONTENT_WIDTH,
       h: 4.7,
       fontSize: 11,
@@ -676,7 +681,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     });
 
     // ---------- SLIDE: {Country} - Competitor Overview ----------
-    const comp = ca.competitiveLandscape || {};
+    const comp = ca.competitors || {};
     // Extract just the intensity level (Low/Medium/High), not the full reasoning
     let compIntensityLevel = '';
     if (comp.competitiveIntensity) {
@@ -769,7 +774,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     const compTableH = safeTableHeight(compRows.length, { maxH: 4.0 });
     compSlide.addTable(compRows, {
       x: LEFT_MARGIN,
-      y: 1.3,
+      y: 1.467,
       w: CONTENT_WIDTH,
       h: compTableH,
       fontSize: 10,
@@ -781,7 +786,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
 
     // Entry barriers section — dynamic y based on table
     const barriers = safeArray(comp.entryBarriers, 4);
-    const barriersY = 1.3 + compTableH + 0.15;
+    const barriersY = 1.467 + compTableH + 0.15;
     if (barriers.length > 0 && barriersY < 6.0) {
       compSlide.addShape('line', {
         x: LEFT_MARGIN,

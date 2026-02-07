@@ -122,9 +122,9 @@ function truncate(text, maxLen = 150, addEllipsis = true) {
   return addEllipsis ? result + '...' : result;
 }
 
-// Helper: truncate subtitle/message text - stricter limits per YCP spec (max ~20 words / 100 chars)
+// Helper: truncate subtitle/message text (max 180 chars for 1-2 sentence subtitles)
 // Adds ellipsis (...) when text is truncated
-function truncateSubtitle(text, maxLen = 100, addEllipsis = true) {
+function truncateSubtitle(text, maxLen = 180, addEllipsis = true) {
   if (!text) return '';
   const str = String(text).trim();
   if (str.length <= maxLen) return str;
@@ -492,7 +492,7 @@ function addCalloutBox(slide, title, content, options = {}) {
   if (content) {
     textParts.push({
       text: fitTextToShape(truncate(content, 200), boxW - 0.4, boxH - 0.4, 9).text,
-      options: { fontSize: 9, color: '333333', fontFace: FONT },
+      options: { fontSize: 9, color: '000000', fontFace: FONT },
     });
   }
   if (textParts.length > 0) {
@@ -528,26 +528,26 @@ function addInsightsPanel(slide, insights = [], options = {}) {
   addInsightPanelsFromPattern(slide, insightObjects, {
     insightPanels: [
       {
-        x: options.x || 9.8,
+        x: options.x || 8.5,
         y: options.y || 1.5,
-        w: options.w || 3.2,
+        w: options.w || 4.4,
         h: Math.min((options.h || 4.0) / Math.min(insights.length, 3), 1.5),
       },
       {
-        x: options.x || 9.8,
+        x: options.x || 8.5,
         y:
           (options.y || 1.5) +
           Math.min((options.h || 4.0) / Math.min(insights.length, 3), 1.5) +
           0.1,
-        w: options.w || 3.2,
+        w: options.w || 4.4,
         h: Math.min((options.h || 4.0) / Math.min(insights.length, 3), 1.5),
       },
       {
-        x: options.x || 9.8,
+        x: options.x || 8.5,
         y:
           (options.y || 1.5) +
           2 * (Math.min((options.h || 4.0) / Math.min(insights.length, 3), 1.5) + 0.1),
-        w: options.w || 3.2,
+        w: options.w || 4.4,
         h: Math.min((options.h || 4.0) / Math.min(insights.length, 3), 1.5),
       },
     ],
@@ -746,22 +746,20 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
 // Colors selected for sufficient contrast and colorblind-friendly combinations
 const CHART_COLORS = [
   '2E5090', // dark blue
-  '1736B6', // deep blue
-  '3C57FE', // medium blue
-  '8EC1FF', // light blue
-  '1B2A4A', // dark navy
-  'D6D7D9', // gray
-  '9BC9FF', // sky blue
-  'A8B4C8', // blue-gray
+  'E46C0A', // orange
+  '1D8348', // green
+  'B71C1C', // red
+  '7B1FA2', // purple
+  '00838F', // teal
 ];
 
-// Extended accessible color palette for more than 8 categories
+// Extended accessible color palette for more than 6 categories
 const CHART_COLORS_EXTENDED = [
   ...CHART_COLORS,
-  '293F55', // deep navy
-  '4A6A96', // steel blue
-  '6889B3', // medium steel
-  '87A5CC', // light steel
+  'FF6F00', // deep orange
+  '1565C0', // blue
+  '2E7D32', // dark green
+  'AD1457', // pink
 ];
 
 // Semantic colors for specific meanings (opportunities, risks, etc.)
@@ -1677,7 +1675,7 @@ function addColoredBorderTable(slide, data, color, patternDef) {
           bold: true,
           color: p.headerColor || 'FFFFFF',
           fill: { color: p.headerFill || '1B2A4A' },
-          fontSize: p.headerFontSize || 10,
+          fontSize: p.headerFontSize || 14,
           fontFace: 'Segoe UI',
         },
       }))
@@ -1690,7 +1688,7 @@ function addColoredBorderTable(slide, data, color, patternDef) {
     tableRows.push(
       cells.map((cell, colIdx) => {
         const cellText = truncate(String(cell || ''), 100);
-        const fittedCell = fitTextToShape(cellText, 3.0, 0.35, p.bodyFontSize || 9);
+        const fittedCell = fitTextToShape(cellText, 3.0, p.rowHeight || 0.65, p.bodyFontSize || 14);
         return {
           text: fittedCell.text,
           options: {
@@ -1719,6 +1717,272 @@ function addColoredBorderTable(slide, data, color, patternDef) {
     h: Math.min(p.maxH || 5.0, tableRows.length * 0.4 + 0.2),
     fontFace: 'Segoe UI',
     valign: 'top',
+  });
+}
+
+// ============ TOC SLIDE ============
+// Creates a Table of Contents slide with highlighted active section
+function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
+  const slide = pptx.addSlide({ masterName: 'YCP_MAIN' });
+
+  // Title "Table of Contents"
+  slide.addText('Table of Contents', {
+    x: 0.376,
+    y: 0.049,
+    w: 12.586,
+    h: 0.91,
+    fontSize: 20,
+    fontFace: FONT,
+    color: '000000',
+    bold: true,
+  });
+
+  // Table with section names
+  const tableRows = sectionNames.map((name, idx) => {
+    const isActive = idx === activeSectionIdx;
+    return [
+      {
+        text: name,
+        options: {
+          fontSize: 18,
+          fontFace: FONT,
+          color: '000000',
+          bold: isActive,
+          fill: { color: isActive ? '8EC1FF' : 'FFFFFF' },
+          border: { pt: 0.5, color: 'D6D7D9' },
+          valign: 'middle',
+        },
+      },
+    ];
+  });
+
+  slide.addTable(tableRows, {
+    x: 0.376,
+    y: 1.5,
+    w: 12.586,
+    rowH: 0.591,
+    border: { pt: 0.5, color: 'D6D7D9' },
+  });
+
+  return slide;
+}
+
+// ============ OPPORTUNITIES & BARRIERS SLIDE ============
+// Creates a 2-column table slide with opportunities on left, barriers on right
+function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
+  const slide = pptx.addSlide({ masterName: 'YCP_MAIN' });
+  slide.addText('Opportunities & Barriers', {
+    x: 0.376,
+    y: 0.049,
+    w: 12.586,
+    h: 0.91,
+    fontSize: 20,
+    fontFace: FONT,
+    color: '000000',
+    bold: true,
+  });
+
+  const opportunities = synthesis.opportunities || synthesis.summary?.opportunities || [];
+  const barriers =
+    synthesis.barriers ||
+    synthesis.obstacles ||
+    synthesis.summary?.barriers ||
+    synthesis.summary?.obstacles ||
+    [];
+
+  // Left table: Opportunities
+  const oppRows = [
+    [
+      {
+        text: 'Opportunities',
+        options: {
+          bold: true,
+          fontSize: 14,
+          fontFace: FONT,
+          fill: { color: '8EC1FF' },
+          border: { pt: 0.5, color: 'D6D7D9' },
+          valign: 'middle',
+        },
+      },
+    ],
+    ...safeArray(opportunities, 4).map((opp) => [
+      {
+        text:
+          typeof opp === 'string'
+            ? opp
+            : opp.description || opp.title || opp.opportunity || JSON.stringify(opp),
+        options: {
+          fontSize: 12,
+          fontFace: FONT,
+          color: '000000',
+          border: { pt: 0.5, color: 'D6D7D9' },
+          valign: 'middle',
+        },
+      },
+    ]),
+  ];
+
+  // Right table: Barriers
+  const barRows = [
+    [
+      {
+        text: 'Barriers',
+        options: {
+          bold: true,
+          fontSize: 14,
+          fontFace: FONT,
+          fill: { color: 'D6D7D9' },
+          border: { pt: 0.5, color: 'D6D7D9' },
+          valign: 'middle',
+        },
+      },
+    ],
+    ...safeArray(barriers, 4).map((bar) => [
+      {
+        text:
+          typeof bar === 'string'
+            ? bar
+            : bar.description || bar.title || bar.obstacle || JSON.stringify(bar),
+        options: {
+          fontSize: 12,
+          fontFace: FONT,
+          color: '000000',
+          border: { pt: 0.5, color: 'D6D7D9' },
+          valign: 'middle',
+        },
+      },
+    ]),
+  ];
+
+  slide.addTable(oppRows, {
+    x: 0.376,
+    y: 1.5,
+    w: 6.0,
+    rowH: 0.8,
+    border: { pt: 0.5, color: 'D6D7D9' },
+  });
+  slide.addTable(barRows, {
+    x: 6.876,
+    y: 1.5,
+    w: 6.0,
+    rowH: 0.8,
+    border: { pt: 0.5, color: 'D6D7D9' },
+  });
+
+  return slide;
+}
+
+// ============ HORIZONTAL FLOW TABLE ============
+// For policy regulatory summary (6-column current -> transition -> future layout)
+function addHorizontalFlowTable(slide, data, options = {}) {
+  const { x = 0.376, y = 1.467, w = 12.586, font = 'Segoe UI' } = options;
+
+  // data is array of { label, currentState, transition, futureState }
+  const colWidths = [1.2, 3.2, 0.5, 4.0, 0.5, 3.2]; // total ~12.6
+
+  const headerRow = [
+    {
+      text: 'Domain',
+      options: {
+        bold: true,
+        fontSize: 14,
+        fill: { color: '1736B6' },
+        color: 'FFFFFF',
+        fontFace: font,
+      },
+    },
+    {
+      text: 'Current State',
+      options: {
+        bold: true,
+        fontSize: 14,
+        fill: { color: '1736B6' },
+        color: 'FFFFFF',
+        fontFace: font,
+      },
+    },
+    {
+      text: '\u2192',
+      options: {
+        fontSize: 14,
+        fill: { color: 'FFFFFF' },
+        color: '000000',
+        align: 'center',
+        fontFace: font,
+      },
+    },
+    {
+      text: 'Transition',
+      options: {
+        bold: true,
+        fontSize: 14,
+        fill: { color: '3C57FE' },
+        color: 'FFFFFF',
+        fontFace: font,
+      },
+    },
+    {
+      text: '\u2192',
+      options: {
+        fontSize: 14,
+        fill: { color: 'FFFFFF' },
+        color: '000000',
+        align: 'center',
+        fontFace: font,
+      },
+    },
+    {
+      text: 'Future State',
+      options: {
+        bold: true,
+        fontSize: 14,
+        fill: { color: '8EC1FF' },
+        color: '000000',
+        fontFace: font,
+      },
+    },
+  ];
+
+  const dataRows = (data || []).map((row) => [
+    {
+      text: row.label || '',
+      options: {
+        fontSize: 14,
+        fontFace: font,
+        color: '000000',
+        bold: true,
+        fill: { color: 'D6D7D9' },
+      },
+    },
+    {
+      text: row.currentState || '',
+      options: { fontSize: 14, fontFace: font, color: '000000' },
+    },
+    {
+      text: '\u2192',
+      options: { fontSize: 14, align: 'center', color: '000000', fontFace: font },
+    },
+    {
+      text: row.transition || '',
+      options: { fontSize: 14, fontFace: font, color: '000000' },
+    },
+    {
+      text: '\u2192',
+      options: { fontSize: 14, align: 'center', color: '000000', fontFace: font },
+    },
+    {
+      text: row.futureState || '',
+      options: { fontSize: 14, fontFace: font, color: '000000' },
+    },
+  ]);
+
+  slide.addTable([headerRow, ...dataRows], {
+    x,
+    y,
+    w,
+    colW: colWidths,
+    rowH: 1.6,
+    border: { pt: 0.5, color: 'D6D7D9' },
   });
 }
 
@@ -1759,4 +2023,7 @@ module.exports = {
   addColoredBorderTable,
   templatePatterns,
   TEMPLATE,
+  addTocSlide,
+  addOpportunitiesBarriersSlide,
+  addHorizontalFlowTable,
 };

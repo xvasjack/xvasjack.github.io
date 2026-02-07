@@ -2,6 +2,23 @@ const { callKimiDeepResearch } = require('./ai-clients');
 const { RESEARCH_FRAMEWORK, RESEARCH_TOPIC_GROUPS } = require('./research-framework');
 
 /**
+ * Find the outermost balanced JSON boundary starting from the first openChar.
+ * Uses bracket counting instead of non-greedy regex to handle nested structures.
+ */
+function findJsonBoundary(text, openChar) {
+  const closeChar = openChar === '{' ? '}' : ']';
+  const start = text.indexOf(openChar);
+  if (start === -1) return null;
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    if (text[i] === openChar) depth++;
+    if (text[i] === closeChar) depth--;
+    if (depth === 0) return text.substring(start, i + 1);
+  }
+  return null;
+}
+
+/**
  * Try multiple JSON extraction strategies
  * Returns { data, status } where status is 'success', 'parse_error', or 'no_json_found'
  */
@@ -28,13 +45,13 @@ function extractJsonFromContent(content) {
     }
   }
 
-  // Strategy 2.5: Match [...] array (non-greedy)
-  const arrayMatch = content.match(/\[[\s\S]*?\]/);
-  if (arrayMatch) {
+  // Strategy 2.5: Bracket-counting for [...] array
+  const arrayStr = findJsonBoundary(content, '[');
+  if (arrayStr) {
     try {
-      return { data: JSON.parse(arrayMatch[0]), status: 'success' };
+      return { data: JSON.parse(arrayStr), status: 'success' };
     } catch (e) {
-      console.log(`      [JSON] Strategy 2.5 (array regex) parse error: ${e.message}`);
+      console.log(`      [JSON] Strategy 2.5 (array bracket-count) parse error: ${e.message}`);
     }
   }
 
@@ -45,13 +62,13 @@ function extractJsonFromContent(content) {
     // Not valid JSON
   }
 
-  // Strategy 4: Regex for {...} object (non-greedy)
-  const objectMatch = content.match(/\{[\s\S]*?\}/);
-  if (objectMatch) {
+  // Strategy 4: Bracket-counting for {...} object
+  const objectStr = findJsonBoundary(content, '{');
+  if (objectStr) {
     try {
-      return { data: JSON.parse(objectMatch[0]), status: 'success' };
+      return { data: JSON.parse(objectStr), status: 'success' };
     } catch (e) {
-      console.log(`      [JSON] Strategy 4 (object regex) parse error: ${e.message}`);
+      console.log(`      [JSON] Strategy 4 (object bracket-count) parse error: ${e.message}`);
     }
   }
 
@@ -102,7 +119,11 @@ async function policyResearchAgent(country, industry, _clientContext) {
       const framework = RESEARCH_FRAMEWORK[topicKey];
       if (!framework) return null;
 
-      const queryContext = `As a regulatory affairs specialist, research ${framework.name} for ${country}'s ${industry} market:
+      const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
+
+For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15'). Return sources as document names, NOT URLs.
+
+As a regulatory affairs specialist, research ${framework.name} for ${country}'s ${industry} market:
 
 SPECIFIC QUESTIONS:
 ${framework.queries.map((q) => '- ' + q.replace('{country}', country)).join('\n')}
@@ -284,7 +305,16 @@ async function marketResearchAgent(country, industry, _clientContext) {
             }`
                 : '';
 
-        const queryContext = `As a market research analyst, research ${framework.name} for ${country}'s ${industry} market:
+        const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
+
+For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15'). Return sources as document names, NOT URLs.
+
+CRITICAL - NAMED PROJECT DATA:
+For each energy source, list SPECIFIC named projects:
+- Project name, location, capacity (GW/MW), status, developer, year, investment value
+- Include percentage growth rates between periods
+
+As a market research analyst, research ${framework.name} for ${country}'s ${industry} market:
 
 SPECIFIC QUESTIONS:
 ${framework.queries.map((q) => '- ' + q.replace('{country}', country)).join('\n')}
@@ -425,7 +455,11 @@ async function competitorResearchAgent(country, industry, _clientContext) {
       if (!framework) return null;
 
       const isJapanese = topicKey === 'competitors_japanese';
-      const queryContext = `As a competitive intelligence analyst, research ${framework.name} for ${country}'s ${industry} market:
+      const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
+
+For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15'). Return sources as document names, NOT URLs.
+
+As a competitive intelligence analyst, research ${framework.name} for ${country}'s ${industry} market:
 
 SPECIFIC QUESTIONS:
 ${framework.queries.map((q) => '- ' + q.replace('{country}', country)).join('\n')}
@@ -592,7 +626,11 @@ async function contextResearchAgent(country, industry, clientContext) {
       const framework = RESEARCH_FRAMEWORK[topicKey];
       if (!framework) return null;
 
-      const queryContext = `As a strategy consultant advising a ${clientContext}, research ${framework.name} for ${country}'s ${industry} market:
+      const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
+
+For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15'). Return sources as document names, NOT URLs.
+
+As a strategy consultant advising a ${clientContext}, research ${framework.name} for ${country}'s ${industry} market:
 
 SPECIFIC QUESTIONS:
 ${framework.queries.map((q) => '- ' + q.replace('{country}', country)).join('\n')}
@@ -752,7 +790,11 @@ AFTER your analysis, provide a JSON block with structured data:
 \`\`\``;
       }
 
-      const queryContext = `As a senior M&A advisor helping a ${clientContext} enter ${country}'s ${industry} market, research ${framework.name}:
+      const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
+
+For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15'). Return sources as document names, NOT URLs.
+
+As a senior M&A advisor helping a ${clientContext} enter ${country}'s ${industry} market, research ${framework.name}:
 
 SPECIFIC QUESTIONS:
 ${framework.queries.map((q) => '- ' + q.replace('{country}', country)).join('\n')}
@@ -952,7 +994,11 @@ AFTER your analysis, provide a JSON block with structured data:
 \`\`\``;
       }
 
-      const queryContext = `As a competitive intelligence analyst helping a ${clientContext} evaluate ${country}'s ${industry} market, research ${framework.name}:
+      const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
+
+For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15'). Return sources as document names, NOT URLs.
+
+As a competitive intelligence analyst helping a ${clientContext} evaluate ${country}'s ${industry} market, research ${framework.name}:
 
 QUESTIONS TO ANSWER:
 ${framework.queries.map((q) => '- ' + q.replace('{country}', country)).join('\n')}
@@ -1070,7 +1116,11 @@ async function universalResearchAgent(
   // Run all topics in parallel with per-topic timeout
   const topicResults = await Promise.all(
     topics.map(async (topic, idx) => {
-      const queryContext = `As a senior consultant advising a ${clientContext} on a ${projectType} project, research ${topic.name} for ${country}'s ${industry} market:
+      const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
+
+For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15'). Return sources as document names, NOT URLs.
+
+As a senior consultant advising a ${clientContext} on a ${projectType} project, research ${topic.name} for ${country}'s ${industry} market:
 
 SPECIFIC QUESTIONS:
 ${topic.queries.map((q) => '- ' + q.replace(/{country}/g, country)).join('\n')}

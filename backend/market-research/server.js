@@ -107,8 +107,20 @@ async function runMarketResearch(userPrompt, email) {
           );
           for (const topic of researchGate.retryTopics.slice(0, 5)) {
             try {
+              const queryMap = {
+                market_tpes: `${ca.country} total primary energy supply statistics and trends`,
+                market_finalDemand: `${ca.country} final energy demand by sector`,
+                market_electricity: `${ca.country} electricity generation mix and capacity`,
+                market_gasLng: `${ca.country} natural gas and LNG market`,
+                market_pricing: `${ca.country} energy pricing and tariffs`,
+                policy_regulatory: `${ca.country} energy regulatory framework`,
+                policy_incentives: `${ca.country} energy incentives and subsidies`,
+                competitors_players: `${ca.country} major energy companies and players`,
+              };
+              const retryQuery =
+                queryMap[topic] || `${ca.country} ${scope.industry} ${topic.replace(/_/g, ' ')}`;
               const retry = await callKimiDeepResearch(
-                topic + ' provide specific statistics and company names',
+                retryQuery + ' provide specific statistics and company names',
                 ca.country,
                 scope.industry
               );
@@ -150,6 +162,16 @@ async function runMarketResearch(userPrompt, email) {
         stage: 'complete',
       };
 
+      // Preserve citations, then clean up rawData to free memory
+      for (const ca of countryAnalyses) {
+        if (ca.rawData) {
+          ca.citations = Object.values(ca.rawData)
+            .flatMap((v) => v?.citations || [])
+            .filter(Boolean);
+          delete ca.rawData;
+        }
+      }
+
       // Stage 3: Synthesize findings
       const synthesis = await synthesizeFindings(countryAnalyses, scope);
 
@@ -163,8 +185,13 @@ async function runMarketResearch(userPrompt, email) {
           failures: synthesisGate.failures,
         })
       );
-      if (!synthesisGate.pass && synthesisGate.overall < 20) {
-        throw new Error(`Synthesis quality too low (${synthesisGate.overall}/100). Aborting.`);
+      if (!synthesisGate.pass) {
+        if (synthesisGate.overall < 20) {
+          throw new Error(`Synthesis quality too low (${synthesisGate.overall}/100). Aborting.`);
+        }
+        console.warn(
+          `[Quality Gate] Synthesis score ${synthesisGate.overall}/100 - below pass threshold but above abort threshold. Proceeding with caution.`
+        );
       }
 
       // Stage 4: Generate PPT
@@ -248,7 +275,7 @@ async function runMarketResearch(userPrompt, email) {
       `,
           attachments: {
             filename: 'error.txt',
-            content: Buffer.from(error.stack || error.message).toString('base64'),
+            content: Buffer.from(error.message).toString('base64'),
           },
           fromName: 'Market Research AI',
         });
@@ -282,6 +309,10 @@ app.post('/api/market-research', async (req, res) => {
 
   if (!prompt || !email) {
     return res.status(400).json({ error: 'Missing required fields: prompt, email' });
+  }
+
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Invalid email address' });
   }
 
   // Respond immediately - research runs in background

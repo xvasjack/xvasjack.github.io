@@ -28,6 +28,9 @@ const {
   addFinancialCharts,
   addColoredBorderTable,
   templatePatterns,
+  addTocSlide,
+  addOpportunitiesBarriersSlide,
+  addHorizontalFlowTable,
 } = require('./ppt-utils');
 const { ensureString } = require('./shared/utils');
 const { validatePptData } = require('./quality-gates');
@@ -73,7 +76,24 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     red: 'B71C1C',
   };
 
-  // ===== DEFINE MASTER SLIDE WITH FIXED LINES (matching profile-slides) =====
+  // ===== DEFINE MASTER SLIDES =====
+  // "No Bar" for cover slide — clean background, no header line
+  pptx.defineSlideMaster({
+    title: 'NO_BAR',
+    background: { color: 'FFFFFF' },
+    objects: [],
+  });
+
+  // "Main" for content slides — white background with header line
+  pptx.defineSlideMaster({
+    title: 'YCP_MAIN',
+    background: { color: 'FFFFFF' },
+    objects: [
+      { line: { x: 0.376, y: 0.73, w: 12.586, h: 0, line: { color: '293F55', width: 3 } } },
+    ],
+  });
+
+  // Legacy alias — keep for any remaining references
   pptx.defineSlideMaster({
     title: 'YCP_MASTER',
     background: { color: 'FFFFFF' },
@@ -241,7 +261,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // Maximum y for content shapes (footer zone below this)
   const CONTENT_BOTTOM = 6.65;
   // Footer y position - pushed below content zone to prevent overlap detection
-  const FOOTER_Y = 7.05;
+  const FOOTER_Y = 6.663;
 
   // Helper: clamp shape height so bottom doesn't exceed CONTENT_BOTTOM
   function clampH(y, h) {
@@ -251,17 +271,17 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // Options: { sources: [{url, title}], dataQuality: 'high'|'medium'|'low'|'estimated' }
   function addSlideWithTitle(title, subtitle = '', options = {}) {
-    // Use master slide (clean background only)
-    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+    // Use YCP_MAIN master (has header line built in)
+    const slide = pptx.addSlide({ masterName: 'YCP_MAIN' });
 
     // Title + subtitle as single text shape to avoid overlap detection
     const titleParts = [
       {
         text: truncateTitle(title),
         options: {
-          fontSize: 24,
+          fontSize: 20,
           bold: true,
-          color: COLORS.dk2,
+          color: '000000',
           fontFace: FONT,
         },
       },
@@ -272,27 +292,20 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       titleParts.push({
         text: '\n' + subtitle + dataQualityIndicator,
         options: {
-          fontSize: 14,
-          color: COLORS.accent1,
+          fontSize: 11,
+          color: '000000',
           fontFace: FONT,
         },
       });
     }
     slide.addText(titleParts, {
       x: LEFT_MARGIN,
-      y: 0.1,
+      y: 0.049,
       w: CONTENT_WIDTH,
-      h: 1.05,
+      h: 0.91,
       valign: 'top',
     });
-    // Divider line below title area
-    slide.addShape('line', {
-      x: 0,
-      y: 1.18,
-      w: 13.333,
-      h: 0,
-      line: { color: COLORS.headerLine, width: 3 },
-    });
+    // Header line is provided by YCP_MAIN master — no manual line needed
 
     // Merge data quality indicator + source citations into ONE shape to prevent overlap
     const hasDataQuality = options.dataQuality === 'estimated' || options.dataQuality === 'low';
@@ -306,21 +319,21 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           : '+ Limited data availability';
       footerParts.push({
         text: legend + (sourcesToRender && sourcesToRender.length > 0 ? '   |   ' : ''),
-        options: { fontSize: 8, italic: true, color: 'E46C0A', fontFace: FONT },
+        options: { fontSize: 8, italic: true, color: '000000', fontFace: FONT },
       });
     }
 
     if (sourcesToRender && sourcesToRender.length > 0) {
       footerParts.push({
         text: 'Sources: ',
-        options: { fontSize: 8, fontFace: FONT, color: '666666' },
+        options: { fontSize: 7, fontFace: FONT, color: '999999' },
       });
 
       sourcesToRender.slice(0, 3).forEach((source, idx) => {
         if (idx > 0)
           footerParts.push({
             text: ', ',
-            options: { fontSize: 8, fontFace: FONT, color: '666666' },
+            options: { fontSize: 7, fontFace: FONT, color: '999999' },
           });
 
         const sourceUrl = typeof source === 'object' ? source.url : source;
@@ -337,7 +350,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           footerParts.push({
             text: displayText,
             options: {
-              fontSize: 8,
+              fontSize: 7,
               fontFace: FONT,
               color: '0066CC',
               hyperlink: { url: sourceUrl },
@@ -346,9 +359,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         } else {
           footerParts.push({
             text: sourceTitle || String(source),
-            options: { fontSize: 8, fontFace: FONT, color: '666666' },
+            options: { fontSize: 7, fontFace: FONT, color: '999999' },
           });
         }
+      });
+    } else if (!hasDataQuality) {
+      // Default source when none provided
+      footerParts.push({
+        text: 'Source: YCP Analysis',
+        options: { fontSize: 7, fontFace: FONT, color: '999999' },
       });
     }
 
@@ -380,11 +399,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       [
         {
           text: '! ' + message + '\n',
-          options: { fontSize: 14, bold: true, color: 'E46C0A', fontFace: FONT },
+          options: { fontSize: 14, bold: true, color: '000000', fontFace: FONT },
         },
         {
           text: 'This data could not be verified through research. Recommend validating independently before making decisions.',
-          options: { fontSize: 11, color: '666666', fontFace: FONT },
+          options: { fontSize: 11, color: '000000', fontFace: FONT },
         },
       ],
       {
@@ -445,7 +464,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           title:
             foundActs.slideTitle ||
             `${country} - ${scope.industry || 'Industry'} Foundational Acts`,
-          subtitle: truncateSubtitle(foundActs.subtitle || foundActs.keyMessage || '', 95),
+          subtitle: truncateSubtitle(foundActs.subtitle || foundActs.keyMessage || '', 180),
           citations: getCitationsForCategory('policy_'),
           dataQuality: getDataQualityForCategory('policy_'),
         });
@@ -456,7 +475,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           dataType: 'policy_analysis',
           data: natPolicy,
           title: natPolicy.slideTitle || `${country} - National Energy Policy`,
-          subtitle: truncateSubtitle(natPolicy.policyDirection || '', 95),
+          subtitle: truncateSubtitle(natPolicy.policyDirection || '', 180),
           citations: getCitationsForCategory('policy_'),
           dataQuality: getDataQualityForCategory('policy_'),
         });
@@ -467,7 +486,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           dataType: 'regulation_list',
           data: investRestrict,
           title: investRestrict.slideTitle || `${country} - Foreign Investment Rules`,
-          subtitle: truncateSubtitle(investRestrict.riskJustification || '', 95),
+          subtitle: truncateSubtitle(investRestrict.riskJustification || '', 180),
           citations: getCitationsForCategory('policy_'),
           dataQuality: getDataQualityForCategory('policy_'),
         });
@@ -696,7 +715,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             recommendation: sectionData.recommendation,
           },
           title: `${country} - Opportunities & Obstacles`,
-          subtitle: truncateSubtitle(sectionData.recommendation || '', 95),
+          subtitle: truncateSubtitle(sectionData.recommendation || '', 180),
           citations: [],
           dataQuality: 'unknown',
         });
@@ -2363,9 +2382,23 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     );
   }
 
+  // Section names for TOC slides
+  const SECTION_NAMES = [
+    'Market Overview',
+    'Policy & Regulatory',
+    'Competitive Landscape',
+    'Strategic Analysis',
+    'Recommendations',
+    'Appendix',
+  ];
+
   function generateSection(sectionName, sectionNumber, totalSections, sectionData) {
-    addSectionDivider(pptx, sectionName, sectionNumber, totalSections, { COLORS });
-    const blocks = classifyDataBlocks(sectionName, sectionData);
+    // Use TOC slide instead of old section divider — highlight active section
+    addTocSlide(pptx, sectionNumber - 1, SECTION_NAMES, COLORS, FONT);
+    // Map display name to internal classifyDataBlocks name
+    const classifyName =
+      sectionName === 'Policy & Regulatory' ? 'Policy & Regulations' : sectionName;
+    const blocks = classifyDataBlocks(classifyName, sectionData);
     const pptGate = validatePptData(blocks);
     console.log('[Quality Gate] PPT data:', JSON.stringify(pptGate));
 
@@ -2404,42 +2437,45 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // ============ MAIN FLOW ============
 
-  // Count blocks per section for dynamic TOC
+  // Section definitions — reordered: Market first, Policy second, renamed "Policy & Regulatory"
   const sectionDefs = [
-    { name: 'Policy & Regulations', data: policy },
     { name: 'Market Overview', data: market },
+    { name: 'Policy & Regulatory', data: policy },
     { name: 'Competitive Landscape', data: competitors },
     { name: 'Strategic Analysis', data: depth },
     { name: 'Recommendations', data: null }, // uses summary
   ];
 
-  // Pre-calculate block counts and content status for TOC
+  // classifyDataBlocks still uses "Policy & Regulations" internally — map the name
+  function classifyBlocksForSection(sec) {
+    const classifyName = sec.name === 'Policy & Regulatory' ? 'Policy & Regulations' : sec.name;
+    return classifyDataBlocks(classifyName, sec.name === 'Recommendations' ? summary : sec.data);
+  }
+
+  // Pre-calculate block counts and content status
   const sectionBlockInfo = sectionDefs.map((sec) => {
-    const blocks = classifyDataBlocks(
-      sec.name,
-      sec.name === 'Recommendations' ? summary : sec.data
-    );
+    const blocks = classifyBlocksForSection(sec);
     const hasContent = sectionHasContent(blocks);
     return { count: blocks.length, hasContent };
   });
   const sectionBlockCounts = sectionBlockInfo.map((info) => info.count);
 
-  // ===== SLIDE 1: TITLE =====
-  const titleSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+  // ===== SLIDE 1: COVER (uses NO_BAR master) =====
+  const titleSlide = pptx.addSlide({ masterName: 'NO_BAR' });
   titleSlide.addText(country.toUpperCase(), {
     x: 0.5,
-    y: 2.2,
-    w: 12,
+    y: 1.633,
+    w: 9.354,
     h: 0.8,
     fontSize: 42,
-    bold: true,
+    bold: false,
     color: COLORS.dk2,
     fontFace: FONT,
   });
   titleSlide.addText(`${scope.industry} - Market Overview & Analysis`, {
     x: 0.5,
-    y: 3.0,
-    w: 12,
+    y: 4.862,
+    w: 9.354,
     h: 0.5,
     fontSize: 24,
     color: COLORS.accent1,
@@ -2459,90 +2495,60 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     y: 6.5,
     w: 9,
     h: 0.3,
-    fontSize: 10,
+    fontSize: 18,
     color: '666666',
     fontFace: FONT,
   });
 
-  // ===== SLIDE 2: TABLE OF CONTENTS (dynamic) =====
-  const tocSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-  tocSlide.addText('Table of Contents', {
-    x: LEFT_MARGIN,
-    y: 0.15,
-    w: CONTENT_WIDTH,
-    h: 0.55,
-    fontSize: 24,
-    bold: true,
-    color: COLORS.dk2,
+  // ===== SLIDE 2: TABLE OF CONTENTS (no section highlighted) =====
+  addTocSlide(pptx, -1, SECTION_NAMES, COLORS, FONT);
+
+  // ===== SLIDE 3: EXECUTIVE SUMMARY =====
+  const execSlide = pptx.addSlide({ masterName: 'YCP_MAIN' });
+  execSlide.addText('Executive Summary', {
+    x: 0.376,
+    y: 0.049,
+    w: 12.586,
+    h: 0.91,
+    fontSize: 20,
     fontFace: FONT,
+    color: '000000',
+    bold: true,
   });
-  tocSlide.addShape('line', {
-    x: 0,
-    y: 0.73,
-    w: 13.333,
-    h: 0,
-    line: { color: COLORS.headerLine, width: 3 },
+  const execContent =
+    synthesis.executiveSummary ||
+    synthesis.summary?.executiveSummary ||
+    summary.recommendation ||
+    'Executive summary not available.';
+  execSlide.addText(execContent, {
+    x: 0.376,
+    y: 1.5,
+    w: 12.586,
+    h: 5.049,
+    fontSize: 14,
+    fontFace: FONT,
+    color: '000000',
+    lineSpacingMultiple: 1.2,
+    valign: 'top',
   });
 
-  // Calculate dynamic slide ranges
-  let currentSlide = 3; // After title and TOC
-  const tocSectionDescriptions = {
-    'Policy & Regulations': 'Foundational Acts, National Policy, Investment Restrictions',
-    'Market Overview': 'Energy Supply, Demand, Electricity, Gas & LNG, Pricing, ESCO Market',
-    'Competitive Landscape': 'Japanese Players, Local Players, Foreign Players, Case Studies',
-    'Strategic Analysis': 'M&A Activity, Economics, Partner Assessment, Entry Strategy',
-    Recommendations: 'Implementation, Timing, Go/No-Go, Opportunities & Obstacles',
-  };
-
-  sectionDefs.forEach((sec, idx) => {
-    currentSlide += 1; // section divider
-    const startSlide = currentSlide + 1;
-    const blockCount = sectionBlockCounts[idx];
-    const yPos = 1.5 + idx * 1.05;
-
-    const limitedDataLabel = sectionBlockInfo[idx].hasContent ? '' : ' (Limited Data)';
-    tocSlide.addText(
-      [
-        {
-          text: `${idx + 1}. ${sec.name}${limitedDataLabel}`,
-          options: { fontSize: 16, bold: true, color: COLORS.dk2, fontFace: FONT },
-        },
-        {
-          text: `   Slide ${startSlide}`,
-          options: { fontSize: 12, color: COLORS.accent1, fontFace: FONT },
-        },
-      ],
-      {
-        x: LEFT_MARGIN,
-        y: yPos,
-        w: CONTENT_WIDTH,
-        h: 0.35,
-        valign: 'middle',
-      }
-    );
-    tocSlide.addText(tocSectionDescriptions[sec.name] || '', {
-      x: LEFT_MARGIN + 0.3,
-      y: yPos + 0.42,
-      w: 10,
-      h: 0.28,
-      fontSize: 11,
-      color: '666666',
-      fontFace: FONT,
-    });
-
-    currentSlide += blockCount;
-  });
+  // ===== SLIDE 4: OPPORTUNITIES & BARRIERS =====
+  addOpportunitiesBarriersSlide(pptx, { ...synthesis, ...summary }, FONT);
 
   // ===== GENERATE ALL SECTIONS =====
-  generateSection('Policy & Regulations', 1, 5, policy);
-  generateSection('Market Overview', 2, 5, market);
-  generateSection('Competitive Landscape', 3, 5, competitors);
-  generateSection('Strategic Analysis', 4, 5, depth);
+  // Section 1: Market Overview (index 0)
+  generateSection('Market Overview', 1, 6, market);
+  // Section 2: Policy & Regulatory (index 1) — classifyDataBlocks maps to "Policy & Regulations"
+  generateSection('Policy & Regulatory', 2, 6, policy);
+  // Section 3: Competitive Landscape (index 2)
+  generateSection('Competitive Landscape', 3, 6, competitors);
+  // Section 4: Strategic Analysis (index 3)
+  generateSection('Strategic Analysis', 4, 6, depth);
+  // Section 5: Recommendations (index 4) — uses summary data
+  generateSection('Recommendations', 5, 6, summary);
 
-  // Recommendations section (uses summary data)
-  generateSection('Recommendations', 5, 5, summary);
-
-  // ===== FINAL SUMMARY SLIDE =====
+  // ===== APPENDIX: FINAL SUMMARY SLIDE (Section 6) =====
+  addTocSlide(pptx, 5, SECTION_NAMES, COLORS, FONT); // Highlight "Appendix"
   const finalSlide = addSlideWithTitle(
     `${country} - Research Summary`,
     `Analysis completed ${new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`
@@ -2625,7 +2631,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   );
 
   const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
-  const totalSlides = 2 + sectionDefs.length + sectionBlockCounts.reduce((a, b) => a + b, 0) + 1;
+  const totalSlides = 4 + sectionDefs.length + sectionBlockCounts.reduce((a, b) => a + b, 0) + 2; // cover + TOC + exec + opps + sections + appendix TOC + summary
   console.log(
     `Section-based PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB, ~${totalSlides} slides`
   );

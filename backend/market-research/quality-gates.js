@@ -145,12 +145,12 @@ function validateSynthesisQuality(synthesis) {
   if (market) {
     // Check sub-sections with chartData.series containing numeric values
     const marketSubSections = [
+      'tpes',
+      'finalDemand',
+      'electricity',
+      'gasLng',
+      'pricing',
       'escoMarket',
-      'energyEfficiency',
-      'renewableEnergy',
-      'buildingEnergy',
-      'industrialEnergy',
-      'evMarket',
     ];
     let sectionsWithCharts = 0;
     for (const sub of marketSubSections) {

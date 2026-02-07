@@ -74,7 +74,13 @@ async function withRetry(fn, maxRetries = 3, baseDelayMs = 1000, operationName =
 
 // Kimi K2 API - for deep research with web browsing
 // Uses 256k context for thorough analysis with retry logic
-async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens = 8192) {
+async function callKimi(
+  query,
+  systemPrompt = '',
+  useWebSearch = true,
+  maxTokens = 8192,
+  temperature = 0.3
+) {
   const messages = [];
   if (systemPrompt) {
     messages.push({ role: 'system', content: systemPrompt });
@@ -85,7 +91,7 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
     model: 'kimi-k2.5',
     messages,
     max_tokens: maxTokens,
-    temperature: 1,
+    temperature: temperature,
   };
 
   // Enable web search tool if requested (can be disabled via env var for testing)
@@ -155,7 +161,7 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
     // Per Moonshot docs: $web_search is a builtin_function — server performs the search.
     // Client must echo back tool call arguments and loop until finish_reason === "stop".
     // CRITICAL: Process tool_calls even if preliminary content exists (thinking/reasoning text)
-    let maxRounds = 3;
+    let maxRounds = 6;
     while (toolCalls && useWebSearch && maxRounds-- > 0) {
       console.log(
         `  [Kimi] Web search tool called (${toolCalls.length} calls), echoing results...`
@@ -181,18 +187,22 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
           const controller = new AbortController();
           const timeoutId = setTimeout(() => controller.abort(), 120000);
           try {
+            const followupBody = {
+              model: 'kimi-k2.5',
+              messages,
+              max_tokens: maxTokens,
+              temperature: temperature,
+            };
+            if (useWebSearch && requestBody.tools) {
+              followupBody.tools = requestBody.tools;
+            }
             const resp = await fetch(`${kimiBaseUrl}/chat/completions`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${process.env.KIMI_API_KEY}`,
               },
-              body: JSON.stringify({
-                model: 'kimi-k2.5',
-                messages,
-                max_tokens: maxTokens,
-                temperature: 1,
-              }),
+              body: JSON.stringify(followupBody),
               signal: controller.signal,
             });
             if (!resp.ok) {
@@ -262,7 +272,7 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
           model: 'kimi-k2.5',
           messages: retryMessages,
           max_tokens: maxTokens,
-          temperature: 1,
+          temperature: temperature,
         };
         if (useWebSearch && process.env.KIMI_WEB_SEARCH !== 'false') {
           retryBody.tools = [{ type: 'builtin_function', function: { name: '$web_search' } }];
@@ -402,18 +412,18 @@ Search the web for recent data (2025-2026). Find:
 
 Be specific. Cite sources. No fluff.`;
 
-  return callKimi(query, systemPrompt, true);
+  return callKimi(query, systemPrompt, true, 8192, 0.2);
 }
 
 // Light tasks (scope parsing, gap ID, review). No web search.
 async function callKimiChat(prompt, systemPrompt = '', maxTokens = 4096) {
-  const result = await callKimi(prompt, systemPrompt, false, maxTokens);
+  const result = await callKimi(prompt, systemPrompt, false, maxTokens, 0.0);
   return result; // { content, citations, usage, researchQuality }
 }
 
 // Heavy synthesis/analysis. No web search.
 async function callKimiAnalysis(prompt, systemPrompt = '', maxTokens = 12000) {
-  const result = await callKimi(prompt, systemPrompt, false, maxTokens);
+  const result = await callKimi(prompt, systemPrompt, false, maxTokens, 0.5);
   return result;
 }
 
@@ -436,13 +446,6 @@ async function callGemini(prompt, options = {}) {
   return withRetry(
     async () => {
       const contents = [];
-      if (systemPrompt) {
-        contents.push({ role: 'user', parts: [{ text: systemPrompt }] });
-        contents.push({
-          role: 'model',
-          parts: [{ text: 'Understood. I will follow these instructions.' }],
-        });
-      }
       contents.push({ role: 'user', parts: [{ text: prompt }] });
 
       const generationConfig = {
@@ -453,6 +456,11 @@ async function callGemini(prompt, options = {}) {
         generationConfig.responseMimeType = 'application/json';
       }
 
+      const requestBody = { contents, generationConfig };
+      if (systemPrompt) {
+        requestBody.systemInstruction = { parts: [{ text: systemPrompt }] };
+      }
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s
       try {
@@ -461,7 +469,7 @@ async function callGemini(prompt, options = {}) {
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents, generationConfig }),
+            body: JSON.stringify(requestBody),
             signal: controller.signal,
           }
         );
@@ -495,8 +503,14 @@ async function callGemini(prompt, options = {}) {
   );
 }
 
+// Factory for per-request cost tracking (future use)
+function createCostTracker() {
+  return { totalCost: 0, calls: [], date: new Date().toISOString().split('T')[0] };
+}
+
 module.exports = {
   costTracker,
+  createCostTracker,
   PRICING,
   trackCost,
   withRetry,

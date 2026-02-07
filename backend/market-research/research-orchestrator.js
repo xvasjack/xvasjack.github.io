@@ -417,9 +417,9 @@ Return JSON:
 {
   "foundationalActs": {
     "slideTitle": "${country} - ${industry} Foundational Acts",
-    "subtitle": "Key insight in max 15 words",
+    "subtitle": "1-2 sentences, 100-180 chars, with specific regulatory citations",
     "acts": [
-      {"name": "Official Act Name", "year": "YYYY", "requirements": "Specific requirements", "penalties": "Specific penalties", "enforcement": "Enforcement reality"}
+      {"name": "Official Act Name", "year": "YYYY", "requirements": "30-50 words per cell with specific regulatory citations and article numbers", "penalties": "30-50 words per cell with specific monetary values, imprisonment terms, or administrative actions", "enforcement": "30-50 words on enforcement reality: agency name, capacity, actual compliance rates"}
     ],
     "keyMessage": "One sentence insight connecting regulations to client opportunity"
   },
@@ -439,7 +439,13 @@ Return JSON:
     ],
     "riskLevel": "low/medium/high",
     "riskJustification": "Specific reasoning with evidence"
-  }
+  },
+  "regulatorySummary": [
+    {"domain": "Energy sector domain (e.g. Electricity, Gas, Renewables, ESCO)", "currentState": "Current regulatory status with key law/policy name", "transition": "What is changing and by when", "futureState": "Expected regulatory environment post-transition"}
+  ],
+  "keyIncentives": [
+    {"initiative": "Named incentive program or policy initiative", "keyContent": "30-50 words describing the initiative scope and requirements", "highlights": "Key numbers: tax rates, durations, caps, eligibility thresholds", "implications": "What this means for foreign market entrants specifically"}
+  ]
 }
 
 Return ONLY valid JSON.`;
@@ -609,8 +615,10 @@ Return JSON:
     "players": [
       {
         "name": "Company Name", "website": "https://...",
-        "presence": "JV/Direct/etc", "projects": "Named projects",
-        "revenue": "$X million", "assessment": "Strong/Weak",
+        "profile": { "overview": "2-3 sentence company overview", "revenueGlobal": "$X billion global", "revenueLocal": "$X million in ${country}", "employees": "X employees", "entryYear": "YYYY", "entryMode": "JV/Direct/M&A" },
+        "projects": [{ "name": "Project name", "value": "$X million", "year": "YYYY", "status": "Active/Completed/Planned", "details": "Brief description" }],
+        "financialHighlights": { "investmentToDate": "$X million", "profitMargin": "X%", "growthRate": "X% CAGR" },
+        "strategicAssessment": "2-3 sentences on competitive position, strengths, weaknesses, and outlook",
         "description": "45-60 words with specific metrics, entry strategy, project details, market position"
       }
     ],
@@ -623,6 +631,10 @@ Return JSON:
     "players": [
       {
         "name": "Company", "website": "https://...", "type": "State-owned/Private",
+        "profile": { "overview": "2-3 sentence company overview", "revenueGlobal": "$X billion", "revenueLocal": "$X million", "employees": "X employees", "entryYear": "YYYY", "entryMode": "Organic/M&A" },
+        "projects": [{ "name": "Project name", "value": "$X million", "year": "YYYY", "status": "Active/Completed", "details": "Brief description" }],
+        "financialHighlights": { "investmentToDate": "$X million", "profitMargin": "X%", "growthRate": "X% CAGR" },
+        "strategicAssessment": "2-3 sentences on market position, government relationships, expansion plans",
         "revenue": "$X million", "marketShare": "X%",
         "strengths": "Specific", "weaknesses": "Specific",
         "description": "45-60 words with specific metrics"
@@ -637,8 +649,12 @@ Return JSON:
     "players": [
       {
         "name": "Company", "website": "https://...", "origin": "Country",
+        "profile": { "overview": "2-3 sentence company overview", "revenueGlobal": "$X billion", "revenueLocal": "$X million in ${country}", "employees": "X employees", "entryYear": "YYYY", "entryMode": "JV/Direct/M&A" },
+        "projects": [{ "name": "Project name", "value": "$X million", "year": "YYYY", "status": "Active/Completed", "details": "Brief description" }],
+        "financialHighlights": { "investmentToDate": "$X million", "profitMargin": "X%", "growthRate": "X% CAGR" },
+        "strategicAssessment": "2-3 sentences on competitive position and market outlook",
         "entryYear": "YYYY", "mode": "JV/Direct",
-        "projects": "Named projects", "success": "High/Medium/Low",
+        "success": "High/Medium/Low",
         "description": "45-60 words with specific metrics"
       }
     ],
@@ -722,9 +738,9 @@ async function synthesizeSummary(
 Client context: ${clientContext}
 
 SYNTHESIZED SECTIONS (already processed):
-Policy: ${summarizeForSummary(policy, 'policy', 800)}
-Market: ${summarizeForSummary(market, 'market', 1200)}
-Competitors: ${summarizeForSummary(competitors, 'competitors', 800)}
+Policy: ${summarizeForSummary(policy, 'policy', 2000)}
+Market: ${summarizeForSummary(market, 'market', 3000)}
+Competitors: ${summarizeForSummary(competitors, 'competitors', 2000)}
 
 Additional research context:
 ${Object.entries(researchData)
@@ -1040,10 +1056,18 @@ Additional requirements:
 
 Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
 
-  const result = await callKimiAnalysis(prompt, '', 8192);
+  let result;
+  try {
+    result = await callGemini(prompt, { maxTokens: 12288, temperature: 0.3 });
+  } catch (e) {
+    console.warn('Gemini failed for reSynthesize, falling back to Kimi:', e.message);
+    result = await callKimiAnalysis(prompt, '', 12288);
+  }
 
   try {
-    let jsonStr = result.content.trim();
+    // Handle both string (Gemini) and object (Kimi) returns
+    const rawText = typeof result === 'string' ? result : result.content || '';
+    let jsonStr = rawText.trim();
     if (jsonStr.startsWith('```')) {
       jsonStr = jsonStr
         .replace(/```json?\n?/g, '')
@@ -1073,6 +1097,8 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
       rawData: originalSynthesis.rawData,
       contentValidation: originalSynthesis.contentValidation,
       metadata: originalSynthesis.metadata,
+      depth: originalSynthesis.depth,
+      summary: originalSynthesis.summary,
     };
     Object.assign(newSynthesis, preserved);
     return newSynthesis;
@@ -1510,12 +1536,11 @@ Return JSON with:
 
 {
   "executiveSummary": [
-    "5 bullets that form a logical argument. Each leads to the next. STRICT MAX: 25 words per bullet. Economist-style prose.",
-    "Bullet 1: THE OPPORTUNITY - Quantify the prize (e.g., 'Thailand's $320M ESCO market grew 14% in 2024, yet foreign players hold only 8% share.')",
-    "Bullet 2: THE TIMING - Why this window matters (e.g., 'BOI incentives offering 8-year tax holidays expire Dec 2027; carbon tax starts 2026.')",
-    "Bullet 3: THE BARRIER - The constraint (e.g., '49% foreign ownership cap, but BOI-promoted projects qualify for majority foreign ownership.')",
-    "Bullet 4: THE PATH - Specific strategy (e.g., 'Three Thai ESCOs seeking tech partners: Absolute Energy has widest industrial client base.')",
-    "Bullet 5: THE FIRST MOVE - Next step (e.g., 'Initiate talks with Absolute Energy (revenue $45M, 180 clients) before Q2 2026.')"
+    "4 analytical paragraphs, 3-4 sentences each (50-80 words per paragraph), Economist-style prose. NOT bullet points — full paragraphs.",
+    "Paragraph 1: MARKET OPPORTUNITY OVERVIEW — Quantify the prize with specific numbers: market size, growth rate, foreign player share, TAM calculation. Example: 'Thailand's energy services market reached $320M in 2024, growing at 14% CAGR since 2020. Foreign players hold only 8% share despite controlling 45% of comparable ASEAN markets. The addressable segment for efficiency services — industrial facilities above 2MW — represents $90M annually.'",
+    "Paragraph 2: REGULATORY LANDSCAPE & TRAJECTORY — Current regulatory state, key policy shifts, and where regulation is heading. Reference specific law names, enforcement realities, ownership rules, and incentive timelines. Connect regulatory trajectory to market opportunity.",
+    "Paragraph 3: MARKET DEMAND & GROWTH PROJECTIONS — Demand drivers with evidence, growth projections with sources, sector-specific opportunities. Include energy price trends, infrastructure gaps, and industrial development that create demand.",
+    "Paragraph 4: COMPETITIVE POSITIONING & RECOMMENDED ENTRY PATH — Competitive gaps, recommended entry mode, specific partner/target names, timeline, and first concrete action. End with a clear 'do this first' recommendation."
   ],
 
   "marketOpportunityAssessment": {
@@ -1636,14 +1661,15 @@ STOP. Before you return the JSON, run this checklist:
    - If <3 → ADD MORE until you have 3-5 insights
    - Each must connect ≥2 data points from different sections
 
-☐ STRATEGIC DEPTH: Read your own executiveSummary bullets
-   - Count specific numbers across all 5 bullets → should have ≥8 numbers total
+☐ STRATEGIC DEPTH: Read your own executiveSummary paragraphs
+   - Count specific numbers across all 4 paragraphs → should have ≥10 numbers total
    - Count action verbs ("should", "recommend", "initiate") → should have ≥3
-   - If falling short → REWRITE bullets with more specificity
+   - If falling short → REWRITE paragraphs with more specificity
 
 ☐ WORD COUNT LIMITS (prevent text overflow):
-   - Count words in EACH executiveSummary bullet → MAX 25 words per bullet
-   - If ANY bullet >25 words → TRIM IT immediately
+   - Count words in EACH executiveSummary paragraph → TARGET 50-80 words per paragraph
+   - If ANY paragraph <50 words → EXPAND IT with more evidence
+   - If ANY paragraph >80 words → TRIM IT to core points
    - keyInsights "data" field → MAX 60 words
    - keyInsights "pattern" field → MAX 50 words
    - keyInsights "implication" field → MAX 50 words
@@ -1651,11 +1677,18 @@ STOP. Before you return the JSON, run this checklist:
 
 Do NOT skip this validation. If you catch yourself returning JSON without checking word counts and number counts, you're shipping shallow work.`;
 
-  const result = await callKimiAnalysis(prompt, systemPrompt, 12000);
+  let result;
+  try {
+    result = await callGemini(prompt, { maxTokens: 12288, temperature: 0.3, systemPrompt });
+  } catch (e) {
+    console.warn('Gemini failed for synthesizeSingleCountry, falling back to Kimi:', e.message);
+    result = await callKimiAnalysis(prompt, systemPrompt, 12000);
+  }
 
   let synthesis;
   try {
-    let jsonStr = result.content.trim();
+    const rawText = typeof result === 'string' ? result : result.content || '';
+    let jsonStr = rawText.trim();
     if (jsonStr.startsWith('```')) {
       jsonStr = jsonStr
         .replace(/```json?\n?/g, '')
@@ -1667,11 +1700,12 @@ Do NOT skip this validation. If you catch yourself returning JSON without checki
     synthesis.country = countryAnalysis.country;
   } catch (error) {
     console.error('Failed to parse single country synthesis:', error?.message);
+    const rawText = typeof result === 'string' ? result : result.content || '';
     return {
       isSingleCountry: true,
       country: countryAnalysis.country,
       executiveSummary: ['Deep analysis parsing failed - raw content available'],
-      rawContent: result.content,
+      rawContent: rawText,
     };
   }
 
@@ -1768,10 +1802,17 @@ Return JSON with:
 
 Focus on COMPARISONS and TRADE-OFFS, not just summaries.`;
 
-  const result = await callKimiAnalysis(prompt, systemPrompt, 12000);
+  let result;
+  try {
+    result = await callGemini(prompt, { maxTokens: 12288, temperature: 0.3, systemPrompt });
+  } catch (e) {
+    console.warn('Gemini failed for synthesizeFindings, falling back to Kimi:', e.message);
+    result = await callKimiAnalysis(prompt, systemPrompt, 12000);
+  }
 
   try {
-    let jsonStr = result.content.trim();
+    const rawText = typeof result === 'string' ? result : result.content || '';
+    let jsonStr = rawText.trim();
     if (jsonStr.startsWith('```')) {
       jsonStr = jsonStr
         .replace(/```json?\n?/g, '')
@@ -1781,9 +1822,10 @@ Focus on COMPARISONS and TRADE-OFFS, not just summaries.`;
     return JSON.parse(jsonStr);
   } catch (error) {
     console.error('Failed to parse synthesis:', error?.message);
+    const rawText = typeof result === 'string' ? result : result.content || '';
     return {
       executiveSummary: ['Synthesis parsing failed - raw content available'],
-      rawContent: result.content,
+      rawContent: rawText,
     };
   }
 }
