@@ -155,8 +155,9 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
     // Handle tool_calls (web search) with proper loop
     // Per Moonshot docs: $web_search is a builtin_function — server performs the search.
     // Client must echo back tool call arguments and loop until finish_reason === "stop".
+    // CRITICAL: Process tool_calls even if preliminary content exists (thinking/reasoning text)
     let maxRounds = 3;
-    while (!content && toolCalls && useWebSearch && maxRounds-- > 0) {
+    while (toolCalls && useWebSearch && maxRounds-- > 0) {
       console.log(
         `  [Kimi] Web search tool called (${toolCalls.length} calls), echoing results...`
       );
