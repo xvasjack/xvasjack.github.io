@@ -168,6 +168,9 @@ REQUIREMENTS:
         );
         const retryQuery = `${queryContext}\n\nCRITICAL: Return ONLY valid JSON. No explanation, no markdown. Just the raw JSON object.`;
         result = await callKimiDeepResearch(retryQuery, country, industry);
+        if (!result || !result.content) {
+          result = { content: '', citations: [], researchQuality: 'failed' };
+        }
         extractResult = extractJsonFromContent(result.content);
         structuredData = extractResult.data;
         extractionStatus = extractResult.status;
@@ -518,6 +521,10 @@ REQUIREMENTS:
 
       const result = await callKimiDeepResearch(queryContext, country, industry);
 
+      // Bug 8 fix: track content/citations that may update on retry
+      let finalContent = result.content;
+      let finalCitations = result.citations || [];
+
       // JSON extraction (multi-strategy with retry)
       let extractResult = extractJsonFromContent(result.content);
       let structuredData = extractResult.data;
@@ -535,6 +542,8 @@ REQUIREMENTS:
           extractionStatus = extractResult.status;
           if (extractionStatus === 'success') {
             console.log(`      [Competitor] ${topicKey}: Retry successful`);
+            finalContent = retryResult.content;
+            finalCitations = retryResult.citations || [];
           }
         }
       }
@@ -550,10 +559,10 @@ REQUIREMENTS:
 
       return {
         key: topicKey,
-        content: result.content,
+        content: finalContent,
         structuredData: structuredData,
         extractionStatus: extractionStatus,
-        citations: result.citations || [],
+        citations: finalCitations,
         slideTitle: framework.slideTitle?.replace('{country}', country) || '',
         dataQuality: dataQuality,
       };
@@ -609,6 +618,10 @@ Your response MUST include a JSON block. Use this format:
 
       const result = await callKimiDeepResearch(queryContext, country, industry);
 
+      // Bug 8 fix: track content/citations that may update on retry
+      let finalContent = result.content;
+      let finalCitations = result.citations || [];
+
       // Extract structured JSON
       let extractResult = extractJsonFromContent(result.content);
       let structuredData = extractResult.data;
@@ -626,16 +639,18 @@ Your response MUST include a JSON block. Use this format:
           extractionStatus = extractResult.status;
           if (extractionStatus === 'success') {
             console.log(`      [Context] ${topicKey}: Retry successful`);
+            finalContent = retryResult.content;
+            finalCitations = retryResult.citations || [];
           }
         }
       }
 
       return {
         key: topicKey,
-        content: result.content,
+        content: finalContent,
         structuredData: structuredData,
         extractionStatus: extractionStatus,
-        citations: result.citations || [],
+        citations: finalCitations,
         slideTitle: framework.slideTitle?.replace('{country}', country) || '',
         dataQuality: structuredData?.dataQuality || 'unknown',
       };
@@ -781,6 +796,10 @@ DEPTH IS CRITICAL - We need specifics for executive decision-making, not general
 
       const result = await callKimiDeepResearch(queryContext, country, industry);
 
+      // Bug 8 fix: track content/citations that may update on retry
+      let finalContent = result.content;
+      let finalCitations = result.citations || [];
+
       // JSON extraction (multi-strategy with retry)
       let extractResult = extractJsonFromContent(result.content);
       let structuredData = extractResult.data;
@@ -798,6 +817,8 @@ DEPTH IS CRITICAL - We need specifics for executive decision-making, not general
           extractionStatus = extractResult.status;
           if (extractionStatus === 'success') {
             console.log(`      [Depth] ${topicKey}: Retry successful`);
+            finalContent = retryResult.content;
+            finalCitations = retryResult.citations || [];
           }
         }
       }
@@ -805,8 +826,8 @@ DEPTH IS CRITICAL - We need specifics for executive decision-making, not general
 
       return {
         key: topicKey,
-        content: result.content,
-        citations: result.citations || [],
+        content: finalContent,
+        citations: finalCitations,
         slideTitle: framework.slideTitle?.replace('{country}', country) || '',
         structuredData,
         extractionStatus,
@@ -980,6 +1001,10 @@ This intelligence is for CEO-level decision making. We need SPECIFIC names, date
 
       const result = await callKimiDeepResearch(queryContext, country, industry);
 
+      // Bug 8 fix: track content/citations that may update on retry
+      let finalContent = result.content;
+      let finalCitations = result.citations || [];
+
       // JSON extraction (multi-strategy with retry)
       let extractResult = extractJsonFromContent(result.content);
       let structuredData = extractResult.data;
@@ -997,6 +1022,8 @@ This intelligence is for CEO-level decision making. We need SPECIFIC names, date
           extractionStatus = extractResult.status;
           if (extractionStatus === 'success') {
             console.log(`      [Insights] ${topicKey}: Retry successful`);
+            finalContent = retryResult.content;
+            finalCitations = retryResult.citations || [];
           }
         }
       }
@@ -1004,8 +1031,8 @@ This intelligence is for CEO-level decision making. We need SPECIFIC names, date
 
       return {
         key: topicKey,
-        content: result.content,
-        citations: result.citations || [],
+        content: finalContent,
+        citations: finalCitations,
         slideTitle: framework.slideTitle?.replace('{country}', country) || '',
         structuredData,
         extractionStatus,

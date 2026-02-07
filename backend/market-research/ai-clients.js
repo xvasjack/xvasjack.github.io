@@ -86,7 +86,6 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
     messages,
     max_tokens: maxTokens,
     temperature: 1,
-    thinking: { type: 'enabled' },
   };
 
   // Enable web search tool if requested (can be disabled via env var for testing)
@@ -172,7 +171,7 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
           role: 'tool',
           tool_call_id: toolCall.id,
           name: toolCall.function?.name || '$web_search',
-          content: JSON.stringify({ status: 'search_completed', query: toolCall.function?.name }),
+          content: toolCall.function?.arguments || '',
         });
       }
 
@@ -193,7 +192,6 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
                 messages,
                 max_tokens: maxTokens,
                 temperature: 1,
-                thinking: { type: 'enabled' },
               }),
               signal: controller.signal,
             });
@@ -265,7 +263,6 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
           messages: retryMessages,
           max_tokens: maxTokens,
           temperature: 1,
-          thinking: { type: 'enabled' },
         };
         if (useWebSearch && process.env.KIMI_WEB_SEARCH !== 'false') {
           retryBody.tools = [{ type: 'builtin_function', function: { name: '$web_search' } }];

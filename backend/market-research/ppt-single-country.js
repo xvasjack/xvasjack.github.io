@@ -30,6 +30,7 @@ const {
   templatePatterns,
 } = require('./ppt-utils');
 const { ensureString } = require('./shared/utils');
+const { validatePptData } = require('./quality-gates');
 
 // Safety wrapper: ensure any value going into a table cell is a plain string.
 // AI sometimes returns nested objects/arrays instead of text — this prevents pptxgenjs crashes.
@@ -59,17 +60,17 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // YCP Theme Colors (from profile-slides template)
   const COLORS = {
-    headerLine: '293F55', // Dark navy for header/footer lines
-    accent3: '011AB7', // Dark blue - table header background
-    accent1: '007FFF', // Bright blue - secondary/subtitle
-    dk2: '1F497D', // Section underline/title color
+    headerLine: '1B2A4A',
+    accent3: '1B2A4A',
+    accent1: '3C57FE',
+    dk2: '1B2A4A',
     white: 'FFFFFF',
     black: '000000',
-    gray: 'BFBFBF', // Border color
-    footerText: '808080', // Gray footer text
-    green: '2E7D32', // Positive/Opportunity
-    orange: 'E46C0A', // Warning/Obstacle
-    red: 'C62828', // Negative/Risk
+    gray: 'D6D7D9',
+    footerText: '808080',
+    green: '1D8348',
+    orange: 'E46C0A',
+    red: 'B71C1C',
   };
 
   // ===== DEFINE MASTER SLIDE WITH FIXED LINES (matching profile-slides) =====
@@ -161,7 +162,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (company.recentActivity) parts.push(`Recent activity: ${company.recentActivity}.`);
     if (company.strategy) parts.push(`Strategy: ${company.strategy}.`);
     // Let thin descriptions stay thin — no fabricated filler
-    company.description = parts.join(' ').trim();
+    let result = parts.join(' ').trim();
+    const words = result.split(/\s+/);
+    if (words.length > 65) result = words.slice(0, 65).join(' ') + '...';
+    company.description = result;
     return company;
   }
 
@@ -1547,7 +1551,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: 0.3,
         fontSize: 12,
         bold: true,
-        color: COLORS.dk2 || '1F497D',
+        color: COLORS.dk2 || '1B2A4A',
         fontFace: FONT,
       });
       maNextY += 0.35;
@@ -1585,7 +1589,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: 0.3,
         fontSize: 12,
         bold: true,
-        color: COLORS.dk2 || '1F497D',
+        color: COLORS.dk2 || '1B2A4A',
         fontFace: FONT,
       });
       maNextY += 0.35;
@@ -1798,7 +1802,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: 0.25,
         fontSize: 11,
         bold: true,
-        color: COLORS.dk2 || '1F497D',
+        color: COLORS.dk2 || '1B2A4A',
         fontFace: FONT,
       });
       const renderHarvey = (arr, idx) => {
@@ -1967,7 +1971,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: 0.25,
         fontSize: 11,
         bold: true,
-        color: COLORS.dk2 || '1F497D',
+        color: COLORS.dk2 || '1B2A4A',
         fontFace: FONT,
       });
       const targetCompRows = [tableHeader(['Company', 'Industry', 'Energy Spend', 'Location'])];
@@ -2362,6 +2366,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   function generateSection(sectionName, sectionNumber, totalSections, sectionData) {
     addSectionDivider(pptx, sectionName, sectionNumber, totalSections, { COLORS });
     const blocks = classifyDataBlocks(sectionName, sectionData);
+    const pptGate = validatePptData(blocks);
+    console.log('[Quality Gate] PPT data:', JSON.stringify(pptGate));
 
     if (!sectionHasContent(blocks)) {
       // Section has no real content - render one summary slide instead of hollow slides

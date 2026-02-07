@@ -70,12 +70,19 @@ async function runMarketResearch(userPrompt, email) {
       // Process countries in batches of 2 to manage API rate limits
       for (let i = 0; i < scope.targetMarkets.length; i += 2) {
         const batch = scope.targetMarkets.slice(i, i + 2);
-        const batchResults = await Promise.all(
+        const batchResults = await Promise.allSettled(
           batch.map((country) =>
             researchCountry(country, scope.industry, scope.clientContext, scope)
           )
         );
-        countryAnalyses.push(...batchResults);
+        const successResults = batchResults
+          .filter((r) => r.status === 'fulfilled')
+          .map((r) => r.value);
+        const failedCountries = batchResults
+          .filter((r) => r.status === 'rejected')
+          .map((r, i) => ({ country: batch[i], error: r.reason.message }));
+        if (failedCountries.length) console.error('Failed countries:', failedCountries);
+        countryAnalyses.push(...successResults);
       }
 
       // Quality Gate 1: Validate research quality per country and retry weak topics
@@ -106,7 +113,12 @@ async function runMarketResearch(userPrompt, email) {
                 scope.industry
               );
               if (retry && retry.content && retry.content.length > 200) {
-                ca.rawData[topic] = retry;
+                ca.rawData[topic] = {
+                  ...ca.rawData[topic],
+                  content: retry.content,
+                  citations: retry.citations || ca.rawData[topic].citations,
+                  researchQuality: retry.researchQuality || 'retried',
+                };
               }
             } catch (e) {
               console.warn('[Quality Gate] Retry failed for topic:', topic, e.message);
@@ -151,6 +163,9 @@ async function runMarketResearch(userPrompt, email) {
           failures: synthesisGate.failures,
         })
       );
+      if (!synthesisGate.pass && synthesisGate.overall < 20) {
+        throw new Error(`Synthesis quality too low (${synthesisGate.overall}/100). Aborting.`);
+      }
 
       // Stage 4: Generate PPT
       const pptBuffer = await generatePPT(synthesis, countryAnalyses, scope);

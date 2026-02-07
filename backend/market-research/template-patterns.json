@@ -32,7 +32,7 @@
       "calloutFill": "F5F5F5",
       "calloutBorder": "CCCCCC",
       "insightBarColor": "2E5090",
-      "tableHeaderFill": "1F497D",
+      "tableHeaderFill": "1B2A4A",
       "tableAltRowFill": "F2F2F2",
       "highlightBorder": "E46C0A",
       "white": "FFFFFF",
@@ -44,7 +44,7 @@
       "copyrightPos": { "x": 0.4, "y": 7.1, "w": 5, "h": 0.25, "fontSize": 7 },
       "pageNumPos": { "x": 12.5, "y": 7.1, "w": 0.5, "h": 0.25, "fontSize": 7 }
     },
-    "sourceFootnote": { "y": 7.05, "fontSize": 7, "color": "999999" }
+    "sourceFootnote": { "y": 6.663, "fontSize": 7, "color": "999999" }
   },
   "patterns": {
     "cover": {
@@ -53,7 +53,7 @@
       "bestFor": ["presentation_start"],
       "templateSlides": [1],
       "elements": {
-        "countryTitle": { "x": 0.5, "y": 2.2, "w": 9, "h": 0.8, "fontSize": 42, "bold": true, "color": "1F497D" },
+        "countryTitle": { "x": 0.5, "y": 2.2, "w": 9, "h": 0.8, "fontSize": 42, "bold": true, "color": "1B2A4A" },
         "industrySubtitle": { "x": 0.5, "y": 3.0, "w": 9, "h": 0.5, "fontSize": 24, "color": "007FFF" },
         "tagline": { "x": 0.5, "y": 3.6, "w": 12, "h": 0.5, "fontSize": 16, "italic": true },
         "date": { "x": 0.5, "y": 6.5, "w": 9, "h": 0.3, "fontSize": 10, "color": "666666" }
@@ -65,13 +65,13 @@
       "bestFor": ["navigation", "section_break"],
       "templateSlides": [4, 5, 11, 20, 30],
       "elements": {
-        "sectionTitle": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55, "fontSize": 24, "bold": true, "color": "1F497D" },
+        "sectionTitle": { "x": 0.4, "y": 0.049, "w": 12.5, "h": 0.55, "fontSize": 24, "bold": true, "color": "1B2A4A" },
         "sectionItems": {
           "startY": 1.5,
           "itemHeight": 1.05,
           "titleFontSize": 16,
           "descFontSize": 11,
-          "titleColor": "1F497D",
+          "titleColor": "1B2A4A",
           "descColor": "666666",
           "highlightColor": "007FFF"
         }
@@ -83,14 +83,14 @@
       "bestFor": ["opportunities_vs_barriers", "strategic_comparison", "swot_analysis"],
       "templateSlides": [2, 3],
       "elements": {
-        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "title": { "x": 0.4, "y": 0.049, "w": 12.5, "h": 0.55 },
         "quadrants": [
           { "x": 0.4, "y": 1.3, "w": 6.0, "h": 2.5, "label": "top-left", "fill": "D6E4F0" },
           { "x": 6.6, "y": 1.3, "w": 6.3, "h": 2.5, "label": "top-right", "fill": "F2F2F2" },
           { "x": 0.4, "y": 4.0, "w": 6.0, "h": 2.5, "label": "bottom-left", "fill": "F2F2F2" },
           { "x": 6.6, "y": 4.0, "w": 6.3, "h": 2.5, "label": "bottom-right", "fill": "D6E4F0" }
         ],
-        "quadrantLabel": { "fontSize": 14, "bold": true, "color": "1F497D" },
+        "quadrantLabel": { "fontSize": 14, "bold": true, "color": "1B2A4A" },
         "quadrantBody": { "fontSize": 10, "color": "333333" }
       }
     },
@@ -104,14 +104,14 @@
         "metrics": { "description": "Numeric metrics in content cells", "templateSlides": [12] }
       },
       "elements": {
-        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "title": { "x": 0.4, "y": 0.049, "w": 12.5, "h": 0.55 },
         "table": {
-          "x": 0.4, "y": 1.3, "w": 12.5,
+          "x": 0.4, "y": 1.467, "w": 12.5,
           "labelColWidth": 2.0,
           "contentColWidth": 10.5,
           "rowHeight": 0.9,
           "maxRows": 6,
-          "labelFill": "1F497D",
+          "labelFill": "1B2A4A",
           "labelColor": "FFFFFF",
           "labelFontSize": 10,
           "labelBold": true,
@@ -129,10 +129,10 @@
       "bestFor": ["regulation_list", "law_reference", "structured_data"],
       "templateSlides": [7, 10],
       "elements": {
-        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "title": { "x": 0.4, "y": 0.049, "w": 12.5, "h": 0.55 },
         "table": {
-          "x": 0.4, "y": 1.3, "w": 12.5, "maxH": 5.0,
-          "headerFill": "1F497D",
+          "x": 0.4, "y": 1.467, "w": 12.5, "maxH": 5.0,
+          "headerFill": "1B2A4A",
           "headerColor": "FFFFFF",
           "headerFontSize": 10,
           "headerBold": true,
@@ -150,10 +150,10 @@
       "bestFor": ["company_comparison", "competitive_analysis", "highlighted_data"],
       "templateSlides": [22],
       "elements": {
-        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "title": { "x": 0.4, "y": 0.049, "w": 12.5, "h": 0.55 },
         "table": {
-          "x": 0.4, "y": 1.3, "w": 12.5, "maxH": 5.0,
-          "headerFill": "1F497D",
+          "x": 0.4, "y": 1.467, "w": 12.5, "maxH": 5.0,
+          "headerFill": "1B2A4A",
           "headerColor": "FFFFFF",
           "headerFontSize": 10,
           "headerBold": true,
@@ -176,14 +176,14 @@
         "comparison": { "description": "Side-by-side decree comparison", "templateSlides": [9] }
       },
       "elements": {
-        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
-        "contentArea": { "x": 0.4, "y": 1.3, "w": 12.5, "h": 5.0 },
-        "sectionHeader": { "fontSize": 12, "bold": true, "color": "1F497D" },
+        "title": { "x": 0.4, "y": 0.049, "w": 12.5, "h": 0.55 },
+        "contentArea": { "x": 0.4, "y": 1.467, "w": 12.5, "h": 5.0 },
+        "sectionHeader": { "fontSize": 12, "bold": true, "color": "1B2A4A" },
         "bodyText": { "fontSize": 10, "color": "333333", "lineSpacing": 1.3 },
         "emphasisText": { "fontSize": 10, "bold": true, "color": "E46C0A" },
         "comparisonSplit": {
-          "leftCol": { "x": 0.4, "y": 1.3, "w": 6.0 },
-          "rightCol": { "x": 6.8, "y": 1.3, "w": 6.1 },
+          "leftCol": { "x": 0.4, "y": 1.467, "w": 6.0 },
+          "rightCol": { "x": 6.8, "y": 1.467, "w": 6.1 },
           "dividerX": 6.5
         }
       }
@@ -198,12 +198,12 @@
         "two_panels_callouts": { "description": "2 insight panels + bottom callout boxes", "templateSlides": [15] }
       },
       "elements": {
-        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
-        "chart": { "x": 0.4, "y": 1.3, "w": 7.8, "h": 5.2 },
+        "title": { "x": 0.4, "y": 0.049, "w": 12.5, "h": 0.55 },
+        "chart": { "x": 0.4, "y": 1.467, "w": 7.8, "h": 5.2 },
         "insightPanels": [
           {
-            "x": 8.5, "y": 1.3, "w": 4.4, "h": 1.5,
-            "blueBar": { "x": 8.5, "y": 1.3, "w": 0.08, "h": 1.5, "color": "2E5090" },
+            "x": 8.5, "y": 1.467, "w": 4.4, "h": 1.5,
+            "blueBar": { "x": 8.5, "y": 1.467, "w": 0.08, "h": 1.5, "color": "2E5090" },
             "titleY": 1.35, "bodyY": 1.65
           },
           {
@@ -226,9 +226,9 @@
       "bestFor": ["two_related_datasets", "composition_plus_breakdown"],
       "templateSlides": [14],
       "elements": {
-        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
-        "chartLeft": { "x": 0.4, "y": 1.3, "w": 6.0, "h": 4.2 },
-        "chartRight": { "x": 6.8, "y": 1.3, "w": 6.1, "h": 4.2 },
+        "title": { "x": 0.4, "y": 0.049, "w": 12.5, "h": 0.55 },
+        "chartLeft": { "x": 0.4, "y": 1.467, "w": 6.0, "h": 4.2 },
+        "chartRight": { "x": 6.8, "y": 1.467, "w": 6.1, "h": 4.2 },
         "quoteCallout": { "x": 0.4, "y": 5.7, "w": 12.5, "h": 0.8, "fill": "F5F5F5", "border": "CCCCCC" }
       }
     },
@@ -238,8 +238,8 @@
       "bestFor": ["time_series_annotated", "trend_with_events"],
       "templateSlides": [16],
       "elements": {
-        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
-        "chart": { "x": 0.4, "y": 1.3, "w": 12.5, "h": 4.5 },
+        "title": { "x": 0.4, "y": 0.049, "w": 12.5, "h": 0.55 },
+        "chart": { "x": 0.4, "y": 1.467, "w": 12.5, "h": 4.5 },
         "annotations": {
           "maxCount": 4,
           "style": { "fill": "FFFFFF", "border": "E46C0A", "borderWidth": 1.5, "fontSize": 8, "w": 2.5, "h": 0.8 }
@@ -253,8 +253,8 @@
       "bestFor": ["time_series_simple", "single_metric_trend"],
       "templateSlides": [18, 32],
       "elements": {
-        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
-        "chart": { "x": 0.4, "y": 1.3, "w": 12.5, "h": 3.8 },
+        "title": { "x": 0.4, "y": 0.049, "w": 12.5, "h": 0.55 },
+        "chart": { "x": 0.4, "y": 1.467, "w": 12.5, "h": 3.8 },
         "callout": { "x": 0.4, "y": 5.3, "w": 12.5, "h": 1.0, "fill": "F5F5F5", "border": "CCCCCC", "borderWidth": 1 }
       }
     },
@@ -269,15 +269,15 @@
         "four_rows_no_chevron": { "description": "4 rows without chevron", "templateSlides": [27] }
       },
       "elements": {
-        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "title": { "x": 0.4, "y": 0.049, "w": 12.5, "h": 0.55 },
         "rows": [
-          { "label": "Business Overview", "labelX": 0.4, "labelW": 2.0, "contentX": 2.5, "contentW": 10.4, "y": 1.3, "h": 0.8 },
+          { "label": "Business Overview", "labelX": 0.4, "labelW": 2.0, "contentX": 2.5, "contentW": 10.4, "y": 1.467, "h": 0.8 },
           { "label": "Context", "labelX": 0.4, "labelW": 2.0, "contentX": 2.5, "contentW": 10.4, "y": 2.2, "h": 1.0 },
           { "label": "Objective", "labelX": 0.4, "labelW": 2.0, "contentX": 2.5, "contentW": 10.4, "y": 3.3, "h": 0.6 },
           { "label": "Scope", "labelX": 0.4, "labelW": 2.0, "contentX": 2.5, "contentW": 10.4, "y": 4.0, "h": 1.3 },
           { "label": "Outcome", "labelX": 0.4, "labelW": 2.0, "contentX": 2.5, "contentW": 10.4, "y": 5.4, "h": 0.8 }
         ],
-        "labelStyle": { "fill": "1F497D", "color": "FFFFFF", "fontSize": 10, "bold": true },
+        "labelStyle": { "fill": "1B2A4A", "color": "FFFFFF", "fontSize": 10, "bold": true },
         "contentStyle": { "fill": "F2F2F2", "color": "333333", "fontSize": 9 },
         "chevronFlow": {
           "x": 2.5, "y": 4.1, "w": 10.4, "h": 1.1,
@@ -295,21 +295,21 @@
       "bestFor": ["financial_performance", "revenue_profit_comparison", "financial_overview"],
       "templateSlides": [26, 29],
       "elements": {
-        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "title": { "x": 0.4, "y": 0.049, "w": 12.5, "h": 0.55 },
         "chartLeft": {
-          "x": 0.4, "y": 1.3, "w": 6.0, "h": 4.0,
-          "chartTitle": { "fontSize": 11, "bold": true, "color": "1F497D" }
+          "x": 0.4, "y": 1.467, "w": 6.0, "h": 4.0,
+          "chartTitle": { "fontSize": 11, "bold": true, "color": "1B2A4A" }
         },
         "chartRight": {
-          "x": 6.8, "y": 1.3, "w": 6.1, "h": 4.0,
-          "chartTitle": { "fontSize": 11, "bold": true, "color": "1F497D" }
+          "x": 6.8, "y": 1.467, "w": 6.1, "h": 4.0,
+          "chartTitle": { "fontSize": 11, "bold": true, "color": "1B2A4A" }
         },
         "metricsRow": {
           "y": 5.5, "h": 0.6,
           "metricBoxWidth": 3.0,
           "metricValueFontSize": 16,
           "metricLabelFontSize": 9,
-          "metricValueColor": "1F497D",
+          "metricValueColor": "1B2A4A",
           "metricLabelColor": "666666"
         },
         "bottomCallout": { "x": 0.4, "y": 6.2, "w": 12.5, "h": 0.4, "fill": "F5F5F5" }
@@ -321,16 +321,16 @@
       "bestFor": ["definitions", "glossary", "terminology"],
       "templateSlides": [33, 34],
       "elements": {
-        "title": { "x": 0.4, "y": 0.15, "w": 12.5, "h": 0.55 },
+        "title": { "x": 0.4, "y": 0.049, "w": 12.5, "h": 0.55 },
         "table": {
-          "x": 0.4, "y": 1.3, "w": 12.5, "maxH": 5.2,
+          "x": 0.4, "y": 1.467, "w": 12.5, "maxH": 5.2,
           "termColWidth": 3.0,
           "defColWidth": 9.5,
-          "headerFill": "1F497D",
+          "headerFill": "1B2A4A",
           "headerColor": "FFFFFF",
           "termFontSize": 10,
           "termBold": true,
-          "termColor": "1F497D",
+          "termColor": "1B2A4A",
           "defFontSize": 9,
           "defColor": "333333",
           "altRowFill": "F2F2F2",

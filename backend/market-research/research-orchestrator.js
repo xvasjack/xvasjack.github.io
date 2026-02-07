@@ -411,7 +411,6 @@ RULES:
 - Only use data from the INPUT DATA above
 - Use null for any missing fields
 - Include source citations where available
-- Company descriptions should be 45-60 words
 - Insights should reference specific numbers from the data
 
 Return JSON:
@@ -727,6 +726,19 @@ Policy: ${summarizeForSummary(policy, 'policy', 800)}
 Market: ${summarizeForSummary(market, 'market', 1200)}
 Competitors: ${summarizeForSummary(competitors, 'competitors', 800)}
 
+Additional research context:
+${Object.entries(researchData)
+  .filter(
+    ([k]) =>
+      k.startsWith('macro_') ||
+      k.startsWith('opportunities_') ||
+      k.startsWith('risks_') ||
+      k.startsWith('depth_') ||
+      k.startsWith('insight_')
+  )
+  .map(([k, v]) => `${k}: ${(v?.content || '').substring(0, 500)}`)
+  .join('\n')}
+
 If research data is insufficient for a field, set the value to:
 - For arrays: empty array []
 - For strings: "Insufficient research data for this field"
@@ -919,7 +931,8 @@ function validateContentDepth(synthesis) {
   let completeInsights = 0;
   for (const insight of insights) {
     // Check structured fields: data (contains number), implication (action verb), timing (exists)
-    const hasData = insight.data && /\d/.test(insight.data); // data field contains a number
+    const hasData =
+      insight.data && /\$[\d,.]+[BMKbmk]?|\d+(\.\d+)?%|\d{4}|\d+(\.\d+)?x/.test(insight.data);
     const hasAction =
       insight.implication &&
       /should|recommend|target|prioritize|position|initiate/i.test(insight.implication);
@@ -992,6 +1005,8 @@ ${JSON.stringify(additionalData.gapResearch, null, 2)}
 
 VERIFICATION RESEARCH (confirms or corrects claims):
 ${JSON.stringify(additionalData.verificationResearch, null, 2)}
+
+DO NOT fabricate data. DO NOT estimate from training knowledge. Use null or empty arrays for missing data.
 
 YOUR TASK:
 1. UPDATE the original analysis with the new data
@@ -1274,7 +1289,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
             ...Object.fromEntries(
               additionalData.gapResearch
                 .filter((g) => g.area === 'policy')
-                .map((g) => [`gap_${g.gap}`, g.findings])
+                .map((g) => [`policy_gap_${Date.now()}_${g.gap.substring(0, 20)}`, g.findings])
             ),
           },
           country,
@@ -1295,7 +1310,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
             ...Object.fromEntries(
               additionalData.gapResearch
                 .filter((g) => g.area === 'market')
-                .map((g) => [`gap_${g.gap}`, g.findings])
+                .map((g) => [`market_gap_${Date.now()}_${g.gap.substring(0, 20)}`, g.findings])
             ),
           },
           country,
@@ -1311,7 +1326,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
             ...Object.fromEntries(
               additionalData.gapResearch
                 .filter((g) => g.area === 'competitors')
-                .map((g) => [`gap_${g.gap}`, g.findings])
+                .map((g) => [`competitors_gap_${Date.now()}_${g.gap.substring(0, 20)}`, g.findings])
             ),
           },
           country,
