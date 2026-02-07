@@ -36,6 +36,9 @@ if (missingVars.length > 0) {
 // Fix 4: Use shared sendEmail with 3 retries + exponential backoff (was inline with zero retries)
 const { sendEmail } = require('./shared/email.js');
 
+// Pipeline diagnostics — stored after each run, exposed via /api/diagnostics
+let lastRunDiagnostics = null;
+
 // ============ MAIN ORCHESTRATOR ============
 
 async function runMarketResearch(userPrompt, email) {
@@ -73,6 +76,29 @@ async function runMarketResearch(userPrompt, email) {
         );
         countryAnalyses.push(...batchResults);
       }
+
+      // Collect pipeline diagnostics for each country
+      lastRunDiagnostics = {
+        timestamp: new Date().toISOString(),
+        industry: scope.industry,
+        countries: countryAnalyses.map((ca) => ({
+          country: ca.country,
+          error: ca.error || null,
+          researchTopicCount: ca.rawData ? Object.keys(ca.rawData).length : 0,
+          researchTopicChars: ca.rawData
+            ? Object.fromEntries(
+                Object.entries(ca.rawData).map(([k, v]) => [k, v?.content?.length || 0])
+              )
+            : {},
+          synthesisScores: ca.contentValidation?.scores || null,
+          synthesisFailures: ca.contentValidation?.failures || [],
+          synthesisValid: ca.contentValidation?.valid ?? null,
+          failedSections: ['policy', 'market', 'competitors'].filter((s) => ca[s]?._synthesisError),
+        })),
+        totalCost: costTracker.totalCost,
+        apiCalls: costTracker.calls.length,
+        stage: 'complete',
+      };
 
       // Stage 3: Synthesize findings
       const synthesis = await synthesizeFindings(countryAnalyses, scope);
@@ -138,6 +164,11 @@ async function runMarketResearch(userPrompt, email) {
       };
     } catch (error) {
       console.error('Market research failed:', error);
+      lastRunDiagnostics = {
+        timestamp: new Date().toISOString(),
+        stage: 'error',
+        error: error.message,
+      };
       await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
 
       // Try to send error email
@@ -205,6 +236,14 @@ app.post('/api/market-research', async (req, res) => {
 // Cost tracking endpoint
 app.get('/api/costs', (req, res) => {
   res.json(costTracker);
+});
+
+// Pipeline diagnostics endpoint
+app.get('/api/diagnostics', (req, res) => {
+  if (!lastRunDiagnostics) {
+    return res.json({ available: false, message: 'No completed run yet' });
+  }
+  res.json({ available: true, ...lastRunDiagnostics });
 });
 
 // ============ START SERVER ============

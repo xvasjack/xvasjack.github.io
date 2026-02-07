@@ -963,6 +963,9 @@ REQUIREMENTS:
             setTimeout(() => reject(new Error(`Topic "${topic.name}" timed out after 90s`)), 90000)
           ),
         ]);
+        console.log(
+          `    [${category}] Topic "${topic.name}": ${result.content?.length || 0} chars`
+        );
         return {
           key: `${category}_${idx}_${topic.name.replace(/\s+/g, '_').toLowerCase()}`,
           name: topic.name,

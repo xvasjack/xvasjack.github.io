@@ -584,13 +584,29 @@ async def analyze_output_callback(
         # Use ComparisonResult's structured output
         issues = [d.to_comment() for d in comparison_result.discrepancies]
 
-        return {
+        # Fetch pipeline diagnostics from backend
+        backend_diagnostics = None
+        try:
+            from config import RAILWAY_URLS
+            import urllib.request, json as _json
+            diag_url = RAILWAY_URLS.get(service_name, "") + "/api/diagnostics"
+            with urllib.request.urlopen(diag_url, timeout=10) as resp:
+                backend_diagnostics = _json.loads(resp.read())
+        except Exception as e:
+            logger.debug(f"Failed to fetch diagnostics: {e}")
+
+        result_dict = {
             "issues": issues,
             "passed": comparison_result.passed,
             "analysis": analysis,
             "comparison": comparison_result.to_dict(),
             "fix_prompt": comparison_result.generate_claude_code_prompt(),
         }
+
+        if backend_diagnostics and backend_diagnostics.get("available"):
+            result_dict["backend_diagnostics"] = backend_diagnostics
+
+        return result_dict
 
     except Exception as e:
         logger.error(f"Analysis failed: {e}")
@@ -684,6 +700,7 @@ async def _diagnose_root_cause(
     issues: List[str],
     service_name: str,
     iteration: int,
+    analysis: Optional[Dict] = None,
 ) -> Dict[str, Any]:
     """
     Think-first step: Diagnose root cause before attempting fix.
@@ -706,6 +723,49 @@ async def _diagnose_root_cause(
                 }
         except (ImportError, Exception) as e:
             logger.debug(f"Pattern memory check failed: {e}")
+
+    # Check backend diagnostics for evidence-based diagnosis
+    diag = analysis.get("backend_diagnostics") if analysis else None
+    if diag and diag.get("countries"):
+        country_diag = diag["countries"][0]  # First country
+        topic_count = country_diag.get("researchTopicCount", 0)
+        scores = country_diag.get("synthesisScores") or {}
+        failed = country_diag.get("failedSections", [])
+
+        if topic_count < 3:
+            return {
+                "diagnosis": f"Research pipeline returned only {topic_count} topics. APIs may be failing or timing out.",
+                "strategy": (
+                    "1) Check ai-clients.js: is callKimiDeepResearch getting responses? "
+                    "2) Check research-agents.js: are queries specific enough? "
+                    "3) Do NOT edit synthesis prompts — the research data itself is empty."
+                ),
+                "from_diagnostics": True,
+                "confidence": "high",
+            }
+
+        if len(failed) >= 2:
+            return {
+                "diagnosis": f"Synthesis failed for sections: {', '.join(failed)}. Research data exists but synthesis couldn't process it.",
+                "strategy": (
+                    "1) Check synthesize* prompts in research-orchestrator.js — are they matching the research data keys? "
+                    "2) Check ai-clients.js callGemini — is it returning valid JSON?"
+                ),
+                "from_diagnostics": True,
+                "confidence": "high",
+            }
+
+        if scores.get("overall", 100) < 30:
+            thin_sections = [s for s in ["policy", "market", "competitors"] if scores.get(s, 100) < 30]
+            return {
+                "diagnosis": f"Synthesis produced thin content in: {', '.join(thin_sections)}. Score: {scores.get('overall')}/100.",
+                "strategy": (
+                    f"Fix the DEPTH REQUIREMENTS in synthesize{''.join(s.capitalize() for s in thin_sections[:1])}() "
+                    f"prompt in research-orchestrator.js. The research data exists but synthesis isn't extracting enough from it."
+                ),
+                "from_diagnostics": True,
+                "confidence": "medium",
+            }
 
     # Categorize issues by type
     issue_categories = {}
@@ -919,7 +979,7 @@ async def generate_fix_callback(
     issues = _pick_top_issue_cluster(issues, max_issues=3)
 
     # THINK FIRST: Diagnose root cause before fixing
-    diagnosis = await _diagnose_root_cause(issues, service_name, iteration)
+    diagnosis = await _diagnose_root_cause(issues, service_name, iteration, analysis=analysis)
     diagnosis_context = ""
     if diagnosis:
         if diagnosis.get("from_memory"):

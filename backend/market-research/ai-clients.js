@@ -86,6 +86,7 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
     messages,
     max_tokens: maxTokens,
     temperature: 1,
+    thinking: { type: 'enabled' },
   };
 
   // Enable web search tool if requested (can be disabled via env var for testing)
@@ -103,7 +104,7 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
 
   try {
     // Use retry logic for network resilience
-    const data = await withRetry(
+    let data = await withRetry(
       async () => {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 min
@@ -147,84 +148,85 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
     trackCost('kimi-k2.5', inputTokens, outputTokens);
     recordTokens('kimi-k2.5', inputTokens, outputTokens);
 
-    // Debug: log if response has tool calls or empty content
+    // Extract content and tool calls from initial response
     let content = data.choices?.[0]?.message?.content || '';
-    const toolCalls = data.choices?.[0]?.message?.tool_calls;
+    let toolCalls = data.choices?.[0]?.message?.tool_calls;
 
-    // If Kimi returned tool_calls without content, it wants to use web search
-    // We need to continue the conversation to get the final answer
-    if (!content && toolCalls && useWebSearch) {
-      console.log('  [Kimi] Web search tool called, continuing conversation for final answer...');
-      try {
-        // Add assistant's tool call message to conversation
+    // Handle tool_calls (web search) with proper loop
+    // Per Moonshot docs: $web_search is a builtin_function — server performs the search.
+    // Client must echo back tool call arguments and loop until finish_reason === "stop".
+    let maxRounds = 3;
+    while (!content && toolCalls && useWebSearch && maxRounds-- > 0) {
+      console.log(
+        `  [Kimi] Web search tool called (${toolCalls.length} calls), echoing results...`
+      );
+
+      // Append assistant's tool call message (preserve all fields)
+      messages.push(data.choices[0].message);
+
+      // Echo back each tool call's arguments (builtin_function protocol)
+      for (const toolCall of toolCalls) {
         messages.push({
-          role: 'assistant',
-          content: '',
-          tool_calls: toolCalls,
+          role: 'tool',
+          tool_call_id: toolCall.id,
+          name: toolCall.function?.name || '$web_search',
+          content: toolCall.function?.arguments || JSON.stringify({ status: 'completed' }),
         });
+      }
 
-        // Add tool results (simulate successful web search)
-        for (const toolCall of toolCalls) {
-          messages.push({
-            role: 'tool',
-            tool_call_id: toolCall.id,
-            content: 'Web search completed. Please analyze the findings and provide your response.',
-          });
-        }
-
-        // Make second API call to get final answer
-        const followupData = await withRetry(
-          async () => {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 120000); // 2 min
-            try {
-              const followupResponse = await fetch(`${kimiBaseUrl}/chat/completions`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${process.env.KIMI_API_KEY}`,
-                },
-                body: JSON.stringify({
-                  model: 'kimi-k2.5',
-                  messages,
-                  max_tokens: maxTokens,
-                  temperature: 1,
-                }),
-                signal: controller.signal,
-              });
-
-              if (!followupResponse.ok) {
-                const errorText = await followupResponse.text();
-                if (followupResponse.status >= 500 || followupResponse.status === 429) {
-                  throw new Error(
-                    `Kimi followup HTTP ${followupResponse.status}: ${errorText.substring(0, 100)}`
-                  );
-                }
-                return null;
+      // Make followup call
+      const followupData = await withRetry(
+        async () => {
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 120000);
+          try {
+            const resp = await fetch(`${kimiBaseUrl}/chat/completions`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${process.env.KIMI_API_KEY}`,
+              },
+              body: JSON.stringify({
+                model: 'kimi-k2.5',
+                messages,
+                max_tokens: maxTokens,
+                temperature: 1,
+                thinking: { type: 'enabled' },
+              }),
+              signal: controller.signal,
+            });
+            if (!resp.ok) {
+              const errText = await resp.text();
+              if (resp.status >= 500 || resp.status === 429) {
+                throw new Error(`Kimi followup HTTP ${resp.status}: ${errText.substring(0, 100)}`);
               }
-
-              return await followupResponse.json();
-            } finally {
-              clearTimeout(timeoutId);
+              return null;
             }
-          },
-          3,
-          2000,
-          'Kimi followup'
-        );
+            return await resp.json();
+          } finally {
+            clearTimeout(timeoutId);
+          }
+        },
+        3,
+        2000,
+        'Kimi followup'
+      );
 
-        if (followupData && followupData.choices?.[0]?.message?.content) {
-          content = followupData.choices[0].message.content;
-          console.log(`  [Kimi] Followup successful, got ${content.length} chars`);
+      if (!followupData) break;
 
-          // Track followup tokens
-          const followupInput = followupData.usage?.prompt_tokens || 0;
-          const followupOutput = followupData.usage?.completion_tokens || 0;
-          trackCost('kimi-k2.5', followupInput, followupOutput);
-          recordTokens('kimi-k2.5', followupInput, followupOutput);
-        }
-      } catch (followupErr) {
-        console.error('  [Kimi] Followup failed:', followupErr?.message);
+      // Track tokens
+      const fInput = followupData.usage?.prompt_tokens || 0;
+      const fOutput = followupData.usage?.completion_tokens || 0;
+      trackCost('kimi-k2.5', fInput, fOutput);
+      recordTokens('kimi-k2.5', fInput, fOutput);
+
+      // Check if we got content or more tool_calls
+      content = followupData.choices?.[0]?.message?.content || '';
+      toolCalls = followupData.choices?.[0]?.message?.tool_calls;
+      data = followupData;
+
+      if (content) {
+        console.log(`  [Kimi] Followup successful, got ${content.length} chars`);
       }
     }
 
@@ -236,8 +238,10 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
         data.choices?.[0]?.finish_reason
       );
       researchQuality = 'failed';
-    } else if (content.length < 100) {
-      console.log(`  [Kimi] Thin response (${content.length} chars) - may be incomplete`);
+    } else if (content.length < 500) {
+      console.log(
+        `  [Kimi] Thin response (${content.length} chars) — likely insufficient for research`
+      );
       researchQuality = 'thin';
     }
 
@@ -262,6 +266,10 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
         url: url.replace(/[.,;:!?)]+$/, ''), // Clean trailing punctuation
         title: url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0],
       }));
+
+    console.log(
+      `  [Kimi] Response: ${content.length} chars, quality: ${researchQuality}, citations: ${citations.length}`
+    );
 
     return {
       content,
