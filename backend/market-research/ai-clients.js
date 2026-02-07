@@ -165,13 +165,14 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
       // Append assistant's tool call message (preserve all fields)
       messages.push(data.choices[0].message);
 
-      // Echo back each tool call's arguments (builtin_function protocol)
+      // Echo back each tool call result (builtin_function protocol)
       for (const toolCall of toolCalls) {
+        console.log('[Kimi Debug] Tool call:', JSON.stringify(toolCall));
         messages.push({
           role: 'tool',
           tool_call_id: toolCall.id,
           name: toolCall.function?.name || '$web_search',
-          content: toolCall.function?.arguments || JSON.stringify({ status: 'completed' }),
+          content: JSON.stringify({ status: 'search_completed', query: toolCall.function?.name }),
         });
       }
 
@@ -222,16 +223,22 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
       recordTokens('kimi-k2.5', fInput, fOutput);
 
       // Check if we got content or more tool_calls
-      content = followupData.choices?.[0]?.message?.content || '';
+      content += followupData.choices?.[0]?.message?.content || '';
       toolCalls = followupData.choices?.[0]?.message?.tool_calls;
       data = followupData;
+      console.log(
+        '[Kimi Debug] Followup content length:',
+        content.length,
+        'first 200 chars:',
+        content.substring(0, 200)
+      );
 
       if (content) {
         console.log(`  [Kimi] Followup successful, got ${content.length} chars`);
       }
     }
 
-    // Validate research quality
+    // Validate research quality and retry if thin
     let researchQuality = 'good';
     if (!content) {
       console.log(
@@ -241,9 +248,85 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
       researchQuality = 'failed';
     } else if (content.length < 500) {
       console.log(
-        `  [Kimi] Thin response (${content.length} chars) — likely insufficient for research`
+        `  [Kimi] Thin response (${content.length} chars) — retrying with reformulated query`
       );
-      researchQuality = 'thin';
+      // Retry once with reformulated query
+      const reformulatedQuery =
+        query + ' provide detailed statistics, company names, and regulations with years';
+      const retryMessages = [];
+      if (systemPrompt) {
+        retryMessages.push({ role: 'system', content: systemPrompt });
+      }
+      retryMessages.push({ role: 'user', content: reformulatedQuery });
+
+      try {
+        const retryBody = {
+          model: 'kimi-k2.5',
+          messages: retryMessages,
+          max_tokens: maxTokens,
+          temperature: 1,
+          thinking: { type: 'enabled' },
+        };
+        if (useWebSearch && process.env.KIMI_WEB_SEARCH !== 'false') {
+          retryBody.tools = [{ type: 'builtin_function', function: { name: '$web_search' } }];
+        }
+        const retryResp = await withRetry(
+          async () => {
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 120000);
+            try {
+              const resp = await fetch(`${kimiBaseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${process.env.KIMI_API_KEY}`,
+                },
+                body: JSON.stringify(retryBody),
+                signal: controller.signal,
+              });
+              if (!resp.ok) return null;
+              return await resp.json();
+            } finally {
+              clearTimeout(timeoutId);
+            }
+          },
+          2,
+          2000,
+          'Kimi quality retry'
+        );
+
+        const retryContent = retryResp?.choices?.[0]?.message?.content || '';
+        if (retryContent.length >= 500) {
+          console.log(`  [Kimi] Quality retry successful: ${retryContent.length} chars`);
+          content = retryContent;
+          researchQuality = 'good';
+        } else {
+          console.log(
+            `  [Kimi] Quality retry still thin (${retryContent.length} chars), falling back to Gemini`
+          );
+          // Fall back to Gemini
+          try {
+            const geminiQuery =
+              reformulatedQuery +
+              ' Search the web and provide detailed statistics, named companies, and specific regulations with years';
+            const geminiResult = await callGemini(geminiQuery);
+            const geminiContent =
+              typeof geminiResult === 'string' ? geminiResult : geminiResult?.content || '';
+            if (geminiContent.length > content.length) {
+              content = geminiContent;
+              researchQuality = 'gemini_fallback';
+            } else {
+              researchQuality = 'thin';
+            }
+          } catch (geminiErr) {
+            console.log(`  [Kimi] Gemini fallback failed: ${geminiErr.message}`);
+            researchQuality = 'thin';
+          }
+        }
+      } catch (retryErr) {
+        console.log(`  [Kimi] Quality retry failed: ${retryErr.message}`);
+        researchQuality = 'thin';
+      }
     }
 
     // Extract URLs from content for source citations
@@ -347,7 +430,7 @@ async function callGemini(prompt, options = {}) {
   if (!apiKey) {
     console.log('  [Gemini] No API key, falling back to KimiChat');
     return callKimiChat(prompt, options.systemPrompt || '', options.maxTokens || 8192).then(
-      (r) => r.content
+      (r) => ({ content: r.content, citations: r.citations || [] })
     );
   }
 

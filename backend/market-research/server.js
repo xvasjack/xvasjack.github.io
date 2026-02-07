@@ -8,10 +8,11 @@ const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { createTracker, trackingContext } = require('./shared/tracking');
 
 // Extracted modules
-const { costTracker } = require('./ai-clients');
+const { costTracker, callKimiDeepResearch } = require('./ai-clients');
 const { parseScope } = require('./research-framework');
 const { researchCountry, synthesizeFindings } = require('./research-orchestrator');
 const { generatePPT } = require('./ppt-multi-country');
+const { validateResearchQuality, validateSynthesisQuality } = require('./quality-gates');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers({ logMemory: false });
@@ -77,6 +78,43 @@ async function runMarketResearch(userPrompt, email) {
         countryAnalyses.push(...batchResults);
       }
 
+      // Quality Gate 1: Validate research quality per country and retry weak topics
+      for (const ca of countryAnalyses) {
+        if (!ca.rawData) continue;
+        const researchGate = validateResearchQuality(ca.rawData);
+        console.log(
+          '[Quality Gate] Research for',
+          ca.country + ':',
+          JSON.stringify({
+            pass: researchGate.pass,
+            score: researchGate.score,
+            issues: researchGate.issues,
+          })
+        );
+        if (!researchGate.pass && researchGate.retryTopics.length > 0) {
+          console.log(
+            '[Quality Gate] Retrying',
+            researchGate.retryTopics.length,
+            'weak topics for',
+            ca.country + '...'
+          );
+          for (const topic of researchGate.retryTopics.slice(0, 5)) {
+            try {
+              const retry = await callKimiDeepResearch(
+                topic + ' provide specific statistics and company names',
+                ca.country,
+                scope.industry
+              );
+              if (retry && retry.content && retry.content.length > 200) {
+                ca.rawData[topic] = retry;
+              }
+            } catch (e) {
+              console.warn('[Quality Gate] Retry failed for topic:', topic, e.message);
+            }
+          }
+        }
+      }
+
       // Collect pipeline diagnostics for each country
       lastRunDiagnostics = {
         timestamp: new Date().toISOString(),
@@ -102,6 +140,17 @@ async function runMarketResearch(userPrompt, email) {
 
       // Stage 3: Synthesize findings
       const synthesis = await synthesizeFindings(countryAnalyses, scope);
+
+      // Quality Gate 2: Validate synthesis quality
+      const synthesisGate = validateSynthesisQuality(synthesis);
+      console.log(
+        '[Quality Gate] Synthesis:',
+        JSON.stringify({
+          pass: synthesisGate.pass,
+          overall: synthesisGate.overall,
+          failures: synthesisGate.failures,
+        })
+      );
 
       // Stage 4: Generate PPT
       const pptBuffer = await generatePPT(synthesis, countryAnalyses, scope);

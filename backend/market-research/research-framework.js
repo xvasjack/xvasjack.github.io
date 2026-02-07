@@ -373,12 +373,74 @@ Return ONLY valid JSON, no markdown or explanation.`;
     return scope;
   } catch (error) {
     console.error('Failed to parse scope:', error.message);
-    // Default fallback
+    // Try to extract useful info from raw prompt before falling back to generic
+    const promptLower = userPrompt.toLowerCase();
+
+    // Extract country names from prompt
+    const countryPatterns = [
+      'Thailand',
+      'Vietnam',
+      'Indonesia',
+      'Malaysia',
+      'Philippines',
+      'Singapore',
+      'Myanmar',
+      'Cambodia',
+      'Laos',
+      'India',
+      'China',
+      'Japan',
+      'Korea',
+      'Taiwan',
+      'Bangladesh',
+      'Pakistan',
+      'Sri Lanka',
+      'Australia',
+      'New Zealand',
+    ];
+    const detectedCountries = countryPatterns.filter((c) => promptLower.includes(c.toLowerCase()));
+
+    // Extract industry keywords from prompt
+    const industryPatterns = [
+      {
+        keywords: ['energy', 'power', 'electricity', 'renewable', 'solar', 'wind'],
+        industry: 'energy services',
+      },
+      { keywords: ['healthcare', 'medical', 'hospital', 'pharma'], industry: 'healthcare' },
+      {
+        keywords: ['fintech', 'banking', 'financial', 'insurance'],
+        industry: 'financial services',
+      },
+      { keywords: ['logistics', 'supply chain', 'warehouse', 'shipping'], industry: 'logistics' },
+      { keywords: ['manufacturing', 'factory', 'industrial'], industry: 'manufacturing' },
+      { keywords: ['technology', 'software', 'IT', 'digital'], industry: 'technology' },
+      { keywords: ['food', 'beverage', 'agriculture', 'agri'], industry: 'food & agriculture' },
+      { keywords: ['real estate', 'property', 'construction'], industry: 'real estate' },
+      { keywords: ['automotive', 'EV', 'vehicle'], industry: 'automotive' },
+      { keywords: ['retail', 'e-commerce', 'consumer'], industry: 'retail & consumer' },
+    ];
+    let detectedIndustry = 'general business';
+    for (const pattern of industryPatterns) {
+      if (pattern.keywords.some((kw) => promptLower.includes(kw.toLowerCase()))) {
+        detectedIndustry = pattern.industry;
+        break;
+      }
+    }
+
+    console.log(
+      `  [Scope Fallback] Detected countries: ${detectedCountries.length ? detectedCountries.join(', ') : 'none'}, industry: ${detectedIndustry}`
+    );
+
     return {
       projectType: 'market_entry',
-      industry: 'energy services',
-      targetMarkets: ['Thailand', 'Vietnam', 'Malaysia', 'Philippines', 'Indonesia'],
-      clientContext: 'Japanese company',
+      industry: detectedIndustry,
+      targetMarkets:
+        detectedCountries.length > 0
+          ? detectedCountries
+          : ['Thailand', 'Vietnam', 'Malaysia', 'Philippines', 'Indonesia'],
+      clientContext: promptLower.includes('japanese')
+        ? 'Japanese company'
+        : 'international company',
       focusAreas: ['market size', 'competition', 'regulations'],
     };
   }
@@ -586,10 +648,33 @@ function generateFallbackFramework(scope) {
   };
 }
 
+/**
+ * Get the appropriate research framework for a country.
+ * Thailand uses the optimized hardcoded framework.
+ * Other countries use dynamic generation with fallback.
+ */
+async function getResearchFramework(country, scope) {
+  if (country && country.toLowerCase() === 'thailand') {
+    console.log(`  [Framework] Using optimized hardcoded framework for Thailand`);
+    return { framework: RESEARCH_FRAMEWORK, topicGroups: RESEARCH_TOPIC_GROUPS };
+  }
+
+  console.log(`  [Framework] Generating dynamic framework for ${country}...`);
+  try {
+    const dynamicFramework = await generateResearchFramework(scope);
+    return { framework: dynamicFramework, topicGroups: null, isDynamic: true };
+  } catch (err) {
+    console.log(`  [Framework] Dynamic generation failed: ${err.message}, using fallback`);
+    const fallback = generateFallbackFramework(scope);
+    return { framework: fallback, topicGroups: null, isDynamic: true };
+  }
+}
+
 module.exports = {
   RESEARCH_FRAMEWORK,
   RESEARCH_TOPIC_GROUPS,
   parseScope,
   generateResearchFramework,
   generateFallbackFramework,
+  getResearchFramework,
 };

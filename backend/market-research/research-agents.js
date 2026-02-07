@@ -28,8 +28,8 @@ function extractJsonFromContent(content) {
     }
   }
 
-  // Strategy 2.5: Match [...] array
-  const arrayMatch = content.match(/\[[\s\S]*\]/);
+  // Strategy 2.5: Match [...] array (non-greedy)
+  const arrayMatch = content.match(/\[[\s\S]*?\]/);
   if (arrayMatch) {
     try {
       return { data: JSON.parse(arrayMatch[0]), status: 'success' };
@@ -45,8 +45,8 @@ function extractJsonFromContent(content) {
     // Not valid JSON
   }
 
-  // Strategy 4: Regex for largest {...} object
-  const objectMatch = content.match(/\{[\s\S]*\}/);
+  // Strategy 4: Regex for {...} object (non-greedy)
+  const objectMatch = content.match(/\{[\s\S]*?\}/);
   if (objectMatch) {
     try {
       return { data: JSON.parse(objectMatch[0]), status: 'success' };
@@ -56,6 +56,37 @@ function extractJsonFromContent(content) {
   }
 
   return { data: null, status: 'no_json_found' };
+}
+
+/**
+ * Validate extracted JSON structure per agent type.
+ * Returns true if valid, false if incomplete. Sets dataQuality to 'incomplete' on failure.
+ */
+function validatePolicyData(data) {
+  if (!data) return false;
+  const acts = data.foundationalActs || data.acts;
+  if (!Array.isArray(acts) || acts.length === 0) return false;
+  return acts.every((act) => act.name && act.year);
+}
+
+function validateMarketData(data) {
+  if (!data) return false;
+  const chartData = data.chartData;
+  if (!chartData) return false;
+  // Check for series array with numeric values in either historical or projected or top-level
+  const series = chartData.series || chartData.historical?.series || chartData.projected?.series;
+  if (!Array.isArray(series) || series.length === 0) return false;
+  return series.every(
+    (s) => Array.isArray(s.values) && s.values.every((v) => typeof v === 'number')
+  );
+}
+
+function validateCompetitorData(data) {
+  if (!data) return false;
+  if (!Array.isArray(data.players) || data.players.length === 0) return false;
+  return data.players.every(
+    (p) => p.name && p.description && p.description.split(/\s+/).length >= 45 && p.website
+  );
 }
 
 // Policy Research Agent - handles regulatory and policy topics
@@ -145,6 +176,13 @@ REQUIREMENTS:
         }
       }
 
+      // Validate policy-specific structure
+      let dataQuality = structuredData?.dataQuality || 'unknown';
+      if (structuredData && !validatePolicyData(structuredData)) {
+        console.log(`      [Policy] ${topicKey}: validation failed — missing acts with name/year`);
+        dataQuality = 'incomplete';
+      }
+
       return {
         key: topicKey,
         content: result.content,
@@ -152,7 +190,7 @@ REQUIREMENTS:
         extractionStatus: extractionStatus,
         citations: result.citations || [],
         slideTitle: framework.slideTitle?.replace('{country}', country) || '',
-        dataQuality: structuredData?.dataQuality || 'unknown',
+        dataQuality: dataQuality,
       };
     })
   );
@@ -303,6 +341,10 @@ REQUIREMENTS:
         let structuredData = extractResult.data;
         let extractionStatus = extractResult.status;
 
+        // Bug 8 fix: track content/citations that may update on retry
+        let finalContent = result.content;
+        let finalCitations = result.citations || [];
+
         if (extractionStatus !== 'success' && result.content) {
           console.log(
             `      [Market] ${topicKey}: extraction failed (${extractionStatus}), retrying...`
@@ -315,19 +357,30 @@ REQUIREMENTS:
             extractionStatus = extractResult.status;
             if (extractionStatus === 'success') {
               console.log(`      [Market] ${topicKey}: Retry successful`);
+              finalContent = retryResult.content;
+              finalCitations = retryResult.citations || [];
             }
           }
         }
 
+        // Validate market-specific structure
+        let dataQuality = structuredData?.dataQuality || 'unknown';
+        if (structuredData && !validateMarketData(structuredData)) {
+          console.log(
+            `      [Market] ${topicKey}: validation failed — missing chartData.series with numeric values`
+          );
+          dataQuality = 'incomplete';
+        }
+
         return {
           key: topicKey,
-          content: result.content,
+          content: finalContent,
           structuredData: structuredData,
           extractionStatus: extractionStatus,
-          citations: result.citations || [],
+          citations: finalCitations,
           chartType: framework.chartType || null,
           slideTitle: framework.slideTitle?.replace('{country}', country) || '',
-          dataQuality: structuredData?.dataQuality || 'unknown',
+          dataQuality: dataQuality,
         };
       })
     );
@@ -486,6 +539,15 @@ REQUIREMENTS:
         }
       }
 
+      // Validate competitor-specific structure
+      let dataQuality = structuredData?.dataQuality || 'unknown';
+      if (structuredData && !validateCompetitorData(structuredData)) {
+        console.log(
+          `      [Competitor] ${topicKey}: validation failed — missing players with name/description(45+words)/website`
+        );
+        dataQuality = 'incomplete';
+      }
+
       return {
         key: topicKey,
         content: result.content,
@@ -493,7 +555,7 @@ REQUIREMENTS:
         extractionStatus: extractionStatus,
         citations: result.citations || [],
         slideTitle: framework.slideTitle?.replace('{country}', country) || '',
-        dataQuality: structuredData?.dataQuality || 'unknown',
+        dataQuality: dataQuality,
       };
     })
   );
@@ -531,14 +593,51 @@ FOCUS ON:
 - Specific risks with mitigation strategies
 - Timing factors (why now vs later)
 - Economic drivers affecting energy demand
-- Industrial development corridors and zones`;
+- Industrial development corridors and zones
+
+CRITICAL - RETURN STRUCTURED DATA:
+Your response MUST include a JSON block. Use this format:
+
+\`\`\`json
+{
+  "economicOverview": { "gdp": "$XXB", "growth": "X%", "fdiInflows": "$XB" },
+  "opportunities": [{ "name": "...", "sizingEstimate": "$XM", "timing": "..." }],
+  "risks": [{ "category": "...", "severity": "High/Med/Low", "mitigation": "..." }],
+  "dataQuality": "high/medium/low"
+}
+\`\`\``;
 
       const result = await callKimiDeepResearch(queryContext, country, industry);
+
+      // Extract structured JSON
+      let extractResult = extractJsonFromContent(result.content);
+      let structuredData = extractResult.data;
+      let extractionStatus = extractResult.status;
+
+      if (extractionStatus !== 'success' && result.content) {
+        console.log(
+          `      [Context] ${topicKey}: JSON extraction failed (${extractionStatus}), retrying...`
+        );
+        const retryQuery = `${queryContext}\n\nCRITICAL: Return ONLY valid JSON. No explanation, no markdown. Just the raw JSON object.`;
+        const retryResult = await callKimiDeepResearch(retryQuery, country, industry);
+        if (retryResult.content) {
+          extractResult = extractJsonFromContent(retryResult.content);
+          structuredData = extractResult.data;
+          extractionStatus = extractResult.status;
+          if (extractionStatus === 'success') {
+            console.log(`      [Context] ${topicKey}: Retry successful`);
+          }
+        }
+      }
+
       return {
         key: topicKey,
         content: result.content,
+        structuredData: structuredData,
+        extractionStatus: extractionStatus,
         citations: result.citations || [],
         slideTitle: framework.slideTitle?.replace('{country}', country) || '',
+        dataQuality: structuredData?.dataQuality || 'unknown',
       };
     })
   );
