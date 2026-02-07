@@ -1271,17 +1271,91 @@ function validateContentDepth(synthesis) {
   else failures.push(`Market: only ${seriesCount} valid data series (need ≥3)`);
   if (market.escoMarket?.marketSize) scores.market += 30;
 
-  // Competitors check: ≥3 companies with details
+  // Competitors check: ≥3 companies with details AND word count validation (45-55 words)
   const competitors = synthesis.competitors || {};
   let totalCompanies = 0;
+  let thinDescriptions = 0;
+  let longDescriptions = 0;
   for (const section of ['japanesePlayers', 'localMajor', 'foreignPlayers']) {
     const players = competitors[section]?.players || [];
     totalCompanies += players.filter((p) => p.name && (p.revenue || p.description)).length;
+    // Validate description word count (45-55 words per prompt)
+    for (const player of players) {
+      if (player.description) {
+        const wordCount = player.description.trim().split(/\s+/).length;
+        if (wordCount < 45) thinDescriptions++;
+        if (wordCount > 60) longDescriptions++; // >60 words causes overflow
+      }
+    }
   }
   if (totalCompanies >= 5) scores.competitors = 100;
   else if (totalCompanies >= 3) scores.competitors = 70;
   else if (totalCompanies >= 1) scores.competitors = 40;
   else failures.push(`Competitors: only ${totalCompanies} detailed companies (need ≥3)`);
+
+  // CRITICAL: Reject if >50% of descriptions are thin or too long
+  if (totalCompanies > 0 && thinDescriptions / totalCompanies > 0.5) {
+    failures.push(
+      `Competitors: ${thinDescriptions}/${totalCompanies} descriptions <45 words (need 45-55)`
+    );
+    scores.competitors = Math.min(scores.competitors, 40); // Cap score if descriptions thin
+  }
+  if (totalCompanies > 0 && longDescriptions > 0) {
+    failures.push(
+      `Competitors: ${longDescriptions}/${totalCompanies} descriptions >60 words (causes overflow, max 55)`
+    );
+    scores.competitors = Math.min(scores.competitors, 40);
+  }
+
+  // Strategic insights validation: check for complete data→implication→action chains
+  const summary = synthesis.summary || {};
+  const insights = summary.keyInsights || [];
+  let completeInsights = 0;
+  for (const insight of insights) {
+    // Check for complete chain: data (with numbers), pattern (causal), implication (action+timing)
+    const hasData = insight.data && /\d/.test(insight.data); // Contains number
+    const hasYear = insight.data && /\b(19|20)\d{2}\b/.test(insight.data); // Contains year
+    const hasPattern = insight.pattern && /because|creates|which|due to/i.test(insight.pattern);
+    const hasAction =
+      insight.implication &&
+      /recommend|should|target|consider|prioritize/i.test(insight.implication);
+    const hasTiming =
+      insight.implication && /(Q[1-4]|month|before|by|202\d|window)/i.test(insight.implication);
+
+    if (hasData && hasYear && hasPattern && hasAction && hasTiming) {
+      completeInsights++;
+    }
+  }
+
+  // Require ≥60% of insights to have complete chains (data+implication+action+timing)
+  if (insights.length >= 3 && completeInsights / insights.length < 0.6) {
+    failures.push(
+      `Strategic: only ${completeInsights}/${insights.length} insights complete (need ≥60% with data+action+timing)`
+    );
+  }
+
+  // Partner descriptions validation (from depth.partnerAssessment)
+  const depth = synthesis.summary?.depth || synthesis.depth || {};
+  const partners = depth.partnerAssessment?.partners || [];
+  let thinPartners = 0;
+  let longPartners = 0;
+  for (const partner of partners) {
+    if (partner.description) {
+      const wordCount = partner.description.trim().split(/\s+/).length;
+      if (wordCount < 45) thinPartners++;
+      if (wordCount > 60) longPartners++; // Causes overflow
+    }
+  }
+  if (partners.length > 0 && thinPartners / partners.length > 0.5) {
+    failures.push(
+      `Partners: ${thinPartners}/${partners.length} descriptions <45 words (need 45-55)`
+    );
+  }
+  if (partners.length > 0 && longPartners > 0) {
+    failures.push(
+      `Partners: ${longPartners}/${partners.length} descriptions >60 words (causes overflow, max 55)`
+    );
+  }
 
   scores.overall = Math.round((scores.policy + scores.market + scores.competitors) / 3);
 
