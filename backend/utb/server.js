@@ -114,6 +114,68 @@ async function callPerplexity(prompt) {
   }
 }
 
+async function callGeminiSearch(prompt, maxRetries = 2) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            tools: [{ google_search: {} }],
+            generationConfig: {
+              temperature: 0.2,
+              maxOutputTokens: 8192,
+            },
+          }),
+          timeout: 180000,
+        }
+      );
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error(
+          `Gemini Search HTTP error ${response.status} (attempt ${attempt + 1}):`,
+          errorText.substring(0, 200)
+        );
+        if (attempt === maxRetries) return '';
+        await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+        continue;
+      }
+
+      const data = await response.json();
+      const usage = data.usageMetadata;
+      if (usage) {
+        recordTokens(
+          'gemini-2.5-flash',
+          usage.promptTokenCount || 0,
+          usage.candidatesTokenCount || 0
+        );
+      }
+
+      if (data.error) {
+        console.error(`Gemini Search API error (attempt ${attempt + 1}):`, data.error.message);
+        if (attempt === maxRetries) return '';
+        await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+        continue;
+      }
+
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      if (!text) {
+        console.warn('Gemini Search returned empty response for prompt:', prompt.substring(0, 100));
+      }
+      return text;
+    } catch (error) {
+      console.error(`Gemini Search error (attempt ${attempt + 1}):`, error.message);
+      if (attempt === maxRetries) return '';
+      await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+    }
+  }
+  return '';
+}
+
 async function callChatGPT(prompt) {
   try {
     const response = await openai.chat.completions.create({
@@ -413,7 +475,7 @@ async function utbPhase0FetchDocuments(companyName, website, context) {
     // 2. Use Perplexity to find specific document content
     const docSearchPromises = [
       // Search for annual report data
-      callPerplexity(`Find the OFFICIAL ANNUAL REPORT data for ${companyName} (${website}).
+      callGeminiSearch(`Find the OFFICIAL ANNUAL REPORT data for ${companyName} (${website}).
 
 Search for their latest:
 - 有価証券報告書 (Securities Report) if Japanese company
@@ -433,7 +495,7 @@ If you cannot find the official document, state "Official document not accessibl
       ),
 
       // Search for mid-term plan
-      callPerplexity(`Find the OFFICIAL MID-TERM MANAGEMENT PLAN (中期経営計画) for ${companyName} (${website}).
+      callGeminiSearch(`Find the OFFICIAL MID-TERM MANAGEMENT PLAN (中期経営計画) for ${companyName} (${website}).
 
 Search for their:
 - Medium-term management plan
@@ -450,7 +512,7 @@ EXTRACT and return:
 Cite the source document name and date for each piece of data.`).catch((_e) => ''),
 
       // Search for M&A/merger announcements
-      callPerplexity(`Find any MERGER, ACQUISITION, or CORPORATE ACTION announcements for ${companyName} (${website}).
+      callGeminiSearch(`Find any MERGER, ACQUISITION, or CORPORATE ACTION announcements for ${companyName} (${website}).
 
 Search for:
 - Recent M&A announcements
@@ -468,7 +530,7 @@ Return:
 5. Source document (press release date, disclosure number)`).catch((_e) => ''),
 
       // Search for recent disclosures
-      callPerplexity(`Find the most recent OFFICIAL DISCLOSURES and IR materials for ${companyName} (${website}).
+      callGeminiSearch(`Find the most recent OFFICIAL DISCLOSURES and IR materials for ${companyName} (${website}).
 
 Look for:
 - Latest earnings release (決算短信)
@@ -520,7 +582,7 @@ async function utbPhase1Research(companyName, website, context, officialDocs = {
 
   const queries = [
     // Query 1: Company Deep Dive - Products & Services
-    callPerplexity(`Research ${companyName} (${website}) - PRODUCTS & SERVICES DEEP DIVE:
+    callGeminiSearch(`Research ${companyName} (${website}) - PRODUCTS & SERVICES DEEP DIVE:
 
 CRITICAL: I need SPECIFIC details, not general descriptions.
 
@@ -545,7 +607,7 @@ ${context ? `CONTEXT: ${context}` : ''}`).catch((e) => ({
     })),
 
     // Query 2: Financial Analysis FROM OFFICIAL DOCUMENTS
-    callPerplexity(`Research ${companyName} financial data - DATA MUST COME FROM OFFICIAL COMPANY DOCUMENTS:
+    callGeminiSearch(`Research ${companyName} financial data - DATA MUST COME FROM OFFICIAL COMPANY DOCUMENTS:
 ${documentContext}
 
 CRITICAL: Only provide data you can source from:
@@ -587,7 +649,7 @@ For Japanese companies specifically search for: 有価証券報告書, 決算短
     ),
 
     // Query 3: Manufacturing & Operations
-    callPerplexity(`Research ${companyName} manufacturing and operations footprint:
+    callGeminiSearch(`Research ${companyName} manufacturing and operations footprint:
 
 1. MANUFACTURING LOCATIONS:
    - List ALL manufacturing facilities by country/city
@@ -613,7 +675,7 @@ Provide SPECIFIC locations (city, country) not just "facilities in Asia".`).catc
     })),
 
     // Query 4: Competitive Landscape - COMPREHENSIVE
-    callPerplexity(`Research ${companyName} competitive landscape - COMPREHENSIVE GLOBAL ANALYSIS:
+    callGeminiSearch(`Research ${companyName} competitive landscape - COMPREHENSIVE GLOBAL ANALYSIS:
 
 CRITICAL: This is a large global industry. Provide a COMPREHENSIVE list of competitors.
 
@@ -642,7 +704,7 @@ Provide SPECIFIC data with sources. No generic statements.`).catch((e) => ({
     })),
 
     // Query 5: M&A History & Strategy
-    callPerplexity(`Research ${companyName} M&A activity and corporate development - COMPREHENSIVE:
+    callGeminiSearch(`Research ${companyName} M&A activity and corporate development - COMPREHENSIVE:
 
 1. PAST ACQUISITIONS (last 10-15 years) - FOR EACH DEAL PROVIDE ALL OF:
    - Year of acquisition
@@ -679,7 +741,7 @@ IMPORTANT: For each acquisition, provide ALL details: year, target name, target 
     ),
 
     // Query 6: Leadership & Strategy
-    callPerplexity(`Research ${companyName} leadership and strategic direction:
+    callGeminiSearch(`Research ${companyName} leadership and strategic direction:
 
 1. LEADERSHIP TEAM:
    - CEO name and background (tenure, previous roles)
@@ -707,7 +769,7 @@ Provide SPECIFIC names and quotes where available.`).catch((e) => ({
     })),
 
     // Query 7: Industry Deep Dive — analyze the INDUSTRY, not the company
-    callPerplexity(`Analyze the INDUSTRY that ${companyName} (${website}) operates in. This is about the INDUSTRY, not the company itself.
+    callGeminiSearch(`Analyze the INDUSTRY that ${companyName} (${website}) operates in. This is about the INDUSTRY, not the company itself.
 
 IMPORTANT RULES:
 - Every claim must cite a specific source (report name, publisher, year)
@@ -752,7 +814,7 @@ ${context ? `CONTEXT: ${context}` : ''}`).catch((e) => ({
     })),
 
     // Query 8: Client Positioning & Expansion Signals
-    callPerplexity(`Analyze ${companyName}'s (${website}) SPECIFIC POSITIONING within its industry and identify expansion signals.
+    callGeminiSearch(`Analyze ${companyName}'s (${website}) SPECIFIC POSITIONING within its industry and identify expansion signals.
 
 IMPORTANT RULES:
 - Every claim must cite a specific source (annual report, press release, interview, filing)
@@ -803,7 +865,7 @@ ${context ? `CONTEXT: ${context}` : ''}`).catch((e) => ({
   // Add local language query if applicable
   if (localLang) {
     queries.push(
-      callPerplexity(`${localLang.searchPrefix} ${companyName}について詳しく調べてください:
+      callGeminiSearch(`${localLang.searchPrefix} ${companyName}について詳しく調べてください:
 
 Search for ${companyName} in ${localLang.lang}:
 - Recent press releases and news
