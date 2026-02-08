@@ -1471,9 +1471,11 @@ function addInsightPanelsFromPattern(slide, insights, patternDef) {
       fill: { color: 'F5F5F5' },
       line: { color: 'CCCCCC', width: 0.5 },
     });
-    // Title
+    // Title — ensureString guards against AI returning object/array for title
     const titleRaw =
-      typeof insight === 'string' ? `Insight ${idx + 1}` : insight.title || `Insight ${idx + 1}`;
+      typeof insight === 'string'
+        ? `Insight ${idx + 1}`
+        : ensureString(insight.title) || `Insight ${idx + 1}`;
     const title = safeText(titleRaw);
     slide.addText(title, {
       x: def.x + 0.2,
@@ -1485,8 +1487,20 @@ function addInsightPanelsFromPattern(slide, insights, patternDef) {
       color: '1F497D',
       fontFace: 'Segoe UI',
     });
-    // Body
-    const body = typeof insight === 'string' ? insight : insight.text || insight.body || '';
+    // Body — use structured fields with labels if available, fallback to text/body
+    let body = '';
+    if (typeof insight === 'string') {
+      body = insight;
+    } else if (insight.data || insight.pattern || insight.implication || insight.timing) {
+      const parts = [];
+      if (insight.data) parts.push(ensureString(insight.data));
+      if (insight.pattern) parts.push(`So what: ${ensureString(insight.pattern)}`);
+      if (insight.implication) parts.push(`Action: ${ensureString(insight.implication)}`);
+      if (insight.timing) parts.push(`Timing: ${ensureString(insight.timing)}`);
+      body = parts.join('\n');
+    } else {
+      body = insight.text || insight.body || '';
+    }
     const fittedBody = fitTextToShape(truncate(body, 200), def.w - 0.3, def.h - 0.5, 11);
     slide.addText(fittedBody.text, {
       x: def.x + 0.2,
