@@ -703,42 +703,8 @@ Provide SPECIFIC data with sources. No generic statements.`).catch((e) => ({
       error: e.message,
     })),
 
-    // Query 5: M&A History & Strategy
-    callGeminiSearch(`Research ${companyName} M&A activity and corporate development - COMPREHENSIVE:
-
-1. PAST ACQUISITIONS (last 10-15 years) - FOR EACH DEAL PROVIDE ALL OF:
-   - Year of acquisition
-   - Target company name
-   - Target company's country/headquarters
-   - Deal type (Acquisition, Merger, JV, Minority stake)
-   - Acquired stake percentage (100%, majority, minority, or undisclosed)
-   - Target's business description (what the acquired company does)
-   - Strategic rationale (why they acquired it)
-
-2. PAST DIVESTITURES:
-   - Any businesses sold off
-
-3. STRATEGIC PARTNERSHIPS & JVs:
-   - Partner name and country
-   - Nature of partnership
-   - Year established
-
-4. INVESTMENTS:
-   - Minority investments made
-   - VC/CVC activity
-
-5. M&A STRATEGY SIGNALS:
-   - Management statements about M&A
-   - Investor presentation mentions of inorganic growth
-   - Recent news about M&A intentions
-
-IMPORTANT: For each acquisition, provide ALL details: year, target name, target country, deal type, stake acquired, target business, and rationale.`).catch(
-      (e) => ({
-        type: 'ma_history',
-        data: '',
-        error: e.message,
-      })
-    ),
+    // Query 5: M&A — replaced by two-pass approach after Promise.all
+    Promise.resolve(''),
 
     // Query 6: Leadership & Strategy
     callGeminiSearch(`Research ${companyName} leadership and strategic direction:
@@ -886,13 +852,54 @@ Provide findings in English with specific details.`).catch((e) => ({
   // Execute all queries in parallel
   const results = await Promise.all(queries);
 
+  // Two-pass M&A: Get exhaustive list first, then details
+  console.log('[UTB Phase 1] Starting two-pass M&A research...');
+
+  // Pass 1: Get complete deal list
+  const maPass1 =
+    await callGeminiSearch(`How many acquisitions, mergers, joint ventures, and minority investments has ${companyName} made throughout its entire history?
+
+List ALL deals — go back to the company's founding if possible. Include:
+- Full acquisitions (100% buyouts)
+- Majority/minority stake purchases
+- Mergers
+- Joint ventures
+- Strategic investments
+
+For each deal, provide: Year and Target company name.
+
+Be EXHAUSTIVE. Companies like this often have 20-50+ deals. Do not stop at 8-10.
+${context ? `CONTEXT: ${context}` : ''}`);
+
+  // Pass 2: Get details for each deal (with Phase 0 merger info as cross-reference)
+  const mergerContext = officialDocs.mergerInfo
+    ? `\nADDITIONAL M&A CONTEXT FROM OFFICIAL DOCUMENTS:\n${officialDocs.mergerInfo}`
+    : '';
+
+  const maPass2 =
+    await callGeminiSearch(`For ${companyName}, provide detailed information on each of these acquisitions/deals:
+
+${maPass1}
+${mergerContext}
+
+For EACH deal listed above, provide ALL of:
+1. Year of deal
+2. Target company name
+3. Target company's country/headquarters
+4. Deal type (Acquisition, Merger, JV, Minority stake)
+5. Acquired stake percentage (100%, majority, minority, or undisclosed)
+6. Target's business description (what the acquired company does)
+7. Strategic rationale (why they acquired it)
+
+Include ALL deals from the list above. Do not skip any. If some details are unknown, write "undisclosed" rather than omitting the deal.`);
+
   // Organize results
   const research = {
     products: typeof results[0] === 'string' ? results[0] : '',
     financials: typeof results[1] === 'string' ? results[1] : '',
     operations: typeof results[2] === 'string' ? results[2] : '',
     competitors: typeof results[3] === 'string' ? results[3] : '',
-    maHistory: typeof results[4] === 'string' ? results[4] : '',
+    maHistory: maPass2 || maPass1 || '',
     leadership: typeof results[5] === 'string' ? results[5] : '',
     industryAnalysis: typeof results[6] === 'string' ? results[6] : '',
     positioningSignals: typeof results[7] === 'string' ? results[7] : '',
@@ -1480,48 +1487,6 @@ async function generateUTBSlides(companyName, website, research, additionalConte
 
   const prod = synthesis.products_and_services || {};
   const maDeepDive = synthesis.ma_deep_dive || {};
-
-  // ========== SLIDE 1: TITLE SLIDE ==========
-  const titleSlide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-
-  // Company name - centered, black, large
-  titleSlide.addText(companyName, {
-    x: 0.38,
-    y: 2.5,
-    w: 12.54,
-    h: 1.0,
-    fontSize: 36,
-    fontFace: 'Segoe UI',
-    bold: true,
-    color: COLORS.black,
-    align: 'center',
-  });
-
-  // Client intention (from additionalContext)
-  if (additionalContext) {
-    titleSlide.addText(additionalContext, {
-      x: 0.38,
-      y: 3.6,
-      w: 12.54,
-      h: 0.8,
-      fontSize: 16,
-      fontFace: 'Segoe UI',
-      color: COLORS.footerText,
-      align: 'center',
-    });
-  }
-
-  // Generated date at bottom
-  titleSlide.addText(`Generated: ${new Date().toLocaleDateString()}`, {
-    x: 0.38,
-    y: 6.5,
-    w: 12.54,
-    h: 0.3,
-    fontSize: 10,
-    fontFace: 'Segoe UI',
-    color: COLORS.footerText,
-    align: 'center',
-  });
 
   // ========== SLIDE 2: BUSINESS OVERVIEW ==========
   if (prod.product_lines && prod.product_lines.length > 0) {
