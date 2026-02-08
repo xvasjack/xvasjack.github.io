@@ -474,37 +474,37 @@ const depth = {
   partnerAssessment: {
     slideTitle: 'Thailand - Partner Assessment',
     recommendedPartner:
-      'Absolute Clean Energy (ACE) — best combination of market access and cultural fit',
+      'Bangchak Green Energy (BGE) — best combination of market access and cultural fit',
     partners: [
       {
-        name: 'Absolute Clean Energy',
+        name: 'Bangchak Green Energy',
         type: 'Listed ESCO',
-        revenue: 'THB 8.2B',
+        revenue: 'THB 9.1B',
         partnershipFit: 4,
         acquisitionFit: 3,
-        estimatedValuation: 'THB 12-15B (listed)',
+        estimatedValuation: 'THB 14-18B (listed)',
         description:
-          'Market leader with 300+ government ESCO projects and strong DEDE relationships. Listed on SET with THB 8.2B revenue. Culture fit is high due to existing Japanese partnerships. Limited technical depth in complex industrial processes creates clear synergy with foreign technology partner.',
+          'Bangchak subsidiary focused on clean energy solutions with 250+ commercial ESCO projects and strong BOI relationships. Listed on SET with THB 9.1B revenue. Culture fit is high due to existing Japanese partnerships. Broad renewables portfolio creates clear synergy with foreign technology partner.',
       },
       {
-        name: 'Gunkul Engineering',
-        type: 'Engineering contractor',
-        revenue: 'THB 6.8B',
+        name: 'WHA Utilities & Power',
+        type: 'Industrial utilities provider',
+        revenue: 'THB 7.5B',
         partnershipFit: 3,
         acquisitionFit: 4,
-        estimatedValuation: 'THB 8-10B',
+        estimatedValuation: 'THB 9-12B',
         description:
-          'Strong execution capabilities with 95% project completion rate. THB 6.8B revenue with proven delivery in industrial ESCO. Technical team of 200+ engineers. Family-owned structure may complicate JV negotiations but makes acquisition path clearer with founder succession planning underway.',
+          'Leading industrial estate utilities provider with 95% uptime track record. THB 7.5B revenue with proven delivery in industrial energy management. Technical team of 200+ engineers across 11 industrial estates. Corporate structure may complicate JV negotiations but strategic interest in ESCO diversification creates clear acquisition rationale.',
       },
       {
-        name: 'Thai Energy Conservation',
+        name: 'Thai Carbon Solutions',
         type: 'Private ESCO',
-        revenue: 'THB 2.5B',
+        revenue: 'THB 2.8B',
         partnershipFit: 5,
         acquisitionFit: 5,
-        estimatedValuation: 'THB 800M-1.2B',
+        estimatedValuation: 'THB 900M-1.4B',
         description:
-          'Largest independent ESCO with 15-year track record and government contract portfolio worth THB 1.8B annually. Founder approaching retirement creates acquisition window. Deep relationships with provincial energy offices. Revenue THB 2.5B with stable 25% margins.',
+          'Leading independent carbon management and ESCO firm with 15-year track record and government contract portfolio worth THB 2.0B annually. Founder approaching retirement creates acquisition window. Deep relationships with provincial energy offices. Revenue THB 2.8B with stable 25% margins.',
       },
     ],
   },

@@ -1180,8 +1180,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       border: { pt: 0.5, color: 'cccccc' },
       colW: colWidths.length > 0 ? colWidths : defaultColW,
       valign: 'top',
-      autoPage: true,
-      autoPageRepeatHeader: true,
+      autoPage: false,
     });
 
     // Add insights below table
@@ -1372,7 +1371,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         border: { pt: 0.5, color: 'cccccc' },
         colW: [2.96, 1.08, 4.43, 4.03],
         valign: 'top',
-        autoPage: true,
+        autoPage: false,
       });
       // Key message summary below table if available
       let actsNextY = 1.3 + actsTableH + 0.15;

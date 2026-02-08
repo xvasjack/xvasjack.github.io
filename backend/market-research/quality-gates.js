@@ -576,9 +576,9 @@ function validatePptData(blocks) {
   }
 
   // Check sections with real data (at least 3 of 5)
-  const sectionNames = [...new Set(blocks.map((b) => b?.section).filter(Boolean))];
+  const sectionNames = [...new Set(blocks.map((b) => b?.key).filter(Boolean))];
   const sectionsWithData = sectionNames.filter((section) => {
-    const sectionBlocks = blocks.filter((b) => b?.section === section);
+    const sectionBlocks = blocks.filter((b) => b?.key === section);
     return sectionBlocks.some(
       (b) => b?.type !== 'unavailable' && b?.content !== 'Data unavailable'
     );
