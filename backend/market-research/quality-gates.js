@@ -102,9 +102,33 @@ function validateResearchQuality(researchData) {
   };
 }
 
+// ============ INDUSTRY RELEVANCE SCORING ============
+
+function scoreIndustryRelevance(synthesis, industry) {
+  if (!industry) return { score: 30, failures: [] };
+
+  const text = JSON.stringify(synthesis).toLowerCase();
+  const term = industry.toLowerCase();
+  const regex = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+  const matches = text.match(regex) || [];
+  const count = matches.length;
+
+  const failures = [];
+  if (count < 10) {
+    failures.push(
+      `Content has only ${count} mentions of '${industry}' — likely padded with macro data`
+    );
+  }
+
+  return {
+    score: Math.min(30, count * 3),
+    failures,
+  };
+}
+
 // ============ GATE 2: SYNTHESIS QUALITY ============
 
-function validateSynthesisQuality(synthesis) {
+function validateSynthesisQuality(synthesis, industry) {
   if (!synthesis || typeof synthesis !== 'object') {
     return {
       pass: false,
@@ -117,7 +141,7 @@ function validateSynthesisQuality(synthesis) {
 
   // Detect single-country synthesis (from synthesizeSingleCountry)
   if (synthesis.isSingleCountry) {
-    return validateSingleCountrySynthesis(synthesis);
+    return validateSingleCountrySynthesis(synthesis, industry);
   }
 
   // Multi-country / standard validation below
@@ -266,7 +290,14 @@ function validateSynthesisQuality(synthesis) {
     emptyFields.push('summary');
   }
 
-  const overall = Math.round((policyScore + marketScore + competitorsScore + summaryScore) / 4);
+  // Fix 14: Industry-specificity scoring
+  const industryRelevance = scoreIndustryRelevance(synthesis, industry);
+  failures.push(...industryRelevance.failures);
+
+  const overall = Math.round(
+    ((policyScore + marketScore + competitorsScore + summaryScore) / 4) * 0.7 +
+      industryRelevance.score
+  );
 
   return {
     pass: overall >= 40,
@@ -275,6 +306,7 @@ function validateSynthesisQuality(synthesis) {
       market: marketScore,
       competitors: competitorsScore,
       summary: summaryScore,
+      industryRelevance: industryRelevance.score,
     },
     overall,
     failures,
@@ -285,7 +317,7 @@ function validateSynthesisQuality(synthesis) {
 // Single-country synthesis validation
 // Checks fields from synthesizeSingleCountry(): executiveSummary, marketOpportunityAssessment,
 // competitivePositioning, keyInsights
-function validateSingleCountrySynthesis(synthesis) {
+function validateSingleCountrySynthesis(synthesis, industry) {
   const failures = [];
   const emptyFields = [];
 
@@ -404,7 +436,13 @@ function validateSingleCountrySynthesis(synthesis) {
     emptyFields.push('keyInsights');
   }
 
-  const overall = Math.round((execScore + marketScore + compScore + insightsScore) / 4);
+  // Fix 14: Industry-specificity scoring
+  const industryRelevance = scoreIndustryRelevance(synthesis, industry);
+  failures.push(...industryRelevance.failures);
+
+  const overall = Math.round(
+    ((execScore + marketScore + compScore + insightsScore) / 4) * 0.7 + industryRelevance.score
+  );
 
   return {
     pass: overall >= 40,
@@ -413,6 +451,7 @@ function validateSingleCountrySynthesis(synthesis) {
       marketOpportunity: marketScore,
       competitivePositioning: compScore,
       keyInsights: insightsScore,
+      industryRelevance: industryRelevance.score,
     },
     overall,
     failures,

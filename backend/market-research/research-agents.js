@@ -1,4 +1,4 @@
-const { callKimiDeepResearch, callGemini } = require('./ai-clients');
+const { callKimiDeepResearch, callGemini, callPerplexityResearch } = require('./ai-clients');
 const { RESEARCH_FRAMEWORK, RESEARCH_TOPIC_GROUPS } = require('./research-framework');
 
 /**
@@ -107,7 +107,7 @@ function validateCompetitorData(data) {
 }
 
 // Policy Research Agent - handles regulatory and policy topics
-async function policyResearchAgent(country, industry, _clientContext) {
+async function policyResearchAgent(country, industry, _clientContext, pipelineSignal = null) {
   console.log(`    [POLICY AGENT] Starting research for ${country}...`);
   const agentStart = Date.now();
   const topics = RESEARCH_TOPIC_GROUPS.policy;
@@ -178,7 +178,7 @@ REQUIREMENTS:
       let result;
       try {
         result = await Promise.race([
-          callKimiDeepResearch(queryContext, country, industry),
+          callKimiDeepResearch(queryContext, country, industry, pipelineSignal),
           new Promise((_, reject) =>
             setTimeout(
               () => reject(new Error(`Policy topic "${topicKey}" timed out after 150s`)),
@@ -188,19 +188,13 @@ REQUIREMENTS:
         ]);
       } catch (timeoutErr) {
         console.warn(
-          `      [Policy] ${topicKey}: ${timeoutErr.message}, trying Gemini fallback...`
+          `      [Policy] ${topicKey}: ${timeoutErr.message}, trying Perplexity fallback...`
         );
         try {
-          const geminiContent = await callGemini(queryContext, {
-            maxTokens: 8192,
-            temperature: 0.3,
-          });
-          const content =
-            typeof geminiContent === 'string' ? geminiContent : geminiContent?.content || '';
-          result = { content, citations: [], researchQuality: 'gemini_fallback' };
+          result = await callPerplexityResearch(queryContext, country, industry);
         } catch (fallbackErr) {
           console.warn(
-            `      [Policy] ${topicKey}: Gemini fallback failed: ${fallbackErr.message}`
+            `      [Policy] ${topicKey}: Perplexity fallback failed: ${fallbackErr.message}`
           );
           result = { content: '', citations: [], researchQuality: 'failed' };
         }
@@ -217,7 +211,7 @@ REQUIREMENTS:
           `      [Policy] ${topicKey}: JSON extraction failed (${extractionStatus}), retrying...`
         );
         const retryQuery = `${queryContext}\n\nCRITICAL: Return ONLY valid JSON. No explanation, no markdown. Just the raw JSON object.`;
-        result = await callKimiDeepResearch(retryQuery, country, industry);
+        result = await callKimiDeepResearch(retryQuery, country, industry, pipelineSignal);
         if (!result || !result.content) {
           result = { content: '', citations: [], researchQuality: 'failed' };
         }
@@ -266,7 +260,7 @@ REQUIREMENTS:
 }
 
 // Market Research Agent - handles market data and pricing topics
-async function marketResearchAgent(country, industry, _clientContext) {
+async function marketResearchAgent(country, industry, _clientContext, pipelineSignal = null) {
   console.log(`    [MARKET AGENT] Starting research for ${country}...`);
   const agentStart = Date.now();
   const topics = RESEARCH_TOPIC_GROUPS.market;
@@ -399,7 +393,7 @@ REQUIREMENTS:
         let result;
         try {
           result = await Promise.race([
-            callKimiDeepResearch(queryContext, country, industry),
+            callKimiDeepResearch(queryContext, country, industry, pipelineSignal),
             new Promise((_, reject) =>
               setTimeout(
                 () => reject(new Error(`Market topic "${topicKey}" timed out after 150s`)),
@@ -409,19 +403,13 @@ REQUIREMENTS:
           ]);
         } catch (timeoutErr) {
           console.warn(
-            `      [Market] ${topicKey}: ${timeoutErr.message}, trying Gemini fallback...`
+            `      [Market] ${topicKey}: ${timeoutErr.message}, trying Perplexity fallback...`
           );
           try {
-            const geminiContent = await callGemini(queryContext, {
-              maxTokens: 8192,
-              temperature: 0.3,
-            });
-            const content =
-              typeof geminiContent === 'string' ? geminiContent : geminiContent?.content || '';
-            result = { content, citations: [], researchQuality: 'gemini_fallback' };
+            result = await callPerplexityResearch(queryContext, country, industry);
           } catch (fallbackErr) {
             console.warn(
-              `      [Market] ${topicKey}: Gemini fallback failed: ${fallbackErr.message}`
+              `      [Market] ${topicKey}: Perplexity fallback failed: ${fallbackErr.message}`
             );
             result = { content: '', citations: [], researchQuality: 'failed' };
           }
@@ -441,7 +429,12 @@ REQUIREMENTS:
             `      [Market] ${topicKey}: extraction failed (${extractionStatus}), retrying...`
           );
           const retryQuery = `${queryContext}\n\nCRITICAL: Return ONLY valid JSON. No explanation, no markdown. Just the raw JSON object.`;
-          const retryResult = await callKimiDeepResearch(retryQuery, country, industry);
+          const retryResult = await callKimiDeepResearch(
+            retryQuery,
+            country,
+            industry,
+            pipelineSignal
+          );
           if (retryResult.content) {
             extractResult = extractJsonFromContent(retryResult.content);
             structuredData = extractResult.data;
@@ -500,7 +493,7 @@ REQUIREMENTS:
 }
 
 // Competitor Research Agent - handles competitive intelligence
-async function competitorResearchAgent(country, industry, _clientContext) {
+async function competitorResearchAgent(country, industry, _clientContext, pipelineSignal = null) {
   console.log(`    [COMPETITOR AGENT] Starting research for ${country}...`);
   const agentStart = Date.now();
   const topics = RESEARCH_TOPIC_GROUPS.competitors;
@@ -614,7 +607,7 @@ REQUIREMENTS:
       let result;
       try {
         result = await Promise.race([
-          callKimiDeepResearch(queryContext, country, industry),
+          callKimiDeepResearch(queryContext, country, industry, pipelineSignal),
           new Promise((_, reject) =>
             setTimeout(
               () => reject(new Error(`Competitor topic "${topicKey}" timed out after 150s`)),
@@ -624,19 +617,13 @@ REQUIREMENTS:
         ]);
       } catch (timeoutErr) {
         console.warn(
-          `      [Competitor] ${topicKey}: ${timeoutErr.message}, trying Gemini fallback...`
+          `      [Competitor] ${topicKey}: ${timeoutErr.message}, trying Perplexity fallback...`
         );
         try {
-          const geminiContent = await callGemini(queryContext, {
-            maxTokens: 8192,
-            temperature: 0.3,
-          });
-          const content =
-            typeof geminiContent === 'string' ? geminiContent : geminiContent?.content || '';
-          result = { content, citations: [], researchQuality: 'gemini_fallback' };
+          result = await callPerplexityResearch(queryContext, country, industry);
         } catch (fallbackErr) {
           console.warn(
-            `      [Competitor] ${topicKey}: Gemini fallback failed: ${fallbackErr.message}`
+            `      [Competitor] ${topicKey}: Perplexity fallback failed: ${fallbackErr.message}`
           );
           result = { content: '', citations: [], researchQuality: 'failed' };
         }
@@ -656,7 +643,12 @@ REQUIREMENTS:
           `      [Competitor] ${topicKey}: extraction failed (${extractionStatus}), retrying...`
         );
         const retryQuery = `${queryContext}\n\nCRITICAL: Return ONLY valid JSON. No explanation, no markdown. Just the raw JSON object.`;
-        const retryResult = await callKimiDeepResearch(retryQuery, country, industry);
+        const retryResult = await callKimiDeepResearch(
+          retryQuery,
+          country,
+          industry,
+          pipelineSignal
+        );
         if (retryResult.content) {
           extractResult = extractJsonFromContent(retryResult.content);
           structuredData = extractResult.data;
@@ -701,7 +693,7 @@ REQUIREMENTS:
 }
 
 // Context Research Agent - handles economic context and opportunities
-async function contextResearchAgent(country, industry, clientContext) {
+async function contextResearchAgent(country, industry, clientContext, pipelineSignal = null) {
   console.log(`    [CONTEXT AGENT] Starting research for ${country}...`);
   const agentStart = Date.now();
   const topics = RESEARCH_TOPIC_GROUPS.context;
@@ -741,7 +733,30 @@ Your response MUST include a JSON block. Use this format:
 }
 \`\`\``;
 
-      const result = await callKimiDeepResearch(queryContext, country, industry);
+      let result;
+      try {
+        result = await Promise.race([
+          callKimiDeepResearch(queryContext, country, industry, pipelineSignal),
+          new Promise((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`Context topic "${topicKey}" timed out after 150s`)),
+              150000
+            )
+          ),
+        ]);
+      } catch (timeoutErr) {
+        console.warn(
+          `      [Context] ${topicKey}: ${timeoutErr.message}, trying Perplexity fallback...`
+        );
+        try {
+          result = await callPerplexityResearch(queryContext, country, industry);
+        } catch (fallbackErr) {
+          console.warn(
+            `      [Context] ${topicKey}: Perplexity fallback failed: ${fallbackErr.message}`
+          );
+          result = { content: '', citations: [], researchQuality: 'failed' };
+        }
+      }
 
       // Bug 8 fix: track content/citations that may update on retry
       let finalContent = result.content;
@@ -757,7 +772,12 @@ Your response MUST include a JSON block. Use this format:
           `      [Context] ${topicKey}: JSON extraction failed (${extractionStatus}), retrying...`
         );
         const retryQuery = `${queryContext}\n\nCRITICAL: Return ONLY valid JSON. No explanation, no markdown. Just the raw JSON object.`;
-        const retryResult = await callKimiDeepResearch(retryQuery, country, industry);
+        const retryResult = await callKimiDeepResearch(
+          retryQuery,
+          country,
+          industry,
+          pipelineSignal
+        );
         if (retryResult.content) {
           extractResult = extractJsonFromContent(retryResult.content);
           structuredData = extractResult.data;
@@ -793,7 +813,7 @@ Your response MUST include a JSON block. Use this format:
 }
 
 // Depth Research Agent - handles ESCO economics, partner assessment, entry strategy, implementation
-async function depthResearchAgent(country, industry, clientContext) {
+async function depthResearchAgent(country, industry, clientContext, pipelineSignal = null) {
   console.log(`    [DEPTH AGENT] Starting deep-dive research for ${country}...`);
   const agentStart = Date.now();
   const topics = RESEARCH_TOPIC_GROUPS.depth;
@@ -923,7 +943,30 @@ ${
 
 DEPTH IS CRITICAL - We need specifics for executive decision-making, not general observations.${jsonStructure}`;
 
-      const result = await callKimiDeepResearch(queryContext, country, industry);
+      let result;
+      try {
+        result = await Promise.race([
+          callKimiDeepResearch(queryContext, country, industry, pipelineSignal),
+          new Promise((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`Depth topic "${topicKey}" timed out after 150s`)),
+              150000
+            )
+          ),
+        ]);
+      } catch (timeoutErr) {
+        console.warn(
+          `      [Depth] ${topicKey}: ${timeoutErr.message}, trying Perplexity fallback...`
+        );
+        try {
+          result = await callPerplexityResearch(queryContext, country, industry);
+        } catch (fallbackErr) {
+          console.warn(
+            `      [Depth] ${topicKey}: Perplexity fallback failed: ${fallbackErr.message}`
+          );
+          result = { content: '', citations: [], researchQuality: 'failed' };
+        }
+      }
 
       // Bug 8 fix: track content/citations that may update on retry
       let finalContent = result.content;
@@ -939,7 +982,12 @@ DEPTH IS CRITICAL - We need specifics for executive decision-making, not general
           `      [Depth] ${topicKey}: extraction failed (${extractionStatus}), retrying...`
         );
         const retryQuery = `${queryContext}\n\nCRITICAL: Return ONLY valid JSON. No explanation, no markdown. Just the raw JSON object.`;
-        const retryResult = await callKimiDeepResearch(retryQuery, country, industry);
+        const retryResult = await callKimiDeepResearch(
+          retryQuery,
+          country,
+          industry,
+          pipelineSignal
+        );
         if (retryResult.content) {
           extractResult = extractJsonFromContent(retryResult.content);
           structuredData = extractResult.data;
@@ -977,7 +1025,7 @@ DEPTH IS CRITICAL - We need specifics for executive decision-making, not general
 }
 
 // Insights Research Agent - handles non-obvious intelligence: failures, timing, competitive dynamics
-async function insightsResearchAgent(country, industry, clientContext) {
+async function insightsResearchAgent(country, industry, clientContext, pipelineSignal = null) {
   console.log(`    [INSIGHTS AGENT] Starting intelligence gathering for ${country}...`);
   const agentStart = Date.now();
   const topics = RESEARCH_TOPIC_GROUPS.insights;
@@ -1132,7 +1180,30 @@ ${
 
 This intelligence is for CEO-level decision making. We need SPECIFIC names, dates, numbers - not generic observations.${jsonStructure}`;
 
-      const result = await callKimiDeepResearch(queryContext, country, industry);
+      let result;
+      try {
+        result = await Promise.race([
+          callKimiDeepResearch(queryContext, country, industry, pipelineSignal),
+          new Promise((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`Insights topic "${topicKey}" timed out after 150s`)),
+              150000
+            )
+          ),
+        ]);
+      } catch (timeoutErr) {
+        console.warn(
+          `      [Insights] ${topicKey}: ${timeoutErr.message}, trying Perplexity fallback...`
+        );
+        try {
+          result = await callPerplexityResearch(queryContext, country, industry);
+        } catch (fallbackErr) {
+          console.warn(
+            `      [Insights] ${topicKey}: Perplexity fallback failed: ${fallbackErr.message}`
+          );
+          result = { content: '', citations: [], researchQuality: 'failed' };
+        }
+      }
 
       // Bug 8 fix: track content/citations that may update on retry
       let finalContent = result.content;
@@ -1148,7 +1219,12 @@ This intelligence is for CEO-level decision making. We need SPECIFIC names, date
           `      [Insights] ${topicKey}: extraction failed (${extractionStatus}), retrying...`
         );
         const retryQuery = `${queryContext}\n\nCRITICAL: Return ONLY valid JSON. No explanation, no markdown. Just the raw JSON object.`;
-        const retryResult = await callKimiDeepResearch(retryQuery, country, industry);
+        const retryResult = await callKimiDeepResearch(
+          retryQuery,
+          country,
+          industry,
+          pipelineSignal
+        );
         if (retryResult.content) {
           extractResult = extractJsonFromContent(retryResult.content);
           structuredData = extractResult.data;
@@ -1194,7 +1270,8 @@ async function universalResearchAgent(
   country,
   industry,
   clientContext,
-  projectType
+  projectType,
+  pipelineSignal = null
 ) {
   console.log(`    [${category.toUpperCase()} AGENT] Starting research for ${country}...`);
   const agentStart = Date.now();
@@ -1221,7 +1298,7 @@ REQUIREMENTS:
       try {
         // Per-topic timeout: 150s. If one topic hangs, fall back to Gemini.
         const result = await Promise.race([
-          callKimiDeepResearch(queryContext, country, industry),
+          callKimiDeepResearch(queryContext, country, industry, pipelineSignal),
           new Promise((_, reject) =>
             setTimeout(
               () => reject(new Error(`Topic "${topic.name}" timed out after 150s`)),
@@ -1240,31 +1317,24 @@ REQUIREMENTS:
         };
       } catch (err) {
         console.warn(`    [${category}] Topic "${topic.name}" failed: ${err.message}`);
-        // Fall back to Gemini instead of dropping the topic
+        // Fall back to Perplexity instead of dropping the topic
         try {
-          console.log(`    [${category}] Falling back to Gemini for "${topic.name}"...`);
-          const geminiResult = await Promise.race([
-            callGemini(queryContext, { maxTokens: 8192, temperature: 0.3 }),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error('Gemini fallback timed out')), 90000)
-            ),
-          ]);
-          const geminiContent =
-            typeof geminiResult === 'string' ? geminiResult : geminiResult?.content || '';
-          if (geminiContent.length > 100) {
+          console.log(`    [${category}] Falling back to Perplexity for "${topic.name}"...`);
+          const perplexityResult = await callPerplexityResearch(queryContext, country, industry);
+          if (perplexityResult.content && perplexityResult.content.length > 100) {
             console.log(
-              `    [${category}] Gemini fallback successful for "${topic.name}": ${geminiContent.length} chars`
+              `    [${category}] Perplexity fallback successful for "${topic.name}": ${perplexityResult.content.length} chars`
             );
             return {
               key: `${category}_${idx}_${topic.name.replace(/\s+/g, '_').toLowerCase()}`,
               name: topic.name,
-              content: geminiContent,
-              citations: [],
+              content: perplexityResult.content,
+              citations: perplexityResult.citations || [],
             };
           }
         } catch (fallbackErr) {
           console.warn(
-            `    [${category}] Gemini fallback also failed for "${topic.name}": ${fallbackErr.message}`
+            `    [${category}] Perplexity fallback also failed for "${topic.name}": ${fallbackErr.message}`
           );
         }
         return { key: `${category}_${idx}_failed`, name: topic.name, content: '', citations: [] };

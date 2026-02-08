@@ -36,7 +36,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     title: 'YCP_MAIN',
     background: { color: 'FFFFFF' },
     objects: [
-      { line: { x: 0.376, y: 0.73, w: 12.586, h: 0, line: { color: '293F55', width: 3 } } },
+      { line: { x: 0.376, y: 0.9, w: 12.586, h: 0, line: { color: '1F497D', width: 2.5 } } },
     ],
   });
 
@@ -46,10 +46,10 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
 
   // YCP Theme Colors (matching ppt-single-country.js)
   const COLORS = {
-    headerLine: '1B2A4A',
-    accent3: '1B2A4A',
-    accent1: '3C57FE',
-    dk2: '1B2A4A',
+    headerLine: '1F497D',
+    accent3: '1F497D',
+    accent1: '007FFF',
+    dk2: '1F497D',
     white: 'FFFFFF',
     black: '000000',
     gray: 'D6D7D9',
@@ -80,13 +80,13 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   // Standard slide layout with title, subtitle (header line provided by YCP_MAIN master)
   function addSlide(title, subtitle = '') {
     const slide = pptx.addSlide({ masterName: 'YCP_MAIN' });
-    // Title - 20pt bold navy
+    // Title - 24pt bold navy
     slide.addText(truncateTitle(title), {
       x: LEFT_MARGIN,
       y: 0.049,
       w: CONTENT_WIDTH,
       h: 0.7,
-      fontSize: 20,
+      fontSize: 24,
       bold: true,
       color: COLORS.dk2,
       fontFace: FONT,
@@ -94,14 +94,14 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       wrap: true,
     });
     // Header line is provided by YCP_MAIN master — no manual line needed
-    // Message/subtitle - 11pt blue (the "so what")
+    // Message/subtitle - 14pt blue (the "so what")
     if (subtitle) {
       slide.addText(subtitle, {
         x: LEFT_MARGIN,
         y: 0.78,
         w: CONTENT_WIDTH,
         h: 0.3,
-        fontSize: 11,
+        fontSize: 14,
         color: COLORS.accent1,
         fontFace: FONT,
       });
@@ -217,7 +217,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     fontSize: 12,
     fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
-    colW: [2.0, 2.5, 2.5, 2.3],
+    colW: [2.69, 3.36, 3.36, 3.09],
     valign: 'top',
   });
 
@@ -516,7 +516,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     fontSize: 11,
     fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
-    colW: [1.8, 1.3, 2.5, 3.7],
+    colW: [2.42, 1.75, 3.36, 4.97],
     valign: 'top',
   });
   // Next steps
@@ -614,10 +614,10 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       y: 1.467,
       w: CONTENT_WIDTH,
       h: 4.7,
-      fontSize: 14,
+      fontSize: 11,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
-      colW: [2.0, 7.3],
+      colW: [2.69, 9.81],
       valign: 'top',
     });
 
@@ -682,7 +682,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       fontSize: 11,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
-      colW: [2.0, 7.3],
+      colW: [2.69, 9.81],
       valign: 'top',
     });
 
@@ -786,7 +786,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       fontSize: 10,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
-      colW: [2.5, 1.0, 5.8],
+      colW: [3.36, 1.34, 7.8],
       valign: 'top',
     });
 
