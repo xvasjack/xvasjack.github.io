@@ -1092,12 +1092,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       headerCols = ['Company', 'Origin', 'Mode', 'Description'];
       defaultColW = [1.8, 1.2, 1.2, 8.3];
       rowBuilder = (p) => {
-        // Build description with revenue and entryYear prepended
+        // Build description with revenue and entryYear prepended (skip if already in description)
         const descParts = [];
-        if (p.revenue) descParts.push(`Revenue: ${safeCell(p.revenue)}.`);
-        if (p.entryYear) descParts.push(`Entered: ${safeCell(p.entryYear)}.`);
         const baseDesc =
           safeCell(p.description) || `${safeCell(p.success)} ${safeCell(p.projects)}`.trim() || '';
+        if (p.revenue && !baseDesc.includes(safeCell(p.revenue)))
+          descParts.push(`Revenue: ${safeCell(p.revenue)}.`);
+        if (p.entryYear && !baseDesc.includes(safeCell(p.entryYear)))
+          descParts.push(`Entered: ${safeCell(p.entryYear)}.`);
         if (baseDesc) descParts.push(baseDesc);
         const desc = descParts.join(' ');
         return [
@@ -1141,11 +1143,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       headerCols = ['Company', 'Presence', 'Description'];
       defaultColW = [2.0, 1.5, 9.0];
       rowBuilder = (p) => {
-        // Build description with revenue and entryYear prepended
+        // Build description with revenue and entryYear prepended (skip if already in description)
         const descParts = [];
-        if (p.revenue) descParts.push(`Revenue: ${safeCell(p.revenue)}.`);
-        if (p.entryYear) descParts.push(`Entered: ${safeCell(p.entryYear)}.`);
         const baseDesc = safeCell(p.description) || safeCell(p.projects) || safeCell(p.assessment);
+        if (p.revenue && (!baseDesc || !baseDesc.includes(safeCell(p.revenue))))
+          descParts.push(`Revenue: ${safeCell(p.revenue)}.`);
+        if (p.entryYear && (!baseDesc || !baseDesc.includes(safeCell(p.entryYear))))
+          descParts.push(`Entered: ${safeCell(p.entryYear)}.`);
         if (baseDesc) descParts.push(baseDesc);
         const desc = descParts.join(' ');
         return [
@@ -1844,7 +1848,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       return;
     } else {
       const optRows = [
-        tableHeader(['Option', 'Timeline', 'Investment', 'Control', 'Risk', 'Key Pros']),
+        tableHeader(['Option', 'Timeline', 'Investment', 'Control', 'Risk', 'Pros', 'Cons']),
       ];
       options.forEach((opt) => {
         optRows.push([
@@ -1858,8 +1862,18 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
               safeArray(opt.pros, 5)
                 .map((p) => safeCell(p))
                 .join('; '),
-              40
+              35
             ),
+            options: { fontSize: 9 },
+          },
+          {
+            text: truncate(
+              safeArray(opt.cons, 5)
+                .map((c) => safeCell(c))
+                .join('; '),
+              35
+            ),
+            options: { fontSize: 9 },
           },
         ]);
       });
@@ -1873,7 +1887,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         fontSize: 10,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
-        colW: optColWidths.length > 0 ? optColWidths : [1.8, 1.5, 1.8, 1.8, 1.3, 4.3],
+        colW: optColWidths.length > 0 ? optColWidths : [1.5, 1.3, 1.5, 1.3, 1.1, 2.9, 2.9],
         valign: 'top',
       });
       entryNextY = 1.3 + optTableH + 0.15;
@@ -2199,19 +2213,31 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
     const ratings = data.ratings || {};
     if (ratings.attractiveness || ratings.feasibility) {
-      slide.addText(
-        `Attractiveness: ${ratings.attractiveness || 'N/A'}/10 | Feasibility: ${ratings.feasibility || 'N/A'}/10`,
-        {
-          x: LEFT_MARGIN,
-          y: CONTENT_BOTTOM - 1.1,
-          w: CONTENT_WIDTH,
-          h: 0.25,
-          fontSize: 12,
-          bold: true,
-          color: COLORS.dk2,
-          fontFace: FONT,
-        }
-      );
+      // Build rating text parts with rationale
+      const ratingParts = [];
+      ratingParts.push({
+        text: `Attractiveness: ${ratings.attractiveness || 'N/A'}/10 | Feasibility: ${ratings.feasibility || 'N/A'}/10`,
+        options: { fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT },
+      });
+      const rationale = [];
+      if (ratings.attractivenessRationale)
+        rationale.push(`Attractiveness: ${ensureString(ratings.attractivenessRationale)}`);
+      if (ratings.feasibilityRationale)
+        rationale.push(`Feasibility: ${ensureString(ratings.feasibilityRationale)}`);
+      if (rationale.length > 0) {
+        ratingParts.push({
+          text: '\n' + truncateWords(rationale.join(' | '), 40),
+          options: { fontSize: 9, color: '666666', fontFace: FONT },
+        });
+      }
+      const ratingH = rationale.length > 0 ? 0.5 : 0.25;
+      slide.addText(ratingParts, {
+        x: LEFT_MARGIN,
+        y: CONTENT_BOTTOM - (rationale.length > 0 ? 1.3 : 1.1),
+        w: CONTENT_WIDTH,
+        h: ratingH,
+        valign: 'top',
+      });
     }
     // Show recommendation only if real data exists
     if (data.recommendation) {
