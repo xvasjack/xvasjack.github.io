@@ -383,6 +383,25 @@ Return ONLY valid JSON. Use null for missing fields.`;
 }
 
 /**
+ * Mark low-confidence research data with quality labels in the prompt context.
+ * Topics with dataQuality "low" or "incomplete" get prefixed so the AI model hedges appropriately.
+ */
+function markDataQuality(filteredData) {
+  const marked = {};
+  for (const [key, value] of Object.entries(filteredData)) {
+    const quality = value?.dataQuality;
+    if (quality === 'low' || quality === 'estimated') {
+      marked[`[ESTIMATED] ${key}`] = value;
+    } else if (quality === 'incomplete') {
+      marked[`[UNVERIFIED] ${key}`] = value;
+    } else {
+      marked[key] = value;
+    }
+  }
+  return marked;
+}
+
+/**
  * Synthesize POLICY section with depth requirements
  */
 async function synthesizePolicy(researchData, country, industry, clientContext) {
@@ -403,9 +422,10 @@ async function synthesizePolicy(researchData, country, industry, clientContext) 
     `    [Policy] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE'})`
   );
 
+  const labeledData = markDataQuality(filteredData);
   const researchContext = dataAvailable
-    ? `RESEARCH DATA (use this as primary source):
-${JSON.stringify(filteredData, null, 2)}`
+    ? `RESEARCH DATA (use this as primary source — items prefixed [ESTIMATED] or [UNVERIFIED] are uncertain, hedge accordingly):
+${JSON.stringify(labeledData, null, 2)}`
     : `RESEARCH DATA: EMPTY due to API issues.`;
 
   const prompt = `You are synthesizing policy and regulatory research for ${country}'s ${industry} market.
@@ -419,6 +439,12 @@ If research data is insufficient for a field, set the value to:
 - For numbers: null
 DO NOT fabricate data. DO NOT estimate from training knowledge.
 The quality gate will handle missing data appropriately.
+
+ANTI-PADDING RULE:
+- Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
+- If you cannot find ${industry}-specific data for a field, use the null/empty value — do NOT fill it with country-level macro data
+- Example: If asked for "ESCO market size" and you only know "Thailand GDP is $500B" — return null, not the GDP figure
+- Macro data is ONLY acceptable in contextual/background fields explicitly labeled as such
 
 RULES:
 - Only use data from the INPUT DATA above
@@ -487,9 +513,10 @@ async function synthesizeMarket(researchData, country, industry, clientContext) 
     `    [Market] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE'})`
   );
 
+  const labeledData = markDataQuality(filteredData);
   const researchContext = dataAvailable
-    ? `RESEARCH DATA (use this as primary source):
-${JSON.stringify(filteredData, null, 2)}`
+    ? `RESEARCH DATA (use this as primary source — items prefixed [ESTIMATED] or [UNVERIFIED] are uncertain, hedge accordingly):
+${JSON.stringify(labeledData, null, 2)}`
     : `RESEARCH DATA: EMPTY due to API issues.`;
 
   const prompt = `You are synthesizing market data research for ${country}'s ${industry} market.
@@ -503,6 +530,12 @@ If research data is insufficient for a field, set the value to:
 - For numbers: null
 DO NOT fabricate data. DO NOT estimate from training knowledge.
 The quality gate will handle missing data appropriately.
+
+ANTI-PADDING RULE:
+- Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
+- If you cannot find ${industry}-specific data for a field, use the null/empty value — do NOT fill it with country-level macro data
+- Example: If asked for "ESCO market size" and you only know "Thailand GDP is $500B" — return null, not the GDP figure
+- Macro data is ONLY acceptable in contextual/background fields explicitly labeled as such
 
 RULES:
 - Only use data from the INPUT DATA above
@@ -596,9 +629,10 @@ async function synthesizeCompetitors(researchData, country, industry, clientCont
     `    [Competitors] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE'})`
   );
 
+  const labeledData = markDataQuality(filteredData);
   const researchContext = dataAvailable
-    ? `RESEARCH DATA (use this as primary source):
-${JSON.stringify(filteredData, null, 2)}`
+    ? `RESEARCH DATA (use this as primary source — items prefixed [ESTIMATED] or [UNVERIFIED] are uncertain, hedge accordingly):
+${JSON.stringify(labeledData, null, 2)}`
     : `RESEARCH DATA: EMPTY due to API issues.`;
 
   const prompt = `You are synthesizing competitive intelligence for ${country}'s ${industry} market.
@@ -612,6 +646,12 @@ If research data is insufficient for a field, set the value to:
 - For numbers: null
 DO NOT fabricate data. DO NOT estimate from training knowledge.
 The quality gate will handle missing data appropriately.
+
+ANTI-PADDING RULE:
+- Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
+- If you cannot find ${industry}-specific data for a field, use the null/empty value — do NOT fill it with country-level macro data
+- Example: If asked for "ESCO market size" and you only know "Thailand GDP is $500B" — return null, not the GDP figure
+- Macro data is ONLY acceptable in contextual/background fields explicitly labeled as such
 
 RULES:
 - Only use data from the INPUT DATA above
@@ -751,9 +791,9 @@ async function synthesizeSummary(
 Client context: ${clientContext}
 
 SYNTHESIZED SECTIONS (already processed):
-Policy: ${summarizeForSummary(policy, 'policy', 2000)}
-Market: ${summarizeForSummary(market, 'market', 3000)}
-Competitors: ${summarizeForSummary(competitors, 'competitors', 2000)}
+Policy: ${summarizeForSummary(policy, 'policy', 4000)}
+Market: ${summarizeForSummary(market, 'market', 5000)}
+Competitors: ${summarizeForSummary(competitors, 'competitors', 4000)}
 
 Additional research context:
 ${Object.entries(researchData)
@@ -774,6 +814,12 @@ If research data is insufficient for a field, set the value to:
 - For numbers: null
 DO NOT fabricate data. DO NOT estimate from training knowledge.
 The quality gate will handle missing data appropriately.
+
+ANTI-PADDING RULE:
+- Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
+- If you cannot find ${industry}-specific data for a field, use the null/empty value — do NOT fill it with country-level macro data
+- Example: If asked for "ESCO market size" and you only know "Thailand GDP is $500B" — return null, not the GDP figure
+- Macro data is ONLY acceptable in contextual/background fields explicitly labeled as such
 
 RULES:
 - Only use data from the INPUT DATA above
@@ -1104,14 +1150,48 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
       return originalSynthesis;
     }
 
+    // Ensure depth and summary sections are preserved — if AI dropped them, recover from original
+    if (
+      originalSynthesis.depth &&
+      typeof originalSynthesis.depth === 'object' &&
+      !newSynthesis.depth
+    ) {
+      console.warn(
+        '  [reSynthesize] depth section missing from re-synthesis — recovering from original'
+      );
+      newSynthesis.depth = originalSynthesis.depth;
+    }
+    if (
+      originalSynthesis.summary &&
+      typeof originalSynthesis.summary === 'object' &&
+      !newSynthesis.summary
+    ) {
+      console.warn(
+        '  [reSynthesize] summary section missing from re-synthesis — recovering from original'
+      );
+      newSynthesis.summary = originalSynthesis.summary;
+    }
+
+    // Re-synthesis verification: count how many top-level sections actually changed
+    const sectionsToCheck = ['policy', 'market', 'competitors', 'depth', 'summary'];
+    let changedFields = 0;
+    for (const section of sectionsToCheck) {
+      const oldJson = JSON.stringify(originalSynthesis[section] || {});
+      const newJson = JSON.stringify(newSynthesis[section] || {});
+      if (oldJson !== newJson) changedFields++;
+    }
+    if (changedFields < 2) {
+      console.warn(
+        `  [reSynthesize] Re-synthesis produced minimal changes (${changedFields} fields updated)`
+      );
+    }
+
     // Preserve country field and metadata from original
     newSynthesis.country = country;
     const preserved = {
       rawData: originalSynthesis.rawData,
       contentValidation: originalSynthesis.contentValidation,
       metadata: originalSynthesis.metadata,
-      depth: originalSynthesis.depth,
-      summary: originalSynthesis.summary,
     };
     Object.assign(newSynthesis, preserved);
     return newSynthesis;
@@ -1158,7 +1238,8 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         country,
         industry,
         clientContext,
-        scope.projectType
+        scope.projectType,
+        pipelineSignal
       )
     );
 
@@ -1214,12 +1295,12 @@ async function researchCountry(country, industry, clientContext, scope = null) {
 
     const [policyData, marketData, competitorData, contextData, depthData, insightsData] =
       await Promise.all([
-        policyResearchAgent(country, industry, clientContext),
-        marketResearchAgent(country, industry, clientContext),
-        competitorResearchAgent(country, industry, clientContext),
-        contextResearchAgent(country, industry, clientContext),
-        depthResearchAgent(country, industry, clientContext),
-        insightsResearchAgent(country, industry, clientContext),
+        policyResearchAgent(country, industry, clientContext, pipelineSignal),
+        marketResearchAgent(country, industry, clientContext, pipelineSignal),
+        competitorResearchAgent(country, industry, clientContext, pipelineSignal),
+        contextResearchAgent(country, industry, clientContext, pipelineSignal),
+        depthResearchAgent(country, industry, clientContext, pipelineSignal),
+        insightsResearchAgent(country, industry, clientContext, pipelineSignal),
       ]);
 
     // Merge all agent results
@@ -1343,7 +1424,9 @@ async function researchCountry(country, industry, clientContext, scope = null) {
           industry,
           clientContext
         );
-        if (
+        if (countryAnalysis.policy?._synthesisError && newPolicy && !newPolicy._synthesisError) {
+          countryAnalysis.policy = newPolicy;
+        } else if (
           newPolicy.foundationalActs?.acts?.length >
           (countryAnalysis.policy.foundationalActs?.acts?.length || 0)
         ) {
@@ -1364,7 +1447,11 @@ async function researchCountry(country, industry, clientContext, scope = null) {
           industry,
           clientContext
         );
-        countryAnalysis.market = { ...countryAnalysis.market, ...newMarket };
+        if (countryAnalysis.market?._synthesisError && newMarket && !newMarket._synthesisError) {
+          countryAnalysis.market = newMarket;
+        } else {
+          countryAnalysis.market = { ...countryAnalysis.market, ...newMarket };
+        }
       }
       if (validation.scores.competitors < 50) {
         const newComp = await synthesizeCompetitors(
@@ -1380,7 +1467,11 @@ async function researchCountry(country, industry, clientContext, scope = null) {
           industry,
           clientContext
         );
-        countryAnalysis.competitors = { ...countryAnalysis.competitors, ...newComp };
+        if (countryAnalysis.competitors?._synthesisError && newComp && !newComp._synthesisError) {
+          countryAnalysis.competitors = newComp;
+        } else {
+          countryAnalysis.competitors = { ...countryAnalysis.competitors, ...newComp };
+        }
       }
 
       // Re-validate
@@ -1394,6 +1485,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         pipelineController.abort();
         countryAnalysis.aborted = true;
         countryAnalysis.abortReason = `Content depth ${revalidation.scores.overall}/100 after retry. Failures: ${revalidation.failures.join('; ')}`;
+        return countryAnalysis;
       }
     }
   }
@@ -1416,6 +1508,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   let readyForClient = false;
 
   while (iteration < MAX_ITERATIONS && !readyForClient) {
+    if (countryAnalysis.aborted) break;
     iteration++;
     console.log(`\n  [REFINEMENT ${iteration}/${MAX_ITERATIONS}] Analyzing quality...`);
 
@@ -1543,7 +1636,16 @@ Every claim needs evidence:
 - DATES: When laws took effect, when incentives expire, when competitors entered
 - SOURCES: If claiming a specific number, it should be traceable
 
-If you don't have specific data, say "estimated" or "industry sources suggest" - don't invent precision.`;
+If you don't have specific data, say "estimated" or "industry sources suggest" - don't invent precision.
+
+=== ANTI-PADDING RULE ===
+- Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
+- If you cannot find ${scope.industry}-specific data for a field, use the null/empty value — do NOT fill it with country-level macro data
+- Example: If asked for "ESCO market size" and you only know "Thailand GDP is $500B" — return null, not the GDP figure
+- Macro data is ONLY acceptable in contextual/background fields explicitly labeled as such
+
+=== ANTI-PADDING VALIDATION ===
+VALIDATION: Before returning, count how many times you used GDP, population, or inflation data. If more than 2 mentions in industry-specific sections (market, competitors, depth), you are padding. Remove those and replace with industry-specific data or null.`;
 
   const prompt = `Client: ${scope.clientContext}
 Industry: ${scope.industry}
@@ -1587,34 +1689,6 @@ Return JSON with:
     "risks": "specific regulatory risks with likelihood and mitigation"
   },
 
-  "entryStrategyOptions": {
-    "optionA": {
-      "name": "short descriptive name",
-      "description": "2-3 sentences on the approach",
-      "pros": "3 specific advantages with evidence",
-      "cons": "3 specific disadvantages with severity",
-      "investmentRequired": "$ estimate with breakdown",
-      "timeToRevenue": "months with assumptions"
-    },
-    "optionB": {
-      "name": "genuinely different approach",
-      "description": "...",
-      "pros": "...",
-      "cons": "...",
-      "investmentRequired": "...",
-      "timeToRevenue": "..."
-    },
-    "optionC": {
-      "name": "third distinct approach",
-      "description": "...",
-      "pros": "...",
-      "cons": "...",
-      "investmentRequired": "...",
-      "timeToRevenue": "..."
-    },
-    "recommendedOption": "which option and WHY - tie back to client's specific situation, risk tolerance, timeline, capabilities"
-  },
-
   "keyInsights": [
     {
       "title": "Max 10 words. The non-obvious conclusion. Example: 'Labor cost pressure makes energy savings an HR priority'",
@@ -1629,28 +1703,7 @@ Return JSON with:
     "GOOD: 'Southern Thailand's grid congestion (transmission capacity 85% utilized) blocks new solar projects, creating captive demand for on-site efficiency solutions in the $2.1B EEC industrial corridor. Recommend targeting EEC zone manufacturers in Q1 2026 before Phase 4 expansion (Dec 2026) when grid upgrades reduce urgency.'"
   ],
 
-  "implementationRoadmap": {
-    "phase1": ["3-5 specific actions for months 0-6 - just the action, no month prefix"],
-    "phase2": ["3-5 specific actions for months 6-12 that BUILD on phase 1"],
-    "phase3": ["3-5 specific actions for months 12-24 with revenue milestones"]
-  },
-
-  "riskAssessment": {
-    "criticalRisks": [
-      {"risk": "specific risk", "likelihood": "high/medium/low", "impact": "description", "mitigation": "specific countermeasure"}
-    ],
-    "goNoGoCriteria": ["specific, measurable criteria that must be true to proceed - not vague conditions"]
-  },
-
-  "nextSteps": ["5 specific actions to take THIS WEEK with owner and deliverable"],
-
-  "slideHeadlines": {
-    "summary": "THE HOOK. Max 8 words. What's the opportunity? Example: '$160M market, no foreign winner yet'",
-    "marketData": "THE SIZE. Max 8 words. How big? Example: '1,200 factories spending $500K each on electricity'",
-    "competition": "THE GAP. Max 8 words. Where's the opening? Example: 'Local giants need foreign technology partners'",
-    "regulation": "THE RULES. Max 8 words. What's required? Example: 'Need Thai partner, but tax breaks available'",
-    "risks": "THE WATCH-OUTS. Max 8 words. What could kill this? Example: 'Wrong partner choice is the biggest risk'"
-  }
+  "nextSteps": ["5 specific actions to take THIS WEEK with owner and deliverable"]
 }
 
 CRITICAL QUALITY STANDARDS:

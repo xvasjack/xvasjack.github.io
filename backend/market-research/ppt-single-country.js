@@ -88,7 +88,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     title: 'YCP_MAIN',
     background: { color: 'FFFFFF' },
     objects: [
-      { line: { x: 0.376, y: 0.73, w: 12.586, h: 0, line: { color: '293F55', width: 3 } } },
+      { line: { x: 0.376, y: 0.9, w: 12.586, h: 0, line: { color: '1F497D', width: 2.5 } } },
     ],
   });
 
@@ -273,37 +273,33 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     // Use YCP_MAIN master (has header line built in)
     const slide = pptx.addSlide({ masterName: 'YCP_MAIN' });
 
-    // Title + subtitle as single text shape to avoid overlap detection
-    const titleParts = [
-      {
-        text: truncateTitle(title),
-        options: {
-          fontSize: 20,
-          bold: true,
-          color: '000000',
-          fontFace: FONT,
-        },
-      },
-    ];
+    // Title shape
+    slide.addText(truncateTitle(title), {
+      x: LEFT_MARGIN,
+      y: 0.15,
+      w: CONTENT_WIDTH,
+      h: 0.7,
+      fontSize: 24,
+      bold: true,
+      color: '1F497D',
+      fontFace: FONT,
+      valign: 'top',
+    });
+    // Subtitle as separate shape
     if (subtitle) {
       const dataQualityIndicator =
         options.dataQuality === 'estimated' ? ' *' : options.dataQuality === 'low' ? ' +' : '';
-      titleParts.push({
-        text: '\n' + subtitle + dataQualityIndicator,
-        options: {
-          fontSize: 11,
-          color: '000000',
-          fontFace: FONT,
-        },
+      slide.addText(subtitle + dataQualityIndicator, {
+        x: LEFT_MARGIN,
+        y: 0.95,
+        w: CONTENT_WIDTH,
+        h: 0.3,
+        fontSize: 14,
+        color: '007FFF',
+        fontFace: FONT,
+        valign: 'top',
       });
     }
-    slide.addText(titleParts, {
-      x: LEFT_MARGIN,
-      y: 0.049,
-      w: CONTENT_WIDTH,
-      h: 0.91,
-      valign: 'top',
-    });
     // Header line is provided by YCP_MAIN master — no manual line needed
 
     // Merge data quality indicator + source citations into ONE shape to prevent overlap
@@ -1032,7 +1028,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           fontSize: 11,
           fontFace: FONT,
           border: { pt: 0.5, color: 'cccccc' },
-          colW: segColWidths.length > 0 ? segColWidths : [4.0, 2.65, 2.65],
+          colW: segColWidths.length > 0 ? segColWidths : [5.38, 3.56, 3.56],
           valign: 'top',
         });
       }
@@ -1096,10 +1092,16 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       headerCols = ['Company', 'Origin', 'Mode', 'Description'];
       defaultColW = [1.8, 1.2, 1.2, 8.3];
       rowBuilder = (p) => {
-        const desc =
-          safeCell(p.description) ||
-          `${p.entryYear ? `Entered ${safeCell(p.entryYear)}. ` : ''}${safeCell(p.success)} ${safeCell(p.projects)}`.trim() ||
-          '';
+        // Build description with revenue and entryYear prepended (skip if already in description)
+        const descParts = [];
+        const baseDesc =
+          safeCell(p.description) || `${safeCell(p.success)} ${safeCell(p.projects)}`.trim() || '';
+        if (p.revenue && !baseDesc.includes(safeCell(p.revenue)))
+          descParts.push(`Revenue: ${safeCell(p.revenue)}.`);
+        if (p.entryYear && !baseDesc.includes(safeCell(p.entryYear)))
+          descParts.push(`Entered: ${safeCell(p.entryYear)}.`);
+        if (baseDesc) descParts.push(baseDesc);
+        const desc = descParts.join(' ');
         return [
           p.website
             ? {
@@ -1116,10 +1118,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       headerCols = ['Company', 'Type', 'Revenue', 'Description'];
       defaultColW = [1.8, 1.2, 1.2, 8.3];
       rowBuilder = (p) => {
-        const desc =
+        // Build description with revenue prepended if not already in a column
+        const descParts = [];
+        const baseDesc =
           safeCell(p.description) ||
           `${safeCell(p.strengths)} ${safeCell(p.weaknesses)}`.trim() ||
           '';
+        if (baseDesc) descParts.push(baseDesc);
+        const desc = descParts.join(' ');
         return [
           p.website
             ? {
@@ -1137,7 +1143,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       headerCols = ['Company', 'Presence', 'Description'];
       defaultColW = [2.0, 1.5, 9.0];
       rowBuilder = (p) => {
-        const desc = safeCell(p.description) || safeCell(p.projects) || safeCell(p.assessment);
+        // Build description with revenue and entryYear prepended (skip if already in description)
+        const descParts = [];
+        const baseDesc = safeCell(p.description) || safeCell(p.projects) || safeCell(p.assessment);
+        if (p.revenue && (!baseDesc || !baseDesc.includes(safeCell(p.revenue))))
+          descParts.push(`Revenue: ${safeCell(p.revenue)}.`);
+        if (p.entryYear && (!baseDesc || !baseDesc.includes(safeCell(p.entryYear))))
+          descParts.push(`Entered: ${safeCell(p.entryYear)}.`);
+        if (baseDesc) descParts.push(baseDesc);
+        const desc = descParts.join(' ');
         return [
           p.website
             ? {
@@ -1166,8 +1180,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       border: { pt: 0.5, color: 'cccccc' },
       colW: colWidths.length > 0 ? colWidths : defaultColW,
       valign: 'top',
-      autoPage: true,
-      autoPageRepeatHeader: true,
+      autoPage: false,
     });
 
     // Add insights below table
@@ -1182,7 +1195,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       });
     }
     // Add synthesis-driven competitive insight if available (fallback to countryAnalysis)
-    const compRecoY = compInsights.length > 0 ? compInsightY + 0.65 + 0.1 : compInsightY;
+    let compRecoY = compInsights.length > 0 ? compInsightY + 0.65 + 0.1 : compInsightY;
     const whiteSpaces =
       enrichment.competitivePositioning?.whiteSpaces ||
       countryAnalysis?.summary?.competitivePositioning?.whiteSpaces ||
@@ -1198,6 +1211,40 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         Array.isArray(whiteSpaces) ? whiteSpaces.join('. ') : String(whiteSpaces),
         { x: LEFT_MARGIN, y: compRecoY, w: CONTENT_WIDTH, h: 0.5, type: 'insight' }
       );
+      compRecoY += 0.5 + 0.1;
+    }
+
+    // Strategic assessment panel: show top 2-3 players' strategicAssessment
+    const playersWithAssessment = players.filter((p) => p.strategicAssessment).slice(0, 3);
+    if (playersWithAssessment.length > 0 && compRecoY < CONTENT_BOTTOM - 0.5) {
+      const assessmentParts = [];
+      playersWithAssessment.forEach((p, idx) => {
+        if (idx > 0) {
+          assessmentParts.push({
+            text: '\n',
+            options: { fontSize: 9, color: '444444', fontFace: FONT },
+          });
+        }
+        assessmentParts.push({
+          text: ensureString(p.name) + ': ',
+          options: { fontSize: 9, bold: true, color: '444444', fontFace: FONT },
+        });
+        assessmentParts.push({
+          text: truncateWords(ensureString(p.strategicAssessment), 40),
+          options: { fontSize: 9, color: '444444', fontFace: FONT },
+        });
+      });
+      const assessH = Math.min(clampH(compRecoY, 1.2), 0.3 + playersWithAssessment.length * 0.3);
+      slide.addText(assessmentParts, {
+        x: LEFT_MARGIN,
+        y: compRecoY,
+        w: CONTENT_WIDTH,
+        h: assessH,
+        fill: { color: 'F5F5F5' },
+        line: { color: 'D6D7D9', pt: 0.5 },
+        margin: [4, 8, 4, 8],
+        valign: 'top',
+      });
     }
   }
 
@@ -1300,11 +1347,17 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (acts.length > 0) {
       const actsRows = [tableHeader(['Act Name', 'Year', 'Requirements', 'Enforcement'])];
       acts.forEach((act) => {
+        // Combine penalties into requirements cell to preserve table width
+        let reqText = safeCell(act.requirements, 80);
+        const penaltiesText = ensureString(act.penalties);
+        if (penaltiesText) {
+          reqText += `\nPenalties: ${truncate(penaltiesText, 40)}`;
+        }
         actsRows.push([
           { text: safeCell(act.name, 25) },
           { text: safeCell(act.year) },
-          { text: safeCell(act.requirements, 50) },
-          { text: safeCell(act.enforcement, 40) },
+          { text: reqText },
+          { text: safeCell(act.enforcement, 80) },
         ]);
       });
       const actsTableH = safeTableHeight(actsRows.length, { maxH: 4.5 });
@@ -1316,12 +1369,28 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         fontSize: 12,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
-        colW: [2.2, 0.8, 3.3, 3.0],
+        colW: [2.96, 1.08, 4.43, 4.03],
         valign: 'top',
-        autoPage: true,
+        autoPage: false,
       });
+      // Key message summary below table if available
+      let actsNextY = 1.3 + actsTableH + 0.15;
+      const keyMessage = ensureString(data.keyMessage);
+      if (keyMessage && actsNextY < CONTENT_BOTTOM - 0.5) {
+        slide.addText(truncate(keyMessage, 150), {
+          x: LEFT_MARGIN,
+          y: actsNextY,
+          w: CONTENT_WIDTH,
+          h: 0.35,
+          fontSize: 9,
+          italic: true,
+          color: '666666',
+          fontFace: FONT,
+        });
+        actsNextY += 0.4;
+      }
       // Synthesis-driven regulatory insight if available (fallback to countryAnalysis)
-      const actsRecoY = 1.3 + actsTableH + 0.15 + 0.7 + 0.1;
+      const actsRecoY = actsNextY + 0.7 + 0.1;
       const keyRegulations =
         enrichment.regulatoryPathway?.keyRegulations ||
         countryAnalysis?.summary?.regulatoryPathway?.keyRegulations ||
@@ -1366,7 +1435,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         fontSize: 11,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
-        colW: [3.0, 2.3, 2.0, 2.0],
+        colW: [4.03, 3.09, 2.69, 2.69],
         valign: 'top',
       });
       policyNextY = 1.3 + policyTableH + 0.15;
@@ -1441,7 +1510,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         fontSize: 11,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
-        colW: [2.5, 1.5, 5.3],
+        colW: [3.36, 2.02, 7.12],
         valign: 'top',
       });
       investNextY = 1.3 + ownerTableH + 0.15;
@@ -1467,7 +1536,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         fontSize: 11,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
-        colW: [2.5, 2.5, 4.3],
+        colW: [3.36, 3.36, 5.78],
         valign: 'top',
       });
       investNextY = investNextY + incTableH + 0.15;
@@ -1488,7 +1557,21 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         color: riskColor,
         fontFace: FONT,
       });
-      investNextY += 0.5;
+      investNextY += 0.45;
+      // Show riskJustification below the risk level label
+      const riskJustification = ensureString(data.riskJustification);
+      if (riskJustification && investNextY < CONTENT_BOTTOM - 0.4) {
+        slide.addText(truncate(riskJustification, 150), {
+          x: LEFT_MARGIN,
+          y: investNextY,
+          w: CONTENT_WIDTH,
+          h: 0.35,
+          fontSize: 9,
+          color: '666666',
+          fontFace: FONT,
+        });
+        investNextY += 0.4;
+      }
     }
     const regRisks =
       enrichment.regulatoryPathway?.risks ||
@@ -1593,7 +1676,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         fontSize: 10,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
-        colW: dealColWidths.length > 0 ? dealColWidths : [0.8, 1.8, 1.8, 1.5, 3.4],
+        colW: dealColWidths.length > 0 ? dealColWidths : [1.08, 2.42, 2.42, 2.02, 4.56],
         valign: 'top',
       });
       maNextY += dealTableH + 0.15;
@@ -1636,7 +1719,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         fontSize: 10,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
-        colW: targetColWidths.length > 0 ? targetColWidths : [2.0, 1.5, 4.0, 1.8],
+        colW: targetColWidths.length > 0 ? targetColWidths : [2.69, 2.02, 5.38, 2.41],
         valign: 'top',
       });
       maNextY += maTargetTableH + 0.15;
@@ -1764,7 +1847,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       return;
     } else {
       const optRows = [
-        tableHeader(['Option', 'Timeline', 'Investment', 'Control', 'Risk', 'Key Pros']),
+        tableHeader(['Option', 'Timeline', 'Investment', 'Control', 'Risk', 'Pros', 'Cons']),
       ];
       options.forEach((opt) => {
         optRows.push([
@@ -1778,8 +1861,18 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
               safeArray(opt.pros, 5)
                 .map((p) => safeCell(p))
                 .join('; '),
-              40
+              35
             ),
+            options: { fontSize: 9 },
+          },
+          {
+            text: truncate(
+              safeArray(opt.cons, 5)
+                .map((c) => safeCell(c))
+                .join('; '),
+              35
+            ),
+            options: { fontSize: 9 },
           },
         ]);
       });
@@ -1793,7 +1886,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         fontSize: 10,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
-        colW: optColWidths.length > 0 ? optColWidths : [1.8, 1.5, 1.8, 1.8, 1.3, 4.3],
+        colW: optColWidths.length > 0 ? optColWidths : [1.5, 1.3, 1.5, 1.3, 1.1, 2.9, 2.9],
         valign: 'top',
       });
       entryNextY = 1.3 + optTableH + 0.15;
@@ -1846,7 +1939,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         fontSize: 9,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
-        colW: harveyColWidths.length > 0 ? harveyColWidths : [2.5, 2.3, 2.25, 2.25],
+        colW: harveyColWidths.length > 0 ? harveyColWidths : [3.36, 3.09, 3.02, 3.03],
         valign: 'middle',
       });
     }
@@ -1855,14 +1948,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   function renderImplementation(slide, data) {
     const phases = safeArray(data.phases, 3);
     if (phases.length > 0) {
-      // Phases as table
+      // Phases as table with distinct colors per phase
+      const phaseColors = ['007FFF', '2E7D32', 'E46C0A'];
       const phaseRows = [
-        phases.map((phase) => ({
+        phases.map((phase, pi) => ({
           text: phase.name || 'Phase',
           options: {
             bold: true,
             color: 'FFFFFF',
-            fill: { color: COLORS.accent1 },
+            fill: { color: phaseColors[pi % phaseColors.length] },
             align: 'center',
             fontSize: 10,
           },
@@ -1872,7 +1966,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             safeArray(phase.activities, 3)
               .map((a) => `- ${truncate(a, 35)}`)
               .join('\n') || 'N/A',
-          options: { fontSize: 8, valign: 'top' },
+          options: { fontSize: 9, valign: 'top' },
         })),
         phases.map((phase) => {
           const parts = [];
@@ -1882,7 +1976,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           if (phase.investment) parts.push(`Investment: ${phase.investment}`);
           return {
             text: parts.join('\n') || '',
-            options: { fontSize: 8, color: COLORS.dk2, bold: true },
+            options: { fontSize: 9, color: '808080', bold: false },
           };
         }),
       ];
@@ -2018,7 +2112,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         fontSize: 9,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
-        colW: targetColWidths.length > 0 ? targetColWidths : [2.5, 2.3, 2.25, 2.25],
+        colW: targetColWidths.length > 0 ? targetColWidths : [3.36, 3.09, 3.02, 3.03],
         valign: 'top',
       });
     }
@@ -2051,7 +2145,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         fontSize: 11,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
-        colW: [3.0, 0.8, 5.5],
+        colW: [4.03, 1.08, 7.39],
         valign: 'top',
       });
     }
@@ -2118,19 +2212,31 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
     const ratings = data.ratings || {};
     if (ratings.attractiveness || ratings.feasibility) {
-      slide.addText(
-        `Attractiveness: ${ratings.attractiveness || 'N/A'}/10 | Feasibility: ${ratings.feasibility || 'N/A'}/10`,
-        {
-          x: LEFT_MARGIN,
-          y: CONTENT_BOTTOM - 1.1,
-          w: CONTENT_WIDTH,
-          h: 0.25,
-          fontSize: 12,
-          bold: true,
-          color: COLORS.dk2,
-          fontFace: FONT,
-        }
-      );
+      // Build rating text parts with rationale
+      const ratingParts = [];
+      ratingParts.push({
+        text: `Attractiveness: ${ratings.attractiveness || 'N/A'}/10 | Feasibility: ${ratings.feasibility || 'N/A'}/10`,
+        options: { fontSize: 12, bold: true, color: COLORS.dk2, fontFace: FONT },
+      });
+      const rationale = [];
+      if (ratings.attractivenessRationale)
+        rationale.push(`Attractiveness: ${ensureString(ratings.attractivenessRationale)}`);
+      if (ratings.feasibilityRationale)
+        rationale.push(`Feasibility: ${ensureString(ratings.feasibilityRationale)}`);
+      if (rationale.length > 0) {
+        ratingParts.push({
+          text: '\n' + truncateWords(rationale.join(' | '), 40),
+          options: { fontSize: 9, color: '666666', fontFace: FONT },
+        });
+      }
+      const ratingH = rationale.length > 0 ? 0.5 : 0.25;
+      slide.addText(ratingParts, {
+        x: LEFT_MARGIN,
+        y: CONTENT_BOTTOM - (rationale.length > 0 ? 1.3 : 1.1),
+        w: CONTENT_WIDTH,
+        h: ratingH,
+        valign: 'top',
+      });
     }
     // Show recommendation only if real data exists
     if (data.recommendation) {
@@ -2145,15 +2251,16 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
 
   // Dynamic text sizing: reduce font size before truncating
-  function dynamicText(text, maxChars, baseFontPt) {
+  function dynamicText(text, maxChars, baseFontPt, floorPt) {
+    const minPt = floorPt || 10;
     if (!text) return { text: '', fontSize: baseFontPt };
     if (text.length <= maxChars) return { text, fontSize: baseFontPt };
-    for (let fs = baseFontPt - 1; fs >= 10; fs--) {
+    for (let fs = baseFontPt - 1; fs >= minPt; fs--) {
       const scaledMax = Math.floor(maxChars * (baseFontPt / fs));
       if (text.length <= scaledMax) return { text, fontSize: fs };
     }
-    const finalMax = Math.floor(maxChars * (baseFontPt / 10));
-    return { text: text.substring(0, finalMax - 3) + '...', fontSize: 10 };
+    const finalMax = Math.floor(maxChars * (baseFontPt / minPt));
+    return { text: text.substring(0, finalMax - 3) + '...', fontSize: minPt };
   }
 
   function renderKeyInsights(slide, data) {
@@ -2173,35 +2280,44 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const finalInsights = resolvedInsights.length > 0 ? resolvedInsights : insights;
     finalInsights.forEach((insight, idx) => {
       const rawTitle =
-        typeof insight === 'string' ? `Insight ${idx + 1}` : insight.title || `Insight ${idx + 1}`;
-      const rawContent =
         typeof insight === 'string'
-          ? insight
-          : `${insight.data || ''} ${insight.pattern || ''} ${insight.implication || ''}`;
+          ? `Insight ${idx + 1}`
+          : ensureString(insight.title) || `Insight ${idx + 1}`;
+      let rawContent = '';
+      if (typeof insight === 'string') {
+        rawContent = insight;
+      } else {
+        const parts = [];
+        if (insight.data) parts.push(ensureString(insight.data));
+        if (insight.pattern) parts.push(`So what: ${ensureString(insight.pattern)}`);
+        if (insight.implication) parts.push(`Action: ${ensureString(insight.implication)}`);
+        if (insight.timing) parts.push(`Timing: ${ensureString(insight.timing)}`);
+        rawContent = parts.join('\n');
+      }
 
-      const titleSized = dynamicText(rawTitle, 70, 13);
+      const titleSized = dynamicText(rawTitle, 70, 14);
       slide.addText(titleSized.text, {
         x: LEFT_MARGIN,
         y: insightY,
         w: CONTENT_WIDTH,
-        h: 0.3,
+        h: 0.35,
         fontSize: titleSized.fontSize,
         bold: true,
-        color: COLORS.dk2,
+        color: '1F497D',
         fontFace: FONT,
       });
-      const contentSized = dynamicText(rawContent, 160, 9);
+      const contentSized = dynamicText(rawContent, 300, 11, 7);
       slide.addText(contentSized.text, {
         x: LEFT_MARGIN,
-        y: insightY + 0.3,
+        y: insightY + 0.35,
         w: CONTENT_WIDTH,
-        h: 0.9,
+        h: 1.2,
         fontSize: contentSized.fontSize,
         fontFace: FONT,
         color: COLORS.black,
         valign: 'top',
       });
-      insightY += 1.35;
+      insightY += 1.7; // step = 0.35 + 1.2 + 0.15
     });
 
     // Show recommendation only if real data exists
@@ -2209,7 +2325,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       const recoY = Math.max(insightY + 0.1, 5.2);
       addCalloutBox(slide, 'RECOMMENDATION', truncate(data.recommendation, 150), {
         y: Math.min(recoY, 6.1),
-        h: 0.7,
+        h: 1.0,
         type: 'recommendation',
       });
     }
@@ -2302,7 +2418,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         fontSize: 10,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
-        colW: [2.2, 3.5, 3.6],
+        colW: [2.96, 4.7, 4.84],
         valign: 'top',
       });
       lessonsNextY += failTableH + 0.15;
@@ -2463,21 +2579,21 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const titleSlide = pptx.addSlide({ masterName: 'NO_BAR' });
   titleSlide.addText(country.toUpperCase(), {
     x: 0.5,
-    y: 1.633,
+    y: 2.2,
     w: 9.354,
     h: 0.8,
     fontSize: 42,
-    bold: false,
-    color: COLORS.dk2,
+    bold: true,
+    color: '1F497D',
     fontFace: FONT,
   });
   titleSlide.addText(`${scope.industry} - Market Overview & Analysis`, {
     x: 0.5,
-    y: 4.862,
+    y: 3.0,
     w: 9.354,
     h: 0.5,
     fontSize: 24,
-    color: COLORS.accent1,
+    color: '007FFF',
     fontFace: FONT,
   });
   titleSlide.addText('Executive Summary - Deep Research Report', {
@@ -2506,25 +2622,38 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const execSlide = pptx.addSlide({ masterName: 'YCP_MAIN' });
   execSlide.addText('Executive Summary', {
     x: 0.376,
-    y: 0.049,
+    y: 0.15,
     w: 12.586,
-    h: 0.91,
-    fontSize: 20,
+    h: 0.7,
+    fontSize: 24,
     fontFace: FONT,
-    color: '000000',
+    color: '1F497D',
     bold: true,
   });
-  const execContent =
+  const execContentRaw =
     synthesis.executiveSummary ||
     synthesis.summary?.executiveSummary ||
     summary.recommendation ||
     'Executive summary not available.';
-  execSlide.addText(execContent, {
+  // Fix 0: executiveSummary can be an array of strings — join them
+  let execText = Array.isArray(execContentRaw)
+    ? execContentRaw.join('\n\n')
+    : String(execContentRaw || '');
+  // Fix 9: overflow protection — count words, reduce font or truncate
+  const execWordCount = execText.split(/\s+/).filter(Boolean).length;
+  let execFontSize = 14;
+  if (execWordCount > 420) {
+    execText = execText.split(/\s+/).slice(0, 420).join(' ') + '...';
+    execFontSize = 12;
+  } else if (execWordCount > 280) {
+    execFontSize = 12;
+  }
+  execSlide.addText(execText, {
     x: 0.376,
     y: 1.5,
     w: 12.586,
     h: 5.049,
-    fontSize: 14,
+    fontSize: execFontSize,
     fontFace: FONT,
     color: '000000',
     lineSpacingMultiple: 1.2,
@@ -2614,7 +2743,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     fontSize: 11,
     fontFace: FONT,
     border: { pt: 0.5, color: 'cccccc' },
-    colW: [2.5, 3.5, 3.3],
+    colW: [3.36, 4.7, 4.44],
     valign: 'top',
   });
   const finalGoNoGo = summary.goNoGo || {};

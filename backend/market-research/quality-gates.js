@@ -102,9 +102,33 @@ function validateResearchQuality(researchData) {
   };
 }
 
+// ============ INDUSTRY RELEVANCE SCORING ============
+
+function scoreIndustryRelevance(synthesis, industry) {
+  if (!industry) return { score: 30, failures: [] };
+
+  const text = JSON.stringify(synthesis).toLowerCase();
+  const term = industry.toLowerCase();
+  const regex = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+  const matches = text.match(regex) || [];
+  const count = matches.length;
+
+  const failures = [];
+  if (count < 10) {
+    failures.push(
+      `Content has only ${count} mentions of '${industry}' — likely padded with macro data`
+    );
+  }
+
+  return {
+    score: Math.min(30, count * 3),
+    failures,
+  };
+}
+
 // ============ GATE 2: SYNTHESIS QUALITY ============
 
-function validateSynthesisQuality(synthesis) {
+function validateSynthesisQuality(synthesis, industry) {
   if (!synthesis || typeof synthesis !== 'object') {
     return {
       pass: false,
@@ -117,7 +141,7 @@ function validateSynthesisQuality(synthesis) {
 
   // Detect single-country synthesis (from synthesizeSingleCountry)
   if (synthesis.isSingleCountry) {
-    return validateSingleCountrySynthesis(synthesis);
+    return validateSingleCountrySynthesis(synthesis, industry);
   }
 
   // Multi-country / standard validation below
@@ -266,7 +290,14 @@ function validateSynthesisQuality(synthesis) {
     emptyFields.push('summary');
   }
 
-  const overall = Math.round((policyScore + marketScore + competitorsScore + summaryScore) / 4);
+  // Fix 14: Industry-specificity scoring
+  const industryRelevance = scoreIndustryRelevance(synthesis, industry);
+  failures.push(...industryRelevance.failures);
+
+  const overall = Math.round(
+    ((policyScore + marketScore + competitorsScore + summaryScore) / 4) * 0.7 +
+      industryRelevance.score
+  );
 
   return {
     pass: overall >= 40,
@@ -275,6 +306,7 @@ function validateSynthesisQuality(synthesis) {
       market: marketScore,
       competitors: competitorsScore,
       summary: summaryScore,
+      industryRelevance: industryRelevance.score,
     },
     overall,
     failures,
@@ -285,7 +317,7 @@ function validateSynthesisQuality(synthesis) {
 // Single-country synthesis validation
 // Checks fields from synthesizeSingleCountry(): executiveSummary, marketOpportunityAssessment,
 // competitivePositioning, keyInsights
-function validateSingleCountrySynthesis(synthesis) {
+function validateSingleCountrySynthesis(synthesis, industry) {
   const failures = [];
   const emptyFields = [];
 
@@ -374,6 +406,27 @@ function validateSingleCountrySynthesis(synthesis) {
         `CompetitivePositioning: average description ${Math.round(avgDesc)} words (need >= 30)`
       );
     }
+
+    // Content validation: check competitor descriptions for specific metrics
+    const metricPatterns = [
+      /\$[\d,.]+[BMKbmk]?(?:\s+(?:billion|million|revenue))?/i,
+      /\d+(\.\d+)?%\s*(?:market\s+share|share)/i,
+      /\d+(\.\d+)?%\s*(?:growth|CAGR|increase|decline)/i,
+      /(?:entered|established|founded|launched)\s+(?:in\s+)?\d{4}/i,
+    ];
+    for (const player of namedPlayers) {
+      const desc = player.description || '';
+      const wc = countWords(desc);
+      if (wc >= 45) {
+        const hasMetric = metricPatterns.some((pat) => pat.test(desc));
+        if (!hasMetric) {
+          failures.push(
+            `CompetitivePositioning: "${player.name}" description has enough words but lacks specific metrics (revenue, market share, growth, entry year)`
+          );
+          compScore = Math.max(0, compScore - 10);
+        }
+      }
+    }
   } else {
     failures.push('CompetitivePositioning section missing');
     emptyFields.push('competitivePositioning');
@@ -389,8 +442,21 @@ function validateSingleCountrySynthesis(synthesis) {
     const withImplication = structuredInsights.filter(
       (i) => i.implication && i.implication.length > 10
     );
-    if (withData.length >= 2 && withImplication.length >= 2) {
+
+    // Completeness: 75% of insights must have both data and implication
+    const complete = structuredInsights.filter(
+      (i) => i.data && /\d/.test(String(i.data)) && i.implication && i.implication.length > 10
+    );
+    const completeness =
+      structuredInsights.length > 0 ? complete.length / structuredInsights.length : 0;
+
+    if (withData.length >= 2 && withImplication.length >= 2 && completeness >= 0.75) {
       insightsScore = 100;
+    } else if (withData.length >= 2 && withImplication.length >= 2) {
+      insightsScore = 70;
+      failures.push(
+        `KeyInsights: completeness ${Math.round(completeness * 100)}% (need >= 75% with both data and implication)`
+      );
     } else if (withData.length >= 1) {
       insightsScore = 50;
       failures.push(
@@ -399,20 +465,73 @@ function validateSingleCountrySynthesis(synthesis) {
     } else {
       failures.push('KeyInsights: no insights with numeric data');
     }
+
+    // Timing validation: timing field must contain a year or quarter
+    const timingPattern = /\d{4}|Q[1-4]/;
+    for (const insight of structuredInsights) {
+      if (insight.timing && !timingPattern.test(String(insight.timing))) {
+        failures.push(
+          `KeyInsights: "${insight.title}" timing "${insight.timing}" lacks a year (YYYY) or quarter (Q1-Q4)`
+        );
+        insightsScore = Math.max(0, insightsScore - 10);
+      }
+    }
   } else {
     failures.push('KeyInsights section missing');
     emptyFields.push('keyInsights');
   }
 
-  const overall = Math.round((execScore + marketScore + compScore + insightsScore) / 4);
+  // --- Implementation Roadmap (scored separately, added to overall) ---
+  let roadmapScore = 0;
+  const phases = synthesis.implementation?.phases;
+  if (!Array.isArray(phases) || phases.length < 2) {
+    failures.push('Missing implementation roadmap');
+    roadmapScore = 0;
+  } else {
+    const allComplete = phases.every(
+      (p) => Array.isArray(p?.activities) && p.activities.length > 0 && p.investment != null
+    );
+    const hasActivitiesOnly = phases.every(
+      (p) => Array.isArray(p?.activities) && p.activities.length > 0
+    );
+    if (allComplete) {
+      roadmapScore = 100;
+    } else if (hasActivitiesOnly) {
+      roadmapScore = 50;
+      failures.push('Implementation roadmap phases missing investment fields');
+    } else {
+      roadmapScore = 25;
+      failures.push('Implementation roadmap phases missing activities or investment');
+    }
+  }
+
+  // --- Macro-data padding detection ---
+  const macroWarnings = detectMacroPadding(
+    JSON.stringify(synthesis.competitivePositioning) +
+      JSON.stringify(synthesis.marketOpportunityAssessment) +
+      JSON.stringify(synthesis.keyInsights),
+    industry
+  );
+  failures.push(...macroWarnings);
+
+  // Fix 14: Industry-specificity scoring
+  const industryRelevance = scoreIndustryRelevance(synthesis, industry);
+  failures.push(...industryRelevance.failures);
+
+  const overall = Math.round(
+    ((execScore + marketScore + compScore + insightsScore + roadmapScore) / 5) * 0.7 +
+      industryRelevance.score
+  );
 
   return {
-    pass: overall >= 40,
+    pass: overall >= 60,
     sectionScores: {
       executiveSummary: execScore,
       marketOpportunity: marketScore,
       competitivePositioning: compScore,
       keyInsights: insightsScore,
+      roadmap: roadmapScore,
+      industryRelevance: industryRelevance.score,
     },
     overall,
     failures,
@@ -457,9 +576,9 @@ function validatePptData(blocks) {
   }
 
   // Check sections with real data (at least 3 of 5)
-  const sectionNames = [...new Set(blocks.map((b) => b?.section).filter(Boolean))];
+  const sectionNames = [...new Set(blocks.map((b) => b?.key).filter(Boolean))];
   const sectionsWithData = sectionNames.filter((section) => {
-    const sectionBlocks = blocks.filter((b) => b?.section === section);
+    const sectionBlocks = blocks.filter((b) => b?.key === section);
     return sectionBlocks.some(
       (b) => b?.type !== 'unavailable' && b?.content !== 'Data unavailable'
     );
@@ -496,7 +615,7 @@ function validatePptData(blocks) {
     }
   }
 
-  // Check chart data values are numbers
+  // Check chart data values are numbers and minimum data points
   for (const block of blocks) {
     if (block?.chartData?.series) {
       const values = flattenSeries(block.chartData.series);
@@ -504,6 +623,18 @@ function validatePptData(blocks) {
       if (nonNumeric.length > 0) {
         chartIssues.push(
           `Block "${block.title || 'unknown'}": ${nonNumeric.length} non-numeric values in chart series`
+        );
+      }
+      // Minimum 4 data points required (was 3)
+      const numericValues = values.filter((v) => typeof v === 'number' && !isNaN(v));
+      if (numericValues.length < 4) {
+        chartIssues.push(
+          `Block "${block.title || 'unknown'}": only ${numericValues.length} data points (need >= 4)`
+        );
+      } else if (numericValues.length < 5) {
+        // Warning only, not a hard failure
+        emptyBlocks.push(
+          `Chart "${block.title || 'unknown'}" has only ${numericValues.length} data points — template shows 5+`
         );
       }
     }
@@ -530,8 +661,30 @@ function validatePptData(blocks) {
   };
 }
 
+// ============ MACRO-DATA PADDING DETECTION ============
+
+function detectMacroPadding(text, industry) {
+  const warnings = [];
+  if (!text || typeof text !== 'string') return warnings;
+  if (!industry) return warnings;
+
+  const macroRegex =
+    /\b(GDP|gross domestic product|population|inflation rate|trade balance|current account)\b/gi;
+  let match;
+  const seen = new Set();
+  while ((match = macroRegex.exec(text)) !== null) {
+    const term = match[1].toLowerCase();
+    if (!seen.has(term)) {
+      seen.add(term);
+      warnings.push(`Possible macro-data padding: '${match[1]}' found in industry-specific field`);
+    }
+  }
+  return warnings;
+}
+
 module.exports = {
   validateResearchQuality,
   validateSynthesisQuality,
   validatePptData,
+  detectMacroPadding,
 };

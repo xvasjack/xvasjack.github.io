@@ -92,7 +92,7 @@ async function callKimi(
   query,
   systemPrompt = '',
   useWebSearch = true,
-  maxTokens = 8192,
+  maxTokens = 12288,
   pipelineSignal = null
 ) {
   const messages = [];
@@ -431,7 +431,7 @@ Search the web for recent data (2025-2026). Find:
 
 Be specific. Cite sources. No fluff.`;
 
-  return callKimi(query, systemPrompt, true, 8192, pipelineSignal);
+  return callKimi(query, systemPrompt, true, 12288, pipelineSignal);
 }
 
 // Light tasks (scope parsing, gap ID, review). No web search.
@@ -522,6 +522,32 @@ async function callGemini(prompt, options = {}) {
   );
 }
 
+// Perplexity research wrapper - fallback when Kimi times out
+async function callPerplexityResearch(topic, country, industry) {
+  const { callPerplexity } = require('../shared/ai-models');
+  console.log(`  [Perplexity Research] ${topic.substring(0, 60)}... for ${country}`);
+
+  const prompt = `Research this topic thoroughly for ${country}'s ${industry} market:
+
+${topic}
+
+Search the web for recent data (2025-2026). Find:
+1. Specific statistics and numbers
+2. Key regulations and their enforcement status
+3. Major companies and their market positions
+4. Recent deals, partnerships, or market developments
+5. Government initiatives and deadlines
+
+Be specific. Cite sources. No fluff.`;
+
+  const content = await callPerplexity(prompt, { timeout: 120000 });
+  return {
+    content: content || '',
+    citations: [],
+    researchQuality: content && content.length > 100 ? 'perplexity_fallback' : 'failed',
+  };
+}
+
 // Factory for per-request cost tracking (future use)
 function createCostTracker() {
   return { totalCost: 0, calls: [], date: new Date().toISOString().split('T')[0] };
@@ -538,4 +564,5 @@ module.exports = {
   callKimiAnalysis,
   callKimiDeepResearch,
   callGemini,
+  callPerplexityResearch,
 };

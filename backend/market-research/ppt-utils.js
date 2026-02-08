@@ -1,4 +1,5 @@
 const { callKimiAnalysis, callGemini } = require('./ai-clients');
+const { ensureString } = require('./shared/utils');
 
 // Load template patterns for smart layout engine
 let templatePatterns = {};
@@ -9,9 +10,9 @@ try {
 }
 
 const TEMPLATE = {
-  title: { x: 0.376, y: 0.049, w: 12.586, h: 0.91 },
-  contentArea: { x: 0.367, y: 1.467, w: 12.6, h: 5.196 },
-  sourceBar: { x: 0.327, y: 6.663, w: 12.595, h: 0.27 },
+  title: { x: 0.376, y: 0.15, w: 12.586, h: 0.7 },
+  contentArea: { x: 0.4, y: 1.3, w: 12.6, h: 5.196 },
+  sourceBar: { x: 0.4, y: 6.663, w: 12.595, h: 0.27 },
 };
 
 // ============ PPT GENERATION ============
@@ -156,6 +157,15 @@ function truncateSubtitle(text, maxLen = 180, addEllipsis = true) {
 function safeArray(arr, max = 5) {
   if (!Array.isArray(arr)) return [];
   return arr.slice(0, max);
+}
+
+// Helper: safely convert any value to text for addText calls
+function safeText(value) {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value))
+    return value.map((v) => (typeof v === 'string' ? v : ensureString(v))).join('\n\n');
+  if (value && typeof value === 'object') return ensureString(value);
+  return String(value || '');
 }
 
 // Helper: ensure company has a website URL, construct fallback from name if missing
@@ -414,16 +424,13 @@ function createTableRowOptions(isHeader = false, isAlternate = false, COLORS = {
   const options = {
     fontFace: 'Segoe UI',
     fontSize: 10,
-    valign: 'middle',
+    valign: 'top',
   };
 
   if (isHeader) {
     options.bold = true;
-    options.fill = { color: COLORS.accent3 || '1B2A4A' };
+    options.fill = { color: COLORS.accent3 || '011AB7' };
     options.color = COLORS.white || 'FFFFFF';
-  } else if (isAlternate) {
-    options.fill = { color: 'F2F2F2' }; // Light gray for alternating rows
-    options.color = COLORS.black || '000000';
   } else {
     options.color = COLORS.black || '000000';
   }
@@ -449,7 +456,7 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
 
   if (sourceText) {
     slide.addText(truncate(sourceText, 120), {
-      x: 0.327,
+      x: 0.4,
       y: 6.663,
       w: 12.595,
       h: 0.27,
@@ -474,9 +481,9 @@ function addCalloutBox(slide, title, content, options = {}) {
   // Box colors based on type
   const typeColors = {
     insight: { fill: 'F5F5F5', border: '1B2A4A', titleColor: '1B2A4A' },
-    warning: { fill: 'F5F5F5', border: 'D6D7D9', titleColor: '333333' },
-    recommendation: { fill: 'EDF2FF', border: '3C57FE', titleColor: '3C57FE' },
-    positive: { fill: 'EDF2FF', border: '3C57FE', titleColor: '3C57FE' },
+    warning: { fill: 'F5F5F5', border: 'CCCCCC', titleColor: '333333' },
+    recommendation: { fill: 'EDFDFF', border: '007FFF', titleColor: '007FFF' },
+    positive: { fill: 'EDFDFF', border: '007FFF', titleColor: '007FFF' },
     negative: { fill: 'F5F5F5', border: '1B2A4A', titleColor: '1B2A4A' },
   };
   const colors = typeColors[boxType] || typeColors.insight;
@@ -491,8 +498,8 @@ function addCalloutBox(slide, title, content, options = {}) {
   }
   if (content) {
     textParts.push({
-      text: fitTextToShape(truncate(content, 200), boxW - 0.4, boxH - 0.4, 9).text,
-      options: { fontSize: 9, color: '000000', fontFace: FONT },
+      text: fitTextToShape(truncate(content, 200), boxW - 0.4, boxH - 0.4, 10).text,
+      options: { fontSize: 10, color: '000000', fontFace: FONT },
     });
   }
   if (textParts.length > 0) {
@@ -506,7 +513,7 @@ function addCalloutBox(slide, title, content, options = {}) {
         w: boxW,
         h: clampedH,
         fill: { color: colors.fill },
-        line: { color: colors.border, pt: 1.5 },
+        line: { color: colors.border, pt: 1 },
         margin: [5, 8, 5, 8],
         valign: 'top',
       });
@@ -559,7 +566,7 @@ function addInsightsPanel(slide, insights = [], options = {}) {
 function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, options = {}) {
   const FONT = 'Segoe UI';
   const COLORS = options.COLORS || {
-    headerLine: '293F55',
+    headerLine: '1F497D',
     accent3: '1B2A4A',
     dk2: '1B2A4A',
     white: 'FFFFFF',
@@ -647,23 +654,26 @@ function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, opt
 // Helper: create Opportunities & Obstacles summary slide (two-column layout)
 // Uses single shapes per section to avoid overlap detection between rect+text
 function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles = [], options = {}) {
+  if (!Array.isArray(opportunities)) opportunities = [];
+  if (!Array.isArray(obstacles)) obstacles = [];
   const FONT = 'Segoe UI';
   const LEFT_MARGIN = options.x || 0.4;
   const contentY = options.y || 1.4;
-  const fullWidth = options.fullWidth || 12.5;
+  const colWidth = 6.0;
+  const gap = 0.5;
   const COLORS = {
-    green: '3C57FE',
-    orange: '1B2A4A',
+    green: '2E7D32',
+    orange: 'E46C0A',
     white: 'FFFFFF',
-    lightGreen: 'EDF2FF',
-    lightOrange: 'F5F5F5',
+    lightGreen: 'E8F5E9',
+    lightOrange: 'FFF3E0',
   };
 
-  // Opportunities header (single text shape with fill)
+  // Left column: Opportunities
   slide.addText('Opportunities', {
     x: LEFT_MARGIN,
     y: contentY,
-    w: fullWidth,
+    w: colWidth,
     h: 0.4,
     fontSize: 13,
     bold: true,
@@ -686,25 +696,24 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
     },
   }));
 
-  // Size opp bullets area based on content count
-  const oppH = Math.min(2.0, Math.max(0.6, oppBullets.length * 0.4 + 0.2));
+  const bulletH = Math.min(4.5, Math.max(0.6, Math.max(oppBullets.length, 1) * 0.4 + 0.2));
   if (oppBullets.length > 0) {
     slide.addText(oppBullets, {
       x: LEFT_MARGIN,
       y: contentY + 0.5,
-      w: fullWidth,
-      h: oppH,
+      w: colWidth,
+      h: bulletH,
       valign: 'top',
       fill: { color: COLORS.lightGreen },
     });
   }
 
-  // Obstacles header — position dynamically below opportunities
-  const obsY = contentY + 0.5 + oppH + 0.15;
+  // Right column: Obstacles
+  const rightX = LEFT_MARGIN + colWidth + gap;
   slide.addText('Obstacles & Risks', {
-    x: LEFT_MARGIN,
-    y: obsY,
-    w: fullWidth,
+    x: rightX,
+    y: contentY,
+    w: colWidth,
     h: 0.4,
     fontSize: 13,
     bold: true,
@@ -727,14 +736,12 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
     },
   }));
 
-  // Size obs bullets area based on content count, cap to stay above footer
-  const obsH = Math.min(2.0, Math.max(0.6, obsBullets.length * 0.4 + 0.2), 6.65 - (obsY + 0.5));
   if (obsBullets.length > 0) {
     slide.addText(obsBullets, {
-      x: LEFT_MARGIN,
-      y: obsY + 0.5,
-      w: fullWidth,
-      h: Math.max(0.3, obsH),
+      x: rightX,
+      y: contentY + 0.5,
+      w: colWidth,
+      h: bulletH,
       valign: 'top',
       fill: { color: COLORS.lightOrange },
     });
@@ -745,13 +752,15 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
 // YCP Color Palette for charts - WCAG 2.1 AA accessible colors
 // Colors selected for sufficient contrast and colorblind-friendly combinations
 const CHART_COLORS = [
-  '2E5090', // dark blue
-  'E46C0A', // orange
-  '1D8348', // green
-  'B71C1C', // red
+  'C0504D', // red
+  '4F81BD', // blue
+  '2E7D32', // green
+  'B71C1C', // dark red
   '7B1FA2', // purple
   '00838F', // teal
 ];
+
+const PIE_COLORS = ['007FFF', '011AB7'];
 
 // Extended accessible color palette for more than 6 categories
 const CHART_COLORS_EXTENDED = [
@@ -840,9 +849,9 @@ function addStackedBarChart(slide, title, data, options = {}) {
   if (!chartData || !chartData.categories || !chartData.series || chartData.series.length === 0) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
-      x: options.x || 0.367,
-      y: options.y || 1.467,
-      w: options.w || 7.8,
+      x: options.x || 0.5,
+      y: options.y || 1.3,
+      w: options.w || 9.0,
       h: options.h || 5.196,
       fontSize: 14,
       color: '999999',
@@ -860,9 +869,9 @@ function addStackedBarChart(slide, title, data, options = {}) {
   if (hasInvalidValues) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
-      x: options.x || 0.367,
-      y: options.y || 1.467,
-      w: options.w || 7.8,
+      x: options.x || 0.5,
+      y: options.y || 1.3,
+      w: options.w || 9.0,
       h: options.h || 5.196,
       fontSize: 14,
       color: '999999',
@@ -887,28 +896,36 @@ function addStackedBarChart(slide, title, data, options = {}) {
   }));
 
   slide.addChart('bar', pptxChartData, {
-    x: options.x || 0.367,
-    y: options.y || 1.467,
-    w: options.w || 7.8,
+    x: options.x || 0.5,
+    y: options.y || 1.3,
+    w: options.w || 9.0,
     h: options.h || 5.196,
     barDir: 'bar',
     barGrouping: 'stacked',
+    barGapWidthPct: 50,
+    barOverlapPct: 100,
     showLegend: true,
     legendPos: 'b',
     showTitle: !!chartTitle,
     title: chartTitle,
     titleFontFace: 'Segoe UI',
     titleFontSize: 14,
+    titleColor: '000000',
     catAxisLabelFontFace: 'Segoe UI',
     catAxisLabelFontSize: 10,
+    catAxisLabelColor: '000000',
+    catAxisLineColor: '888888',
+    catGridLineColor: '888888',
     valAxisLabelFontFace: 'Segoe UI',
     valAxisLabelFontSize: 10,
-    // Data labels enabled by default for YCP-quality output
-    showValue: options.showValues !== false, // Default to true
+    valAxisLabelColor: '000000',
+    valAxisLineColor: '888888',
+    valGridLineColor: '888888',
+    showValue: false,
     dataLabelFontFace: 'Segoe UI',
     dataLabelFontSize: 9,
-    dataLabelColor: 'FFFFFF', // White text on colored bars
-    dataLabelPosition: 'ctr', // Center position
+    dataLabelColor: 'FFFFFF',
+    dataLabelPosition: 'ctr',
   });
 }
 
@@ -925,9 +942,9 @@ function addLineChart(slide, title, data, options = {}) {
   if (!chartData || !chartData.categories || !chartData.series || chartData.series.length === 0) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
-      x: options.x || 0.367,
-      y: options.y || 1.467,
-      w: options.w || 7.8,
+      x: options.x || 0.5,
+      y: options.y || 1.3,
+      w: options.w || 9.0,
       h: options.h || 5.196,
       fontSize: 14,
       color: '999999',
@@ -945,9 +962,9 @@ function addLineChart(slide, title, data, options = {}) {
   if (hasInvalidValues) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
-      x: options.x || 0.367,
-      y: options.y || 1.467,
-      w: options.w || 7.8,
+      x: options.x || 0.5,
+      y: options.y || 1.3,
+      w: options.w || 9.0,
       h: options.h || 5.196,
       fontSize: 14,
       color: '999999',
@@ -972,9 +989,9 @@ function addLineChart(slide, title, data, options = {}) {
   }));
 
   slide.addChart('line', pptxChartData, {
-    x: options.x || 0.367,
-    y: options.y || 1.467,
-    w: options.w || 7.8,
+    x: options.x || 0.5,
+    y: options.y || 1.3,
+    w: options.w || 9.0,
     h: options.h || 5.196,
     showLegend: chartData.series.length > 1,
     legendPos: 'b',
@@ -982,17 +999,24 @@ function addLineChart(slide, title, data, options = {}) {
     title: chartTitle,
     titleFontFace: 'Segoe UI',
     titleFontSize: 14,
+    titleColor: '000000',
     catAxisLabelFontFace: 'Segoe UI',
     catAxisLabelFontSize: 10,
+    catAxisLabelColor: '000000',
+    catAxisLineColor: '888888',
+    catGridLineColor: '888888',
     valAxisLabelFontFace: 'Segoe UI',
     valAxisLabelFontSize: 10,
+    valAxisLabelColor: '000000',
+    valAxisLineColor: '888888',
+    valGridLineColor: '888888',
     lineDataSymbol: 'circle',
     lineDataSymbolSize: 6,
-    // Data labels for line charts
-    showValue: options.showValues !== false, // Default to true
+    lineWidth: 2,
+    showValue: options.showValues !== false,
     dataLabelFontFace: 'Segoe UI',
     dataLabelFontSize: 9,
-    dataLabelPosition: 't', // Position above the line points
+    dataLabelPosition: 't',
   });
 }
 
@@ -1001,9 +1025,9 @@ function addBarChart(slide, title, data, options = {}) {
   if (!data || !data.categories || !data.values || data.values.length === 0) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
-      x: options.x || 0.367,
-      y: options.y || 1.467,
-      w: options.w || 7.8,
+      x: options.x || 0.5,
+      y: options.y || 1.3,
+      w: options.w || 9.0,
       h: options.h || 5.196,
       fontSize: 14,
       color: '999999',
@@ -1018,9 +1042,9 @@ function addBarChart(slide, title, data, options = {}) {
   if (data.values.some((v) => typeof v !== 'number' || isNaN(v))) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
-      x: options.x || 0.367,
-      y: options.y || 1.467,
-      w: options.w || 7.8,
+      x: options.x || 0.5,
+      y: options.y || 1.3,
+      w: options.w || 9.0,
       h: options.h || 5.196,
       fontSize: 14,
       color: '999999',
@@ -1041,9 +1065,9 @@ function addBarChart(slide, title, data, options = {}) {
   ];
 
   slide.addChart('bar', chartData, {
-    x: options.x || 0.367,
-    y: options.y || 1.467,
-    w: options.w || 7.8,
+    x: options.x || 0.5,
+    y: options.y || 1.3,
+    w: options.w || 9.0,
     h: options.h || 5.196,
     barDir: options.horizontal ? 'bar' : 'col',
     showLegend: false,
@@ -1051,10 +1075,17 @@ function addBarChart(slide, title, data, options = {}) {
     title: title,
     titleFontFace: 'Segoe UI',
     titleFontSize: 14,
+    titleColor: '000000',
     catAxisLabelFontFace: 'Segoe UI',
     catAxisLabelFontSize: 10,
+    catAxisLabelColor: '000000',
+    catAxisLineColor: '888888',
+    catGridLineColor: '888888',
     valAxisLabelFontFace: 'Segoe UI',
     valAxisLabelFontSize: 10,
+    valAxisLabelColor: '000000',
+    valAxisLineColor: '888888',
+    valGridLineColor: '888888',
     showValue: true,
     dataLabelFontFace: 'Segoe UI',
     dataLabelFontSize: 9,
@@ -1067,9 +1098,9 @@ function addPieChart(slide, title, data, options = {}) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
       x: options.x || 0.5,
-      y: options.y || 1.467,
-      w: options.w || 6,
-      h: options.h || 5.196,
+      y: options.y || 1.3,
+      w: options.w || 5.0,
+      h: options.h || 4.0,
       fontSize: 14,
       color: '999999',
       fontFace: 'Segoe UI',
@@ -1084,9 +1115,9 @@ function addPieChart(slide, title, data, options = {}) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
       x: options.x || 0.5,
-      y: options.y || 1.467,
-      w: options.w || 6,
-      h: options.h || 5.196,
+      y: options.y || 1.3,
+      w: options.w || 5.0,
+      h: options.h || 4.0,
       fontSize: 14,
       color: '999999',
       fontFace: 'Segoe UI',
@@ -1095,6 +1126,12 @@ function addPieChart(slide, title, data, options = {}) {
     });
     return;
   }
+
+  // Use PIE_COLORS as base, extend with CHART_COLORS for more categories
+  const pieColors =
+    data.categories.length <= PIE_COLORS.length
+      ? PIE_COLORS.slice(0, data.categories.length)
+      : [...PIE_COLORS, ...CHART_COLORS].slice(0, data.categories.length);
 
   const chartData = [
     {
@@ -1105,18 +1142,19 @@ function addPieChart(slide, title, data, options = {}) {
   ];
 
   slide.addChart(options.doughnut ? 'doughnut' : 'pie', chartData, {
-    x: options.x || 3,
-    y: options.y || 1.467,
-    w: options.w || 7,
-    h: options.h || 5.196,
+    x: options.x || 0.5,
+    y: options.y || 1.3,
+    w: options.w || 5.0,
+    h: options.h || 4.0,
     showLegend: true,
     legendPos: 'r',
     showTitle: !!title,
     title: title,
     titleFontFace: 'Segoe UI',
     titleFontSize: 14,
+    titleColor: '000000',
     showPercent: true,
-    chartColors: CHART_COLORS.slice(0, data.categories.length),
+    chartColors: pieColors,
   });
 }
 
@@ -1369,7 +1407,7 @@ function addChevronFlow(slide, phases, patternDef, opts = {}) {
   const totalW = p.w || 10.4;
   const h = p.h || 1.1;
   const maxPhases = p.maxPhases || 5;
-  const colors = p.chevronColors || ['2E5090', '3A6BA5', '4D80BA', '6095CF', '73AAE4'];
+  const colors = p.chevronColors || ['007FFF', '2E7D32', 'E46C0A', '4F81BD', 'C0504D'];
   const spacing = p.spacing || 0.05;
 
   const count = Math.min(phases.length, maxPhases);
@@ -1433,29 +1471,44 @@ function addInsightPanelsFromPattern(slide, insights, patternDef) {
       fill: { color: 'F5F5F5' },
       line: { color: 'CCCCCC', width: 0.5 },
     });
-    // Title
-    const title =
-      typeof insight === 'string' ? `Insight ${idx + 1}` : insight.title || `Insight ${idx + 1}`;
+    // Title — ensureString guards against AI returning object/array for title
+    const titleRaw =
+      typeof insight === 'string'
+        ? `Insight ${idx + 1}`
+        : ensureString(insight.title) || `Insight ${idx + 1}`;
+    const title = safeText(titleRaw);
     slide.addText(title, {
       x: def.x + 0.2,
       y: def.y + 0.05,
       w: def.w - 0.3,
       h: 0.35,
-      fontSize: 10,
+      fontSize: 14,
       bold: true,
-      color: '1B2A4A',
+      color: '1F497D',
       fontFace: 'Segoe UI',
     });
-    // Body
-    const body = typeof insight === 'string' ? insight : insight.text || insight.body || '';
-    const fittedBody = fitTextToShape(truncate(body, 200), def.w - 0.3, def.h - 0.5, 9);
+    // Body — use structured fields with labels if available, fallback to text/body
+    let body = '';
+    if (typeof insight === 'string') {
+      body = insight;
+    } else if (insight.data || insight.pattern || insight.implication || insight.timing) {
+      const parts = [];
+      if (insight.data) parts.push(ensureString(insight.data));
+      if (insight.pattern) parts.push(`So what: ${ensureString(insight.pattern)}`);
+      if (insight.implication) parts.push(`Action: ${ensureString(insight.implication)}`);
+      if (insight.timing) parts.push(`Timing: ${ensureString(insight.timing)}`);
+      body = parts.join('\n');
+    } else {
+      body = insight.text || insight.body || '';
+    }
+    const fittedBody = fitTextToShape(truncate(body, 200), def.w - 0.3, def.h - 0.5, 11);
     slide.addText(fittedBody.text, {
       x: def.x + 0.2,
       y: def.y + 0.4,
       w: def.w - 0.3,
       h: def.h - 0.5,
       fontSize: fittedBody.fontSize,
-      color: '333333',
+      color: '000000',
       fontFace: 'Segoe UI',
       valign: 'top',
     });
@@ -1519,7 +1572,7 @@ function addMatrix(slide, quadrants, patternDef) {
       line: { color: 'CCCCCC', width: 0.5 },
     });
     // Label
-    slide.addText(q.label || q.title || '', {
+    slide.addText(safeText(q.label || q.title || ''), {
       x: qDef.x + 0.15,
       y: qDef.y + 0.1,
       w: qDef.w - 0.3,
@@ -1686,8 +1739,8 @@ function addColoredBorderTable(slide, data, color, patternDef) {
         options: {
           bold: true,
           color: p.headerColor || 'FFFFFF',
-          fill: { color: p.headerFill || '1B2A4A' },
-          fontSize: p.headerFontSize || 14,
+          fill: { color: p.headerFill || '011AB7' },
+          fontSize: p.headerFontSize || 11,
           fontFace: 'Segoe UI',
         },
       }))
@@ -1700,12 +1753,12 @@ function addColoredBorderTable(slide, data, color, patternDef) {
     tableRows.push(
       cells.map((cell, colIdx) => {
         const cellText = truncate(String(cell || ''), 100);
-        const fittedCell = fitTextToShape(cellText, 3.0, p.rowHeight || 0.65, p.bodyFontSize || 14);
+        const fittedCell = fitTextToShape(cellText, 3.0, p.rowHeight || 0.65, p.bodyFontSize || 11);
         return {
           text: fittedCell.text,
           options: {
             fontSize: fittedCell.fontSize,
-            color: p.bodyColor || '333333',
+            color: p.bodyColor || '000000',
             fontFace: 'Segoe UI',
             border:
               colIdx === 0
@@ -1740,10 +1793,10 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
   // Title "Table of Contents"
   slide.addText('Table of Contents', {
     x: 0.376,
-    y: 0.049,
+    y: 0.15,
     w: 12.586,
-    h: 0.91,
-    fontSize: 20,
+    h: 0.7,
+    fontSize: 24,
     fontFace: FONT,
     color: '000000',
     bold: true,
@@ -1761,7 +1814,7 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
           color: '000000',
           bold: isActive,
           fill: { color: isActive ? '8EC1FF' : 'FFFFFF' },
-          border: { pt: 0.5, color: 'D6D7D9' },
+          border: { pt: 0.5, color: 'CCCCCC' },
           valign: 'middle',
         },
       },
@@ -1773,7 +1826,7 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
     y: 1.5,
     w: 12.586,
     rowH: 0.591,
-    border: { pt: 0.5, color: 'D6D7D9' },
+    border: { pt: 0.5, color: 'CCCCCC' },
   });
 
   return slide;
@@ -1785,10 +1838,10 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
   const slide = pptx.addSlide({ masterName: 'YCP_MAIN' });
   slide.addText('Opportunities & Barriers', {
     x: 0.376,
-    y: 0.049,
+    y: 0.15,
     w: 12.586,
-    h: 0.91,
-    fontSize: 20,
+    h: 0.7,
+    fontSize: 24,
     fontFace: FONT,
     color: '000000',
     bold: true,
@@ -1811,8 +1864,9 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
           bold: true,
           fontSize: 14,
           fontFace: FONT,
-          fill: { color: '8EC1FF' },
-          border: { pt: 0.5, color: 'D6D7D9' },
+          fill: { color: '2E7D32' },
+          color: 'FFFFFF',
+          border: { pt: 0.5, color: 'CCCCCC' },
           valign: 'middle',
         },
       },
@@ -1827,7 +1881,7 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
           fontSize: 12,
           fontFace: FONT,
           color: '000000',
-          border: { pt: 0.5, color: 'D6D7D9' },
+          border: { pt: 0.5, color: 'CCCCCC' },
           valign: 'middle',
         },
       },
@@ -1843,8 +1897,9 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
           bold: true,
           fontSize: 14,
           fontFace: FONT,
-          fill: { color: 'D6D7D9' },
-          border: { pt: 0.5, color: 'D6D7D9' },
+          fill: { color: 'E46C0A' },
+          color: 'FFFFFF',
+          border: { pt: 0.5, color: 'CCCCCC' },
           valign: 'middle',
         },
       },
@@ -1859,7 +1914,7 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
           fontSize: 12,
           fontFace: FONT,
           color: '000000',
-          border: { pt: 0.5, color: 'D6D7D9' },
+          border: { pt: 0.5, color: 'CCCCCC' },
           valign: 'middle',
         },
       },
@@ -1871,14 +1926,14 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
     y: 1.5,
     w: 6.0,
     rowH: 0.8,
-    border: { pt: 0.5, color: 'D6D7D9' },
+    border: { pt: 0.5, color: 'CCCCCC' },
   });
   slide.addTable(barRows, {
     x: 6.876,
     y: 1.5,
     w: 6.0,
     rowH: 0.8,
-    border: { pt: 0.5, color: 'D6D7D9' },
+    border: { pt: 0.5, color: 'CCCCCC' },
   });
 
   return slide;
@@ -1887,7 +1942,8 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
 // ============ HORIZONTAL FLOW TABLE ============
 // For policy regulatory summary (6-column current -> transition -> future layout)
 function addHorizontalFlowTable(slide, data, options = {}) {
-  const { x = 0.376, y = 1.467, w = 12.586, font = 'Segoe UI' } = options;
+  if (!Array.isArray(data)) return;
+  const { x = 0.376, y = 1.3, w = 12.586, font = 'Segoe UI' } = options;
 
   // data is array of { label, currentState, transition, futureState }
   const colWidths = [1.2, 3.2, 0.5, 4.0, 0.5, 3.2]; // total ~12.6
@@ -1897,7 +1953,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       text: 'Domain',
       options: {
         bold: true,
-        fontSize: 14,
+        fontSize: 11,
         fill: { color: '1736B6' },
         color: 'FFFFFF',
         fontFace: font,
@@ -1907,7 +1963,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       text: 'Current State',
       options: {
         bold: true,
-        fontSize: 14,
+        fontSize: 11,
         fill: { color: '1736B6' },
         color: 'FFFFFF',
         fontFace: font,
@@ -1916,7 +1972,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
     {
       text: '\u2192',
       options: {
-        fontSize: 14,
+        fontSize: 11,
         fill: { color: 'FFFFFF' },
         color: '000000',
         align: 'center',
@@ -1927,7 +1983,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       text: 'Transition',
       options: {
         bold: true,
-        fontSize: 14,
+        fontSize: 11,
         fill: { color: '3C57FE' },
         color: 'FFFFFF',
         fontFace: font,
@@ -1936,7 +1992,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
     {
       text: '\u2192',
       options: {
-        fontSize: 14,
+        fontSize: 11,
         fill: { color: 'FFFFFF' },
         color: '000000',
         align: 'center',
@@ -1947,7 +2003,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       text: 'Future State',
       options: {
         bold: true,
-        fontSize: 14,
+        fontSize: 11,
         fill: { color: '8EC1FF' },
         color: '000000',
         fontFace: font,
@@ -1959,32 +2015,32 @@ function addHorizontalFlowTable(slide, data, options = {}) {
     {
       text: row.label || '',
       options: {
-        fontSize: 14,
+        fontSize: 11,
         fontFace: font,
         color: '000000',
         bold: true,
-        fill: { color: 'D6D7D9' },
+        fill: { color: 'CCCCCC' },
       },
     },
     {
       text: row.currentState || '',
-      options: { fontSize: 14, fontFace: font, color: '000000' },
+      options: { fontSize: 11, fontFace: font, color: '000000' },
     },
     {
       text: '\u2192',
-      options: { fontSize: 14, align: 'center', color: '000000', fontFace: font },
+      options: { fontSize: 11, align: 'center', color: '000000', fontFace: font },
     },
     {
       text: row.transition || '',
-      options: { fontSize: 14, fontFace: font, color: '000000' },
+      options: { fontSize: 11, fontFace: font, color: '000000' },
     },
     {
       text: '\u2192',
-      options: { fontSize: 14, align: 'center', color: '000000', fontFace: font },
+      options: { fontSize: 11, align: 'center', color: '000000', fontFace: font },
     },
     {
       text: row.futureState || '',
-      options: { fontSize: 14, fontFace: font, color: '000000' },
+      options: { fontSize: 11, fontFace: font, color: '000000' },
     },
   ]);
 
@@ -1994,7 +2050,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
     w,
     colW: colWidths,
     rowH: 1.6,
-    border: { pt: 0.5, color: 'D6D7D9' },
+    border: { pt: 0.5, color: 'CCCCCC' },
   });
 }
 
@@ -2002,6 +2058,7 @@ module.exports = {
   truncate,
   truncateSubtitle,
   safeArray,
+  safeText,
   ensureWebsite,
   isValidCompany,
   dedupeCompanies,
@@ -2015,6 +2072,7 @@ module.exports = {
   addSectionDivider,
   addOpportunitiesObstaclesSummary,
   CHART_COLORS,
+  PIE_COLORS,
   CHART_COLORS_EXTENDED,
   SEMANTIC_COLORS,
   mergeHistoricalProjected,

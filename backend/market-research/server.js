@@ -105,36 +105,48 @@ async function runMarketResearch(userPrompt, email) {
             'weak topics for',
             ca.country + '...'
           );
-          for (const topic of researchGate.retryTopics.slice(0, 5)) {
-            try {
-              const queryMap = {
-                market_tpes: `${ca.country} total primary energy supply statistics and trends`,
-                market_finalDemand: `${ca.country} final energy demand by sector`,
-                market_electricity: `${ca.country} electricity generation mix and capacity`,
-                market_gasLng: `${ca.country} natural gas and LNG market`,
-                market_pricing: `${ca.country} energy pricing and tariffs`,
-                policy_regulatory: `${ca.country} energy regulatory framework`,
-                policy_incentives: `${ca.country} energy incentives and subsidies`,
-                competitors_players: `${ca.country} major energy companies and players`,
-              };
-              const retryQuery =
-                queryMap[topic] || `${ca.country} ${scope.industry} ${topic.replace(/_/g, ' ')}`;
-              const retry = await callKimiDeepResearch(
-                retryQuery + ' provide specific statistics and company names',
-                ca.country,
-                scope.industry
-              );
-              if (retry && retry.content && retry.content.length > 200) {
-                ca.rawData[topic] = {
-                  ...ca.rawData[topic],
-                  content: retry.content,
-                  citations: retry.citations || ca.rawData[topic].citations,
-                  researchQuality: retry.researchQuality || 'retried',
+          // Fix 22: Cap retry loop at 2 minutes
+          const RETRY_TIMEOUT = 2 * 60 * 1000;
+          const retryLoop = async () => {
+            for (const topic of researchGate.retryTopics.slice(0, 5)) {
+              try {
+                const queryMap = {
+                  market_tpes: `${ca.country} total primary energy supply statistics and trends`,
+                  market_finalDemand: `${ca.country} final energy demand by sector`,
+                  market_electricity: `${ca.country} electricity generation mix and capacity`,
+                  market_gasLng: `${ca.country} natural gas and LNG market`,
+                  market_pricing: `${ca.country} energy pricing and tariffs`,
+                  policy_regulatory: `${ca.country} energy regulatory framework`,
+                  policy_incentives: `${ca.country} energy incentives and subsidies`,
+                  competitors_players: `${ca.country} major energy companies and players`,
                 };
+                const retryQuery =
+                  queryMap[topic] || `${ca.country} ${scope.industry} ${topic.replace(/_/g, ' ')}`;
+                const retry = await callKimiDeepResearch(
+                  retryQuery + ' provide specific statistics and company names',
+                  ca.country,
+                  scope.industry
+                );
+                if (retry && retry.content && retry.content.length > 200) {
+                  ca.rawData[topic] = {
+                    ...ca.rawData[topic],
+                    content: retry.content,
+                    citations: retry.citations || ca.rawData[topic].citations,
+                    researchQuality: retry.researchQuality || 'retried',
+                  };
+                }
+              } catch (e) {
+                console.warn('[Quality Gate] Retry failed for topic:', topic, e.message);
               }
-            } catch (e) {
-              console.warn('[Quality Gate] Retry failed for topic:', topic, e.message);
             }
+            return { timedOut: false };
+          };
+          const retryResult = await Promise.race([
+            retryLoop(),
+            new Promise((resolve) => setTimeout(() => resolve({ timedOut: true }), RETRY_TIMEOUT)),
+          ]);
+          if (retryResult.timedOut) {
+            console.warn(`[Quality Gate] Retry loop timed out after 2 minutes for ${ca.country}`);
           }
         }
       }
@@ -162,9 +174,15 @@ async function runMarketResearch(userPrompt, email) {
         stage: 'complete',
       };
 
-      // Preserve citations, then clean up rawData to free memory
+      // Preserve citations and PPT data, then clean up rawData to free memory
       for (const ca of countryAnalyses) {
         if (ca.rawData) {
+          // Fix 10: Preserve data needed for PPT before deleting rawData
+          ca.pptData = {
+            citations: ca.rawData.citations || [],
+            dataQuality: ca.rawData.dataQuality || {},
+            structuredData: ca.rawData.structuredData || {},
+          };
           ca.citations = Object.values(ca.rawData)
             .flatMap((v) => v?.citations || [])
             .filter(Boolean);
@@ -175,8 +193,8 @@ async function runMarketResearch(userPrompt, email) {
       // Stage 3: Synthesize findings
       const synthesis = await synthesizeFindings(countryAnalyses, scope);
 
-      // Quality Gate 2: Validate synthesis quality
-      const synthesisGate = validateSynthesisQuality(synthesis);
+      // Quality Gate 2: Validate synthesis quality (Fix 14: pass industry for specificity scoring)
+      const synthesisGate = validateSynthesisQuality(synthesis, scope.industry);
       console.log(
         '[Quality Gate] Synthesis:',
         JSON.stringify({
@@ -322,8 +340,12 @@ app.post('/api/market-research', async (req, res) => {
     estimatedTime: '30-60 minutes',
   });
 
-  // Run research in background
-  runMarketResearch(prompt, email).catch((error) => {
+  // Run research in background with Fix 19: 15-minute global pipeline timeout
+  const PIPELINE_TIMEOUT = 15 * 60 * 1000;
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Pipeline timeout after 15 minutes')), PIPELINE_TIMEOUT)
+  );
+  Promise.race([runMarketResearch(prompt, email), timeoutPromise]).catch((error) => {
     console.error('Background research failed:', error);
   });
 });

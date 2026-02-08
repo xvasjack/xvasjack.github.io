@@ -122,7 +122,11 @@ async function callChatGPT(prompt) {
       temperature: 0.2,
     });
     if (response.usage) {
-      recordTokens('gpt-4o', response.usage.prompt_tokens || 0, response.usage.completion_tokens || 0);
+      recordTokens(
+        'gpt-4o',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
     }
     const result = response.choices[0].message.content || '';
     if (!result) {
@@ -132,6 +136,94 @@ async function callChatGPT(prompt) {
   } catch (error) {
     console.error('ChatGPT error:', error.message);
     return '';
+  }
+}
+
+async function callChatGPTJSON(prompt) {
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.2,
+      response_format: { type: 'json_object' },
+    });
+    if (response.usage) {
+      recordTokens(
+        'gpt-4o',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
+    }
+    const result = response.choices[0].message.content || '';
+    if (!result) {
+      console.warn('ChatGPTJSON returned empty response for prompt:', prompt.substring(0, 100));
+    }
+    return result;
+  } catch (error) {
+    console.error('ChatGPTJSON error:', error.message);
+    return '';
+  }
+}
+
+async function validateSynthesisOutput(sectionName, jsonOutput) {
+  const bannedWords = ['synergy', 'leverage', 'optimize', 'strategic value'];
+  const issues = [];
+
+  // Local check for banned words
+  const lower = JSON.stringify(jsonOutput).toLowerCase();
+  for (const word of bannedWords) {
+    if (lower.includes(word)) {
+      issues.push(`Banned word "${word}" found in ${sectionName}`);
+    }
+  }
+
+  // GPT-4o-mini validation for substance
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'user',
+          content: `You are a quality checker for M&A research output. Check this JSON section "${sectionName}" for quality issues.
+
+JSON:
+${JSON.stringify(jsonOutput, null, 2)}
+
+Check for:
+1. Any vague claims without specific numbers or sources (e.g., "growing market" without a growth rate)
+2. Any of these banned buzzwords: synergy, leverage, optimize, strategic value
+3. Any fields that are empty or contain only generic filler text
+4. Missing data sources for quantitative claims
+
+Return JSON: { "valid": true/false, "issues": ["issue1", "issue2"] }
+If no issues found, return { "valid": true, "issues": [] }`,
+        },
+      ],
+      temperature: 0,
+      response_format: { type: 'json_object' },
+    });
+    if (response.usage) {
+      recordTokens(
+        'gpt-4o-mini',
+        response.usage.prompt_tokens || 0,
+        response.usage.completion_tokens || 0
+      );
+    }
+    const result = JSON.parse(response.choices[0].message.content || '{}');
+    if (result.issues && result.issues.length > 0) {
+      issues.push(...result.issues);
+    }
+  } catch (error) {
+    console.warn(`[Validation] Failed for ${sectionName}:`, error.message);
+  }
+
+  return { valid: issues.length === 0, issues };
+}
+
+function stripReasoning(obj) {
+  if (obj && typeof obj === 'object') {
+    delete obj._reasoning;
+    Object.values(obj).forEach((v) => stripReasoning(v));
   }
 }
 
@@ -613,6 +705,99 @@ Provide SPECIFIC names and quotes where available.`).catch((e) => ({
       data: '',
       error: e.message,
     })),
+
+    // Query 7: Industry Deep Dive — analyze the INDUSTRY, not the company
+    callPerplexity(`Analyze the INDUSTRY that ${companyName} (${website}) operates in. This is about the INDUSTRY, not the company itself.
+
+IMPORTANT RULES:
+- Every claim must cite a specific source (report name, publisher, year)
+- If data is not available, write "DATA NOT AVAILABLE" — do NOT fabricate
+- BANNED phrases without dollar/number impact: "digital transformation", "growing demand", "increasing adoption", "paradigm shift", "synergies"
+- If you use any of those phrases, you MUST attach a specific dollar figure or percentage
+
+1. INDUSTRY IDENTIFICATION:
+   - What is the precise industry/sub-industry name? (e.g., "Industrial automation sensors" not just "manufacturing")
+   - SIC/NAICS codes if available
+   - Standard industry classification used by analysts
+
+2. VALUE CHAIN MAP:
+   - Full value chain from raw materials to end customer
+   - Where does value concentrate? Which stages capture highest margins?
+   - Who are the key players at each stage?
+
+3. MARKET SIZE & SEGMENTATION:
+   - Total addressable market size (global, with source and year)
+   - Segmentation axes: by product type, by end-use industry, by geography
+   - Size of each segment if available
+
+4. GROWTH DRIVERS & HEADWINDS:
+   - Top 3 growth drivers with quantified impact (dollar or % terms)
+   - Top 3 headwinds or risks with quantified impact
+   - Cyclicality: Is this industry cyclical? What drives cycles?
+
+5. CONSOLIDATION STATUS:
+   - Is the industry fragmented or consolidated? (CR5, CR10, HHI if available)
+   - Recent consolidation trend: accelerating, stable, or fragmenting?
+   - Notable recent M&A transactions in the industry (last 3 years)
+
+6. REGULATORY & TECHNOLOGY DISRUPTION:
+   - Key regulations affecting the industry
+   - Technology shifts that could disrupt incumbent positions
+
+Cite sources for every data point. Use "DATA NOT AVAILABLE" for anything you cannot verify.
+${context ? `CONTEXT: ${context}` : ''}`).catch((e) => ({
+      type: 'industry',
+      data: '',
+      error: e.message,
+    })),
+
+    // Query 8: Client Positioning & Expansion Signals
+    callPerplexity(`Analyze ${companyName}'s (${website}) SPECIFIC POSITIONING within its industry and identify expansion signals.
+
+IMPORTANT RULES:
+- Every claim must cite a specific source (annual report, press release, interview, filing)
+- If data is not available, write "DATA NOT AVAILABLE" — do NOT guess
+- BANNED without evidence: "well-positioned", "market leader", "strong brand", "competitive advantage"
+
+1. SUB-SEGMENT POSITIONING:
+   - What specific sub-segment or niche does ${companyName} occupy?
+   - What do they deliberately NOT do? (segments they avoid, products they don't offer)
+   - How do they describe their own positioning in annual reports or investor presentations?
+
+2. PRICING & CUSTOMER PROFILE:
+   - Pricing tier: Premium / Mid-market / Value? (with evidence — ASP data, margin comparison to peers)
+   - Customer type: Enterprise / SME / Consumer / Government?
+   - Customer concentration: Top 5 customers as % of revenue if disclosed
+   - Contract structure: Long-term contracts, recurring revenue, or transactional?
+
+3. REVENUE CONCENTRATION RISK:
+   - Geographic concentration (% from top market)
+   - Product concentration (% from top product line)
+   - Customer concentration (if disclosed in filings)
+
+4. COMPETITOR EXPANSION INTO THEIR SPACE:
+   - Which competitors are moving into ${companyName}'s sub-segment?
+   - New entrants or adjacent players expanding into their territory?
+   - Pricing pressure from above or below?
+
+5. EXPANSION SIGNALS (from official company sources):
+   - Statements from annual reports (有価証券報告書) about growth plans
+   - 中期経営計画 (mid-term management plan) targets for new markets or products
+   - Recent capex announcements, new facility plans, or hiring patterns
+   - JV or partnership announcements indicating new directions
+   - Patent filings in new technology areas
+
+6. STRATEGIC GAPS:
+   - What capabilities does ${companyName} lack vs. top competitors?
+   - Geographic white spaces where they have no presence
+   - Product/service gaps relative to customer needs
+
+Cite specific sources (document name, date) for every claim.
+${context ? `CONTEXT: ${context}` : ''}`).catch((e) => ({
+      type: 'positioning',
+      data: '',
+      error: e.message,
+    })),
   ];
 
   // Add local language query if applicable
@@ -647,11 +832,13 @@ Provide findings in English with specific details.`).catch((e) => ({
     competitors: typeof results[3] === 'string' ? results[3] : '',
     maHistory: typeof results[4] === 'string' ? results[4] : '',
     leadership: typeof results[5] === 'string' ? results[5] : '',
-    localInsights: localLang && results[6] && typeof results[6] === 'string' ? results[6] : '',
+    industryAnalysis: typeof results[6] === 'string' ? results[6] : '',
+    positioningSignals: typeof results[7] === 'string' ? results[7] : '',
+    localInsights: localLang && results[8] && typeof results[8] === 'string' ? results[8] : '',
   };
 
   console.log(
-    `[UTB Phase 1] Complete. Research lengths: products=${research.products.length}, financials=${research.financials.length}, operations=${research.operations.length}, competitors=${research.competitors.length}, maHistory=${research.maHistory.length}, leadership=${research.leadership.length}`
+    `[UTB Phase 1] Complete. Research lengths: products=${research.products.length}, financials=${research.financials.length}, operations=${research.operations.length}, competitors=${research.competitors.length}, maHistory=${research.maHistory.length}, leadership=${research.leadership.length}, industryAnalysis=${research.industryAnalysis.length}, positioningSignals=${research.positioningSignals.length}`
   );
 
   return research;
@@ -894,48 +1081,155 @@ Include ALL deals found in research. Use "unknown" or "undisclosed" for missing 
       })
     ),
 
-    // Synthesis 5: Ideal Target Profile - SEA/Asia Target List with Products
-    callChatGPT(`Identify 10 REAL acquisition targets for ${companyName} in SOUTHEAST ASIA or ASIA. BE CONCISE.
+    // Synthesis 6: Industry Intelligence
+    callChatGPTJSON(`You are an industry analyst writing for M&A advisors. Analyze the industry that ${companyName} (${website}) operates in.
 
-RESEARCH:
+RESEARCH ON PRODUCTS & SERVICES:
 ${research.products}
-${research.maHistory}
-${research.leadership}
-${research.financials}
+
+RESEARCH ON COMPETITORS:
+${research.competitors}
+
+${research.industryAnalysis ? `INDUSTRY ANALYSIS DATA:\n${research.industryAnalysis}` : ''}
 
 ${context ? `CLIENT CONTEXT: ${context}` : ''}
 
 ---
 
-GEOGRAPHIC FOCUS: Prioritize targets in:
-1. Southeast Asia (Singapore, Thailand, Vietnam, Indonesia, Malaysia, Philippines)
-2. If not enough in SEA, expand to broader Asia (Japan, Korea, China, Taiwan, India)
-Do NOT include targets from Americas, Europe, or other regions.
-
 Respond in this EXACT JSON format:
 {
-  "ideal_target": {
-    "segments": ["Segment 1", "Segment 2", "Segment 3", "Segment 4"],
-    "target_list": [
-      {
-        "company_name": "Actual company name",
-        "hq_country": "Country",
-        "hq_city": "City",
-        "revenue": "4,500",
-        "ownership": "Public|Private|PE-backed",
-        "products_offered": [true, false, true, false],
-        "website": "company URL"
-      }
-    ]
+  "_reasoning": "Think step by step: What industry is this company in? What is the market size? How is the value chain structured? What are the real growth drivers with data?",
+  "industry_analysis": {
+    "industry_name": "Specific industry name (e.g., 'Industrial Automation Components' not just 'Manufacturing')",
+    "market_size": "Global market size with year and source (e.g., '$45.2B in 2024, source: MarketsandMarkets')",
+    "growth_rate": "CAGR with period and source (e.g., '6.8% CAGR 2024-2029, source: Grand View Research')",
+    "value_chain": [
+      {"stage": "Stage name", "description": "What happens here", "key_players": "1-2 example companies", "margin": "Typical margin % as number (e.g., 15)", "company_presence": "active|absent|target"}
+    ],
+    "segmentation": [
+      {"segment": "Sub-segment name", "market_size": "Market size", "growth": "Growth rate", "fragmentation": "Fragmented|Moderate|Concentrated", "key_players": "Top 2-3 players", "client_position": "Active|Not Served|Target|High Priority"}
+    ],
+    "growth_drivers": "3-4 specific drivers with data points, not generic statements",
+    "consolidation": "Is the industry consolidating? M&A activity level and recent notable deals",
+    "key_trends": "3-4 specific trends with evidence"
   }
 }
 
-IMPORTANT:
-- "segments" should list the 4-6 main product/service categories based on the buyer's business
-- "products_offered" is a boolean array matching the segments array (true = company offers this product/service)
-- "revenue" MUST be a NUMBER in USD millions (e.g., "4,500" for $4.5B, "500" for $500M, "50" for $50M). NO currency symbols, NO letters like B/M. Just the number with commas.
-- Real SEA/Asia companies only
-- Include company website URL`).catch((e) => ({ section: 'ideal_target', error: e.message })),
+RULES:
+- Every number must have a source
+- No generic statements like "growing market" — include the actual growth rate
+- Be specific about the industry, not the company`).catch((e) => ({
+      section: 'industry_analysis',
+      error: e.message,
+    })),
+
+    // Synthesis 7: Client Positioning
+    callChatGPTJSON(`You are an M&A advisor analyzing how ${companyName} (${website}) is positioned within its industry.
+
+RESEARCH ON PRODUCTS & SERVICES:
+${research.products}
+
+RESEARCH ON FINANCIALS:
+${research.financials}
+
+${research.industryAnalysis ? `INDUSTRY ANALYSIS DATA:\n${research.industryAnalysis}` : ''}
+${research.positioningSignals ? `POSITIONING SIGNALS:\n${research.positioningSignals}` : ''}
+
+${context ? `CLIENT CONTEXT: ${context}` : ''}
+
+---
+
+Respond in this EXACT JSON format:
+{
+  "_reasoning": "Think step by step: What sub-segment does this company focus on? What do they explicitly NOT do? Who are their customers? What is their pricing tier?",
+  "client_positioning": {
+    "sub_segment": "The specific niche within the broader industry (e.g., 'High-precision servo motors for semiconductor equipment' not just 'Motors')",
+    "positioning_statement": "One sentence: What they do, for whom, and why customers choose them over alternatives",
+    "what_they_dont_do": "Explicitly list 2-3 things competitors do that this company does NOT do",
+    "pricing_tier": "Premium|Mid-tier|Value — with evidence (e.g., 'Premium — ASPs 20-30% above industry average per FY2024 IR presentation')",
+    "primary_customer": "Who buys from them — specific industries or customer types with examples",
+    "segments": [
+      {"name": "Segment name", "client_revenue": "Revenue from this segment", "market_share": "Client share in segment", "position": "Leader|Challenger|Follower|Not Present", "coverage": "Full|Partial|None", "key_competitors": "Top 2-3 competitors in this segment", "notes": "Key insight about this segment"}
+    ],
+    "concentrations": {
+      "revenue": {"detail": "One sentence about revenue concentration risk with data"},
+      "geographic": {"detail": "One sentence about geographic/customer concentration with data"},
+      "white_space": {"detail": "One sentence about biggest underserved segment opportunity"}
+    }
+  }
+}
+
+RULES:
+- Be specific and evidence-based
+- "what_they_dont_do" is critical — this tells advisors where adjacency opportunities exist
+- Include data sources for claims about pricing or market position`).catch((e) => ({
+      section: 'client_positioning',
+      error: e.message,
+    })),
+
+    // Synthesis 8: Expansion Strategy
+    callChatGPTJSON(`You are a senior M&A strategist. Based on ALL available research, identify the top 3 expansion segments for ${companyName} (${website}).
+
+RESEARCH ON PRODUCTS & SERVICES:
+${research.products}
+
+RESEARCH ON FINANCIALS:
+${research.financials}
+
+RESEARCH ON COMPETITORS:
+${research.competitors}
+
+RESEARCH ON M&A HISTORY:
+${research.maHistory}
+
+RESEARCH ON LEADERSHIP & STRATEGY:
+${research.leadership}
+
+${research.industryAnalysis ? `INDUSTRY ANALYSIS DATA:\n${research.industryAnalysis}` : ''}
+${research.positioningSignals ? `POSITIONING SIGNALS:\n${research.positioningSignals}` : ''}
+
+${context ? `CLIENT CONTEXT: ${context}` : ''}
+
+---
+
+CRITICAL ANTI-BULLSHIT RULES:
+- Every recommendation must include: named segment with market size, growth rate with source, specific capability bridge from the client, competitive proof point
+- Do NOT recommend a segment without explaining exactly WHICH client capability transfers
+- Include exclusion criteria: what should the client NOT target and why
+- Ban these words: synergy, leverage, optimize, strategic alignment, value creation
+- If you cannot find real data for a segment, do NOT include it — better to have 2 strong recommendations than 3 weak ones
+
+Respond in this EXACT JSON format:
+{
+  "_reasoning": "Think step by step: Given the client's current capabilities, what adjacent segments are real opportunities? What specific capabilities transfer? What proof exists that they could compete?",
+  "expansion_strategy": {
+    "strategic_rationale": "2-3 sentences: Why should this company expand and what gives them the right to win in adjacent segments? Include specific evidence.",
+    "top_3_segments": [
+      {
+        "rank": 1,
+        "segment": "Specific named segment (e.g., 'Industrial IoT sensors for predictive maintenance' not 'IoT')",
+        "type": "Adjacent|New Market|Vertical Integration|Geographic",
+        "market_size": "Size with source (e.g., '$12.3B in 2024, Grand View Research')",
+        "growth": "CAGR with source (e.g., '14.2% CAGR 2024-2029, MarketsandMarkets')",
+        "fragmentation": "Fragmented|Moderately concentrated|Concentrated — with top 3 players and their shares",
+        "capability_bridge": "EXACTLY which current capability of ${companyName} transfers to this segment and how (e.g., 'Their polymer extrusion expertise directly applies to medical tubing, which uses the same base processes')",
+        "competitive_proof": "Evidence that the client could compete: existing patents, customer overlap, technology similarity, or competitor precedent",
+        "target_profile": "What an ideal acquisition target in this segment looks like: size, geography, capabilities",
+        "exclusion_criteria": "What types of companies in this segment should the client NOT pursue and why",
+        "entry_mode": "Acquisition|JV|Organic|Licensing — with reasoning"
+      }
+    ],
+    "segments_to_avoid": "2-3 segments that might seem attractive but should be avoided, with specific reasons why"
+  }
+}
+
+RULES:
+- Quality over quantity. Include only segments where you have real data
+- Every field must contain specific, sourced information
+- The capability_bridge must name a SPECIFIC capability of ${companyName}, not a generic "manufacturing expertise"
+- If the research doesn't support 3 segments, include only the ones with real evidence`).catch(
+      (e) => ({ section: 'expansion_strategy', error: e.message })
+    ),
   ];
 
   // Add local insights synthesis if available
@@ -969,6 +1263,8 @@ Respond in JSON:
         const jsonMatch = result.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
+          // Strip _reasoning fields before merging into sections
+          stripReasoning(parsed);
           Object.assign(sections, parsed);
         }
       } catch (e) {
@@ -976,6 +1272,25 @@ Respond in JSON:
       }
     } else if (result.error) {
       console.error(`Synthesis error for ${result.section}:`, result.error);
+    }
+  }
+
+  // Validation pass on key sections
+  const sectionsToValidate = ['industry_analysis', 'client_positioning', 'expansion_strategy'];
+  const validationPromises = sectionsToValidate
+    .filter((name) => sections[name])
+    .map((name) =>
+      validateSynthesisOutput(name, sections[name]).then((result) => ({ name, ...result }))
+    );
+
+  if (validationPromises.length > 0) {
+    const validationResults = await Promise.all(validationPromises);
+    for (const vr of validationResults) {
+      if (!vr.valid) {
+        console.warn(`[UTB Phase 2] Validation issues in ${vr.name}:`, vr.issues);
+      } else {
+        console.log(`[UTB Phase 2] Validation passed for ${vr.name}`);
+      }
     }
   }
 
@@ -1298,7 +1613,414 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     addFootnote(slide);
   }
 
-  // ========== SLIDE 3: PAST M&A ==========
+  // ========== SLIDE 3: INDUSTRY LANDSCAPE ==========
+  {
+    const indData = synthesis.industry_analysis || {};
+    const valueChain = indData.value_chain || [];
+    const segmentation = indData.segmentation || [];
+
+    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+    addSlideTitle(slide, 'Industry Landscape');
+
+    // === TOP HALF: Value Chain (y=1.3 to y=3.1) ===
+    const stages = valueChain.slice(0, 6);
+    const stageCount = Math.max(stages.length, 1);
+    const boxW = 2.15;
+    const boxH = 0.9;
+    const totalChainW = stageCount * boxW + (stageCount - 1) * 0.3;
+    const chainStartX = (13.333 - totalChainW) / 2;
+    const chainY = 1.3;
+
+    stages.forEach((stage, i) => {
+      const x = chainStartX + i * (boxW + 0.3);
+      // Determine box color based on company_presence
+      const presence = (stage.company_presence || '').toLowerCase();
+      let fillColor = 'E8E8E8'; // gray = not active
+      let borderOpts = { type: 'none' };
+      let textColor = COLORS.black;
+      if (presence === 'active' || presence === 'yes') {
+        fillColor = '007FFF'; // blue = active
+        textColor = COLORS.white;
+      } else if (presence === 'target' || presence === 'potential') {
+        fillColor = 'D6E4F0'; // light blue = potential target
+        borderOpts = { color: '007FFF', width: 1.5, dashType: 'dash' };
+      }
+
+      // Stage box
+      slide.addShape(pptx.shapes.RECTANGLE, {
+        x,
+        y: chainY,
+        w: boxW,
+        h: boxH,
+        fill: { color: fillColor },
+        line: borderOpts,
+        rectRadius: 0.05,
+      });
+
+      // Stage name
+      slide.addText(stage.stage || stage.name || `Stage ${i + 1}`, {
+        x,
+        y: chainY,
+        w: boxW,
+        h: boxH,
+        fontSize: 12,
+        fontFace: 'Segoe UI',
+        bold: true,
+        color: textColor,
+        align: 'center',
+        valign: 'middle',
+      });
+
+      // Margin bar below box
+      const margin = parseFloat(stage.margin) || 0;
+      const barColor = margin > 20 ? '00A651' : margin >= 10 ? 'FFD700' : 'FF4444';
+      slide.addShape(pptx.shapes.RECTANGLE, {
+        x: x + 0.1,
+        y: chainY + boxH + 0.05,
+        w: boxW - 0.2,
+        h: 0.12,
+        fill: { color: barColor },
+        line: { type: 'none' },
+      });
+      slide.addText(`${margin}%`, {
+        x,
+        y: chainY + boxH + 0.18,
+        w: boxW,
+        h: 0.2,
+        fontSize: 9,
+        fontFace: 'Segoe UI',
+        color: COLORS.black,
+        align: 'center',
+      });
+
+      // Arrow to next stage
+      if (i < stages.length - 1) {
+        slide.addShape(pptx.shapes.LINE, {
+          x: x + boxW,
+          y: chainY + boxH / 2,
+          w: 0.3,
+          h: 0,
+          line: { color: COLORS.headerLine, width: 1.5, endArrowType: 'arrow' },
+        });
+      }
+    });
+
+    // === DOTTED DIVIDER at y=3.15 ===
+    slide.addShape(pptx.shapes.LINE, {
+      x: 0.38,
+      y: 3.15,
+      w: 12.54,
+      h: 0,
+      line: { color: COLORS.gray, width: 0.75, dashType: 'dash' },
+    });
+
+    // === BOTTOM HALF: Segmentation Table (y=3.3 to y=6.5) ===
+    const segHeaderOpts = {
+      fill: { color: COLORS.headerBg },
+      color: COLORS.white,
+      bold: false,
+      align: 'center',
+      valign: 'middle',
+      border: { pt: 2, color: COLORS.white },
+    };
+    const segRows = [
+      [
+        { text: 'Segment', options: segHeaderOpts },
+        { text: 'Market Size', options: segHeaderOpts },
+        { text: 'CAGR', options: segHeaderOpts },
+        { text: 'Fragmentation', options: segHeaderOpts },
+        { text: 'Key Players', options: segHeaderOpts },
+        { text: 'Client Position', options: segHeaderOpts },
+      ],
+    ];
+
+    const segs = segmentation.slice(0, 5);
+    segs.forEach((seg, i) => {
+      const isLastRow = i === segs.length - 1;
+      const rowBorder = isLastRow
+        ? { pt: 0, color: COLORS.white }
+        : { pt: 0.5, color: COLORS.gray, dashType: 'dash' };
+      const cellOpts = {
+        fill: { color: COLORS.white },
+        color: COLORS.black,
+        bold: false,
+        align: 'center',
+        valign: 'middle',
+        border: [
+          { pt: 0, color: COLORS.white },
+          { pt: 0, color: COLORS.white },
+          rowBorder,
+          { pt: 0, color: COLORS.white },
+        ],
+      };
+
+      // Client Position color
+      const pos = (seg.client_position || '').toLowerCase();
+      let posFill = 'E8E8E8'; // gray = not served
+      let posColor = COLORS.black;
+      if (pos.includes('active') || pos.includes('present')) {
+        posFill = '00A651';
+        posColor = COLORS.white;
+      } else if (pos.includes('target')) {
+        posFill = '007FFF';
+        posColor = COLORS.white;
+      } else if (pos.includes('high') || pos.includes('priority')) {
+        posFill = 'FF8C00';
+        posColor = COLORS.white;
+      }
+
+      segRows.push([
+        {
+          text: seg.segment || seg.name || '',
+          options: {
+            ...cellOpts,
+            fill: { color: COLORS.labelBg },
+            color: COLORS.white,
+            align: 'center',
+            border: { pt: 2, color: COLORS.white },
+          },
+        },
+        { text: seg.market_size || seg.size || '', options: cellOpts },
+        { text: seg.growth || seg.cagr || '', options: cellOpts },
+        { text: seg.fragmentation || '', options: cellOpts },
+        { text: seg.key_players || '', options: { ...cellOpts, align: 'left' } },
+        {
+          text: seg.client_position || '',
+          options: { ...cellOpts, fill: { color: posFill }, color: posColor },
+        },
+      ]);
+    });
+
+    slide.addTable(segRows, {
+      x: 0.38,
+      y: 3.3,
+      w: 12.54,
+      colW: [2.5, 1.8, 1.2, 1.8, 3.0, 2.3],
+      rowH: 0.5,
+      fontFace: 'Segoe UI',
+      fontSize: 14,
+      valign: 'middle',
+    });
+
+    addFootnote(slide, 'Source: Industry reports, company disclosures');
+  }
+
+  // ========== SLIDE 4: CLIENT POSITIONING ==========
+  {
+    const posData = synthesis.client_positioning || {};
+    const posSegments = posData.segments || [];
+    const concentrations = posData.concentrations || {};
+
+    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+    addSlideTitle(slide, 'Client Positioning');
+
+    // === MAIN TABLE (y=1.3 to y=5.1) ===
+    const posHeaderOpts = {
+      fill: { color: COLORS.headerBg },
+      color: COLORS.white,
+      bold: false,
+      align: 'center',
+      valign: 'middle',
+      border: { pt: 2, color: COLORS.white },
+    };
+    const posRows = [
+      [
+        { text: 'Segment', options: posHeaderOpts },
+        { text: 'Client Revenue', options: posHeaderOpts },
+        { text: 'Market Share', options: posHeaderOpts },
+        { text: 'Position', options: posHeaderOpts },
+        { text: 'Coverage', options: posHeaderOpts },
+        { text: 'Key Competitors', options: posHeaderOpts },
+        { text: 'Notes', options: posHeaderOpts },
+      ],
+    ];
+
+    const posSegs = posSegments.slice(0, 6);
+    posSegs.forEach((seg, i) => {
+      const isLastRow = i === posSegs.length - 1;
+      const rowBorder = isLastRow
+        ? { pt: 0, color: COLORS.white }
+        : { pt: 0.5, color: COLORS.gray, dashType: 'dash' };
+      const cellOpts = {
+        fill: { color: COLORS.white },
+        color: COLORS.black,
+        bold: false,
+        align: 'center',
+        valign: 'middle',
+        border: [
+          { pt: 0, color: COLORS.white },
+          { pt: 0, color: COLORS.white },
+          rowBorder,
+          { pt: 0, color: COLORS.white },
+        ],
+      };
+
+      // Position color
+      const position = (seg.position || '').toLowerCase();
+      let posFill = 'E8E8E8';
+      let posTextColor = COLORS.black;
+      if (position.includes('leader')) {
+        posFill = '00A651';
+        posTextColor = COLORS.white;
+      } else if (position.includes('challenger')) {
+        posFill = 'FF8C00';
+        posTextColor = COLORS.white;
+      } else if (position.includes('not') || position.includes('absent')) {
+        posFill = 'FF4444';
+        posTextColor = COLORS.white;
+      }
+
+      // Coverage unicode circles
+      const cov = (seg.coverage || '').toLowerCase();
+      let covSymbol = '○'; // none
+      if (cov.includes('full') || cov === 'high') covSymbol = '●';
+      else if (cov.includes('partial') || cov === 'medium') covSymbol = '◐';
+
+      posRows.push([
+        {
+          text: seg.name || '',
+          options: {
+            ...cellOpts,
+            fill: { color: COLORS.labelBg },
+            color: COLORS.white,
+            border: { pt: 2, color: COLORS.white },
+          },
+        },
+        { text: seg.client_revenue || '', options: cellOpts },
+        { text: seg.market_share || '', options: cellOpts },
+        {
+          text: seg.position || '',
+          options: { ...cellOpts, fill: { color: posFill }, color: posTextColor },
+        },
+        { text: covSymbol, options: { ...cellOpts, fontSize: 16 } },
+        { text: seg.key_competitors || '', options: { ...cellOpts, align: 'left' } },
+        { text: seg.notes || '', options: { ...cellOpts, align: 'left' } },
+      ]);
+    });
+
+    slide.addTable(posRows, {
+      x: 0.38,
+      y: 1.3,
+      w: 12.54,
+      colW: [2.2, 1.5, 1.2, 1.6, 1.2, 2.5, 2.4],
+      rowH: 0.5,
+      fontFace: 'Segoe UI',
+      fontSize: 14,
+      valign: 'middle',
+    });
+
+    // === 3 CALLOUT BOXES (y=5.3 to y=6.5) ===
+    const boxW = 3.9;
+    const boxH = 1.2;
+    const boxY = 5.3;
+    const boxGap = 0.22;
+    const boxStartX = 0.38;
+
+    // Box 1: Revenue Concentration (orange)
+    const revConc = concentrations.revenue || {};
+    slide.addShape(pptx.shapes.RECTANGLE, {
+      x: boxStartX,
+      y: boxY,
+      w: boxW,
+      h: boxH,
+      fill: { color: 'FFF3CC' },
+      line: { color: 'FF8C00', width: 1.5 },
+      rectRadius: 0.05,
+    });
+    slide.addText('Revenue Concentration', {
+      x: boxStartX + 0.1,
+      y: boxY + 0.05,
+      w: boxW - 0.2,
+      h: 0.35,
+      fontSize: 12,
+      fontFace: 'Segoe UI',
+      bold: true,
+      color: 'FF8C00',
+      valign: 'top',
+    });
+    slide.addText(revConc.detail || 'Top segments drive majority of revenue', {
+      x: boxStartX + 0.1,
+      y: boxY + 0.4,
+      w: boxW - 0.2,
+      h: 0.7,
+      fontSize: 11,
+      fontFace: 'Segoe UI',
+      color: COLORS.black,
+      valign: 'top',
+    });
+
+    // Box 2: Customer/Geographic Concentration (red)
+    const geoConc = concentrations.geographic || {};
+    const box2X = boxStartX + boxW + boxGap;
+    slide.addShape(pptx.shapes.RECTANGLE, {
+      x: box2X,
+      y: boxY,
+      w: boxW,
+      h: boxH,
+      fill: { color: 'FFE0E0' },
+      line: { color: 'FF4444', width: 1.5 },
+      rectRadius: 0.05,
+    });
+    slide.addText('Customer/Geographic Concentration', {
+      x: box2X + 0.1,
+      y: boxY + 0.05,
+      w: boxW - 0.2,
+      h: 0.35,
+      fontSize: 12,
+      fontFace: 'Segoe UI',
+      bold: true,
+      color: 'FF4444',
+      valign: 'top',
+    });
+    slide.addText(geoConc.detail || 'Geographic and customer base analysis', {
+      x: box2X + 0.1,
+      y: boxY + 0.4,
+      w: boxW - 0.2,
+      h: 0.7,
+      fontSize: 11,
+      fontFace: 'Segoe UI',
+      color: COLORS.black,
+      valign: 'top',
+    });
+
+    // Box 3: White Space Opportunity (blue)
+    const whiteSpace = concentrations.white_space || {};
+    const box3X = box2X + boxW + boxGap;
+    slide.addShape(pptx.shapes.RECTANGLE, {
+      x: box3X,
+      y: boxY,
+      w: boxW,
+      h: boxH,
+      fill: { color: 'D6E4F0' },
+      line: { color: '007FFF', width: 1.5 },
+      rectRadius: 0.05,
+    });
+    slide.addText('White Space Opportunity', {
+      x: box3X + 0.1,
+      y: boxY + 0.05,
+      w: boxW - 0.2,
+      h: 0.35,
+      fontSize: 12,
+      fontFace: 'Segoe UI',
+      bold: true,
+      color: '007FFF',
+      valign: 'top',
+    });
+    slide.addText(whiteSpace.detail || 'Underserved segments and expansion areas', {
+      x: box3X + 0.1,
+      y: boxY + 0.4,
+      w: boxW - 0.2,
+      h: 0.7,
+      fontSize: 11,
+      fontFace: 'Segoe UI',
+      color: COLORS.black,
+      valign: 'top',
+    });
+
+    addFootnote(slide, 'Source: Company disclosures, market analysis');
+  }
+
+  // ========== SLIDE 5: PAST M&A ==========
   const dealHistory = maDeepDive.deal_history || maDeepDive.deal_stories || [];
   if (dealHistory.length > 0) {
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
@@ -1381,252 +2103,133 @@ async function generateUTBSlides(companyName, website, research, additionalConte
     addFootnote(slide);
   }
 
-  // ========== SLIDE 4: TARGET LIST with Products/Services Tick Marks ==========
-  const idealTarget = synthesis.ideal_target || {};
-  const targetList = idealTarget.target_list || [];
-  const segments = idealTarget.segments || ['Product 1', 'Product 2', 'Product 3', 'Product 4'];
+  // ========== SLIDE 6: EXPANSION STRATEGY ==========
+  {
+    const expData = synthesis.expansion_strategy || {};
+    const priorities = expData.top_3_segments || [];
+    const vectors = expData.top_3_segments || []; // Same data for both cards and table
+    const exclusions =
+      typeof expData.segments_to_avoid === 'string'
+        ? expData.segments_to_avoid
+        : Array.isArray(expData.segments_to_avoid)
+          ? expData.segments_to_avoid
+              .map((s) =>
+                typeof s === 'string' ? s : `${s.segment || s.name}: ${s.why || s.reason || ''}`
+              )
+              .join(' | ')
+          : '';
 
-  if (targetList.length > 0) {
     const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
+    addSlideTitle(slide, 'Expansion Strategy');
 
-    // Title: "Target List – SEA/Asia"
-    const targetTitle = additionalContext
-      ? `Target List – ${additionalContext.substring(0, 40)}`
-      : 'Target List – SEA/Asia';
-    addSlideTitle(slide, targetTitle);
+    // === TOP: 3 Priority Cards (y=1.6 to y=3.4) ===
+    const cardW = 4.0;
+    const cardH = 1.8;
+    const cardY = 1.6;
+    const cardGap = 0.22;
+    const cardStartX = (13.333 - 3 * cardW - 2 * cardGap) / 2;
+    const priorityColors = ['1524A9', '011AB7', '007FFF'];
 
-    // Use max 4 segments, fully spelled out (no truncation)
-    const displaySegments = segments.slice(0, 4);
-    const numSegments = displaySegments.length;
+    const topPriorities = priorities.slice(0, 3);
+    topPriorities.forEach((p, i) => {
+      const x = cardStartX + i * (cardW + cardGap);
+      const pColor = priorityColors[i] || '007FFF';
 
-    // Column widths: Company(2.6) + HQ(0.9) + Revenue(1.0) + segments(remaining, evenly split)
-    const fixedColsW = 2.6 + 0.9 + 1.0;
-    const segmentColW = (12.54 - fixedColsW) / numSegments;
-    const colWidths = [2.6, 0.9, 1.0, ...Array(numSegments).fill(segmentColW)];
-
-    // Build header row with tall uniform blocks (not bold per design requirements)
-    const headerOpts = {
-      fill: { color: COLORS.headerBg },
-      color: COLORS.white,
-      bold: false,
-      align: 'center',
-      valign: 'middle',
-      border: { pt: 2, color: COLORS.white },
-    };
-
-    // Revenue header includes unit, rows show just numbers
-    const headerRow = [
-      { text: 'Company', options: headerOpts },
-      { text: 'HQ', options: headerOpts },
-      { text: 'Revenue (USD M)', options: headerOpts },
-    ];
-
-    // Add segment columns to header (full names, no truncation, font size 14)
-    displaySegments.forEach((seg) => {
-      headerRow.push({
-        text: seg,
-        options: headerOpts,
+      // Card header (dark colored)
+      const headerH = 0.45;
+      slide.addShape(pptx.shapes.RECTANGLE, {
+        x,
+        y: cardY,
+        w: cardW,
+        h: headerH,
+        fill: { color: pColor },
+        line: { type: 'none' },
+        rectRadius: 0.05,
       });
-    });
 
-    const rows = [headerRow];
-    const targets = targetList.slice(0, 10);
-
-    targets.forEach((t, i) => {
-      const isLastRow = i === targets.length - 1;
-
-      // Company column: lighter blue, with hyperlink to company website
-      const companyOpts = {
-        fill: { color: COLORS.companyBg },
+      // Priority label + segment name
+      const pType = (p.type || p.direction || '').toUpperCase();
+      const badge = pType.includes('VERTICAL')
+        ? 'VERTICAL'
+        : pType.includes('GEO')
+          ? 'GEOGRAPHIC'
+          : 'HORIZONTAL';
+      slide.addText(`#${i + 1} ${p.segment || p.name || 'Priority'}`, {
+        x: x + 0.1,
+        y: cardY,
+        w: cardW - 1.4,
+        h: headerH,
+        fontSize: 12,
+        fontFace: 'Segoe UI',
+        bold: true,
         color: COLORS.white,
-        bold: false,
-        align: 'left',
         valign: 'middle',
-        border: { pt: 2, color: COLORS.white },
-      };
-      // Add hyperlink if website is available
-      if (t.website) {
-        companyOpts.hyperlink = { url: t.website };
-      }
-      const row = [
-        {
-          text: `${i + 1}. ${t.company_name || ''}`,
-          options: companyOpts,
-        },
-        {
-          text: t.hq_country || '',
-          options: {
-            fill: { color: COLORS.white },
-            color: COLORS.black,
-            align: 'center',
-            valign: 'middle',
-            border: [
-              { pt: 2, color: COLORS.white },
-              { pt: 2, color: COLORS.white },
-              getRowBorder(isLastRow),
-              { pt: 2, color: COLORS.white },
-            ],
-          },
-        },
-        {
-          text: t.revenue || t.estimated_revenue || '',
-          options: {
-            fill: { color: COLORS.white },
-            color: COLORS.black,
-            align: 'center',
-            valign: 'middle',
-            border: [
-              { pt: 2, color: COLORS.white },
-              { pt: 2, color: COLORS.white },
-              getRowBorder(isLastRow),
-              { pt: 2, color: COLORS.white },
-            ],
-          },
-        },
-      ];
-
-      // Add tick marks for each segment (centered, consistent size)
-      const productsOffered = t.products_offered || [];
-      displaySegments.forEach((seg, si) => {
-        const hasProduct = productsOffered[si] === true;
-        row.push({
-          text: hasProduct ? '✓' : '',
-          options: {
-            fill: { color: COLORS.white },
-            color: '00A651', // Green tick
-            fontSize: 12,
-            bold: true,
-            align: 'center',
-            valign: 'middle',
-            border: [
-              { pt: 2, color: COLORS.white },
-              { pt: 2, color: COLORS.white },
-              getRowBorder(isLastRow),
-              { pt: 2, color: COLORS.white },
-            ],
-          },
-        });
+      });
+      // Badge
+      slide.addShape(pptx.shapes.RECTANGLE, {
+        x: x + cardW - 1.2,
+        y: cardY + 0.08,
+        w: 1.05,
+        h: 0.28,
+        fill: { color: COLORS.white },
+        line: { type: 'none' },
+        rectRadius: 0.03,
+      });
+      slide.addText(badge, {
+        x: x + cardW - 1.2,
+        y: cardY + 0.08,
+        w: 1.05,
+        h: 0.28,
+        fontSize: 8,
+        fontFace: 'Segoe UI',
+        bold: true,
+        color: pColor,
+        align: 'center',
+        valign: 'middle',
       });
 
-      rows.push(row);
+      // Card body (light gray)
+      const bodyH = cardH - headerH;
+      slide.addShape(pptx.shapes.RECTANGLE, {
+        x,
+        y: cardY + headerH,
+        w: cardW,
+        h: bodyH,
+        fill: { color: 'F5F5F5' },
+        line: { color: 'E0E0E0', width: 0.5 },
+      });
+
+      // Card body content
+      const bodyLines = [
+        `Market Size: ${p.market_size || 'N/A'}`,
+        `CAGR: ${p.growth || p.cagr || 'N/A'}`,
+        `Rationale: ${p.capability_bridge || p.rationale || 'Strategic fit'}`,
+        `Entry Mode: ${p.entry_mode || 'Acquisition'}`,
+      ].join('\n');
+      slide.addText(bodyLines, {
+        x: x + 0.1,
+        y: cardY + headerH + 0.05,
+        w: cardW - 0.2,
+        h: bodyH - 0.1,
+        fontSize: 10,
+        fontFace: 'Segoe UI',
+        color: COLORS.black,
+        valign: 'top',
+        lineSpacing: 14,
+      });
     });
 
-    slide.addTable(rows, {
-      x: 0.38,
-      y: 1.2,
-      w: 12.54,
-      colW: colWidths,
-      rowH: [0.55, ...Array(targets.length).fill(0.5)], // Taller header row
-      fontFace: 'Segoe UI',
-      fontSize: 14,
-      valign: 'middle',
-    });
-
-    // Bottom boundary line
-    const tableBottom = 1.2 + 0.55 + targets.length * 0.5;
+    // === DIVIDER at y=3.5 ===
     slide.addShape(pptx.shapes.LINE, {
       x: 0.38,
-      y: tableBottom,
+      y: 3.5,
       w: 12.54,
       h: 0,
-      line: { color: COLORS.gray, width: 1 },
+      line: { color: COLORS.gray, width: 0.75, dashType: 'dash' },
     });
 
-    addFootnote(slide, 'Source: Company disclosures, industry databases');
-  }
-
-  // ========== SLIDE 5: M&A STRATEGY (Row-Based Geographic Framework) ==========
-  if (targetList.length >= 2) {
-    const slide = pptx.addSlide({ masterName: 'YCP_MASTER' });
-    addSlideTitle(slide, 'Hypothetical M&A Strategies');
-
-    // Define geographic strategy themes based on target locations
-    const geoStrategies = [];
-
-    // Group targets by region
-    const seaCountries = [
-      'Singapore',
-      'Thailand',
-      'Vietnam',
-      'Indonesia',
-      'Malaysia',
-      'Philippines',
-    ];
-    const greaterChinaCountries = ['China', 'Taiwan', 'Hong Kong'];
-    const neaCountries = ['Japan', 'Korea', 'South Korea'];
-
-    const seaTargets = targetList.filter((t) =>
-      seaCountries.some((c) => (t.hq_country || '').includes(c))
-    );
-    const gcTargets = targetList.filter((t) =>
-      greaterChinaCountries.some((c) => (t.hq_country || '').includes(c))
-    );
-    const neaTargets = targetList.filter((t) =>
-      neaCountries.some((c) => (t.hq_country || '').includes(c))
-    );
-    const otherTargets = targetList.filter(
-      (t) =>
-        !seaCountries.some((c) => (t.hq_country || '').includes(c)) &&
-        !greaterChinaCountries.some((c) => (t.hq_country || '').includes(c)) &&
-        !neaCountries.some((c) => (t.hq_country || '').includes(c))
-    );
-
-    // Build strategy rows based on available targets (without company names per design requirements)
-    if (seaTargets.length > 0) {
-      geoStrategies.push({
-        region: 'Southeast Asia',
-        strategy: `■  Acquire regional player to establish footprint\n■  Leverage local distribution networks and customer relationships`,
-        rationale: `■  Access to high-growth ASEAN markets with favorable demographics\n■  Cost-effective manufacturing base and supply chain diversification`,
-      });
-    }
-
-    if (gcTargets.length > 0) {
-      geoStrategies.push({
-        region: 'Greater China',
-        strategy: `■  Target local manufacturer for technology and scale expansion\n■  Build presence in world's largest manufacturing ecosystem`,
-        rationale: `■  Access to advanced manufacturing capabilities and R&D talent\n■  Strategic positioning in key supply chain hub`,
-      });
-    }
-
-    if (neaTargets.length > 0) {
-      geoStrategies.push({
-        region: 'Northeast Asia',
-        strategy: `■  Partner with or acquire regional company for premium segment\n■  Strengthen technical capabilities through talent acquisition`,
-        rationale: `■  Access to high-value customer segments and premium pricing\n■  Technology transfer and quality improvement opportunities`,
-      });
-    }
-
-    if (otherTargets.length > 0 && geoStrategies.length < 3) {
-      geoStrategies.push({
-        region: 'Other Asia',
-        strategy: `■  Evaluate regional targets for niche market entry\n■  Diversify geographic exposure beyond core markets`,
-        rationale: `■  Risk diversification across multiple markets\n■  Access to unique capabilities or customer segments`,
-      });
-    }
-
-    // Ensure at least 3 rows
-    while (geoStrategies.length < 3) {
-      geoStrategies.push({
-        region:
-          geoStrategies.length === 0
-            ? 'Southeast Asia'
-            : geoStrategies.length === 1
-              ? 'Greater China'
-              : 'Northeast Asia',
-        strategy: '■  Identify acquisition targets in region\n■  Build local market intelligence',
-        rationale: '■  Expand geographic footprint\n■  Diversify revenue streams',
-      });
-    }
-
-    // Column widths: Region(2.0) + Strategy(5.27) + Rationale(5.27)
-    const colWidths = [2.0, 5.27, 5.27];
-    const tableStartX = 0.38;
-    const tableStartY = 1.2;
-    const headerHeight = 0.5;
-    const rowHeight = 1.2;
-
-    // Header row (not bold per design requirements)
-    const headerOpts = {
+    // === EXPANSION VECTOR TABLE (y=3.6 to y=5.7) ===
+    const vecHeaderOpts = {
       fill: { color: COLORS.headerBg },
       color: COLORS.white,
       bold: false,
@@ -1634,82 +2237,122 @@ async function generateUTBSlides(companyName, website, research, additionalConte
       valign: 'middle',
       border: { pt: 2, color: COLORS.white },
     };
-
-    const rows = [
+    const vecRows = [
       [
-        { text: 'Region', options: headerOpts },
-        { text: 'Strategy', options: headerOpts },
-        { text: 'Rationale', options: headerOpts },
+        { text: 'Priority', options: vecHeaderOpts },
+        { text: 'Direction', options: vecHeaderOpts },
+        { text: 'Target Segment', options: vecHeaderOpts },
+        { text: 'Market Size', options: vecHeaderOpts },
+        { text: 'Growth', options: vecHeaderOpts },
+        { text: 'Capability Fit', options: vecHeaderOpts },
+        { text: 'Rationale', options: vecHeaderOpts },
+        { text: 'Status', options: vecHeaderOpts },
       ],
     ];
 
-    // Data rows (not bold per design requirements)
-    geoStrategies.slice(0, 4).forEach((gs, i) => {
-      const isLastRow = i === Math.min(geoStrategies.length, 4) - 1;
+    const vecData = vectors.slice(0, 5);
+    vecData.forEach((v, i) => {
+      const isLastRow = i === vecData.length - 1;
+      const rowBorder = isLastRow
+        ? { pt: 0, color: COLORS.white }
+        : { pt: 0.5, color: COLORS.gray, dashType: 'dash' };
+      const cellOpts = {
+        fill: { color: COLORS.white },
+        color: COLORS.black,
+        bold: false,
+        align: 'center',
+        valign: 'middle',
+        border: [
+          { pt: 0, color: COLORS.white },
+          { pt: 0, color: COLORS.white },
+          rowBorder,
+          { pt: 0, color: COLORS.white },
+        ],
+      };
 
-      rows.push([
+      // Direction styling
+      const dir = (v.type || v.direction || '').toLowerCase();
+      const isVertical = dir.includes('vertical');
+      const dirText = isVertical ? '\u2191 Vertical' : '\u2192 Horizontal';
+      const dirFill = isVertical ? '6A0DAD' : '007FFF';
+
+      // Entry mode / status color - top priorities default to "Pursue" (green)
+      const entryMode = (v.entry_mode || v.status || '').toLowerCase();
+      let statusFill = '00A651';
+      let statusColor = COLORS.white; // Default green for pursue
+      if (entryMode.includes('monitor') || entryMode.includes('watch')) {
+        statusFill = 'FFD700';
+        statusColor = COLORS.black;
+      } else if (entryMode.includes('exclude') || entryMode.includes('avoid')) {
+        statusFill = 'FF4444';
+        statusColor = COLORS.white;
+      }
+
+      vecRows.push([
+        { text: String(v.rank || v.priority || i + 1), options: { ...cellOpts, bold: true } },
         {
-          text: gs.region,
-          options: {
-            fill: { color: COLORS.labelBg },
-            color: COLORS.white,
-            bold: false,
-            fontSize: 14,
-            align: 'center',
-            valign: 'middle',
-            border: { pt: 2, color: COLORS.white },
-          },
+          text: dirText,
+          options: { ...cellOpts, fill: { color: dirFill }, color: COLORS.white, fontSize: 11 },
         },
+        { text: v.segment || v.target_segment || '', options: { ...cellOpts, align: 'left' } },
+        { text: v.market_size || '', options: cellOpts },
+        { text: v.growth || '', options: cellOpts },
+        { text: v.fragmentation || v.capability_fit || '', options: cellOpts },
+        { text: v.capability_bridge || v.rationale || '', options: { ...cellOpts, align: 'left' } },
         {
-          text: gs.strategy,
-          options: {
-            fill: { color: COLORS.white },
-            color: COLORS.black,
-            fontSize: 14,
-            align: 'left',
-            valign: 'top',
-            border: [
-              { pt: 2, color: COLORS.white },
-              { pt: 2, color: COLORS.white },
-              getRowBorder(isLastRow),
-              { pt: 2, color: COLORS.white },
-            ],
-          },
-        },
-        {
-          text: gs.rationale,
-          options: {
-            fill: { color: COLORS.white },
-            color: COLORS.black,
-            fontSize: 14,
-            align: 'left',
-            valign: 'top',
-            border: [
-              { pt: 2, color: COLORS.white },
-              { pt: 2, color: COLORS.white },
-              getRowBorder(isLastRow),
-              { pt: 2, color: COLORS.white },
-            ],
-          },
+          text: v.entry_mode || v.status || 'Pursue',
+          options: { ...cellOpts, fill: { color: statusFill }, color: statusColor },
         },
       ]);
     });
 
-    slide.addTable(rows, {
-      x: tableStartX,
-      y: tableStartY,
+    slide.addTable(vecRows, {
+      x: 0.38,
+      y: 3.6,
       w: 12.54,
-      colW: colWidths,
-      rowH: [headerHeight, ...Array(rows.length - 1).fill(rowHeight)],
+      colW: [0.8, 1.2, 2.5, 1.2, 0.8, 1.2, 3.0, 1.9],
+      rowH: 0.38,
       fontFace: 'Segoe UI',
       fontSize: 14,
       valign: 'middle',
     });
 
-    addFootnote(slide);
+    // === EXCLUSION CRITERIA BAR (y=5.9 to y=6.5) ===
+    slide.addShape(pptx.shapes.RECTANGLE, {
+      x: 0.38,
+      y: 5.9,
+      w: 12.54,
+      h: 0.6,
+      fill: { color: 'F5F5F5' },
+      line: { color: 'E0E0E0', width: 0.5 },
+      rectRadius: 0.05,
+    });
+    slide.addText('Exclusion Criteria:', {
+      x: 0.5,
+      y: 5.9,
+      w: 2.0,
+      h: 0.6,
+      fontSize: 11,
+      fontFace: 'Segoe UI',
+      bold: true,
+      color: 'FF4444',
+      valign: 'middle',
+    });
+    slide.addText(exclusions || 'Segments with low strategic fit or high regulatory barriers', {
+      x: 2.5,
+      y: 5.9,
+      w: 10.3,
+      h: 0.6,
+      fontSize: 11,
+      fontFace: 'Segoe UI',
+      color: COLORS.black,
+      valign: 'middle',
+    });
+
+    addFootnote(slide, 'Source: Market analysis, strategic assessment');
   }
 
-  // ========== SLIDE 6: FINANCIAL BAR CHART (if revenue history available) ==========
+  // ========== SLIDE 7: FINANCIAL BAR CHART (if revenue history available) ==========
   const fin = synthesis.financials || {};
   const revenueHistory = fin.revenue_history || [];
 
@@ -1787,39 +2430,39 @@ app.post('/api/utb', async (req, res) => {
   const tracker = createTracker('utb', email, { companyName, website });
 
   trackingContext.run(tracker, async () => {
-  try {
-    // Conduct comprehensive research
-    const research = await conductUTBResearch(companyName, website, context);
+    try {
+      // Conduct comprehensive research
+      const research = await conductUTBResearch(companyName, website, context);
 
-    // Generate PowerPoint slides with structured data (1 slide per segment)
-    const slidesBase64 = await generateUTBSlides(companyName, website, research, context);
+      // Generate PowerPoint slides with structured data (1 slide per segment)
+      const slidesBase64 = await generateUTBSlides(companyName, website, research, context);
 
-    // Send email with attachment
-    await sendEmail(
-      email,
-      `UTB: ${companyName}`,
-      `<div style="font-family:Arial,sans-serif;max-width:500px;">
+      // Send email with attachment
+      await sendEmail(
+        email,
+        `UTB: ${companyName}`,
+        `<div style="font-family:Arial,sans-serif;max-width:500px;">
         <h2 style="color:#1a365d;margin-bottom:5px;">${companyName}</h2>
         <p style="color:#64748b;margin-top:0;">${website}</p>
         <p>Your UTB buyer intelligence report is attached.</p>
         <p style="font-size:12px;color:#94a3b8;">Generated: ${new Date().toLocaleString()}</p>
       </div>`,
-      {
-        content: slidesBase64,
-        name: `UTB_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pptx`,
-      }
-    );
+        {
+          content: slidesBase64,
+          name: `UTB_${companyName.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pptx`,
+        }
+      );
 
-    console.log(`[UTB] Slides report sent successfully to ${email}`);
+      console.log(`[UTB] Slides report sent successfully to ${email}`);
 
-    await tracker.finish({ status: 'success', companyName });
-  } catch (error) {
-    console.error('[UTB] Error:', error);
-    await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
-    await sendEmail(email, `UTB Error - ${companyName}`, `<p>Error: ${error.message}</p>`).catch(
-      () => {}
-    );
-  }
+      await tracker.finish({ status: 'success', companyName });
+    } catch (error) {
+      console.error('[UTB] Error:', error);
+      await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
+      await sendEmail(email, `UTB Error - ${companyName}`, `<p>Error: ${error.message}</p>`).catch(
+        () => {}
+      );
+    }
   }); // end trackingContext.run
 });
 

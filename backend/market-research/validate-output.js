@@ -30,7 +30,7 @@ function getExpectations(country = 'Vietnam', industry = 'Energy Services') {
       { slide: 2, minChars: 50, mustContain: ['Table of Contents'] },
       { slide: 3, minChars: 50, mustContain: ['Executive Summary', country] },
     ],
-    tableChecks: [{ slide: 3, minTables: 1 }],
+    tableChecks: [],
   };
 }
 

@@ -8,7 +8,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawn } = require('child_process');
 const { validatePPTX, generateReport, readPPTX } = require('./pptx-validator');
-const { EXPECTATIONS, validateSlides } = require('./validate-output');
+const { getExpectations, validateSlides } = require('./validate-output');
 
 const CONFIG = {
   maxIterations: 10,
@@ -39,15 +39,15 @@ async function generatePPT() {
   });
 }
 
-async function validate() {
+async function validate(expectations) {
   const results = { passed: [], failed: [], warnings: [], details: null };
   try {
-    const basic = await validatePPTX(CONFIG.outputFile, EXPECTATIONS);
+    const basic = await validatePPTX(CONFIG.outputFile, expectations);
     results.passed.push(...basic.passed);
     results.failed.push(...basic.failed);
     results.warnings.push(...basic.warnings);
     const { zip } = await readPPTX(CONFIG.outputFile);
-    const slideRes = await validateSlides(zip, EXPECTATIONS.slideChecks);
+    const slideRes = await validateSlides(zip, expectations.slideChecks);
     results.passed.push(...slideRes.passed);
     results.failed.push(...slideRes.failed);
     results.details = await generateReport(CONFIG.outputFile);
@@ -122,7 +122,7 @@ async function waitForInput(prompt) {
   );
 }
 
-async function runLoop() {
+async function runLoop(expectations) {
   console.log('='.repeat(70));
   console.log('AUTOMATED TEST-FIX LOOP');
   console.log('='.repeat(70));
@@ -134,7 +134,7 @@ async function runLoop() {
     iter++;
     const gen = await generatePPT();
     const val = gen.success
-      ? await validate()
+      ? await validate(expectations)
       : {
           valid: false,
           passed: [],
@@ -170,7 +170,7 @@ async function runLoop() {
   return { success: allPassed, iterations: history.length, history };
 }
 
-async function runOnce() {
+async function runOnce(expectations) {
   if (!fs.existsSync(CONFIG.outputFile)) {
     const gen = await generatePPT();
     if (!gen.success) {
@@ -178,7 +178,7 @@ async function runOnce() {
       process.exit(1);
     }
   }
-  const val = await validate();
+  const val = await validate(expectations);
   printReport(1, { success: true, duration: 0 }, val);
   exportIssues(val);
   return val;
@@ -187,18 +187,26 @@ async function runOnce() {
 async function main() {
   const args = process.argv.slice(2);
   if (args.includes('--help')) {
-    console.log('Usage: node test-fix-loop.js [--once|--auto|--max N]');
+    console.log(
+      'Usage: node test-fix-loop.js [--once|--auto|--max N] [--country=X] [--industry=Y]'
+    );
     process.exit(0);
   }
   if (args.includes('--auto')) CONFIG.waitForFix = false;
   const maxIdx = args.indexOf('--max');
   if (maxIdx >= 0 && args[maxIdx + 1]) CONFIG.maxIterations = parseInt(args[maxIdx + 1], 10) || 10;
 
+  const countryArg = args.find((a) => a.startsWith('--country='));
+  const industryArg = args.find((a) => a.startsWith('--industry='));
+  const country = countryArg ? countryArg.split('=')[1] : 'Thailand';
+  const industry = industryArg ? industryArg.split('=')[1] : 'Energy Services';
+  const expectations = getExpectations(country, industry);
+
   if (args.includes('--once')) {
-    const r = await runOnce();
+    const r = await runOnce(expectations);
     process.exit(r.valid ? 0 : 1);
   } else {
-    const r = await runLoop();
+    const r = await runLoop(expectations);
     process.exit(r.success ? 0 : 1);
   }
 }
