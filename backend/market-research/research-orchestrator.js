@@ -383,6 +383,25 @@ Return ONLY valid JSON. Use null for missing fields.`;
 }
 
 /**
+ * Mark low-confidence research data with quality labels in the prompt context.
+ * Topics with dataQuality "low" or "incomplete" get prefixed so the AI model hedges appropriately.
+ */
+function markDataQuality(filteredData) {
+  const marked = {};
+  for (const [key, value] of Object.entries(filteredData)) {
+    const quality = value?.dataQuality;
+    if (quality === 'low' || quality === 'estimated') {
+      marked[`[ESTIMATED] ${key}`] = value;
+    } else if (quality === 'incomplete') {
+      marked[`[UNVERIFIED] ${key}`] = value;
+    } else {
+      marked[key] = value;
+    }
+  }
+  return marked;
+}
+
+/**
  * Synthesize POLICY section with depth requirements
  */
 async function synthesizePolicy(researchData, country, industry, clientContext) {
@@ -403,9 +422,10 @@ async function synthesizePolicy(researchData, country, industry, clientContext) 
     `    [Policy] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE'})`
   );
 
+  const labeledData = markDataQuality(filteredData);
   const researchContext = dataAvailable
-    ? `RESEARCH DATA (use this as primary source):
-${JSON.stringify(filteredData, null, 2)}`
+    ? `RESEARCH DATA (use this as primary source — items prefixed [ESTIMATED] or [UNVERIFIED] are uncertain, hedge accordingly):
+${JSON.stringify(labeledData, null, 2)}`
     : `RESEARCH DATA: EMPTY due to API issues.`;
 
   const prompt = `You are synthesizing policy and regulatory research for ${country}'s ${industry} market.
@@ -493,9 +513,10 @@ async function synthesizeMarket(researchData, country, industry, clientContext) 
     `    [Market] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE'})`
   );
 
+  const labeledData = markDataQuality(filteredData);
   const researchContext = dataAvailable
-    ? `RESEARCH DATA (use this as primary source):
-${JSON.stringify(filteredData, null, 2)}`
+    ? `RESEARCH DATA (use this as primary source — items prefixed [ESTIMATED] or [UNVERIFIED] are uncertain, hedge accordingly):
+${JSON.stringify(labeledData, null, 2)}`
     : `RESEARCH DATA: EMPTY due to API issues.`;
 
   const prompt = `You are synthesizing market data research for ${country}'s ${industry} market.
@@ -608,9 +629,10 @@ async function synthesizeCompetitors(researchData, country, industry, clientCont
     `    [Competitors] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE'})`
   );
 
+  const labeledData = markDataQuality(filteredData);
   const researchContext = dataAvailable
-    ? `RESEARCH DATA (use this as primary source):
-${JSON.stringify(filteredData, null, 2)}`
+    ? `RESEARCH DATA (use this as primary source — items prefixed [ESTIMATED] or [UNVERIFIED] are uncertain, hedge accordingly):
+${JSON.stringify(labeledData, null, 2)}`
     : `RESEARCH DATA: EMPTY due to API issues.`;
 
   const prompt = `You are synthesizing competitive intelligence for ${country}'s ${industry} market.
@@ -1128,6 +1150,42 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
       return originalSynthesis;
     }
 
+    // Ensure depth and summary sections are preserved — if AI dropped them, recover from original
+    if (
+      originalSynthesis.depth &&
+      typeof originalSynthesis.depth === 'object' &&
+      !newSynthesis.depth
+    ) {
+      console.warn(
+        '  [reSynthesize] depth section missing from re-synthesis — recovering from original'
+      );
+      newSynthesis.depth = originalSynthesis.depth;
+    }
+    if (
+      originalSynthesis.summary &&
+      typeof originalSynthesis.summary === 'object' &&
+      !newSynthesis.summary
+    ) {
+      console.warn(
+        '  [reSynthesize] summary section missing from re-synthesis — recovering from original'
+      );
+      newSynthesis.summary = originalSynthesis.summary;
+    }
+
+    // Re-synthesis verification: count how many top-level sections actually changed
+    const sectionsToCheck = ['policy', 'market', 'competitors', 'depth', 'summary'];
+    let changedFields = 0;
+    for (const section of sectionsToCheck) {
+      const oldJson = JSON.stringify(originalSynthesis[section] || {});
+      const newJson = JSON.stringify(newSynthesis[section] || {});
+      if (oldJson !== newJson) changedFields++;
+    }
+    if (changedFields < 2) {
+      console.warn(
+        `  [reSynthesize] Re-synthesis produced minimal changes (${changedFields} fields updated)`
+      );
+    }
+
     // Preserve country field and metadata from original
     newSynthesis.country = country;
     const preserved = {
@@ -1584,7 +1642,10 @@ If you don't have specific data, say "estimated" or "industry sources suggest" -
 - Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
 - If you cannot find ${scope.industry}-specific data for a field, use the null/empty value — do NOT fill it with country-level macro data
 - Example: If asked for "ESCO market size" and you only know "Thailand GDP is $500B" — return null, not the GDP figure
-- Macro data is ONLY acceptable in contextual/background fields explicitly labeled as such`;
+- Macro data is ONLY acceptable in contextual/background fields explicitly labeled as such
+
+=== ANTI-PADDING VALIDATION ===
+VALIDATION: Before returning, count how many times you used GDP, population, or inflation data. If more than 2 mentions in industry-specific sections (market, competitors, depth), you are padding. Remove those and replace with industry-specific data or null.`;
 
   const prompt = `Client: ${scope.clientContext}
 Industry: ${scope.industry}
