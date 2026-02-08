@@ -599,6 +599,12 @@ CRITICAL: I need SPECIFIC details, not general descriptions.
 
 4. VALUE CHAIN POSITION: Where they sit (R&D, manufacturing, distribution, etc.)
 
+5. REVENUE BY PRODUCT: For each major product line, what % of revenue does it represent?
+6. KEY CUSTOMERS: Name specific customers or customer types for each product line
+7. END MARKETS: What industries/verticals buy each product? With approximate revenue split
+8. RECENT LAUNCHES: Any new products/services launched in the last 2 years?
+9. GEOGRAPHIC SCOPE: Which products are sold in which regions?
+
 BE SPECIFIC with names and numbers. Generic descriptions are NOT useful.
 ${context ? `CONTEXT: ${context}` : ''}`).catch((e) => ({
       type: 'products',
@@ -994,6 +1000,14 @@ ${research.products}
 RESEARCH ON OPERATIONS:
 ${research.operations}
 
+RESEARCH ON FINANCIALS:
+${research.financials}
+
+RESEARCH ON COMPETITORS (for context):
+${research.competitors}
+
+${officialDocContext}
+
 ---
 
 CRITICAL INSTRUCTIONS:
@@ -1016,6 +1030,8 @@ Respond in this EXACT JSON format:
       {
         "name": "Business segment name",
         "what_it_does": "One sentence - customer value",
+        "revenue_pct": "% of total revenue if available",
+        "key_customers": "Customer types or specific names",
         "revenue_significance": "High/Medium/Low",
         "source_url": "URL to source"
       }
@@ -1394,6 +1410,126 @@ async function conductUTBResearch(companyName, website, additionalContext) {
     additionalContext,
     officialDocs
   );
+
+  // Completeness check for Business Overview
+  const prodSection = synthesis.products_and_services || {};
+  const productLines = prodSection.product_lines || [];
+  const overview = prodSection.overview || '';
+
+  if (productLines.length < 2 || overview.length < 30) {
+    console.log(
+      `[UTB] Business Overview thin (${productLines.length} product lines, overview ${overview.length} chars). Re-querying...`
+    );
+
+    // Re-run Query 1 with stronger prompt
+    const reQuery =
+      await callGeminiSearch(`Research ${companyName} (${website}) - PRODUCTS & SERVICES DEEP DIVE:
+
+You returned very little data on the previous attempt. Search harder.
+
+${rawResearch.products ? `PREVIOUS RESULT (too thin):\n${rawResearch.products}\n\n` : ''}
+CRITICAL: I need SPECIFIC details, not general descriptions.
+
+1. PRODUCT LINES: List ALL major product lines with specific product/model names, key specs, target applications
+2. SERVICE OFFERINGS: List specific services with names
+3. TECHNOLOGY/IP: Proprietary technologies, patents, unique capabilities
+4. VALUE CHAIN POSITION: Where they sit (R&D, manufacturing, distribution, etc.)
+5. REVENUE BY PRODUCT: For each major product line, what % of revenue does it represent?
+6. KEY CUSTOMERS: Name specific customers or customer types for each product line
+7. END MARKETS: What industries/verticals buy each product? With approximate revenue split
+8. RECENT LAUNCHES: Any new products/services launched in the last 2 years?
+9. GEOGRAPHIC SCOPE: Which products are sold in which regions?
+
+BE SPECIFIC with names and numbers. Generic descriptions are NOT useful.
+${additionalContext ? `CONTEXT: ${additionalContext}` : ''}`);
+
+    if (reQuery) {
+      rawResearch.products = reQuery;
+      // Re-synthesize just Synthesis 2
+      const docContext = [];
+      if (officialDocs.annualReport)
+        docContext.push(`ANNUAL REPORT:\n${officialDocs.annualReport}`);
+      if (officialDocs.midtermPlan) docContext.push(`MID-TERM PLAN:\n${officialDocs.midtermPlan}`);
+      if (officialDocs.mergerInfo) docContext.push(`MERGER INFO:\n${officialDocs.mergerInfo}`);
+      const reDocContext =
+        docContext.length > 0
+          ? `\n\nOFFICIAL DOCUMENTS (PRIMARY SOURCE):\n${docContext.join('\n\n')}`
+          : '';
+
+      const reSynth2 =
+        await callChatGPT(`You are writing for M&A ADVISORS who need to understand a company's business quickly. NOT engineers.
+
+COMPANY: ${companyName}
+
+RESEARCH ON PRODUCTS & SERVICES:
+${reQuery}
+
+RESEARCH ON OPERATIONS:
+${rawResearch.operations}
+
+RESEARCH ON FINANCIALS:
+${rawResearch.financials}
+
+RESEARCH ON COMPETITORS (for context):
+${rawResearch.competitors}
+
+${reDocContext}
+
+---
+
+CRITICAL INSTRUCTIONS:
+- Be concise, direct, and professional. No jargon. No generic AI fluff.
+- Do NOT list technical model numbers or product codes
+- Every statement must be backed by concrete facts from the research
+- If you don't have specific data, don't write generic filler - leave it out
+
+Respond in this EXACT JSON format:
+{
+  "products_and_services": {
+    "overview": "1-2 sentences. What do they sell, to whom?",
+    "product_lines": [
+      {
+        "name": "Business segment name",
+        "what_it_does": "One sentence - customer value",
+        "revenue_pct": "% of total revenue if available",
+        "key_customers": "Customer types or specific names",
+        "revenue_significance": "High/Medium/Low",
+        "source_url": "URL to source"
+      }
+    ],
+    "strategic_capabilities": [
+      {
+        "category": "Technology|Scale|Relationships|Cost|Brand",
+        "capability": "Specific capability with number",
+        "source": "Source document name",
+        "source_url": "URL to source"
+      }
+    ]
+  },
+  "operations": {
+    "manufacturing_footprint": [
+      {"location": "City, Country", "type": "Manufacturing|R&D|HQ|Distribution", "details": "Capacity/employees/products", "source_url": "URL"}
+    ]
+  }
+}
+
+BE CONCISE. Each field should be brief and scannable.`);
+
+      if (typeof reSynth2 === 'string') {
+        try {
+          const jsonMatch = reSynth2.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            const parsed = JSON.parse(jsonMatch[0]);
+            stripReasoning(parsed);
+            Object.assign(synthesis, parsed);
+            console.log('[UTB] Business Overview re-synthesized successfully');
+          }
+        } catch (e) {
+          console.error('[UTB] Failed to parse re-synthesis:', e.message);
+        }
+      }
+    }
+  }
 
   console.log(`[UTB] Research complete for: ${companyName}`);
 
