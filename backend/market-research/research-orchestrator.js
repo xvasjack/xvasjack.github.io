@@ -1127,6 +1127,10 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   console.log(`\n=== RESEARCHING: ${country} ===`);
   const startTime = Date.now();
 
+  // AbortController for cancelling orphaned retries on pipeline error
+  const pipelineController = new AbortController();
+  const pipelineSignal = pipelineController.signal;
+
   // Use dynamic framework for universal industry support
   const useDynamicFramework = true; // Enable dynamic framework
   let researchData = {}; // Declare outside to be accessible in both paths
@@ -1169,6 +1173,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
       ]);
     } catch (err) {
       console.error(`  [ERROR] Research phase failed: ${err.message}`);
+      pipelineController.abort();
       categoryResults = [];
     }
 
@@ -1188,6 +1193,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
       console.error(
         `  [ERROR] Dynamic framework returned only ${actualTopics} topics with data (minimum 3 required)`
       );
+      pipelineController.abort();
       return {
         country,
         error: 'Insufficient research data',
@@ -1238,6 +1244,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
       console.error(
         `  [ERROR] Insufficient research data: ${totalTopics} topics (minimum ${MIN_TOPICS_REQUIRED} required)`
       );
+      pipelineController.abort();
       return {
         country,
         error: 'Insufficient research data',
@@ -1266,6 +1273,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     console.error(
       `  [ERROR] ${failedSections.length}/3 synthesis sections failed: ${failedSections.join(', ')}`
     );
+    pipelineController.abort();
     return {
       country,
       error: 'Synthesis failed',
@@ -1383,6 +1391,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         console.error(
           `  [ABORT] Content still too thin after retry (${revalidation.scores.overall}/100). Will not generate hollow PPT.`
         );
+        pipelineController.abort();
         countryAnalysis.aborted = true;
         countryAnalysis.abortReason = `Content depth ${revalidation.scores.overall}/100 after retry. Failures: ${revalidation.failures.join('; ')}`;
       }

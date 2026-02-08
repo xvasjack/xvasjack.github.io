@@ -52,13 +52,26 @@ function trackCost(
 // ============ AI TOOLS ============
 
 // Retry utility with exponential backoff
-async function withRetry(fn, maxRetries = 3, baseDelayMs = 1000, operationName = 'API call') {
+// Accepts optional signal (AbortSignal) to cancel retries when pipeline aborts
+async function withRetry(
+  fn,
+  maxRetries = 3,
+  baseDelayMs = 1000,
+  operationName = 'API call',
+  signal = null
+) {
   let lastError;
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    if (signal?.aborted) {
+      throw new Error(`${operationName} aborted before attempt ${attempt}`);
+    }
     try {
       return await fn();
     } catch (error) {
       lastError = error;
+      if (signal?.aborted) {
+        throw new Error(`${operationName} aborted during attempt ${attempt}`);
+      }
       if (attempt < maxRetries) {
         const delay = baseDelayMs * Math.pow(2, attempt - 1); // 1s, 2s, 4s
         console.log(
@@ -75,7 +88,13 @@ async function withRetry(fn, maxRetries = 3, baseDelayMs = 1000, operationName =
 // Kimi K2 API - for deep research with web browsing
 // Uses 256k context for thorough analysis with retry logic
 // NOTE: kimi-k2.5 ONLY accepts temperature: 1 (Moonshot API constraint)
-async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens = 8192) {
+async function callKimi(
+  query,
+  systemPrompt = '',
+  useWebSearch = true,
+  maxTokens = 8192,
+  pipelineSignal = null
+) {
   const messages = [];
   if (systemPrompt) {
     messages.push({ role: 'system', content: systemPrompt });
@@ -241,6 +260,11 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
       }
     }
 
+    // Check if pipeline was aborted before quality retry
+    if (pipelineSignal?.aborted) {
+      return { content: content || '', citations: [], researchQuality: 'aborted' };
+    }
+
     // Validate research quality and retry if thin
     let researchQuality = 'good';
     if (!content) {
@@ -375,7 +399,7 @@ async function callKimi(query, systemPrompt = '', useWebSearch = true, maxTokens
 
 // Kimi deep research - comprehensive research on a topic
 // Lets Kimi browse and think deeply about the research question
-async function callKimiDeepResearch(topic, country, industry) {
+async function callKimiDeepResearch(topic, country, industry, pipelineSignal = null) {
   console.log(`  [Kimi Deep Research] ${topic} for ${country}...`);
 
   const systemPrompt = `You are a senior market research analyst at McKinsey. You have access to web search.
@@ -407,7 +431,7 @@ Search the web for recent data (2025-2026). Find:
 
 Be specific. Cite sources. No fluff.`;
 
-  return callKimi(query, systemPrompt, true, 8192);
+  return callKimi(query, systemPrompt, true, 8192, pipelineSignal);
 }
 
 // Light tasks (scope parsing, gap ID, review). No web search.

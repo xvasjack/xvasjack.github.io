@@ -1,4 +1,4 @@
-const { callKimiDeepResearch } = require('./ai-clients');
+const { callKimiDeepResearch, callGemini } = require('./ai-clients');
 const { RESEARCH_FRAMEWORK, RESEARCH_TOPIC_GROUPS } = require('./research-framework');
 
 /**
@@ -113,7 +113,7 @@ async function policyResearchAgent(country, industry, _clientContext) {
   const topics = RESEARCH_TOPIC_GROUPS.policy;
   const results = {};
 
-  // Run all policy topics in parallel
+  // Run all policy topics in parallel with per-topic timeout
   const policyResults = await Promise.all(
     topics.map(async (topicKey) => {
       const framework = RESEARCH_FRAMEWORK[topicKey];
@@ -175,7 +175,36 @@ REQUIREMENTS:
 - Include specific percentages, years, and monetary values where available
 - Mark dataQuality as "low" if information is estimated or uncertain`;
 
-      let result = await callKimiDeepResearch(queryContext, country, industry);
+      let result;
+      try {
+        result = await Promise.race([
+          callKimiDeepResearch(queryContext, country, industry),
+          new Promise((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`Policy topic "${topicKey}" timed out after 150s`)),
+              150000
+            )
+          ),
+        ]);
+      } catch (timeoutErr) {
+        console.warn(
+          `      [Policy] ${topicKey}: ${timeoutErr.message}, trying Gemini fallback...`
+        );
+        try {
+          const geminiContent = await callGemini(queryContext, {
+            maxTokens: 8192,
+            temperature: 0.3,
+          });
+          const content =
+            typeof geminiContent === 'string' ? geminiContent : geminiContent?.content || '';
+          result = { content, citations: [], researchQuality: 'gemini_fallback' };
+        } catch (fallbackErr) {
+          console.warn(
+            `      [Policy] ${topicKey}: Gemini fallback failed: ${fallbackErr.message}`
+          );
+          result = { content: '', citations: [], researchQuality: 'failed' };
+        }
+      }
 
       // Extract structured JSON using multi-strategy extraction
       let extractResult = extractJsonFromContent(result.content);
@@ -367,7 +396,36 @@ REQUIREMENTS:
 - Market sizes should be in USD millions or billions
 - Cite projection sources (IEA, national plans, industry reports)`;
 
-        const result = await callKimiDeepResearch(queryContext, country, industry);
+        let result;
+        try {
+          result = await Promise.race([
+            callKimiDeepResearch(queryContext, country, industry),
+            new Promise((_, reject) =>
+              setTimeout(
+                () => reject(new Error(`Market topic "${topicKey}" timed out after 150s`)),
+                150000
+              )
+            ),
+          ]);
+        } catch (timeoutErr) {
+          console.warn(
+            `      [Market] ${topicKey}: ${timeoutErr.message}, trying Gemini fallback...`
+          );
+          try {
+            const geminiContent = await callGemini(queryContext, {
+              maxTokens: 8192,
+              temperature: 0.3,
+            });
+            const content =
+              typeof geminiContent === 'string' ? geminiContent : geminiContent?.content || '';
+            result = { content, citations: [], researchQuality: 'gemini_fallback' };
+          } catch (fallbackErr) {
+            console.warn(
+              `      [Market] ${topicKey}: Gemini fallback failed: ${fallbackErr.message}`
+            );
+            result = { content: '', citations: [], researchQuality: 'failed' };
+          }
+        }
 
         // JSON extraction (multi-strategy with retry)
         let extractResult = extractJsonFromContent(result.content);
@@ -553,7 +611,36 @@ REQUIREMENTS:
 - EVERY company in "players" and "japanesePlayers" MUST have a "website" field with the company's actual corporate URL
 - EVERY company MUST have a "description" field with 50+ words covering: revenue, growth rate, market share, key services/projects, geographic coverage, entry strategy details, and competitive significance. NO generic one-liners.`;
 
-      const result = await callKimiDeepResearch(queryContext, country, industry);
+      let result;
+      try {
+        result = await Promise.race([
+          callKimiDeepResearch(queryContext, country, industry),
+          new Promise((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`Competitor topic "${topicKey}" timed out after 150s`)),
+              150000
+            )
+          ),
+        ]);
+      } catch (timeoutErr) {
+        console.warn(
+          `      [Competitor] ${topicKey}: ${timeoutErr.message}, trying Gemini fallback...`
+        );
+        try {
+          const geminiContent = await callGemini(queryContext, {
+            maxTokens: 8192,
+            temperature: 0.3,
+          });
+          const content =
+            typeof geminiContent === 'string' ? geminiContent : geminiContent?.content || '';
+          result = { content, citations: [], researchQuality: 'gemini_fallback' };
+        } catch (fallbackErr) {
+          console.warn(
+            `      [Competitor] ${topicKey}: Gemini fallback failed: ${fallbackErr.message}`
+          );
+          result = { content: '', citations: [], researchQuality: 'failed' };
+        }
+      }
 
       // Bug 8 fix: track content/citations that may update on retry
       let finalContent = result.content;
@@ -1132,11 +1219,14 @@ REQUIREMENTS:
 - Include recent developments (2023-2024)`;
 
       try {
-        // Per-topic timeout: 90s. If one topic hangs, skip it rather than blocking all.
+        // Per-topic timeout: 150s. If one topic hangs, fall back to Gemini.
         const result = await Promise.race([
           callKimiDeepResearch(queryContext, country, industry),
           new Promise((_, reject) =>
-            setTimeout(() => reject(new Error(`Topic "${topic.name}" timed out after 90s`)), 90000)
+            setTimeout(
+              () => reject(new Error(`Topic "${topic.name}" timed out after 150s`)),
+              150000
+            )
           ),
         ]);
         console.log(
@@ -1150,6 +1240,33 @@ REQUIREMENTS:
         };
       } catch (err) {
         console.warn(`    [${category}] Topic "${topic.name}" failed: ${err.message}`);
+        // Fall back to Gemini instead of dropping the topic
+        try {
+          console.log(`    [${category}] Falling back to Gemini for "${topic.name}"...`);
+          const geminiResult = await Promise.race([
+            callGemini(queryContext, { maxTokens: 8192, temperature: 0.3 }),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Gemini fallback timed out')), 90000)
+            ),
+          ]);
+          const geminiContent =
+            typeof geminiResult === 'string' ? geminiResult : geminiResult?.content || '';
+          if (geminiContent.length > 100) {
+            console.log(
+              `    [${category}] Gemini fallback successful for "${topic.name}": ${geminiContent.length} chars`
+            );
+            return {
+              key: `${category}_${idx}_${topic.name.replace(/\s+/g, '_').toLowerCase()}`,
+              name: topic.name,
+              content: geminiContent,
+              citations: [],
+            };
+          }
+        } catch (fallbackErr) {
+          console.warn(
+            `    [${category}] Gemini fallback also failed for "${topic.name}": ${fallbackErr.message}`
+          );
+        }
         return { key: `${category}_${idx}_failed`, name: topic.name, content: '', citations: [] };
       }
     })
