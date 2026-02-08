@@ -155,8 +155,15 @@ function truncateSubtitle(text, maxLen = 180, addEllipsis = true) {
 
 // Helper: safely get array items
 function safeArray(arr, max = 5) {
-  if (!Array.isArray(arr)) return [];
-  return arr.slice(0, max);
+  if (Array.isArray(arr)) return arr.slice(0, max);
+  if (typeof arr === 'string' && arr.trim()) {
+    return arr
+      .split(/[;\n]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, max);
+  }
+  return [];
 }
 
 // Helper: safely convert any value to text for addText calls
@@ -1693,7 +1700,7 @@ function addFinancialCharts(slide, incomeData, balanceData, patternDef) {
 
   metrics.slice(0, 4).forEach((metric, idx) => {
     const x = 0.4 + idx * (metricW + 0.3);
-    slide.addText(metric.value || '', {
+    slide.addText(ensureString(metric.value || ''), {
       x,
       y: metricsRow.y,
       w: metricW,
@@ -1704,7 +1711,7 @@ function addFinancialCharts(slide, incomeData, balanceData, patternDef) {
       fontFace: 'Segoe UI',
       align: 'center',
     });
-    slide.addText(metric.label || '', {
+    slide.addText(ensureString(metric.label || ''), {
       x,
       y: metricsRow.y + 0.3,
       w: metricW,
@@ -2013,7 +2020,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
 
   const dataRows = (data || []).map((row) => [
     {
-      text: row.label || '',
+      text: ensureString(row.label || ''),
       options: {
         fontSize: 11,
         fontFace: font,
@@ -2023,7 +2030,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       },
     },
     {
-      text: row.currentState || '',
+      text: ensureString(row.currentState || ''),
       options: { fontSize: 11, fontFace: font, color: '000000' },
     },
     {
@@ -2031,7 +2038,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       options: { fontSize: 11, align: 'center', color: '000000', fontFace: font },
     },
     {
-      text: row.transition || '',
+      text: ensureString(row.transition || ''),
       options: { fontSize: 11, fontFace: font, color: '000000' },
     },
     {
@@ -2039,7 +2046,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       options: { fontSize: 11, align: 'center', color: '000000', fontFace: font },
     },
     {
-      text: row.futureState || '',
+      text: ensureString(row.futureState || ''),
       options: { fontSize: 11, fontFace: font, color: '000000' },
     },
   ]);
