@@ -32,8 +32,9 @@ const C_WHITE = TP_COLORS.lt1 || 'FFFFFF';
 const C_BLACK = TP_COLORS.dk1 || '000000'; // Standard text color (template dk1)
 const C_TRUE_BLACK = '000000'; // Chart axes/titles
 const C_BORDER = templatePatterns.style?.table?.borderColor || 'D6D7D9'; // Template table border
+const TABLE_BORDER_WIDTH = templatePatterns.style?.table?.borderWidth || 1;
 const C_MUTED = '999999'; // Muted/unavailable text
-const C_AXIS_GRAY = '888888'; // Chart axis/grid lines
+const C_AXIS_GRAY = TP_COLORS.gridLine || 'D6D7D9'; // Chart axis/grid lines
 const C_LIGHT_GRAY = 'F5F5F5'; // Panel/callout backgrounds
 const C_GRAY_BG = 'F2F2F2'; // Alternate row/content backgrounds
 const C_SECONDARY = '666666'; // Secondary text
@@ -491,12 +492,14 @@ function calculateColumnWidths(data, totalWidth = 12.6, options = {}) {
 function createTableRowOptions(isHeader = false, isAlternate = false, COLORS = {}) {
   const options = {
     fontFace: 'Segoe UI',
-    fontSize: 9,
+    fontSize: TP_FONTS.tableBody?.size || 14,
     valign: 'top',
+    margin: [0, 3, 0, 3],
   };
 
   if (isHeader) {
-    options.bold = true;
+    options.bold = TP_FONTS.tableHeader?.bold !== undefined ? TP_FONTS.tableHeader.bold : false;
+    options.fontSize = TP_FONTS.tableHeader?.size || 14;
     options.fill = { color: COLORS.accent3 || '011AB7' };
     options.color = COLORS.white || 'FFFFFF';
   } else {
@@ -550,11 +553,11 @@ function addCalloutBox(slide, title, content, options = {}) {
   const accent2 = TP_COLORS.accent2 || 'EDFDFF';
   const typeColors = {
     insight: {
-      fill: C_LIGHT_GRAY,
+      fill: C_WHITE,
       border: C_DK2,
       titleColor: C_DK2,
     },
-    warning: { fill: C_LIGHT_GRAY, border: C_BORDER, titleColor: C_BLACK },
+    warning: { fill: C_WHITE, border: C_BORDER, titleColor: C_BLACK },
     recommendation: {
       fill: accent2,
       border: C_ACCENT1,
@@ -566,7 +569,7 @@ function addCalloutBox(slide, title, content, options = {}) {
       titleColor: C_ACCENT1,
     },
     negative: {
-      fill: C_LIGHT_GRAY,
+      fill: C_WHITE,
       border: C_DK2,
       titleColor: C_DK2,
     },
@@ -578,13 +581,13 @@ function addCalloutBox(slide, title, content, options = {}) {
   if (title) {
     textParts.push({
       text: truncate(title, 80) + '\n',
-      options: { fontSize: 10, bold: true, color: colors.titleColor, fontFace: FONT },
+      options: { fontSize: 12, bold: true, color: colors.titleColor, fontFace: FONT },
     });
   }
   if (content) {
     textParts.push({
-      text: fitTextToShape(truncate(content, 200), boxW - 0.4, boxH - 0.4, 9).text,
-      options: { fontSize: 9, color: C_BLACK, fontFace: FONT },
+      text: fitTextToShape(truncate(content, 200), boxW - 0.4, boxH - 0.4, 11).text,
+      options: { fontSize: 11, color: C_BLACK, fontFace: FONT },
     });
   }
   if (textParts.length > 0) {
@@ -1027,12 +1030,12 @@ function addStackedBarChart(slide, title, data, options = {}) {
     titleFontSize: 14,
     ...CHART_AXIS_DEFAULTS,
     catAxisLabelFontFace: 'Segoe UI',
-    catAxisLabelFontSize: 10,
+    catAxisLabelFontSize: 12,
     valAxisLabelFontFace: 'Segoe UI',
-    valAxisLabelFontSize: 10,
-    showValue: false,
+    valAxisLabelFontSize: 12,
+    showValue: true,
     dataLabelFontFace: 'Segoe UI',
-    dataLabelFontSize: 9,
+    dataLabelFontSize: 10,
     dataLabelColor: C_WHITE,
     dataLabelPosition: 'ctr',
   });
@@ -1128,18 +1131,15 @@ function addLineChart(slide, title, data, options = {}) {
     titleFontSize: 14,
     ...CHART_AXIS_DEFAULTS,
     catAxisLabelFontFace: 'Segoe UI',
-    catAxisLabelFontSize: 10,
+    catAxisLabelFontSize: 12,
     valAxisLabelFontFace: 'Segoe UI',
-    valAxisLabelFontSize: 10,
+    valAxisLabelFontSize: 12,
     lineDataSymbol: 'circle',
     lineDataSymbolSize: 6,
     lineWidth: 2,
-    showValue:
-      options.showValues !== undefined
-        ? options.showValues
-        : chartData.categories.length <= 6 && chartData.series.length <= 2,
+    showValue: options.showValues !== undefined ? options.showValues : true,
     dataLabelFontFace: 'Segoe UI',
-    dataLabelFontSize: 9,
+    dataLabelFontSize: 10,
     dataLabelPosition: 't',
   });
 }
@@ -1201,12 +1201,12 @@ function addBarChart(slide, title, data, options = {}) {
     titleFontSize: 14,
     ...CHART_AXIS_DEFAULTS,
     catAxisLabelFontFace: 'Segoe UI',
-    catAxisLabelFontSize: 10,
+    catAxisLabelFontSize: 12,
     valAxisLabelFontFace: 'Segoe UI',
-    valAxisLabelFontSize: 10,
+    valAxisLabelFontSize: 12,
     showValue: true,
     dataLabelFontFace: 'Segoe UI',
-    dataLabelFontSize: 9,
+    dataLabelFontSize: 10,
   });
 }
 
@@ -1601,7 +1601,7 @@ function addInsightPanelsFromPattern(slide, insights, patternDef) {
       y: def.y,
       w: def.w - 0.12,
       h: def.h,
-      fill: { color: C_LIGHT_GRAY },
+      fill: { color: C_WHITE },
       line: { color: C_BORDER, width: 0.5 },
     });
     // Title — ensureString guards against AI returning object/array for title
@@ -1663,7 +1663,7 @@ function addCalloutOverlay(slide, text, pos) {
     y,
     w,
     h,
-    fill: { color: p.fill || C_LIGHT_GRAY },
+    fill: { color: p.fill || C_WHITE },
     line: { color: p.border || C_BORDER, width: p.borderWidth || 1 },
     rectRadius: p.cornerRadius || 0.05,
     shadow: { type: 'outer', blur: 3, opacity: 0.15, offset: 1.5, color: C_TRUE_BLACK },
@@ -1731,7 +1731,7 @@ function addMatrix(slide, quadrants, patternDef) {
       y: qDef.y + 0.5,
       w: qDef.w - 0.3,
       h: qDef.h - 0.6,
-      fontSize: 10,
+      fontSize: 12,
       color: C_BLACK,
       fontFace: 'Segoe UI',
       valign: 'top',
@@ -1755,10 +1755,10 @@ function addCaseStudyRows(slide, rows, chevrons, patternDef) {
   const labelStyle = p.labelStyle || {
     fill: C_DK2,
     color: C_WHITE,
-    fontSize: 10,
+    fontSize: 12,
     bold: true,
   };
-  const contentStyle = p.contentStyle || { fill: C_GRAY_BG, color: C_BLACK, fontSize: 9 };
+  const contentStyle = p.contentStyle || { fill: C_WHITE, color: C_BLACK, fontSize: 11 };
   const labelX = TEMPLATE.contentArea.x;
   const labelW = 2.0;
   const contentX = TEMPLATE.contentArea.x + 2.1;
@@ -1890,7 +1890,7 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
           color: C_BLACK,
           bold: isActive,
           fill: { color: isActive ? C_ACCENT1 : C_WHITE },
-          border: { pt: 0.5, color: C_BORDER },
+          border: { pt: TABLE_BORDER_WIDTH, color: C_BORDER },
           valign: 'middle',
         },
       },
@@ -1902,7 +1902,7 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
     y: TEMPLATE.contentArea.y,
     w: TEMPLATE.contentArea.w,
     rowH: 0.9,
-    border: { pt: 0.5, color: C_BORDER },
+    border: { pt: TABLE_BORDER_WIDTH, color: C_BORDER },
   });
 
   return slide;
@@ -1943,7 +1943,7 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
           fontFace: FONT,
           fill: { color: SEMANTIC_COLORS.positive },
           color: C_WHITE,
-          border: { pt: 0.5, color: C_BORDER },
+          border: { pt: TABLE_BORDER_WIDTH, color: C_BORDER },
           valign: 'middle',
         },
       },
@@ -1960,7 +1960,7 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
           fontSize: 12,
           fontFace: FONT,
           color: C_TRUE_BLACK,
-          border: { pt: 0.5, color: C_BORDER },
+          border: { pt: TABLE_BORDER_WIDTH, color: C_BORDER },
           valign: 'middle',
         },
       },
@@ -1978,7 +1978,7 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
           fontFace: FONT,
           fill: { color: C_ACCENT6 },
           color: C_WHITE,
-          border: { pt: 0.5, color: C_BORDER },
+          border: { pt: TABLE_BORDER_WIDTH, color: C_BORDER },
           valign: 'middle',
         },
       },
@@ -1995,7 +1995,7 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
           fontSize: 12,
           fontFace: FONT,
           color: C_TRUE_BLACK,
-          border: { pt: 0.5, color: C_BORDER },
+          border: { pt: TABLE_BORDER_WIDTH, color: C_BORDER },
           valign: 'middle',
         },
       },
@@ -2007,14 +2007,14 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
     y: TEMPLATE.contentArea.y,
     w: colW,
     rowH: 0.8,
-    border: { pt: 0.5, color: C_BORDER },
+    border: { pt: TABLE_BORDER_WIDTH, color: C_BORDER },
   });
   slide.addTable(barRows, {
     x: TEMPLATE.contentArea.x + colW + 0.5,
     y: TEMPLATE.contentArea.y,
     w: colW,
     rowH: 0.8,
-    border: { pt: 0.5, color: C_BORDER },
+    border: { pt: TABLE_BORDER_WIDTH, color: C_BORDER },
   });
 
   return slide;
@@ -2039,7 +2039,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       text: 'Domain',
       options: {
         bold: true,
-        fontSize: 11,
+        fontSize: 12,
         fill: { color: C_TABLE_HEADER },
         color: C_WHITE,
         fontFace: font,
@@ -2049,7 +2049,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       text: 'Current State',
       options: {
         bold: true,
-        fontSize: 11,
+        fontSize: 12,
         fill: { color: C_TABLE_HEADER },
         color: C_WHITE,
         fontFace: font,
@@ -2058,7 +2058,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
     {
       text: '\u2192',
       options: {
-        fontSize: 11,
+        fontSize: 12,
         fill: { color: C_WHITE },
         color: C_BLACK,
         align: 'center',
@@ -2069,7 +2069,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       text: 'Transition',
       options: {
         bold: true,
-        fontSize: 11,
+        fontSize: 12,
         fill: { color: C_ACCENT1 },
         color: C_WHITE,
         fontFace: font,
@@ -2078,7 +2078,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
     {
       text: '\u2192',
       options: {
-        fontSize: 11,
+        fontSize: 12,
         fill: { color: C_WHITE },
         color: C_BLACK,
         align: 'center',
@@ -2089,7 +2089,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       text: 'Future State',
       options: {
         bold: true,
-        fontSize: 11,
+        fontSize: 12,
         fill: { color: TP_COLORS.accent2 || 'EDFDFF' },
         color: C_BLACK,
         fontFace: font,
@@ -2101,7 +2101,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
     {
       text: ensureString(row.label || ''),
       options: {
-        fontSize: 11,
+        fontSize: 12,
         fontFace: font,
         color: C_BLACK,
         bold: true,
@@ -2110,23 +2110,23 @@ function addHorizontalFlowTable(slide, data, options = {}) {
     },
     {
       text: ensureString(row.currentState || ''),
-      options: { fontSize: 11, fontFace: font, color: C_BLACK },
+      options: { fontSize: 12, fontFace: font, color: C_BLACK },
     },
     {
       text: '\u2192',
-      options: { fontSize: 11, align: 'center', color: C_BLACK, fontFace: font },
+      options: { fontSize: 12, align: 'center', color: C_BLACK, fontFace: font },
     },
     {
       text: ensureString(row.transition || ''),
-      options: { fontSize: 11, fontFace: font, color: C_BLACK },
+      options: { fontSize: 12, fontFace: font, color: C_BLACK },
     },
     {
       text: '\u2192',
-      options: { fontSize: 11, align: 'center', color: C_BLACK, fontFace: font },
+      options: { fontSize: 12, align: 'center', color: C_BLACK, fontFace: font },
     },
     {
       text: ensureString(row.futureState || ''),
-      options: { fontSize: 11, fontFace: font, color: C_BLACK },
+      options: { fontSize: 12, fontFace: font, color: C_BLACK },
     },
   ]);
 
@@ -2139,7 +2139,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
     w,
     colW: colWidths,
     rowH,
-    border: { pt: 0.5, color: C_BORDER },
+    border: { pt: TABLE_BORDER_WIDTH, color: C_BORDER },
   });
 }
 
@@ -2187,6 +2187,7 @@ module.exports = {
   C_BLACK,
   C_TRUE_BLACK,
   C_BORDER,
+  TABLE_BORDER_WIDTH,
   C_MUTED,
   C_AXIS_GRAY,
   C_LIGHT_GRAY,
