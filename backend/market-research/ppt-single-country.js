@@ -74,6 +74,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     green: '2E7D32',
     orange: tpColors.orange || 'E46C0A',
     red: 'B71C1C',
+    hyperlink: '0066CC',
   };
 
   // ===== DEFINE MASTER SLIDES =====
@@ -373,7 +374,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: 0.3,
         fontSize: 14,
         italic: true,
-        color: '007FFF',
+        color: COLORS.accent1,
         fontFace: FONT,
         valign: 'top',
       });
@@ -425,7 +426,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             options: {
               fontSize: 7,
               fontFace: FONT,
-              color: '0066CC',
+              color: COLORS.hyperlink,
               hyperlink: { url: sourceUrl },
             },
           });
@@ -491,7 +492,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         w: CONTENT_WIDTH,
         h: 2.0,
         fill: { color: 'FFF8E1' },
-        line: { color: 'E46C0A', pt: 1 },
+        line: { color: COLORS.orange, pt: 1 },
         margin: [8, 12, 8, 12],
         valign: 'top',
       }
@@ -1208,7 +1209,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         p.website
           ? {
               text: safeCell(p.name, 35),
-              options: { hyperlink: { url: p.website }, color: '0066CC' },
+              options: { hyperlink: { url: p.website }, color: COLORS.hyperlink },
             }
           : { text: safeCell(p.name, 35) },
         { text: safeCell(p.type, 30) },
@@ -1237,7 +1238,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           p.website
             ? {
                 text: safeCell(p.name),
-                options: { hyperlink: { url: p.website }, color: '0066CC' },
+                options: { hyperlink: { url: p.website }, color: COLORS.hyperlink },
               }
             : { text: safeCell(p.name) },
           { text: safeCell(p.origin) },
@@ -1262,7 +1263,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           p.website
             ? {
                 text: safeCell(p.name),
-                options: { hyperlink: { url: p.website }, color: '0066CC' },
+                options: { hyperlink: { url: p.website }, color: COLORS.hyperlink },
               }
             : { text: safeCell(p.name) },
           { text: safeCell(p.type) },
@@ -1287,7 +1288,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           p.website
             ? {
                 text: safeCell(p.name),
-                options: { hyperlink: { url: p.website }, color: '0066CC' },
+                options: { hyperlink: { url: p.website }, color: COLORS.hyperlink },
               }
             : { text: safeCell(p.name) },
           { text: safeCell(p.entryYear) },
@@ -1922,7 +1923,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       const targetRows = [tableHeader(['Company', 'Est. Value', 'Rationale', 'Timing'])];
       potentialTargets.forEach((t) => {
         const nameCell = t.website
-          ? { text: safeCell(t.name), options: { hyperlink: { url: t.website }, color: '0066CC' } }
+          ? {
+              text: safeCell(t.name),
+              options: { hyperlink: { url: t.website }, color: COLORS.hyperlink },
+            }
           : { text: safeCell(t.name) };
         targetRows.push([
           nameCell,
@@ -2201,7 +2205,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const phases = safeArray(data.phases, 3);
     if (phases.length > 0) {
       // Phases as table with distinct colors per phase
-      const phaseColors = ['007FFF', '2E7D32', 'E46C0A'];
+      const phaseColors = [COLORS.accent1, COLORS.green, COLORS.orange];
       const phaseRows = [
         phases.map((phase, pi) => ({
           text: phase.name || 'Phase',
@@ -2359,7 +2363,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         const nameCell = t.website
           ? {
               text: safeCell(t.company || t.name, 25),
-              options: { hyperlink: { url: t.website }, color: '0066CC' },
+              options: { hyperlink: { url: t.website }, color: COLORS.hyperlink },
             }
           : { text: safeCell(t.company || t.name, 25) };
         targetCompRows.push([
@@ -2864,7 +2868,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         [
           {
             text: `Synthesis failed for ${sectionName}\n`,
-            options: { fontSize: 14, bold: true, color: 'B71C1C', fontFace: FONT },
+            options: { fontSize: 14, bold: true, color: COLORS.red, fontFace: FONT },
           },
           {
             text: `${sectionData.message || 'All AI synthesis attempts failed.'}  Data may still be available in rawData.`,
@@ -2877,7 +2881,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           w: CONTENT_WIDTH,
           h: 2.0,
           fill: { color: 'FFF8E1' },
-          line: { color: 'B71C1C', pt: 1 },
+          line: { color: COLORS.red, pt: 1 },
           margin: [8, 12, 8, 12],
           valign: 'top',
         }
@@ -2997,7 +3001,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     w: 9.0,
     h: 0.5,
     fontSize: 24,
-    color: '007FFF',
+    color: COLORS.accent1,
     fontFace: FONT,
   });
   titleSlide.addText('Executive Summary - Deep Research Report', {
