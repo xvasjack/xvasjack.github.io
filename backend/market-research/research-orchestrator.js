@@ -1,9 +1,4 @@
-const {
-  callKimiChat,
-  callKimiAnalysis,
-  callKimiDeepResearch,
-  callGemini,
-} = require('./ai-clients');
+const { callKimiDeepResearch, callGemini } = require('./ai-clients');
 const { generateResearchFramework } = require('./research-framework');
 const {
   policyResearchAgent,
@@ -24,7 +19,7 @@ async function identifyResearchGaps(synthesis, country, _industry) {
   const gapPrompt = `You are a research quality auditor reviewing a market analysis. Score each section and identify critical gaps.
 
 CURRENT ANALYSIS:
-${JSON.stringify(synthesis, null, 2)}
+${JSON.stringify(synthesis)}
 
 SCORING CRITERIA (0-100 for each section):
 - 90-100: Excellent - Specific numbers, named sources, actionable insights
@@ -88,8 +83,14 @@ Return ONLY valid JSON.`;
       content: typeof geminiResult === 'string' ? geminiResult : geminiResult.content || '',
     };
   } catch (e) {
-    console.warn('Gemini failed for gap identification, falling back to Kimi:', e.message);
-    result = await callKimiChat(gapPrompt, '', 4096);
+    console.warn('Gemini failed for gap identification:', e.message);
+    return {
+      sectionScores: {},
+      overallScore: 40,
+      criticalGaps: [],
+      dataToVerify: [],
+      confidenceAssessment: { overall: 'low', numericConfidence: 40, readyForClient: false },
+    };
   }
 
   try {
@@ -137,8 +138,8 @@ async function fillResearchGaps(gaps, country, industry) {
 
   // Research critical gaps with Kimi
   const criticalGaps = gaps.criticalGaps || [];
-  for (const gap of criticalGaps.slice(0, 4)) {
-    // Limit to 4 most critical
+  for (const gap of criticalGaps.slice(0, 2)) {
+    // Limit to 2 most critical
     if (!gap.searchQuery) continue;
     console.log(`    Gap search: ${gap.gap.substring(0, 50)}...`);
 
@@ -194,6 +195,73 @@ function parseJsonResponse(text) {
       .trim();
   }
   return JSON.parse(jsonStr);
+}
+
+function repairTruncatedJson(text) {
+  if (!text || typeof text !== 'string') return null;
+  let content = text
+    .trim()
+    .replace(/```json?\n?/g, '')
+    .replace(/```/g, '')
+    .trim();
+  content = content.replace(/,\s*([}\]])/g, '$1');
+  const quoteCount = (content.match(/(?<!\\)"/g) || []).length;
+  if (quoteCount % 2 !== 0) content += '"';
+  const stack = [];
+  for (const ch of content) {
+    if (ch === '{' || ch === '[') stack.push(ch === '{' ? '}' : ']');
+    else if (ch === '}' || ch === ']') stack.pop();
+  }
+  content += stack.reverse().join('');
+  try {
+    return JSON.parse(content);
+  } catch {
+    const lastComma = content.lastIndexOf(',');
+    if (lastComma > 0) {
+      const trimmed = content.substring(0, lastComma);
+      const stack2 = [];
+      for (const ch of trimmed) {
+        if (ch === '{' || ch === '[') stack2.push(ch === '{' ? '}' : ']');
+        else if (ch === '}' || ch === ']') stack2.pop();
+      }
+      try {
+        return JSON.parse(trimmed + stack2.reverse().join(''));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+function parseOrRepair(text) {
+  try {
+    const parsed = parseJsonResponse(text);
+    if (parsed) return parsed;
+  } catch {
+    /* fall through */
+  }
+  return repairTruncatedJson(text);
+}
+
+function compressResearchData(data, maxCharsPerTopic = 2500) {
+  if (!data || typeof data !== 'object') return data;
+  const compressed = {};
+  for (const [key, val] of Object.entries(data)) {
+    if (val?.content && typeof val.content === 'string' && val.content.length > maxCharsPerTopic) {
+      compressed[key] = {
+        ...val,
+        content: val.content.substring(0, maxCharsPerTopic) + '...[truncated]',
+      };
+    } else {
+      compressed[key] = val;
+    }
+  }
+  return compressed;
+}
+
+function simplifyPrompt(prompt) {
+  return prompt.replace(/Example[^}]*\}[\s\S]*?\}/g, '').substring(0, 12000);
 }
 
 /**
@@ -336,68 +404,62 @@ function validatePolicySynthesis(result) {
 }
 
 /**
- * Synthesize with fallback chain: Gemini → Kimi → Kimi retry → null
+ * Synthesize with Gemini (3 attempts with progressive fallback)
  */
 async function synthesizeWithFallback(prompt, options = {}) {
   const { maxTokens = 8192, jsonMode = true } = options;
 
-  // Try Gemini first
-  let geminiRawContent = null;
+  // Attempt 1: Gemini with JSON mode
   try {
-    const result = await callGemini(prompt, { maxTokens, jsonMode, temperature: 0.2 });
-    geminiRawContent = result;
-    const parsed = parseJsonResponse(result);
+    const result = await callGemini(prompt, {
+      maxTokens,
+      jsonMode,
+      temperature: 0.2,
+      timeout: 60000,
+      maxRetries: 2,
+    });
+    const parsed = parseOrRepair(result);
     if (parsed) return parsed;
-  } catch (geminiErr) {
-    console.warn(`  [Synthesis] Gemini failed: ${geminiErr?.message}, trying JSON repair...`);
+  } catch (err1) {
+    console.warn(`  [Synthesis] Attempt 1 failed: ${err1?.message}`);
   }
 
-  // 10D: Attempt JSON repair for truncated Gemini output before Kimi fallback
-  if (geminiRawContent && typeof geminiRawContent === 'string') {
-    try {
-      const content = geminiRawContent
-        .trim()
-        .replace(/```json?\n?/g, '')
-        .replace(/```/g, '')
-        .trim();
-      const repaired = content.replace(/,\s*$/, '') + ']}';
-      const parsed = JSON.parse(repaired);
-      if (parsed) {
-        console.log(`  [Synthesis] JSON repair succeeded`);
-        return parsed;
-      }
-    } catch {
-      /* fall through to Kimi fallback */
-    }
-  }
-
-  // Try Kimi
+  // Attempt 2: Gemini with simplified prompt
   try {
-    const result = await callKimiChat(prompt, '', maxTokens);
-    const parsed = parseJsonResponse(result.content);
-    if (parsed) return parsed;
-  } catch (kimiErr) {
-    console.warn(`  [Synthesis] Kimi failed: ${kimiErr?.message}`);
-  }
-
-  // Final retry with ultra-direct prompt
-  console.warn(
-    `  [Synthesis] Both APIs failed or returned unparseable data. Retrying with direct prompt...`
-  );
-  try {
-    const directPrompt = `${prompt}
-
-CRITICAL: Return ONLY valid JSON. No markdown. No explanation. Just the raw JSON object.
-Return ONLY valid JSON. Use null for missing fields.`;
-
-    const result = await callKimiChat(directPrompt, '', maxTokens);
-    const parsed = parseJsonResponse(result.content);
+    const simplePrompt = simplifyPrompt(prompt);
+    const result = await callGemini(simplePrompt, {
+      maxTokens,
+      jsonMode,
+      temperature: 0.1,
+      timeout: 60000,
+      maxRetries: 2,
+    });
+    const parsed = parseOrRepair(result);
     if (parsed) {
-      console.log(`  [Synthesis] Direct prompt retry succeeded`);
+      console.log(`  [Synthesis] Attempt 2 (simplified) succeeded`);
       return parsed;
     }
-  } catch (retryErr) {
-    console.error(`  [Synthesis] Final retry also failed: ${retryErr?.message}`);
+  } catch (err2) {
+    console.warn(`  [Synthesis] Attempt 2 failed: ${err2?.message}`);
+  }
+
+  // Attempt 3: Gemini without JSON mode, append instruction
+  try {
+    const directPrompt = prompt + '\n\nRespond ONLY with valid JSON.';
+    const result = await callGemini(directPrompt, {
+      maxTokens,
+      jsonMode: false,
+      temperature: 0.1,
+      timeout: 60000,
+      maxRetries: 2,
+    });
+    const parsed = parseOrRepair(result);
+    if (parsed) {
+      console.log(`  [Synthesis] Attempt 3 (no JSON mode) succeeded`);
+      return parsed;
+    }
+  } catch (err3) {
+    console.error(`  [Synthesis] All 3 attempts failed: ${err3?.message}`);
   }
 
   return null;
@@ -446,7 +508,7 @@ async function synthesizePolicy(researchData, country, industry, clientContext) 
   const labeledData = markDataQuality(filteredData);
   const researchContext = dataAvailable
     ? `RESEARCH DATA (use this as primary source — items prefixed [ESTIMATED] or [UNVERIFIED] are uncertain, hedge accordingly):
-${JSON.stringify(labeledData, null, 2)}`
+${JSON.stringify(compressResearchData(labeledData))}`
     : `RESEARCH DATA: EMPTY due to API issues.`;
 
   const prompt = `You are synthesizing policy and regulatory research for ${country}'s ${industry} market.
@@ -537,7 +599,7 @@ async function synthesizeMarket(researchData, country, industry, clientContext) 
   const labeledData = markDataQuality(filteredData);
   const researchContext = dataAvailable
     ? `RESEARCH DATA (use this as primary source — items prefixed [ESTIMATED] or [UNVERIFIED] are uncertain, hedge accordingly):
-${JSON.stringify(labeledData, null, 2)}`
+${JSON.stringify(compressResearchData(labeledData))}`
     : `RESEARCH DATA: EMPTY due to API issues.`;
 
   const prompt = `You are synthesizing market data research for ${country}'s ${industry} market.
@@ -653,10 +715,10 @@ async function synthesizeCompetitors(researchData, country, industry, clientCont
   const labeledData = markDataQuality(filteredData);
   const researchContext = dataAvailable
     ? `RESEARCH DATA (use this as primary source — items prefixed [ESTIMATED] or [UNVERIFIED] are uncertain, hedge accordingly):
-${JSON.stringify(labeledData, null, 2)}`
+${JSON.stringify(compressResearchData(labeledData))}`
     : `RESEARCH DATA: EMPTY due to API issues.`;
 
-  const prompt = `You are synthesizing competitive intelligence for ${country}'s ${industry} market.
+  const commonIntro = `You are synthesizing competitive intelligence for ${country}'s ${industry} market.
 Client context: ${clientContext}
 
 ${researchContext}
@@ -681,7 +743,10 @@ RULES:
 - Company descriptions MUST be exactly 45-60 words — no shorter, no longer
 - subtitle fields: Max 90 characters
 - keyInsight fields: Max 180 characters
-- Insights should reference specific numbers from the data
+- Insights should reference specific numbers from the data`;
+
+  // Sub-call 1: japanesePlayers only
+  const prompt1 = `${commonIntro}
 
 Return JSON:
 {
@@ -700,7 +765,16 @@ Return JSON:
     ],
     "marketInsight": "Overall assessment of Japanese presence",
     "dataType": "company_comparison"
-  },
+  }
+}
+
+Return ONLY valid JSON.`;
+
+  // Sub-call 2: localMajor + foreignPlayers
+  const prompt2 = `${commonIntro}
+
+Return JSON:
+{
   "localMajor": {
     "slideTitle": "${country} - Major Local Players",
     "subtitle": "Max 90 characters. Key insight about local players",
@@ -735,7 +809,16 @@ Return JSON:
     ],
     "competitiveInsight": "How foreign players compete",
     "dataType": "company_comparison"
-  },
+  }
+}
+
+Return ONLY valid JSON.`;
+
+  // Sub-call 3: caseStudy + maActivity
+  const prompt3 = `${commonIntro}
+
+Return JSON:
+{
   "caseStudy": {
     "slideTitle": "${country} - Market Entry Case Study",
     "subtitle": "Lessons from the best example",
@@ -758,16 +841,35 @@ Return JSON:
 
 Return ONLY valid JSON.`;
 
-  const result = await synthesizeWithFallback(prompt, { maxTokens: 12288 });
-  if (!result) {
-    console.error('  [synthesizeCompetitors] Synthesis completely failed — no data returned');
+  // Run 3 sub-calls in parallel
+  console.log(`    [Competitors] Running 3 chunked sub-calls in parallel...`);
+  const [r1, r2, r3] = await Promise.allSettled([
+    synthesizeWithFallback(prompt1, { maxTokens: 4096 }),
+    synthesizeWithFallback(prompt2, { maxTokens: 6144 }),
+    synthesizeWithFallback(prompt3, { maxTokens: 4096 }),
+  ]);
+
+  // Merge fulfilled results
+  const merged = {};
+  for (const r of [r1, r2, r3]) {
+    if (r.status === 'fulfilled' && r.value) {
+      Object.assign(merged, r.value);
+    }
+  }
+
+  const fulfilledCount = [r1, r2, r3].filter((r) => r.status === 'fulfilled' && r.value).length;
+  console.log(`    [Competitors] ${fulfilledCount}/3 sub-calls succeeded`);
+
+  if (fulfilledCount === 0) {
+    console.error('  [synthesizeCompetitors] All chunked synthesis failed — no data returned');
     return {
       _synthesisError: true,
       section: 'competitors',
       message: 'All synthesis attempts failed',
     };
   }
-  const validated = validateCompetitorsSynthesis(result);
+
+  const validated = validateCompetitorsSynthesis(merged);
   return validated;
 }
 
@@ -1090,44 +1192,58 @@ function validateContentDepth(synthesis) {
 async function reSynthesize(originalSynthesis, additionalData, country, _industry, _clientContext) {
   console.log(`  [Re-synthesizing ${country} with additional data...]`);
 
-  const prompt = `You are improving a market analysis with NEW DATA that fills previous gaps.
+  // Check which sections scored < 50 and only re-synthesize those
+  const depthCheck = validateContentDepth(originalSynthesis);
+  const scores = depthCheck.scores || {};
+  const failedSections = [];
+  if (scores.policy < 50) failedSections.push('policy');
+  if (scores.market < 50) failedSections.push('market');
+  if (scores.competitors < 50) failedSections.push('competitors');
 
-ORIGINAL ANALYSIS:
-${JSON.stringify(originalSynthesis, null, 2)}
+  if (failedSections.length === 0) {
+    console.log(`  [reSynthesize] No sections scored < 50 — returning original unchanged`);
+    return originalSynthesis;
+  }
 
-NEW DATA TO INCORPORATE:
+  console.log(
+    `  [reSynthesize] Re-synthesizing failed sections: ${failedSections.join(', ')} (scores: P=${scores.policy}, M=${scores.market}, C=${scores.competitors})`
+  );
 
-GAP RESEARCH (fills missing information):
-${JSON.stringify(additionalData.gapResearch, null, 2)}
+  // Build a focused prompt for each failed section and re-synthesize in parallel
+  const sectionPromises = {};
 
-VERIFICATION RESEARCH (confirms or corrects claims):
-${JSON.stringify(additionalData.verificationResearch, null, 2)}
+  for (const section of failedSections) {
+    const relevantGaps = additionalData.gapResearch.filter((g) => g.area === section);
+    const relevantVerifications = additionalData.verificationResearch.filter(
+      (v) =>
+        v.claim &&
+        JSON.stringify(originalSynthesis[section] || {}).includes(v.claim.substring(0, 30))
+    );
+
+    const prompt = `You are improving the ${section.toUpperCase()} section of a market analysis with NEW DATA.
+
+ORIGINAL ${section.toUpperCase()} SECTION:
+${JSON.stringify(originalSynthesis[section])}
+
+NEW GAP RESEARCH for ${section}:
+${JSON.stringify(relevantGaps)}
+
+VERIFICATION RESEARCH:
+${JSON.stringify(relevantVerifications.length > 0 ? relevantVerifications : additionalData.verificationResearch)}
 
 DO NOT fabricate data. DO NOT estimate from training knowledge. Use null or empty arrays for missing data.
 
 YOUR TASK:
-1. UPDATE the original analysis with the new data
+1. UPDATE the ${section} section with the new data
 2. CORRECT any claims that verification proved wrong
 3. ADD DEPTH where gaps have been filled
 4. FLAG remaining uncertainties with "estimated" or "unverified"
 
 CRITICAL - STRUCTURE PRESERVATION:
-You MUST return the EXACT SAME JSON structure/schema as the ORIGINAL ANALYSIS above.
-- Keep all the same top-level keys (policy, market, competitors, depth, summary, etc.)
-- Keep all the same nested keys within each section
+Return the EXACT SAME JSON structure/schema as the ORIGINAL ${section.toUpperCase()} SECTION above.
+- Keep all the same keys and nested keys
 - Only UPDATE the VALUES with improved/corrected information
-- Do NOT change the structure, do NOT rename keys, do NOT reorganize
-
-For example, if the original has:
-{
-  "policy": {
-    "foundationalActs": { "acts": [...] },
-    "nationalPolicy": { ... }
-  },
-  "market": { ... }
-}
-
-Your output MUST have the same structure with policy.foundationalActs.acts, etc.
+- Do NOT change the structure, do NOT rename keys
 
 Additional requirements:
 - Every number should now have context (year, source type, comparison)
@@ -1135,174 +1251,104 @@ Additional requirements:
 - Every regulation should have enforcement reality
 - Mark anything still uncertain as "estimated" or "industry sources suggest"
 
-Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
+Return ONLY valid JSON with the SAME STRUCTURE as the original ${section} section.`;
 
-  let result;
-  try {
-    result = await callGemini(prompt, { maxTokens: 12288, temperature: 0.3 });
-  } catch (e) {
-    console.warn('Gemini failed for reSynthesize, falling back to Kimi:', e.message);
-    result = await callKimiAnalysis(prompt, '', 12288);
+    sectionPromises[section] = synthesizeWithFallback(prompt, { maxTokens: 8192 });
   }
 
-  try {
-    // Handle both string (Gemini) and object (Kimi) returns
-    const rawText = typeof result === 'string' ? result : result.content || '';
-    let jsonStr = rawText.trim();
-    if (jsonStr.startsWith('```')) {
-      jsonStr = jsonStr
-        .replace(/```json?\n?/g, '')
-        .replace(/```/g, '')
-        .trim();
-    }
-    const newSynthesis = JSON.parse(jsonStr);
+  // Await all section re-syntheses
+  const sectionKeys = Object.keys(sectionPromises);
+  const sectionResults = await Promise.allSettled(Object.values(sectionPromises));
 
-    // Validate structure preservation - check for key fields
-    const hasPolicy = newSynthesis.policy && typeof newSynthesis.policy === 'object';
-    const hasMarket = newSynthesis.market && typeof newSynthesis.market === 'object';
-    const hasCompetitors = newSynthesis.competitors && typeof newSynthesis.competitors === 'object';
+  // Build new synthesis from original, replacing only failed sections that succeeded
+  const newSynthesis = { ...originalSynthesis };
 
-    if (!hasPolicy || !hasMarket || !hasCompetitors) {
-      console.warn('  [reSynthesize] Structure mismatch detected - falling back to original');
-      console.warn(
-        `    Missing: ${!hasPolicy ? 'policy ' : ''}${!hasMarket ? 'market ' : ''}${!hasCompetitors ? 'competitors' : ''}`
-      );
-      // Preserve country field from original
-      originalSynthesis.country = country;
-      return originalSynthesis;
-    }
+  for (let i = 0; i < sectionKeys.length; i++) {
+    const section = sectionKeys[i];
+    const result = sectionResults[i];
 
-    // Ensure depth and summary sections are preserved — if AI dropped them, recover from original
-    if (
-      originalSynthesis.depth &&
-      typeof originalSynthesis.depth === 'object' &&
-      !newSynthesis.depth
-    ) {
-      console.warn(
-        '  [reSynthesize] depth section missing from re-synthesis — recovering from original'
-      );
-      newSynthesis.depth = originalSynthesis.depth;
-    }
-    if (
-      originalSynthesis.summary &&
-      typeof originalSynthesis.summary === 'object' &&
-      !newSynthesis.summary
-    ) {
-      console.warn(
-        '  [reSynthesize] summary section missing from re-synthesis — recovering from original'
-      );
-      newSynthesis.summary = originalSynthesis.summary;
-    }
+    if (result.status === 'fulfilled' && result.value) {
+      console.log(`  [reSynthesize] ${section} re-synthesis succeeded`);
+      const reResult = result.value;
 
-    // 2A: Recover competitor sub-keys dropped by reSynthesize
-    if (newSynthesis.competitors && originalSynthesis.competitors) {
-      const compSubKeys = [
-        'japanesePlayers',
-        'localMajor',
-        'foreignPlayers',
-        'caseStudy',
-        'maActivity',
-      ];
-      for (const subKey of compSubKeys) {
-        if (
-          originalSynthesis.competitors[subKey] &&
-          !originalSynthesis.competitors[subKey]._synthesisError &&
-          (!newSynthesis.competitors[subKey] ||
-            Object.keys(newSynthesis.competitors[subKey]).length === 0)
-        ) {
-          console.warn(
-            `  [reSynthesize] competitors.${subKey} lost in re-synthesis — recovering from original`
-          );
-          newSynthesis.competitors[subKey] = originalSynthesis.competitors[subKey];
+      // Apply sub-key recovery logic before replacing
+      if (section === 'competitors' && originalSynthesis.competitors) {
+        const compSubKeys = [
+          'japanesePlayers',
+          'localMajor',
+          'foreignPlayers',
+          'caseStudy',
+          'maActivity',
+        ];
+        for (const subKey of compSubKeys) {
+          if (
+            originalSynthesis.competitors[subKey] &&
+            !originalSynthesis.competitors[subKey]._synthesisError &&
+            (!reResult[subKey] || Object.keys(reResult[subKey]).length === 0)
+          ) {
+            console.warn(`  [reSynthesize] competitors.${subKey} lost — recovering from original`);
+            reResult[subKey] = originalSynthesis.competitors[subKey];
+          }
         }
       }
-    }
 
-    // 2A: Recover market sub-keys dropped by reSynthesize
-    if (newSynthesis.market && originalSynthesis.market) {
-      const marketSubKeys = [
-        'tpes',
-        'finalDemand',
-        'electricity',
-        'gasLng',
-        'pricing',
-        'escoMarket',
-      ];
-      for (const subKey of marketSubKeys) {
-        if (
-          originalSynthesis.market[subKey] &&
-          !originalSynthesis.market[subKey]._synthesisError &&
-          (!newSynthesis.market[subKey] || Object.keys(newSynthesis.market[subKey]).length === 0)
-        ) {
-          console.warn(
-            `  [reSynthesize] market.${subKey} lost in re-synthesis — recovering from original`
-          );
-          newSynthesis.market[subKey] = originalSynthesis.market[subKey];
+      if (section === 'market' && originalSynthesis.market) {
+        const marketSubKeys = [
+          'tpes',
+          'finalDemand',
+          'electricity',
+          'gasLng',
+          'pricing',
+          'escoMarket',
+        ];
+        for (const subKey of marketSubKeys) {
+          if (
+            originalSynthesis.market[subKey] &&
+            !originalSynthesis.market[subKey]._synthesisError &&
+            (!reResult[subKey] || Object.keys(reResult[subKey]).length === 0)
+          ) {
+            console.warn(`  [reSynthesize] market.${subKey} lost — recovering from original`);
+            reResult[subKey] = originalSynthesis.market[subKey];
+          }
         }
       }
-    }
 
-    // 2A: Recover policy sub-keys dropped by reSynthesize
-    if (newSynthesis.policy && originalSynthesis.policy) {
-      const policySubKeys = [
-        'foundationalActs',
-        'nationalPolicy',
-        'investmentRestrictions',
-        'regulatorySummary',
-        'keyIncentives',
-      ];
-      for (const subKey of policySubKeys) {
-        if (
-          originalSynthesis.policy[subKey] &&
-          !originalSynthesis.policy[subKey]._synthesisError &&
-          (!newSynthesis.policy[subKey] || Object.keys(newSynthesis.policy[subKey]).length === 0)
-        ) {
-          console.warn(
-            `  [reSynthesize] policy.${subKey} lost in re-synthesis — recovering from original`
-          );
-          newSynthesis.policy[subKey] = originalSynthesis.policy[subKey];
+      if (section === 'policy' && originalSynthesis.policy) {
+        const policySubKeys = [
+          'foundationalActs',
+          'nationalPolicy',
+          'investmentRestrictions',
+          'regulatorySummary',
+          'keyIncentives',
+        ];
+        for (const subKey of policySubKeys) {
+          if (
+            originalSynthesis.policy[subKey] &&
+            !originalSynthesis.policy[subKey]._synthesisError &&
+            (!reResult[subKey] || Object.keys(reResult[subKey]).length === 0)
+          ) {
+            console.warn(`  [reSynthesize] policy.${subKey} lost — recovering from original`);
+            reResult[subKey] = originalSynthesis.policy[subKey];
+          }
         }
       }
-    }
 
-    // 11D: Do NOT propagate _synthesisError sentinels into re-synthesized output
-    for (const section of ['policy', 'market', 'competitors']) {
-      if (
-        originalSynthesis[section]?._synthesisError &&
-        newSynthesis[section] &&
-        !newSynthesis[section]._synthesisError
-      ) {
-        console.log(`  [reSynthesize] ${section} recovered from _synthesisError via re-synthesis`);
-      }
+      newSynthesis[section] = reResult;
+    } else {
+      console.warn(`  [reSynthesize] ${section} re-synthesis failed — keeping original`);
     }
-
-    // Re-synthesis verification: count how many top-level sections actually changed
-    const sectionsToCheck = ['policy', 'market', 'competitors', 'depth', 'summary'];
-    let changedFields = 0;
-    for (const section of sectionsToCheck) {
-      const oldJson = JSON.stringify(originalSynthesis[section] || {});
-      const newJson = JSON.stringify(newSynthesis[section] || {});
-      if (oldJson !== newJson) changedFields++;
-    }
-    if (changedFields < 2) {
-      console.warn(
-        `  [reSynthesize] Re-synthesis produced minimal changes (${changedFields} fields updated)`
-      );
-    }
-
-    // Preserve country field and metadata from original
-    // Note: contentValidation is stale after reSynthesize — delete it so it gets recalculated
-    newSynthesis.country = country;
-    const preserved = {
-      rawData: originalSynthesis.rawData,
-      metadata: originalSynthesis.metadata,
-    };
-    Object.assign(newSynthesis, preserved);
-    return newSynthesis;
-  } catch (error) {
-    console.error('  Re-synthesis failed:', error?.message);
-    return originalSynthesis; // Fall back to original
   }
+
+  // Preserve country field and metadata from original
+  // contentValidation is stale after reSynthesize — delete it so it gets recalculated
+  newSynthesis.country = country;
+  delete newSynthesis.contentValidation;
+  const preserved = {
+    rawData: originalSynthesis.rawData,
+    metadata: originalSynthesis.metadata,
+  };
+  Object.assign(newSynthesis, preserved);
+  return newSynthesis;
 }
 
 // ============ COUNTRY RESEARCH ORCHESTRATOR ============
@@ -1605,8 +1651,8 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   // ============ ITERATIVE REFINEMENT LOOP WITH CONFIDENCE SCORING ============
   // Like Deep Research: score → identify gaps → research → re-synthesize → repeat until ready
 
-  const MAX_ITERATIONS = 3; // Up to 3 refinement passes for higher quality
-  const MIN_CONFIDENCE_SCORE = 70; // Minimum score to stop refinement
+  const MAX_ITERATIONS = 2; // Up to 2 refinement passes for higher quality
+  const MIN_CONFIDENCE_SCORE = 60; // Minimum score to stop refinement
   let iteration = 0;
   let confidenceScore = 0;
   let readyForClient = false;
@@ -1626,8 +1672,13 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     countryAnalysis.confidenceScore = confidenceScore;
 
     // If ready for client or high confidence score, we're done
-    if (readyForClient || confidenceScore >= MIN_CONFIDENCE_SCORE) {
-      console.log(`    ✓ Quality threshold met (${confidenceScore}/100) - analysis ready`);
+    const codeGateScore =
+      validateContentDepth({ ...countryAnalysis, country }).scores?.overall || 0;
+    const effectiveScore = Math.min(confidenceScore, codeGateScore);
+    if (effectiveScore >= MIN_CONFIDENCE_SCORE) {
+      console.log(
+        `    ✓ Quality threshold met (AI: ${confidenceScore}, Gate: ${codeGateScore}, Effective: ${effectiveScore}/100) - analysis ready`
+      );
       break;
     }
 
@@ -1756,7 +1807,7 @@ Industry: ${scope.industry}
 Target: ${countryAnalysis.country}
 
 DATA GATHERED:
-${JSON.stringify(countryAnalysis, null, 2)}
+${JSON.stringify(countryAnalysis)}
 
 Synthesize this research into a CEO-ready briefing. Professional tone, specific data, actionable insights.
 
@@ -1858,8 +1909,18 @@ Do NOT skip this validation. If you catch yourself returning JSON without checki
   try {
     result = await callGemini(prompt, { maxTokens: 12288, temperature: 0.3, systemPrompt });
   } catch (e) {
-    console.warn('Gemini failed for synthesizeSingleCountry, falling back to Kimi:', e.message);
-    result = await callKimiAnalysis(prompt, systemPrompt, 12000);
+    console.warn('Gemini failed for synthesizeSingleCountry:', e.message);
+    // Retry Gemini without JSON mode
+    try {
+      result = await callGemini(prompt + '\n\nRespond ONLY with valid JSON.', {
+        maxTokens: 12288,
+        temperature: 0.1,
+        systemPrompt,
+      });
+    } catch (e2) {
+      console.error('Gemini retry also failed for synthesizeSingleCountry:', e2.message);
+      result = null;
+    }
   }
 
   let synthesis;
@@ -1921,7 +1982,7 @@ The CEO should finish reading knowing: "Enter X first because Y, then Z, using t
 Industry: ${scope.industry}
 
 DATA FROM EACH COUNTRY:
-${JSON.stringify(countryAnalyses, null, 2)}
+${JSON.stringify(countryAnalyses)}
 
 Create a COMPARATIVE synthesis. Not summaries of each - actual COMPARISONS and TRADE-OFFS.
 
@@ -1983,8 +2044,18 @@ Focus on COMPARISONS and TRADE-OFFS, not just summaries.`;
   try {
     result = await callGemini(prompt, { maxTokens: 12288, temperature: 0.3, systemPrompt });
   } catch (e) {
-    console.warn('Gemini failed for synthesizeFindings, falling back to Kimi:', e.message);
-    result = await callKimiAnalysis(prompt, systemPrompt, 12000);
+    console.warn('Gemini failed for synthesizeFindings:', e.message);
+    // Retry Gemini without JSON mode
+    try {
+      result = await callGemini(prompt + '\n\nRespond ONLY with valid JSON.', {
+        maxTokens: 12288,
+        temperature: 0.1,
+        systemPrompt,
+      });
+    } catch (e2) {
+      console.error('Gemini retry also failed for synthesizeFindings:', e2.message);
+      result = null;
+    }
   }
 
   try {

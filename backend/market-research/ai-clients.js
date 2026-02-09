@@ -1,6 +1,19 @@
 const fetch = require('node-fetch');
 const { recordTokens } = require('./shared/tracking');
 
+// Robust Perplexity import — try primary path, then fallback, then stub
+let callPerplexityImported = null;
+try {
+  callPerplexityImported = require('./shared/ai-models').callPerplexity;
+} catch (_e1) {
+  try {
+    callPerplexityImported = require('../shared/ai-models').callPerplexity;
+  } catch (_e2) {
+    console.warn('[ai-clients] Could not import callPerplexity — Perplexity fallback disabled');
+    callPerplexityImported = async () => '';
+  }
+}
+
 // ============ COST TRACKING ============
 const costTracker = {
   date: new Date().toISOString().split('T')[0],
@@ -322,31 +335,67 @@ async function callKimi(
         );
 
         const retryContent = retryResp?.choices?.[0]?.message?.content || '';
+        // Track quality retry tokens
+        const retryInput = retryResp?.usage?.prompt_tokens || 0;
+        const retryOutput = retryResp?.usage?.completion_tokens || 0;
+        if (retryInput || retryOutput) {
+          trackCost('kimi-k2.5', retryInput, retryOutput);
+          recordTokens('kimi-k2.5', retryInput, retryOutput);
+        }
+
         if (retryContent.length >= 500) {
           console.log(`  [Kimi] Quality retry successful: ${retryContent.length} chars`);
           content = retryContent;
           researchQuality = 'good';
         } else {
-          console.log(
-            `  [Kimi] Quality retry still thin (${retryContent.length} chars), falling back to Gemini`
-          );
-          // Fall back to Gemini
-          try {
-            const geminiQuery =
-              reformulatedQuery +
-              ' Search the web and provide detailed statistics, named companies, and specific regulations with years';
-            const geminiResult = await callGemini(geminiQuery);
-            const geminiContent =
-              typeof geminiResult === 'string' ? geminiResult : geminiResult?.content || '';
-            if (geminiContent.length > content.length) {
-              content = geminiContent;
-              researchQuality = 'gemini_fallback';
-            } else {
+          // Try Perplexity before Gemini
+          if (callPerplexityImported) {
+            try {
+              console.log(
+                `  [Kimi] Quality retry still thin (${retryContent.length} chars), trying Perplexity fallback`
+              );
+              const perplexityResult = await callPerplexityResearch(
+                query.substring(0, 2000),
+                '',
+                ''
+              );
+              if (perplexityResult?.content?.length >= 500) {
+                console.log(
+                  `  [Kimi] Perplexity fallback successful: ${perplexityResult.content.length} chars`
+                );
+                content = perplexityResult.content;
+                researchQuality = 'perplexity_thin_fallback';
+              }
+            } catch (perplexityErr) {
+              console.warn(`  [Kimi] Perplexity thin fallback failed: ${perplexityErr.message}`);
+            }
+          }
+
+          if (researchQuality !== 'perplexity_thin_fallback') {
+            console.log(
+              `  [Kimi] Still thin after Perplexity (${content.length} chars), falling back to Gemini`
+            );
+          }
+
+          // Fall back to Gemini if Perplexity didn't help
+          if (researchQuality !== 'perplexity_thin_fallback') {
+            try {
+              const geminiQuery =
+                reformulatedQuery +
+                ' Search the web and provide detailed statistics, named companies, and specific regulations with years';
+              const geminiResult = await callGemini(geminiQuery);
+              const geminiContent =
+                typeof geminiResult === 'string' ? geminiResult : geminiResult?.content || '';
+              if (geminiContent.length > content.length) {
+                content = geminiContent;
+                researchQuality = 'gemini_fallback';
+              } else {
+                researchQuality = 'thin';
+              }
+            } catch (geminiErr) {
+              console.log(`  [Kimi] Gemini fallback failed: ${geminiErr.message}`);
               researchQuality = 'thin';
             }
-          } catch (geminiErr) {
-            console.log(`  [Kimi] Gemini fallback failed: ${geminiErr.message}`);
-            researchQuality = 'thin';
           }
         }
       } catch (retryErr) {
@@ -460,7 +509,14 @@ async function callGemini(prompt, options = {}) {
     );
   }
 
-  const { temperature = 0.3, maxTokens = 8192, systemPrompt, jsonMode = false } = options;
+  const {
+    temperature = 0.3,
+    maxTokens = 8192,
+    systemPrompt,
+    jsonMode = false,
+    timeout = 90000,
+    maxRetries = 3,
+  } = options;
 
   return withRetry(
     async () => {
@@ -481,7 +537,7 @@ async function callGemini(prompt, options = {}) {
       }
 
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90s
+      const timeoutId = setTimeout(() => controller.abort(), timeout);
       try {
         const response = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${apiKey}`,
@@ -516,7 +572,7 @@ async function callGemini(prompt, options = {}) {
         clearTimeout(timeoutId);
       }
     },
-    3,
+    maxRetries,
     1000,
     'Gemini'
   );
@@ -524,23 +580,19 @@ async function callGemini(prompt, options = {}) {
 
 // Perplexity research wrapper - fallback when Kimi times out
 async function callPerplexityResearch(topic, country, industry) {
-  const { callPerplexity } = require('./shared/ai-models');
-  console.log(`  [Perplexity Research] ${topic.substring(0, 60)}... for ${country}`);
+  console.log(`  [Perplexity Research] ${topic.substring(0, 60)}... for ${country || 'unknown'}`);
 
-  const prompt = `Research this topic thoroughly for ${country}'s ${industry} market:
+  const prompt =
+    country && industry
+      ? `Research this topic thoroughly for ${country}'s ${industry} market:\n\n${topic}\n\nSearch the web for recent data (2025-2026). Find:\n1. Specific statistics and numbers\n2. Key regulations and their enforcement status\n3. Major companies and their market positions\n4. Recent deals, partnerships, or market developments\n5. Government initiatives and deadlines\n\nBe specific. Cite sources. No fluff.`
+      : topic;
 
-${topic}
+  const content = await callPerplexityImported(prompt, { timeout: 120000 });
 
-Search the web for recent data (2025-2026). Find:
-1. Specific statistics and numbers
-2. Key regulations and their enforcement status
-3. Major companies and their market positions
-4. Recent deals, partnerships, or market developments
-5. Government initiatives and deadlines
+  // Track Perplexity cost (estimate: $0.005/1K tokens input+output)
+  const estimatedTokens = Math.ceil((prompt.length + (content?.length || 0)) / 4);
+  trackCost('perplexity', estimatedTokens, estimatedTokens, 0.005, 0.005);
 
-Be specific. Cite sources. No fluff.`;
-
-  const content = await callPerplexity(prompt, { timeout: 120000 });
   return {
     content: content || '',
     citations: [],
