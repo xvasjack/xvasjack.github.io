@@ -404,7 +404,7 @@ function fitTextToShape(text, maxW, maxH, baseFontPt) {
 
 // Helper: calculate dynamic column widths based on content length
 // Returns array of column widths in inches that sum to totalWidth
-function calculateColumnWidths(data, totalWidth = 12.5, options = {}) {
+function calculateColumnWidths(data, totalWidth = 12.6, options = {}) {
   if (!data || data.length === 0) return [];
 
   const minColWidth = options.minColWidth || 0.8; // Minimum column width in inches

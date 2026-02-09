@@ -309,6 +309,26 @@ function ensureHonestDescription(company) {
 function validateCompetitorsSynthesis(result) {
   if (!result) return result;
 
+  // B3: Unwrap numeric keys from array-style responses (e.g. {"0": {...japanesePlayers...}, "1": {...}})
+  const numericKeys = Object.keys(result).filter((k) => /^\d+$/.test(k));
+  if (
+    numericKeys.length > 0 &&
+    !result.japanesePlayers &&
+    !result.localMajor &&
+    !result.foreignPlayers
+  ) {
+    console.log(
+      `  [Synthesis] Competitor result had numeric keys [${numericKeys.join(',')}], unwrapping`
+    );
+    for (const k of numericKeys) {
+      const inner = result[k];
+      if (inner && typeof inner === 'object') {
+        Object.assign(result, inner);
+      }
+      delete result[k];
+    }
+  }
+
   const sections = ['japanesePlayers', 'localMajor', 'foreignPlayers'];
   const warnings = [];
 
@@ -337,6 +357,20 @@ function validateCompetitorsSynthesis(result) {
  */
 function validateMarketSynthesis(result) {
   if (!result) return result;
+
+  // A3: If AI returned an array instead of object, convert to keyed sections
+  if (Array.isArray(result)) {
+    console.log(
+      `  [Synthesis] Market result was array (len=${result.length}), converting to object`
+    );
+    const obj = {};
+    result.forEach((item, i) => {
+      if (item && typeof item === 'object') {
+        obj[`section_${i}`] = item;
+      }
+    });
+    result = obj;
+  }
 
   // Dynamically discover sections (supports both legacy energy keys and dynamic section_N keys)
   const sections = Object.keys(result).filter(
@@ -897,8 +931,13 @@ Return JSON with ONLY the caseStudy and maActivity sections:
   ]);
 
   const merged = {};
-  for (const r of [r1, r2, r3, r4]) {
-    if (r) Object.assign(merged, r);
+  for (let r of [r1, r2, r3, r4]) {
+    if (!r) continue;
+    // B1: Unwrap arrays — AI sometimes returns [{...}] instead of {...}
+    if (Array.isArray(r)) {
+      r = r.length === 1 ? r[0] : Object.assign({}, ...r);
+    }
+    if (r && typeof r === 'object') Object.assign(merged, r);
   }
 
   if (Object.keys(merged).length === 0) {

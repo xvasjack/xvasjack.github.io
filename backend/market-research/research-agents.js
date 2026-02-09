@@ -45,30 +45,30 @@ function extractJsonFromContent(content) {
     }
   }
 
-  // Strategy 2.5: Bracket-counting for [...] array
-  const arrayStr = findJsonBoundary(content, '[');
-  if (arrayStr) {
-    try {
-      return { data: JSON.parse(arrayStr), status: 'success' };
-    } catch (e) {
-      console.log(`      [JSON] Strategy 2.5 (array bracket-count) parse error: ${e.message}`);
-    }
-  }
-
-  // Strategy 3: Parse entire content as JSON
+  // Strategy 3: Parse entire content as JSON (catches both objects and arrays when content is pure JSON)
   try {
     return { data: JSON.parse(content), status: 'success' };
   } catch (e) {
     // Not valid JSON
   }
 
-  // Strategy 4: Bracket-counting for {...} object
+  // Strategy 3.5: Bracket-counting for {...} object (prefer objects over arrays)
   const objectStr = findJsonBoundary(content, '{');
   if (objectStr) {
     try {
       return { data: JSON.parse(objectStr), status: 'success' };
     } catch (e) {
-      console.log(`      [JSON] Strategy 4 (object bracket-count) parse error: ${e.message}`);
+      console.log(`      [JSON] Strategy 3.5 (object bracket-count) parse error: ${e.message}`);
+    }
+  }
+
+  // Strategy 4: Bracket-counting for [...] array (fallback)
+  const arrayStr = findJsonBoundary(content, '[');
+  if (arrayStr) {
+    try {
+      return { data: JSON.parse(arrayStr), status: 'success' };
+    } catch (e) {
+      console.log(`      [JSON] Strategy 4 (array bracket-count) parse error: ${e.message}`);
     }
   }
 
