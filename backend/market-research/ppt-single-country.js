@@ -44,9 +44,9 @@ function safeCell(value, maxLen) {
 // Truncate text to max word count to prevent table overflow
 function truncateWords(text, maxWords) {
   if (!text) return '';
-  const words = text.split(/\s+/).filter(Boolean);
-  if (words.length <= maxWords) return text;
-  return words.slice(0, maxWords).join(' ') + '...';
+  const words = String(text).trim().split(/\s+/);
+  if (words.length <= maxWords) return words.join(' ');
+  return words.slice(0, maxWords).join(' ');
 }
 
 // ============ SECTION-BASED SLIDE GENERATOR ============
@@ -160,7 +160,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (!company || typeof company !== 'object') return company;
     const desc = company.description || '';
     const wordCount = desc.split(/\s+/).filter(Boolean).length;
-    if (wordCount >= 50) return company; // Already rich enough
+    if (wordCount >= 45) return company; // Already rich enough
     // Build a richer description from available fields
     const parts = [];
     if (desc) parts.push(desc);
@@ -207,7 +207,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     // Let thin descriptions stay thin — no fabricated filler
     let result = parts.join(' ').trim();
     const words = result.split(/\s+/);
-    if (words.length > 65) result = words.slice(0, 65).join(' ') + '...';
+    if (words.length > 60) result = words.slice(0, 60).join(' ');
     company.description = result;
     return company;
   }
@@ -1114,9 +1114,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         'Revenue',
         'Partnership Fit',
         'Acquisition Fit',
-        'Est. Value',
+        'Description',
       ];
-      defaultColW = [2.0, 1.8, 1.5, 1.5, 1.5, 4.2];
+      defaultColW = [1.8, 1.2, 1.2, 1.2, 1.2, 5.9];
       rowBuilder = (p) => [
         p.website
           ? {
@@ -1128,7 +1128,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         { text: safeCell(p.revenue) },
         { text: p.partnershipFit ? `${safeCell(p.partnershipFit)}/5` : '' },
         { text: p.acquisitionFit ? `${safeCell(p.acquisitionFit)}/5` : '' },
-        { text: safeCell(p.estimatedValuation) },
+        { text: truncateWords(safeCell(p.description), 50), options: { fontSize: 11 } },
       ];
     } else if (block.key === 'foreignPlayers') {
       headerCols = ['Company', 'Origin', 'Mode', 'Description'];
@@ -2823,8 +2823,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // Fix 9: overflow protection — count words, reduce font or truncate
   const execWordCount = execText.split(/\s+/).filter(Boolean).length;
   let execFontSize = 14;
-  if (execWordCount > 420) {
-    execText = execText.split(/\s+/).slice(0, 420).join(' ') + '...';
+  if (execWordCount > 500) {
+    execText = execText.split(/\s+/).slice(0, 500).join(' ');
     execFontSize = 12;
   } else if (execWordCount > 280) {
     execFontSize = 12;
