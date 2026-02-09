@@ -33,6 +33,7 @@ const MODEL_COSTS = {
   'sonar-pro': { input: 0.003, output: 0.015 },
   sonar: { input: 0.001, output: 0.001 },
   // Gemini
+  'gemini-2.5-flash': { input: 0.00015, output: 0.0006 },
   'gemini-3-flash-preview': { input: 0.0005, output: 0.003 },
   'gemini-2.5-pro': { input: 0.00125, output: 0.005 },
   // Anthropic

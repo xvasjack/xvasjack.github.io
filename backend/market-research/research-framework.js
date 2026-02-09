@@ -356,7 +356,6 @@ If countries are vague like "ASEAN", expand to: ["Thailand", "Vietnam", "Indones
 
 Return ONLY valid JSON, no markdown or explanation.`;
 
-  // Use Gemini for deterministic parsing (temperature 0.0), Kimi fallback
   let result;
   try {
     const geminiResult = await callGemini(userPrompt, {

@@ -59,15 +59,15 @@ function validateResearchQuality(researchData) {
     issues.push(`Only ${topicsWithContent} topics have 300+ chars (need >= 5)`);
   }
 
-  // Metric 3: Structured data (25 pts)
+  // Metric 3: Structured data (info only — Gemini Research returns prose, not JSON blocks)
   let structuredCount = 0;
-  for (const [, val] of entries) {
-    if (val?.structuredData) structuredCount++;
+  for (const [key, val] of entries) {
+    if (val?.structuredData) {
+      structuredCount++;
+      console.log(`[QualityGate] ${key} has structuredData (info only)`);
+    }
   }
-  const structuredScore = Math.min(25, Math.round((structuredCount / 3) * 25));
-  if (structuredCount < 3) {
-    issues.push(`Only ${structuredCount} topics have structuredData (need >= 3)`);
-  }
+  const structuredScore = 0; // No score impact — structuredData check is dead with Gemini
 
   // Metric 4: Company mentions (10 pts)
   const companyRegex = /[A-Z][a-z]+ (?:Corp|Ltd|Inc|Co|Group|Energy|Electric|Power|Solutions)/;
@@ -164,6 +164,11 @@ function validateSynthesisQuality(synthesis, industry) {
     } else {
       failures.push(`Policy: only ${validActs.length} acts have both name and year`);
     }
+    // Check act content detail
+    for (const act of acts) {
+      if (!act.requirements || act.requirements.length < 20)
+        failures.push(`Policy: act "${act.name}" missing requirements detail`);
+    }
   } else {
     failures.push('Policy section missing');
     emptyFields.push('policy');
@@ -252,12 +257,19 @@ function validateSynthesisQuality(synthesis, industry) {
       failures.push(`Competitors: only ${totalCompanies} companies found (need >= 5)`);
     }
 
-    const avgDescWords = descCount > 0 ? totalDescWords / descCount : 0;
-    if (avgDescWords >= 40) {
+    // Per-player description check (not average-based)
+    let thinPlayers = 0;
+    for (const subKey of ['japanesePlayers', 'localMajor', 'foreignPlayers']) {
+      for (const p of competitors[subKey]?.players || []) {
+        const wc = (p.description || '').trim().split(/\s+/).length;
+        if (wc < 40) thinPlayers++;
+      }
+    }
+    if (thinPlayers === 0) {
       competitorsScore += 50;
     } else {
       failures.push(
-        `Competitors: average description ${Math.round(avgDescWords)} words (need >= 40)`
+        `Competitors: ${thinPlayers} players have descriptions <40 words (need 45-60)`
       );
     }
 
@@ -347,7 +359,7 @@ function validateSingleCountrySynthesis(synthesis, industry) {
   const execSummary = synthesis.executiveSummary;
   if (Array.isArray(execSummary)) {
     // Filter to actual paragraphs (skip instruction strings)
-    const paragraphs = execSummary.filter((p) => typeof p === 'string' && countWords(p) >= 20);
+    const paragraphs = execSummary.filter((p) => typeof p === 'string' && countWords(p) >= 40);
     if (paragraphs.length >= 3) {
       execScore = 100;
     } else if (paragraphs.length >= 2) {
@@ -409,22 +421,19 @@ function validateSingleCountrySynthesis(synthesis, industry) {
         `CompetitivePositioning: only ${namedPlayers.length} named key players (need >= 3)`
       );
     }
-    // Check description quality
-    let totalDescWords = 0;
-    let descCount = 0;
-    for (const player of namedPlayers) {
-      const desc = player.description || '';
-      totalDescWords += countWords(desc);
-      descCount++;
+    // Per-player description check (not average-based)
+    let thinPlayers = 0;
+    for (const subKey of ['japanesePlayers', 'localMajor', 'foreignPlayers']) {
+      for (const p of (cp[subKey]?.players || [])) {
+        const wc = (p.description || '').trim().split(/\s+/).length;
+        if (wc < 40) thinPlayers++;
+      }
     }
-    const avgDesc = descCount > 0 ? totalDescWords / descCount : 0;
-    if (avgDesc >= 30) {
+    if (thinPlayers === 0) {
       compScore += 50;
-    } else if (namedPlayers.length >= 3) {
-      // Players exist but descriptions are thin
-      compScore += 20;
+    } else {
       failures.push(
-        `CompetitivePositioning: average description ${Math.round(avgDesc)} words (need >= 30)`
+        `CompetitivePositioning: ${thinPlayers} players have descriptions <40 words (need 45-60)`
       );
     }
 
@@ -471,12 +480,12 @@ function validateSingleCountrySynthesis(synthesis, industry) {
     const completeness =
       structuredInsights.length > 0 ? complete.length / structuredInsights.length : 0;
 
-    if (withData.length >= 2 && withImplication.length >= 2 && completeness >= 0.75) {
+    if (withData.length >= 2 && withImplication.length >= 2 && completeness >= 0.85) {
       insightsScore = 100;
     } else if (withData.length >= 2 && withImplication.length >= 2) {
       insightsScore = 70;
       failures.push(
-        `KeyInsights: completeness ${Math.round(completeness * 100)}% (need >= 75% with both data and implication)`
+        `KeyInsights: completeness ${Math.round(completeness * 100)}% (need >= 85% with both data and implication)`
       );
     } else if (withData.length >= 1) {
       insightsScore = 50;

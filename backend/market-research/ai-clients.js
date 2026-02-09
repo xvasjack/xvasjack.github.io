@@ -188,7 +188,7 @@ async function callGemini(prompt, options = {}) {
 
 /**
  * Call Gemini 2.5 Flash with Google Search grounding for deep research
- * Returns { content, citations, researchQuality } — same interface as old callKimiDeepResearch
+ * Returns { content, citations, researchQuality }
  */
 async function callGeminiResearch(topic, country, industry, pipelineSignal = null) {
   console.log(`  [Gemini Research] ${topic.substring(0, 80)}... for ${country || 'unknown'}`);

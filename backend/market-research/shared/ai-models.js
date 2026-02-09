@@ -15,20 +15,6 @@ const MODEL_CONFIG = {
     timeout: 30000,
     maxTokens: 8192,
   },
-  // Perplexity
-  'sonar-pro': {
-    provider: 'perplexity',
-    cost: { input: 3.0, output: 15.0 },
-    timeout: 90000,
-    maxTokens: 4096,
-  },
-  // Kimi
-  'kimi-k2.5': {
-    provider: 'kimi',
-    cost: { input: 0.6, output: 2.5 },
-    timeout: 30000,
-    maxTokens: 16384,
-  },
 };
 
 // Temperature presets for different task types
@@ -363,56 +349,6 @@ async function callGemini(prompt, options = {}) {
   }
 }
 
-// ============ PERPLEXITY HELPER ============
-
-/**
- * Call Perplexity API for web search
- * @param {string} prompt - Search prompt
- * @param {Object} options - Options
- * @param {string} options.model - Model name (default: sonar-pro)
- * @param {number} options.timeout - Timeout in ms
- * @returns {Promise<string>} Response text or empty string
- */
-async function callPerplexity(prompt, options = {}) {
-  const { model = 'sonar-pro', timeout = 90000 } = options;
-
-  const apiKey = process.env.PERPLEXITY_API_KEY;
-  if (!apiKey) {
-    console.warn('  PERPLEXITY_API_KEY not set');
-    return '';
-  }
-
-  try {
-    const response = await withTimeout(
-      fetch('https://api.perplexity.ai/chat/completions', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          messages: [{ role: 'user', content: prompt }],
-        }),
-      }),
-      timeout,
-      'Perplexity API'
-    );
-
-    if (!response.ok) {
-      const error = await response.text();
-      console.error(`  Perplexity API error: ${response.status} - ${error}`);
-      return '';
-    }
-
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || '';
-  } catch (error) {
-    console.error('  Perplexity call failed:', error.message);
-    return '';
-  }
-}
-
 module.exports = {
   // Configuration
   MODEL_CONFIG,
@@ -434,5 +370,4 @@ module.exports = {
 
   // API helpers
   callGemini,
-  callPerplexity,
 };
