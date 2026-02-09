@@ -27,7 +27,7 @@ const C_DK2 = TP_COLORS.dk2 || '1F497D';
 const C_ACCENT1 = TP_COLORS.accent1 || '007FFF';
 const C_ACCENT3 = TP_COLORS.accent3 || '011AB7';
 const C_ACCENT6 = TP_COLORS.accent6 || 'E46C0A';
-const C_TABLE_HEADER = TP_COLORS.tableHeaderFill || C_ACCENT3;
+const C_TABLE_HEADER = TP_COLORS.tableHeaderFill || 'FFFFFF';
 const C_WHITE = TP_COLORS.lt1 || 'FFFFFF';
 const C_BLACK = TP_COLORS.dk1 || '000000'; // Standard text color (template dk1)
 const C_TRUE_BLACK = '000000'; // Chart axes/titles
@@ -500,8 +500,8 @@ function createTableRowOptions(isHeader = false, isAlternate = false, COLORS = {
   if (isHeader) {
     options.bold = TP_FONTS.tableHeader?.bold !== undefined ? TP_FONTS.tableHeader.bold : false;
     options.fontSize = TP_FONTS.tableHeader?.size || 14;
-    options.fill = { color: COLORS.accent3 || '011AB7' };
-    options.color = COLORS.white || 'FFFFFF';
+    options.fill = { color: 'FFFFFF' };
+    options.color = '000000';
   } else {
     options.color = COLORS.black || '333333';
   }
@@ -845,12 +845,14 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
 // Chart palette from Escort template extraction (chartPalette.extended)
 const TP_CHART = templatePatterns.chartPalette || {};
 const CHART_COLORS = TP_CHART.extended || [
-  '007FFF', // accent1 blue
-  '011AB7', // accent3 navy
-  'E46C0A', // accent6 orange
-  '1524A9', // accent4 blue
-  '001C44', // accent5 dark navy
-  'C0504D', // red
+  '3C57FE', // blue (primary)
+  '9BC9FF', // light blue
+  'D6D7D9', // gray
+  '1F497D', // dark navy
+  '007FFF', // accent blue
+  'E46C0A', // orange
+  '2E7D32', // green
+  '4F81BD', // steel blue
 ];
 
 const PIE_COLORS = TP_CHART.themeAccents || [
@@ -1885,7 +1887,7 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
       {
         text: name,
         options: {
-          fontSize: 16,
+          fontSize: 18,
           fontFace: FONT,
           color: C_BLACK,
           bold: isActive,
@@ -1901,7 +1903,7 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
     x: TEMPLATE.contentArea.x,
     y: TEMPLATE.contentArea.y,
     w: TEMPLATE.contentArea.w,
-    rowH: 0.9,
+    rowH: 0.59,
     border: { pt: TABLE_BORDER_WIDTH, color: C_BORDER },
   });
 

@@ -52,9 +52,9 @@
   "pptxPositions": {
     "title": {
       "x": 0.3758,
-      "y": 0.2917,
+      "y": 0.2875,
       "w": 12.5862,
-      "h": 0.6944
+      "h": 0.6910
     },
     "titleBar": {
       "x": 0.3758,
@@ -148,11 +148,12 @@
       "accent4": "1524A9",
       "accent5": "001C44",
       "accent6": "E46C0A",
-      "tableHeaderFill": "011AB7",
+      "tableHeaderFill": "FFFFFF",
       "accentBlue": "007FFF",
       "darkNavy": "1F497D",
       "orange": "E46C0A",
-      "gridLine": "D6D7D9"
+      "gridLine": "D6D7D9",
+      "chartSeries": ["3C57FE", "9BC9FF", "D6D7D9"]
     },
     "headerLines": {
       "top": {
@@ -172,8 +173,12 @@
       "w": 4.4983,
       "thickness": 1.75
     },
+    "toc": {
+      "fontSize": 18,
+      "rowHeight": 0.59
+    },
     "table": {
-      "headerFill": "scheme:bg1",
+      "headerFill": "FFFFFF",
       "headerFontSize": 14,
       "bodyFontSize": 14,
       "borderWidth": 1,

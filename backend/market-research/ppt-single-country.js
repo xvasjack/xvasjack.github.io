@@ -413,22 +413,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       fontFace: FONT,
       valign: 'top',
     });
-    // Subtitle as separate shape (below title, above header line)
-    if (subtitle) {
-      const dataQualityIndicator =
-        options.dataQuality === 'estimated' ? ' *' : options.dataQuality === 'low' ? ' +' : '';
-      slide.addText(subtitle + dataQualityIndicator, {
-        x: TITLE_X,
-        y: tpTitle.y + tpTitle.h + 0.02,
-        w: TITLE_W,
-        h: 0.3,
-        fontSize: 14,
-        italic: true,
-        color: COLORS.black,
-        fontFace: FONT,
-        valign: 'top',
-      });
-    }
+    // Escort template has no subtitle line — subtitle text used only for context
+    // if (subtitle) { ... } — removed to match real template
     // Header line is provided by YCP_MAIN master — no manual line needed
 
     // Merge data quality indicator + source citations into ONE shape to prevent overlap
@@ -515,8 +501,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       options: {
         bold: false,
         fontSize: 14,
-        fill: { color: COLORS.accent3 },
-        color: COLORS.white,
+        fill: { color: 'FFFFFF' },
+        color: '000000',
         fontFace: FONT,
       },
     }));
