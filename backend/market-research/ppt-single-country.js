@@ -75,7 +75,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     accent1: tpColors.accent1 || '007FFF',
     dk2: tpColors.dk2 || '1F497D',
     white: tpColors.lt1 || 'FFFFFF',
-    black: '333333',
+    black: tpColors.dk1 || '000000',
     gray: 'F2F2F2',
     footerText: '808080',
     green: '2E7D32',
@@ -102,6 +102,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const tpPos = templatePatterns.pptxPositions || {};
   const hlTop = tpPos.headerLineTop || { x: 0, y: 1.0208, w: 13.3333, h: 0 };
   const hlBot = tpPos.headerLineBottom || { x: 0, y: 1.0972, w: 13.3333, h: 0 };
+  // Footer elements from template extraction
+  const tpFooter = templatePatterns.style?.footer || {};
+  const crPos = tpFooter.copyrightPos || { x: 4.11, y: 7.26, w: 5.12, h: 0.24, fontSize: 8 };
+  const crText = tpFooter.copyrightText || '(C) YCP 2026';
   pptx.defineSlideMaster({
     title: 'YCP_MAIN',
     background: { color: COLORS.white },
@@ -124,6 +128,32 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           line: { color: COLORS.dk2, width: 1.75 },
         },
       },
+      // Footer line (thin separator above copyright)
+      {
+        line: {
+          x: 0,
+          y: 7.2361,
+          w: 13.3333,
+          h: 0,
+          line: { color: COLORS.border, width: 0.5 },
+        },
+      },
+      // Copyright text
+      {
+        text: {
+          text: crText,
+          options: {
+            x: crPos.x,
+            y: crPos.y,
+            w: crPos.w,
+            h: crPos.h,
+            fontSize: crPos.fontSize || 8,
+            fontFace: 'Segoe UI',
+            color: COLORS.footerText,
+            align: 'center',
+          },
+        },
+      },
     ],
   });
 
@@ -141,6 +171,18 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // Set default font to Segoe UI (YCP standard)
   pptx.theme = { headFontFace: 'Segoe UI', bodyFontFace: 'Segoe UI' };
   const FONT = 'Segoe UI';
+
+  // Slide numbers (from template footer extraction)
+  const pgPos = tpFooter.pageNumPos || { x: 10.22, y: 7.28, w: 3.11, h: 0.2 };
+  pptx.slideNumber = {
+    x: pgPos.x,
+    y: pgPos.y,
+    w: pgPos.w,
+    h: pgPos.h,
+    fontSize: 8,
+    fontFace: FONT,
+    color: COLORS.footerText,
+  };
 
   // Use countryAnalysis for detailed data (policy, market, competitors, etc.)
   // synthesis contains metadata like isSingleCountry, confidenceScore, etc.
@@ -326,6 +368,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const tpTitle = tpPos.title || { x: 0.3758, y: 0.2917, w: 12.5862, h: 0.6944 };
   const tpContent = tpPos.contentArea || { x: 0.3758, y: 1.5, w: 12.5862, h: 5.0 };
   const tpSource = tpPos.sourceBar || { x: 0.3758, y: 6.6944, w: 12.5862, h: 0.25 };
+  // Title font from template extraction
+  const tpTitleFont = templatePatterns.style?.fonts?.title || {};
+  const tpTitleFontSize = tpTitleFont.size || 20;
+  const tpTitleBold = tpTitleFont.bold !== undefined ? tpTitleFont.bold : false;
   const CONTENT_WIDTH = tpContent.w; // Full content width for 16:9 widescreen
   const LEFT_MARGIN = tpContent.x; // Left margin from template
   const TITLE_X = tpTitle.x; // Title x position
@@ -364,14 +410,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     // Use YCP_MAIN master (has header line built in)
     const slide = pptx.addSlide({ masterName: 'YCP_MAIN' });
 
-    // Title shape (position from template extraction)
+    // Title shape (position + font from template extraction)
     slide.addText(truncateTitle(title), {
       x: TITLE_X,
       y: tpTitle.y,
       w: TITLE_W,
       h: tpTitle.h,
-      fontSize: 24,
-      bold: true,
+      fontSize: tpTitleFontSize,
+      bold: tpTitleBold,
       color: COLORS.dk2,
       fontFace: FONT,
       valign: 'top',
@@ -413,14 +459,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (sourcesToRender && sourcesToRender.length > 0) {
       footerParts.push({
         text: 'Sources: ',
-        options: { fontSize: 7, fontFace: FONT, color: COLORS.muted },
+        options: { fontSize: 10, fontFace: FONT, color: COLORS.muted },
       });
 
       sourcesToRender.slice(0, 3).forEach((source, idx) => {
         if (idx > 0)
           footerParts.push({
             text: ', ',
-            options: { fontSize: 7, fontFace: FONT, color: COLORS.muted },
+            options: { fontSize: 10, fontFace: FONT, color: COLORS.muted },
           });
 
         const sourceUrl = typeof source === 'object' ? source.url : source;
@@ -437,7 +483,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           footerParts.push({
             text: displayText,
             options: {
-              fontSize: 7,
+              fontSize: 10,
               fontFace: FONT,
               color: COLORS.hyperlink,
               hyperlink: { url: sourceUrl },
@@ -446,7 +492,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         } else {
           footerParts.push({
             text: sourceTitle || String(source),
-            options: { fontSize: 7, fontFace: FONT, color: COLORS.muted },
+            options: { fontSize: 10, fontFace: FONT, color: COLORS.muted },
           });
         }
       });
@@ -454,7 +500,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       // Default source when none provided
       footerParts.push({
         text: 'Source: YCP Analysis',
-        options: { fontSize: 7, fontFace: FONT, color: COLORS.muted },
+        options: { fontSize: 10, fontFace: FONT, color: COLORS.muted },
       });
     }
 
@@ -3047,10 +3093,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     y: tpTitle.y,
     w: TITLE_W,
     h: tpTitle.h,
-    fontSize: 24,
+    fontSize: tpTitleFontSize,
     fontFace: FONT,
     color: COLORS.dk2,
-    bold: true,
+    bold: tpTitleBold,
   });
   const execContentRaw =
     synthesis.executiveSummary ||

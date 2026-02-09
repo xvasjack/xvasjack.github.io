@@ -29,15 +29,20 @@ const C_ACCENT3 = TP_COLORS.accent3 || '011AB7';
 const C_ACCENT6 = TP_COLORS.accent6 || 'E46C0A';
 const C_TABLE_HEADER = TP_COLORS.tableHeaderFill || C_ACCENT3;
 const C_WHITE = TP_COLORS.lt1 || 'FFFFFF';
-const C_BLACK = '333333'; // Standard text color
+const C_BLACK = TP_COLORS.dk1 || '000000'; // Standard text color (template dk1)
 const C_TRUE_BLACK = '000000'; // Chart axes/titles
-const C_BORDER = 'CCCCCC'; // Table/panel border gray
+const C_BORDER = templatePatterns.style?.table?.borderColor || 'D6D7D9'; // Template table border
 const C_MUTED = '999999'; // Muted/unavailable text
 const C_AXIS_GRAY = '888888'; // Chart axis/grid lines
 const C_LIGHT_GRAY = 'F5F5F5'; // Panel/callout backgrounds
 const C_GRAY_BG = 'F2F2F2'; // Alternate row/content backgrounds
 const C_SECONDARY = '666666'; // Secondary text
 const C_LIGHT_BLUE = 'D6E4F0'; // Matrix quadrant / section overview
+
+// Template font specs
+const TP_FONTS = templatePatterns.style?.fonts || {};
+const TITLE_FONT_SIZE = TP_FONTS.title?.size || 20;
+const TITLE_BOLD = TP_FONTS.title?.bold !== undefined ? TP_FONTS.title.bold : false;
 
 // Shared chart axis/grid defaults (identical across all chart types)
 const CHART_AXIS_DEFAULTS = {
@@ -523,7 +528,7 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
       y: TEMPLATE.sourceBar.y,
       w: TEMPLATE.sourceBar.w,
       h: TEMPLATE.sourceBar.h || 0.27,
-      fontSize: 7,
+      fontSize: templatePatterns.style?.fonts?.source?.size || 10,
       fontFace: FONT,
       color: COLORS?.footerText || C_MUTED,
       valign: 'top',
@@ -834,26 +839,33 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
 }
 
 // ============ CHART GENERATION ============
-// YCP Color Palette for charts - WCAG 2.1 AA accessible colors
-// Colors selected for sufficient contrast and colorblind-friendly combinations
-const CHART_COLORS = [
+// Chart palette from Escort template extraction (chartPalette.extended)
+const TP_CHART = templatePatterns.chartPalette || {};
+const CHART_COLORS = TP_CHART.extended || [
+  '007FFF', // accent1 blue
+  '011AB7', // accent3 navy
+  'E46C0A', // accent6 orange
+  '1524A9', // accent4 blue
+  '001C44', // accent5 dark navy
   'C0504D', // red
-  '4F81BD', // blue
-  '2E7D32', // green
-  'B71C1C', // dark red
-  '7B1FA2', // purple
-  '00838F', // teal
 ];
 
-const PIE_COLORS = ['007FFF', '011AB7', 'FF7F0E', '2CA02C', '9467BD', 'E377C2'];
+const PIE_COLORS = TP_CHART.themeAccents || [
+  '007FFF',
+  '011AB7',
+  'EDFDFF',
+  '1524A9',
+  '001C44',
+  'E46C0A',
+];
 
-// Extended accessible color palette for more than 6 categories
+// Extended palette for more than 6 categories
 const CHART_COLORS_EXTENDED = [
   ...CHART_COLORS,
-  'FF6F00', // deep orange
-  '1565C0', // blue
-  'E46C0A', // amber (was duplicate green)
-  'AD1457', // pink
+  '4F81BD', // steel blue
+  '2E7D32', // green
+  '7B1FA2', // purple
+  '00838F', // teal
 ];
 
 // Semantic colors for specific meanings (opportunities, risks, etc.)
@@ -1860,10 +1872,10 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
     y: TEMPLATE.title.y,
     w: TEMPLATE.title.w,
     h: TEMPLATE.title.h,
-    fontSize: 24,
+    fontSize: TITLE_FONT_SIZE,
     fontFace: FONT,
     color: C_DK2,
-    bold: true,
+    bold: TITLE_BOLD,
   });
 
   // Table with section names
@@ -1905,10 +1917,10 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
     y: TEMPLATE.title.y,
     w: TEMPLATE.title.w,
     h: TEMPLATE.title.h,
-    fontSize: 24,
+    fontSize: TITLE_FONT_SIZE,
     fontFace: FONT,
     color: C_DK2,
-    bold: true,
+    bold: TITLE_BOLD,
   });
 
   const opportunities = synthesis.opportunities || synthesis.summary?.opportunities || [];
