@@ -191,6 +191,45 @@ const patterns = {
       gridLines: { color: 'D6D7D9', thickness: 0.25 },
     },
   },
+  // Alias: ppt-utils references chart_callout_dual for dual chart layouts
+  chart_callout_dual: {
+    id: 6.1,
+    aliasOf: 'chart_with_grid',
+    description: 'Dual chart with callout (derived from chart_with_grid pattern)',
+    templateSlides: [13, 14, 15, 16, 17, 18, 19, 31, 32],
+    layout: 1,
+    elements: {
+      chartLeft: { x: 0.38, y: 1.5, w: 6.0, h: 4.2 },
+      chartRight: { x: 6.8, y: 1.5, w: 6.1, h: 4.2 },
+      quoteCallout: { x: 0.38, y: 5.9, w: 12.59, h: 0.7 },
+    },
+  },
+  // Alias: ppt-utils references chart_insight_panels for chart + insight sidebar
+  chart_insight_panels: {
+    id: 6.2,
+    aliasOf: 'chart_with_grid',
+    description: 'Chart with insight panels sidebar (derived from chart_with_grid pattern)',
+    templateSlides: [13, 14, 15, 16, 17, 18, 19, 31, 32],
+    layout: 1,
+    elements: {
+      chart: { x: 0.38, y: 1.5, w: 7.8, h: 4.5 },
+      insightPanels: [
+        { x: 8.5, y: 1.5, w: 4.4, h: 1.4 },
+        { x: 8.5, y: 3.1, w: 4.4, h: 1.4 },
+        { x: 8.5, y: 4.7, w: 4.4, h: 1.4 },
+      ],
+      calloutOverlay: {
+        x: 1.0,
+        y: 5.0,
+        w: 5.5,
+        h: 1.0,
+        fill: 'F5F5F5',
+        border: 'CCCCCC',
+        borderWidth: 1,
+        cornerRadius: 0.05,
+      },
+    },
+  },
   company_comparison: {
     id: 7,
     description: 'Company comparison table with source notes',
@@ -211,6 +250,36 @@ const patterns = {
       table: { x: 0.38, y: 1.5, w: 12.59 },
     },
   },
+  // Alias: ppt-utils references case_study_rows for structured row layout
+  case_study_rows: {
+    id: 8.1,
+    aliasOf: 'case_study',
+    description: 'Case study with labeled rows (derived from case_study pattern)',
+    templateSlides: [23, 24, 27, 28],
+    layout: 1,
+    elements: {
+      rows: [
+        { label: 'Business Overview', y: 1.5, h: 0.8 },
+        { label: 'Context', y: 2.4, h: 1.0 },
+        { label: 'Objective', y: 3.5, h: 0.6 },
+        { label: 'Scope', y: 4.2, h: 1.3 },
+        { label: 'Outcome', y: 5.6, h: 0.8 },
+      ],
+      labelStyle: { fill: '1F497D', color: 'FFFFFF', fontSize: 10, bold: true },
+      contentStyle: { fill: 'F2F2F2', color: '333333', fontSize: 9 },
+      chevronFlow: {
+        x: 2.5,
+        y: 5.6,
+        w: 10.4,
+        h: 0.8,
+        maxPhases: 5,
+        chevronColors: ['007FFF', '2E7D32', 'E46C0A', '4F81BD', 'C0504D'],
+        spacing: 0.05,
+        fontSize: 8,
+        textColor: 'FFFFFF',
+      },
+    },
+  },
   financial_charts: {
     id: 9,
     description: 'Dual financial charts with company data',
@@ -218,8 +287,29 @@ const patterns = {
     layout: 7,
     elements: {
       dividerLine: { x: 2.1851, y: 1.729, w: 8.6231 },
-      chartLeft: {},
-      chartRight: {},
+      chartLeft: { x: 0.38, y: 1.5, w: 6.0, h: 4.2 },
+      chartRight: { x: 6.8, y: 1.5, w: 6.1, h: 4.2 },
+    },
+  },
+  // Alias: ppt-utils references dual_chart_financial
+  dual_chart_financial: {
+    id: 9.1,
+    aliasOf: 'financial_charts',
+    description: 'Financial dual charts with metrics row (derived from financial_charts)',
+    templateSlides: [26, 29],
+    layout: 7,
+    elements: {
+      chartLeft: { x: 0.38, y: 1.5, w: 6.0, h: 4.0 },
+      chartRight: { x: 6.8, y: 1.5, w: 6.1, h: 4.0 },
+      metricsRow: {
+        y: 5.7,
+        h: 0.6,
+        metricBoxWidth: 3.0,
+        metricValueFontSize: 16,
+        metricValueColor: '1F497D',
+        metricLabelFontSize: 9,
+        metricLabelColor: '666666',
+      },
     },
   },
   company_profile: {
@@ -235,6 +325,21 @@ const patterns = {
     layout: 6,
     elements: {
       table: { x: 0.38, y: 1.5, w: 12.59 },
+    },
+  },
+  // Alias: ppt-utils references matrix_2x2 for 2x2 quadrant layout
+  matrix_2x2: {
+    id: 12,
+    description: '2x2 quadrant matrix (custom pattern, not from template)',
+    templateSlides: [],
+    layout: 1,
+    elements: {
+      quadrants: [
+        { x: 0.38, y: 1.5, w: 6.0, h: 2.5, fill: 'D6E4F0' },
+        { x: 6.6, y: 1.5, w: 6.3, h: 2.5, fill: 'F2F2F2' },
+        { x: 0.38, y: 4.2, w: 6.0, h: 2.3, fill: 'F2F2F2' },
+        { x: 6.6, y: 4.2, w: 6.3, h: 2.3, fill: 'D6E4F0' },
+      ],
     },
   },
 };
@@ -318,7 +423,57 @@ const chartDetails = extracted.charts.map((c) => ({
   styleVal: c.styleVal || null,
 }));
 
+// ===== pptxgenjs-compatible positions (x/y/w/h format) =====
+// These can be used directly in pptxgenjs addText/addShape/addTable calls
+const pptxPositions = {
+  title: {
+    x: positions.title.left,
+    y: positions.title.top,
+    w: positions.title.width,
+    h: positions.title.height,
+  },
+  titleBar: {
+    x: positions.titleBar.left,
+    y: positions.titleBar.top,
+    w: positions.titleBar.width,
+    h: positions.titleBar.height,
+  },
+  contentArea: {
+    x: positions.content_area.left,
+    y: positions.content_area.top,
+    w: positions.content_area.width,
+    h: positions.content_area.height,
+  },
+  sourceBar: {
+    x: positions.source_bar.left,
+    y: positions.source_bar.top,
+    w: positions.source_bar.width,
+    h: positions.source_bar.height,
+  },
+  headerLineTop: {
+    x: positions.headerLineTop.left,
+    y: positions.headerLineTop.top,
+    w: positions.headerLineTop.width,
+    h: 0,
+  },
+  headerLineBottom: {
+    x: positions.headerLineBottom.left,
+    y: positions.headerLineBottom.top,
+    w: positions.headerLineBottom.width,
+    h: 0,
+  },
+  footerLine: {
+    x: positions.footer_line.left,
+    y: positions.footer_line.top,
+    w: positions.footer_line.width,
+    h: 0,
+  },
+};
+
 // ===== Assemble final output =====
+const themeWithName = { ...extracted.theme };
+themeWithName.name = extracted.theme?.fontScheme?.name || 'YCP';
+
 const output = {
   _meta: {
     source: extracted._meta.source,
@@ -331,11 +486,12 @@ const output = {
     layoutCount: 8,
   },
   positions,
+  pptxPositions,
   style,
   patterns,
   chartPalette,
   _extractedConstants,
-  theme: extracted.theme,
+  theme: themeWithName,
   slideMaster: { elements: stripText(extracted.slideMaster.elements) },
   slideLayouts: layoutDetails,
   slideDetails,
