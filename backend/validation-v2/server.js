@@ -1246,7 +1246,7 @@ app.post('/api/validation', async (req, res) => {
   }
 
   console.log(`\n${'='.repeat(50)}`);
-  console.log(`NEW VALIDATION PJ VESSEL REQUEST: ${new Date().toISOString()}`);
+  console.log(`NEW VALIDATION V2 REQUEST: ${new Date().toISOString()}`);
   console.log(`Criteria: ${Criteria.length} items`);
   Criteria.forEach((c, i) => console.log(`  ${i + 1}. ${c}`));
   console.log(`Countries: ${Countries}`);
@@ -1260,7 +1260,7 @@ app.post('/api/validation', async (req, res) => {
     message: 'Validation request received. Results will be emailed within 3 minutes.',
   });
 
-  const tracker = createTracker('validation-pj-vessel', Email, {
+  const tracker = createTracker('validation-v2', Email, {
     Criteria,
     Countries,
   });
@@ -1277,7 +1277,7 @@ app.post('/api/validation', async (req, res) => {
       if (companyList.length === 0) {
         await sendEmail(
           Email,
-          'Validation (PJ Vessel) - No Companies',
+          'Validation V2 - No Companies',
           '<p>No valid company names were found in your input.</p>'
         );
         return;
@@ -1316,7 +1316,7 @@ app.post('/api/validation', async (req, res) => {
       }).join('<br>');
 
       const emailBody = `
-        <h2>Validation (PJ Vessel) Complete</h2>
+        <h2>Validation V2 Complete</h2>
         <p><strong>Criteria:</strong></p>
         <ol>${Criteria.map((c) => `<li>${c}</li>`).join('')}</ol>
         <p><strong>Countries:</strong> ${countryList.join(', ') || 'None specified'}</p>
@@ -1329,7 +1329,7 @@ app.post('/api/validation', async (req, res) => {
       const attachments = [
         {
           content: excelBase64,
-          name: `validation-pj-vessel-${new Date().toISOString().split('T')[0]}.xlsx`,
+          name: `validation-v2-${new Date().toISOString().split('T')[0]}.xlsx`,
         },
       ];
       if (pptBase64) {
@@ -1341,14 +1341,14 @@ app.post('/api/validation', async (req, res) => {
 
       await sendEmail(
         Email,
-        `Validation (PJ Vessel): ${results.length} companies evaluated against ${Criteria.length} criteria`,
+        `Validation V2: ${results.length} companies evaluated against ${Criteria.length} criteria`,
         emailBody,
         attachments
       );
 
       const totalTime = ((Date.now() - totalStart) / 1000 / 60).toFixed(1);
       console.log(`\n${'='.repeat(50)}`);
-      console.log(`VALIDATION PJ VESSEL COMPLETE! Email sent to ${Email}`);
+      console.log(`VALIDATION V2 COMPLETE! Email sent to ${Email}`);
       console.log(`Total companies: ${results.length}`);
       console.log(`Total time: ${totalTime} minutes`);
       console.log('='.repeat(50));
@@ -1358,10 +1358,10 @@ app.post('/api/validation', async (req, res) => {
         criteriaCount: Criteria.length,
       });
     } catch (error) {
-      console.error('Validation PJ Vessel error:', error);
+      console.error('Validation V2 error:', error);
       await tracker.finish({ status: 'error', error: error.message }).catch(() => {});
       try {
-        await sendEmail(Email, 'Validation (PJ Vessel) - Error', `<p>Error: ${error.message}</p>`);
+        await sendEmail(Email, 'Validation V2 - Error', `<p>Error: ${error.message}</p>`);
       } catch (e) {
         console.error('Failed to send error email:', e);
       }
@@ -1370,14 +1370,14 @@ app.post('/api/validation', async (req, res) => {
 });
 
 // ============ HEALTH CHECK ============
-app.get('/health', healthCheck('validation-pj-vessel'));
+app.get('/health', healthCheck('validation-v2'));
 
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'validation-pj-vessel' });
+  res.json({ status: 'ok', service: 'validation-v2' });
 });
 
 // ============ SERVER STARTUP ============
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Validation PJ Vessel server running on port ${PORT}`);
+  console.log(`Validation V2 server running on port ${PORT}`);
 });
