@@ -292,6 +292,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     let value = 0;
     if (numMatch) {
       value = parseFloat(numMatch[1].replace(/,/g, ''));
+      if (!isFinite(value)) value = 0;
       if (/billion|B/i.test(numMatch[2] || '')) value *= 1000; // Convert to millions
     }
     chartValues.push(value || 100); // Default to 100 if can't parse
@@ -318,7 +319,10 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
         dataLabelFontFace: FONT,
         dataLabelFontSize: 10,
         chartColors: [COLORS.accent1],
-        valAxisMaxVal: Math.max(...chartValues) * 1.2,
+        valAxisMaxVal: (() => {
+          const m = Math.max(...chartValues.filter((v) => isFinite(v) && v > 0));
+          return isFinite(m) ? m * 1.2 : 100;
+        })(),
         catAxisLabelFontFace: FONT,
         catAxisLabelFontSize: 11,
         valAxisLabelFontFace: FONT,

@@ -311,7 +311,7 @@ function dedupeCompanies(companies) {
 // AI synthesis returns data nested under profile/financialHighlights keys;
 // PPT renderers expect flat top-level fields like revenue, employees, entryYear, etc.
 function flattenPlayerProfile(p) {
-  if (!p || typeof p !== 'object') return p;
+  if (!p || typeof p !== 'object') return {};
   const flat = { ...p };
   if (p.profile && typeof p.profile === 'object') {
     flat.revenue = p.revenue || p.profile.revenueGlobal || p.profile.revenueLocal;
@@ -439,7 +439,7 @@ function calculateColumnWidths(data, totalWidth = 12.5, options = {}) {
 
   // Normalize to ensure widths sum to totalWidth
   const currentTotal = widths.reduce((sum, w) => sum + w, 0);
-  if (currentTotal !== totalWidth) {
+  if (currentTotal > 0 && currentTotal !== totalWidth) {
     const scale = totalWidth / currentTotal;
     widths = widths.map((w) => w * scale);
   }
@@ -892,7 +892,7 @@ function addStackedBarChart(slide, title, data, options = {}) {
 
   // Validate series values are all numbers
   const hasInvalidValues = chartData.series.some(
-    (s) => s.values && s.values.some((v) => typeof v !== 'number' || isNaN(v))
+    (s) => s.values && s.values.some((v) => typeof v !== 'number' || !isFinite(v))
   );
   if (hasInvalidValues) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
@@ -1003,7 +1003,7 @@ function addLineChart(slide, title, data, options = {}) {
 
   // Validate series values are all numbers
   const hasInvalidValues = chartData.series.some(
-    (s) => s.values && s.values.some((v) => typeof v !== 'number' || isNaN(v))
+    (s) => s.values && s.values.some((v) => typeof v !== 'number' || !isFinite(v))
   );
   if (hasInvalidValues) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
@@ -1106,7 +1106,7 @@ function addBarChart(slide, title, data, options = {}) {
   }
 
   // Validate values are all numbers
-  if (data.values.some((v) => typeof v !== 'number' || isNaN(v))) {
+  if (data.values.some((v) => typeof v !== 'number' || !isFinite(v))) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
       x: options.x || 0.4,
@@ -1178,7 +1178,7 @@ function addPieChart(slide, title, data, options = {}) {
   }
 
   // Validate values are all numbers
-  if (data.values.some((v) => typeof v !== 'number' || isNaN(v))) {
+  if (data.values.some((v) => typeof v !== 'number' || !isFinite(v))) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
       x: options.x || 0.4,

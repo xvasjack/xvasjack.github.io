@@ -2004,7 +2004,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       });
       const renderHarvey = (arr, idx) => {
         if (!Array.isArray(arr) || idx >= arr.length) return '';
-        const val = Math.max(0, Math.min(5, parseInt(arr[idx]) || 0));
+        const val = Math.max(0, Math.min(5, parseInt(arr[idx], 10) || 0));
         return '\u25CF'.repeat(val) + '\u25CB'.repeat(5 - val);
       };
       // Derive column headers from options data or harvey ball keys

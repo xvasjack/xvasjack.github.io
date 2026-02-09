@@ -29,9 +29,6 @@ const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
 // Cost estimates per model (USD per 1K tokens)
 const MODEL_COSTS = {
-  // Perplexity
-  'sonar-pro': { input: 0.003, output: 0.015 },
-  sonar: { input: 0.001, output: 0.001 },
   // Gemini
   'gemini-2.5-flash': { input: 0.00015, output: 0.0006 },
   'gemini-3-flash-preview': { input: 0.0005, output: 0.003 },
@@ -41,8 +38,6 @@ const MODEL_COSTS = {
   'claude-3-sonnet': { input: 0.003, output: 0.015 },
   'claude-sonnet-4': { input: 0.003, output: 0.015 },
   'claude-3-haiku': { input: 0.00025, output: 0.00125 },
-  // Kimi
-  'kimi-k2.5': { input: 0.0006, output: 0.0025 },
 };
 
 // Cache access token

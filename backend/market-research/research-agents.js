@@ -102,7 +102,12 @@ function validateCompetitorData(data) {
   if (!data) return false;
   if (!Array.isArray(data.players) || data.players.length === 0) return false;
   return data.players.every(
-    (p) => p.name && p.description && p.description.split(/\s+/).length >= 45 && p.website
+    (p) =>
+      p.name &&
+      p.description &&
+      typeof p.description === 'string' &&
+      p.description.split(/\s+/).length >= 45 &&
+      p.website
   );
 }
 
@@ -126,7 +131,7 @@ For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petr
 As a regulatory affairs specialist, research ${framework.name} for ${country}'s ${industry} market:
 
 SPECIFIC QUESTIONS:
-${framework.queries.map((q) => '- ' + q.replace('{country}', country)).join('\n')}
+${(framework.queries || []).map((q) => '- ' + q.replace('{country}', country)).join('\n')}
 
 FOCUS ON:
 - Exact law names, years enacted, enforcement status
@@ -331,7 +336,7 @@ For each energy source, list SPECIFIC named projects:
 As a market research analyst, research ${framework.name} for ${country}'s ${industry} market:
 
 SPECIFIC QUESTIONS:
-${framework.queries.map((q) => '- ' + q.replace('{country}', country)).join('\n')}
+${(framework.queries || []).map((q) => '- ' + q.replace('{country}', country)).join('\n')}
 
 CRITICAL - RETURN STRUCTURED DATA:
 Your response MUST include a JSON block with chart data. Use this EXACT format:
@@ -417,7 +422,7 @@ REQUIREMENTS:
             industry,
             pipelineSignal
           );
-          if (retryResult.content) {
+          if (retryResult && retryResult.content) {
             extractResult = extractJsonFromContent(retryResult.content);
             structuredData = extractResult.data;
             extractionStatus = extractResult.status;
@@ -495,7 +500,7 @@ For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petr
 As a competitive intelligence analyst, research ${framework.name} for ${country}'s ${industry} market:
 
 SPECIFIC QUESTIONS:
-${framework.queries.map((q) => '- ' + q.replace('{country}', country)).join('\n')}
+${(framework.queries || []).map((q) => '- ' + q.replace('{country}', country)).join('\n')}
 
 ${
   isJapanese
@@ -617,7 +622,7 @@ REQUIREMENTS:
         );
         const retryQuery = `${queryContext}\n\nCRITICAL: Return ONLY valid JSON. No explanation, no markdown. Just the raw JSON object.`;
         const retryResult = await callGeminiResearch(retryQuery, country, industry, pipelineSignal);
-        if (retryResult.content) {
+        if (retryResult && retryResult.content) {
           extractResult = extractJsonFromContent(retryResult.content);
           structuredData = extractResult.data;
           extractionStatus = extractResult.status;
@@ -680,7 +685,7 @@ For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petr
 As a strategy consultant advising a ${clientContext}, research ${framework.name} for ${country}'s ${industry} market:
 
 SPECIFIC QUESTIONS:
-${framework.queries.map((q) => '- ' + q.replace('{country}', country)).join('\n')}
+${(framework.queries || []).map((q) => '- ' + q.replace('{country}', country)).join('\n')}
 
 FOCUS ON:
 - Actionable opportunities with sizing
@@ -732,7 +737,7 @@ Your response MUST include a JSON block. Use this format:
         );
         const retryQuery = `${queryContext}\n\nCRITICAL: Return ONLY valid JSON. No explanation, no markdown. Just the raw JSON object.`;
         const retryResult = await callGeminiResearch(retryQuery, country, industry, pipelineSignal);
-        if (retryResult.content) {
+        if (retryResult && retryResult.content) {
           extractResult = extractJsonFromContent(retryResult.content);
           structuredData = extractResult.data;
           extractionStatus = extractResult.status;
@@ -858,7 +863,7 @@ For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petr
 As a senior M&A advisor helping a ${clientContext} enter ${country}'s ${industry} market, research ${framework.name}:
 
 SPECIFIC QUESTIONS:
-${framework.queries.map((q) => '- ' + q.replace('{country}', country)).join('\n')}
+${(framework.queries || []).map((q) => '- ' + q.replace('{country}', country)).join('\n')}
 
 ${
   isEconomics
@@ -928,7 +933,7 @@ DEPTH IS CRITICAL - We need specifics for executive decision-making, not general
         );
         const retryQuery = `${queryContext}\n\nCRITICAL: Return ONLY valid JSON. No explanation, no markdown. Just the raw JSON object.`;
         const retryResult = await callGeminiResearch(retryQuery, country, industry, pipelineSignal);
-        if (retryResult.content) {
+        if (retryResult && retryResult.content) {
           extractResult = extractJsonFromContent(retryResult.content);
           structuredData = extractResult.data;
           extractionStatus = extractResult.status;
@@ -1076,7 +1081,7 @@ For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petr
 As a competitive intelligence analyst helping a ${clientContext} evaluate ${country}'s ${industry} market, research ${framework.name}:
 
 QUESTIONS TO ANSWER:
-${framework.queries.map((q) => '- ' + q.replace('{country}', country)).join('\n')}
+${(framework.queries || []).map((q) => '- ' + q.replace('{country}', country)).join('\n')}
 
 ${
   isFailures
@@ -1151,7 +1156,7 @@ This intelligence is for CEO-level decision making. We need SPECIFIC names, date
         );
         const retryQuery = `${queryContext}\n\nCRITICAL: Return ONLY valid JSON. No explanation, no markdown. Just the raw JSON object.`;
         const retryResult = await callGeminiResearch(retryQuery, country, industry, pipelineSignal);
-        if (retryResult.content) {
+        if (retryResult && retryResult.content) {
           extractResult = extractJsonFromContent(retryResult.content);
           structuredData = extractResult.data;
           extractionStatus = extractResult.status;
@@ -1213,7 +1218,7 @@ For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petr
 As a senior consultant advising a ${clientContext} on a ${projectType} project, research ${topic.name} for ${country}'s ${industry} market:
 
 SPECIFIC QUESTIONS:
-${topic.queries.map((q) => '- ' + q.replace(/{country}/g, country)).join('\n')}
+${(topic.queries || []).map((q) => '- ' + q.replace(/{country}/g, country)).join('\n')}
 
 REQUIREMENTS:
 - Provide SPECIFIC data: numbers, company names, dates, deal sizes

@@ -2,7 +2,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { securityHeaders, rateLimiter } = require('./shared/security');
+const { securityHeaders, rateLimiter, escapeHtml } = require('./shared/security');
 const { requestLogger, healthCheck } = require('./shared/middleware');
 const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { createTracker, trackingContext } = require('./shared/tracking');
@@ -51,6 +51,7 @@ async function runMarketResearch(userPrompt, email) {
   console.log('Email:', email);
 
   // Reset cost tracker
+  // NOTE: Global costTracker has race condition with concurrent requests — acceptable for single-instance deployment
   costTracker.totalCost = 0;
   costTracker.calls = [];
   resetBudget();
@@ -221,7 +222,7 @@ async function runMarketResearch(userPrompt, email) {
 
       const emailHtml = `
       <p>Your market research report is attached.</p>
-      <p style="color: #666; font-size: 12px;">${scope.industry} - ${scope.targetMarkets.join(', ')}</p>
+      <p style="color: #666; font-size: 12px;">${escapeHtml(scope.industry)} - ${escapeHtml(scope.targetMarkets.join(', '))}</p>
     `;
 
       await sendEmail({
@@ -289,7 +290,7 @@ async function runMarketResearch(userPrompt, email) {
           html: `
         <h2>Market Research Error</h2>
         <p>Your market research request encountered an error:</p>
-        <pre>${error.message}</pre>
+        <pre>${escapeHtml(error.message)}</pre>
         <p>Please try again or contact support.</p>
       `,
           attachments: {
@@ -319,9 +320,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-// ============ HEALTH CHECK ============
-app.get('/health', healthCheck('market-research'));
-
 // Main research endpoint
 app.post('/api/market-research', async (req, res) => {
   const { prompt, email } = req.body;
@@ -346,8 +344,18 @@ app.post('/api/market-research', async (req, res) => {
   const timeoutPromise = new Promise((_, reject) =>
     setTimeout(() => reject(new Error('Pipeline timeout after 25 minutes')), PIPELINE_TIMEOUT)
   );
-  Promise.race([runMarketResearch(prompt, email), timeoutPromise]).catch((error) => {
+  Promise.race([runMarketResearch(prompt, email), timeoutPromise]).catch(async (error) => {
     console.error('Background research failed:', error);
+    try {
+      await sendEmail({
+        to: email,
+        subject: 'Market Research Failed',
+        html: `<h2>Market Research Error</h2><p>Your request failed: ${escapeHtml(error.message)}</p><p>Please try again.</p>`,
+        fromName: 'Market Research AI',
+      });
+    } catch (emailErr) {
+      console.error('Failed to send error email:', emailErr);
+    }
   });
 });
 

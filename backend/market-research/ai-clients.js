@@ -162,7 +162,12 @@ async function callGemini(prompt, options = {}) {
           throw new Error(`Gemini API error ${response.status}: ${errText}`);
         }
 
-        const data = await response.json();
+        let data;
+        try {
+          data = await response.json();
+        } catch (parseErr) {
+          throw new Error(`API returned non-JSON response (HTTP ${response.status})`);
+        }
         const candidate = data.candidates?.[0];
         if (!candidate || !candidate.content?.parts?.[0]?.text) {
           throw new Error('Gemini returned empty response');
@@ -274,7 +279,12 @@ Be specific. Cite sources. No fluff.`;
           return { content: '', citations: [], researchQuality: 'failed' };
         }
 
-        const data = await response.json();
+        let data;
+        try {
+          data = await response.json();
+        } catch (parseErr) {
+          throw new Error(`API returned non-JSON response (HTTP ${response.status})`);
+        }
         const candidate = data.candidates?.[0];
 
         // Track cost
@@ -384,7 +394,12 @@ async function callGeminiPro(prompt, options = {}) {
           throw new Error(`Gemini Pro API error ${response.status}: ${errText}`);
         }
 
-        const data = await response.json();
+        let data;
+        try {
+          data = await response.json();
+        } catch (parseErr) {
+          throw new Error(`API returned non-JSON response (HTTP ${response.status})`);
+        }
         const candidate = data.candidates?.[0];
         if (!candidate || !candidate.content?.parts?.[0]?.text) {
           throw new Error('Gemini Pro returned empty response');
