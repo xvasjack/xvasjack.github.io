@@ -451,7 +451,7 @@ function calculateColumnWidths(data, totalWidth = 12.5, options = {}) {
 function createTableRowOptions(isHeader = false, isAlternate = false, COLORS = {}) {
   const options = {
     fontFace: 'Segoe UI',
-    fontSize: 10,
+    fontSize: 9,
     valign: 'top',
   };
 
@@ -460,7 +460,7 @@ function createTableRowOptions(isHeader = false, isAlternate = false, COLORS = {
     options.fill = { color: COLORS.accent3 || '011AB7' };
     options.color = COLORS.white || 'FFFFFF';
   } else {
-    options.color = COLORS.black || '000000';
+    options.color = COLORS.black || '333333';
   }
 
   return options;
@@ -526,8 +526,8 @@ function addCalloutBox(slide, title, content, options = {}) {
   }
   if (content) {
     textParts.push({
-      text: fitTextToShape(truncate(content, 200), boxW - 0.4, boxH - 0.4, 10).text,
-      options: { fontSize: 10, color: '000000', fontFace: FONT },
+      text: fitTextToShape(truncate(content, 200), boxW - 0.4, boxH - 0.4, 9).text,
+      options: { fontSize: 9, color: '333333', fontFace: FONT },
     });
   }
   if (textParts.length > 0) {
@@ -564,14 +564,14 @@ function addInsightsPanel(slide, insights = [], options = {}) {
     insightPanels: [
       {
         x: options.x || 8.5,
-        y: options.y || 1.5,
+        y: options.y || 1.3,
         w: options.w || 4.4,
         h: Math.min((options.h || 4.0) / Math.min(insights.length, 3), 1.5),
       },
       {
         x: options.x || 8.5,
         y:
-          (options.y || 1.5) +
+          (options.y || 1.3) +
           Math.min((options.h || 4.0) / Math.min(insights.length, 3), 1.5) +
           0.1,
         w: options.w || 4.4,
@@ -1212,7 +1212,7 @@ function addPieChart(slide, title, data, options = {}) {
     x: options.x || 0.4,
     y: options.y || 1.3,
     w: options.w || 12.5,
-    h: options.h || 5.2,
+    h: options.h || 5.196,
     showLegend: true,
     legendPos: 'r',
     showTitle: !!title,
@@ -1843,7 +1843,7 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
     h: 0.7,
     fontSize: 24,
     fontFace: FONT,
-    color: '000000',
+    color: '1F497D',
     bold: true,
   });
 

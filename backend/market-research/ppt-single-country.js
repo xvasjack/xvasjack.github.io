@@ -67,10 +67,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     accent1: '3C57FE',
     dk2: '1B2A4A',
     white: 'FFFFFF',
-    black: '000000',
-    gray: 'D6D7D9',
+    black: '333333',
+    gray: 'F2F2F2',
     footerText: '808080',
-    green: '1D8348',
+    green: '2E7D32',
     orange: 'E46C0A',
     red: 'B71C1C',
   };
@@ -280,8 +280,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // Standard slide layout with title, subtitle, and navy divider line
   // Uses widescreen dimensions (13.333" x 7.5" = 16:9)
-  const CONTENT_WIDTH = 12.5; // Full content width for 16:9 widescreen
+  const CONTENT_WIDTH = 12.6; // Full content width for 16:9 widescreen
   const LEFT_MARGIN = 0.4; // Left margin matching YCP template
+  const TITLE_X = 0.376; // Title x position (differs from content LEFT_MARGIN)
+  const TITLE_W = 12.586; // Title width matching template
+  const SOURCE_W = 12.595; // Footer/source width matching template
 
   // Maximum y for content shapes (footer zone below this)
   const CONTENT_BOTTOM = 6.65;
@@ -301,9 +304,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
     // Title shape
     slide.addText(truncateTitle(title), {
-      x: LEFT_MARGIN,
+      x: TITLE_X,
       y: 0.15,
-      w: CONTENT_WIDTH,
+      w: TITLE_W,
       h: 0.7,
       fontSize: 24,
       bold: true,
@@ -316,11 +319,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       const dataQualityIndicator =
         options.dataQuality === 'estimated' ? ' *' : options.dataQuality === 'low' ? ' +' : '';
       slide.addText(subtitle + dataQualityIndicator, {
-        x: LEFT_MARGIN,
+        x: TITLE_X,
         y: 0.95,
-        w: CONTENT_WIDTH,
+        w: TITLE_W,
         h: 0.3,
         fontSize: 14,
+        italic: true,
         color: '007FFF',
         fontFace: FONT,
         valign: 'top',
@@ -340,7 +344,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           : '+ Limited data availability';
       footerParts.push({
         text: legend + (sourcesToRender && sourcesToRender.length > 0 ? '   |   ' : ''),
-        options: { fontSize: 8, italic: true, color: '000000', fontFace: FONT },
+        options: { fontSize: 8, italic: true, color: '333333', fontFace: FONT },
       });
     }
 
@@ -396,7 +400,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       slide.addText(footerParts, {
         x: LEFT_MARGIN,
         y: FOOTER_Y,
-        w: CONTENT_WIDTH,
+        w: SOURCE_W,
         h: 0.27,
         valign: 'top',
       });
@@ -411,7 +415,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       text,
       options: {
         bold: true,
-        fontSize: 12,
+        fontSize: 10,
         fill: { color: COLORS.accent3 },
         color: COLORS.white,
         fontFace: FONT,
@@ -426,11 +430,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       [
         {
           text: '! ' + message + '\n',
-          options: { fontSize: 14, bold: true, color: '000000', fontFace: FONT },
+          options: { fontSize: 14, bold: true, color: '333333', fontFace: FONT },
         },
         {
           text: 'This data could not be verified through research. Recommend validating independently before making decisions.',
-          options: { fontSize: 11, color: '000000', fontFace: FONT },
+          options: { fontSize: 11, color: '333333', fontFace: FONT },
         },
       ],
       {
@@ -1220,7 +1224,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       y: tableStartY,
       w: CONTENT_WIDTH,
       h: tableH,
-      fontSize: 11,
+      fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: colWidths.length > 0 ? colWidths : defaultColW,
@@ -1286,7 +1290,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         w: CONTENT_WIDTH,
         h: assessH,
         fill: { color: 'F5F5F5' },
-        line: { color: 'D6D7D9', pt: 0.5 },
+        line: { color: 'F2F2F2', pt: 0.5 },
         margin: [4, 8, 4, 8],
         valign: 'top',
       });
@@ -1414,7 +1418,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         y: 1.3,
         w: CONTENT_WIDTH,
         h: actsTableH,
-        fontSize: 12,
+        fontSize: 9,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
         colW: [2.96, 1.08, 4.43, 4.03],
@@ -1480,7 +1484,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         y: 1.3,
         w: CONTENT_WIDTH,
         h: policyTableH,
-        fontSize: 11,
+        fontSize: 9,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
         colW: [4.03, 3.09, 2.69, 2.69],
@@ -1561,7 +1565,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         y: 1.3,
         w: CONTENT_WIDTH,
         h: ownerTableH,
-        fontSize: 11,
+        fontSize: 9,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
         colW: [3.36, 2.02, 7.12],
@@ -1662,7 +1666,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       y: 1.3,
       w: CONTENT_WIDTH,
       h: incTableH,
-      fontSize: 11,
+      fontSize: 9,
       fontFace: FONT,
       border: { pt: 0.5, color: 'cccccc' },
       colW: [2.5, 3.5, 3.0, 3.5],
@@ -1757,7 +1761,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         y: maNextY,
         w: CONTENT_WIDTH,
         h: dealTableH,
-        fontSize: 11,
+        fontSize: 9,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
         colW: dealColWidths.length > 0 ? dealColWidths : [1.08, 2.42, 2.42, 2.02, 4.56],
@@ -1886,7 +1890,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         y: 1.3,
         w: CONTENT_WIDTH,
         h: financing.length > 0 ? 3.0 : 4.0,
-        fontSize: 12,
+        fontSize: 9,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
         colW: econColWidths.length > 0 ? econColWidths : [2.5, 3.0, 7.0],
@@ -1969,7 +1973,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         y: 1.3,
         w: CONTENT_WIDTH,
         h: optTableH,
-        fontSize: 11,
+        fontSize: 9,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
         colW: optColWidths.length > 0 ? optColWidths : [1.5, 1.3, 1.5, 1.3, 1.1, 2.9, 2.9],
@@ -2244,7 +2248,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         y: 1.3,
         w: CONTENT_WIDTH,
         h: goNoGoTableH,
-        fontSize: 11,
+        fontSize: 9,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
         colW: [4.03, 1.08, 7.39],
@@ -2451,7 +2455,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         y: 1.3,
         w: CONTENT_WIDTH,
         h: 2.8,
-        fontSize: 11,
+        fontSize: 9,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
         colW: triggerColWidths.length > 0 ? triggerColWidths : [4.0, 4.25, 4.25],
@@ -2517,7 +2521,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         y: lessonsNextY,
         w: CONTENT_WIDTH,
         h: failTableH,
-        fontSize: 11,
+        fontSize: 9,
         fontFace: FONT,
         border: { pt: 0.5, color: 'cccccc' },
         colW: [2.96, 4.7, 4.84],
@@ -2657,7 +2661,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           },
           {
             text: `${sectionData.message || 'All AI synthesis attempts failed.'}  Data may still be available in rawData.`,
-            options: { fontSize: 11, color: '000000', fontFace: FONT },
+            options: { fontSize: 11, color: '333333', fontFace: FONT },
           },
         ],
         {
@@ -2833,11 +2837,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     x: 0.376,
     y: 1.3,
     w: 12.586,
-    h: 5.049,
+    h: 5.196,
     fontSize: execFontSize,
     fontFace: FONT,
-    color: '000000',
-    lineSpacingMultiple: 1.2,
+    color: '333333',
+    lineSpacingMultiple: 1.3,
     valign: 'top',
   });
 

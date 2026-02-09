@@ -52,10 +52,10 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     accent1: '007FFF',
     dk2: '1F497D',
     white: 'FFFFFF',
-    black: '000000',
-    gray: 'D6D7D9',
+    black: '333333',
+    gray: 'F2F2F2',
     footerText: '808080',
-    green: '1D8348',
+    green: '2E7D32',
     orange: 'E46C0A',
     red: 'B71C1C',
   };
