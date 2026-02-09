@@ -61,7 +61,7 @@ const CHART_AXIS_DEFAULTS = {
 // Helper: truncate text to fit slides - end at sentence or phrase boundary
 // CRITICAL: Never cut mid-sentence. Better to be shorter than incomplete.
 // Adds ellipsis (...) when text is truncated to indicate continuation
-function truncate(text, maxLen = 150, addEllipsis = true) {
+function truncate(text, maxLen = 600, addEllipsis = true) {
   if (!text) return '';
   const str = String(text).trim();
   if (str.length <= maxLen) return str;
@@ -586,7 +586,7 @@ function addCalloutBox(slide, title, content, options = {}) {
   }
   if (content) {
     textParts.push({
-      text: fitTextToShape(truncate(content, 200), boxW - 0.4, boxH - 0.4, 11).text,
+      text: fitTextToShape(String(content || ''), boxW - 0.4, boxH - 0.4, 11).text,
       options: { fontSize: 11, color: C_BLACK, fontFace: FONT },
     });
   }
@@ -1634,7 +1634,7 @@ function addInsightPanelsFromPattern(slide, insights, patternDef) {
     } else {
       body = insight.text || insight.body || '';
     }
-    const fittedBody = fitTextToShape(truncate(body, 200), def.w - 0.3, def.h - 0.5, 11);
+    const fittedBody = fitTextToShape(String(body || ''), def.w - 0.3, def.h - 0.5, 11);
     slide.addText(fittedBody.text, {
       x: def.x + 0.2,
       y: def.y + 0.4,
