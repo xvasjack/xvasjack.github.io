@@ -1,4 +1,4 @@
-const { callKimiChat, callGemini } = require('./ai-clients');
+const { callGemini } = require('./ai-clients');
 
 const RESEARCH_FRAMEWORK = {
   // === SECTION 1: POLICY & REGULATIONS (3 slides) ===
@@ -356,7 +356,6 @@ If countries are vague like "ASEAN", expand to: ["Thailand", "Vietnam", "Indones
 
 Return ONLY valid JSON, no markdown or explanation.`;
 
-  // Use Gemini for deterministic parsing (temperature 0.0), Kimi fallback
   let result;
   try {
     const geminiResult = await callGemini(userPrompt, {
@@ -369,8 +368,20 @@ Return ONLY valid JSON, no markdown or explanation.`;
       content: typeof geminiResult === 'string' ? geminiResult : geminiResult.content || '',
     };
   } catch (e) {
-    console.warn('Gemini failed for scope parsing, falling back to Kimi:', e.message);
-    result = await callKimiChat(userPrompt, systemPrompt, 4096);
+    console.warn('Gemini failed for scope parsing, retrying:', e.message);
+    try {
+      const geminiRetry = await callGemini(userPrompt, {
+        systemPrompt,
+        maxTokens: 4096,
+        jsonMode: true,
+      });
+      result = {
+        content: typeof geminiRetry === 'string' ? geminiRetry : geminiRetry.content || '',
+      };
+    } catch (retryErr) {
+      console.warn('Gemini retry also failed:', retryErr.message);
+      result = { content: '' };
+    }
   }
 
   try {
@@ -546,14 +557,14 @@ CRITICAL RULES:
 3. Include queries about failures, not just successes
 4. Include timing-related queries (deadlines, expirations, upcoming changes)
 5. For ${scope.projectType === 'market_entry' ? 'market entry' : scope.projectType}: focus on entry barriers, local partners, investment requirements
-6. Total: 3-4 topics per category, 5 queries per topic
+6. Total: 5 topics per category, 5 queries per topic (25 total topics minimum)
 
 Return ONLY valid JSON.`;
 
-  const result = await callKimiChat(frameworkPrompt, '', 4096);
+  const geminiText = await callGemini(frameworkPrompt, { maxTokens: 4096, jsonMode: true });
 
   try {
-    let jsonStr = result.content.trim();
+    let jsonStr = (typeof geminiText === 'string' ? geminiText : geminiText.content || '').trim();
     if (jsonStr.startsWith('```')) {
       jsonStr = jsonStr
         .replace(/```json?\n?/g, '')
@@ -601,6 +612,16 @@ function generateFallbackFramework(scope) {
             `{country} government policy ${industry} development`,
           ],
         },
+        {
+          name: 'Investment & Trade Policy',
+          queries: [
+            `{country} foreign investment rules ${industry} ownership limits`,
+            `{country} trade agreements ${industry} sector bilateral`,
+            `{country} investment incentives ${industry} tax breaks subsidies`,
+            `{country} special economic zones ${industry} privileges`,
+            `{country} BOI promotion ${industry} foreign investor benefits`,
+          ],
+        },
       ],
     },
     market: {
@@ -615,6 +636,16 @@ function generateFallbackFramework(scope) {
             `{country} ${industry} market outlook 2025 2030`,
           ],
         },
+        {
+          name: 'Industry Trends & Drivers',
+          queries: [
+            `{country} ${industry} demand drivers growth factors`,
+            `{country} ${industry} technology adoption digital transformation`,
+            `{country} ${industry} fastest growing segments 2024 2025`,
+            `{country} ${industry} supply chain dynamics imports exports`,
+            `{country} ${industry} investment inflows FDI trends`,
+          ],
+        },
       ],
     },
     competitors: {
@@ -627,6 +658,16 @@ function generateFallbackFramework(scope) {
             `{country} ${industry} local major players`,
             `{country} ${industry} competitive landscape analysis`,
             `{country} ${industry} M&A acquisitions recent`,
+          ],
+        },
+        {
+          name: 'Market Entry & Partnerships',
+          queries: [
+            `{country} ${industry} joint venture examples foreign local`,
+            `{country} ${industry} acquisition activity 2023 2024 deals`,
+            `{country} ${industry} partnership models distribution licensing`,
+            `{country} ${industry} new market entrants recent 2024`,
+            `{country} ${industry} strategic alliances collaboration agreements`,
           ],
         },
       ],

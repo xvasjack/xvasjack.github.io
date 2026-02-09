@@ -8,6 +8,7 @@ const {
   dedupeCompanies,
   enrichCompanyDesc,
   safeTableHeight,
+  flattenPlayerProfile,
 } = require('./ppt-utils');
 const { generateSingleCountryPPT } = require('./ppt-single-country');
 
@@ -311,7 +312,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
         y: 1.467,
         w: CONTENT_WIDTH,
         h: 4.5,
-        barDir: 'bar',
+        barDir: 'col',
         showValue: true,
         dataLabelPosition: 'outEnd',
         dataLabelFontFace: FONT,
@@ -737,6 +738,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       safeArray(comp.localPlayers, 3)
         .map((p) => (typeof p === 'string' ? { name: p } : p))
         .filter(isValidCompany)
+        .map(flattenPlayerProfile)
         .map(ensureWebsite)
         .map((c) => enrichCompanyDesc(c, ca.country || '', scope.industry || ''))
     ).forEach((p) => {
@@ -759,6 +761,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       safeArray(comp.foreignPlayers, 3)
         .map((p) => (typeof p === 'string' ? { name: p } : p))
         .filter(isValidCompany)
+        .map(flattenPlayerProfile)
         .map(ensureWebsite)
         .map((c) => enrichCompanyDesc(c, ca.country || '', scope.industry || ''))
     ).forEach((p) => {
