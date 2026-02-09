@@ -9,11 +9,17 @@ try {
   console.warn('[ppt-utils] template-patterns.json not found, using defaults');
 }
 
-const TEMPLATE = {
-  title: { x: 0.376, y: 0.15, w: 12.586, h: 0.7 },
-  contentArea: { x: 0.4, y: 1.3, w: 12.6, h: 5.196 },
-  sourceBar: { x: 0.4, y: 6.663, w: 12.595, h: 0.27 },
-};
+const TEMPLATE = templatePatterns.pptxPositions
+  ? {
+      title: templatePatterns.pptxPositions.title,
+      contentArea: templatePatterns.pptxPositions.contentArea,
+      sourceBar: templatePatterns.pptxPositions.sourceBar,
+    }
+  : {
+      title: { x: 0.3758, y: 0.2917, w: 12.5862, h: 0.6944 },
+      contentArea: { x: 0.3758, y: 1.5, w: 12.5862, h: 5.0 },
+      sourceBar: { x: 0.3758, y: 6.6944, w: 12.5862, h: 0.25 },
+    };
 
 // ============ PPT GENERATION ============
 
@@ -508,11 +514,27 @@ function addCalloutBox(slide, title, content, options = {}) {
 
   // Box colors based on type
   const typeColors = {
-    insight: { fill: 'F5F5F5', border: '1B2A4A', titleColor: '1B2A4A' },
+    insight: {
+      fill: 'F5F5F5',
+      border: templatePatterns.style?.colors?.dk2 || '1F497D',
+      titleColor: templatePatterns.style?.colors?.dk2 || '1F497D',
+    },
     warning: { fill: 'F5F5F5', border: 'CCCCCC', titleColor: '333333' },
-    recommendation: { fill: 'EDFDFF', border: '007FFF', titleColor: '007FFF' },
-    positive: { fill: 'EDFDFF', border: '007FFF', titleColor: '007FFF' },
-    negative: { fill: 'F5F5F5', border: '1B2A4A', titleColor: '1B2A4A' },
+    recommendation: {
+      fill: 'EDFDFF',
+      border: templatePatterns.style?.colors?.accent1 || '007FFF',
+      titleColor: templatePatterns.style?.colors?.accent1 || '007FFF',
+    },
+    positive: {
+      fill: 'EDFDFF',
+      border: templatePatterns.style?.colors?.accent1 || '007FFF',
+      titleColor: templatePatterns.style?.colors?.accent1 || '007FFF',
+    },
+    negative: {
+      fill: 'F5F5F5',
+      border: templatePatterns.style?.colors?.dk2 || '1F497D',
+      titleColor: templatePatterns.style?.colors?.dk2 || '1F497D',
+    },
   };
   const colors = typeColors[boxType] || typeColors.insight;
 
@@ -593,11 +615,12 @@ function addInsightsPanel(slide, insights = [], options = {}) {
 // Creates a visual break between major sections with section title
 function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, options = {}) {
   const FONT = 'Segoe UI';
+  const tpC = templatePatterns.style?.colors || {};
   const COLORS = options.COLORS || {
-    headerLine: '1F497D',
-    accent3: '1B2A4A',
-    dk2: '1B2A4A',
-    white: 'FFFFFF',
+    headerLine: tpC.dk2 || '1F497D',
+    accent3: tpC.accent3 || '011AB7',
+    dk2: tpC.dk2 || '1F497D',
+    white: tpC.lt1 || 'FFFFFF',
   };
 
   // Section overview text for each section (actionable context)
@@ -674,7 +697,9 @@ function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, opt
   }
 
   // Set slide background color instead of rect shape to avoid overlaps
-  slide.background = { color: COLORS.accent3 || '1B2A4A' };
+  slide.background = {
+    color: COLORS.accent3 || templatePatterns.style?.colors?.accent3 || '011AB7',
+  };
 
   return slide;
 }
@@ -809,7 +834,7 @@ const SEMANTIC_COLORS = {
   warning: 'E46C0A',
   neutral: '666666',
   primary: '4F81BD',
-  accent: '1B2A4A',
+  accent: templatePatterns.style?.colors?.dk2 || '1F497D',
 };
 
 // Helper to merge historical and projected data into unified chart format
@@ -1650,7 +1675,7 @@ function addMatrix(slide, quadrants, patternDef) {
       h: 0.35,
       fontSize: 14,
       bold: true,
-      color: '1B2A4A',
+      color: templatePatterns.style?.colors?.dk2 || '1F497D',
       fontFace: 'Segoe UI',
     });
     // Items
@@ -1684,7 +1709,12 @@ function addCaseStudyRows(slide, rows, chevrons, patternDef) {
     { label: 'Scope', y: 4.0, h: 1.3 },
     { label: 'Outcome', y: 5.4, h: 0.8 },
   ];
-  const labelStyle = p.labelStyle || { fill: '1B2A4A', color: 'FFFFFF', fontSize: 10, bold: true };
+  const labelStyle = p.labelStyle || {
+    fill: templatePatterns.style?.colors?.dk2 || '1F497D',
+    color: 'FFFFFF',
+    fontSize: 10,
+    bold: true,
+  };
   const contentStyle = p.contentStyle || { fill: 'F2F2F2', color: '333333', fontSize: 9 };
   const labelX = 0.4;
   const labelW = 2.0;
@@ -1771,7 +1801,7 @@ function addFinancialCharts(slide, incomeData, balanceData, patternDef) {
       h: 0.3,
       fontSize: metricsRow.metricValueFontSize || 16,
       bold: true,
-      color: metricsRow.metricValueColor || '1B2A4A',
+      color: metricsRow.metricValueColor || templatePatterns.style?.colors?.dk2 || '1F497D',
       fontFace: 'Segoe UI',
       align: 'center',
     });
@@ -1795,13 +1825,13 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
 
   // Title "Table of Contents"
   slide.addText('Table of Contents', {
-    x: 0.376,
-    y: 0.15,
-    w: 12.586,
-    h: 0.7,
+    x: TEMPLATE.title.x,
+    y: TEMPLATE.title.y,
+    w: TEMPLATE.title.w,
+    h: TEMPLATE.title.h,
     fontSize: 24,
     fontFace: FONT,
-    color: '1B2A4A',
+    color: templatePatterns.style?.colors?.dk2 || '1F497D',
     bold: true,
   });
 
@@ -1825,9 +1855,9 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
   });
 
   slide.addTable(tableRows, {
-    x: 0.376,
-    y: 1.5,
-    w: 12.586,
+    x: TEMPLATE.contentArea.x,
+    y: TEMPLATE.contentArea.y,
+    w: TEMPLATE.contentArea.w,
     rowH: 0.9,
     border: { pt: 0.5, color: 'CCCCCC' },
   });
@@ -1840,13 +1870,13 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
 function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
   const slide = pptx.addSlide({ masterName: 'YCP_MAIN' });
   slide.addText('Opportunities & Barriers', {
-    x: 0.376,
-    y: 0.15,
-    w: 12.586,
-    h: 0.7,
+    x: TEMPLATE.title.x,
+    y: TEMPLATE.title.y,
+    w: TEMPLATE.title.w,
+    h: TEMPLATE.title.h,
     fontSize: 24,
     fontFace: FONT,
-    color: '1F497D',
+    color: templatePatterns.style?.colors?.dk2 || '1F497D',
     bold: true,
   });
 
@@ -1929,15 +1959,15 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
   ];
 
   slide.addTable(oppRows, {
-    x: 0.376,
-    y: 1.3,
+    x: TEMPLATE.contentArea.x,
+    y: TEMPLATE.contentArea.y,
     w: 6.0,
     rowH: 0.8,
     border: { pt: 0.5, color: 'CCCCCC' },
   });
   slide.addTable(barRows, {
-    x: 6.876,
-    y: 1.3,
+    x: TEMPLATE.contentArea.x + 6.5,
+    y: TEMPLATE.contentArea.y,
     w: 6.0,
     rowH: 0.8,
     border: { pt: 0.5, color: 'CCCCCC' },
@@ -1950,7 +1980,12 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
 // For policy regulatory summary (6-column current -> transition -> future layout)
 function addHorizontalFlowTable(slide, data, options = {}) {
   if (!Array.isArray(data)) return;
-  const { x = 0.376, y = 1.3, w = 12.586, font = 'Segoe UI' } = options;
+  const {
+    x = TEMPLATE.contentArea.x,
+    y = TEMPLATE.contentArea.y,
+    w = TEMPLATE.contentArea.w,
+    font = 'Segoe UI',
+  } = options;
 
   // data is array of { label, currentState, transition, futureState }
   const colWidths = [1.2, 3.2, 0.5, 4.0, 0.5, 3.2]; // total ~12.6

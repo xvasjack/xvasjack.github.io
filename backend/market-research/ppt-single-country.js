@@ -60,18 +60,19 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   pptx.defineLayout({ name: 'YCP', width: 13.333, height: 7.5 });
   pptx.layout = 'YCP';
 
-  // YCP Theme Colors (from profile-slides template)
+  // YCP Theme Colors (from Escort template extraction — template-patterns.json)
+  const tpColors = templatePatterns.style?.colors || {};
   const COLORS = {
-    headerLine: '1B2A4A',
-    accent3: '011AB7',
-    accent1: '3C57FE',
-    dk2: '1B2A4A',
-    white: 'FFFFFF',
+    headerLine: tpColors.dk2 || '1F497D',
+    accent3: tpColors.accent3 || '011AB7',
+    accent1: tpColors.accent1 || '007FFF',
+    dk2: tpColors.dk2 || '1F497D',
+    white: tpColors.lt1 || 'FFFFFF',
     black: '333333',
     gray: 'F2F2F2',
     footerText: '808080',
     green: '2E7D32',
-    orange: 'E46C0A',
+    orange: tpColors.orange || 'E46C0A',
     red: 'B71C1C',
   };
 
@@ -83,12 +84,32 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     objects: [],
   });
 
-  // "Main" for content slides — white background with header line
+  // "Main" for content slides — white background with double header lines (from Escort template)
+  const tpPos = templatePatterns.pptxPositions || {};
+  const hlTop = tpPos.headerLineTop || { x: 0, y: 1.0208, w: 13.3333, h: 0 };
+  const hlBot = tpPos.headerLineBottom || { x: 0, y: 1.0972, w: 13.3333, h: 0 };
   pptx.defineSlideMaster({
     title: 'YCP_MAIN',
     background: { color: 'FFFFFF' },
     objects: [
-      { line: { x: 0.376, y: 0.9, w: 12.586, h: 0, line: { color: '1F497D', width: 2.5 } } },
+      {
+        line: {
+          x: hlTop.x,
+          y: hlTop.y,
+          w: hlTop.w,
+          h: 0,
+          line: { color: COLORS.dk2, width: 1.75 },
+        },
+      },
+      {
+        line: {
+          x: hlBot.x,
+          y: hlBot.y,
+          w: hlBot.w,
+          h: 0,
+          line: { color: COLORS.dk2, width: 1.75 },
+        },
+      },
     ],
   });
 
@@ -287,18 +308,20 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     return lastSpace > 40 ? cut.substring(0, lastSpace) : cut;
   }
 
-  // Standard slide layout with title, subtitle, and navy divider line
-  // Uses widescreen dimensions (13.333" x 7.5" = 16:9)
-  const CONTENT_WIDTH = 12.6; // Full content width for 16:9 widescreen
-  const LEFT_MARGIN = 0.4; // Left margin matching YCP template
-  const TITLE_X = 0.376; // Title x position (differs from content LEFT_MARGIN)
-  const TITLE_W = 12.586; // Title width matching template
-  const SOURCE_W = 12.595; // Footer/source width matching template
+  // Standard slide layout — positions from Escort template extraction
+  const tpTitle = tpPos.title || { x: 0.3758, y: 0.2917, w: 12.5862, h: 0.6944 };
+  const tpContent = tpPos.contentArea || { x: 0.3758, y: 1.5, w: 12.5862, h: 5.0 };
+  const tpSource = tpPos.sourceBar || { x: 0.3758, y: 6.6944, w: 12.5862, h: 0.25 };
+  const CONTENT_WIDTH = tpContent.w; // Full content width for 16:9 widescreen
+  const LEFT_MARGIN = tpContent.x; // Left margin from template
+  const TITLE_X = tpTitle.x; // Title x position
+  const TITLE_W = tpTitle.w; // Title width
+  const SOURCE_W = tpSource.w; // Footer/source width
 
-  // Maximum y for content shapes (footer zone below this)
-  const CONTENT_BOTTOM = 6.663;
-  // Footer y position - pushed below content zone to prevent overlap detection
-  const FOOTER_Y = 6.663;
+  // Maximum y for content shapes (source bar y = bottom of content zone)
+  const CONTENT_BOTTOM = tpSource.y;
+  // Footer y position
+  const FOOTER_Y = tpSource.y;
 
   // Helper: apply alternating row fill for readability (skip header row at idx 0)
   function applyAlternateRowFill(rows) {
@@ -326,25 +349,25 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     // Use YCP_MAIN master (has header line built in)
     const slide = pptx.addSlide({ masterName: 'YCP_MAIN' });
 
-    // Title shape
+    // Title shape (position from template extraction)
     slide.addText(truncateTitle(title), {
       x: TITLE_X,
-      y: 0.15,
+      y: tpTitle.y,
       w: TITLE_W,
-      h: 0.7,
+      h: tpTitle.h,
       fontSize: 24,
       bold: true,
-      color: '1F497D',
+      color: COLORS.dk2,
       fontFace: FONT,
       valign: 'top',
     });
-    // Subtitle as separate shape
+    // Subtitle as separate shape (below title, above header line)
     if (subtitle) {
       const dataQualityIndicator =
         options.dataQuality === 'estimated' ? ' *' : options.dataQuality === 'low' ? ' +' : '';
       slide.addText(subtitle + dataQualityIndicator, {
         x: TITLE_X,
-        y: 0.95,
+        y: tpTitle.y + tpTitle.h + 0.02,
         w: TITLE_W,
         h: 0.3,
         fontSize: 14,
@@ -1852,7 +1875,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: 0.3,
         fontSize: 12,
         bold: true,
-        color: COLORS.dk2 || '1B2A4A',
+        color: COLORS.dk2,
         fontFace: FONT,
       });
       maNextY += 0.35;
@@ -1891,7 +1914,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: 0.3,
         fontSize: 12,
         bold: true,
-        color: COLORS.dk2 || '1B2A4A',
+        color: COLORS.dk2,
         fontFace: FONT,
       });
       maNextY += 0.35;
@@ -2123,7 +2146,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: 0.25,
         fontSize: 11,
         bold: true,
-        color: COLORS.dk2 || '1B2A4A',
+        color: COLORS.dk2,
         fontFace: FONT,
       });
       const renderHarvey = (arr, idx) => {
@@ -2326,7 +2349,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: 0.25,
         fontSize: 11,
         bold: true,
-        color: COLORS.dk2 || '1B2A4A',
+        color: COLORS.dk2,
         fontFace: FONT,
       });
       const targetCompRows = [tableHeader(['Company', 'Industry', 'Energy Spend', 'Location'])];
@@ -2586,7 +2609,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: 0.35,
         fontSize: titleSized.fontSize,
         bold: true,
-        color: '1F497D',
+        color: COLORS.dk2,
         fontFace: FONT,
       });
       const contentSized = dynamicText(truncate(rawContent, 200), 200, 11, 7);
@@ -2962,7 +2985,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     h: 0.8,
     fontSize: 42,
     bold: true,
-    color: '1B2A4A',
+    color: COLORS.dk2,
     fontFace: FONT,
   });
   titleSlide.addText(`${scope.industry} - Market Overview & Analysis`, {
@@ -3000,13 +3023,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // ===== SLIDE 3: EXECUTIVE SUMMARY =====
   const execSlide = pptx.addSlide({ masterName: 'YCP_MAIN' });
   execSlide.addText('Executive Summary', {
-    x: 0.376,
-    y: 0.15,
-    w: 12.586,
-    h: 0.7,
+    x: TITLE_X,
+    y: tpTitle.y,
+    w: TITLE_W,
+    h: tpTitle.h,
     fontSize: 24,
     fontFace: FONT,
-    color: '1F497D',
+    color: COLORS.dk2,
     bold: true,
   });
   const execContentRaw =
@@ -3028,10 +3051,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     execFontSize = 12;
   }
   execSlide.addText(execText, {
-    x: 0.376,
-    y: 1.3,
-    w: 12.586,
-    h: 5.196,
+    x: LEFT_MARGIN,
+    y: tpContent.y,
+    w: CONTENT_WIDTH,
+    h: tpContent.h,
     fontSize: execFontSize,
     fontFace: FONT,
     color: '333333',
