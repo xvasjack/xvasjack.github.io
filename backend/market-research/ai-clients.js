@@ -524,7 +524,7 @@ async function callGemini(prompt, options = {}) {
 
 // Perplexity research wrapper - fallback when Kimi times out
 async function callPerplexityResearch(topic, country, industry) {
-  const { callPerplexity } = require('../shared/ai-models');
+  const { callPerplexity } = require('./shared/ai-models');
   console.log(`  [Perplexity Research] ${topic.substring(0, 60)}... for ${country}`);
 
   const prompt = `Research this topic thoroughly for ${country}'s ${industry} market:

@@ -340,10 +340,10 @@ app.post('/api/market-research', async (req, res) => {
     estimatedTime: '30-60 minutes',
   });
 
-  // Run research in background with Fix 19: 15-minute global pipeline timeout
-  const PIPELINE_TIMEOUT = 15 * 60 * 1000;
+  // Run research in background with 25-minute global pipeline timeout
+  const PIPELINE_TIMEOUT = 25 * 60 * 1000;
   const timeoutPromise = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error('Pipeline timeout after 15 minutes')), PIPELINE_TIMEOUT)
+    setTimeout(() => reject(new Error('Pipeline timeout after 25 minutes')), PIPELINE_TIMEOUT)
   );
   Promise.race([runMarketResearch(prompt, email), timeoutPromise]).catch((error) => {
     console.error('Background research failed:', error);

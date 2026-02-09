@@ -260,6 +260,27 @@ function validateSynthesisQuality(synthesis, industry) {
         `Competitors: average description ${Math.round(avgDescWords)} words (need >= 40)`
       );
     }
+
+    // 5B: Validate expected sub-keys exist
+    const expectedSubKeys = ['japanesePlayers', 'localMajor', 'foreignPlayers'];
+    const missingSubKeys = expectedSubKeys.filter(
+      (k) => !competitors[k] || !Array.isArray(competitors[k]?.players)
+    );
+    if (missingSubKeys.length > 0) {
+      failures.push(`Competitors: missing sub-keys: ${missingSubKeys.join(', ')}`);
+    }
+
+    // 5C: Detect profile-nesting issue (item.profile exists but item.revenue doesn't)
+    for (const subKey of expectedSubKeys) {
+      const players = competitors[subKey]?.players || [];
+      for (const item of players) {
+        if (item?.profile && !item?.revenue) {
+          failures.push(
+            `Competitors: ${subKey} player "${item.name || 'unknown'}" has nested profile but no flat revenue — data may be lost in rendering`
+          );
+        }
+      }
+    }
   } else {
     failures.push('Competitors section missing');
     emptyFields.push('competitors');
@@ -300,7 +321,7 @@ function validateSynthesisQuality(synthesis, industry) {
   );
 
   return {
-    pass: overall >= 40,
+    pass: overall >= 60,
     sectionScores: {
       policy: policyScore,
       market: marketScore,
@@ -636,6 +657,31 @@ function validatePptData(blocks) {
         emptyBlocks.push(
           `Chart "${block.title || 'unknown'}" has only ${numericValues.length} data points — template shows 5+`
         );
+      }
+    }
+  }
+
+  // 5D: Chart plausibility checks — all-zero series and negative values in stacked data
+  for (const block of blocks) {
+    if (block?.chartData?.series) {
+      const values = flattenSeries(block.chartData.series);
+      const numericValues = values.filter((v) => typeof v === 'number' && !isNaN(v));
+
+      // All-zero series detection
+      if (numericValues.length > 0 && numericValues.every((v) => v === 0)) {
+        chartIssues.push(
+          `Block "${block.title || 'unknown'}": all-zero data series — chart will be empty`
+        );
+      }
+
+      // Negative values in stacked data
+      if (block.chartData.stacked || block.chartType === 'stackedBar') {
+        const negativeCount = numericValues.filter((v) => v < 0).length;
+        if (negativeCount > 0) {
+          chartIssues.push(
+            `Block "${block.title || 'unknown'}": ${negativeCount} negative values in stacked chart data — rendering will be incorrect`
+          );
+        }
       }
     }
   }

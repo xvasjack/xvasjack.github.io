@@ -181,8 +181,8 @@ REQUIREMENTS:
           callKimiDeepResearch(queryContext, country, industry, pipelineSignal),
           new Promise((_, reject) =>
             setTimeout(
-              () => reject(new Error(`Policy topic "${topicKey}" timed out after 150s`)),
-              150000
+              () => reject(new Error(`Policy topic "${topicKey}" timed out after 210s`)),
+              210000
             )
           ),
         ]);
@@ -396,8 +396,8 @@ REQUIREMENTS:
             callKimiDeepResearch(queryContext, country, industry, pipelineSignal),
             new Promise((_, reject) =>
               setTimeout(
-                () => reject(new Error(`Market topic "${topicKey}" timed out after 150s`)),
-                150000
+                () => reject(new Error(`Market topic "${topicKey}" timed out after 210s`)),
+                210000
               )
             ),
           ]);
@@ -610,8 +610,8 @@ REQUIREMENTS:
           callKimiDeepResearch(queryContext, country, industry, pipelineSignal),
           new Promise((_, reject) =>
             setTimeout(
-              () => reject(new Error(`Competitor topic "${topicKey}" timed out after 150s`)),
-              150000
+              () => reject(new Error(`Competitor topic "${topicKey}" timed out after 210s`)),
+              210000
             )
           ),
         ]);
@@ -739,8 +739,8 @@ Your response MUST include a JSON block. Use this format:
           callKimiDeepResearch(queryContext, country, industry, pipelineSignal),
           new Promise((_, reject) =>
             setTimeout(
-              () => reject(new Error(`Context topic "${topicKey}" timed out after 150s`)),
-              150000
+              () => reject(new Error(`Context topic "${topicKey}" timed out after 210s`)),
+              210000
             )
           ),
         ]);
@@ -949,8 +949,8 @@ DEPTH IS CRITICAL - We need specifics for executive decision-making, not general
           callKimiDeepResearch(queryContext, country, industry, pipelineSignal),
           new Promise((_, reject) =>
             setTimeout(
-              () => reject(new Error(`Depth topic "${topicKey}" timed out after 150s`)),
-              150000
+              () => reject(new Error(`Depth topic "${topicKey}" timed out after 210s`)),
+              210000
             )
           ),
         ]);
@@ -1186,8 +1186,8 @@ This intelligence is for CEO-level decision making. We need SPECIFIC names, date
           callKimiDeepResearch(queryContext, country, industry, pipelineSignal),
           new Promise((_, reject) =>
             setTimeout(
-              () => reject(new Error(`Insights topic "${topicKey}" timed out after 150s`)),
-              150000
+              () => reject(new Error(`Insights topic "${topicKey}" timed out after 210s`)),
+              210000
             )
           ),
         ]);
@@ -1296,13 +1296,13 @@ REQUIREMENTS:
 - Include recent developments (2023-2024)`;
 
       try {
-        // Per-topic timeout: 150s. If one topic hangs, fall back to Gemini.
+        // Per-topic timeout: 210s. If one topic hangs, fall back to Perplexity.
         const result = await Promise.race([
           callKimiDeepResearch(queryContext, country, industry, pipelineSignal),
           new Promise((_, reject) =>
             setTimeout(
-              () => reject(new Error(`Topic "${topic.name}" timed out after 150s`)),
-              150000
+              () => reject(new Error(`Topic "${topic.name}" timed out after 210s`)),
+              210000
             )
           ),
         ]);

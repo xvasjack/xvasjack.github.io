@@ -342,12 +342,33 @@ async function synthesizeWithFallback(prompt, options = {}) {
   const { maxTokens = 8192, jsonMode = true } = options;
 
   // Try Gemini first
+  let geminiRawContent = null;
   try {
     const result = await callGemini(prompt, { maxTokens, jsonMode, temperature: 0.2 });
+    geminiRawContent = result;
     const parsed = parseJsonResponse(result);
     if (parsed) return parsed;
   } catch (geminiErr) {
-    console.warn(`  [Synthesis] Gemini failed: ${geminiErr?.message}, trying Kimi...`);
+    console.warn(`  [Synthesis] Gemini failed: ${geminiErr?.message}, trying JSON repair...`);
+  }
+
+  // 10D: Attempt JSON repair for truncated Gemini output before Kimi fallback
+  if (geminiRawContent && typeof geminiRawContent === 'string') {
+    try {
+      const content = geminiRawContent
+        .trim()
+        .replace(/```json?\n?/g, '')
+        .replace(/```/g, '')
+        .trim();
+      const repaired = content.replace(/,\s*$/, '') + ']}';
+      const parsed = JSON.parse(repaired);
+      if (parsed) {
+        console.log(`  [Synthesis] JSON repair succeeded`);
+        return parsed;
+      }
+    } catch {
+      /* fall through to Kimi fallback */
+    }
   }
 
   // Try Kimi
@@ -456,7 +477,7 @@ Return JSON:
 {
   "foundationalActs": {
     "slideTitle": "${country} - ${industry} Foundational Acts",
-    "subtitle": "1-2 sentences, 100-180 chars, with specific regulatory citations",
+    "subtitle": "Max 90 characters. Key regulatory insight with specific citation",
     "acts": [
       {"name": "Official Act Name", "year": "YYYY", "requirements": "30-50 words per cell with specific regulatory citations and article numbers", "penalties": "30-50 words per cell with specific monetary values, imprisonment terms, or administrative actions", "enforcement": "30-50 words on enforcement reality: agency name, capacity, actual compliance rates"}
     ],
@@ -548,57 +569,57 @@ Return JSON:
 {
   "tpes": {
     "slideTitle": "${country} - Total Primary Energy Supply",
-    "subtitle": "Key insight",
+    "subtitle": "Max 90 characters. Key insight",
     "chartData": {"categories": ["2020","2021","2022"], "series": [{"name":"Source", "values": [1,2,3]}], "unit": "Mtoe"},
-    "keyInsight": "What this means for client",
+    "keyInsight": "Max 180 characters. What this means for client",
     "dataType": "time_series_multi_insight"
   },
   "finalDemand": {
     "slideTitle": "${country} - Final Energy Demand",
-    "subtitle": "Key insight",
+    "subtitle": "Max 90 characters. Key insight",
     "chartData": {"categories": [], "series": [], "unit": "%"},
     "growthRate": "X% CAGR with years",
     "keyDrivers": ["Named driver with evidence"],
-    "keyInsight": "Client implication",
+    "keyInsight": "Max 180 characters. Client implication",
     "dataType": "time_series_multi_insight"
   },
   "electricity": {
     "slideTitle": "${country} - Electricity & Power",
-    "subtitle": "Key insight",
+    "subtitle": "Max 90 characters. Key insight",
     "totalCapacity": "XX GW",
     "chartData": {"categories": [], "series": [], "unit": "%"},
     "demandGrowth": "X% with year range",
     "keyTrend": "Trend with evidence",
-    "keyInsight": "Client implication",
+    "keyInsight": "Max 180 characters. Client implication",
     "dataType": "composition_breakdown"
   },
   "gasLng": {
     "slideTitle": "${country} - Gas & LNG Market",
-    "subtitle": "Key insight",
+    "subtitle": "Max 90 characters. Key insight",
     "chartData": {"categories": [], "series": [], "unit": "bcm"},
     "lngTerminals": [{"name": "Named terminal", "capacity": "X mtpa", "utilization": "X%"}],
     "pipelineNetwork": "Description",
-    "keyInsight": "Client implication",
+    "keyInsight": "Max 180 characters. Client implication",
     "dataType": "time_series_annotated"
   },
   "pricing": {
     "slideTitle": "${country} - Energy Pricing",
-    "subtitle": "Key insight",
+    "subtitle": "Max 90 characters. Key insight",
     "chartData": {"categories": [], "series": [], "unit": "USD/kWh"},
     "comparison": "vs regional peers with specific numbers",
     "outlook": "Projected trend with reasoning",
-    "keyInsight": "Client implication",
+    "keyInsight": "Max 180 characters. Client implication",
     "dataType": "two_related_series"
   },
   "escoMarket": {
     "slideTitle": "${country} - ESCO/${industry} Market",
-    "subtitle": "Key insight",
+    "subtitle": "Max 90 characters. Key insight",
     "marketSize": "$XXX million with year",
     "growthRate": "X% CAGR with period",
     "segments": [{"name": "Named segment", "size": "$XXM", "share": "X%"}],
     "chartData": {"categories": [], "series": [], "unit": "%"},
     "keyDrivers": "Named drivers",
-    "keyInsight": "Client implication",
+    "keyInsight": "Max 180 characters. Client implication",
     "dataType": "composition_breakdown"
   }
 }
@@ -657,22 +678,24 @@ RULES:
 - Only use data from the INPUT DATA above
 - Use null for any missing fields
 - Include source citations where available
-- Company descriptions should be 45-60 words
+- Company descriptions MUST be exactly 45-60 words — no shorter, no longer
+- subtitle fields: Max 90 characters
+- keyInsight fields: Max 180 characters
 - Insights should reference specific numbers from the data
 
 Return JSON:
 {
   "japanesePlayers": {
     "slideTitle": "${country} - Japanese ${industry} Companies",
-    "subtitle": "Key insight",
+    "subtitle": "Max 90 characters. Key insight about Japanese presence",
     "players": [
       {
         "name": "Company Name", "website": "https://...",
-        "profile": { "overview": "2-3 sentence company overview", "revenueGlobal": "$X billion global", "revenueLocal": "$X million in ${country}", "employees": "X employees", "entryYear": "YYYY", "entryMode": "JV/Direct/M&A" },
-        "projects": [{ "name": "Project name", "value": "$X million", "year": "YYYY", "status": "Active/Completed/Planned", "details": "Brief description" }],
-        "financialHighlights": { "investmentToDate": "$X million", "profitMargin": "X%", "growthRate": "X% CAGR" },
+        "revenue": "$X million in ${country}", "employees": "X employees", "entryYear": "YYYY", "mode": "JV/Direct/M&A",
+        "projects": "Key project names with values, e.g. 'Solar Farm A ($50M, 2023), Wind Park B ($30M, 2024)'",
+        "growthRate": "X% CAGR", "profitMargin": "X%", "investmentToDate": "$X million",
         "strategicAssessment": "2-3 sentences on competitive position, strengths, weaknesses, and outlook",
-        "description": "45-60 words with specific metrics, entry strategy, project details, market position"
+        "description": "Exactly 45-60 words with specific metrics, entry strategy, project details, market position"
       }
     ],
     "marketInsight": "Overall assessment of Japanese presence",
@@ -680,17 +703,17 @@ Return JSON:
   },
   "localMajor": {
     "slideTitle": "${country} - Major Local Players",
-    "subtitle": "Key insight",
+    "subtitle": "Max 90 characters. Key insight about local players",
     "players": [
       {
         "name": "Company", "website": "https://...", "type": "State-owned/Private",
-        "profile": { "overview": "2-3 sentence company overview", "revenueGlobal": "$X billion", "revenueLocal": "$X million", "employees": "X employees", "entryYear": "YYYY", "entryMode": "Organic/M&A" },
-        "projects": [{ "name": "Project name", "value": "$X million", "year": "YYYY", "status": "Active/Completed", "details": "Brief description" }],
-        "financialHighlights": { "investmentToDate": "$X million", "profitMargin": "X%", "growthRate": "X% CAGR" },
+        "revenue": "$X million", "employees": "X employees", "entryYear": "YYYY", "mode": "Organic/M&A",
+        "projects": "Key project names with values",
+        "growthRate": "X% CAGR", "profitMargin": "X%", "investmentToDate": "$X million",
         "strategicAssessment": "2-3 sentences on market position, government relationships, expansion plans",
-        "revenue": "$X million", "marketShare": "X%",
+        "marketShare": "X%",
         "strengths": "Specific", "weaknesses": "Specific",
-        "description": "45-60 words with specific metrics"
+        "description": "Exactly 45-60 words with specific metrics"
       }
     ],
     "concentration": "Market concentration with evidence",
@@ -698,17 +721,16 @@ Return JSON:
   },
   "foreignPlayers": {
     "slideTitle": "${country} - Foreign ${industry} Companies",
-    "subtitle": "Key insight",
+    "subtitle": "Max 90 characters. Key insight about foreign players",
     "players": [
       {
         "name": "Company", "website": "https://...", "origin": "Country",
-        "profile": { "overview": "2-3 sentence company overview", "revenueGlobal": "$X billion", "revenueLocal": "$X million in ${country}", "employees": "X employees", "entryYear": "YYYY", "entryMode": "JV/Direct/M&A" },
-        "projects": [{ "name": "Project name", "value": "$X million", "year": "YYYY", "status": "Active/Completed", "details": "Brief description" }],
-        "financialHighlights": { "investmentToDate": "$X million", "profitMargin": "X%", "growthRate": "X% CAGR" },
+        "revenue": "$X million in ${country}", "employees": "X employees", "entryYear": "YYYY", "mode": "JV/Direct/M&A",
+        "projects": "Key project names with values",
+        "growthRate": "X% CAGR", "profitMargin": "X%", "investmentToDate": "$X million",
         "strategicAssessment": "2-3 sentences on competitive position and market outlook",
-        "entryYear": "YYYY", "mode": "JV/Direct",
         "success": "High/Medium/Low",
-        "description": "45-60 words with specific metrics"
+        "description": "Exactly 45-60 words with specific metrics"
       }
     ],
     "competitiveInsight": "How foreign players compete",
@@ -842,9 +864,9 @@ Return JSON:
     },
     "partnerAssessment": {
       "slideTitle": "${country} - Partner Assessment",
-      "subtitle": "Key insight",
+      "subtitle": "Max 90 characters. Key insight about partner landscape",
       "partners": [
-        {"name": "Company", "website": "https://...", "type": "Type", "revenue": "$XM", "partnershipFit": 4, "acquisitionFit": 3, "estimatedValuation": "$X-YM", "description": "45-60 words"}
+        {"name": "Company", "website": "https://...", "type": "Type", "revenue": "$XM", "employees": "X", "partnershipFit": 4, "acquisitionFit": 3, "estimatedValuation": "$X-YM", "description": "Exactly 45-60 words with revenue, capabilities, strategic fit"}
       ],
       "recommendedPartner": "Top pick with reasoning"
     },
@@ -1172,6 +1194,88 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
       newSynthesis.summary = originalSynthesis.summary;
     }
 
+    // 2A: Recover competitor sub-keys dropped by reSynthesize
+    if (newSynthesis.competitors && originalSynthesis.competitors) {
+      const compSubKeys = [
+        'japanesePlayers',
+        'localMajor',
+        'foreignPlayers',
+        'caseStudy',
+        'maActivity',
+      ];
+      for (const subKey of compSubKeys) {
+        if (
+          originalSynthesis.competitors[subKey] &&
+          !originalSynthesis.competitors[subKey]._synthesisError &&
+          (!newSynthesis.competitors[subKey] ||
+            Object.keys(newSynthesis.competitors[subKey]).length === 0)
+        ) {
+          console.warn(
+            `  [reSynthesize] competitors.${subKey} lost in re-synthesis — recovering from original`
+          );
+          newSynthesis.competitors[subKey] = originalSynthesis.competitors[subKey];
+        }
+      }
+    }
+
+    // 2A: Recover market sub-keys dropped by reSynthesize
+    if (newSynthesis.market && originalSynthesis.market) {
+      const marketSubKeys = [
+        'tpes',
+        'finalDemand',
+        'electricity',
+        'gasLng',
+        'pricing',
+        'escoMarket',
+      ];
+      for (const subKey of marketSubKeys) {
+        if (
+          originalSynthesis.market[subKey] &&
+          !originalSynthesis.market[subKey]._synthesisError &&
+          (!newSynthesis.market[subKey] || Object.keys(newSynthesis.market[subKey]).length === 0)
+        ) {
+          console.warn(
+            `  [reSynthesize] market.${subKey} lost in re-synthesis — recovering from original`
+          );
+          newSynthesis.market[subKey] = originalSynthesis.market[subKey];
+        }
+      }
+    }
+
+    // 2A: Recover policy sub-keys dropped by reSynthesize
+    if (newSynthesis.policy && originalSynthesis.policy) {
+      const policySubKeys = [
+        'foundationalActs',
+        'nationalPolicy',
+        'investmentRestrictions',
+        'regulatorySummary',
+        'keyIncentives',
+      ];
+      for (const subKey of policySubKeys) {
+        if (
+          originalSynthesis.policy[subKey] &&
+          !originalSynthesis.policy[subKey]._synthesisError &&
+          (!newSynthesis.policy[subKey] || Object.keys(newSynthesis.policy[subKey]).length === 0)
+        ) {
+          console.warn(
+            `  [reSynthesize] policy.${subKey} lost in re-synthesis — recovering from original`
+          );
+          newSynthesis.policy[subKey] = originalSynthesis.policy[subKey];
+        }
+      }
+    }
+
+    // 11D: Do NOT propagate _synthesisError sentinels into re-synthesized output
+    for (const section of ['policy', 'market', 'competitors']) {
+      if (
+        originalSynthesis[section]?._synthesisError &&
+        newSynthesis[section] &&
+        !newSynthesis[section]._synthesisError
+      ) {
+        console.log(`  [reSynthesize] ${section} recovered from _synthesisError via re-synthesis`);
+      }
+    }
+
     // Re-synthesis verification: count how many top-level sections actually changed
     const sectionsToCheck = ['policy', 'market', 'competitors', 'depth', 'summary'];
     let changedFields = 0;
@@ -1187,10 +1291,10 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
     }
 
     // Preserve country field and metadata from original
+    // Note: contentValidation is stale after reSynthesize — delete it so it gets recalculated
     newSynthesis.country = country;
     const preserved = {
       rawData: originalSynthesis.rawData,
-      contentValidation: originalSynthesis.contentValidation,
       metadata: originalSynthesis.metadata,
     };
     Object.assign(newSynthesis, preserved);
@@ -1678,8 +1782,7 @@ Return JSON with:
     "keyPlayers": [
       {"name": "actual company", "website": "https://company.com", "strengths": "specific", "weaknesses": "specific", "threat": "how they could block you", "description": "REQUIRED 45-60 words with revenue, market share, growth rate, key services, strategic significance with revenue, market share, entry year, key projects, geographic coverage, strategic positioning, and why this player matters for competitive analysis"}
     ],
-    "whiteSpaces": ["specific gaps with EVIDENCE of demand and SIZE of opportunity"],
-    "potentialPartners": [{"name": "actual company", "website": "https://partner.com", "rationale": "why they'd partner, what they bring, what you bring"}]
+    "whiteSpaces": ["specific gaps with EVIDENCE of demand and SIZE of opportunity"]
   },
 
   "regulatoryPathway": {
@@ -1703,7 +1806,6 @@ Return JSON with:
     "GOOD: 'Southern Thailand's grid congestion (transmission capacity 85% utilized) blocks new solar projects, creating captive demand for on-site efficiency solutions in the $2.1B EEC industrial corridor. Recommend targeting EEC zone manufacturers in Q1 2026 before Phase 4 expansion (Dec 2026) when grid upgrades reduce urgency.'"
   ],
 
-  "nextSteps": ["5 specific actions to take THIS WEEK with owner and deliverable"]
 }
 
 CRITICAL QUALITY STANDARDS:
@@ -1713,7 +1815,7 @@ CRITICAL QUALITY STANDARDS:
 4. COMPETITIVE EDGE. The reader should learn something they couldn't find in an hour of desk research.
 5. ACTIONABLE CONCLUSIONS. End each section with what the reader should DO with this information.
 6. PROFESSIONAL PROSE. Write like The Economist - clear, precise, analytical. Use technical terms where they add precision, but always explain significance.
-7. COMPANY DESCRIPTIONS: Every company in keyPlayers and potentialPartners MUST have a "description" field with 45-60 words. Include revenue, growth rate, market share, key services, geographic coverage, and competitive advantages. NEVER write generic one-liners like "X is a company that provides Y" — include specific metrics and strategic context.
+7. COMPANY DESCRIPTIONS: Every company in keyPlayers MUST have a "description" field with exactly 45-60 words. Include revenue, growth rate, market share, key services, geographic coverage, and competitive advantages. NEVER write generic one-liners like "X is a company that provides Y" — include specific metrics and strategic context.
 8. WEBSITE URLs: Every company MUST have a "website" field with the company's actual corporate website URL.
 
 =============================================================================
@@ -1721,7 +1823,7 @@ VALIDATION CHECKPOINT — BEFORE RETURNING JSON, VERIFY THESE:
 =============================================================================
 STOP. Before you return the JSON, run this checklist:
 
-☐ COMPANY DESCRIPTIONS: Count words in EACH company description in competitivePositioning.keyPlayers and competitivePositioning.potentialPartners
+☐ COMPANY DESCRIPTIONS: Count words in EACH company description in competitivePositioning.keyPlayers
    - Target: 45-60 words EACH
    - If ANY description <45 words → REWRITE IT with revenue + market share + growth rate + strategic context
    - If ANY description >60 words → TRIM IT to core metrics
