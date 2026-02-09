@@ -43,9 +43,8 @@ const { validatePptData } = require('./quality-gates');
 
 // Safety wrapper: ensure any value going into a table cell is a plain string.
 // AI sometimes returns nested objects/arrays instead of text — this prevents pptxgenjs crashes.
-function safeCell(value, maxLen) {
-  const str = ensureString(value);
-  return maxLen ? truncate(str, maxLen) : str;
+function safeCell(value) {
+  return ensureString(value);
 }
 
 // Truncate text to max word count to prevent table overflow
@@ -510,29 +509,17 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // Helper to show "Data unavailable" message on slides with missing data
   function addDataUnavailableMessage(slide, message = 'Data not available for this section') {
-    // Single text shape with fill to avoid overlap between rect+text
-    slide.addText(
-      [
-        {
-          text: '! ' + message + '\n',
-          options: { fontSize: 14, bold: true, color: COLORS.black, fontFace: FONT },
-        },
-        {
-          text: 'This data could not be verified through research. Recommend validating independently before making decisions.',
-          options: { fontSize: 12, color: COLORS.black, fontFace: FONT },
-        },
-      ],
-      {
-        x: LEFT_MARGIN,
-        y: 2.0,
-        w: CONTENT_WIDTH,
-        h: 2.0,
-        fill: { color: COLORS.warningFill },
-        line: { color: COLORS.orange, pt: 1 },
-        margin: [8, 12, 8, 12],
-        valign: 'top',
-      }
-    );
+    slide.addText(message, {
+      x: LEFT_MARGIN,
+      y: 3.0,
+      w: CONTENT_WIDTH,
+      h: 1.0,
+      fontSize: 14,
+      color: COLORS.muted,
+      fontFace: FONT,
+      align: 'center',
+      valign: 'middle',
+    });
   }
 
   // Helper to extract citations from raw research data for a specific topic category
@@ -2900,29 +2887,18 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       console.warn(
         `[PPT] Section "${sectionName}" has _synthesisError: ${sectionData.message || 'unknown'}`
       );
-      const slide = addSlideWithTitle(`${sectionName}`, 'Synthesis Error');
-      slide.addText(
-        [
-          {
-            text: `Synthesis failed for ${sectionName}\n`,
-            options: { fontSize: 14, bold: true, color: COLORS.red, fontFace: FONT },
-          },
-          {
-            text: `${sectionData.message || 'All AI synthesis attempts failed.'}  Data may still be available in rawData.`,
-            options: { fontSize: 11, color: COLORS.black, fontFace: FONT },
-          },
-        ],
-        {
-          x: LEFT_MARGIN,
-          y: 2.0,
-          w: CONTENT_WIDTH,
-          h: 2.0,
-          fill: { color: COLORS.warningFill },
-          line: { color: COLORS.red, pt: 1 },
-          margin: [8, 12, 8, 12],
-          valign: 'top',
-        }
-      );
+      const slide = addSlideWithTitle(`${sectionName}`, '');
+      slide.addText(`${sectionData.message || 'Synthesis data unavailable for this section.'}`, {
+        x: LEFT_MARGIN,
+        y: 3.0,
+        w: CONTENT_WIDTH,
+        h: 1.0,
+        fontSize: 14,
+        color: COLORS.muted,
+        fontFace: FONT,
+        align: 'center',
+        valign: 'middle',
+      });
       return 1;
     }
 
