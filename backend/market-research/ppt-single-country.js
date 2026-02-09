@@ -317,6 +317,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const TITLE_X = tpTitle.x; // Title x position
   const TITLE_W = tpTitle.w; // Title width
   const SOURCE_W = tpSource.w; // Footer/source width
+  const CONTENT_Y = tpContent.y; // Content area top Y from template
 
   // Maximum y for content shapes (source bar y = bottom of content zone)
   const CONTENT_BOTTOM = tpSource.y;
@@ -935,7 +936,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
     if (hasChartSeries || hasChartValues) {
       // Chart on left 60%
-      const chartOpts = { x: LEFT_MARGIN, y: 1.3, w: 7.8, h: 3.6 };
+      const chartOpts = { x: LEFT_MARGIN, y: CONTENT_Y, w: 7.8, h: 3.6 };
       const chartTitle = getChartTitle(block.key, data);
 
       if (hasChartSeries) {
@@ -1188,7 +1189,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       return;
     }
 
-    const tableStartY = 1.3;
+    const tableStartY = CONTENT_Y;
 
     // Determine columns based on block type
     let headerCols, rowBuilder, defaultColW;
@@ -1523,7 +1524,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       applyAlternateRowFill(actsRows);
       slide.addTable(actsRows, {
         x: LEFT_MARGIN,
-        y: 1.3,
+        y: CONTENT_Y,
         w: CONTENT_WIDTH,
         h: actsTableH,
         fontSize: 9,
@@ -1534,7 +1535,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         autoPage: false,
       });
       // Key message summary below table if available
-      let actsNextY = 1.3 + actsTableH + 0.15;
+      let actsNextY = CONTENT_Y + actsTableH + 0.15;
       const keyMessage = ensureString(data.keyMessage);
       if (keyMessage && actsNextY < CONTENT_BOTTOM - 0.5) {
         slide.addText(truncate(keyMessage, 150), {
@@ -1575,7 +1576,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       addDataUnavailableMessage(slide, 'National policy data not available');
       return;
     }
-    let policyNextY = 1.3;
+    let policyNextY = CONTENT_Y;
     if (targets.length > 0) {
       const targetRows = [tableHeader(['Metric', 'Target', 'Deadline', 'Status'])];
       targets.forEach((t) => {
@@ -1590,7 +1591,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       applyAlternateRowFill(targetRows);
       slide.addTable(targetRows, {
         x: LEFT_MARGIN,
-        y: 1.3,
+        y: CONTENT_Y,
         w: CONTENT_WIDTH,
         h: policyTableH,
         fontSize: 9,
@@ -1599,7 +1600,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         colW: [4.13, 3.09, 2.69, 2.69],
         valign: 'top',
       });
-      policyNextY = 1.3 + policyTableH + 0.15;
+      policyNextY = CONTENT_Y + policyTableH + 0.15;
     }
     const initiatives = safeArray(data.keyInitiatives, 4);
     if (initiatives.length > 0) {
@@ -1675,13 +1676,13 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           text: safeCell(ownership.promotedDetails || ownership.incentiveDetails || ''),
         },
       ]);
-    let investNextY = 1.3;
+    let investNextY = CONTENT_Y;
     if (ownershipRows.length > 1) {
       const ownerTableH = safeTableHeight(ownershipRows.length, { fontSize: 9, maxH: 1.8 });
       applyAlternateRowFill(ownershipRows);
       slide.addTable(ownershipRows, {
         x: LEFT_MARGIN,
-        y: 1.3,
+        y: CONTENT_Y,
         w: CONTENT_WIDTH,
         h: ownerTableH,
         fontSize: 9,
@@ -1690,7 +1691,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         colW: [3.36, 2.02, 7.22],
         valign: 'top',
       });
-      investNextY = 1.3 + ownerTableH + 0.15;
+      investNextY = CONTENT_Y + ownerTableH + 0.15;
     }
     const incentivesList = safeArray(data.incentives, 3);
     if (incentivesList.length > 0) {
@@ -1798,7 +1799,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     applyAlternateRowFill(incRows);
     slide.addTable(incRows, {
       x: LEFT_MARGIN,
-      y: 1.3,
+      y: CONTENT_Y,
       w: CONTENT_WIDTH,
       h: incTableH,
       fontSize: 9,
@@ -1866,7 +1867,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       return;
     }
 
-    let maNextY = 1.3;
+    let maNextY = CONTENT_Y;
     if (deals.length > 0) {
       slide.addText('Recent Transactions', {
         x: LEFT_MARGIN,
@@ -2029,7 +2030,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       applyAlternateRowFill(econRows);
       slide.addTable(econRows, {
         x: LEFT_MARGIN,
-        y: 1.3,
+        y: CONTENT_Y,
         w: CONTENT_WIDTH,
         h: financing.length > 0 ? 3.0 : 4.0,
         fontSize: 9,
@@ -2042,7 +2043,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         const econTableH = financing.length > 0 ? 3.0 : 4.0;
         addCalloutBox(slide, 'Deal Economics', econInsights.slice(0, 4).join(' | '), {
           x: LEFT_MARGIN,
-          y: 1.3 + econTableH + 0.15,
+          y: CONTENT_Y + econTableH + 0.15,
           w: CONTENT_WIDTH,
           h: 0.65,
           type: 'insight',
@@ -2056,7 +2057,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         financing.map((f) => `- ${truncate(f, 120)}`).join('\n'),
         {
           x: LEFT_MARGIN,
-          y: econInsights.length > 0 ? 1.3 + 3.0 + 0.15 + 0.65 + 0.15 : 1.3 + 3.0 + 0.15,
+          y:
+            econInsights.length > 0 ? CONTENT_Y + 3.0 + 0.15 + 0.65 + 0.15 : CONTENT_Y + 3.0 + 0.15,
           w: CONTENT_WIDTH,
           h: 0.8,
           type: 'insight',
@@ -2113,7 +2115,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       applyAlternateRowFill(optRows);
       slide.addTable(optRows, {
         x: LEFT_MARGIN,
-        y: 1.3,
+        y: CONTENT_Y,
         w: CONTENT_WIDTH,
         h: optTableH,
         fontSize: 9,
@@ -2122,7 +2124,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         colW: optColWidths.length > 0 ? optColWidths : [1.5, 1.3, 1.5, 1.3, 1.1, 3.0, 2.9],
         valign: 'top',
       });
-      entryNextY = 1.3 + optTableH + 0.15;
+      entryNextY = CONTENT_Y + optTableH + 0.15;
       if (stratInsights.length > 0) {
         addCalloutBox(slide, 'Strategy Insights', stratInsights.slice(0, 4).join(' | '), {
           x: LEFT_MARGIN,
@@ -2235,7 +2237,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       applyAlternateRowFill(phaseRows);
       slide.addTable(phaseRows, {
         x: LEFT_MARGIN,
-        y: 1.3,
+        y: CONTENT_Y,
         w: CONTENT_WIDTH,
         h: implTableH,
         fontSize: 9,
@@ -2250,12 +2252,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         slide,
         phases.map((p) => p.name || 'Phase'),
         null,
-        { y: 1.3 + implTableH + 0.3 }
+        { y: CONTENT_Y + implTableH + 0.3 }
       );
 
       // Next steps from Stage 3
       const nextSteps = enrichment.nextSteps || countryAnalysis?.summary?.nextSteps || null;
-      const chevronBottomY = 1.3 + implTableH + 0.3 + 0.7;
+      const chevronBottomY = CONTENT_Y + implTableH + 0.3 + 0.7;
       if (nextSteps && chevronBottomY < CONTENT_BOTTOM - 0.7) {
         addCalloutBox(
           slide,
@@ -2285,7 +2287,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       if (highPriority) segInsights.push(`Top Priority: ${highPriority.name}`);
     }
 
-    let nextSegY = 1.35;
+    let nextSegY = CONTENT_Y;
     if (segmentsList.length === 0) {
       addDataUnavailableMessage(slide, 'Target segment data not available');
       return;
@@ -2308,7 +2310,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       applyAlternateRowFill(segmentRows);
       slide.addTable(segmentRows, {
         x: LEFT_MARGIN,
-        y: 1.35,
+        y: CONTENT_Y,
         w: CONTENT_WIDTH,
         h: segTableH,
         fontSize: 9,
@@ -2317,7 +2319,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         colW: segColWidths.length > 0 ? segColWidths : [2.5, 2.5, 2.1, 2.5, 3.0],
         valign: 'top',
       });
-      nextSegY = 1.35 + segTableH + 0.15;
+      nextSegY = CONTENT_Y + segTableH + 0.15;
       if (segInsights.length > 0) {
         addCalloutBox(slide, 'Market Approach', segInsights.slice(0, 2).join(' | '), {
           x: LEFT_MARGIN,
@@ -2407,7 +2409,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       applyAlternateRowFill(goNoGoRows);
       slide.addTable(goNoGoRows, {
         x: LEFT_MARGIN,
-        y: 1.3,
+        y: CONTENT_Y,
         w: CONTENT_WIDTH,
         h: goNoGoTableH,
         fontSize: 9,
@@ -2420,7 +2422,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     // Verdict box
     const goNoGoTableBottom =
       goNoGoCriteria.length > 0
-        ? 1.3 + safeTableHeight(goNoGoCriteria.length + 1, { fontSize: 11, maxH: 3.5 }) + 0.15
+        ? CONTENT_Y + safeTableHeight(goNoGoCriteria.length + 1, { fontSize: 11, maxH: 3.5 }) + 0.15
         : 1.5;
     const verdictColor =
       data.overallVerdict?.includes('GO') && !data.overallVerdict?.includes('NO')
@@ -2509,7 +2511,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
     addOpportunitiesObstaclesSummary(slide, oppsFormatted, obsFormatted, {
       x: LEFT_MARGIN,
-      y: 1.3,
+      y: CONTENT_Y,
       fullWidth: CONTENT_WIDTH,
     });
 
@@ -2571,7 +2573,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   function renderKeyInsights(slide, data) {
     const insights = safeArray(data.insights, 3);
-    let insightY = 1.3;
+    let insightY = CONTENT_Y;
     // Prefer synthesis keyInsights over countryAnalysis insights (fallback chain)
     const synthesisInsights =
       enrichment.keyInsights || countryAnalysis?.summary?.keyInsights || null;
@@ -2653,7 +2655,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       applyAlternateRowFill(triggerRows);
       slide.addTable(triggerRows, {
         x: LEFT_MARGIN,
-        y: 1.3,
+        y: CONTENT_Y,
         w: CONTENT_WIDTH,
         h: Math.min(0.3 + triggerRows.length * 0.35, 3.5),
         fontSize: 9,
@@ -2668,7 +2670,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
     const triggerTableH =
       triggers.length > 0 ? Math.min(0.3 + (triggers.length + 1) * 0.35, 3.5) : 0;
-    const windowY = (triggers.length > 0 ? Math.min(1.3 + triggerTableH + 0.15, 4.5) : 3.8) + 0.85;
+    const windowY =
+      (triggers.length > 0 ? Math.min(CONTENT_Y + triggerTableH + 0.15, 4.5) : 3.8) + 0.85;
     if (data.windowOfOpportunity) {
       addCalloutBox(slide, 'WINDOW OF OPPORTUNITY', data.windowOfOpportunity, {
         x: LEFT_MARGIN,
@@ -2696,7 +2699,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
 
   function renderLessonsLearned(slide, data) {
-    let lessonsNextY = 1.3;
+    let lessonsNextY = CONTENT_Y;
     const failures = safeArray(data.failures, 3);
     if (failures.length > 0) {
       slide.addText('FAILURES TO AVOID', {
@@ -2905,7 +2908,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         const slide = addSlideWithTitle(`${sectionName}`, 'Data from Raw Research (Unprocessed)');
         slide.addText(truncate(rawFallbackContent, 1200), {
           x: LEFT_MARGIN,
-          y: 1.3,
+          y: CONTENT_Y,
           w: CONTENT_WIDTH,
           h: 5.0,
           fontSize: 11,
@@ -3156,7 +3159,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     applyAlternateRowFill(metricsRows);
     finalSlide.addTable(metricsRows, {
       x: LEFT_MARGIN,
-      y: 1.3,
+      y: CONTENT_Y,
       w: CONTENT_WIDTH,
       h: metricsTableH,
       fontSize: 11,

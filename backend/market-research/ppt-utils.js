@@ -21,6 +21,14 @@ const TEMPLATE = templatePatterns.pptxPositions
       sourceBar: { x: 0.3758, y: 6.6944, w: 12.5862, h: 0.25 },
     };
 
+// Template colors shorthand — avoids repeating templatePatterns.style?.colors? everywhere
+const TP_COLORS = templatePatterns.style?.colors || {};
+const C_DK2 = TP_COLORS.dk2 || '1F497D';
+const C_ACCENT1 = TP_COLORS.accent1 || '007FFF';
+const C_ACCENT3 = TP_COLORS.accent3 || '011AB7';
+const C_ACCENT6 = TP_COLORS.accent6 || 'E46C0A';
+const C_TABLE_HEADER = TP_COLORS.tableHeaderFill || C_ACCENT3;
+
 // ============ PPT GENERATION ============
 
 // Helper: truncate text to fit slides - end at sentence or phrase boundary
@@ -516,24 +524,24 @@ function addCalloutBox(slide, title, content, options = {}) {
   const typeColors = {
     insight: {
       fill: 'F5F5F5',
-      border: templatePatterns.style?.colors?.dk2 || '1F497D',
-      titleColor: templatePatterns.style?.colors?.dk2 || '1F497D',
+      border: C_DK2,
+      titleColor: C_DK2,
     },
     warning: { fill: 'F5F5F5', border: 'CCCCCC', titleColor: '333333' },
     recommendation: {
       fill: 'EDFDFF',
-      border: templatePatterns.style?.colors?.accent1 || '007FFF',
-      titleColor: templatePatterns.style?.colors?.accent1 || '007FFF',
+      border: C_ACCENT1,
+      titleColor: C_ACCENT1,
     },
     positive: {
       fill: 'EDFDFF',
-      border: templatePatterns.style?.colors?.accent1 || '007FFF',
-      titleColor: templatePatterns.style?.colors?.accent1 || '007FFF',
+      border: C_ACCENT1,
+      titleColor: C_ACCENT1,
     },
     negative: {
       fill: 'F5F5F5',
-      border: templatePatterns.style?.colors?.dk2 || '1F497D',
-      titleColor: templatePatterns.style?.colors?.dk2 || '1F497D',
+      border: C_DK2,
+      titleColor: C_DK2,
     },
   };
   const colors = typeColors[boxType] || typeColors.insight;
@@ -615,12 +623,11 @@ function addInsightsPanel(slide, insights = [], options = {}) {
 // Creates a visual break between major sections with section title
 function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, options = {}) {
   const FONT = 'Segoe UI';
-  const tpC = templatePatterns.style?.colors || {};
   const COLORS = options.COLORS || {
-    headerLine: tpC.dk2 || '1F497D',
-    accent3: tpC.accent3 || '011AB7',
-    dk2: tpC.dk2 || '1F497D',
-    white: tpC.lt1 || 'FFFFFF',
+    headerLine: C_DK2,
+    accent3: C_ACCENT3,
+    dk2: C_DK2,
+    white: TP_COLORS.lt1 || 'FFFFFF',
   };
 
   // Section overview text for each section (actionable context)
@@ -698,7 +705,7 @@ function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, opt
 
   // Set slide background color instead of rect shape to avoid overlaps
   slide.background = {
-    color: COLORS.accent3 || templatePatterns.style?.colors?.accent3 || '011AB7',
+    color: COLORS.accent3 || C_ACCENT3,
   };
 
   return slide;
@@ -834,7 +841,7 @@ const SEMANTIC_COLORS = {
   warning: 'E46C0A',
   neutral: '666666',
   primary: '4F81BD',
-  accent: templatePatterns.style?.colors?.dk2 || '1F497D',
+  accent: C_DK2,
 };
 
 // Helper to merge historical and projected data into unified chart format
@@ -1541,12 +1548,11 @@ function addChevronFlow(slide, phases, patternDef, opts = {}) {
 function addInsightPanelsFromPattern(slide, insights, patternDef) {
   const p = patternDef || templatePatterns.patterns?.chart_insight_panels?.elements || {};
   const panelDefs = p.insightPanels || [
-    { x: 8.5, y: 1.3, w: 4.4, h: 1.5 },
-    { x: 8.5, y: 3.0, w: 4.4, h: 1.5 },
-    { x: 8.5, y: 4.7, w: 4.4, h: 1.5 },
+    { x: 8.5, y: TEMPLATE.contentArea.y, w: 4.4, h: 1.5 },
+    { x: 8.5, y: TEMPLATE.contentArea.y + 1.5, w: 4.4, h: 1.5 },
+    { x: 8.5, y: TEMPLATE.contentArea.y + 3.2, w: 4.4, h: 1.5 },
   ];
-  const style = templatePatterns.style || {};
-  const barColor = style.colors?.insightBarColor || '2E5090';
+  const barColor = C_DK2;
 
   insights.slice(0, panelDefs.length).forEach((insight, idx) => {
     const def = panelDefs[idx];
@@ -1580,7 +1586,7 @@ function addInsightPanelsFromPattern(slide, insights, patternDef) {
       h: 0.35,
       fontSize: 14,
       bold: true,
-      color: '1F497D',
+      color: C_DK2,
       fontFace: 'Segoe UI',
     });
     // Body — use structured fields with labels if available, fallback to text/body
@@ -1649,11 +1655,12 @@ function addCalloutOverlay(slide, text, pos) {
  */
 function addMatrix(slide, quadrants, patternDef) {
   const p = patternDef || templatePatterns.patterns?.matrix_2x2?.elements || {};
+  const cy = TEMPLATE.contentArea.y;
   const quads = p.quadrants || [
-    { x: 0.4, y: 1.3, w: 6.0, h: 2.5, fill: 'D6E4F0' },
-    { x: 6.6, y: 1.3, w: 6.3, h: 2.5, fill: 'F2F2F2' },
-    { x: 0.4, y: 4.0, w: 6.0, h: 2.5, fill: 'F2F2F2' },
-    { x: 6.6, y: 4.0, w: 6.3, h: 2.5, fill: 'D6E4F0' },
+    { x: TEMPLATE.contentArea.x, y: cy, w: 6.0, h: 2.5, fill: 'D6E4F0' },
+    { x: 6.6, y: cy, w: 6.3, h: 2.5, fill: 'F2F2F2' },
+    { x: TEMPLATE.contentArea.x, y: cy + 2.7, w: 6.0, h: 2.5, fill: 'F2F2F2' },
+    { x: 6.6, y: cy + 2.7, w: 6.3, h: 2.5, fill: 'D6E4F0' },
   ];
 
   quadrants.slice(0, 4).forEach((q, idx) => {
@@ -1675,7 +1682,7 @@ function addMatrix(slide, quadrants, patternDef) {
       h: 0.35,
       fontSize: 14,
       bold: true,
-      color: templatePatterns.style?.colors?.dk2 || '1F497D',
+      color: C_DK2,
       fontFace: 'Segoe UI',
     });
     // Items
@@ -1702,24 +1709,25 @@ function addMatrix(slide, quadrants, patternDef) {
  */
 function addCaseStudyRows(slide, rows, chevrons, patternDef) {
   const p = patternDef || templatePatterns.patterns?.case_study_rows?.elements || {};
+  const csY = TEMPLATE.contentArea.y;
   const rowDefs = p.rows || [
-    { label: 'Business Overview', y: 1.3, h: 0.8 },
-    { label: 'Context', y: 2.2, h: 1.0 },
-    { label: 'Objective', y: 3.3, h: 0.6 },
-    { label: 'Scope', y: 4.0, h: 1.3 },
-    { label: 'Outcome', y: 5.4, h: 0.8 },
+    { label: 'Business Overview', y: csY, h: 0.8 },
+    { label: 'Context', y: csY + 0.9, h: 1.0 },
+    { label: 'Objective', y: csY + 2.0, h: 0.6 },
+    { label: 'Scope', y: csY + 2.7, h: 1.3 },
+    { label: 'Outcome', y: csY + 4.1, h: 0.8 },
   ];
   const labelStyle = p.labelStyle || {
-    fill: templatePatterns.style?.colors?.dk2 || '1F497D',
+    fill: C_DK2,
     color: 'FFFFFF',
     fontSize: 10,
     bold: true,
   };
   const contentStyle = p.contentStyle || { fill: 'F2F2F2', color: '333333', fontSize: 9 };
-  const labelX = 0.4;
+  const labelX = TEMPLATE.contentArea.x;
   const labelW = 2.0;
-  const contentX = 2.5;
-  const contentW = 10.4;
+  const contentX = TEMPLATE.contentArea.x + 2.1;
+  const contentW = TEMPLATE.contentArea.w - 2.1;
 
   rows.slice(0, rowDefs.length).forEach((row, idx) => {
     const def = rowDefs[idx];
@@ -1793,7 +1801,7 @@ function addFinancialCharts(slide, incomeData, balanceData, patternDef) {
   const metricW = metricsRow.metricBoxWidth || 3.0;
 
   metrics.slice(0, 4).forEach((metric, idx) => {
-    const x = 0.4 + idx * (metricW + 0.3);
+    const x = TEMPLATE.contentArea.x + idx * (metricW + 0.3);
     slide.addText(ensureString(metric.value || ''), {
       x,
       y: metricsRow.y,
@@ -1801,7 +1809,7 @@ function addFinancialCharts(slide, incomeData, balanceData, patternDef) {
       h: 0.3,
       fontSize: metricsRow.metricValueFontSize || 16,
       bold: true,
-      color: metricsRow.metricValueColor || templatePatterns.style?.colors?.dk2 || '1F497D',
+      color: metricsRow.metricValueColor || C_DK2,
       fontFace: 'Segoe UI',
       align: 'center',
     });
@@ -1831,7 +1839,7 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
     h: TEMPLATE.title.h,
     fontSize: 24,
     fontFace: FONT,
-    color: templatePatterns.style?.colors?.dk2 || '1F497D',
+    color: C_DK2,
     bold: true,
   });
 
@@ -1846,7 +1854,7 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
           fontFace: FONT,
           color: '333333',
           bold: isActive,
-          fill: { color: isActive ? '007FFF' : 'FFFFFF' },
+          fill: { color: isActive ? C_ACCENT1 : 'FFFFFF' },
           border: { pt: 0.5, color: 'CCCCCC' },
           valign: 'middle',
         },
@@ -1876,7 +1884,7 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
     h: TEMPLATE.title.h,
     fontSize: 24,
     fontFace: FONT,
-    color: templatePatterns.style?.colors?.dk2 || '1F497D',
+    color: C_DK2,
     bold: true,
   });
 
@@ -1932,7 +1940,7 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
           bold: true,
           fontSize: 14,
           fontFace: FONT,
-          fill: { color: 'E46C0A' },
+          fill: { color: C_ACCENT6 },
           color: 'FFFFFF',
           border: { pt: 0.5, color: 'CCCCCC' },
           valign: 'middle',
@@ -1996,7 +2004,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       options: {
         bold: true,
         fontSize: 11,
-        fill: { color: '1736B6' },
+        fill: { color: C_TABLE_HEADER },
         color: 'FFFFFF',
         fontFace: font,
       },
@@ -2006,7 +2014,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       options: {
         bold: true,
         fontSize: 11,
-        fill: { color: '1736B6' },
+        fill: { color: C_TABLE_HEADER },
         color: 'FFFFFF',
         fontFace: font,
       },
@@ -2026,7 +2034,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       options: {
         bold: true,
         fontSize: 11,
-        fill: { color: '3C57FE' },
+        fill: { color: C_ACCENT1 },
         color: 'FFFFFF',
         fontFace: font,
       },
@@ -2046,7 +2054,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       options: {
         bold: true,
         fontSize: 11,
-        fill: { color: '8EC1FF' },
+        fill: { color: TP_COLORS.accent2 || 'EDFDFF' },
         color: '333333',
         fontFace: font,
       },
@@ -2087,7 +2095,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
   ]);
 
   const maxRows = Math.min(dataRows.length, 3);
-  const rowH = Math.min(1.6, (6.65 - 1.3 - 0.5) / (maxRows + 1));
+  const rowH = Math.min(1.6, (TEMPLATE.sourceBar.y - TEMPLATE.contentArea.y - 0.5) / (maxRows + 1));
 
   slide.addTable([headerRow, ...dataRows], {
     x,
