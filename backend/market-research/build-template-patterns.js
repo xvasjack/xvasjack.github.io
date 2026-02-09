@@ -1,6 +1,6 @@
 /**
  * Builds template-patterns.json from the raw template-extracted.json
- * Replaces manually-written values with actual extracted ground truth
+ * Source: 251219_Escort_Phase 1 Market Selection_V3.pptx (34 slides, 15 charts)
  */
 const fs = require('fs');
 
@@ -17,7 +17,6 @@ function stripText(elements) {
           props: p.props,
           runs: p.runs.map((r) => ({
             props: r.props,
-            // Keep first 50 chars as label hint
             textHint: r.text ? r.text.substring(0, 50) : '',
           })),
           endRunProps: p.endRunProps,
@@ -53,306 +52,237 @@ function stripText(elements) {
   });
 }
 
-// ===== Build corrected positions =====
-// From extraction: slides 2-26 all have title at {x:0.4, y:0.15, w:12.5, h:0.7}
+// ===== Positions from Escort template =====
+// Layout 1: title bar at {x:0.38, y:0.05, w:12.59, h:0.91}
+// Layout 7/8: title at {x:0.62, y:0.18, w:11.48, h:0.91}
+// Content slides (7-10): title at {x:0.37, y:0.29, w:12.59, h:0.69}
+// Layout 1 lines: y=1.02 and y=1.10 (double line header)
+// Footer: copyright at {x:4.11, y:7.26, w:5.12, h:0.24}
+// Page number: {x:10.22, y:7.28, w:3.11, h:0.20}
+// Source bar: {x:0.37, y:6.69, w:12.59, h:0.25}
 const positions = {
-  title: { left: 0.4, top: 0.15, width: 12.5, height: 0.7 },
-  subtitle: { left: 0.4, top: 0.95, width: 12.5, height: 0.3 },
-  headerLine: { left: 0.4, top: 0.9, width: 12.5 },
-  content_area: { left: 0.4, top: 1.3, width: 12.5, height: 5.2 },
-  source_bar: { left: 0.4, top: 6.663, width: 12.5, height: 0.27 },
+  titleBar: { left: 0.3758, top: 0.0486, width: 12.5862, height: 0.9097 },
+  title: { left: 0.3758, top: 0.2917, width: 12.5862, height: 0.6944 },
+  headerLineTop: { left: 0, top: 1.0208, width: 13.3333 },
+  headerLineBottom: { left: 0, top: 1.0972, width: 13.3333 },
+  content_area: { left: 0.3758, top: 1.5, width: 12.5862, height: 5.0 },
+  source_bar: { left: 0.3758, top: 6.6944, width: 12.5862, height: 0.25 },
+  footer_line: { left: 0, top: 7.2361, width: 13.3333 },
 };
 
-// ===== Build corrected style =====
+// ===== Theme-based style =====
+// Theme "YCP": accent1=007FFF, accent2=EDFDFF, accent3=011AB7, accent4=1524A9, accent5=001C44, accent6=E46C0A
+// dk2=1F497D (dark navy), lt2=1F497D
+const tc = extracted.theme.colorScheme || {};
 const style = {
   slideWidth: extracted.presentation.slideWidth,
   slideHeight: extracted.presentation.slideHeight,
   slideWidthEmu: extracted.presentation.slideWidthEmu,
   slideHeightEmu: extracted.presentation.slideHeightEmu,
   fonts: {
-    // Cover title: slide 1, element 0
-    coverTitle: { family: 'Segoe UI', size: 42, color: '1F497D', bold: true },
-    // Cover subtitle: slide 1, element 1
-    coverSubtitle: { family: 'Segoe UI', size: 24, color: '007FFF', bold: false, italic: false },
-    // Content slide title: slides 2-26, element 0
-    title: { family: 'Segoe UI', size: 24, color: '1F497D', bold: true },
-    // Subtitle (blue text under header line): slides 2-26, element 2
-    subtitle: { family: 'Segoe UI', size: 14, color: '007FFF', bold: false, italic: false },
-    // Body text (most content)
-    body: { family: 'Segoe UI', size: 12, color: '000000' },
-    // Bullet text
-    bullet: { family: 'Segoe UI', size: 12, color: '000000' },
-    // Table header
-    tableHeader: { family: 'Segoe UI', size: 11, color: 'FFFFFF', bold: true },
-    // Table body
-    tableBody: { family: 'Segoe UI', size: 11, color: '000000', bold: false },
-    // Source footnote
-    source: { family: 'Segoe UI', size: 7, color: '999999' },
-    // Section header text
-    sectionHeader: { family: 'Segoe UI', size: 12, color: '1B2A4A', bold: true },
-    // Phase/category labels (colored fills)
-    phaseLabel: { family: 'Segoe UI', size: 12, color: 'FFFFFF', bold: true },
-    // Date on cover
-    coverDate: { family: 'Segoe UI', size: 10, color: '666666' },
-    // Cover tagline
-    coverTagline: { family: 'Segoe UI', size: 14, color: '000000' },
+    majorLatin: 'Segoe UI',
+    minorLatin: 'Segoe UI',
+    title: { family: 'Segoe UI', size: 20, bold: false },
+    tableHeader: { family: 'Segoe UI', size: 14, bold: false },
+    tableBody: { family: 'Segoe UI', size: 14, bold: false },
+    footer: { family: 'Segoe UI', size: 8 },
+    source: { family: 'Segoe UI', size: 10 },
+    coverCompany: { family: 'Segoe UI' },
+    coverTitle: { family: 'Segoe UI' },
   },
   colors: {
-    // From extraction: actual colors used in template
-    darkNavy: '1F497D',
-    accentBlue: '007FFF',
-    phaseGreen: '2E7D32',
-    phaseOrange: 'E46C0A',
-    tableCellFill: 'CCCCCC',
-    white: 'FFFFFF',
-    black: '000000',
-    dateGray: '666666',
-    // Theme scheme colors
-    themeAccent1: extracted.theme.colorScheme?.accent1?.val || '4472C4',
-    themeAccent2: extracted.theme.colorScheme?.accent2?.val || 'ED7D31',
-    themeAccent3: extracted.theme.colorScheme?.accent3?.val || 'A5A5A5',
-    themeAccent4: extracted.theme.colorScheme?.accent4?.val || 'FFC000',
-    themeAccent5: extracted.theme.colorScheme?.accent5?.val || '5B9BD5',
-    themeAccent6: extracted.theme.colorScheme?.accent6?.val || '70AD47',
-    themeDk1: '000000',
-    themeLt1: 'FFFFFF',
-    themeDk2: extracted.theme.colorScheme?.dk2?.val || '44546A',
-    themeLt2: extracted.theme.colorScheme?.lt2?.val || 'E7E6E6',
+    // Theme scheme colors (ground truth from Escort)
+    dk1: tc.dk1?.lastClr || '000000',
+    lt1: tc.lt1?.lastClr || 'FFFFFF',
+    dk2: tc.dk2?.val || '1F497D',
+    lt2: tc.lt2?.val || '1F497D',
+    accent1: tc.accent1?.val || '007FFF',
+    accent2: tc.accent2?.val || 'EDFDFF',
+    accent3: tc.accent3?.val || '011AB7',
+    accent4: tc.accent4?.val || '1524A9',
+    accent5: tc.accent5?.val || '001C44',
+    accent6: tc.accent6?.val || 'E46C0A',
+    // Semantic mappings
+    tableHeaderFill: tc.accent3?.val || '011AB7',
+    accentBlue: tc.accent1?.val || '007FFF',
+    darkNavy: tc.dk2?.val || '1F497D',
+    orange: tc.accent6?.val || 'E46C0A',
+    gridLine: 'D6D7D9',
   },
-  headerLine: { y: 0.9, color: '1F497D', thickness: 2.5, dash: 'solid' },
-  bullet: {
-    char: '\u2022',
-    indent: -0.375,
-    marginLeft: 0.375,
-    sizePct: 100,
+  headerLines: {
+    top: { y: 1.0208, color: 'scheme:dk2', thickness: 1.75 },
+    bottom: { y: 1.0972, color: 'scheme:dk2', thickness: 1.75 },
   },
+  dividerLine: { x: 0.4983, y: 2.2292, w: 4.4983, thickness: 1.75 },
   table: {
-    cellFill: 'CCCCCC',
-    headerTextColor: 'FFFFFF',
-    headerBold: true,
-    bodyTextColor: '000000',
-    bodyBold: false,
-    fontSize: 11,
-    cellMargins: { left: 0.1, right: 0.1, top: 0.05, bottom: 0.05 },
+    headerFill: 'scheme:bg1',
+    headerFontSize: 14,
+    bodyFontSize: 14,
     borderWidth: 0.5,
-    borderColor: 'CCCCCC',
-    borderDash: 'solid',
+    borderColor: 'D6D7D9',
   },
   footer: {
-    logoPos: { x: 11.5, y: 6.9, w: 1.5, h: 0.4 },
-    copyrightPos: { x: 0.4, y: 7.1, w: 5, h: 0.25, fontSize: 7 },
-    pageNumPos: { x: 12.5, y: 7.1, w: 0.5, h: 0.25, fontSize: 7 },
+    copyrightPos: { x: 4.11, y: 7.26, w: 5.12, h: 0.24, fontSize: 8 },
+    copyrightText: '(C) YCP 2026',
+    pageNumPos: { x: 10.22, y: 7.28, w: 3.11, h: 0.2 },
+    logoPos: { x: 0.38, y: 7.3, w: 0.47, h: 0.17 },
   },
-  sourceFootnote: { y: 6.663, fontSize: 7, color: '999999' },
 };
 
-// ===== Build corrected patterns =====
-// Map each pattern to its slide numbers and extract actual element positions
-
-function getSlideElements(slideNum) {
-  const slide = extracted.slides.find((s) => s.slideNumber === slideNum);
-  return slide ? slide.elements : [];
-}
-
+// ===== Patterns mapped to Escort template slides =====
 const patterns = {
   cover: {
     id: 1,
-    description: 'Title slide with country name, industry, and date',
+    description: 'Title slide with company name and project title',
     templateSlides: [1],
+    layout: 2,
     elements: {
-      countryTitle: { x: 0.5, y: 2.2, w: 9, h: 0.8, fontSize: 42, bold: true, color: '1F497D' },
-      industrySubtitle: { x: 0.5, y: 3, w: 9, h: 0.5, fontSize: 24, color: '007FFF' },
-      tagline: { x: 0.5, y: 3.6, w: 9, h: 0.4, fontSize: 14, color: '000000' },
-      date: { x: 0.5, y: 6.5, w: 9, h: 0.3, fontSize: 10, color: '666666' },
+      companyName: { x: 0.4555, y: 1.6333, w: 9.3541, h: 2.8349 },
+      projectTitle: { x: 0.4555, y: 4.862, w: 9.3541, h: 1.6491 },
     },
   },
-  // Slides with tables that have charts above them
-  chart_with_bullets: {
+  toc_divider: {
     id: 2,
-    description: 'Chart with bullet points below',
-    templateSlides: [5, 6, 7, 9],
+    description: 'Table of contents with section navigation',
+    templateSlides: [2, 5, 11, 20, 30],
+    layout: 5,
     elements: {
-      title: { x: 0.4, y: 0.15, w: 12.5, h: 0.7 },
-      headerLine: { x: 0.4, y: 0.9, w: 12.5 },
-      subtitle: { x: 0.4, y: 0.95, w: 12.5, h: 0.3 },
-      chart: { x: 0.5, y: 1.3, w: 9, h: 4 },
-      bullets: { x: 0.4, y: 5.5, w: 12.5, h: 1.1 },
+      title: { fontSize: 18, font: '+mn-lt' },
+      tocTable: { x: 0.3758, y: 1.5, w: 12.5862 },
     },
   },
-  chart_with_table: {
+  executive_summary: {
     id: 3,
-    description: 'Chart with data table below',
-    templateSlides: [8, 10],
-    elements: {
-      title: { x: 0.4, y: 0.15, w: 12.5, h: 0.7 },
-      headerLine: { x: 0.4, y: 0.9, w: 12.5 },
-      subtitle: { x: 0.4, y: 0.95, w: 12.5, h: 0.3 },
-      chart: { x: 0.5, y: 1.3, w: 9, h: 3 },
-      table: { x: 0.4, y: 4.65, w: 12.5 },
-    },
+    description: 'Executive summary section',
+    templateSlides: [3],
+    layout: 6,
   },
-  data_table: {
+  country_overview: {
     id: 4,
-    description: 'Full-width data table',
-    templateSlides: [2, 3, 11, 12, 13, 17],
+    description: 'Country overview with flag and key metrics',
+    templateSlides: [4],
+    layout: 7,
     elements: {
-      title: { x: 0.4, y: 0.15, w: 12.5, h: 0.7 },
-      headerLine: { x: 0.4, y: 0.9, w: 12.5 },
-      subtitle: { x: 0.4, y: 0.95, w: 12.5, h: 0.3 },
-      table: { x: 0.4, y: 1.3, w: 12.5 },
+      title: { x: 0.37, y: 0.29, w: 12.59, h: 0.69 },
+      dividerLine: { x: 2.1851, y: 1.729, w: 8.6231, thickness: 1.75 },
+      tables: 2,
     },
   },
-  dual_table: {
+  regulatory_table: {
     id: 5,
-    description: 'Two tables side by side',
-    templateSlides: [4, 15, 18, 20],
+    description: 'Regulatory or policy data table with header bar',
+    templateSlides: [6, 7, 8, 9, 10, 12, 21],
+    layout: 1,
     elements: {
-      title: { x: 0.4, y: 0.15, w: 12.5, h: 0.7 },
-      headerLine: { x: 0.4, y: 0.9, w: 12.5 },
-      subtitle: { x: 0.4, y: 0.95, w: 12.5, h: 0.3 },
-      tableLeft: { x: 0.4, y: 1.3 },
-      tableRight: { x: 6.8, y: 1.3 },
+      titleBar: { x: 0.38, y: 0.05, w: 12.59, h: 0.91 },
+      dividerLine: { x: 0.4983, y: 2.2292, w: 4.4983 },
+      table: { x: 0.38, y: 1.5, w: 12.59 },
     },
   },
-  text_case_study: {
+  chart_with_grid: {
     id: 6,
-    description: 'Text-heavy case study or narrative with bullet sections',
-    templateSlides: [14, 16],
+    description: 'Chart with data grid lines and annotations',
+    templateSlides: [13, 14, 15, 16, 17, 18, 19, 31, 32],
+    layout: 1,
     elements: {
-      title: { x: 0.4, y: 0.15, w: 12.5, h: 0.7 },
-      headerLine: { x: 0.4, y: 0.9, w: 12.5 },
-      subtitle: { x: 0.4, y: 0.95, w: 12.5, h: 0.3 },
-      contentArea: { x: 0.4, y: 1.3, w: 12.5, h: 5.2 },
+      titleBar: { x: 0.38, y: 0.05, w: 12.59, h: 0.91 },
+      dividerLine: { x: 0.4983, y: 2.2292, w: 4.4983 },
+      chart: {},
+      gridLines: { color: 'D6D7D9', thickness: 0.25 },
     },
   },
-  phased_roadmap: {
+  company_comparison: {
     id: 7,
-    description: 'Multi-phase implementation roadmap with colored columns',
-    templateSlides: [19],
+    description: 'Company comparison table with source notes',
+    templateSlides: [22],
+    layout: 1,
     elements: {
-      title: { x: 0.4, y: 0.15, w: 12.5, h: 0.7 },
-      headerLine: { x: 0.4, y: 0.9, w: 12.5 },
-      subtitle: { x: 0.4, y: 0.95, w: 12.5, h: 0.3 },
-      phases: [
-        {
-          x: 0.35,
-          headerY: 1.3,
-          contentY: 1.8,
-          milestonesY: 4.4,
-          investmentY: 4.9,
-          w: 3,
-          headerH: 0.4,
-          contentH: 2.5,
-          milestonesH: 0.5,
-          investmentH: 0.3,
-          color: '007FFF',
-        },
-        {
-          x: 3.5,
-          headerY: 1.3,
-          contentY: 1.8,
-          milestonesY: 4.4,
-          investmentY: 4.9,
-          w: 3,
-          headerH: 0.4,
-          contentH: 2.5,
-          milestonesH: 0.5,
-          investmentH: 0.3,
-          color: '2E7D32',
-        },
-        {
-          x: 6.65,
-          headerY: 1.3,
-          contentY: 1.8,
-          milestonesY: 4.4,
-          investmentY: 4.9,
-          w: 3,
-          headerH: 0.4,
-          contentH: 2.5,
-          milestonesH: 0.5,
-          investmentH: 0.3,
-          color: 'E46C0A',
-        },
-      ],
+      sourceBar: { x: 0.37, y: 6.69, w: 12.59, h: 0.25, fontSize: 10 },
+      table: { x: 0.38, y: 1.5, w: 12.59 },
     },
   },
-  table_with_labels: {
+  case_study: {
     id: 8,
-    description: 'Table with labeled sections and additional text shapes',
-    templateSlides: [21, 22, 23],
+    description: 'Case study with structured content and table',
+    templateSlides: [23, 24, 27, 28],
+    layout: 1,
     elements: {
-      title: { x: 0.4, y: 0.15, w: 12.5, h: 0.7 },
-      headerLine: { x: 0.4, y: 0.9, w: 12.5 },
-      subtitle: { x: 0.4, y: 0.95, w: 12.5, h: 0.3 },
-      table: { x: 0.4, y: 1.3, w: 12.5 },
-      labels: { y: 4, h: 0.3 },
+      title: { fontSize: 20 },
+      table: { x: 0.38, y: 1.5, w: 12.59 },
     },
   },
-  key_insights: {
+  financial_charts: {
     id: 9,
-    description: 'Key insights summary with numbered or grouped items',
-    templateSlides: [24, 25],
+    description: 'Dual financial charts with company data',
+    templateSlides: [26, 29],
+    layout: 7,
     elements: {
-      title: { x: 0.4, y: 0.15, w: 12.5, h: 0.7 },
-      headerLine: { x: 0.4, y: 0.9, w: 12.5 },
-      subtitle: { x: 0.4, y: 0.95, w: 12.5, h: 0.3 },
-      contentArea: { x: 0.4, y: 1.3, w: 12.5, h: 5.2 },
+      dividerLine: { x: 2.1851, y: 1.729, w: 8.6231 },
+      chartLeft: {},
+      chartRight: {},
     },
   },
-  glossary_table: {
+  company_profile: {
     id: 10,
-    description: 'Glossary or reference table',
-    templateSlides: [26],
+    description: 'Company profile with logo and description',
+    templateSlides: [25],
+    layout: 1,
+  },
+  glossary: {
+    id: 11,
+    description: 'Glossary tables (term/definition)',
+    templateSlides: [33, 34],
+    layout: 6,
     elements: {
-      title: { x: 0.4, y: 0.15, w: 12.5, h: 0.7 },
-      headerLine: { x: 0.4, y: 0.9, w: 12.5 },
-      subtitle: { x: 0.4, y: 0.95, w: 12.5, h: 0.3 },
-      table: { x: 0.4, y: 1.3, w: 12.5 },
+      table: { x: 0.38, y: 1.5, w: 12.59 },
     },
   },
 };
 
 // ===== Chart palette from actual chart data =====
 const chartPalette = {
-  primary: ['C0504D', '4F81BD'],
   themeAccents: [
-    extracted.theme.colorScheme?.accent1?.val,
-    extracted.theme.colorScheme?.accent2?.val,
-    extracted.theme.colorScheme?.accent3?.val,
-    extracted.theme.colorScheme?.accent4?.val,
-    extracted.theme.colorScheme?.accent5?.val,
-    extracted.theme.colorScheme?.accent6?.val,
+    tc.accent1?.val,
+    tc.accent2?.val,
+    tc.accent3?.val,
+    tc.accent4?.val,
+    tc.accent5?.val,
+    tc.accent6?.val,
   ].filter(Boolean),
+  primary: [tc.accent1?.val || '007FFF', tc.accent3?.val || '011AB7'],
   extended: [
+    tc.accent1?.val || '007FFF',
+    tc.accent3?.val || '011AB7',
+    tc.accent6?.val || 'E46C0A',
+    tc.accent4?.val || '1524A9',
+    tc.accent5?.val || '001C44',
     'C0504D',
     '4F81BD',
     '2E7D32',
-    'B71C1C',
-    '7B1FA2',
-    '00838F',
-    'FF6F00',
-    '1565C0',
-    'E46C0A',
-    'AD1457',
   ],
 };
 
-// ===== Extracted constants =====
+// ===== EMU constants from extraction =====
 const _extractedConstants = {
   emuPerInch: 914400,
   emuPerPoint: 12700,
-  commonTitlePosition: { x: 365760, y: 137160, cx: 11430000, cy: 640080 },
-  commonHeaderLine: { x: 365760, y: 822960, cx: 11430000, cy: 0, lineWidth: 31750 },
-  commonSubtitle: { x: 365760, y: 868680, cx: 11430000, cy: 274320 },
-  coverTitle: { x: 457200, y: 2011680, cx: 8229600, cy: 731520 },
-  coverSubtitle: { x: 457200, y: 2743200, cx: 8229600, cy: 457200 },
-  coverTagline: { x: 457200, y: 3291840, cx: 8229600, cy: 365760 },
-  coverDate: { x: 457200, y: 5943600, cx: 8229600, cy: 274320 },
-  tableCellMargins: { marL: 91440, marR: 91440, marT: 45720, marB: 45720 },
-  tableBorderWidth: 6350,
+  slideWidthEmu: extracted.presentation.slideWidthEmu,
+  slideHeightEmu: extracted.presentation.slideHeightEmu,
+  // Layout 1 title bar
+  layout1TitleBar: { x: 343558, y: 44450, cx: 11501120, cy: 831215 },
+  // Layout 1 header lines
+  layout1LineTop: { x: 0, y: 933450, cx: 12192000, cy: 0 },
+  layout1LineBottom: { x: 0, y: 1003300, cx: 12192000, cy: 0 },
+  // Layout 1 footer line
+  layout1FooterLine: { x: 0, y: 6615113, cx: 12192000, cy: 0 },
+  // Common divider line (直線コネクタ 66)
+  commonDividerLine: { x: 455613, y: 2037398, cx: 4113213, cy: 0, lineWidth: 22225 },
+  // Cover positions
+  coverCompanyName: { x: 416483, y: 1492803, cx: 8551583, cy: 2590483 },
+  coverProjectTitle: { x: 416483, y: 4443767, cx: 8551583, cy: 1507267 },
 };
 
-// ===== Build slideDetails (per-slide with text stripped) =====
+// ===== Build slideDetails =====
 const slideDetails = extracted.slides.map((slide) => ({
   slideNumber: slide.slideNumber,
   name: slide.name,
@@ -360,6 +290,12 @@ const slideDetails = extracted.slides.map((slide) => ({
   elementTypes: slide.elementTypes,
   elements: stripText(slide.elements),
   relationships: slide.relationships,
+}));
+
+// ===== Build layout details =====
+const layoutDetails = (extracted.slideLayouts || []).map((layout) => ({
+  index: layout.index,
+  elements: stripText(layout.elements),
 }));
 
 // ===== Build chart details =====
@@ -389,7 +325,10 @@ const output = {
     extractedAt: extracted._meta.extractedAt,
     builtAt: new Date().toISOString(),
     description:
-      'Ground truth extracted from template PPTX. All values are actual measurements, not manually estimated.',
+      'Ground truth extracted from Escort template PPTX (251219_Escort_Phase 1 Market Selection_V3.pptx). All values are actual measurements.',
+    slideCount: 34,
+    chartCount: 15,
+    layoutCount: 8,
   },
   positions,
   style,
@@ -398,7 +337,7 @@ const output = {
   _extractedConstants,
   theme: extracted.theme,
   slideMaster: { elements: stripText(extracted.slideMaster.elements) },
-  slideLayout: { elements: stripText(extracted.slideLayout.elements) },
+  slideLayouts: layoutDetails,
   slideDetails,
   chartDetails,
 };
@@ -410,6 +349,7 @@ const stats = fs.statSync(outputPath);
 console.log(`Written: ${outputPath} (${(stats.size / 1024).toFixed(1)} KB)`);
 console.log(`Slides: ${slideDetails.length}`);
 console.log(`Charts: ${chartDetails.length}`);
+console.log(`Layouts: ${layoutDetails.length}`);
 console.log(`Total elements: ${slideDetails.reduce((s, sl) => s + sl.elementCount, 0)}`);
 
 // Verify JSON is valid

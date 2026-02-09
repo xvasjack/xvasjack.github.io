@@ -7,7 +7,7 @@ const JSZip = require('jszip');
 const fs = require('fs');
 
 const TEMPLATE_PATH =
-  '/home/xvasjack/xvasjack.github.io/Market_Research_energy_services_2025-12-31 (6).pptx';
+  '/home/xvasjack/xvasjack.github.io/251219_Escort_Phase 1 Market Selection_V3.pptx';
 const EMU_PER_INCH = 914400;
 const EMU_PER_PT = 12700;
 
@@ -641,33 +641,11 @@ function parseGraphicFrame(gf) {
   return result;
 }
 
-// Parse group shape (p:grpSp)
-function parseGroupShape(grpSp) {
-  const nvGrpSpPr = getNestedTag(grpSp, 'p:nvGrpSpPr');
-  const cNvPr = nvGrpSpPr ? getNestedTag(nvGrpSpPr, 'p:cNvPr') : null;
-  const name = cNvPr ? getAttr(cNvPr, 'name') : null;
-  const id = cNvPr ? getAttr(cNvPr, 'id') : null;
-
-  const grpSpPr = getNestedTag(grpSp, 'p:grpSpPr');
-  const xfrm = grpSpPr ? parseXfrm(grpSpPr) : null;
-
-  // Child shapes
-  const children = parseSlideElements(grpSp);
-
-  return {
-    type: 'group',
-    id: id ? parseInt(id) : null,
-    name,
-    position: xfrm,
-    children,
-  };
-}
-
-// Parse all elements on a slide
+// Parse all elements on a slide (flat — groups are recorded but children extracted to top level)
 function parseSlideElements(xml) {
   const elements = [];
 
-  // Shapes (p:sp) — excluding the root nvGrpSpPr/grpSpPr
+  // Find ALL shapes anywhere in the slide (flat extraction, no recursion into groups)
   const shapes = getAllNestedTags(xml, 'p:sp');
   for (const sp of shapes) {
     elements.push(parseShape(sp));
@@ -685,12 +663,23 @@ function parseSlideElements(xml) {
     elements.push(parseConnectionShape(cxn));
   }
 
-  // Group shapes (p:grpSp) — skip the root one
+  // Group shapes (p:grpSp) — record group info but don't recurse
   const grps = getAllNestedTags(xml, 'p:grpSp');
   for (const grp of grps) {
     // Skip root group (the spTree itself)
     if (grp.includes('<p:nvGrpSpPr><p:cNvPr id="1" name=""')) continue;
-    elements.push(parseGroupShape(grp));
+    const nvGrpSpPr = getNestedTag(grp, 'p:nvGrpSpPr');
+    const cNvPr = nvGrpSpPr ? getNestedTag(nvGrpSpPr, 'p:cNvPr') : null;
+    const name = cNvPr ? getAttr(cNvPr, 'name') : null;
+    const id = cNvPr ? getAttr(cNvPr, 'id') : null;
+    const grpSpPr = getNestedTag(grp, 'p:grpSpPr');
+    const xfrm = grpSpPr ? parseXfrm(grpSpPr) : null;
+    elements.push({
+      type: 'group',
+      id: id ? parseInt(id) : null,
+      name,
+      position: xfrm,
+    });
   }
 
   // Picture shapes (p:pic)
@@ -903,15 +892,15 @@ async function extractTemplate() {
 
   const result = {
     _meta: {
-      source: 'Market_Research_energy_services_2025-12-31 (6).pptx',
+      source: '251219_Escort_Phase 1 Market Selection_V3.pptx',
       extractedAt: new Date().toISOString(),
-      slideCount: 26,
-      chartCount: 6,
+      slideCount: 34,
+      chartCount: 15,
     },
     presentation: {},
     theme: {},
     slideMaster: {},
-    slideLayout: {},
+    slideLayouts: [],
     slides: [],
     charts: [],
   };
@@ -987,16 +976,23 @@ async function extractTemplate() {
     elements: parseSlideElements(masterXml),
   };
 
-  // ===== SLIDE LAYOUT =====
-  console.log('Extracting slide layout...');
-  const layoutXml = await zip.file('ppt/slideLayouts/slideLayout1.xml').async('string');
-  result.slideLayout = {
-    elements: parseSlideElements(layoutXml),
-  };
+  // ===== SLIDE LAYOUTS (all 8) =====
+  console.log('Extracting slide layouts...');
+  result.slideLayouts = [];
+  for (let i = 1; i <= 8; i++) {
+    const layoutFile = zip.file(`ppt/slideLayouts/slideLayout${i}.xml`);
+    if (layoutFile) {
+      const layoutXml = await layoutFile.async('string');
+      result.slideLayouts.push({
+        index: i,
+        elements: parseSlideElements(layoutXml),
+      });
+    }
+  }
 
-  // ===== SLIDES (all 26) =====
-  for (let i = 1; i <= 26; i++) {
-    console.log(`Extracting slide ${i}/26...`);
+  // ===== SLIDES (all 34) =====
+  for (let i = 1; i <= 34; i++) {
+    console.log(`Extracting slide ${i}/34...`);
     const slideXml = await zip.file(`ppt/slides/slide${i}.xml`).async('string');
 
     // Get slide name
@@ -1027,8 +1023,8 @@ async function extractTemplate() {
   }
 
   // ===== CHARTS =====
-  for (let i = 1; i <= 6; i++) {
-    console.log(`Extracting chart ${i}/6...`);
+  for (let i = 1; i <= 15; i++) {
+    console.log(`Extracting chart ${i}/15...`);
     const chartXml = await zip.file(`ppt/charts/chart${i}.xml`).async('string');
     const chart = parseChartXml(chartXml);
     chart.chartIndex = i;
