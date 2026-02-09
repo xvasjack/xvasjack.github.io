@@ -1,9 +1,4 @@
-const {
-  callKimiChat,
-  callKimiAnalysis,
-  callKimiDeepResearch,
-  callGemini,
-} = require('./ai-clients');
+const { callGemini, callGeminiPro, callGeminiResearch } = require('./ai-clients');
 const { generateResearchFramework } = require('./research-framework');
 const {
   policyResearchAgent,
@@ -88,8 +83,13 @@ Return ONLY valid JSON.`;
       content: typeof geminiResult === 'string' ? geminiResult : geminiResult.content || '',
     };
   } catch (e) {
-    console.warn('Gemini failed for gap identification, falling back to Kimi:', e.message);
-    result = await callKimiChat(gapPrompt, '', 4096);
+    console.warn('Gemini failed for gap identification, retrying:', e.message);
+    const retryResult = await callGemini(gapPrompt, {
+      maxTokens: 4096,
+      jsonMode: true,
+      temperature: 0.1,
+    });
+    result = { content: typeof retryResult === 'string' ? retryResult : retryResult.content || '' };
   }
 
   try {
@@ -130,19 +130,19 @@ Return ONLY valid JSON.`;
   }
 }
 
-// Step 2: Execute targeted research to fill gaps using Kimi
+// Step 2: Execute targeted research to fill gaps using Gemini
 async function fillResearchGaps(gaps, country, industry) {
-  console.log(`  [Filling research gaps for ${country} with Kimi...]`);
+  console.log(`  [Filling research gaps for ${country}...]`);
   const additionalData = { gapResearch: [], verificationResearch: [] };
 
-  // Research critical gaps with Kimi
+  // Research critical gaps with Gemini
   const criticalGaps = gaps.criticalGaps || [];
   for (const gap of criticalGaps.slice(0, 4)) {
     // Limit to 4 most critical
     if (!gap.searchQuery) continue;
     console.log(`    Gap search: ${gap.gap.substring(0, 50)}...`);
 
-    const result = await callKimiDeepResearch(gap.searchQuery, country, industry);
+    const result = await callGeminiResearch(gap.searchQuery, country, industry);
     if (result.content) {
       additionalData.gapResearch.push({
         area: gap.area,
@@ -155,14 +155,14 @@ async function fillResearchGaps(gaps, country, industry) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
-  // Verify questionable claims with Kimi
+  // Verify questionable claims with Gemini
   const toVerify = gaps.dataToVerify || [];
   for (const item of toVerify.slice(0, 2)) {
     // Limit to 2 verifications
     if (!item.searchQuery) continue;
     console.log(`    Verify: ${item.claim.substring(0, 50)}...`);
 
-    const result = await callKimiDeepResearch(item.searchQuery, country, industry);
+    const result = await callGeminiResearch(item.searchQuery, country, industry);
     if (result.content) {
       additionalData.verificationResearch.push({
         claim: item.claim,
@@ -371,47 +371,31 @@ function validatePolicySynthesis(result) {
 }
 
 /**
- * Synthesize with fallback chain: Gemini → Kimi → Kimi retry → null
+ * Synthesize with fallback chain: Gemini → Gemini retry (stricter prompt) → null
  */
 async function synthesizeWithFallback(prompt, options = {}) {
   const { maxTokens = 8192, jsonMode = true } = options;
 
-  // Try Gemini first
+  // Try Gemini
   try {
     const result = await callGemini(prompt, { maxTokens, jsonMode, temperature: 0.2 });
     const parsed = parseJsonResponse(result);
     if (parsed) return parsed;
   } catch (geminiErr) {
-    console.warn(`  [Synthesis] Gemini failed: ${geminiErr?.message}, trying Kimi...`);
+    console.warn(`  [Synthesis] Gemini attempt 1 failed: ${geminiErr?.message}`);
   }
 
-  // Try Kimi
+  // Retry Gemini with stricter prompt and lower temperature
   try {
-    const result = await callKimiChat(prompt, '', maxTokens);
-    const parsed = parseJsonResponse(result.content);
-    if (parsed) return parsed;
-  } catch (kimiErr) {
-    console.warn(`  [Synthesis] Kimi failed: ${kimiErr?.message}`);
-  }
-
-  // Final retry with ultra-direct prompt
-  console.warn(
-    `  [Synthesis] Both APIs failed or returned unparseable data. Retrying with direct prompt...`
-  );
-  try {
-    const directPrompt = `${prompt}
-
-CRITICAL: Return ONLY valid JSON. No markdown. No explanation. Just the raw JSON object.
-Return ONLY valid JSON. Use null for missing fields.`;
-
-    const result = await callKimiChat(directPrompt, '', maxTokens);
-    const parsed = parseJsonResponse(result.content);
+    const directPrompt = `${prompt}\n\nCRITICAL: Return ONLY valid JSON. No markdown. No explanation. No trailing text. Just the raw JSON object. Use null for missing fields.`;
+    const result = await callGemini(directPrompt, { maxTokens, jsonMode, temperature: 0.1 });
+    const parsed = parseJsonResponse(result);
     if (parsed) {
-      console.log(`  [Synthesis] Direct prompt retry succeeded`);
+      console.log('  [Synthesis] Gemini retry succeeded');
       return parsed;
     }
   } catch (retryErr) {
-    console.error(`  [Synthesis] Final retry also failed: ${retryErr?.message}`);
+    console.error(`  [Synthesis] Gemini retry also failed: ${retryErr?.message}`);
   }
 
   return null;
@@ -1223,12 +1207,12 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
   try {
     result = await callGemini(prompt, { maxTokens: 12288, temperature: 0.3 });
   } catch (e) {
-    console.warn('Gemini failed for reSynthesize, falling back to Kimi:', e.message);
-    result = await callKimiAnalysis(prompt, '', 12288);
+    console.warn('Gemini failed for reSynthesize, retrying with GeminiPro:', e.message);
+    result = await callGeminiPro(prompt, { maxTokens: 12288, temperature: 0.3 });
   }
 
   try {
-    // Handle both string (Gemini) and object (Kimi) returns
+    // Handle both string and object returns
     const rawText = typeof result === 'string' ? result : result.content || '';
     let jsonStr = rawText.trim();
     if (jsonStr.startsWith('```')) {
@@ -1867,8 +1851,8 @@ Do NOT skip this validation. If you catch yourself returning JSON without checki
   try {
     result = await callGemini(prompt, { maxTokens: 12288, temperature: 0.3, systemPrompt });
   } catch (e) {
-    console.warn('Gemini failed for synthesizeSingleCountry, falling back to Kimi:', e.message);
-    result = await callKimiAnalysis(prompt, systemPrompt, 12000);
+    console.warn('Gemini failed for synthesizeSingleCountry, retrying with GeminiPro:', e.message);
+    result = await callGeminiPro(prompt, { maxTokens: 12000, temperature: 0.3, systemPrompt });
   }
 
   let synthesis;
@@ -1992,8 +1976,8 @@ Focus on COMPARISONS and TRADE-OFFS, not just summaries.`;
   try {
     result = await callGemini(prompt, { maxTokens: 12288, temperature: 0.3, systemPrompt });
   } catch (e) {
-    console.warn('Gemini failed for synthesizeFindings, falling back to Kimi:', e.message);
-    result = await callKimiAnalysis(prompt, systemPrompt, 12000);
+    console.warn('Gemini failed for synthesizeFindings, retrying with GeminiPro:', e.message);
+    result = await callGeminiPro(prompt, { maxTokens: 12000, temperature: 0.3, systemPrompt });
   }
 
   try {
