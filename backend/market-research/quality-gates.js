@@ -268,9 +268,7 @@ function validateSynthesisQuality(synthesis, industry) {
     if (thinPlayers === 0) {
       competitorsScore += 50;
     } else {
-      failures.push(
-        `Competitors: ${thinPlayers} players have descriptions <40 words (need 45-60)`
-      );
+      failures.push(`Competitors: ${thinPlayers} players have descriptions <40 words (need 45-60)`);
     }
 
     // 5B: Validate expected sub-keys exist
@@ -424,7 +422,7 @@ function validateSingleCountrySynthesis(synthesis, industry) {
     // Per-player description check (not average-based)
     let thinPlayers = 0;
     for (const subKey of ['japanesePlayers', 'localMajor', 'foreignPlayers']) {
-      for (const p of (cp[subKey]?.players || [])) {
+      for (const p of cp[subKey]?.players || []) {
         const wc = (p.description || '').trim().split(/\s+/).length;
         if (wc < 40) thinPlayers++;
       }
@@ -473,7 +471,7 @@ function validateSingleCountrySynthesis(synthesis, industry) {
       (i) => i.implication && i.implication.length > 10
     );
 
-    // Completeness: 75% of insights must have both data and implication
+    // Completeness: 85% of insights must have both data and implication
     const complete = structuredInsights.filter(
       (i) => i.data && /\d/.test(String(i.data)) && i.implication && i.implication.length > 10
     );
