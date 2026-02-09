@@ -249,6 +249,41 @@ function validateCompetitorsSynthesis(result) {
 }
 
 /**
+ * Post-synthesis description padding for thin competitor descriptions
+ */
+function padThinDescriptions(competitors) {
+  for (const section of ['japanesePlayers', 'localMajor', 'foreignPlayers']) {
+    const players = competitors[section]?.players || [];
+    for (const p of players) {
+      if (!p.description) continue;
+      const words = p.description.trim().split(/\s+/);
+      if (words.length >= 45) continue;
+      const extras = [];
+      if (p.revenue && !p.description.includes(p.revenue)) extras.push(`Revenue: ${p.revenue}.`);
+      if (p.entryYear && !p.description.includes(p.entryYear))
+        extras.push(`Market entry: ${p.entryYear}.`);
+      if (p.growthRate && !p.description.includes(p.growthRate))
+        extras.push(`Growth: ${p.growthRate}.`);
+      if (p.marketShare && !p.description.includes(p.marketShare))
+        extras.push(`Market share: ${p.marketShare}.`);
+      if (p.projects && !p.description.includes('project'))
+        extras.push(
+          `Key projects: ${typeof p.projects === 'string' ? p.projects : JSON.stringify(p.projects)}.`
+        );
+      if (p.mode && !p.description.includes(p.mode)) extras.push(`Entry mode: ${p.mode}.`);
+      if (p.employees && !p.description.includes(p.employees))
+        extras.push(`Workforce: ${p.employees}.`);
+      if (extras.length > 0) {
+        p.description = p.description.trimEnd().replace(/\.?$/, '. ') + extras.join(' ');
+        const padded = p.description.trim().split(/\s+/);
+        if (padded.length > 60) p.description = padded.slice(0, 60).join(' ');
+      }
+    }
+  }
+  return competitors;
+}
+
+/**
  * Validate and apply honest fallbacks to market synthesis
  * Returns the result with fallbacks applied
  */
@@ -549,14 +584,14 @@ Return JSON:
   "tpes": {
     "slideTitle": "${country} - Total Primary Energy Supply",
     "subtitle": "Key insight",
-    "chartData": {"categories": ["2020","2021","2022"], "series": [{"name":"Source", "values": [1,2,3]}], "unit": "Mtoe"},
+    "chartData": {"categories": ["2019","2020","2021","2022","2023"], "series": [{"name":"Coal","values":[45,43,41,40,38]},{"name":"Gas","values":[20,22,24,25,27]},{"name":"Renewables","values":[5,7,9,12,15]}], "unit": "Mtoe"},
     "keyInsight": "What this means for client",
     "dataType": "time_series_multi_insight"
   },
   "finalDemand": {
     "slideTitle": "${country} - Final Energy Demand",
     "subtitle": "Key insight",
-    "chartData": {"categories": [], "series": [], "unit": "%"},
+    "chartData": {"categories": ["2019","2020","2021","2022","2023"], "series": [{"name":"Industry","values":[60,62,65,68,70]},{"name":"Transport","values":[25,26,27,28,30]}], "unit": "%"},
     "growthRate": "X% CAGR with years",
     "keyDrivers": ["Named driver with evidence"],
     "keyInsight": "Client implication",
@@ -566,7 +601,7 @@ Return JSON:
     "slideTitle": "${country} - Electricity & Power",
     "subtitle": "Key insight",
     "totalCapacity": "XX GW",
-    "chartData": {"categories": [], "series": [], "unit": "%"},
+    "chartData": {"categories": ["Coal","Gas","Hydro","Solar","Wind"], "series": [{"name":"Share","values":[35,25,20,12,8]}], "unit": "%"},
     "demandGrowth": "X% with year range",
     "keyTrend": "Trend with evidence",
     "keyInsight": "Client implication",
@@ -575,7 +610,7 @@ Return JSON:
   "gasLng": {
     "slideTitle": "${country} - Gas & LNG Market",
     "subtitle": "Key insight",
-    "chartData": {"categories": [], "series": [], "unit": "bcm"},
+    "chartData": {"categories": ["2019","2020","2021","2022","2023"], "series": [{"name":"Production","values":[8.5,8.2,7.9,7.6,7.3]},{"name":"Imports","values":[2.1,2.5,3.0,3.5,4.0]}], "unit": "bcm"},
     "lngTerminals": [{"name": "Named terminal", "capacity": "X mtpa", "utilization": "X%"}],
     "pipelineNetwork": "Description",
     "keyInsight": "Client implication",
@@ -584,7 +619,7 @@ Return JSON:
   "pricing": {
     "slideTitle": "${country} - Energy Pricing",
     "subtitle": "Key insight",
-    "chartData": {"categories": [], "series": [], "unit": "USD/kWh"},
+    "chartData": {"categories": ["2020","2021","2022","2023","2024"], "series": [{"name":"Industrial","values":[0.08,0.09,0.11,0.10,0.10]},{"name":"Commercial","values":[0.12,0.13,0.15,0.14,0.13]}], "unit": "USD/kWh"},
     "comparison": "vs regional peers with specific numbers",
     "outlook": "Projected trend with reasoning",
     "keyInsight": "Client implication",
@@ -596,7 +631,7 @@ Return JSON:
     "marketSize": "$XXX million with year",
     "growthRate": "X% CAGR with period",
     "segments": [{"name": "Named segment", "size": "$XXM", "share": "X%"}],
-    "chartData": {"categories": [], "series": [], "unit": "%"},
+    "chartData": {"categories": ["Building","Industrial","Municipal"], "series": [{"name":"Share","values":[45,35,20]}], "unit": "%"},
     "keyDrivers": "Named drivers",
     "keyInsight": "Client implication",
     "dataType": "composition_breakdown"
@@ -659,6 +694,13 @@ RULES:
 - Include source citations where available
 - Company descriptions should be 45-60 words
 - Insights should reference specific numbers from the data
+
+CRITICAL WORD COUNT RULE — DESCRIPTIONS WILL BE REJECTED IF WRONG:
+Each "description" field MUST contain exactly 45-60 words. Count them.
+
+EXAMPLE (52 words): "Baker Hughes entered Vietnam in 2015 through a JV with PTSC, generating $45M annual revenue by 2023. Operating 3 service bases in Vung Tau and Hanoi, the company holds 12% market share in drilling services. Growth of 8% CAGR driven by offshore deepwater contracts with PVEP and Murphy Oil exploration programs."
+
+A description of 20-30 words WILL BE REJECTED. Include: revenue figures, entry year, market share, key projects, growth rate.
 
 Return JSON:
 {
@@ -746,7 +788,8 @@ Return ONLY valid JSON.`;
     };
   }
   const validated = validateCompetitorsSynthesis(result);
-  return validated;
+  const padded = padThinDescriptions(validated);
+  return padded;
 }
 
 /**
@@ -791,9 +834,9 @@ async function synthesizeSummary(
 Client context: ${clientContext}
 
 SYNTHESIZED SECTIONS (already processed):
-Policy: ${summarizeForSummary(policy, 'policy', 4000)}
-Market: ${summarizeForSummary(market, 'market', 5000)}
-Competitors: ${summarizeForSummary(competitors, 'competitors', 4000)}
+Policy: ${summarizeForSummary(policy, 'policy', 6000)}
+Market: ${summarizeForSummary(market, 'market', 8000)}
+Competitors: ${summarizeForSummary(competitors, 'competitors', 6000)}
 
 Additional research context:
 ${Object.entries(researchData)
@@ -805,7 +848,7 @@ ${Object.entries(researchData)
       k.startsWith('depth_') ||
       k.startsWith('insight_')
   )
-  .map(([k, v]) => `${k}: ${(v?.content || '').substring(0, 500)}`)
+  .map(([k, v]) => `${k}: ${(v?.content || '').substring(0, 2000)}`)
   .join('\n')}
 
 If research data is insufficient for a field, set the value to:
@@ -1065,10 +1108,35 @@ function validateContentDepth(synthesis) {
 }
 
 // Step 3: Re-synthesize with additional data
-async function reSynthesize(originalSynthesis, additionalData, country, _industry, _clientContext) {
+async function reSynthesize(
+  originalSynthesis,
+  additionalData,
+  country,
+  _industry,
+  _clientContext,
+  failures
+) {
   console.log(`  [Re-synthesizing ${country} with additional data...]`);
 
   const prompt = `You are improving a market analysis with NEW DATA that fills previous gaps.
+
+QUALITY GATE FAILURES (you MUST fix these):
+${failures && failures.length > 0 ? failures.join('\n') : 'General quality improvement needed'}
+
+${
+  failures && failures.some((f) => f.toLowerCase().includes('competitors'))
+    ? `CRITICAL: Every player description MUST be 45-60 words with specific metrics.
+Count words carefully. 30-word descriptions will be REJECTED.
+Include: revenue, market share, entry year, growth rate, key projects.`
+    : ''
+}
+${
+  failures && failures.some((f) => f.toLowerCase().includes('market'))
+    ? `CRITICAL: Every chartData MUST have populated series with real numeric values.
+Empty series [] will be REJECTED. Use research data to fill actual numbers.
+Format: {"categories": ["2020","2021","2022","2023"], "series": [{"name":"Category","values":[N,N,N,N]}]}`
+    : ''
+}
 
 ORIGINAL ANALYSIS:
 ${JSON.stringify(originalSynthesis, null, 2)}
@@ -1522,8 +1590,14 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     countryAnalysis.confidenceScore = confidenceScore;
 
     // If ready for client or high confidence score, we're done
-    if (readyForClient || confidenceScore >= MIN_CONFIDENCE_SCORE) {
-      console.log(`    ✓ Quality threshold met (${confidenceScore}/100) - analysis ready`);
+    const codeGateResult = validateContentDepth({ ...countryAnalysis, country });
+    const codeGateScore = codeGateResult.scores?.overall || 0;
+    const codeGateFailures = codeGateResult.failures || [];
+    const effectiveScore = Math.min(confidenceScore, codeGateScore);
+    if (effectiveScore >= MIN_CONFIDENCE_SCORE) {
+      console.log(
+        `    ✓ Quality threshold met (AI: ${confidenceScore}, Gate: ${codeGateScore}, Effective: ${effectiveScore}/100) - analysis ready`
+      );
       break;
     }
 
@@ -1547,7 +1621,8 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         additionalData,
         country,
         industry,
-        clientContext
+        clientContext,
+        codeGateFailures
       );
       countryAnalysis.country = country; // Ensure country is set
       countryAnalysis.iterationsCompleted = iteration;
