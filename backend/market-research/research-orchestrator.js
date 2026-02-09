@@ -8,6 +8,7 @@ const {
   depthResearchAgent,
   insightsResearchAgent,
   universalResearchAgent,
+  extractJsonFromContent,
 } = require('./research-agents');
 
 // ============ ITERATIVE RESEARCH SYSTEM WITH CONFIDENCE SCORING ============
@@ -197,6 +198,82 @@ function parseJsonResponse(text) {
 }
 
 /**
+ * Detect if JSON text was truncated (unbalanced brackets, unterminated strings)
+ */
+function isJsonTruncated(text) {
+  if (!text || typeof text !== 'string') return false;
+  const trimmed = text.trim();
+  if (!trimmed.startsWith('{') && !trimmed.startsWith('[')) return false;
+
+  let braces = 0,
+    brackets = 0,
+    inString = false;
+  for (let i = 0; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (ch === '\\' && inString) {
+      i++;
+      continue;
+    }
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) continue;
+    if (ch === '{') braces++;
+    else if (ch === '}') braces--;
+    else if (ch === '[') brackets++;
+    else if (ch === ']') brackets--;
+  }
+  // Truncated if: unbalanced, ends mid-string, or trailing comma/colon
+  return inString || braces > 0 || brackets > 0 || /[,:\s]+$/.test(trimmed);
+}
+
+/**
+ * Attempt to repair truncated JSON by closing open structures
+ */
+function repairTruncatedJson(text) {
+  if (!text || typeof text !== 'string') return text;
+  let repaired = text.trim();
+
+  // Remove trailing comma
+  repaired = repaired.replace(/,\s*$/, '');
+  // Remove incomplete key-value (e.g. "key": or "key":  )
+  repaired = repaired.replace(/,?\s*"[^"]*"\s*:\s*$/, '');
+  // Close unterminated string
+  let inStr = false;
+  for (let i = 0; i < repaired.length; i++) {
+    if (repaired[i] === '\\' && inStr) {
+      i++;
+      continue;
+    }
+    if (repaired[i] === '"') inStr = !inStr;
+  }
+  if (inStr) repaired += '"';
+
+  // Close open brackets/braces
+  const stack = [];
+  inStr = false;
+  for (let i = 0; i < repaired.length; i++) {
+    if (repaired[i] === '\\' && inStr) {
+      i++;
+      continue;
+    }
+    if (repaired[i] === '"') {
+      inStr = !inStr;
+      continue;
+    }
+    if (inStr) continue;
+    if (repaired[i] === '{') stack.push('}');
+    else if (repaired[i] === '[') stack.push(']');
+    else if (repaired[i] === '}' || repaired[i] === ']') stack.pop();
+  }
+  // Remove trailing comma before closing
+  repaired = repaired.replace(/,\s*$/, '');
+  while (stack.length > 0) repaired += stack.pop();
+  return repaired;
+}
+
+/**
  * Honest fallback for missing company website - Google search link
  */
 function ensureHonestWebsite(company) {
@@ -371,31 +448,124 @@ function validatePolicySynthesis(result) {
 }
 
 /**
- * Synthesize with fallback chain: Gemini → Gemini retry (stricter prompt) → null
+ * Synthesize with 5-tier fallback chain:
+ * 1. Gemini jsonMode → 2. Truncation repair → 3. Gemini no-jsonMode + boosted tokens
+ * → 4. GeminiPro jsonMode → 5. GeminiPro no-jsonMode
  */
 async function synthesizeWithFallback(prompt, options = {}) {
   const { maxTokens = 8192, jsonMode = true } = options;
+  const strictSuffix =
+    '\n\nCRITICAL: Return ONLY valid JSON. No markdown. No explanation. No trailing text. Just the raw JSON object. Use null for missing fields.';
 
-  // Try Gemini
+  // Tier 1: callGemini jsonMode (fast path)
   try {
     const result = await callGemini(prompt, { maxTokens, jsonMode, temperature: 0.2 });
-    const parsed = parseJsonResponse(result);
-    if (parsed) return parsed;
+    const text = typeof result === 'string' ? result : result?.content || '';
+    try {
+      const parsed = parseJsonResponse(text);
+      if (parsed) {
+        console.log('  [Synthesis] Tier 1 (Gemini jsonMode) succeeded');
+        return parsed;
+      }
+    } catch (parseErr) {
+      // Tier 2: Truncation repair on raw text
+      console.warn(`  [Synthesis] Tier 1 parse failed: ${parseErr?.message}`);
+      if (text && isJsonTruncated(text)) {
+        console.log('  [Synthesis] Tier 2: Detected truncation, attempting repair...');
+        try {
+          const repaired = repairTruncatedJson(text);
+          const extractResult = extractJsonFromContent(repaired);
+          if (extractResult.status === 'success' && extractResult.data) {
+            console.log('  [Synthesis] Tier 2 (truncation repair) succeeded');
+            return extractResult.data;
+          }
+        } catch (repairErr) {
+          console.warn(`  [Synthesis] Tier 2 repair failed: ${repairErr?.message}`);
+        }
+      }
+      // Also try multi-strategy extraction on raw text
+      const extractResult = extractJsonFromContent(text);
+      if (extractResult.status === 'success' && extractResult.data) {
+        console.log('  [Synthesis] Tier 2 (extract from raw) succeeded');
+        return extractResult.data;
+      }
+    }
   } catch (geminiErr) {
-    console.warn(`  [Synthesis] Gemini attempt 1 failed: ${geminiErr?.message}`);
+    console.warn(`  [Synthesis] Tier 1 Gemini call failed: ${geminiErr?.message}`);
   }
 
-  // Retry Gemini with stricter prompt and lower temperature
+  // Tier 3: callGemini NO jsonMode + boosted tokens (let model finish naturally)
   try {
-    const directPrompt = `${prompt}\n\nCRITICAL: Return ONLY valid JSON. No markdown. No explanation. No trailing text. Just the raw JSON object. Use null for missing fields.`;
-    const result = await callGemini(directPrompt, { maxTokens, jsonMode, temperature: 0.1 });
-    const parsed = parseJsonResponse(result);
-    if (parsed) {
-      console.log('  [Synthesis] Gemini retry succeeded');
-      return parsed;
+    const boostedTokens = Math.min(Math.round(maxTokens * 1.5), 32768);
+    const result = await callGemini(prompt + strictSuffix, {
+      maxTokens: boostedTokens,
+      jsonMode: false,
+      temperature: 0.1,
+    });
+    const text = typeof result === 'string' ? result : result?.content || '';
+    const extractResult = extractJsonFromContent(text);
+    if (extractResult.status === 'success' && extractResult.data) {
+      console.log('  [Synthesis] Tier 3 (Gemini no-jsonMode, boosted tokens) succeeded');
+      return extractResult.data;
     }
-  } catch (retryErr) {
-    console.error(`  [Synthesis] Gemini retry also failed: ${retryErr?.message}`);
+    if (text && isJsonTruncated(text)) {
+      const repaired = repairTruncatedJson(text);
+      const repairResult = extractJsonFromContent(repaired);
+      if (repairResult.status === 'success' && repairResult.data) {
+        console.log('  [Synthesis] Tier 3 (repaired) succeeded');
+        return repairResult.data;
+      }
+    }
+  } catch (err3) {
+    console.warn(`  [Synthesis] Tier 3 failed: ${err3?.message}`);
+  }
+
+  // Tier 4: callGeminiPro jsonMode (stronger model)
+  try {
+    const result = await callGeminiPro(prompt, { maxTokens, jsonMode, temperature: 0.2 });
+    const text = typeof result === 'string' ? result : result?.content || '';
+    try {
+      const parsed = parseJsonResponse(text);
+      if (parsed) {
+        console.log('  [Synthesis] Tier 4 (GeminiPro jsonMode) succeeded');
+        return parsed;
+      }
+    } catch (parseErr4) {
+      console.warn(`  [Synthesis] Tier 4 parse failed: ${parseErr4?.message}`);
+      const extractResult = extractJsonFromContent(text);
+      if (extractResult.status === 'success' && extractResult.data) {
+        console.log('  [Synthesis] Tier 4 (extract) succeeded');
+        return extractResult.data;
+      }
+    }
+  } catch (err4) {
+    console.warn(`  [Synthesis] Tier 4 failed: ${err4?.message}`);
+  }
+
+  // Tier 5: callGeminiPro NO jsonMode (last resort, highest capability)
+  try {
+    const boostedTokens = Math.min(Math.round(maxTokens * 1.5), 32768);
+    const result = await callGeminiPro(prompt + strictSuffix, {
+      maxTokens: boostedTokens,
+      jsonMode: false,
+      temperature: 0.1,
+    });
+    const text = typeof result === 'string' ? result : result?.content || '';
+    const extractResult = extractJsonFromContent(text);
+    if (extractResult.status === 'success' && extractResult.data) {
+      console.log('  [Synthesis] Tier 5 (GeminiPro no-jsonMode) succeeded');
+      return extractResult.data;
+    }
+    if (text && isJsonTruncated(text)) {
+      const repaired = repairTruncatedJson(text);
+      const repairResult = extractJsonFromContent(repaired);
+      if (repairResult.status === 'success' && repairResult.data) {
+        console.log('  [Synthesis] Tier 5 (GeminiPro repaired) succeeded');
+        return repairResult.data;
+      }
+    }
+  } catch (err5) {
+    console.error(`  [Synthesis] Tier 5 (final) failed: ${err5?.message}`);
   }
 
   return null;
@@ -508,7 +678,7 @@ Return JSON:
 
 Return ONLY valid JSON.`;
 
-  const result = await synthesizeWithFallback(prompt);
+  const result = await synthesizeWithFallback(prompt, { maxTokens: 10240 });
   if (!result) {
     console.error('  [synthesizePolicy] Synthesis completely failed — no data returned');
     return { _synthesisError: true, section: 'policy', message: 'All synthesis attempts failed' };
@@ -624,7 +794,7 @@ Return JSON:
 
 Return ONLY valid JSON.`;
 
-  const result = await synthesizeWithFallback(prompt, { maxTokens: 12288 });
+  const result = await synthesizeWithFallback(prompt, { maxTokens: 16384 });
   if (!result) {
     console.error('  [synthesizeMarket] Synthesis completely failed — no data returned');
     return { _synthesisError: true, section: 'market', message: 'All synthesis attempts failed' };
@@ -784,10 +954,10 @@ Return JSON with ONLY the caseStudy and maActivity sections:
 
   console.log('    [Competitors] Running 4 parallel synthesis calls...');
   const [r1, r2, r3, r4] = await Promise.all([
-    synthesizeWithFallback(prompt1, { maxTokens: 4096 }),
-    synthesizeWithFallback(prompt2, { maxTokens: 4096 }),
-    synthesizeWithFallback(prompt3, { maxTokens: 4096 }),
-    synthesizeWithFallback(prompt4, { maxTokens: 4096 }),
+    synthesizeWithFallback(prompt1, { maxTokens: 8192 }),
+    synthesizeWithFallback(prompt2, { maxTokens: 8192 }),
+    synthesizeWithFallback(prompt3, { maxTokens: 8192 }),
+    synthesizeWithFallback(prompt4, { maxTokens: 8192 }),
   ]);
 
   const merged = {};
