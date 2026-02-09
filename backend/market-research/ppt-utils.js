@@ -501,7 +501,7 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
 function addCalloutBox(slide, title, content, options = {}) {
   const boxX = options.x || 0.4; // LEFT_MARGIN for widescreen
   const boxY = options.y || 5.3;
-  const boxW = options.w || 12.5; // CONTENT_WIDTH for widescreen
+  const boxW = options.w || 12.6; // CONTENT_WIDTH for widescreen
   const boxH = options.h || 1.2;
   const boxType = options.type || 'insight'; // insight, warning, recommendation
   const FONT = 'Segoe UI';
@@ -580,7 +580,7 @@ function addInsightsPanel(slide, insights = [], options = {}) {
       {
         x: options.x || 8.5,
         y:
-          (options.y || 1.5) +
+          (options.y || 1.3) +
           2 * (Math.min((options.h || 4.0) / Math.min(insights.length, 3), 1.5) + 0.1),
         w: options.w || 4.4,
         h: Math.min((options.h || 4.0) / Math.min(insights.length, 3), 1.5),
@@ -724,7 +724,22 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
     },
   }));
 
-  const bulletH = Math.min(4.5, Math.max(0.6, Math.max(oppBullets.length, 1) * 0.4 + 0.2));
+  const obsBullets = (obstacles || []).slice(0, 4).map((obs) => ({
+    text: truncate(String(obs), 150),
+    options: {
+      fontSize: 10,
+      color: '333333',
+      fontFace: FONT,
+      bullet: { type: 'bullet', code: '26A0', color: COLORS.orange },
+      paraSpaceBefore: 6,
+      paraSpaceAfter: 3,
+    },
+  }));
+
+  const bulletH = Math.min(
+    4.5,
+    Math.max(0.6, Math.max(oppBullets.length, obsBullets.length, 1) * 0.4 + 0.2)
+  );
   if (oppBullets.length > 0) {
     slide.addText(oppBullets, {
       x: LEFT_MARGIN,
@@ -751,18 +766,6 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
     margin: [0, 8, 0, 8],
     fill: { color: COLORS.orange },
   });
-
-  const obsBullets = (obstacles || []).slice(0, 4).map((obs) => ({
-    text: truncate(String(obs), 150),
-    options: {
-      fontSize: 10,
-      color: '333333',
-      fontFace: FONT,
-      bullet: { type: 'bullet', code: '26A0', color: COLORS.orange },
-      paraSpaceBefore: 6,
-      paraSpaceAfter: 3,
-    },
-  }));
 
   if (obsBullets.length > 0) {
     slide.addText(obsBullets, {
@@ -937,7 +940,7 @@ function addStackedBarChart(slide, title, data, options = {}) {
   const pptxChartData = chartData.series.map((s, idx) => ({
     name: s.name,
     labels: chartData.categories,
-    values: s.values,
+    values: (s.values || []).map((v) => (typeof v === 'number' && isFinite(v) ? v : 0)),
     color: CHART_COLORS[idx % CHART_COLORS.length],
   }));
 
@@ -1048,7 +1051,7 @@ function addLineChart(slide, title, data, options = {}) {
   const pptxChartData = chartData.series.map((s, idx) => ({
     name: s.name,
     labels: chartData.categories,
-    values: s.values,
+    values: (s.values || []).map((v) => (typeof v === 'number' && isFinite(v) ? v : 0)),
     color: CHART_COLORS[idx % CHART_COLORS.length],
   }));
 
@@ -1126,7 +1129,7 @@ function addBarChart(slide, title, data, options = {}) {
     {
       name: data.name || 'Value',
       labels: data.categories,
-      values: data.values,
+      values: (data.values || []).map((v) => (typeof v === 'number' && isFinite(v) ? v : 0)),
       color: CHART_COLORS[0],
     },
   ];
@@ -1204,7 +1207,7 @@ function addPieChart(slide, title, data, options = {}) {
     {
       name: data.name || 'Share',
       labels: data.categories,
-      values: data.values,
+      values: (data.values || []).map((v) => (typeof v === 'number' && isFinite(v) ? v : 0)),
     },
   ];
 
@@ -1811,7 +1814,7 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
         options: {
           fontSize: 16,
           fontFace: FONT,
-          color: '000000',
+          color: '333333',
           bold: isActive,
           fill: { color: isActive ? '007FFF' : 'FFFFFF' },
           border: { pt: 0.5, color: 'CCCCCC' },
@@ -1825,7 +1828,7 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
     x: 0.376,
     y: 1.5,
     w: 12.586,
-    rowH: 1.05,
+    rowH: 0.9,
     border: { pt: 0.5, color: 'CCCCCC' },
   });
 
@@ -1978,7 +1981,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       options: {
         fontSize: 11,
         fill: { color: 'FFFFFF' },
-        color: '000000',
+        color: '333333',
         align: 'center',
         fontFace: font,
       },
@@ -1998,7 +2001,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       options: {
         fontSize: 11,
         fill: { color: 'FFFFFF' },
-        color: '000000',
+        color: '333333',
         align: 'center',
         fontFace: font,
       },
@@ -2009,7 +2012,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
         bold: true,
         fontSize: 11,
         fill: { color: '8EC1FF' },
-        color: '000000',
+        color: '333333',
         fontFace: font,
       },
     },
@@ -2021,35 +2024,35 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       options: {
         fontSize: 11,
         fontFace: font,
-        color: '000000',
+        color: '333333',
         bold: true,
         fill: { color: 'CCCCCC' },
       },
     },
     {
       text: ensureString(row.currentState || ''),
-      options: { fontSize: 11, fontFace: font, color: '000000' },
+      options: { fontSize: 11, fontFace: font, color: '333333' },
     },
     {
       text: '\u2192',
-      options: { fontSize: 11, align: 'center', color: '000000', fontFace: font },
+      options: { fontSize: 11, align: 'center', color: '333333', fontFace: font },
     },
     {
       text: ensureString(row.transition || ''),
-      options: { fontSize: 11, fontFace: font, color: '000000' },
+      options: { fontSize: 11, fontFace: font, color: '333333' },
     },
     {
       text: '\u2192',
-      options: { fontSize: 11, align: 'center', color: '000000', fontFace: font },
+      options: { fontSize: 11, align: 'center', color: '333333', fontFace: font },
     },
     {
       text: ensureString(row.futureState || ''),
-      options: { fontSize: 11, fontFace: font, color: '000000' },
+      options: { fontSize: 11, fontFace: font, color: '333333' },
     },
   ]);
 
   const maxRows = Math.min(dataRows.length, 3);
-  const rowH = Math.min(1.6, (6.65 - 1.3 - 0.5) / maxRows);
+  const rowH = Math.min(1.6, (6.65 - 1.3 - 0.5) / (maxRows + 1));
 
   slide.addTable([headerRow, ...dataRows], {
     x,

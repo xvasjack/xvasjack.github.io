@@ -123,10 +123,16 @@ Return ONLY valid JSON.`;
     console.error('  Failed to parse gaps:', error?.message);
     return {
       sectionScores: {},
-      overallScore: 40,
-      criticalGaps: [],
+      overallScore: 30,
+      criticalGaps: [
+        {
+          area: 'general',
+          description: 'Research quality could not be assessed',
+          severity: 'medium',
+        },
+      ],
       dataToVerify: [],
-      confidenceAssessment: { overall: 'low', numericConfidence: 40, readyForClient: false },
+      confidenceAssessment: { overall: 'low', numericConfidence: 30, readyForClient: false },
     };
   }
 }
@@ -326,49 +332,16 @@ function validateCompetitorsSynthesis(result) {
 }
 
 /**
- * Post-synthesis description padding for thin competitor descriptions
- */
-function padThinDescriptions(competitors) {
-  for (const section of ['japanesePlayers', 'localMajor', 'foreignPlayers']) {
-    const players = competitors[section]?.players || [];
-    for (const p of players) {
-      if (!p.description) continue;
-      const words = p.description.trim().split(/\s+/);
-      if (words.length >= 45) continue;
-      const extras = [];
-      if (p.revenue && !p.description.includes(p.revenue)) extras.push(`Revenue: ${p.revenue}.`);
-      if (p.entryYear && !p.description.includes(p.entryYear))
-        extras.push(`Market entry: ${p.entryYear}.`);
-      if (p.growthRate && !p.description.includes(p.growthRate))
-        extras.push(`Growth: ${p.growthRate}.`);
-      if (p.marketShare && !p.description.includes(p.marketShare))
-        extras.push(`Market share: ${p.marketShare}.`);
-      if (p.projects && !p.description.includes('project'))
-        extras.push(
-          `Key projects: ${typeof p.projects === 'string' ? p.projects : JSON.stringify(p.projects)}.`
-        );
-      if (p.mode && !p.description.includes(p.mode)) extras.push(`Entry mode: ${p.mode}.`);
-      if (p.employees && !p.description.includes(p.employees))
-        extras.push(`Workforce: ${p.employees}.`);
-      if (extras.length > 0) {
-        p.description = p.description.trimEnd().replace(/\.?$/, '. ') + extras.join(' ');
-        const padded = p.description.trim().split(/\s+/);
-        if (padded.length > 60) p.description = padded.slice(0, 60).join(' ');
-      }
-    }
-  }
-  return competitors;
-}
-
-/**
  * Validate and apply honest fallbacks to market synthesis
  * Returns the result with fallbacks applied
  */
 function validateMarketSynthesis(result) {
   if (!result) return result;
 
-  // Check for required chart data
-  const sections = ['tpes', 'finalDemand', 'electricity', 'gasLng', 'pricing', 'escoMarket'];
+  // Dynamically discover sections (supports both legacy energy keys and dynamic section_N keys)
+  const sections = Object.keys(result).filter(
+    (k) => !k.startsWith('_') && typeof result[k] === 'object' && result[k] !== null
+  );
   let chartCount = 0;
 
   for (const section of sections) {
@@ -390,7 +363,7 @@ function validateMarketSynthesis(result) {
         for (const [key, data] of Object.entries(chartData)) {
           if (key === 'series' || key === 'categories' || key === 'unit') continue;
           if (data && typeof data === 'object') {
-            for (const [cat, val] of Object.entries(data)) {
+            for (const [cat] of Object.entries(data)) {
               catSet.add(cat);
             }
             series.push({ name: key, values: Object.values(data).map(Number) });
@@ -413,14 +386,6 @@ function validateMarketSynthesis(result) {
 
   if (chartCount < 2) {
     console.log(`  [Synthesis] Market warning: only ${chartCount} sections have valid chart data`);
-  }
-
-  // Check ESCO market specifics
-  if (!result.escoMarket?.marketSize) {
-    console.log(`  [Synthesis] Market warning: ESCO market size not available`);
-    if (result.escoMarket) {
-      result.escoMarket.marketSize = 'Data not available';
-    }
   }
 
   return result;
@@ -702,6 +667,32 @@ async function synthesizeMarket(researchData, country, industry, clientContext) 
     `    [Market] Filtered research data: ${Object.keys(filteredData).length} topics (${dataAvailable ? Object.keys(filteredData).slice(0, 3).join(', ') : 'NONE'})`
   );
 
+  // Extract dynamic sub-section names from research data keys
+  // e.g. "market_0_market_size_&_growth" → "Market Size & Growth"
+  const marketTopicNames = Object.keys(filteredData).map((k) => {
+    const withoutPrefix = k.replace(/^market_\d+_/, '');
+    return withoutPrefix
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase())
+      .replace(/ & /g, ' & ');
+  });
+  const uniqueTopics = [...new Set(marketTopicNames)].slice(0, 6);
+  console.log(`    [Market] Dynamic topics: ${uniqueTopics.join(', ')}`);
+
+  // Build dynamic schema from research topic names
+  const sectionSchemas = uniqueTopics.map((topic, i) => {
+    const key = `section_${i}`;
+    return `  "${key}": {
+    "slideTitle": "${country} - ${topic}",
+    "subtitle": "Key insight from research data",
+    "overview": "2-3 sentence overview of this topic based on research data",
+    "keyMetrics": [{"metric": "Named metric", "value": "Specific value from data", "context": "Why this matters"}],
+    "chartData": null,
+    "keyInsight": "What this means for client",
+    "dataType": "time_series_multi_insight"
+  }`;
+  });
+
   const labeledData = markDataQuality(filteredData);
   const researchContext = dataAvailable
     ? `RESEARCH DATA (use this as primary source — items prefixed [ESTIMATED] or [UNVERIFIED] are uncertain, hedge accordingly):
@@ -723,7 +714,6 @@ The quality gate will handle missing data appropriately.
 ANTI-PADDING RULE:
 - Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
 - If you cannot find ${industry}-specific data for a field, use the null/empty value — do NOT fill it with country-level macro data
-- Example: If asked for "ESCO market size" and you only know "Thailand GDP is $500B" — return null, not the GDP figure
 - Macro data is ONLY acceptable in contextual/background fields explicitly labeled as such
 
 RULES:
@@ -731,65 +721,11 @@ RULES:
 - Use null for any missing fields
 - Include source citations where available
 - Insights should reference specific numbers from the data
-- chartData MUST use series/categories format: {"series": [{"name": "Category", "values": [1, 2, 3]}], "categories": ["2020", "2021", "2022"]}
+- If specific yearly data is available in the research, provide chartData with series/categories format: {"series": [{"name": "Category", "values": [1, 2, 3]}], "categories": ["2020", "2021", "2022"]}. If not, set chartData to null. Do NOT fabricate time series from training knowledge.
 
 Return JSON:
 {
-  "tpes": {
-    "slideTitle": "${country} - Total Primary Energy Supply",
-    "subtitle": "Key insight",
-    "chartData": {"categories": ["2019","2020","2021","2022","2023"], "series": [{"name":"Coal","values":[45,43,41,40,38]},{"name":"Gas","values":[20,22,24,25,27]},{"name":"Renewables","values":[5,7,9,12,15]}], "unit": "Mtoe"},
-    "keyInsight": "What this means for client",
-    "dataType": "time_series_multi_insight"
-  },
-  "finalDemand": {
-    "slideTitle": "${country} - Final Energy Demand",
-    "subtitle": "Key insight",
-    "chartData": {"categories": ["2019","2020","2021","2022","2023"], "series": [{"name":"Industry","values":[60,62,65,68,70]},{"name":"Transport","values":[25,26,27,28,30]}], "unit": "%"},
-    "growthRate": "X% CAGR with years",
-    "keyDrivers": ["Named driver with evidence"],
-    "keyInsight": "Client implication",
-    "dataType": "time_series_multi_insight"
-  },
-  "electricity": {
-    "slideTitle": "${country} - Electricity & Power",
-    "subtitle": "Key insight",
-    "totalCapacity": "XX GW",
-    "chartData": {"categories": ["Coal","Gas","Hydro","Solar","Wind"], "series": [{"name":"Share","values":[35,25,20,12,8]}], "unit": "%"},
-    "demandGrowth": "X% with year range",
-    "keyTrend": "Trend with evidence",
-    "keyInsight": "Client implication",
-    "dataType": "composition_breakdown"
-  },
-  "gasLng": {
-    "slideTitle": "${country} - Gas & LNG Market",
-    "subtitle": "Key insight",
-    "chartData": {"categories": ["2019","2020","2021","2022","2023"], "series": [{"name":"Production","values":[8.5,8.2,7.9,7.6,7.3]},{"name":"Imports","values":[2.1,2.5,3.0,3.5,4.0]}], "unit": "bcm"},
-    "lngTerminals": [{"name": "Named terminal", "capacity": "X mtpa", "utilization": "X%"}],
-    "pipelineNetwork": "Description",
-    "keyInsight": "Client implication",
-    "dataType": "time_series_annotated"
-  },
-  "pricing": {
-    "slideTitle": "${country} - Energy Pricing",
-    "subtitle": "Key insight",
-    "chartData": {"categories": ["2020","2021","2022","2023","2024"], "series": [{"name":"Industrial","values":[0.08,0.09,0.11,0.10,0.10]},{"name":"Commercial","values":[0.12,0.13,0.15,0.14,0.13]}], "unit": "USD/kWh"},
-    "comparison": "vs regional peers with specific numbers",
-    "outlook": "Projected trend with reasoning",
-    "keyInsight": "Client implication",
-    "dataType": "two_related_series"
-  },
-  "escoMarket": {
-    "slideTitle": "${country} - ESCO/${industry} Market",
-    "subtitle": "Key insight",
-    "marketSize": "$XXX million with year",
-    "growthRate": "X% CAGR with period",
-    "segments": [{"name": "Named segment", "size": "$XXM", "share": "X%"}],
-    "chartData": {"categories": ["Building","Industrial","Municipal"], "series": [{"name":"Share","values":[45,35,20]}], "unit": "%"},
-    "keyDrivers": "Named drivers",
-    "keyInsight": "Client implication",
-    "dataType": "composition_breakdown"
-  }
+${sectionSchemas.join(',\n')}
 }
 
 Return ONLY valid JSON.`;
@@ -978,8 +914,7 @@ Return JSON with ONLY the caseStudy and maActivity sections:
     `    [Competitors] Merged ${Object.keys(merged).length} sections: ${Object.keys(merged).join(', ')}`
   );
   const validated = validateCompetitorsSynthesis(merged);
-  const padded = padThinDescriptions(validated);
-  return padded;
+  return validated;
 }
 
 /**
@@ -1003,7 +938,14 @@ function summarizeForSummary(synthesis, section, maxChars) {
       }
     } else brief[key] = val;
   }
-  return JSON.stringify(brief).slice(0, maxChars);
+  const sliced = JSON.stringify(brief).slice(0, maxChars);
+  // Repair truncated JSON from slicing
+  try {
+    JSON.parse(sliced);
+    return sliced;
+  } catch (_e) {
+    return repairTruncatedJson(sliced);
+  }
 }
 
 /**
@@ -1032,7 +974,6 @@ Additional research context:
 ${Object.entries(researchData)
   .filter(
     ([k]) =>
-      k.startsWith('macro_') ||
       k.startsWith('opportunities_') ||
       k.startsWith('risks_') ||
       k.startsWith('depth_') ||
@@ -1172,10 +1113,13 @@ function validateContentDepth(synthesis) {
   if (targets.length >= 2) scores.policy += 30;
   if (policy.investmentRestrictions?.incentives?.length >= 1) scores.policy += 30;
 
-  // Market check: ≥3 data series with ≥5 points
+  // Market check: ≥3 data series with ≥3 points (dynamic section discovery)
   const market = synthesis.market || {};
+  const marketSections = Object.keys(market).filter(
+    (k) => !k.startsWith('_') && typeof market[k] === 'object' && market[k] !== null
+  );
   let seriesCount = 0;
-  for (const section of ['tpes', 'finalDemand', 'electricity', 'gasLng', 'pricing', 'escoMarket']) {
+  for (const section of marketSections) {
     const chartData = market[section]?.chartData;
     if (chartData) {
       if (chartData.series && Array.isArray(chartData.series)) {
@@ -1195,7 +1139,9 @@ function validateContentDepth(synthesis) {
   if (seriesCount >= 3) scores.market = 70;
   else if (seriesCount >= 1) scores.market = 40;
   else failures.push(`Market: only ${seriesCount} valid data series (need ≥3)`);
-  if (market.escoMarket?.marketSize) scores.market += 30;
+  // Bonus points if any section has market size data
+  const hasMarketSize = marketSections.some((s) => market[s]?.marketSize);
+  if (hasMarketSize) scores.market += 30;
 
   // Competitors check: ≥3 companies with details AND word count validation (45-60 words)
   const competitors = synthesis.competitors || {};
@@ -1369,16 +1315,16 @@ Additional requirements:
 - Every number should now have context (year, source type, comparison)
 - Every company mentioned should have specifics (size, market position)
 - Every regulation should have enforcement reality
-- Mark anything still uncertain as "estimated" or "industry sources suggest"
+- For uncertain data, use null rather than hedging language like "estimated" or "industry sources suggest"
 
 Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
 
   let result;
   try {
-    result = await callGemini(prompt, { maxTokens: 12288, temperature: 0.3 });
+    result = await callGemini(prompt, { maxTokens: 16384, temperature: 0.3 });
   } catch (e) {
     console.warn('Gemini failed for reSynthesize, retrying with GeminiPro:', e.message);
-    result = await callGeminiPro(prompt, { maxTokens: 12288, temperature: 0.3 });
+    result = await callGeminiPro(prompt, { maxTokens: 16384, temperature: 0.3 });
   }
 
   try {
@@ -1391,7 +1337,18 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
         .replace(/```/g, '')
         .trim();
     }
-    const newSynthesis = JSON.parse(jsonStr);
+    let newSynthesis;
+    try {
+      newSynthesis = JSON.parse(jsonStr);
+    } catch (parseErr) {
+      // Attempt truncation repair before giving up
+      console.warn(
+        `  [reSynthesize] JSON parse failed, attempting truncation repair: ${parseErr?.message}`
+      );
+      const repaired = repairTruncatedJson(jsonStr);
+      newSynthesis = JSON.parse(repaired);
+      console.log('  [reSynthesize] Truncation repair succeeded');
+    }
 
     // Validate structure preservation - check for key fields
     const hasPolicy = newSynthesis.policy && typeof newSynthesis.policy === 'object';
@@ -1399,11 +1356,20 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
     const hasCompetitors = newSynthesis.competitors && typeof newSynthesis.competitors === 'object';
 
     if (!hasPolicy || !hasMarket || !hasCompetitors) {
-      console.warn('  [reSynthesize] Structure mismatch detected - falling back to original');
+      console.warn(
+        '  [reSynthesize] Structure mismatch detected - merging available sections into original'
+      );
       console.warn(
         `    Missing: ${!hasPolicy ? 'policy ' : ''}${!hasMarket ? 'market ' : ''}${!hasCompetitors ? 'competitors' : ''}`
       );
-      // Preserve country field from original
+      // Merge available improved sections into original instead of discarding all
+      if (hasPolicy) originalSynthesis.policy = newSynthesis.policy;
+      if (hasMarket) originalSynthesis.market = newSynthesis.market;
+      if (hasCompetitors) originalSynthesis.competitors = newSynthesis.competitors;
+      if (newSynthesis.depth && typeof newSynthesis.depth === 'object')
+        originalSynthesis.depth = newSynthesis.depth;
+      if (newSynthesis.summary && typeof newSynthesis.summary === 'object')
+        originalSynthesis.summary = newSynthesis.summary;
       originalSynthesis.country = country;
       return originalSynthesis;
     }
@@ -1901,7 +1867,7 @@ Every claim needs evidence:
 - DATES: When laws took effect, when incentives expire, when competitors entered
 - SOURCES: If claiming a specific number, it should be traceable
 
-If you don't have specific data, say "estimated" or "industry sources suggest" - don't invent precision.
+If you don't have specific data, return null or empty string. Do NOT use hedging language like 'estimated' or 'industry sources suggest' — the quality gate treats hedged fabrication the same as fabrication.
 
 === ANTI-PADDING RULE ===
 - Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
@@ -1912,12 +1878,15 @@ If you don't have specific data, say "estimated" or "industry sources suggest" -
 === ANTI-PADDING VALIDATION ===
 VALIDATION: Before returning, count how many times you used GDP, population, or inflation data. If more than 2 mentions in industry-specific sections (market, competitors, depth), you are padding. Remove those and replace with industry-specific data or null.`;
 
+  // Strip rawData to save ~200K chars of prompt space
+  const { rawData: _rawData, ...countryDataForPrompt } = countryAnalysis;
+
   const prompt = `Client: ${scope.clientContext}
 Industry: ${scope.industry}
 Target: ${countryAnalysis.country}
 
 DATA GATHERED:
-${JSON.stringify(countryAnalysis, null, 2)}
+${JSON.stringify(countryDataForPrompt, null, 2)}
 
 Synthesize this research into a CEO-ready briefing. Professional tone, specific data, actionable insights.
 
@@ -1998,17 +1967,15 @@ STOP. Before you return the JSON, run this checklist:
    - If ANY insight missing these → REWRITE that insight
 
 ☐ INSIGHT COUNT: Count keyInsights array length
-   - If <3 → ADD MORE until you have 3-5 insights
+   - If <3 and you have supporting data, add more — but do NOT fabricate insights without research backing
    - Each must connect ≥2 data points from different sections
 
 ☐ STRATEGIC DEPTH: Read your own executiveSummary paragraphs
-   - Count specific numbers across all 4 paragraphs → should have ≥10 numbers total
-   - Count action verbs ("should", "recommend", "initiate") → should have ≥3
-   - If falling short → REWRITE paragraphs with more specificity
+   - Ensure numbers cited are FROM the research data, not invented
+   - Ensure action verbs match the evidence ("should", "recommend", "initiate")
 
 ☐ WORD COUNT LIMITS (prevent text overflow):
    - Count words in EACH executiveSummary paragraph → TARGET 50-80 words per paragraph
-   - If ANY paragraph <50 words → EXPAND IT with more evidence
    - If ANY paragraph >80 words → TRIM IT to core points
    - keyInsights "data" field → MAX 60 words
    - keyInsights "pattern" field → MAX 50 words
@@ -2019,10 +1986,10 @@ Do NOT skip this validation. If you catch yourself returning JSON without checki
 
   let result;
   try {
-    result = await callGemini(prompt, { maxTokens: 12288, temperature: 0.3, systemPrompt });
+    result = await callGemini(prompt, { maxTokens: 16384, temperature: 0.3, systemPrompt });
   } catch (e) {
     console.warn('Gemini failed for synthesizeSingleCountry, retrying with GeminiPro:', e.message);
-    result = await callGeminiPro(prompt, { maxTokens: 12000, temperature: 0.3, systemPrompt });
+    result = await callGeminiPro(prompt, { maxTokens: 16384, temperature: 0.3, systemPrompt });
   }
 
   let synthesis;
@@ -2035,7 +2002,17 @@ Do NOT skip this validation. If you catch yourself returning JSON without checki
         .replace(/```/g, '')
         .trim();
     }
-    synthesis = JSON.parse(jsonStr);
+    try {
+      synthesis = JSON.parse(jsonStr);
+    } catch (parseErr) {
+      // Attempt truncation repair before giving up
+      console.warn(
+        `  [synthesizeSingleCountry] JSON parse failed, attempting truncation repair: ${parseErr?.message}`
+      );
+      const repaired = repairTruncatedJson(jsonStr);
+      synthesis = JSON.parse(repaired);
+      console.log('  [synthesizeSingleCountry] Truncation repair succeeded');
+    }
     synthesis.isSingleCountry = true;
     synthesis.country = countryAnalysis.country;
   } catch (error) {

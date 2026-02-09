@@ -95,7 +95,7 @@ function validateResearchQuality(researchData) {
   const score = charScore + topicScore + structuredScore + companyScore + yearScore;
 
   return {
-    pass: score >= 40,
+    pass: score >= 55,
     score,
     issues,
     retryTopics,
@@ -108,20 +108,48 @@ function scoreIndustryRelevance(synthesis, industry) {
   if (!industry) return { score: 30, failures: [] };
 
   const text = JSON.stringify(synthesis).toLowerCase();
-  const term = industry.toLowerCase();
-  const regex = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
-  const matches = text.match(regex) || [];
-  const count = matches.length;
+
+  // Split industry into words for partial matching
+  const industryWords = industry.toLowerCase().split(/\s+/);
+  const industryVariations = [industry.toLowerCase()];
+  // Add individual words (skip very short/common words)
+  industryWords.filter((w) => w.length > 3).forEach((w) => industryVariations.push(w));
+  // Add common synonyms
+  const synonyms = {
+    energy: ['power', 'electricity', 'esco', 'renewable'],
+    services: ['service', 'consulting', 'solutions'],
+    technology: ['tech', 'digital', 'software'],
+    manufacturing: ['production', 'factory', 'industrial'],
+    construction: ['building', 'infrastructure'],
+    automotive: ['vehicle', 'automobile', 'EV'],
+    healthcare: ['medical', 'pharmaceutical', 'health'],
+    financial: ['finance', 'banking', 'fintech'],
+    logistics: ['transport', 'shipping', 'supply chain'],
+    telecommunications: ['telecom', 'mobile', 'wireless'],
+  };
+  industryWords.forEach((w) => {
+    if (synonyms[w]) industryVariations.push(...synonyms[w].map((s) => s.toLowerCase()));
+  });
+
+  // Count matches for all variations (deduplicated)
+  const uniqueVariations = [...new Set(industryVariations)];
+  let totalCount = 0;
+  for (const variation of uniqueVariations) {
+    const escaped = variation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escaped, 'gi');
+    const matches = text.match(regex) || [];
+    totalCount += matches.length;
+  }
 
   const failures = [];
-  if (count < 10) {
+  if (totalCount < 10) {
     failures.push(
-      `Content has only ${count} mentions of '${industry}' — likely padded with macro data`
+      `Content has only ${totalCount} mentions of '${industry}' (and variations) — likely padded with macro data`
     );
   }
 
   return {
-    score: Math.min(30, count * 3),
+    score: Math.min(30, totalCount * 3),
     failures,
   };
 }

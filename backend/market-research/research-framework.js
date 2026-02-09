@@ -537,6 +537,22 @@ Return a JSON object with this structure:
       }
     ]
   },
+  "context": {
+    "topics": [
+      {
+        "name": "Macroeconomic Context",
+        "queries": ["5 queries about GDP, economic growth, industrial output, FDI trends"]
+      },
+      {
+        "name": "Market Opportunities & White Spaces",
+        "queries": ["5 queries about underserved segments, gaps, upcoming tenders, unmet demand"]
+      },
+      {
+        "name": "Key Risks & Market Barriers",
+        "queries": ["5 queries about regulatory risk, political stability, currency risk, barriers to entry"]
+      }
+    ]
+  },
   "insights": {
     "topics": [
       {
@@ -557,11 +573,12 @@ CRITICAL RULES:
 3. Include queries about failures, not just successes
 4. Include timing-related queries (deadlines, expirations, upcoming changes)
 5. For ${scope.projectType === 'market_entry' ? 'market entry' : scope.projectType}: focus on entry barriers, local partners, investment requirements
-6. Total: 5 topics per category, 5 queries per topic (25 total topics minimum)
+6. Total: 6 categories (policy, market, competitors, context, depth, insights), 3-5 topics per category, 5 queries per topic (25 total topics minimum)
+7. The "context" category must have 3 topics: macroeconomic context, market opportunities/white spaces, and key risks/barriers
 
 Return ONLY valid JSON.`;
 
-  const geminiText = await callGemini(frameworkPrompt, { maxTokens: 4096, jsonMode: true });
+  const geminiText = await callGemini(frameworkPrompt, { maxTokens: 12288, jsonMode: true });
 
   try {
     let jsonStr = (typeof geminiText === 'string' ? geminiText : geminiText.content || '').trim();
@@ -571,7 +588,26 @@ Return ONLY valid JSON.`;
         .replace(/```/g, '')
         .trim();
     }
-    const framework = JSON.parse(jsonStr);
+    let framework;
+    try {
+      framework = JSON.parse(jsonStr);
+    } catch (parseErr) {
+      // Attempt to repair truncated JSON by closing open brackets/braces
+      console.warn('JSON parse failed, attempting truncation repair...');
+      let repaired = jsonStr;
+      const openBraces = (repaired.match(/\{/g) || []).length;
+      const closeBraces = (repaired.match(/\}/g) || []).length;
+      const openBrackets = (repaired.match(/\[/g) || []).length;
+      const closeBrackets = (repaired.match(/\]/g) || []).length;
+      // Trim trailing comma or incomplete value
+      repaired = repaired.replace(/,\s*$/, '');
+      // Remove any trailing incomplete string
+      repaired = repaired.replace(/"[^"]*$/, '""');
+      for (let i = 0; i < openBrackets - closeBrackets; i++) repaired += ']';
+      for (let i = 0; i < openBraces - closeBraces; i++) repaired += '}';
+      framework = JSON.parse(repaired);
+      console.log('Truncation repair succeeded');
+    }
 
     // Count topics and queries
     let topicCount = 0;
@@ -587,6 +623,13 @@ Return ONLY valid JSON.`;
     console.log(
       `Generated dynamic framework: ${topicCount} topics, ${queryCount} queries for ${scope.industry}`
     );
+
+    if (topicCount < 15) {
+      console.warn(
+        `WARNING: Dynamic framework only has ${topicCount} topics (minimum 15). Falling back to hardcoded framework.`
+      );
+      return generateFallbackFramework(scope);
+    }
 
     return framework;
   } catch (error) {
@@ -622,6 +665,16 @@ function generateFallbackFramework(scope) {
             `{country} BOI promotion ${industry} foreign investor benefits`,
           ],
         },
+        {
+          name: 'Investment Incentives & FDI Policy',
+          queries: [
+            `{country} FDI policy foreign direct investment incentives ${industry}`,
+            `{country} tax holidays investment promotion ${industry} sector`,
+            `{country} free trade zones ${industry} foreign company benefits`,
+            `{country} government grants subsidies ${industry} projects`,
+            `{country} bilateral investment treaties ${industry} protection`,
+          ],
+        },
       ],
     },
     market: {
@@ -644,6 +697,46 @@ function generateFallbackFramework(scope) {
             `{country} ${industry} fastest growing segments 2024 2025`,
             `{country} ${industry} supply chain dynamics imports exports`,
             `{country} ${industry} investment inflows FDI trends`,
+          ],
+        },
+        {
+          name: 'Electricity Generation & Grid',
+          queries: [
+            `{country} electricity generation capacity installed MW GW 2024`,
+            `{country} power grid infrastructure transmission distribution`,
+            `{country} electricity generation mix coal gas renewable nuclear`,
+            `{country} smart grid modernization investment plans`,
+            `{country} electricity demand growth forecast 2025 2030`,
+          ],
+        },
+        {
+          name: 'Gas & LNG Infrastructure',
+          queries: [
+            `{country} natural gas consumption production statistics`,
+            `{country} LNG import terminal capacity regasification`,
+            `{country} gas pipeline network coverage industrial`,
+            `{country} gas distribution companies market share`,
+            `{country} LNG price trends contracts long term spot`,
+          ],
+        },
+        {
+          name: 'Pricing & Tariffs',
+          queries: [
+            `{country} industrial electricity tariff rate per kWh`,
+            `{country} energy price comparison regional benchmarks`,
+            `{country} natural gas price industrial commercial users`,
+            `{country} energy subsidy policy reform plans`,
+            `{country} tariff structure time-of-use peak off-peak`,
+          ],
+        },
+        {
+          name: 'ESCO & Energy Efficiency Market',
+          queries: [
+            `{country} ESCO market size growth energy service companies`,
+            `{country} energy performance contracting EPC projects`,
+            `{country} energy audit market demand mandatory compliance`,
+            `{country} energy efficiency targets government mandates`,
+            `{country} energy management systems adoption industrial`,
           ],
         },
       ],
@@ -670,6 +763,60 @@ function generateFallbackFramework(scope) {
             `{country} ${industry} strategic alliances collaboration agreements`,
           ],
         },
+        {
+          name: 'Case Studies & Notable Projects',
+          queries: [
+            `{country} ${industry} successful foreign company entry case study`,
+            `{country} ${industry} notable projects flagship developments`,
+            `{country} ${industry} BOI promoted projects foreign investors`,
+            `{country} ${industry} joint venture success stories lessons`,
+            `{country} ${industry} award winning projects best practice`,
+          ],
+        },
+        {
+          name: 'M&A Activity & Joint Ventures',
+          queries: [
+            `{country} ${industry} mergers acquisitions 2023 2024 deals`,
+            `{country} ${industry} companies for sale acquisition targets`,
+            `{country} ${industry} joint venture announcements partnerships`,
+            `{country} ${industry} strategic investments deal terms valuation`,
+            `{country} ${industry} private equity venture capital investments`,
+          ],
+        },
+      ],
+    },
+    context: {
+      topics: [
+        {
+          name: 'Macroeconomic Context & GDP Outlook',
+          queries: [
+            `{country} GDP growth forecast 2025 2026 IMF World Bank`,
+            `{country} manufacturing sector contribution GDP industrial output`,
+            `{country} foreign direct investment inflows by sector`,
+            `{country} economic development plan industrial strategy`,
+            `{country} inflation interest rates monetary policy outlook`,
+          ],
+        },
+        {
+          name: 'Market Opportunities & White Spaces',
+          queries: [
+            `{country} ${industry} market gaps underserved segments opportunity`,
+            `{country} ${industry} government tenders upcoming projects pipeline`,
+            `{country} ${industry} unmet demand emerging needs`,
+            `{country} industrial parks zones seeking ${industry} solutions`,
+            `{country} ${industry} technology gaps foreign expertise needed`,
+          ],
+        },
+        {
+          name: 'Key Risks & Market Barriers',
+          queries: [
+            `{country} ${industry} regulatory risk policy uncertainty`,
+            `{country} foreign investment risks political stability`,
+            `{country} currency exchange rate risk business contracts`,
+            `{country} ${industry} barriers to entry foreign companies`,
+            `{country} local content requirements protectionism ${industry}`,
+          ],
+        },
       ],
     },
     depth: {
@@ -684,6 +831,26 @@ function generateFallbackFramework(scope) {
             `{country} ${industry} success factors best practices`,
           ],
         },
+        {
+          name: 'Contract Models & Procurement',
+          queries: [
+            `{country} ${industry} contract types EPC BOT PPP models`,
+            `{country} ${industry} procurement process government tenders`,
+            `{country} ${industry} contract duration terms typical`,
+            `{country} ${industry} payment terms financing structures`,
+            `{country} ${industry} performance guarantees penalty clauses`,
+          ],
+        },
+        {
+          name: 'Target Customer Segments',
+          queries: [
+            `{country} largest ${industry} consumers industrial facilities`,
+            `{country} industrial estates zones highest ${industry} demand`,
+            `{country} manufacturing sectors highest ${industry} consumption`,
+            `{country} ${industry} mandatory compliance audit requirements`,
+            `{country} Japanese manufacturing companies factories presence`,
+          ],
+        },
       ],
     },
     insights: {
@@ -696,6 +863,16 @@ function generateFallbackFramework(scope) {
             `{country} ${industry} incentives expiration deadline`,
             `{country} ${industry} underserved segments gaps`,
             `{country} ${industry} barriers challenges foreign companies`,
+          ],
+        },
+        {
+          name: 'Regulatory Outlook & Reform Trajectory',
+          queries: [
+            `{country} ${industry} regulation reform roadmap timeline`,
+            `{country} ${industry} new laws pending legislation 2025 2026`,
+            `{country} carbon pricing carbon tax implementation schedule`,
+            `{country} ${industry} standards harmonization international`,
+            `{country} ${industry} enforcement trends crackdown compliance`,
           ],
         },
       ],

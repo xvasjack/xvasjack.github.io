@@ -196,7 +196,8 @@ async function runMarketResearch(userPrompt, email) {
       const synthesis = await synthesizeFindings(countryAnalyses, scope);
 
       // Quality Gate 2: Validate synthesis quality (Fix 14: pass industry for specificity scoring)
-      const synthesisGate = validateSynthesisQuality(synthesis, scope.industry);
+      let finalSynthesis = synthesis;
+      const synthesisGate = validateSynthesisQuality(finalSynthesis, scope.industry);
       console.log(
         '[Quality Gate] Synthesis:',
         JSON.stringify({
@@ -206,16 +207,35 @@ async function runMarketResearch(userPrompt, email) {
         })
       );
       if (!synthesisGate.pass) {
-        if (synthesisGate.overall < 20) {
+        if (synthesisGate.overall < 40) {
           throw new Error(`Synthesis quality too low (${synthesisGate.overall}/100). Aborting.`);
         }
-        console.warn(
-          `[Quality Gate] Synthesis score ${synthesisGate.overall}/100 - below pass threshold but above abort threshold. Proceeding with caution.`
-        );
+        if (synthesisGate.overall < 60) {
+          console.log(
+            `[Quality Gate] Quality marginal (${synthesisGate.overall}/100), retrying synthesis with boosted tokens...`
+          );
+          // Retry synthesis once with boosted maxTokens
+          const boostedScope = { ...scope, maxTokens: 24576 };
+          finalSynthesis = await synthesizeFindings(countryAnalyses, boostedScope);
+          const retryGate = validateSynthesisQuality(finalSynthesis, scope.industry);
+          console.log(
+            '[Quality Gate] Retry synthesis:',
+            JSON.stringify({
+              pass: retryGate.pass,
+              overall: retryGate.overall,
+              failures: retryGate.failures,
+            })
+          );
+          if (!retryGate.pass && retryGate.overall < 40) {
+            throw new Error(
+              `Synthesis quality still too low after retry (${retryGate.overall}/100). Aborting.`
+            );
+          }
+        }
       }
 
       // Stage 4: Generate PPT
-      const pptBuffer = await generatePPT(synthesis, countryAnalyses, scope);
+      const pptBuffer = await generatePPT(finalSynthesis, countryAnalyses, scope);
 
       // Stage 5: Send email
       const filename = `Market_Research_${scope.industry.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pptx`;
@@ -303,6 +323,8 @@ async function runMarketResearch(userPrompt, email) {
         console.error('Failed to send error email:', emailError);
       }
 
+      // Mark that error email was already sent to prevent double-send from outer catch
+      error._errorEmailSent = true;
       throw error;
     }
   }); // end trackingContext.run
@@ -339,24 +361,38 @@ app.post('/api/market-research', async (req, res) => {
     estimatedTime: '30-60 minutes',
   });
 
-  // Run research in background with 25-minute global pipeline timeout
+  // Run research in background with 25-minute global pipeline timeout + abort signal
   const PIPELINE_TIMEOUT = 25 * 60 * 1000;
-  const timeoutPromise = new Promise((_, reject) =>
-    setTimeout(() => reject(new Error('Pipeline timeout after 25 minutes')), PIPELINE_TIMEOUT)
-  );
-  Promise.race([runMarketResearch(prompt, email), timeoutPromise]).catch(async (error) => {
-    console.error('Background research failed:', error);
-    try {
-      await sendEmail({
-        to: email,
-        subject: 'Market Research Failed',
-        html: `<h2>Market Research Error</h2><p>Your request failed: ${escapeHtml(error.message)}</p><p>Please try again.</p>`,
-        fromName: 'Market Research AI',
-      });
-    } catch (emailErr) {
-      console.error('Failed to send error email:', emailErr);
-    }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => {
+    controller.abort();
+  }, PIPELINE_TIMEOUT);
+  const timeoutPromise = new Promise((_, reject) => {
+    controller.signal.addEventListener('abort', () => {
+      reject(new Error('Pipeline timeout after 25 minutes'));
+    });
   });
+  Promise.race([runMarketResearch(prompt, email), timeoutPromise])
+    .then(() => {
+      clearTimeout(timeoutId);
+    })
+    .catch(async (error) => {
+      clearTimeout(timeoutId);
+      console.error('Background research failed:', error);
+      // Only send error email if runMarketResearch didn't already send one
+      if (!error._errorEmailSent) {
+        try {
+          await sendEmail({
+            to: email,
+            subject: 'Market Research Failed',
+            html: `<h2>Market Research Error</h2><p>Your request failed: ${escapeHtml(error.message)}</p><p>Please try again.</p>`,
+            fromName: 'Market Research AI',
+          });
+        } catch (emailErr) {
+          console.error('Failed to send error email:', emailErr);
+        }
+      }
+    });
 });
 
 // Cost tracking endpoint
