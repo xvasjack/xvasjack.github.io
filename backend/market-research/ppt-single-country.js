@@ -1755,6 +1755,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         ]);
       });
       const incTableH = safeTableHeight(incRows.length, {
+        fontSize: 14,
         maxH: Math.max(0.6, CONTENT_BOTTOM - investNextY - 1.0),
       });
       applyAlternateRowFill(incRows);

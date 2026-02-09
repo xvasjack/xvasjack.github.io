@@ -1602,7 +1602,7 @@ function addInsightPanelsFromPattern(slide, insights, patternDef) {
       w: def.w - 0.12,
       h: def.h,
       fill: { color: C_WHITE },
-      line: { color: C_BORDER, width: 0.5 },
+      line: { color: C_BORDER, width: 1 },
     });
     // Title — ensureString guards against AI returning object/array for title
     const titleRaw =
@@ -1693,8 +1693,8 @@ function addMatrix(slide, quadrants, patternDef) {
   const rightW = TEMPLATE.contentArea.w - halfW - 0.3;
   const quads = p.quadrants || [
     { x: cx, y: cy, w: halfW, h: 2.5, fill: C_LIGHT_BLUE },
-    { x: rightX, y: cy, w: rightW, h: 2.5, fill: C_GRAY_BG },
-    { x: cx, y: cy + 2.7, w: halfW, h: 2.5, fill: C_GRAY_BG },
+    { x: rightX, y: cy, w: rightW, h: 2.5, fill: C_WHITE },
+    { x: cx, y: cy + 2.7, w: halfW, h: 2.5, fill: C_WHITE },
     { x: rightX, y: cy + 2.7, w: rightW, h: 2.5, fill: C_LIGHT_BLUE },
   ];
 
@@ -1706,8 +1706,8 @@ function addMatrix(slide, quadrants, patternDef) {
       y: qDef.y,
       w: qDef.w,
       h: qDef.h,
-      fill: { color: qDef.fill || C_GRAY_BG },
-      line: { color: C_BORDER, width: 0.5 },
+      fill: { color: qDef.fill || C_WHITE },
+      line: { color: C_BORDER, width: 1 },
     });
     // Label
     slide.addText(safeText(q.label || q.title || ''), {
@@ -1796,7 +1796,7 @@ function addCaseStudyRows(slide, rows, chevrons, patternDef) {
       w: contentW,
       h: def.h,
       fill: { color: contentStyle.fill },
-      line: { color: C_BORDER, width: 0.5 },
+      line: { color: C_BORDER, width: 1 },
     });
     slide.addText(truncate(content, 500), {
       x: contentX + 0.1,
