@@ -1,4 +1,4 @@
-const { callKimiAnalysis, callGemini } = require('./ai-clients');
+const { callGeminiPro, callGemini } = require('./ai-clients');
 const { ensureString } = require('./shared/utils');
 
 // Load template patterns for smart layout engine
@@ -1322,8 +1322,9 @@ Transform this research into a narrative. Return JSON:
       const content = typeof geminiResult === 'string' ? geminiResult : geminiResult.content || '';
       response = { content };
     } catch (e) {
-      console.warn('Gemini failed for story architect, falling back to Kimi:', e.message);
-      response = await callKimiAnalysis(prompt, systemPrompt, 8192);
+      console.warn('Gemini failed for story architect, falling back to Gemini Pro:', e.message);
+      const proResult = await callGeminiPro(prompt, { systemPrompt, maxTokens: 8192 });
+      response = { content: typeof proResult === 'string' ? proResult : proResult.content || '' };
     }
 
     // Parse response

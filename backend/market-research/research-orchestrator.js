@@ -1,4 +1,4 @@
-const { callKimiDeepResearch, callGemini } = require('./ai-clients');
+const { callGeminiResearch, callGemini } = require('./ai-clients');
 const { generateResearchFramework } = require('./research-framework');
 const {
   policyResearchAgent,
@@ -131,19 +131,19 @@ Return ONLY valid JSON.`;
   }
 }
 
-// Step 2: Execute targeted research to fill gaps using Kimi
+// Step 2: Execute targeted research to fill gaps
 async function fillResearchGaps(gaps, country, industry) {
-  console.log(`  [Filling research gaps for ${country} with Kimi...]`);
+  console.log(`  [Filling research gaps for ${country}...]`);
   const additionalData = { gapResearch: [], verificationResearch: [] };
 
-  // Research critical gaps with Kimi
+  // Research critical gaps
   const criticalGaps = gaps.criticalGaps || [];
   for (const gap of criticalGaps.slice(0, 2)) {
     // Limit to 2 most critical
     if (!gap.searchQuery) continue;
     console.log(`    Gap search: ${gap.gap.substring(0, 50)}...`);
 
-    const result = await callKimiDeepResearch(gap.searchQuery, country, industry);
+    const result = await callGeminiResearch(gap.searchQuery, country, industry);
     if (result.content) {
       additionalData.gapResearch.push({
         area: gap.area,
@@ -156,14 +156,14 @@ async function fillResearchGaps(gaps, country, industry) {
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
 
-  // Verify questionable claims with Kimi
+  // Verify questionable claims
   const toVerify = gaps.dataToVerify || [];
   for (const item of toVerify.slice(0, 2)) {
     // Limit to 2 verifications
     if (!item.searchQuery) continue;
     console.log(`    Verify: ${item.claim.substring(0, 50)}...`);
 
-    const result = await callKimiDeepResearch(item.searchQuery, country, industry);
+    const result = await callGeminiResearch(item.searchQuery, country, industry);
     if (result.content) {
       additionalData.verificationResearch.push({
         claim: item.claim,

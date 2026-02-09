@@ -8,7 +8,7 @@ const { setupGlobalErrorHandlers } = require('./shared/logging');
 const { createTracker, trackingContext } = require('./shared/tracking');
 
 // Extracted modules
-const { costTracker, callKimiDeepResearch } = require('./ai-clients');
+const { costTracker, callGeminiResearch, resetBudget } = require('./ai-clients');
 const { parseScope } = require('./research-framework');
 const { researchCountry, synthesizeFindings } = require('./research-orchestrator');
 const { generatePPT } = require('./ppt-multi-country');
@@ -27,7 +27,7 @@ app.use(requestLogger);
 app.use(express.json({ limit: '10mb' }));
 
 // Check required environment variables
-const requiredEnvVars = ['KIMI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
+const requiredEnvVars = ['GEMINI_API_KEY', 'SENDGRID_API_KEY', 'SENDER_EMAIL'];
 const missingVars = requiredEnvVars.filter((v) => !process.env[v]);
 if (missingVars.length > 0) {
   console.error('Missing environment variables:', missingVars.join(', '));
@@ -53,6 +53,7 @@ async function runMarketResearch(userPrompt, email) {
   // Reset cost tracker
   costTracker.totalCost = 0;
   costTracker.calls = [];
+  resetBudget();
 
   const tracker = createTracker('market-research', email, { prompt: userPrompt.substring(0, 200) });
 
@@ -122,7 +123,7 @@ async function runMarketResearch(userPrompt, email) {
                 };
                 const retryQuery =
                   queryMap[topic] || `${ca.country} ${scope.industry} ${topic.replace(/_/g, ' ')}`;
-                const retry = await callKimiDeepResearch(
+                const retry = await callGeminiResearch(
                   retryQuery + ' provide specific statistics and company names',
                   ca.country,
                   scope.industry
@@ -369,12 +370,7 @@ const PORT = process.env.PORT || 3010;
 app.listen(PORT, () => {
   console.log(`Market Research server running on port ${PORT}`);
   console.log('Environment check:');
-  console.log('  - KIMI_API_KEY:', process.env.KIMI_API_KEY ? 'Set' : 'MISSING');
-  console.log(
-    '  - KIMI_API_BASE:',
-    process.env.KIMI_API_BASE || 'https://api.moonshot.ai/v1 (default)'
-  );
-  console.log('  - PERPLEXITY_API_KEY:', process.env.PERPLEXITY_API_KEY ? 'Set' : 'MISSING');
+  console.log('  - GEMINI_API_KEY:', process.env.GEMINI_API_KEY ? 'Set' : 'MISSING');
   console.log('  - SENDGRID_API_KEY:', process.env.SENDGRID_API_KEY ? 'Set' : 'MISSING');
   console.log('  - SENDER_EMAIL:', process.env.SENDER_EMAIL || 'MISSING');
 });
