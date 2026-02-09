@@ -28,6 +28,27 @@ const C_ACCENT1 = TP_COLORS.accent1 || '007FFF';
 const C_ACCENT3 = TP_COLORS.accent3 || '011AB7';
 const C_ACCENT6 = TP_COLORS.accent6 || 'E46C0A';
 const C_TABLE_HEADER = TP_COLORS.tableHeaderFill || C_ACCENT3;
+const C_WHITE = TP_COLORS.lt1 || 'FFFFFF';
+const C_BLACK = '333333'; // Standard text color
+const C_TRUE_BLACK = '000000'; // Chart axes/titles
+const C_BORDER = 'CCCCCC'; // Table/panel border gray
+const C_MUTED = '999999'; // Muted/unavailable text
+const C_AXIS_GRAY = '888888'; // Chart axis/grid lines
+const C_LIGHT_GRAY = 'F5F5F5'; // Panel/callout backgrounds
+const C_GRAY_BG = 'F2F2F2'; // Alternate row/content backgrounds
+const C_SECONDARY = '666666'; // Secondary text
+const C_LIGHT_BLUE = 'D6E4F0'; // Matrix quadrant / section overview
+
+// Shared chart axis/grid defaults (identical across all chart types)
+const CHART_AXIS_DEFAULTS = {
+  titleColor: C_TRUE_BLACK,
+  catAxisLabelColor: C_TRUE_BLACK,
+  catAxisLineColor: C_AXIS_GRAY,
+  catGridLineColor: C_AXIS_GRAY,
+  valAxisLabelColor: C_TRUE_BLACK,
+  valAxisLineColor: C_AXIS_GRAY,
+  valGridLineColor: C_AXIS_GRAY,
+};
 
 // ============ PPT GENERATION ============
 
@@ -498,13 +519,13 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
 
   if (sourceText) {
     slide.addText(truncate(sourceText, 120), {
-      x: 0.4,
-      y: 6.663,
-      w: 12.595,
-      h: 0.27,
+      x: TEMPLATE.sourceBar.x,
+      y: TEMPLATE.sourceBar.y,
+      w: TEMPLATE.sourceBar.w,
+      h: TEMPLATE.sourceBar.h || 0.27,
       fontSize: 7,
       fontFace: FONT,
-      color: COLORS?.footerText || '999999',
+      color: COLORS?.footerText || C_MUTED,
       valign: 'top',
     });
   }
@@ -521,25 +542,26 @@ function addCalloutBox(slide, title, content, options = {}) {
   const FONT = 'Segoe UI';
 
   // Box colors based on type
+  const accent2 = TP_COLORS.accent2 || 'EDFDFF';
   const typeColors = {
     insight: {
-      fill: 'F5F5F5',
+      fill: C_LIGHT_GRAY,
       border: C_DK2,
       titleColor: C_DK2,
     },
-    warning: { fill: 'F5F5F5', border: 'CCCCCC', titleColor: '333333' },
+    warning: { fill: C_LIGHT_GRAY, border: C_BORDER, titleColor: C_BLACK },
     recommendation: {
-      fill: 'EDFDFF',
+      fill: accent2,
       border: C_ACCENT1,
       titleColor: C_ACCENT1,
     },
     positive: {
-      fill: 'EDFDFF',
+      fill: accent2,
       border: C_ACCENT1,
       titleColor: C_ACCENT1,
     },
     negative: {
-      fill: 'F5F5F5',
+      fill: C_LIGHT_GRAY,
       border: C_DK2,
       titleColor: C_DK2,
     },
@@ -557,12 +579,12 @@ function addCalloutBox(slide, title, content, options = {}) {
   if (content) {
     textParts.push({
       text: fitTextToShape(truncate(content, 200), boxW - 0.4, boxH - 0.4, 9).text,
-      options: { fontSize: 9, color: '333333', fontFace: FONT },
+      options: { fontSize: 9, color: C_BLACK, fontFace: FONT },
     });
   }
   if (textParts.length > 0) {
-    // Clamp height so callout doesn't extend past content zone (6.65")
-    const maxBottom = 6.65;
+    // Clamp height so callout doesn't extend past content zone
+    const maxBottom = TEMPLATE.sourceBar.y;
     const clampedH = boxY + boxH > maxBottom ? Math.max(0.3, maxBottom - boxY) : boxH;
     if (boxY < maxBottom) {
       slide.addText(textParts, {
@@ -657,7 +679,7 @@ function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, opt
       w: 3,
       h: 0.3,
       fontSize: 12,
-      color: 'FFFFFF',
+      color: C_WHITE,
       fontFace: FONT,
       italic: true,
     });
@@ -671,7 +693,7 @@ function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, opt
     h: 1.2,
     fontSize: 44,
     bold: true,
-    color: 'FFFFFF',
+    color: C_WHITE,
     fontFace: FONT,
     align: 'center',
     valign: 'middle',
@@ -683,7 +705,7 @@ function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, opt
     y: 3.8,
     w: 5.333,
     h: 0,
-    line: { color: 'FFFFFF', width: 3 },
+    line: { color: C_WHITE, width: 3 },
   });
 
   // Section overview description
@@ -695,7 +717,7 @@ function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, opt
       w: 10.333,
       h: 0.8,
       fontSize: 14,
-      color: 'D6E4F0',
+      color: C_LIGHT_BLUE,
       fontFace: FONT,
       align: 'center',
       valign: 'top',
@@ -748,7 +770,7 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
     text: truncate(String(opp), 150),
     options: {
       fontSize: 10,
-      color: '333333',
+      color: C_BLACK,
       fontFace: FONT,
       bullet: { type: 'bullet', code: '2714', color: COLORS.green },
       paraSpaceBefore: 6,
@@ -760,7 +782,7 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
     text: truncate(String(obs), 150),
     options: {
       fontSize: 10,
-      color: '333333',
+      color: C_BLACK,
       fontFace: FONT,
       bullet: { type: 'bullet', code: '26A0', color: COLORS.orange },
       paraSpaceBefore: 6,
@@ -912,12 +934,12 @@ function addStackedBarChart(slide, title, data, options = {}) {
   if (!chartData || !chartData.categories || !chartData.series || chartData.series.length === 0) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
-      x: options.x || 0.4,
-      y: options.y || 1.3,
-      w: options.w || 12.5,
+      x: options.x || TEMPLATE.contentArea.x,
+      y: options.y || TEMPLATE.contentArea.y,
+      w: options.w || TEMPLATE.contentArea.w,
       h: options.h || 5.196,
       fontSize: 14,
-      color: '999999',
+      color: C_MUTED,
       fontFace: 'Segoe UI',
       align: 'center',
       valign: 'middle',
@@ -932,12 +954,12 @@ function addStackedBarChart(slide, title, data, options = {}) {
   if (hasInvalidValues) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
-      x: options.x || 0.4,
-      y: options.y || 1.3,
-      w: options.w || 12.5,
+      x: options.x || TEMPLATE.contentArea.x,
+      y: options.y || TEMPLATE.contentArea.y,
+      w: options.w || TEMPLATE.contentArea.w,
       h: options.h || 5.196,
       fontSize: 14,
-      color: '999999',
+      color: C_MUTED,
       fontFace: 'Segoe UI',
       align: 'center',
       valign: 'middle',
@@ -977,9 +999,9 @@ function addStackedBarChart(slide, title, data, options = {}) {
   }));
 
   slide.addChart('bar', pptxChartData, {
-    x: options.x || 0.4,
-    y: options.y || 1.3,
-    w: options.w || 12.5,
+    x: options.x || TEMPLATE.contentArea.x,
+    y: options.y || TEMPLATE.contentArea.y,
+    w: options.w || TEMPLATE.contentArea.w,
     h: options.h || 5.196,
     barDir: options.barDir || 'col',
     barGrouping: 'stacked',
@@ -991,21 +1013,15 @@ function addStackedBarChart(slide, title, data, options = {}) {
     title: chartTitle,
     titleFontFace: 'Segoe UI',
     titleFontSize: 14,
-    titleColor: '000000',
+    ...CHART_AXIS_DEFAULTS,
     catAxisLabelFontFace: 'Segoe UI',
     catAxisLabelFontSize: 10,
-    catAxisLabelColor: '000000',
-    catAxisLineColor: '888888',
-    catGridLineColor: '888888',
     valAxisLabelFontFace: 'Segoe UI',
     valAxisLabelFontSize: 10,
-    valAxisLabelColor: '000000',
-    valAxisLineColor: '888888',
-    valGridLineColor: '888888',
     showValue: false,
     dataLabelFontFace: 'Segoe UI',
     dataLabelFontSize: 9,
-    dataLabelColor: 'FFFFFF',
+    dataLabelColor: C_WHITE,
     dataLabelPosition: 'ctr',
   });
 }
@@ -1023,12 +1039,12 @@ function addLineChart(slide, title, data, options = {}) {
   if (!chartData || !chartData.categories || !chartData.series || chartData.series.length === 0) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
-      x: options.x || 0.4,
-      y: options.y || 1.3,
-      w: options.w || 12.5,
+      x: options.x || TEMPLATE.contentArea.x,
+      y: options.y || TEMPLATE.contentArea.y,
+      w: options.w || TEMPLATE.contentArea.w,
       h: options.h || 5.196,
       fontSize: 14,
-      color: '999999',
+      color: C_MUTED,
       fontFace: 'Segoe UI',
       align: 'center',
       valign: 'middle',
@@ -1043,12 +1059,12 @@ function addLineChart(slide, title, data, options = {}) {
   if (hasInvalidValues) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
-      x: options.x || 0.4,
-      y: options.y || 1.3,
-      w: options.w || 12.5,
+      x: options.x || TEMPLATE.contentArea.x,
+      y: options.y || TEMPLATE.contentArea.y,
+      w: options.w || TEMPLATE.contentArea.w,
       h: options.h || 5.196,
       fontSize: 14,
-      color: '999999',
+      color: C_MUTED,
       fontFace: 'Segoe UI',
       align: 'center',
       valign: 'middle',
@@ -1088,9 +1104,9 @@ function addLineChart(slide, title, data, options = {}) {
   }));
 
   slide.addChart('line', pptxChartData, {
-    x: options.x || 0.4,
-    y: options.y || 1.3,
-    w: options.w || 12.5,
+    x: options.x || TEMPLATE.contentArea.x,
+    y: options.y || TEMPLATE.contentArea.y,
+    w: options.w || TEMPLATE.contentArea.w,
     h: options.h || 5.196,
     showLegend: chartData.series.length > 1,
     legendPos: 'b',
@@ -1098,17 +1114,11 @@ function addLineChart(slide, title, data, options = {}) {
     title: chartTitle,
     titleFontFace: 'Segoe UI',
     titleFontSize: 14,
-    titleColor: '000000',
+    ...CHART_AXIS_DEFAULTS,
     catAxisLabelFontFace: 'Segoe UI',
     catAxisLabelFontSize: 10,
-    catAxisLabelColor: '000000',
-    catAxisLineColor: '888888',
-    catGridLineColor: '888888',
     valAxisLabelFontFace: 'Segoe UI',
     valAxisLabelFontSize: 10,
-    valAxisLabelColor: '000000',
-    valAxisLineColor: '888888',
-    valGridLineColor: '888888',
     lineDataSymbol: 'circle',
     lineDataSymbolSize: 6,
     lineWidth: 2,
@@ -1127,12 +1137,12 @@ function addBarChart(slide, title, data, options = {}) {
   if (!data || !data.categories || !data.values || data.values.length === 0) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
-      x: options.x || 0.4,
-      y: options.y || 1.3,
-      w: options.w || 12.5,
+      x: options.x || TEMPLATE.contentArea.x,
+      y: options.y || TEMPLATE.contentArea.y,
+      w: options.w || TEMPLATE.contentArea.w,
       h: options.h || 5.196,
       fontSize: 14,
-      color: '999999',
+      color: C_MUTED,
       fontFace: 'Segoe UI',
       align: 'center',
       valign: 'middle',
@@ -1144,12 +1154,12 @@ function addBarChart(slide, title, data, options = {}) {
   if (data.values.some((v) => typeof v !== 'number' || !isFinite(v))) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
-      x: options.x || 0.4,
-      y: options.y || 1.3,
-      w: options.w || 12.5,
+      x: options.x || TEMPLATE.contentArea.x,
+      y: options.y || TEMPLATE.contentArea.y,
+      w: options.w || TEMPLATE.contentArea.w,
       h: options.h || 5.196,
       fontSize: 14,
-      color: '999999',
+      color: C_MUTED,
       fontFace: 'Segoe UI',
       align: 'center',
       valign: 'middle',
@@ -1167,9 +1177,9 @@ function addBarChart(slide, title, data, options = {}) {
   ];
 
   slide.addChart('bar', chartData, {
-    x: options.x || 0.4,
-    y: options.y || 1.3,
-    w: options.w || 12.5,
+    x: options.x || TEMPLATE.contentArea.x,
+    y: options.y || TEMPLATE.contentArea.y,
+    w: options.w || TEMPLATE.contentArea.w,
     h: options.h || 5.196,
     barDir: options.horizontal ? 'bar' : 'col',
     showLegend: false,
@@ -1177,17 +1187,11 @@ function addBarChart(slide, title, data, options = {}) {
     title: title,
     titleFontFace: 'Segoe UI',
     titleFontSize: 14,
-    titleColor: '000000',
+    ...CHART_AXIS_DEFAULTS,
     catAxisLabelFontFace: 'Segoe UI',
     catAxisLabelFontSize: 10,
-    catAxisLabelColor: '000000',
-    catAxisLineColor: '888888',
-    catGridLineColor: '888888',
     valAxisLabelFontFace: 'Segoe UI',
     valAxisLabelFontSize: 10,
-    valAxisLabelColor: '000000',
-    valAxisLineColor: '888888',
-    valGridLineColor: '888888',
     showValue: true,
     dataLabelFontFace: 'Segoe UI',
     dataLabelFontSize: 9,
@@ -1199,12 +1203,12 @@ function addPieChart(slide, title, data, options = {}) {
   if (!data || !data.categories || !data.values || data.values.length === 0) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
-      x: options.x || 0.4,
-      y: options.y || 1.3,
-      w: options.w || 12.5,
+      x: options.x || TEMPLATE.contentArea.x,
+      y: options.y || TEMPLATE.contentArea.y,
+      w: options.w || TEMPLATE.contentArea.w,
       h: options.h || 5.2,
       fontSize: 14,
-      color: '999999',
+      color: C_MUTED,
       fontFace: 'Segoe UI',
       align: 'center',
       valign: 'middle',
@@ -1216,12 +1220,12 @@ function addPieChart(slide, title, data, options = {}) {
   if (data.values.some((v) => typeof v !== 'number' || !isFinite(v))) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
-      x: options.x || 0.4,
-      y: options.y || 1.3,
-      w: options.w || 12.5,
+      x: options.x || TEMPLATE.contentArea.x,
+      y: options.y || TEMPLATE.contentArea.y,
+      w: options.w || TEMPLATE.contentArea.w,
       h: options.h || 5.2,
       fontSize: 14,
-      color: '999999',
+      color: C_MUTED,
       fontFace: 'Segoe UI',
       align: 'center',
       valign: 'middle',
@@ -1244,9 +1248,9 @@ function addPieChart(slide, title, data, options = {}) {
   ];
 
   slide.addChart(options.doughnut ? 'doughnut' : 'pie', chartData, {
-    x: options.x || 0.4,
-    y: options.y || 1.3,
-    w: options.w || 12.5,
+    x: options.x || TEMPLATE.contentArea.x,
+    y: options.y || TEMPLATE.contentArea.y,
+    w: options.w || TEMPLATE.contentArea.w,
     h: options.h || 5.196,
     showLegend: true,
     legendPos: 'r',
@@ -1254,7 +1258,7 @@ function addPieChart(slide, title, data, options = {}) {
     title: title,
     titleFontFace: 'Segoe UI',
     titleFontSize: 14,
-    titleColor: '000000',
+    titleColor: C_TRUE_BLACK,
     showPercent: true,
     chartColors: pieColors,
   });
@@ -1458,8 +1462,18 @@ function choosePattern(dataType, data) {
  */
 function addDualChart(slide, leftData, rightData, patternDef, opts = {}) {
   const p = patternDef || templatePatterns.patterns?.chart_callout_dual?.elements || {};
-  const leftPos = p.chartLeft || { x: 0.4, y: 1.3, w: 6.0, h: 4.2 };
-  const rightPos = p.chartRight || { x: 6.8, y: 1.3, w: 6.1, h: 4.2 };
+  const leftPos = p.chartLeft || {
+    x: TEMPLATE.contentArea.x,
+    y: TEMPLATE.contentArea.y,
+    w: TEMPLATE.contentArea.w / 2 - 0.15,
+    h: 4.2,
+  };
+  const rightPos = p.chartRight || {
+    x: TEMPLATE.contentArea.x + TEMPLATE.contentArea.w / 2 + 0.15,
+    y: TEMPLATE.contentArea.y,
+    w: TEMPLATE.contentArea.w / 2 - 0.15,
+    h: 4.2,
+  };
   const style = templatePatterns.style || {};
   const colors = style.colors || {};
 
@@ -1489,7 +1503,12 @@ function addDualChart(slide, leftData, rightData, patternDef, opts = {}) {
 
   // Bottom callout
   if (opts.callout) {
-    const calloutPos = p.quoteCallout || { x: 0.4, y: 5.7, w: 12.5, h: 0.8 };
+    const calloutPos = p.quoteCallout || {
+      x: TEMPLATE.contentArea.x,
+      y: 5.7,
+      w: TEMPLATE.contentArea.w,
+      h: 0.8,
+    };
     addCalloutBox(slide, opts.callout.title || 'Key Insight', opts.callout.text || '', {
       x: calloutPos.x,
       y: calloutPos.y,
@@ -1570,8 +1589,8 @@ function addInsightPanelsFromPattern(slide, insights, patternDef) {
       y: def.y,
       w: def.w - 0.12,
       h: def.h,
-      fill: { color: 'F5F5F5' },
-      line: { color: 'CCCCCC', width: 0.5 },
+      fill: { color: C_LIGHT_GRAY },
+      line: { color: C_BORDER, width: 0.5 },
     });
     // Title — ensureString guards against AI returning object/array for title
     const titleRaw =
@@ -1610,7 +1629,7 @@ function addInsightPanelsFromPattern(slide, insights, patternDef) {
       w: def.w - 0.3,
       h: def.h - 0.5,
       fontSize: fittedBody.fontSize,
-      color: '000000',
+      color: C_TRUE_BLACK,
       fontFace: 'Segoe UI',
       valign: 'top',
     });
@@ -1632,10 +1651,10 @@ function addCalloutOverlay(slide, text, pos) {
     y,
     w,
     h,
-    fill: { color: p.fill || 'F5F5F5' },
-    line: { color: p.border || 'CCCCCC', width: p.borderWidth || 1 },
+    fill: { color: p.fill || C_LIGHT_GRAY },
+    line: { color: p.border || C_BORDER, width: p.borderWidth || 1 },
     rectRadius: p.cornerRadius || 0.05,
-    shadow: { type: 'outer', blur: 3, opacity: 0.15, offset: 1.5, color: '000000' },
+    shadow: { type: 'outer', blur: 3, opacity: 0.15, offset: 1.5, color: C_TRUE_BLACK },
   });
   const fitted = fitTextToShape(String(text || ''), w - 0.2, h - 0.2, 9);
   slide.addText(fitted.text, {
@@ -1644,7 +1663,7 @@ function addCalloutOverlay(slide, text, pos) {
     w: w - 0.2,
     h: h - 0.2,
     fontSize: fitted.fontSize,
-    color: '333333',
+    color: C_BLACK,
     fontFace: 'Segoe UI',
     valign: 'middle',
   });
@@ -1656,11 +1675,15 @@ function addCalloutOverlay(slide, text, pos) {
 function addMatrix(slide, quadrants, patternDef) {
   const p = patternDef || templatePatterns.patterns?.matrix_2x2?.elements || {};
   const cy = TEMPLATE.contentArea.y;
+  const cx = TEMPLATE.contentArea.x;
+  const halfW = TEMPLATE.contentArea.w / 2 - 0.15;
+  const rightX = cx + halfW + 0.3;
+  const rightW = TEMPLATE.contentArea.w - halfW - 0.3;
   const quads = p.quadrants || [
-    { x: TEMPLATE.contentArea.x, y: cy, w: 6.0, h: 2.5, fill: 'D6E4F0' },
-    { x: 6.6, y: cy, w: 6.3, h: 2.5, fill: 'F2F2F2' },
-    { x: TEMPLATE.contentArea.x, y: cy + 2.7, w: 6.0, h: 2.5, fill: 'F2F2F2' },
-    { x: 6.6, y: cy + 2.7, w: 6.3, h: 2.5, fill: 'D6E4F0' },
+    { x: cx, y: cy, w: halfW, h: 2.5, fill: C_LIGHT_BLUE },
+    { x: rightX, y: cy, w: rightW, h: 2.5, fill: C_GRAY_BG },
+    { x: cx, y: cy + 2.7, w: halfW, h: 2.5, fill: C_GRAY_BG },
+    { x: rightX, y: cy + 2.7, w: rightW, h: 2.5, fill: C_LIGHT_BLUE },
   ];
 
   quadrants.slice(0, 4).forEach((q, idx) => {
@@ -1671,8 +1694,8 @@ function addMatrix(slide, quadrants, patternDef) {
       y: qDef.y,
       w: qDef.w,
       h: qDef.h,
-      fill: { color: qDef.fill || 'F2F2F2' },
-      line: { color: 'CCCCCC', width: 0.5 },
+      fill: { color: qDef.fill || C_GRAY_BG },
+      line: { color: C_BORDER, width: 0.5 },
     });
     // Label
     slide.addText(safeText(q.label || q.title || ''), {
@@ -1697,7 +1720,7 @@ function addMatrix(slide, quadrants, patternDef) {
       w: qDef.w - 0.3,
       h: qDef.h - 0.6,
       fontSize: 10,
-      color: '333333',
+      color: C_BLACK,
       fontFace: 'Segoe UI',
       valign: 'top',
     });
@@ -1719,11 +1742,11 @@ function addCaseStudyRows(slide, rows, chevrons, patternDef) {
   ];
   const labelStyle = p.labelStyle || {
     fill: C_DK2,
-    color: 'FFFFFF',
+    color: C_WHITE,
     fontSize: 10,
     bold: true,
   };
-  const contentStyle = p.contentStyle || { fill: 'F2F2F2', color: '333333', fontSize: 9 };
+  const contentStyle = p.contentStyle || { fill: C_GRAY_BG, color: C_BLACK, fontSize: 9 };
   const labelX = TEMPLATE.contentArea.x;
   const labelW = 2.0;
   const contentX = TEMPLATE.contentArea.x + 2.1;
@@ -1761,7 +1784,7 @@ function addCaseStudyRows(slide, rows, chevrons, patternDef) {
       w: contentW,
       h: def.h,
       fill: { color: contentStyle.fill },
-      line: { color: 'CCCCCC', width: 0.5 },
+      line: { color: C_BORDER, width: 0.5 },
     });
     slide.addText(truncate(content, 500), {
       x: contentX + 0.1,
@@ -1852,10 +1875,10 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
         options: {
           fontSize: 16,
           fontFace: FONT,
-          color: '333333',
+          color: C_BLACK,
           bold: isActive,
-          fill: { color: isActive ? C_ACCENT1 : 'FFFFFF' },
-          border: { pt: 0.5, color: 'CCCCCC' },
+          fill: { color: isActive ? C_ACCENT1 : C_WHITE },
+          border: { pt: 0.5, color: C_BORDER },
           valign: 'middle',
         },
       },
@@ -1867,7 +1890,7 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
     y: TEMPLATE.contentArea.y,
     w: TEMPLATE.contentArea.w,
     rowH: 0.9,
-    border: { pt: 0.5, color: 'CCCCCC' },
+    border: { pt: 0.5, color: C_BORDER },
   });
 
   return slide;
@@ -1897,6 +1920,7 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
     [];
 
   // Left table: Opportunities
+  const colW = (TEMPLATE.contentArea.w - 0.5) / 2;
   const oppRows = [
     [
       {
@@ -1905,9 +1929,9 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
           bold: true,
           fontSize: 14,
           fontFace: FONT,
-          fill: { color: '2E7D32' },
-          color: 'FFFFFF',
-          border: { pt: 0.5, color: 'CCCCCC' },
+          fill: { color: SEMANTIC_COLORS.positive },
+          color: C_WHITE,
+          border: { pt: 0.5, color: C_BORDER },
           valign: 'middle',
         },
       },
@@ -1923,8 +1947,8 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
         options: {
           fontSize: 12,
           fontFace: FONT,
-          color: '000000',
-          border: { pt: 0.5, color: 'CCCCCC' },
+          color: C_TRUE_BLACK,
+          border: { pt: 0.5, color: C_BORDER },
           valign: 'middle',
         },
       },
@@ -1941,8 +1965,8 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
           fontSize: 14,
           fontFace: FONT,
           fill: { color: C_ACCENT6 },
-          color: 'FFFFFF',
-          border: { pt: 0.5, color: 'CCCCCC' },
+          color: C_WHITE,
+          border: { pt: 0.5, color: C_BORDER },
           valign: 'middle',
         },
       },
@@ -1958,8 +1982,8 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
         options: {
           fontSize: 12,
           fontFace: FONT,
-          color: '000000',
-          border: { pt: 0.5, color: 'CCCCCC' },
+          color: C_TRUE_BLACK,
+          border: { pt: 0.5, color: C_BORDER },
           valign: 'middle',
         },
       },
@@ -1969,16 +1993,16 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
   slide.addTable(oppRows, {
     x: TEMPLATE.contentArea.x,
     y: TEMPLATE.contentArea.y,
-    w: 6.0,
+    w: colW,
     rowH: 0.8,
-    border: { pt: 0.5, color: 'CCCCCC' },
+    border: { pt: 0.5, color: C_BORDER },
   });
   slide.addTable(barRows, {
-    x: TEMPLATE.contentArea.x + 6.5,
+    x: TEMPLATE.contentArea.x + colW + 0.5,
     y: TEMPLATE.contentArea.y,
-    w: 6.0,
+    w: colW,
     rowH: 0.8,
-    border: { pt: 0.5, color: 'CCCCCC' },
+    border: { pt: 0.5, color: C_BORDER },
   });
 
   return slide;
@@ -2005,7 +2029,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
         bold: true,
         fontSize: 11,
         fill: { color: C_TABLE_HEADER },
-        color: 'FFFFFF',
+        color: C_WHITE,
         fontFace: font,
       },
     },
@@ -2015,7 +2039,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
         bold: true,
         fontSize: 11,
         fill: { color: C_TABLE_HEADER },
-        color: 'FFFFFF',
+        color: C_WHITE,
         fontFace: font,
       },
     },
@@ -2023,8 +2047,8 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       text: '\u2192',
       options: {
         fontSize: 11,
-        fill: { color: 'FFFFFF' },
-        color: '333333',
+        fill: { color: C_WHITE },
+        color: C_BLACK,
         align: 'center',
         fontFace: font,
       },
@@ -2035,7 +2059,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
         bold: true,
         fontSize: 11,
         fill: { color: C_ACCENT1 },
-        color: 'FFFFFF',
+        color: C_WHITE,
         fontFace: font,
       },
     },
@@ -2043,8 +2067,8 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       text: '\u2192',
       options: {
         fontSize: 11,
-        fill: { color: 'FFFFFF' },
-        color: '333333',
+        fill: { color: C_WHITE },
+        color: C_BLACK,
         align: 'center',
         fontFace: font,
       },
@@ -2055,7 +2079,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
         bold: true,
         fontSize: 11,
         fill: { color: TP_COLORS.accent2 || 'EDFDFF' },
-        color: '333333',
+        color: C_BLACK,
         fontFace: font,
       },
     },
@@ -2067,30 +2091,30 @@ function addHorizontalFlowTable(slide, data, options = {}) {
       options: {
         fontSize: 11,
         fontFace: font,
-        color: '333333',
+        color: C_BLACK,
         bold: true,
-        fill: { color: 'CCCCCC' },
+        fill: { color: C_BORDER },
       },
     },
     {
       text: ensureString(row.currentState || ''),
-      options: { fontSize: 11, fontFace: font, color: '333333' },
+      options: { fontSize: 11, fontFace: font, color: C_BLACK },
     },
     {
       text: '\u2192',
-      options: { fontSize: 11, align: 'center', color: '333333', fontFace: font },
+      options: { fontSize: 11, align: 'center', color: C_BLACK, fontFace: font },
     },
     {
       text: ensureString(row.transition || ''),
-      options: { fontSize: 11, fontFace: font, color: '333333' },
+      options: { fontSize: 11, fontFace: font, color: C_BLACK },
     },
     {
       text: '\u2192',
-      options: { fontSize: 11, align: 'center', color: '333333', fontFace: font },
+      options: { fontSize: 11, align: 'center', color: C_BLACK, fontFace: font },
     },
     {
       text: ensureString(row.futureState || ''),
-      options: { fontSize: 11, fontFace: font, color: '333333' },
+      options: { fontSize: 11, fontFace: font, color: C_BLACK },
     },
   ]);
 
@@ -2103,7 +2127,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
     w,
     colW: colWidths,
     rowH,
-    border: { pt: 0.5, color: 'CCCCCC' },
+    border: { pt: 0.5, color: C_BORDER },
   });
 }
 
@@ -2146,6 +2170,17 @@ module.exports = {
   addFinancialCharts,
   templatePatterns,
   TEMPLATE,
+  CHART_AXIS_DEFAULTS,
+  C_WHITE,
+  C_BLACK,
+  C_TRUE_BLACK,
+  C_BORDER,
+  C_MUTED,
+  C_AXIS_GRAY,
+  C_LIGHT_GRAY,
+  C_GRAY_BG,
+  C_SECONDARY,
+  C_LIGHT_BLUE,
   addTocSlide,
   addOpportunitiesBarriersSlide,
   addHorizontalFlowTable,
