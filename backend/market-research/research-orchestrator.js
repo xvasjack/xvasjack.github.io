@@ -670,7 +670,7 @@ async function synthesizeCompetitors(researchData, country, industry, clientCont
 ${JSON.stringify(labeledData, null, 2)}`
     : `RESEARCH DATA: EMPTY due to API issues.`;
 
-  const prompt = `You are synthesizing competitive intelligence for ${country}'s ${industry} market.
+  const commonIntro = `You are synthesizing competitive intelligence for ${country}'s ${industry} market.
 Client context: ${clientContext}
 
 ${researchContext}
@@ -702,7 +702,11 @@ EXAMPLE (52 words): "Baker Hughes entered Vietnam in 2015 through a JV with PTSC
 
 A description of 20-30 words WILL BE REJECTED. Include: revenue figures, entry year, market share, key projects, growth rate.
 
-Return JSON:
+Return ONLY valid JSON.`;
+
+  const prompt1 = `${commonIntro}
+
+Return JSON with ONLY the japanesePlayers section:
 {
   "japanesePlayers": {
     "slideTitle": "${country} - Japanese ${industry} Companies",
@@ -719,7 +723,13 @@ Return JSON:
     ],
     "marketInsight": "Overall assessment of Japanese presence",
     "dataType": "company_comparison"
-  },
+  }
+}`;
+
+  const prompt2 = `${commonIntro}
+
+Return JSON with ONLY the localMajor section:
+{
   "localMajor": {
     "slideTitle": "${country} - Major Local Players",
     "subtitle": "Key insight",
@@ -737,7 +747,13 @@ Return JSON:
     ],
     "concentration": "Market concentration with evidence",
     "dataType": "company_comparison"
-  },
+  }
+}`;
+
+  const prompt3 = `${commonIntro}
+
+Return JSON with ONLY the foreignPlayers section:
+{
   "foreignPlayers": {
     "slideTitle": "${country} - Foreign ${industry} Companies",
     "subtitle": "Key insight",
@@ -755,7 +771,13 @@ Return JSON:
     ],
     "competitiveInsight": "How foreign players compete",
     "dataType": "company_comparison"
-  },
+  }
+}`;
+
+  const prompt4 = `${commonIntro}
+
+Return JSON with ONLY the caseStudy and maActivity sections:
+{
   "caseStudy": {
     "slideTitle": "${country} - Market Entry Case Study",
     "subtitle": "Lessons from the best example",
@@ -774,20 +796,34 @@ Return JSON:
     "valuationMultiples": "Typical multiples with evidence",
     "dataType": "regulation_list"
   }
-}
+}`;
 
-Return ONLY valid JSON.`;
+  console.log('    [Competitors] Running 4 parallel synthesis calls...');
+  const [r1, r2, r3, r4] = await Promise.all([
+    synthesizeWithFallback(prompt1, { maxTokens: 4096 }),
+    synthesizeWithFallback(prompt2, { maxTokens: 4096 }),
+    synthesizeWithFallback(prompt3, { maxTokens: 4096 }),
+    synthesizeWithFallback(prompt4, { maxTokens: 4096 }),
+  ]);
 
-  const result = await synthesizeWithFallback(prompt, { maxTokens: 12288 });
-  if (!result) {
-    console.error('  [synthesizeCompetitors] Synthesis completely failed — no data returned');
+  const merged = {};
+  for (const r of [r1, r2, r3, r4]) {
+    if (r) Object.assign(merged, r);
+  }
+
+  if (Object.keys(merged).length === 0) {
+    console.error('  [synthesizeCompetitors] All parallel synthesis calls failed');
     return {
       _synthesisError: true,
       section: 'competitors',
       message: 'All synthesis attempts failed',
     };
   }
-  const validated = validateCompetitorsSynthesis(result);
+
+  console.log(
+    `    [Competitors] Merged ${Object.keys(merged).length} sections: ${Object.keys(merged).join(', ')}`
+  );
+  const validated = validateCompetitorsSynthesis(merged);
   const padded = padThinDescriptions(validated);
   return padded;
 }
