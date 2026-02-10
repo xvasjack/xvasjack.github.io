@@ -32,6 +32,7 @@ const C_WHITE = TP_COLORS.lt1 || 'FFFFFF';
 const C_BLACK = TP_COLORS.dk1 || '000000'; // Standard text color (template dk1)
 const C_TRUE_BLACK = '000000'; // Chart axes/titles
 const C_BORDER = templatePatterns.style?.table?.borderColor || 'D6D7D9'; // Template table border
+const C_BORDER_STYLE = templatePatterns.style?.table?.borderStyle || 'dash';
 const TABLE_BORDER_WIDTH = templatePatterns.style?.table?.borderWidth || 1;
 const C_MUTED = '999999'; // Muted/unavailable text
 const C_AXIS_GRAY = TP_COLORS.gridLine || 'D6D7D9'; // Chart axis/grid lines
@@ -720,13 +721,21 @@ function addInsightsPanel(slide, insights = [], options = {}) {
 
 // Helper: add section divider slide (Table of Contents style)
 // Creates a visual break between major sections with section title
-function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, options = {}) {
+function addSectionDivider(
+  pptx,
+  sectionTitle,
+  sectionNumber,
+  totalSections,
+  masterName = 'DIVIDER_NAVY'
+) {
   const FONT = 'Segoe UI';
-  const COLORS = options.COLORS || {
-    headerLine: C_DK2,
-    accent3: C_ACCENT3,
-    dk2: C_DK2,
-    white: TP_COLORS.lt1 || 'FFFFFF',
+  const dividerPos = templatePatterns.patterns?.section_divider?.elements?.title || {
+    x: 0.74,
+    y: 2.99,
+    w: 8.19,
+    h: 1.51,
+    fontSize: 44,
+    color: 'FFFFFF',
   };
 
   // Section overview text for each section (actionable context)
@@ -743,10 +752,10 @@ function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, opt
       'Decision framework — synthesizing all findings into actionable recommendations with clear go/no-go criteria and next steps.',
   };
 
-  // Use plain slide (not master) for section dividers to avoid master line overlaps
-  const slide = pptx.addSlide();
+  // Use master slide for background (no manual background shape needed)
+  const slide = pptx.addSlide({ masterName });
 
-  // Section number (small, top left) — use background fill on text instead of separate rect
+  // Section number (small, top left)
   const sectionLabel =
     sectionNumber && totalSections ? `Section ${sectionNumber} of ${totalSections}` : '';
   if (sectionLabel) {
@@ -756,21 +765,21 @@ function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, opt
       w: 3,
       h: 0.3,
       fontSize: 12,
-      color: C_WHITE,
+      color: dividerPos.color || 'FFFFFF',
       fontFace: FONT,
       italic: true,
     });
   }
 
-  // Section title (large, centered)
+  // Section title (large, positioned from template pattern)
   slide.addText(truncate(sectionTitle, 50), {
-    x: 0.5,
-    y: 2.4,
-    w: 12.333,
-    h: 1.2,
-    fontSize: 44,
+    x: dividerPos.x,
+    y: dividerPos.y,
+    w: dividerPos.w,
+    h: dividerPos.h,
+    fontSize: dividerPos.fontSize || 44,
     bold: true,
-    color: C_WHITE,
+    color: dividerPos.color || 'FFFFFF',
     fontFace: FONT,
     align: 'center',
     valign: 'middle',
@@ -779,10 +788,10 @@ function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, opt
   // Decorative line under title
   slide.addShape('line', {
     x: 4,
-    y: 3.8,
+    y: dividerPos.y + dividerPos.h + 0.2,
     w: 5.333,
     h: 0,
-    line: { color: C_WHITE, width: 3 },
+    line: { color: dividerPos.color || 'FFFFFF', width: 3 },
   });
 
   // Section overview description
@@ -790,7 +799,7 @@ function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, opt
   if (overview) {
     slide.addText(overview, {
       x: 1.5,
-      y: 4.2,
+      y: dividerPos.y + dividerPos.h + 0.6,
       w: 10.333,
       h: 0.8,
       fontSize: 14,
@@ -801,11 +810,6 @@ function addSectionDivider(pptx, sectionTitle, sectionNumber, totalSections, opt
       italic: true,
     });
   }
-
-  // Set slide background color instead of rect shape to avoid overlaps
-  slide.background = {
-    color: COLORS.accent3 || C_ACCENT3,
-  };
 
   return slide;
 }
@@ -1940,7 +1944,7 @@ function addFinancialCharts(slide, incomeData, balanceData, patternDef) {
 
 // ============ TOC SLIDE ============
 // Creates a Table of Contents slide with highlighted active section
-function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
+function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT, countryName) {
   const slide = pptx.addSlide({ masterName: 'YCP_MAIN' });
 
   // Title "Table of Contents"
@@ -1955,10 +1959,31 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
     bold: TITLE_BOLD,
   });
 
-  // Table with section names
-  const tableRows = sectionNames.map((name, idx) => {
+  // Build table rows
+  const tableRows = [];
+
+  // Country header row (light blue fill) if countryName provided
+  if (countryName) {
+    tableRows.push([
+      {
+        text: countryName,
+        options: {
+          fontSize: 20,
+          fontFace: FONT,
+          color: C_DK2,
+          bold: true,
+          fill: { color: '99CCFF' },
+          border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: C_BORDER },
+          valign: 'middle',
+        },
+      },
+    ]);
+  }
+
+  // Section name rows
+  sectionNames.forEach((name, idx) => {
     const isActive = idx === activeSectionIdx;
-    return [
+    tableRows.push([
       {
         text: name,
         options: {
@@ -1967,11 +1992,12 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
           color: C_BLACK,
           bold: isActive,
           fill: { color: isActive ? C_ACCENT1 : C_WHITE },
-          border: { pt: TABLE_BORDER_WIDTH, color: C_BORDER },
+          border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: C_BORDER },
           valign: 'middle',
+          margin: [0, 0, 0, 20],
         },
       },
-    ];
+    ]);
   });
 
   slide.addTable(tableRows, {
@@ -1979,7 +2005,7 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT) {
     y: TEMPLATE.contentArea.y,
     w: TEMPLATE.contentArea.w,
     rowH: 0.59,
-    border: { pt: TABLE_BORDER_WIDTH, color: C_BORDER },
+    border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: C_BORDER },
   });
 
   return slide;
@@ -2260,6 +2286,7 @@ module.exports = {
   C_BLACK,
   C_TRUE_BLACK,
   C_BORDER,
+  C_BORDER_STYLE,
   TABLE_BORDER_WIDTH,
   C_MUTED,
   C_AXIS_GRAY,

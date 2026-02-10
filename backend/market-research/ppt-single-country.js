@@ -1,4 +1,21 @@
+const fs = require('fs');
+const path = require('path');
 const pptxgen = require('pptxgenjs');
+
+// Template images extracted from Escort template
+const COVER_BG_B64 = fs
+  .readFileSync(path.join(__dirname, 'assets/cover-bg.png'))
+  .toString('base64');
+const DIVIDER_BG_B64 = fs
+  .readFileSync(path.join(__dirname, 'assets/divider-bg.png'))
+  .toString('base64');
+const LOGO_DARK_B64 = fs
+  .readFileSync(path.join(__dirname, 'assets/logo-dark.png'))
+  .toString('base64');
+const LOGO_WHITE_B64 = fs
+  .readFileSync(path.join(__dirname, 'assets/logo-white.png'))
+  .toString('base64');
+
 const {
   truncate,
   truncateSubtitle,
@@ -28,6 +45,7 @@ const {
   addFinancialCharts,
   templatePatterns,
   addTocSlide,
+  addSectionDivider,
   addOpportunitiesBarriersSlide,
   addHorizontalFlowTable,
   flattenPlayerProfile,
@@ -147,6 +165,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           },
         },
       },
+      {
+        image: {
+          data: `image/png;base64,${LOGO_DARK_B64}`,
+          x: 0.38,
+          y: 7.3,
+          w: 0.47,
+          h: 0.17,
+        },
+      },
     ],
   });
 
@@ -155,6 +182,22 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     title: 'YCP_MASTER',
     background: { color: COLORS.white },
     objects: [],
+  });
+
+  pptx.defineSlideMaster({
+    title: 'DIVIDER_NAVY',
+    background: { data: `image/png;base64,${DIVIDER_BG_B64}` },
+    objects: [
+      {
+        image: {
+          data: `image/png;base64,${LOGO_WHITE_B64}`,
+          x: 0.63,
+          y: 0.58,
+          w: 2.44,
+          h: 0.87,
+        },
+      },
+    ],
   });
 
   pptx.author = 'YCP Market Research';
@@ -402,6 +445,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       color: COLORS.dk2,
       fontFace: FONT,
       valign: 'top',
+      fit: 'shrink',
     });
     // Escort template has no subtitle line — subtitle text used only for context
     // if (subtitle) { ... } — removed to match real template
@@ -3030,8 +3074,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
 
   function generateSection(sectionName, sectionNumber, totalSections, sectionData) {
-    // Use TOC slide instead of old section divider — highlight active section
-    addTocSlide(pptx, sectionNumber - 1, SECTION_NAMES, COLORS, FONT);
+    // Section divider slide with navy background
+    addSectionDivider(pptx, sectionName, sectionNumber, totalSections, 'DIVIDER_NAVY');
 
     // Detect _synthesisError sentinel — synthesis completely failed for this section
     if (sectionData && sectionData._synthesisError) {
@@ -3171,29 +3215,35 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
   // ===== SLIDE 1: COVER (uses NO_BAR master) =====
   const titleSlide = pptx.addSlide({ masterName: 'NO_BAR' });
+  titleSlide.background = { data: `image/png;base64,${COVER_BG_B64}` };
   // Use client/project name if available, otherwise country
   const coverTitle = scope.clientName || (country || 'UNKNOWN').toUpperCase();
   const coverSubtitle = scope.projectName
     ? `${scope.projectName} - ${scope.industry} Market Selection`
     : `${scope.industry} - Market Overview & Analysis`;
+  const coverPattern = templatePatterns.patterns?.cover?.elements || {};
+  const compPos = coverPattern.companyName || { x: 0.46, y: 1.63, w: 9.35, h: 2.83 };
+  const projPos = coverPattern.projectTitle || { x: 0.46, y: 4.86, w: 9.35, h: 1.65 };
   titleSlide.addText(coverTitle, {
-    x: 0.5,
-    y: 2.2,
-    w: 9.0,
-    h: 0.8,
-    fontSize: 42,
+    x: compPos.x,
+    y: compPos.y,
+    w: compPos.w,
+    h: compPos.h,
+    fontSize: coverPattern.companyName?.fontSize || 36,
     bold: true,
     color: COLORS.dk2,
     fontFace: FONT,
+    fit: 'shrink',
   });
   titleSlide.addText(coverSubtitle, {
-    x: 0.5,
-    y: 3.0,
-    w: 9.0,
-    h: 0.5,
-    fontSize: 24,
+    x: projPos.x,
+    y: projPos.y,
+    w: projPos.w,
+    h: projPos.h,
+    fontSize: coverPattern.projectTitle?.fontSize || 18,
     color: COLORS.accent1,
     fontFace: FONT,
+    fit: 'shrink',
   });
   titleSlide.addText(
     scope.projectName
