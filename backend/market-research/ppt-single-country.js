@@ -1782,7 +1782,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       margin: TABLE_CELL_MARGIN,
       colW: colWidths.length > 0 ? colWidths : defaultColW,
       valign: 'top',
-      autoPage: false,
+      autoPage: true,
+      autoPageRepeatHeader: true,
+      autoPageHeaderRows: 1,
     });
 
     // Add insights below table
@@ -2088,7 +2090,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           margin: TABLE_CELL_MARGIN,
           colW: colW.length > 0 ? colW : undefined,
           valign: 'top',
-          autoPage: false,
+          autoPage: true,
+          autoPageRepeatHeader: true,
+          autoPageHeaderRows: 1,
         });
         currentY += tableH + 0.15;
       }
@@ -2204,7 +2208,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         margin: TABLE_CELL_MARGIN,
         colW: [2.96, 1.08, 4.53, 4.03],
         valign: 'top',
-        autoPage: false,
+        autoPage: true,
+        autoPageRepeatHeader: true,
+        autoPageHeaderRows: 1,
       });
       // Key message summary below table if available
       let actsNextY = CONTENT_Y + actsTableH + 0.15;
@@ -2484,7 +2490,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       margin: TABLE_CELL_MARGIN,
       colW: [2.5, 3.5, 3.1, 3.5],
       valign: 'top',
-      autoPage: false,
+      autoPage: true,
+      autoPageRepeatHeader: true,
+      autoPageHeaderRows: 1,
     });
   }
 
@@ -3818,12 +3826,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       generateSection(sec.name, sec.num, 6, sec.data);
 
       // Regulatory transition summary slide after Policy section
-      if (
-        sec.name === 'Policy & Regulatory' &&
-        policy?.regulatorySummary &&
-        Array.isArray(policy.regulatorySummary) &&
-        policy.regulatorySummary.length > 0
-      ) {
+      if (sec.name === 'Policy & Regulatory' && policy?.regulatorySummary) {
+        const regData = policy.regulatorySummary;
         const regSummarySlide = addSlideWithTitle(
           `${country} - Regulatory Transition Summary`,
           '',
@@ -3832,7 +3836,18 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             dataQuality: getDataQualityForCategory('policy_'),
           }
         );
-        addHorizontalFlowTable(regSummarySlide, policy.regulatorySummary, { font: FONT });
+        if (Array.isArray(regData) && regData.length > 0) {
+          // Array format: use horizontal flow table (current -> transition -> future)
+          addHorizontalFlowTable(regSummarySlide, regData, { font: FONT });
+        } else if (typeof regData === 'object' && Object.keys(regData).length > 0) {
+          // Object format: render via generic content slide renderer
+          renderGenericContentSlide(regSummarySlide, {
+            key: 'regulatorySummary',
+            data: regData,
+            title: `${country} - Regulatory Transition Summary`,
+            subtitle: '',
+          });
+        }
       }
     } catch (sectionErr) {
       console.error(`[PPT] Section "${sec.name}" crashed: ${sectionErr?.message}`);
