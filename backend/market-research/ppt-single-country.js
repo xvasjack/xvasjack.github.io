@@ -978,15 +978,54 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         );
       }
     } else {
-      // No chart data - render text insights with sufficient content blocks (min 3)
+      // No chart data - render text insights as structured content blocks
       if (insights.length > 0) {
-        addCalloutBox(slide, 'Market Overview', insights.slice(0, 4).join(' | '), {
-          x: LEFT_MARGIN,
-          y: CONTENT_Y,
-          w: CONTENT_WIDTH,
-          h: 2.0,
-          type: 'insight',
-        });
+        const overview = data.overview ? ensureString(data.overview) : null;
+        const keyInsight = data.keyInsight ? ensureString(data.keyInsight) : null;
+        let currentY = CONTENT_Y;
+
+        // Main overview block
+        if (overview) {
+          addCalloutBox(slide, 'Overview', overview, {
+            x: LEFT_MARGIN,
+            y: currentY,
+            w: CONTENT_WIDTH,
+            h: 1.4,
+            type: 'insight',
+          });
+          currentY += 1.55;
+        }
+
+        // Remaining insights as bullet list
+        const remainingInsights = insights
+          .filter((ins) => ins !== overview && ins !== keyInsight)
+          .slice(0, 6);
+        if (remainingInsights.length > 0) {
+          const bulletText = remainingInsights.map((t) => `\u2022 ${ensureString(t)}`).join('\n');
+          slide.addText(bulletText, {
+            x: LEFT_MARGIN,
+            y: currentY,
+            w: CONTENT_WIDTH,
+            h: Math.min(2.5, remainingInsights.length * 0.45 + 0.3),
+            fontSize: 12,
+            fontFace: FONT,
+            color: COLORS.bodyText,
+            valign: 'top',
+            wrap: true,
+            lineSpacingMultiple: 1.2,
+          });
+          currentY += Math.min(2.5, remainingInsights.length * 0.45 + 0.3) + 0.15;
+        }
+
+        // Key insight callout at bottom
+        if (keyInsight) {
+          addCalloutOverlay(slide, keyInsight, {
+            x: LEFT_MARGIN + 0.5,
+            y: currentY,
+            w: CONTENT_WIDTH - 1.0,
+            h: 0.55,
+          });
+        }
       } else {
         addDataUnavailableMessage(slide, `${block.key} data not available`);
       }
@@ -1058,6 +1097,26 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           if (state.totalProjects) insights.push(`Total Projects: ${state.totalProjects}`);
         }
         if (data.keyDrivers) insights.push(ensureString(data.keyDrivers));
+        break;
+
+      default:
+        // Generic insight extraction for dynamic market keys (section_0, section_1, etc.)
+        if (data.overview) insights.push(ensureString(data.overview));
+        if (data.keyInsight) insights.push(ensureString(data.keyInsight));
+        if (Array.isArray(data.keyMetrics)) {
+          data.keyMetrics.forEach((m) => {
+            if (m && m.metric && m.value) {
+              insights.push(`${m.metric}: ${m.value}${m.context ? ` (${m.context})` : ''}`);
+            }
+          });
+        }
+        if (data.narrative) insights.push(ensureString(data.narrative));
+        safeArray(data.keyDrivers, 3).forEach((d) => insights.push(ensureString(d)));
+        // Also check for generic market fields
+        if (data.marketSize) insights.push(`Market Size: ${data.marketSize}`);
+        if (data.growthRate) insights.push(`Growth: ${data.growthRate}`);
+        if (data.demandGrowth) insights.push(`Demand Growth: ${data.demandGrowth}`);
+        if (data.totalCapacity) insights.push(`Capacity: ${data.totalCapacity}`);
         break;
     }
 
