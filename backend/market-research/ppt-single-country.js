@@ -1861,7 +1861,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         { text: safeCell(p.revenue) },
         { text: p.partnershipFit ? `${safeCell(p.partnershipFit)}/5` : '' },
         { text: p.acquisitionFit ? `${safeCell(p.acquisitionFit)}/5` : '' },
-        { text: safeCell(p.description), options: { fontSize: 14 } },
+        { text: safeCell(p.description, 220), options: { fontSize: 14 } },
       ];
     } else if (block.key === 'foreignPlayers') {
       headerCols = ['Company', 'Origin', 'Mode', 'Description'];
@@ -1870,15 +1870,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         // Build description with revenue and entryYear prepended (skip if already in description)
         const descParts = [];
         const baseDesc =
-          safeCell(p.description) ||
-          `${safeCell(p.success)} ${formatProjects(p.projects)}`.trim() ||
+          safeCell(p.description, 220) ||
+          `${safeCell(p.success, 140)} ${formatProjects(p.projects)}`.trim() ||
           '';
         if (p.revenue && !baseDesc.includes(safeCell(p.revenue)))
           descParts.push(`Revenue: ${safeCell(p.revenue)}.`);
         if (p.entryYear && !baseDesc.includes(safeCell(p.entryYear)))
           descParts.push(`Entered: ${safeCell(p.entryYear)}.`);
         if (baseDesc) descParts.push(baseDesc);
-        const desc = descParts.join(' ');
+        const desc = safeCell(descParts.join(' '), 240);
         return [
           p.website
             ? {
@@ -1898,12 +1898,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         // Build description with revenue prepended if not already in a column
         const descParts = [];
         const baseDesc =
-          safeCell(p.description) ||
-          `${safeCell(p.strengths)} ${safeCell(p.weaknesses)}`.trim() ||
+          safeCell(p.description, 220) ||
+          `${safeCell(p.strengths, 120)} ${safeCell(p.weaknesses, 120)}`.trim() ||
           (p.projects ? `Projects: ${formatProjects(p.projects)}` : '') ||
           '';
         if (baseDesc) descParts.push(baseDesc);
-        const desc = descParts.join(' ');
+        const desc = safeCell(descParts.join(' '), 240);
         return [
           p.website
             ? {
@@ -1924,11 +1924,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         // Build description with revenue prepended (skip if already in description)
         const descParts = [];
         const baseDesc =
-          safeCell(p.description) || formatProjects(p.projects) || safeCell(p.assessment);
+          safeCell(p.description, 220) || formatProjects(p.projects) || safeCell(p.assessment, 140);
         if (p.revenue && (!baseDesc || !baseDesc.includes(safeCell(p.revenue))))
           descParts.push(`Revenue: ${safeCell(p.revenue)}.`);
         if (baseDesc) descParts.push(baseDesc);
-        const desc = descParts.join(' ');
+        const desc = safeCell(descParts.join(' '), 240);
         return [
           p.website
             ? {
@@ -1963,9 +1963,6 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         margin: TABLE_CELL_MARGIN,
         colW: colWidths.length > 0 ? colWidths : defaultColW,
         valign: 'top',
-        autoPage: true,
-        autoPageRepeatHeader: true,
-        autoPageHeaderRows: 1,
       },
       block.key
     );
@@ -2270,10 +2267,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         );
 
         const rows = [tableHeader(headerLabels)];
-        items.forEach((item) => {
+        items.slice(0, 8).forEach((item) => {
           rows.push(
             colKeys.map((k) => ({
-              text: safeCell(item[k] != null ? String(item[k]) : ''),
+              text: safeCell(item[k] != null ? String(item[k]) : '', 140),
             }))
           );
         });
@@ -2284,21 +2281,23 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         });
         const colW = calculateColumnWidths(rows, CONTENT_WIDTH);
         applyAlternateRowFill(rows);
-        safeAddTable(slide, rows, {
-          x: LEFT_MARGIN,
-          y: currentY,
-          w: CONTENT_WIDTH,
-          h: tableH,
-          fontSize: 14,
-          fontFace: FONT,
-          border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
-          margin: TABLE_CELL_MARGIN,
-          colW: colW.length > 0 ? colW : undefined,
-          valign: 'top',
-          autoPage: true,
-          autoPageRepeatHeader: true,
-          autoPageHeaderRows: 1,
-        });
+        safeAddTable(
+          slide,
+          rows,
+          {
+            x: LEFT_MARGIN,
+            y: currentY,
+            w: CONTENT_WIDTH,
+            h: tableH,
+            fontSize: 14,
+            fontFace: FONT,
+            border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+            margin: TABLE_CELL_MARGIN,
+            colW: colW.length > 0 ? colW : undefined,
+            valign: 'top',
+          },
+          block.key || 'genericTable'
+        );
         currentY += tableH + 0.15;
       }
     }
@@ -2416,9 +2415,6 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           margin: TABLE_CELL_MARGIN,
           colW: [2.96, 1.08, 4.53, 4.03],
           valign: 'top',
-          autoPage: true,
-          autoPageRepeatHeader: true,
-          autoPageHeaderRows: 1,
         },
         'foundationalActs'
       );
@@ -2689,21 +2685,23 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
     const incTableH = safeTableHeight(incRows.length, { fontSize: 14, maxH: 4.5 });
     applyAlternateRowFill(incRows);
-    safeAddTable(slide, incRows, {
-      x: LEFT_MARGIN,
-      y: CONTENT_Y,
-      w: CONTENT_WIDTH,
-      h: incTableH,
-      fontSize: 14,
-      fontFace: FONT,
-      border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
-      margin: TABLE_CELL_MARGIN,
-      colW: [2.5, 3.5, 3.1, 3.5],
-      valign: 'top',
-      autoPage: true,
-      autoPageRepeatHeader: true,
-      autoPageHeaderRows: 1,
-    });
+    safeAddTable(
+      slide,
+      incRows,
+      {
+        x: LEFT_MARGIN,
+        y: CONTENT_Y,
+        w: CONTENT_WIDTH,
+        h: incTableH,
+        fontSize: 14,
+        fontFace: FONT,
+        border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+        margin: TABLE_CELL_MARGIN,
+        colW: [2.5, 3.5, 3.1, 3.5],
+        valign: 'top',
+      },
+      'keyIncentives'
+    );
   }
 
   function renderCaseStudy(slide, data) {
@@ -4227,6 +4225,14 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     ].join(', ');
     throw new Error(
       `PPT rendering failures detected (${templateUsageStats.slideRenderFailures.length}): ${failKeys}`
+    );
+  }
+  if (templateStrictMode && templateUsageStats.tableRecoveries.length > 0) {
+    const recoveredKeys = [...new Set(templateUsageStats.tableRecoveries.map((r) => r.key))].join(
+      ', '
+    );
+    throw new Error(
+      `Template formatting gate failed: table autoPage recoveries were required (${templateUsageStats.tableRecoveries.length}): ${recoveredKeys}`
     );
   }
 
