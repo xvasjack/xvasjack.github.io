@@ -2735,7 +2735,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
 
   // ============ REVIEW-DEEPEN LOOP ============
   // Loop: review → deepen → merge → review again until coverage is good
-  const REVIEW_DEEPEN_MAX_ITERATIONS = 3;
+  const REVIEW_DEEPEN_MAX_ITERATIONS = 5;
   const REVIEW_DEEPEN_TARGET_SCORE = 80;
   let reviewDeepenIteration = 0;
   let lastCoverageScore = 0;
@@ -3106,6 +3106,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   if (!countryAnalysis.aborted) {
     let finalReviewIteration = 0;
     let lastCoherenceScore = 0;
+    let verificationPassesRemaining = 0;
 
     try {
       while (finalReviewIteration < FINAL_REVIEW_MAX_ITERATIONS) {
@@ -3118,14 +3119,6 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         countryAnalysis.finalReview = finalReview;
         lastCoherenceScore = finalReview?.coherenceScore || 0;
 
-        // Exit: coherence score meets target
-        if (lastCoherenceScore >= FINAL_REVIEW_TARGET_SCORE) {
-          console.log(
-            `  [FINAL REVIEW] Coherence ${lastCoherenceScore}/100 >= ${FINAL_REVIEW_TARGET_SCORE}. Done.`
-          );
-          break;
-        }
-
         if (!finalReview) {
           console.log('  [FINAL REVIEW] Review returned null, proceeding.');
           break;
@@ -3134,6 +3127,35 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         const criticalOrMajor = (finalReview.issues || []).filter(
           (i) => i.severity === 'critical' || i.severity === 'major'
         );
+        const hasResearchGaps = Array.isArray(finalReview.researchGaps)
+          ? finalReview.researchGaps.length > 0
+          : false;
+        const reviewClean =
+          lastCoherenceScore >= FINAL_REVIEW_TARGET_SCORE &&
+          criticalOrMajor.length === 0 &&
+          !hasResearchGaps;
+
+        // Exit only when score is high AND no critical/major issues remain.
+        // If we just fixed sections, enforce two extra clean validation passes.
+        if (reviewClean) {
+          if (verificationPassesRemaining > 0) {
+            console.log(
+              `  [FINAL REVIEW] Clean verification pass (${3 - verificationPassesRemaining}/2)`
+            );
+            verificationPassesRemaining--;
+            if (verificationPassesRemaining === 0) {
+              console.log(
+                `  [FINAL REVIEW] Coherence ${lastCoherenceScore}/100 with no critical/major issues after verification. Done.`
+              );
+              break;
+            }
+            continue;
+          }
+          console.log(
+            `  [FINAL REVIEW] Coherence ${lastCoherenceScore}/100 with no critical/major issues. Done.`
+          );
+          break;
+        }
 
         // Exit: no actionable issues despite low score
         if (
@@ -3225,6 +3247,8 @@ async function researchCountry(country, industry, clientContext, scope = null) {
             clientContext,
             storyPlan
           );
+          // Hard rule: after each fix, run at least 2 additional review passes.
+          verificationPassesRemaining = Math.max(verificationPassesRemaining, 2);
         }
       }
 
@@ -3243,10 +3267,14 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     (i) => i?.severity === 'critical'
   ).length;
   const finalMajor = (finalReview?.issues || []).filter((i) => i?.severity === 'major').length;
+  const finalReviewOpenGaps = Array.isArray(finalReview?.researchGaps)
+    ? finalReview.researchGaps.length
+    : 0;
   const confidenceReady = (countryAnalysis.finalConfidenceScore || 0) >= MIN_CONFIDENCE_SCORE;
   const codeGateReady = (lastCodeGateScore || 0) >= MIN_CONFIDENCE_SCORE;
   const reviewReady =
-    !finalReview || (finalCoherence >= 80 && finalCritical === 0 && finalMajor <= 1);
+    !finalReview ||
+    (finalCoherence >= 80 && finalCritical === 0 && finalMajor === 0 && finalReviewOpenGaps === 0);
 
   countryAnalysis.readyForClient = Boolean(countryAnalysis.readyForClient && confidenceReady);
   countryAnalysis.readyForClient = Boolean(countryAnalysis.readyForClient && codeGateReady);
@@ -3259,6 +3287,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     finalReviewCoherence: finalCoherence,
     finalReviewCritical: finalCritical,
     finalReviewMajor: finalMajor,
+    finalReviewOpenGaps,
   };
   if (!countryAnalysis.readyForClient) {
     const reasons = [];
@@ -3272,7 +3301,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
       );
     if (!reviewReady)
       reasons.push(
-        `Final review coherence ${finalCoherence}/100 with critical=${finalCritical}, major=${finalMajor}`
+        `Final review coherence ${finalCoherence}/100 with critical=${finalCritical}, major=${finalMajor}, openGaps=${finalReviewOpenGaps}`
       );
     countryAnalysis.readiness.reasons = reasons;
   }

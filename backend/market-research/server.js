@@ -308,10 +308,12 @@ async function runMarketResearch(userPrompt, email, options = {}) {
           Number(pptMetrics.templateCoverage || 0) < 100 ||
           Number(pptMetrics.slideRenderFailureCount || 0) > 0 ||
           Number(pptMetrics.tableRecoveryCount || 0) > 0 ||
-          Number(pptMetrics.nonTemplatePatternCount || 0) > 0
+          Number(pptMetrics.nonTemplatePatternCount || 0) > 0 ||
+          Number(pptMetrics.geometryIssueCount || 0) > 0 ||
+          Number(pptMetrics.geometryMaxDelta || 0) > 0.05
         ) {
           throw new Error(
-            `PPT template/formatting gate failed: coverage=${pptMetrics.templateCoverage}%, failures=${pptMetrics.slideRenderFailureCount}, recoveries=${pptMetrics.tableRecoveryCount}, nonTemplate=${pptMetrics.nonTemplatePatternCount}`
+            `PPT template/formatting gate failed: coverage=${pptMetrics.templateCoverage}%, failures=${pptMetrics.slideRenderFailureCount}, recoveries=${pptMetrics.tableRecoveryCount}, nonTemplate=${pptMetrics.nonTemplatePatternCount}, geometryIssues=${pptMetrics.geometryIssueCount || 0}, geometryMaxDelta=${pptMetrics.geometryMaxDelta || 0}`
           );
         }
       }
@@ -324,6 +326,10 @@ async function runMarketResearch(userPrompt, email, options = {}) {
           nonTemplatePatternCount: null,
           slideRenderFailureCount: null,
           tableRecoveryCount: null,
+          geometryCheckCount: null,
+          geometryAlignedCount: null,
+          geometryMaxDelta: null,
+          geometryIssueCount: null,
         };
       }
 

@@ -38,6 +38,7 @@ const {
   safeTableHeight,
   choosePattern,
   resolveTemplatePattern,
+  getTemplateSlideLayout,
   addDualChart,
   addChevronFlow,
   addInsightPanelsFromPattern,
@@ -299,6 +300,41 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     slideRenderFailures: [],
     tableRecoveries: [],
   };
+  const activeTemplateContext = { blockKey: null, slideNumber: null, layout: null };
+  const layoutFidelityStats = {
+    checks: 0,
+    aligned: 0,
+    maxDelta: 0,
+    missingGeometry: [],
+  };
+  const TABLE_TEMPLATE_CONTEXTS = new Set([
+    'foundationalActs',
+    'nationalPolicy',
+    'investmentRestrictions',
+    'keyIncentives',
+    'regulatorySummary',
+    'japanesePlayers',
+    'localMajor',
+    'foreignPlayers',
+    'partnerAssessment',
+    'caseStudy',
+    'maActivity',
+    'entryStrategy',
+    'implementation',
+    'targetSegments',
+    'goNoGo',
+    'timingIntelligence',
+    'lessonsLearned',
+    'dealEconomics',
+  ]);
+  const CHART_TEMPLATE_CONTEXTS = new Set([
+    'tpes',
+    'finalDemand',
+    'electricity',
+    'gasLng',
+    'pricing',
+    'escoMarket',
+  ]);
 
   // Enrichment fallback: use synthesis when available, otherwise fall back to countryAnalysis summary
   const enrichment = synthesis || {};
@@ -478,6 +514,49 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // Footer y position
   const FOOTER_Y = tpSource.y;
 
+  function rectDelta(a, b) {
+    if (!a || !b) return null;
+    const dx = Math.abs((a.x || 0) - (b.x || 0));
+    const dy = Math.abs((a.y || 0) - (b.y || 0));
+    const dw = Math.abs((a.w || 0) - (b.w || 0));
+    const dh = Math.abs((a.h || 0) - (b.h || 0));
+    return Math.max(dx, dy, dw, dh);
+  }
+
+  function recordGeometryCheck(kind, context, expectedRect, actualRect) {
+    const delta = rectDelta(expectedRect, actualRect);
+    if (delta == null) return;
+    layoutFidelityStats.checks += 1;
+    if (delta <= 0.01) layoutFidelityStats.aligned += 1;
+    layoutFidelityStats.maxDelta = Math.max(layoutFidelityStats.maxDelta, delta);
+    if (delta > 0.05) {
+      layoutFidelityStats.missingGeometry.push({
+        kind,
+        context,
+        reason: `delta=${delta.toFixed(3)}in`,
+      });
+    }
+  }
+
+  function noteMissingGeometry(kind, context, reason) {
+    layoutFidelityStats.missingGeometry.push({ kind, context, reason });
+  }
+
+  function getActiveLayoutRect(kind, fallbackRect, index = 0) {
+    const layout = activeTemplateContext.layout;
+    if (!layout) return fallbackRect;
+    if (kind === 'title' && layout.title) return { ...fallbackRect, ...layout.title };
+    if (kind === 'source' && layout.source) return { ...fallbackRect, ...layout.source };
+    if (kind === 'content' && layout.content) return { ...fallbackRect, ...layout.content };
+    if (kind === 'table' && layout.table) return { ...fallbackRect, ...layout.table };
+    if (kind === 'chart') {
+      const charts = Array.isArray(layout.charts) ? layout.charts : [];
+      if (charts[index]) return { ...fallbackRect, ...charts[index] };
+      if (charts[0]) return { ...fallbackRect, ...charts[0] };
+    }
+    return fallbackRect;
+  }
+
   // Helper: apply alternating row fill for readability (skip header row at idx 0)
   function applyAlternateRowFill(_rows) {
     // No-op: Escort template uses no alternate row shading
@@ -493,6 +572,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   function addSlideWithTitle(title, subtitle = '', options = {}) {
     // Use YCP_MAIN master (has header line built in)
     const slide = pptx.addSlide({ masterName: 'YCP_MAIN' });
+    const activeLayout = options.templateLayout || activeTemplateContext.layout || null;
+    const titleRect = getActiveLayoutRect('title', tpTitle);
+    const sourceRect = getActiveLayoutRect('source', tpSource);
 
     // Title shape (position + font from template extraction)
     // Escort template uses title (20pt) + subtitle thesis (16pt) in same shape, separated by line break
@@ -522,26 +604,34 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           },
         ],
         {
-          x: TITLE_X,
-          y: tpTitle.y,
-          w: TITLE_W,
-          h: tpTitle.h + 0.25,
+          x: titleRect.x,
+          y: titleRect.y,
+          w: titleRect.w,
+          h: titleRect.h + 0.25,
           valign: 'top',
           fit: 'shrink',
         }
       );
     } else {
       slide.addText(truncateTitle(title), {
-        x: TITLE_X,
-        y: tpTitle.y,
-        w: TITLE_W,
-        h: tpTitle.h,
+        x: titleRect.x,
+        y: titleRect.y,
+        w: titleRect.w,
+        h: titleRect.h,
         fontSize: tpTitleFontSize,
         bold: tpTitleBold,
         color: COLORS.dk2,
         fontFace: FONT,
         valign: 'top',
         fit: 'shrink',
+      });
+    }
+    if (activeLayout?.title) {
+      recordGeometryCheck('title', activeTemplateContext.blockKey || 'slide', activeLayout.title, {
+        x: titleRect.x,
+        y: titleRect.y,
+        w: titleRect.w,
+        h: titleRect.h,
       });
     }
     // Header line is provided by YCP_MAIN master — no manual line needed
@@ -612,12 +702,25 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
     if (footerParts.length > 0) {
       slide.addText(footerParts, {
-        x: LEFT_MARGIN,
-        y: FOOTER_Y,
-        w: SOURCE_W,
-        h: tpSource.h || 0.25,
+        x: sourceRect.x ?? LEFT_MARGIN,
+        y: sourceRect.y ?? FOOTER_Y,
+        w: sourceRect.w ?? SOURCE_W,
+        h: sourceRect.h || tpSource.h || 0.25,
         valign: 'top',
       });
+      if (activeLayout?.source) {
+        recordGeometryCheck(
+          'source',
+          activeTemplateContext.blockKey || 'slide',
+          activeLayout.source,
+          {
+            x: sourceRect.x ?? LEFT_MARGIN,
+            y: sourceRect.y ?? FOOTER_Y,
+            w: sourceRect.w ?? SOURCE_W,
+            h: sourceRect.h || tpSource.h || 0.25,
+          }
+        );
+      }
     }
 
     return slide;
@@ -694,6 +797,43 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (!normalizedRows) return false;
     const hadAutoPage = !!(options && options.autoPage);
     const addOptions = options && typeof options === 'object' ? { ...options } : options;
+    const shouldAlignToTemplate =
+      typeof addOptions === 'object' &&
+      TABLE_TEMPLATE_CONTEXTS.has(context) &&
+      activeTemplateContext.layout;
+    if (shouldAlignToTemplate) {
+      const expectedTableRect = getActiveLayoutRect('table', null);
+      if (expectedTableRect) {
+        const requestedRect = {
+          x: addOptions.x,
+          y: addOptions.y,
+          w: addOptions.w,
+          h: addOptions.h,
+        };
+        addOptions.x = expectedTableRect.x;
+        addOptions.y = expectedTableRect.y;
+        addOptions.w = expectedTableRect.w;
+        addOptions.h = expectedTableRect.h;
+        recordGeometryCheck('table', context, expectedTableRect, {
+          x: addOptions.x,
+          y: addOptions.y,
+          w: addOptions.w,
+          h: addOptions.h,
+        });
+        const preDelta = rectDelta(expectedTableRect, requestedRect);
+        if (preDelta != null && preDelta > 0.05) {
+          console.log(
+            `[PPT TEMPLATE] ${context}: aligned table geometry to slide ${activeTemplateContext.slideNumber} (delta=${preDelta.toFixed(3)}in)`
+          );
+        }
+      } else {
+        noteMissingGeometry(
+          'table',
+          context,
+          `No table geometry for selected template slide ${activeTemplateContext.slideNumber}`
+        );
+      }
+    }
     try {
       slide.addTable(normalizedRows, addOptions);
       return true;
@@ -1435,19 +1575,56 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       chartData.series.length >= 2 &&
       block.dataType !== 'composition_breakdown'
     ) {
-      // Dual chart: split series into two charts
+      // Dual chart: split series into two charts and prefer exact template chart boxes when available.
       const halfLen = Math.ceil(chartData.series.length / 2);
       const leftSeries = { ...chartData, series: chartData.series.slice(0, halfLen) };
       const rightSeries = { ...chartData, series: chartData.series.slice(halfLen) };
-      addDualChart(
-        slide,
-        { chartData: leftSeries, title: '', type: 'bar' },
-        { chartData: rightSeries, title: '', type: 'bar' },
-        null,
-        {
-          callout: insights.length > 0 ? { title: 'Key Insight', text: insights[0] } : null,
+      const leftRect = getActiveLayoutRect('chart', { x: 0.36, y: 1.86, w: 6.1, h: 3.8 }, 0);
+      const rightRect = getActiveLayoutRect('chart', { x: 6.86, y: 1.86, w: 6.1, h: 3.8 }, 1);
+      const hasTemplateDualCharts =
+        activeTemplateContext.layout &&
+        Array.isArray(activeTemplateContext.layout.charts) &&
+        activeTemplateContext.layout.charts.length >= 2;
+      if (hasTemplateDualCharts) {
+        const chartType = block.key === 'gasLng' ? 'line' : 'bar';
+        const chartTitle = getChartTitle(block.key, data);
+        if (chartType === 'line') {
+          addLineChart(slide, chartTitle, leftSeries, leftRect);
+          addLineChart(slide, chartTitle, rightSeries, rightRect);
+        } else {
+          addStackedBarChart(slide, chartTitle, leftSeries, leftRect);
+          addStackedBarChart(slide, chartTitle, rightSeries, rightRect);
         }
-      );
+        recordGeometryCheck(
+          'chart',
+          `${block.key}:left`,
+          activeTemplateContext.layout.charts[0],
+          leftRect
+        );
+        recordGeometryCheck(
+          'chart',
+          `${block.key}:right`,
+          activeTemplateContext.layout.charts[1],
+          rightRect
+        );
+      } else {
+        if (CHART_TEMPLATE_CONTEXTS.has(block.key)) {
+          noteMissingGeometry(
+            'chart',
+            block.key,
+            `No dual-chart geometry found for selected template slide ${activeTemplateContext.slideNumber}`
+          );
+        }
+        addDualChart(
+          slide,
+          { chartData: leftSeries, title: '', type: 'bar' },
+          { chartData: rightSeries, title: '', type: 'bar' },
+          null,
+          {
+            callout: insights.length > 0 ? { title: 'Key Insight', text: insights[0] } : null,
+          }
+        );
+      }
       return;
     }
 
@@ -1462,12 +1639,28 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         templatePatterns.patterns?.chart_insight_panels?.elements ||
         {};
       const chartPos = chartPattern.chart || {};
-      const chartOpts = {
+      const fallbackRect = {
         x: chartPos.x || LEFT_MARGIN,
         y: chartPos.y || CONTENT_Y,
         w: chartPos.w || 7.8,
         h: chartPos.h || 4.5,
       };
+      const resolvedChartRect = getActiveLayoutRect('chart', fallbackRect, 0);
+      const chartOpts = {
+        x: resolvedChartRect.x,
+        y: resolvedChartRect.y,
+        w: resolvedChartRect.w,
+        h: resolvedChartRect.h,
+      };
+      if (activeTemplateContext.layout?.charts?.[0]) {
+        recordGeometryCheck('chart', block.key, activeTemplateContext.layout.charts[0], chartOpts);
+      } else if (CHART_TEMPLATE_CONTEXTS.has(block.key)) {
+        noteMissingGeometry(
+          'chart',
+          block.key,
+          `No chart geometry found for selected template slide ${activeTemplateContext.slideNumber}`
+        );
+      }
       const chartTitle = getChartTitle(block.key, data);
 
       if (hasChartSeries) {
@@ -2054,9 +2247,24 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   // Generate a pattern-based slide for a single data block
   // Wrapped in try-catch so one failed slide doesn't kill the entire deck
   function generatePatternSlide(block) {
+    const templateLayout =
+      Number.isFinite(Number(block._templateSlide)) && block._templateSlide > 0
+        ? getTemplateSlideLayout(block._templateSlide)
+        : null;
+    activeTemplateContext.blockKey = block.key;
+    activeTemplateContext.slideNumber = block._templateSlide || null;
+    activeTemplateContext.layout = templateLayout;
+    if (block._templateSlide && !templateLayout) {
+      noteMissingGeometry(
+        'layout',
+        block.key,
+        `No extracted layout found for template slide ${block._templateSlide}`
+      );
+    }
     const slide = addSlideWithTitle(block.title, block.subtitle, {
       citations: block.citations,
       dataQuality: block.dataQuality,
+      templateLayout,
     });
     if (block._templatePattern) {
       console.log(
@@ -4235,6 +4443,18 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       `Template formatting gate failed: table autoPage recoveries were required (${templateUsageStats.tableRecoveries.length}): ${recoveredKeys}`
     );
   }
+  const geometryIssues = [
+    ...new Set(
+      layoutFidelityStats.missingGeometry.map(
+        (g) => `${g.kind}:${g.context}${g.reason ? ` (${g.reason})` : ''}`
+      )
+    ),
+  ];
+  if (templateStrictMode && geometryIssues.length > 0) {
+    throw new Error(
+      `Template geometry gate failed (${geometryIssues.length}): ${geometryIssues.slice(0, 10).join(', ')}`
+    );
+  }
 
   let pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
   pptxBuffer = await normalizeChartRelationshipTargets(pptxBuffer);
@@ -4251,6 +4471,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     slideRenderFailureCount: templateUsageStats.slideRenderFailures.length,
     tableRecoveryCount: templateUsageStats.tableRecoveries.length,
     tableRecoveryKeys: [...new Set(templateUsageStats.tableRecoveries.map((r) => r.key))],
+    geometryCheckCount: layoutFidelityStats.checks,
+    geometryAlignedCount: layoutFidelityStats.aligned,
+    geometryMaxDelta: Number(layoutFidelityStats.maxDelta.toFixed(4)),
+    geometryIssueCount: geometryIssues.length,
+    geometryIssueKeys: geometryIssues.slice(0, 20),
     slideRenderFailureKeys: [
       ...new Set(templateUsageStats.slideRenderFailures.map((f) => f.key || 'unknown')),
     ],

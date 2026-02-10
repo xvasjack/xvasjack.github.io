@@ -1605,7 +1605,7 @@ const BLOCK_TEMPLATE_PATTERN_MAP = Object.freeze({
   tpes: 'chart_insight_panels',
   finalDemand: 'chart_insight_panels',
   electricity: 'chart_insight_panels',
-  gasLng: 'chart_callout_dual',
+  gasLng: 'chart_with_grid',
   pricing: 'chart_insight_panels',
   escoMarket: 'chart_insight_panels',
   japanesePlayers: 'company_comparison',
@@ -1625,6 +1625,37 @@ const BLOCK_TEMPLATE_PATTERN_MAP = Object.freeze({
   lessonsLearned: 'regulatory_table',
 });
 
+// Deterministic block -> template slide mapping (pixel-exact source slide from Escort repository).
+// This is intentionally explicit so each generated block can inherit geometry from a known template slide.
+const BLOCK_TEMPLATE_SLIDE_MAP = Object.freeze({
+  foundationalActs: 7,
+  nationalPolicy: 8,
+  investmentRestrictions: 9,
+  keyIncentives: 10,
+  regulatorySummary: 6,
+  tpes: 13,
+  finalDemand: 14,
+  electricity: 15,
+  gasLng: 17,
+  pricing: 16,
+  escoMarket: 18,
+  japanesePlayers: 22,
+  localMajor: 22,
+  foreignPlayers: 22,
+  caseStudy: 23,
+  maActivity: 24,
+  dealEconomics: 26,
+  partnerAssessment: 22,
+  entryStrategy: 12,
+  implementation: 28,
+  targetSegments: 22,
+  goNoGo: 12,
+  opportunitiesObstacles: 12,
+  keyInsights: 12,
+  timingIntelligence: 12,
+  lessonsLearned: 12,
+});
+
 function getPatternKeyForSlideId(slideId) {
   if (!Number.isFinite(Number(slideId))) return null;
   const numericId = Number(slideId);
@@ -1638,6 +1669,167 @@ function getPatternKeyForSlideId(slideId) {
     }
   }
   return null;
+}
+
+function getTemplateSlideDetail(slideNumber) {
+  const numeric = Number(slideNumber);
+  if (!Number.isFinite(numeric)) return null;
+  return (
+    (templatePatterns.slideDetails || []).find((s) => Number(s?.slideNumber) === numeric) || null
+  );
+}
+
+function _isValidPos(pos) {
+  return (
+    pos &&
+    Number.isFinite(pos.x) &&
+    Number.isFinite(pos.y) &&
+    Number.isFinite(pos.w) &&
+    Number.isFinite(pos.h)
+  );
+}
+
+function _rectFromPos(pos) {
+  return { x: pos.x, y: pos.y, w: pos.w, h: pos.h };
+}
+
+function _rectArea(r) {
+  if (!_isValidPos(r)) return 0;
+  return Math.max(0, r.w) * Math.max(0, r.h);
+}
+
+function _getTextHint(el) {
+  const paragraphs = el?.textBody?.paragraphs;
+  if (!Array.isArray(paragraphs)) return '';
+  const parts = [];
+  for (const p of paragraphs) {
+    const runs = Array.isArray(p?.runs) ? p.runs : [];
+    for (const run of runs) {
+      if (run?.textHint) parts.push(String(run.textHint));
+    }
+  }
+  return parts.join(' ').trim();
+}
+
+function _computeBounds(rects, fallbackRect, sourceYLimit) {
+  if (!Array.isArray(rects) || rects.length === 0) {
+    return { ...fallbackRect };
+  }
+  const minX = Math.min(...rects.map((r) => r.x));
+  const minY = Math.min(...rects.map((r) => r.y));
+  const maxRight = Math.max(...rects.map((r) => r.x + r.w));
+  const maxBottom = Math.max(...rects.map((r) => r.y + r.h));
+  const limitedBottom = Number.isFinite(sourceYLimit)
+    ? Math.min(maxBottom, sourceYLimit)
+    : maxBottom;
+  return {
+    x: minX,
+    y: minY,
+    w: Math.max(0.1, maxRight - minX),
+    h: Math.max(0.1, limitedBottom - minY),
+  };
+}
+
+const _templateSlideLayoutCache = new Map();
+
+function getTemplateSlideLayout(slideNumber) {
+  const numeric = Number(slideNumber);
+  if (!Number.isFinite(numeric)) return null;
+  if (_templateSlideLayoutCache.has(numeric)) return _templateSlideLayoutCache.get(numeric);
+
+  const slide = getTemplateSlideDetail(numeric);
+  if (!slide) {
+    _templateSlideLayoutCache.set(numeric, null);
+    return null;
+  }
+
+  const elements = Array.isArray(slide.elements) ? slide.elements : [];
+  const shapes = elements.filter((e) => e?.type === 'shape' && _isValidPos(e?.position));
+  const tables = elements
+    .filter((e) => e?.type === 'table' && _isValidPos(e?.position))
+    .map((e) => _rectFromPos(e.position));
+  const charts = elements
+    .filter((e) => e?.type === 'chart' && _isValidPos(e?.position))
+    .map((e) => _rectFromPos(e.position))
+    .filter((r) => r.w > 0.2 && r.h > 0.2)
+    .sort((a, b) => (a.x === b.x ? a.y - b.y : a.x - b.x));
+
+  const titleShape = shapes
+    .filter((s) => /^title/i.test(String(s?.name || '')) && s.position.y < 1.3)
+    .sort((a, b) => a.position.y - b.position.y)[0];
+  const title = titleShape ? _rectFromPos(titleShape.position) : { ...TEMPLATE.title };
+
+  const sourceShape = shapes
+    .map((s) => ({ s, hint: _getTextHint(s).toLowerCase() }))
+    .filter(
+      ({ s, hint }) =>
+        s.position.y >= 6.2 &&
+        (hint.includes('source') || hint.includes('note') || /^textbox/i.test(String(s.name || '')))
+    )
+    .sort((a, b) => a.s.position.y - b.s.position.y)[0]?.s;
+  const source = sourceShape ? _rectFromPos(sourceShape.position) : { ...TEMPLATE.sourceBar };
+
+  const callouts = shapes
+    .map((s) => ({ s, hint: _getTextHint(s) }))
+    .filter(({ s, hint }) => {
+      const nm = String(s.name || '').toLowerCase();
+      return (
+        s.position.y > 1.2 &&
+        s.position.y < 6.6 &&
+        s.position.w > 0.8 &&
+        s.position.h > 0.25 &&
+        hint.length > 2 &&
+        (nm.includes('speech bubble') ||
+          nm.includes('autoshape') ||
+          nm.includes('rectangle') ||
+          nm.includes('oval'))
+      );
+    })
+    .map(({ s }) => _rectFromPos(s.position))
+    .sort((a, b) => (a.y === b.y ? a.x - b.x : a.y - b.y));
+
+  const largestTable = tables.slice().sort((a, b) => _rectArea(b) - _rectArea(a))[0] || null;
+
+  const contentCandidates = [];
+  if (largestTable) contentCandidates.push(largestTable);
+  contentCandidates.push(...charts);
+  contentCandidates.push(...callouts);
+
+  if (contentCandidates.length === 0) {
+    const largeShapes = shapes
+      .map((s) => ({
+        rect: _rectFromPos(s.position),
+        hint: _getTextHint(s),
+        name: String(s.name || ''),
+      }))
+      .filter(({ rect, hint, name }) => {
+        const lname = name.toLowerCase();
+        if (/^title/i.test(name)) return false;
+        if (lname.includes('columnheader')) return false;
+        if (rect.y < 1.2 || rect.y > 6.6) return false;
+        return rect.w > 2.0 && rect.h > 0.3 && hint.length > 2;
+      })
+      .map((x) => x.rect);
+    contentCandidates.push(...largeShapes);
+  }
+
+  const content = _computeBounds(
+    contentCandidates,
+    TEMPLATE.contentArea,
+    source?.y || TEMPLATE.sourceBar.y
+  );
+
+  const layout = {
+    slideNumber: numeric,
+    title,
+    source,
+    content,
+    table: largestTable,
+    charts,
+    callouts,
+  };
+  _templateSlideLayoutCache.set(numeric, layout);
+  return layout;
 }
 
 /**
@@ -1706,7 +1898,13 @@ function resolveTemplatePattern({ blockKey, dataType, data, templateSelection } 
   }
 
   if (selectedSlide == null && templateSlides.length > 0) {
-    selectedSlide = templateSlides[0];
+    const mappedSlide = BLOCK_TEMPLATE_SLIDE_MAP[blockKey];
+    if (Number.isFinite(Number(mappedSlide)) && templateSlides.includes(Number(mappedSlide))) {
+      selectedSlide = Number(mappedSlide);
+      source = source === 'block-default' ? 'block-default-slide' : `${source}-blockSlide`;
+    } else {
+      selectedSlide = templateSlides[0];
+    }
   }
 
   return {
@@ -2488,6 +2686,9 @@ module.exports = {
   resolveTemplatePattern,
   getPatternKeyForSlideId,
   BLOCK_TEMPLATE_PATTERN_MAP,
+  BLOCK_TEMPLATE_SLIDE_MAP,
+  getTemplateSlideDetail,
+  getTemplateSlideLayout,
   addDualChart,
   addChevronFlow,
   addInsightPanelsFromPattern,
