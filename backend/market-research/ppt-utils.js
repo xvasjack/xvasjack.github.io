@@ -578,34 +578,62 @@ function addCalloutBox(slide, title, content, options = {}) {
 
   // Use single addText shape with fill+border to avoid shape overlap
   const textParts = [];
+  const contentStr = String(content || '');
   if (title) {
     textParts.push({
       text: (title || '') + '\n',
       options: { fontSize: 12, bold: true, color: colors.titleColor, fontFace: FONT },
     });
   }
-  if (content) {
+
+  // Calculate available height for content text:
+  // margins = 5pt top + 5pt bottom = ~0.14 inches
+  // title line = ~0.22 inches (12pt bold + newline)
+  const marginInches = 0.14;
+  const titleInches = title ? 0.22 : 0;
+  const maxBottom = TEMPLATE.sourceBar.y;
+  const availableBottom = Math.min(boxY + boxH, maxBottom);
+  const totalBoxH = Math.max(0.3, availableBottom - boxY);
+  const contentMaxH = Math.max(0.1, totalBoxH - marginInches - titleInches);
+
+  if (contentStr) {
+    // Fit content by shrinking font (min 7pt), never truncate to "..."
+    const contentMaxW = boxW - 0.24; // 8pt left + 8pt right margins
+    const finalText = contentStr;
+    let finalFontSize = 11;
+
+    // Try font sizes from 11 down to 7
+    let fits = false;
+    for (let fs = 11; fs >= 7; fs--) {
+      const cw = fs * 0.006;
+      const lh = fs * 0.017;
+      const cpl = Math.max(1, Math.floor(contentMaxW / cw));
+      const ml = Math.max(1, Math.floor(contentMaxH / lh));
+      if (Math.ceil(contentStr.length / cpl) <= ml) {
+        finalFontSize = fs;
+        fits = true;
+        break;
+      }
+    }
+    if (!fits) finalFontSize = 7;
+
     textParts.push({
-      text: fitTextToShape(String(content || ''), boxW - 0.4, boxH - 0.4, 11).text,
-      options: { fontSize: 11, color: C_BLACK, fontFace: FONT },
+      text: finalText,
+      options: { fontSize: finalFontSize, color: C_BLACK, fontFace: FONT },
     });
   }
-  if (textParts.length > 0) {
-    // Clamp height so callout doesn't extend past content zone
-    const maxBottom = TEMPLATE.sourceBar.y;
-    const clampedH = boxY + boxH > maxBottom ? Math.max(0.3, maxBottom - boxY) : boxH;
-    if (boxY < maxBottom) {
-      slide.addText(textParts, {
-        x: boxX,
-        y: boxY,
-        w: boxW,
-        h: clampedH,
-        fill: { color: colors.fill },
-        line: { color: colors.border, pt: 1 },
-        margin: [5, 8, 5, 8],
-        valign: 'top',
-      });
-    }
+  if (textParts.length > 0 && boxY < maxBottom) {
+    slide.addText(textParts, {
+      x: boxX,
+      y: boxY,
+      w: boxW,
+      h: totalBoxH,
+      fill: { color: colors.fill },
+      line: { color: colors.border, pt: 1 },
+      margin: [5, 8, 5, 8],
+      valign: 'top',
+      shrinkText: true,
+    });
   }
 }
 
@@ -1558,20 +1586,17 @@ function addChevronFlow(slide, phases, patternDef, opts = {}) {
       h,
       fill: { color: colors[idx % colors.length] },
     });
-    slide.addText(
-      truncate(typeof phase === 'string' ? phase : phase.name || phase.label || '', 25),
-      {
-        x: x + 0.1,
-        y: baseY + 0.1,
-        w: chevronW - 0.2,
-        h: h - 0.2,
-        fontSize: p.fontSize || 8,
-        color: p.textColor || 'FFFFFF',
-        fontFace: 'Segoe UI',
-        align: 'center',
-        valign: 'middle',
-      }
-    );
+    slide.addText(typeof phase === 'string' ? phase : phase.name || phase.label || '', {
+      x: x + 0.1,
+      y: baseY + 0.1,
+      w: chevronW - 0.2,
+      h: h - 0.2,
+      fontSize: p.fontSize || 8,
+      color: p.textColor || 'FFFFFF',
+      fontFace: 'Segoe UI',
+      align: 'center',
+      valign: 'middle',
+    });
   });
 }
 

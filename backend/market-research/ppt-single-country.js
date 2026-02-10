@@ -974,7 +974,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           typeof growthTrajectory === 'string'
             ? growthTrajectory
             : JSON.stringify(growthTrajectory),
-          { x: LEFT_MARGIN + 0.5, y: 5.55, w: 7.0, h: 0.5, type: 'insight' }
+          { x: LEFT_MARGIN + 0.5, y: 5.55, w: 7.0, h: 1.0, type: 'insight' }
         );
       }
     } else {
@@ -1387,9 +1387,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         slide,
         'Competitive Insight',
         Array.isArray(whiteSpaces) ? whiteSpaces.join('. ') : String(whiteSpaces),
-        { x: LEFT_MARGIN, y: compRecoY, w: CONTENT_WIDTH, h: 0.5, type: 'insight' }
+        { x: LEFT_MARGIN, y: compRecoY, w: CONTENT_WIDTH, h: 0.8, type: 'insight' }
       );
-      compRecoY += 0.5 + 0.1;
+      compRecoY += 0.8 + 0.1;
     }
 
     // Potential partners from Stage 3 competitivePositioning
@@ -1406,9 +1406,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         slide,
         'Potential Partners',
         Array.isArray(potentialPartners) ? potentialPartners.join(', ') : String(potentialPartners),
-        { x: LEFT_MARGIN, y: compRecoY, w: CONTENT_WIDTH, h: 0.5, type: 'insight' }
+        { x: LEFT_MARGIN, y: compRecoY, w: CONTENT_WIDTH, h: 0.8, type: 'insight' }
       );
-      compRecoY += 0.5 + 0.1;
+      compRecoY += 0.8 + 0.1;
     }
 
     // Strategic assessment panel: show top 2-3 players' strategicAssessment
@@ -2179,10 +2179,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           x: LEFT_MARGIN,
           y: entryNextY,
           w: CONTENT_WIDTH,
-          h: 0.55,
+          h: 0.8,
           type: 'insight',
         });
-        entryNextY += 0.55 + 0.15;
+        entryNextY += 0.8 + 0.15;
       }
     }
 
