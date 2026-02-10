@@ -1792,7 +1792,7 @@ async function reviewResearch(researchData, country, industry, scope) {
       extractionStatus: value.extractionStatus || 'unknown',
       citationCount: (value.citations || []).length,
       structuredData: value.structuredData || null,
-      contentPreview: value.structuredData ? null : (value.content || '').substring(0, 800),
+      contentPreview: value.structuredData ? null : (value.content || '').substring(0, 4000),
       hasChartData: !!value.structuredData?.chartData,
     };
   }
@@ -2048,6 +2048,225 @@ function mergeDeepened(researchData, deepenedResults) {
   return researchData;
 }
 
+// ============ FINAL SYNTHESIS REVIEWER ============
+
+/**
+ * Reviews the ENTIRE assembled synthesis for coherence, contradictions, and gaps.
+ * Runs AFTER all synthesis + refinement is done. Checks the final output as a whole.
+ * Returns review findings + optional fixes to apply.
+ * Non-fatal — failure just warns and returns null.
+ */
+async function finalReviewSynthesis(countryAnalysis, country, industry) {
+  console.log(`\n  [FINAL REVIEW] Reviewing complete synthesis for ${country}...`);
+  const reviewStart = Date.now();
+
+  // Build condensed but complete view of all sections
+  const policyPreview = summarizeForSummary(countryAnalysis.policy, 'policy', 6000);
+  const marketPreview = summarizeForSummary(countryAnalysis.market, 'market', 6000);
+  const competitorsPreview = summarizeForSummary(countryAnalysis.competitors, 'competitors', 6000);
+  const summaryPreview = summarizeForSummary(countryAnalysis.summary, 'summary', 4000);
+  const depthPreview = summarizeForSummary(countryAnalysis.depth, 'depth', 4000);
+
+  const reviewPrompt = `You are a senior partner at McKinsey doing a FINAL quality review of a market entry report for ${industry} in ${country} before it goes to the client CEO.
+
+This is NOT a research review — the research is done. This is a PRESENTATION review. You are checking whether the assembled slides tell a coherent, credible story.
+
+=== COMPLETE SYNTHESIS ===
+
+POLICY SECTION:
+${policyPreview}
+
+MARKET SECTION:
+${marketPreview}
+
+COMPETITORS SECTION:
+${competitorsPreview}
+
+SUMMARY & RECOMMENDATIONS:
+${summaryPreview}
+
+DEPTH ANALYSIS:
+${depthPreview}
+
+=== REVIEW CHECKLIST ===
+
+1. NARRATIVE COHERENCE: Do sections flow logically? Does each section set up the next? Or do they read like disconnected Wikipedia articles?
+
+2. CONTRADICTIONS: Does any section claim something that contradicts another? (e.g., policy says market is restricted but market section says it's growing rapidly without acknowledging barriers)
+
+3. EXEC SUMMARY ACCURACY: Does the executive summary actually reflect what's in the detail slides? Or does it introduce claims not backed by detail sections?
+
+4. DATA CONSISTENCY: Are numbers consistent across sections? (e.g., market size mentioned in summary matches what's in market section)
+
+5. MISSING CONNECTIONS: Are there obvious insights the sections could connect but don't? (e.g., a regulation in policy that directly affects a competitor mentioned in competitors)
+
+6. ACTIONABILITY: Does the report end with clear, specific next steps? Or vague "explore opportunities"?
+
+7. CREDIBILITY GAPS: Any claims that sound made up or lack specificity? Vague statements that would make a CEO skeptical?
+
+Return JSON:
+{
+  "overallGrade": "A|B|C|D|F",
+  "coherenceScore": 0-100,
+  "issues": [
+    {
+      "type": "contradiction|missing_connection|data_inconsistency|vague_claim|exec_summary_mismatch|narrative_gap|missing_data",
+      "severity": "critical|major|minor",
+      "section": "policy|market|competitors|summary|depth|cross-section",
+      "description": "specific issue found",
+      "fix": "how synthesis should be corrected",
+      "escalation": "research|synthesis|none"
+    }
+  ],
+  "strengths": ["what's working well — max 3"],
+  "narrativeAssessment": "2-sentence assessment of whether this reads like a McKinsey deck or a Wikipedia dump",
+  "sectionFixes": {
+    "policy": "specific instruction to improve policy section, or null if good",
+    "market": "specific instruction to improve market section, or null if good",
+    "competitors": "specific instruction to improve competitors section, or null if good",
+    "summary": "specific instruction to improve summary section, or null if good"
+  },
+  "researchGaps": [
+    {
+      "description": "what data is missing from the report entirely",
+      "searchQuery": "EXACT search query to find this for ${country}",
+      "targetSection": "policy|market|competitors",
+      "priority": 1-10
+    }
+  ]
+}
+
+RULES:
+- Be BRUTAL. A CEO paying $50K for this report expects perfection.
+- Max 10 issues, prioritized by severity.
+- "sectionFixes" should be actionable instructions, not vague feedback.
+- If grade is A or B, sectionFixes should be null for good sections.
+- "escalation" tells the system what kind of fix is needed:
+  - "research": data is MISSING — need to go back and search the web for it
+  - "synthesis": data EXISTS in research but synthesis didn't use it — re-synthesize
+  - "none": minor wording issue — no re-work needed
+- "researchGaps": data the report NEEDS but DOESN'T HAVE — max 10, each with a concrete searchQuery including "${country}"
+- Return ONLY valid JSON.`;
+
+  try {
+    const result = await callGeminiPro(reviewPrompt, {
+      temperature: 0.1,
+      maxTokens: 8192,
+      jsonMode: true,
+    });
+
+    const text = typeof result === 'string' ? result : result.content || '';
+    const extracted = extractJsonFromContent(text);
+
+    if (extracted.status !== 'success' || !extracted.data) {
+      console.warn('  [FINAL REVIEW] Failed to parse review output');
+      return null;
+    }
+
+    const review = extracted.data;
+    const criticalCount = (review.issues || []).filter((i) => i.severity === 'critical').length;
+    const majorCount = (review.issues || []).filter((i) => i.severity === 'major').length;
+
+    console.log(
+      `  [FINAL REVIEW] Grade: ${review.overallGrade} | Coherence: ${review.coherenceScore}/100 | Critical: ${criticalCount} | Major: ${majorCount}`
+    );
+    console.log(`  [FINAL REVIEW] ${review.narrativeAssessment || 'No narrative assessment'}`);
+    console.log(`  [FINAL REVIEW] Completed in ${((Date.now() - reviewStart) / 1000).toFixed(1)}s`);
+
+    return review;
+  } catch (err) {
+    console.error(`  [FINAL REVIEW] Failed: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Apply fixes from final review by re-synthesizing sections the reviewer flagged.
+ * Only re-synthesizes sections with non-null sectionFixes.
+ */
+async function applyFinalReviewFixes(
+  countryAnalysis,
+  review,
+  researchData,
+  country,
+  industry,
+  clientContext,
+  storyPlan
+) {
+  if (!review || !review.sectionFixes) return countryAnalysis;
+
+  const fixes = review.sectionFixes;
+  const sectionsToFix = Object.entries(fixes).filter(
+    ([, instruction]) => instruction && instruction !== 'null'
+  );
+
+  if (sectionsToFix.length === 0) {
+    console.log('  [FINAL REVIEW] No section fixes needed');
+    return countryAnalysis;
+  }
+
+  console.log(
+    `  [FINAL REVIEW] Re-synthesizing ${sectionsToFix.length} sections: ${sectionsToFix.map(([s]) => s).join(', ')}`
+  );
+
+  // Re-synthesize flagged sections in parallel
+  const fixPromises = sectionsToFix.map(async ([section, instruction]) => {
+    try {
+      const fixContext = `${clientContext || ''}\n\nFINAL REVIEW FEEDBACK — MUST ADDRESS:\n${instruction}`;
+
+      if (section === 'policy') {
+        return {
+          section,
+          result: await synthesizePolicy(researchData, country, industry, fixContext, storyPlan),
+        };
+      } else if (section === 'market') {
+        return {
+          section,
+          result: await synthesizeMarket(researchData, country, industry, fixContext, storyPlan),
+        };
+      } else if (section === 'competitors') {
+        return {
+          section,
+          result: await synthesizeCompetitors(
+            researchData,
+            country,
+            industry,
+            fixContext,
+            storyPlan
+          ),
+        };
+      } else if (section === 'summary') {
+        // Summary depends on other sections, re-synthesize with updated data
+        const summaryResult = await synthesizeSummary(
+          researchData,
+          countryAnalysis.policy,
+          countryAnalysis.market,
+          countryAnalysis.competitors,
+          country,
+          industry,
+          fixContext
+        );
+        return { section: 'summary', result: summaryResult.summary || summaryResult };
+      }
+      return null;
+    } catch (err) {
+      console.warn(`  [FINAL REVIEW] Failed to fix ${section}: ${err.message}`);
+      return null;
+    }
+  });
+
+  const results = await Promise.all(fixPromises);
+
+  for (const fix of results) {
+    if (fix && fix.result && !fix.result._synthesisError) {
+      countryAnalysis[fix.section] = fix.result;
+      console.log(`  [FINAL REVIEW] Fixed: ${fix.section}`);
+    }
+  }
+
+  return countryAnalysis;
+}
+
 // ============ COUNTRY RESEARCH ORCHESTRATOR ============
 
 async function researchCountry(country, industry, clientContext, scope = null) {
@@ -2184,17 +2403,49 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     }
   }
 
-  // ============ REVIEW-DEEPEN STAGE ============
-  // Single reviewer analyzes all research, identifies gaps, then targeted follow-up
-  try {
-    const { gapReport, reviewMeta } = await reviewResearch(
-      researchData,
-      country,
-      industry,
-      scope || { industry, projectType: 'market_entry', clientContext }
-    );
+  // ============ REVIEW-DEEPEN LOOP ============
+  // Loop: review → deepen → merge → review again until coverage is good
+  const REVIEW_DEEPEN_MAX_ITERATIONS = 3;
+  const REVIEW_DEEPEN_TARGET_SCORE = 80;
+  let reviewDeepenIteration = 0;
+  let lastCoverageScore = 0;
 
-    if (gapReport && gapReport.gaps && gapReport.gaps.length > 0) {
+  try {
+    while (reviewDeepenIteration < REVIEW_DEEPEN_MAX_ITERATIONS) {
+      reviewDeepenIteration++;
+      console.log(
+        `\n  [REVIEW-DEEPEN ${reviewDeepenIteration}/${REVIEW_DEEPEN_MAX_ITERATIONS}] Reviewing research quality...`
+      );
+
+      const { gapReport, reviewMeta } = await reviewResearch(
+        researchData,
+        country,
+        industry,
+        scope || { industry, projectType: 'market_entry', clientContext }
+      );
+
+      lastCoverageScore = gapReport?.coverageScore || 0;
+
+      // Exit: coverage score meets target
+      if (lastCoverageScore >= REVIEW_DEEPEN_TARGET_SCORE) {
+        console.log(
+          `  [REVIEW-DEEPEN] Coverage ${lastCoverageScore}/100 >= ${REVIEW_DEEPEN_TARGET_SCORE} target. Research quality sufficient.`
+        );
+        break;
+      }
+
+      // Exit: no gaps found
+      if (!gapReport || !gapReport.gaps || gapReport.gaps.length === 0) {
+        console.log(
+          `  [REVIEW-DEEPEN] No gaps identified (score: ${lastCoverageScore}/100). Proceeding.`
+        );
+        break;
+      }
+
+      console.log(
+        `  [REVIEW-DEEPEN] Coverage ${lastCoverageScore}/100 < ${REVIEW_DEEPEN_TARGET_SCORE}. ${gapReport.gaps.length} gaps found. Deepening...`
+      );
+
       const { deepenedResults, deepenMeta } = await deepenResearch(
         gapReport,
         country,
@@ -2205,17 +2456,23 @@ async function researchCountry(country, industry, clientContext, scope = null) {
 
       if (deepenedResults.length > 0) {
         researchData = mergeDeepened(researchData, deepenedResults);
+        console.log(
+          `  [REVIEW-DEEPEN ${reviewDeepenIteration}] Review: ${reviewMeta.timeMs}ms | Deepen: ${deepenMeta.timeMs}ms | +${deepenMeta.queriesSucceeded} topics`
+        );
+      } else {
+        console.log(
+          `  [REVIEW-DEEPEN ${reviewDeepenIteration}] No new data collected. Stopping loop.`
+        );
+        break;
       }
-
-      console.log(
-        `  [REVIEW-DEEPEN] Review: ${reviewMeta.timeMs}ms | Deepen: ${deepenMeta.timeMs}ms | +${deepenMeta.queriesSucceeded} topics`
-      );
-    } else {
-      console.log('  [REVIEW-DEEPEN] No gaps found or review failed, proceeding to synthesis');
     }
+
+    console.log(
+      `  [REVIEW-DEEPEN] Completed after ${reviewDeepenIteration} iteration(s). Final coverage: ${lastCoverageScore}/100. Total topics: ${Object.keys(researchData).length}`
+    );
   } catch (reviewErr) {
     console.warn(
-      `  [REVIEW-DEEPEN] Stage failed, continuing with round-1 data: ${reviewErr.message}`
+      `  [REVIEW-DEEPEN] Loop failed at iteration ${reviewDeepenIteration}, continuing with current data: ${reviewErr.message}`
     );
   }
 
@@ -2475,9 +2732,117 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   countryAnalysis.finalConfidenceScore = confidenceScore;
   countryAnalysis.readyForClient = readyForClient || confidenceScore >= MIN_CONFIDENCE_SCORE;
 
+  // ============ FINAL REVIEW LOOP ============
+  // Reviewer 3: reviews ENTIRE assembled synthesis. Can escalate to:
+  //   - Research (Reviewer 1): "go find this data" → callGeminiResearch
+  //   - Synthesis (Reviewer 2): "re-synthesize this section with this feedback"
+  // Loops until grade A/B or max iterations reached.
+  const FINAL_REVIEW_MAX_ITERATIONS = 3;
+  const FINAL_REVIEW_TARGET_GRADES = ['A', 'B'];
+
+  if (!countryAnalysis.aborted) {
+    let finalReviewIteration = 0;
+    let lastGrade = null;
+
+    try {
+      while (finalReviewIteration < FINAL_REVIEW_MAX_ITERATIONS) {
+        finalReviewIteration++;
+        console.log(
+          `\n  [FINAL REVIEW ${finalReviewIteration}/${FINAL_REVIEW_MAX_ITERATIONS}] Reviewing complete output...`
+        );
+
+        const finalReview = await finalReviewSynthesis(countryAnalysis, country, industry);
+        countryAnalysis.finalReview = finalReview;
+        lastGrade = finalReview?.overallGrade || 'F';
+
+        // Exit: grade meets target
+        if (FINAL_REVIEW_TARGET_GRADES.includes(lastGrade)) {
+          console.log(`  [FINAL REVIEW] Grade ${lastGrade} — meets quality target. Done.`);
+          break;
+        }
+
+        if (!finalReview) {
+          console.log('  [FINAL REVIEW] Review returned null, proceeding.');
+          break;
+        }
+
+        const criticalOrMajor = (finalReview.issues || []).filter(
+          (i) => i.severity === 'critical' || i.severity === 'major'
+        );
+
+        // Exit: no actionable issues
+        if (
+          criticalOrMajor.length === 0 &&
+          (!finalReview.researchGaps || finalReview.researchGaps.length === 0)
+        ) {
+          console.log(`  [FINAL REVIEW] Grade ${lastGrade} but no actionable issues. Proceeding.`);
+          break;
+        }
+
+        // ESCALATION 1: Research gaps → go find missing data (Reviewer 1 power)
+        if (finalReview.researchGaps && finalReview.researchGaps.length > 0) {
+          console.log(
+            `  [FINAL REVIEW → RESEARCH] ${finalReview.researchGaps.length} data gaps found. Escalating to research...`
+          );
+
+          // Build gap report in the format deepenResearch expects
+          const escalatedGapReport = {
+            gaps: finalReview.researchGaps.map((g, i) => ({
+              id: `final_review_gap_${i}`,
+              category: g.targetSection || 'market',
+              topic: 'new',
+              description: g.description,
+              searchQuery: g.searchQuery,
+              priority: g.priority || 5,
+              type: 'missing_data',
+            })),
+            verificationsNeeded: [],
+          };
+
+          const { deepenedResults } = await deepenResearch(
+            escalatedGapReport,
+            country,
+            industry,
+            pipelineSignal,
+            10
+          );
+
+          if (deepenedResults.length > 0) {
+            researchData = mergeDeepened(researchData, deepenedResults);
+            console.log(
+              `  [FINAL REVIEW → RESEARCH] +${deepenedResults.length} topics added to research data`
+            );
+          }
+        }
+
+        // ESCALATION 2: Synthesis fixes → re-synthesize flagged sections (Reviewer 2 power)
+        if (criticalOrMajor.length > 0 && finalReview.sectionFixes) {
+          console.log(
+            `  [FINAL REVIEW → SYNTHESIS] ${criticalOrMajor.length} critical/major issues. Re-synthesizing...`
+          );
+          countryAnalysis = await applyFinalReviewFixes(
+            countryAnalysis,
+            finalReview,
+            researchData,
+            country,
+            industry,
+            clientContext,
+            storyPlan
+          );
+        }
+      }
+
+      console.log(
+        `  [FINAL REVIEW] Completed after ${finalReviewIteration} pass(es). Final grade: ${lastGrade || 'unknown'}`
+      );
+    } catch (finalErr) {
+      console.warn(`  [FINAL REVIEW] Loop failed, proceeding: ${finalErr.message}`);
+    }
+  }
+
   console.log(`\n  ✓ Completed ${country}:`);
   console.log(
-    `    Time: ${(countryAnalysis.researchTimeMs / 1000).toFixed(1)}s | Iterations: ${iteration}`
+    `    Time: ${((Date.now() - startTime) / 1000).toFixed(1)}s | Iterations: ${iteration}`
   );
   console.log(
     `    Confidence: ${confidenceScore}/100 | Ready: ${countryAnalysis.readyForClient ? 'YES' : 'NEEDS REVIEW'}`
@@ -2846,5 +3211,7 @@ module.exports = {
   deepenResearch,
   mergeDeepened,
   buildStoryPlan,
+  finalReviewSynthesis,
+  applyFinalReviewFixes,
   TEMPLATE_NARRATIVE_PATTERN,
 };
