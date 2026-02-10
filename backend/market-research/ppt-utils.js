@@ -1057,7 +1057,9 @@ function addStackedBarChart(slide, title, data, options = {}) {
   const pptxChartData = chartData.series.map((s, idx) => ({
     name: s.name,
     labels: chartData.categories,
-    values: (s.values || []).map((v) => (typeof v === 'number' && isFinite(v) ? v : 0)),
+    values: (s.values || []).map((v) =>
+      typeof v === 'number' && isFinite(v) ? v : Number(v) || 0
+    ),
     color: CHART_COLORS[idx % CHART_COLORS.length],
   }));
 
@@ -1162,7 +1164,9 @@ function addLineChart(slide, title, data, options = {}) {
   const pptxChartData = chartData.series.map((s, idx) => ({
     name: s.name,
     labels: chartData.categories,
-    values: (s.values || []).map((v) => (typeof v === 'number' && isFinite(v) ? v : 0)),
+    values: (s.values || []).map((v) =>
+      typeof v === 'number' && isFinite(v) ? v : Number(v) || 0
+    ),
     color: CHART_COLORS[idx % CHART_COLORS.length],
   }));
 
@@ -1194,6 +1198,10 @@ function addLineChart(slide, title, data, options = {}) {
 
 // Add a bar chart (horizontal or vertical) to a slide
 function addBarChart(slide, title, data, options = {}) {
+  // Convert series format to values format if needed (synthesis returns series, bar chart needs values)
+  if (data && data.series && data.series.length > 0 && !data.values) {
+    data = { ...data, values: data.series[0].values || [] };
+  }
   if (!data || !data.categories || !data.values || data.values.length === 0) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
@@ -1231,7 +1239,9 @@ function addBarChart(slide, title, data, options = {}) {
     {
       name: data.name || 'Value',
       labels: data.categories,
-      values: (data.values || []).map((v) => (typeof v === 'number' && isFinite(v) ? v : 0)),
+      values: (data.values || []).map((v) =>
+        typeof v === 'number' && isFinite(v) ? v : Number(v) || 0
+      ),
       color: CHART_COLORS[0],
     },
   ];
@@ -1260,6 +1270,10 @@ function addBarChart(slide, title, data, options = {}) {
 
 // Add a pie/doughnut chart to a slide
 function addPieChart(slide, title, data, options = {}) {
+  // Convert series format to values format if needed (synthesis returns series, pie chart needs values)
+  if (data && data.series && data.series.length > 0 && !data.values) {
+    data = { ...data, values: data.series[0].values || [] };
+  }
   if (!data || !data.categories || !data.values || data.values.length === 0) {
     console.warn('[PPT] Chart skipped - invalid data:', JSON.stringify(data).substring(0, 200));
     slide.addText('Chart data unavailable', {
@@ -1303,7 +1317,9 @@ function addPieChart(slide, title, data, options = {}) {
     {
       name: data.name || 'Share',
       labels: data.categories,
-      values: (data.values || []).map((v) => (typeof v === 'number' && isFinite(v) ? v : 0)),
+      values: (data.values || []).map((v) =>
+        typeof v === 'number' && isFinite(v) ? v : Number(v) || 0
+      ),
     },
   ];
 
@@ -2189,7 +2205,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
 
   const dataRows = (data || []).map((row) => [
     {
-      text: ensureString(row.label || ''),
+      text: ensureString(row.label || row.domain || ''),
       options: {
         fontSize: 12,
         fontFace: font,
