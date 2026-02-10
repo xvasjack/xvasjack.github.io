@@ -435,20 +435,55 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const slide = pptx.addSlide({ masterName: 'YCP_MAIN' });
 
     // Title shape (position + font from template extraction)
-    slide.addText(truncateTitle(title), {
-      x: TITLE_X,
-      y: tpTitle.y,
-      w: TITLE_W,
-      h: tpTitle.h,
-      fontSize: tpTitleFontSize,
-      bold: tpTitleBold,
-      color: COLORS.dk2,
-      fontFace: FONT,
-      valign: 'top',
-      fit: 'shrink',
-    });
-    // Escort template has no subtitle line — subtitle text used only for context
-    // if (subtitle) { ... } — removed to match real template
+    // Escort template uses title (20pt) + subtitle thesis (16pt) in same shape, separated by line break
+    if (subtitle && subtitle.length > 10) {
+      slide.addText(
+        [
+          {
+            text: truncateTitle(title),
+            options: {
+              fontSize: tpTitleFontSize,
+              bold: tpTitleBold,
+              color: COLORS.dk2,
+              fontFace: FONT,
+              breakType: 'none',
+            },
+          },
+          {
+            text: subtitle,
+            options: {
+              fontSize: 16,
+              bold: false,
+              color: COLORS.dk2,
+              fontFace: FONT,
+              breakType: 'none',
+              paraSpaceBefore: 2,
+            },
+          },
+        ],
+        {
+          x: TITLE_X,
+          y: tpTitle.y,
+          w: TITLE_W,
+          h: tpTitle.h + 0.25,
+          valign: 'top',
+          fit: 'shrink',
+        }
+      );
+    } else {
+      slide.addText(truncateTitle(title), {
+        x: TITLE_X,
+        y: tpTitle.y,
+        w: TITLE_W,
+        h: tpTitle.h,
+        fontSize: tpTitleFontSize,
+        bold: tpTitleBold,
+        color: COLORS.dk2,
+        fontFace: FONT,
+        valign: 'top',
+        fit: 'shrink',
+      });
+    }
     // Header line is provided by YCP_MAIN master — no manual line needed
 
     // Merge data quality indicator + source citations into ONE shape to prevent overlap

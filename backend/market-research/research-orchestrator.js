@@ -605,6 +605,23 @@ function markDataQuality(filteredData) {
   return marked;
 }
 
+// ============ SYNTHESIS STYLE GUIDE ============
+// Consistent tone/style matching the consulting deck template
+const SYNTHESIS_STYLE_GUIDE = `
+WRITING STYLE (MANDATORY — match this EXACTLY):
+- Write like a senior management consultant presenting to a CEO. Strategic, analytical, forward-looking.
+- Frame EVERY finding in terms of CLIENT IMPLICATIONS: "This enables foreign entrants to..." not "The law states..."
+- Use CONDITIONAL language where appropriate: "may become more streamlined", "will depend on implementation", "remains to be seen"
+- NEVER make absolute claims without evidence. Hedge uncertain points.
+- Cite specific law names with numbers inline: "Petroleum Law No. 12/2022/QH15" not "the petroleum law"
+- Every slide title subtitle should be a THESIS STATEMENT — the key takeaway, not a description. Example:
+  GOOD: "Vietnam is selectively opening competition, with recent reforms prioritizing private-sector participation in demand-side efficiency"
+  BAD: "Overview of Vietnam's regulatory environment"
+- Use strategic vocabulary: "structurally attractive", "underpinned by", "selectively positioned", "scalable commercial models"
+- Connect data points causally: "X happened because Y, which means Z for the client"
+- NEVER write generic filler like "the market is growing" — always attach numbers, timelines, and implications
+`;
+
 /**
  * Synthesize POLICY section with depth requirements
  */
@@ -634,7 +651,7 @@ ${JSON.stringify(labeledData, null, 2)}`
 
   const prompt = `You are synthesizing policy and regulatory research for ${country}'s ${industry} market.
 Client context: ${clientContext}
-
+${SYNTHESIS_STYLE_GUIDE}
 ${researchContext}
 
 If research data is insufficient for a field, set the value to:
@@ -660,7 +677,7 @@ Return JSON:
 {
   "foundationalActs": {
     "slideTitle": "${country} - ${industry} Foundational Acts",
-    "subtitle": "1-2 sentences, 100-180 chars, with specific regulatory citations",
+    "subtitle": "THESIS STATEMENT: 1-2 sentences (100-180 chars) explaining the KEY TAKEAWAY for the client. Example: '${country} is selectively opening competition, with recent reforms prioritizing private-sector participation in demand-side efficiency'",
     "acts": [
       {"name": "Official Act Name", "year": "YYYY", "requirements": "30-50 words per cell with specific regulatory citations and article numbers", "penalties": "30-50 words per cell with specific monetary values, imprisonment terms, or administrative actions", "enforcement": "30-50 words on enforcement reality: agency name, capacity, actual compliance rates"}
     ],
@@ -737,8 +754,8 @@ async function synthesizeMarket(researchData, country, industry, clientContext) 
     const key = `section_${i}`;
     return `  "${key}": {
     "slideTitle": "${country} - ${topic}",
-    "subtitle": "Key insight from research data",
-    "overview": "2-3 sentence overview of this topic based on research data",
+    "subtitle": "THESIS STATEMENT (100-180 chars): the key strategic takeaway for the client. NOT a description — a conclusion. Example: 'Rapid industrialization is driving 12% annual demand growth, creating a $2.1B addressable market for efficiency services'",
+    "overview": "2-3 sentence strategic overview of this topic. Frame in terms of client implications, not just facts.",
     "keyMetrics": [{"metric": "Named metric", "value": "Specific value from data", "context": "Why this matters"}],
     "chartData": null,
     "keyInsight": "What this means for client",
@@ -755,7 +772,7 @@ ${JSON.stringify(labeledData, null, 2)}`
 
   const prompt = `You are synthesizing market data research for ${country}'s ${industry} market.
 Client context: ${clientContext}
-
+${SYNTHESIS_STYLE_GUIDE}
 ${researchContext}
 
 If research data is insufficient for a field, set the value to:
@@ -911,7 +928,7 @@ ${JSON.stringify(labeledData, null, 2)}`
 
   const commonIntro = `You are synthesizing competitive intelligence for ${country}'s ${industry} market.
 Client context: ${clientContext}
-
+${SYNTHESIS_STYLE_GUIDE}
 ${researchContext}
 
 If research data is insufficient for a field, set the value to:
@@ -2061,17 +2078,17 @@ VALIDATION: Before returning, count how many times you used GDP, population, or 
   const prompt = `Client: ${scope.clientContext}
 Industry: ${scope.industry}
 Target: ${countryAnalysis.country}
-
+${SYNTHESIS_STYLE_GUIDE}
 DATA GATHERED:
 ${JSON.stringify(countryDataForPrompt, null, 2)}
 
-Synthesize this research into a CEO-ready briefing. Professional tone, specific data, actionable insights.
+Synthesize this research into a CEO-ready briefing.
 
 Return JSON with:
 
 {
   "executiveSummary": [
-    "4 analytical paragraphs, 3-4 sentences each (50-80 words per paragraph), Economist-style prose. NOT bullet points — full paragraphs. Each paragraph MUST end with a cross-reference like '(Refer: Chapter 1)' pointing to the relevant section.",
+    "4 analytical paragraphs, 3-4 sentences each (50-80 words per paragraph). Write like a senior McKinsey partner — strategic, analytical, forward-looking. NOT bullet points — full flowing paragraphs. Each paragraph MUST end with a cross-reference like '(Refer: Chapter 1)'. Use conditional language ('may', 'remains to be seen', 'will depend on') for uncertain points. Frame everything in terms of client opportunity/risk, not just facts.",
     "Paragraph 1: MARKET OPPORTUNITY OVERVIEW — Quantify the prize with specific numbers: market size, growth rate, foreign player share, TAM calculation. End with '(Refer: Chapter 2)'. Example: 'Thailand's energy services market reached $320M in 2024, growing at 14% CAGR since 2020. (Refer: Chapter 2)'",
     "Paragraph 2: REGULATORY LANDSCAPE & TRAJECTORY — Current regulatory state, key policy shifts, where regulation is heading. Reference specific law names, enforcement realities. End with '(Refer: Chapter 1)'",
     "Paragraph 3: MARKET DEMAND & GROWTH PROJECTIONS — Demand drivers with evidence, growth projections with sources, sector-specific opportunities. End with '(Refer: Chapter 2)'",
