@@ -11,6 +11,14 @@ const {
   flattenPlayerProfile,
 } = require('./ppt-utils');
 const { generateSingleCountryPPT } = require('./ppt-single-country');
+const { ensureString: _ensureStringRaw } = require('./shared/utils');
+
+// PPTX-safe string: strips XML-invalid control characters that corrupt PPTX files.
+// eslint-disable-next-line no-control-regex
+const XML_CTRL = /[\x00-\x08\x0B\x0C\x0E-\x1F]/g;
+function safeText(value) {
+  return _ensureStringRaw(value).replace(XML_CTRL, '');
+}
 
 // Multi-country comparison PPT - Matches YCP Escort format
 // Structure: Title → Overview → For each country: Policy & Regulations → Market → Competitor Overview

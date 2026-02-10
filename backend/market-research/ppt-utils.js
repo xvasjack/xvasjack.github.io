@@ -1,5 +1,12 @@
 const { callGeminiPro, callGemini } = require('./ai-clients');
-const { ensureString } = require('./shared/utils');
+const { ensureString: _ensureString } = require('./shared/utils');
+
+// PPTX-safe ensureString: strips XML-invalid control characters.
+// eslint-disable-next-line no-control-regex
+const XML_INVALID_CHARS_UTILS = /[\x00-\x08\x0B\x0C\x0E-\x1F]/g;
+function ensureString(value, defaultValue) {
+  return _ensureString(value, defaultValue).replace(XML_INVALID_CHARS_UTILS, '');
+}
 
 // Load template patterns for smart layout engine
 let templatePatterns = {};
@@ -74,7 +81,7 @@ const CHART_AXIS_DEFAULTS = {
 // Adds ellipsis (...) when text is truncated to indicate continuation
 function truncate(text, maxLen = 600, addEllipsis = true) {
   if (!text) return '';
-  const str = String(text).trim();
+  const str = String(text).trim().replace(XML_INVALID_CHARS_UTILS, '');
   if (str.length <= maxLen) return str;
 
   // Find the last sentence boundary before maxLen
@@ -179,7 +186,7 @@ function truncate(text, maxLen = 600, addEllipsis = true) {
 // Adds ellipsis (...) when text is truncated
 function truncateSubtitle(text, maxLen = 180, addEllipsis = true) {
   if (!text) return '';
-  const str = String(text).trim();
+  const str = String(text).trim().replace(XML_INVALID_CHARS_UTILS, '');
   if (str.length <= maxLen) return str;
 
   // For subtitles, prefer ending at sentence boundary

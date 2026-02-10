@@ -63,11 +63,21 @@ const {
   C_CALLOUT_BORDER,
   TABLE_CELL_MARGIN,
 } = require('./ppt-utils');
-const { ensureString } = require('./shared/utils');
+const { ensureString: _ensureString } = require('./shared/utils');
 const { validatePptData } = require('./quality-gates');
 
-// Safety wrapper: ensure any value going into a table cell is a plain string.
-// AI sometimes returns nested objects/arrays instead of text — this prevents pptxgenjs crashes.
+// PPTX-safe ensureString: strips XML-invalid control characters after conversion.
+// PPTX = ZIP of XML files. Characters \x00-\x08, \x0B, \x0C, \x0E-\x1F are invalid in
+// XML 1.0 and cause "PowerPoint can't read this file" errors.
+// eslint-disable-next-line no-control-regex
+const XML_INVALID_CHARS = /[\x00-\x08\x0B\x0C\x0E-\x1F]/g;
+function ensureString(value, defaultValue) {
+  return _ensureString(value, defaultValue).replace(XML_INVALID_CHARS, '');
+}
+
+// Safety wrapper: ensure any value going into a table cell is a plain, XML-safe string.
+// AI sometimes returns nested objects/arrays — this prevents pptxgenjs crashes.
+// XML sanitization happens in ensureString() above.
 function safeCell(value, maxLen) {
   const str = ensureString(value);
   if (maxLen && str.length > maxLen) {
