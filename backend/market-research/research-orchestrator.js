@@ -103,6 +103,92 @@ Return ONLY valid JSON.`;
     }
     const gaps = JSON.parse(jsonStr);
 
+    // Normalize reviewer output so downstream refinement always has actionable work.
+    const overallScoreRaw =
+      typeof gaps.overallScore === 'number'
+        ? gaps.overallScore
+        : Number(gaps.confidenceAssessment?.numericConfidence) || 0;
+    const normalizedOverallScore = Math.max(0, Math.min(100, overallScoreRaw || 0));
+    const normalizedConfidence =
+      normalizedOverallScore ||
+      Math.max(0, Math.min(100, Number(gaps.confidenceAssessment?.numericConfidence) || 0));
+
+    const rawCriticalGaps = Array.isArray(gaps.criticalGaps) ? gaps.criticalGaps : [];
+    const normalizedCriticalGaps = rawCriticalGaps
+      .map((gap, idx) => {
+        if (!gap || typeof gap !== 'object') return null;
+        const area = String(gap.area || gap.section || 'general').trim() || 'general';
+        const gapText =
+          String(gap.gap || gap.description || gap.missingData || '').trim() ||
+          `Insufficient depth in ${area}`;
+        const priorityRaw = String(gap.priority || gap.severity || '').toLowerCase();
+        const priority =
+          priorityRaw === 'high' || priorityRaw === 'critical'
+            ? 'high'
+            : normalizedOverallScore < 50
+              ? 'high'
+              : 'medium';
+        const searchQuery =
+          String(gap.searchQuery || '').trim() ||
+          `${country} ${_industry || 'industry'} ${area} latest official data and specific numbers`;
+        return {
+          area,
+          gap: gapText,
+          searchQuery,
+          priority,
+          impactOnScore: gap.impactOnScore || null,
+          _normalized: true,
+          _index: idx,
+        };
+      })
+      .filter(Boolean);
+
+    // If quality is low but reviewer returned no actionable gaps, inject a fallback gap.
+    if (normalizedCriticalGaps.length === 0 && normalizedOverallScore < 70) {
+      normalizedCriticalGaps.push({
+        area: 'general',
+        gap: 'Reviewer returned no actionable gaps despite low confidence; collect fresh grounded facts',
+        searchQuery: `${country} ${_industry || 'industry'} official statistics regulations competitors market size latest`,
+        priority: 'high',
+        impactOnScore: 'high',
+        _normalized: true,
+        _fallback: true,
+      });
+    }
+
+    const rawVerifications = Array.isArray(gaps.dataToVerify) ? gaps.dataToVerify : [];
+    const normalizedVerifications = rawVerifications
+      .map((item) => {
+        if (!item || typeof item !== 'object') return null;
+        const claim = String(item.claim || item.statement || '').trim();
+        if (!claim) return null;
+        const searchQuery =
+          String(item.searchQuery || '').trim() ||
+          `${country} ${claim} official source verification`;
+        return {
+          claim,
+          searchQuery,
+          currentConfidence: item.currentConfidence || 'low',
+          _normalized: true,
+        };
+      })
+      .filter(Boolean);
+
+    gaps.overallScore = normalizedOverallScore;
+    gaps.criticalGaps = normalizedCriticalGaps;
+    gaps.dataToVerify = normalizedVerifications;
+    gaps.confidenceAssessment = {
+      ...(gaps.confidenceAssessment || {}),
+      numericConfidence: normalizedConfidence,
+      overall:
+        gaps.confidenceAssessment?.overall ||
+        (normalizedConfidence >= 75 ? 'high' : normalizedConfidence >= 50 ? 'medium' : 'low'),
+      readyForClient:
+        typeof gaps.confidenceAssessment?.readyForClient === 'boolean'
+          ? gaps.confidenceAssessment.readyForClient
+          : normalizedConfidence >= 75,
+    };
+
     // Log detailed scoring
     const scores = gaps.sectionScores || {};
     console.log(
@@ -127,8 +213,10 @@ Return ONLY valid JSON.`;
       criticalGaps: [
         {
           area: 'general',
-          description: 'Research quality could not be assessed',
-          severity: 'medium',
+          gap: 'Research quality could not be assessed due to malformed reviewer output',
+          priority: 'high',
+          searchQuery: `${country} ${_industry || 'industry'} official market size regulations competitors latest`,
+          impactOnScore: 'high',
         },
       ],
       dataToVerify: [],
@@ -444,6 +532,71 @@ function validatePolicySynthesis(result) {
   });
 
   return result;
+}
+
+/**
+ * Repair policy payloads when the model returns array-wrapped sections.
+ * Converts {section_0: {...}, _wasArray:true} into expected policy keys when possible.
+ */
+function normalizePolicySynthesisResult(result) {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return result;
+
+  const normalized = { ...result };
+  const sectionEntries = Object.entries(normalized).filter(
+    ([key, value]) =>
+      /^section_\d+$/.test(key) && value && typeof value === 'object' && !Array.isArray(value)
+  );
+
+  for (const [, section] of sectionEntries) {
+    if (!section || typeof section !== 'object') continue;
+
+    // Case 1: section contains nested expected keys
+    if (!normalized.foundationalActs && section.foundationalActs) {
+      normalized.foundationalActs = section.foundationalActs;
+    }
+    if (!normalized.nationalPolicy && section.nationalPolicy) {
+      normalized.nationalPolicy = section.nationalPolicy;
+    }
+    if (!normalized.investmentRestrictions && section.investmentRestrictions) {
+      normalized.investmentRestrictions = section.investmentRestrictions;
+    }
+    if (!normalized.keyIncentives && Array.isArray(section.keyIncentives)) {
+      normalized.keyIncentives = section.keyIncentives;
+    }
+    if (!normalized.regulatorySummary && Array.isArray(section.regulatorySummary)) {
+      normalized.regulatorySummary = section.regulatorySummary;
+    }
+    if (!normalized.sources && Array.isArray(section.sources)) {
+      normalized.sources = section.sources;
+    }
+
+    // Case 2: section is itself a policy sub-block payload
+    if (
+      !normalized.foundationalActs &&
+      (Array.isArray(section.acts) || section.keyMessage || section.enforcement)
+    ) {
+      normalized.foundationalActs = section;
+    }
+    if (
+      !normalized.nationalPolicy &&
+      (section.policyDirection ||
+        Array.isArray(section.targets) ||
+        Array.isArray(section.keyInitiatives))
+    ) {
+      normalized.nationalPolicy = section;
+    }
+    if (
+      !normalized.investmentRestrictions &&
+      (section.ownershipLimits ||
+        Array.isArray(section.incentives) ||
+        section.riskLevel ||
+        section.riskJustification)
+    ) {
+      normalized.investmentRestrictions = section;
+    }
+  }
+
+  return normalized;
 }
 
 /**
@@ -920,12 +1073,69 @@ IMPORTANT: For the "sources" field, extract any URLs you find in the research da
 
 Return ONLY valid JSON.`;
 
-  const result = await synthesizeWithFallback(prompt, { maxTokens: 10240 });
-  if (!result) {
+  const antiArraySuffix =
+    '\n\nCRITICAL: Return a JSON OBJECT with policy keys (foundationalActs, nationalPolicy, investmentRestrictions). DO NOT return a top-level JSON array.';
+
+  let policyResult = null;
+  const MAX_POLICY_RETRIES = 3;
+
+  for (let attempt = 0; attempt <= MAX_POLICY_RETRIES; attempt++) {
+    if (attempt > 0) {
+      console.log(`  [synthesizePolicy] Retry ${attempt}: enforcing object schema`);
+    }
+
+    const currentPrompt = attempt === 0 ? prompt : prompt + antiArraySuffix;
+    let currentResult = await synthesizeWithFallback(currentPrompt, { maxTokens: 10240 });
+
+    if (!currentResult) {
+      console.warn(`  [synthesizePolicy] Attempt ${attempt} returned null`);
+      continue;
+    }
+
+    currentResult = normalizePolicySynthesisResult(currentResult);
+
+    if (currentResult._wasArray) {
+      console.warn(
+        `  [synthesizePolicy] Attempt ${attempt} returned array (tagged _wasArray), retrying...`
+      );
+      if (attempt === MAX_POLICY_RETRIES) {
+        console.warn('  [synthesizePolicy] All retries exhausted, accepting array conversion');
+        delete currentResult._wasArray;
+        policyResult = currentResult;
+        break;
+      }
+      continue;
+    }
+
+    const sectionCount = ['foundationalActs', 'nationalPolicy', 'investmentRestrictions'].filter(
+      (key) => currentResult[key] && typeof currentResult[key] === 'object'
+    ).length;
+
+    if (sectionCount < 2) {
+      console.warn(
+        `  [synthesizePolicy] Attempt ${attempt}: only ${sectionCount} expected section(s), retrying...`
+      );
+      if (attempt === MAX_POLICY_RETRIES) {
+        console.warn('  [synthesizePolicy] All retries exhausted, accepting partial result');
+        policyResult = currentResult;
+        break;
+      }
+      continue;
+    }
+
+    policyResult = currentResult;
+    if (attempt > 0) {
+      console.log(`  [synthesizePolicy] Succeeded on retry ${attempt}`);
+    }
+    break;
+  }
+
+  if (!policyResult) {
     console.error('  [synthesizePolicy] Synthesis completely failed — no data returned');
     return { _synthesisError: true, section: 'policy', message: 'All synthesis attempts failed' };
   }
-  const validated = validatePolicySynthesis(result);
+
+  const validated = validatePolicySynthesis(policyResult);
   return validated;
 }
 

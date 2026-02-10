@@ -1,4 +1,5 @@
 const pptxgen = require('pptxgenjs');
+const JSZip = require('jszip');
 const {
   truncate,
   truncateSubtitle,
@@ -18,6 +19,31 @@ const { ensureString: _ensureStringRaw } = require('./shared/utils');
 const XML_CTRL = /[\x00-\x08\x0B\x0C\x0E-\x1F]/g;
 function safeText(value) {
   return _ensureStringRaw(value).replace(XML_CTRL, '');
+}
+
+async function normalizeChartRelationshipTargets(pptxBuffer) {
+  if (!Buffer.isBuffer(pptxBuffer) || pptxBuffer.length === 0) return pptxBuffer;
+  const zip = await JSZip.loadAsync(pptxBuffer);
+  const relFiles = Object.keys(zip.files).filter((name) =>
+    /^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/.test(name)
+  );
+  let mutated = 0;
+  for (const relFile of relFiles) {
+    const relEntry = zip.file(relFile);
+    if (!relEntry) continue;
+    const xml = await relEntry.async('string');
+    const nextXml = xml.replace(
+      /Target="\/ppt\/charts\/(chart\d+\.xml)"/g,
+      'Target="../charts/$1"'
+    );
+    if (nextXml !== xml) {
+      zip.file(relFile, nextXml);
+      mutated++;
+    }
+  }
+  if (mutated === 0) return pptxBuffer;
+  console.log(`[PPT] Normalized ${mutated} chart relationship target(s) to relative paths`);
+  return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
 
 // Multi-country comparison PPT - Matches YCP Escort format
@@ -837,7 +863,8 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     }
   }
 
-  const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
+  let pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
+  pptxBuffer = await normalizeChartRelationshipTargets(pptxBuffer);
   console.log(`PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB`);
 
   return pptxBuffer;

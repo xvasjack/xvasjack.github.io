@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const pptxgen = require('pptxgenjs');
+const JSZip = require('jszip');
 
 // Template images extracted from Escort template
 const COVER_BG_B64 = fs
@@ -84,6 +85,35 @@ function safeCell(value, maxLen) {
     return str.substring(0, maxLen - 3) + '...';
   }
   return str;
+}
+
+// PptxGenJS 4.x can emit absolute chart relationship targets (/ppt/charts/chartN.xml).
+// Rewrite them to relative paths to maximize PowerPoint compatibility.
+async function normalizeChartRelationshipTargets(pptxBuffer) {
+  if (!Buffer.isBuffer(pptxBuffer) || pptxBuffer.length === 0) return pptxBuffer;
+  const zip = await JSZip.loadAsync(pptxBuffer);
+  const relFiles = Object.keys(zip.files).filter((name) =>
+    /^ppt\/slides\/_rels\/slide\d+\.xml\.rels$/.test(name)
+  );
+  let mutated = 0;
+
+  for (const relFile of relFiles) {
+    const relEntry = zip.file(relFile);
+    if (!relEntry) continue;
+    const xml = await relEntry.async('string');
+    const nextXml = xml.replace(
+      /Target="\/ppt\/charts\/(chart\d+\.xml)"/g,
+      'Target="../charts/$1"'
+    );
+    if (nextXml !== xml) {
+      zip.file(relFile, nextXml);
+      mutated++;
+    }
+  }
+
+  if (mutated === 0) return pptxBuffer;
+  console.log(`[PPT] Normalized ${mutated} chart relationship target(s) to relative paths`);
+  return zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
 }
 
 // ============ SECTION-BASED SLIDE GENERATOR ============
@@ -594,6 +624,93 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         fontFace: FONT,
       },
     }));
+  }
+
+  // Guard addTable calls so malformed rows never create broken slide XML.
+  function normalizeTableRows(rows, context = 'table') {
+    if (!Array.isArray(rows)) {
+      console.warn(`[PPT] ${context}: expected rows array, got ${typeof rows}`);
+      return null;
+    }
+
+    const normalized = rows
+      .map((row, idx) => {
+        if (Array.isArray(row)) {
+          const cells = row
+            .map((cell) => {
+              if (cell == null) return { text: '' };
+              if (typeof cell === 'object' && !Array.isArray(cell)) {
+                const normalizedCell = { ...cell };
+                normalizedCell.text = safeCell(
+                  Object.prototype.hasOwnProperty.call(normalizedCell, 'text')
+                    ? normalizedCell.text
+                    : ''
+                );
+                return normalizedCell;
+              }
+              return { text: safeCell(cell) };
+            })
+            .filter(Boolean);
+          return cells.length > 0 ? cells : null;
+        }
+
+        if (typeof row === 'object' && row !== null && !Array.isArray(row)) {
+          const normalizedRow = { ...row };
+          normalizedRow.text = safeCell(
+            Object.prototype.hasOwnProperty.call(normalizedRow, 'text') ? normalizedRow.text : ''
+          );
+          return [normalizedRow];
+        }
+
+        if (typeof row === 'string' || typeof row === 'number' || typeof row === 'boolean') {
+          return [{ text: safeCell(row) }];
+        }
+
+        console.warn(`[PPT] ${context}: dropping invalid row at index ${idx}`);
+        return null;
+      })
+      .filter((row) => Array.isArray(row) && row.length > 0);
+
+    if (normalized.length === 0) {
+      console.warn(`[PPT] ${context}: no valid rows after normalization`);
+      return null;
+    }
+
+    return normalized;
+  }
+
+  function safeAddTable(slide, rows, options = {}, context = 'table') {
+    const normalizedRows = normalizeTableRows(rows, context);
+    if (!normalizedRows) return false;
+    const hadAutoPage = !!(options && options.autoPage);
+    const addOptions = options && typeof options === 'object' ? { ...options } : options;
+    try {
+      slide.addTable(normalizedRows, addOptions);
+      return true;
+    } catch (err) {
+      // Known pptxgenjs edge case: autoPage can fail internally even with valid rows.
+      // Retry once without auto-page flags to keep the deck valid.
+      if (hadAutoPage) {
+        const retryOptions = { ...options };
+        delete retryOptions.autoPage;
+        delete retryOptions.autoPageRepeatHeader;
+        delete retryOptions.autoPageHeaderRows;
+        try {
+          slide.addTable(normalizedRows, retryOptions);
+          console.warn(`[PPT] ${context}: addTable recovered by disabling autoPage`);
+          return true;
+        } catch (retryErr) {
+          console.error(
+            `[PPT] ${context} addTable retry failed: ${retryErr.message} | rows=${normalizedRows.length}`
+          );
+          return false;
+        }
+      }
+      console.error(
+        `[PPT] ${context} addTable failed: ${err.message} | rows=${normalizedRows.length}`
+      );
+      return false;
+    }
   }
 
   // Helper to show "Data unavailable" message on slides with missing data
@@ -1597,7 +1714,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         });
         const termColWidths = calculateColumnWidths(termRows, CONTENT_WIDTH);
         applyAlternateRowFill(termRows);
-        slide.addTable(termRows, {
+        safeAddTable(slide, termRows, {
           x: LEFT_MARGIN,
           y: termStartY,
           w: CONTENT_WIDTH,
@@ -1626,7 +1743,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         const segColWidths = calculateColumnWidths(segRows, CONTENT_WIDTH);
         const segStartY = hasChart ? 6.1 : 3.2;
         applyAlternateRowFill(segRows);
-        slide.addTable(segRows, {
+        safeAddTable(slide, segRows, {
           x: LEFT_MARGIN,
           y: segStartY,
           w: CONTENT_WIDTH,
@@ -1781,21 +1898,26 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const tableH = safeTableHeight(rows.length, { fontSize: 14, maxH: 4.5 });
 
     applyAlternateRowFill(rows);
-    slide.addTable(rows, {
-      x: LEFT_MARGIN,
-      y: tableStartY,
-      w: CONTENT_WIDTH,
-      h: tableH,
-      fontSize: 14,
-      fontFace: FONT,
-      border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
-      margin: TABLE_CELL_MARGIN,
-      colW: colWidths.length > 0 ? colWidths : defaultColW,
-      valign: 'top',
-      autoPage: true,
-      autoPageRepeatHeader: true,
-      autoPageHeaderRows: 1,
-    });
+    safeAddTable(
+      slide,
+      rows,
+      {
+        x: LEFT_MARGIN,
+        y: tableStartY,
+        w: CONTENT_WIDTH,
+        h: tableH,
+        fontSize: 14,
+        fontFace: FONT,
+        border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+        margin: TABLE_CELL_MARGIN,
+        colW: colWidths.length > 0 ? colWidths : defaultColW,
+        valign: 'top',
+        autoPage: true,
+        autoPageRepeatHeader: true,
+        autoPageHeaderRows: 1,
+      },
+      block.key
+    );
 
     // Add insights below table
     const compInsightY = tableStartY + tableH + 0.15;
@@ -2089,7 +2211,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         });
         const colW = calculateColumnWidths(rows, CONTENT_WIDTH);
         applyAlternateRowFill(rows);
-        slide.addTable(rows, {
+        safeAddTable(slide, rows, {
           x: LEFT_MARGIN,
           y: currentY,
           w: CONTENT_WIDTH,
@@ -2207,21 +2329,26 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       });
       const actsTableH = safeTableHeight(actsRows.length, { fontSize: 14, maxH: 4.5 });
       applyAlternateRowFill(actsRows);
-      slide.addTable(actsRows, {
-        x: LEFT_MARGIN,
-        y: CONTENT_Y,
-        w: CONTENT_WIDTH,
-        h: actsTableH,
-        fontSize: 14,
-        fontFace: FONT,
-        border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
-        margin: TABLE_CELL_MARGIN,
-        colW: [2.96, 1.08, 4.53, 4.03],
-        valign: 'top',
-        autoPage: true,
-        autoPageRepeatHeader: true,
-        autoPageHeaderRows: 1,
-      });
+      safeAddTable(
+        slide,
+        actsRows,
+        {
+          x: LEFT_MARGIN,
+          y: CONTENT_Y,
+          w: CONTENT_WIDTH,
+          h: actsTableH,
+          fontSize: 14,
+          fontFace: FONT,
+          border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+          margin: TABLE_CELL_MARGIN,
+          colW: [2.96, 1.08, 4.53, 4.03],
+          valign: 'top',
+          autoPage: true,
+          autoPageRepeatHeader: true,
+          autoPageHeaderRows: 1,
+        },
+        'foundationalActs'
+      );
       // Key message summary below table if available
       let actsNextY = CONTENT_Y + actsTableH + 0.15;
       const keyMessage = ensureString(data.keyMessage);
@@ -2277,7 +2404,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       });
       const policyTableH = safeTableHeight(targetRows.length, { fontSize: 14, maxH: 2.5 });
       applyAlternateRowFill(targetRows);
-      slide.addTable(targetRows, {
+      safeAddTable(slide, targetRows, {
         x: LEFT_MARGIN,
         y: CONTENT_Y,
         w: CONTENT_WIDTH,
@@ -2369,7 +2496,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (ownershipRows.length > 1) {
       const ownerTableH = safeTableHeight(ownershipRows.length, { fontSize: 14, maxH: 1.8 });
       applyAlternateRowFill(ownershipRows);
-      slide.addTable(ownershipRows, {
+      safeAddTable(slide, ownershipRows, {
         x: LEFT_MARGIN,
         y: CONTENT_Y,
         w: CONTENT_WIDTH,
@@ -2398,7 +2525,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         maxH: Math.max(0.6, CONTENT_BOTTOM - investNextY - 1.0),
       });
       applyAlternateRowFill(incRows);
-      slide.addTable(incRows, {
+      safeAddTable(slide, incRows, {
         x: LEFT_MARGIN,
         y: investNextY,
         w: CONTENT_WIDTH,
@@ -2489,7 +2616,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     });
     const incTableH = safeTableHeight(incRows.length, { fontSize: 14, maxH: 4.5 });
     applyAlternateRowFill(incRows);
-    slide.addTable(incRows, {
+    safeAddTable(slide, incRows, {
       x: LEFT_MARGIN,
       y: CONTENT_Y,
       w: CONTENT_WIDTH,
@@ -2583,7 +2710,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       const dealColWidths = calculateColumnWidths(dealRows, CONTENT_WIDTH);
       const dealTableH = safeTableHeight(dealRows.length, { fontSize: 14, maxH: 2.0 });
       applyAlternateRowFill(dealRows);
-      slide.addTable(dealRows, {
+      safeAddTable(slide, dealRows, {
         x: LEFT_MARGIN,
         y: maNextY,
         w: CONTENT_WIDTH,
@@ -2631,7 +2758,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         maxH: Math.max(0.6, CONTENT_BOTTOM - maNextY - 1.0),
       });
       applyAlternateRowFill(targetRows);
-      slide.addTable(targetRows, {
+      safeAddTable(slide, targetRows, {
         x: LEFT_MARGIN,
         y: maNextY,
         w: CONTENT_WIDTH,
@@ -2724,7 +2851,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (econRows.length > 1) {
       const econColWidths = calculateColumnWidths(econRows, CONTENT_WIDTH);
       applyAlternateRowFill(econRows);
-      slide.addTable(econRows, {
+      safeAddTable(slide, econRows, {
         x: LEFT_MARGIN,
         y: CONTENT_Y,
         w: CONTENT_WIDTH,
@@ -2810,7 +2937,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       const optColWidths = calculateColumnWidths(optRows, CONTENT_WIDTH);
       const optTableH = safeTableHeight(optRows.length, { fontSize: 14, maxH: 2.5 });
       applyAlternateRowFill(optRows);
-      slide.addTable(optRows, {
+      safeAddTable(slide, optRows, {
         x: LEFT_MARGIN,
         y: CONTENT_Y,
         w: CONTENT_WIDTH,
@@ -2881,7 +3008,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       });
       const harveyColWidths = calculateColumnWidths(harveyRows, CONTENT_WIDTH);
       applyAlternateRowFill(harveyRows);
-      slide.addTable(harveyRows, {
+      safeAddTable(slide, harveyRows, {
         x: LEFT_MARGIN,
         y: harveyBaseY + 0.3,
         w: CONTENT_WIDTH,
@@ -2934,7 +3061,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       const phaseColW = phases.map(() => CONTENT_WIDTH / phases.length);
       const implTableH = safeTableHeight(phaseRows.length, { fontSize: 14, maxH: 4.0 });
       applyAlternateRowFill(phaseRows);
-      slide.addTable(phaseRows, {
+      safeAddTable(slide, phaseRows, {
         x: LEFT_MARGIN,
         y: CONTENT_Y,
         w: CONTENT_WIDTH,
@@ -3008,7 +3135,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       const segColWidths = calculateColumnWidths(segmentRows, CONTENT_WIDTH);
       const segTableH = Math.min(1.8, segmentRows.length * 0.4 + 0.2);
       applyAlternateRowFill(segmentRows);
-      slide.addTable(segmentRows, {
+      safeAddTable(slide, segmentRows, {
         x: LEFT_MARGIN,
         y: CONTENT_Y,
         w: CONTENT_WIDTH,
@@ -3074,7 +3201,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       const targetTableStartY = priorityYBase + 0.45;
       const targetTableH = Math.min(1.0, Math.max(0.4, CONTENT_BOTTOM - targetTableStartY));
       applyAlternateRowFill(targetCompRows);
-      slide.addTable(targetCompRows, {
+      safeAddTable(slide, targetCompRows, {
         x: LEFT_MARGIN,
         y: targetTableStartY,
         w: CONTENT_WIDTH,
@@ -3110,7 +3237,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       });
       const goNoGoTableH = safeTableHeight(goNoGoRows.length, { fontSize: 14, maxH: 3.5 });
       applyAlternateRowFill(goNoGoRows);
-      slide.addTable(goNoGoRows, {
+      safeAddTable(slide, goNoGoRows, {
         x: LEFT_MARGIN,
         y: CONTENT_Y,
         w: CONTENT_WIDTH,
@@ -3357,7 +3484,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       });
       const triggerColWidths = calculateColumnWidths(triggerRows, CONTENT_WIDTH);
       applyAlternateRowFill(triggerRows);
-      slide.addTable(triggerRows, {
+      safeAddTable(slide, triggerRows, {
         x: LEFT_MARGIN,
         y: CONTENT_Y,
         w: CONTENT_WIDTH,
@@ -3428,7 +3555,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       });
       const failTableH = safeTableHeight(failureRows.length, { fontSize: 14, maxH: 2.0 });
       applyAlternateRowFill(failureRows);
-      slide.addTable(failureRows, {
+      safeAddTable(slide, failureRows, {
         x: LEFT_MARGIN,
         y: lessonsNextY,
         w: CONTENT_WIDTH,
@@ -3946,7 +4073,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   if (metricsRows.length > 1) {
     const metricsTableH = Math.min(2.5, metricsRows.length * 0.35 + 0.2);
     applyAlternateRowFill(metricsRows);
-    finalSlide.addTable(metricsRows, {
+    safeAddTable(finalSlide, metricsRows, {
       x: LEFT_MARGIN,
       y: CONTENT_Y,
       w: CONTENT_WIDTH,
@@ -4007,7 +4134,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
   }
 
-  const pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
+  let pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
+  pptxBuffer = await normalizeChartRelationshipTargets(pptxBuffer);
   const totalSlides = 4 + sectionDefs.length + sectionBlockCounts.reduce((a, b) => a + b, 0) + 2; // cover + TOC + exec + opps + sections + appendix TOC + summary
   console.log(
     `Section-based PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB, ~${totalSlides} slides`

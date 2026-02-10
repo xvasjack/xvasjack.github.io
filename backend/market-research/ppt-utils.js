@@ -225,6 +225,54 @@ function safeArray(arr, max = 5) {
   return [];
 }
 
+// Guard addTable calls so malformed AI rows never throw and break slide generation.
+function normalizeTableRows(rows) {
+  if (!Array.isArray(rows)) return null;
+  const normalized = rows
+    .map((row) => {
+      if (Array.isArray(row)) {
+        const cells = row.map((cell) => {
+          if (cell == null) return { text: '' };
+          if (typeof cell === 'object' && !Array.isArray(cell)) {
+            const normalizedCell = { ...cell };
+            normalizedCell.text = ensureString(
+              Object.prototype.hasOwnProperty.call(normalizedCell, 'text')
+                ? normalizedCell.text
+                : ''
+            );
+            return normalizedCell;
+          }
+          return { text: ensureString(cell) };
+        });
+        return cells.length > 0 ? cells : null;
+      }
+      if (typeof row === 'object' && row !== null && !Array.isArray(row)) {
+        return [{ text: ensureString(row.text || '') }];
+      }
+      if (typeof row === 'string' || typeof row === 'number' || typeof row === 'boolean') {
+        return [{ text: ensureString(row) }];
+      }
+      return null;
+    })
+    .filter((row) => Array.isArray(row) && row.length > 0);
+  return normalized.length > 0 ? normalized : null;
+}
+
+function safeAddTable(slide, rows, options = {}, context = 'table') {
+  const normalizedRows = normalizeTableRows(rows);
+  if (!normalizedRows) {
+    console.warn(`[PPT] ${context}: invalid rows, skipping table`);
+    return false;
+  }
+  try {
+    slide.addTable(normalizedRows, options);
+    return true;
+  } catch (err) {
+    console.warn(`[PPT] ${context}: addTable failed (${err.message})`);
+    return false;
+  }
+}
+
 // Helper: safely convert any value to text for addText calls
 function safeText(value) {
   if (typeof value === 'string') return value;
@@ -1063,10 +1111,12 @@ function addStackedBarChart(slide, title, data, options = {}) {
     chartData.projectedStartIndex && chartData.projectedStartIndex < chartData.categories.length;
   const chartTitle =
     hasProjections && !title.includes('Projected') ? `${title} (includes projections)` : title;
+  const safeCategories = (chartData.categories || []).map((c) => ensureString(c));
+  const safeChartTitle = ensureString(chartTitle);
 
   const pptxChartData = chartData.series.map((s, idx) => ({
-    name: s.name,
-    labels: chartData.categories,
+    name: ensureString(s.name),
+    labels: safeCategories,
     values: (s.values || []).map((v) =>
       typeof v === 'number' && isFinite(v) ? v : Number(v) || 0
     ),
@@ -1084,8 +1134,8 @@ function addStackedBarChart(slide, title, data, options = {}) {
     barOverlapPct: 100,
     showLegend: true,
     legendPos: 'b',
-    showTitle: !!chartTitle,
-    title: chartTitle,
+    showTitle: !!safeChartTitle,
+    title: safeChartTitle,
     titleFontFace: 'Segoe UI',
     titleFontSize: 14,
     ...CHART_AXIS_DEFAULTS,
@@ -1170,10 +1220,12 @@ function addLineChart(slide, title, data, options = {}) {
     chartData.projectedStartIndex && chartData.projectedStartIndex < chartData.categories.length;
   const chartTitle =
     hasProjections && !title.includes('Projected') ? `${title} (includes projections)` : title;
+  const safeCategories = (chartData.categories || []).map((c) => ensureString(c));
+  const safeChartTitle = ensureString(chartTitle);
 
   const pptxChartData = chartData.series.map((s, idx) => ({
-    name: s.name,
-    labels: chartData.categories,
+    name: ensureString(s.name),
+    labels: safeCategories,
     values: (s.values || []).map((v) =>
       typeof v === 'number' && isFinite(v) ? v : Number(v) || 0
     ),
@@ -1187,8 +1239,8 @@ function addLineChart(slide, title, data, options = {}) {
     h: options.h || TEMPLATE.contentArea.h,
     showLegend: chartData.series.length > 1,
     legendPos: 'b',
-    showTitle: !!chartTitle,
-    title: chartTitle,
+    showTitle: !!safeChartTitle,
+    title: safeChartTitle,
     titleFontFace: 'Segoe UI',
     titleFontSize: 14,
     ...CHART_AXIS_DEFAULTS,
@@ -1247,8 +1299,8 @@ function addBarChart(slide, title, data, options = {}) {
 
   const chartData = [
     {
-      name: data.name || 'Value',
-      labels: data.categories,
+      name: ensureString(data.name || 'Value'),
+      labels: (data.categories || []).map((c) => ensureString(c)),
       values: (data.values || []).map((v) =>
         typeof v === 'number' && isFinite(v) ? v : Number(v) || 0
       ),
@@ -1264,7 +1316,7 @@ function addBarChart(slide, title, data, options = {}) {
     barDir: options.horizontal ? 'bar' : 'col',
     showLegend: false,
     showTitle: !!title,
-    title: title,
+    title: ensureString(title),
     titleFontFace: 'Segoe UI',
     titleFontSize: 14,
     ...CHART_AXIS_DEFAULTS,
@@ -1325,8 +1377,8 @@ function addPieChart(slide, title, data, options = {}) {
 
   const chartData = [
     {
-      name: data.name || 'Share',
-      labels: data.categories,
+      name: ensureString(data.name || 'Share'),
+      labels: (data.categories || []).map((c) => ensureString(c)),
       values: (data.values || []).map((v) =>
         typeof v === 'number' && isFinite(v) ? v : Number(v) || 0
       ),
@@ -1341,7 +1393,7 @@ function addPieChart(slide, title, data, options = {}) {
     showLegend: true,
     legendPos: 'r',
     showTitle: !!title,
-    title: title,
+    title: ensureString(title),
     titleFontFace: 'Segoe UI',
     titleFontSize: 14,
     titleColor: C_TRUE_BLACK,
@@ -2017,13 +2069,18 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT, country
     ]);
   });
 
-  slide.addTable(tableRows, {
-    x: TEMPLATE.contentArea.x,
-    y: TEMPLATE.contentArea.y,
-    w: TEMPLATE.contentArea.w,
-    rowH: 0.59,
-    border: [tocBorderTB, tocBorderNone, tocBorderTB, tocBorderNone],
-  });
+  safeAddTable(
+    slide,
+    tableRows,
+    {
+      x: TEMPLATE.contentArea.x,
+      y: TEMPLATE.contentArea.y,
+      w: TEMPLATE.contentArea.w,
+      rowH: 0.59,
+      border: [tocBorderTB, tocBorderNone, tocBorderTB, tocBorderNone],
+    },
+    'toc'
+  );
 
   return slide;
 }
@@ -2118,20 +2175,30 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
     ]),
   ];
 
-  slide.addTable(oppRows, {
-    x: TEMPLATE.contentArea.x,
-    y: TEMPLATE.contentArea.y,
-    w: colW,
-    rowH: 0.8,
-    border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: C_BORDER },
-  });
-  slide.addTable(barRows, {
-    x: TEMPLATE.contentArea.x + colW + 0.5,
-    y: TEMPLATE.contentArea.y,
-    w: colW,
-    rowH: 0.8,
-    border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: C_BORDER },
-  });
+  safeAddTable(
+    slide,
+    oppRows,
+    {
+      x: TEMPLATE.contentArea.x,
+      y: TEMPLATE.contentArea.y,
+      w: colW,
+      rowH: 0.8,
+      border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: C_BORDER },
+    },
+    'opportunities'
+  );
+  safeAddTable(
+    slide,
+    barRows,
+    {
+      x: TEMPLATE.contentArea.x + colW + 0.5,
+      y: TEMPLATE.contentArea.y,
+      w: colW,
+      rowH: 0.8,
+      border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: C_BORDER },
+    },
+    'barriers'
+  );
 
   return slide;
 }
@@ -2249,14 +2316,19 @@ function addHorizontalFlowTable(slide, data, options = {}) {
   const maxRows = Math.min(dataRows.length, 3);
   const rowH = Math.min(1.6, (TEMPLATE.sourceBar.y - TEMPLATE.contentArea.y - 0.5) / (maxRows + 1));
 
-  slide.addTable([headerRow, ...dataRows], {
-    x,
-    y,
-    w,
-    colW: colWidths,
-    rowH,
-    border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: C_BORDER },
-  });
+  safeAddTable(
+    slide,
+    [headerRow, ...dataRows],
+    {
+      x,
+      y,
+      w,
+      colW: colWidths,
+      rowH,
+      border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: C_BORDER },
+    },
+    'horizontalFlow'
+  );
 }
 
 module.exports = {

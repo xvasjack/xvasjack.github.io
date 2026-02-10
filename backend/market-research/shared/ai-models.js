@@ -15,6 +15,12 @@ const MODEL_CONFIG = {
     timeout: 30000,
     maxTokens: 8192,
   },
+  'gemini-3-pro-preview': {
+    provider: 'gemini',
+    cost: { input: 1.25, output: 10.0 },
+    timeout: 60000,
+    maxTokens: 8192,
+  },
 };
 
 // Temperature presets for different task types

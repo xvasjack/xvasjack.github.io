@@ -32,6 +32,7 @@ const MODEL_COSTS = {
   // Gemini
   'gemini-2.5-flash': { input: 0.00015, output: 0.0006 },
   'gemini-3-flash-preview': { input: 0.0005, output: 0.003 },
+  'gemini-3-pro-preview': { input: 0.00125, output: 0.01 },
   'gemini-2.5-pro': { input: 0.00125, output: 0.005 },
   // Anthropic
   'claude-3-opus': { input: 0.015, output: 0.075 },
