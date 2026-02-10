@@ -871,7 +871,7 @@ The quality gate will handle missing data appropriately.
 ANTI-PADDING RULE:
 - Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
 - If you cannot find ${industry}-specific data for a field, use the null/empty value — do NOT fill it with country-level macro data
-- Example: If asked for "ESCO market size" and you only know "Thailand GDP is $500B" — return null, not the GDP figure
+- Example: If asked for "${industry} market size" and you only know "Thailand GDP is $500B" — return null, not the GDP figure
 - Macro data is ONLY acceptable in contextual/background fields explicitly labeled as such
 
 RULES:
@@ -1164,7 +1164,7 @@ The quality gate will handle missing data appropriately.
 ANTI-PADDING RULE:
 - Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
 - If you cannot find ${industry}-specific data for a field, use the null/empty value — do NOT fill it with country-level macro data
-- Example: If asked for "ESCO market size" and you only know "Thailand GDP is $500B" — return null, not the GDP figure
+- Example: If asked for "${industry} market size" and you only know "Thailand GDP is $500B" — return null, not the GDP figure
 - Macro data is ONLY acceptable in contextual/background fields explicitly labeled as such
 
 RULES:
@@ -1393,7 +1393,7 @@ The quality gate will handle missing data appropriately.
 ANTI-PADDING RULE:
 - Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
 - If you cannot find ${industry}-specific data for a field, use the null/empty value — do NOT fill it with country-level macro data
-- Example: If asked for "ESCO market size" and you only know "Thailand GDP is $500B" — return null, not the GDP figure
+- Example: If asked for "${industry} market size" and you only know "Thailand GDP is $500B" — return null, not the GDP figure
 - Macro data is ONLY acceptable in contextual/background fields explicitly labeled as such
 
 RULES:
@@ -1403,16 +1403,16 @@ RULES:
 - Company descriptions should be 45-60 words
 - Insights must have structured fields: data (with specific numbers), pattern (causal mechanism), implication (action verb + timing)
 
-IMPORTANT: Use EXACTLY the JSON keys specified below (escoEconomics, partnerAssessment, entryStrategy, implementation, targetSegments). Even if the industry is not energy/ESCO, use these exact keys — the rendering pipeline depends on them. Adapt the CONTENT to ${industry} but keep the KEY NAMES exactly as shown.
+IMPORTANT: Use EXACTLY the JSON keys specified below (dealEconomics, partnerAssessment, entryStrategy, implementation, targetSegments). Adapt the CONTENT to ${industry} but keep the KEY NAMES exactly as shown.
 
 Return JSON:
 {
   "depth": {
-    "escoEconomics": {
+    "dealEconomics": {
       "slideTitle": "${country} - ${industry} Deal Economics",
       "subtitle": "Key insight",
       "typicalDealSize": {"min": "$XM", "max": "$YM", "average": "$ZM"},
-      "contractTerms": {"duration": "X years", "savingsSplit": "Client X% / Provider Y%", "guaranteeStructure": "Type"},
+      "contractTerms": {"duration": "X years", "revenueSplit": "Client X% / Provider Y%", "guaranteeStructure": "Type"},
       "financials": {"paybackPeriod": "X years", "irr": "X-Y%", "marginProfile": "X% gross margin"},
       "financingOptions": ["Named option 1", "Named option 2"],
       "keyInsight": "Investment thesis"
@@ -2305,7 +2305,11 @@ async function applyFinalReviewFixes(
           industry,
           fixContext
         );
-        return { section: 'summary', result: summaryResult.summary || summaryResult };
+        return {
+          section: 'summary',
+          result: summaryResult.summary || summaryResult,
+          depth: summaryResult.depth || null,
+        };
       }
       return null;
     } catch (err) {
@@ -2319,6 +2323,10 @@ async function applyFinalReviewFixes(
   for (const fix of results) {
     if (fix && fix.result && !fix.result._synthesisError) {
       countryAnalysis[fix.section] = fix.result;
+      // synthesizeSummary returns { depth, summary } — update depth too if present
+      if (fix.section === 'summary' && fix.depth) {
+        countryAnalysis.depth = fix.depth;
+      }
       console.log(`  [FINAL REVIEW] Fixed: ${fix.section}`);
     }
   }
@@ -2636,7 +2644,8 @@ async function researchCountry(country, industry, clientContext, scope = null) {
           },
           country,
           industry,
-          clientContext
+          clientContext,
+          storyPlan
         );
         if (countryAnalysis.policy?._synthesisError && newPolicy && !newPolicy._synthesisError) {
           countryAnalysis.policy = newPolicy;
@@ -2659,7 +2668,8 @@ async function researchCountry(country, industry, clientContext, scope = null) {
           },
           country,
           industry,
-          clientContext
+          clientContext,
+          storyPlan
         );
         if (countryAnalysis.market?._synthesisError && newMarket && !newMarket._synthesisError) {
           countryAnalysis.market = newMarket;
@@ -2679,7 +2689,8 @@ async function researchCountry(country, industry, clientContext, scope = null) {
           },
           country,
           industry,
-          clientContext
+          clientContext,
+          storyPlan
         );
         if (countryAnalysis.competitors?._synthesisError && newComp && !newComp._synthesisError) {
           countryAnalysis.competitors = newComp;
@@ -2843,6 +2854,8 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         }
 
         // ESCALATION 1: Research gaps → go find missing data (Reviewer 1 power)
+        let researchDataDeepened = false;
+        const deepenedTargetSections = new Set();
         if (finalReview.researchGaps && finalReview.researchGaps.length > 0) {
           console.log(
             `  [FINAL REVIEW → RESEARCH] ${finalReview.researchGaps.length} data gaps found. Escalating to research...`
@@ -2862,6 +2875,11 @@ async function researchCountry(country, industry, clientContext, scope = null) {
             verificationsNeeded: [],
           };
 
+          // Track which sections the gaps target
+          for (const g of finalReview.researchGaps) {
+            deepenedTargetSections.add(g.targetSection || 'market');
+          }
+
           const { deepenedResults } = await deepenResearch(
             escalatedGapReport,
             country,
@@ -2872,6 +2890,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
 
           if (deepenedResults.length > 0) {
             researchData = mergeDeepened(researchData, deepenedResults);
+            researchDataDeepened = true;
             console.log(
               `  [FINAL REVIEW → RESEARCH] +${deepenedResults.length} topics added to research data`
             );
@@ -2879,9 +2898,30 @@ async function researchCountry(country, industry, clientContext, scope = null) {
         }
 
         // ESCALATION 2: Synthesis fixes → re-synthesize flagged sections (Reviewer 2 power)
-        if (criticalOrMajor.length > 0 && finalReview.sectionFixes) {
+        // Also trigger if research data was deepened — new data needs re-synthesis even without sectionFixes
+        const needsSynthesisFix = criticalOrMajor.length > 0 && finalReview.sectionFixes;
+        const needsResearchResynth = researchDataDeepened && deepenedTargetSections.size > 0;
+
+        if (needsSynthesisFix || needsResearchResynth) {
+          // Build sectionFixes from research gaps' targetSection if reviewer didn't provide them
+          if (!finalReview.sectionFixes && needsResearchResynth) {
+            finalReview.sectionFixes = {};
+            for (const section of deepenedTargetSections) {
+              finalReview.sectionFixes[section] =
+                `Re-synthesize with new research data found for ${section}`;
+            }
+          } else if (finalReview.sectionFixes && needsResearchResynth) {
+            // Ensure deepened sections are included even if reviewer didn't flag them
+            for (const section of deepenedTargetSections) {
+              if (!finalReview.sectionFixes[section]) {
+                finalReview.sectionFixes[section] =
+                  `Re-synthesize with new research data found for ${section}`;
+              }
+            }
+          }
+
           console.log(
-            `  [FINAL REVIEW → SYNTHESIS] ${criticalOrMajor.length} critical/major issues. Re-synthesizing...`
+            `  [FINAL REVIEW → SYNTHESIS] ${criticalOrMajor.length} critical/major issues${researchDataDeepened ? ` + ${deepenedTargetSections.size} sections with new research data` : ''}. Re-synthesizing...`
           );
           countryAnalysis = await applyFinalReviewFixes(
             countryAnalysis,
@@ -2982,7 +3022,7 @@ If you don't have specific data, return null or empty string. Do NOT use hedging
 === ANTI-PADDING RULE ===
 - Do NOT substitute general/macro economic data (GDP, population, inflation, general trade statistics) when industry-specific data is unavailable
 - If you cannot find ${scope.industry}-specific data for a field, use the null/empty value — do NOT fill it with country-level macro data
-- Example: If asked for "ESCO market size" and you only know "Thailand GDP is $500B" — return null, not the GDP figure
+- Example: If asked for "${scope.industry} market size" and you only know "Thailand GDP is $500B" — return null, not the GDP figure
 - Macro data is ONLY acceptable in contextual/background fields explicitly labeled as such
 
 === ANTI-PADDING VALIDATION ===

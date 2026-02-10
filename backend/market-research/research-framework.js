@@ -203,16 +203,16 @@ const RESEARCH_FRAMEWORK = {
     ],
   },
 
-  // === DEPTH TOPICS: ESCO ECONOMICS & DEAL STRUCTURE ===
-  depth_escoEconomics: {
-    name: 'ESCO Contract Economics',
-    slideTitle: '{country} - ESCO Deal Economics',
+  // === DEPTH TOPICS: DEAL ECONOMICS & STRUCTURE ===
+  depth_dealEconomics: {
+    name: 'Deal Economics & Contract Structure',
+    slideTitle: '{country} - {industry} Deal Economics',
     queries: [
-      '{country} ESCO contract structure shared savings guaranteed savings',
-      '{country} energy performance contracting typical deal size value',
-      '{country} ESCO project payback period ROI internal rate return',
-      '{country} energy efficiency project financing options banks',
-      '{country} ESCO contract duration terms typical 5 10 years',
+      '{country} {industry} contract structure deal terms',
+      '{country} {industry} typical deal size value market',
+      '{country} {industry} project payback period ROI internal rate return',
+      '{country} {industry} project financing options funding',
+      '{country} {industry} contract duration terms typical',
     ],
   },
   depth_partnerAssessment: {
@@ -327,7 +327,7 @@ const RESEARCH_TOPIC_GROUPS = {
   ],
   context: ['macro_economicContext', 'opportunities_whitespace', 'risks_assessment'],
   depth: [
-    'depth_escoEconomics',
+    'depth_dealEconomics',
     'depth_partnerAssessment',
     'depth_entryStrategy',
     'depth_implementation',
@@ -892,8 +892,7 @@ function generateFallbackFramework(scope) {
 
 /**
  * Get the appropriate research framework for a country.
- * Thailand uses the optimized hardcoded framework.
- * Other countries use dynamic generation with fallback.
+ * Always uses dynamic generation with fallback to hardcoded framework.
  */
 async function getResearchFramework(country, scope) {
   // Always dynamic — no country-specific or industry-specific routing

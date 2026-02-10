@@ -595,9 +595,9 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
 // Helper: add callout/insight box to slide (single shape to avoid overlap detection)
 // Uses widescreen dimensions (13.333" x 7.5" = 16:9)
 function addCalloutBox(slide, title, content, options = {}) {
-  const boxX = options.x || 0.4; // LEFT_MARGIN for widescreen
+  const boxX = options.x || TEMPLATE.contentArea.x; // LEFT_MARGIN for widescreen
   const boxY = options.y || 5.3;
-  const boxW = options.w || 12.6; // CONTENT_WIDTH for widescreen
+  const boxW = options.w || TEMPLATE.contentArea.w; // CONTENT_WIDTH for widescreen
   const boxH = options.h || 1.2;
   const boxType = options.type || 'insight'; // insight, warning, recommendation
   const FONT = 'Segoe UI';
@@ -682,7 +682,10 @@ function addCalloutBox(slide, title, content, options = {}) {
       w: boxW,
       h: totalBoxH,
       fill: { color: colors.fill },
-      line: { color: colors.border, pt: 1 },
+      line: {
+        color: colors.border,
+        pt: templatePatterns.patterns?.calloutOverlay?.borderWidth || 0.75,
+      },
       margin: [5, 8, 5, 8],
       valign: 'top',
       fit: 'shrink',
@@ -788,9 +791,9 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
   if (!Array.isArray(opportunities)) opportunities = [];
   if (!Array.isArray(obstacles)) obstacles = [];
   const FONT = 'Segoe UI';
-  const LEFT_MARGIN = options.x || 0.4;
-  const contentY = options.y || 1.4;
-  const colWidth = 6.0;
+  const LEFT_MARGIN = options.x || TEMPLATE.contentArea.x;
+  const contentY = options.y || TEMPLATE.contentArea.y;
+  const colWidth = (TEMPLATE.contentArea.w - 0.5) / 2;
   const gap = 0.5;
   const COLORS = {
     green: '2E7D32',
@@ -1000,7 +1003,7 @@ function addStackedBarChart(slide, title, data, options = {}) {
       x: options.x || TEMPLATE.contentArea.x,
       y: options.y || TEMPLATE.contentArea.y,
       w: options.w || TEMPLATE.contentArea.w,
-      h: options.h || 5.196,
+      h: options.h || TEMPLATE.contentArea.h,
       fontSize: 14,
       color: C_MUTED,
       fontFace: 'Segoe UI',
@@ -1020,7 +1023,7 @@ function addStackedBarChart(slide, title, data, options = {}) {
       x: options.x || TEMPLATE.contentArea.x,
       y: options.y || TEMPLATE.contentArea.y,
       w: options.w || TEMPLATE.contentArea.w,
-      h: options.h || 5.196,
+      h: options.h || TEMPLATE.contentArea.h,
       fontSize: 14,
       color: C_MUTED,
       fontFace: 'Segoe UI',
@@ -1067,7 +1070,7 @@ function addStackedBarChart(slide, title, data, options = {}) {
     x: options.x || TEMPLATE.contentArea.x,
     y: options.y || TEMPLATE.contentArea.y,
     w: options.w || TEMPLATE.contentArea.w,
-    h: options.h || 5.196,
+    h: options.h || TEMPLATE.contentArea.h,
     barDir: options.barDir || 'col',
     barGrouping: 'stacked',
     barGapWidthPct: 50,
@@ -1107,7 +1110,7 @@ function addLineChart(slide, title, data, options = {}) {
       x: options.x || TEMPLATE.contentArea.x,
       y: options.y || TEMPLATE.contentArea.y,
       w: options.w || TEMPLATE.contentArea.w,
-      h: options.h || 5.196,
+      h: options.h || TEMPLATE.contentArea.h,
       fontSize: 14,
       color: C_MUTED,
       fontFace: 'Segoe UI',
@@ -1127,7 +1130,7 @@ function addLineChart(slide, title, data, options = {}) {
       x: options.x || TEMPLATE.contentArea.x,
       y: options.y || TEMPLATE.contentArea.y,
       w: options.w || TEMPLATE.contentArea.w,
-      h: options.h || 5.196,
+      h: options.h || TEMPLATE.contentArea.h,
       fontSize: 14,
       color: C_MUTED,
       fontFace: 'Segoe UI',
@@ -1174,7 +1177,7 @@ function addLineChart(slide, title, data, options = {}) {
     x: options.x || TEMPLATE.contentArea.x,
     y: options.y || TEMPLATE.contentArea.y,
     w: options.w || TEMPLATE.contentArea.w,
-    h: options.h || 5.196,
+    h: options.h || TEMPLATE.contentArea.h,
     showLegend: chartData.series.length > 1,
     legendPos: 'b',
     showTitle: !!chartTitle,
@@ -1208,7 +1211,7 @@ function addBarChart(slide, title, data, options = {}) {
       x: options.x || TEMPLATE.contentArea.x,
       y: options.y || TEMPLATE.contentArea.y,
       w: options.w || TEMPLATE.contentArea.w,
-      h: options.h || 5.196,
+      h: options.h || TEMPLATE.contentArea.h,
       fontSize: 14,
       color: C_MUTED,
       fontFace: 'Segoe UI',
@@ -1225,7 +1228,7 @@ function addBarChart(slide, title, data, options = {}) {
       x: options.x || TEMPLATE.contentArea.x,
       y: options.y || TEMPLATE.contentArea.y,
       w: options.w || TEMPLATE.contentArea.w,
-      h: options.h || 5.196,
+      h: options.h || TEMPLATE.contentArea.h,
       fontSize: 14,
       color: C_MUTED,
       fontFace: 'Segoe UI',
@@ -1250,7 +1253,7 @@ function addBarChart(slide, title, data, options = {}) {
     x: options.x || TEMPLATE.contentArea.x,
     y: options.y || TEMPLATE.contentArea.y,
     w: options.w || TEMPLATE.contentArea.w,
-    h: options.h || 5.196,
+    h: options.h || TEMPLATE.contentArea.h,
     barDir: options.horizontal ? 'bar' : 'col',
     showLegend: false,
     showTitle: !!title,
@@ -1327,7 +1330,7 @@ function addPieChart(slide, title, data, options = {}) {
     x: options.x || TEMPLATE.contentArea.x,
     y: options.y || TEMPLATE.contentArea.y,
     w: options.w || TEMPLATE.contentArea.w,
-    h: options.h || 5.196,
+    h: options.h || TEMPLATE.contentArea.h,
     showLegend: true,
     legendPos: 'r',
     showTitle: !!title,

@@ -784,7 +784,7 @@ async function depthResearchAgent(country, industry, clientContext, pipelineSign
       const framework = RESEARCH_FRAMEWORK[topicKey];
       if (!framework) return null;
 
-      const isEconomics = topicKey === 'depth_escoEconomics';
+      const isEconomics = topicKey === 'depth_dealEconomics' || topicKey === 'depth_escoEconomics';
       const isPartner = topicKey === 'depth_partnerAssessment';
       const isEntry = topicKey === 'depth_entryStrategy';
 

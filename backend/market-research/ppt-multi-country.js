@@ -669,8 +669,11 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     if (market.supplyChain) {
       marketRows.push([{ text: 'Supply Chain' }, { text: market.supplyChain }]);
     }
-    if (market.energyIntensity) {
-      marketRows.push([{ text: 'Energy Intensity' }, { text: market.energyIntensity }]);
+    if (market.marketIntensity || market.energyIntensity) {
+      marketRows.push([
+        { text: 'Market Intensity' },
+        { text: market.marketIntensity || market.energyIntensity },
+      ]);
     }
     if (market.keyObservation) {
       marketRows.push([{ text: 'Key Observation' }, { text: market.keyObservation }]);

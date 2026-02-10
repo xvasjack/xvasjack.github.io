@@ -201,10 +201,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       {
         image: {
           data: `image/png;base64,${LOGO_WHITE_B64}`,
-          x: 0.63,
-          y: 0.58,
-          w: 2.44,
-          h: 0.87,
+          x: 0.6322,
+          y: 0.5847,
+          w: 2.4367,
+          h: 0.8692,
         },
       },
     ],
@@ -225,7 +225,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     y: pgPos.y,
     w: pgPos.w,
     h: pgPos.h,
-    fontSize: 8,
+    fontSize: 10,
     fontFace: FONT,
     color: COLORS.footerText,
   };
@@ -681,7 +681,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     'caseStudy',
     'maActivity',
     // Depth
-    'escoEconomics',
+    'dealEconomics',
     'partnerAssessment',
     'entryStrategy',
     'implementation',
@@ -1079,17 +1079,16 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         const depthCitations = getCitationsForCategory('depth_');
         const depthDQ = getDataQualityForCategory('depth_');
 
+        // Support both new generic key (dealEconomics) and legacy key (escoEconomics)
+        const dealEconData = sectionData.dealEconomics || sectionData.escoEconomics || {};
         blocks.push({
-          key: 'escoEconomics',
+          key: 'dealEconomics',
           dataType: 'financial_performance',
-          data: sectionData.escoEconomics || {},
+          data: dealEconData,
           title:
-            (sectionData.escoEconomics || {}).slideTitle ||
+            dealEconData.slideTitle ||
             `${country} - ${scope.industry || 'Industry'} Deal Economics`,
-          subtitle:
-            (sectionData.escoEconomics || {}).keyInsight ||
-            (sectionData.escoEconomics || {}).subtitle ||
-            '',
+          subtitle: dealEconData.keyInsight || dealEconData.subtitle || '',
           citations: depthCitations,
           dataQuality: depthDQ,
         });
@@ -1921,8 +1920,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           break;
 
         // ===== DEPTH SECTION =====
-        case 'escoEconomics':
-          renderEscoEconomics(slide, block.data);
+        case 'dealEconomics':
+        case 'escoEconomics': // legacy key
+          renderDealEconomics(slide, block.data);
           break;
         case 'entryStrategy':
           renderEntryStrategy(slide, block.data);
@@ -2639,7 +2639,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
   }
 
-  function renderEscoEconomics(slide, data) {
+  function renderDealEconomics(slide, data) {
     const rawDealSize = data.typicalDealSize;
     let dealSizeText = '';
     let dealSize = {};
@@ -2676,10 +2676,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         { text: safeCell(terms.duration) },
         { text: '' },
       ]);
-    if (terms.savingsSplit)
+    const revSplit = terms.revenueSplit || terms.savingsSplit;
+    if (revSplit)
       econRows.push([
-        { text: 'Savings Split' },
-        { text: safeCell(terms.savingsSplit) },
+        { text: 'Revenue Split' },
+        { text: safeCell(revSplit) },
         { text: safeCell(terms.guaranteeStructure) },
       ]);
     if (financials.paybackPeriod)
@@ -3871,10 +3872,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       },
     ]);
   }
-  if (depth.escoEconomics?.typicalDealSize?.average) {
+  const dealEcon = depth.dealEconomics || depth.escoEconomics;
+  if (dealEcon?.typicalDealSize?.average) {
     metricsRows.push([
       { text: 'Typical Deal Size' },
-      { text: safeCell(depth.escoEconomics.typicalDealSize.average) },
+      { text: safeCell(dealEcon.typicalDealSize.average) },
       { text: '' },
     ]);
   }

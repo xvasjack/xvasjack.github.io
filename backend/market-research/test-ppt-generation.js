@@ -450,14 +450,14 @@ const competitors = {
 };
 
 const depth = {
-  escoEconomics: {
+  dealEconomics: {
     slideTitle: 'Thailand - ESCO Deal Economics',
     keyInsight:
       'Average deal size THB 25M with 18-22% IRR; payback under 4 years makes Thailand among most attractive ESCO markets in ASEAN',
     typicalDealSize: { min: 'THB 5M', max: 'THB 80M', average: 'THB 25M' },
     contractTerms: {
       duration: '5-10 years',
-      savingsSplit: '70/30 ESCO/client in years 1-3, transitioning to 50/50',
+      revenueSplit: '70/30 ESCO/client in years 1-3, transitioning to 50/50',
       guaranteeStructure: 'Minimum 15% energy savings guarantee with penalty clause',
     },
     financials: {
@@ -632,28 +632,28 @@ const depth = {
       {
         name: 'Japanese Manufacturers',
         size: 'THB 2.8B addressable',
-        energyIntensity: 'High',
+        marketIntensity: 'High',
         decisionMaker: 'Japan HQ + local plant manager',
         priority: 5,
       },
       {
         name: 'Thai Industrial Estates',
         size: 'THB 4.2B addressable',
-        energyIntensity: 'Very High',
+        marketIntensity: 'Very High',
         decisionMaker: 'Estate management + tenant committee',
         priority: 4,
       },
       {
         name: 'Commercial Buildings',
         size: 'THB 3.5B addressable',
-        energyIntensity: 'Medium',
+        marketIntensity: 'Medium',
         decisionMaker: 'Property management / building owner',
         priority: 3,
       },
       {
         name: 'Government Facilities',
         size: 'THB 2.1B addressable',
-        energyIntensity: 'Medium',
+        marketIntensity: 'Medium',
         decisionMaker: 'DEDE / provincial energy office',
         priority: 3,
       },
@@ -662,19 +662,19 @@ const depth = {
       {
         company: 'Toyota Motor Thailand',
         industry: 'Automotive',
-        energySpend: 'THB 1.2B annually',
+        annualSpend: 'THB 1.2B annually',
         location: 'Gateway City Industrial Estate, Chachoengsao',
       },
       {
         company: 'SCG Chemicals',
         industry: 'Petrochemical',
-        energySpend: 'THB 3.5B annually',
+        annualSpend: 'THB 3.5B annually',
         location: 'Map Ta Phut Industrial Estate, Rayong',
       },
       {
         company: 'Central Group',
         industry: 'Retail/Commercial',
-        energySpend: 'THB 800M annually',
+        annualSpend: 'THB 800M annually',
         location: 'Bangkok metropolitan area (45 properties)',
       },
     ],

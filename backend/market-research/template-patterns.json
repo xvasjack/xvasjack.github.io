@@ -72,7 +72,7 @@
       "x": 0.3758,
       "y": 6.6944,
       "w": 12.5862,
-      "h": 0.25
+      "h": 0.27
     },
     "headerLineTop": {
       "x": 0,
@@ -167,12 +167,12 @@
     "headerLines": {
       "top": {
         "y": 1.0208,
-        "color": "scheme:dk2",
+        "color": "293F55",
         "thickness": 4.5
       },
       "bottom": {
         "y": 1.0972,
-        "color": "scheme:dk2",
+        "color": "293F55",
         "thickness": 2.25
       }
     },
@@ -314,10 +314,10 @@
       "layout": 1,
       "elements": {
         "content": {
-          "x": 0.3663,
+          "x": 0.3758,
           "y": 1.5,
           "w": 12.5862,
-          "h": 5.0488,
+          "h": 5.0,
           "fontSize": 14,
           "autoFit": "spAutoFit"
         }
