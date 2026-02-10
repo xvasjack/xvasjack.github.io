@@ -582,8 +582,9 @@ CRITICAL RULES:
 3. Include queries about failures, not just successes
 4. Include timing-related queries (deadlines, expirations, upcoming changes)
 5. For ${scope.projectType === 'market_entry' ? 'market entry' : scope.projectType}: focus on entry barriers, local partners, investment requirements
-6. Total: 6 categories (policy, market, competitors, context, depth, insights), 3-5 topics per category, 5 queries per topic (25 total topics minimum)
+6. Total: EXACTLY 6 categories — policy, market, competitors, context, depth, insights. No more, no fewer. 3-5 topics per category, 5 queries per topic (25 total topics minimum)
 7. The "context" category must have 3 topics: macroeconomic context, market opportunities/white spaces, and key risks/barriers
+8. Categories MUST be exactly: policy, market, competitors, context, depth, insights — the synthesis pipeline depends on these exact 6 names
 
 Return ONLY valid JSON.`;
 
@@ -895,11 +896,7 @@ function generateFallbackFramework(scope) {
  * Other countries use dynamic generation with fallback.
  */
 async function getResearchFramework(country, scope) {
-  if (country && country.toLowerCase() === 'thailand') {
-    console.log(`  [Framework] Using optimized hardcoded framework for Thailand`);
-    return { framework: RESEARCH_FRAMEWORK, topicGroups: RESEARCH_TOPIC_GROUPS };
-  }
-
+  // Always dynamic — no country-specific or industry-specific routing
   console.log(`  [Framework] Generating dynamic framework for ${country}...`);
   try {
     const dynamicFramework = await generateResearchFramework(scope);

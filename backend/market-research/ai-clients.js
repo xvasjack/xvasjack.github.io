@@ -16,7 +16,7 @@ const PRICING = {
 };
 
 // ============ BUDGET GUARDRAILS ============
-const GEMINI_BUDGET_LIMIT = parseFloat(process.env.GEMINI_BUDGET_LIMIT || '5.00');
+const GEMINI_BUDGET_LIMIT = parseFloat(process.env.GEMINI_BUDGET_LIMIT || '20.00');
 let runBudgetUsed = 0;
 
 function checkBudget() {

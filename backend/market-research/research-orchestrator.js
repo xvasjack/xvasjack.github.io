@@ -622,10 +622,173 @@ WRITING STYLE (MANDATORY — match this EXACTLY):
 - NEVER write generic filler like "the market is growing" — always attach numbers, timelines, and implications
 `;
 
+// ============ TEMPLATE NARRATIVE PATTERN ============
+// Extracted from the Escort template's actual slide structure — the PATTERN, not content.
+// Used by buildStoryPlan() to guide narrative arc for ANY industry/country.
+
+const TEMPLATE_NARRATIVE_PATTERN = {
+  narrativeFlow:
+    'regulatory landscape → market opportunity sizing → competitive dynamics → entry strategy → action plan',
+  slidePatterns: {
+    policy: {
+      count: 3,
+      flow: 'foundational laws (what exists) → national targets (where heading) → investment rules (how to enter)',
+      eachSlide:
+        'Thesis title stating client implication, NOT topic description. 3-5 specific laws/regulations with year+enforcement. Transition table: pre-reform → key change → resulting landscape.',
+      example:
+        '1.1 The Foundational Acts: Defining Control & Competition — Vietnam is selectively opening competition, with recent reforms prioritizing private-sector participation',
+    },
+    market: {
+      count: 6,
+      flow: 'total supply (macro context) → demand by sector (where the money is) → generation mix (infrastructure) → subsector deep-dive → pricing (unit economics) → services market (client actual market)',
+      eachSlide:
+        'Chart with historical + projected data. 2-3 bullet insights connecting data to client opportunity. Source citations with specific report names.',
+      example:
+        '2.3 Electricity & Power Generation — Rapid capacity expansion underpinned by coal-to-gas transition creates $4.2B services opportunity',
+    },
+    competitors: {
+      count: 5,
+      flow: 'Japanese/similar peers (what others like client did) → local majors (who to partner with) → foreign players (who to compete with) → case study (what worked) → M&A (what is available)',
+      eachSlide:
+        'Company profiles: name, website, revenue, market share, entry year, entry mode, local partner. Strategic assessment per company. 45-60 word descriptions.',
+      example:
+        '3.1 Japanese Energy Companies — JERA and Tokyo Gas have established footholds through JVs, creating both partnership templates and competitive pressure',
+    },
+    depth: {
+      count: 5,
+      flow: 'deal economics (profitable?) → partner assessment (who to work with?) → entry strategy (JV vs acquisition vs greenfield) → implementation roadmap → target segments',
+      eachSlide:
+        'Decision-enabling data: specific numbers for deal sizes, timelines, valuations. Harvey ball comparisons for entry options.',
+    },
+    summary: {
+      flow: 'exec summary (4 paragraphs: opportunity → regulation → market → competition+entry) → key insights (3-5 with data+pattern+implication) → next steps (5 specific actions)',
+      eachSlide:
+        'Every sentence must reference specific data from earlier slides. No new information introduced here.',
+    },
+  },
+  toneProgression:
+    "Slides 1-3: 'Here is the landscape' (neutral) → Slides 4-9: 'Here is the opportunity' (optimistic-with-caveats) → Slides 10-14: 'Here is who you are up against' (analytical) → Slides 15-20: 'Here is how to win' (action-oriented)",
+};
+
+// ============ STORY ARCHITECT ============
+// Plans narrative arc and per-slide thesis BEFORE synthesis
+
+async function buildStoryPlan(researchData, country, industry, scope) {
+  console.log(`\n  [STORY] Building narrative plan for ${country}...`);
+  const storyStart = Date.now();
+
+  // Build condensed research summary for story architect
+  const researchSummary = {};
+  for (const [key, value] of Object.entries(researchData)) {
+    researchSummary[key] = {
+      name: value.name || key,
+      dataQuality: value.dataQuality || 'unknown',
+      keyContent: value.structuredData
+        ? JSON.stringify(value.structuredData).substring(0, 600)
+        : (value.content || '').substring(0, 600),
+      deepened: value.deepened || false,
+    };
+  }
+
+  const storyPrompt = `You are a senior strategy consultant planning a client presentation on ${scope.industry} in ${country}.
+Client: ${scope.clientContext || 'International company evaluating market entry'}
+Project type: ${scope.projectType || 'market_entry'}
+
+TEMPLATE NARRATIVE PATTERN (use as your guide):
+${JSON.stringify(TEMPLATE_NARRATIVE_PATTERN, null, 2)}
+
+RESEARCH DATA AVAILABLE:
+${JSON.stringify(researchSummary, null, 2)}
+
+YOUR TASK: Plan the SPECIFIC story for this research. What thesis should each slide have based on what we ACTUALLY found?
+
+Rules:
+- Each thesis must be grounded in the actual research data — don't invent claims
+- The narrative arc should tell a coherent story: landscape → opportunity → competition → how to win
+- Tone should progress per the template pattern
+- Each slide connects to the next — explicitly state how
+- keyDataToFeature should reference SPECIFIC findings from the research (law names, company names, numbers)
+- If research data is weak for a section, note it in the thesis (e.g. "limited data suggests...")
+
+Return JSON:
+{
+  "narrativeArc": "1-2 sentence overall story for ${country} ${scope.industry}",
+  "slides": [
+    {
+      "section": "policy|market|competitors|depth|summary",
+      "slideKey": "foundationalActs|nationalPolicy|investmentRestrictions|section_0|section_1|...|japanesePlayers|localMajor|foreignPlayers|caseStudy|maActivity|escoEconomics|partnerAssessment|entryStrategy|implementation|targetSegments",
+      "thesis": "Specific thesis grounded in research findings (100-180 chars)",
+      "keyDataToFeature": ["Specific law/company/number from research", "Another specific finding"],
+      "connectsTo": "How this builds toward the next slide",
+      "tone": "neutral|opportunity|analytical|action-oriented"
+    }
+  ],
+  "insightPriorities": ["Top 3-5 cross-cutting insights for executive summary"],
+  "clientImplication": "The single most important takeaway for the client"
+}
+
+Return ONLY valid JSON.`;
+
+  try {
+    const result = await callGeminiPro(storyPrompt, {
+      temperature: 0.2,
+      maxTokens: 8192,
+      jsonMode: true,
+    });
+
+    const text = typeof result === 'string' ? result : result.content || '';
+    const extracted = extractJsonFromContent(text);
+
+    if (extracted.status !== 'success' || !extracted.data) {
+      console.warn('  [STORY] Failed to parse story plan, synthesis will use style guide only');
+      return null;
+    }
+
+    const storyPlan = extracted.data;
+    const slideCount = (storyPlan.slides || []).length;
+    console.log(
+      `  [STORY] Planned ${slideCount} slides with narrative: "${(storyPlan.narrativeArc || '').substring(0, 100)}..."`
+    );
+    console.log(`  [STORY] Completed in ${((Date.now() - storyStart) / 1000).toFixed(1)}s`);
+
+    return storyPlan;
+  } catch (err) {
+    console.error(`  [STORY] Failed: ${err.message}`);
+    return null;
+  }
+}
+
+// Helper: extract story plan instructions for a specific section
+function getStoryInstructions(storyPlan, section) {
+  if (!storyPlan || !storyPlan.slides) return '';
+
+  const sectionSlides = storyPlan.slides.filter((s) => s.section === section);
+  if (sectionSlides.length === 0) return '';
+
+  let instructions = `\nNARRATIVE PLAN (follow this story arc):
+- Overall narrative: "${storyPlan.narrativeArc}"
+`;
+
+  for (const slide of sectionSlides) {
+    instructions += `\n- Slide "${slide.slideKey}":
+  Thesis: "${slide.thesis}"
+  Key data to feature: ${(slide.keyDataToFeature || []).join(', ')}
+  Connects to next: "${slide.connectsTo}"
+  Tone: ${slide.tone}`;
+  }
+
+  if (section === 'summary' && storyPlan.insightPriorities) {
+    instructions += `\n\n- Priority insights for executive summary: ${storyPlan.insightPriorities.join('; ')}`;
+    instructions += `\n- Client implication: "${storyPlan.clientImplication}"`;
+  }
+
+  return instructions;
+}
+
 /**
  * Synthesize POLICY section with depth requirements
  */
-async function synthesizePolicy(researchData, country, industry, clientContext) {
+async function synthesizePolicy(researchData, country, industry, clientContext, storyPlan) {
   console.log(`  [Synthesis] Policy section for ${country}...`);
 
   const filteredData = Object.fromEntries(
@@ -649,9 +812,10 @@ async function synthesizePolicy(researchData, country, industry, clientContext) 
 ${JSON.stringify(labeledData, null, 2)}`
     : `RESEARCH DATA: EMPTY due to API issues.`;
 
+  const storyInstructions = getStoryInstructions(storyPlan, 'policy');
   const prompt = `You are synthesizing policy and regulatory research for ${country}'s ${industry} market.
 Client context: ${clientContext}
-${SYNTHESIS_STYLE_GUIDE}
+${SYNTHESIS_STYLE_GUIDE}${storyInstructions}
 ${researchContext}
 
 If research data is insufficient for a field, set the value to:
@@ -725,7 +889,7 @@ Return ONLY valid JSON.`;
 /**
  * Synthesize MARKET section with depth requirements
  */
-async function synthesizeMarket(researchData, country, industry, clientContext) {
+async function synthesizeMarket(researchData, country, industry, clientContext, storyPlan) {
   console.log(`  [Synthesis] Market section for ${country}...`);
 
   const filteredData = Object.fromEntries(
@@ -770,9 +934,10 @@ async function synthesizeMarket(researchData, country, industry, clientContext) 
 ${JSON.stringify(labeledData, null, 2)}`
     : `RESEARCH DATA: EMPTY due to API issues.`;
 
+  const storyInstructions = getStoryInstructions(storyPlan, 'market');
   const prompt = `You are synthesizing market data research for ${country}'s ${industry} market.
 Client context: ${clientContext}
-${SYNTHESIS_STYLE_GUIDE}
+${SYNTHESIS_STYLE_GUIDE}${storyInstructions}
 ${researchContext}
 
 If research data is insufficient for a field, set the value to:
@@ -908,7 +1073,7 @@ Return ONLY valid JSON.`;
 /**
  * Synthesize COMPETITORS section with depth requirements
  */
-async function synthesizeCompetitors(researchData, country, industry, clientContext) {
+async function synthesizeCompetitors(researchData, country, industry, clientContext, storyPlan) {
   console.log(`  [Synthesis] Competitors section for ${country}...`);
 
   const filteredData = Object.fromEntries(
@@ -926,9 +1091,10 @@ async function synthesizeCompetitors(researchData, country, industry, clientCont
 ${JSON.stringify(labeledData, null, 2)}`
     : `RESEARCH DATA: EMPTY due to API issues.`;
 
+  const storyInstructions = getStoryInstructions(storyPlan, 'competitors');
   const commonIntro = `You are synthesizing competitive intelligence for ${country}'s ${industry} market.
 Client context: ${clientContext}
-${SYNTHESIS_STYLE_GUIDE}
+${SYNTHESIS_STYLE_GUIDE}${storyInstructions}
 ${researchContext}
 
 If research data is insufficient for a field, set the value to:
@@ -1610,6 +1776,278 @@ Return ONLY valid JSON with the SAME STRUCTURE as the original.`;
   }
 }
 
+// ============ REVIEW-DEEPEN STAGE ============
+// Single reviewer analyzes ALL round-1 research, identifies gaps, then targeted follow-up
+
+async function reviewResearch(researchData, country, industry, scope) {
+  console.log(`\n  [REVIEW] Analyzing all research for ${country}...`);
+  const reviewStart = Date.now();
+
+  // Build condensed summary per topic for reviewer
+  const topicSummaries = {};
+  for (const [key, value] of Object.entries(researchData)) {
+    topicSummaries[key] = {
+      name: value.name || key,
+      dataQuality: value.dataQuality || 'unknown',
+      extractionStatus: value.extractionStatus || 'unknown',
+      citationCount: (value.citations || []).length,
+      structuredData: value.structuredData || null,
+      contentPreview: value.structuredData ? null : (value.content || '').substring(0, 800),
+      hasChartData: !!value.structuredData?.chartData,
+    };
+  }
+
+  const reviewPrompt = `You are a research quality reviewer for a ${scope.projectType} project on ${scope.industry} in ${country}.
+Client context: ${scope.clientContext || 'Not specified'}
+
+Below is a summary of ${Object.keys(topicSummaries).length} research topics already completed. Identify GAPS — critical information MISSING for a client-ready market entry report.
+
+RESEARCH COMPLETED:
+${JSON.stringify(topicSummaries, null, 2)}
+
+REVIEW CRITERIA:
+1. REGULATORY DEPTH: Do we have specific law names with numbers, years, enforcement status, penalties? If a law is named, do we have article numbers and real-world enforcement data?
+2. MARKET DATA: Do we have actual numbers (market size in $, growth rate %, capacity in MW/GW)? Or just qualitative statements?
+3. COMPETITOR SPECIFICS: Do we have company names, revenue, market share, entry year, local partners? Or just "several companies"?
+4. TIMING INTELLIGENCE: Do we have specific deadlines, incentive expirations, policy change dates?
+5. MISSING CATEGORIES: Are there important aspects of ${scope.industry} in ${country} not covered?
+6. DATA QUALITY: Which topics have "low" or "unknown" quality that need verification?
+7. CROSS-REFERENCE GAPS: Claims in one topic that contradict or lack support from others?
+
+Return JSON:
+{
+  "overallAssessment": "2-sentence assessment of research completeness",
+  "coverageScore": 0-100,
+  "gaps": [
+    {
+      "id": "gap_1",
+      "category": "policy|market|competitors|context|depth|insights",
+      "topic": "existing topic key this relates to, or 'new'",
+      "description": "what specific information is missing",
+      "searchQuery": "EXACT search query to find this — must include ${country}",
+      "priority": 1-10,
+      "expectedImpact": "what finding this adds to the report",
+      "type": "missing_data|shallow_coverage|no_numbers|no_enforcement_detail|missing_competitor|missing_regulation|missing_timeline"
+    }
+  ],
+  "verificationsNeeded": [
+    {
+      "id": "verify_1",
+      "claim": "specific claim to verify",
+      "source_topic": "which topic contains the claim",
+      "searchQuery": "EXACT search query to verify",
+      "priority": 1-10
+    }
+  ],
+  "strongTopics": ["topic keys already good quality"],
+  "weakTopics": ["topic keys needing most work"]
+}
+
+RULES:
+- Max 20 gaps, ranked by priority (10=most critical, 1=nice-to-have)
+- Max 5 verifications
+- searchQuery must be specific, include "${country}", not generic
+- Focus on what makes the BIGGEST difference to report quality
+- type field helps the deepen stage understand what KIND of research to do
+
+Return ONLY valid JSON.`;
+
+  try {
+    const result = await callGeminiPro(reviewPrompt, {
+      temperature: 0.1,
+      maxTokens: 8192,
+      jsonMode: true,
+    });
+
+    const text = typeof result === 'string' ? result : result.content || '';
+    const extracted = extractJsonFromContent(text);
+
+    if (extracted.status !== 'success' || !extracted.data) {
+      console.warn('  [REVIEW] Failed to parse review output, skipping deepen stage');
+      return {
+        gapReport: null,
+        reviewMeta: { timeMs: Date.now() - reviewStart, error: 'parse_failed' },
+      };
+    }
+
+    const gapReport = extracted.data;
+    const gapCount = (gapReport.gaps || []).length;
+    const verifyCount = (gapReport.verificationsNeeded || []).length;
+    console.log(
+      `  [REVIEW] Coverage: ${gapReport.coverageScore}/100 | Gaps: ${gapCount} | Verifications: ${verifyCount}`
+    );
+    console.log(`  [REVIEW] Strong: ${(gapReport.strongTopics || []).slice(0, 3).join(', ')}`);
+    console.log(`  [REVIEW] Weak: ${(gapReport.weakTopics || []).slice(0, 3).join(', ')}`);
+    console.log(`  [REVIEW] Completed in ${((Date.now() - reviewStart) / 1000).toFixed(1)}s`);
+
+    return {
+      gapReport,
+      reviewMeta: {
+        timeMs: Date.now() - reviewStart,
+        gapCount,
+        verifyCount,
+        coverageScore: gapReport.coverageScore,
+      },
+    };
+  } catch (err) {
+    console.error(`  [REVIEW] Failed: ${err.message}`);
+    return {
+      gapReport: null,
+      reviewMeta: { timeMs: Date.now() - reviewStart, error: err.message },
+    };
+  }
+}
+
+async function deepenResearch(gapReport, country, industry, pipelineSignal, maxQueries = 20) {
+  if (!gapReport || !gapReport.gaps || gapReport.gaps.length === 0) {
+    console.log('  [DEEPEN] No gaps to fill, skipping');
+    return {
+      deepenedResults: [],
+      deepenMeta: { timeMs: 0, queriesRun: 0, queriesSucceeded: 0, totalChars: 0 },
+    };
+  }
+
+  console.log(`\n  [DEEPEN] Running targeted follow-up research for ${country}...`);
+  const deepenStart = Date.now();
+
+  // Prioritize: sort by priority descending, take top N
+  const sortedGaps = [...gapReport.gaps].sort((a, b) => (b.priority || 0) - (a.priority || 0));
+  const verifications = (gapReport.verificationsNeeded || [])
+    .sort((a, b) => (b.priority || 0) - (a.priority || 0))
+    .slice(0, 3);
+
+  const maxGapQueries = maxQueries - verifications.length;
+  const selectedGaps = sortedGaps.slice(0, maxGapQueries);
+
+  console.log(
+    `  [DEEPEN] Selected ${selectedGaps.length} gaps + ${verifications.length} verifications = ${selectedGaps.length + verifications.length} queries`
+  );
+
+  // Build all queries
+  const allQueries = [
+    ...selectedGaps.map((gap) => ({
+      id: gap.id,
+      type: 'gap',
+      category: gap.category,
+      topic: gap.topic,
+      description: gap.description,
+      searchQuery: gap.searchQuery,
+      gapType: gap.type,
+    })),
+    ...verifications.map((v) => ({
+      id: v.id,
+      type: 'verification',
+      category: 'verification',
+      topic: v.source_topic,
+      description: v.claim,
+      searchQuery: v.searchQuery,
+      gapType: 'verification',
+    })),
+  ];
+
+  // Run all in parallel with per-query timeout
+  const results = await Promise.all(
+    allQueries.map(async (query) => {
+      try {
+        const result = await Promise.race([
+          callGeminiResearch(query.searchQuery, country, industry, pipelineSignal),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error(`Deepen query "${query.id}" timed out`)), 120000)
+          ),
+        ]);
+
+        console.log(`    [DEEPEN] ${query.id}: ${(result.content || '').length} chars`);
+
+        return {
+          ...query,
+          content: result.content || '',
+          citations: result.citations || [],
+          researchQuality: result.researchQuality || 'unknown',
+          success: !!(result.content && result.content.length > 200),
+        };
+      } catch (err) {
+        console.warn(`    [DEEPEN] ${query.id} failed: ${err.message}`);
+        return {
+          ...query,
+          content: '',
+          citations: [],
+          researchQuality: 'failed',
+          success: false,
+        };
+      }
+    })
+  );
+
+  const successCount = results.filter((r) => r.success).length;
+  const totalChars = results.reduce((sum, r) => sum + (r.content || '').length, 0);
+
+  console.log(
+    `  [DEEPEN] Completed: ${successCount}/${results.length} successful, ${totalChars} total chars in ${((Date.now() - deepenStart) / 1000).toFixed(1)}s`
+  );
+
+  return {
+    deepenedResults: results.filter((r) => r.success),
+    deepenMeta: {
+      timeMs: Date.now() - deepenStart,
+      queriesRun: results.length,
+      queriesSucceeded: successCount,
+      totalChars,
+    },
+  };
+}
+
+function mergeDeepened(researchData, deepenedResults) {
+  if (!deepenedResults || deepenedResults.length === 0) return researchData;
+
+  console.log(`  [MERGE] Merging ${deepenedResults.length} deepened results into research data...`);
+
+  let appendCount = 0;
+  let newCount = 0;
+
+  for (const result of deepenedResults) {
+    // Find matching existing topic
+    const matchingKey =
+      result.topic !== 'new'
+        ? Object.keys(researchData).find((k) => k === result.topic || k.includes(result.topic))
+        : null;
+
+    if (matchingKey && researchData[matchingKey]) {
+      // Append to existing topic
+      const existing = researchData[matchingKey];
+      existing.content =
+        (existing.content || '') + '\n\n--- DEEPENED RESEARCH ---\n' + result.content;
+      existing.citations = [...(existing.citations || []), ...(result.citations || [])];
+      if (existing.dataQuality === 'low' || existing.dataQuality === 'unknown') {
+        existing.dataQuality = 'medium';
+      }
+      existing.deepened = true;
+      appendCount++;
+    } else {
+      // Create new topic entry
+      const newKey = `${result.category}_deepen_${result.id}`;
+      researchData[newKey] = {
+        key: newKey,
+        name: result.description,
+        content: result.content,
+        citations: result.citations || [],
+        slideTitle: `${result.category} - ${result.description}`.substring(0, 80),
+        dataQuality: 'medium',
+        extractionStatus: 'raw',
+        deepened: true,
+        gapType: result.gapType,
+      };
+      newCount++;
+    }
+  }
+
+  console.log(
+    `  [MERGE] Appended to ${appendCount} existing topics, created ${newCount} new topics`
+  );
+  console.log(`  [MERGE] Total research topics: ${Object.keys(researchData).length}`);
+
+  return researchData;
+}
+
 // ============ COUNTRY RESEARCH ORCHESTRATOR ============
 
 async function researchCountry(country, industry, clientContext, scope = null) {
@@ -1746,14 +2184,63 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     }
   }
 
+  // ============ REVIEW-DEEPEN STAGE ============
+  // Single reviewer analyzes all research, identifies gaps, then targeted follow-up
+  try {
+    const { gapReport, reviewMeta } = await reviewResearch(
+      researchData,
+      country,
+      industry,
+      scope || { industry, projectType: 'market_entry', clientContext }
+    );
+
+    if (gapReport && gapReport.gaps && gapReport.gaps.length > 0) {
+      const { deepenedResults, deepenMeta } = await deepenResearch(
+        gapReport,
+        country,
+        industry,
+        pipelineSignal,
+        20
+      );
+
+      if (deepenedResults.length > 0) {
+        researchData = mergeDeepened(researchData, deepenedResults);
+      }
+
+      console.log(
+        `  [REVIEW-DEEPEN] Review: ${reviewMeta.timeMs}ms | Deepen: ${deepenMeta.timeMs}ms | +${deepenMeta.queriesSucceeded} topics`
+      );
+    } else {
+      console.log('  [REVIEW-DEEPEN] No gaps found or review failed, proceeding to synthesis');
+    }
+  } catch (reviewErr) {
+    console.warn(
+      `  [REVIEW-DEEPEN] Stage failed, continuing with round-1 data: ${reviewErr.message}`
+    );
+  }
+
+  // ============ STORY ARCHITECT ============
+  // Plans narrative arc and per-slide thesis BEFORE synthesis
+  let storyPlan = null;
+  try {
+    storyPlan = await buildStoryPlan(
+      researchData,
+      country,
+      industry,
+      scope || { industry, projectType: 'market_entry', clientContext }
+    );
+  } catch (storyErr) {
+    console.warn(`  [STORY] Failed, synthesis will use style guide only: ${storyErr.message}`);
+  }
+
   // ============ PER-SECTION GEMINI SYNTHESIS ============
   console.log(`  [Synthesizing ${country} data per-section with Gemini...]`);
 
   // Run policy, market, and competitor synthesis in parallel
   const [policySynthesis, marketSynthesis, competitorsSynthesis] = await Promise.all([
-    synthesizePolicy(researchData, country, industry, clientContext),
-    synthesizeMarket(researchData, country, industry, clientContext),
-    synthesizeCompetitors(researchData, country, industry, clientContext),
+    synthesizePolicy(researchData, country, industry, clientContext, storyPlan),
+    synthesizeMarket(researchData, country, industry, clientContext, storyPlan),
+    synthesizeCompetitors(researchData, country, industry, clientContext, storyPlan),
   ]);
 
   // Check if too many synthesis sections failed
@@ -1793,6 +2280,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     depth: summaryResult.depth || {},
     summary: summaryResult.summary || {},
     rawData: researchData,
+    storyPlan: storyPlan || null,
   };
 
   // Validate content depth BEFORE proceeding
@@ -2075,10 +2563,11 @@ VALIDATION: Before returning, count how many times you used GDP, population, or 
   // Strip rawData to save ~200K chars of prompt space
   const { rawData: _rawData, ...countryDataForPrompt } = countryAnalysis;
 
+  const summaryStoryInstructions = getStoryInstructions(countryAnalysis.storyPlan, 'summary');
   const prompt = `Client: ${scope.clientContext}
 Industry: ${scope.industry}
 Target: ${countryAnalysis.country}
-${SYNTHESIS_STYLE_GUIDE}
+${SYNTHESIS_STYLE_GUIDE}${summaryStoryInstructions}
 DATA GATHERED:
 ${JSON.stringify(countryDataForPrompt, null, 2)}
 
@@ -2353,4 +2842,9 @@ module.exports = {
   synthesizeMarket,
   synthesizeCompetitors,
   synthesizeSummary,
+  reviewResearch,
+  deepenResearch,
+  mergeDeepened,
+  buildStoryPlan,
+  TEMPLATE_NARRATIVE_PATTERN,
 };
