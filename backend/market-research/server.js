@@ -12,7 +12,11 @@ const { costTracker, callGeminiResearch, resetBudget } = require('./ai-clients')
 const { parseScope } = require('./research-framework');
 const { researchCountry, synthesizeFindings } = require('./research-orchestrator');
 const { generatePPT } = require('./ppt-multi-country');
-const { validateResearchQuality, validateSynthesisQuality } = require('./quality-gates');
+const {
+  validateResearchQuality,
+  validateSynthesisQuality,
+  validatePptData,
+} = require('./quality-gates');
 
 // Setup global error handlers to prevent crashes
 setupGlobalErrorHandlers({ logMemory: false });
@@ -176,21 +180,8 @@ async function runMarketResearch(userPrompt, email) {
         stage: 'complete',
       };
 
-      // Preserve citations and PPT data, then clean up rawData to free memory
-      for (const ca of countryAnalyses) {
-        if (ca.rawData) {
-          // Fix 10: Preserve data needed for PPT before deleting rawData
-          ca.pptData = {
-            citations: ca.rawData.citations || [],
-            dataQuality: ca.rawData.dataQuality || {},
-            structuredData: ca.rawData.structuredData || {},
-          };
-          ca.citations = Object.values(ca.rawData)
-            .flatMap((v) => v?.citations || [])
-            .filter(Boolean);
-          delete ca.rawData;
-        }
-      }
+      // NOTE: rawData is preserved here — PPT generation needs it for citations and fallback content.
+      // It will be cleaned up AFTER PPT generation to free memory.
 
       // Stage 3: Synthesize findings
       const synthesis = await synthesizeFindings(countryAnalyses, scope);
@@ -234,8 +225,45 @@ async function runMarketResearch(userPrompt, email) {
         }
       }
 
+      // Quality Gate 3: Validate PPT data completeness before rendering
+      for (const ca of countryAnalyses) {
+        const sections = ['policy', 'market', 'competitors', 'depth', 'insights'].filter(
+          (s) => ca[s]
+        );
+        const blocks = sections.map((s) => ({
+          key: s,
+          type: typeof ca[s] === 'object' ? 'section' : 'unavailable',
+          title: s,
+          content: ca[s]?._synthesisError ? 'Data unavailable' : JSON.stringify(ca[s]).slice(0, 50),
+          chartData: ca[s]?.chartData || ca[s]?.tpes?.chartData || null,
+        }));
+        const pptGate = validatePptData(blocks);
+        console.log(
+          `[Quality Gate] PPT data for ${ca.country}:`,
+          JSON.stringify({
+            pass: pptGate.pass,
+            emptyBlocks: pptGate.emptyBlocks.length,
+            chartIssues: pptGate.chartIssues.length,
+            overflowRisks: pptGate.overflowRisks.length,
+          })
+        );
+        if (!pptGate.pass) {
+          console.warn(
+            `[Quality Gate] PPT data issues for ${ca.country}:`,
+            JSON.stringify({ emptyBlocks: pptGate.emptyBlocks, chartIssues: pptGate.chartIssues })
+          );
+        }
+      }
+
       // Stage 4: Generate PPT
       const pptBuffer = await generatePPT(finalSynthesis, countryAnalyses, scope);
+
+      // Clean up rawData AFTER PPT generation to free memory (citations already used by PPT renderer)
+      for (const ca of countryAnalyses) {
+        if (ca.rawData) {
+          delete ca.rawData;
+        }
+      }
 
       // Stage 5: Send email
       const filename = `Market_Research_${scope.industry.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pptx`;
