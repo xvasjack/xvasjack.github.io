@@ -159,12 +159,12 @@
       "top": {
         "y": 1.0208,
         "color": "scheme:dk2",
-        "thickness": 1.75
+        "thickness": 4.5
       },
       "bottom": {
         "y": 1.0972,
         "color": "scheme:dk2",
-        "thickness": 1.75
+        "thickness": 2.25
       }
     },
     "dividerLine": {
@@ -182,7 +182,8 @@
       "headerFontSize": 14,
       "bodyFontSize": 14,
       "borderWidth": 1,
-      "borderColor": "D6D7D9"
+      "borderColor": "BFBFBF",
+      "borderStyle": "dash"
     },
     "footer": {
       "copyrightPos": {
@@ -220,13 +221,15 @@
           "x": 0.4555,
           "y": 1.6333,
           "w": 9.3541,
-          "h": 2.8349
+          "h": 2.8349,
+          "fontSize": 36
         },
         "projectTitle": {
           "x": 0.4555,
           "y": 4.862,
           "w": 9.3541,
-          "h": 1.6491
+          "h": 1.6491,
+          "fontSize": 18
         }
       }
     },
@@ -250,6 +253,21 @@
           "x": 0.3758,
           "y": 1.5,
           "w": 12.5862
+        }
+      }
+    },
+    "section_divider": {
+      "id": 2.5,
+      "layout": 2,
+      "templateSlides": [2, 5, 11, 20, 30],
+      "elements": {
+        "title": {
+          "x": 0.7411,
+          "y": 2.9863,
+          "w": 8.1926,
+          "h": 1.5137,
+          "fontSize": 44,
+          "color": "FFFFFF"
         }
       }
     },
