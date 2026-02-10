@@ -1603,25 +1603,9 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   const pipelineController = new AbortController();
   const pipelineSignal = pipelineController.signal;
 
-  // Use hardcoded framework for energy-related industries (deeply aligned with Escort template)
-  // Only use dynamic framework for non-energy industries where hardcoded topics don't apply
-  const energyKeywords = [
-    'energy',
-    'power',
-    'electricity',
-    'gas',
-    'lng',
-    'esco',
-    'renewable',
-    'solar',
-    'wind',
-    'oil',
-    'petroleum',
-    'fuel',
-    'utilities',
-  ];
-  const industryLower = (industry || '').toLowerCase();
-  const useDynamicFramework = !energyKeywords.some((kw) => industryLower.includes(kw));
+  // Always use dynamic framework — each request is unique (industry, country, client context)
+  // The dynamic framework generator creates industry-specific topics on every request
+  const useDynamicFramework = true;
   let researchData = {}; // Declare outside to be accessible in both paths
 
   if (useDynamicFramework && scope) {

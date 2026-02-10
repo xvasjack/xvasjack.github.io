@@ -493,11 +493,12 @@ Generate a research framework with specific search queries for each category. Th
 - Appropriate for the ${scope.projectType} project type
 - Designed to find actionable data, not general information
 
-CRITICAL ANTI-DRIFT RULE:
-- If the industry is "energy services" or similar demand-side energy, DO NOT research upstream oil & gas production, refining, or exploration
-- Instead focus on: ESCO (energy service companies), energy efficiency, energy audits, energy performance contracting, behind-the-meter solutions, industrial energy management, demand-side management
-- Market topics should include: Total Primary Energy Supply (TPES), Final Energy Demand by sector, Electricity consumption vs capacity, Energy pricing, Natural gas/LNG supply
-- Each topic should have at least 5 very specific search queries
+CRITICAL RULES:
+- Stay focused on "${scope.industry}" specifically. Do NOT drift into adjacent industries or upstream/downstream sectors unless directly relevant
+- Each topic should have at least 5 very specific search queries that seek NUMBERS, NAMES, and DATES — not general overviews
+- Queries should target government reports, industry associations, IEA/World Bank data, company filings — authoritative sources
+- For market topics, include: market size (USD), growth rates (CAGR), supply/demand data, pricing data, import/export volumes
+- For competitor topics, include queries for specific company names, market share %, revenue, M&A activity, joint ventures
 
 Return a JSON object with this structure:
 {
