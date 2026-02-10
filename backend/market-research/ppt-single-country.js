@@ -399,12 +399,12 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   }
 
   // Standard slide layout — positions from Escort template extraction
-  const tpTitle = tpPos.title || { x: 0.3758, y: 0.2917, w: 12.5862, h: 0.6944 };
+  const tpTitle = tpPos.title || { x: 0.3758, y: 0.0488, w: 12.5862, h: 0.9097 };
   const tpContent = tpPos.contentArea || { x: 0.3758, y: 1.5, w: 12.5862, h: 5.0 };
   const tpSource = tpPos.sourceBar || { x: 0.3758, y: 6.6944, w: 12.5862, h: 0.25 };
   // Title font from template extraction
   const tpTitleFont = templatePatterns.style?.fonts?.title || {};
-  const tpTitleFontSize = tpTitleFont.size || 20;
+  const tpTitleFontSize = tpTitleFont.size || 24;
   const tpTitleBold = tpTitleFont.bold !== undefined ? tpTitleFont.bold : false;
   const CONTENT_WIDTH = tpContent.w; // Full content width for 16:9 widescreen
   const LEFT_MARGIN = tpContent.x; // Left margin from template

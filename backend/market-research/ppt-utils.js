@@ -16,7 +16,7 @@ const TEMPLATE = templatePatterns.pptxPositions
       sourceBar: templatePatterns.pptxPositions.sourceBar,
     }
   : {
-      title: { x: 0.3758, y: 0.2917, w: 12.5862, h: 0.6944 },
+      title: { x: 0.3758, y: 0.0488, w: 12.5862, h: 0.9097 },
       contentArea: { x: 0.3758, y: 1.5, w: 12.5862, h: 5.0 },
       sourceBar: { x: 0.3758, y: 6.6944, w: 12.5862, h: 0.25 },
     };
@@ -32,7 +32,7 @@ const C_WHITE = TP_COLORS.lt1 || 'FFFFFF';
 const C_BLACK = TP_COLORS.dk1 || '000000'; // Standard text color (template dk1)
 const C_TRUE_BLACK = '000000'; // Chart axes/titles
 const C_BORDER = templatePatterns.style?.table?.borderColor || 'D6D7D9'; // Template table border
-const C_BORDER_STYLE = templatePatterns.style?.table?.borderStyle || 'dash';
+const C_BORDER_STYLE = templatePatterns.style?.table?.borderStyle || 'sysDash';
 const TABLE_BORDER_WIDTH = templatePatterns.style?.table?.borderWidth || 1;
 const C_MUTED = '999999'; // Muted/unavailable text
 const C_AXIS_GRAY = TP_COLORS.gridLine || 'D6D7D9'; // Chart axis/grid lines
@@ -43,7 +43,7 @@ const C_LIGHT_BLUE = 'D6E4F0'; // Matrix quadrant / section overview
 
 // Template font specs
 const TP_FONTS = templatePatterns.style?.fonts || {};
-const TITLE_FONT_SIZE = TP_FONTS.title?.size || 20;
+const TITLE_FONT_SIZE = TP_FONTS.title?.size || 24;
 const TITLE_BOLD = TP_FONTS.title?.bold !== undefined ? TP_FONTS.title.bold : false;
 
 // Shared chart axis/grid defaults (identical across all chart types)
@@ -1962,18 +1962,27 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT, country
   // Build table rows
   const tableRows = [];
 
-  // Country header row (light blue fill) if countryName provided
+  // TOC border: top/bottom dashed, NO left/right (matches template slide2.xml)
+  const tocBorderTB = {
+    type: C_BORDER_STYLE,
+    pt: TABLE_BORDER_WIDTH,
+    color: C_BORDER,
+  };
+  const tocBorderNone = { pt: 0, color: 'FFFFFF' };
+  const tocSectionIndent = templatePatterns.style?.toc?.sectionIndentPt || 35;
+
+  // Country header row (light blue tint fill) if countryName provided
   if (countryName) {
     tableRows.push([
       {
         text: countryName,
         options: {
-          fontSize: 20,
+          fontSize: templatePatterns.style?.toc?.countryRowFontSize || 18,
           fontFace: FONT,
-          color: C_DK2,
-          bold: true,
+          color: C_BLACK,
+          bold: false,
           fill: { color: '99CCFF' },
-          border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: C_BORDER },
+          border: [tocBorderTB, tocBorderNone, tocBorderTB, tocBorderNone],
           valign: 'middle',
         },
       },
@@ -1991,10 +2000,10 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT, country
           fontFace: FONT,
           color: C_BLACK,
           bold: isActive,
-          fill: { color: isActive ? C_ACCENT1 : C_WHITE },
-          border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: C_BORDER },
+          fill: isActive ? { color: C_ACCENT1 } : undefined,
+          border: [tocBorderTB, tocBorderNone, tocBorderTB, tocBorderNone],
           valign: 'middle',
-          margin: [0, 0, 0, 20],
+          margin: [0, 0, 0, tocSectionIndent],
         },
       },
     ]);
@@ -2005,7 +2014,7 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT, country
     y: TEMPLATE.contentArea.y,
     w: TEMPLATE.contentArea.w,
     rowH: 0.59,
-    border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: C_BORDER },
+    border: [tocBorderTB, tocBorderNone, tocBorderTB, tocBorderNone],
   });
 
   return slide;

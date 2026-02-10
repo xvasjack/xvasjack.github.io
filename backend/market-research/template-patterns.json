@@ -17,9 +17,9 @@
     },
     "title": {
       "left": 0.3758,
-      "top": 0.2917,
+      "top": 0.0488,
       "width": 12.5862,
-      "height": 0.6944
+      "height": 0.9097
     },
     "headerLineTop": {
       "left": 0,
@@ -52,9 +52,9 @@
   "pptxPositions": {
     "title": {
       "x": 0.3758,
-      "y": 0.2875,
+      "y": 0.0488,
       "w": 12.5862,
-      "h": 0.6910
+      "h": 0.9097
     },
     "titleBar": {
       "x": 0.3758,
@@ -109,7 +109,7 @@
       "minorLatin": "Segoe UI",
       "title": {
         "family": "Segoe UI",
-        "size": 20,
+        "size": 24,
         "bold": false
       },
       "tableHeader": {
@@ -175,7 +175,12 @@
     },
     "toc": {
       "fontSize": 18,
-      "rowHeight": 0.59
+      "rowHeight": 0.59,
+      "sectionIndentPt": 35,
+      "firstRowFill": "accent1_tint60",
+      "sideBorders": false,
+      "countryRowFontSize": 18,
+      "countryRowBold": false
     },
     "table": {
       "headerFill": "FFFFFF",
@@ -183,7 +188,7 @@
       "bodyFontSize": 14,
       "borderWidth": 1,
       "borderColor": "BFBFBF",
-      "borderStyle": "dash"
+      "borderStyle": "sysDash"
     },
     "footer": {
       "copyrightPos": {
@@ -230,6 +235,12 @@
           "w": 9.3541,
           "h": 1.6491,
           "fontSize": 18
+        },
+        "logo": {
+          "x": 0.4467,
+          "y": 0.3228,
+          "w": 1.1389,
+          "h": 0.4027
         }
       }
     },
@@ -268,6 +279,12 @@
           "h": 1.5137,
           "fontSize": 44,
           "color": "FFFFFF"
+        },
+        "whiteLogo": {
+          "x": 0.6322,
+          "y": 0.5847,
+          "w": 2.4367,
+          "h": 0.8692
         }
       }
     },

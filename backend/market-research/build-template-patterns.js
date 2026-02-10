@@ -62,7 +62,7 @@ function stripText(elements) {
 // Source bar: {x:0.37, y:6.69, w:12.59, h:0.25}
 const positions = {
   titleBar: { left: 0.3758, top: 0.0486, width: 12.5862, height: 0.9097 },
-  title: { left: 0.3758, top: 0.2917, width: 12.5862, height: 0.6944 },
+  title: { left: 0.3758, top: 0.0488, width: 12.5862, height: 0.9097 },
   headerLineTop: { left: 0, top: 1.0208, width: 13.3333 },
   headerLineBottom: { left: 0, top: 1.0972, width: 13.3333 },
   content_area: { left: 0.3758, top: 1.5, width: 12.5862, height: 5.0 },
@@ -82,7 +82,7 @@ const style = {
   fonts: {
     majorLatin: 'Segoe UI',
     minorLatin: 'Segoe UI',
-    title: { family: 'Segoe UI', size: 20, bold: false },
+    title: { family: 'Segoe UI', size: 24, bold: false },
     tableHeader: { family: 'Segoe UI', size: 14, bold: false },
     tableBody: { family: 'Segoe UI', size: 14, bold: false },
     footer: { family: 'Segoe UI', size: 8 },
