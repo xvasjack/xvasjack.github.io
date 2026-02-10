@@ -677,62 +677,99 @@ async function buildStoryPlan(researchData, country, industry, scope) {
   console.log(`\n  [STORY] Building narrative plan for ${country}...`);
   const storyStart = Date.now();
 
-  // Build condensed research summary for story architect
+  // Build detailed research summary — story architect needs to see the data to plan the story
   const researchSummary = {};
   for (const [key, value] of Object.entries(researchData)) {
     researchSummary[key] = {
       name: value.name || key,
+      category: key.split('_')[0] || 'unknown',
       dataQuality: value.dataQuality || 'unknown',
       keyContent: value.structuredData
-        ? JSON.stringify(value.structuredData).substring(0, 600)
-        : (value.content || '').substring(0, 600),
+        ? JSON.stringify(value.structuredData).substring(0, 4000)
+        : (value.content || '').substring(0, 4000),
+      citationCount: (value.citations || []).length,
       deepened: value.deepened || false,
     };
   }
 
-  const storyPrompt = `You are a senior strategy consultant planning a client presentation on ${scope.industry} in ${country}.
+  const storyPrompt = `You are a SENIOR PARTNER at McKinsey planning the narrative strategy for a ${scope.industry} market entry presentation for ${country}.
+
+This is the most important step. The story you plan HERE determines whether the final deck reads like a strategic advisory document or a Wikipedia dump. Think deeply.
+
 Client: ${scope.clientContext || 'International company evaluating market entry'}
 Project type: ${scope.projectType || 'market_entry'}
 
-TEMPLATE NARRATIVE PATTERN (use as your guide):
+TEMPLATE NARRATIVE PATTERN (structural guide — follow this framework):
 ${JSON.stringify(TEMPLATE_NARRATIVE_PATTERN, null, 2)}
 
-RESEARCH DATA AVAILABLE:
+RESEARCH DATA AVAILABLE (${Object.keys(researchSummary).length} topics):
 ${JSON.stringify(researchSummary, null, 2)}
 
-YOUR TASK: Plan the SPECIFIC story for this research. What thesis should each slide have based on what we ACTUALLY found?
+=== YOUR TASK ===
 
-Rules:
-- Each thesis must be grounded in the actual research data — don't invent claims
-- The narrative arc should tell a coherent story: landscape → opportunity → competition → how to win
-- Tone should progress per the template pattern
-- Each slide connects to the next — explicitly state how
-- keyDataToFeature should reference SPECIFIC findings from the research (law names, company names, numbers)
-- If research data is weak for a section, note it in the thesis (e.g. "limited data suggests...")
+STEP 1: IDENTIFY 3 POSSIBLE STORYLINES
+Before committing to a narrative, brainstorm 3 distinct storylines this data could support. Each storyline emphasizes different aspects of the research:
+
+Example storylines:
+- "Regulatory window" — story centers on a policy change creating a time-limited opportunity
+- "Competitive vacuum" — story centers on weak local players leaving market share on the table
+- "Infrastructure boom" — story centers on massive investment creating demand
+- "Cost arbitrage" — story centers on pricing dynamics favoring new entrants
+- "Partnership play" — story centers on available JV partners making entry easy
+
+STEP 2: EVALUATE AND PICK THE BEST
+For each of the 3 storylines, assess:
+- How well does the research data support it? (do we have the numbers?)
+- How compelling is it for a CEO making a $10M+ decision?
+- Does it lead to a clear call-to-action?
+
+Pick the STRONGEST storyline — the one with the best data support AND most compelling client implications.
+
+STEP 3: PLAN PER-SLIDE NARRATIVE
+Using the chosen storyline and the template narrative pattern, plan each slide's thesis.
 
 Return JSON:
 {
-  "narrativeArc": "1-2 sentence overall story for ${country} ${scope.industry}",
+  "storylineCandidates": [
+    {
+      "name": "2-3 word name",
+      "hook": "1 sentence — why would the CEO care?",
+      "dataSupport": "strong|moderate|weak",
+      "reasoning": "why this storyline works or doesn't"
+    }
+  ],
+  "chosenStoryline": "name of the picked storyline",
+  "whyChosen": "1-2 sentences on why this one wins",
+  "narrativeArc": "2-3 sentence overall story for ${country} ${scope.industry} — must be specific, not generic",
   "slides": [
     {
       "section": "policy|market|competitors|depth|summary",
-      "slideKey": "foundationalActs|nationalPolicy|investmentRestrictions|section_0|section_1|...|japanesePlayers|localMajor|foreignPlayers|caseStudy|maActivity|escoEconomics|partnerAssessment|entryStrategy|implementation|targetSegments",
-      "thesis": "Specific thesis grounded in research findings (100-180 chars)",
+      "slideKey": "descriptive key like foundationalActs, marketSize, japanesePeers, etc.",
+      "thesis": "Specific thesis grounded in research findings. Must state a CLAIM, not a topic. Bad: 'Overview of regulations'. Good: 'Three recent regulatory changes create a 24-month entry window' (100-180 chars)",
       "keyDataToFeature": ["Specific law/company/number from research", "Another specific finding"],
-      "connectsTo": "How this builds toward the next slide",
+      "connectsTo": "How this slide's conclusion sets up the QUESTION the next slide answers",
       "tone": "neutral|opportunity|analytical|action-oriented"
     }
   ],
-  "insightPriorities": ["Top 3-5 cross-cutting insights for executive summary"],
-  "clientImplication": "The single most important takeaway for the client"
+  "insightPriorities": ["Top 3-5 cross-cutting insights that connect dots across sections"],
+  "clientImplication": "The single most important takeaway — must be a specific recommendation, not vague"
 }
+
+RULES:
+- storylineCandidates must have EXACTLY 3 options — no more, no fewer
+- Each thesis must be a CLAIM, not a topic label. "The market is growing" = bad. "Three converging factors create a $2B opportunity by 2027" = good.
+- keyDataToFeature must reference ACTUAL data from the research — specific law names, company names, dollar amounts, percentages
+- If research is weak for a section, the thesis should acknowledge it honestly
+- connectsTo must explain the LOGICAL link, not just "leads to next section"
+- Minimum 15 slides, maximum 22 slides
+- clientImplication must be actionable — "enter now via JV" not "consider exploring"
 
 Return ONLY valid JSON.`;
 
   try {
     const result = await callGeminiPro(storyPrompt, {
-      temperature: 0.2,
-      maxTokens: 8192,
+      temperature: 0.4,
+      maxTokens: 12000,
       jsonMode: true,
     });
 
@@ -746,8 +783,14 @@ Return ONLY valid JSON.`;
 
     const storyPlan = extracted.data;
     const slideCount = (storyPlan.slides || []).length;
+    const candidates = storyPlan.storylineCandidates || [];
+    console.log(`  [STORY] Evaluated ${candidates.length} storylines:`);
+    for (const c of candidates) {
+      console.log(`    - "${c.name}" (${c.dataSupport}): ${c.hook}`);
+    }
+    console.log(`  [STORY] Chose: "${storyPlan.chosenStoryline}" — ${storyPlan.whyChosen || ''}`);
     console.log(
-      `  [STORY] Planned ${slideCount} slides with narrative: "${(storyPlan.narrativeArc || '').substring(0, 100)}..."`
+      `  [STORY] Planned ${slideCount} slides. Arc: "${(storyPlan.narrativeArc || '').substring(0, 120)}..."`
     );
     console.log(`  [STORY] Completed in ${((Date.now() - storyStart) / 1000).toFixed(1)}s`);
 
@@ -2738,11 +2781,11 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   //   - Synthesis (Reviewer 2): "re-synthesize this section with this feedback"
   // Loops until grade A/B or max iterations reached.
   const FINAL_REVIEW_MAX_ITERATIONS = 3;
-  const FINAL_REVIEW_TARGET_GRADES = ['A', 'B'];
+  const FINAL_REVIEW_TARGET_SCORE = 80;
 
   if (!countryAnalysis.aborted) {
     let finalReviewIteration = 0;
-    let lastGrade = null;
+    let lastCoherenceScore = 0;
 
     try {
       while (finalReviewIteration < FINAL_REVIEW_MAX_ITERATIONS) {
@@ -2753,11 +2796,13 @@ async function researchCountry(country, industry, clientContext, scope = null) {
 
         const finalReview = await finalReviewSynthesis(countryAnalysis, country, industry);
         countryAnalysis.finalReview = finalReview;
-        lastGrade = finalReview?.overallGrade || 'F';
+        lastCoherenceScore = finalReview?.coherenceScore || 0;
 
-        // Exit: grade meets target
-        if (FINAL_REVIEW_TARGET_GRADES.includes(lastGrade)) {
-          console.log(`  [FINAL REVIEW] Grade ${lastGrade} — meets quality target. Done.`);
+        // Exit: coherence score meets target
+        if (lastCoherenceScore >= FINAL_REVIEW_TARGET_SCORE) {
+          console.log(
+            `  [FINAL REVIEW] Coherence ${lastCoherenceScore}/100 >= ${FINAL_REVIEW_TARGET_SCORE}. Done.`
+          );
           break;
         }
 
@@ -2770,12 +2815,14 @@ async function researchCountry(country, industry, clientContext, scope = null) {
           (i) => i.severity === 'critical' || i.severity === 'major'
         );
 
-        // Exit: no actionable issues
+        // Exit: no actionable issues despite low score
         if (
           criticalOrMajor.length === 0 &&
           (!finalReview.researchGaps || finalReview.researchGaps.length === 0)
         ) {
-          console.log(`  [FINAL REVIEW] Grade ${lastGrade} but no actionable issues. Proceeding.`);
+          console.log(
+            `  [FINAL REVIEW] Score ${lastCoherenceScore}/100 but no actionable issues. Proceeding.`
+          );
           break;
         }
 
@@ -2833,7 +2880,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
       }
 
       console.log(
-        `  [FINAL REVIEW] Completed after ${finalReviewIteration} pass(es). Final grade: ${lastGrade || 'unknown'}`
+        `  [FINAL REVIEW] Completed after ${finalReviewIteration} pass(es). Final coherence: ${lastCoherenceScore}/100`
       );
     } catch (finalErr) {
       console.warn(`  [FINAL REVIEW] Loop failed, proceeding: ${finalErr.message}`);
