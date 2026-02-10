@@ -198,13 +198,13 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     if (c.error) return;
     overviewRows.push([
       { text: c.country, options: { fontFace: FONT } },
-      { text: truncate(c.market?.marketSize || 'N/A', 60), options: { fontFace: FONT } },
+      { text: c.market?.marketSize || 'N/A', options: { fontFace: FONT } },
       {
-        text: truncate(c.policy?.foreignOwnershipRules || 'N/A', 60),
+        text: c.policy?.foreignOwnershipRules || 'N/A',
         options: { fontFace: FONT },
       },
       {
-        text: truncate(c.policy?.regulatoryRisk || 'N/A', 40),
+        text: c.policy?.regulatoryRisk || 'N/A',
         options: { fontFace: FONT },
       },
     ]);
@@ -237,7 +237,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
   if (keyFindings.length > 0) {
     execSlide.addText(
       keyFindings.map((f, idx) => ({
-        text: `${idx + 1}. ${truncate(typeof f === 'string' ? f : f.finding || f.text || '', 120)}`,
+        text: `${idx + 1}. ${typeof f === 'string' ? f : f.finding || f.text || ''}`,
         options: { bullet: false, paraSpaceBefore: idx > 0 ? 8 : 0 },
       })),
       {
@@ -264,7 +264,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       color: COLORS.dk2,
       fontFace: FONT,
     });
-    execSlide.addText(truncate(synthesis.recommendation, 200), {
+    execSlide.addText(synthesis.recommendation, {
       x: LEFT_MARGIN,
       y: 5.85,
       w: CONTENT_WIDTH,
@@ -506,9 +506,9 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     recRows.push([
       { text: c.country },
       { text: priority, options: { color: priorityColor, bold: true } },
-      { text: truncate(entryMode, 30) },
+      { text: entryMode },
       {
-        text: truncate(typeof keyAction === 'string' ? keyAction : keyAction.opportunity || '', 50),
+        text: typeof keyAction === 'string' ? keyAction : keyAction.opportunity || '',
       },
     ]);
   });
@@ -543,7 +543,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     ];
   recSlide.addText(
     safeArray(nextSteps, 3).map((s) => ({
-      text: truncate(typeof s === 'string' ? s : s.step || '', 80),
+      text: typeof s === 'string' ? s : s.step || '',
       options: { bullet: true },
     })),
     {
@@ -566,7 +566,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
 
     // ---------- SLIDE: {Country} - Policy & Regulations ----------
     const reg = ca.policy || {};
-    const regSubtitle = reg.governmentStance ? truncateSubtitle(reg.governmentStance, 95) : '';
+    const regSubtitle = reg.governmentStance ? truncateSubtitle(reg.governmentStance, 180) : '';
     const regSlide = addSlide(`${countryName} - Policy & Regulations`, regSubtitle);
 
     const regRows = [
@@ -595,23 +595,26 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     // Add key legislation
     const laws = safeArray(reg.keyLegislation, 3);
     laws.forEach((law, idx) => {
-      regRows.push([{ text: `Key Law ${idx + 1}` }, { text: truncate(law, 100) }]);
+      regRows.push([
+        { text: `Key Law ${idx + 1}` },
+        { text: typeof law === 'string' ? law : String(law) },
+      ]);
     });
 
     if (reg.foreignOwnershipRules) {
-      regRows.push([
-        { text: 'Foreign Ownership' },
-        { text: truncate(reg.foreignOwnershipRules, 100) },
-      ]);
+      regRows.push([{ text: 'Foreign Ownership' }, { text: reg.foreignOwnershipRules }]);
     }
 
     const incentives = safeArray(reg.incentives, 2);
     incentives.forEach((inc, idx) => {
-      regRows.push([{ text: idx === 0 ? 'Incentives' : '' }, { text: truncate(inc, 100) }]);
+      regRows.push([
+        { text: idx === 0 ? 'Incentives' : '' },
+        { text: typeof inc === 'string' ? inc : String(inc) },
+      ]);
     });
 
     if (reg.regulatoryRisk) {
-      regRows.push([{ text: 'Risk Level' }, { text: truncate(reg.regulatoryRisk, 100) }]);
+      regRows.push([{ text: 'Risk Level' }, { text: reg.regulatoryRisk }]);
     }
 
     regSlide.addTable(regRows, {
@@ -628,7 +631,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
 
     // ---------- SLIDE: {Country} - Market ----------
     const market = ca.market || {};
-    const marketSubtitle = market.marketSize ? truncateSubtitle(market.marketSize, 95) : '';
+    const marketSubtitle = market.marketSize ? truncateSubtitle(market.marketSize, 180) : '';
     const marketSlide = addSlide(`${countryName} - Market`, marketSubtitle);
 
     const marketRows = [
@@ -655,28 +658,22 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
     ];
 
     if (market.marketSize) {
-      marketRows.push([{ text: 'Market Size' }, { text: truncate(market.marketSize, 100) }]);
+      marketRows.push([{ text: 'Market Size' }, { text: market.marketSize }]);
     }
     if (market.demand) {
-      marketRows.push([{ text: 'Demand Drivers' }, { text: truncate(market.demand, 100) }]);
+      marketRows.push([{ text: 'Demand Drivers' }, { text: market.demand }]);
     }
     if (market.pricing) {
-      marketRows.push([{ text: 'Pricing/Tariffs' }, { text: truncate(market.pricing, 100) }]);
+      marketRows.push([{ text: 'Pricing/Tariffs' }, { text: market.pricing }]);
     }
     if (market.supplyChain) {
-      marketRows.push([{ text: 'Supply Chain' }, { text: truncate(market.supplyChain, 100) }]);
+      marketRows.push([{ text: 'Supply Chain' }, { text: market.supplyChain }]);
     }
     if (market.energyIntensity) {
-      marketRows.push([
-        { text: 'Energy Intensity' },
-        { text: truncate(market.energyIntensity, 100) },
-      ]);
+      marketRows.push([{ text: 'Energy Intensity' }, { text: market.energyIntensity }]);
     }
     if (market.keyObservation) {
-      marketRows.push([
-        { text: 'Key Observation' },
-        { text: truncate(market.keyObservation, 100) },
-      ]);
+      marketRows.push([{ text: 'Key Observation' }, { text: market.keyObservation }]);
     }
 
     marketSlide.addTable(marketRows, {
@@ -701,7 +698,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
       if (levelMatch) {
         compIntensityLevel = `Competitive intensity: ${levelMatch[1]}`;
       } else {
-        compIntensityLevel = truncateSubtitle(`Competitive intensity: ${intensityStr}`, 60);
+        compIntensityLevel = truncateSubtitle(`Competitive intensity: ${intensityStr}`, 180);
       }
     }
     const compSlide = addSlide(`${countryName} - Competitor Overview`, compIntensityLevel);
@@ -754,11 +751,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
             options: { hyperlink: { url: p.website }, color: '0066CC' },
           }
         : { text: truncate(name, 30) };
-      compRows.push([
-        nameCell,
-        { text: 'Local' },
-        { text: truncate(desc, 350), options: { fontSize: 9 } },
-      ]);
+      compRows.push([nameCell, { text: 'Local' }, { text: desc, options: { fontSize: 9 } }]);
     });
 
     dedupeCompanies(
@@ -777,11 +770,7 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
             options: { hyperlink: { url: p.website }, color: '0066CC' },
           }
         : { text: truncate(name, 30) };
-      compRows.push([
-        nameCell,
-        { text: 'Foreign' },
-        { text: truncate(desc, 350), options: { fontSize: 9 } },
-      ]);
+      compRows.push([nameCell, { text: 'Foreign' }, { text: desc, options: { fontSize: 9 } }]);
     });
 
     const compTableH = safeTableHeight(compRows.length, { maxH: 4.0 });
@@ -819,7 +808,10 @@ async function generatePPT(synthesis, countryAnalyses, scope) {
         fontFace: FONT,
       });
       compSlide.addText(
-        barriers.map((b) => ({ text: truncate(b, 90), options: { bullet: true } })),
+        barriers.map((b) => ({
+          text: typeof b === 'string' ? b : String(b),
+          options: { bullet: true },
+        })),
         {
           x: LEFT_MARGIN,
           y: barriersY + 0.5,

@@ -436,11 +436,9 @@ function fitTextToShape(text, maxW, maxH, baseFontPt) {
     if (Math.ceil(text.length / cpl) <= ml) return { text, fontSize: fs };
   }
 
-  // Still doesn't fit at 7pt — truncate
-  const cpl7 = Math.floor(maxW / (7 * 0.006));
-  const ml7 = Math.floor(maxH / (7 * 0.017));
-  const maxChars = cpl7 * ml7;
-  return { text: text.substring(0, maxChars - 3) + '...', fontSize: 7 };
+  // Still doesn't fit at 7pt — return full text at 7pt, let pptxgenjs handle overflow
+  // Never truncate paid-for AI content with "..."
+  return { text, fontSize: 7 };
 }
 
 // Helper: calculate dynamic column widths based on content length
@@ -1748,6 +1746,7 @@ function addCalloutOverlay(slide, text, pos) {
     color: C_BLACK,
     fontFace: 'Segoe UI',
     valign: 'middle',
+    shrinkText: true,
   });
 }
 
