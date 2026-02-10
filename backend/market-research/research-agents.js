@@ -1220,11 +1220,35 @@ As a senior consultant advising a ${clientContext} on a ${projectType} project, 
 SPECIFIC QUESTIONS:
 ${(topic.queries || []).map((q) => '- ' + q.replace(/{country}/g, country)).join('\n')}
 
+CRITICAL - RETURN STRUCTURED DATA:
+Your response MUST include a JSON block with research findings. Use this EXACT format:
+
+\`\`\`json
+{
+  "narrative": "Your detailed research findings here (2-3 paragraphs with specific numbers, sources, citations)",
+  "keyFindings": [
+    {"finding": "Specific finding with numbers", "data": "The exact number/fact/statistic", "source": "Source name and URL if available"}
+  ],
+  "dataPoints": [
+    {"metric": "Named metric (e.g. market size, growth rate, capacity)", "value": "Specific value with units", "year": "Year of data", "source": "Source name"}
+  ],
+  "entities": [
+    {"name": "Company/Organization/Agency name", "role": "Their role in this market", "details": "Revenue, market share, key projects, or other specifics"}
+  ],
+  "regulations": [
+    {"name": "Law/Policy name", "year": "Year enacted", "status": "enforced/planned/voluntary", "details": "Key requirements and implications"}
+  ],
+  "dataQuality": "high/medium/low",
+  "sources": ["Source 1 with URL", "Source 2 with URL"]
+}
+\`\`\`
+
 REQUIREMENTS:
 - Provide SPECIFIC data: numbers, company names, dates, deal sizes
-- If data is unavailable, clearly state "data not available" rather than guessing
+- If data is unavailable for a field, use empty array [] — do NOT guess
 - Focus on actionable intelligence, not general observations
-- Include recent developments (2023-2024)`;
+- Include recent developments (2023-2025)
+- Mark dataQuality as "low" if information is estimated or uncertain`;
 
       try {
         // Per-topic timeout: 180s.
@@ -1240,15 +1264,69 @@ REQUIREMENTS:
         console.log(
           `    [${category}] Topic "${topic.name}": ${result.content?.length || 0} chars`
         );
+
+        // Extract structured JSON from response (same approach as specialized agents)
+        let structuredData = null;
+        let extractionStatus = 'no_json_found';
+        if (result.content) {
+          const extracted = extractJsonFromContent(result.content);
+          structuredData = extracted.data;
+          extractionStatus = extracted.status;
+
+          // Retry once with simplified prompt if extraction failed
+          if (extractionStatus !== 'success') {
+            console.log(
+              `      [${category}] ${topic.name}: JSON extraction failed (${extractionStatus}), retrying...`
+            );
+            try {
+              const retryQuery = `${queryContext}\n\nCRITICAL: Return ONLY valid JSON. No explanation, no markdown. Just the raw JSON object with: narrative, keyFindings, dataPoints, entities, regulations, dataQuality, sources.`;
+              const retryResult = await Promise.race([
+                callGeminiResearch(retryQuery, country, industry, pipelineSignal),
+                new Promise((_, reject) =>
+                  setTimeout(() => reject(new Error('Retry timeout')), 60000)
+                ),
+              ]);
+              if (retryResult?.content) {
+                const retryExtracted = extractJsonFromContent(retryResult.content);
+                if (retryExtracted.status === 'success') {
+                  structuredData = retryExtracted.data;
+                  extractionStatus = 'success';
+                  // Merge content from both attempts
+                  result.content = result.content + '\n\n' + retryResult.content;
+                  console.log(`      [${category}] ${topic.name}: Retry JSON extraction succeeded`);
+                }
+              }
+            } catch (retryErr) {
+              console.warn(`      [${category}] ${topic.name}: Retry failed: ${retryErr.message}`);
+            }
+          }
+        }
+
+        const slideTitle = `${country} - ${topic.name}`;
+
         return {
           key: `${category}_${idx}_${topic.name.replace(/\s+/g, '_').toLowerCase()}`,
           name: topic.name,
           content: result.content,
+          structuredData: structuredData,
+          extractionStatus: extractionStatus,
           citations: result.citations || [],
+          slideTitle: slideTitle,
+          dataQuality:
+            structuredData?.dataQuality || (extractionStatus === 'success' ? 'medium' : 'unknown'),
         };
       } catch (err) {
         console.warn(`    [${category}] Topic "${topic.name}" failed: ${err.message}`);
-        return { key: `${category}_${idx}_failed`, name: topic.name, content: '', citations: [] };
+        return {
+          key: `${category}_${idx}_failed`,
+          name: topic.name,
+          content: '',
+          structuredData: null,
+          extractionStatus: 'failed',
+          citations: [],
+          slideTitle: `${country} - ${topic.name}`,
+          dataQuality: 'failed',
+        };
       }
     })
   );
@@ -1257,8 +1335,12 @@ REQUIREMENTS:
     if (r && r.content) results[r.key] = r;
   }
 
+  const successCount = Object.values(results).filter(
+    (r) => r.extractionStatus === 'success'
+  ).length;
+  const totalCount = Object.keys(results).length;
   console.log(
-    `    [${category.toUpperCase()} AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${Object.keys(results).length} topics`
+    `    [${category.toUpperCase()} AGENT] Completed in ${((Date.now() - agentStart) / 1000).toFixed(1)}s - ${totalCount} topics (${successCount} with structured JSON)`
   );
   return results;
 }
