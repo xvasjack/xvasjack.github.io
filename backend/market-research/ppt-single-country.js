@@ -56,14 +56,24 @@ const {
   C_LIGHT_GRAY,
   C_GRAY_BG,
   C_SECONDARY,
+  TABLE_BORDER_WIDTH,
+  C_BORDER_STYLE,
+  C_TABLE_HEADER,
+  C_CALLOUT_FILL,
+  C_CALLOUT_BORDER,
+  TABLE_CELL_MARGIN,
 } = require('./ppt-utils');
 const { ensureString } = require('./shared/utils');
 const { validatePptData } = require('./quality-gates');
 
 // Safety wrapper: ensure any value going into a table cell is a plain string.
 // AI sometimes returns nested objects/arrays instead of text — this prevents pptxgenjs crashes.
-function safeCell(value) {
-  return ensureString(value);
+function safeCell(value, maxLen) {
+  const str = ensureString(value);
+  if (maxLen && str.length > maxLen) {
+    return str.substring(0, maxLen - 3) + '...';
+  }
+  return str;
 }
 
 // ============ SECTION-BASED SLIDE GENERATOR ============
@@ -555,7 +565,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         x: LEFT_MARGIN,
         y: FOOTER_Y,
         w: SOURCE_W,
-        h: 0.27,
+        h: tpSource.h || 0.25,
         valign: 'top',
       });
     }
@@ -570,7 +580,6 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       options: {
         bold: false,
         fontSize: 14,
-        fill: { color: 'FFFFFF' },
         color: '000000',
         fontFace: FONT,
       },
@@ -1049,8 +1058,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const hasChartValues = chartData && chartData.values && chartData.values.length > 0;
 
     if (hasChartSeries || hasChartValues) {
-      // Chart on left 60%
-      const chartOpts = { x: LEFT_MARGIN, y: CONTENT_Y, w: 7.8, h: 3.6 };
+      // Chart on left 60% — positions from template JSON
+      const chartPattern = templatePatterns.patterns?.chart_insight_panels?.elements || {};
+      const chartPos = chartPattern.chart || {};
+      const chartOpts = {
+        x: chartPos.x || LEFT_MARGIN,
+        y: chartPos.y || CONTENT_Y,
+        w: chartPos.w || 7.8,
+        h: chartPos.h || 4.5,
+      };
       const chartTitle = getChartTitle(block.key, data);
 
       if (hasChartSeries) {
@@ -1083,12 +1099,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
       // Add callout overlay on chart area for key data point
       if (data.keyInsight) {
-        addCalloutOverlay(slide, ensureString(data.keyInsight), {
-          x: LEFT_MARGIN + 0.5,
-          y: 4.95,
-          w: 7.0,
-          h: 0.55,
-        });
+        addCalloutOverlay(slide, ensureString(data.keyInsight));
       }
       // Add synthesis-driven market outlook if available (fallback to countryAnalysis)
       const growthTrajectory =
@@ -1360,7 +1371,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           h: Math.min(0.8, CONTENT_BOTTOM - termStartY),
           fontSize: 14,
           fontFace: FONT,
-          border: { pt: 1, color: COLORS.border },
+          border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+          margin: TABLE_CELL_MARGIN,
           colW: termColWidths.length > 0 ? termColWidths : [4.0, 4.25, 4.35],
           valign: 'top',
         });
@@ -1388,7 +1400,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           h: Math.min(1.3, segRows.length * 0.35 + 0.2, CONTENT_BOTTOM - segStartY),
           fontSize: 14,
           fontFace: FONT,
-          border: { pt: 1, color: COLORS.border },
+          border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+          margin: TABLE_CELL_MARGIN,
           colW: segColWidths.length > 0 ? segColWidths : [5.48, 3.56, 3.56],
           valign: 'top',
         });
@@ -1542,7 +1555,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       h: tableH,
       fontSize: 14,
       fontFace: FONT,
-      border: { pt: 1, color: COLORS.border },
+      border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+      margin: TABLE_CELL_MARGIN,
       colW: colWidths.length > 0 ? colWidths : defaultColW,
       valign: 'top',
       autoPage: false,
@@ -1761,7 +1775,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: actsTableH,
         fontSize: 14,
         fontFace: FONT,
-        border: { pt: 1, color: COLORS.border },
+        border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+        margin: TABLE_CELL_MARGIN,
         colW: [2.96, 1.08, 4.53, 4.03],
         valign: 'top',
         autoPage: false,
@@ -1828,7 +1843,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: policyTableH,
         fontSize: 14,
         fontFace: FONT,
-        border: { pt: 1, color: COLORS.border },
+        border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+        margin: TABLE_CELL_MARGIN,
         colW: [4.13, 3.09, 2.69, 2.69],
         valign: 'top',
       });
@@ -1919,7 +1935,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: ownerTableH,
         fontSize: 14,
         fontFace: FONT,
-        border: { pt: 1, color: COLORS.border },
+        border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+        margin: TABLE_CELL_MARGIN,
         colW: [3.36, 2.02, 7.22],
         valign: 'top',
       });
@@ -1947,7 +1964,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: incTableH,
         fontSize: 14,
         fontFace: FONT,
-        border: { pt: 1, color: COLORS.border },
+        border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+        margin: TABLE_CELL_MARGIN,
         colW: [3.36, 3.36, 5.88],
         valign: 'top',
       });
@@ -2037,7 +2055,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       h: incTableH,
       fontSize: 14,
       fontFace: FONT,
-      border: { pt: 1, color: COLORS.border },
+      border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+      margin: TABLE_CELL_MARGIN,
       colW: [2.5, 3.5, 3.1, 3.5],
       valign: 'top',
       autoPage: false,
@@ -2071,12 +2090,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
 
     if (data.applicability) {
-      addCalloutOverlay(slide, `Applicability: ${ensureString(data.applicability)}`, {
-        x: LEFT_MARGIN,
-        y: 6.0,
-        w: CONTENT_WIDTH,
-        h: 0.5,
-      });
+      addCalloutOverlay(slide, `Applicability: ${ensureString(data.applicability)}`);
     }
   }
 
@@ -2133,7 +2147,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: dealTableH,
         fontSize: 14,
         fontFace: FONT,
-        border: { pt: 1, color: COLORS.border },
+        border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+        margin: TABLE_CELL_MARGIN,
         colW: dealColWidths.length > 0 ? dealColWidths : [1.08, 2.42, 2.42, 2.02, 4.66],
         valign: 'top',
       });
@@ -2180,7 +2195,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: maTargetTableH,
         fontSize: 14,
         fontFace: FONT,
-        border: { pt: 1, color: COLORS.border },
+        border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+        margin: TABLE_CELL_MARGIN,
         colW: targetColWidths.length > 0 ? targetColWidths : [2.69, 2.02, 5.48, 2.41],
         valign: 'top',
       });
@@ -2271,7 +2287,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: financing.length > 0 ? 3.0 : 4.0,
         fontSize: 14,
         fontFace: FONT,
-        border: { pt: 1, color: COLORS.border },
+        border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+        margin: TABLE_CELL_MARGIN,
         colW: econColWidths.length > 0 ? econColWidths : [2.5, 3.0, 7.1],
         valign: 'top',
       });
@@ -2356,7 +2373,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: optTableH,
         fontSize: 14,
         fontFace: FONT,
-        border: { pt: 1, color: COLORS.border },
+        border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+        margin: TABLE_CELL_MARGIN,
         colW: optColWidths.length > 0 ? optColWidths : [1.5, 1.3, 1.5, 1.3, 1.1, 3.0, 2.9],
         valign: 'top',
       });
@@ -2426,7 +2444,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: Math.min(0.3 + harvey.criteria.length * 0.25, 2.5),
         fontSize: 14,
         fontFace: FONT,
-        border: { pt: 1, color: COLORS.border },
+        border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+        margin: TABLE_CELL_MARGIN,
         colW: harveyColWidths.length > 0 ? harveyColWidths : [3.36, 3.09, 3.02, 3.13],
         valign: 'middle',
       });
@@ -2478,7 +2497,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: implTableH,
         fontSize: 14,
         fontFace: FONT,
-        border: { pt: 1, color: COLORS.border },
+        border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+        margin: TABLE_CELL_MARGIN,
         colW: phaseColW,
         valign: 'top',
       });
@@ -2551,7 +2571,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: segTableH,
         fontSize: 14,
         fontFace: FONT,
-        border: { pt: 1, color: COLORS.border },
+        border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+        margin: TABLE_CELL_MARGIN,
         colW: segColWidths.length > 0 ? segColWidths : [2.5, 2.5, 2.1, 2.5, 3.0],
         valign: 'top',
       });
@@ -2616,7 +2637,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: targetTableH,
         fontSize: 14,
         fontFace: FONT,
-        border: { pt: 1, color: COLORS.border },
+        border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+        margin: TABLE_CELL_MARGIN,
         colW: targetColWidths.length > 0 ? targetColWidths : [3.36, 3.09, 3.02, 3.13],
         valign: 'top',
       });
@@ -2632,9 +2654,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (goNoGoCriteria.length > 0) {
       const goNoGoRows = [tableHeader(['Criterion', 'Status', 'Evidence'])];
       goNoGoCriteria.forEach((c) => {
-        const statusIcon = c.met === true ? '\u2713' : c.met === false ? '\u2717' : '?';
-        const statusColor =
-          c.met === true ? COLORS.green : c.met === false ? COLORS.red : COLORS.orange;
+        const isMet = c.met === true || c.met === 'true';
+        const isNotMet = c.met === false || c.met === 'false';
+        const statusIcon = isMet ? '\u2713' : isNotMet ? '\u2717' : '?';
+        const statusColor = isMet ? COLORS.green : isNotMet ? COLORS.red : COLORS.orange;
         goNoGoRows.push([
           { text: safeCell(c.criterion, 60) },
           { text: statusIcon, options: { color: statusColor, bold: true, align: 'center' } },
@@ -2650,7 +2673,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: goNoGoTableH,
         fontSize: 14,
         fontFace: FONT,
-        border: { pt: 1, color: COLORS.border },
+        border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+        margin: TABLE_CELL_MARGIN,
         colW: [4.03, 1.08, 7.49],
         valign: 'top',
       });
@@ -2896,7 +2920,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: Math.min(0.3 + triggerRows.length * 0.35, 3.5),
         fontSize: 14,
         fontFace: FONT,
-        border: { pt: 1, color: COLORS.border },
+        border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+        margin: TABLE_CELL_MARGIN,
         colW: triggerColWidths.length > 0 ? triggerColWidths : [4.0, 4.25, 4.35],
         valign: 'top',
       });
@@ -2966,7 +2991,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         h: failTableH,
         fontSize: 14,
         fontFace: FONT,
-        border: { pt: 1, color: COLORS.border },
+        border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+        margin: TABLE_CELL_MARGIN,
         colW: [2.96, 4.7, 4.94],
         valign: 'top',
       });
@@ -3265,7 +3291,6 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     w: compPos.w,
     h: compPos.h,
     fontSize: coverPattern.companyName?.fontSize || 36,
-    bold: true,
     color: COLORS.dk2,
     fontFace: FONT,
     fit: 'shrink',
@@ -3280,27 +3305,23 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     fontFace: FONT,
     fit: 'shrink',
   });
-  titleSlide.addText(
-    scope.projectName
-      ? `Phase 1 Market Selection - ${(country || '').toUpperCase()}`
-      : 'Executive Summary - Deep Research Report',
-    {
-      x: 0.5,
-      y: 3.6,
-      w: 12,
-      h: 0.5,
-      fontSize: 16,
-      italic: true,
-      color: COLORS.black,
-      fontFace: FONT,
-    }
-  );
+  // Cover logo
+  const coverLogo = coverPattern.logo || {};
+  titleSlide.addImage({
+    data: `image/png;base64,${LOGO_DARK_B64}`,
+    x: coverLogo.x || 0.45,
+    y: coverLogo.y || 0.32,
+    w: coverLogo.w || 1.14,
+    h: coverLogo.h || 0.4,
+  });
+  // Date element (position from template)
+  const coverDate = coverPattern.date || {};
   titleSlide.addText(new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long' }), {
-    x: 0.5,
-    y: 6.5,
-    w: 9,
-    h: 0.3,
-    fontSize: 10,
+    x: coverDate.x || 0.46,
+    y: coverDate.y || 5.94,
+    w: coverDate.w || 9,
+    h: coverDate.h || 0.3,
+    fontSize: coverDate.fontSize || 10,
     color: COLORS.secondary,
     fontFace: FONT,
   });
@@ -3480,7 +3501,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       h: metricsTableH,
       fontSize: 14,
       fontFace: FONT,
-      border: { pt: 1, color: COLORS.border },
+      border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: COLORS.border },
+      margin: TABLE_CELL_MARGIN,
       colW: [3.36, 4.7, 4.54],
       valign: 'top',
     });

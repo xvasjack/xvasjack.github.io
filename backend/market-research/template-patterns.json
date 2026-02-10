@@ -161,7 +161,8 @@
       "calloutBorder": "BFBFBF",
       "categoryFillDark": "7F8DA1",
       "categoryFillLight": "BFC6D0",
-      "tocFirstRowFill": "99CBFF"
+      "tocFirstRowFill": "99CBFF",
+      "tocActiveSectionFill": "CCE5FF"
     },
     "headerLines": {
       "top": {

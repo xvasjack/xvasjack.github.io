@@ -32,12 +32,20 @@ const C_WHITE = TP_COLORS.lt1 || 'FFFFFF';
 const C_BLACK = TP_COLORS.dk1 || '000000'; // Standard text color (template dk1)
 const C_TRUE_BLACK = '000000'; // Chart axes/titles
 const C_BORDER = templatePatterns.style?.table?.borderColor || 'D6D7D9'; // Template table border
-const C_BORDER_STYLE = templatePatterns.style?.table?.borderStyle || 'sysDash';
+const rawBorderStyle = templatePatterns.style?.table?.borderStyle || 'dash';
+const C_BORDER_STYLE = rawBorderStyle === 'sysDash' ? 'dash' : rawBorderStyle;
 const TABLE_BORDER_WIDTH = templatePatterns.style?.table?.borderWidth || 1;
 const C_MUTED = '999999'; // Muted/unavailable text
 const C_AXIS_GRAY = TP_COLORS.gridLine || 'D6D7D9'; // Chart axis/grid lines
 const C_CALLOUT_FILL = TP_COLORS.calloutFill || 'D9D9D9'; // Callout bg (bg1 lumMod 85%)
 const C_CALLOUT_BORDER = TP_COLORS.calloutBorder || 'BFBFBF'; // Callout border (bg1 lumMod 75%)
+// Cell margins in points (pptxgenjs uses pts). Template: LR=0.04in=2.88pt, TB=0
+const TABLE_CELL_MARGIN = [
+  Math.round((templatePatterns.style?.table?.cellMarginTB || 0) * 72),
+  Math.round((templatePatterns.style?.table?.cellMarginLR || 0.04) * 72),
+  Math.round((templatePatterns.style?.table?.cellMarginTB || 0) * 72),
+  Math.round((templatePatterns.style?.table?.cellMarginLR || 0.04) * 72),
+];
 const C_LIGHT_GRAY = 'F5F5F5'; // Panel/callout backgrounds
 const C_GRAY_BG = 'F2F2F2'; // Alternate row/content backgrounds
 const C_SECONDARY = '666666'; // Secondary text
@@ -518,6 +526,7 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
 
   const fontSize = templatePatterns.style?.fonts?.source?.size || 10;
   const fontColor = COLORS?.footerText || C_MUTED;
+  const hlinkColor = TP_COLORS.hlink || '0563C1';
 
   // Build rich text parts with hyperlinks
   if (Array.isArray(sources)) {
@@ -550,7 +559,7 @@ function addSourceFootnote(slide, sources, COLORS, FONT) {
           options: {
             fontSize,
             fontFace: FONT,
-            color: '0563C1',
+            color: hlinkColor,
             hyperlink: { url: sourceUrl },
           },
         });
@@ -597,8 +606,8 @@ function addCalloutBox(slide, title, content, options = {}) {
   const accent2 = TP_COLORS.accent2 || 'EDFDFF';
   const typeColors = {
     insight: {
-      fill: C_WHITE,
-      border: C_DK2,
+      fill: C_CALLOUT_FILL,
+      border: C_CALLOUT_BORDER,
       titleColor: C_DK2,
     },
     warning: { fill: C_WHITE, border: C_BORDER, titleColor: C_BLACK },
@@ -740,38 +749,8 @@ function addSectionDivider(
     color: 'FFFFFF',
   };
 
-  // Section overview text for each section (actionable context)
-  const sectionOverviews = {
-    'Policy & Regulations':
-      'Regulatory landscape assessment — identifying compliance requirements, investment incentives, and policy-driven opportunities for market entry.',
-    'Market Overview':
-      'Quantitative market analysis — sizing the opportunity, understanding demand drivers, and identifying growth potential across key segments.',
-    'Competitive Landscape':
-      'Competitive intelligence — mapping key players, assessing market positioning, and identifying partnership or acquisition targets.',
-    'Strategic Analysis':
-      'Strategic deep-dive — evaluating M&A activity, deal economics, entry options, and implementation roadmap for recommended market approach.',
-    Recommendations:
-      'Decision framework — synthesizing all findings into actionable recommendations with clear go/no-go criteria and next steps.',
-  };
-
   // Use master slide for background (no manual background shape needed)
   const slide = pptx.addSlide({ masterName });
-
-  // Section number (small, top left)
-  const sectionLabel =
-    sectionNumber && totalSections ? `Section ${sectionNumber} of ${totalSections}` : '';
-  if (sectionLabel) {
-    slide.addText(sectionLabel, {
-      x: 0.5,
-      y: 0.5,
-      w: 3,
-      h: 0.3,
-      fontSize: 12,
-      color: dividerPos.color || 'FFFFFF',
-      fontFace: FONT,
-      italic: true,
-    });
-  }
 
   // Section title (large, positioned from template pattern)
   slide.addText(truncate(sectionTitle, 50), {
@@ -787,31 +766,18 @@ function addSectionDivider(
     valign: 'middle',
   });
 
-  // Decorative line under title
+  // Decorative line under title (position from JSON)
+  const divLine = templatePatterns.style?.dividerLine || {};
+  const lineX = divLine.x || dividerPos.x;
+  const lineW = divLine.w || 4.5;
+  const lineThickness = divLine.thickness || 1.75;
   slide.addShape('line', {
-    x: 4,
+    x: lineX,
     y: dividerPos.y + dividerPos.h + 0.2,
-    w: 5.333,
+    w: lineW,
     h: 0,
-    line: { color: dividerPos.color || 'FFFFFF', width: 3 },
+    line: { color: dividerPos.color || 'FFFFFF', width: lineThickness },
   });
-
-  // Section overview description
-  const overview = sectionOverviews[sectionTitle] || '';
-  if (overview) {
-    slide.addText(overview, {
-      x: 1.5,
-      y: dividerPos.y + dividerPos.h + 0.6,
-      w: 10.333,
-      h: 0.8,
-      fontSize: 14,
-      color: C_LIGHT_BLUE,
-      fontFace: FONT,
-      align: 'center',
-      valign: 'top',
-      italic: true,
-    });
-  }
 
   return slide;
 }
@@ -919,16 +885,21 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
 // ============ CHART GENERATION ============
 // Chart palette from Escort template extraction (chartPalette.extended)
 const TP_CHART = templatePatterns.chartPalette || {};
-const CHART_COLORS = TP_CHART.extended || [
-  '3C57FE', // blue (primary)
-  '9BC9FF', // light blue
-  'D6D7D9', // gray
-  '1F497D', // dark navy
-  '007FFF', // accent blue
-  'E46C0A', // orange
-  '2E7D32', // green
-  '4F81BD', // steel blue
+const chartSeries = templatePatterns.style?.colors?.chartSeries || [];
+const extendedPalette = TP_CHART.extended || [
+  '007FFF',
+  '011AB7',
+  'E46C0A',
+  '1524A9',
+  '001C44',
+  'C0504D',
+  '4F81BD',
+  '2E7D32',
 ];
+const CHART_COLORS =
+  chartSeries.length > 0
+    ? [...chartSeries, ...extendedPalette.filter((c) => !chartSeries.includes(c))]
+    : extendedPalette;
 
 const PIE_COLORS = TP_CHART.themeAccents || [
   '007FFF',
@@ -1624,9 +1595,11 @@ function addChevronFlow(slide, phases, patternDef, opts = {}) {
   const count = Math.min(phases.length, maxPhases);
   const chevronW = (totalW - spacing * (count - 1)) / count;
 
+  const chevronShape = p.shape || 'homePlate';
+
   phases.slice(0, count).forEach((phase, idx) => {
     const x = baseX + idx * (chevronW + spacing);
-    slide.addShape('chevron', {
+    slide.addShape(chevronShape, {
       x,
       y: baseY,
       w: chevronW,
@@ -1948,13 +1921,16 @@ function addFinancialCharts(slide, incomeData, balanceData, patternDef) {
 function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT, countryName) {
   const slide = pptx.addSlide({ masterName: 'YCP_MAIN' });
 
+  // Fix 6: TOC title font size from JSON (default 18, not TITLE_FONT_SIZE which is 20)
+  const tocTitleSize = templatePatterns.style?.toc?.fontSize || 18;
+
   // Title "Table of Contents"
   slide.addText('Table of Contents', {
     x: TEMPLATE.title.x,
     y: TEMPLATE.title.y,
     w: TEMPLATE.title.w,
     h: TEMPLATE.title.h,
-    fontSize: TITLE_FONT_SIZE,
+    fontSize: tocTitleSize,
     fontFace: FONT,
     color: C_DK2,
     bold: TITLE_BOLD,
@@ -1972,6 +1948,11 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT, country
   const tocBorderNone = { pt: 0, color: 'FFFFFF' };
   const tocSectionIndent = templatePatterns.style?.toc?.sectionIndentPt || 35;
 
+  // Fix 4: TOC active section fill from JSON
+  const tocActiveFill = TP_COLORS.tocActiveSectionFill || 'CCE5FF';
+  // Fix 5: TOC country row fill from JSON
+  const tocCountryFill = TP_COLORS.tocFirstRowFill || '99CBFF';
+
   // Country header row (light blue tint fill) if countryName provided
   if (countryName) {
     tableRows.push([
@@ -1982,7 +1963,7 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT, country
           fontFace: FONT,
           color: C_BLACK,
           bold: false,
-          fill: { color: '99CCFF' },
+          fill: { color: tocCountryFill },
           border: [tocBorderTB, tocBorderNone, tocBorderTB, tocBorderNone],
           valign: 'middle',
         },
@@ -2001,7 +1982,7 @@ function addTocSlide(pptx, activeSectionIdx, sectionNames, COLORS, FONT, country
           fontFace: FONT,
           color: C_BLACK,
           bold: isActive,
-          fill: isActive ? { color: C_ACCENT1 } : undefined,
+          fill: isActive ? { color: tocActiveFill } : undefined,
           border: [tocBorderTB, tocBorderNone, tocBorderTB, tocBorderNone],
           valign: 'middle',
           margin: [0, 0, 0, tocSectionIndent],
@@ -2056,7 +2037,7 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
           fontFace: FONT,
           fill: { color: SEMANTIC_COLORS.positive },
           color: C_WHITE,
-          border: { pt: TABLE_BORDER_WIDTH, color: C_BORDER },
+          border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: C_BORDER },
           valign: 'middle',
         },
       },
@@ -2071,7 +2052,7 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
           fontSize: 12,
           fontFace: FONT,
           color: C_TRUE_BLACK,
-          border: { pt: TABLE_BORDER_WIDTH, color: C_BORDER },
+          border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: C_BORDER },
           valign: 'middle',
         },
       },
@@ -2089,7 +2070,7 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
           fontFace: FONT,
           fill: { color: C_ACCENT6 },
           color: C_WHITE,
-          border: { pt: TABLE_BORDER_WIDTH, color: C_BORDER },
+          border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: C_BORDER },
           valign: 'middle',
         },
       },
@@ -2104,7 +2085,7 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
           fontSize: 12,
           fontFace: FONT,
           color: C_TRUE_BLACK,
-          border: { pt: TABLE_BORDER_WIDTH, color: C_BORDER },
+          border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: C_BORDER },
           valign: 'middle',
         },
       },
@@ -2116,14 +2097,14 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
     y: TEMPLATE.contentArea.y,
     w: colW,
     rowH: 0.8,
-    border: { pt: TABLE_BORDER_WIDTH, color: C_BORDER },
+    border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: C_BORDER },
   });
   slide.addTable(barRows, {
     x: TEMPLATE.contentArea.x + colW + 0.5,
     y: TEMPLATE.contentArea.y,
     w: colW,
     rowH: 0.8,
-    border: { pt: TABLE_BORDER_WIDTH, color: C_BORDER },
+    border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: C_BORDER },
   });
 
   return slide;
@@ -2248,7 +2229,7 @@ function addHorizontalFlowTable(slide, data, options = {}) {
     w,
     colW: colWidths,
     rowH,
-    border: { pt: TABLE_BORDER_WIDTH, color: C_BORDER },
+    border: { type: C_BORDER_STYLE, pt: TABLE_BORDER_WIDTH, color: C_BORDER },
   });
 }
 
@@ -2304,6 +2285,10 @@ module.exports = {
   C_GRAY_BG,
   C_SECONDARY,
   C_LIGHT_BLUE,
+  C_CALLOUT_FILL,
+  C_CALLOUT_BORDER,
+  C_TABLE_HEADER,
+  TABLE_CELL_MARGIN,
   addTocSlide,
   addOpportunitiesBarriersSlide,
   addHorizontalFlowTable,
