@@ -2,6 +2,7 @@ const pptxgen = require('pptxgenjs');
 const {
   truncate,
   truncateSubtitle,
+  fitTextToShape,
   safeArray,
   ensureWebsite,
   isValidCompany,
@@ -45,14 +46,6 @@ const { validatePptData } = require('./quality-gates');
 // AI sometimes returns nested objects/arrays instead of text — this prevents pptxgenjs crashes.
 function safeCell(value) {
   return ensureString(value);
-}
-
-// Truncate text to max word count to prevent table overflow
-function truncateWords(text, maxWords) {
-  if (!text) return '';
-  const words = String(text).trim().split(/\s+/);
-  if (words.length <= maxWords) return words.join(' ');
-  return words.slice(0, maxWords).join(' ');
 }
 
 // ============ SECTION-BASED SLIDE GENERATOR ============
@@ -291,9 +284,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     if (company.recentActivity) parts.push(`Recent activity: ${company.recentActivity}.`);
     if (company.strategy) parts.push(`Strategy: ${company.strategy}.`);
     // Let thin descriptions stay thin — no fabricated filler
-    let result = parts.join(' ').trim();
-    const words = result.split(/\s+/);
-    if (words.length > 60) result = words.slice(0, 60).join(' ');
+    const result = parts.join(' ').trim();
     company.description = result;
     return company;
   }
@@ -567,7 +558,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           title:
             foundActs.slideTitle ||
             `${country} - ${scope.industry || 'Industry'} Foundational Acts`,
-          subtitle: truncateSubtitle(foundActs.subtitle || foundActs.keyMessage || '', 180),
+          subtitle: foundActs.subtitle || foundActs.keyMessage || '',
           citations: getCitationsForCategory('policy_'),
           dataQuality: getDataQualityForCategory('policy_'),
         });
@@ -578,7 +569,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           dataType: 'policy_analysis',
           data: natPolicy,
           title: natPolicy.slideTitle || `${country} - National Energy Policy`,
-          subtitle: truncateSubtitle(natPolicy.policyDirection || '', 180),
+          subtitle: natPolicy.policyDirection || '',
           citations: getCitationsForCategory('policy_'),
           dataQuality: getDataQualityForCategory('policy_'),
         });
@@ -589,7 +580,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           dataType: 'regulation_list',
           data: investRestrict,
           title: investRestrict.slideTitle || `${country} - Foreign Investment Rules`,
-          subtitle: truncateSubtitle(investRestrict.riskJustification || '', 180),
+          subtitle: investRestrict.riskJustification || '',
           citations: getCitationsForCategory('policy_'),
           dataQuality: getDataQualityForCategory('policy_'),
         });
@@ -601,7 +592,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             dataType: 'regulation_list',
             data: { incentives: keyIncentives },
             title: `${country} - Key Investment Incentives`,
-            subtitle: truncateSubtitle(`${keyIncentives.length} incentive programs identified`, 95),
+            subtitle: `${keyIncentives.length} incentive programs identified`,
             citations: getCitationsForCategory('policy_'),
             dataQuality: getDataQualityForCategory('policy_'),
           });
@@ -679,12 +670,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           title:
             (sectionData.japanesePlayers || {}).slideTitle ||
             `${country} - Japanese ${scope.industry || 'Industry'} Companies`,
-          subtitle: truncateSubtitle(
+          subtitle:
             (sectionData.japanesePlayers || {}).marketInsight ||
-              (sectionData.japanesePlayers || {}).subtitle ||
-              '',
-            95
-          ),
+            (sectionData.japanesePlayers || {}).subtitle ||
+            '',
           citations: compCitations,
           dataQuality: compDQ,
         });
@@ -694,12 +683,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           dataType: 'company_comparison',
           data: sectionData.localMajor || {},
           title: (sectionData.localMajor || {}).slideTitle || `${country} - Major Local Players`,
-          subtitle: truncateSubtitle(
+          subtitle:
             (sectionData.localMajor || {}).concentration ||
-              (sectionData.localMajor || {}).subtitle ||
-              '',
-            95
-          ),
+            (sectionData.localMajor || {}).subtitle ||
+            '',
           citations: compCitations,
           dataQuality: compDQ,
         });
@@ -711,12 +698,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           title:
             (sectionData.foreignPlayers || {}).slideTitle ||
             `${country} - Foreign ${scope.industry || 'Industry'} Companies`,
-          subtitle: truncateSubtitle(
+          subtitle:
             (sectionData.foreignPlayers || {}).competitiveInsight ||
-              (sectionData.foreignPlayers || {}).subtitle ||
-              '',
-            95
-          ),
+            (sectionData.foreignPlayers || {}).subtitle ||
+            '',
           citations: compCitations,
           dataQuality: compDQ,
         });
@@ -726,12 +711,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           dataType: 'case_study',
           data: sectionData.caseStudy || {},
           title: (sectionData.caseStudy || {}).slideTitle || `${country} - Market Entry Case Study`,
-          subtitle: truncateSubtitle(
+          subtitle:
             (sectionData.caseStudy || {}).applicability ||
-              (sectionData.caseStudy || {}).subtitle ||
-              '',
-            95
-          ),
+            (sectionData.caseStudy || {}).subtitle ||
+            '',
           citations: compCitations,
           dataQuality: compDQ,
         });
@@ -741,12 +724,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           dataType: 'section_summary',
           data: sectionData.maActivity || {},
           title: (sectionData.maActivity || {}).slideTitle || `${country} - M&A Activity`,
-          subtitle: truncateSubtitle(
+          subtitle:
             (sectionData.maActivity || {}).valuationMultiples ||
-              (sectionData.maActivity || {}).subtitle ||
-              '',
-            95
-          ),
+            (sectionData.maActivity || {}).subtitle ||
+            '',
           citations: compCitations,
           dataQuality: compDQ,
         });
@@ -762,12 +743,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           dataType: 'financial_performance',
           data: sectionData.escoEconomics || {},
           title: (sectionData.escoEconomics || {}).slideTitle || `${country} - ESCO Deal Economics`,
-          subtitle: truncateSubtitle(
+          subtitle:
             (sectionData.escoEconomics || {}).keyInsight ||
-              (sectionData.escoEconomics || {}).subtitle ||
-              '',
-            95
-          ),
+            (sectionData.escoEconomics || {}).subtitle ||
+            '',
           citations: depthCitations,
           dataQuality: depthDQ,
         });
@@ -778,12 +757,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           data: sectionData.partnerAssessment || {},
           title:
             (sectionData.partnerAssessment || {}).slideTitle || `${country} - Partner Assessment`,
-          subtitle: truncateSubtitle(
+          subtitle:
             (sectionData.partnerAssessment || {}).recommendedPartner ||
-              (sectionData.partnerAssessment || {}).subtitle ||
-              '',
-            95
-          ),
+            (sectionData.partnerAssessment || {}).subtitle ||
+            '',
           citations: depthCitations,
           dataQuality: depthDQ,
         });
@@ -794,12 +771,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           data: sectionData.entryStrategy || {},
           title:
             (sectionData.entryStrategy || {}).slideTitle || `${country} - Entry Strategy Options`,
-          subtitle: truncateSubtitle(
+          subtitle:
             (sectionData.entryStrategy || {}).recommendation ||
-              (sectionData.entryStrategy || {}).subtitle ||
-              '',
-            95
-          ),
+            (sectionData.entryStrategy || {}).subtitle ||
+            '',
           citations: depthCitations,
           dataQuality: depthDQ,
         });
@@ -810,10 +785,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           data: sectionData.implementation || {},
           title:
             (sectionData.implementation || {}).slideTitle || `${country} - Implementation Roadmap`,
-          subtitle: truncateSubtitle(
-            `Total: ${(sectionData.implementation || {}).totalInvestment || 'TBD'} | Breakeven: ${(sectionData.implementation || {}).breakeven || 'TBD'}`,
-            95
-          ),
+          subtitle: `Total: ${(sectionData.implementation || {}).totalInvestment || 'TBD'} | Breakeven: ${(sectionData.implementation || {}).breakeven || 'TBD'}`,
           citations: depthCitations,
           dataQuality: depthDQ,
         });
@@ -825,12 +797,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           title:
             (sectionData.targetSegments || {}).slideTitle ||
             `${country} - Target Customer Segments`,
-          subtitle: truncateSubtitle(
+          subtitle:
             (sectionData.targetSegments || {}).goToMarketApproach ||
-              (sectionData.targetSegments || {}).subtitle ||
-              '',
-            95
-          ),
+            (sectionData.targetSegments || {}).subtitle ||
+            '',
           citations: depthCitations,
           dataQuality: depthDQ,
         });
@@ -843,10 +813,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           dataType: 'section_summary',
           data: sectionData.goNoGo || {},
           title: `${country} - Go/No-Go Assessment`,
-          subtitle: truncateSubtitle(
-            (sectionData.goNoGo || {}).overallVerdict || 'Investment Decision Framework',
-            95
-          ),
+          subtitle: (sectionData.goNoGo || {}).overallVerdict || 'Investment Decision Framework',
           citations: [],
           dataQuality: 'unknown',
         });
@@ -861,7 +828,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
             recommendation: sectionData.recommendation,
           },
           title: `${country} - Opportunities & Obstacles`,
-          subtitle: truncateSubtitle(sectionData.recommendation || '', 180),
+          subtitle: sectionData.recommendation || '',
           citations: [],
           dataQuality: 'unknown',
         });
@@ -881,11 +848,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           dataType: 'section_summary',
           data: sectionData.timingIntelligence || {},
           title: (sectionData.timingIntelligence || {}).slideTitle || `${country} - Why Now?`,
-          subtitle: truncateSubtitle(
+          subtitle:
             (sectionData.timingIntelligence || {}).windowOfOpportunity ||
-              'Time-sensitive factors driving urgency',
-            95
-          ),
+            'Time-sensitive factors driving urgency',
           citations: [],
           dataQuality: 'unknown',
         });
@@ -896,10 +861,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
           data: sectionData.lessonsLearned || {},
           title:
             (sectionData.lessonsLearned || {}).slideTitle || `${country} - Lessons from Market`,
-          subtitle: truncateSubtitle(
-            (sectionData.lessonsLearned || {}).subtitle || 'What previous entrants learned',
-            95
-          ),
+          subtitle: (sectionData.lessonsLearned || {}).subtitle || 'What previous entrants learned',
           citations: [],
           dataQuality: 'unknown',
         });
@@ -2586,7 +2548,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
   }
 
-  // Dynamic text sizing: reduce font size before truncating
+  // Dynamic text sizing: reduce font size to fit, never truncate content
   function dynamicText(text, maxChars, baseFontPt, floorPt) {
     const minPt = floorPt || 10;
     if (!text) return { text: '', fontSize: baseFontPt };
@@ -2595,8 +2557,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       const scaledMax = Math.floor(maxChars * (baseFontPt / fs));
       if (text.length <= scaledMax) return { text, fontSize: fs };
     }
-    const finalMax = Math.floor(maxChars * (baseFontPt / minPt));
-    return { text: text.substring(0, finalMax - 3) + '...', fontSize: minPt };
+    // Text still doesn't fit at floor font — show full text at floor size
+    return { text, fontSize: minPt };
   }
 
   function renderKeyInsights(slide, data) {
@@ -2868,9 +2830,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     for (const [key, data] of Object.entries(countryAnalysis.rawData)) {
       if (key.startsWith(prefix) && data?.content) {
         const snippet =
-          typeof data.content === 'string'
-            ? data.content.substring(0, 300)
-            : JSON.stringify(data.content).substring(0, 300);
+          typeof data.content === 'string' ? data.content : JSON.stringify(data.content);
         parts.push(`${key}: ${snippet}`);
       }
     }
@@ -3104,24 +3064,17 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     summary.recommendation ||
     `This report provides a comprehensive analysis of the ${scope.industry || 'target'} market in ${country || 'the selected country'}. Detailed findings are presented in the following sections.`;
   // Fix 0: executiveSummary can be an array of strings — join them
-  let execText = Array.isArray(execContentRaw)
+  const execText = Array.isArray(execContentRaw)
     ? execContentRaw.join('\n\n')
     : String(execContentRaw || '');
-  // Fix 9: overflow protection — count words, reduce font or truncate
-  const execWordCount = execText.split(/\s+/).filter(Boolean).length;
-  let execFontSize = 14;
-  if (execWordCount > 500) {
-    execText = execText.split(/\s+/).slice(0, 500).join(' ');
-    execFontSize = 12;
-  } else if (execWordCount > 280) {
-    execFontSize = 12;
-  }
-  execSlide.addText(execText, {
+  // Fix 9: overflow protection — shrink font to fit, never truncate
+  const execFitted = fitTextToShape(execText, CONTENT_WIDTH, tpContent.h, 14);
+  execSlide.addText(execFitted.text, {
     x: LEFT_MARGIN,
     y: tpContent.y,
     w: CONTENT_WIDTH,
     h: tpContent.h,
-    fontSize: execFontSize,
+    fontSize: execFitted.fontSize,
     fontFace: FONT,
     color: COLORS.black,
     lineSpacingMultiple: 1.3,

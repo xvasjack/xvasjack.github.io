@@ -580,7 +580,7 @@ function addCalloutBox(slide, title, content, options = {}) {
   const textParts = [];
   if (title) {
     textParts.push({
-      text: truncate(title, 80) + '\n',
+      text: (title || '') + '\n',
       options: { fontSize: 12, bold: true, color: colors.titleColor, fontFace: FONT },
     });
   }
@@ -775,7 +775,7 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
   });
 
   const oppBullets = (opportunities || []).slice(0, 4).map((opp) => ({
-    text: truncate(String(opp), 150),
+    text: String(opp),
     options: {
       fontSize: 10,
       color: C_BLACK,
@@ -787,7 +787,7 @@ function addOpportunitiesObstaclesSummary(slide, opportunities = [], obstacles =
   }));
 
   const obsBullets = (obstacles || []).slice(0, 4).map((obs) => ({
-    text: truncate(String(obs), 150),
+    text: String(obs),
     options: {
       fontSize: 10,
       color: C_BLACK,
@@ -1726,7 +1726,7 @@ function addMatrix(slide, quadrants, patternDef) {
     const items = Array.isArray(q.items) ? q.items : typeof q.text === 'string' ? [q.text] : [];
     const itemText = items
       .slice(0, 5)
-      .map((i) => `• ${truncate(typeof i === 'string' ? i : i.text || '', 80)}`)
+      .map((i) => `• ${typeof i === 'string' ? i : i.text || ''}`)
       .join('\n');
     slide.addText(itemText, {
       x: qDef.x + 0.15,
@@ -1800,12 +1800,18 @@ function addCaseStudyRows(slide, rows, chevrons, patternDef) {
       fill: { color: contentStyle.fill },
       line: { color: C_BORDER, width: 1 },
     });
-    slide.addText(truncate(content, 500), {
+    const fittedContent = fitTextToShape(
+      String(content || ''),
+      contentW - 0.2,
+      def.h - 0.1,
+      contentStyle.fontSize
+    );
+    slide.addText(fittedContent.text, {
       x: contentX + 0.1,
       y: def.y + 0.05,
       w: contentW - 0.2,
       h: def.h - 0.1,
-      fontSize: contentStyle.fontSize,
+      fontSize: fittedContent.fontSize,
       color: contentStyle.color,
       fontFace: 'Segoe UI',
       valign: 'top',
@@ -1952,12 +1958,10 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
     ],
     ...safeArray(opportunities, 4).map((opp) => [
       {
-        text: truncate(
+        text:
           typeof opp === 'string'
             ? opp
             : opp.description || opp.title || opp.opportunity || ensureString(opp),
-          120
-        ),
         options: {
           fontSize: 12,
           fontFace: FONT,
@@ -1987,12 +1991,10 @@ function addOpportunitiesBarriersSlide(pptx, synthesis, FONT) {
     ],
     ...safeArray(barriers, 4).map((bar) => [
       {
-        text: truncate(
+        text:
           typeof bar === 'string'
             ? bar
             : bar.description || bar.title || bar.obstacle || ensureString(bar),
-          120
-        ),
         options: {
           fontSize: 12,
           fontFace: FONT,
