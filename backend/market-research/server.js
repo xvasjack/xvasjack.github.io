@@ -116,15 +116,17 @@ async function runMarketResearch(userPrompt, email) {
           const retryLoop = async () => {
             for (const topic of researchGate.retryTopics.slice(0, 5)) {
               try {
+                const ind = scope.industry || 'the industry';
                 const queryMap = {
-                  market_tpes: `${ca.country} total primary energy supply statistics and trends`,
-                  market_finalDemand: `${ca.country} final energy demand by sector`,
-                  market_electricity: `${ca.country} electricity generation mix and capacity`,
-                  market_gasLng: `${ca.country} natural gas and LNG market`,
-                  market_pricing: `${ca.country} energy pricing and tariffs`,
-                  policy_regulatory: `${ca.country} energy regulatory framework`,
-                  policy_incentives: `${ca.country} energy incentives and subsidies`,
-                  competitors_players: `${ca.country} major energy companies and players`,
+                  market_size: `${ca.country} ${ind} market size value statistics and trends`,
+                  market_demand: `${ca.country} ${ind} demand by sector analysis`,
+                  market_supplyChain: `${ca.country} ${ind} supply chain infrastructure`,
+                  market_adjacentServices: `${ca.country} ${ind} services ecosystem providers`,
+                  market_pricing: `${ca.country} ${ind} pricing and cost structure`,
+                  market_services: `${ca.country} ${ind} specialized services market`,
+                  policy_regulatory: `${ca.country} ${ind} regulatory framework laws`,
+                  policy_incentives: `${ca.country} ${ind} incentives and subsidies`,
+                  competitors_players: `${ca.country} major ${ind} companies and players`,
                 };
                 const retryQuery =
                   queryMap[topic] || `${ca.country} ${scope.industry} ${topic.replace(/_/g, ' ')}`;
