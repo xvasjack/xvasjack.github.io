@@ -511,29 +511,72 @@ function createTableRowOptions(isHeader = false, isAlternate = false, COLORS = {
 
 // Helper: add source footnote to slide
 // Uses widescreen dimensions (13.333" x 7.5" = 16:9)
+// Supports hyperlinks for {url, title} source objects
 function addSourceFootnote(slide, sources, COLORS, FONT) {
   if (!sources || (Array.isArray(sources) && sources.length === 0)) return;
 
-  let sourceText = '';
-  if (typeof sources === 'string') {
-    sourceText = `Source: ${sources}`;
-  } else if (Array.isArray(sources)) {
-    const sourceList = sources
-      .slice(0, 3)
-      .map((s) => (typeof s === 'string' ? s : s.name || s.source || ''))
-      .filter(Boolean);
-    sourceText = sourceList.length > 0 ? `Sources: ${sourceList.join('; ')}` : '';
-  }
+  const fontSize = templatePatterns.style?.fonts?.source?.size || 10;
+  const fontColor = COLORS?.footerText || C_MUTED;
 
-  if (sourceText) {
-    slide.addText(truncate(sourceText, 120), {
+  // Build rich text parts with hyperlinks
+  if (Array.isArray(sources)) {
+    const footerParts = [
+      { text: 'Sources: ', options: { fontSize, fontFace: FONT, color: fontColor } },
+    ];
+
+    sources.slice(0, 3).forEach((source, idx) => {
+      if (idx > 0) {
+        footerParts.push({
+          text: ', ',
+          options: { fontSize, fontFace: FONT, color: fontColor },
+        });
+      }
+
+      const sourceUrl = typeof source === 'object' ? source.url : null;
+      const sourceTitle =
+        typeof source === 'object' ? source.title || source.name || source.source : String(source);
+
+      if (sourceUrl && sourceUrl.startsWith('http')) {
+        let displayText;
+        try {
+          const url = new URL(sourceUrl);
+          displayText = sourceTitle || url.hostname.replace('www.', '');
+        } catch {
+          displayText = sourceTitle || sourceUrl.substring(0, 30);
+        }
+        footerParts.push({
+          text: displayText,
+          options: {
+            fontSize,
+            fontFace: FONT,
+            color: '0563C1',
+            hyperlink: { url: sourceUrl },
+          },
+        });
+      } else {
+        footerParts.push({
+          text: sourceTitle || String(source),
+          options: { fontSize, fontFace: FONT, color: fontColor },
+        });
+      }
+    });
+
+    slide.addText(footerParts, {
       x: TEMPLATE.sourceBar.x,
       y: TEMPLATE.sourceBar.y,
       w: TEMPLATE.sourceBar.w,
       h: TEMPLATE.sourceBar.h || 0.27,
-      fontSize: templatePatterns.style?.fonts?.source?.size || 10,
+      valign: 'top',
+    });
+  } else if (typeof sources === 'string') {
+    slide.addText(`Source: ${sources}`, {
+      x: TEMPLATE.sourceBar.x,
+      y: TEMPLATE.sourceBar.y,
+      w: TEMPLATE.sourceBar.w,
+      h: TEMPLATE.sourceBar.h || 0.27,
+      fontSize,
       fontFace: FONT,
-      color: COLORS?.footerText || C_MUTED,
+      color: fontColor,
       valign: 'top',
     });
   }

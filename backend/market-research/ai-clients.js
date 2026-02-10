@@ -295,9 +295,14 @@ Be specific. Cite sources. No fluff.`;
 
         const content = candidate?.content?.parts?.[0]?.text || '';
 
-        // Extract citations from grounding metadata
-        const groundingChunks = candidate?.groundingMetadata?.groundingChunks || [];
-        const citations = groundingChunks
+        // Extract citations from grounding metadata (try multiple paths for API compatibility)
+        const groundingMeta = candidate?.groundingMetadata || {};
+        const groundingChunks =
+          groundingMeta.groundingChunks ||
+          groundingMeta.supportingChunks ||
+          groundingMeta.chunks ||
+          [];
+        let citations = groundingChunks
           .filter((chunk) => chunk.web?.uri)
           .map((chunk) => ({
             url: chunk.web.uri,
@@ -305,6 +310,31 @@ Be specific. Cite sources. No fluff.`;
               chunk.web.title || chunk.web.uri.replace(/^https?:\/\/(www\.)?/, '').split('/')[0],
           }))
           .slice(0, 15);
+
+        // Fallback: extract URLs from grounding supports
+        if (citations.length === 0 && groundingMeta.groundingSupports) {
+          const supportUrls = new Set();
+          for (const support of groundingMeta.groundingSupports) {
+            for (const idx of support.groundingChunkIndices || []) {
+              const chunk = groundingChunks[idx];
+              if (chunk?.web?.uri) supportUrls.add(chunk.web.uri);
+            }
+          }
+          citations = [...supportUrls].slice(0, 15).map((url) => ({
+            url,
+            title: url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0],
+          }));
+        }
+
+        // Fallback: extract URLs directly from content text
+        if (citations.length === 0 && content) {
+          const urlRegex = /https?:\/\/[^\s"'<>)\]},]+/g;
+          const foundUrls = [...new Set(content.match(urlRegex) || [])];
+          citations = foundUrls.slice(0, 10).map((url) => ({
+            url: url.replace(/[.,;:]+$/, ''),
+            title: url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0],
+          }));
+        }
 
         // Quality check
         if (!content || content.length < 500) {

@@ -688,8 +688,11 @@ Return JSON:
   ],
   "keyIncentives": [
     {"initiative": "Named incentive program or policy initiative", "keyContent": "30-50 words describing the initiative scope and requirements", "highlights": "Key numbers: tax rates, durations, caps, eligibility thresholds", "implications": "What this means for foreign market entrants specifically"}
-  ]
+  ],
+  "sources": [{"url": "https://example.com/source", "title": "Source Name"}]
 }
+
+IMPORTANT: For the "sources" field, extract any URLs you find in the research data. These will be displayed as clickable hyperlinks in the presentation.
 
 Return ONLY valid JSON.`;
 
@@ -739,7 +742,8 @@ async function synthesizeMarket(researchData, country, industry, clientContext) 
     "keyMetrics": [{"metric": "Named metric", "value": "Specific value from data", "context": "Why this matters"}],
     "chartData": null,
     "keyInsight": "What this means for client",
-    "dataType": "time_series_multi_insight"
+    "dataType": "time_series_multi_insight",
+    "sources": [{"url": "https://example.com/source", "title": "Source Name"}]
   }`;
   });
 
@@ -772,6 +776,7 @@ RULES:
 - Include source citations where available
 - Insights should reference specific numbers from the data
 - If specific yearly data is available in the research, provide chartData with series/categories format: {"series": [{"name": "Category", "values": [1, 2, 3]}], "categories": ["2020", "2021", "2022"]}. If not, set chartData to null. Do NOT fabricate time series from training knowledge.
+- For "sources": extract any URLs from the research data that are relevant to this section. These become clickable hyperlinks in the presentation.
 
 Return JSON:
 {
@@ -928,6 +933,7 @@ RULES:
 - Include source citations where available
 - Company descriptions should be 45-60 words
 - Insights should reference specific numbers from the data
+- Include a "sources" array with relevant URLs from the research data for each section: [{"url": "https://...", "title": "Source Name"}]
 
 CRITICAL WORD COUNT RULE — DESCRIPTIONS WILL BE REJECTED IF WRONG:
 Each "description" field MUST contain exactly 45-60 words. Count them.

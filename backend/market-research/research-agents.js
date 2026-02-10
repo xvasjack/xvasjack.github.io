@@ -126,7 +126,7 @@ async function policyResearchAgent(country, industry, _clientContext, pipelineSi
 
       const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
 
-For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15'). Return sources as document names, NOT URLs.
+For every data point, cite specific sources with URLs where available. Include source names (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15') and link to the original source URL.
 
 As a regulatory affairs specialist, research ${framework.name} for ${country}'s ${industry} market:
 
@@ -326,7 +326,7 @@ async function marketResearchAgent(country, industry, _clientContext, pipelineSi
 
         const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
 
-For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15'). Return sources as document names, NOT URLs.
+For every data point, cite specific sources with URLs where available. Include source names (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15') and link to the original source URL.
 
 CRITICAL - NAMED PROJECT DATA:
 For each energy source, list SPECIFIC named projects:
@@ -495,7 +495,7 @@ async function competitorResearchAgent(country, industry, _clientContext, pipeli
       const isJapanese = topicKey === 'competitors_japanese';
       const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
 
-For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15'). Return sources as document names, NOT URLs.
+For every data point, cite specific sources with URLs where available. Include source names (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15') and link to the original source URL.
 
 As a competitive intelligence analyst, research ${framework.name} for ${country}'s ${industry} market:
 
@@ -680,7 +680,7 @@ async function contextResearchAgent(country, industry, clientContext, pipelineSi
 
       const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
 
-For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15'). Return sources as document names, NOT URLs.
+For every data point, cite specific sources with URLs where available. Include source names (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15') and link to the original source URL.
 
 As a strategy consultant advising a ${clientContext}, research ${framework.name} for ${country}'s ${industry} market:
 
@@ -858,7 +858,7 @@ AFTER your analysis, provide a JSON block with structured data:
 
       const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
 
-For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15'). Return sources as document names, NOT URLs.
+For every data point, cite specific sources with URLs where available. Include source names (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15') and link to the original source URL.
 
 As a senior M&A advisor helping a ${clientContext} enter ${country}'s ${industry} market, research ${framework.name}:
 
@@ -1076,7 +1076,7 @@ AFTER your analysis, provide a JSON block with structured data:
 
       const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
 
-For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15'). Return sources as document names, NOT URLs.
+For every data point, cite specific sources with URLs where available. Include source names (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15') and link to the original source URL.
 
 As a competitive intelligence analyst helping a ${clientContext} evaluate ${country}'s ${industry} market, research ${framework.name}:
 
@@ -1213,7 +1213,7 @@ async function universalResearchAgent(
     topics.map(async (topic, idx) => {
       const queryContext = `DO NOT fabricate data. DO NOT invent numbers, company names, law names, or statistics. If data is unavailable, say so explicitly.
 
-For every data point, include EXACT document name as source (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15'). Return sources as document names, NOT URLs.
+For every data point, cite specific sources with URLs where available. Include source names (e.g., 'PDP8', 'Petroleum Law No. 12/2022/QH15') and link to the original source URL.
 
 As a senior consultant advising a ${clientContext} on a ${projectType} project, research ${topic.name} for ${country}'s ${industry} market:
 
