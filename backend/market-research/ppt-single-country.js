@@ -37,6 +37,7 @@ const {
   addPieChart,
   safeTableHeight,
   choosePattern,
+  resolveTemplatePattern,
   addDualChart,
   addChevronFlow,
   addInsightPanelsFromPattern,
@@ -289,6 +290,15 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     recommendation: rawSummary.recommendation || '',
   };
   const country = countryAnalysis.country || (synthesis || {}).country;
+  const templateSlideSelections =
+    (scope && (scope.templateSlideSelections || scope.templateSelections)) || {};
+  const templateStrictMode = scope?.templateStrictMode !== false;
+  const templateUsageStats = {
+    resolved: [],
+    nonTemplatePatterns: [],
+    slideRenderFailures: [],
+    tableRecoveries: [],
+  };
 
   // Enrichment fallback: use synthesis when available, otherwise fall back to countryAnalysis summary
   const enrichment = synthesis || {};
@@ -698,17 +708,28 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
         try {
           slide.addTable(normalizedRows, retryOptions);
           console.warn(`[PPT] ${context}: addTable recovered by disabling autoPage`);
+          templateUsageStats.tableRecoveries.push({ key: context });
           return true;
         } catch (retryErr) {
           console.error(
             `[PPT] ${context} addTable retry failed: ${retryErr.message} | rows=${normalizedRows.length}`
           );
+          templateUsageStats.slideRenderFailures.push({
+            key: context,
+            pattern: 'table',
+            error: retryErr.message,
+          });
           return false;
         }
       }
       console.error(
         `[PPT] ${context} addTable failed: ${err.message} | rows=${normalizedRows.length}`
       );
+      templateUsageStats.slideRenderFailures.push({
+        key: context,
+        pattern: 'table',
+        error: err.message,
+      });
       return false;
     }
   }
@@ -956,6 +977,33 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
 
     return dynamicBlocks;
+  }
+
+  function resolveBlockTemplate(block) {
+    const overrideSelection = templateSlideSelections?.[block.key];
+    const resolved = resolveTemplatePattern({
+      blockKey: block.key,
+      dataType: block.dataType,
+      data: block.data,
+      templateSelection: overrideSelection,
+    });
+    block._templatePattern = resolved.patternKey;
+    block._templateSlide = resolved.selectedSlide;
+    block._templateSource = resolved.source;
+    templateUsageStats.resolved.push({
+      key: block.key,
+      pattern: resolved.patternKey,
+      slide: resolved.selectedSlide,
+      source: resolved.source,
+      templateBacked: resolved.isTemplateBacked,
+    });
+    if (!resolved.isTemplateBacked) {
+      templateUsageStats.nonTemplatePatterns.push({
+        key: block.key,
+        pattern: resolved.patternKey,
+      });
+    }
+    return resolved;
   }
 
   // Classify data blocks in a section for pattern selection
@@ -1376,7 +1424,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   function generateMarketChartSlide(slide, block) {
     const data = block.data;
     const chartData = data.chartData;
-    const pattern = choosePattern(block.dataType, data);
+    const pattern = block._templatePattern || choosePattern(block.dataType, data);
 
     // Collect insights for the panel
     const insights = collectMarketInsights(block.key, data);
@@ -1409,7 +1457,10 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
 
     if (hasChartSeries || hasChartValues) {
       // Chart on left 60% — positions from template JSON
-      const chartPattern = templatePatterns.patterns?.chart_insight_panels?.elements || {};
+      const chartPattern =
+        templatePatterns.patterns?.[pattern]?.elements ||
+        templatePatterns.patterns?.chart_insight_panels?.elements ||
+        {};
       const chartPos = chartPattern.chart || {};
       const chartOpts = {
         x: chartPos.x || LEFT_MARGIN,
@@ -2010,6 +2061,11 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       citations: block.citations,
       dataQuality: block.dataQuality,
     });
+    if (block._templatePattern) {
+      console.log(
+        `  [PPT TEMPLATE] ${block.key} -> ${block._templatePattern}${block._templateSlide ? ` (slide ${block._templateSlide})` : ''} [${block._templateSource || 'auto'}]`
+      );
+    }
 
     try {
       // Route to appropriate renderer based on block key and pattern
@@ -2096,6 +2152,23 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
       }
     } catch (err) {
       console.error(`[PPT] Slide "${block.key}" failed, showing fallback: ${err.message}`);
+      templateUsageStats.slideRenderFailures.push({
+        key: block.key,
+        pattern: block._templatePattern || null,
+        error: err.message,
+      });
+      // Clear partially-rendered objects to avoid carrying malformed XML fragments.
+      if (Array.isArray(slide.data)) slide.data = [];
+      slide.addText(truncateTitle(block.title || block.key), {
+        x: TITLE_X,
+        y: tpTitle.y,
+        w: TITLE_W,
+        h: tpTitle.h,
+        fontSize: tpTitleFontSize,
+        bold: tpTitleBold,
+        color: COLORS.dk2,
+        fontFace: FONT,
+      });
       addDataUnavailableMessage(
         slide,
         `Data unavailable for ${block.title || block.key} — rendering error`
@@ -3733,6 +3806,9 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     const classifyName =
       sectionName === 'Policy & Regulatory' ? 'Policy & Regulations' : sectionName;
     const blocks = classifyDataBlocks(classifyName, sectionData);
+    for (const block of blocks) {
+      resolveBlockTemplate(block);
+    }
     const pptGate = validatePptData(blocks);
     console.log('[Quality Gate] PPT data:', JSON.stringify(pptGate));
     if (
@@ -4134,9 +4210,44 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     }
   }
 
+  const nonTemplate = templateUsageStats.nonTemplatePatterns;
+  if (templateStrictMode && nonTemplate.length > 0) {
+    const details = [...new Set(nonTemplate.map((x) => `${x.key}:${x.pattern}`))].join(', ');
+    throw new Error(
+      `Template fidelity gate failed: non-template patterns used (${details}). Provide templateSlideSelections to map these blocks to template slides.`
+    );
+  }
+  if (templateUsageStats.slideRenderFailures.length > 0) {
+    const failKeys = [
+      ...new Set(
+        templateUsageStats.slideRenderFailures.map(
+          (f) => `${f.key}${f.pattern ? `:${f.pattern}` : ''}`
+        )
+      ),
+    ].join(', ');
+    throw new Error(
+      `PPT rendering failures detected (${templateUsageStats.slideRenderFailures.length}): ${failKeys}`
+    );
+  }
+
   let pptxBuffer = await pptx.write({ outputType: 'nodebuffer' });
   pptxBuffer = await normalizeChartRelationshipTargets(pptxBuffer);
   const totalSlides = 4 + sectionDefs.length + sectionBlockCounts.reduce((a, b) => a + b, 0) + 2; // cover + TOC + exec + opps + sections + appendix TOC + summary
+  const templateBackedCount = templateUsageStats.resolved.filter((x) => x.templateBacked).length;
+  const templateTotal = templateUsageStats.resolved.length;
+  const templateCoverage =
+    templateTotal > 0 ? Math.round((templateBackedCount / templateTotal) * 100) : 100;
+  console.log(
+    `[PPT TEMPLATE] Coverage: ${templateCoverage}% (${templateBackedCount}/${templateTotal}) template-backed block mappings`
+  );
+  if (templateUsageStats.tableRecoveries.length > 0) {
+    const recoveredKeys = [...new Set(templateUsageStats.tableRecoveries.map((r) => r.key))].join(
+      ', '
+    );
+    console.warn(
+      `[PPT] Table recoveries applied for ${templateUsageStats.tableRecoveries.length} table(s): ${recoveredKeys}`
+    );
+  }
   console.log(
     `Section-based PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB, ~${totalSlides} slides`
   );

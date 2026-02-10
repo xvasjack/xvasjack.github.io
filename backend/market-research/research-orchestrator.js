@@ -174,7 +174,36 @@ Return ONLY valid JSON.`;
       })
       .filter(Boolean);
 
+    // Normalize section scores so downstream logic never sees unknown placeholders.
+    const sectionKeys = ['policy', 'market', 'competitors', 'summary'];
+    const normalizedSectionScores = {};
+    for (const sectionKey of sectionKeys) {
+      const rawSection = gaps.sectionScores?.[sectionKey];
+      const rawScore =
+        typeof rawSection?.score === 'number' ? rawSection.score : Number(rawSection?.score);
+      const isValidScore = Number.isFinite(rawScore);
+      const relatedGaps = normalizedCriticalGaps.filter((g) =>
+        [sectionKey, 'general', 'cross-section'].includes(String(g.area || '').toLowerCase())
+      );
+      const fallbackScore = Math.max(20, normalizedOverallScore - relatedGaps.length * 10);
+      const score = Math.max(0, Math.min(100, isValidScore ? rawScore : fallbackScore));
+      const missingData = Array.isArray(rawSection?.missingData)
+        ? rawSection.missingData.filter(Boolean).slice(0, 8)
+        : relatedGaps.map((g) => g.gap).slice(0, 8);
+      normalizedSectionScores[sectionKey] = {
+        score,
+        reasoning:
+          typeof rawSection?.reasoning === 'string' && rawSection.reasoning.trim()
+            ? rawSection.reasoning.trim()
+            : isValidScore
+              ? 'Score accepted from reviewer'
+              : 'Score normalized from overall confidence due incomplete reviewer section output',
+        missingData,
+      };
+    }
+
     gaps.overallScore = normalizedOverallScore;
+    gaps.sectionScores = normalizedSectionScores;
     gaps.criticalGaps = normalizedCriticalGaps;
     gaps.dataToVerify = normalizedVerifications;
     gaps.confidenceAssessment = {
@@ -191,11 +220,16 @@ Return ONLY valid JSON.`;
 
     // Log detailed scoring
     const scores = gaps.sectionScores || {};
+    const policyScore = Number.isFinite(scores.policy?.score) ? scores.policy.score : 0;
+    const marketScore = Number.isFinite(scores.market?.score) ? scores.market.score : 0;
+    const competitorScore = Number.isFinite(scores.competitors?.score)
+      ? scores.competitors.score
+      : 0;
     console.log(
-      `    Section Scores: Policy=${scores.policy?.score || '?'}, Market=${scores.market?.score || '?'}, Competitors=${scores.competitors?.score || '?'}`
+      `    Section Scores: Policy=${policyScore}, Market=${marketScore}, Competitors=${competitorScore}`
     );
     console.log(
-      `    Overall: ${gaps.overallScore || '?'}/100 | Confidence: ${gaps.confidenceAssessment?.overall || 'unknown'}`
+      `    Overall: ${gaps.overallScore}/100 | Confidence: ${gaps.confidenceAssessment?.overall || 'unknown'}`
     );
     console.log(
       `    Gaps: ${gaps.criticalGaps?.length || 0} critical | Verify: ${gaps.dataToVerify?.length || 0} claims`
@@ -229,6 +263,9 @@ Return ONLY valid JSON.`;
 async function fillResearchGaps(gaps, country, industry) {
   console.log(`  [Filling research gaps for ${country}...]`);
   const additionalData = { gapResearch: [], verificationResearch: [] };
+  const MIN_GAP_FINDING_CHARS = 1200;
+  const MIN_VERIFY_FINDING_CHARS = 600;
+  const MIN_FINDING_CITATIONS = 2;
 
   // Research critical gaps with Gemini
   const criticalGaps = gaps.criticalGaps || [];
@@ -238,7 +275,11 @@ async function fillResearchGaps(gaps, country, industry) {
     console.log(`    Gap search: ${gap.gap.substring(0, 50)}...`);
 
     const result = await callGeminiResearch(gap.searchQuery, country, industry);
-    if (result.content) {
+    const contentLength = (result.content || '').length;
+    const citationsCount = Array.isArray(result.citations) ? result.citations.length : 0;
+    const usableGapFinding =
+      contentLength >= MIN_GAP_FINDING_CHARS || citationsCount >= MIN_FINDING_CITATIONS;
+    if (result.content && usableGapFinding) {
       additionalData.gapResearch.push({
         area: gap.area,
         gap: gap.gap,
@@ -246,6 +287,10 @@ async function fillResearchGaps(gaps, country, industry) {
         findings: result.content,
         citations: result.citations || [],
       });
+    } else if (result.content) {
+      console.warn(
+        `    Gap search returned thin content (${contentLength} chars, ${citationsCount} citations) — skipping low-signal result`
+      );
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
@@ -258,13 +303,21 @@ async function fillResearchGaps(gaps, country, industry) {
     console.log(`    Verify: ${item.claim.substring(0, 50)}...`);
 
     const result = await callGeminiResearch(item.searchQuery, country, industry);
-    if (result.content) {
+    const contentLength = (result.content || '').length;
+    const citationsCount = Array.isArray(result.citations) ? result.citations.length : 0;
+    const usableVerification =
+      contentLength >= MIN_VERIFY_FINDING_CHARS || citationsCount >= MIN_FINDING_CITATIONS;
+    if (result.content && usableVerification) {
       additionalData.verificationResearch.push({
         claim: item.claim,
         query: item.searchQuery,
         findings: result.content,
         citations: result.citations || [],
       });
+    } else if (result.content) {
+      console.warn(
+        `    Verification returned thin content (${contentLength} chars, ${citationsCount} citations) — skipping low-signal result`
+      );
     }
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
@@ -2941,6 +2994,8 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   let iteration = 0;
   let confidenceScore = 0;
   let readyForClient = false;
+  let lastCodeGateScore = 0;
+  let lastEffectiveScore = 0;
 
   while (iteration < MAX_ITERATIONS && !readyForClient) {
     if (countryAnalysis.aborted) break;
@@ -2961,6 +3016,8 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     const codeGateScore = codeGateResult.scores?.overall || 0;
     const codeGateFailures = codeGateResult.failures || [];
     const effectiveScore = Math.min(confidenceScore, codeGateScore);
+    lastCodeGateScore = codeGateScore;
+    lastEffectiveScore = effectiveScore;
     if (effectiveScore >= MIN_CONFIDENCE_SCORE) {
       console.log(
         `    ✓ Quality threshold met (AI: ${confidenceScore}, Gate: ${codeGateScore}, Effective: ${effectiveScore}/100) - analysis ready`
@@ -2969,9 +3026,25 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     }
 
     const criticalGapCount = (gaps.criticalGaps || []).filter((g) => g.priority === 'high').length;
-    if (criticalGapCount === 0 && (gaps.dataToVerify || []).length === 0) {
-      console.log(`    ✓ No actionable gaps found (score: ${confidenceScore}/100) - stopping`);
-      break;
+    const verificationCount = (gaps.dataToVerify || []).length;
+    if (criticalGapCount === 0 && verificationCount === 0) {
+      if (effectiveScore < MIN_CONFIDENCE_SCORE) {
+        console.warn(
+          `    [Refinement] No actionable gaps returned at ${effectiveScore}/100 — injecting forced recovery query`
+        );
+        gaps.criticalGaps = [
+          {
+            area: 'cross-section',
+            gap: 'Low-confidence synthesis without actionable gaps from reviewer output',
+            searchQuery: `${country} ${industry} official regulations market size competitors enforcement latest`,
+            priority: 'high',
+            impactOnScore: 'high',
+          },
+        ];
+      } else {
+        console.log(`    ✓ No actionable gaps found (score: ${confidenceScore}/100) - stopping`);
+        break;
+      }
     }
 
     console.log(
@@ -3002,6 +3075,12 @@ async function researchCountry(country, industry, clientContext, scope = null) {
       }
       countryAnalysis.iterationsCompleted = iteration;
     } else {
+      if (effectiveScore < MIN_CONFIDENCE_SCORE && iteration < MAX_ITERATIONS) {
+        console.warn(
+          `    [Refinement] No new usable data collected at ${effectiveScore}/100 — proceeding to next pass`
+        );
+        continue;
+      }
       console.log(`    → No additional data collected, stopping refinement`);
       break;
     }
@@ -3009,8 +3088,12 @@ async function researchCountry(country, industry, clientContext, scope = null) {
 
   countryAnalysis.researchTimeMs = Date.now() - startTime;
   countryAnalysis.totalIterations = iteration;
-  countryAnalysis.finalConfidenceScore = confidenceScore;
-  countryAnalysis.readyForClient = readyForClient || confidenceScore >= MIN_CONFIDENCE_SCORE;
+  countryAnalysis.finalConfidenceScore = Math.min(
+    confidenceScore || 0,
+    lastCodeGateScore || confidenceScore || 0
+  );
+  countryAnalysis.readyForClient =
+    readyForClient || countryAnalysis.finalConfidenceScore >= MIN_CONFIDENCE_SCORE;
 
   // ============ FINAL REVIEW LOOP ============
   // Reviewer 3: reviews ENTIRE assembled synthesis. Can escalate to:
@@ -3151,6 +3234,47 @@ async function researchCountry(country, industry, clientContext, scope = null) {
     } catch (finalErr) {
       console.warn(`  [FINAL REVIEW] Loop failed, proceeding: ${finalErr.message}`);
     }
+  }
+
+  // Final readiness is the intersection of depth confidence and final-review coherence.
+  const finalReview = countryAnalysis.finalReview;
+  const finalCoherence = Number(finalReview?.coherenceScore) || 0;
+  const finalCritical = (finalReview?.issues || []).filter(
+    (i) => i?.severity === 'critical'
+  ).length;
+  const finalMajor = (finalReview?.issues || []).filter((i) => i?.severity === 'major').length;
+  const confidenceReady = (countryAnalysis.finalConfidenceScore || 0) >= MIN_CONFIDENCE_SCORE;
+  const codeGateReady = (lastCodeGateScore || 0) >= MIN_CONFIDENCE_SCORE;
+  const reviewReady =
+    !finalReview || (finalCoherence >= 80 && finalCritical === 0 && finalMajor <= 1);
+
+  countryAnalysis.readyForClient = Boolean(countryAnalysis.readyForClient && confidenceReady);
+  countryAnalysis.readyForClient = Boolean(countryAnalysis.readyForClient && codeGateReady);
+  countryAnalysis.readyForClient = Boolean(countryAnalysis.readyForClient && reviewReady);
+  countryAnalysis.readiness = {
+    confidenceScore: confidenceScore || 0,
+    finalConfidenceScore: countryAnalysis.finalConfidenceScore || 0,
+    codeGateScore: lastCodeGateScore || 0,
+    effectiveScore: lastEffectiveScore || 0,
+    finalReviewCoherence: finalCoherence,
+    finalReviewCritical: finalCritical,
+    finalReviewMajor: finalMajor,
+  };
+  if (!countryAnalysis.readyForClient) {
+    const reasons = [];
+    if (!confidenceReady)
+      reasons.push(
+        `Final confidence ${countryAnalysis.finalConfidenceScore || 0}/100 is below ${MIN_CONFIDENCE_SCORE}`
+      );
+    if (!codeGateReady)
+      reasons.push(
+        `Content-depth gate ${lastCodeGateScore || 0}/100 is below ${MIN_CONFIDENCE_SCORE}`
+      );
+    if (!reviewReady)
+      reasons.push(
+        `Final review coherence ${finalCoherence}/100 with critical=${finalCritical}, major=${finalMajor}`
+      );
+    countryAnalysis.readiness.reasons = reasons;
   }
 
   console.log(`\n  ✓ Completed ${country}:`);

@@ -1561,38 +1561,162 @@ function choosePattern(dataType, data) {
     case 'time_series_multi_insight':
       return 'chart_insight_panels';
     case 'time_series_annotated':
-      return 'chart_annotations';
+      return 'chart_with_grid';
     case 'two_related_series':
       return 'chart_callout_dual';
     case 'time_series_simple':
-      return 'chart_callout_simple';
+      return 'chart_with_grid';
     case 'composition_breakdown':
-      return 'chart_callout_dual';
+      return 'chart_with_grid';
     case 'company_comparison':
-      return 'data_table_highlighted';
+      return 'company_comparison';
     case 'regulation_list':
-      return 'data_table_reference';
+      return 'regulatory_table';
     case 'policy_analysis':
-      return 'text_policy_block';
+      return 'regulatory_table';
     case 'case_study':
       return 'case_study_rows';
     case 'financial_performance':
       return 'dual_chart_financial';
     case 'opportunities_vs_barriers':
-      return 'matrix_2x2';
+      return 'regulatory_table';
     case 'section_summary':
-      return 'label_row_table';
+      return 'regulatory_table';
     case 'definitions':
-      return 'glossary_table';
+      return 'glossary';
     default:
       // Auto-detect from data shape
       if (data?.chartData?.series && data.chartData.series.length >= 2) return 'chart_callout_dual';
-      if (data?.chartData?.series) return 'chart_callout_simple';
-      if (data?.chartData?.values) return 'chart_callout_simple';
-      if (data?.players || data?.companies) return 'data_table_highlighted';
-      if (data?.rows || data?.acts || data?.regulations) return 'data_table_reference';
-      return 'label_row_table';
+      if (data?.chartData?.series) return 'chart_with_grid';
+      if (data?.chartData?.values) return 'chart_with_grid';
+      if (data?.players || data?.companies) return 'company_comparison';
+      if (data?.rows || data?.acts || data?.regulations) return 'regulatory_table';
+      return 'regulatory_table';
   }
+}
+
+// Deterministic block -> template pattern mapping so styling stays close to Escort source slides.
+const BLOCK_TEMPLATE_PATTERN_MAP = Object.freeze({
+  foundationalActs: 'regulatory_table',
+  nationalPolicy: 'regulatory_table',
+  investmentRestrictions: 'regulatory_table',
+  keyIncentives: 'regulatory_table',
+  regulatorySummary: 'regulatory_table',
+  tpes: 'chart_insight_panels',
+  finalDemand: 'chart_insight_panels',
+  electricity: 'chart_insight_panels',
+  gasLng: 'chart_callout_dual',
+  pricing: 'chart_insight_panels',
+  escoMarket: 'chart_insight_panels',
+  japanesePlayers: 'company_comparison',
+  localMajor: 'company_comparison',
+  foreignPlayers: 'company_comparison',
+  caseStudy: 'case_study_rows',
+  maActivity: 'company_comparison',
+  dealEconomics: 'dual_chart_financial',
+  partnerAssessment: 'company_comparison',
+  entryStrategy: 'regulatory_table',
+  implementation: 'case_study_rows',
+  targetSegments: 'company_comparison',
+  goNoGo: 'regulatory_table',
+  opportunitiesObstacles: 'regulatory_table',
+  keyInsights: 'regulatory_table',
+  timingIntelligence: 'regulatory_table',
+  lessonsLearned: 'regulatory_table',
+});
+
+function getPatternKeyForSlideId(slideId) {
+  if (!Number.isFinite(Number(slideId))) return null;
+  const numericId = Number(slideId);
+  const patterns = templatePatterns.patterns || {};
+  for (const [patternKey, patternDef] of Object.entries(patterns)) {
+    if (
+      Array.isArray(patternDef?.templateSlides) &&
+      patternDef.templateSlides.includes(numericId)
+    ) {
+      return patternKey;
+    }
+  }
+  return null;
+}
+
+/**
+ * Resolve a template pattern deterministically with optional user override:
+ * - override by slide id (preferred for "pick from template repository")
+ * - override by pattern key
+ * - default mapping by block key
+ * - fallback by data type inference
+ */
+function resolveTemplatePattern({ blockKey, dataType, data, templateSelection } = {}) {
+  const patterns = templatePatterns.patterns || {};
+  const defaultPattern = BLOCK_TEMPLATE_PATTERN_MAP[blockKey] || choosePattern(dataType, data);
+  let patternKey = defaultPattern;
+  let source = BLOCK_TEMPLATE_PATTERN_MAP[blockKey] ? 'block-default' : 'dataType-fallback';
+  let selectedSlide = null;
+
+  let overridePattern = null;
+  let overrideSlide = null;
+  if (templateSelection && typeof templateSelection === 'object') {
+    overridePattern = templateSelection.pattern || null;
+    overrideSlide = templateSelection.slide ?? null;
+  } else if (Number.isFinite(Number(templateSelection))) {
+    overrideSlide = Number(templateSelection);
+  } else if (typeof templateSelection === 'string' && templateSelection.trim()) {
+    const trimmed = templateSelection.trim();
+    if (Number.isFinite(Number(trimmed))) overrideSlide = Number(trimmed);
+    else overridePattern = trimmed;
+  }
+
+  if (overridePattern && patterns[overridePattern]) {
+    patternKey = overridePattern;
+    source = 'override-pattern';
+  }
+
+  if (overrideSlide != null) {
+    const fromSlide = getPatternKeyForSlideId(overrideSlide);
+    if (fromSlide) {
+      patternKey = fromSlide;
+      selectedSlide = Number(overrideSlide);
+      source = 'override-slide';
+    }
+  }
+
+  if (!patterns[patternKey]) {
+    patternKey = defaultPattern;
+    source = 'fallback';
+  }
+
+  let patternDef = patterns[patternKey] || null;
+  let templateSlides = Array.isArray(patternDef?.templateSlides) ? patternDef.templateSlides : [];
+  let isTemplateBacked = templateSlides.length > 0;
+
+  // If override landed on a non-template custom pattern, pull back to a template-backed default.
+  if (!isTemplateBacked && patternKey !== defaultPattern) {
+    const defaultDef = patterns[defaultPattern];
+    const defaultSlides = Array.isArray(defaultDef?.templateSlides)
+      ? defaultDef.templateSlides
+      : [];
+    if (defaultDef && defaultSlides.length > 0) {
+      patternKey = defaultPattern;
+      patternDef = defaultDef;
+      templateSlides = defaultSlides;
+      isTemplateBacked = true;
+      source = `${source}-nonTemplateFallback`;
+    }
+  }
+
+  if (selectedSlide == null && templateSlides.length > 0) {
+    selectedSlide = templateSlides[0];
+  }
+
+  return {
+    patternKey,
+    patternDef,
+    templateSlides,
+    selectedSlide,
+    isTemplateBacked,
+    source,
+  };
 }
 
 /**
@@ -2361,6 +2485,9 @@ module.exports = {
   buildStoryNarrative,
   safeTableHeight,
   choosePattern,
+  resolveTemplatePattern,
+  getPatternKeyForSlideId,
+  BLOCK_TEMPLATE_PATTERN_MAP,
   addDualChart,
   addChevronFlow,
   addInsightPanelsFromPattern,

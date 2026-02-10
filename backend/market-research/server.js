@@ -46,7 +46,7 @@ let lastRunDiagnostics = null;
 
 // ============ MAIN ORCHESTRATOR ============
 
-async function runMarketResearch(userPrompt, email) {
+async function runMarketResearch(userPrompt, email, options = {}) {
   const startTime = Date.now();
   console.log('\n========================================');
   console.log('MARKET RESEARCH - START');
@@ -66,6 +66,17 @@ async function runMarketResearch(userPrompt, email) {
     try {
       // Stage 1: Parse scope
       const scope = await parseScope(userPrompt);
+      if (options && typeof options === 'object') {
+        if (
+          options.templateSlideSelections &&
+          typeof options.templateSlideSelections === 'object'
+        ) {
+          scope.templateSlideSelections = options.templateSlideSelections;
+        }
+        if (typeof options.templateStrictMode === 'boolean') {
+          scope.templateStrictMode = options.templateStrictMode;
+        }
+      }
 
       // Stage 2: Research each country (in parallel with limit)
       console.log('\n=== STAGE 2: COUNTRY RESEARCH ===');
@@ -176,11 +187,43 @@ async function runMarketResearch(userPrompt, email) {
           synthesisFailures: ca.contentValidation?.failures || [],
           synthesisValid: ca.contentValidation?.valid ?? null,
           failedSections: ['policy', 'market', 'competitors'].filter((s) => ca[s]?._synthesisError),
+          finalConfidenceScore: ca.finalConfidenceScore ?? null,
+          readyForClient: ca.readyForClient ?? null,
+          readiness: ca.readiness || null,
+          finalReview: ca.finalReview
+            ? {
+                grade: ca.finalReview.overallGrade || null,
+                coherenceScore: ca.finalReview.coherenceScore ?? null,
+                criticalIssues: (ca.finalReview.issues || []).filter(
+                  (i) => i.severity === 'critical'
+                ).length,
+                majorIssues: (ca.finalReview.issues || []).filter((i) => i.severity === 'major')
+                  .length,
+              }
+            : null,
         })),
         totalCost: costTracker.totalCost,
         apiCalls: costTracker.calls.length,
         stage: 'complete',
       };
+
+      // Depth/readiness gate: block clearly weak outputs before synthesis/PPT generation.
+      const notReadyCountries = countryAnalyses.filter((ca) => ca && ca.readyForClient === false);
+      if (notReadyCountries.length > 0) {
+        const severeNotReady = notReadyCountries.filter((ca) => {
+          const effectiveScore = Number(ca?.readiness?.effectiveScore || 0);
+          const coherence = Number(ca?.readiness?.finalReviewCoherence || 0);
+          return effectiveScore < 60 || coherence < 75;
+        });
+        const list = notReadyCountries.map((ca) => ca.country).join(', ');
+        console.warn(`[Quality Gate] Countries not fully ready: ${list}`);
+        if (severeNotReady.length > 0) {
+          const severeList = severeNotReady.map((ca) => ca.country).join(', ');
+          throw new Error(
+            `Country analysis quality gate failed for ${severeList}. Refusing to generate low-confidence deck.`
+          );
+        }
+      }
 
       // NOTE: rawData is preserved here — PPT generation needs it for citations and fallback content.
       // It will be cleaned up AFTER PPT generation to free memory.
@@ -374,7 +417,7 @@ app.get('/health', (req, res) => {
 
 // Main research endpoint
 app.post('/api/market-research', async (req, res) => {
-  const { prompt, email } = req.body;
+  const { prompt, email, options, templateSlideSelections, templateStrictMode } = req.body;
 
   if (!prompt || !email) {
     return res.status(400).json({ error: 'Missing required fields: prompt, email' });
@@ -402,7 +445,14 @@ app.post('/api/market-research', async (req, res) => {
       reject(new Error('Pipeline timeout after 25 minutes'));
     });
   });
-  Promise.race([runMarketResearch(prompt, email), timeoutPromise])
+  const mergedOptions = { ...(options || {}) };
+  if (templateSlideSelections && typeof templateSlideSelections === 'object') {
+    mergedOptions.templateSlideSelections = templateSlideSelections;
+  }
+  if (typeof templateStrictMode === 'boolean') {
+    mergedOptions.templateStrictMode = templateStrictMode;
+  }
+  Promise.race([runMarketResearch(prompt, email, mergedOptions), timeoutPromise])
     .then(() => {
       clearTimeout(timeoutId);
     })
