@@ -946,7 +946,9 @@ Return ONLY valid JSON.`;
 
   const prompt1 = `${commonIntro}
 
-Return JSON with ONLY the japanesePlayers section:
+Return JSON with ONLY the japanesePlayers section.
+IMPORTANT: Return AT LEAST 3-5 Japanese companies. Search thoroughly — include subsidiaries, JV partners, trading companies (sogo shosha), and any Japanese firm with energy/industrial operations in ${country}.
+
 {
   "japanesePlayers": {
     "slideTitle": "${country} - Japanese ${industry} Companies",
@@ -968,7 +970,9 @@ Return JSON with ONLY the japanesePlayers section:
 
   const prompt2 = `${commonIntro}
 
-Return JSON with ONLY the localMajor section:
+Return JSON with ONLY the localMajor section.
+IMPORTANT: Return AT LEAST 5 local/domestic companies. Include state-owned enterprises, large conglomerates, and private players active in ${industry} in ${country}.
+
 {
   "localMajor": {
     "slideTitle": "${country} - Major Local Players",
@@ -992,7 +996,9 @@ Return JSON with ONLY the localMajor section:
 
   const prompt3 = `${commonIntro}
 
-Return JSON with ONLY the foreignPlayers section:
+Return JSON with ONLY the foreignPlayers section.
+IMPORTANT: Return AT LEAST 3-5 foreign (non-Japanese, non-local) companies. Include multinationals, regional players, and any foreign firm with ${industry} operations in ${country}.
+
 {
   "foreignPlayers": {
     "slideTitle": "${country} - Foreign ${industry} Companies",
@@ -1597,8 +1603,25 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   const pipelineController = new AbortController();
   const pipelineSignal = pipelineController.signal;
 
-  // Use dynamic framework for universal industry support
-  const useDynamicFramework = true; // Enable dynamic framework
+  // Use hardcoded framework for energy-related industries (deeply aligned with Escort template)
+  // Only use dynamic framework for non-energy industries where hardcoded topics don't apply
+  const energyKeywords = [
+    'energy',
+    'power',
+    'electricity',
+    'gas',
+    'lng',
+    'esco',
+    'renewable',
+    'solar',
+    'wind',
+    'oil',
+    'petroleum',
+    'fuel',
+    'utilities',
+  ];
+  const industryLower = (industry || '').toLowerCase();
+  const useDynamicFramework = !energyKeywords.some((kw) => industryLower.includes(kw));
   let researchData = {}; // Declare outside to be accessible in both paths
 
   if (useDynamicFramework && scope) {
@@ -2064,11 +2087,11 @@ Return JSON with:
 
 {
   "executiveSummary": [
-    "4 analytical paragraphs, 3-4 sentences each (50-80 words per paragraph), Economist-style prose. NOT bullet points — full paragraphs.",
-    "Paragraph 1: MARKET OPPORTUNITY OVERVIEW — Quantify the prize with specific numbers: market size, growth rate, foreign player share, TAM calculation. Example: 'Thailand's energy services market reached $320M in 2024, growing at 14% CAGR since 2020. Foreign players hold only 8% share despite controlling 45% of comparable ASEAN markets. The addressable segment for efficiency services — industrial facilities above 2MW — represents $90M annually.'",
-    "Paragraph 2: REGULATORY LANDSCAPE & TRAJECTORY — Current regulatory state, key policy shifts, and where regulation is heading. Reference specific law names, enforcement realities, ownership rules, and incentive timelines. Connect regulatory trajectory to market opportunity.",
-    "Paragraph 3: MARKET DEMAND & GROWTH PROJECTIONS — Demand drivers with evidence, growth projections with sources, sector-specific opportunities. Include energy price trends, infrastructure gaps, and industrial development that create demand.",
-    "Paragraph 4: COMPETITIVE POSITIONING & RECOMMENDED ENTRY PATH — Competitive gaps, recommended entry mode, specific partner/target names, timeline, and first concrete action. End with a clear 'do this first' recommendation."
+    "4 analytical paragraphs, 3-4 sentences each (50-80 words per paragraph), Economist-style prose. NOT bullet points — full paragraphs. Each paragraph MUST end with a cross-reference like '(Refer: Chapter 1)' pointing to the relevant section.",
+    "Paragraph 1: MARKET OPPORTUNITY OVERVIEW — Quantify the prize with specific numbers: market size, growth rate, foreign player share, TAM calculation. End with '(Refer: Chapter 2)'. Example: 'Thailand's energy services market reached $320M in 2024, growing at 14% CAGR since 2020. (Refer: Chapter 2)'",
+    "Paragraph 2: REGULATORY LANDSCAPE & TRAJECTORY — Current regulatory state, key policy shifts, where regulation is heading. Reference specific law names, enforcement realities. End with '(Refer: Chapter 1)'",
+    "Paragraph 3: MARKET DEMAND & GROWTH PROJECTIONS — Demand drivers with evidence, growth projections with sources, sector-specific opportunities. End with '(Refer: Chapter 2)'",
+    "Paragraph 4: COMPETITIVE POSITIONING & RECOMMENDED ENTRY PATH — Competitive gaps, recommended entry mode, specific partner/target names, timeline. End with '(Refer: Chapter 3)'"
   ],
 
   "marketOpportunityAssessment": {

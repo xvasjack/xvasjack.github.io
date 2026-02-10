@@ -349,6 +349,8 @@ Return a JSON object with these fields:
 - industry: string (the industry/sector being researched)
 - targetMarkets: string[] (list of countries/regions to analyze)
 - clientContext: string (any context about the client making the request)
+- clientName: string (the client company name if mentioned, e.g. "Shizuoka Gas Company")
+- projectName: string (the project name if mentioned, e.g. "Project Escort")
 - focusAreas: string[] (specific aspects to emphasize)
 
 If countries are vague like "Southeast Asia" or "SEA", expand to: ["Thailand", "Vietnam", "Indonesia", "Malaysia", "Philippines"]
@@ -490,6 +492,12 @@ Generate a research framework with specific search queries for each category. Th
 - Specific to the ${scope.industry} industry
 - Appropriate for the ${scope.projectType} project type
 - Designed to find actionable data, not general information
+
+CRITICAL ANTI-DRIFT RULE:
+- If the industry is "energy services" or similar demand-side energy, DO NOT research upstream oil & gas production, refining, or exploration
+- Instead focus on: ESCO (energy service companies), energy efficiency, energy audits, energy performance contracting, behind-the-meter solutions, industrial energy management, demand-side management
+- Market topics should include: Total Primary Energy Supply (TPES), Final Energy Demand by sector, Electricity consumption vs capacity, Energy pricing, Natural gas/LNG supply
+- Each topic should have at least 5 very specific search queries
 
 Return a JSON object with this structure:
 {
