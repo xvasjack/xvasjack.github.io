@@ -3256,6 +3256,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
     color: COLORS.black,
     lineSpacingMultiple: 1.3,
     valign: 'top',
+    fit: 'shrink',
   });
 
   // ===== SLIDE 4: OPPORTUNITIES & BARRIERS (after Exec Summary, matches template) =====

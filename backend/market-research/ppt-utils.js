@@ -673,7 +673,7 @@ function addCalloutBox(slide, title, content, options = {}) {
       line: { color: colors.border, pt: 1 },
       margin: [5, 8, 5, 8],
       valign: 'top',
-      shrinkText: true,
+      fit: 'shrink',
     });
   }
 }
@@ -1712,6 +1712,7 @@ function addInsightPanelsFromPattern(slide, insights, patternDef) {
       color: C_TRUE_BLACK,
       fontFace: 'Segoe UI',
       valign: 'top',
+      fit: 'shrink',
     });
   });
 }
@@ -1746,7 +1747,7 @@ function addCalloutOverlay(slide, text, pos) {
     color: C_BLACK,
     fontFace: 'Segoe UI',
     valign: 'middle',
-    shrinkText: true,
+    fit: 'shrink',
   });
 }
 
@@ -1882,6 +1883,7 @@ function addCaseStudyRows(slide, rows, chevrons, patternDef) {
       color: contentStyle.color,
       fontFace: 'Segoe UI',
       valign: 'top',
+      fit: 'shrink',
     });
   });
 
