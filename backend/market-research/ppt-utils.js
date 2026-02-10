@@ -36,6 +36,8 @@ const C_BORDER_STYLE = templatePatterns.style?.table?.borderStyle || 'sysDash';
 const TABLE_BORDER_WIDTH = templatePatterns.style?.table?.borderWidth || 1;
 const C_MUTED = '999999'; // Muted/unavailable text
 const C_AXIS_GRAY = TP_COLORS.gridLine || 'D6D7D9'; // Chart axis/grid lines
+const C_CALLOUT_FILL = TP_COLORS.calloutFill || 'D9D9D9'; // Callout bg (bg1 lumMod 85%)
+const C_CALLOUT_BORDER = TP_COLORS.calloutBorder || 'BFBFBF'; // Callout border (bg1 lumMod 75%)
 const C_LIGHT_GRAY = 'F5F5F5'; // Panel/callout backgrounds
 const C_GRAY_BG = 'F2F2F2'; // Alternate row/content backgrounds
 const C_SECONDARY = '666666'; // Secondary text
@@ -43,7 +45,7 @@ const C_LIGHT_BLUE = 'D6E4F0'; // Matrix quadrant / section overview
 
 // Template font specs
 const TP_FONTS = templatePatterns.style?.fonts || {};
-const TITLE_FONT_SIZE = TP_FONTS.title?.size || 24;
+const TITLE_FONT_SIZE = TP_FONTS.title?.size || 20;
 const TITLE_BOLD = TP_FONTS.title?.bold !== undefined ? TP_FONTS.title.bold : false;
 
 // Shared chart axis/grid defaults (identical across all chart types)
@@ -1736,10 +1738,9 @@ function addCalloutOverlay(slide, text, pos) {
     y,
     w,
     h,
-    fill: { color: p.fill || C_WHITE },
-    line: { color: p.border || C_BORDER, width: p.borderWidth || 1 },
-    rectRadius: p.cornerRadius || 0.05,
-    shadow: { type: 'outer', blur: 3, opacity: 0.15, offset: 1.5, color: C_TRUE_BLACK },
+    fill: { color: p.fill || C_CALLOUT_FILL },
+    line: { color: p.border || C_CALLOUT_BORDER, width: p.borderWidth || 0.75 },
+    rectRadius: p.cornerRadius || 0,
   });
   const fitted = fitTextToShape(String(text || ''), w - 0.2, h - 0.2, 9);
   slide.addText(fitted.text, {

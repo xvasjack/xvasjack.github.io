@@ -404,7 +404,7 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const tpSource = tpPos.sourceBar || { x: 0.3758, y: 6.6944, w: 12.5862, h: 0.25 };
   // Title font from template extraction
   const tpTitleFont = templatePatterns.style?.fonts?.title || {};
-  const tpTitleFontSize = tpTitleFont.size || 24;
+  const tpTitleFontSize = tpTitleFont.size || 20;
   const tpTitleBold = tpTitleFont.bold !== undefined ? tpTitleFont.bold : false;
   const CONTENT_WIDTH = tpContent.w; // Full content width for 16:9 widescreen
   const LEFT_MARGIN = tpContent.x; // Left margin from template

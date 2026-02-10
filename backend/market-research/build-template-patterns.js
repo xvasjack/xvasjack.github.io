@@ -82,7 +82,7 @@ const style = {
   fonts: {
     majorLatin: 'Segoe UI',
     minorLatin: 'Segoe UI',
-    title: { family: 'Segoe UI', size: 24, bold: false },
+    title: { family: 'Segoe UI', size: 20, bold: false },
     tableHeader: { family: 'Segoe UI', size: 14, bold: false },
     tableBody: { family: 'Segoe UI', size: 14, bold: false },
     footer: { family: 'Segoe UI', size: 8 },

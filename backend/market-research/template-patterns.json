@@ -109,7 +109,7 @@
       "minorLatin": "Segoe UI",
       "title": {
         "family": "Segoe UI",
-        "size": 24,
+        "size": 20,
         "bold": false
       },
       "tableHeader": {
@@ -135,7 +135,10 @@
       },
       "coverTitle": {
         "family": "Segoe UI"
-      }
+      },
+      "majorEA": "Yu mincho",
+      "sourceEA": "Meiryo UI",
+      "sourceCS": "Times New Roman"
     },
     "colors": {
       "dk1": "000000",
@@ -153,7 +156,12 @@
       "darkNavy": "1F497D",
       "orange": "E46C0A",
       "gridLine": "D6D7D9",
-      "chartSeries": ["3C57FE", "9BC9FF", "D6D7D9"]
+      "chartSeries": ["1736B6", "8EC1FF", "D6D7D9"],
+      "calloutFill": "D9D9D9",
+      "calloutBorder": "BFBFBF",
+      "categoryFillDark": "7F8DA1",
+      "categoryFillLight": "BFC6D0",
+      "tocFirstRowFill": "99CBFF"
     },
     "headerLines": {
       "top": {
@@ -171,7 +179,8 @@
       "x": 0.4983,
       "y": 2.2292,
       "w": 4.4983,
-      "thickness": 1.75
+      "thickness": 1.75,
+      "color": "1F497D"
     },
     "toc": {
       "fontSize": 18,
@@ -180,15 +189,22 @@
       "firstRowFill": "accent1_tint60",
       "sideBorders": false,
       "countryRowFontSize": 18,
-      "countryRowBold": false
+      "countryRowBold": false,
+      "activeSectionFill": "accent1_tint80",
+      "cellMarginLR": 0.101,
+      "cellMarginTB": 0.0505
     },
     "table": {
-      "headerFill": "FFFFFF",
+      "headerFill": "noFill",
       "headerFontSize": 14,
       "bodyFontSize": 14,
       "borderWidth": 1,
       "borderColor": "BFBFBF",
-      "borderStyle": "sysDash"
+      "borderStyle": "sysDash",
+      "outerBorderWidth": 3,
+      "outerBorderColor": "FFFFFF",
+      "cellMarginLR": 0.04,
+      "cellMarginTB": 0
     },
     "footer": {
       "copyrightPos": {
@@ -220,7 +236,7 @@
       "templateSlides": [
         1
       ],
-      "layout": 2,
+      "layout": 3,
       "elements": {
         "companyName": {
           "x": 0.4555,
@@ -254,11 +270,11 @@
         20,
         30
       ],
-      "layout": 5,
+      "layout": 1,
       "elements": {
         "title": {
           "fontSize": 18,
-          "font": "+mn-lt"
+          "font": "+mj-lt"
         },
         "tocTable": {
           "x": 0.3758,
@@ -294,7 +310,17 @@
       "templateSlides": [
         3
       ],
-      "layout": 6
+      "layout": 1,
+      "elements": {
+        "content": {
+          "x": 0.3663,
+          "y": 1.5,
+          "w": 12.5862,
+          "h": 5.0488,
+          "fontSize": 14,
+          "autoFit": "spAutoFit"
+        }
+      }
     },
     "country_overview": {
       "id": 4,
@@ -302,7 +328,7 @@
       "templateSlides": [
         4
       ],
-      "layout": 7,
+      "layout": 1,
       "elements": {
         "title": {
           "x": 0.37,
@@ -345,9 +371,9 @@
           "w": 4.4983
         },
         "table": {
-          "x": 0.38,
-          "y": 1.5,
-          "w": 12.59
+          "x": 0.3667,
+          "y": 1.467,
+          "w": 12.6
         }
       }
     },
@@ -378,7 +404,12 @@
           "y": 2.2292,
           "w": 4.4983
         },
-        "chart": {},
+        "chart": {
+          "x": 0.83,
+          "y": 2.31,
+          "w": 5.74,
+          "h": 3.85
+        },
         "gridLines": {
           "color": "D6D7D9",
           "thickness": 0.25
@@ -403,22 +434,24 @@
       "layout": 1,
       "elements": {
         "chartLeft": {
-          "x": 0.38,
-          "y": 1.5,
-          "w": 6,
-          "h": 4.2
+          "x": 0.83,
+          "y": 2.31,
+          "w": 5.74,
+          "h": 3.85
         },
         "chartRight": {
-          "x": 6.8,
-          "y": 1.5,
-          "w": 6.1,
-          "h": 4.2
+          "x": 6.87,
+          "y": 1.91,
+          "w": 6.09,
+          "h": 4.69
         },
         "quoteCallout": {
-          "x": 0.38,
-          "y": 5.9,
-          "w": 12.59,
-          "h": 0.7
+          "x": 1.16,
+          "y": 5.67,
+          "w": 11.81,
+          "h": 0.96,
+          "fill": "D9D9D9",
+          "border": "BFBFBF"
         }
       }
     },
@@ -466,14 +499,15 @@
           }
         ],
         "calloutOverlay": {
-          "x": 1,
-          "y": 5,
-          "w": 5.5,
-          "h": 1,
-          "fill": "F5F5F5",
-          "border": "CCCCCC",
-          "borderWidth": 1,
-          "cornerRadius": 0.05
+          "x": 1.1,
+          "y": 2.22,
+          "w": 4.51,
+          "h": 1.04,
+          "fill": "D9D9D9",
+          "border": "BFBFBF",
+          "borderWidth": 0.75,
+          "cornerRadius": 0,
+          "shape": "wedgeRectCallout"
         }
       }
     },
@@ -493,9 +527,9 @@
           "fontSize": 10
         },
         "table": {
-          "x": 0.38,
-          "y": 1.5,
-          "w": 12.59
+          "x": 0.3667,
+          "y": 1.467,
+          "w": 12.6
         }
       }
     },
@@ -514,9 +548,9 @@
           "fontSize": 20
         },
         "table": {
-          "x": 0.38,
-          "y": 1.5,
-          "w": 12.59
+          "x": 0.3667,
+          "y": 1.467,
+          "w": 12.6
         }
       }
     },
@@ -560,32 +594,35 @@
           }
         ],
         "labelStyle": {
-          "fill": "1F497D",
+          "fill": "011AB7",
           "color": "FFFFFF",
-          "fontSize": 10,
-          "bold": true
+          "fontSize": 14,
+          "bold": false
         },
         "contentStyle": {
-          "fill": "F2F2F2",
-          "color": "333333",
-          "fontSize": 9
+          "fill": "FFFFFF",
+          "color": "000000",
+          "fontSize": 14
         },
         "chevronFlow": {
-          "x": 2.5,
-          "y": 5.6,
-          "w": 10.4,
-          "h": 0.8,
+          "x": 1.43,
+          "y": 3.2,
+          "w": 11.45,
+          "h": 0.53,
           "maxPhases": 5,
           "chevronColors": [
-            "007FFF",
-            "2E7D32",
-            "E46C0A",
-            "4F81BD",
-            "C0504D"
+            "005FBF",
+            "005FBF",
+            "005FBF",
+            "005FBF",
+            "005FBF"
           ],
           "spacing": 0.05,
-          "fontSize": 8,
-          "textColor": "FFFFFF"
+          "fontSize": 14,
+          "textColor": "FFFFFF",
+          "lineColor": "FFFFFF",
+          "lineWidth": 3,
+          "shape": "homePlate"
         }
       }
     },
@@ -596,7 +633,7 @@
         26,
         29
       ],
-      "layout": 7,
+      "layout": 1,
       "elements": {
         "dividerLine": {
           "x": 2.1851,
@@ -605,15 +642,15 @@
         },
         "chartLeft": {
           "x": 0.38,
-          "y": 1.5,
-          "w": 6,
-          "h": 4.2
+          "y": 1.79,
+          "w": 6.1,
+          "h": 4.87
         },
         "chartRight": {
-          "x": 6.8,
-          "y": 1.5,
-          "w": 6.1,
-          "h": 4.2
+          "x": 6.86,
+          "y": 1.74,
+          "w": 6.11,
+          "h": 4.94
         }
       }
     },
@@ -625,19 +662,19 @@
         26,
         29
       ],
-      "layout": 7,
+      "layout": 1,
       "elements": {
         "chartLeft": {
           "x": 0.38,
-          "y": 1.5,
-          "w": 6,
-          "h": 4
+          "y": 1.79,
+          "w": 6.1,
+          "h": 4.5
         },
         "chartRight": {
-          "x": 6.8,
-          "y": 1.5,
-          "w": 6.1,
-          "h": 4
+          "x": 6.86,
+          "y": 1.74,
+          "w": 6.11,
+          "h": 4.5
         },
         "metricsRow": {
           "y": 5.7,
@@ -665,13 +702,17 @@
         33,
         34
       ],
-      "layout": 6,
+      "layout": 1,
       "elements": {
         "table": {
-          "x": 0.38,
-          "y": 1.5,
-          "w": 12.59
-        }
+          "x": 0.3796,
+          "y": 1.467,
+          "w": 12.578
+        },
+        "headerFill": "011AB7",
+        "termColFill": "7F8DA1",
+        "termColWidth": 2.15,
+        "explanationColWidth": 10.43
       }
     },
     "matrix_2x2": {
