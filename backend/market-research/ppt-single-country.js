@@ -4243,6 +4243,18 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   const templateTotal = templateUsageStats.resolved.length;
   const templateCoverage =
     templateTotal > 0 ? Math.round((templateBackedCount / templateTotal) * 100) : 100;
+  const pptMetrics = {
+    templateCoverage,
+    templateBackedCount,
+    templateTotal,
+    nonTemplatePatternCount: templateUsageStats.nonTemplatePatterns.length,
+    slideRenderFailureCount: templateUsageStats.slideRenderFailures.length,
+    tableRecoveryCount: templateUsageStats.tableRecoveries.length,
+    tableRecoveryKeys: [...new Set(templateUsageStats.tableRecoveries.map((r) => r.key))],
+    slideRenderFailureKeys: [
+      ...new Set(templateUsageStats.slideRenderFailures.map((f) => f.key || 'unknown')),
+    ],
+  };
   console.log(
     `[PPT TEMPLATE] Coverage: ${templateCoverage}% (${templateBackedCount}/${templateTotal}) template-backed block mappings`
   );
@@ -4257,6 +4269,8 @@ async function generateSingleCountryPPT(synthesis, countryAnalysis, scope) {
   console.log(
     `Section-based PPT generated: ${(pptxBuffer.length / 1024).toFixed(0)} KB, ~${totalSlides} slides`
   );
+  // Attach run metrics for diagnostics/quality gating in server pipeline.
+  pptxBuffer.__pptMetrics = pptMetrics;
   return pptxBuffer;
 }
 

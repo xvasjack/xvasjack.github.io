@@ -210,19 +210,17 @@ async function runMarketResearch(userPrompt, email, options = {}) {
       // Depth/readiness gate: block clearly weak outputs before synthesis/PPT generation.
       const notReadyCountries = countryAnalyses.filter((ca) => ca && ca.readyForClient === false);
       if (notReadyCountries.length > 0) {
-        const severeNotReady = notReadyCountries.filter((ca) => {
-          const effectiveScore = Number(ca?.readiness?.effectiveScore || 0);
-          const coherence = Number(ca?.readiness?.finalReviewCoherence || 0);
-          return effectiveScore < 60 || coherence < 75;
-        });
-        const list = notReadyCountries.map((ca) => ca.country).join(', ');
+        const list = notReadyCountries
+          .map((ca) => {
+            const score = Number(ca?.readiness?.effectiveScore || 0);
+            const coherence = Number(ca?.readiness?.finalReviewCoherence || 0);
+            return `${ca.country} (effective=${score}, coherence=${coherence})`;
+          })
+          .join(', ');
         console.warn(`[Quality Gate] Countries not fully ready: ${list}`);
-        if (severeNotReady.length > 0) {
-          const severeList = severeNotReady.map((ca) => ca.country).join(', ');
-          throw new Error(
-            `Country analysis quality gate failed for ${severeList}. Refusing to generate low-confidence deck.`
-          );
-        }
+        throw new Error(
+          `Country analysis quality gate failed: ${list}. Refusing to generate deck below required quality threshold (>=80).`
+        );
       }
 
       // NOTE: rawData is preserved here — PPT generation needs it for citations and fallback content.
@@ -302,6 +300,32 @@ async function runMarketResearch(userPrompt, email, options = {}) {
 
       // Stage 4: Generate PPT
       const pptBuffer = await generatePPT(finalSynthesis, countryAnalyses, scope);
+      const pptMetrics = (pptBuffer && (pptBuffer.__pptMetrics || pptBuffer.pptMetrics)) || null;
+
+      // Strict formatting gate for single-country template path
+      if (pptMetrics) {
+        if (
+          Number(pptMetrics.templateCoverage || 0) < 100 ||
+          Number(pptMetrics.slideRenderFailureCount || 0) > 0 ||
+          Number(pptMetrics.tableRecoveryCount || 0) > 0 ||
+          Number(pptMetrics.nonTemplatePatternCount || 0) > 0
+        ) {
+          throw new Error(
+            `PPT template/formatting gate failed: coverage=${pptMetrics.templateCoverage}%, failures=${pptMetrics.slideRenderFailureCount}, recoveries=${pptMetrics.tableRecoveryCount}, nonTemplate=${pptMetrics.nonTemplatePatternCount}`
+          );
+        }
+      }
+
+      if (lastRunDiagnostics) {
+        lastRunDiagnostics.ppt = pptMetrics || {
+          templateCoverage: null,
+          templateBackedCount: null,
+          templateTotal: null,
+          nonTemplatePatternCount: null,
+          slideRenderFailureCount: null,
+          tableRecoveryCount: null,
+        };
+      }
 
       // Clean up rawData AFTER PPT generation to free memory (citations already used by PPT renderer)
       for (const ca of countryAnalyses) {

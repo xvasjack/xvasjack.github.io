@@ -2989,8 +2989,8 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   // ============ ITERATIVE REFINEMENT LOOP WITH CONFIDENCE SCORING ============
   // Like Deep Research: score → identify gaps → research → re-synthesize → repeat until ready
 
-  const MAX_ITERATIONS = 3; // Up to 3 refinement passes for higher quality
-  const MIN_CONFIDENCE_SCORE = 70; // Minimum score to stop refinement
+  const MAX_ITERATIONS = 5; // Up to 5 refinement passes for higher quality
+  const MIN_CONFIDENCE_SCORE = 80; // Minimum score to stop refinement
   let iteration = 0;
   let confidenceScore = 0;
   let readyForClient = false;
@@ -3100,7 +3100,7 @@ async function researchCountry(country, industry, clientContext, scope = null) {
   //   - Research (Reviewer 1): "go find this data" → callGeminiResearch
   //   - Synthesis (Reviewer 2): "re-synthesize this section with this feedback"
   // Loops until grade A/B or max iterations reached.
-  const FINAL_REVIEW_MAX_ITERATIONS = 3;
+  const FINAL_REVIEW_MAX_ITERATIONS = 5;
   const FINAL_REVIEW_TARGET_SCORE = 80;
 
   if (!countryAnalysis.aborted) {
